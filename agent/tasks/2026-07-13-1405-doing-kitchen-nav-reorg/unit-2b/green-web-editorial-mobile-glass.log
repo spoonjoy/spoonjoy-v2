@@ -1,0 +1,15 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2-agent-kitchen-nav
+
+ ✓ test/routes/index.test.tsx (17 tests) 834ms
+ ✓ test/components/navigation/spoon-dock.test.tsx (19 tests) 50ms
+ ✓ test/routes/saved-recipes.test.tsx (6 tests) 482ms
+ ✓ test/routes/cookbooks-index.test.tsx (6 tests) 422ms
+ ✓ test/routes/my-recipes.test.tsx (6 tests) 437ms
+ ✓ test/components/navigation/mobile-nav.test.tsx (20 tests) 139ms
+
+ Test Files  6 passed (6)
+      Tests  74 passed (74)
+   Start at  15:32:27
+   Duration  6.03s (transform 246ms, setup 346ms, import 1.76s, tests 2.36s, environment 898ms)
+

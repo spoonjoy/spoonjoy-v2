@@ -1,5 +1,6 @@
-@import "tailwindcss";
-@source "../../stories";
+@import "tailwindcss" source(none);
+@source "../**/*.{js,jsx,ts,tsx}";
+@source "../../stories/**/*.{js,jsx,ts,tsx,mdx}";
 @config "../../tailwind.config.js";
 
 :root {

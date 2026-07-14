@@ -162,7 +162,7 @@ test.describe('Mobile RecipeBuilder and SpoonDock audit', () => {
     await expect(page.getByRole('heading', { name: 'Shopping List' })).toBeVisible();
     const dock = await getDock(page);
 
-    await expectTouchTarget(dock.getByRole('link', { name: /List market/i }), 'shopping dock List link');
+    await expectTouchTarget(dock.getByRole('link', { name: /Shopping List/i }), 'shopping dock Shopping List link');
     await expectTouchTarget(dock.getByRole('link', { name: 'Add' }), 'shopping dock Add link');
     await expectTouchTarget(dock.getByRole('link', { name: 'Search' }), 'shopping dock Search link');
     const addButton = page.getByRole('button', { name: /^Add$/ });

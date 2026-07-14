@@ -1446,7 +1446,7 @@ const COOKBOOKS: CookbookData[] = [
     recipeIndices: [8, 10, 12, 14, 15],
   },
   {
-    title: "Market Run Dinners",
+    title: "Pantry Dinners",
     authorUsername: "demo_chef",
     recipeIndices: [9, 11, 12, 16],
   },

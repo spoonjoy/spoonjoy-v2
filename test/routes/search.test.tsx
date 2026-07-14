@@ -101,7 +101,7 @@ describe("Search Route", () => {
     it("returns search metadata", () => {
       expect(meta({} as any)).toEqual([
         { title: "Search Spoonjoy" },
-        { name: "description", content: "Search Spoonjoy recipes, cookbooks, chefs, and private shopping-list items." },
+        { name: "description", content: "Search Spoonjoy recipes, cookbooks, chefs, and private shopping list items." },
       ]);
     });
   });
@@ -123,7 +123,7 @@ describe("Search Route", () => {
       expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
       expect(screen.getByText("Recently searchable")).toBeInTheDocument();
       expect(screen.getByText("0 results")).toBeInTheDocument();
-      expect(screen.getByText(/Shopping-list results are always private/i)).toBeInTheDocument();
+      expect(screen.getByText(/Shopping List results are private/i)).toBeInTheDocument();
       expect(screen.getByText(/Try searching by ingredient/i)).toBeInTheDocument();
       expect(screen.getByText("No matches yet")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Recipes" })).toHaveAttribute("href", "/search?scope=recipes");

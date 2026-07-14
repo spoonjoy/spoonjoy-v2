@@ -1,0 +1,877 @@
+Building for debugging...
+[0/18] /Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/.build/arm64-apple-macosx/debug/SpoonjoyApplePackageTests.derived/runner.swift
+[1/18] Write sources
+[6/18] Write SpoonjoyNativeDogfood-entitlement.plist
+[6/18] Write SpoonjoyScenarioVerifier-entitlement.plist
+[8/18] Copying Fixtures
+[9/18] Write swift-version--58304C5D6DBC2206.txt
+[11/101] Emitting module SpoonjoyCore
+[12/101] Compiling SpoonjoyCore PublicCatalogRequests.swift
+[13/101] Compiling SpoonjoyCore ShoppingListAPI.swift
+[14/101] Compiling SpoonjoyCore ShoppingListRequests.swift
+[15/101] Compiling SpoonjoyCore AppNavigationState.swift
+[16/101] Compiling SpoonjoyCore AppRoute.swift
+[17/101] Compiling SpoonjoyCore DeepLinkRouter.swift
+[18/101] Compiling SpoonjoyCore DeepLinkURLBuilder.swift
+[19/101] Compiling SpoonjoyCore NativeAppSnapshot.swift
+[20/101] Compiling SpoonjoyCore NativeFixtureFallbackPolicy.swift
+[21/110] Compiling SpoonjoyCore NativeCacheFreshnessPolicy.swift
+[22/110] Compiling SpoonjoyCore NativeCachePrefetchPolicy.swift
+[23/110] Compiling SpoonjoyCore NativeDurableCache.swift
+[24/110] Compiling SpoonjoyCore NativeDurableCacheStore.swift
+[25/110] Compiling SpoonjoyCore NativeIndicatorDismissalStore.swift
+[26/110] Compiling SpoonjoyCore NativeMediaStagingPolicy.swift
+[27/110] Compiling SpoonjoyCore OfflineFreshnessIndicator.swift
+[28/110] Compiling SpoonjoyCore CaptureImportViewModel.swift
+[29/110] Compiling SpoonjoyCore CookbookSurfaceRepository.swift
+[30/110] Compiling SpoonjoyCore ShoppingSurfaceViewModel.swift
+[31/110] Compiling SpoonjoyCore SpoonCookLogViewModel.swift
+[32/110] Compiling SpoonjoyCore CaptureDraft.swift
+[33/110] Compiling SpoonjoyCore CookModeProgress.swift
+[34/110] Compiling SpoonjoyCore KitchenFixtureState.swift
+[35/110] Compiling SpoonjoyCore SettingsState.swift
+[36/110] Compiling SpoonjoyCore ShoppingListState.swift
+[37/110] Compiling SpoonjoyCore CaptureDraftEntityCatalog.swift
+[38/110] Compiling SpoonjoyCore ChefProfileEntityCatalog.swift
+[39/110] Compiling SpoonjoyCore RecipeDetailScreenViewModel.swift
+[40/110] Compiling SpoonjoyCore RecipeEditorDraft.swift
+[41/110] Compiling SpoonjoyCore RecipeEditorDraftChangePlanner.swift
+[42/110] Compiling SpoonjoyCore RecipeEditorViewModel.swift
+[43/110] Compiling SpoonjoyCore SearchSurfaceRepository.swift
+[44/110] Compiling SpoonjoyCore SearchSurfaceViewModel.swift
+[45/110] Compiling SpoonjoyCore SettingsSurfaceRepository.swift
+[46/110] Compiling SpoonjoyCore SettingsSurfaceViewModel.swift
+[47/110] Compiling SpoonjoyCore NativeSharePayload.swift
+[48/110] Compiling SpoonjoyCore NativeAuthSessionRepository.swift
+[49/110] Compiling SpoonjoyCore NativePasswordSignInRequests.swift
+[50/110] Compiling SpoonjoyCore OAuthPKCE.swift
+[51/110] Compiling SpoonjoyCore OAuthRedirectValidator.swift
+[52/110] Compiling SpoonjoyCore OAuthRequests.swift
+[53/110] Compiling SpoonjoyCore OAuthResponses.swift
+[54/110] Compiling SpoonjoyCore RefreshCoordinator.swift
+[55/110] Compiling SpoonjoyCore SecureAuthWebHandoff.swift
+[56/110] Compiling SpoonjoyCore TokenVault.swift
+[57/110] Compiling SpoonjoyCore DeepLinkManifest.swift
+[58/110] Compiling SpoonjoyCore NativeCapabilityMetadata.swift
+[59/110] Compiling SpoonjoyCore NativeIntentAction.swift
+[60/110] Compiling SpoonjoyCore RecipeCookbookEntityCatalog.swift
+[61/110] Compiling SpoonjoyCore ScenarioCommand.swift
+[62/110] Compiling SpoonjoyCore ScenarioReport.swift
+[63/110] Compiling SpoonjoyCore ScenarioVerifier.swift
+[64/110] Compiling SpoonjoyCore ShoppingEntityCatalog.swift
+[65/110] Compiling SpoonjoyCore SpoonEntityCatalog.swift
+[66/110] Compiling SpoonjoyCore APIClient.swift
+[67/110] Compiling SpoonjoyCore APIEnvelope.swift
+[68/110] Compiling SpoonjoyCore APIError.swift
+[69/110] Compiling SpoonjoyCore APIRequestBuilder.swift
+[70/110] Compiling SpoonjoyCore APIRequestSupport.swift
+[71/110] Compiling SpoonjoyCore APIRetryPolicy.swift
+[72/110] Compiling SpoonjoyCore APITransport.swift
+[73/110] Compiling SpoonjoyCore JSONValue.swift
+[74/110] Compiling SpoonjoyCore NativeAPIRequests.swift
+[75/110] Compiling SpoonjoyCore PaginationCursor.swift
+[76/110] Compiling SpoonjoyCore CookbookSurfaceViewModel.swift
+[77/110] Compiling SpoonjoyCore RecipeCoverControlsViewModel.swift
+[78/110] Compiling SpoonjoyCore NotificationAPNsSurfaceRepository.swift
+[79/110] Compiling SpoonjoyCore NotificationAPNsSurfaceViewModel.swift
+[80/110] Compiling SpoonjoyCore ProfileChefGraphSurfaceRepository.swift
+[81/110] Compiling SpoonjoyCore ProfileChefGraphSurfaceViewModel.swift
+[82/110] Compiling SpoonjoyCore RecipeActionsViewModel.swift
+[83/110] Compiling SpoonjoyCore RecipeCatalogRepository.swift
+[84/110] Compiling SpoonjoyCore RecipeCatalogViewModel.swift
+[85/110] Compiling SpoonjoyCore NativeLiveAppStore.swift
+[86/110] Compiling SpoonjoyCore ScreenViewModels.swift
+[87/110] Compiling SpoonjoyCore SearchState.swift
+[88/110] Compiling SpoonjoyCore AuthSessionState.swift
+[89/110] Compiling SpoonjoyCore FileBackedTokenVault.swift
+[90/110] Compiling SpoonjoyCore InMemoryTokenVault.swift
+[91/110] Compiling SpoonjoyCore KeychainTokenVault.swift
+[92/110] Compiling SpoonjoyCore NativeAppleSignInRequests.swift
+[93/110] Compiling SpoonjoyCore NativeAuthSession.swift
+[94/110] Compiling SpoonjoyCore SpotlightIndexPlan.swift
+[95/110] Compiling SpoonjoyCore JSONFileStore.swift
+[96/110] Compiling SpoonjoyCore MutationQueue.swift
+[97/110] Compiling SpoonjoyCore OfflineSnapshot.swift
+[98/110] Compiling SpoonjoyCore SyncCheckpoint.swift
+[99/110] Compiling SpoonjoyCore RecipeCookbook.swift
+[100/110] Compiling SpoonjoyCore SpoonjoyCore.swift
+[101/110] Compiling SpoonjoyCore NativeSyncEngine.swift
+[102/110] Compiling SpoonjoyCore resource_bundle_accessor.swift
+[103/161] Compiling SpoonjoyScenarioVerifier main.swift
+[104/161] Emitting module SpoonjoyScenarioVerifier
+[105/161] Compiling SpoonjoyScenarioVerifier ScenarioProcessMain.swift
+[105/161] Write Objects.LinkFileList
+[107/161] Emitting module SpoonjoyNativeDogfood
+[108/161] Compiling SpoonjoyNativeDogfood main.swift
+[108/161] Write Objects.LinkFileList
+[109/161] Linking SpoonjoyScenarioVerifier
+[110/161] Applying SpoonjoyScenarioVerifier
+[111/161] Linking SpoonjoyNativeDogfood
+[112/161] Applying SpoonjoyNativeDogfood
+[114/161] Emitting module SpoonjoyCoreTests
+[115/166] Compiling SpoonjoyCoreTests APIReadClientTests.swift
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:22:34: error: type 'AppRoute' has no member 'savedRecipes'
+ 20 |         #expect(navigation.sidebarSelection == .recipes)
+ 21 |
+ 22 |         navigation.navigate(to: .savedRecipes)
+    |                                  `- error: type 'AppRoute' has no member 'savedRecipes'
+ 23 |         #expect(navigation.route == .savedRecipes)
+ 24 |         #expect(navigation.sidebarSelection == .savedRecipes)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:23:38: error: type 'AppRoute' has no member 'savedRecipes'
+ 21 |
+ 22 |         navigation.navigate(to: .savedRecipes)
+ 23 |         #expect(navigation.route == .savedRecipes)
+    |                                      `- error: type 'AppRoute' has no member 'savedRecipes'
+ 24 |         #expect(navigation.sidebarSelection == .savedRecipes)
+ 25 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:24:49: error: type 'AppSection' has no member 'savedRecipes'
+ 22 |         navigation.navigate(to: .savedRecipes)
+ 23 |         #expect(navigation.route == .savedRecipes)
+ 24 |         #expect(navigation.sidebarSelection == .savedRecipes)
+    |                                                 `- error: type 'AppSection' has no member 'savedRecipes'
+ 25 |
+ 26 |         navigation.navigate(to: .chefs)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:26:34: error: type 'AppRoute' has no member 'chefs'
+ 24 |         #expect(navigation.sidebarSelection == .savedRecipes)
+ 25 |
+ 26 |         navigation.navigate(to: .chefs)
+    |                                  `- error: type 'AppRoute' has no member 'chefs'
+ 27 |         #expect(navigation.route == .chefs)
+ 28 |         #expect(navigation.sidebarSelection == .chefs)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:27:38: error: type 'AppRoute' has no member 'chefs'
+ 25 |
+ 26 |         navigation.navigate(to: .chefs)
+ 27 |         #expect(navigation.route == .chefs)
+    |                                      `- error: type 'AppRoute' has no member 'chefs'
+ 28 |         #expect(navigation.sidebarSelection == .chefs)
+ 29 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:28:49: error: type 'AppSection' has no member 'chefs'
+ 26 |         navigation.navigate(to: .chefs)
+ 27 |         #expect(navigation.route == .chefs)
+ 28 |         #expect(navigation.sidebarSelection == .chefs)
+    |                                                 `- error: type 'AppSection' has no member 'chefs'
+ 29 |
+ 30 |         navigation.navigate(to: .recipeDetail(id: "recipe_lemon_pantry_pasta", presentation: .detail))
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:119:25: error: value of type 'NativeShellContentState' has no member 'currentChefID'
+117 |         )
+118 |
+119 |         #expect(content.currentChefID == currentChef.id)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'currentChefID'
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:120:25: error: value of type 'NativeShellContentState' has no member 'myRecipesCatalog'
+118 |
+119 |         #expect(content.currentChefID == currentChef.id)
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+    |                         `- error: value of type 'NativeShellContentState' has no member 'myRecipesCatalog'
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:120:51: error: cannot infer key path type from context; consider explicitly specifying a root type
+118 |
+119 |         #expect(content.currentChefID == currentChef.id)
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+    |                                                   `- error: cannot infer key path type from context; consider explicitly specifying a root type
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:121:25: error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+119 |         #expect(content.currentChefID == currentChef.id)
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+    |                         `- error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+123 |     }
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:121:54: error: cannot infer key path type from context; consider explicitly specifying a root type
+119 |         #expect(content.currentChefID == currentChef.id)
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+    |                                                      `- error: cannot infer key path type from context; consider explicitly specifying a root type
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+123 |     }
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:122:25: error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+123 |     }
+124 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:122:54: error: cannot infer key path type from context; consider explicitly specifying a root type
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+    |                                                      `- error: cannot infer key path type from context; consider explicitly specifying a root type
+123 |     }
+124 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:146:25: error: value of type 'NativeShellContentState' has no member 'currentChefID'
+144 |         )
+145 |
+146 |         #expect(content.currentChefID == nil)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'currentChefID'
+147 |         #expect(content.myRecipesCatalog.rows.isEmpty)
+148 |         #expect(content.savedRecipesCatalog.rows.isEmpty)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:147:25: error: value of type 'NativeShellContentState' has no member 'myRecipesCatalog'
+145 |
+146 |         #expect(content.currentChefID == nil)
+147 |         #expect(content.myRecipesCatalog.rows.isEmpty)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'myRecipesCatalog'
+148 |         #expect(content.savedRecipesCatalog.rows.isEmpty)
+149 |     }
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:148:25: error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+146 |         #expect(content.currentChefID == nil)
+147 |         #expect(content.myRecipesCatalog.rows.isEmpty)
+148 |         #expect(content.savedRecipesCatalog.rows.isEmpty)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+149 |     }
+150 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:833:15: error: type 'AppRoute' has no member 'savedRecipes'
+831 |             (.kitchen, "kitchen", "spoonjoy://kitchen"),
+832 |             (.recipes, "recipes", "spoonjoy://recipes"),
+833 |             (.savedRecipes, "saved-recipes", "spoonjoy://saved-recipes"),
+    |               `- error: type 'AppRoute' has no member 'savedRecipes'
+834 |             (.recipeDetail(id: "recipe_lemon", presentation: .detail), "recipe:recipe_lemon", "spoonjoy://recipes/recipe_lemon"),
+835 |             (.recipeDetail(id: "recipe_lemon", presentation: .cook), "recipe-cook:recipe_lemon", "spoonjoy://recipes/recipe_lemon/cook"),
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:841:15: error: type 'AppRoute' has no member 'chefs'
+839 |             (.cookbooks, "cookbooks", "spoonjoy://cookbooks"),
+840 |             (.cookbookDetail(id: "cookbook_weeknights"), "cookbook:cookbook_weeknights", "spoonjoy://cookbooks/cookbook_weeknights"),
+841 |             (.chefs, "chefs", "spoonjoy://chefs"),
+    |               `- error: type 'AppRoute' has no member 'chefs'
+842 |             (.profile(identifier: "ari"), "profile:ari", "spoonjoy://users/ari"),
+843 |             (.profile(identifier: "ari/space"), "profile:ari%2Fspace", "spoonjoy://users/ari%2Fspace"),
+[116/166] Compiling SpoonjoyCoreTests APITransportTests.swift
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:22:34: error: type 'AppRoute' has no member 'savedRecipes'
+ 20 |         #expect(navigation.sidebarSelection == .recipes)
+ 21 |
+ 22 |         navigation.navigate(to: .savedRecipes)
+    |                                  `- error: type 'AppRoute' has no member 'savedRecipes'
+ 23 |         #expect(navigation.route == .savedRecipes)
+ 24 |         #expect(navigation.sidebarSelection == .savedRecipes)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:23:38: error: type 'AppRoute' has no member 'savedRecipes'
+ 21 |
+ 22 |         navigation.navigate(to: .savedRecipes)
+ 23 |         #expect(navigation.route == .savedRecipes)
+    |                                      `- error: type 'AppRoute' has no member 'savedRecipes'
+ 24 |         #expect(navigation.sidebarSelection == .savedRecipes)
+ 25 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:24:49: error: type 'AppSection' has no member 'savedRecipes'
+ 22 |         navigation.navigate(to: .savedRecipes)
+ 23 |         #expect(navigation.route == .savedRecipes)
+ 24 |         #expect(navigation.sidebarSelection == .savedRecipes)
+    |                                                 `- error: type 'AppSection' has no member 'savedRecipes'
+ 25 |
+ 26 |         navigation.navigate(to: .chefs)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:26:34: error: type 'AppRoute' has no member 'chefs'
+ 24 |         #expect(navigation.sidebarSelection == .savedRecipes)
+ 25 |
+ 26 |         navigation.navigate(to: .chefs)
+    |                                  `- error: type 'AppRoute' has no member 'chefs'
+ 27 |         #expect(navigation.route == .chefs)
+ 28 |         #expect(navigation.sidebarSelection == .chefs)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:27:38: error: type 'AppRoute' has no member 'chefs'
+ 25 |
+ 26 |         navigation.navigate(to: .chefs)
+ 27 |         #expect(navigation.route == .chefs)
+    |                                      `- error: type 'AppRoute' has no member 'chefs'
+ 28 |         #expect(navigation.sidebarSelection == .chefs)
+ 29 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:28:49: error: type 'AppSection' has no member 'chefs'
+ 26 |         navigation.navigate(to: .chefs)
+ 27 |         #expect(navigation.route == .chefs)
+ 28 |         #expect(navigation.sidebarSelection == .chefs)
+    |                                                 `- error: type 'AppSection' has no member 'chefs'
+ 29 |
+ 30 |         navigation.navigate(to: .recipeDetail(id: "recipe_lemon_pantry_pasta", presentation: .detail))
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:119:25: error: value of type 'NativeShellContentState' has no member 'currentChefID'
+117 |         )
+118 |
+119 |         #expect(content.currentChefID == currentChef.id)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'currentChefID'
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:120:25: error: value of type 'NativeShellContentState' has no member 'myRecipesCatalog'
+118 |
+119 |         #expect(content.currentChefID == currentChef.id)
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+    |                         `- error: value of type 'NativeShellContentState' has no member 'myRecipesCatalog'
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:120:51: error: cannot infer key path type from context; consider explicitly specifying a root type
+118 |
+119 |         #expect(content.currentChefID == currentChef.id)
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+    |                                                   `- error: cannot infer key path type from context; consider explicitly specifying a root type
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:121:25: error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+119 |         #expect(content.currentChefID == currentChef.id)
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+    |                         `- error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+123 |     }
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:121:54: error: cannot infer key path type from context; consider explicitly specifying a root type
+119 |         #expect(content.currentChefID == currentChef.id)
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+    |                                                      `- error: cannot infer key path type from context; consider explicitly specifying a root type
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+123 |     }
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:122:25: error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+123 |     }
+124 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:122:54: error: cannot infer key path type from context; consider explicitly specifying a root type
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+    |                                                      `- error: cannot infer key path type from context; consider explicitly specifying a root type
+123 |     }
+124 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:146:25: error: value of type 'NativeShellContentState' has no member 'currentChefID'
+144 |         )
+145 |
+146 |         #expect(content.currentChefID == nil)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'currentChefID'
+147 |         #expect(content.myRecipesCatalog.rows.isEmpty)
+148 |         #expect(content.savedRecipesCatalog.rows.isEmpty)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:147:25: error: value of type 'NativeShellContentState' has no member 'myRecipesCatalog'
+145 |
+146 |         #expect(content.currentChefID == nil)
+147 |         #expect(content.myRecipesCatalog.rows.isEmpty)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'myRecipesCatalog'
+148 |         #expect(content.savedRecipesCatalog.rows.isEmpty)
+149 |     }
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:148:25: error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+146 |         #expect(content.currentChefID == nil)
+147 |         #expect(content.myRecipesCatalog.rows.isEmpty)
+148 |         #expect(content.savedRecipesCatalog.rows.isEmpty)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+149 |     }
+150 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:833:15: error: type 'AppRoute' has no member 'savedRecipes'
+831 |             (.kitchen, "kitchen", "spoonjoy://kitchen"),
+832 |             (.recipes, "recipes", "spoonjoy://recipes"),
+833 |             (.savedRecipes, "saved-recipes", "spoonjoy://saved-recipes"),
+    |               `- error: type 'AppRoute' has no member 'savedRecipes'
+834 |             (.recipeDetail(id: "recipe_lemon", presentation: .detail), "recipe:recipe_lemon", "spoonjoy://recipes/recipe_lemon"),
+835 |             (.recipeDetail(id: "recipe_lemon", presentation: .cook), "recipe-cook:recipe_lemon", "spoonjoy://recipes/recipe_lemon/cook"),
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:841:15: error: type 'AppRoute' has no member 'chefs'
+839 |             (.cookbooks, "cookbooks", "spoonjoy://cookbooks"),
+840 |             (.cookbookDetail(id: "cookbook_weeknights"), "cookbook:cookbook_weeknights", "spoonjoy://cookbooks/cookbook_weeknights"),
+841 |             (.chefs, "chefs", "spoonjoy://chefs"),
+    |               `- error: type 'AppRoute' has no member 'chefs'
+842 |             (.profile(identifier: "ari"), "profile:ari", "spoonjoy://users/ari"),
+843 |             (.profile(identifier: "ari/space"), "profile:ari%2Fspace", "spoonjoy://users/ari%2Fspace"),
+[117/166] Compiling SpoonjoyCoreTests AppIntentAvailabilityTelemetryContractTests.swift
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:22:34: error: type 'AppRoute' has no member 'savedRecipes'
+ 20 |         #expect(navigation.sidebarSelection == .recipes)
+ 21 |
+ 22 |         navigation.navigate(to: .savedRecipes)
+    |                                  `- error: type 'AppRoute' has no member 'savedRecipes'
+ 23 |         #expect(navigation.route == .savedRecipes)
+ 24 |         #expect(navigation.sidebarSelection == .savedRecipes)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:23:38: error: type 'AppRoute' has no member 'savedRecipes'
+ 21 |
+ 22 |         navigation.navigate(to: .savedRecipes)
+ 23 |         #expect(navigation.route == .savedRecipes)
+    |                                      `- error: type 'AppRoute' has no member 'savedRecipes'
+ 24 |         #expect(navigation.sidebarSelection == .savedRecipes)
+ 25 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:24:49: error: type 'AppSection' has no member 'savedRecipes'
+ 22 |         navigation.navigate(to: .savedRecipes)
+ 23 |         #expect(navigation.route == .savedRecipes)
+ 24 |         #expect(navigation.sidebarSelection == .savedRecipes)
+    |                                                 `- error: type 'AppSection' has no member 'savedRecipes'
+ 25 |
+ 26 |         navigation.navigate(to: .chefs)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:26:34: error: type 'AppRoute' has no member 'chefs'
+ 24 |         #expect(navigation.sidebarSelection == .savedRecipes)
+ 25 |
+ 26 |         navigation.navigate(to: .chefs)
+    |                                  `- error: type 'AppRoute' has no member 'chefs'
+ 27 |         #expect(navigation.route == .chefs)
+ 28 |         #expect(navigation.sidebarSelection == .chefs)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:27:38: error: type 'AppRoute' has no member 'chefs'
+ 25 |
+ 26 |         navigation.navigate(to: .chefs)
+ 27 |         #expect(navigation.route == .chefs)
+    |                                      `- error: type 'AppRoute' has no member 'chefs'
+ 28 |         #expect(navigation.sidebarSelection == .chefs)
+ 29 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:28:49: error: type 'AppSection' has no member 'chefs'
+ 26 |         navigation.navigate(to: .chefs)
+ 27 |         #expect(navigation.route == .chefs)
+ 28 |         #expect(navigation.sidebarSelection == .chefs)
+    |                                                 `- error: type 'AppSection' has no member 'chefs'
+ 29 |
+ 30 |         navigation.navigate(to: .recipeDetail(id: "recipe_lemon_pantry_pasta", presentation: .detail))
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:119:25: error: value of type 'NativeShellContentState' has no member 'currentChefID'
+117 |         )
+118 |
+119 |         #expect(content.currentChefID == currentChef.id)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'currentChefID'
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:120:25: error: value of type 'NativeShellContentState' has no member 'myRecipesCatalog'
+118 |
+119 |         #expect(content.currentChefID == currentChef.id)
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+    |                         `- error: value of type 'NativeShellContentState' has no member 'myRecipesCatalog'
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:120:51: error: cannot infer key path type from context; consider explicitly specifying a root type
+118 |
+119 |         #expect(content.currentChefID == currentChef.id)
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+    |                                                   `- error: cannot infer key path type from context; consider explicitly specifying a root type
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:121:25: error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+119 |         #expect(content.currentChefID == currentChef.id)
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+    |                         `- error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+123 |     }
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:121:54: error: cannot infer key path type from context; consider explicitly specifying a root type
+119 |         #expect(content.currentChefID == currentChef.id)
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+    |                                                      `- error: cannot infer key path type from context; consider explicitly specifying a root type
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+123 |     }
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:122:25: error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+123 |     }
+124 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:122:54: error: cannot infer key path type from context; consider explicitly specifying a root type
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+    |                                                      `- error: cannot infer key path type from context; consider explicitly specifying a root type
+123 |     }
+124 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:146:25: error: value of type 'NativeShellContentState' has no member 'currentChefID'
+144 |         )
+145 |
+146 |         #expect(content.currentChefID == nil)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'currentChefID'
+147 |         #expect(content.myRecipesCatalog.rows.isEmpty)
+148 |         #expect(content.savedRecipesCatalog.rows.isEmpty)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:147:25: error: value of type 'NativeShellContentState' has no member 'myRecipesCatalog'
+145 |
+146 |         #expect(content.currentChefID == nil)
+147 |         #expect(content.myRecipesCatalog.rows.isEmpty)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'myRecipesCatalog'
+148 |         #expect(content.savedRecipesCatalog.rows.isEmpty)
+149 |     }
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:148:25: error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+146 |         #expect(content.currentChefID == nil)
+147 |         #expect(content.myRecipesCatalog.rows.isEmpty)
+148 |         #expect(content.savedRecipesCatalog.rows.isEmpty)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+149 |     }
+150 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:833:15: error: type 'AppRoute' has no member 'savedRecipes'
+831 |             (.kitchen, "kitchen", "spoonjoy://kitchen"),
+832 |             (.recipes, "recipes", "spoonjoy://recipes"),
+833 |             (.savedRecipes, "saved-recipes", "spoonjoy://saved-recipes"),
+    |               `- error: type 'AppRoute' has no member 'savedRecipes'
+834 |             (.recipeDetail(id: "recipe_lemon", presentation: .detail), "recipe:recipe_lemon", "spoonjoy://recipes/recipe_lemon"),
+835 |             (.recipeDetail(id: "recipe_lemon", presentation: .cook), "recipe-cook:recipe_lemon", "spoonjoy://recipes/recipe_lemon/cook"),
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:841:15: error: type 'AppRoute' has no member 'chefs'
+839 |             (.cookbooks, "cookbooks", "spoonjoy://cookbooks"),
+840 |             (.cookbookDetail(id: "cookbook_weeknights"), "cookbook:cookbook_weeknights", "spoonjoy://cookbooks/cookbook_weeknights"),
+841 |             (.chefs, "chefs", "spoonjoy://chefs"),
+    |               `- error: type 'AppRoute' has no member 'chefs'
+842 |             (.profile(identifier: "ari"), "profile:ari", "spoonjoy://users/ari"),
+843 |             (.profile(identifier: "ari/space"), "profile:ari%2Fspace", "spoonjoy://users/ari%2Fspace"),
+[118/166] Compiling SpoonjoyCoreTests AppStateTests.swift
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:22:34: error: type 'AppRoute' has no member 'savedRecipes'
+ 20 |         #expect(navigation.sidebarSelection == .recipes)
+ 21 |
+ 22 |         navigation.navigate(to: .savedRecipes)
+    |                                  `- error: type 'AppRoute' has no member 'savedRecipes'
+ 23 |         #expect(navigation.route == .savedRecipes)
+ 24 |         #expect(navigation.sidebarSelection == .savedRecipes)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:23:38: error: type 'AppRoute' has no member 'savedRecipes'
+ 21 |
+ 22 |         navigation.navigate(to: .savedRecipes)
+ 23 |         #expect(navigation.route == .savedRecipes)
+    |                                      `- error: type 'AppRoute' has no member 'savedRecipes'
+ 24 |         #expect(navigation.sidebarSelection == .savedRecipes)
+ 25 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:24:49: error: type 'AppSection' has no member 'savedRecipes'
+ 22 |         navigation.navigate(to: .savedRecipes)
+ 23 |         #expect(navigation.route == .savedRecipes)
+ 24 |         #expect(navigation.sidebarSelection == .savedRecipes)
+    |                                                 `- error: type 'AppSection' has no member 'savedRecipes'
+ 25 |
+ 26 |         navigation.navigate(to: .chefs)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:26:34: error: type 'AppRoute' has no member 'chefs'
+ 24 |         #expect(navigation.sidebarSelection == .savedRecipes)
+ 25 |
+ 26 |         navigation.navigate(to: .chefs)
+    |                                  `- error: type 'AppRoute' has no member 'chefs'
+ 27 |         #expect(navigation.route == .chefs)
+ 28 |         #expect(navigation.sidebarSelection == .chefs)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:27:38: error: type 'AppRoute' has no member 'chefs'
+ 25 |
+ 26 |         navigation.navigate(to: .chefs)
+ 27 |         #expect(navigation.route == .chefs)
+    |                                      `- error: type 'AppRoute' has no member 'chefs'
+ 28 |         #expect(navigation.sidebarSelection == .chefs)
+ 29 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:28:49: error: type 'AppSection' has no member 'chefs'
+ 26 |         navigation.navigate(to: .chefs)
+ 27 |         #expect(navigation.route == .chefs)
+ 28 |         #expect(navigation.sidebarSelection == .chefs)
+    |                                                 `- error: type 'AppSection' has no member 'chefs'
+ 29 |
+ 30 |         navigation.navigate(to: .recipeDetail(id: "recipe_lemon_pantry_pasta", presentation: .detail))
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:119:25: error: value of type 'NativeShellContentState' has no member 'currentChefID'
+117 |         )
+118 |
+119 |         #expect(content.currentChefID == currentChef.id)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'currentChefID'
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:120:25: error: value of type 'NativeShellContentState' has no member 'myRecipesCatalog'
+118 |
+119 |         #expect(content.currentChefID == currentChef.id)
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+    |                         `- error: value of type 'NativeShellContentState' has no member 'myRecipesCatalog'
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:120:51: error: cannot infer key path type from context; consider explicitly specifying a root type
+118 |
+119 |         #expect(content.currentChefID == currentChef.id)
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+    |                                                   `- error: cannot infer key path type from context; consider explicitly specifying a root type
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:121:25: error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+119 |         #expect(content.currentChefID == currentChef.id)
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+    |                         `- error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+123 |     }
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:121:54: error: cannot infer key path type from context; consider explicitly specifying a root type
+119 |         #expect(content.currentChefID == currentChef.id)
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+    |                                                      `- error: cannot infer key path type from context; consider explicitly specifying a root type
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+123 |     }
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:122:25: error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+123 |     }
+124 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:122:54: error: cannot infer key path type from context; consider explicitly specifying a root type
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+    |                                                      `- error: cannot infer key path type from context; consider explicitly specifying a root type
+123 |     }
+124 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:146:25: error: value of type 'NativeShellContentState' has no member 'currentChefID'
+144 |         )
+145 |
+146 |         #expect(content.currentChefID == nil)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'currentChefID'
+147 |         #expect(content.myRecipesCatalog.rows.isEmpty)
+148 |         #expect(content.savedRecipesCatalog.rows.isEmpty)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:147:25: error: value of type 'NativeShellContentState' has no member 'myRecipesCatalog'
+145 |
+146 |         #expect(content.currentChefID == nil)
+147 |         #expect(content.myRecipesCatalog.rows.isEmpty)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'myRecipesCatalog'
+148 |         #expect(content.savedRecipesCatalog.rows.isEmpty)
+149 |     }
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:148:25: error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+146 |         #expect(content.currentChefID == nil)
+147 |         #expect(content.myRecipesCatalog.rows.isEmpty)
+148 |         #expect(content.savedRecipesCatalog.rows.isEmpty)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+149 |     }
+150 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:833:15: error: type 'AppRoute' has no member 'savedRecipes'
+831 |             (.kitchen, "kitchen", "spoonjoy://kitchen"),
+832 |             (.recipes, "recipes", "spoonjoy://recipes"),
+833 |             (.savedRecipes, "saved-recipes", "spoonjoy://saved-recipes"),
+    |               `- error: type 'AppRoute' has no member 'savedRecipes'
+834 |             (.recipeDetail(id: "recipe_lemon", presentation: .detail), "recipe:recipe_lemon", "spoonjoy://recipes/recipe_lemon"),
+835 |             (.recipeDetail(id: "recipe_lemon", presentation: .cook), "recipe-cook:recipe_lemon", "spoonjoy://recipes/recipe_lemon/cook"),
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:841:15: error: type 'AppRoute' has no member 'chefs'
+839 |             (.cookbooks, "cookbooks", "spoonjoy://cookbooks"),
+840 |             (.cookbookDetail(id: "cookbook_weeknights"), "cookbook:cookbook_weeknights", "spoonjoy://cookbooks/cookbook_weeknights"),
+841 |             (.chefs, "chefs", "spoonjoy://chefs"),
+    |               `- error: type 'AppRoute' has no member 'chefs'
+842 |             (.profile(identifier: "ari"), "profile:ari", "spoonjoy://users/ari"),
+843 |             (.profile(identifier: "ari/space"), "profile:ari%2Fspace", "spoonjoy://users/ari%2Fspace"),
+[119/166] Compiling SpoonjoyCoreTests AuthTelemetryContractTests.swift
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:22:34: error: type 'AppRoute' has no member 'savedRecipes'
+ 20 |         #expect(navigation.sidebarSelection == .recipes)
+ 21 |
+ 22 |         navigation.navigate(to: .savedRecipes)
+    |                                  `- error: type 'AppRoute' has no member 'savedRecipes'
+ 23 |         #expect(navigation.route == .savedRecipes)
+ 24 |         #expect(navigation.sidebarSelection == .savedRecipes)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:23:38: error: type 'AppRoute' has no member 'savedRecipes'
+ 21 |
+ 22 |         navigation.navigate(to: .savedRecipes)
+ 23 |         #expect(navigation.route == .savedRecipes)
+    |                                      `- error: type 'AppRoute' has no member 'savedRecipes'
+ 24 |         #expect(navigation.sidebarSelection == .savedRecipes)
+ 25 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:24:49: error: type 'AppSection' has no member 'savedRecipes'
+ 22 |         navigation.navigate(to: .savedRecipes)
+ 23 |         #expect(navigation.route == .savedRecipes)
+ 24 |         #expect(navigation.sidebarSelection == .savedRecipes)
+    |                                                 `- error: type 'AppSection' has no member 'savedRecipes'
+ 25 |
+ 26 |         navigation.navigate(to: .chefs)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:26:34: error: type 'AppRoute' has no member 'chefs'
+ 24 |         #expect(navigation.sidebarSelection == .savedRecipes)
+ 25 |
+ 26 |         navigation.navigate(to: .chefs)
+    |                                  `- error: type 'AppRoute' has no member 'chefs'
+ 27 |         #expect(navigation.route == .chefs)
+ 28 |         #expect(navigation.sidebarSelection == .chefs)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:27:38: error: type 'AppRoute' has no member 'chefs'
+ 25 |
+ 26 |         navigation.navigate(to: .chefs)
+ 27 |         #expect(navigation.route == .chefs)
+    |                                      `- error: type 'AppRoute' has no member 'chefs'
+ 28 |         #expect(navigation.sidebarSelection == .chefs)
+ 29 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:28:49: error: type 'AppSection' has no member 'chefs'
+ 26 |         navigation.navigate(to: .chefs)
+ 27 |         #expect(navigation.route == .chefs)
+ 28 |         #expect(navigation.sidebarSelection == .chefs)
+    |                                                 `- error: type 'AppSection' has no member 'chefs'
+ 29 |
+ 30 |         navigation.navigate(to: .recipeDetail(id: "recipe_lemon_pantry_pasta", presentation: .detail))
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:119:25: error: value of type 'NativeShellContentState' has no member 'currentChefID'
+117 |         )
+118 |
+119 |         #expect(content.currentChefID == currentChef.id)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'currentChefID'
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:120:25: error: value of type 'NativeShellContentState' has no member 'myRecipesCatalog'
+118 |
+119 |         #expect(content.currentChefID == currentChef.id)
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+    |                         `- error: value of type 'NativeShellContentState' has no member 'myRecipesCatalog'
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:120:51: error: cannot infer key path type from context; consider explicitly specifying a root type
+118 |
+119 |         #expect(content.currentChefID == currentChef.id)
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+    |                                                   `- error: cannot infer key path type from context; consider explicitly specifying a root type
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:121:25: error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+119 |         #expect(content.currentChefID == currentChef.id)
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+    |                         `- error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+123 |     }
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:121:54: error: cannot infer key path type from context; consider explicitly specifying a root type
+119 |         #expect(content.currentChefID == currentChef.id)
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+    |                                                      `- error: cannot infer key path type from context; consider explicitly specifying a root type
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+123 |     }
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:122:25: error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+123 |     }
+124 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:122:54: error: cannot infer key path type from context; consider explicitly specifying a root type
+120 |         #expect(content.myRecipesCatalog.rows.map(\.id) == ["recipe_own", "recipe_saved_unique"])
+121 |         #expect(content.savedRecipesCatalog.rows.map(\.id) == ["recipe_saved_shared", "recipe_saved_unique"])
+122 |         #expect(content.savedRecipesCatalog.rows.map(\.id).contains("recipe_foreign_saved") == false)
+    |                                                      `- error: cannot infer key path type from context; consider explicitly specifying a root type
+123 |     }
+124 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:146:25: error: value of type 'NativeShellContentState' has no member 'currentChefID'
+144 |         )
+145 |
+146 |         #expect(content.currentChefID == nil)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'currentChefID'
+147 |         #expect(content.myRecipesCatalog.rows.isEmpty)
+148 |         #expect(content.savedRecipesCatalog.rows.isEmpty)
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:147:25: error: value of type 'NativeShellContentState' has no member 'myRecipesCatalog'
+145 |
+146 |         #expect(content.currentChefID == nil)
+147 |         #expect(content.myRecipesCatalog.rows.isEmpty)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'myRecipesCatalog'
+148 |         #expect(content.savedRecipesCatalog.rows.isEmpty)
+149 |     }
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:148:25: error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+146 |         #expect(content.currentChefID == nil)
+147 |         #expect(content.myRecipesCatalog.rows.isEmpty)
+148 |         #expect(content.savedRecipesCatalog.rows.isEmpty)
+    |                         `- error: value of type 'NativeShellContentState' has no member 'savedRecipesCatalog'
+149 |     }
+150 |
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:833:15: error: type 'AppRoute' has no member 'savedRecipes'
+831 |             (.kitchen, "kitchen", "spoonjoy://kitchen"),
+832 |             (.recipes, "recipes", "spoonjoy://recipes"),
+833 |             (.savedRecipes, "saved-recipes", "spoonjoy://saved-recipes"),
+    |               `- error: type 'AppRoute' has no member 'savedRecipes'
+834 |             (.recipeDetail(id: "recipe_lemon", presentation: .detail), "recipe:recipe_lemon", "spoonjoy://recipes/recipe_lemon"),
+835 |             (.recipeDetail(id: "recipe_lemon", presentation: .cook), "recipe-cook:recipe_lemon", "spoonjoy://recipes/recipe_lemon/cook"),
+
+/Users/arimendelow/Projects/spoonjoy-apple-agent-kitchen-nav/Tests/SpoonjoyCoreTests/AppStateTests.swift:841:15: error: type 'AppRoute' has no member 'chefs'
+839 |             (.cookbooks, "cookbooks", "spoonjoy://cookbooks"),
+840 |             (.cookbookDetail(id: "cookbook_weeknights"), "cookbook:cookbook_weeknights", "spoonjoy://cookbooks/cookbook_weeknights"),
+841 |             (.chefs, "chefs", "spoonjoy://chefs"),
+    |               `- error: type 'AppRoute' has no member 'chefs'
+842 |             (.profile(identifier: "ari"), "profile:ari", "spoonjoy://users/ari"),
+843 |             (.profile(identifier: "ari/space"), "profile:ari%2Fspace", "spoonjoy://users/ari%2Fspace"),
+[120/166] Compiling SpoonjoyCoreTests NotificationAPNsSurfaceTests.swift
+[121/166] Compiling SpoonjoyCoreTests NotificationIntentTests.swift
+[122/166] Compiling SpoonjoyCoreTests OAuthRequestTests.swift
+[123/166] Compiling SpoonjoyCoreTests OfflineStoreTests.swift
+[124/166] Compiling SpoonjoyCoreTests OpenSearchShareCookIntentTests.swift
+[125/166] Compiling SpoonjoyCoreTests CookbookIntentTests.swift
+[126/166] Compiling SpoonjoyCoreTests CookbookSurfaceParityTests.swift
+[127/166] Compiling SpoonjoyCoreTests CoverControlSurfaceTests.swift
+[128/166] Compiling SpoonjoyCoreTests DeepLinkRouterTests.swift
+[129/166] Compiling SpoonjoyCoreTests KitchenRecipesStructureContractTests.swift
+[130/166] Compiling SpoonjoyCoreTests CaptureDraftEntityTests.swift
+[131/166] Compiling SpoonjoyCoreTests CaptureImportIntentTests.swift
+[132/166] Compiling SpoonjoyCoreTests CaptureImportSurfaceTests.swift
+[133/166] Compiling SpoonjoyCoreTests ChefProfileEntityTests.swift
+[134/166] Compiling SpoonjoyCoreTests CookModeParityTests.swift
+[135/166] Compiling SpoonjoyCoreTests ProfileChefGraphSurfaceTests.swift
+[136/166] Compiling SpoonjoyCoreTests ProfileSettingsIntentTests.swift
+[137/166] Compiling SpoonjoyCoreTests RecipeActionIntentTests.swift
+[138/166] Compiling SpoonjoyCoreTests RecipeActionParityTests.swift
+[139/166] Compiling SpoonjoyCoreTests RecipeCatalogDetailTests.swift
+[140/166] Compiling SpoonjoyCoreTests ShoppingAPIClientTests.swift
+[141/166] Compiling SpoonjoyCoreTests ShoppingEntityTests.swift
+[142/166] Compiling SpoonjoyCoreTests ShoppingIntentTests.swift
+[143/166] Compiling SpoonjoyCoreTests ShoppingSurfaceParityTests.swift
+[144/166] Compiling SpoonjoyCoreTests SpoonCookLogSurfaceTests.swift
+[145/166] Compiling SpoonjoyCoreTests SpoonEntityTests.swift
+[146/166] Compiling SpoonjoyCoreTests SpoonIntentTests.swift
+[147/166] Compiling SpoonjoyCoreTests SpoonjoyCoreBootstrapTests.swift
+[148/166] Compiling SpoonjoyCoreTests SpotlightShortcutTransferTests.swift
+[149/166] Compiling SpoonjoyCoreTests TokenRefreshTests.swift
+[150/166] Compiling SpoonjoyCoreTests RecipeCookbookEntityTests.swift
+[151/166] Compiling SpoonjoyCoreTests RecipeCookbookTests.swift
+[152/166] Compiling SpoonjoyCoreTests RecipeEditorParityTests.swift
+[153/166] Compiling SpoonjoyCoreTests SettingsAuthSurfaceContractTests.swift
+[154/166] Compiling SpoonjoyCoreTests SettingsTokenConnectionTests.swift
+[155/166] Compiling SpoonjoyCoreTests KitchenStateTests.swift
+[156/166] Compiling SpoonjoyCoreTests NativeAPIExpansionTests.swift
+[157/166] Compiling SpoonjoyCoreTests NativeAuthSessionTests.swift
+[158/166] Compiling SpoonjoyCoreTests NativeCacheFreshnessTests.swift
+[159/166] Compiling SpoonjoyCoreTests NativeLiveStoreTests.swift
+[160/166] Compiling SpoonjoyCoreTests NativeMobileDesignContractTests.swift
+[161/166] Compiling SpoonjoyCoreTests NativeScenarioTests.swift
+[162/166] Compiling SpoonjoyCoreTests NativeSearchSurfaceTests.swift
+[163/166] Compiling SpoonjoyCoreTests NativeSharingTests.swift
+[164/166] Compiling SpoonjoyCoreTests NativeSyncEngineTests.swift
+error: fatalError

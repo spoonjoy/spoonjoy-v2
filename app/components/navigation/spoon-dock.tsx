@@ -37,12 +37,8 @@ export function SpoonDock({
         // which still fills the width without spilling (guarded by
         // e2e/flows/spoondock-responsive.spec.ts). MobileNav grows the zones.
         centered ? null : "justify-between",
-        // Solid dark fill (no backdrop-filter): a `backdrop-blur` on a
-        // position:fixed element is a known iOS Safari bug that detaches/
-        // mis-positions the element during scroll (the dock "not sticking to
-        // the bottom"). A solid surface + border + shadow keeps it pinned and
-        // still reads as an elevated dark pill.
-        "rounded-full border border-[var(--sj-photo-line)] bg-[var(--sj-photo-charcoal)] p-2 max-[389px]:p-1.5 text-[var(--sj-on-photo)] shadow-[var(--sj-shadow)]",
+        "rounded-full border border-[var(--sj-photo-line)] bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_72%,transparent)] p-2 max-[389px]:p-1.5 text-[var(--sj-on-photo)]",
+        "shadow-[0_18px_60px_rgba(31,26,20,0.28),inset_0_1px_0_color-mix(in_srgb,var(--sj-on-photo)_24%,transparent)] backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_62%,transparent)]",
         "z-50 mb-[max(1rem,env(safe-area-inset-bottom))] lg:hidden",
         className,
       )}

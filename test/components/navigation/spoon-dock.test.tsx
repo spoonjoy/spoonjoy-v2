@@ -91,16 +91,13 @@ describe('SpoonDock', () => {
   })
 
   describe('surface styling', () => {
-    it('uses a solid fill with no backdrop-filter (iOS keeps fixed elements with backdrop-filter from sticking)', () => {
+    it('uses a translucent liquid-glass material instead of a solid fill', () => {
       render(<SpoonDock />)
       const nav = screen.getByRole('navigation')
-      expect(nav.className).not.toMatch(/backdrop-blur/)
-    })
-
-    it('has a solid dark background', () => {
-      render(<SpoonDock />)
-      const nav = screen.getByRole('navigation')
-      expect(nav.className).toContain('bg-[var(--sj-photo-charcoal)]')
+      expect(nav.className).toMatch(/backdrop-blur/)
+      expect(nav.className).toContain('bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_72%,transparent)]')
+      expect(nav.className).toContain('supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_62%,transparent)]')
+      expect(nav.className).toContain('shadow-[0_18px_60px_rgba(31,26,20,0.28),inset_0_1px_0_color-mix(in_srgb,var(--sj-on-photo)_24%,transparent)]')
     })
 
     it('has subtle border for glass edge', () => {

@@ -59,7 +59,7 @@ const SEARCH_SCOPES: SearchScope[] = ["all", "recipes", "cookbooks", "chefs", "s
 export function meta({}: Route.MetaArgs) {
   return [
     { title: "Search Spoonjoy" },
-    { name: "description", content: "Search Spoonjoy recipes, cookbooks, chefs, and private shopping-list items." },
+    { name: "description", content: "Search Spoonjoy recipes, cookbooks, chefs, and private shopping list items." },
   ];
 }
 
@@ -227,7 +227,7 @@ export default function Search() {
               })}
             </div>
             <Text className="font-sj-ui mt-5 hidden text-xs/5 uppercase tracking-[0.14em] sm:block">
-              Shopping-list results are always private to the signed-in kitchen.
+              Shopping List results are private to your signed-in kitchen.
             </Text>
           </aside>
 
@@ -249,7 +249,7 @@ export default function Search() {
             {!hasQuery ? (
               <div className="mb-4 border-y border-dashed border-[var(--sj-border-strong)] py-4">
                 <Text className="text-sm/6">
-                  Try searching by ingredient, step wording, cookbook theme, chef username, or shopping-list category.
+                  Try searching by ingredient, step wording, cookbook theme, chef username, or shopping list category.
                 </Text>
               </div>
             ) : null}

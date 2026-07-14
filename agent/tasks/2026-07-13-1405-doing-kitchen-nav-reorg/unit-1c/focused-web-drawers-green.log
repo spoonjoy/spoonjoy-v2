@@ -1,0 +1,15 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2-agent-kitchen-nav
+
+ ✓ test/routes/saved-recipes.test.tsx (4 tests) 457ms
+ ✓ test/routes/chefs.test.tsx (3 tests) 431ms
+     ✓ returns fellow chefs, chefs using my recipes, and private chronological activity without shopping-list events  304ms
+ ✓ test/routes/cookbooks-index.test.tsx (5 tests) 406ms
+ ✓ test/routes/my-recipes.test.tsx (4 tests) 357ms
+ ✓ test/components/navigation/mobile-nav.test.tsx (20 tests) 140ms
+ ✓ test/root-navbar.test.tsx (4 tests) 75ms
+
+ Test Files  6 passed (6)
+      Tests  40 passed (40)
+   Start at  15:23:26
+   Duration  5.32s (transform 255ms, setup 307ms, import 1.69s, tests 1.87s, environment 816ms)
