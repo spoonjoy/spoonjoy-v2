@@ -115,6 +115,50 @@ describe("scheduleSpoonCoverStylization", () => {
     expect(runner.imageToImage).toHaveBeenCalledTimes(1);
   });
 
+  it("persists prompt addition and parent cover lineage for editorial regeneration", async () => {
+    const parentCover = await db.recipeCover.create({
+      data: {
+        recipeId,
+        imageUrl: "https://stub.test/original-parent.png",
+        stylizedImageUrl: "https://stub.test/original-editorial.png",
+        sourceType: "chef-upload",
+        status: "ready",
+        generationStatus: "succeeded",
+      },
+    });
+    const runner = makeRunner();
+
+    await scheduleSpoonCoverStylization({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      parentCoverId: parentCover.id,
+      promptAddition: "  keep the garnish   but use a darker table  ",
+      rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
+      recipeTitle: "Stylize Me",
+      runner,
+      bucket: mockR2(),
+      now: () => 1234,
+      logger: errorSpy,
+    });
+
+    expect(runner.imageToImage).toHaveBeenCalledWith(
+      expect.any(File),
+      expect.stringContaining("Additional direction: keep the garnish but use a darker table."),
+      { model: "gpt-image-2" },
+    );
+    await expect(
+      db.recipeCover.findUniqueOrThrow({
+        where: { id: coverId },
+        select: { parentCoverId: true, promptAddition: true },
+      }),
+    ).resolves.toEqual({
+      parentCoverId: parentCover.id,
+      promptAddition: "keep the garnish but use a darker table",
+    });
+  });
+
   it("auto-activates a completed editorial cover only when the recipe has no real active cover", async () => {
     await db.recipeCover.update({
       where: { id: coverId },

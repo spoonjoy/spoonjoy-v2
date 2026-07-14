@@ -72,12 +72,30 @@ describe("image-gen.server prompts and constants", () => {
     expect(prompt).not.toContain("Tomato Soup, .");
   });
 
+  it("appends a sanitized bounded prompt addition to placeholder prompts", () => {
+    const prompt = composePlaceholderPrompt("Tomato Soup", null, {
+      promptAddition: `  brighter   herbs\n${"x".repeat(260)}  `,
+    });
+    expect(prompt).toContain(`Additional direction: brighter herbs ${"x".repeat(225)}`);
+    expect(prompt).not.toContain("\n");
+    expect(prompt).not.toContain("x".repeat(226));
+  });
+
   it("returns the verbatim stylization prompt", () => {
     expect(composeStylizationPrompt()).toContain(
       "Create an appetizing editorial food photograph based on the provided dish image",
     );
     expect(composeStylizationPrompt()).toContain(
       "Do not add text, logos, utensils, hands, new ingredients, or fantasy elements",
+    );
+  });
+
+  it("appends a sanitized bounded prompt addition to stylization prompts", () => {
+    const prompt = composeStylizationPrompt({
+      promptAddition: "  keep the same plate   but make the sauce glossier  ",
+    });
+    expect(prompt).toContain(
+      "Additional direction: keep the same plate but make the sauce glossier.",
     );
   });
 
@@ -124,6 +142,22 @@ describe("generatePlaceholderImage", () => {
     await generatePlaceholderImage("Pasta", "fresh and bright", deps);
     expect(runner.textToImage).toHaveBeenCalledWith(
       composePlaceholderPrompt("Pasta", "fresh and bright"),
+      { model: "dall-e-3" },
+    );
+  });
+
+  it("forwards prompt additions to textToImage", async () => {
+    const runner = mockRunner();
+    await generatePlaceholderImage("Pasta", null, {
+      env: {},
+      runner,
+      bucket: mockR2(),
+    }, {
+      promptAddition: "use a blue linen napkin",
+    });
+
+    expect(runner.textToImage).toHaveBeenCalledWith(
+      expect.stringContaining("Additional direction: use a blue linen napkin."),
       { model: "dall-e-3" },
     );
   });
@@ -359,6 +393,25 @@ describe("stylizeSpoonPhoto", () => {
     const sourceFile = (runner.imageToImage as ReturnType<typeof vi.fn>).mock.calls[0][0] as File;
     expect(sourceFile.type).toBe("image/png");
     expect(new Uint8Array(await sourceFile.arrayBuffer())).toEqual(VALID_PNG_BYTES);
+  });
+
+  it("forwards prompt additions to imageToImage", async () => {
+    const runner = mockRunner();
+    await stylizeSpoonPhoto(dataUrl("image/png", VALID_PNG_BYTES), "Tomato Soup", {
+      env: {},
+      runner,
+      bucket: mockR2(),
+    }, {
+      promptAddition: "preserve the garnish but brighten the background",
+    });
+
+    expect(runner.imageToImage).toHaveBeenCalledWith(
+      expect.any(File),
+      expect.stringContaining(
+        "Additional direction: preserve the garnish but brighten the background.",
+      ),
+      { model: "gpt-image-2" },
+    );
   });
 
   it("resolves an R2 /photos source to a validated File before imageToImage", async () => {

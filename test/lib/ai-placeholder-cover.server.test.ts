@@ -122,6 +122,35 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
     expect(errorSpy.error).not.toHaveBeenCalled();
   });
 
+  it("persists the sanitized prompt addition and forwards it to the provider", async () => {
+    const runner = makeRunner();
+    await scheduleAiPlaceholderCover({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      title: "Pasta",
+      description: null,
+      promptAddition: "  brighter   herbs\nand tighter crop  ",
+      runner,
+      bucket: mockR2(),
+      logger: errorSpy,
+    });
+
+    expect(runner.textToImage).toHaveBeenCalledWith(
+      expect.stringContaining("Additional direction: brighter herbs and tighter crop."),
+      { model: "dall-e-3" },
+    );
+    await expect(
+      db.recipeCover.findUniqueOrThrow({
+        where: { id: coverId },
+        select: { promptAddition: true },
+      }),
+    ).resolves.toEqual({
+      promptAddition: "brighter herbs and tighter crop",
+    });
+  });
+
   it("returns silently when the quota is exhausted", async () => {
     const now = () => new Date("2026-05-11T08:30:00Z");
     for (let i = 0; i < PLACEHOLDER_DAILY_CAP; i++) {
