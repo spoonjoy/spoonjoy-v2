@@ -70,7 +70,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 
 ### ⬜ Unit 1b: Backend Prompt And Cover Lineage — Implementation
 **What**: Add `RecipeCover` lineage/prompt fields in Prisma and migration SQL, update image-generation helpers and scheduling helpers to accept bounded prompt additions, and persist lineage.
-**Output**: Passing tests plus implementation in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/prisma/schema.prisma`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/prisma/migrations/20260714123600_recipe_cover_prompt_lineage/migration.sql`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/migrations/0023_recipe_cover_prompt_lineage.sql`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/lib/image-gen.server.ts`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/lib/ai-placeholder-cover.server.ts`, and `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/lib/spoon-cover-stylization.server.ts`.
+**Output**: Passing tests plus implementation in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/prisma/schema.prisma`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/prisma/migrations/20260714123600_recipe_cover_prompt_lineage/migration.sql`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/migrations/0023_recipe_cover_prompt_lineage.sql`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/lib/image-gen.server.ts`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/lib/ai-placeholder-cover.server.ts`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/lib/spoon-cover-stylization.server.ts`, and `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/lib/recipe-cover.server.ts` so `RECIPE_COVER_DISPLAY_SELECT satisfies Record<keyof RecipeCover, true>` remains exhaustive after Prisma generation.
 **Acceptance**: `pnpm run api:playground:generate && pnpm exec vitest run test/lib/image-gen.server.test.ts test/lib/ai-placeholder-cover.server.test.ts test/lib/spoon-cover-stylization.server.test.ts test/scripts/migration-0023-recipe-cover-prompt-lineage.test.ts --fileParallelism=false` passes; `pnpm run prisma:generate` passes; no warnings appear in the green logs.
 
 ### ⬜ Unit 1c: Backend Prompt And Cover Lineage — Coverage & Refactor
@@ -361,7 +361,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 ### ⬜ Unit 24: Reviewer Finding Fixes
 **What**: Address any BLOCKER/MAJOR reviewer findings from Unit 23 with focused patches, tests, commits, and re-review.
 **Output**: Fix commits, focused validation logs, and reviewer follow-up notes.
-**Acceptance**: `reviewer-reports.md` has no unresolved `BLOCKER` or `MAJOR` findings after re-review, and the focused commands tied to each fix pass.
+**Acceptance**: `reviewer-reports.md` has no unresolved `BLOCKER` or `MAJOR` findings after re-review; the focused commands tied to each fix pass; if any fix changes web/backend source, rerun Unit 19 final web validation before Unit 25; if any fix changes native source, rerun Unit 20 final native validation before Unit 26; if any fix changes UI, rerun Unit 11 visual QA before Unit 25 or Unit 26.
 
 ### ⬜ Unit 25: Merge Web PR
 **What**: Merge the web/backend PR after reviewer gates and GitHub status checks pass.
@@ -424,3 +424,4 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 - 2026-07-14 13:11 Ambiguity Round 3 replaced final web warning-scan glob with explicit log filenames
 - 2026-07-14 13:18 Scrutiny A added migration/deploy ordering, native media staging, MCP smoke, pinned status polling, and upload cleanup criteria
 - 2026-07-14 13:26 Scrutiny B addressed no-op smoke command, pipefail validation, root D1 migration, native upstream, pinned request shapes, stale unit reference, and inverted scans
+- 2026-07-14 13:33 Final scrutiny A fixed schema-helper ordering and required post-review final validation reruns
