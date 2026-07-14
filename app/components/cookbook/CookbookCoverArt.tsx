@@ -85,7 +85,7 @@ function CookbookImageCover({
           {images.length === 1 ? (
             <CoverProvenanceBadge
               label={image.coverProvenanceLabel}
-              className="absolute left-3 top-3 max-w-[calc(100%-1.5rem)] border-[color-mix(in_srgb,var(--sj-paper)_58%,transparent)] bg-[color-mix(in_srgb,var(--sj-charcoal)_76%,transparent)] text-[var(--sj-paper)]"
+              className="absolute left-3 top-3 max-w-[calc(100%-1.5rem)]"
             />
           ) : null}
         </span>

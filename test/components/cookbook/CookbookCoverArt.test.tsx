@@ -40,7 +40,11 @@ describe("CookbookCoverArt", () => {
     render(<CookbookCoverArt title="One Dish" recipeCount={1} recipeImages={[images[0]]} />);
 
     expect(screen.getByRole("img", { name: "A" })).toHaveAttribute("src", "/a.jpg");
-    expect(screen.getByText("Chef photo")).toBeInTheDocument();
+    const badge = screen.getByTestId("cover-provenance-badge");
+    expect(badge).toHaveTextContent("Chef photo");
+    expect(badge).toHaveClass("bg-[rgba(37,34,31,0.96)]");
+    expect(badge).toHaveClass("text-[var(--sj-paper)]");
+    expect(badge.className).not.toContain("text-[var(--sj-ink-soft)]");
     expect(screen.getAllByText("1 recipe").length).toBeGreaterThan(0);
   });
 
