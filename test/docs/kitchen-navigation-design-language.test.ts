@@ -24,11 +24,12 @@ describe("kitchen navigation design language", () => {
       "personal drawer filters are local filters",
       "mobile dock",
       "Pantry drawer",
-      "On the Counter"
+      "Recently Updated"
     ]) {
       expect(designLanguage).toContain(marker);
     }
 
     expect(designLanguage).not.toContain("Latest from the kitchen");
+    expect(designLanguage).not.toContain("On the Counter");
   });
 });

@@ -429,11 +429,12 @@ describe("Kitchen Index Route", () => {
       expect(screen.queryByRole("button", { name: "Logout" })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "New Recipe" })).not.toBeInTheDocument();
       expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
-      expect(screen.getByRole("region", { name: "On the Counter" })).toBeInTheDocument();
-      expect(screen.getByText("On the Counter")).toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "Recently Updated" })).toBeInTheDocument();
+      expect(screen.getByText("Recently Updated")).toBeInTheDocument();
       expect(screen.queryByText("Latest from the kitchen")).not.toBeInTheDocument();
+      expect(screen.queryByText("On the Counter")).not.toBeInTheDocument();
       expect(screen.getByRole("complementary", { name: "Recipe index" })).toBeInTheDocument();
-      expect(screen.getByRole("region", { name: "Cookbook shelf" })).toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "Cookbooks" })).toBeInTheDocument();
       expect(screen.getByText("3 recipes and 1 cookbook")).toBeInTheDocument();
       expect(screen.getAllByText("Cheese Night").length).toBeGreaterThan(0);
       expect(screen.getByText("Chef photo")).toBeInTheDocument();
@@ -492,7 +493,7 @@ describe("Kitchen Index Route", () => {
       render(<Stub initialEntries={["/"]} />);
 
       expect(await screen.findByText("0 recipes and 0 cookbooks")).toBeInTheDocument();
-      expect(screen.getByText("Start your recipe box")).toBeInTheDocument();
+      expect(screen.getByText("Create your first recipe")).toBeInTheDocument();
       expect(screen.getByText(/the family classic everyone asks about/i)).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Create First Recipe" })).toHaveAttribute("href", "/recipes/new");
       expect(screen.getByText("Build your first cookbook")).toBeInTheDocument();
@@ -648,7 +649,45 @@ describe("Kitchen Index Route", () => {
 
       expect(await screen.findByText("alpinechef's Kitchen")).toBeInTheDocument();
       expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
-      expect(screen.getByRole("region", { name: "Cookbook shelf" })).toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "Cookbooks" })).toBeInTheDocument();
+    });
+
+    it("does not hide QA-looking recipe titles in the production kitchen UI", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/",
+          Component: Index,
+          loader: () => ({
+            tab: "recipes",
+            isOwner: true,
+            viewer: { id: "viewer-1", username: "chef", email: "chef@example.com", photoUrl: null },
+            kitchenUser: { id: "viewer-1", username: "chef", photoUrl: null },
+            recipes: [
+              {
+                id: "recipe-qa-title",
+                title: "e2e Chocolate Cake",
+                description: "A real recipe with an unfortunate title.",
+                servings: null,
+                coverImageUrl: null,
+              },
+              {
+                id: "recipe-variation",
+                title: "Pasta (variation 2)",
+                description: null,
+                servings: null,
+                coverImageUrl: null,
+              },
+            ],
+            cookbooks: [],
+          }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/"]} />);
+
+      await screen.findByText("e2e Chocolate Cake");
+      expect(screen.getAllByRole("link", { name: "e2e Chocolate Cake" }).some((link) => link.getAttribute("href") === "/recipes/recipe-qa-title")).toBe(true);
+      expect(screen.getByRole("link", { name: /Pasta \(variation 2\)/ })).toHaveAttribute("href", "/recipes/recipe-variation");
     });
   });
 });
