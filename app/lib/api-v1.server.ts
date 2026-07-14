@@ -3782,6 +3782,14 @@ export async function runIdempotentApiV1Mutation(
     });
   } catch (error) {
     if (!options.recoverInFlight) throw error;
+    try {
+      await completeIdempotencyKey(db, reservation.record.id, {
+        status: result.status,
+        body: responseBody,
+      });
+    } catch {
+      // Leave the reserved key recoverable; the committed write is more important than a duplicate response write failure.
+    }
   }
 
   return withApiV1Telemetry(Response.json(responseBody, {

@@ -841,6 +841,10 @@ describe("API v1 OpenAPI document", () => {
 
     expect(operation(document, "/api/v1/me/photo", "POST").requestBody.content["multipart/form-data"].schema.$ref)
       .toBe("#/components/schemas/ProfilePhotoUploadRequest");
+    expect(operation(document, "/api/v1/me/photo", "POST").requestBody.content["multipart/form-data"].encoding.photo.contentType)
+      .toBe("image/jpeg,image/png,image/gif,image/webp");
+    expect(operation(document, "/api/v1/recipes/{id}/image", "POST").requestBody.content["multipart/form-data"].encoding.photo.contentType)
+      .toBe("image/jpeg,image/png,image/webp");
     expect(operation(document, "/api/v1/me/photo", "POST").requestBody.content["application/json"]).toBeUndefined();
 	    expect(operation(document, "/api/v1/me/photo", "POST").responses["200"].content["application/json"].schema.$ref)
 	      .toBe("#/components/schemas/AccountProfileMutationEnvelope");

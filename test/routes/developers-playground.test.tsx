@@ -183,7 +183,7 @@ describe("/developers/playground", () => {
       contentType: "multipart/form-data",
       fields: [
         { name: "clientMutationId", required: true, accept: "" },
-        { name: "photo", required: true, accept: "image/jpeg,image/png,image/gif,image/webp" },
+        { name: "photo", required: true, accept: "image/jpeg,image/png,image/webp" },
         { name: "activate", required: false, accept: "" },
         { name: "generateEditorial", required: false, accept: "" },
         { name: "postAsSpoon", required: false, accept: "" },

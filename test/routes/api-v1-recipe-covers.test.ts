@@ -594,7 +594,9 @@ describe("API v1 recipe cover management", () => {
     const fixture = await createFirstPhotoFixture(db);
     const photoBucket = mockPhotoBucket();
     const originalUpdate = db.apiIdempotencyKey.update;
-    const updateSpy = vi.fn().mockRejectedValueOnce(new Error("idempotency completion failed after upload"));
+    const updateSpy = vi.fn()
+      .mockRejectedValueOnce(new Error("idempotency completion failed after upload"))
+      .mockRejectedValueOnce(new Error("idempotency completion retry failed after upload"));
     db.apiIdempotencyKey.update = updateSpy as unknown as typeof db.apiIdempotencyKey.update;
     const body = {
       clientMutationId: "first-photo-recover-after-commit",
@@ -643,6 +645,75 @@ describe("API v1 recipe cover management", () => {
       expect(photoBucket.bucket.put).toHaveBeenCalledTimes(1);
       await expect(db.recipeCover.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(1);
       await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(1);
+    } finally {
+      db.apiIdempotencyKey.update = originalUpdate;
+    }
+  });
+
+  it("persists the exact first-photo response when idempotency completion retry succeeds", async () => {
+    const fixture = await createCoverFixture(db);
+    const photoBucket = mockPhotoBucket();
+    const originalUpdate = db.apiIdempotencyKey.update;
+    const updateSpy = vi.fn()
+      .mockRejectedValueOnce(new Error("idempotency completion failed once"))
+      .mockImplementation((...args: Parameters<typeof db.apiIdempotencyKey.update>) => originalUpdate.apply(db.apiIdempotencyKey, args));
+    db.apiIdempotencyKey.update = updateSpy as unknown as typeof db.apiIdempotencyKey.update;
+    const body = {
+      clientMutationId: "first-photo-completion-retry",
+      photo: photoFile("completion-retry.png"),
+      activate: true,
+      generateEditorial: false,
+      postAsSpoon: false,
+    };
+
+    try {
+      const first = await action(routeArgs(
+        recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_recipe_image_completion_retry_first", recipeImageForm(body)),
+        `recipes/${fixture.recipe.id}/image`,
+        backgroundContext({ PHOTOS: photoBucket.bucket }),
+      ));
+      const firstPayload = await readJson(first);
+      expect(first.status).toBe(201);
+      expect(firstPayload).toMatchObject({
+        ok: true,
+        requestId: "req_recipe_image_completion_retry_first",
+        data: {
+          previousActiveCover: {
+            id: fixture.activeCover.id,
+            activeVariant: "stylized",
+          },
+          mutation: { clientMutationId: "first-photo-completion-retry", replayed: false },
+        },
+      });
+      await expect(db.apiIdempotencyKey.findFirst({
+        where: {
+          userId: fixture.owner.id,
+          key: "first-photo-completion-retry",
+        },
+      })).resolves.toMatchObject({
+        responseStatus: 201,
+        responseBody: expect.stringContaining(fixture.activeCover.id),
+      });
+
+      db.apiIdempotencyKey.update = originalUpdate;
+      const replay = await action(routeArgs(
+        recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_recipe_image_completion_retry_second", recipeImageForm(body)),
+        `recipes/${fixture.recipe.id}/image`,
+        backgroundContext({ PHOTOS: photoBucket.bucket }),
+      ));
+      expect(replay.status).toBe(201);
+      await expect(replay.json()).resolves.toMatchObject({
+        ok: true,
+        requestId: "req_recipe_image_completion_retry_second",
+        data: {
+          previousActiveCover: {
+            id: fixture.activeCover.id,
+            activeVariant: "stylized",
+          },
+          mutation: { clientMutationId: "first-photo-completion-retry", replayed: true },
+        },
+      });
+      expect(photoBucket.bucket.put).toHaveBeenCalledTimes(1);
     } finally {
       db.apiIdempotencyKey.update = originalUpdate;
     }
@@ -1256,6 +1327,34 @@ describe("API v1 recipe cover management", () => {
       },
     });
     expect(recipe).toMatchObject({ activeCoverId: null, activeCoverVariant: null, coverMode: "none" });
+  });
+
+  it("surfaces idempotency completion failures for cover mutations without recovery", async () => {
+    const fixture = await createCoverFixture(db);
+    const originalUpdate = db.apiIdempotencyKey.update;
+    const updateSpy = vi.fn().mockRejectedValueOnce(new Error("idempotency completion unavailable"));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    db.apiIdempotencyKey.update = updateSpy as unknown as typeof db.apiIdempotencyKey.update;
+
+    try {
+      const response = await action(routeArgs(jsonRequest(
+        `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers`,
+        "PATCH",
+        fixture.ownerKitchenWrite.token,
+        "req_cover_completion_failure_no_recovery",
+        { clientMutationId: "cover-none-completion-failure", confirmNoCover: true },
+      ), `recipes/${fixture.recipe.id}/covers`));
+
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toMatchObject({
+        ok: false,
+        requestId: "req_cover_completion_failure_no_recovery",
+        error: { code: "internal_error", status: 500 },
+      });
+    } finally {
+      db.apiIdempotencyKey.update = originalUpdate;
+      errorSpy.mockRestore();
+    }
   });
 
   it("handles stale active cover pointers when clearing covers", async () => {

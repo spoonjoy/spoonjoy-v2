@@ -5402,7 +5402,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
             "name": "photo",
             "label": "Photo",
             "required": true,
-            "accept": "image/jpeg,image/png,image/gif,image/webp",
+            "accept": "image/jpeg,image/png,image/webp",
             "description": "(binary image file)"
           },
           {

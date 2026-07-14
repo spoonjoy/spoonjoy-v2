@@ -1,0 +1,155 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2-photo-studio
+      Coverage enabled with istanbul
+
+ ✓ test/routes/developers-playground.test.tsx (39 tests) 5345ms
+     ✓ sends generated JSON-body operations with session auth by default  303ms
+     ✓ covers generated OAuth, mutation id, example body, and secret-response playground controls  392ms
+     ✓ copies generated playground values and reports clipboard failures  1816ms
+     ✓ supports keyboard roving for surface and auth mode radio groups  484ms
+     ✓ handles OAuth callback validation failures and redirect submissions  352ms
+ ✓ test/routes/api-v1-recipe-covers.test.ts (26 tests) 780ms
+ ✓ test/routes/api-v1-openapi.test.ts (2 tests) 137ms
+ ✓ test/lib/api-v1-openapi.server.test.ts (11 tests) 130ms
+ ✓ test/scripts/generate-api-playground.test.ts (3 tests) 115ms
+ ✓ test/docs/developer-platform-docs.test.ts (6 tests) 26ms
+
+ Test Files  6 passed (6)
+      Tests  87 passed (87)
+   Start at  16:32:27
+   Duration  14.89s (transform 4.56s, setup 436ms, import 6.01s, tests 6.53s, environment 986ms)
+
+ % Coverage report from istanbul
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   28.64 |    29.79 |   33.13 |   28.87 |                   
+ ...nents/cookbook |      30 |    16.66 |   42.85 |   33.33 |                   
+  page.tsx         |      30 |    16.66 |   42.85 |   33.33 | 87-178            
+ app/components/ui |   71.79 |       50 |   72.72 |   84.84 |                   
+  badge.tsx        |   77.77 |        0 |      50 |   77.77 | 60-65             
+  button.tsx       |     100 |    83.33 |     100 |     100 | 43                
+  link.tsx         |   66.66 |       50 |     100 |   93.33 | 82                
+  text.tsx         |      50 |      100 |      50 |      50 | 15-27             
+ app/lib           |   21.56 |    20.99 |   22.72 |   22.25 |                   
+  ...ngs.server.ts |       1 |        0 |       0 |    1.02 | 117-901           
+  ...ics-server.ts |    8.24 |     6.59 |    9.52 |    8.64 | ...46-290,304-321 
+  analytics.ts     |   59.67 |    51.72 |   66.66 |   68.18 | 69-94,101,107-110 
+  ...uth.server.ts |      76 |    56.36 |      75 |   74.64 | ...93,232,265-279 
+  ...ncy.server.ts |   60.93 |    53.06 |   76.92 |   67.85 | ...52-158,180,194 
+  ...act.server.ts |     100 |      100 |     100 |     100 |                   
+  ...api.server.ts |     100 |    99.72 |     100 |     100 | 3424              
+  ...eps.server.ts |       0 |        0 |       0 |       0 | 96-1069           
+  ...tes.server.ts |       0 |        0 |       0 |       0 | 62-465            
+  api-v1.server.ts |    25.2 |    25.93 |   23.09 |   25.79 | ...6530-6717,6782 
+  ...uth.server.ts |    9.09 |        0 |       0 |    9.72 | 74-243            
+  ...ack.server.ts |       0 |        0 |       0 |       0 | 73-154            
+  auth.server.ts   |    8.69 |        0 |       0 |    8.69 | 21-160            
+  ...ask.server.ts |     100 |      100 |     100 |     100 |                   
+  ...ost.server.ts |    6.25 |        0 |       0 |    6.45 | 6-45,53-77        
+  chef-avatar.ts   |    9.09 |        0 |       0 |    9.09 | 4-22              
+  ...rce.server.ts |       0 |        0 |       0 |       0 | 2-14              
+  db.server.ts     |   35.71 |       25 |   42.85 |   35.71 | 8-10,19-28,42-56  
+  env.server.ts    |       5 |        0 |       0 |       5 | 73-152,172-221    
+  ...ext.server.ts |     8.1 |        0 |       0 |    8.33 | 44-156            
+  ...ger.server.ts |      10 |        0 |       0 |   11.11 | 31-118            
+  ...try.server.ts |      60 |     52.5 |      60 |      60 | 100-117           
+  ...gen.server.ts |    3.84 |      0.9 |    2.12 |    3.64 | ...75-613,665-833 
+  ...age.server.ts |   33.52 |    35.71 |      60 |   33.73 | ...90-298,394-405 
+  ...ols.server.ts |       0 |        0 |       0 |       0 | 32-111            
+  ...ffordances.ts |   29.41 |        0 |       0 |   31.25 | 113-144           
+  ...rse.server.ts |    8.49 |        0 |       0 |    8.49 | 97-104,194-534    
+  ...try.server.ts |       0 |        0 |       0 |       0 | 61-122            
+  ...uth.server.ts |       0 |        0 |       0 |       0 | 28-68             
+  ...ion.server.ts |      25 |     5.55 |   33.33 |   27.27 | 18-56,75,102-111  
+  ...tch.server.ts |       0 |        0 |       0 |       0 | 81-306            
+  ...ers.server.ts |       0 |        0 |       0 |       0 | 43-194            
+  ...ver.server.ts |    3.96 |        0 |       0 |    4.62 | 46-108,120-402    
+  ...ser.server.ts |       0 |        0 |       0 |       0 | 74-419            
+  og-metadata.ts   |   64.28 |     62.5 |      50 |   69.23 | 51,71-75,83       
+  ...ent.server.ts |       0 |      100 |       0 |       0 | 10                
+  ...ror.server.ts |       0 |        0 |       0 |       0 | 23-63             
+  ...mit.server.ts |   28.57 |     22.5 |   22.22 |   27.65 | ...75-180,191-226 
+  ...ver.server.ts |   47.72 |    45.89 |   53.12 |   50.86 | ...43,449,455-491 
+  ...ate.server.ts |       0 |        0 |       0 |       0 | 39-279            
+  ...ork.server.ts |    5.17 |        0 |       0 |    6.25 | 12-22,70-223      
+  ...ent.server.ts |       0 |        0 |       0 |       0 | 20-112            
+  recipe-image.ts  |     100 |      100 |     100 |     100 |                   
+  ...tch.server.ts |     1.4 |        0 |       0 |    1.65 | 29-264            
+  ...nld.server.ts |    0.97 |        0 |       0 |    1.19 | 43-188            
+  ...llm.server.ts |    9.33 |        0 |       0 |    9.85 | 66-72,106-240     
+  ...deo.server.ts |   10.12 |        0 |       0 |   10.81 | 46-51,101-280     
+  ...ort.server.ts |     1.5 |        0 |       0 |    1.57 | ...8-738,772-1040 
+  ...oon.server.ts |   30.76 |    25.39 |   35.71 |   31.39 | ...43-247,282-293 
+  ...ess.server.ts |   11.11 |        0 |       0 |   11.11 | 18-44             
+  ...orm.server.ts |   57.14 |    11.53 |   66.66 |   57.14 | 11-13,44          
+  ...tch.server.ts |    2.43 |        0 |       0 |    2.59 | 21-168            
+  search.server.ts |    6.07 |        0 |       0 |    6.83 | 174-740           
+  ...ion.server.ts |   46.37 |    21.56 |   35.71 |   48.43 | ...79-190,214-243 
+  ...ion.server.ts |       0 |        0 |       0 |       0 | 18-55             
+  ...ion.server.ts |       0 |        0 |       0 |       0 | 41-117            
+  ...ion.server.ts |   33.33 |    25.56 |   45.16 |    36.7 | ...56-658,671-710 
+  ...ion.server.ts |       0 |        0 |       0 |       0 | 19-57             
+  ...ies.server.ts |       0 |      100 |       0 |       0 | 14-77             
+  ...ion.server.ts |       0 |        0 |       0 |       0 | 29-227            
+  validation.ts    |   12.16 |        0 |       0 |   12.16 | 28-207            
+  ...ush.server.ts |    6.25 |        0 |       0 |    7.14 | 52-108            
+  ...ute.server.ts |    1.16 |        0 |       0 |    1.21 | 37-405            
+  ...thn.server.ts |    5.26 |        0 |       0 |    5.88 | 50-51,79-173      
+ app/lib/generated |     100 |      100 |     100 |     100 |                   
+  ...playground.ts |     100 |      100 |     100 |     100 |                   
+ app/routes        |     100 |      100 |     100 |     100 |                   
+  api.v1.$.ts      |     100 |      100 |     100 |     100 |                   
+  ...layground.tsx |     100 |      100 |     100 |     100 |                   
+ scripts           |   96.22 |    92.64 |   96.87 |   96.15 |                   
+  ...playground.ts |   96.22 |    92.64 |   96.87 |   96.15 | 522-525,529       
+-------------------|---------|----------|---------|---------|-------------------
+
+Targeted Unit 3c review-fix coverage audit
+[
+  {
+    "file": "app/lib/api-v1.server.ts",
+    "label": "recipe image upload response/recovery/handler",
+    "start": 2259,
+    "end": 2470,
+    "uncoveredStatements": [],
+    "uncoveredFunctions": [],
+    "uncoveredBranches": []
+  },
+  {
+    "file": "app/lib/api-v1.server.ts",
+    "label": "idempotency exact completion retry",
+    "start": 3777,
+    "end": 3793,
+    "uncoveredStatements": [],
+    "uncoveredFunctions": [],
+    "uncoveredBranches": []
+  },
+  {
+    "file": "app/lib/api-v1.server.ts",
+    "label": "multipart boolean parser",
+    "start": 4336,
+    "end": 4342,
+    "uncoveredStatements": [],
+    "uncoveredFunctions": [],
+    "uncoveredBranches": []
+  },
+  {
+    "file": "scripts/generate-api-playground.ts",
+    "label": "multipart schema and encoding generator",
+    "start": 162,
+    "end": 203,
+    "uncoveredStatements": [],
+    "uncoveredFunctions": [],
+    "uncoveredBranches": []
+  },
+  {
+    "file": "app/lib/api-v1-openapi.server.ts",
+    "label": "multipart OpenAPI encoding helper",
+    "start": 62,
+    "end": 72,
+    "uncoveredStatements": [],
+    "uncoveredFunctions": [],
+    "uncoveredBranches": []
+  }
+]

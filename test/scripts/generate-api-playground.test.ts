@@ -72,6 +72,9 @@ describe("generate-api-playground", () => {
                   examples: {
                     example: { value: { photo: "(binary image file)", caption: "Optional caption" } },
                   },
+                  encoding: {
+                    photo: { contentType: "image/png" },
+                  },
                 },
               },
             },
@@ -104,7 +107,7 @@ describe("generate-api-playground", () => {
     const manifest = buildApiPlaygroundManifest(document);
 
     expect(manifest.operations.find((operation) => operation.id === "POST /custom/inline-upload")?.requestBody?.fields).toEqual([
-      expect.objectContaining({ name: "photo", required: true }),
+      expect.objectContaining({ name: "photo", required: true, accept: "image/png" }),
       expect.objectContaining({ name: "caption", required: false }),
     ]);
     expect(manifest.operations.find((operation) => operation.id === "POST /custom/unsupported-ref-upload")?.requestBody?.fields).toEqual([

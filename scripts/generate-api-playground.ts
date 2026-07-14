@@ -8,6 +8,7 @@ import {
 } from "../app/lib/api-v1-openapi.server";
 
 type OpenApiDocument = ReturnType<typeof buildApiV1OpenApiDocument>;
+type OpenApiMultipartEncoding = Record<string, { contentType?: string }>;
 type OpenApiSchema = {
   $ref?: string;
   type?: string | string[];
@@ -68,6 +69,7 @@ type OpenApiOperation = {
       };
       "multipart/form-data"?: {
         schema?: OpenApiSchema;
+        encoding?: OpenApiMultipartEncoding;
         examples?: Record<string, { value?: unknown }>;
       };
     };
@@ -182,6 +184,9 @@ function requestBodyExample(document: OpenApiDocument, operation: OpenApiOperati
   const multipartSchema = contentType === "multipart/form-data"
     ? resolveSchema(document, multipartMedia?.schema)
     : undefined;
+  const multipartEncoding = contentType === "multipart/form-data"
+    ? multipartMedia?.encoding ?? {}
+    : {};
   const requiredMultipartFields = new Set(multipartSchema?.required ?? []);
   const multipartProperties = multipartSchema?.properties ?? {};
   const multipartFields = contentType === "multipart/form-data" && example && typeof example === "object" && !Array.isArray(example)
@@ -191,7 +196,7 @@ function requestBodyExample(document: OpenApiDocument, operation: OpenApiOperati
           name,
           label: titleCase(name),
           required: requiredMultipartFields.has(name),
-          accept: name === "photo" ? "image/jpeg,image/png,image/gif,image/webp" : "",
+          accept: multipartEncoding[name]?.contentType ?? "",
           description: typeof value === "string" ? value : fieldSchema?.description ?? "",
         };
       })

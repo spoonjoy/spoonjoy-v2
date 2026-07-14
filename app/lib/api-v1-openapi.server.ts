@@ -25,6 +25,7 @@ interface OperationConfig {
   requestBody?: string;
   requestBodyRequired?: boolean;
   requestBodyContentType?: "application/json" | "multipart/form-data";
+  requestBodyEncoding?: Record<string, { contentType: string }>;
 }
 
 interface BuildOpenApiOptions {
@@ -58,9 +59,14 @@ const formContentExamples = (schema: JsonSchema, examples: Record<string, unknow
   },
 });
 
-const multipartContent = (schema: JsonSchema, example: unknown) => ({
+const multipartContent = (
+  schema: JsonSchema,
+  example: unknown,
+  encoding: Record<string, { contentType: string }>,
+) => ({
   "multipart/form-data": {
     schema,
+    encoding,
     examples: {
       example: { value: example },
     },
@@ -1418,7 +1424,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
     DELETE: { operationId: "deleteApiV1RecipeSpoon", tags: ["Recipe Spoons"], summary: "Soft-delete one owned recipe spoon cook event", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeSpoonEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.id, pathParameters.spoonId), requestBody: "DeleteRecipeSpoonRequest", requestBodyRequired: false },
   },
   "/api/v1/recipes/{id}/image": {
-    POST: { operationId: "postApiV1RecipeImage", tags: ["Recipe Covers"], summary: "Upload a first recipe photo, optionally preserve it as a Spoon, and queue editorialization", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "RecipeImageUploadEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "RecipeImageUploadRequest", requestBodyContentType: "multipart/form-data" },
+    POST: { operationId: "postApiV1RecipeImage", tags: ["Recipe Covers"], summary: "Upload a first recipe photo, optionally preserve it as a Spoon, and queue editorialization", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "RecipeImageUploadEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "RecipeImageUploadRequest", requestBodyContentType: "multipart/form-data", requestBodyEncoding: { photo: { contentType: "image/jpeg,image/png,image/webp" } } },
   },
   "/api/v1/recipes/{id}/covers": {
     GET: { operationId: "getApiV1RecipeCovers", tags: ["Recipe Covers"], summary: "List owner recipe cover candidates and spoon photo sources", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverListEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, queryParameters.includeArchived, queryParameters.limit, queryParameters.offset] },
@@ -1455,7 +1461,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
     GET: { operationId: "getApiV1MeSync", tags: ["Account"], summary: "Bootstrap native offline account data", auth: "bearer", scopes: ["account:read", "kitchen:read"], success: { 200: "NativeAccountSyncEnvelope" }, errors: ["invalid_cursor", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [queryParameters.cursor, queryParameters.limit] },
   },
   "/api/v1/me/photo": {
-    POST: { operationId: "postApiV1MePhoto", tags: ["Account"], summary: "Upload the authenticated account profile photo", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileMutationEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "ProfilePhotoUploadRequest", requestBodyContentType: "multipart/form-data" },
+    POST: { operationId: "postApiV1MePhoto", tags: ["Account"], summary: "Upload the authenticated account profile photo", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileMutationEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "ProfilePhotoUploadRequest", requestBodyContentType: "multipart/form-data", requestBodyEncoding: { photo: { contentType: "image/jpeg,image/png,image/gif,image/webp" } } },
     DELETE: { operationId: "deleteApiV1MePhoto", tags: ["Account"], summary: "Remove the authenticated account profile photo", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(), requestBody: "AccountDeleteMutationRequest", requestBodyRequired: false },
   },
   "/api/v1/me/notification-preferences": {
@@ -3415,7 +3421,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
               requestBody: {
                 required: meta.requestBodyRequired ?? true,
                 content: meta.requestBodyContentType === "multipart/form-data"
-                  ? multipartContent(ref(meta.requestBody), requestExampleFor(meta.requestBody, path, method))
+                  ? multipartContent(ref(meta.requestBody), requestExampleFor(meta.requestBody, path, method), meta.requestBodyEncoding ?? {})
                   : jsonContent(ref(meta.requestBody), requestExampleFor(meta.requestBody, path, method)),
               },
             }
