@@ -270,7 +270,6 @@ describe("API v1 recipe cover management", () => {
       clientMutationId: "first-photo-spoon-editorial",
       photo: photoFile("first-photo.png"),
       activate: true,
-      generateEditorial: true,
       postAsSpoon: true,
       note: "  Weeknight version  ",
       nextTime: "Use more lemon",
@@ -287,7 +286,7 @@ describe("API v1 recipe cover management", () => {
     expect(response.status).toBe(201);
     expect(photoBucket.bucket.put).toHaveBeenCalledTimes(1);
     const uploadedKey = vi.mocked(photoBucket.bucket.put).mock.calls[0][0] as string;
-    expect(uploadedKey).toMatch(new RegExp(`^recipes/${fixture.owner.id}/${fixture.recipe.id}/\\d+-.*\\.png$`));
+    expect(uploadedKey).toMatch(new RegExp(`^spoons/${fixture.owner.id}/${fixture.recipe.id}/\\d+-.*\\.png$`));
     expect(payload).toMatchObject({
       ok: true,
       requestId: "req_recipe_image_first_photo",
