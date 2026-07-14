@@ -5,6 +5,7 @@ import {
   DEFAULT_GEMINI_IMAGE_MODEL,
   DEFAULT_GEMINI_IMAGE_TIMEOUT_MS,
   generatePlaceholderImage,
+  sanitizeImagePromptAddition,
   type ImageGenEnv,
   type ImageGenRunner,
 } from "~/lib/image-gen.server";
@@ -35,6 +36,7 @@ export interface SchedulePlaceholderInput {
   coverId: string;
   title: string;
   description: string | null;
+  promptAddition?: string | null;
   env?: ImageGenerationSchedulerEnv | null;
   bucket?: R2Bucket;
   runner?: ImageGenRunner;
@@ -253,6 +255,8 @@ export async function scheduleAiPlaceholderCover(
       fetchImpl: input.fetchImpl,
       bucket: input.bucket,
       now: input.now,
+    }, {
+      promptAddition: input.promptAddition,
     });
 
     await input.db.recipeCover.update({
@@ -262,6 +266,7 @@ export async function scheduleAiPlaceholderCover(
         status: "ready",
         generationStatus: "succeeded",
         failureReason: null,
+        promptAddition: sanitizeImagePromptAddition(input.promptAddition),
       },
     });
     await activatePlaceholderIfStillAutomatic(input);

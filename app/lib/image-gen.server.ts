@@ -41,6 +41,10 @@ export interface ImageGenDeps {
   allowLocalImageFallback?: boolean;
 }
 
+export interface ImagePromptOptions {
+  promptAddition?: string | null;
+}
+
 type ImageAssetDeps = Pick<
   ImageGenDeps,
   "fetchImpl" | "bucket" | "now" | "randomId" | "allowLocalImageFallback"
@@ -86,6 +90,7 @@ export const OPENAI_IMAGE_EDIT_MODELS = [
   "gpt-image-1-mini",
 ] as const;
 
+export const IMAGE_PROMPT_ADDITION_MAX_LENGTH = 240;
 export const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-3.1-flash-image";
 export const DEFAULT_GEMINI_IMAGE_TIMEOUT_MS = 30_000;
 
@@ -230,23 +235,26 @@ export function isImageProviderFallbackError(cause: unknown): boolean {
 export function composePlaceholderPrompt(
   title: string,
   description: string | null,
+  options: ImagePromptOptions = {},
 ): string {
   const descClause = description ? `, ${description}` : "";
   return (
     `Warm editorial food photograph of ${title}${descClause}. ` +
     `Plated on cream ceramic with brass-toned cutlery, soft golden afternoon light, weathered oak surface. ` +
     `Style: intimate cookbook photography, muted palette of cream, terracotta, sage, and brass. ` +
-    `Single dish, shallow depth of field. No text, no watermarks, no people.`
+    `Single dish, shallow depth of field. No text, no watermarks, no people.` +
+    promptAdditionClause(options.promptAddition)
   );
 }
 
-export function composeStylizationPrompt(): string {
+export function composeStylizationPrompt(options: ImagePromptOptions = {}): string {
   return (
     `Create an appetizing editorial food photograph based on the provided dish image. ` +
     `Preserve the actual dish, ingredients, plating, orientation, and overall composition. ` +
     `Improve lighting, color, texture, and background polish so it feels natural, warm, and realistic for a recipe app. ` +
     `Do not add text, logos, utensils, hands, new ingredients, or fantasy elements. ` +
-    `Do not crop out the main dish.`
+    `Do not crop out the main dish.` +
+    promptAdditionClause(options.promptAddition)
   );
 }
 
@@ -257,6 +265,21 @@ export function composeStylizationFallbackPrompt(title: string): string {
     `Soft golden afternoon tones; palette of cream, terracotta, sage, brass. ` +
     `Single dish, shallow depth of field. No text, no watermarks, no people.`
   );
+}
+
+export function sanitizeImagePromptAddition(value: string | null | undefined): string | null {
+  const normalized = typeof value === "string"
+    ? value.replace(/\s+/g, " ").trim()
+    : "";
+  if (!normalized) return null;
+  return normalized.slice(0, IMAGE_PROMPT_ADDITION_MAX_LENGTH);
+}
+
+function promptAdditionClause(value: string | null | undefined): string {
+  const addition = sanitizeImagePromptAddition(value);
+  if (!addition) return "";
+  const punctuation = /[.!?]$/.test(addition) ? "" : ".";
+  return ` Additional direction: ${addition}${punctuation}`;
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -464,8 +487,9 @@ export async function generatePlaceholderImage(
   title: string,
   description: string | null,
   deps: ImageGenDeps,
+  options: ImagePromptOptions = {},
 ): Promise<string> {
-  const prompt = composePlaceholderPrompt(title, description);
+  const prompt = composePlaceholderPrompt(title, description, options);
   let runnerResult: GeneratedImageOutput;
   try {
     runnerResult = await deps.runner.textToImage(prompt, { model: deps.model ?? "dall-e-3" });
@@ -479,8 +503,9 @@ export async function stylizeSpoonPhoto(
   rawPhotoUrl: string,
   _title: string,
   deps: StylizeImageGenDeps,
+  options: ImagePromptOptions = {},
 ): Promise<StylizationResult> {
-  const prompt = composeStylizationPrompt();
+  const prompt = composeStylizationPrompt(options);
   try {
     const sourceFile = await resolveEditSourceFile(rawPhotoUrl, deps);
     const failures: ImageProviderAttemptError[] = [];

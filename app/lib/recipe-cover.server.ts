@@ -30,6 +30,8 @@ export const RECIPE_COVER_DISPLAY_SELECT = {
   failureReason: true,
   promptVersion: true,
   styleVersion: true,
+  promptAddition: true,
+  parentCoverId: true,
   archivedAt: true,
   createdAt: true,
 } satisfies Record<keyof RecipeCover, true>;
@@ -47,6 +49,8 @@ export interface CreateCoverInput {
   failureReason?: string | null;
   promptVersion?: string | null;
   styleVersion?: string | null;
+  promptAddition?: string | null;
+  parentCoverId?: string | null;
   archivedAt?: Date | null;
 }
 
@@ -108,6 +112,8 @@ export async function createCover(
       failureReason: input.failureReason ?? null,
       promptVersion: input.promptVersion ?? null,
       styleVersion: input.styleVersion ?? null,
+      promptAddition: input.promptAddition ?? null,
+      parentCoverId: input.parentCoverId ?? null,
       archivedAt: input.archivedAt ?? null,
     },
   });
@@ -177,6 +183,8 @@ export function recipeCoverCacheSnapshot(cover: RecipeCover | null) {
     failureReason: cover.failureReason,
     promptVersion: cover.promptVersion,
     styleVersion: cover.styleVersion,
+    promptAddition: cover.promptAddition,
+    parentCoverId: cover.parentCoverId,
     archivedAt: cover.archivedAt?.toISOString() ?? null,
     createdAt: cover.createdAt.toISOString(),
   };
