@@ -1,6 +1,6 @@
 # Planning: Clem Feedback E2E
 
-**Status**: drafting
+**Status**: NEEDS_REVIEW
 **Created**: 2026-07-14 13:15
 
 ## Goal
@@ -24,6 +24,8 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 - Add recipe snapshot/fingerprint protection so in-progress cooking handles recipe edits without silently applying progress to the wrong step or ingredient.
 - Keep scaling as cook-session state and API projection; never mutate stored recipe ingredients while scaling.
 - Add private saved recipes separate from cookbook membership, with recipe detail, My Kitchen, search/API state, and tests.
+- Update the existing `/saved-recipes` route, loader, UI copy, and tests so it is backed by `SavedRecipe` instead of deriving saved state only from owned cookbook membership.
+- Backfill or bridge existing cookbook-derived saved recipes into `SavedRecipe` so current users do not lose their saved-recipes list during migration.
 - Add typed recipe tags for accepted/manual tags that power recipe filtering/search/API; reserve AI tag suggestions for a later reviewed-suggestion layer only after accepted tags are useful.
 - Update search indexing/query paths so saved recipes and accepted tags are discoverable through the surfaces that claim to support them.
 - Add API-neutral metadata improvements: explicit step count, normalized source display name, yield/servings consistency, tag/course fields, authenticated saved state, and structured scale projections for parseable quantities.
@@ -50,7 +52,8 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 - [ ] Cook-session completion is idempotent, creates/updates cook history, clears active resume state, and tolerates DO-to-D1 retry after transient failure.
 - [ ] Recipe edits during an active cook session are detected and do not silently remap progress to different steps or ingredients.
 - [ ] Scaling persists in cook sessions and API projections expose original quantities plus scaled structured quantities without mutating recipe data.
-- [ ] Saved recipes are private, distinct from cookbook membership, and appear on recipe detail, My Kitchen, and authenticated API responses.
+- [ ] Saved recipes are private, distinct from cookbook membership, and appear on recipe detail, `/saved-recipes`, My Kitchen, search, and authenticated API responses.
+- [ ] Existing cookbook-derived saved recipes are preserved through migration/interop tests.
 - [ ] Accepted typed recipe tags power at least one user-facing filter/search path, search-index path, and API response path.
 - [ ] API responses and OpenAPI/playground docs expose step count, normalized source display name, tags/course data, authenticated saved state, and scaling semantics.
 - [ ] Import feedback is explicitly rejected in product UI and documented as agentic/API-only.
@@ -85,6 +88,8 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 - Keep import agentic/API-only and do not add a first-party import flow.
 - Build accepted typed tags before AI suggestions; AI categorization must never silently become canonical truth.
 - Add `SavedRecipe` as a private primitive distinct from cookbook membership.
+- Backfill existing saved-recipes state from `RecipeInCookbook`; after migration, `/saved-recipes` uses `SavedRecipe` as canonical state.
+- Adding a recipe to an owned cookbook should ensure `SavedRecipe` exists for compatibility, but removing a cookbook membership must not be the only way to control saved state once explicit save/unsave exists.
 - Defer explicit author follow/favorite semantics; existing fellow-chef pages remain derived from spoons, forks, and cookbook saves.
 - Add only API-neutral provider fields and reject Pebble-specific behavior.
 - Run reliability/smoke validation before claiming the product work is shipped.
@@ -101,7 +106,8 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 - `app/lib/api-v1.server.ts` recipe detail returns steps but does not expose explicit `stepCount`; attribution exposes raw `sourceHost`.
 - `app/lib/spoonjoy-api.server.ts` MCP recipe summaries already expose `stepCount`, so REST/API and MCP behavior must be reconciled intentionally.
 - `app/lib/fellow-chefs.server.ts` derives fellow chefs from spoons, forks, and cookbook saves; explicit follows should not be conflated with this graph.
-- `app/components/navigation/mobile-nav.tsx` already gives the mobile dock My Kitchen, Search, and Shopping List.
+- `app/routes/saved-recipes.tsx` already exists and currently derives saved recipes from `RecipeInCookbook` memberships in cookbooks owned by the signed-in user.
+- `app/components/navigation/mobile-nav.tsx` default signed-in dock currently exposes My Kitchen, My Recipes, Shopping List, and Pantry; Search appears in contextual dock states and the Pantry drawer.
 - `scripts/smoke-live.mjs`, `scripts/smoke-api-live.mjs`, `scripts/cleanup-local-qa-data.mjs`, `scripts/deployment-preflight.ts`, and `scripts/production-readiness.ts` are the reliability/smoke starting points.
 - Cloudflare Durable Objects overview: https://developers.cloudflare.com/durable-objects/
 - Cloudflare Durable Object WebSocket hibernation: https://developers.cloudflare.com/durable-objects/best-practices/websockets/
@@ -113,3 +119,4 @@ The implementation should prefer shared service helpers over fixing identical be
 ## Progress Log
 - 2026-07-14 13:15 Created
 - 2026-07-14 13:16 Tinfoil pass added Durable Object env binding, route contract, migration, and search-index scope.
+- 2026-07-14 13:18 Planning review addressed saved-recipes route coverage, migration interop, status, and mobile-nav source fidelity.
