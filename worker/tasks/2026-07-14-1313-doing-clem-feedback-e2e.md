@@ -404,4 +404,4 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 - 2026-07-14 13:31 Granularity pass split Durable Object, cook-session UI, SavedRecipe, tags, and final delivery into smaller units.
 - 2026-07-14 13:38 Validation pass aligned route-test targets with existing harness filenames.
 - 2026-07-14 13:42 Ambiguity pass named exact test/source targets, scoped SavedRecipe REST API behavior, and kept MCP saved behavior/notifications out of scope unless existing tests fail.
-- 2026-07-14 13:47 Ambiguity Round 2 named cook-session URL contracts, route modules, migration filenames, and remaining test targets.
+- 2026-07-14 13:46 Ambiguity Round 2 named cook-session URL contracts, route modules, migration filenames, and remaining test targets.
