@@ -193,7 +193,7 @@ describe("search.server", () => {
       ingredientNames: ["meyer lemon", "zesty orange"],
       stepCount: 1,
       cookbookTitles: ["Citrus Brunch"],
-      coverProvenanceLabel: "Editorialized chef photo",
+      coverProvenanceLabel: "Editorial photo",
       coverSourceType: "spoon",
       coverVariant: "stylized",
     });
@@ -424,7 +424,7 @@ describe("search.server", () => {
       .resolves.toMatchObject([{
         id: maskedRecipe.id,
         imageUrl: "/photos/recipes/chef/older-gratin.jpg",
-        metadata: { coverProvenanceLabel: "Chef photo", coverSourceType: "chef-upload", coverVariant: "image" },
+        metadata: { coverProvenanceLabel: "Original photo", coverSourceType: "chef-upload", coverVariant: "image" },
       }]);
     await expect(searchSpoonjoy(db, { query: "pending cover freshness", scope: "recipes" }))
       .resolves.toMatchObject([{ id: pendingRecipe.id, imageUrl: null }]);
@@ -434,13 +434,13 @@ describe("search.server", () => {
       .resolves.toMatchObject([{
         id: provenanceRecipe.id,
         imageUrl: "/photos/covers/provenance-beans.jpg",
-        metadata: { coverProvenanceLabel: "Chef photo", coverSourceType: "chef-upload", coverVariant: "image" },
+        metadata: { coverProvenanceLabel: "Original photo", coverSourceType: "chef-upload", coverVariant: "image" },
       }]);
     await expect(searchSpoonjoy(db, { query: "variant cover freshness", scope: "recipes" }))
       .resolves.toMatchObject([{
         id: variantRecipe.id,
         imageUrl: "/photos/covers/variant-soup-raw.jpg",
-        metadata: { coverProvenanceLabel: "Chef photo", coverSourceType: "spoon", coverVariant: "image" },
+        metadata: { coverProvenanceLabel: "Original photo", coverSourceType: "spoon", coverVariant: "image" },
       }]);
 
     await db.recipeCover.update({
@@ -462,7 +462,7 @@ describe("search.server", () => {
       .resolves.toMatchObject([{
         id: stylizedRecipe.id,
         imageUrl: "/photos/covers/stylized-toast.png",
-        metadata: { coverProvenanceLabel: "Editorialized chef photo", coverSourceType: "chef-upload", coverVariant: "stylized" },
+        metadata: { coverProvenanceLabel: "Editorial photo", coverSourceType: "chef-upload", coverVariant: "stylized" },
       }]);
     await db.recipeCover.update({
       where: { id: provenanceCover.id },
@@ -493,7 +493,7 @@ describe("search.server", () => {
       .resolves.toMatchObject([{
         id: variantRecipe.id,
         imageUrl: "/photos/covers/variant-soup-editorial.jpg",
-        metadata: { coverProvenanceLabel: "Editorialized chef photo", coverSourceType: "spoon", coverVariant: "stylized" },
+        metadata: { coverProvenanceLabel: "Editorial photo", coverSourceType: "spoon", coverVariant: "stylized" },
       }]);
 
     const metadataRows = await db.$queryRawUnsafe<Array<{ sourceFingerprint: string }>>(

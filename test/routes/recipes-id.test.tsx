@@ -354,7 +354,7 @@ describe("Recipes $id Route", () => {
       } as any);
 
       expect(result.coverImageUrl).toBe("/photos/detail-editorial.jpg");
-      expect(result.coverProvenanceLabel).toBe("Editorialized chef photo");
+      expect(result.coverProvenanceLabel).toBe("Editorial photo");
     });
 
     it("returns owner-only cover history with active variant and provenance labels", async () => {
@@ -417,7 +417,7 @@ describe("Recipes $id Route", () => {
             expect.objectContaining({
               variant: "image",
               imageUrl: "/photos/archived-by-timestamp.jpg",
-              provenanceLabel: "Chef photo",
+              provenanceLabel: "Original photo",
               isActive: false,
             }),
           ],
@@ -444,13 +444,13 @@ describe("Recipes $id Route", () => {
             expect.objectContaining({
               variant: "image",
               imageUrl: "/photos/detail-raw.jpg",
-              provenanceLabel: "Chef photo",
+              provenanceLabel: "Original photo",
               isActive: false,
             }),
             expect.objectContaining({
               variant: "stylized",
               imageUrl: "/photos/detail-editorial.jpg",
-              provenanceLabel: "Editorialized chef photo",
+              provenanceLabel: "Editorial photo",
               isActive: true,
             }),
           ],
@@ -2712,7 +2712,7 @@ describe("Recipes $id Route", () => {
           description: "A delicious test dish",
           servings: "4",
           coverImageUrl: "https://example.com/recipe.jpg",
-          coverProvenanceLabel: "Editorialized chef photo",
+          coverProvenanceLabel: "Editorial photo",
           chef: { id: "user-1", username: "testchef" },
           steps: [],
         },
@@ -2734,7 +2734,7 @@ describe("Recipes $id Route", () => {
       // Chef name in link (Avatar also has it as title, so use link role to be specific)
       expect(screen.getByRole("link", { name: "testchef" })).toBeInTheDocument();
       expect(screen.getByText("A delicious test dish")).toBeInTheDocument();
-      expect(screen.getByText("Editorialized chef photo")).toBeInTheDocument();
+      expect(screen.getByText("Editorial photo")).toBeInTheDocument();
       // Servings display with new component format
       expect(screen.getByText("4")).toBeInTheDocument();
       expect(screen.getByText("No steps added yet")).toBeInTheDocument();
@@ -2941,13 +2941,13 @@ describe("Recipes $id Route", () => {
             {
               variant: "image",
               imageUrl: "/photos/raw.jpg",
-              provenanceLabel: "Chef photo",
+              provenanceLabel: "Original photo",
               isActive: false,
             },
             {
               variant: "stylized",
               imageUrl: "/photos/editorial.jpg",
-              provenanceLabel: "Editorialized chef photo",
+              provenanceLabel: "Editorial photo",
               isActive: true,
             },
           ],
@@ -2964,7 +2964,7 @@ describe("Recipes $id Route", () => {
           steps: [],
         },
         coverImageUrl: "/photos/editorial.jpg",
-        coverProvenanceLabel: "Editorialized chef photo",
+        coverProvenanceLabel: "Editorial photo",
         isOwner: true,
         coverHistory,
       };
@@ -2994,8 +2994,8 @@ describe("Recipes $id Route", () => {
       const history = await screen.findByTestId("recipe-cover-history");
       expect(within(history).getByRole("heading", { name: "Recipe covers" })).toBeInTheDocument();
       expect(within(history).getByText("Current")).toBeInTheDocument();
-      expect(within(history).getByText("Chef photo")).toBeInTheDocument();
-      expect(within(history).getByText("Editorialized chef photo")).toBeInTheDocument();
+      expect(within(history).getByText("Original photo")).toBeInTheDocument();
+      expect(within(history).getByText("Editorial photo")).toBeInTheDocument();
       expect(within(history).getByText("Imported photo")).toBeInTheDocument();
       expect(within(history).getByText("No cover selected")).toBeInTheDocument();
 

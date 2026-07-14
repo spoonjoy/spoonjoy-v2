@@ -277,7 +277,7 @@ describe("spoonjoy-api spoon operations", () => {
       expect(result.recipe).toMatchObject({
         imageUrl: "/photos/raw.jpg",
         coverImageUrl: "/photos/raw.jpg",
-        coverProvenanceLabel: "Chef photo",
+        coverProvenanceLabel: "Original photo",
         coverSourceType: "spoon",
         coverVariant: "image",
         coverStatus: "processing",
@@ -288,7 +288,7 @@ describe("spoonjoy-api spoon operations", () => {
           displayUrl: "/photos/raw.jpg",
           sourceType: "spoon",
           activeVariant: "image",
-          provenanceLabel: "Chef photo",
+          provenanceLabel: "Original photo",
           status: "processing",
           generationStatus: "processing",
         },
@@ -412,7 +412,7 @@ describe("spoonjoy-api spoon operations", () => {
         recipeId: recipe.id,
         displayUrl: "/photos/editorial.jpg",
         activeVariant: "stylized",
-        provenanceLabel: "Editorialized chef photo",
+        provenanceLabel: "Editorial photo",
         sourceSpoonId: spoon.id,
         createdById: chef.id,
         generationStatus: "succeeded",
@@ -474,7 +474,7 @@ describe("spoonjoy-api spoon operations", () => {
         displayUrl: "/photos/raw.jpg",
         sourceType: "chef-upload",
         activeVariant: "image",
-        provenanceLabel: "Chef photo",
+        provenanceLabel: "Original photo",
         status: "ready",
         generationStatus: "failed",
       });
@@ -2833,7 +2833,7 @@ describe("spoonjoy-api spoon operations", () => {
       expect(result.spoons[0].chef.username).toBe(cook.username);
       expect(result.spoons[0]).toMatchObject({
         coverImageUrl: "/photos/editorial.jpg",
-        coverProvenanceLabel: "Editorialized chef photo",
+        coverProvenanceLabel: "Editorial photo",
         coverSourceType: "spoon",
         coverVariant: "stylized",
         coverStatus: "ready",
@@ -3026,7 +3026,7 @@ describe("spoonjoy-api spoon operations", () => {
       expect(result.spoons[0].recipe.title).toBe(recipe.title);
       expect(result.spoons[0]).toMatchObject({
         coverImageUrl: "/photos/original.jpg",
-        coverProvenanceLabel: "Chef photo",
+        coverProvenanceLabel: "Original photo",
         coverSourceType: "chef-upload",
         coverVariant: "image",
         coverStatus: "ready",

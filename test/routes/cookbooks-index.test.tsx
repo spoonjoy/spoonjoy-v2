@@ -176,7 +176,7 @@ describe("Cookbooks drawer route", () => {
     expect(result.cookbooks[0].recipes[0].recipe).toMatchObject({
       id: newestCoveredRecipe.id,
       coverImageUrl: "/photos/newest-covered-stew.jpg",
-      coverProvenanceLabel: "Chef photo",
+      coverProvenanceLabel: "Original photo",
     });
   });
 
@@ -197,7 +197,7 @@ describe("Cookbooks drawer route", () => {
                 {
                   recipe: {
                     coverImageUrl: "/photos/grandma-book.jpg",
-                    coverProvenanceLabel: "Chef photo",
+                    coverProvenanceLabel: "Original photo",
                   },
                 },
               ],

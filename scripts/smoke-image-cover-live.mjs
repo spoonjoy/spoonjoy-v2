@@ -611,7 +611,7 @@ export async function runImageCoverSmokeFlow(options) {
       limit: 50,
     }), state);
 
-    for (const label of ["AI generated", "Chef photo", "Editorialized chef photo"]) {
+    for (const label of ["AI generated", "Original photo", "Editorial photo"]) {
       if (!state.provenanceLabels.has(label)) {
         throw new Error(`Image-cover smoke did not observe provenance label: ${label}`);
       }

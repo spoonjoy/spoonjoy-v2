@@ -388,7 +388,7 @@ describe("API v1 public cookbook reads", () => {
     ]);
     expect(payload.data.cookbook.recipes.find((recipe: { id: string }) => recipe.id === fixture.recipe.id)).toMatchObject({
       coverImageUrl: "https://spoonjoy.app/photos/cookbooks/active-cover-editorial.jpg",
-      coverProvenanceLabel: "Editorialized chef photo",
+      coverProvenanceLabel: "Editorial photo",
       coverSourceType: "chef-upload",
       coverVariant: "stylized",
     });

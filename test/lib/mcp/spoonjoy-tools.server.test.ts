@@ -369,7 +369,7 @@ describe("spoonjoy MCP tools", () => {
     expect(covers.activeCover).toMatchObject({
       id: cover.id,
       displayUrl: "/photos/editorial.jpg",
-      provenanceLabel: "Editorialized chef photo",
+      provenanceLabel: "Editorial photo",
     });
 
     const spoonImages = parseJson(await callSpoonjoyMcpTool(

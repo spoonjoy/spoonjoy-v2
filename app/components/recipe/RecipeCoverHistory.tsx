@@ -1,5 +1,6 @@
 import { Form } from "react-router";
 import { Button } from "~/components/ui/button";
+import { normalizeCoverProvenanceLabel } from "~/components/recipe/CoverProvenanceBadge";
 
 export type RecipeCoverHistoryVariant = {
   variant: "image" | "stylized";
@@ -122,7 +123,7 @@ export function RecipeCoverHistory({
                 candidate.variants.map((variant) => ({
                   coverId: candidate.id,
                   variant: variant.variant,
-                  label: variant.provenanceLabel,
+                  label: normalizeCoverProvenanceLabel(variant.provenanceLabel) ?? variant.provenanceLabel,
                 })),
               );
             return (
@@ -164,43 +165,47 @@ export function RecipeCoverHistory({
                     </p>
                   ) : (
                     <div className="grid gap-2 sm:grid-cols-2">
-                      {cover.variants.map((variant) => (
-                        <div
-                          key={`${cover.id}-${variant.variant}`}
-                          className="flex min-h-16 items-center justify-between gap-3 border border-[var(--sj-border)] px-3 py-2"
-                        >
-                          <div className="min-w-0">
-                            <p className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
-                              {variant.provenanceLabel}
-                            </p>
-                            <p className="font-sj-ui text-xs uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]">
-                              {variantName(variant.variant)}
-                            </p>
+                      {cover.variants.map((variant) => {
+                        const provenanceLabel = normalizeCoverProvenanceLabel(variant.provenanceLabel)
+                          ?? variant.provenanceLabel;
+                        return (
+                          <div
+                            key={`${cover.id}-${variant.variant}`}
+                            className="flex min-h-16 items-center justify-between gap-3 border border-[var(--sj-border)] px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
+                                {provenanceLabel}
+                              </p>
+                              <p className="font-sj-ui text-xs uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]">
+                                {variantName(variant.variant)}
+                              </p>
+                            </div>
+                            {variant.isActive ? (
+                              <span className="shrink-0 font-sj-ui text-xs font-semibold text-[var(--sj-brass)]">
+                                Active variant
+                              </span>
+                            ) : canActivate ? (
+                              <Form method="post" className="shrink-0">
+                                <input type="hidden" name="intent" value="setRecipeCover" />
+                                <input type="hidden" name="coverId" value={cover.id} />
+                                <input type="hidden" name="variant" value={variant.variant} />
+                                <Button
+                                  type="submit"
+                                  plain
+                                  aria-label={`Use ${provenanceLabel} cover`}
+                                >
+                                  Use
+                                </Button>
+                              </Form>
+                            ) : (
+                              <span className="shrink-0 font-sj-ui text-xs font-semibold text-[var(--sj-ink-soft)]">
+                                Unavailable
+                              </span>
+                            )}
                           </div>
-                          {variant.isActive ? (
-                            <span className="shrink-0 font-sj-ui text-xs font-semibold text-[var(--sj-brass)]">
-                              Active variant
-                            </span>
-                          ) : canActivate ? (
-                            <Form method="post" className="shrink-0">
-                              <input type="hidden" name="intent" value="setRecipeCover" />
-                              <input type="hidden" name="coverId" value={cover.id} />
-                              <input type="hidden" name="variant" value={variant.variant} />
-                              <Button
-                                type="submit"
-                                plain
-                                aria-label={`Use ${variant.provenanceLabel} cover`}
-                              >
-                                Use
-                              </Button>
-                            </Form>
-                          ) : (
-                            <span className="shrink-0 font-sj-ui text-xs font-semibold text-[var(--sj-ink-soft)]">
-                              Unavailable
-                            </span>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                   <div className="flex flex-wrap gap-2">

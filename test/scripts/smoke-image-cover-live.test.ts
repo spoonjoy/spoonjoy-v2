@@ -46,7 +46,7 @@ const CHEF_PHOTO_COVER = {
   imageUrl: "/photos/recipes/user-1/uploads/oriented.jpg",
   stylizedImageUrl: null,
   displayUrl: "/photos/recipes/user-1/uploads/oriented.jpg",
-  provenanceLabel: "Chef photo",
+  provenanceLabel: "Original photo",
   sourceType: "chef-upload",
   generationStatus: "none",
   status: "ready",
@@ -58,7 +58,7 @@ const EDITORIAL_COVER = {
   imageUrl: "/photos/recipes/user-1/uploads/oriented.jpg",
   stylizedImageUrl: "/photos/covers/editorial.jpg",
   displayUrl: "/photos/covers/editorial.jpg",
-  provenanceLabel: "Editorialized chef photo",
+  provenanceLabel: "Editorial photo",
   sourceType: "chef-upload",
   generationStatus: "succeeded",
   status: "ready",
@@ -70,7 +70,7 @@ const SPOON_EDITORIAL_COVER = {
   imageUrl: "/photos/spoons/user-1/uploads/spoon.png",
   stylizedImageUrl: "/photos/covers/spoon-editorial.jpg",
   displayUrl: "/photos/covers/spoon-editorial.jpg",
-  provenanceLabel: "Editorialized chef photo",
+  provenanceLabel: "Editorial photo",
   sourceType: "spoon",
   sourceSpoonId: "spoon-1",
   generationStatus: "succeeded",
@@ -505,8 +505,8 @@ describe("image-cover live smoke flow", () => {
     });
     expect(report.provenanceLabels).toEqual(expect.arrayContaining([
       "AI generated",
-      "Chef photo",
-      "Editorialized chef photo",
+      "Original photo",
+      "Editorial photo",
     ]));
     expect(report.operations).toEqual(expect.arrayContaining([
       "tools/list",
@@ -733,7 +733,7 @@ describe("image-cover live smoke flow", () => {
     harness.options.mcpTool = vi.fn(async (name: string, args: Record<string, unknown>) => {
       const payload = await originalMcpTool(name, args);
       const scrub = (cover: Record<string, unknown> | null | undefined) =>
-        cover?.provenanceLabel === "Editorialized chef photo" ? { ...cover, provenanceLabel: null } : cover;
+        cover?.provenanceLabel === "Editorial photo" ? { ...cover, provenanceLabel: null } : cover;
       return {
         ...payload,
         covers: Array.isArray(payload?.covers) ? payload.covers.map(scrub) : payload?.covers,
@@ -745,7 +745,7 @@ describe("image-cover live smoke flow", () => {
       };
     });
 
-    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/Editorialized chef photo/);
+    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/Editorial photo/);
   });
 
   it("surfaces cleanup failures when the flow itself succeeds", async () => {

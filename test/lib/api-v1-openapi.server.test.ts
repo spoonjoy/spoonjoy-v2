@@ -427,7 +427,7 @@ describe("API v1 OpenAPI document", () => {
       limit: 20,
       recipes: [expect.objectContaining({
         title: "Pasta",
-        coverProvenanceLabel: "Chef photo",
+        coverProvenanceLabel: "Original photo",
         coverSourceType: "chef-upload",
         coverVariant: "image",
       })],
@@ -441,7 +441,7 @@ describe("API v1 OpenAPI document", () => {
         expect.objectContaining({
           type: "recipe",
           canonicalUrl: "https://spoonjoy.app/recipes/recipe_1",
-          metadata: expect.objectContaining({ coverProvenanceLabel: "Chef photo" }),
+          metadata: expect.objectContaining({ coverProvenanceLabel: "Original photo" }),
         }),
         expect.objectContaining({
           type: "shopping-list-item",
@@ -451,7 +451,7 @@ describe("API v1 OpenAPI document", () => {
       ],
     });
     expect(responseExample(document, "/api/v1/recipes/{id}", "GET", "200").data.recipe).toMatchObject({
-      coverProvenanceLabel: "Chef photo",
+      coverProvenanceLabel: "Original photo",
       coverSourceType: "chef-upload",
       coverVariant: "image",
     });
@@ -482,7 +482,7 @@ describe("API v1 OpenAPI document", () => {
       mutation: { clientMutationId: "device-uuid-spoon-delete", replayed: false },
     });
     expect(responseExample(document, "/api/v1/cookbooks/{id}", "GET", "200").data.cookbook.recipes[0]).toMatchObject({
-      coverProvenanceLabel: "Chef photo",
+      coverProvenanceLabel: "Original photo",
       coverSourceType: "chef-upload",
       coverVariant: "image",
     });

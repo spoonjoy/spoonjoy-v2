@@ -389,7 +389,7 @@ describe("API v1 public recipe reads", () => {
     expect(list.status).toBe(200);
     expect(listedRecipe).toMatchObject({
       coverImageUrl: "https://spoonjoy.app/photos/covers/explicit-editorial.jpg",
-      coverProvenanceLabel: "Editorialized chef photo",
+      coverProvenanceLabel: "Editorial photo",
       coverSourceType: "spoon",
       coverVariant: "stylized",
     });
@@ -402,7 +402,7 @@ describe("API v1 public recipe reads", () => {
     expect(detail.status).toBe(200);
     expect(detailPayload.data.recipe).toMatchObject({
       coverImageUrl: "https://spoonjoy.app/photos/covers/explicit-editorial.jpg",
-      coverProvenanceLabel: "Editorialized chef photo",
+      coverProvenanceLabel: "Editorial photo",
       coverSourceType: "spoon",
       coverVariant: "stylized",
     });

@@ -24,7 +24,7 @@ export type SpoonCoverCreationDecision =
       shouldCreateCover: true;
       reason: "auto-seed";
       coverMode: "auto";
-      activeCoverVariant: null;
+      activeCoverVariant: "image";
     }
   | {
       shouldCreateCover: true;
@@ -103,7 +103,7 @@ export function decideSpoonCoverCreation(input: {
       shouldCreateCover: true,
       reason: "auto-seed",
       coverMode: "auto",
-      activeCoverVariant: null,
+      activeCoverVariant: "image",
     };
   }
   if (input.useAsRecipeCover) {

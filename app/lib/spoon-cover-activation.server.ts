@@ -15,12 +15,13 @@ export async function activateSpoonCoverForDecision(
     previousActiveCoverId: string | null;
   },
 ): Promise<boolean> {
+  const activeCoverVariant = activeCoverVariantFor(input.decision);
   if (input.decision.reason === "manual-opt-in") {
     await db.recipe.update({
       where: { id: input.recipeId },
       data: {
         activeCoverId: input.coverId,
-        activeCoverVariant: input.decision.activeCoverVariant,
+        activeCoverVariant,
         coverMode: input.decision.coverMode,
       },
     });
@@ -36,11 +37,18 @@ export async function activateSpoonCoverForDecision(
     },
     data: {
       activeCoverId: input.coverId,
-      activeCoverVariant: input.decision.activeCoverVariant,
+      activeCoverVariant,
       coverMode: input.decision.coverMode,
     },
   });
   return result.count > 0;
+}
+
+function activeCoverVariantFor(
+  decision: CreatingSpoonCoverDecision,
+): "image" | "stylized" | null {
+  if (decision.reason === "auto-seed") return "image";
+  return decision.activeCoverVariant;
 }
 
 function withoutRealActiveCover(recipeId: string): Prisma.RecipeWhereInput {

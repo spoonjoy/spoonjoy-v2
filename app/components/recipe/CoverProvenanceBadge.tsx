@@ -1,5 +1,12 @@
 import clsx from "clsx";
 
+export function normalizeCoverProvenanceLabel(label?: string | null): string | null {
+  if (!label) return null;
+  if (label === "Chef photo") return "Original photo";
+  if (label === "Editorialized chef photo") return "Editorial photo";
+  return label;
+}
+
 export function CoverProvenanceBadge({
   label,
   className,
@@ -7,7 +14,8 @@ export function CoverProvenanceBadge({
   label?: string | null;
   className?: string;
 }) {
-  if (!label) return null;
+  const displayLabel = normalizeCoverProvenanceLabel(label);
+  if (!displayLabel) return null;
 
   return (
     <span
@@ -17,7 +25,7 @@ export function CoverProvenanceBadge({
         className,
       )}
     >
-      {label}
+      {displayLabel}
     </span>
   );
 }

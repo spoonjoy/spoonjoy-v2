@@ -1,0 +1,20 @@
+
+> spoonjoy-v2@1.0.0 api:playground:generate /Users/arimendelow/Projects/spoonjoy-v2-photo-studio
+> tsx scripts/generate-api-playground.ts
+
+Generated app/lib/generated/api-v1-playground.ts
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2-photo-studio
+
+ ✓ test/lib/spoon-cover-stylization.server.test.ts (40 tests) 659ms
+ ✓ test/lib/recipe-cover.server.test.ts (57 tests) 472ms
+ ✓ test/components/recipe/RecipeCoverHistory.test.tsx (3 tests) 265ms
+ ✓ test/components/recipe/RecipeHeader.test.tsx (27 tests) 135ms
+ ✓ test/lib/spoon-cover-activation.server.test.ts (3 tests) 80ms
+ ✓ test/components/cookbook/CookbookCoverArt.test.tsx (7 tests) 55ms
+
+ Test Files  6 passed (6)
+      Tests  137 passed (137)
+   Start at  14:47:03
+   Duration  4.76s (transform 233ms, setup 357ms, import 1.10s, tests 1.67s, environment 940ms)
+

@@ -403,9 +403,9 @@ export function getRecipeCoverProvenanceLabel(
 
 function provenanceLabel(sourceType: string, variant: RecipeCoverVariant): string {
   if ((sourceType === "chef-upload" || sourceType === "spoon") && variant === "stylized") {
-    return "Editorialized chef photo";
+    return "Editorial photo";
   }
-  if (sourceType === "chef-upload" || sourceType === "spoon") return "Chef photo";
+  if (sourceType === "chef-upload" || sourceType === "spoon") return "Original photo";
   if (sourceType === "import") return "Imported photo";
   if (sourceType === "ai-placeholder") return "AI generated";
   return "Unknown source";

@@ -880,7 +880,7 @@ export default function RecipeDetail() {
         chefPhotoUrl={recipe.chef.photoUrl ?? undefined}
         coverImageUrl={coverImageUrl ?? recipeCoverImageUrl}
         coverProvenanceLabel={coverProvenanceLabel ?? recipeCoverProvenanceLabel}
-        coverPlaceholderLabel={isOwner ? "Awaiting first chef photo" : "Cover coming soon"}
+        coverPlaceholderLabel={isOwner ? "Awaiting first photo" : "Cover coming soon"}
         servings={recipe.servings ?? undefined}
         scaleFactor={scaleFactor}
         onScaleChange={handleScaleChange}

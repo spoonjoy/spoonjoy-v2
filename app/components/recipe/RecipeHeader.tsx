@@ -7,6 +7,10 @@ import { scaleServingsText } from '~/lib/quantity'
 import { resolveChefAvatarUrl } from '~/lib/chef-avatar'
 import { CoverProvenanceBadge } from './CoverProvenanceBadge'
 
+function normalizeCoverPlaceholderLabel(label: string) {
+  return label === 'Awaiting first chef photo' ? 'Awaiting first photo' : label
+}
+
 export interface RecipeHeaderProps {
   /** Recipe title */
   title: string
@@ -71,6 +75,7 @@ export function RecipeHeader({
   const displayImageUrl = coverImageUrl && coverImageUrl.length > 0 ? coverImageUrl : undefined
   const resolvedChefHref = chefProfileHref ?? (chefId ? `/users/${chefId}` : undefined)
   const resolvedChefPhotoUrl = resolveChefAvatarUrl(chefPhotoUrl)
+  const displayCoverPlaceholderLabel = normalizeCoverPlaceholderLabel(coverPlaceholderLabel)
 
   const chefIdentity = (
     <>
@@ -132,7 +137,7 @@ export function RecipeHeader({
               <div className="rounded-[var(--sj-radius-control)] border border-[var(--sj-border-strong)] p-5">
                 <ImageOff className="size-12 sm:size-16" aria-hidden="true" />
               </div>
-              <span className="font-sj-ui text-sm font-semibold">{coverPlaceholderLabel}</span>
+              <span className="font-sj-ui text-sm font-semibold">{displayCoverPlaceholderLabel}</span>
             </div>
           </div>
         )}
