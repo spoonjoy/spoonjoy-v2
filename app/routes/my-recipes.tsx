@@ -20,6 +20,17 @@ type DrawerRecipe = {
   ingredientNames: string[];
 };
 
+type IngredientLookupDb = {
+  ingredient: {
+    findMany(args: {
+      where: { recipeId: { in: string[] } };
+      select: { recipeId: true; ingredientRef: { select: { name: true } } };
+    }): Promise<Array<{ recipeId: string; ingredientRef: { name: string } }>>;
+  };
+};
+
+export const INGREDIENT_LOOKUP_BATCH_SIZE = 200;
+
 function normalizedQuery(request: Request) {
   return (new URL(request.url).searchParams.get("q") ?? "").trim();
 }
@@ -36,44 +47,65 @@ function matchesRecipeQuery(recipe: DrawerRecipe, query: string) {
   ].some((value) => value?.toLowerCase().includes(needle));
 }
 
+export async function loadIngredientNamesByRecipeId(
+  database: IngredientLookupDb,
+  recipeIds: string[],
+) {
+  const namesByRecipeId = new Map<string, string[]>();
+
+  for (let start = 0; start < recipeIds.length; start += INGREDIENT_LOOKUP_BATCH_SIZE) {
+    const batch = recipeIds.slice(start, start + INGREDIENT_LOOKUP_BATCH_SIZE);
+    const ingredients = await database.ingredient.findMany({
+      where: { recipeId: { in: batch } },
+      select: {
+        recipeId: true,
+        ingredientRef: { select: { name: true } },
+      },
+    });
+
+    for (const ingredient of ingredients) {
+      const names = namesByRecipeId.get(ingredient.recipeId) ?? [];
+      names.push(ingredient.ingredientRef.name);
+      namesByRecipeId.set(ingredient.recipeId, names);
+    }
+  }
+
+  return namesByRecipeId;
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const query = normalizedQuery(request);
   const database = await getRequestDb(context);
 
+  const chef = await database.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: { id: true, username: true },
+  });
   const recipes = await database.recipe.findMany({
     where: {
       chefId: userId,
       deletedAt: null,
     },
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-    include: {
-      chef: {
-        select: { id: true, username: true },
-      },
-      steps: {
-        include: {
-          ingredients: {
-            include: {
-              ingredientRef: {
-                select: { name: true },
-              },
-            },
-          },
-        },
-      },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      servings: true,
     },
   });
+  const ingredientNamesByRecipeId = query
+    ? await loadIngredientNamesByRecipeId(database, recipes.map((recipe) => recipe.id))
+    : new Map<string, string[]>();
 
   const drawerRecipes: DrawerRecipe[] = recipes.map((recipe) => ({
     id: recipe.id,
     title: recipe.title,
     description: recipe.description,
     servings: recipe.servings,
-    chef: recipe.chef,
-    ingredientNames: recipe.steps.flatMap((step) =>
-      step.ingredients.map((ingredient) => ingredient.ingredientRef.name),
-    ),
+    chef,
+    ingredientNames: ingredientNamesByRecipeId.get(recipe.id) ?? [],
   }));
 
   return {
