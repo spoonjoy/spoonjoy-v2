@@ -1,0 +1,125 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2-photo-studio
+
+ ❯ test/routes/api-v1-recipe-covers.test.ts (17 tests | 5 failed) 525ms
+     ✓ requires kitchen write scope and owner access for cover management 43ms
+     × uploads a first recipe photo, preserves the original on a Spoon, and starts editorial cover generation by default 21ms
+     × uploads a direct recipe cover without creating a Spoon when postAsSpoon and editorial generation are disabled 13ms
+     × validates first-photo upload auth, multipart fields, and image files before writing storage or database rows 12ms
+     × replays first-photo uploads idempotently and rejects conflicting multipart bodies 14ms
+     × deletes an uploaded first-photo object when a later database write fails 12ms
+     ✓ validates recipe existence and cover list pagination 25ms
+     ✓ lists active cover candidates and spoon photo sources for the owner 20ms
+     ✓ activates cover variants idempotently and rejects conflicting replays 28ms
+     ✓ returns not_found for stale cover activate and archive ids 25ms
+     ✓ rejects regenerating covers that have no source image 33ms
+     ✓ sets an explicit no-cover state only after destructive confirmation 22ms
+     ✓ handles stale active cover pointers when clearing covers 24ms
+     ✓ archives active covers with replacement or no-cover confirmation 42ms
+     ✓ creates covers from spoon photos and regenerates editorial variants through waitUntil 62ms
+     ✓ returns not_found when creating covers from missing spoon photos 19ms
+     ✓ normalizes non-error cover mutation failures 32ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/routes/api-v1-recipe-covers.test.ts > API v1 recipe cover management > uploads a first recipe photo, preserves the original on a Spoon, and starts editorial cover generation by default
+AssertionError: expected 404 to be 201 // Object.is equality
+
+- Expected
++ Received
+
+- 201
++ 404
+
+ ❯ test/routes/api-v1-recipe-covers.test.ts:287:29
+    285|     const payload = await readJson(response);
+    286| 
+    287|     expect(response.status).toBe(201);
+       |                             ^
+    288|     expect(photoBucket.bucket.put).toHaveBeenCalledTimes(1);
+    289|     const uploadedKey = vi.mocked(photoBucket.bucket.put).mock.calls[0…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  test/routes/api-v1-recipe-covers.test.ts > API v1 recipe cover management > uploads a direct recipe cover without creating a Spoon when postAsSpoon and editorial generation are disabled
+AssertionError: expected 404 to be 201 // Object.is equality
+
+- Expected
++ Received
+
+- 201
++ 404
+
+ ❯ test/routes/api-v1-recipe-covers.test.ts:358:29
+    356|     const payload = await readJson(response);
+    357| 
+    358|     expect(response.status).toBe(201);
+       |                             ^
+    359|     const uploadedKey = vi.mocked(photoBucket.bucket.put).mock.calls[0…
+    360|     expect(uploadedKey).toMatch(new RegExp(`^recipes/${fixture.owner.i…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  test/routes/api-v1-recipe-covers.test.ts > API v1 recipe cover management > validates first-photo upload auth, multipart fields, and image files before writing storage or database rows
+AssertionError: expected 404 to be 400 // Object.is equality
+
+- Expected
++ Received
+
+- 400
++ 404
+
+ ❯ test/routes/api-v1-recipe-covers.test.ts:449:31
+    447|         backgroundContext({ PHOTOS: photoBucket.bucket }),
+    448|       ));
+    449|       expect(response.status).toBe(testCase.status);
+       |                               ^
+    450|       await expect(response.json()).resolves.toMatchObject({
+    451|         ok: false,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  test/routes/api-v1-recipe-covers.test.ts > API v1 recipe cover management > replays first-photo uploads idempotently and rejects conflicting multipart bodies
+AssertionError: expected 404 to be 201 // Object.is equality
+
+- Expected
++ Received
+
+- 201
++ 404
+
+ ❯ test/routes/api-v1-recipe-covers.test.ts:479:26
+    477|     ));
+    478|     const firstPayload = await readJson(first);
+    479|     expect(first.status).toBe(201);
+       |                          ^
+    480| 
+    481|     const replay = await action(routeArgs(
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  test/routes/api-v1-recipe-covers.test.ts > API v1 recipe cover management > deletes an uploaded first-photo object when a later database write fails
+AssertionError: expected 404 to be 500 // Object.is equality
+
+- Expected
++ Received
+
+- 500
++ 404
+
+ ❯ test/routes/api-v1-recipe-covers.test.ts:538:31
+    536|       ));
+    537| 
+    538|       expect(response.status).toBe(500);
+       |                               ^
+    539|       await expect(response.json()).resolves.toMatchObject({
+    540|         ok: false,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 12 passed (17)
+   Start at  15:34:42
+   Duration  1.89s (transform 495ms, setup 108ms, import 926ms, tests 525ms, environment 205ms)
+
