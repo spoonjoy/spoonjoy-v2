@@ -2,6 +2,35 @@ import { defineConfig } from "vitest/config";
 
 const appDirectory = new URL("./app", import.meta.url).pathname;
 const componentsDirectory = new URL("./app/components", import.meta.url).pathname;
+const coverageInclude = [
+  "app/lib/**/*.ts",
+  "app/routes/**/*.ts",
+  "app/routes/**/*.tsx",
+  "app/components/**/*.tsx",
+  "app/hooks/**/*.ts",
+  "scripts/script-environment.mjs",
+  "scripts/cleanup-local-qa-data.mjs",
+  "scripts/smoke-live-helpers.mjs",
+  "scripts/smoke-image-cover-live.mjs",
+  "scripts/smoke-api-live.mjs",
+  "scripts/qa-preflight.ts",
+  "scripts/deployment-preflight.ts",
+] as const;
+
+const hasCoverageFlag = process.argv.some((arg) =>
+  arg === "--coverage" || arg.startsWith("--coverage."),
+);
+const hasFocusedTestFilter = process.argv.some((arg) =>
+  !arg.startsWith("-") &&
+  (
+    arg.startsWith("test/") ||
+    arg.startsWith("app/") ||
+    /\.(test|spec)\.[cm]?[jt]sx?$/.test(arg)
+  ),
+);
+// Full coverage gates keep repo-wide thresholds; focused unit coverage reports
+// should not fail because unrelated imported helpers are partially covered.
+const isFocusedCoverageRun = hasCoverageFlag && hasFocusedTestFilter;
 
 export default defineConfig({
   test: {
@@ -20,22 +49,9 @@ export default defineConfig({
     coverage: {
       provider: "istanbul",
       reporter: ["text", "json", "html"],
-      include: [
-        "app/lib/**/*.ts",
-        "app/routes/**/*.ts",
-        "app/routes/**/*.tsx",
-        "app/components/**/*.tsx",
-        "app/hooks/**/*.ts",
-        "scripts/script-environment.mjs",
-        "scripts/cleanup-local-qa-data.mjs",
-        "scripts/smoke-live-helpers.mjs",
-        "scripts/smoke-image-cover-live.mjs",
-        "scripts/smoke-api-live.mjs",
-        "scripts/qa-preflight.ts",
-        "scripts/deployment-preflight.ts",
-      ],
+      include: isFocusedCoverageRun ? undefined : [...coverageInclude],
       exclude: ["node_modules/**", "test/**", "**/*.config.ts", "**/*.d.ts", "**/types/**"],
-      thresholds: {
+      thresholds: isFocusedCoverageRun ? undefined : {
         statements: 100,
         branches: 100,
         functions: 100,

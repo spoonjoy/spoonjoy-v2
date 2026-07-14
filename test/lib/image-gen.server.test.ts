@@ -100,6 +100,14 @@ describe("image-gen.server prompts and constants", () => {
     expect(prompt).not.toContain("x".repeat(225));
   });
 
+  it("keeps prompt addition punctuation when already present", () => {
+    const prompt = composeStylizationPrompt({
+      promptAddition: "make the sauce glossier!",
+    });
+    expect(prompt).toContain("Additional direction: make the sauce glossier!");
+    expect(prompt).not.toContain("make the sauce glossier!.");
+  });
+
   it("returns a text-only fallback prompt for DALL-E 3", () => {
     const prompt = composeStylizationFallbackPrompt("Tomato Soup");
     expect(prompt).toContain("Restyle this photograph");

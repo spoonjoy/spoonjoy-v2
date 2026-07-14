@@ -1092,6 +1092,15 @@ describe("scheduleSpoonCoverStylization", () => {
   });
 
   it("logs errors and leaves stylizedImageUrl null when the runner throws", async () => {
+    const parentCover = await db.recipeCover.create({
+      data: {
+        recipeId,
+        imageUrl: "https://stub.test/failed-parent.png",
+        sourceType: "chef-upload",
+        status: "ready",
+        generationStatus: "succeeded",
+      },
+    });
     const analyticsFetchImpl = postHogFetchSpy();
     const runner: ImageGenRunner = {
       textToImage: vi.fn().mockRejectedValue(new Error("text failed")),
@@ -1102,6 +1111,8 @@ describe("scheduleSpoonCoverStylization", () => {
       userId,
       recipeId,
       coverId,
+      parentCoverId: parentCover.id,
+      promptAddition: "  try   a brighter table  ",
       rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
       recipeTitle: "Stylize Me",
       runner,
@@ -1117,6 +1128,8 @@ describe("scheduleSpoonCoverStylization", () => {
       generationStatus: "failed",
       promptVersion: "spoon-photo-editorial-v1",
       styleVersion: "mendelow-phone-to-editorial-v1",
+      parentCoverId: parentCover.id,
+      promptAddition: "try a brighter table",
     });
     expect(cover.failureReason).toContain("Stylization failed");
     expect(cover.failureReason).toContain("img failed");
