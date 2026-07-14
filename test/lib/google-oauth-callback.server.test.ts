@@ -450,7 +450,7 @@ describe("google-oauth-callback.server", () => {
     });
 
     describe("email collision handling", () => {
-      it("should return error when email exists but user not logged in", async () => {
+      it("should restore a missing Google OAuth row when verified email exists", async () => {
         // Create existing user with email
         const testUserData = createTestUser();
         const existingUser = await db.user.create({
@@ -472,12 +472,21 @@ describe("google-oauth-callback.server", () => {
 
         const result = await handleGoogleOAuthCallback(params);
 
-        expect(result.success).toBe(false);
-        expect(result.error).toBe("account_exists");
-        expect(result.message).toContain("log in");
+        expect(result.success).toBe(true);
+        expect(result.action).toBe("account_linked");
+        expect(result.userId).toBe(existingUser.id);
+
+        const oauth = await db.oAuth.findUnique({
+          where: { userId_provider: { userId: existingUser.id, provider: "google" } },
+        });
+        expect(oauth).toMatchObject({
+          provider: "google",
+          providerUserId: mockGoogleUser.id,
+          providerUsername: mockGoogleUser.name,
+        });
       });
 
-      it("should handle case-insensitive email collision", async () => {
+      it("should restore by verified email case-insensitively", async () => {
         // Create existing user with email
         const testUserData = createTestUser();
         testUserData.email = "Test@Example.COM";
@@ -500,8 +509,64 @@ describe("google-oauth-callback.server", () => {
 
         const result = await handleGoogleOAuthCallback(params);
 
-        expect(result.success).toBe(false);
-        expect(result.error).toBe("account_exists");
+        expect(result.success).toBe(true);
+        expect(result.action).toBe("account_linked");
+        expect(result.userId).toBe(existingUser.id);
+      });
+
+      it("should propagate restore errors when the verified email user already has Google linked", async () => {
+        const existingUser = await db.user.create({
+          data: {
+            ...createTestUser(),
+            email: "linked-google@example.com",
+            OAuth: {
+              create: {
+                provider: "google",
+                providerUserId: "existing-google-id",
+                providerUsername: "Existing Google",
+              },
+            },
+          },
+        });
+        testUserIds.push(existingUser.id);
+
+        const result = await handleGoogleOAuthCallback({
+          db,
+          googleUser: createMockGoogleUser({
+            id: "new-google-id",
+            email: "linked-google@example.com",
+            name: "New Google",
+          }),
+          currentUserId: null,
+          redirectTo: null,
+        });
+
+        expect(result).toMatchObject({
+          success: false,
+          error: "provider_already_linked",
+          redirectTo: "/",
+        });
+        expect(result.userId).toBeUndefined();
+      });
+
+      it("should reject unverified Google email before linking or creating", async () => {
+        const mockGoogleUser = createMockGoogleUser({
+          emailVerified: false,
+        });
+
+        const result = await handleGoogleOAuthCallback({
+          db,
+          googleUser: mockGoogleUser,
+          currentUserId: null,
+          redirectTo: null,
+        });
+
+        expect(result).toMatchObject({
+          success: false,
+          error: "email_unverified",
+          redirectTo: "/",
+        });
+        expect(result.userId).toBeUndefined();
       });
     });
 
@@ -548,16 +613,8 @@ describe("google-oauth-callback.server", () => {
       });
 
       it("should not return userId on error", async () => {
-        // Create user with email
-        const testUserData = createTestUser();
-        const existingUser = await db.user.create({
-          data: testUserData,
-        });
-        testUserIds.push(existingUser.id);
-
-        // Try to create with same email (not logged in)
         const mockGoogleUser = createMockGoogleUser({
-          email: testUserData.email.toLowerCase(),
+          emailVerified: false,
         });
 
         const result = await handleGoogleOAuthCallback({
@@ -667,14 +724,8 @@ describe("google-oauth-callback.server", () => {
       });
 
       it("should include redirectTo in error results for retry flow", async () => {
-        const testUserData = createTestUser();
-        const existingUser = await db.user.create({
-          data: testUserData,
-        });
-        testUserIds.push(existingUser.id);
-
         const mockGoogleUser = createMockGoogleUser({
-          email: testUserData.email.toLowerCase(),
+          emailVerified: false,
         });
 
         const result = await handleGoogleOAuthCallback({
@@ -745,14 +796,8 @@ describe("google-oauth-callback.server", () => {
       });
 
       it("should not include action on error", async () => {
-        const testUserData = createTestUser();
-        const existingUser = await db.user.create({
-          data: testUserData,
-        });
-        testUserIds.push(existingUser.id);
-
         const mockGoogleUser = createMockGoogleUser({
-          email: testUserData.email.toLowerCase(),
+          emailVerified: false,
         });
 
         const result = await handleGoogleOAuthCallback({

@@ -10,6 +10,7 @@ import {
   generateUsername,
   findExistingOAuthAccount,
   linkOAuthAccount,
+  linkOAuthAccountByVerifiedEmail,
   unlinkOAuthAccount,
 } from "~/lib/oauth-user.server";
 
@@ -595,6 +596,87 @@ describe("oauth-user.server", () => {
 
       expect(result.success).toBe(true);
       expect(result.oauthRecord?.providerUsername).toBe(providerUsername);
+    });
+  });
+
+  describe("linkOAuthAccountByVerifiedEmail", () => {
+    it("should link a provider to an existing user with a verified matching email", async () => {
+      const existingEmail = "Existing.User@Example.com";
+      const user = await db.user.create({
+        data: {
+          ...createTestUser(),
+          email: existingEmail,
+        },
+      });
+
+      const result = await linkOAuthAccountByVerifiedEmail(db, {
+        provider: "github",
+        providerUserId: faker.string.numeric(8),
+        providerUsername: "existingchef",
+        email: "existing.user@example.com",
+        emailVerified: true,
+      });
+
+      expect(result).toMatchObject({
+        success: true,
+        userId: user.id,
+        oauthRecord: {
+          provider: "github",
+          providerUsername: "existingchef",
+        },
+      });
+    });
+
+    it("should refuse unverified provider emails", async () => {
+      const result = await linkOAuthAccountByVerifiedEmail(db, {
+        provider: "google",
+        providerUserId: faker.string.uuid(),
+        providerUsername: "Google User",
+        email: faker.internet.email().toLowerCase(),
+        emailVerified: false,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("email_unverified");
+      expect(result.userId).toBeUndefined();
+    });
+
+    it("should return account_not_found when no user owns the verified email", async () => {
+      const result = await linkOAuthAccountByVerifiedEmail(db, {
+        provider: "google",
+        providerUserId: faker.string.uuid(),
+        providerUsername: "Google User",
+        email: faker.internet.email().toLowerCase(),
+        emailVerified: true,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("account_not_found");
+      expect(result.userId).toBeUndefined();
+    });
+
+    it("should preserve provider ownership errors", async () => {
+      const firstUser = await db.user.create({ data: createTestUser() });
+      const secondUser = await db.user.create({ data: createTestUser() });
+      const providerUserId = faker.string.uuid();
+
+      await linkOAuthAccount(db, firstUser.id, {
+        provider: "google",
+        providerUserId,
+        providerUsername: "First Google",
+      });
+
+      const result = await linkOAuthAccountByVerifiedEmail(db, {
+        provider: "google",
+        providerUserId,
+        providerUsername: "First Google",
+        email: secondUser.email.toLowerCase(),
+        emailVerified: true,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("provider_account_taken");
+      expect(result.userId).toBeUndefined();
     });
   });
 

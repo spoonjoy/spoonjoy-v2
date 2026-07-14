@@ -28,6 +28,7 @@
     "cleanup:remote:qa": "node scripts/cleanup-local-qa-data.mjs --target-env qa",
     "cleanup:remote:qa:apply": "node scripts/cleanup-local-qa-data.mjs --target-env qa --apply",
     "cleanup:production": "node scripts/cleanup-local-qa-data.mjs --target-env production",
+    "migrate:cloudinary-r2": "tsx scripts/migrate-cloudinary-covers-to-r2.ts",
     "typecheck": "pnpm run api:playground:generate && react-router typegen && tsc",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "test": "pnpm run api:playground:generate && vitest",

@@ -1,0 +1,149 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2
+
+stderr | test/routes/mcp-page.test.tsx > /mcp landing page > renders human-facing setup guidance without treating browser GET as the protocol call
+Matched leaf route at location "/mcp" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+stderr | test/routes/mcp-page.test.tsx > /mcp landing page > renders human-facing setup guidance without treating browser GET as the protocol call
+Matched leaf route at location "/mcp" does not have an element or Component. This means it will render an <Outlet /> with a null value by default resulting in an "empty" page.
+
+ ❯ test/routes/mcp-page.test.tsx (1 test | 1 failed) 1117ms
+     × renders human-facing setup guidance without treating browser GET as the protocol call 1032ms
+ ❯ test/routes/mcp.test.ts (4 tests | 1 failed) 105ms
+     × returns landing-page data on GET via the loader 22ms
+     ✓ challenges an unauthenticated request via the action 9ms
+     ✓ handles initialize + tools/list + a tools/call end to end when authenticated 29ms
+     ✓ accepts OAuth tokens bound to /mcp and rejects tokens bound elsewhere 15ms
+ ✓ test/routes/route-shell-coverage.test.ts (13 tests) 578ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/routes/mcp-page.test.tsx > /mcp landing page > renders human-facing setup guidance without treating browser GET as the protocol call
+TestingLibraryElementError: Unable to find role="heading" and name "Spoonjoy MCP"
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div />[39m
+[36m</body>[39m
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div />[39m
+[36m</body>[39m
+ ❯ waitForWrapper node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ test/routes/mcp-page.test.tsx:20:18
+     18|     render(createElement(Stub, { initialEntries: ["/mcp"] }));
+     19|
+     20|     await screen.findByRole("heading", { name: "Spoonjoy MCP" });
+       |                  ^
+     21|     const pageText = document.body.textContent ?? "";
+     22|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  test/routes/mcp.test.ts > /mcp route > returns landing-page data on GET via the loader
+AssertionError: expected Response { status: 405, statusText: '', headers: Headers { 'Content-Type': 'application/json' }, body: ReadableStream { locked: false, state: 'readable', supportsBYOB: true }, bodyUsed: false, ok: false, redirected: false, type: 'default', url: '' } to deeply equal { …(2) }
+
+- Expected
++ Received
+
+- {
+-   "endpoint": "https://spoonjoy.app/mcp",
+-   "protectedResourceMetadataUrl": "https://spoonjoy.app/.well-known/oauth-protected-resource/mcp",
++ Response {
++   Symbol(state): {
++     "aborted": false,
++     "body": {
++       "length": 73,
++       "source": "{\"error\":\"method_not_allowed\",\"message\":\"The MCP endpoint accepts POST.\"}",
++       "stream": ReadableStream {
++         Symbol(kType): "ReadableStream",
++         Symbol(kState): {
++           "controller": ReadableByteStreamController {
++             Symbol(kType): "ReadableByteStreamController",
++             Symbol(kState): {
++               "autoAllocateChunkSize": undefined,
++               "byobRequest": null,
++               "cancelAlgorithm": [Function nonOpCancel],
++               "closeRequested": false,
++               "highWaterMark": 0,
++               "pendingPullIntos": [],
++               "pullAgain": false,
++               "pullAlgorithm": [Function anonymous],
++               "pulling": false,
++               "queue": [],
++               "queueTotalSize": 0,
++               "started": true,
++               "stream": [Circular],
++             },
++           },
++           "disturbed": false,
++           "reader": undefined,
++           "state": "readable",
++           "storedError": undefined,
++           "transfer": {
++             "port1": undefined,
++             "port2": undefined,
++             "promise": undefined,
++             "writable": undefined,
++           },
++         },
++         Symbol(nodejs.webstream.isClosedPromise): {
++           "promise": Promise {},
++           "reject": [Function anonymous],
++           "resolve": [Function anonymous],
++         },
++         Symbol(nodejs.webstream.controllerErrorFunction): [Function anonymous],
++       },
++     },
++     "cacheState": "",
++     "headersList": HeadersList {
++       "cookies": null,
++       Symbol(headers map): Map {
++         "content-type" => {
++           "name": "Content-Type",
++           "value": "application/json",
++         },
++       },
++       Symbol(headers map sorted): null,
++     },
++     "rangeRequested": false,
++     "requestIncludesCredentials": false,
++     "status": 405,
++     "statusText": "",
++     "timingAllowPassed": false,
++     "timingInfo": null,
++     "type": "default",
++     "urlList": [],
++   },
++   Symbol(headers): Headers {},
+  }
+
+ ❯ test/routes/mcp.test.ts:39:5
+     37|   it("returns landing-page data on GET via the loader", async () => {
+     38|     const request = new UndiciRequest("https://spoonjoy.app/mcp", { me…
+     39|     await expect(loader(routeArgs(request))).resolves.toEqual({
+       |     ^
+     40|       endpoint: "https://spoonjoy.app/mcp",
+     41|       protectedResourceMetadataUrl: "https://spoonjoy.app/.well-known/…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  2 failed | 16 passed (18)
+   Start at  14:12:42
+   Duration  3.94s (transform 623ms, setup 268ms, import 1.08s, tests 1.80s, environment 386ms)
+
+DOMException [AbortError]: The operation was aborted.
+    at Fetch.onAsyncTaskManagerAbort (file:///Users/arimendelow/Projects/spoonjoy-v2/node_modules/.pnpm/happy-dom@20.4.0/node_modules/happy-dom/lib/fetch/Fetch.js:546:23)
+    at Object.<anonymous> (file:///Users/arimendelow/Projects/spoonjoy-v2/node_modules/.pnpm/happy-dom@20.4.0/node_modules/happy-dom/lib/fetch/Fetch.js:416:101)
+    at AsyncTaskManager.abortAll (file:///Users/arimendelow/Projects/spoonjoy-v2/node_modules/.pnpm/happy-dom@20.4.0/node_modules/happy-dom/lib/async-task-manager/AsyncTaskManager.js:292:30)
+    at AsyncTaskManager.abort (file:///Users/arimendelow/Projects/spoonjoy-v2/node_modules/.pnpm/happy-dom@20.4.0/node_modules/happy-dom/lib/async-task-manager/AsyncTaskManager.js:52:21)
+    at DetachedBrowserFrame.abort (file:///Users/arimendelow/Projects/spoonjoy-v2/node_modules/.pnpm/happy-dom@20.4.0/node_modules/happy-dom/lib/browser/detached-browser/DetachedBrowserFrame.js:112:58)
+    at DetachedWindowAPI.abort (file:///Users/arimendelow/Projects/spoonjoy-v2/node_modules/.pnpm/happy-dom@20.4.0/node_modules/happy-dom/lib/window/DetachedWindowAPI.js:51:35)
+    at teardownWindow (file:///Users/arimendelow/Projects/spoonjoy-v2/node_modules/.pnpm/vitest@4.0.18_@opentelemetry+api@1.9.0_@types+node@22.19.21_@vitest+browser-playwright@_e9cdabd01be3faeda59d98b7131acd81/node_modules/vitest/dist/chunks/index.CyBMJtT7.js:331:22)
+    at Object.teardown (file:///Users/arimendelow/Projects/spoonjoy-v2/node_modules/.pnpm/vitest@4.0.18_@opentelemetry+api@1.9.0_@types+node@22.19.21_@vitest+browser-playwright@_e9cdabd01be3faeda59d98b7131acd81/node_modules/vitest/dist/chunks/index.CyBMJtT7.js:392:10)
+    at file:///Users/arimendelow/Projects/spoonjoy-v2/node_modules/.pnpm/vitest@4.0.18_@opentelemetry+api@1.9.0_@types+node@22.19.21_@vitest+browser-playwright@_e9cdabd01be3faeda59d98b7131acd81/node_modules/vitest/dist/chunks/base.CJ0Y4ePK.js:130:65
+    at Traces.$ (file:///Users/arimendelow/Projects/spoonjoy-v2/node_modules/.pnpm/vitest@4.0.18_@opentelemetry+api@1.9.0_@types+node@22.19.21_@vitest+browser-playwright@_e9cdabd01be3faeda59d98b7131acd81/node_modules/vitest/dist/chunks/traces.CCmnQaNT.js:142:27)

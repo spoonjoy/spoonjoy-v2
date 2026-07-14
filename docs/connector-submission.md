@@ -21,7 +21,7 @@ collected at the bottom.
 - [x] Every tool carries a `title` + `readOnlyHint`/`destructiveHint` (surfaced via `tools/list`)
 - [x] Public Privacy Policy + Terms of Service (linked from every auth/consent screen)
 - [x] `server.json` present for the MCP Registry
-- [ ] Reviewer demo account created + seeded (see below — needs Ari)
+- [ ] Reviewer access plan confirmed (see below — needs Ari)
 - [ ] Logo asset exported (see below — needs Ari)
 
 ---
@@ -30,9 +30,10 @@ collected at the bottom.
 
 - **Name:** Spoonjoy
 - **Tagline:** Your personal recipe kitchen.
-- **Short description:** Spoonjoy keeps the recipes you actually cook. Search and
-  open public recipes, save and fork them into your kitchen, build cookbooks,
-  log cooks, and manage a shopping list — now from your AI assistant.
+- **Short description:** Spoonjoy keeps the recipes you actually cook. Use the
+  app for fast finding and following; use an agent through MCP for complex
+  kitchen work like authoring recipes, importing from messy sources, organizing
+  cookbooks, and updating shopping lists.
 - **Categories:** Productivity / Lifestyle / Food & cooking
 - **Auth type:** OAuth 2.1 (authorization code + PKCE, dynamic client registration)
 - **Scopes:** `kitchen:read` (view recipes, cookbooks, shopping list),
@@ -52,7 +53,7 @@ Add recipe to shopping list, Create cookbook, Add recipe to cookbook,
 Add shopping-list item, Check shopping-list item, Log a cook, Update a cook.
 
 The connector has no outbound web access: it never server-fetches arbitrary
-URLs. To save a recipe from the web, the assistant reads the page itself and
+URLs. To save a recipe from the web, the agent reads the source itself and
 calls `Create recipe`. (The REST API still offers a server-side URL import that
 the Spoonjoy web app uses, but it is not exposed as an MCP tool.)
 
@@ -95,7 +96,7 @@ Submit at **https://clau.de/mcp-directory-submission**. Form answers:
 | Third-party connections | Cloudflare (hosting/DB/storage); analytics + error monitoring; OpenAI (only for recipe-cover image generation); OAuth providers (Apple/GitHub/Google) on user opt-in |
 | Support / docs | ari@spoonjoy.app · https://spoonjoy.app/privacy · https://spoonjoy.app/terms |
 | Logo | (export needed — see below) |
-| Test credentials | (demo account — see below) |
+| Test credentials | (reviewer access — see below) |
 
 Escalations / firewall issues: `mcp-review@anthropic.com`.
 
@@ -113,7 +114,7 @@ Submit at **https://platform.openai.com/apps-manage** (needs Owner role or
 - Support contact: ari@spoonjoy.app
 - MCP connectivity: `https://spoonjoy.app/mcp`, OAuth 2.1.
 - Tool annotations: already present (`readOnlyHint`/`destructiveHint`/`title`).
-- A full-featured demo account with sample data (below).
+- Reviewer access details (below).
 - Country availability settings.
 
 Note: OpenAI's Apps SDK adds an optional UI layer on top of MCP. The connector
@@ -122,22 +123,20 @@ not a submission blocker.
 
 ---
 
-## Reviewer demo account
+## Reviewer access
 
 Both Anthropic and OpenAI test the connector end to end, so they need a working
-login with sample data.
+login. Do not seed demo fixture data into production.
 
-1. Sign up a dedicated account at https://spoonjoy.app/signup (e.g.
-   `demo@spoonjoy.app` with a strong password).
-2. Create an API token for it in Account Settings.
-3. Seed sample content:
+1. Rehearse the review flow against QA/local only:
    ```bash
-   SPOONJOY_API_TOKEN=sj_... node scripts/seed-demo-kitchen.mjs
+   SPOONJOY_API_TOKEN=sj_... node scripts/seed-demo-kitchen.mjs --target-env qa
    ```
-   This adds three recipes, a "Weeknight Favorites" cookbook, and a few
-   shopping-list items via the public API. Safe to re-run.
-4. Hand the directory reviewers the email + password (not the API token). They
-   sign in during the OAuth consent step to authorize the connector.
+   The script refuses `spoonjoy.app` even when `SPOONJOY_BASE_URL` is set.
+2. If a directory absolutely requires production credentials, create a temporary
+   real reviewer account by hand, give it only the content needed for review,
+   and remove that account plus its content immediately after review closes.
+3. Hand reviewers the email + password only. Never share API tokens.
 
 ---
 
@@ -146,6 +145,6 @@ login with sample data.
 1. Add the apex `spoonjoy.app` DNS TXT record for the MCP Registry namespace.
 2. Run `mcp-publisher login dns` + `publish`.
 3. Create the Anthropic + OpenAI developer accounts and accept their terms.
-4. Create + seed the reviewer demo account (steps above).
+4. Confirm the reviewer access plan (steps above).
 5. Export a Spoonjoy logo asset (PNG/SVG) for the listings.
 6. Read through `/privacy` + `/terms`, then click submit on each venue.

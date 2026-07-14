@@ -16,7 +16,7 @@ export type SpoonjoyMcpToolInfo = SpoonjoyMcpToolDescriptor;
 // over the MCP connector.
 // - `import_recipe_from_url` server-fetches arbitrary URLs (annotated
 //   `openWorldHint: true`) — the connector's only outbound web access. The
-//   agent-driven flow (assistant reads the page, calls `create_recipe`) replaces
+//   agent-driven flow (agent reads the page, calls `create_recipe`) replaces
 //   it for MCP clients, so it stays REST-only and the MCP surface has no web access.
 // - `regenerate_recipe_cover` and `create_recipe_cover_from_spoon` produce
 //   AI-generated "editorial" cover images. The Anthropic Connectors Directory lists

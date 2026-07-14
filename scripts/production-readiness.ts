@@ -27,7 +27,7 @@ export const OPTIONAL_FEATURE_SECRET_GROUPS = [
   },
 ] as const;
 
-export const INTENTIONALLY_DISABLED_FEATURE_GROUPS = ["Google OAuth"] as const;
+export const INTENTIONALLY_DISABLED_FEATURE_GROUPS = [] as const;
 
 export const REQUIRED_PWA_ASSETS = [
   "public/manifest.webmanifest",

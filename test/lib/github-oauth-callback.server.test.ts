@@ -165,21 +165,62 @@ describe("github-oauth-callback.server", () => {
     expect(result.userId).toBeUndefined();
   });
 
-  it("returns account_exists when a new GitHub login collides by email", async () => {
+  it("restores a missing GitHub OAuth row when verified email matches an existing user", async () => {
     const existingUser = await db.user.create({
       data: { ...createTestUser(), email: "Existing@Example.com" },
     });
     testUserIds.push(existingUser.id);
 
-    const result = await runCallback(undefined, createMockGitHubUser({
+    const githubUser = createMockGitHubUser({
       email: "existing@example.com",
+    });
+    const result = await runCallback(undefined, githubUser);
+
+    expect(result).toMatchObject({
+      success: true,
+      userId: existingUser.id,
+      action: "account_linked",
+      redirectTo: "/recipes",
+    });
+
+    const oauth = await db.oAuth.findUnique({
+      where: { userId_provider: { userId: existingUser.id, provider: "github" } },
+    });
+    expect(oauth).toMatchObject({
+      provider: "github",
+      providerUserId: githubUser.id,
+      providerUsername: githubUser.login,
+    });
+  });
+
+  it("propagates restore errors when the verified email user already has GitHub linked", async () => {
+    const existingUser = await db.user.create({
+      data: {
+        ...createTestUser(),
+        email: "linked-github@example.com",
+        OAuth: {
+          create: {
+            provider: "github",
+            providerUserId: "existing-github-id",
+            providerUsername: "existingchef",
+          },
+        },
+      },
+    });
+    testUserIds.push(existingUser.id);
+
+    const result = await runCallback(undefined, createMockGitHubUser({
+      id: "new-github-id",
+      email: "linked-github@example.com",
+      login: "newchef",
     }));
 
     expect(result).toMatchObject({
       success: false,
-      error: "account_exists",
+      error: "provider_already_linked",
       redirectTo: "/recipes",
     });
+    expect(result.userId).toBeUndefined();
   });
 
   it("returns email_required for a new GitHub user with no verified email", async () => {

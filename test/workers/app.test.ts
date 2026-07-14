@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 const requestHandler = vi.fn(async () => new Response("handled"));
+const mcpPostRoute = vi.fn(async () => Response.json({ ok: true }));
 
 vi.mock("react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-router")>();
@@ -10,6 +11,10 @@ vi.mock("react-router", async (importOriginal) => {
     createRequestHandler: vi.fn(() => requestHandler),
   };
 });
+
+vi.mock("../../app/lib/mcp/http-mcp-route.server", () => ({
+  handleMcpPostRouteRequest: mcpPostRoute,
+}));
 
 const worker = (await import("../../workers/app")).default;
 
@@ -61,6 +66,7 @@ describe("Cloudflare worker app", () => {
 
   it("still routes non-preflight requests through React Router", async () => {
     requestHandler.mockClear();
+    mcpPostRoute.mockClear();
 
     const response = await worker.fetch(
       new Request("https://spoonjoy.app/oauth/token", { method: "POST" }),
@@ -72,5 +78,27 @@ describe("Cloudflare worker app", () => {
     await expect(response.text()).resolves.toBe("handled");
     expect(response.headers.get("X-Frame-Options")).toBe("DENY");
     expect(requestHandler).toHaveBeenCalledTimes(1);
+    expect(mcpPostRoute).not.toHaveBeenCalled();
+  });
+
+  it("answers MCP POST requests as raw JSON before React Router renders the landing page", async () => {
+    requestHandler.mockClear();
+    mcpPostRoute.mockClear();
+    const env = { SPOONJOY_BASE_URL: "https://spoonjoy.app" } as CloudflareEnvironment;
+    const ctx = context();
+    const request = new Request("https://spoonjoy.app/mcp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize" }),
+    });
+
+    const response = await worker.fetch(request, env, ctx);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toContain("application/json");
+    expect(response.headers.get("X-Frame-Options")).toBe("DENY");
+    await expect(response.json()).resolves.toEqual({ ok: true });
+    expect(requestHandler).not.toHaveBeenCalled();
+    expect(mcpPostRoute).toHaveBeenCalledWith(request, { cloudflare: { env, ctx } });
   });
 });
