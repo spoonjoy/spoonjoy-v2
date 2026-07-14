@@ -1,8 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { render, screen } from "@testing-library/react";
 import { cleanupDatabase } from "../helpers/cleanup";
-import { loader } from "~/routes/my-recipes";
+import {
+  INGREDIENT_LOOKUP_BATCH_SIZE,
+  loadIngredientNamesByRecipeId,
+  loader,
+} from "~/routes/my-recipes";
 import MyRecipes from "~/routes/my-recipes";
 import { createTestRoutesStub } from "../utils";
 import {
@@ -120,6 +124,45 @@ describe("My Recipes drawer route", () => {
     expect(result.recipes.map((recipe: { id: string }) => recipe.id)).toEqual([
       newer.id,
       older.id,
+    ]);
+  });
+
+  it("batches ingredient lookup so large kitchens stay under D1 variable limits", async () => {
+    const recipeIds = Array.from(
+      { length: INGREDIENT_LOOKUP_BATCH_SIZE * 2 + 3 },
+      (_, index) => `recipe-${index}`,
+    );
+    const batchSizes: number[] = [];
+    const database = {
+      ingredient: {
+        findMany: vi.fn(async (args: {
+          where: { recipeId: { in: string[] } };
+          select: { recipeId: true; ingredientRef: { select: { name: true } } };
+        }) => {
+          const batch = args.where.recipeId.in;
+          if (batch.length > INGREDIENT_LOOKUP_BATCH_SIZE) {
+            throw new Error("would exceed D1 variable limit");
+          }
+          batchSizes.push(batch.length);
+          return batch.slice(0, 1).map((recipeId) => ({
+            recipeId,
+            ingredientRef: { name: `ingredient-${recipeId}` },
+          }));
+        }),
+      },
+    };
+
+    const result = await loadIngredientNamesByRecipeId(database, recipeIds);
+
+    expect(database.ingredient.findMany).toHaveBeenCalledTimes(3);
+    expect(batchSizes).toEqual([
+      INGREDIENT_LOOKUP_BATCH_SIZE,
+      INGREDIENT_LOOKUP_BATCH_SIZE,
+      3,
+    ]);
+    expect(result.get("recipe-0")).toEqual(["ingredient-recipe-0"]);
+    expect(result.get(`recipe-${INGREDIENT_LOOKUP_BATCH_SIZE}`)).toEqual([
+      `ingredient-recipe-${INGREDIENT_LOOKUP_BATCH_SIZE}`,
     ]);
   });
 
