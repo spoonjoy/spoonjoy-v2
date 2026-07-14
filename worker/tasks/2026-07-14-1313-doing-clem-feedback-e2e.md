@@ -130,13 +130,13 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 **Acceptance**: 100% coverage on new state code, no warnings.
 
 ### ⬜ Unit 5a: Durable Object Binding And HTTP Contracts — Tests
-**What**: Write failing tests for Wrangler Durable Object binding/migration in production and QA, Env binding shape, Worker export, session snapshot `GET`, revision-checked `PATCH`, auth rejection, ownership checks, and invalid payload errors.
-**Output**: Tests in `test/config/wrangler-durable-objects.test.ts`, `test/workers/cook-session-do.test.ts`, and route contract tests.
+**What**: Write failing tests for Wrangler Durable Object binding/migration in production and QA, Env binding shape, Worker export, and the cook-session HTTP contract: `GET /api/cook-sessions/:sessionId`, `PATCH /api/cook-sessions/:sessionId`, and `POST /api/cook-sessions/:sessionId/complete`.
+**Output**: Tests in `test/config/wrangler-durable-objects.test.ts`, `test/workers/cook-session-do.test.ts`, and new `test/routes/api-cook-sessions.test.ts`.
 **Acceptance**: Tests fail because no binding/export/contracts exist.
 
 ### ⬜ Unit 5b: Durable Object Binding And HTTP Contracts — Implementation
-**What**: Configure the Durable Object binding/migration, export the class from `workers/app.ts`, update Env types, and add authenticated cook-session HTTP contracts.
-**Output**: Updated `wrangler.json`, `app/cloudflare-env.d.ts`, `workers/app.ts`, and cook-session route modules/libs.
+**What**: Configure the Durable Object binding/migration, export the class from `workers/app.ts`, update Env types, register routes in `app/routes.ts`, and add authenticated cook-session HTTP contracts.
+**Output**: Updated `wrangler.json`, `app/cloudflare-env.d.ts`, `workers/app.ts`, `app/routes.ts`, new `app/routes/api.cook-sessions.$sessionId.ts`, new `app/routes/api.cook-sessions.$sessionId.complete.ts`, and new `app/lib/cook-session-route.server.ts`.
 **Acceptance**: Unit 5a tests pass; top-level and QA Wrangler envs both define the binding/migration.
 
 ### ⬜ Unit 5c: Durable Object Binding And HTTP Contracts — Coverage & Refactor
@@ -165,8 +165,8 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 **Acceptance**: Tests fail because no WebSocket subscription exists.
 
 ### ⬜ Unit 7b: Cook Session WebSocket Subscription — Implementation
-**What**: Implement WebSocket subscription/broadcast on the Durable Object using hibernation-compatible APIs and fallback-safe state loading.
-**Output**: Updated Durable Object class and tests.
+**What**: Implement `GET /api/cook-sessions/:sessionId/live` WebSocket subscription/broadcast on the Durable Object using hibernation-compatible APIs and fallback-safe state loading.
+**Output**: Updated Durable Object class, `app/routes.ts`, new `app/routes/api.cook-sessions.$sessionId.live.ts`, and `test/workers/cook-session-do.test.ts`.
 **Acceptance**: Unit 7a tests pass; accepted patches broadcast snapshots to subscribed clients.
 
 ### ⬜ Unit 7c: Cook Session WebSocket Subscription — Coverage & Refactor
@@ -180,7 +180,7 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 **Acceptance**: Tests fail because logged-in cook progress is still localStorage-only.
 
 ### ⬜ Unit 8b: Recipe Cook Mode Server Source — Implementation
-**What**: Wire recipe cook mode to cook-session snapshot/patch/WebSocket contracts for logged-in users while retaining anonymous/local fallback.
+**What**: Wire recipe cook mode to `GET /api/cook-sessions/:sessionId`, `PATCH /api/cook-sessions/:sessionId`, and `GET /api/cook-sessions/:sessionId/live` for logged-in users while retaining anonymous/local fallback.
 **Output**: Updated `app/routes/recipes.$id.tsx`, new client cook-session hook/module, and route integration.
 **Acceptance**: Unit 8a tests pass; logged-in progress reads/writes through server session.
 
@@ -231,7 +231,7 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 
 ### ⬜ Unit 11b: SavedRecipe Data And Backfill — Implementation
 **What**: Add `SavedRecipe` schema/migrations/backfill helper and canonical data access helpers.
-**Output**: Updated Prisma/D1 migrations and new `app/lib/saved-recipes.server.ts`.
+**Output**: Updated `prisma/schema.prisma`, `migrations/0024_saved_recipes.sql`, `prisma/migrations/20260714131400_saved_recipes/migration.sql`, and new `app/lib/saved-recipes.server.ts`.
 **Acceptance**: Unit 11a tests pass; existing cookbook-derived saved state is preserved.
 
 ### ⬜ Unit 11c: SavedRecipe Data And Backfill — Coverage & Refactor
@@ -241,7 +241,7 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 
 ### ⬜ Unit 12a: SavedRecipe Service And Cookbook Compatibility — Tests
 **What**: Write failing tests for explicit save/unsave, cookbook-add ensuring saved state, cookbook-removal not being the only unsave path, idempotency, ownership checks, and no accidental author-follow behavior.
-**Output**: Tests in saved service, recipe detail, and cookbook mutation suites.
+**Output**: Tests in existing `test/lib/saved-recipes.server.test.ts`, existing `test/routes/recipes-id.test.tsx`, existing `test/routes/cookbooks-id.test.tsx`, and existing `test/lib/spoonjoy-api-cookbook-notification.test.ts` only to assert notification behavior remains unchanged.
 **Acceptance**: Tests fail because compatibility service behavior does not exist.
 
 ### ⬜ Unit 12b: SavedRecipe Service And Cookbook Compatibility — Implementation
@@ -296,7 +296,7 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 
 ### ⬜ Unit 15b: Typed Recipe Tags Data And Service — Implementation
 **What**: Add accepted/manual typed tags, schema/migrations, and service helpers.
-**Output**: Updated Prisma/D1 migrations and new recipe tag service files.
+**Output**: Updated `prisma/schema.prisma`, `migrations/0025_recipe_tags.sql`, `prisma/migrations/20260714131500_recipe_tags/migration.sql`, and new `app/lib/recipe-tags.server.ts`.
 **Acceptance**: Unit 15a tests pass; system course tags include main/side/appetizer/dessert.
 
 ### ⬜ Unit 15c: Typed Recipe Tags Data And Service — Coverage & Refactor
@@ -321,7 +321,7 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 
 ### ⬜ Unit 17a: Typed Recipe Tags Discovery And Search — Tests
 **What**: Write failing tests for tag filters in My Kitchen/search/list surfaces, search-index metadata, query behavior, and empty states.
-**Output**: Tests in search, recipe list, My Kitchen, and route/component suites.
+**Output**: Tests in existing `test/lib/search.server.test.ts`, existing `test/routes/recipes-index.test.tsx`, existing `test/routes/index.test.tsx`, existing `test/routes/search.test.tsx`, and existing `test/components/pantry/RecipeGrid.test.tsx`.
 **Acceptance**: Tests fail because tags do not power discovery.
 
 ### ⬜ Unit 17b: Typed Recipe Tags Discovery And Search — Implementation
@@ -341,7 +341,7 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 
 ### ⬜ Unit 18a: Typed Recipe Tags API And Docs — Tests
 **What**: Write failing tests for tag/course API fields, OpenAPI/playground docs, developer docs, and no AI-suggestion contract in v1.
-**Output**: API/OpenAPI/docs tests.
+**Output**: Tests in existing `test/routes/api-v1-recipes.test.ts`, existing `test/lib/api-v1-openapi.server.test.ts`, existing `test/routes/api-v1-openapi.test.ts`, existing `test/docs/developer-platform-docs.test.ts`, and existing `test/docs/developer-platform-guide.test.ts`.
 **Acceptance**: Tests fail because API/docs do not expose tags.
 
 ### ⬜ Unit 18b: Typed Recipe Tags API And Docs — Implementation
@@ -361,7 +361,7 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 
 ### ⬜ Unit 19b: Navigation, Import Rejection, And Developer Docs — Implementation
 **What**: Update My Kitchen/navigation surfaces after primitives exist, explicitly document import as agentic/API-only, and ensure docs/API copy is neutral and non-Pebble-specific.
-**Output**: Updated `app/routes/_index.tsx`, `app/components/navigation/mobile-nav.tsx`, `docs/developer-platform.md` if present, `app/routes/developers.tsx`, `app/routes/api.docs.ts`, and `app/routes/mcp.tsx` only to describe import as agentic/API-only. Do not add first-party import entry points.
+**Output**: Updated `app/routes/_index.tsx`, `app/components/navigation/mobile-nav.tsx`, `app/routes/developers.tsx`, `app/routes/api.docs.ts`, and `app/routes/mcp.tsx` only to describe import as agentic/API-only. Do not add first-party import entry points.
 **Acceptance**: Unit 19a tests pass; My Kitchen surfaces Continue Cooking, Your Recipes, Saved Recipes, Cookbooks, and Tags without dock churn.
 
 ### ⬜ Unit 19c: Navigation, Import Rejection, And Developer Docs — Coverage & Refactor
@@ -404,3 +404,4 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 - 2026-07-14 13:31 Granularity pass split Durable Object, cook-session UI, SavedRecipe, tags, and final delivery into smaller units.
 - 2026-07-14 13:38 Validation pass aligned route-test targets with existing harness filenames.
 - 2026-07-14 13:42 Ambiguity pass named exact test/source targets, scoped SavedRecipe REST API behavior, and kept MCP saved behavior/notifications out of scope unless existing tests fail.
+- 2026-07-14 13:47 Ambiguity Round 2 named cook-session URL contracts, route modules, migration filenames, and remaining test targets.
