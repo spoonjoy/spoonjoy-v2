@@ -1,6 +1,6 @@
 # Planning: Recipe Photo Studio
 
-**Status**: drafting
+**Status**: approved
 **Created**: 2026-07-14 12:37
 
 ## Goal
@@ -95,3 +95,4 @@ Existing web cover models already distinguish `RecipeCover.imageUrl`, `stylizedI
 ## Progress Log
 - 2026-07-14 12:37 Created
 - 2026-07-14 12:37 Tinfoil hat pass tightened idempotency, native queued upload metadata, and ship/smoke criteria
+- 2026-07-14 12:38 Approved after cold planning reviewer convergence
