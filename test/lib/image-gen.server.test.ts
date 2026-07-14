@@ -91,12 +91,13 @@ describe("image-gen.server prompts and constants", () => {
   });
 
   it("appends a sanitized bounded prompt addition to stylization prompts", () => {
+    const boundedAddition = `keep same plate ${"x".repeat(224)}`;
     const prompt = composeStylizationPrompt({
-      promptAddition: "  keep the same plate   but make the sauce glossier  ",
+      promptAddition: `  keep   same\nplate ${"x".repeat(260)}  `,
     });
-    expect(prompt).toContain(
-      "Additional direction: keep the same plate but make the sauce glossier.",
-    );
+    expect(prompt).toContain(`Additional direction: ${boundedAddition}.`);
+    expect(prompt).not.toContain("\n");
+    expect(prompt).not.toContain("x".repeat(225));
   });
 
   it("returns a text-only fallback prompt for DALL-E 3", () => {

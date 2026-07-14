@@ -127,6 +127,7 @@ describe("scheduleSpoonCoverStylization", () => {
       },
     });
     const runner = makeRunner();
+    const boundedAddition = `keep same plate ${"x".repeat(224)}`;
 
     await scheduleSpoonCoverStylization({
       db,
@@ -134,7 +135,7 @@ describe("scheduleSpoonCoverStylization", () => {
       recipeId,
       coverId,
       parentCoverId: parentCover.id,
-      promptAddition: "  keep the garnish   but use a darker table  ",
+      promptAddition: `  keep   same\nplate ${"x".repeat(260)}  `,
       rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
       recipeTitle: "Stylize Me",
       runner,
@@ -145,7 +146,7 @@ describe("scheduleSpoonCoverStylization", () => {
 
     expect(runner.imageToImage).toHaveBeenCalledWith(
       expect.any(File),
-      expect.stringContaining("Additional direction: keep the garnish but use a darker table."),
+      expect.stringContaining(`Additional direction: ${boundedAddition}.`),
       { model: "gpt-image-2" },
     );
     await expect(
@@ -155,7 +156,7 @@ describe("scheduleSpoonCoverStylization", () => {
       }),
     ).resolves.toEqual({
       parentCoverId: parentCover.id,
-      promptAddition: "keep the garnish but use a darker table",
+      promptAddition: boundedAddition,
     });
   });
 
