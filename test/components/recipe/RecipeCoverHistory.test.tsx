@@ -149,8 +149,9 @@ describe("RecipeCoverHistory", () => {
     expect(screen.getAllByText("Unavailable")).toHaveLength(5);
     expect(screen.getByText("No usable image variants.")).toBeInTheDocument();
     expect(screen.getByText("No image")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Use Chef photo cover" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Use Original photo cover" })).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Use Imported photo cover" })).toBeNull();
+    expect(screen.queryByText("Chef photo")).toBeNull();
     expect(screen.getAllByRole("button", { name: "Regenerate cover" })).toHaveLength(3);
     expect(screen.getAllByRole("button", { name: "Archive cover" })).toHaveLength(3);
   });
@@ -226,7 +227,12 @@ describe("RecipeCoverHistory", () => {
     expect(await screen.findByText("Current")).toBeInTheDocument();
     expect(screen.getByText("Active variant")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Use Chef photo cover" }));
+    expect(screen.getByText("Original photo")).toBeInTheDocument();
+    expect(screen.getByText("Editorial photo")).toBeInTheDocument();
+    expect(screen.queryByText("Chef photo")).toBeNull();
+    expect(screen.queryByText("Editorialized chef photo")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Use Original photo cover" }));
     await waitFor(() => {
       expect(submitted).toContainEqual({
         intent: "setRecipeCover",

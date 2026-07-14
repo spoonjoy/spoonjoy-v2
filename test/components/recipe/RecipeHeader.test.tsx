@@ -126,7 +126,8 @@ describe('RecipeHeader', () => {
         />
       )
 
-      expect(screen.getByText('Editorialized chef photo')).toBeInTheDocument()
+      expect(screen.getByText('Editorial photo')).toBeInTheDocument()
+      expect(screen.queryByText('Editorialized chef photo')).toBeNull()
     })
 
     it('uses a high-contrast overlay treatment for cover provenance on bright photos', () => {
@@ -139,6 +140,8 @@ describe('RecipeHeader', () => {
       )
 
       const badge = screen.getByTestId('cover-provenance-badge')
+      expect(badge).toHaveTextContent('Original photo')
+      expect(screen.queryByText('Chef photo')).toBeNull()
       expect(badge).toHaveClass('bg-[rgba(37,34,31,0.96)]')
       expect(badge).toHaveClass('border-[rgba(255,252,246,0.76)]')
       expect(badge).toHaveClass('text-[var(--sj-paper)]')
@@ -157,7 +160,8 @@ describe('RecipeHeader', () => {
     it('renders explicit awaiting-chef-photo placeholder copy for owners', () => {
       renderWithRouter(<RecipeHeader {...defaultProps} coverPlaceholderLabel="Awaiting first chef photo" />)
       expect(screen.getByTestId('recipe-image-placeholder')).toBeInTheDocument()
-      expect(screen.getByText('Awaiting first chef photo')).toBeInTheDocument()
+      expect(screen.getByText('Awaiting first photo')).toBeInTheDocument()
+      expect(screen.queryByText('Awaiting first chef photo')).toBeNull()
     })
 
     it('renders placeholder when coverImageUrl is empty', () => {

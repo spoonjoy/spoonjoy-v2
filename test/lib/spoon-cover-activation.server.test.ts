@@ -37,7 +37,7 @@ describe("spoon-cover-activation.server", () => {
     await cleanupDatabase();
   });
 
-  it("auto-activates a first spoon cover when the active selection is still unchanged", async () => {
+  it("auto-activates a first spoon cover as the original image while editorialization is still processing", async () => {
     const cover = await db.recipeCover.create({
       data: {
         recipeId,
@@ -61,7 +61,7 @@ describe("spoon-cover-activation.server", () => {
       }),
     ).resolves.toEqual({
       activeCoverId: cover.id,
-      activeCoverVariant: null,
+      activeCoverVariant: "image",
       coverMode: "auto",
     });
   });
