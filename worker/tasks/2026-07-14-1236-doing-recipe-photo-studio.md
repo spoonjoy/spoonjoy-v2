@@ -63,7 +63,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 **Output**: Artifact notes in `./2026-07-14-1236-doing-recipe-photo-studio/setup.md` covering web worktree, native worktree, source files, test files, command matrix, and any local capability blockers.
 **Acceptance**: `git status --short --branch` is clean except task docs; source/test paths in the notes exist; web branch is pushed; native branch `worker/recipe-photo-studio` is pushed and tracks `origin/worker/recipe-photo-studio` before any native commit is created.
 
-### ⬜ Unit 1a: Backend Prompt And Cover Lineage — Tests
+### ✅ Unit 1a: Backend Prompt And Cover Lineage — Tests
 **What**: Write failing tests for bounded prompt additions, prompt sanitization, provider prompt forwarding, and `RecipeCover` prompt/parent lineage persistence.
 **Output**: Red tests in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/lib/image-gen.server.test.ts`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/lib/ai-placeholder-cover.server.test.ts`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/lib/spoon-cover-stylization.server.test.ts`, and `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/scripts/migration-0023-recipe-cover-prompt-lineage.test.ts`.
 **Acceptance**: `pnpm run api:playground:generate && pnpm exec vitest run test/lib/image-gen.server.test.ts test/lib/ai-placeholder-cover.server.test.ts test/lib/spoon-cover-stylization.server.test.ts test/scripts/migration-0023-recipe-cover-prompt-lineage.test.ts --fileParallelism=false` fails for missing prompt additions, sanitization, persisted lineage fields, and provider prompt forwarding.
@@ -427,3 +427,4 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 - 2026-07-14 13:33 Final scrutiny A fixed schema-helper ordering and required post-review final validation reruns
 - 2026-07-14 13:34 Doing doc ready for execution after granularity, validation, ambiguity, quality, and scrutiny reviewer convergence
 - 2026-07-14 13:43 Unit 0 complete: confirmed web/native worktrees, pushed native upstream, recorded setup artifact; unit review skipped because this was setup inventory only
+- 2026-07-14 13:50 Unit 1a complete: added red tests for sanitized/bounded prompt additions, provider prompt forwarding, `RecipeCover` prompt/parent lineage persistence, and root/Prisma migration coverage; acceptance fails with 12 expected prompt/lineage failures and 141 existing tests passing (log: `./2026-07-14-1236-doing-recipe-photo-studio/unit-1a-red.log`)
