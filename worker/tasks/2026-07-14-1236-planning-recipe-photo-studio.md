@@ -1,7 +1,7 @@
 # Planning: Recipe Photo Studio
 
 **Status**: drafting
-**Created**: 2026-07-14 12:36
+**Created**: 2026-07-14 12:37
 
 ## Goal
 Build Recipe Photo Studio as the owner-facing recipe-management workflow for adding, editorializing, regenerating, and controlling a recipe's single public cover photo across web, native Apple, and MCP/agent surfaces.
@@ -15,9 +15,9 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 - Web owner UI under recipe management for first-photo and ongoing recipe-photo controls.
 - Minimal first-photo flow: upload a real photo, optionally post it as a Spoon with Spoon fields, default editorialized recipe cover creation, immediate original-photo preview, processing/loading chip, and automatic swap to the editorialized cover when ready.
 - Backend cover lifecycle support for upload, Spoon-origin covers, generated placeholder covers, regeneration with prompt additions, cover status polling, activation, archive, no-cover mode, and owner media validation.
-- REST API v1 coverage for native clients, including the existing native `/api/v1/recipes/:id/image` upload contract and JSON cover creation where needed.
+- REST API v1 coverage for native clients, including the existing native `/api/v1/recipes/:id/image` upload contract, JSON cover creation where needed, idempotent `clientMutationId` behavior, and outgoing request-shape parity for native upload helpers.
 - MCP/agent tool coverage for upload/generated/regenerate/status/activate/archive flows, including prompt additions.
-- Native Apple Photo Studio surface that uses real backend contracts, preserves Spoon fields where the user is turning a photo into a Spoon, and keeps platform-native controls.
+- Native Apple Photo Studio surface that uses real backend contracts, preserves Spoon fields where the user is turning a photo into a Spoon, updates queued/offline upload metadata to carry the same choices, and keeps platform-native controls.
 - Provenance and cover labels that avoid false "chef photo" language and generic "Spoonjoy cookbook" wording.
 - Prompt lineage for AI placeholder and editorial regeneration flows, including bounded prompt additions.
 - Tests, docs/API updates, OpenAPI/playground/generated contract checks where applicable, web visual QA, and native build/UI validation evidence.
@@ -35,10 +35,12 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 - [ ] The active recipe photo shows the original immediately while editorialization is processing, displays a clear loading chip, and refreshes to the editorial variant when ready.
 - [ ] Backend cover lifecycle supports upload, Spoon-origin cover creation, AI placeholder generation, regeneration with prompt additions, activation, archive, no-cover mode, status polling, and owner media validation.
 - [ ] REST API v1 exposes the native-required real cover upload/create/regenerate/status contracts with request-shape tests and docs/OpenAPI/playground drift coverage.
+- [ ] Native queued cover uploads preserve `clientMutationId`, Spoon-posting fields, activation choice, and editorialization choice without dropping staged media on validation or cancellation errors.
 - [ ] MCP/agent tools expose the same core cover lifecycle, including generated placeholders and prompt additions.
 - [ ] Native Apple Photo Studio uses the real backend contracts and platform-native upload/Spoon/detail/editorial controls.
 - [ ] User-facing cover labels no longer say misleading "Chef photo" or generic "Spoonjoy cookbook" for all covers.
 - [ ] Prompt additions and cover lineage are persisted and tested for AI placeholder/editorial generation paths.
+- [ ] Web and native changes are merged, deployed/published to the applicable non-human-gated targets, and smoke-tested through their consuming surfaces.
 - [ ] 100% test coverage on all new code
 - [ ] All tests pass
 - [ ] No warnings
@@ -91,4 +93,5 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 Existing web cover models already distinguish `RecipeCover.imageUrl`, `stylizedImageUrl`, `sourceType`, `sourceSpoonId`, `generationStatus`, and active recipe cover fields. Existing native code already expects an upload route at `/api/v1/recipes/:id/image`, but the web API currently lacks that implemented contract. Existing MCP tooling is ahead of REST for upload-to-cover, so REST, MCP, and native need to be brought into alignment.
 
 ## Progress Log
-- 2026-07-14 12:36 Created
+- 2026-07-14 12:37 Created
+- 2026-07-14 12:37 Tinfoil hat pass tightened idempotency, native queued upload metadata, and ship/smoke criteria
