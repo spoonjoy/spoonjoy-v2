@@ -2,6 +2,10 @@ import clsx from "clsx";
 
 export function normalizeCoverProvenanceLabel(label?: string | null): string | null {
   if (!label) return null;
+  return normalizeRequiredCoverProvenanceLabel(label);
+}
+
+export function normalizeRequiredCoverProvenanceLabel(label: string): string {
   if (label === "Chef photo") return "Original photo";
   if (label === "Editorialized chef photo") return "Editorial photo";
   return label;

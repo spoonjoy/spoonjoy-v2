@@ -1,6 +1,6 @@
 import { Form } from "react-router";
 import { Button } from "~/components/ui/button";
-import { normalizeCoverProvenanceLabel } from "~/components/recipe/CoverProvenanceBadge";
+import { normalizeRequiredCoverProvenanceLabel } from "~/components/recipe/CoverProvenanceBadge";
 
 export type RecipeCoverHistoryVariant = {
   variant: "image" | "stylized";
@@ -123,7 +123,7 @@ export function RecipeCoverHistory({
                 candidate.variants.map((variant) => ({
                   coverId: candidate.id,
                   variant: variant.variant,
-                  label: normalizeCoverProvenanceLabel(variant.provenanceLabel) ?? variant.provenanceLabel,
+                  label: normalizeRequiredCoverProvenanceLabel(variant.provenanceLabel),
                 })),
               );
             return (
@@ -166,8 +166,7 @@ export function RecipeCoverHistory({
                   ) : (
                     <div className="grid gap-2 sm:grid-cols-2">
                       {cover.variants.map((variant) => {
-                        const provenanceLabel = normalizeCoverProvenanceLabel(variant.provenanceLabel)
-                          ?? variant.provenanceLabel;
+                        const provenanceLabel = normalizeRequiredCoverProvenanceLabel(variant.provenanceLabel);
                         return (
                           <div
                             key={`${cover.id}-${variant.variant}`}
