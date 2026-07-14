@@ -176,7 +176,7 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 
 ### ⬜ Unit 8a: Recipe Cook Mode Server Source — Tests
 **What**: Write failing tests for logged-in recipe cook mode loading server snapshots, applying revision conflicts, preserving anonymous localStorage fallback, and not using localStorage as logged-in canonical state.
-**Output**: Tests in `test/routes/recipe-detail-cook-session.test.tsx` and client hook tests.
+**Output**: Tests in existing `test/routes/recipes-id.test.tsx` route harness and client hook tests, unless a split-out cook-session route test file is explicitly justified during implementation.
 **Acceptance**: Tests fail because logged-in cook progress is still localStorage-only.
 
 ### ⬜ Unit 8b: Recipe Cook Mode Server Source — Implementation
@@ -206,7 +206,7 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 
 ### ⬜ Unit 10a: My Kitchen Continue Cooking — Tests
 **What**: Write failing tests for My Kitchen Continue Cooking cards sourced from D1 cook-session index, empty state behavior, completed-session removal, and mobile navigation stability.
-**Output**: Tests in `test/routes/index-cook-session.test.tsx` and navigation/layout tests.
+**Output**: Tests in existing `test/routes/index.test.tsx` route harness and navigation/layout tests, unless a split-out cook-session index test file is explicitly justified during implementation.
 **Acceptance**: Tests fail because My Kitchen has no Continue Cooking section.
 
 ### ⬜ Unit 10b: My Kitchen Continue Cooking — Implementation
@@ -256,7 +256,7 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 
 ### ⬜ Unit 13a: SavedRecipe Routes And UI — Tests
 **What**: Write failing tests for `/saved-recipes` loader/UI using `SavedRecipe`, recipe detail saved controls, My Kitchen saved section, copy that distinguishes saved from cookbooks, and empty/query states.
-**Output**: Tests in `test/routes/saved-recipes.test.tsx`, `test/routes/recipe-detail-saved.test.tsx`, and My Kitchen route tests.
+**Output**: Tests in existing `test/routes/saved-recipes.test.tsx`, `test/routes/recipes-id.test.tsx`, and `test/routes/index.test.tsx` route harnesses.
 **Acceptance**: Tests fail because UI still derives saved state from cookbook membership or lacks explicit saved controls.
 
 ### ⬜ Unit 13b: SavedRecipe Routes And UI — Implementation
@@ -402,3 +402,4 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 ## Progress Log
 - 2026-07-14 13:26 Created from planning doc
 - 2026-07-14 13:31 Granularity pass split Durable Object, cook-session UI, SavedRecipe, tags, and final delivery into smaller units.
+- 2026-07-14 13:34 Validation pass aligned route-test targets with existing harness filenames.
