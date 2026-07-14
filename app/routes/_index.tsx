@@ -268,7 +268,7 @@ export default function Index() {
   const handleShareCookbook = async (cookbook: KitchenCookbook) => {
     await shareContent({
       title: cookbook.title,
-      text: `Open this Spoonjoy cookbook with ${cookbook._count.recipes} ${cookbook._count.recipes === 1 ? "recipe" : "recipes"}.`,
+      text: `${cookbook.title} has ${cookbook._count.recipes} ${cookbook._count.recipes === 1 ? "recipe" : "recipes"} on Spoonjoy.`,
       url: absoluteKitchenUrl(`/cookbooks/${cookbook.id}`),
     });
   };

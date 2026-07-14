@@ -978,11 +978,11 @@ describe("Cookbooks $id Route", () => {
         } as any),
       ).toEqual([
         { title: "Weeknight Book - Spoonjoy" },
-        { name: "description", content: "Weeknight Book, a Spoonjoy cookbook by ari with 1 recipe." },
+        { name: "description", content: "Weeknight Book by ari on Spoonjoy with 1 recipe." },
         { property: "og:site_name", content: "Spoonjoy" },
         { property: "og:type", content: "article" },
         { property: "og:title", content: "Weeknight Book" },
-        { property: "og:description", content: "Weeknight Book, a Spoonjoy cookbook by ari with 1 recipe." },
+        { property: "og:description", content: "Weeknight Book by ari on Spoonjoy with 1 recipe." },
         { property: "og:url", content: "https://spoonjoy.app/cookbooks/cb-1" },
         { property: "og:image", content: "https://spoonjoy.app/og/cookbooks/cb-1.png" },
         { property: "og:image:width", content: "1200" },
@@ -990,7 +990,7 @@ describe("Cookbooks $id Route", () => {
         { property: "og:image:type", content: "image/png" },
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:title", content: "Weeknight Book" },
-        { name: "twitter:description", content: "Weeknight Book, a Spoonjoy cookbook by ari with 1 recipe." },
+        { name: "twitter:description", content: "Weeknight Book by ari on Spoonjoy with 1 recipe." },
         { name: "twitter:image", content: "https://spoonjoy.app/og/cookbooks/cb-1.png" },
         { tagName: "link", rel: "canonical", href: "https://spoonjoy.app/cookbooks/cb-1" },
       ]);
@@ -1011,14 +1011,14 @@ describe("Cookbooks $id Route", () => {
         } as any),
       ).toContainEqual({
         name: "description",
-        content: "Dinner Book, a Spoonjoy cookbook by ari with 2 recipes.",
+        content: "Dinner Book by ari on Spoonjoy with 2 recipes.",
       });
     });
 
     it("returns fallback metadata before loader data is available", () => {
       expect(meta({ data: undefined } as any)).toEqual([
         { title: "Cookbook - Spoonjoy" },
-        { name: "description", content: "Open this Spoonjoy cookbook." },
+        { name: "description", content: "Open this cookbook on Spoonjoy." },
       ]);
     });
   });
@@ -1063,7 +1063,7 @@ describe("Cookbooks $id Route", () => {
       await waitFor(() => {
         expect(vi.mocked(shareContent)).toHaveBeenCalledWith({
           title: "My Test Cookbook",
-          text: "Open this Spoonjoy cookbook by testchef.",
+          text: "My Test Cookbook by testchef on Spoonjoy.",
           url: "https://spoonjoy.app/cookbooks/cookbook-1",
         });
       });
