@@ -226,7 +226,7 @@ export default function ShoppingList() {
           </div>
           <h1 className="font-sj-display mt-7 text-5xl/12 font-extrabold text-[var(--sj-ink)]">
             <span className="sr-only">Shopping list</span>
-            <span aria-hidden="true">Market run.</span>
+            <span aria-hidden="true">Shopping List</span>
           </h1>
           <Text className="mt-3">
             {checkedCount > 0 ? `${checkedCount} checked, ${uncheckedCount} remaining` : "Grouped for the aisle, built for one thumb."}
@@ -311,7 +311,7 @@ export default function ShoppingList() {
         ) : filteredItems.length === 0 ? (
           <RuledEmptyState title={viewMode === "basket" ? "Nothing in the basket yet" : "Nothing left in this view"}>
             <Text className="mt-2">
-              Switch views or categories to see the rest of the market run.
+              Switch views or categories to see the rest of your shopping list.
             </Text>
           </RuledEmptyState>
         ) : (
