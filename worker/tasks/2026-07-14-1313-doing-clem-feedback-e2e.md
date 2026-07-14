@@ -71,7 +71,7 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 
 ### ⬜ Unit 1a: Shopping List Canonical Mutations — Tests
 **What**: Write failing tests for shared shopping-list add/restore semantics across route helper behavior, REST API v1 add-from-recipe, MCP `add_recipe_to_shopping_list`, manual add, deleted tombstone restore, checked restore, active duplicate merge, sort order, and category/icon retention.
-**Output**: Tests in `test/lib/shopping-list-mutations.server.test.ts`, `test/routes/api-v1-shopping-mutations.test.ts`, `test/routes/api-v1-shopping-d1.test.ts`, `test/lib/mcp/spoonjoy-tools.server.test.ts`, and route-level tests covering `app/lib/shopping-list.server.ts` behavior.
+**Output**: Tests in new `test/lib/shopping-list-mutations.server.test.ts`, existing `test/routes/api-v1-shopping-mutations.test.ts`, existing `test/routes/api-v1-shopping-d1.test.ts`, existing `test/lib/mcp/spoonjoy-tools.server.test.ts`, and existing route harness `test/routes/shopping-list.test.tsx`.
 **Acceptance**: Targeted tests fail because deleted rows currently add stale quantities or web/API/MCP behavior differs.
 
 ### ⬜ Unit 1b: Shopping List Canonical Mutations — Implementation
@@ -86,12 +86,12 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 
 ### ⬜ Unit 2a: Base API Metadata And Scaling Projection — Tests
 **What**: Write failing tests for REST API recipe detail/list/OpenAPI/playground fields that do not depend on later primitives: `stepCount`, normalized `sourceDisplayName`, yield/servings validation behavior, and scale projection that returns original plus scaled structured quantities without mutating stored ingredients.
-**Output**: Tests in `test/routes/api-v1-recipes.test.ts`, `test/lib/api-v1-openapi.server.test.ts`, `test/routes/api-v1-openapi.test.ts`, `test/docs/developer-platform-docs.test.ts`, and supporting lib tests as needed.
+**Output**: Tests in existing `test/routes/api-v1-recipes.test.ts`, existing `test/lib/api-v1-openapi.server.test.ts`, existing `test/routes/api-v1-openapi.test.ts`, existing `test/docs/developer-platform-docs.test.ts`, and new helper test `test/lib/api-v1-recipe-metadata.server.test.ts`.
 **Acceptance**: Tests fail on missing fields or scaling projection behavior.
 
 ### ⬜ Unit 2b: Base API Metadata And Scaling Projection — Implementation
 **What**: Implement API-neutral metadata and scale projection in API v1 response builders, OpenAPI schema, generated playground data, and developer docs without Pebble-specific language.
-**Output**: Updated `app/lib/api-v1.server.ts`, `app/lib/api-v1-openapi.server.ts`, `app/lib/generated/api-v1-playground.ts` via generator, API docs routes, and related helpers.
+**Output**: Updated `app/lib/api-v1.server.ts`, `app/lib/api-v1-openapi.server.ts`, `app/lib/generated/api-v1-playground.ts` via `pnpm run api:playground:generate`, `app/routes/api.docs.ts`, `app/routes/developers.tsx`, and new helper file `app/lib/api-v1-recipe-metadata.server.ts`.
 **Acceptance**: Unit 2a tests pass and stored recipe ingredient quantities remain unchanged after scaled reads.
 
 ### ⬜ Unit 2c: Base API Metadata And Scaling Projection — Coverage & Refactor
@@ -106,7 +106,7 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 
 ### ⬜ Unit 3b: Cook Session D1 Index And Migrations — Implementation
 **What**: Add the D1/Prisma cook-session index model, migrations, and helper functions for active lookup, metadata update, completion marking, and pending completion state.
-**Output**: Updated `prisma/schema.prisma`, `migrations/`, `prisma/migrations/`, new `app/lib/cook-session-index.server.ts`, and generated Prisma artifacts if required.
+**Output**: Updated `prisma/schema.prisma`, `migrations/0023_cook_session_index.sql`, `prisma/migrations/20260714131300_cook_session_index/migration.sql`, and new `app/lib/cook-session-index.server.ts`. Run `pnpm prisma:generate`; commit generated Prisma schema/client artifacts only if `git status` shows tracked generated files changed.
 **Acceptance**: Unit 3a tests pass; D1 stores queryable metadata/history only, not the live checklist source of truth.
 
 ### ⬜ Unit 3c: Cook Session D1 Index And Migrations — Coverage & Refactor
@@ -146,7 +146,7 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 
 ### ⬜ Unit 6a: Cook Session Completion And Retry — Tests
 **What**: Write failing tests for idempotent completion, RecipeSpoon creation/update, active resume clearing, pending completion retry after D1 failure, duplicate completion replay, and cleanup of completed sessions.
-**Output**: Tests in cook-session route/lib suites and `test/models/recipe-spoon.test.ts` or existing spoon helper tests as needed.
+**Output**: Tests in `test/workers/cook-session-do.test.ts`, `test/lib/cook-session-index.server.test.ts`, and existing `test/models/recipe-spoon.test.ts`.
 **Acceptance**: Tests fail because completion/retry is not implemented.
 
 ### ⬜ Unit 6b: Cook Session Completion And Retry — Implementation
@@ -161,7 +161,7 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 
 ### ⬜ Unit 7a: Cook Session WebSocket Subscription — Tests
 **What**: Write failing tests for WebSocket subscribe authorization, initial snapshot delivery, broadcast after accepted patch/completion, stale-client handling, and hibernation-safe attachment metadata.
-**Output**: Tests in `test/workers/cook-session-do.test.ts` or equivalent DO WebSocket test suite.
+**Output**: Tests in `test/workers/cook-session-do.test.ts`.
 **Acceptance**: Tests fail because no WebSocket subscription exists.
 
 ### ⬜ Unit 7b: Cook Session WebSocket Subscription — Implementation
@@ -246,7 +246,7 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 
 ### ⬜ Unit 12b: SavedRecipe Service And Cookbook Compatibility — Implementation
 **What**: Implement explicit save/unsave service and cookbook-save compatibility updates.
-**Output**: Updated saved service, recipe detail actions/loaders, cookbook save flows, and notification behavior if affected.
+**Output**: Updated `app/lib/saved-recipes.server.ts`, `app/lib/recipe-detail.server.ts`, `app/routes/recipes.$id.tsx`, `app/routes/cookbooks.$id.tsx`, and `app/lib/spoonjoy-api.server.ts` cookbook-save paths. Notification behavior is out of scope unless existing notification tests fail after the compatibility change.
 **Acceptance**: Unit 12a tests pass; SavedRecipe is canonical private saved state.
 
 ### ⬜ Unit 12c: SavedRecipe Service And Cookbook Compatibility — Coverage & Refactor
@@ -261,7 +261,7 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 
 ### ⬜ Unit 13b: SavedRecipe Routes And UI — Implementation
 **What**: Update `/saved-recipes`, recipe detail, and My Kitchen UI to use explicit SavedRecipe state.
-**Output**: Updated `app/routes/saved-recipes.tsx`, `app/routes/recipes.$id.tsx`, `app/routes/_index.tsx`, and related components.
+**Output**: Updated `app/routes/saved-recipes.tsx`, `app/routes/recipes.$id.tsx`, `app/routes/_index.tsx`, `app/components/recipe/SaveToCookbookDropdown.tsx`, and `app/components/recipe/SaveRecipeButton.tsx` when the saved control is extracted from the route.
 **Acceptance**: Unit 13a tests pass; saved controls are distinct from Save to Cookbook.
 
 ### ⬜ Unit 13c: SavedRecipe Routes And UI — Coverage & Refactor
@@ -275,8 +275,8 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 **Acceptance**: No ready visual issues remain; saved controls are reachable and not confused with cookbook membership.
 
 ### ⬜ Unit 14a: SavedRecipe Search And API — Tests
-**What**: Write failing tests for saved recipe search index/private filtering, REST API authenticated `isSaved`, saved recipe listing if added, OpenAPI/playground fields, and MCP/API saved behavior if exposed.
-**Output**: Tests in `test/lib/search.server.test.ts`, API/OpenAPI route tests, and MCP tests if the surface changes.
+**What**: Write failing tests for saved recipe search index/private filtering, REST API authenticated `isSaved`, REST API saved-recipe list endpoint, and OpenAPI/playground fields. MCP saved behavior is out of scope for this unit unless an existing MCP test fails because REST/API helper shape changed.
+**Output**: Tests in existing `test/lib/search.server.test.ts`, existing `test/routes/api-v1-recipes.test.ts`, existing `test/lib/api-v1-openapi.server.test.ts`, existing `test/routes/api-v1-openapi.test.ts`, and new `test/routes/api-v1-saved-recipes.test.ts`.
 **Acceptance**: Tests fail because search/API do not read `SavedRecipe`.
 
 ### ⬜ Unit 14b: SavedRecipe Search And API — Implementation
@@ -306,12 +306,12 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 
 ### ⬜ Unit 16a: Typed Recipe Tags Authoring UI — Tests
 **What**: Write failing tests for recipe create/edit tag controls, validation errors, persisted accepted tags, and display on recipe detail/cards.
-**Output**: Tests in recipe builder, recipe create/edit route, recipe detail, and card component suites.
+**Output**: Tests in existing `test/components/recipe/RecipeBuilder.test.tsx`, existing `test/routes/recipes-new.test.tsx`, existing `test/routes/recipes-id-edit.test.tsx`, existing `test/routes/recipes-id.test.tsx`, existing `test/routes/recipes-index.test.tsx`, and existing `test/components/pantry/RecipeGrid.test.tsx`.
 **Acceptance**: Tests fail because tag authoring/display UI does not exist.
 
 ### ⬜ Unit 16b: Typed Recipe Tags Authoring UI — Implementation
 **What**: Add tag controls and display surfaces to recipe authoring/detail/card UI using existing design patterns.
-**Output**: Updated recipe builder/routes/components.
+**Output**: Updated `app/components/recipe/RecipeBuilder.tsx`, `app/routes/recipes.new.tsx`, `app/routes/recipes.$id.edit.tsx`, `app/routes/recipes.$id.tsx`, `app/routes/recipes._index.tsx`, and `app/components/pantry/RecipeGrid.tsx`.
 **Acceptance**: Unit 16a tests pass; tags can be manually accepted/edited without AI suggestion UI.
 
 ### ⬜ Unit 16c: Typed Recipe Tags Authoring UI — Coverage & Refactor
@@ -326,7 +326,7 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 
 ### ⬜ Unit 17b: Typed Recipe Tags Discovery And Search — Implementation
 **What**: Add tag filtering/search-index integration and user-facing discovery surfaces.
-**Output**: Updated `app/lib/search.server.ts`, recipe/My Kitchen/search routes, and related components.
+**Output**: Updated `app/lib/search.server.ts`, `app/routes/recipes._index.tsx`, `app/routes/_index.tsx`, `app/routes/search.tsx`, and `app/components/pantry/RecipeGrid.tsx`.
 **Acceptance**: Unit 17a tests pass; accepted tags power at least one filter/search path.
 
 ### ⬜ Unit 17c: Typed Recipe Tags Discovery And Search — Coverage & Refactor
@@ -356,12 +356,12 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 
 ### ⬜ Unit 19a: Navigation, Import Rejection, And Developer Docs — Tests
 **What**: Write failing tests for My Kitchen sections, mobile dock stability, `/saved-recipes` copy, import UI absence, agentic/API import documentation, API docs with no Pebble-specific language, and developer guide examples.
-**Output**: Tests in navigation/route/docs suites, including `test/components/navigation/mobile-nav.test.tsx`, route tests, `test/docs/developer-platform-docs.test.ts`, and repo hygiene tests for forbidden Pebble-specific strings if useful.
+**Output**: Tests in existing `test/components/navigation/mobile-nav.test.tsx`, existing `test/routes/index.test.tsx`, existing `test/routes/saved-recipes.test.tsx`, existing `test/docs/developer-platform-docs.test.ts`, existing `test/docs/developer-platform-guide.test.ts`, and existing `test/repo-hygiene.test.ts` for forbidden first-party import UI and Pebble-specific strings.
 **Acceptance**: Tests fail on missing My Kitchen sections/docs or stale import/saved copy.
 
 ### ⬜ Unit 19b: Navigation, Import Rejection, And Developer Docs — Implementation
 **What**: Update My Kitchen/navigation surfaces after primitives exist, explicitly document import as agentic/API-only, and ensure docs/API copy is neutral and non-Pebble-specific.
-**Output**: Updated `app/routes/_index.tsx`, navigation tests/fixtures, developer/API docs, MCP docs/landing copy if needed, and no first-party import entry point.
+**Output**: Updated `app/routes/_index.tsx`, `app/components/navigation/mobile-nav.tsx`, `docs/developer-platform.md` if present, `app/routes/developers.tsx`, `app/routes/api.docs.ts`, and `app/routes/mcp.tsx` only to describe import as agentic/API-only. Do not add first-party import entry points.
 **Acceptance**: Unit 19a tests pass; My Kitchen surfaces Continue Cooking, Your Recipes, Saved Recipes, Cookbooks, and Tags without dock churn.
 
 ### ⬜ Unit 19c: Navigation, Import Rejection, And Developer Docs — Coverage & Refactor
@@ -403,3 +403,4 @@ Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live coo
 - 2026-07-14 13:26 Created from planning doc
 - 2026-07-14 13:31 Granularity pass split Durable Object, cook-session UI, SavedRecipe, tags, and final delivery into smaller units.
 - 2026-07-14 13:38 Validation pass aligned route-test targets with existing harness filenames.
+- 2026-07-14 13:42 Ambiguity pass named exact test/source targets, scoped SavedRecipe REST API behavior, and kept MCP saved behavior/notifications out of scope unless existing tests fail.
