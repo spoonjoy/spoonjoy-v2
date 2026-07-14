@@ -84,6 +84,15 @@ describe("Spoonjoy UI design-system hygiene", () => {
     expect(kitchenRoute).not.toContain("border-y border-[var(--sj-border-strong)] py-7");
   });
 
+  it("keeps Tailwind source discovery scoped to product UI files", () => {
+    const css = readSourceFile("app/styles/tailwind.css");
+
+    expect(css).toContain('@import "tailwindcss" source(none);');
+    expect(css).toContain('@source "../**/*.{js,jsx,ts,tsx}";');
+    expect(css).toContain('@source "../../stories/**/*.{js,jsx,ts,tsx,mdx}";');
+    expect(css).not.toContain('@source "../../stories";');
+  });
+
   it("keeps form and settings sections from echoing adjacent header rules", () => {
     const css = readSourceFile("app/styles/tailwind.css");
     const cookbookPage = readSourceFile("app/components/cookbook/page.tsx");
