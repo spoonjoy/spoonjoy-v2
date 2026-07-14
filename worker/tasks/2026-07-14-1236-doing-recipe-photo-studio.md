@@ -80,7 +80,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 
 ### ⬜ Unit 2a: Backend Activation And Labels — Tests
 **What**: Write failing tests for first-photo activation guard behavior and user-facing provenance labels that avoid false "Chef photo" and generic cookbook language.
-**Output**: Red tests in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/lib/recipe-cover.server.test.ts`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/lib/spoon-cover-activation.server.test.ts`, and relevant route/component tests for visible labels.
+**Output**: Red tests in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/lib/recipe-cover.server.test.ts`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/lib/spoon-cover-activation.server.test.ts`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/components/recipe/RecipeCoverHistory.test.tsx`, and `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/components/recipe/RecipeHeader.test.tsx`.
 **Acceptance**: Focused Vitest command fails because labels and active-cover guard behavior still use the old contract.
 
 ### ⬜ Unit 2b: Backend Activation And Labels — Implementation
@@ -190,7 +190,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 
 ### ⬜ Unit 8a: Web First-Photo Studio — Tests
 **What**: Write failing route/component tests for the Recipe management Photo Studio no-photo state, `Add first photo`, default toggles, Spoon details disclosure, and action payload creating a Spoon-backed editorial cover.
-**Output**: Red tests in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/routes/recipes-id.test.tsx` and any component-focused Photo Studio test.
+**Output**: Red tests in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/routes/recipes-id.test.tsx`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/components/recipe/RecipeCoverHistory.test.tsx`, and `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/components/recipe/SpoonDialog.test.tsx`.
 **Acceptance**: Focused UI tests fail on missing first-photo UI, defaults, or action behavior.
 
 ### ⬜ Unit 8b: Web First-Photo Studio — Implementation
@@ -205,7 +205,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 
 ### ⬜ Unit 9a: Web Processing State And Autoswap — Tests
 **What**: Write failing tests for active original-photo display while editorialization is processing, loading chip copy, revalidation/autorefresh behavior, and final editorial swap.
-**Output**: Red tests in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/routes/recipes-id.test.tsx` and component tests for `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/app/components/recipe/RecipeHeader.tsx`.
+**Output**: Red tests in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/routes/recipes-id.test.tsx` and `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/components/recipe/RecipeHeader.test.tsx`.
 **Acceptance**: Focused UI tests fail on missing loading chip or revalidation behavior.
 
 ### ⬜ Unit 9b: Web Processing State And Autoswap — Implementation
@@ -220,7 +220,7 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 
 ### ⬜ Unit 10a: Web Generation Controls And Copy — Tests
 **What**: Write failing tests for generated placeholder controls, prompt-addition regeneration, create-cover-from-Spoon controls, archive/no-cover controls, and safer user-facing labels.
-**Output**: Red tests in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/routes/recipes-id.test.tsx` and component tests.
+**Output**: Red tests in `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/routes/recipes-id.test.tsx`, `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/components/recipe/RecipeCoverHistory.test.tsx`, and `/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/test/components/recipe/RecipeHeader.test.tsx`.
 **Acceptance**: Focused tests fail on missing controls, prompt fields, or rejected labels.
 
 ### ⬜ Unit 10b: Web Generation Controls And Copy — Implementation
@@ -268,20 +268,20 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 **Output**: Logs in `./2026-07-14-1236-doing-recipe-photo-studio/native-sync-coverage.log`.
 **Acceptance**: New sync code is covered and final Swift test logs contain no warnings.
 
-### ⬜ Unit 14a: Native View Model Actions — Tests
-**What**: Write failing tests for Photo Studio view-model actions: first-photo upload, generated placeholder, regenerate with prompt addition, create from Spoon, activate, archive, and no-cover.
+### ⬜ Unit 14a: Native Cover Action Planning — Tests
+**What**: Write failing tests for `RecipeCoverControlsAction`, `RecipeCoverControlsMutationPlan`, `RecipeCoverControlsData`, and `LiveRecipeCoverControlsRepository` behavior for first-photo upload, generated placeholder, regenerate with prompt addition, create from Spoon, activate, archive, and no-cover.
 **Output**: Red tests in `/Users/arimendelow/Projects/spoonjoy-apple-photo-studio/Tests/SpoonjoyCoreTests/CoverControlSurfaceTests.swift` and `/Users/arimendelow/Projects/spoonjoy-apple-photo-studio/Tests/SpoonjoyCoreTests/RecipeActionParityTests.swift`.
 **Acceptance**: Focused Swift tests fail on missing action plans or old `Recipe Covers` naming.
 
-### ⬜ Unit 14b: Native View Model Actions — Implementation
-**What**: Update `RecipeCoverControlsViewModel` actions, mutation plans, preparation failures, and product copy for Photo Studio.
+### ⬜ Unit 14b: Native Cover Action Planning — Implementation
+**What**: Update `RecipeCoverControlsAction`, `RecipeCoverControlsMutationPlan`, `RecipeCoverControlsData`, `LiveRecipeCoverControlsRepository`, preparation failures, and product copy for Photo Studio.
 **Output**: Passing focused Swift tests plus implementation in `/Users/arimendelow/Projects/spoonjoy-apple-photo-studio/Sources/SpoonjoyCore/Features/Covers/RecipeCoverControlsViewModel.swift`.
-**Acceptance**: Focused view-model tests pass and action plans match REST field names.
+**Acceptance**: Focused cover-action tests pass and action plans match REST field names.
 
-### ⬜ Unit 14c: Native View Model Actions — Coverage & Refactor
-**What**: Run focused coverage for view-model action branches and error states.
+### ⬜ Unit 14c: Native Cover Action Planning — Coverage & Refactor
+**What**: Run focused coverage for cover-action planning branches and error states.
 **Output**: Logs in `./2026-07-14-1236-doing-recipe-photo-studio/native-viewmodel-coverage.log`.
-**Acceptance**: New view-model code is covered and final Swift test logs contain no warnings.
+**Acceptance**: New cover-action planning code is covered and final Swift test logs contain no warnings.
 
 ### ⬜ Unit 15a: Native SwiftUI Photo Studio Surface — Tests
 **What**: Write failing source-contract/UI tests for native Photo Studio controls, Spoon details, editorial defaults, prompt-addition fields, loading states, and platform-native copy.
@@ -397,3 +397,4 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 - 2026-07-14 12:39 Created from planning doc
 - 2026-07-14 12:46 Granularity pass addressed reviewer blockers by splitting REST, MCP, web, native, cross-surface, and terminal work into smaller TDD/validation units
 - 2026-07-14 12:50 Granularity Round 2 addressed remaining MCP and terminal-unit findings
+- 2026-07-14 12:55 Validation pass retargeted stale native ViewModel symbol and concrete web component test paths
