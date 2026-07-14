@@ -1099,6 +1099,128 @@ describe("API v1 recipe cover management", () => {
     expect(archivedPayload.data.covers.map((cover: { id: string }) => cover.id)).toContain(fixture.archivedCover.id);
   });
 
+  it("creates cover candidates from JSON image URLs without creating a Spoon", async () => {
+    const fixture = await createCoverFixture(db);
+    const url = `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers`;
+    const splat = `recipes/${fixture.recipe.id}/covers`;
+    const response = await action(routeArgs(jsonRequest(url, "POST", fixture.ownerKitchenWrite.token, "req_cover_create_url", {
+      clientMutationId: "cover-create-url",
+      imageUrl: "/photos/uploads/json-url-cover.jpg",
+      activate: true,
+      generateEditorial: false,
+    }), splat));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(201);
+    expect(payload).toMatchObject({
+      ok: true,
+      requestId: "req_cover_create_url",
+      data: {
+        activeCover: expect.objectContaining({
+          activeVariant: "image",
+          displayUrl: "https://spoonjoy.app/photos/uploads/json-url-cover.jpg",
+          generationStatus: "none",
+          provenanceLabel: "Original photo",
+          sourceType: "chef-upload",
+        }),
+        previousActiveCover: expect.objectContaining({
+          id: fixture.activeCover.id,
+          activeVariant: "stylized",
+        }),
+        createdCover: expect.objectContaining({
+          imageUrl: "https://spoonjoy.app/photos/uploads/json-url-cover.jpg",
+          sourceImageUrl: "https://spoonjoy.app/photos/uploads/json-url-cover.jpg",
+          sourceType: "chef-upload",
+          status: "ready",
+          generationStatus: "none",
+          sourceSpoonId: null,
+        }),
+        generationStatus: "none",
+        mutation: { clientMutationId: "cover-create-url", replayed: false },
+      },
+    });
+    expect(payload.data.activeCover.id).toBe(payload.data.createdCover.id);
+    await expect(db.recipeCover.findUniqueOrThrow({
+      where: { id: payload.data.createdCover.id },
+      select: {
+        imageUrl: true,
+        sourceImageUrl: true,
+        sourceType: true,
+        status: true,
+        generationStatus: true,
+      },
+    })).resolves.toEqual({
+      imageUrl: "/photos/uploads/json-url-cover.jpg",
+      sourceImageUrl: "/photos/uploads/json-url-cover.jpg",
+      sourceType: "chef-upload",
+      status: "ready",
+      generationStatus: "none",
+    });
+    await expect(db.recipe.findUniqueOrThrow({
+      where: { id: fixture.recipe.id },
+      select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+    })).resolves.toMatchObject({
+      activeCoverId: payload.data.createdCover.id,
+      activeCoverVariant: "image",
+      coverMode: "manual",
+    });
+  });
+
+  it("generates AI placeholder cover candidates and returns provider-blocker status for polling", async () => {
+    const fixture = await createCoverFixture(db);
+    const url = `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers/generate`;
+    const splat = `recipes/${fixture.recipe.id}/covers/generate`;
+    const response = await action(routeArgs(jsonRequest(url, "POST", fixture.ownerKitchenWrite.token, "req_cover_generate_placeholder", {
+      clientMutationId: "cover-generate-placeholder",
+      promptAddition: "  brighter   herbs\nand tighter crop  ",
+      activateWhenReady: true,
+    }), splat));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(201);
+    expect(payload).toMatchObject({
+      ok: true,
+      requestId: "req_cover_generate_placeholder",
+      data: {
+        activeCover: expect.objectContaining({
+          id: fixture.activeCover.id,
+          activeVariant: "stylized",
+        }),
+        previousActiveCover: expect.objectContaining({
+          id: fixture.activeCover.id,
+          activeVariant: "stylized",
+        }),
+        createdCover: expect.objectContaining({
+          sourceType: "ai-placeholder",
+          status: "failed",
+          generationStatus: "failed",
+          failureReason: expect.stringContaining("missing_image_provider_config"),
+          sourceSpoonId: null,
+        }),
+        generationStatus: "failed",
+        mutation: { clientMutationId: "cover-generate-placeholder", replayed: false },
+      },
+    });
+    await expect(db.recipeCover.findUniqueOrThrow({
+      where: { id: payload.data.createdCover.id },
+      select: {
+        imageUrl: true,
+        sourceType: true,
+        status: true,
+        generationStatus: true,
+        failureReason: true,
+        promptAddition: true,
+      },
+    })).resolves.toMatchObject({
+      imageUrl: "",
+      sourceType: "ai-placeholder",
+      status: "failed",
+      generationStatus: "failed",
+      failureReason: expect.stringContaining("missing_image_provider_config"),
+      promptAddition: "brighter herbs and tighter crop",
+    });
+  });
+
   it("activates cover variants idempotently and rejects conflicting replays", async () => {
     const fixture = await createCoverFixture(db);
     const url = `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers/${fixture.replacementCover.id}`;
@@ -1291,6 +1413,49 @@ describe("API v1 recipe cover management", () => {
       },
     });
     expect(updatedFallbackCover.sourceImageUrl).toBe("/photos/covers/cover-fallback-source.jpg");
+  });
+
+  it("passes bounded prompt additions through cover regeneration", async () => {
+    const fixture = await createCoverFixture(db);
+    const url = `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers/regenerate`;
+    const response = await action(routeArgs(jsonRequest(url, "POST", fixture.ownerKitchenWrite.token, "req_cover_regenerate_prompt_addition", {
+      clientMutationId: "cover-regenerate-prompt-addition",
+      coverId: fixture.replacementCover.id,
+      promptAddition: `  keep   same\nplate ${"x".repeat(260)}  `,
+      activateWhenReady: true,
+    }), `recipes/${fixture.recipe.id}/covers/regenerate`));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      ok: true,
+      requestId: "req_cover_regenerate_prompt_addition",
+      data: {
+        activeCover: expect.objectContaining({
+          id: fixture.activeCover.id,
+          activeVariant: "stylized",
+        }),
+        previousActiveCover: expect.objectContaining({
+          id: fixture.activeCover.id,
+          activeVariant: "stylized",
+        }),
+        createdCover: expect.objectContaining({
+          id: fixture.replacementCover.id,
+          status: "ready",
+          generationStatus: "failed",
+          failureReason: expect.stringContaining("missing_image_provider_config"),
+        }),
+        generationStatus: "failed",
+        mutation: { clientMutationId: "cover-regenerate-prompt-addition", replayed: false },
+      },
+    });
+    await expect(db.recipeCover.findUniqueOrThrow({
+      where: { id: fixture.replacementCover.id },
+      select: { promptAddition: true, parentCoverId: true },
+    })).resolves.toEqual({
+      promptAddition: `keep same plate ${"x".repeat(224)}`,
+      parentCoverId: fixture.replacementCover.id,
+    });
   });
 
   it("sets an explicit no-cover state only after destructive confirmation", async () => {
