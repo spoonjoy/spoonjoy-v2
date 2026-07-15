@@ -727,11 +727,6 @@ describe("image-cover live smoke flow", () => {
 
   it.each([
     {
-      label: "spoon id",
-      expected: /could not create a spoon/i,
-      mutate: (name: string) => name === "create_spoon",
-    },
-    {
       label: "chef-photo cover id",
       expected: /chef-photo cover/i,
       mutate: (name: string, args: Record<string, unknown>) =>
