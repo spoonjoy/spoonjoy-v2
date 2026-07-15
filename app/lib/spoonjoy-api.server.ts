@@ -21,6 +21,7 @@ import {
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import {
   archiveRecipeCover,
+  clearActiveRecipeCover,
   createCover,
   getRecipeCoverDisplay,
   getRecipeCoverProvenanceLabel,
@@ -2250,9 +2251,29 @@ const setRecipeNoCoverTool: SpoonjoyApiOperation = {
     if (args.confirmNoCover !== true) {
       throw new ApiAuthError("confirmNoCover must be true", 400);
     }
-    requiredString(args, "idempotencyKey");
-    await findOwnedCoverMutationRecipe(context, principal, recipeId);
-    throw new ApiAuthError("set_recipe_no_cover is not implemented yet", 501);
+    const idempotencyKey = requiredString(args, "idempotencyKey");
+    const recipe = await findOwnedCoverMutationRecipe(context, principal, recipeId);
+    const previousActiveCover = await activeFullCoverPayload(context, recipe);
+
+    return runIdempotentMcpCoverMutation(context, principal, {
+      operation: "set_recipe_no_cover",
+      recipeId,
+      args,
+      idempotencyKey,
+      dryRun: false,
+      write: async (mutationKey) => {
+        await clearActiveRecipeCover(context.db, recipeId);
+        const nextRecipe = await reloadCoverMutationRecipe(context, recipeId);
+        return activeCoverMutationResponse({
+          activeCover: await activeFullCoverPayload(context, nextRecipe),
+          previousActiveCover,
+          archivedCover: null,
+          warnings: [],
+          nextActions: ["list_recipe_covers", "get_recipe"],
+          idempotencyKey: mutationKey,
+        });
+      },
+    });
   },
 };
 
