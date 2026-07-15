@@ -692,6 +692,22 @@ describe("image-cover live smoke flow", () => {
     await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/generation status cover payload/);
   });
 
+  it("fails cleanly when MCP omits the generated placeholder cover id", async () => {
+    const harness = createFlowHarness();
+    const originalMcpTool = harness.options.mcpTool;
+    harness.options.mcpTool = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      if (name === "generate_recipe_cover_placeholder") {
+        harness.calls.push({ kind: "mcp", name, args });
+        return {};
+      }
+      return originalMcpTool(name, args);
+    });
+
+    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/AI placeholder cover/);
+    expect(harness.calls.some((call) => call.kind === "api" && call.name === "upload_recipe_image")).toBe(false);
+    expect(harness.deletedKeys).toEqual(expect.arrayContaining(["covers/ai-placeholder.jpg"]));
+  });
+
   it("cleans exact observed R2 keys and revokes the credential when the flow fails", async () => {
     const harness = createFlowHarness();
     const originalMcpTool = harness.options.mcpTool;
