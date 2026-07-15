@@ -1166,6 +1166,179 @@ describe("API v1 recipe cover management", () => {
     });
   });
 
+  it("creates inactive editorial cover candidates from absolute Spoonjoy image URLs", async () => {
+    const fixture = await createCoverFixture(db);
+    const url = `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers`;
+    const splat = `recipes/${fixture.recipe.id}/covers`;
+    const response = await action(routeArgs(jsonRequest(url, "POST", fixture.ownerKitchenWrite.token, "req_cover_create_url_editorial", {
+      clientMutationId: "cover-create-url-editorial",
+      imageUrl: "https://spoonjoy.app/photos/uploads/json-url-editorial.jpg",
+      activate: false,
+      generateEditorial: true,
+    }), splat));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(201);
+    expect(payload).toMatchObject({
+      ok: true,
+      requestId: "req_cover_create_url_editorial",
+      data: {
+        activeCover: expect.objectContaining({
+          id: fixture.activeCover.id,
+          activeVariant: "stylized",
+        }),
+        createdCover: expect.objectContaining({
+          imageUrl: "https://spoonjoy.app/photos/uploads/json-url-editorial.jpg",
+          sourceImageUrl: "https://spoonjoy.app/photos/uploads/json-url-editorial.jpg",
+          sourceType: "chef-upload",
+          status: "ready",
+          generationStatus: "failed",
+          failureReason: expect.stringContaining("missing_image_provider_config"),
+        }),
+        generationStatus: "failed",
+        mutation: { clientMutationId: "cover-create-url-editorial", replayed: false },
+      },
+    });
+    expect(payload.data.createdCover.activeVariant).toBeNull();
+    await expect(db.recipe.findUniqueOrThrow({
+      where: { id: fixture.recipe.id },
+      select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+    })).resolves.toMatchObject({
+      activeCoverId: fixture.activeCover.id,
+      activeCoverVariant: "stylized",
+      coverMode: "manual",
+    });
+
+    const activatingResponse = await action(routeArgs(jsonRequest(url, "POST", fixture.ownerKitchenWrite.token, "req_cover_create_url_editorial_activate", {
+      clientMutationId: "cover-create-url-editorial-activate",
+      imageUrl: "https://spoonjoy.app/photos/uploads/json-url-editorial-activate.jpg",
+      activate: true,
+      generateEditorial: true,
+    }), splat));
+    const activatingPayload = await readJson(activatingResponse);
+
+    expect(activatingResponse.status).toBe(201);
+    expect(activatingPayload).toMatchObject({
+      ok: true,
+      requestId: "req_cover_create_url_editorial_activate",
+      data: {
+        activeCover: expect.objectContaining({
+          imageUrl: "https://spoonjoy.app/photos/uploads/json-url-editorial-activate.jpg",
+          activeVariant: "image",
+        }),
+        createdCover: expect.objectContaining({
+          imageUrl: "https://spoonjoy.app/photos/uploads/json-url-editorial-activate.jpg",
+          status: "ready",
+          generationStatus: "failed",
+          failureReason: expect.stringContaining("missing_image_provider_config"),
+        }),
+        generationStatus: "failed",
+        mutation: { clientMutationId: "cover-create-url-editorial-activate", replayed: false },
+      },
+    });
+  });
+
+  it("validates JSON cover URLs and prompt additions before writing cover rows", async () => {
+    const fixture = await createCoverFixture(db);
+    const createUrl = `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers`;
+    const generateUrl = `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers/generate`;
+    const initialCoverCount = await db.recipeCover.count({ where: { recipeId: fixture.recipe.id } });
+    const cases = [
+      {
+        requestId: "req_cover_create_bad_host",
+        url: createUrl,
+        splat: `recipes/${fixture.recipe.id}/covers`,
+        body: {
+          clientMutationId: "cover-create-bad-host",
+          imageUrl: "https://example.com/photos/uploads/bad-host.jpg",
+        },
+        message: "imageUrl must be a Spoonjoy uploaded image URL",
+      },
+      {
+        requestId: "req_cover_create_query",
+        url: createUrl,
+        splat: `recipes/${fixture.recipe.id}/covers`,
+        body: {
+          clientMutationId: "cover-create-query",
+          imageUrl: "https://spoonjoy.app/photos/uploads/has-query.jpg?download=1",
+        },
+        message: "imageUrl must not include query parameters or fragments",
+      },
+      {
+        requestId: "req_cover_create_non_photo",
+        url: createUrl,
+        splat: `recipes/${fixture.recipe.id}/covers`,
+        body: {
+          clientMutationId: "cover-create-non-photo",
+          imageUrl: "/avatars/not-a-photo.jpg",
+        },
+        message: "imageUrl must be a Spoonjoy uploaded image URL",
+      },
+      {
+        requestId: "req_cover_create_encoded_path",
+        url: createUrl,
+        splat: `recipes/${fixture.recipe.id}/covers`,
+        body: {
+          clientMutationId: "cover-create-encoded-path",
+          imageUrl: "/photos/uploads/%2E%2E/not-clean.jpg",
+        },
+        message: "imageUrl must be a clean Spoonjoy uploaded image URL",
+      },
+      {
+        requestId: "req_cover_create_malformed_encoding",
+        url: createUrl,
+        splat: `recipes/${fixture.recipe.id}/covers`,
+        body: {
+          clientMutationId: "cover-create-malformed-encoding",
+          imageUrl: "/photos/uploads/%E0%A4%A.jpg",
+        },
+        message: "imageUrl must be a clean Spoonjoy uploaded image URL",
+      },
+      {
+        requestId: "req_cover_create_empty_segment",
+        url: createUrl,
+        splat: `recipes/${fixture.recipe.id}/covers`,
+        body: {
+          clientMutationId: "cover-create-empty-segment",
+          imageUrl: "/photos/uploads//not-clean.jpg",
+        },
+        message: "imageUrl must be a clean Spoonjoy uploaded image URL",
+      },
+      {
+        requestId: "req_cover_generate_bad_prompt",
+        url: generateUrl,
+        splat: `recipes/${fixture.recipe.id}/covers/generate`,
+        body: {
+          clientMutationId: "cover-generate-bad-prompt",
+          promptAddition: { nope: true },
+        },
+        message: "promptAddition must be a string",
+      },
+    ];
+
+    for (const testCase of cases) {
+      const response = await action(routeArgs(jsonRequest(
+        testCase.url,
+        "POST",
+        fixture.ownerKitchenWrite.token,
+        testCase.requestId,
+        testCase.body,
+      ), testCase.splat));
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        ok: false,
+        requestId: testCase.requestId,
+        error: {
+          code: "validation_error",
+          status: 400,
+          message: testCase.message,
+        },
+      });
+    }
+
+    await expect(db.recipeCover.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(initialCoverCount);
+  });
+
   it("generates AI placeholder cover candidates and returns provider-blocker status for polling", async () => {
     const fixture = await createCoverFixture(db);
     const url = `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers/generate`;
@@ -1218,6 +1391,36 @@ describe("API v1 recipe cover management", () => {
       generationStatus: "failed",
       failureReason: expect.stringContaining("missing_image_provider_config"),
       promptAddition: "brighter herbs and tighter crop",
+    });
+  });
+
+  it("queues AI placeholder generation through waitUntil for polling", async () => {
+    const fixture = await createCoverFixture(db);
+    const url = `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers/generate`;
+    const response = await action(routeArgs(jsonRequest(url, "POST", fixture.ownerKitchenWrite.token, "req_cover_generate_placeholder_wait_until", {
+      clientMutationId: "cover-generate-placeholder-wait-until",
+      activateWhenReady: false,
+    }), `recipes/${fixture.recipe.id}/covers/generate`, backgroundContext()));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(201);
+    expect(payload).toMatchObject({
+      ok: true,
+      requestId: "req_cover_generate_placeholder_wait_until",
+      data: {
+        activeCover: expect.objectContaining({
+          id: fixture.activeCover.id,
+          activeVariant: "stylized",
+        }),
+        createdCover: expect.objectContaining({
+          sourceType: "ai-placeholder",
+          status: "processing",
+          generationStatus: "processing",
+          failureReason: null,
+        }),
+        generationStatus: "processing",
+        mutation: { clientMutationId: "cover-generate-placeholder-wait-until", replayed: false },
+      },
     });
   });
 
@@ -1938,6 +2141,36 @@ describe("API v1 recipe cover management", () => {
         code: "validation_error",
         status: 400,
         message: "Cover mutation failed",
+      },
+    });
+  });
+
+  it("maps activation failures during JSON cover creation", async () => {
+    const fixture = await createCoverFixture(db);
+    vi.resetModules();
+    vi.doMock("~/lib/recipe-cover.server", async (importOriginal) => ({
+      ...(await importOriginal<typeof import("~/lib/recipe-cover.server")>()),
+      setActiveRecipeCover: vi.fn(async () => {
+        throw new Error("Cover was not found");
+      }),
+    }));
+    const { action: mockedAction } = await import("~/routes/api.v1.$");
+    const url = `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers`;
+    const response = await mockedAction(routeArgs(jsonRequest(url, "POST", fixture.ownerKitchenWrite.token, "req_cover_create_activation_failure", {
+      clientMutationId: "cover-create-activation-failure",
+      imageUrl: "/photos/uploads/activation-failure.jpg",
+      activate: true,
+      generateEditorial: false,
+    }), `recipes/${fixture.recipe.id}/covers`));
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_cover_create_activation_failure",
+      error: {
+        code: "not_found",
+        status: 404,
+        details: { resource: "recipe_cover" },
       },
     });
   });

@@ -738,4 +738,149 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
         generationStatus: "succeeded",
       });
   });
+
+  it("activates a requested generated placeholder only when the guard still matches", async () => {
+    const runner = makeRunner();
+    await scheduleAiPlaceholderCover({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      title: "Pasta",
+      description: null,
+      runner,
+      bucket: mockR2(),
+      activateWhenReady: true,
+      suppressAutoActivation: true,
+      activationGuard: {
+        activeCoverId: null,
+        activeCoverVariant: null,
+        coverMode: "auto",
+      },
+      logger: errorSpy,
+    });
+
+    await expect(
+      db.recipe.findUniqueOrThrow({
+        where: { id: recipeId },
+        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+      }),
+    ).resolves.toEqual({
+      activeCoverId: coverId,
+      activeCoverVariant: "image",
+      coverMode: "manual",
+    });
+  });
+
+  it("leaves the active cover alone when requested placeholder activation guard is stale", async () => {
+    const manualCover = await db.recipeCover.create({
+      data: {
+        recipeId,
+        imageUrl: "/photos/manual/stale-guard.jpg",
+        sourceType: "chef-upload",
+        status: "ready",
+      },
+    });
+    await db.recipe.update({
+      where: { id: recipeId },
+      data: {
+        activeCoverId: manualCover.id,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      },
+    });
+
+    await scheduleAiPlaceholderCover({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      title: "Pasta",
+      description: null,
+      runner: makeRunner(),
+      bucket: mockR2(),
+      activateWhenReady: true,
+      suppressAutoActivation: true,
+      activationGuard: {
+        activeCoverId: null,
+        activeCoverVariant: null,
+        coverMode: "auto",
+      },
+      logger: errorSpy,
+    });
+
+    await expect(
+      db.recipe.findUniqueOrThrow({
+        where: { id: recipeId },
+        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+      }),
+    ).resolves.toEqual({
+      activeCoverId: manualCover.id,
+      activeCoverVariant: "image",
+      coverMode: "manual",
+    });
+  });
+
+  it("does not activate a requested generated placeholder when no guard is provided", async () => {
+    await scheduleAiPlaceholderCover({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      title: "Pasta",
+      description: null,
+      runner: makeRunner(),
+      bucket: mockR2(),
+      activateWhenReady: true,
+      suppressAutoActivation: true,
+      logger: errorSpy,
+    });
+
+    await expect(
+      db.recipe.findUniqueOrThrow({
+        where: { id: recipeId },
+        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+      }),
+    ).resolves.toEqual({
+      activeCoverId: null,
+      activeCoverVariant: null,
+      coverMode: "auto",
+    });
+    await expect(db.recipeCover.findUniqueOrThrow({ where: { id: coverId } }))
+      .resolves.toMatchObject({
+        status: "ready",
+        generationStatus: "succeeded",
+      });
+  });
+
+  it("can suppress automatic placeholder activation after successful generation", async () => {
+    await scheduleAiPlaceholderCover({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      title: "Pasta",
+      description: null,
+      runner: makeRunner(),
+      bucket: mockR2(),
+      suppressAutoActivation: true,
+      logger: errorSpy,
+    });
+
+    await expect(
+      db.recipe.findUniqueOrThrow({
+        where: { id: recipeId },
+        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+      }),
+    ).resolves.toEqual({
+      activeCoverId: null,
+      activeCoverVariant: null,
+      coverMode: "auto",
+    });
+    await expect(db.recipeCover.findUniqueOrThrow({ where: { id: coverId } }))
+      .resolves.toMatchObject({
+        status: "ready",
+        generationStatus: "succeeded",
+      });
+  });
 });
