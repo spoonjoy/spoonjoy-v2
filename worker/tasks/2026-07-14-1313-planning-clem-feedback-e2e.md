@@ -1,123 +1,147 @@
 # Planning: Clem Feedback E2E
 
-**Status**: approved
+**Status**: NEEDS_REVIEW
 **Created**: 2026-07-14 13:15
+**Re-audited**: 2026-07-15 against `origin/main` at `b22c5fec`
 
 ## Goal
-Turn Clem's feedback into shipped Spoonjoy product primitives: reliable live cooking continuity across devices, correct shopping-list behavior, usable recipe organization, and neutral API metadata while explicitly rejecting first-party import UI and Pebble-specific work.
+Ship every accepted part of Clem's feedback as coherent Spoonjoy primitives: reliable cross-device cooking, correct shopping-list restoration, private saved recipes, useful manual categorization, and neutral API metadata. Explicitly reject first-party import UI, premature AI categorization, and Pebble-specific work.
 
 ## Upstream Work Items
-- None
+- `./2026-07-14-1313-clem-feedback-source.md` is the durable source-of-truth and item-by-item disposition.
 
 ## Scope
 
 ### In Scope
-- Gate the work on Spoonjoy reliability checks using existing health, smoke, cleanup, and deployment-preflight scripts against the correct QA and production targets.
-- Fix shopping-list re-add semantics consistently across the web route, REST API v1, and MCP tool surfaces.
-- Add a canonical shopping-list mutation helper so web/API/MCP do not drift after the fix.
-- Add a Cloudflare Durable Object class and Wrangler bindings/migrations for logged-in live cook sessions.
-- Add Durable Object bindings/migrations for both top-level production config and the QA Wrangler environment because Durable Object env bindings are not inherited.
-- Add D1/Prisma migrations for any cook-session index, saved-recipe, tag, or related schema.
-- Add explicit cook-session routes/contracts: snapshot `GET`, revision-checked `PATCH`, completion mutation, and WebSocket subscribe/broadcast after accepted mutations.
-- Replace logged-in recipe cook progress localStorage as source of truth with server-backed cook sessions while retaining localStorage as anonymous/offline fallback.
-- Add D1 cook-session index/history rows only for querying, My Kitchen resume cards, completion history, and idempotent DO-to-D1 completion handoff.
-- Add recipe snapshot/fingerprint protection so in-progress cooking handles recipe edits without silently applying progress to the wrong step or ingredient.
-- Keep scaling as cook-session state and API projection; never mutate stored recipe ingredients while scaling.
-- Add private saved recipes separate from cookbook membership, with recipe detail, My Kitchen, search/API state, and tests.
-- Update the existing `/saved-recipes` route, loader, UI copy, and tests so it is backed by `SavedRecipe` instead of deriving saved state only from owned cookbook membership.
-- Backfill or bridge existing cookbook-derived saved recipes into `SavedRecipe` so current users do not lose their saved-recipes list during migration.
-- Add typed recipe tags for accepted/manual tags that power recipe filtering/search/API; reserve AI tag suggestions for a later reviewed-suggestion layer only after accepted tags are useful.
-- Update search indexing/query paths so saved recipes and accepted tags are discoverable through the surfaces that claim to support them.
-- Add API-neutral metadata improvements: explicit step count, normalized source display name, yield/servings consistency, tag/course fields, authenticated saved state, and structured scale projections for parseable quantities.
-- Update OpenAPI, generated playground data, MCP/API docs, route contracts, and developer-facing docs where public behavior changes.
-- Improve My Kitchen/navigation only after underlying cook sessions, saved recipes, and tags exist.
-- Run visual QA for changed UI surfaces and smoke/cleanup checks for any live validation.
-- Commit atomic logical units and push after each committable unit.
+- Preserve the current navigation model and change it only for a demonstrated accessibility or reachability defect.
+- Centralize web, REST v1, and MCP shopping-list add/restore behavior in `app/lib/shopping-list-mutations.server.ts`.
+- Add a SQLite-backed Cloudflare Durable Object as the canonical authenticated cook-session owner, explicitly bound and migrated in production and QA.
+- Add a real `@cloudflare/vitest-pool-workers` test project and CI gate for Durable Object, alarm, D1, WebSocket, and full Worker-response behavior.
+- Add an internal same-origin cookie-session cook API at `/api/cook-sessions`; it is not a public v1 API and is excluded from OpenAPI.
+- Add start/resume, snapshot, operation patch, live subscription, complete, abandon, and owner-authorized purge lifecycle contracts.
+- Keep authenticated offline state as a non-canonical operation queue; reconcile through revisioned, deduplicated operations when connectivity returns.
+- Keep anonymous cook progress entirely in localStorage and allow explicit one-time adoption when a user signs in and no newer server session exists.
+- Pin a normalized recipe snapshot and fingerprint in each active Durable Object so recipe edits never silently remap progress.
+- Store only owner-private query/history projection data in D1 for My Kitchen; reconcile every projection change from the Durable Object with idempotent alarms.
+- Add private `SavedRecipe` state distinct from cookbook membership, with migration backfill, web UI, privacy-safe search, and private REST v1 endpoints.
+- Add accepted-only manual `RecipeTag` state: one controlled course and owner-authored custom tags, with authoring, filtering, search indexing, and REST v1 projections.
+- Add backward-compatible REST v1 metadata and scale projections: `stepCount`, `sourceDisplayName`, `course`, `tags`, authenticated `isSaved`, and detail-only scaled quantities.
+- Update OpenAPI, contract registries, generated playground, MCP metadata where behavior changes, developer docs, smoke scripts, deployment preflight, and cleanup.
+- Deploy to QA before merge, validate two-client synchronization and cleanup, then merge and verify the exact merge SHA's automatic production deployment.
 
 ### Out of Scope
-- First-party import/upload UI for URLs, PDFs, cookbooks, or videos.
-- Pebble-specific fields, routes, naming, or partner behavior.
-- Real-time collaborative editing beyond same-user cross-device cook progress.
-- Public saved-count metrics unless privacy and aggregation rules are explicitly defined in a future task.
-- Explicit author follow/favorite semantics unless saved recipes expose a hard dependency that cannot be solved otherwise.
-- High-fidelity cookbook PDF formatting, forewords, photos, or book-layout preservation in the product UI.
-- Broad redesign of the existing mobile dock before the supporting primitives exist.
+- First-party import/upload UI for URLs, PDFs, cookbooks, or videos; existing agent/API import remains available.
+- AI tag suggestion tables, endpoints, inference jobs, or review UI.
+- Pebble-specific fields, routes, naming, documentation, or partner behavior.
+- Public saved counts, collaborative cook sessions between different users, public cook history, or automatic social `RecipeSpoon` creation.
+- Replacing freeform `servings`, changing existing v1 field types, or mutating stored recipes during scaling.
+- Broad mobile dock redesign.
+
+## Product And Data Contracts
+
+### Shopping-List State Matrix
+
+| Existing row | Quantity after add | Checked state | Ordering | Category/icon |
+| --- | --- | --- | --- | --- |
+| Active, unchecked | If requested is `null`, retain existing; otherwise `(existing ?? 0) + requested` | Unchecked | Unchanged | Preserve unless request explicitly overrides |
+| Active, checked | If requested is `null`, retain existing; otherwise `(existing ?? 0) + requested` | Reset unchecked; clear `checkedAt` | Move to a newly allocated end position | Preserve unless request explicitly overrides |
+| Deleted tombstone | Requested quantity exactly, including `null`; never add stale quantity | Reset unchecked; clear `checkedAt` and `deletedAt` | Move to a newly allocated end position | Preserve unless request explicitly overrides; infer recipe category/icon only when absent |
+
+Recipe batch adds aggregate equal ingredient-reference/unit pairs before mutation: numeric requested quantities sum, while an all-null group remains null. They allocate distinct monotonic sort indices. Web, REST, and MCP call the same D1-safe helper.
+
+### Cook-Session Ownership And Lifecycle
+- `POST /api/cook-sessions` accepts `{ recipeId, adoption? }`, uses API-safe 401/403/404 responses, and atomically creates or resumes one active session per `(userId, recipeId)`.
+- D1 enforces that invariant with nullable unique `activeKey = "${userId}:${recipeId}"`; terminal rows set `activeKey` to `NULL`. Insert races return the winning active row.
+- `sessionId` is a random UUID. The Durable Object is addressed by `idFromName(sessionId)`; the private D1 index binds the opaque id to its owner and recipe. Every HTTP and WebSocket request checks that binding before proxying.
+- `GET /api/cook-sessions/:sessionId` returns the current snapshot.
+- `PATCH /api/cook-sessions/:sessionId` accepts `{ baseRevision, mutationId, operations }`. Stable-id operations set active step, scale factor, ingredient check state, and step-output check state. Mutation IDs are bounded/deduplicated in the DO.
+- A stale base revision returns `409` with the latest snapshot. The client rebases queued operations on that snapshot and retries; unrelated fields merge, and the reconnecting same-field operation wins when accepted.
+- `GET /api/cook-sessions/:sessionId/live` requires a same-origin WebSocket upgrade and emits an initial snapshot plus snapshots after accepted mutations or terminal transitions.
+- `POST .../complete` and `POST .../abandon` are idempotent terminal transitions that clear `activeKey`. Completion is private history only and never creates a `RecipeSpoon` or notification.
+- `DELETE /api/cook-sessions/:sessionId` is an owner-authorized purge used by explicit history deletion and smoke cleanup; it removes the D1 projection and empties DO storage.
+- State-changing HTTP requests and upgrades enforce same-origin `Origin`; all endpoints use cookie sessions and are intentionally excluded from public v1/OpenAPI.
+
+### Cook Snapshot, Offline, And Projection
+- The server creates a normalized snapshot from recipe id/title/cover, ordered stable step ids and text, ingredient ids/reference ids/names/quantities/unit ids+names, and step-output-use ids. A deterministic SHA-256 of canonical JSON is the fingerprint.
+- The DO stores immutable owner/recipe identity, pinned recipe snapshot/fingerprint, revision, active step, scale factor bounded to `0.25..50`, checked stable ids, status, timestamps, bounded mutation ids, and pending D1 projection metadata.
+- Active cooking renders the pinned snapshot. When the current recipe fingerprint differs, the UI offers `Continue original` or `Start fresh`; start-fresh abandons the old attempt before creating a new one.
+- For authenticated users, local storage may cache a snapshot and queued operations for offline UX but is never authoritative. Anonymous versioned local progress remains local-only. Adoption is accepted only for the same fingerprint and only when no newer active server state exists.
+- The DO is canonical. D1 contains owner-private active/history metadata needed for My Kitchen. Every create/update/complete/abandon projection is idempotent; a persisted pending marker plus a DO alarm retries transient failures and reschedules after exhausted platform retries.
+
+### SavedRecipe
+- `SavedRecipe(userId, recipeId, createdAt)` is hard-deleted on explicit unsave and unique by `(userId, recipeId)`.
+- Migration `0025_saved_recipes.sql` backfills active recipes with `SELECT DISTINCT Cookbook.authorId, RecipeInCookbook.recipeId`, conflict-ignore semantics, and no replacement/deletion. `addedById` does not determine ownership. Rerunning is harmless.
+- Adding cookbook membership through `recipe-detail.server.ts`, `cookbooks.$id.tsx`, `spoonjoy-api.server.ts`, or `api-v1.server.ts` ensures the cookbook owner has a saved row. Removing membership never unsaves; explicit unsave never removes cookbook membership. Re-save is idempotent. Soft-deleted recipes remain referenced but are hidden until restored.
+- `/saved-recipes` and owner-only My Kitchen sections use SavedRecipe. Saved search intersects recipe-search results with the viewer's saved ids; private save state is never written to global `SearchDocument` metadata.
+- Public v1 adds private `GET /api/v1/me/saved-recipes` and idempotent `PUT`/`DELETE /api/v1/me/saved-recipes/:recipeId` with existing `recipes:read`/`recipes:write` scope, error, idempotency, and private no-store conventions.
+
+### RecipeTag
+- `RecipeTag(id, recipeId, label, normalizedLabel, kind, source, createdById, createdAt, updatedAt)` stores accepted canonical tags only.
+- `kind` is `COURSE` or `CUSTOM`; `source` is `MANUAL` in this release. Only the recipe owner may mutate tags. Manual tags are canonical immediately and have no acceptance transition.
+- Course is optional and singular; allowed normalized values are `main`, `side`, `appetizer`, and `dessert`. Custom tags are normalized case-insensitively and unique per recipe.
+- Accepted course/custom labels participate in public recipe search fingerprints and documents. Future AI proposals require a separate non-canonical model and explicit acceptance workflow.
+
+### REST v1 Compatibility
+- Existing field types and meanings remain unchanged. Any incompatible change requires v2.
+- Recipe summary/detail add `stepCount: number`, `course: string | null`, `tags: string[]`, and `isSaved: boolean | null`; anonymous/public-token responses use `null`, while an authenticated user receives a boolean.
+- Attribution preserves raw `sourceHost` and adds `sourceDisplayName`, defined as lowercase hostname with a leading `www.` removed.
+- Detail-only `GET /api/v1/recipes/{id}?scaleFactor=<number>` accepts finite `0.25..50`; invalid/multiple/out-of-range values return the existing `validation_error` shape. List/search behavior is unchanged.
+- Detail preserves ingredient `quantity` and adds `scaledQuantity` for parseable numeric quantities; the response includes `scaleFactor`. Null quantities remain null. Scaling is multiplication only and does not write recipe data. `servings` remains the original nullable freeform string.
+- OpenAPI, `api-v1-contract.server.ts`, generator output, developer playground, examples, REST tests, and MCP shopping metadata remain synchronized.
 
 ## Completion Criteria
-- [ ] Reliability gate identifies the canonical QA/prod smoke commands, confirms cleanup safety, and passes or records a true credential/capability blocker.
-- [ ] Shopping-list clear/remove then re-add of the same recipe restores only the newly requested quantity across web, REST API v1, and MCP.
-- [ ] Active shopping-list duplicate adds still merge quantities consistently and keep ordering/check-state behavior tested.
-- [ ] Logged-in cook progress syncs across two clients through a Durable Object-backed session; anonymous cook progress remains local-only.
-- [ ] Cook-session snapshot `GET`, revision-checked `PATCH`, completion mutation, and WebSocket subscription contracts are tested.
-- [ ] Cook-session completion is idempotent, creates/updates cook history, clears active resume state, and tolerates DO-to-D1 retry after transient failure.
-- [ ] Recipe edits during an active cook session are detected and do not silently remap progress to different steps or ingredients.
-- [ ] Scaling persists in cook sessions and API projections expose original quantities plus scaled structured quantities without mutating recipe data.
-- [ ] Saved recipes are private, distinct from cookbook membership, and appear on recipe detail, `/saved-recipes`, My Kitchen, search, and authenticated API responses.
-- [ ] Existing cookbook-derived saved recipes are preserved through migration/interop tests.
-- [ ] Accepted typed recipe tags power at least one user-facing filter/search path, search-index path, and API response path.
-- [ ] API responses and OpenAPI/playground docs expose step count, normalized source display name, tags/course data, authenticated saved state, and scaling semantics.
-- [ ] Import feedback is explicitly rejected in product UI and documented as agentic/API-only.
-- [ ] No Pebble-specific behavior is introduced.
-- [ ] My Kitchen/navigation updates surface Continue Cooking, Your Recipes, Saved Recipes, Cookbooks, and Tags without destabilizing the mobile dock.
-- [ ] Visual QA evidence is captured for changed UI surfaces.
-- [ ] Live/manual smoke data is disposable, named according to repo rules, and cleaned up in the same run.
-- [ ] 100% test coverage on all new code
-- [ ] All tests pass
-- [ ] No warnings
-- [ ] If UI/rendering/layout changed: `visual-qa-dogfood` evidence captured, absurdity ledger closed, and automated visual metrics still pass
-
-## Code Coverage Requirements
-**MANDATORY: 100% coverage on all new code.**
-- No `[ExcludeFromCodeCoverage]` or equivalent on new code
-- All branches covered (if/else, switch, try/catch)
-- All error paths tested
-- Edge cases: null, empty, boundary values
+- [ ] Every line of the feedback source has an implemented or explicitly rejected disposition.
+- [ ] Shopping re-add behavior matches the state matrix across web, REST v1, and MCP under repeated and concurrent calls.
+- [ ] Workers-runtime tests prove SQLite DO persistence, ownership, revision conflict/rebase, mutation dedupe, alarms, hibernation WebSockets, purge, and the full Worker 101 response path.
+- [ ] Two authenticated clients start/resume one session and synchronize step, checklist, and scale state; anonymous progress remains local-only.
+- [ ] Recipe edits display pinned-state choices and never silently remap progress.
+- [ ] My Kitchen cook/saved sections are owner-only for owner, authenticated visitor, and anonymous visitor cases.
+- [ ] Completion and abandon clear resume state, preserve private history as intended, and create no RecipeSpoon/social side effect.
+- [ ] SavedRecipe migration/backfill and all four cookbook membership writers obey the compatibility contract.
+- [ ] Saved search is viewer-scoped without global-index leakage; private REST saved endpoints and `isSaved` are no-store and ownership-safe.
+- [ ] Manual course/custom tags author, filter, search, and project through REST without any AI suggestion surface.
+- [ ] REST v1 additions pass compatibility, OpenAPI, contract, generator, list/detail/search/native-sync/write/cookbook tests.
+- [ ] Current mobile dock remains stable; changed UI passes desktop/mobile visual QA with no overlap or unreachable controls.
+- [ ] QA deploy, two-client smoke, purge, and residue inspection pass before merge.
+- [ ] The exact merged SHA's automatic production workflow completes, then readiness/web/API smoke and cleanup pass.
+- [ ] All tests and builds pass with zero warnings and 100% coverage on all new code, including `workers/**`.
 
 ## Open Questions
-- None; Ari delegated the v1 product decisions in chat. Human input is needed only if Cloudflare/GitHub credentials are unavailable, billing/capability limits block Durable Objects, or a production operation would be destructive without a safe staged path.
+- None. Ari delegated the product decisions in chat. Human input is needed only for unavailable Cloudflare/GitHub credentials, a billing/capability limitation, or an unsafe destructive production action.
 
 ## Decisions Made
-- Use a SQLite-backed Cloudflare Durable Object as the canonical owner for logged-in active cook-session state because the feature is stateful coordination across a user's devices.
-- Do not require Ari to create a Durable Object manually; implement the exported Worker class, `wrangler.json` binding, and Durable Object migration in code.
-- Configure Durable Object bindings and migrations for the production and QA Wrangler environments explicitly.
-- Use a session id for each cook attempt while enforcing one active cook session per logged-in user and recipe in v1.
-- Store live progress in the Durable Object; store only query/index/history metadata in D1.
-- Keep anonymous cooking progress local-only.
-- Adopt local progress into a server session on login/current-recipe open only when no newer active server session exists.
-- Treat deleted shopping-list rows as tombstones/history, not quantities to accumulate from; restore resets to the requested quantity and moves the item to the end unchecked.
-- Keep import agentic/API-only and do not add a first-party import flow.
-- Build accepted typed tags before AI suggestions; AI categorization must never silently become canonical truth.
-- Add `SavedRecipe` as a private primitive distinct from cookbook membership.
-- Backfill existing saved-recipes state from `RecipeInCookbook`; after migration, `/saved-recipes` uses `SavedRecipe` as canonical state.
-- Adding a recipe to an owned cookbook should ensure `SavedRecipe` exists for compatibility, but removing a cookbook membership must not be the only way to control saved state once explicit save/unsave exists.
-- Defer explicit author follow/favorite semantics; existing fellow-chef pages remain derived from spoons, forks, and cookbook saves.
-- Add only API-neutral provider fields and reject Pebble-specific behavior.
-- Run reliability/smoke validation before claiming the product work is shipped.
+- Use a SQLite-backed Durable Object for authenticated live state and D1 only as a private, retryable query/history projection.
+- Route the internal cook API at Worker level before React Router so WebSocket upgrades retain the Cloudflare `webSocket` handle. Preserve security headers on ordinary responses and test the full default export.
+- Use operation-based optimistic concurrency instead of whole-snapshot last-write-wins.
+- Use one active attempt per user/recipe with explicit complete, abandon/start-fresh, and purge lifecycle.
+- Do not create RecipeSpoon entries from private cooking progress.
+- Keep anonymous cooking local; authenticated local cache/queue is non-canonical.
+- Add SavedRecipe as private canonical save state and bridge all cookbook writers for compatibility.
+- Keep global recipe search free of private save metadata.
+- Ship manual accepted tags only; defer AI suggestions until a review model and UX exist.
+- Preserve current navigation unless evidence warrants a focused fix.
+- Keep import agent/API-only and reject Pebble-specific behavior.
 
 ## Context / References
-- `app/routes/recipes.$id.tsx` currently owns cook progress in `localStorage` under `spoonjoy-cook-progress:${recipeId}`.
-- `workers/app.ts` is the Cloudflare Worker entrypoint and currently has no Durable Object export.
-- `wrangler.json` currently defines D1, R2, rate-limit bindings, and QA env config, but no Durable Object binding or migration.
-- Cloudflare Wrangler environments do not inherit Durable Object bindings, so QA must be configured explicitly when the top-level binding is added.
-- `app/cloudflare-env.d.ts` currently defines `Env` without a Durable Object namespace binding.
-- `prisma/schema.prisma` has Recipe, RecipeStep, Ingredient, Cookbook, RecipeInCookbook, ShoppingList, ShoppingListItem, and RecipeSpoon but no cook-session index, saved-recipe, tag, or follow models.
-- `migrations/` and `prisma/migrations/` both exist; schema changes must follow the repo's current D1/Prisma migration pattern.
-- `app/lib/shopping-list.server.ts`, `app/lib/api-v1.server.ts`, and `app/lib/spoonjoy-api.server.ts` all currently restore deleted shopping-list rows by adding old quantity to new quantity.
-- `app/lib/api-v1.server.ts` recipe detail returns steps but does not expose explicit `stepCount`; attribution exposes raw `sourceHost`.
-- `app/lib/spoonjoy-api.server.ts` MCP recipe summaries already expose `stepCount`, so REST/API and MCP behavior must be reconciled intentionally.
-- `app/lib/fellow-chefs.server.ts` derives fellow chefs from spoons, forks, and cookbook saves; explicit follows should not be conflated with this graph.
-- `app/routes/saved-recipes.tsx` already exists and currently derives saved recipes from `RecipeInCookbook` memberships in cookbooks owned by the signed-in user.
-- `app/components/navigation/mobile-nav.tsx` default signed-in dock currently exposes My Kitchen, My Recipes, Shopping List, and Pantry; Search appears in contextual dock states and the Pantry drawer.
-- `scripts/smoke-live.mjs`, `scripts/smoke-api-live.mjs`, `scripts/cleanup-local-qa-data.mjs`, `scripts/deployment-preflight.ts`, and `scripts/production-readiness.ts` are the reliability/smoke starting points.
-- Cloudflare Durable Objects overview: https://developers.cloudflare.com/durable-objects/
-- Cloudflare Durable Object WebSocket hibernation: https://developers.cloudflare.com/durable-objects/best-practices/websockets/
-- Cloudflare Durable Object migrations: https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/
+- `./2026-07-14-1313-clem-feedback-source.md`
+- `app/routes/recipes.$id.tsx` currently stores `spoonjoy-cook-progress:${recipeId}` locally and already bounds scale to `0.25..50`.
+- `workers/app.ts` is the Worker entrypoint; `withSecurityHeaders` currently rebuilds responses and drops a Cloudflare WebSocket attachment.
+- `vitest.config.ts` uses happy-dom/forks and excludes `workers/**`; a separate Workers pool is required.
+- `migrations/0023_recipe_cover_prompt_lineage.sql` is current, so new D1 migrations are `0024`, `0025`, and `0026`.
+- `app/routes/_index.tsx` can render another user's kitchen, so private sections must be loaded/rendered only for the owner.
+- `app/lib/search.server.ts` uses global recipe documents; SavedRecipe must remain a viewer-scoped overlay.
+- Cookbook membership writers exist in `app/lib/recipe-detail.server.ts`, `app/routes/cookbooks.$id.tsx`, `app/lib/spoonjoy-api.server.ts`, and `app/lib/api-v1.server.ts`.
+- Cloudflare Durable Objects: https://developers.cloudflare.com/durable-objects/
+- Workers Vitest integration: https://developers.cloudflare.com/durable-objects/examples/testing-with-durable-objects/
+- WebSocket hibernation: https://developers.cloudflare.com/durable-objects/best-practices/websockets/
+- Durable Object alarms: https://developers.cloudflare.com/durable-objects/api/alarms/
+- Wrangler environments: https://developers.cloudflare.com/durable-objects/reference/environments/
 
 ## Notes
-The implementation should prefer shared service helpers over fixing identical behavior independently in routes/API/MCP. Durable Object and D1 state must have explicit ownership boundaries: DO for live progress, D1 for queryable metadata, history, idempotency, and recovery surfaces.
+The task is deliberately broad because the feedback describes an end-to-end product boundary. Delivery stays reviewable through strict TDD units, atomic commits, QA-before-merge sequencing, and a final continuation scan rather than by dropping any accepted thread.
 
 ## Progress Log
-- 2026-07-14 13:15 Created
-- 2026-07-14 13:16 Tinfoil pass added Durable Object env binding, route contract, migration, and search-index scope.
-- 2026-07-14 13:21 Planning review addressed saved-recipes route coverage, migration interop, status, and mobile-nav source fidelity.
-- 2026-07-14 13:24 Planning approved after Round 2 reviewer convergence.
+- 2026-07-14 13:15 Created.
+- 2026-07-14 13:24 Initial planning approved after two review rounds.
+- 2026-07-15 Latest-model audit invalidated stale assumptions after eight upstream commits.
+- 2026-07-15 Added durable feedback disposition, real Workers testing, executable cook lifecycle, privacy boundaries, exact data/API contracts, and QA-before-merge sequencing; returned to `NEEDS_REVIEW`.
