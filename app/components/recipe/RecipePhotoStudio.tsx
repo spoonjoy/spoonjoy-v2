@@ -156,6 +156,7 @@ export function RecipePhotoStudio({
         method="post"
         encType="multipart/form-data"
         className="mt-4 space-y-4"
+        data-testid="recipe-photo-studio-form"
         onSubmit={handleSubmit}
       >
         <input type="hidden" name="intent" value="createFirstPhotoCover" />
