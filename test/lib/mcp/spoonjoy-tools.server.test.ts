@@ -1075,6 +1075,15 @@ describe("spoonjoy MCP tools", () => {
       idempotencyKey: "mcp-set-no-cover",
     };
 
+    await expect(callSpoonjoyMcpTool(
+      "set_recipe_no_cover",
+      { ...args, confirmNoCover: false, idempotencyKey: "mcp-set-no-cover-denied" },
+      { db: context.db, principal },
+    )).rejects.toMatchObject({
+      status: 400,
+      message: "confirmNoCover must be true",
+    });
+
     const first = parseJson(await callSpoonjoyMcpTool("set_recipe_no_cover", args, { db: context.db, principal }));
     const replay = parseJson(await callSpoonjoyMcpTool("set_recipe_no_cover", args, { db: context.db, principal }));
 
