@@ -2417,7 +2417,9 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
   assertKnownFormDataFields(formData, RECIPE_IMAGE_UPLOAD_FIELDS);
   const clientMutationId = clientMutationIdFromFormDataHeaderOrQuery(args, formData);
   const photo = singleFormDataValue(formData, "photo");
-  const activate = optionalFormDataBoolean(formData, "activate", true);
+  const activateWhenReady = formData.has("activateWhenReady")
+    ? optionalFormDataBoolean(formData, "activateWhenReady", true)
+    : optionalFormDataBoolean(formData, "activate", true);
   const generateEditorial = optionalFormDataBoolean(formData, "generateEditorial", true);
   const postAsSpoon = optionalFormDataBoolean(formData, "postAsSpoon", false);
   const note = optionalFormDataString(formData, "note");
@@ -2426,7 +2428,7 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
   const idempotencyBody = {
     clientMutationId,
     photo: await accountPhotoIdempotencyValue(photo),
-    activate,
+    activateWhenReady,
     generateEditorial,
     postAsSpoon,
     note,
@@ -2502,7 +2504,7 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
         });
       }
 
-      if (activate) {
+      if (activateWhenReady) {
         try {
           await setActiveRecipeCover(db, { recipeId, coverId: createdCover.id, variant: "image" });
         } catch (error) {
@@ -2519,9 +2521,9 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
           rawPhotoUrl: uploadedImageUrl,
           recipeTitle: recipe.title,
           sourceType,
-          activateWhenReady: activate,
-          suppressAutoActivation: !activate,
-          activationGuard: activate ? {
+          activateWhenReady,
+          suppressAutoActivation: !activateWhenReady,
+          activationGuard: activateWhenReady ? {
             activeCoverId: createdCover.id,
             activeCoverVariant: "image",
             coverMode: "manual",
@@ -4524,6 +4526,8 @@ async function accountPhotoIdempotencyValue(photo: FormDataEntryValue | null) {
 const RECIPE_IMAGE_UPLOAD_FIELDS = [
   "clientMutationId",
   "photo",
+  "activateWhenReady",
+  // Legacy alias accepted for older native builds and pre-canonical automation clients.
   "activate",
   "generateEditorial",
   "postAsSpoon",

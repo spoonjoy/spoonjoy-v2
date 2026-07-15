@@ -568,7 +568,7 @@ Recipe spoon endpoints expose first-class cook-event history for native clients.
 
 Recipe spoon mutations require `kitchen:write` and are idempotent with `clientMutationId`. `POST /api/v1/recipes/{id}/spoons` creates a cook event from `note`, `nextTime`, `cookedAt`, `photoUrl`, and `useAsRecipeCover`; it reuses Spoonjoy's web spoon creation rules and can create or activate a recipe cover from a spoon photo when the existing cover-decision logic allows it. `PATCH /api/v1/recipes/{id}/spoons/{spoonId}` updates owned spoon fields through the same owner-only domain service as the web product. `DELETE /api/v1/recipes/{id}/spoons/{spoonId}` soft-deletes an owned spoon and accepts the mutation id in the JSON body, query string, or `X-Client-Mutation-Id` header. Path recipe ids are validated so a spoon cannot be mutated through a different recipe URL.
 
-`POST /api/v1/recipes/{id}/image` is the minimal-click first-photo path for recipe management clients. It accepts `multipart/form-data` with required `clientMutationId` and `photo`, defaults `activate=true` and `generateEditorial=true`, and can also set `postAsSpoon=true` with optional `note`, `nextTime`, and `cookedAt` fields. When `postAsSpoon` is true, Spoonjoy preserves the original upload on the created Spoon while the cover candidate can be editorialized for the recipe cover. The response returns the optional `spoon`, `activeCover`, `previousActiveCover`, `createdCover`, `generationStatus`, and replay metadata.
+`POST /api/v1/recipes/{id}/image` is the minimal-click first-photo path for recipe management clients. It accepts `multipart/form-data` with required `clientMutationId` and `photo`, defaults `activateWhenReady=true` and `generateEditorial=true`, and can also set `postAsSpoon=true` with optional `note`, `nextTime`, and `cookedAt` fields. When `postAsSpoon` is true, Spoonjoy preserves the original upload on the created Spoon while the cover candidate can be editorialized for the recipe cover. The response returns the optional `spoon`, `activeCover`, `previousActiveCover`, `createdCover`, `generationStatus`, and replay metadata.
 
 Recipe cover management endpoints are owner-scoped native app surface, not public catalog writes. They require the authenticated chef to own the recipe and to have `kitchen:write`. `GET /api/v1/recipes/{id}/covers` returns cover candidates, the current `activeCover`, spoon photo sources in `spoonImages`, and offset pagination. Pass `includeArchived=true` only for management UIs that need archived candidates.
 
@@ -623,6 +623,7 @@ curl -fsS -X POST 'https://spoonjoy.app/api/v1/recipes/recipe_1/image' \
   -H 'Authorization: Bearer sj_...' \
   -F 'clientMutationId=recipe-image:recipe_1:2026-06-01' \
   -F 'photo=@./dinner.jpg;type=image/jpeg' \
+  -F 'activateWhenReady=true' \
   -F 'postAsSpoon=true' \
   -F 'note=Added more lemon' \
   -F 'generateEditorial=true'

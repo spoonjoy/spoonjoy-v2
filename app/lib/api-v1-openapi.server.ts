@@ -642,7 +642,7 @@ const schemas = {
   RecipeImageUploadRequest: objectSchema(["clientMutationId", "photo"], {
     clientMutationId: shortTextSchema,
     photo: { type: "string", format: "binary", description: "JPG, PNG, or WebP recipe photo up to 5MB." },
-    activate: { type: "boolean", default: true },
+    activateWhenReady: { type: "boolean", default: true },
     generateEditorial: { type: "boolean", default: true },
     postAsSpoon: { type: "boolean", default: false },
     note: boundedNullableStringSchema,
@@ -2515,7 +2515,7 @@ const requestExamples: Record<string, unknown> = {
   RecipeImageUploadRequest: {
     clientMutationId: "device-uuid-recipe-image",
     photo: "(binary image file)",
-    activate: true,
+    activateWhenReady: true,
     generateEditorial: true,
     postAsSpoon: true,
     note: "Added more lemon.",

@@ -1732,7 +1732,6 @@ const createRecipeCoverFromUploadTool: SpoonjoyApiOperation = {
     properties: {
       recipeId: { type: "string", description: "Recipe that will receive the cover candidate." },
       imageUrl: { type: "string", description: "Spoonjoy uploaded recipe or spoon photo URL to use as the original cover source." },
-      activate: { type: "boolean", description: "Legacy alias for activateWhenReady; retained for older MCP clients." },
       activateWhenReady: { type: "boolean", description: "Make the cover active when the editorial image is ready." },
       generateEditorial: { type: "boolean", description: "Generate an editorialized cover from the uploaded original photo." },
       promptAddition: { type: "string", maxLength: 240, description: "Optional bounded instruction to guide editorial cover generation." },
