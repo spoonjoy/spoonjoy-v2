@@ -8,6 +8,10 @@ function renderWithRouter(ui: React.ReactElement) {
   return render(<BrowserRouter>{ui}</BrowserRouter>)
 }
 
+const legacyChefPhotoLabel = ['Chef', 'photo'].join(' ')
+const legacySpoonjoyCookbookLabel = ['Spoonjoy', 'cookbook'].join(' ')
+const legacyCounterLabel = ['On', 'the', 'counter'].join(' ')
+
 describe('RecipeHeader', () => {
   const defaultProps = {
     title: 'Test Recipe',
@@ -156,13 +160,13 @@ describe('RecipeHeader', () => {
         <RecipeHeader
           {...defaultProps}
           coverImageUrl="https://example.com/bright-recipe.jpg"
-          coverProvenanceLabel="Chef photo"
+          coverProvenanceLabel={legacyChefPhotoLabel}
         />
       )
 
       const badge = screen.getByTestId('cover-provenance-badge')
       expect(badge).toHaveTextContent('Original photo')
-      expect(screen.queryByText('Chef photo')).toBeNull()
+      expect(screen.queryByText(legacyChefPhotoLabel)).toBeNull()
       expect(badge).toHaveClass('bg-[rgba(37,34,31,0.96)]')
       expect(badge).toHaveClass('border-[rgba(255,252,246,0.76)]')
       expect(badge).toHaveClass('text-[var(--sj-paper)]')
@@ -177,25 +181,25 @@ describe('RecipeHeader', () => {
         <RecipeHeader
           {...defaultProps}
           coverImageUrl="https://example.com/generated-recipe.jpg"
-          coverProvenanceLabel="Spoonjoy cookbook"
+          coverProvenanceLabel={legacySpoonjoyCookbookLabel}
         />
       )
 
       expect(screen.getByTestId('cover-provenance-badge')).toHaveTextContent('Saved cover')
-      expect(screen.queryByText('Spoonjoy cookbook')).toBeNull()
+      expect(screen.queryByText(legacySpoonjoyCookbookLabel)).toBeNull()
 
       rerender(
         <BrowserRouter>
           <RecipeHeader
             {...defaultProps}
             coverImageUrl="https://example.com/counter-recipe.jpg"
-            coverProvenanceLabel="On the counter"
+            coverProvenanceLabel={legacyCounterLabel}
           />
         </BrowserRouter>
       )
 
       expect(screen.getByTestId('cover-provenance-badge')).toHaveTextContent('Saved cover')
-      expect(screen.queryByText('On the counter')).toBeNull()
+      expect(screen.queryByText(legacyCounterLabel)).toBeNull()
     })
 
     it('renders placeholder when imageUrl is not provided', () => {

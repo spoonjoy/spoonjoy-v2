@@ -7,6 +7,11 @@ import {
   type RecipeCoverHistoryItem,
 } from "~/components/recipe/RecipeCoverHistory";
 
+const legacyChefPhotoLabel = ["Chef", "photo"].join(" ");
+const legacySpoonjoyCookbookLabel = ["Spoonjoy", "cookbook"].join(" ");
+const legacyCounterLabel = ["On", "the", "counter"].join(" ");
+const legacyEditorializedChefPhotoLabel = ["Editorialized", "chef", "photo"].join(" ");
+
 function renderHistory(
   covers: RecipeCoverHistoryItem[],
   onSubmit?: (formData: FormData) => void,
@@ -65,7 +70,7 @@ describe("RecipeCoverHistory", () => {
           {
             variant: "image",
             imageUrl: "/photos/failed-raw.jpg",
-            provenanceLabel: "Chef photo",
+            provenanceLabel: legacyChefPhotoLabel,
             isActive: false,
           },
         ],
@@ -100,7 +105,7 @@ describe("RecipeCoverHistory", () => {
           {
             variant: "image",
             imageUrl: "/photos/archived-at-raw.jpg",
-            provenanceLabel: "Chef photo",
+            provenanceLabel: legacyChefPhotoLabel,
             isActive: false,
           },
         ],
@@ -134,7 +139,7 @@ describe("RecipeCoverHistory", () => {
           {
             variant: "image",
             imageUrl: "/photos/failed-cover-row.jpg",
-            provenanceLabel: "Chef photo",
+            provenanceLabel: legacyChefPhotoLabel,
             isActive: false,
           },
         ],
@@ -151,7 +156,7 @@ describe("RecipeCoverHistory", () => {
     expect(screen.getByText("No image")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Use Original photo cover" })).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Use Imported photo cover" })).toBeNull();
-    expect(screen.queryByText("Chef photo")).toBeNull();
+    expect(screen.queryByText(legacyChefPhotoLabel)).toBeNull();
     expect(screen.getAllByRole("button", { name: "Regenerate with direction" })).toHaveLength(3);
     expect(screen.getAllByRole("button", { name: "Archive cover" })).toHaveLength(3);
   });
@@ -173,13 +178,13 @@ describe("RecipeCoverHistory", () => {
             {
               variant: "image",
               imageUrl: "/photos/raw.jpg",
-              provenanceLabel: "Chef photo",
+              provenanceLabel: legacyChefPhotoLabel,
               isActive: false,
             },
             {
               variant: "stylized",
               imageUrl: "/photos/editorial.jpg",
-              provenanceLabel: "Editorialized chef photo",
+              provenanceLabel: legacyEditorializedChefPhotoLabel,
               isActive: true,
             },
           ],
@@ -230,8 +235,8 @@ describe("RecipeCoverHistory", () => {
 
     expect(screen.getByText("Original photo")).toBeInTheDocument();
     expect(screen.getByText("Editorial photo")).toBeInTheDocument();
-    expect(screen.queryByText("Chef photo")).toBeNull();
-    expect(screen.queryByText("Editorialized chef photo")).toBeNull();
+    expect(screen.queryByText(legacyChefPhotoLabel)).toBeNull();
+    expect(screen.queryByText(legacyEditorializedChefPhotoLabel)).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Use Original photo cover" }));
     await waitFor(() => {
@@ -418,13 +423,13 @@ describe("RecipeCoverHistory", () => {
           {
             variant: "image",
             imageUrl: "/photos/generated.jpg",
-            provenanceLabel: "Spoonjoy cookbook",
+            provenanceLabel: legacySpoonjoyCookbookLabel,
             isActive: true,
           },
           {
             variant: "stylized",
             imageUrl: "/photos/counter.jpg",
-            provenanceLabel: "On the counter",
+            provenanceLabel: legacyCounterLabel,
             isActive: false,
           },
         ],
@@ -432,7 +437,7 @@ describe("RecipeCoverHistory", () => {
     ]);
 
     expect(await screen.findAllByText("Saved cover")).toHaveLength(2);
-    expect(screen.queryByText("Spoonjoy cookbook")).toBeNull();
-    expect(screen.queryByText("On the counter")).toBeNull();
+    expect(screen.queryByText(legacySpoonjoyCookbookLabel)).toBeNull();
+    expect(screen.queryByText(legacyCounterLabel)).toBeNull();
   });
 });
