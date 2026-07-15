@@ -306,8 +306,10 @@ function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
 
   const dispatchInputs = childBlock(lines, workflowDispatch[0], workflowDispatch[1], "inputs");
   const sourceSha = dispatchInputs ? childBlock(lines, dispatchInputs[0], dispatchInputs[1], "source_sha") : null;
-  const allowRollback = dispatchInputs ? childBlock(lines, dispatchInputs[0], dispatchInputs[1], "allow_rollback") : null;
-  if (!sourceSha || !allowRollback) return false;
+  const rollbackVersion = dispatchInputs
+    ? childBlock(lines, dispatchInputs[0], dispatchInputs[1], "rollback_version_id")
+    : null;
+  if (!sourceSha || !rollbackVersion) return false;
 
   const permissionsIndex = lines.findIndex((line) => line.indent === 0 && line.text === "permissions:");
   if (permissionsIndex === -1) return false;
@@ -336,6 +338,8 @@ function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
 
   const reportPermissions = childBlock(lines, report[0], report[1], "permissions");
   if (
+    blockScalarChildValue(lines, report[0], report[1], "if") !== "always() && needs.deploy.result != 'skipped'" ||
+    blockScalarChildValue(lines, report[0], report[1], "needs") !== "deploy" ||
     !reportPermissions ||
     blockScalarChildValue(lines, reportPermissions[0], reportPermissions[1], "contents") !== "read" ||
     blockScalarChildValue(lines, reportPermissions[0], reportPermissions[1], "issues") !== "write"
@@ -345,10 +349,13 @@ function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
 
   const steps = childBlock(lines, deploy[0], deploy[1], "steps");
   if (!steps) return false;
-  let checkoutStep = -1;
+  let sourceCheckoutStep = -1;
+  let rollbackCheckoutStep = -1;
   let validationStep = -1;
   let deployStep = -1;
   let recordStep = -1;
+  let ensureArtifactStep = -1;
+  let uploadArtifactStep = -1;
 
   for (const [stepStart, stepEnd] of stepBlocks(lines, steps[0], steps[1])) {
     const run = stepRunText(lines, stepStart, stepEnd);
@@ -356,23 +363,37 @@ function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
       stepUses(lines, stepStart, stepEnd, "actions/checkout@") &&
       stepWithValue(lines, stepStart, stepEnd, "ref") === "${{ env.SOURCE_SHA }}" &&
       stepWithValue(lines, stepStart, stepEnd, "fetch-depth") === "0" &&
-      stepWithValue(lines, stepStart, stepEnd, "persist-credentials") === "false"
+      stepWithValue(lines, stepStart, stepEnd, "persist-credentials") === "false" &&
+      stepIfEquals(lines, stepStart, stepEnd, "env.ROLLBACK_VERSION_ID == ''")
     ) {
-      checkoutStep = stepStart;
+      sourceCheckoutStep = stepStart;
+    }
+    if (
+      stepUses(lines, stepStart, stepEnd, "actions/checkout@") &&
+      stepWithValue(lines, stepStart, stepEnd, "ref") === "${{ github.workflow_sha }}" &&
+      stepWithValue(lines, stepStart, stepEnd, "fetch-depth") === "0" &&
+      stepWithValue(lines, stepStart, stepEnd, "persist-credentials") === "false" &&
+      stepIfEquals(lines, stepStart, stepEnd, "env.ROLLBACK_VERSION_ID != ''")
+    ) {
+      rollbackCheckoutStep = stepStart;
     }
     if (stepPropertyValue(lines, stepStart, stepEnd, "name") === "Validate release source") {
       const requiredRunFragments = [
         "grep -Eq '^[0-9a-f]{40}$'",
         'git merge-base --is-ancestor "$SOURCE_SHA" origin/main',
         `test "$WORKFLOW_RUN_PATH" = '.github/workflows/ci.yml' || test "$GITHUB_EVENT_NAME" = 'workflow_dispatch'`,
-        'test "$(git rev-parse origin/main)" = "$SOURCE_SHA" || test "$ALLOW_ROLLBACK" = "true"',
+        'test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"',
         'gh run list --workflow .github/workflows/ci.yml --branch main --commit "$SOURCE_SHA" --event push --status success',
-        'required_checks=\'["coverage","e2e","build-storybook"]\'',
-        "repos/$GITHUB_REPOSITORY/commits/$SOURCE_SHA/check-runs",
+        "--json databaseId,headSha",
+        'gh run view "$ci_run_id" --json jobs',
+        '.name == $required_job and .conclusion == "success"',
+        'gh run list --workflow .github/workflows/storybook.yml --branch main --commit "$SOURCE_SHA" --event push --status success',
+        'gh run view "$storybook_run_id" --json jobs',
+        '.name == "build-storybook" and .conclusion == "success"',
       ];
       if (
         stepPropertyValue(lines, stepStart, stepEnd, "if") === null &&
-        stepHasEnvKeys(lines, stepStart, stepEnd, ["GH_TOKEN", "ALLOW_ROLLBACK", "WORKFLOW_RUN_PATH"]) &&
+        stepHasEnvKeys(lines, stepStart, stepEnd, ["GH_TOKEN", "WORKFLOW_RUN_PATH"]) &&
         requiredRunFragments.every((fragment) => run.includes(fragment))
       ) {
         validationStep = stepStart;
@@ -381,15 +402,80 @@ function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
     if (
       stepRunsDeployAuto(lines, stepStart, stepEnd) &&
       stepPropertyValue(lines, stepStart, stepEnd, "if") === null &&
-      stepHasEnvKeys(lines, stepStart, stepEnd, ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"])
+      stepHasEnvKeys(lines, stepStart, stepEnd, [
+        "CLOUDFLARE_ACCOUNT_ID",
+        "CLOUDFLARE_D1_API_TOKEN",
+        "CLOUDFLARE_WORKERS_API_TOKEN",
+      ]) &&
+      run.includes('--rollback-version-id "$ROLLBACK_VERSION_ID"')
     ) {
       deployStep = stepStart;
     }
     if (
       stepPropertyValue(lines, stepStart, stepEnd, "name") === "Record release source" &&
+      stepIfEquals(lines, stepStart, stepEnd, "always()") &&
       run.includes("Source SHA: `%s`")
     ) {
       recordStep = stepStart;
+    }
+    if (
+      stepPropertyValue(lines, stepStart, stepEnd, "name") === "Ensure release artifact exists" &&
+      stepIfEquals(lines, stepStart, stepEnd, "always()") &&
+      run.includes("mkdir -p mcp-oauth-canary-artifacts") &&
+      run.includes("mcp-oauth-canary-artifacts/production-release.json") &&
+      run.includes("jq -n --arg source_sha") &&
+      run.includes('reviewedMigrations: []') &&
+      run.includes('migrationApply: "not_started"') &&
+      run.includes("databaseRollbackSupported: false")
+    ) {
+      ensureArtifactStep = stepStart;
+    }
+    if (
+      stepUses(lines, stepStart, stepEnd, "actions/upload-artifact@") &&
+      stepIfEquals(lines, stepStart, stepEnd, "always()") &&
+      stepWithValue(lines, stepStart, stepEnd, "name") === "mcp-oauth-canary-artifacts" &&
+      stepWithValue(lines, stepStart, stepEnd, "path") === "mcp-oauth-canary-artifacts/" &&
+      stepWithValue(lines, stepStart, stepEnd, "if-no-files-found") === "error"
+    ) {
+      uploadArtifactStep = stepStart;
+    }
+  }
+
+  const reportSteps = childBlock(lines, report[0], report[1], "steps");
+  if (!reportSteps) return false;
+  let reportCheckoutStep = -1;
+  let downloadArtifactStep = -1;
+  let reportCanaryStep = -1;
+  for (const [stepStart, stepEnd] of stepBlocks(lines, reportSteps[0], reportSteps[1])) {
+    const run = stepRunText(lines, stepStart, stepEnd);
+    if (
+      stepUses(lines, stepStart, stepEnd, "actions/checkout@") &&
+      stepWithValue(lines, stepStart, stepEnd, "ref") === "${{ github.workflow_sha }}" &&
+      stepWithValue(lines, stepStart, stepEnd, "persist-credentials") === "false"
+    ) {
+      reportCheckoutStep = stepStart;
+    }
+    if (
+      stepUses(lines, stepStart, stepEnd, "actions/download-artifact@") &&
+      stepPropertyValue(lines, stepStart, stepEnd, "continue-on-error") === "true" &&
+      stepWithValue(lines, stepStart, stepEnd, "name") === "mcp-oauth-canary-artifacts" &&
+      stepWithValue(lines, stepStart, stepEnd, "path") === "mcp-oauth-canary-artifacts"
+    ) {
+      downloadArtifactStep = stepStart;
+    }
+    if (
+      stepPropertyValue(lines, stepStart, stepEnd, "name") === "Report MCP OAuth canary" &&
+      stepIfEquals(lines, stepStart, stepEnd, "always()") &&
+      stepHasEnvKeys(lines, stepStart, stepEnd, [
+        "GITHUB_TOKEN",
+        "MCP_CANARY_STATUS",
+        "MCP_CANARY_WORKFLOW_RUN_URL",
+        "MCP_CANARY_ARTIFACT_URL",
+      ]) &&
+      run.includes("node scripts/report-mcp-oauth-canary.mjs") &&
+      run.includes("--manage-issue")
+    ) {
+      reportCanaryStep = stepStart;
     }
   }
 
@@ -400,13 +486,19 @@ function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
     blockScalarChildValue(lines, workflowRun[0], workflowRun[1], "types") === "[completed]" &&
     blockScalarChildValue(lines, sourceSha[0], sourceSha[1], "required") === "true" &&
     blockScalarChildValue(lines, sourceSha[0], sourceSha[1], "type") === "string" &&
-    blockScalarChildValue(lines, allowRollback[0], allowRollback[1], "required") === "true" &&
-    blockScalarChildValue(lines, allowRollback[0], allowRollback[1], "default") === "false" &&
-    blockScalarChildValue(lines, allowRollback[0], allowRollback[1], "type") === "boolean" &&
-    checkoutStep >= 0 &&
-    validationStep > checkoutStep &&
+    blockScalarChildValue(lines, rollbackVersion[0], rollbackVersion[1], "required") === "false" &&
+    blockScalarChildValue(lines, rollbackVersion[0], rollbackVersion[1], "default") === "" &&
+    blockScalarChildValue(lines, rollbackVersion[0], rollbackVersion[1], "type") === "string" &&
+    sourceCheckoutStep >= 0 &&
+    rollbackCheckoutStep > sourceCheckoutStep &&
+    validationStep > rollbackCheckoutStep &&
     deployStep > validationStep &&
     recordStep > deployStep &&
+    ensureArtifactStep > recordStep &&
+    uploadArtifactStep > ensureArtifactStep &&
+    reportCheckoutStep >= 0 &&
+    downloadArtifactStep > reportCheckoutStep &&
+    reportCanaryStep > downloadArtifactStep &&
     workflowActionReferencesArePinned(workflow)
   );
 }
@@ -474,9 +566,6 @@ function workflowJobBlocks(lines: WorkflowLine[]): Array<[number, number]> {
 }
 
 function stepRunsDeployAuto(lines: WorkflowLine[], stepStart: number, stepEnd: number): boolean {
-  const inlineRun = lines[stepStart].text.match(/^-\s+run:\s*(.+)$/);
-  if (inlineRun && inlineRun[1].trim() === "pnpm run deploy:auto") return true;
-
   const runIndent = lines[stepStart].indent + 2;
   for (let index = stepStart + 1; index < stepEnd; index += 1) {
     if (lines[index].indent !== runIndent) continue;
@@ -484,7 +573,6 @@ function stepRunsDeployAuto(lines: WorkflowLine[], stepStart: number, stepEnd: n
     if (!run) continue;
 
     const value = run[1].trim();
-    if (value === "pnpm run deploy:auto") return true;
     if (value !== "|" && value !== ">") continue;
 
     for (let commandIndex = index + 1; commandIndex < stepEnd; commandIndex += 1) {
@@ -584,24 +672,6 @@ function stepHasEnvKeys(lines: WorkflowLine[], stepStart: number, stepEnd: numbe
     if (key) found.add(key[1]);
   }
   return keys.every((key) => found.has(key));
-}
-
-function workflowHasCloudflareDeployAutoStep(workflow: string): boolean {
-  const lines = workflowLines(workflow);
-  for (const [jobStart, jobEnd] of workflowJobBlocks(lines)) {
-    const steps = childBlock(lines, jobStart, jobEnd, "steps");
-    if (!steps) continue;
-
-    for (const [stepStart, stepEnd] of stepBlocks(lines, steps[0], steps[1])) {
-      if (
-        stepRunsDeployAuto(lines, stepStart, stepEnd) &&
-        stepHasEnvKeys(lines, stepStart, stepEnd, ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"])
-      ) {
-        return true;
-      }
-    }
-  }
-  return false;
 }
 
 function workflowHasGitDefaultBranchConfig(workflow: string): boolean {
@@ -1083,7 +1153,6 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     check(
       "production deploy workflow",
       workflowDeploysSuccessfulCiSha(inputs.productionDeployWorkflow) &&
-        workflowHasCloudflareDeployAutoStep(inputs.productionDeployWorkflow) &&
         workflowHasGitDefaultBranchConfig(inputs.productionDeployWorkflow) &&
         workflowUsesCorepackPnpmSetup(inputs.productionDeployWorkflow),
       ".github/workflows/production-deploy.yml must deploy only an exact successful main-branch CI SHA, validate exact-SHA manual dispatches, pin every action, run deploy:auto with Cloudflare credentials, and record the released SHA."

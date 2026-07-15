@@ -15,6 +15,8 @@ import {
 
 const CHECKOUT_ACTION = "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10";
 const SETUP_NODE_ACTION = "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38";
+const UPLOAD_ARTIFACT_ACTION = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
+const DOWNLOAD_ARTIFACT_ACTION = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c";
 
 function secureProductionDeployWorkflow(): string {
   return [
@@ -29,10 +31,10 @@ function secureProductionDeployWorkflow(): string {
     "      source_sha:",
     "        required: true",
     "        type: string",
-    "      allow_rollback:",
-    "        required: true",
-    "        default: false",
-    "        type: boolean",
+    "      rollback_version_id:",
+    "        required: false",
+    "        default: ''",
+    "        type: string",
     "permissions:",
     "  actions: read",
     "  contents: read",
@@ -41,6 +43,7 @@ function secureProductionDeployWorkflow(): string {
     "  GIT_CONFIG_KEY_0: init.defaultBranch",
     "  GIT_CONFIG_VALUE_0: main",
     "  SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.source_sha }}",
+    "  ROLLBACK_VERSION_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.rollback_version_id || '' }}",
     "jobs:",
     "  deploy:",
     "    if: (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.path == '.github/workflows/ci.yml') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')",
@@ -48,24 +51,37 @@ function secureProductionDeployWorkflow(): string {
     "    environment: production",
     "    steps:",
     `      - uses: ${CHECKOUT_ACTION} # v6`,
+    "        if: env.ROLLBACK_VERSION_ID == ''",
     "        with:",
     "          ref: ${{ env.SOURCE_SHA }}",
+    "          fetch-depth: 0",
+    "          persist-credentials: false",
+    `      - uses: ${CHECKOUT_ACTION} # v6`,
+    "        if: env.ROLLBACK_VERSION_ID != ''",
+    "        with:",
+    "          ref: ${{ github.workflow_sha }}",
     "          fetch-depth: 0",
     "          persist-credentials: false",
     "      - name: Validate release source",
     "        env:",
     "          GH_TOKEN: ${{ github.token }}",
-    "          ALLOW_ROLLBACK: ${{ inputs.allow_rollback || false }}",
     "          WORKFLOW_RUN_PATH: ${{ github.event.workflow_run.path }}",
     "        run: |",
     "          grep -Eq '^[0-9a-f]{40}$' <<<\"$SOURCE_SHA\"",
     "          git fetch --no-tags origin main",
     "          git merge-base --is-ancestor \"$SOURCE_SHA\" origin/main",
     "          test \"$WORKFLOW_RUN_PATH\" = '.github/workflows/ci.yml' || test \"$GITHUB_EVENT_NAME\" = 'workflow_dispatch'",
-    "          test \"$(git rev-parse origin/main)\" = \"$SOURCE_SHA\" || test \"$ALLOW_ROLLBACK\" = \"true\"",
-    "          gh run list --workflow .github/workflows/ci.yml --branch main --commit \"$SOURCE_SHA\" --event push --status success",
-    "          required_checks='[\"coverage\",\"e2e\",\"build-storybook\"]'",
-    "          gh api \"repos/$GITHUB_REPOSITORY/commits/$SOURCE_SHA/check-runs\"",
+    "          test -z \"$ROLLBACK_VERSION_ID\" || test \"$(git rev-parse HEAD)\" = \"$(git rev-parse origin/main)\"",
+    "          ci_runs=\"$(gh run list --workflow .github/workflows/ci.yml --branch main --commit \"$SOURCE_SHA\" --event push --status success --limit 100 --json databaseId,headSha)\"",
+    "          ci_run_id=\"$(jq -er --arg source_sha \"$SOURCE_SHA\" '[.[] | select(.headSha == $source_sha)] | first | .databaseId' <<<\"$ci_runs\")\"",
+    "          ci_jobs=\"$(gh run view \"$ci_run_id\" --json jobs)\"",
+    "          required_job=coverage",
+    "          required_job=e2e",
+    "          jq -e --arg required_job \"$required_job\" '[.jobs[] | select(.name == $required_job and .conclusion == \"success\")] | length == 1' <<<\"$ci_jobs\"",
+    "          storybook_runs=\"$(gh run list --workflow .github/workflows/storybook.yml --branch main --commit \"$SOURCE_SHA\" --event push --status success --limit 100 --json databaseId,headSha)\"",
+    "          storybook_run_id=\"$(jq -er --arg source_sha \"$SOURCE_SHA\" '[.[] | select(.headSha == $source_sha)] | first | .databaseId' <<<\"$storybook_runs\")\"",
+    "          storybook_jobs=\"$(gh run view \"$storybook_run_id\" --json jobs)\"",
+    "          jq -e '[.jobs[] | select(.name == \"build-storybook\" and .conclusion == \"success\")] | length == 1' <<<\"$storybook_jobs\"",
     `      - uses: ${SETUP_NODE_ACTION} # v6`,
     "        with:",
     "          node-version: '22'",
@@ -75,13 +91,32 @@ function secureProductionDeployWorkflow(): string {
     "          corepack prepare pnpm@10.28.1 --activate",
     "      - name: Deploy to Cloudflare Workers",
     "        env:",
-    "          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
     "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
-    "        run: pnpm run deploy:auto",
+    "          CLOUDFLARE_D1_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}",
+    "          CLOUDFLARE_WORKERS_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}",
+    "        run: |",
+    "          if [ -n \"$ROLLBACK_VERSION_ID\" ]; then",
+    "            pnpm run deploy:auto -- --rollback-version-id \"$ROLLBACK_VERSION_ID\"",
+    "          else",
+    "            pnpm run deploy:auto",
+    "          fi",
     "      - name: Record release source",
+    "        if: always()",
     "        run: printf 'Source SHA: `%s`\\n' \"$SOURCE_SHA\" >> \"$GITHUB_STEP_SUMMARY\"",
+    "      - name: Ensure release artifact exists",
+    "        if: always()",
+    "        run: |",
+    "          mkdir -p mcp-oauth-canary-artifacts",
+    "          test -f mcp-oauth-canary-artifacts/production-release.json || jq -n --arg source_sha \"$SOURCE_SHA\" '{status: \"failed_before_stage\", sourceSha: $source_sha, phase: \"validate\", reviewedMigrations: [], migrationApply: \"not_started\", databaseRollbackSupported: false, failure: \"Release workflow failed before the orchestrator wrote an artifact.\"}' > mcp-oauth-canary-artifacts/production-release.json",
+    "      - name: Upload MCP OAuth canary artifacts",
+    "        if: always()",
+    `        uses: ${UPLOAD_ARTIFACT_ACTION} # v7`,
+    "        with:",
+    "          name: mcp-oauth-canary-artifacts",
+    "          path: mcp-oauth-canary-artifacts/",
+    "          if-no-files-found: error",
     "  report-canary:",
-    "    if: always()",
+    "    if: always() && needs.deploy.result != 'skipped'",
     "    needs: deploy",
     "    permissions:",
     "      contents: read",
@@ -90,7 +125,7 @@ function secureProductionDeployWorkflow(): string {
     "    steps:",
     `      - uses: ${CHECKOUT_ACTION} # v6`,
     "        with:",
-    "          ref: ${{ env.SOURCE_SHA }}",
+    "          ref: ${{ github.workflow_sha }}",
     "          persist-credentials: false",
     `      - uses: ${SETUP_NODE_ACTION} # v6`,
     "        with:",
@@ -99,6 +134,20 @@ function secureProductionDeployWorkflow(): string {
     "        run: |",
     "          corepack enable",
     "          corepack prepare pnpm@10.28.1 --activate",
+    "      - name: Download MCP OAuth canary artifacts",
+    `        uses: ${DOWNLOAD_ARTIFACT_ACTION} # v8`,
+    "        continue-on-error: true",
+    "        with:",
+    "          name: mcp-oauth-canary-artifacts",
+    "          path: mcp-oauth-canary-artifacts",
+    "      - name: Report MCP OAuth canary",
+    "        if: always()",
+    "        env:",
+    "          GITHUB_TOKEN: ${{ github.token }}",
+    "          MCP_CANARY_STATUS: ${{ needs.deploy.result }}",
+    "          MCP_CANARY_WORKFLOW_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+    "          MCP_CANARY_ARTIFACT_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts",
+    "        run: node scripts/report-mcp-oauth-canary.mjs --artifact-dir mcp-oauth-canary-artifacts --status \"$MCP_CANARY_STATUS\" --workflow-run-url \"$MCP_CANARY_WORKFLOW_RUN_URL\" --artifact-url \"$MCP_CANARY_ARTIFACT_URL\" --manage-issue",
   ].join("\n");
 }
 
@@ -675,10 +724,7 @@ describe("deployment preflight", () => {
 
   it("accepts deploy:auto from a block-style secure production workflow run step", () => {
     const inputs = validInputs();
-    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
-      "        run: pnpm run deploy:auto",
-      "        run: |\n          pnpm run deploy:auto",
-    );
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow();
 
     const result = validateDeploymentConfig(inputs);
 
@@ -689,7 +735,7 @@ describe("deployment preflight", () => {
     ["a required manual source SHA", "        required: true", "        required: false"],
     ["manual dispatch inputs", "    inputs:", "    invalid_inputs:"],
     ["the source_sha input", "      source_sha:", "      invalid_source_sha:"],
-    ["an explicit rollback input", "      allow_rollback:", "      invalid_allow_rollback:"],
+    ["an explicit rollback version input", "      rollback_version_id:", "      invalid_rollback_version_id:"],
     [
       "a successful workflow-run conclusion",
       "github.event.workflow_run.conclusion == 'success'",
@@ -698,6 +744,7 @@ describe("deployment preflight", () => {
     ["an exact-SHA checkout", "          ref: ${{ env.SOURCE_SHA }}", "          ref: main"],
     ["a credential-free checkout", "          persist-credentials: false", "          persist-credentials: true"],
     ["the protected production environment", "    environment: production", "    environment: preview"],
+    ["report-only issue write access", "      issues: write", "      issues: read"],
     [
       "the canonical CI workflow path",
       "github.event.workflow_run.path == '.github/workflows/ci.yml'",
@@ -709,16 +756,17 @@ describe("deployment preflight", () => {
       "github.event_name == 'workflow_dispatch'",
     ],
     [
-      "automatic current-main freshness or explicit rollback",
-      "test \"$(git rev-parse origin/main)\" = \"$SOURCE_SHA\" || test \"$ALLOW_ROLLBACK\" = \"true\"",
-      "git merge-base --is-ancestor \"$SOURCE_SHA\" origin/main",
+      "trusted current-main rollback tooling",
+      "test -z \"$ROLLBACK_VERSION_ID\" || test \"$(git rev-parse HEAD)\" = \"$(git rev-parse origin/main)\"",
+      "test -z \"$ROLLBACK_VERSION_ID\"",
     ],
     [
       "a successful push-CI lookup for manual releases",
       "gh run list --workflow .github/workflows/ci.yml --branch main --commit \"$SOURCE_SHA\" --event push --status success",
       "gh run list --workflow .github/workflows/ci.yml --branch main",
     ],
-    ["all required branch checks", "required_checks='[\"coverage\",\"e2e\",\"build-storybook\"]'", "required_checks='[]'"],
+    ["exact canonical CI jobs", "gh run view \"$ci_run_id\" --json jobs", "gh run view \"$ci_run_id\" --json conclusion"],
+    ["the exact canonical Storybook run", "gh run view \"$storybook_run_id\" --json jobs", "gh run view \"$storybook_run_id\" --json conclusion"],
     ["immutable action references", CHECKOUT_ACTION, "actions/checkout@v6"],
   ])("requires %s", (_name, expected, replacement) => {
     const inputs = validInputs();
@@ -744,8 +792,8 @@ describe("deployment preflight", () => {
   it("rejects a disabled production deploy step", () => {
     const inputs = validInputs();
     inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
-      "        run: pnpm run deploy:auto",
-      "        if: ${{ false }}\n        run: pnpm run deploy:auto",
+      "      - name: Deploy to Cloudflare Workers\n        env:",
+      "      - name: Deploy to Cloudflare Workers\n        if: ${{ false }}\n        env:",
     );
 
     const result = validateDeploymentConfig(inputs);
@@ -781,23 +829,76 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
   });
 
-  it("accepts a secure production workflow whose deploy command is an inline step", () => {
+  it.each([
+    [
+      "an always-running release source record",
+      "      - name: Record release source\n        if: always()",
+      "      - name: Record release source",
+    ],
+    [
+      "a fallback release artifact",
+      "      - name: Ensure release artifact exists",
+      "      - name: Ignore missing release artifact",
+    ],
+    [
+      "a non-skipped report gate",
+      "    if: always() && needs.deploy.result != 'skipped'",
+      "    if: always()",
+    ],
+    [
+      "a stable report checkout",
+      "          ref: ${{ github.workflow_sha }}",
+      "          ref: ${{ env.SOURCE_SHA }}",
+    ],
+    [
+      "failure-tolerant artifact download",
+      "        continue-on-error: true",
+      "        continue-on-error: false",
+    ],
+    [
+      "an always-running report step",
+      "      - name: Report MCP OAuth canary\n        if: always()",
+      "      - name: Report MCP OAuth canary",
+    ],
+  ])("requires %s", (_name, expected, replacement) => {
     const inputs = validInputs();
-    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
-      [
-        "      - name: Deploy to Cloudflare Workers",
-        "        env:",
-        "          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
-        "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
-        "        run: pnpm run deploy:auto",
-      ].join("\n"),
-      [
-        "      - run: pnpm run deploy:auto",
-        "        env:",
-        "          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
-        "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
-      ].join("\n"),
-    );
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(expected, replacement);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it.each([
+    [
+      "top-level permissions",
+      "permissions:\n  actions: read\n  contents: read",
+      "invalid_permissions:\n  actions: read\n  contents: read",
+    ],
+    ["the report job", "  report-canary:", "  invalid-report-canary:"],
+    [
+      "the report steps block",
+      `    runs-on: ubuntu-latest\n    steps:\n      - uses: ${CHECKOUT_ACTION} # v6`,
+      `    runs-on: ubuntu-latest\n    invalid_steps:\n      - uses: ${CHECKOUT_ACTION} # v6`,
+    ],
+    [
+      "the deploy condition",
+      "    if: (github.event_name == 'workflow_run'",
+      "    invalid_if: (github.event_name == 'workflow_run'",
+    ],
+    ["the deploy steps block", "    steps:\n", "    invalid_steps:\n"],
+  ])("rejects a secure-looking workflow without %s", (_name, expected, replacement) => {
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(expected, replacement);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it("accepts the guarded normal and rollback deploy commands", () => {
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow();
 
     const result = validateDeploymentConfig(inputs);
 
@@ -807,21 +908,8 @@ describe("deployment preflight", () => {
   it("rejects a secure production workflow whose block deploy step never deploys", () => {
     const inputs = validInputs();
     inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
-      [
-        "      - name: Deploy to Cloudflare Workers",
-        "        env:",
-        "          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
-        "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
-        "        run: pnpm run deploy:auto",
-      ].join("\n"),
-      [
-        "      - name: Deploy to Cloudflare Workers",
-        "        run: |",
-        "          echo no-deploy-command",
-        "        env:",
-        "          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
-        "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
-      ].join("\n"),
+      "          else\n            pnpm run deploy:auto",
+      "          else\n            echo no-deploy-command",
     );
 
     const result = validateDeploymentConfig(inputs);
@@ -845,13 +933,15 @@ describe("deployment preflight", () => {
     const inputs = validInputs();
     inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
       [
-        "          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
         "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+        "          CLOUDFLARE_D1_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}",
+        "          CLOUDFLARE_WORKERS_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}",
       ].join("\n"),
       [
-        "          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+        "          CLOUDFLARE_D1_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}",
         "          nested:",
         "            CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+        "            CLOUDFLARE_WORKERS_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}",
         "          - malformed-env-line",
       ].join("\n"),
     );

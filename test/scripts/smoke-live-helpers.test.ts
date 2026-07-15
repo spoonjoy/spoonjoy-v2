@@ -19,6 +19,8 @@ import {
   buildCleanupD1Args,
   buildUserCountD1Args,
   buildWorkerVersionOverrideHeaders,
+  buildBrowserEnvironment,
+  buildD1CommandEnvironment,
   createWorkerVersionResponseTracker,
   decideMcpCanaryIssueAction,
   findMcpCanarySecretLeaks,
@@ -41,6 +43,36 @@ import {
 const CANDIDATE_VERSION = "22222222-2222-4222-8222-222222222222";
 
 describe("smoke-live helpers", () => {
+  it("isolates the D1 token from Chromium and the Workers token from D1 commands", () => {
+    const env = {
+      PATH: "/test/bin",
+      CLOUDFLARE_ACCOUNT_ID: "account-id",
+      CLOUDFLARE_API_TOKEN: "legacy-token",
+      CLOUDFLARE_D1_API_TOKEN: "d1-token",
+      CLOUDFLARE_WORKERS_API_TOKEN: "workers-token",
+      CF_API_KEY: "api-key",
+      CF_API_TOKEN: "cf-token",
+      CLOUDFLARE_EMAIL: "ari@example.test",
+      SAFE_VALUE: "visible",
+    };
+
+    expect(buildD1CommandEnvironment(env)).toEqual({
+      PATH: "/test/bin",
+      CLOUDFLARE_ACCOUNT_ID: "account-id",
+      CLOUDFLARE_API_TOKEN: "d1-token",
+      SAFE_VALUE: "visible",
+    });
+    expect(buildBrowserEnvironment(env)).toEqual({
+      PATH: "/test/bin",
+      SAFE_VALUE: "visible",
+    });
+    expect(buildD1CommandEnvironment({ PATH: "/test/bin", CLOUDFLARE_API_TOKEN: "legacy-token" })).toEqual({
+      PATH: "/test/bin",
+      CLOUDFLARE_API_TOKEN: "legacy-token",
+    });
+    expect(buildD1CommandEnvironment({ PATH: "/test/bin" })).toEqual({ PATH: "/test/bin" });
+  });
+
   it("detects local D1 targets from localhost base URLs", () => {
     expect(usesLocalD1("http://localhost:5173")).toBe(true);
     expect(usesLocalD1("http://127.0.0.1:5173")).toBe(true);
@@ -575,6 +607,8 @@ describe("smoke-live helpers", () => {
     expect(source).toContain("responseTracker.assertAll(\"complete browser flow\")");
     expect(source).toContain("maxRedirects: 0");
     expect(source).toContain('serviceWorkers: "block"');
+    expect(source).toContain("env: buildBrowserEnvironment(process.env)");
+    expect(source).toContain("env: buildD1CommandEnvironment(process.env)");
     expect(source.indexOf('check("candidate Worker override readiness"')).toBeLessThan(
       source.indexOf("canaryMutationStarted = true"),
     );

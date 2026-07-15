@@ -44,6 +44,7 @@ describe("UI audit tooling", () => {
       scripts?: Record<string, string>;
     };
     const productionDeploy = readFileSync(".github/workflows/production-deploy.yml", "utf8");
+    const productionRelease = readFileSync("scripts/deploy-production-canary.ts", "utf8");
     const canaryWorkflow = readFileSync(".github/workflows/mcp-oauth-canary.yml", "utf8");
     const auditWorkflow = readFileSync(".github/workflows/mcp-oauth-d1-audit.yml", "utf8");
 
@@ -53,7 +54,8 @@ describe("UI audit tooling", () => {
     expect(packageJson.scripts?.["audit:mcp:oauth"]).toBe(
       "node scripts/audit-mcp-oauth-d1.mjs --target-env production --base-url https://spoonjoy.app",
     );
-    expect(productionDeploy).toContain("pnpm run smoke:mcp:oauth -- --out mcp-oauth-canary-artifacts");
+    expect(productionDeploy).toContain("pnpm run deploy:auto");
+    expect(productionRelease).toContain('"run", "smoke:mcp:oauth"');
     expect(productionDeploy).toContain("node scripts/report-mcp-oauth-canary.mjs");
     expect(productionDeploy).toContain("issues: write");
     expect(productionDeploy).toContain("path: mcp-oauth-canary-artifacts/");

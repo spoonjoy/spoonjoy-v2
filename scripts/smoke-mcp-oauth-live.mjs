@@ -9,6 +9,8 @@ import { promisify } from "node:util";
 
 import {
   assertWorkerVersionResponse,
+  buildBrowserEnvironment,
+  buildD1CommandEnvironment,
   buildMcpCanaryCleanupD1Args,
   buildMcpCanaryConnectionResourceD1Args,
   buildMcpCanaryLegacyRefreshInsertD1Args,
@@ -119,6 +121,7 @@ async function responseJson(response, label) {
 async function runWranglerD1(args) {
   const { stdout, stderr } = await execFileAsync("pnpm", args, {
     encoding: "utf8",
+    env: buildD1CommandEnvironment(process.env),
     maxBuffer: 1024 * 1024 * 4,
   });
   return { stdout, stderr };
@@ -458,7 +461,10 @@ async function main() {
   };
 
   try {
-    browser = await chromium.launch({ headless: true });
+    browser = await chromium.launch({
+      headless: true,
+      env: buildBrowserEnvironment(process.env),
+    });
     context = await browser.newContext({
       serviceWorkers: "block",
       viewport: { width: 1440, height: 900 },

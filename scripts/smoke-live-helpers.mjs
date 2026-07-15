@@ -30,6 +30,34 @@ const WORKER_VERSION_OVERRIDE_HEADER = "Cloudflare-Workers-Version-Overrides";
 const WORKER_VERSION_RESPONSE_HEADER = "X-Spoonjoy-Worker-Version";
 const WORKER_VERSION_READINESS_TIMEOUT_MS = 20_000;
 const WORKER_VERSION_READINESS_INTERVAL_MS = 500;
+const CLOUDFLARE_SECRET_ENV_NAMES = [
+  "CF_API_KEY",
+  "CF_API_TOKEN",
+  "CLOUDFLARE_API_KEY",
+  "CLOUDFLARE_API_TOKEN",
+  "CLOUDFLARE_D1_API_TOKEN",
+  "CLOUDFLARE_EMAIL",
+  "CLOUDFLARE_WORKERS_API_TOKEN",
+];
+
+function withoutCloudflareSecrets(env) {
+  const sanitized = { ...env };
+  for (const name of CLOUDFLARE_SECRET_ENV_NAMES) delete sanitized[name];
+  return sanitized;
+}
+
+export function buildD1CommandEnvironment(env) {
+  const token = env.CLOUDFLARE_D1_API_TOKEN ?? env.CLOUDFLARE_API_TOKEN;
+  const scoped = withoutCloudflareSecrets(env);
+  if (token) scoped.CLOUDFLARE_API_TOKEN = token;
+  return scoped;
+}
+
+export function buildBrowserEnvironment(env) {
+  const scoped = withoutCloudflareSecrets(env);
+  delete scoped.CLOUDFLARE_ACCOUNT_ID;
+  return scoped;
+}
 
 function normalizeWorkerVersionId(value) {
   if (typeof value !== "string" || !WORKER_VERSION_UUID.test(value)) {

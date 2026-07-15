@@ -11,11 +11,11 @@ on:
         description: Exact successful main-branch SHA to release
         required: true
         type: string
-      allow_rollback:
-        description: Permit an older successful main SHA for an intentional rollback
-        required: true
-        default: false
-        type: boolean
+      rollback_version_id:
+        description: Existing source-tagged Worker version ID for an intentional rollback
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   group: production-deploy
@@ -30,6 +30,7 @@ env:
   GIT_CONFIG_KEY_0: init.defaultBranch
   GIT_CONFIG_VALUE_0: main
   SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.source_sha }}
+  ROLLBACK_VERSION_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.rollback_version_id || '' }}
 
 jobs:
   deploy:
@@ -41,16 +42,24 @@ jobs:
 
     steps:
       - name: Checkout approved source SHA
+        if: env.ROLLBACK_VERSION_ID == ''
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           ref: ${{ env.SOURCE_SHA }}
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Checkout trusted rollback tooling
+        if: env.ROLLBACK_VERSION_ID != ''
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
       - name: Validate release source
         env:
           GH_TOKEN: ${{ github.token }}
-          ALLOW_ROLLBACK: ${{ inputs.allow_rollback || false }}
           WORKFLOW_RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           WORKFLOW_RUN_EVENT: ${{ github.event.workflow_run.event }}
           WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
@@ -63,6 +72,10 @@ jobs:
             echo "source_sha must be an exact 40-character lowercase Git SHA" >&2
             exit 1
           fi
+          if [ -n "$ROLLBACK_VERSION_ID" ] && ! printf '%s' "$ROLLBACK_VERSION_ID" | grep -Eiq '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'; then
+            echo "rollback_version_id must be an exact Worker version UUID" >&2
+            exit 1
+          fi
 
           git fetch --no-tags origin main:refs/remotes/origin/main
           if ! git merge-base --is-ancestor "$SOURCE_SHA" origin/main; then
@@ -72,41 +85,52 @@ jobs:
 
           test "$WORKFLOW_RUN_PATH" = '.github/workflows/ci.yml' || test "$GITHUB_EVENT_NAME" = 'workflow_dispatch'
           if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
+            test -z "$ROLLBACK_VERSION_ID"
             test "$WORKFLOW_RUN_CONCLUSION" = "success"
             test "$WORKFLOW_RUN_EVENT" = "push"
             test "$WORKFLOW_RUN_HEAD_BRANCH" = "main"
             test "$WORKFLOW_RUN_HEAD_SHA" = "$SOURCE_SHA"
             test "$(git rev-parse origin/main)" = "$SOURCE_SHA"
+            test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           else
-            test "$(git rev-parse origin/main)" = "$SOURCE_SHA" || test "$ALLOW_ROLLBACK" = "true"
+            if [ -z "$ROLLBACK_VERSION_ID" ]; then
+              test "$(git rev-parse origin/main)" = "$SOURCE_SHA"
+              test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+            else
+              test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+            fi
           fi
 
-          matching_runs="$(
-            gh run list --workflow .github/workflows/ci.yml --branch main --commit "$SOURCE_SHA" --event push --status success --limit 100 --json headSha |
-              jq --arg source_sha "$SOURCE_SHA" '[.[] | select(.headSha == $source_sha)] | length'
-          )"
-          if [ "$matching_runs" -lt 1 ]; then
+          ci_runs="$(gh run list --workflow .github/workflows/ci.yml --branch main --commit "$SOURCE_SHA" --event push --status success --limit 100 --json databaseId,headSha)"
+          if ! ci_run_id="$(jq -er --arg source_sha "$SOURCE_SHA" '[.[] | select(.headSha == $source_sha)] | first | .databaseId' <<<"$ci_runs")"; then
             echo "Source SHA has no successful canonical main-branch CI run" >&2
             exit 1
           fi
+          ci_jobs="$(gh run view "$ci_run_id" --json jobs)"
+          for required_job in coverage e2e; do
+            if ! jq -e --arg required_job "$required_job" '[.jobs[] | select(.name == $required_job and .conclusion == "success")] | length == 1' <<<"$ci_jobs" >/dev/null; then
+              echo "Canonical CI run $ci_run_id is missing successful job: $required_job" >&2
+              exit 1
+            fi
+          done
 
-          required_checks='["coverage","e2e","build-storybook"]'
           for attempt in $(seq 1 30); do
-            check_runs="$(gh api --method GET "repos/$GITHUB_REPOSITORY/commits/$SOURCE_SHA/check-runs?per_page=100")"
-            missing_checks="$(
-              jq --argjson required "$required_checks" \
-                '$required - ([.check_runs[] | select(.conclusion == "success") | .name] | unique)' \
-                <<<"$check_runs"
-            )"
-            if [ "$missing_checks" = "[]" ]; then
+            storybook_runs="$(gh run list --workflow .github/workflows/storybook.yml --branch main --commit "$SOURCE_SHA" --event push --status success --limit 100 --json databaseId,headSha)"
+            storybook_run_id="$(jq -er --arg source_sha "$SOURCE_SHA" '[.[] | select(.headSha == $source_sha)] | first | .databaseId' <<<"$storybook_runs" 2>/dev/null || true)"
+            if [ -n "$storybook_run_id" ]; then
               break
             fi
             if [ "$attempt" -eq 30 ]; then
-              echo "Required successful checks are missing: $missing_checks" >&2
+              echo "Source SHA has no successful canonical Storybook run" >&2
               exit 1
             fi
             sleep 10
           done
+          storybook_jobs="$(gh run view "$storybook_run_id" --json jobs)"
+          if ! jq -e '[.jobs[] | select(.name == "build-storybook" and .conclusion == "success")] | length == 1' <<<"$storybook_jobs" >/dev/null; then
+            echo "Canonical Storybook run $storybook_run_id is missing successful build-storybook" >&2
+            exit 1
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -129,11 +153,17 @@ jobs:
 
       - name: Deploy staged release to Cloudflare Workers
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_D1_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+          CLOUDFLARE_WORKERS_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
           SPOONJOY_RELEASE_SHA: ${{ env.SOURCE_SHA }}
           SPOONJOY_MCP_CANARY_BASE_URL: https://spoonjoy.app
-        run: pnpm run deploy:auto
+        run: |
+          if [ -n "$ROLLBACK_VERSION_ID" ]; then
+            pnpm run deploy:auto -- --rollback-version-id "$ROLLBACK_VERSION_ID"
+          else
+            pnpm run deploy:auto
+          fi
 
       - name: Record release source
         if: always()
@@ -141,6 +171,18 @@ jobs:
           # Markdown backticks are intentional literals in the step summary.
           # shellcheck disable=SC2016
           printf 'Source SHA: `%s`\n' "$SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Ensure release artifact exists
+        if: always()
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p mcp-oauth-canary-artifacts
+          if [ ! -f mcp-oauth-canary-artifacts/production-release.json ]; then
+            jq -n --arg source_sha "$SOURCE_SHA" \
+              '{status: "failed_before_stage", sourceSha: $source_sha, phase: "validate", reviewedMigrations: [], migrationApply: "not_started", databaseRollbackSupported: false, failure: "Release workflow failed before the orchestrator wrote an artifact."}' \
+              > mcp-oauth-canary-artifacts/production-release.json
+          fi
 
       - name: Upload MCP OAuth canary artifacts
         if: always()
@@ -153,7 +195,7 @@ jobs:
 
   report-canary:
     name: report-canary
-    if: always()
+    if: always() && needs.deploy.result != 'skipped'
     needs: deploy
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -165,7 +207,7 @@ jobs:
       - name: Checkout released source SHA
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
-          ref: ${{ env.SOURCE_SHA }}
+          ref: ${{ github.workflow_sha }}
           persist-credentials: false
 
       - name: Setup Node.js
@@ -180,11 +222,13 @@ jobs:
 
       - name: Download MCP OAuth canary artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        continue-on-error: true
         with:
           name: mcp-oauth-canary-artifacts
           path: mcp-oauth-canary-artifacts
 
       - name: Report MCP OAuth canary
+        if: always()
         env:
           GITHUB_TOKEN: ${{ github.token }}
           MCP_CANARY_STATUS: ${{ needs.deploy.result }}
