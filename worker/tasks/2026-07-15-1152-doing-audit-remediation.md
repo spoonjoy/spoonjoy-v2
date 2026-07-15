@@ -64,7 +64,7 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 
 **CRITICAL: Every unit header starts with a status marker.**
 
-### ⬜ Unit 0: Rebaseline, Ownership, And Private Inventory
+### ✅ Unit 0: Rebaseline, Ownership, And Private Inventory
 **What**: Fetch both remotes, compare current remote heads with audited SHAs, reconcile branch drift without discarding concurrent work, refresh the finding/file map, inspect worktree ownership, inventory every proposed artifact removal, privately scan tracked databases/environment backups/generated evidence without printing values, instantiate the planning rollback matrix with current refs/builds, and initiate all five human-only actions at their earliest available prerequisite while independent work continues.
 **Output**: Evidence index entries for audited/current SHAs, branch/worktree classification, redacted scan result, removal manifests, callback/provider configuration baseline, known-good refs/build, compatibility constraints, and rollback commands/checks.
 **Acceptance**: Both remediation branches contain current remote heads; every removal has `remove`, `preserve`, or `human-review` disposition; dirty/unmerged work is excluded; confirmed secrets are rotated before deletion or marked `BLOCKED_HUMAN`; no user data is printed; every rollback row has an executable trigger/mechanic/proof.
@@ -477,3 +477,4 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 - 2026-07-15 12:16 Created from approved planning doc
 - 2026-07-15 12:29 Split OAuth, cross-repo contracts, repository cleanup, extraction, and advisory work into independent TDD PRs; made coverage/warning and release trust-chain gates concrete.
 - 2026-07-15 12:34 Fresh doing-doc re-review passed; execution is ready.
+- 2026-07-15 12:43 Unit 0 complete: remotes match audited heads, active concurrent work is excluded, redacted current-tree scans and removal manifests are recorded, rollback refs are instantiated, and all human-only actions have initial dispositions.

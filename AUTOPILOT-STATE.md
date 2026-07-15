@@ -24,7 +24,7 @@ Close every actionable 2026-07-15 shipped-work audit finding across Spoonjoy web
 
 ## Next Action
 
-Begin Unit 0 rebaseline, private inventory, rollback instantiation, and human-action initiation.
+Begin Unit 1a with failing web release-containment and immutable-revision contract tests.
 
 ## Hard Exceptions
 
@@ -39,6 +39,7 @@ Begin Unit 0 rebaseline, private inventory, rollback instantiation, and human-ac
 - Audit verified production web deployment at `b22c5fec` and TestFlight build 35 from native `bad81b49`.
 - Operations exploration found roughly 57.5 MiB of tracked web task evidence and 296 MiB of tracked native task/evidence roots, including a tracked SQLite database and environment backups requiring private secret triage.
 - Native exploration confirmed the 5 MiB server image limit conflicts with native's raw HEIC/25 MiB staging path and mapped executable test seams for image normalization, single-flight mutation state, provider-specific OAuth, form semantics, screenshot routes, and release metadata.
+- Unit 0 complete: remote heads match the audit, concurrent Clem work is excluded, redacted scans found no confirmed live current-tree credential, and removal manifests cover 944 web paths plus 4,074 native paths.
 
 ## Stop Condition
 
