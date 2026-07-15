@@ -172,6 +172,32 @@ describe('RecipeHeader', () => {
       expect(badge.className).not.toContain('bg-[color-mix(in_srgb,var(--sj-panel-solid)_92%,transparent)]')
     })
 
+    it('normalizes stale cookbook and counter labels before rendering the cover badge', () => {
+      const { rerender } = renderWithRouter(
+        <RecipeHeader
+          {...defaultProps}
+          coverImageUrl="https://example.com/generated-recipe.jpg"
+          coverProvenanceLabel="Spoonjoy cookbook"
+        />
+      )
+
+      expect(screen.getByTestId('cover-provenance-badge')).toHaveTextContent('Saved cover')
+      expect(screen.queryByText('Spoonjoy cookbook')).toBeNull()
+
+      rerender(
+        <BrowserRouter>
+          <RecipeHeader
+            {...defaultProps}
+            coverImageUrl="https://example.com/counter-recipe.jpg"
+            coverProvenanceLabel="On the counter"
+          />
+        </BrowserRouter>
+      )
+
+      expect(screen.getByTestId('cover-provenance-badge')).toHaveTextContent('Saved cover')
+      expect(screen.queryByText('On the counter')).toBeNull()
+    })
+
     it('renders placeholder when imageUrl is not provided', () => {
       renderWithRouter(<RecipeHeader {...defaultProps} />)
       expect(screen.getByTestId('recipe-image-placeholder')).toBeInTheDocument()

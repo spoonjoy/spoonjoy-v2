@@ -1485,7 +1485,12 @@ describe("Recipes $id Route", () => {
       });
       const waitUntil = vi.fn();
       const request = await createFormRequest(
-        { intent: "createCoverFromSpoon", spoonId: spoon.id },
+        {
+          intent: "createCoverFromSpoon",
+          spoonId: spoon.id,
+          activateWhenReady: "true",
+          promptAddition: "  brighten   herbs\nand keep the plate  ",
+        },
         testUserId,
       );
 
@@ -1507,6 +1512,72 @@ describe("Recipes $id Route", () => {
         createdById: testUserId,
         status: "processing",
         generationStatus: "processing",
+        promptAddition: "brighten herbs and keep the plate",
+      });
+      await expect(
+        db.recipe.findUniqueOrThrow({
+          where: { id: recipeId },
+          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+        }),
+      ).resolves.toEqual({
+        activeCoverId: activeCover.id,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      });
+      expect(waitUntil).toHaveBeenCalledTimes(1);
+    });
+
+    it("generates an AI placeholder cover candidate from web Photo Studio controls", async () => {
+      const activeCover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "/photos/active.jpg",
+          sourceType: "chef-upload",
+          status: "ready",
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: {
+          activeCoverId: activeCover.id,
+          activeCoverVariant: "image",
+          coverMode: "manual",
+        },
+      });
+      const waitUntil = vi.fn();
+      const request = await createFormRequest(
+        {
+          intent: "generateRecipeCoverPlaceholder",
+          activateWhenReady: "true",
+          promptAddition: "  warm   light\nwith crispy edges  ",
+        },
+        testUserId,
+      );
+
+      const result = await action({
+        request,
+        context: { cloudflare: { env: null, ctx: { waitUntil } } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(result).toEqual(expect.objectContaining({
+        success: true,
+        intent: "generateRecipeCoverPlaceholder",
+        coverId: expect.any(String),
+      }));
+      const cover = await db.recipeCover.findUniqueOrThrow({
+        where: { id: result.coverId },
+      });
+      expect(cover).toMatchObject({
+        recipeId,
+        imageUrl: "",
+        sourceImageUrl: null,
+        sourceType: "ai-placeholder",
+        sourceSpoonId: null,
+        createdById: testUserId,
+        status: "processing",
+        generationStatus: "processing",
+        promptAddition: "warm light with crispy edges",
       });
       await expect(
         db.recipe.findUniqueOrThrow({
@@ -1585,7 +1656,12 @@ describe("Recipes $id Route", () => {
       });
       const waitUntil = vi.fn();
       const request = await createFormRequest(
-        { intent: "regenerateRecipeCover", coverId: cover.id, activateWhenReady: "true" },
+        {
+          intent: "regenerateRecipeCover",
+          coverId: cover.id,
+          activateWhenReady: "true",
+          promptAddition: "  less   shadow\nmore basil  ",
+        },
         testUserId,
       );
 
@@ -1601,6 +1677,8 @@ describe("Recipes $id Route", () => {
           status: "processing",
           generationStatus: "processing",
           failureReason: null,
+          promptAddition: "less shadow more basil",
+          parentCoverId: cover.id,
         });
       await expect(
         db.recipe.findUniqueOrThrow({
