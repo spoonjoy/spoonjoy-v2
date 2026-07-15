@@ -65,51 +65,98 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 **CRITICAL: Every unit header starts with a status marker.**
 
 ### ⬜ Unit 0: Rebaseline, Ownership, And Private Inventory
-**What**: Fetch both remotes, compare current remote heads with audited SHAs, reconcile branch drift without discarding concurrent work, refresh the finding/file map, inspect worktree ownership, inventory every proposed artifact removal, privately scan tracked databases/environment backups/generated evidence without printing values, and instantiate the planning rollback matrix with current refs/builds.
+**What**: Fetch both remotes, compare current remote heads with audited SHAs, reconcile branch drift without discarding concurrent work, refresh the finding/file map, inspect worktree ownership, inventory every proposed artifact removal, privately scan tracked databases/environment backups/generated evidence without printing values, instantiate the planning rollback matrix with current refs/builds, and initiate all five human-only actions at their earliest available prerequisite while independent work continues.
 **Output**: Evidence index entries for audited/current SHAs, branch/worktree classification, redacted scan result, removal manifests, callback/provider configuration baseline, known-good refs/build, compatibility constraints, and rollback commands/checks.
 **Acceptance**: Both remediation branches contain current remote heads; every removal has `remove`, `preserve`, or `human-review` disposition; dirty/unmerged work is excluded; confirmed secrets are rotated before deletion or marked `BLOCKED_HUMAN`; no user data is printed; every rollback row has an executable trigger/mechanic/proof.
 
 ### ⬜ Unit 1a: Web Release-Containment Tests
-**What**: Add failing workflow/source-contract tests proving production deploy cannot run for a `main` SHA until required CI checks for that exact SHA succeed, manual dispatch validates an exact SHA, and deployment records that SHA.
+**What**: Add failing workflow/source-contract tests proving production deploy cannot run for a `main` SHA until required CI checks for that exact SHA succeed, manual dispatch validates an exact SHA, deployment records that SHA, and every mutable action/tool revision in `.github/workflows/ci.yml` and `.github/workflows/production-deploy.yml` is pinned or covered by an explicit reviewed justification.
 **Output**: Focused workflow contract tests under `test/config/` or `test/scripts/`.
 **Acceptance**: Exact focused test command fails against the current independent push-triggered deploy workflow.
 
 ### ⬜ Unit 1b: Web Release-Containment Implementation
-**What**: Gate `.github/workflows/production-deploy.yml` on successful CI for the exact source SHA, retain an exact-SHA validated manual recovery path, and make deployment/smoke evidence record that SHA.
+**What**: Gate `.github/workflows/production-deploy.yml` on successful CI for the exact source SHA, retain an exact-SHA validated manual recovery path, make deployment/smoke evidence record that SHA, and pin or document every remaining mutable CI/deploy action/tool revision.
 **Output**: Workflow/script changes; atomic web PR W1.
 **Acceptance**: Unit 1a passes; a simulated stale/failed/mismatched SHA is rejected; a green exact SHA is accepted; rollback is reverting W1 to the prior trigger.
 
 ### ⬜ Unit 1c: Web Release-Containment Verification
-**What**: Run focused workflow tests, typecheck scripts, full coverage, build, and a fresh security/release reviewer.
+**What**: Run the focused workflow tests, `pnpm run typecheck`, `pnpm run typecheck:scripts`, `pnpm test:coverage`, and `pnpm build`; scan logs for warnings; run a fresh security/release reviewer.
 **Acceptance**: 100% changed-code coverage, zero warnings, reviewer PASS, W1 CI green, W1 merged, and its deployment SHA recorded before later web PRs.
 
 ### ⬜ Unit 2a: Native TestFlight-Containment Tests
-**What**: Add failing source-contract tests proving TestFlight publishes only an explicitly selected SHA with a successful required Native run, release notes match that SHA/build, and the distribution toolkit/actions use immutable revisions.
+**What**: Add failing source-contract tests proving TestFlight publishes only an explicitly selected SHA with a successful required Native run, a non-stale SHA-keyed note artifact is present, and every mutable action/tool revision in `.github/workflows/native.yml` and `.github/workflows/testflight.yml` including the distribution toolkit is pinned or explicitly justified. Unit 2 checks note-to-SHA trust structure; Unit 17 checks final user-facing note freshness/content.
 **Output**: `Tests/SpoonjoyCoreTests/TestFlightAutomationContractTests.swift` and focused workflow contract coverage.
 **Acceptance**: Tests fail against automatic `main` publishing, mutable toolkit checkout, or stale note mapping.
 
 ### ⬜ Unit 2b: Native TestFlight-Containment Implementation
-**What**: Convert TestFlight publishing to an exact-SHA release-candidate dispatch after Native checks, pin the distribution toolkit/actions to reviewed commits, and preserve a documented rollback dispatch.
+**What**: Convert TestFlight publishing to an exact-SHA release-candidate dispatch after Native checks, pin or justify all native/TestFlight workflow actions and the distribution toolkit, require a SHA-keyed note artifact without prescribing final Unit 17 content, and preserve a documented rollback dispatch.
 **Output**: `.github/workflows/testflight.yml`, distribution scripts/config; atomic native PR N1.
 **Acceptance**: Unit 2a passes; no interim native merge can publish; exact-SHA dispatch rejects absent/failed Native runs and accepts a green candidate.
 
 ### ⬜ Unit 2c: Native TestFlight-Containment Verification
-**What**: Run TestFlight contracts, Swift tests, scenario verifier, app-target builds, and fresh release/security review.
-**Acceptance**: Zero warnings, reviewer PASS, N1 CI green and merged, with no unexpected build published.
+**What**: Run TestFlight contracts; `swift test --enable-code-coverage --disable-xctest --parallel -Xswiftc -warnings-as-errors`; `ruby scripts/fail-on-warning.rb --log <swift-log>`; `ruby scripts/enforce-swift-coverage.rb --coverage-json "$(swift test --show-codecov-path)" --minimum 100 --include Sources/SpoonjoyCore`; `scripts/verify-native-scenarios.sh --stage final`; iOS/macOS `xcodebuild` with warnings as errors; and fresh release/security review.
+**Acceptance**: 100% new/changed core coverage, zero warnings, reviewer PASS, N1 CI green and merged, with no unexpected build published.
 
-### ⬜ Unit 3a: Backward-Compatible OAuth Contract Tests
-**What**: Add failing web tests for signed/validated `google|github` provider hints through first-party client validation, redirect preservation, consent, state, PKCE, linking, unknown hints, cancellation, bounded provider calls, timeout/upstream/missing-email taxonomy, dual Apple callback paths, and clean-start rollback.
-**Output**: Focused auth route/lib tests covering outgoing provider URLs, parameters, headers, bodies, and timeout behavior.
-**Acceptance**: Tests fail for absent provider hint, unbounded calls, misleading GitHub email errors, or legacy-only Apple starts.
+### ⬜ Unit 3a: Provider-Hint Contract Tests
+**What**: Add failing tests in `test/routes/oauth-authorize.test.tsx`, `test/lib/oauth-route.server.test.ts`, and related login/auth route tests for signed/validated `google|github` hints, first-party client validation, redirect preservation, consent, state, PKCE, linking, cancellation, and unknown hints; assert outgoing provider URLs/parameters.
+**Acceptance**: Focused tests fail because `/oauth/authorize` cannot route a validated named provider.
 
-### ⬜ Unit 3b: Backward-Compatible OAuth Implementation
-**What**: Implement validated provider routing through `/oauth/authorize`, bounded Google/GitHub exchanges and user-info calls, truthful error classification, dual Apple callback support, clean-start configuration, reconciled docs/environment examples, and legacy rollback.
-**Output**: Web auth route/lib/docs/config changes; atomic web PR W2.
-**Acceptance**: Unit 3a passes; existing clients without hints behave unchanged; invalid hints cannot alter redirect/client/state; legacy Apple callback remains functional.
+### ⬜ Unit 3b: Provider-Hint Implementation
+**What**: Implement only additive provider-hint routing in `app/routes/oauth.authorize.tsx`, `app/lib/oauth-route.server.ts`, and the existing login/provider start seams; clients without hints remain unchanged.
+**Output**: Atomic web PR W2.
+**Acceptance**: Unit 3a reruns green; invalid hints cannot alter client/redirect/state; `pnpm test:coverage`, both typechecks, and build pass with 100% changed-code coverage and zero warnings before the implementation commit.
 
-### ⬜ Unit 3c: OAuth Verification And Callback Registration
-**What**: Run focused/full auth coverage, typecheck/build, fresh security reviewer, register the clean Apple callback through an authorized session, deploy W2, verify both callback paths, switch new starts, and run Google/GitHub/Apple live canaries.
-**Acceptance**: W2 exact SHA is live; all provider starts/callbacks pass; timeout/error telemetry is truthful; clean callback is default with monitored legacy compatibility, or portal registration is durably `BLOCKED_HUMAN` without an unsafe switch.
+### ⬜ Unit 3c: Provider-Hint Verification
+**What**: Run focused auth tests, `pnpm run typecheck`, `pnpm run typecheck:scripts`, `pnpm test:coverage`, `pnpm build`, and fresh auth/security review; merge/deploy W2.
+**Acceptance**: W2 exact SHA is live, provider-hint canaries pass, existing no-hint clients pass, and reviewer returns PASS.
+
+### ⬜ Unit 3d: Provider Resilience Tests
+**What**: Add failing tests in `test/lib/google-oauth.server.test.ts`, `test/lib/github-oauth.server.test.ts`, and callback tests for bounded exchanges/user-info calls, timeout versus upstream failure versus genuinely missing verified email, retry classification, and outgoing request details.
+**Acceptance**: Focused tests fail on unbounded calls or misleading GitHub email classification.
+
+### ⬜ Unit 3e: Provider Resilience Implementation
+**What**: Add bounded provider calls and truthful error taxonomy in `app/lib/google-oauth.server.ts`, `app/lib/github-oauth.server.ts`, and their callback seams without changing successful linking behavior.
+**Output**: Atomic web PR W3.
+**Acceptance**: Unit 3d reruns green; `pnpm test:coverage`, both typechecks, and build pass with 100% changed-code coverage and zero warnings before the implementation commit.
+
+### ⬜ Unit 3f: Provider Resilience Verification
+**What**: Run focused/full web matrices and fresh security/resilience review; merge/deploy W3 and run Google/GitHub success/timeout/error canaries.
+**Acceptance**: W3 exact SHA is live, reviewer PASS, and production error telemetry distinguishes timeout/upstream/missing email.
+
+### ⬜ Unit 3g: Dual Apple Callback Support Tests
+**What**: Add failing tests in `test/routes/auth-apple.test.ts`, `test/routes/redwood-functions-auth-oauth.test.ts`, `test/lib/apple-oauth.server.test.ts`, and `test/lib/oauth-route.server.test.ts` for both callback paths, legacy-default starts, configuration validation, documentation/environment parity, and rollback.
+**Acceptance**: Tests fail because runtime/documented callback contracts drift and clean dual support is not explicit.
+
+### ⬜ Unit 3h: Dual Apple Callback Support Implementation
+**What**: Add backward-compatible support for both social Apple callbacks, reconcile `.env.example`, `DEPLOY.md`, `docs/production-cutover.md`, and runtime source, but keep the legacy Apple start as the default.
+**Output**: Atomic web PR W4.
+**Acceptance**: Unit 3g reruns green; `pnpm test:coverage`, both typechecks, and build pass with 100% changed-code coverage and zero warnings before commit; no generated `redirect_uri` selects an unregistered callback.
+
+### ⬜ Unit 3i: Dual Apple Callback Verification
+**What**: Run focused/full web matrices and fresh security/config review; merge/deploy W4; verify the legacy path and direct clean callback handler without switching starts.
+**Acceptance**: W4 exact SHA is live, legacy production sign-in remains healthy, clean handler is deploy-ready, reviewer PASS.
+
+### ⬜ Unit 3j: Clean Apple Callback Registration And Canary
+**What**: Through an authorized Apple Developer browser session, add the clean callback without removing the legacy one, then canary both paths. If access is unavailable, preserve the exact `BLOCKED_HUMAN` action and continue all independent work.
+**Acceptance**: Portal evidence and both canaries pass before any start switch; no source/config change selects the clean callback early.
+
+### ⬜ Unit 3k: Clean Apple Start-Switch Tests
+**What**: Add failing configuration tests proving clean starts are allowed only after a recorded successful registration/canary prerequisite and legacy rollback remains selectable.
+**Acceptance**: Tests fail while the legacy default remains and detect a switch without prerequisite evidence.
+
+### ⬜ Unit 3l: Clean Apple Start-Switch Implementation
+**What**: Switch only new Apple social starts to the clean callback behind validated configuration after Unit 3j succeeds; retain legacy callback handling and one-commit/config rollback.
+**Output**: Atomic web PR W5.
+**Acceptance**: Unit 3k reruns green; full web coverage/typechecks/build pass with 100% changed-code coverage and zero warnings before commit.
+
+### ⬜ Unit 3m: Clean Apple Start Verification
+**What**: Merge/deploy W5, verify exact SHA, run clean/legacy Apple canaries and Google/GitHub regression canaries, and obtain fresh security review.
+**Acceptance**: Clean callback is default only after registration; both paths remain functional; rollback proof passes; reviewer PASS. If Unit 3j is blocked, Units 3k-3m remain explicitly `BLOCKED_HUMAN` while later independent units continue.
+
+### ⬜ Unit 4.0: Web Native-Upload Contract Matrix
+**What**: Add a web test-only contract PR in `test/lib/recipe-image.test.ts` and `test/routes/api-v1-recipe-covers.test.ts` proving normalized native cover output is JPEG at or below 5 MiB, server acceptance succeeds, and raw HEIC/HEIF remains rejected. Record `app/lib/recipe-image.ts` as the authoritative boundary.
+**Output**: Atomic test-only web PR W6 merged before native N2; no production behavior change.
+**Acceptance**: Focused/full web coverage, both typechecks, and build pass with zero warnings; W6 exact SHA is live before Unit 4b.
 
 ### ⬜ Unit 4a: Native Cover Image Normalization Tests
 **What**: Add failing tests for real HEIC/HEIF/default-camera samples, orientation, corrupt input, JPEG/PNG/WebP, oversized input, 2048-pixel longest edge, adaptive JPEG quality, exact 5 MiB boundary, prior-stage preservation, immediate upload, offline durable staging, replay, and emitted filename/MIME/bytes.
@@ -182,12 +229,12 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 
 ### ⬜ Unit 8b: Demo-Source Eradication Implementation
 **What**: Replace active fixed accounts/credentials with per-run disposable setup/teardown, require explicit `--target-env local` for development seeds, update CI/scripts/docs, and quarantine historical migration references without editing applied SQL.
-**Output**: Seed/e2e/docs/CI changes; atomic web PR W3.
+**Output**: Seed/e2e/docs/CI changes; atomic web PR W7.
 **Acceptance**: Unit 8a passes; CI creates and tears down disposable users; no active source teaches reusable demo credentials.
 
 ### ⬜ Unit 8c: Demo-Source Verification
 **What**: Run source-policy, seed, e2e, cleanup dry-run/apply, full coverage/typecheck/build, and fresh data-safety reviewer.
-**Acceptance**: Zero fixed active demo identities, zero disposable residue, 100% changed-code coverage, zero warnings, W3 CI green and merged.
+**Acceptance**: Zero fixed active demo identities, zero disposable residue, 100% changed-code coverage, zero warnings, W7 CI green and merged.
 
 ### ⬜ Unit 9a: Local OAuth Teardown Tests
 **What**: Add failing cleanup tests for disposable e2e OAuth clients and dependent credentials/codes/tokens, dry-run/apply parity, manifest IDs, local snapshot metadata, transaction rollback, non-disposable ownership refusal, partial failures, reruns, recovery, and exact residue reporting.
@@ -196,54 +243,111 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 
 ### ⬜ Unit 9b: Local OAuth Teardown Implementation
 **What**: Add local-only dependency-aware teardown for generated e2e clients and disposable references, with explicit target checks, pre-apply private snapshot/manifest, one transaction, post-apply retained-owner checksums, recovery instructions, and hard refusal for non-disposable users outside the generated test contract.
-**Output**: Cleanup script/helper changes; atomic web PR W4.
+**Output**: Cleanup script/helper changes; atomic web PR W8.
 **Acceptance**: Unit 9a passes; local before/apply/after ends at zero disposable clients, credentials, codes, tokens, users, recipes, and cookbooks without touching retained users.
 
 ### ⬜ Unit 9c: Local OAuth Teardown Verification
 **What**: Run focused/full script coverage, typecheck scripts, local cleanup twice, and fresh safety reviewer.
-**Acceptance**: Idempotent zero-residue result, 100% new-code coverage, zero warnings, W4 CI green and merged.
+**Acceptance**: Idempotent zero-residue result, 100% new-code coverage, zero warnings, W8 CI green and merged.
 
-### ⬜ Unit 10a: Repository Hygiene Guard Tests
-**What**: Add failing web/native tests for tracked databases, environment backups, generated task extensions, screenshot/log/result dumps, legitimate fixture allowlists, durable Markdown preservation, PR size thresholds, required large-change manifest, and artifact evidence indexing outside source.
-**Output**: Web repo-hygiene tests, native artifact-audit contracts, and removal manifests.
-**Acceptance**: Tests fail on the current tracked artifact/database/backups and missing PR-size gates.
+### ⬜ Unit 10a: Web Repository Hygiene Guard Tests
+**What**: Add failing tests in `test/repo-hygiene.test.ts` and focused script tests for tracked SQLite databases, generated task extensions, screenshot/log/result dumps, legitimate fixture allowlists, durable Markdown preservation, PR-size thresholds, required PR-body manifest, and external evidence indexing.
+**Acceptance**: Focused tests fail on current tracked web artifacts/database and missing size/manifest gates.
 
-### ⬜ Unit 10b: Current-Tree Artifact Cleanup And Guard Implementation
-**What**: Privately scan then remove only manifest-approved generated artifacts from both current trees, preserve durable task docs and real fixtures, remove tracked local DB/backups, add pre-cleanup refs and ownership checks, add ignores/guards/manifests/recovery commands, and update validation scripts to emit raw evidence into ignored/external storage.
-**Output**: Atomic web PR W5 and native PR N6, each with human-readable changed-file manifest.
-**Acceptance**: Unit 10a passes; no unmanifested task-owned generated artifacts remain; no dirty/unmerged worktree is removed; any confirmed secret was rotated first.
+### ⬜ Unit 10b: Web Artifact Cleanup And Guard Implementation
+**What**: Privately scan then remove only web-manifest-approved generated artifacts and the tracked local DB, preserve durable docs/real fixtures, add pre-cleanup refs/ownership/recovery, and route future raw validation output outside tracked source.
+**Output**: Atomic web PR W9 with human-readable changed-file manifest.
+**Acceptance**: Unit 10a reruns green; `pnpm test:coverage`, both typechecks, and build pass with 100% changed-code coverage and zero warnings before commit.
 
-### ⬜ Unit 10c: Repository Hygiene And History Disposition
-**What**: Run redacted secret scans, tracked-file policy, PR-size gates, full repo tests/builds, `git count-objects -vH`, reachability/worktree checks, and fresh security/repository reviewers.
-**Acceptance**: W5/N6 CI green and merged; current trees are clean; manifest recovery is test-proven; large-history disposition records no rewrite unless separately authorized; raw evidence is external and durable indexes remain.
+### ⬜ Unit 10c: Web Repository Hygiene Verification
+**What**: Run redacted secret scan, `pnpm run typecheck`, `pnpm run typecheck:scripts`, `pnpm test:coverage`, `pnpm build`, tracked-file/PR-size policy, `git count-objects -vH`, manifest recovery test, and fresh security/repository review.
+**Acceptance**: W9 CI green and merged; web tree clean; reviewer PASS; no rewrite without separate authorization; raw evidence external.
 
-### ⬜ Unit 11a: Web Cover Boundary Contract Tests
-**What**: Add/strengthen public REST/MCP/OpenAPI/idempotency/ownership/rollback contract snapshots around recipe cover behavior before extraction, including outgoing request assertions.
-**Output**: Focused contract tests around current API and MCP boundaries.
-**Acceptance**: Baseline contracts pass before extraction and fail under deliberate temporary boundary perturbation.
+### ⬜ Unit 10d: Native Repository Hygiene Guard Tests
+**What**: Add failing Swift/Ruby contracts around `scripts/audit-native-validation-artifacts.rb` for tracked environment backups, logs, screenshots, generated JSON/patches, legitimate app/test image allowlists, durable Markdown preservation, PR-size thresholds, and external evidence paths.
+**Acceptance**: Focused tests fail on current native artifact roots/backups and missing size/manifest gates.
 
-### ⬜ Unit 11b: Web Cover Service Extraction
-**What**: Extract cover schemas, image/upload/generation/activation services, REST controllers, and MCP adapters from oversized modules behind unchanged public contracts.
-**Output**: Cohesive cover modules with thin `api-v1.server.ts` and `spoonjoy-api.server.ts` delegation; atomic web PR W6.
-**Acceptance**: Unit 11a remains green; no route, envelope, scope, ownership, idempotency, rollback, or MCP tool behavior changes.
+### ⬜ Unit 10e: Native Artifact Cleanup And Guard Implementation
+**What**: Privately scan then remove only native-manifest-approved generated artifacts/backups, preserve durable docs/app/test fixtures, add pre-cleanup refs/ownership/recovery, and route validation matrix output to ignored/external storage.
+**Output**: Atomic native PR N6 with human-readable changed-file manifest.
+**Acceptance**: Unit 10d reruns green; Swift coverage/warning matrix and app builds pass with 100% changed core coverage and zero warnings before commit.
 
-### ⬜ Unit 11c: Web Cover Extraction Verification
-**What**: Run focused/full coverage, typecheck, build, OpenAPI generation diff, MCP tests, and fresh architecture/API/security review.
-**Acceptance**: 100% changed-code coverage, zero warnings, reviewer PASS, W6 CI green and merged.
+### ⬜ Unit 10f: Native Repository Hygiene And History Verification
+**What**: Run redacted secret scan; `swift test --enable-code-coverage --disable-xctest --parallel -Xswiftc -warnings-as-errors`; warning and 100% coverage enforcement scripts; scenario verifier; app builds; tracked-file/PR-size policy; `git count-objects -vH`; manifest recovery; fresh security/repository review.
+**Acceptance**: N6 CI green and merged; native tree clean; reviewer PASS; no history rewrite without separate authorization; raw evidence external.
 
-### ⬜ Unit 12a: Native Cover Boundary Contract Tests
-**What**: Pin cover staging, request codec, queue factory, replay transport, mutation planning, and presentation contracts before extraction.
-**Output**: Focused native cover/sync/API contract tests.
-**Acceptance**: Baseline contracts pass and detect deliberate temporary codec/planner perturbation.
+### ⬜ Unit 11.0: Web Cover Characterization Baseline
+**What**: Run and, only where coverage is missing, add green public behavior characterization in `test/lib/recipe-cover.server.test.ts`, `test/routes/api-v1-recipe-covers.test.ts`, `test/lib/api-v1-openapi.server.test.ts`, and `test/lib/spoonjoy-api-spoons.test.ts` for REST/MCP/OpenAPI/idempotency/ownership/rollback and outgoing adapter calls.
+**Acceptance**: Baseline is green before structural tests; characterization additions do not claim the extraction red phase.
 
-### ⬜ Unit 12b: Native Cover Boundary Extraction
-**What**: Extract cover codecs/queue transport from `NativeSyncEngine.swift` and separate staging/transcoding, mutation orchestration, and presentation without broadly weakening visibility.
-**Output**: Narrow internal cover modules; atomic native PR N7.
-**Acceptance**: Unit 12a remains green; queued wire format, retry behavior, public API, and UI outcomes are unchanged.
+### ⬜ Unit 11a: Shared Cover Service Structural Tests
+**What**: Add failing architecture/delegation tests requiring shared cover schema/service ownership outside `app/lib/api-v1.server.ts` and `app/lib/spoonjoy-api.server.ts`, with no duplicate image/generation/activation logic.
+**Acceptance**: Tests fail against current oversized ownership.
 
-### ⬜ Unit 12c: Native Cover Extraction Verification
-**What**: Run focused/full Swift coverage, scenario verifier, app-target builds, project generation contracts, warning scan, and fresh architecture/concurrency review.
-**Acceptance**: 100% changed-code coverage, zero warnings, reviewer PASS, N7 CI green and merged.
+### ⬜ Unit 11b: Shared Cover Service Extraction
+**What**: Extract schemas and shared image/upload/generation/activation orchestration from `app/lib/api-v1.server.ts`, `app/lib/spoonjoy-api.server.ts`, `app/lib/recipe-cover.server.ts`, and `app/lib/recipe-image.ts` into cohesive server modules without changing public behavior.
+**Output**: Atomic web PR W10.
+**Acceptance**: Unit 11a reruns green; full web coverage/typechecks/build pass with 100% changed-code coverage and zero warnings before commit.
+
+### ⬜ Unit 11c: Shared Cover Service Verification
+**What**: Run characterization/structural tests, full web matrix, OpenAPI generation diff, and fresh architecture/API/security review.
+**Acceptance**: Reviewer PASS, W10 CI green and merged, no public behavior drift.
+
+### ⬜ Unit 11.1a: REST Cover Delegation Tests
+**What**: Add failing structural tests requiring cover handlers in `app/lib/api-v1.server.ts` to delegate to the shared service/controller boundary while preserving exact envelopes/scopes/idempotency.
+**Acceptance**: Tests fail while REST cover orchestration remains inline.
+
+### ⬜ Unit 11.1b: REST Cover Delegation Implementation
+**What**: Move REST cover controller logic behind the shared boundary and leave thin route dispatch in `app/lib/api-v1.server.ts`.
+**Output**: Atomic web PR W11.
+**Acceptance**: Unit 11.1a reruns green; full web coverage/typechecks/build pass with 100% changed-code coverage and zero warnings before commit.
+
+### ⬜ Unit 11.1c: REST Cover Delegation Verification
+**What**: Run REST/OpenAPI/idempotency/ownership suites, full web matrix, and fresh API/security review.
+**Acceptance**: Reviewer PASS, W11 CI green and merged, no route/envelope/scope change.
+
+### ⬜ Unit 11.2a: MCP Cover Delegation Tests
+**What**: Add failing structural tests requiring cover tools in `app/lib/spoonjoy-api.server.ts` to delegate to shared cover services while preserving tool schemas, binary upload, next actions, ownership, and errors.
+**Acceptance**: Tests fail while MCP cover orchestration remains inline.
+
+### ⬜ Unit 11.2b: MCP Cover Delegation Implementation
+**What**: Move MCP cover adapter logic behind shared services and leave thin tool registration/translation in `app/lib/spoonjoy-api.server.ts`.
+**Output**: Atomic web PR W12.
+**Acceptance**: Unit 11.2a reruns green; full web coverage/typechecks/build pass with 100% changed-code coverage and zero warnings before commit.
+
+### ⬜ Unit 11.2c: MCP Cover Delegation Verification
+**What**: Run MCP/REST parity, binary upload, idempotency, full web matrix, and fresh API/agent-surface review.
+**Acceptance**: Reviewer PASS, W12 CI green and merged, no public tool behavior drift.
+
+### ⬜ Unit 12.0: Native Cover Characterization Baseline
+**What**: Run and fill only genuine gaps in `CoverControlSurfaceTests.swift`, `NativeAPIExpansionTests.swift`, and `NativeSyncEngineTests.swift` for staging, codec, queue factory, replay transport, mutation planning, and presentation behavior.
+**Acceptance**: Baseline is green before structural red tests; Unit 4 owns staging/transcoding, Unit 5 mutation orchestration, and Unit 7 presentation extraction.
+
+### ⬜ Unit 12a: Native Cover Codec Structural Tests
+**What**: Add failing source/behavior tests requiring cover payload encode/decode ownership in a dedicated codec outside `NativeSyncEngine.swift`, with exact wire parity.
+**Acceptance**: Tests fail while codec logic remains embedded.
+
+### ⬜ Unit 12b: Native Cover Codec Extraction
+**What**: Extract cover request/persisted payload codecs from `Sources/SpoonjoyCore/Sync/NativeSyncEngine.swift` into a narrow cover codec module without weakening unrelated visibility.
+**Output**: Atomic native PR N7.
+**Acceptance**: Unit 12a reruns green; native coverage/warning/scenario/app-build matrix passes with 100% changed core coverage and zero warnings before commit.
+
+### ⬜ Unit 12c: Native Cover Codec Verification
+**What**: Run focused/full native matrix and fresh architecture/API-compatibility review.
+**Acceptance**: Reviewer PASS, N7 CI green and merged, exact wire parity retained.
+
+### ⬜ Unit 12d: Native Cover Queue Transport Structural Tests
+**What**: Add failing tests requiring cover queue factories/replay transport ownership outside the main sync engine while preserving retry, staged-media, and persisted-kind behavior.
+**Acceptance**: Tests fail while queue transport remains embedded.
+
+### ⬜ Unit 12e: Native Cover Queue Transport Extraction
+**What**: Extract cover queue factories and replay transport from `NativeSyncEngine.swift` behind narrow internal interfaces.
+**Output**: Atomic native PR N8.
+**Acceptance**: Unit 12d reruns green; native coverage/warning/scenario/app-build matrix passes with 100% changed core coverage and zero warnings before commit.
+
+### ⬜ Unit 12f: Native Cover Queue Transport Verification
+**What**: Run focused/full native matrix, offline replay scenarios, and fresh architecture/concurrency review.
+**Acceptance**: Reviewer PASS, N8 CI green and merged, queue/retry behavior unchanged.
 
 ### ⬜ Unit 13a: Database-Bounded My Recipes Search Tests
 **What**: Add failing parity tests for owner scoping, title/description/ingredient matching, case/whitespace/special characters, pagination/order, empty/no-result states, large owner corpus, bounded rows/query count, and D1 variable limits.
@@ -252,12 +356,12 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 
 ### ⬜ Unit 13b: Database-Bounded My Recipes Search Implementation
 **What**: Move matching and pagination into the D1 query boundary, add only justified indexes/migration, preserve route semantics, and keep query/result work bounded.
-**Output**: Search service/route and optional migration changes; atomic web PR W7.
+**Output**: Search service/route and optional migration changes; atomic web PR W13.
 **Acceptance**: Unit 13a passes with stable result parity and bounded query/row assertions at scale.
 
 ### ⬜ Unit 13c: Search Verification
 **What**: Run focused/full coverage, migration idempotency, typecheck/build, local D1 scale fixture, and fresh database/performance reviewer.
-**Acceptance**: 100% changed-code coverage, zero warnings, no full-corpus application filtering, W7 CI green and merged.
+**Acceptance**: 100% changed-code coverage, zero warnings, no full-corpus application filtering, W13 CI green and merged.
 
 ### ⬜ Unit 14a: CSP Enforcement Tests
 **What**: Add failing tests for enforced production CSP, nonce/script behavior, required image/style/connect sources, report-only QA comparison, violation telemetry, and one-commit rollback.
@@ -266,12 +370,12 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 
 ### ⬜ Unit 14b: CSP QA Enforcement Implementation
 **What**: Tighten compatible sources, preserve nonce behavior, add violation reporting, enforce in QA, and keep a documented report-only rollback flag/commit.
-**Output**: Security header/config/ops changes; atomic web PR W8 after QA proof.
+**Output**: Security header/config/ops changes; atomic web PR W14 after QA proof.
 **Acceptance**: QA browser/Photo Studio/OAuth/MCP/API surfaces load without CSP violations or blocked required assets; attacker-style inline/script probes are blocked.
 
 ### ⬜ Unit 14c: CSP Production Verification
-**What**: Run full coverage/build/e2e, fresh security review, merge W8, verify exact production headers and live surfaces, and watch violation telemetry before closing rollback readiness.
-**Acceptance**: Production sends enforced CSP; core surfaces and provider starts remain healthy; rollback is tested and documented; W8 exact SHA is recorded.
+**What**: Run `pnpm run typecheck`, `pnpm run typecheck:scripts`, `pnpm test:coverage`, `pnpm test:e2e`, and `pnpm build`; require zero warnings and 100% changed-code coverage; run fresh security review; merge W14; verify exact production headers/live surfaces and violation telemetry.
+**Acceptance**: Production sends enforced CSP; core surfaces/provider starts remain healthy; rollback tested/documented; reviewer PASS; W14 exact SHA recorded.
 
 ### ⬜ Unit 15a: Home Hero Viewport Tests
 **What**: Add failing responsive tests proving the first viewport preserves brand/product signal while revealing following content on mobile, desktop, and wide desktop without overlap or font viewport scaling.
@@ -280,30 +384,42 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 
 ### ⬜ Unit 15b: Home Hero Implementation
 **What**: Adjust stable hero height/spacing so the next section is visibly discoverable while preserving the real food image, typography, and current product language.
-**Output**: Narrow home route/style change; atomic web PR W9.
+**Output**: Narrow home route/style change; atomic web PR W15.
 **Acceptance**: Unit 15a passes with no public copy/provenance regression.
 
 ### ⬜ Unit 15c: Home Hero Coverage And Build
 **What**: Run focused/full coverage, typecheck/build, accessibility checks, and fresh implementation review.
-**Acceptance**: 100% changed-code coverage, zero warnings, reviewer PASS, W9 CI green and merged.
+**Acceptance**: 100% changed-code coverage, zero warnings, reviewer PASS, W15 CI green and merged.
 
 ### ⬜ Unit 15d: Home Visual QA Dogfood
 **What**: Capture and inspect mobile, desktop, and wide-desktop public home screenshots with the next section visible.
 **Acceptance**: External screenshots show no overlap, awkward crop, unreadable copy, or hidden continuation; absurdity ledger closed; fresh visual reviewer PASS.
 
-### ⬜ Unit 16a: Advisory-Pipeline Contract Tests
-**What**: Add failing workflow/script tests for a version/SHA-pinned supported scanner, lockfile coverage, scanner/network failure, actionable vulnerability failure, explicit time-bounded allowlists, and Ruby dependency coverage.
-**Output**: CI/security workflow contracts in both repos.
-**Acceptance**: Tests fail because current CI has no supported advisory gate.
+### ⬜ Unit 16a: Web Advisory-Pipeline Contract Tests
+**What**: Add failing web workflow/script tests for a version/SHA-pinned supported scanner, `pnpm-lock.yaml` coverage, scanner/network failure, actionable vulnerability failure, and explicit expiring allowlists.
+**Acceptance**: Tests fail because web CI has no supported fail-closed advisory gate.
 
-### ⬜ Unit 16b: Advisory-Pipeline Implementation
-**What**: Add pinned OSV-compatible dependency scanning for web lockfiles and pinned Ruby advisory scanning for native release tooling; fail closed on scanner errors and actionable findings.
-**Output**: Atomic web PR W10 and native PR N8 with documented severity/allowlist policy.
-**Acceptance**: Unit 16a passes; synthetic vulnerable and scanner-error fixtures fail; clean graphs pass.
+### ⬜ Unit 16b: Web Advisory-Pipeline Implementation
+**What**: Add pinned OSV-compatible scanning for the web lockfile with documented severity/allowlist policy and fail-closed scanner errors.
+**Output**: Atomic web PR W16.
+**Acceptance**: Unit 16a reruns green; synthetic vulnerability/error fixtures fail; `pnpm test:coverage`, both typechecks, and build pass with 100% changed-code coverage and zero warnings before commit.
 
-### ⬜ Unit 16c: Advisory Verification And Remediation
-**What**: Run real scans, fix or time-bound-review every finding, run full repo validation, and obtain fresh security reviewer PASS.
-**Acceptance**: W10/N8 CI green and merged; no unreviewed actionable advisory or silent scanner failure remains.
+### ⬜ Unit 16c: Web Advisory Verification And Remediation
+**What**: Run the real scanner plus `pnpm run typecheck`, `pnpm run typecheck:scripts`, `pnpm test:coverage`, and `pnpm build`; fix or time-bound-review every finding; obtain fresh security review.
+**Acceptance**: Reviewer PASS, W16 CI green and merged, no unreviewed actionable advisory or silent scanner failure.
+
+### ⬜ Unit 16d: Native Advisory-Pipeline Contract Tests
+**What**: Add failing native workflow/Ruby contract tests for pinned `bundler-audit` or supported equivalent, `Gemfile.lock` coverage, scanner/network failure, actionable finding failure, and expiring allowlists.
+**Acceptance**: Tests fail because native CI does not scan release-tool Ruby dependencies.
+
+### ⬜ Unit 16e: Native Advisory-Pipeline Implementation
+**What**: Add pinned fail-closed Ruby dependency scanning to native CI with documented policy.
+**Output**: Atomic native PR N9.
+**Acceptance**: Unit 16d reruns green; synthetic vulnerability/error fixtures fail; native coverage/warning/scenario/app-build matrix passes with 100% changed core coverage and zero warnings before commit.
+
+### ⬜ Unit 16f: Native Advisory Verification And Remediation
+**What**: Run real scan; Swift coverage with warnings as errors; `ruby scripts/fail-on-warning.rb`; 100% coverage enforcement; scenario verifier; app builds; fix or time-bound-review every finding; fresh security review.
+**Acceptance**: Reviewer PASS, N9 CI green and merged, no unreviewed actionable advisory or silent scanner failure.
 
 ### ⬜ Unit 17a: Build-Specific TestFlight Notes Tests
 **What**: Add failing tests tying source SHA, build number, user-facing change manifest, and release-note freshness; require notes to mention current Photo Studio, image, mutation, and provider-sign-in changes.
@@ -312,12 +428,12 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 
 ### ⬜ Unit 17b: Build-Specific TestFlight Notes Implementation
 **What**: Make notes generated/validated from the designated release candidate and update exact user-facing copy for the new build.
-**Output**: Distribution metadata/scripts/docs; atomic native PR N9.
+**Output**: Distribution metadata/scripts/docs; atomic native PR N10.
 **Acceptance**: Unit 17a passes; publishing refuses stale/mismatched notes and accepts exact candidate metadata.
 
 ### ⬜ Unit 17c: TestFlight Metadata Verification
 **What**: Run focused/full native validation and fresh release-copy/automation review.
-**Acceptance**: 100% changed-code coverage, zero warnings, reviewer PASS, N9 CI green and merged without publishing before final candidate selection.
+**Acceptance**: 100% changed-code coverage, zero warnings, reviewer PASS, N10 CI green and merged without publishing before final candidate selection.
 
 ### ⬜ Unit 18: Final Web Validation And Implementation Review
 **What**: From clean current `origin/main`, run `pnpm cleanup:qa`, local migrations twice, API generation diff, typechecks, full 100% coverage, e2e, production build, Storybook build, repo/advisory gates, and fresh implementation/test/security/visual reviewers.
@@ -340,12 +456,14 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 **Acceptance**: Exact candidate is available to internal testers with current notes; installed app passes provider, HEIC, mutation-lock, queue replay, Photo Studio, and cleanup checks.
 
 ### ⬜ Unit 22: Human-Only Closure, Cleanup, And Durable Continuation Scan
-**What**: Complete or durably classify the four planning-table human actions, preserve any blocked prerequisite, update planning/doing/Desk state, scan feedback/backlogs/PRs/CI/deploy/TestFlight/cleanup for ready work, remove only clean terminal remediation worktrees, prune only merged proven-stale branches, and notify Slugger.
+**What**: Complete or durably classify all five planning-table human actions, preserve every unresolved exact prerequisite/action, update planning/doing/Desk state, scan feedback/backlogs/PRs/CI/deploy/TestFlight/cleanup for ready work, remove only clean terminal remediation worktrees, prune only merged proven-stale branches, and notify Slugger.
 **Output**: Terminal docs/Desk state, worktree/branch inventory, human-action dispositions, continuation scan, and `ouro msg --to slugger` result.
-**Acceptance**: No ready in-scope work remains; independent work is shipped; audit task is `done` only if human-only closure is complete, otherwise remains `BLOCKED_HUMAN` with one exact required action and no hidden partial state.
+**Acceptance**: No ready in-scope work remains; independent work is shipped; audit task is `done` only if human-only closure is complete, otherwise remains `BLOCKED_HUMAN` with every unresolved exact required action and no hidden partial state.
 
 ## Execution
 - **TDD strictly enforced**: tests -> red -> implement -> green -> refactor
+- Green characterization baselines do not substitute for red structural/delegation tests in extraction units.
+- Before any implementation (`b`/`e`) commit, rerun its focused red suite green and pass the repository matrix: web uses `pnpm run typecheck`, `pnpm run typecheck:scripts`, `pnpm test:coverage`, and `pnpm build`; native uses Swift coverage with `-warnings-as-errors`, `scripts/fail-on-warning.rb`, `scripts/enforce-swift-coverage.rb --minimum 100 --include Sources/SpoonjoyCore`, scenario verification, and iOS/macOS app builds with warnings as errors.
 - Commit after each phase (a, b, c)
 - Push after each unit complete
 - Run full test suite before marking unit done
@@ -353,7 +471,8 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 - **All artifacts**: Keep only a durable evidence index in `./2026-07-15-1152-doing-audit-remediation/`; save raw logs, screenshots, data, and binaries to ignored local storage or CI artifacts so product repositories do not accumulate generated evidence
 - **Fixes/blockers**: Spawn sub-agent immediately; do not ask unless the planning human-only table applies
 - **Decisions made**: Update docs immediately, commit, and push
-- PR boundaries W1-W10 and N1-N9 are independently releasable; web backward-compatible OAuth W2 must be live before native N4, and TestFlight publishes only Unit 20's selected SHA
+- PR boundaries W1-W16 and N1-N10 are independently releasable. W2 provider hints must be live before N4. W4 dual Apple support must be live and Unit 3j registration/canary must pass before W5 switches starts. W6 web image-contract proof must merge before N2. TestFlight publishes only Unit 20's selected SHA.
 
 ## Progress Log
 - 2026-07-15 12:16 Created from approved planning doc
+- 2026-07-15 12:29 Split OAuth, cross-repo contracts, repository cleanup, extraction, and advisory work into independent TDD PRs; made coverage/warning and release trust-chain gates concrete.

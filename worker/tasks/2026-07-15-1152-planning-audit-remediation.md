@@ -1,6 +1,6 @@
 # Planning: Spoonjoy Audit Remediation
 
-**Status**: approved
+**Status**: NEEDS_REVIEW
 **Created**: 2026-07-15 11:54
 
 ## Goal
@@ -77,8 +77,9 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 | Clean Apple social callback registration | Ari or an already authorized browser session | Dual callback support is deployed and the Apple Services ID is accessible. | Add `https://spoonjoy.app/auth/apple/callback` without removing the legacy callback. | Apple portal configuration plus live canaries through both callback paths. | Keep new starts on the legacy callback and mark callback switch `BLOCKED_HUMAN`; resilience work still ships. |
 | Confirmed live-secret rotation | Ari or authorized secret-store session | Private scan proves a tracked value is a live secret. | Rotate the specific provider/deployment secret before deleting tracked evidence. | New secret works, old secret is revoked, redacted incident record exists. | Stop only the affected release path and mark `BLOCKED_HUMAN`; never print or remove the sole working secret first. |
 | Authenticated production owner smoke | Ari or an existing signed-in browser session | Exact web SHA is deployed. | Exercise owner-only Photo Studio without preserving smoke content. | Screenshot/network evidence and post-run zero-residue check. | Mark only the owner-smoke criterion `BLOCKED_HUMAN` if no authorized session can be obtained; public/API/MCP smokes continue. |
+| Installed TestFlight dogfood | Ari with the Spoonjoy Internal Apple account and a compatible physical device | The exact candidate is `IN_BETA_TESTING` and attached to `Spoonjoy Internal`. | Install/update the candidate from TestFlight and exercise provider sign-in plus Photo Studio against production. | Device/build identity, installed-build screenshots, smoke result, and post-run cleanup. | Mark installed-device verification `BLOCKED_HUMAN`; App Store Connect state and simulator/macOS validation continue, but the audit task remains non-terminal. |
 
-Ordinary implementation and UX ambiguity remains delegated to reviewer gates. The four rows above are the only anticipated human-only boundaries.
+Ordinary implementation and UX ambiguity remains delegated to reviewer gates. The five rows above are the only anticipated human-only boundaries.
 
 ## Decisions Made
 - Normalize native picker output to orientation-correct JPEG before staging, with a 2048-pixel longest edge, initial quality 0.85, adaptive quality reduction, and a hard 5 MiB output ceiling derived from the server contract. Corrupt or still-oversized inputs fail without replacing the prior staged selection.
@@ -143,3 +144,4 @@ Repo-local `subagents/work-planner.md` and `subagents/work-doer.md` were unavail
 - 2026-07-15 12:18 Reopened review to add a finding-level rollback matrix, transactional cleanup recovery, and direct web Photo Studio visual evidence after a second independent gate.
 - 2026-07-15 12:20 Mapped every audit finding to rollback coverage and added the missing Clem credential recovery boundary.
 - 2026-07-15 12:22 Final fresh planning gate passed with all 12 findings, rollback/recovery, visual evidence, release closure, and human-only actions covered.
+- 2026-07-15 12:29 Reopened review after doing-doc audit to add installed TestFlight access as a human-only action and tighten execution granularity.
