@@ -14,14 +14,14 @@
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
 - Branch: `worker/clem-feedback-e2e`, pushed through `72b21714`.
-- Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is `NEEDS_REVIEW` after a latest-model rebuild against current main.
+- Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is approved after five fresh hostile rounds.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation has not started.
-- Active gate: fresh hostile planning review. After convergence, approve planning and run the complete doing-doc granularity, validation, ambiguity, quality, and alternating scrutiny chain.
+- Active gate: complete doing-doc granularity, validation, ambiguity, quality, and alternating scrutiny chain; Granularity is running.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Consume the fresh planning review, fix every BLOCKER/MAJOR, mark planning approved after convergence, then begin the mandatory doing-doc review chain.
+Consume the Granularity pass, fix every BLOCKER/MAJOR, commit it, then continue through Validation, Ambiguity, Quality, and alternating Scrutiny until two consecutive scrutiny passes converge.
 
 ## Operator-Locked Rules
 
@@ -40,8 +40,8 @@ Consume the fresh planning review, fix every BLOCKER/MAJOR, mark planning approv
 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
-| Planning reviewer gate | needs reviewer gate | Rebuilt planning status is `NEEDS_REVIEW`; reviewer is active | Consume findings and converge |
-| Doing review chain | ready | Draft doing doc exists but depends on planning approval | Start immediately after planning convergence |
+| Planning reviewer gate | deferred by scope | Planning approved at `2c3b4759` after convergence | Closed |
+| Doing review chain | needs reviewer gate | Draft doing doc exists; Granularity reviewer is active | Converge every mandatory pass |
 | Work Doer Units 0-24 | ready | Full doing queue is defined | Start after doing review convergence |
 | PR/QA/merge/production | ready | Units 22-24 define delivery path | Execute after implementation/local validation |
 
