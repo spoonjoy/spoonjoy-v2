@@ -1,0 +1,1005 @@
+{
+  "ok": true,
+  "fullyValidated": true,
+  "generatedAt": "2026-07-15T10:58:05Z",
+  "routeCount": 34,
+  "buildBlocked": false,
+  "buildBlocker": null,
+  "routes": [
+    {
+      "name": "kitchen",
+      "route": "kitchen",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix --unit-slug matrix --route kitchen",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/design-review.json",
+        "exists": true,
+        "bytes": 515
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 422046
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 726203
+      }
+    },
+    {
+      "name": "recipes",
+      "route": "recipes",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/recipes",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/recipes --unit-slug matrix-recipes --route recipes",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/recipes/design-review.json",
+        "exists": true,
+        "bytes": 528
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/recipes/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/recipes/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 217472
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/recipes/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 593200
+      }
+    },
+    {
+      "name": "saved-recipes",
+      "route": "saved-recipes",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/saved-recipes",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/saved-recipes --unit-slug matrix-saved-recipes --route saved-recipes",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/saved-recipes/design-review.json",
+        "exists": true,
+        "bytes": 549
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/saved-recipes/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/saved-recipes/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 220951
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/saved-recipes/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 596051
+      }
+    },
+    {
+      "name": "recipe-detail",
+      "route": "recipe-detail",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/recipe-detail",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/recipe-detail --unit-slug matrix-recipe-detail --route recipe-detail",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/recipe-detail/design-review.json",
+        "exists": true,
+        "bytes": 588
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/recipe-detail/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/recipe-detail/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 2057177
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/recipe-detail/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 2485859
+      }
+    },
+    {
+      "name": "cook-mode",
+      "route": "cook-mode",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/cook-mode",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/cook-mode --unit-slug matrix-cook-mode --route cook-mode",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/cook-mode/design-review.json",
+        "exists": true,
+        "bytes": 572
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/cook-mode/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/cook-mode/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 487509
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/cook-mode/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 642952
+      }
+    },
+    {
+      "name": "cookbooks",
+      "route": "cookbooks",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/cookbooks",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/cookbooks --unit-slug matrix-cookbooks --route cookbooks",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/cookbooks/design-review.json",
+        "exists": true,
+        "bytes": 601
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/cookbooks/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/cookbooks/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 1423579
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/cookbooks/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 2636149
+      }
+    },
+    {
+      "name": "cookbook-detail",
+      "route": "cookbook-detail",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/cookbook-detail",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/cookbook-detail --unit-slug matrix-cookbook-detail --route cookbook-detail",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/cookbook-detail/design-review.json",
+        "exists": true,
+        "bytes": 667
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/cookbook-detail/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/cookbook-detail/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 484394
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/cookbook-detail/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 708590
+      }
+    },
+    {
+      "name": "shopping-list",
+      "route": "shopping-list",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list --unit-slug matrix-shopping-list --route shopping-list",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list/design-review.json",
+        "exists": true,
+        "bytes": 583
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 350693
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 637475
+      }
+    },
+    {
+      "name": "shopping-list-empty",
+      "route": "shopping-list-empty",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-empty",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-empty --unit-slug matrix-shopping-list-empty --route shopping-list-empty",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-empty/design-review.json",
+        "exists": true,
+        "bytes": 594
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-empty/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-empty/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 249191
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-empty/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 605344
+      }
+    },
+    {
+      "name": "shopping-list-all-complete",
+      "route": "shopping-list-all-complete",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-all-complete",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-all-complete --unit-slug matrix-shopping-list-all-complete --route shopping-list-all-complete",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-all-complete/design-review.json",
+        "exists": true,
+        "bytes": 615
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-all-complete/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-all-complete/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 261674
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-all-complete/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 617271
+      }
+    },
+    {
+      "name": "shopping-list-duplicate",
+      "route": "shopping-list-duplicate",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-duplicate",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-duplicate --unit-slug matrix-shopping-list-duplicate --route shopping-list-duplicate",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-duplicate/design-review.json",
+        "exists": true,
+        "bytes": 606
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-duplicate/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-duplicate/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 354052
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-duplicate/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 643015
+      }
+    },
+    {
+      "name": "shopping-list-conflict",
+      "route": "shopping-list-conflict",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-conflict",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-conflict --unit-slug matrix-shopping-list-conflict --route shopping-list-conflict",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-conflict/design-review.json",
+        "exists": true,
+        "bytes": 636
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-conflict/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-conflict/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 353101
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-conflict/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 656920
+      }
+    },
+    {
+      "name": "shopping-list-offline-queued",
+      "route": "shopping-list-offline-queued",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-offline-queued",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-offline-queued --unit-slug matrix-shopping-list-offline-queued --route shopping-list-offline-queued",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-offline-queued/design-review.json",
+        "exists": true,
+        "bytes": 621
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-offline-queued/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-offline-queued/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 346893
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-offline-queued/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 648785
+      }
+    },
+    {
+      "name": "chefs",
+      "route": "chefs",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/chefs",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/chefs --unit-slug matrix-chefs --route chefs",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/chefs/design-review.json",
+        "exists": true,
+        "bytes": 525
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/chefs/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/chefs/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 143718
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/chefs/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 581149
+      }
+    },
+    {
+      "name": "search",
+      "route": "search",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search --unit-slug matrix-search --route search",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search/design-review.json",
+        "exists": true,
+        "bytes": 899
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 280906
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 646127
+      }
+    },
+    {
+      "name": "search-typed-results",
+      "route": "search-typed-results",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-typed-results",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-typed-results --unit-slug matrix-search-typed-results --route search-typed-results",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-typed-results/design-review.json",
+        "exists": true,
+        "bytes": 973
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-typed-results/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-typed-results/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 226651
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-typed-results/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 603894
+      }
+    },
+    {
+      "name": "search-scoped-recipes",
+      "route": "search-scoped-recipes",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-recipes",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-recipes --unit-slug matrix-search-scoped-recipes --route search-scoped-recipes",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-recipes/design-review.json",
+        "exists": true,
+        "bytes": 986
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-recipes/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-recipes/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 646883
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-recipes/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 590205
+      }
+    },
+    {
+      "name": "search-scoped-cookbooks",
+      "route": "search-scoped-cookbooks",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-cookbooks",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-cookbooks --unit-slug matrix-search-scoped-cookbooks --route search-scoped-cookbooks",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-cookbooks/design-review.json",
+        "exists": true,
+        "bytes": 1010
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-cookbooks/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-cookbooks/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 195055
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-cookbooks/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 588538
+      }
+    },
+    {
+      "name": "search-scoped-chefs",
+      "route": "search-scoped-chefs",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-chefs",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-chefs --unit-slug matrix-search-scoped-chefs --route search-scoped-chefs",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-chefs/design-review.json",
+        "exists": true,
+        "bytes": 968
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-chefs/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-chefs/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 252207
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-chefs/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 578133
+      }
+    },
+    {
+      "name": "search-scoped-shopping",
+      "route": "search-scoped-shopping",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-shopping",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-shopping --unit-slug matrix-search-scoped-shopping --route search-scoped-shopping",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-shopping/design-review.json",
+        "exists": true,
+        "bytes": 1005
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-shopping/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-shopping/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 196214
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-scoped-shopping/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 582858
+      }
+    },
+    {
+      "name": "search-no-results",
+      "route": "search-no-results",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-no-results",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-no-results --unit-slug matrix-search-no-results --route search-no-results",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-no-results/design-review.json",
+        "exists": true,
+        "bytes": 970
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-no-results/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-no-results/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 190367
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/search-no-results/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 589118
+      }
+    },
+    {
+      "name": "capture",
+      "route": "capture",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture --unit-slug matrix-capture --route capture",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture/design-review.json",
+        "exists": true,
+        "bytes": 634
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 271636
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 638803
+      }
+    },
+    {
+      "name": "capture-empty",
+      "route": "capture-empty",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-empty",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-empty --unit-slug matrix-capture-empty --route capture-empty",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-empty/design-review.json",
+        "exists": true,
+        "bytes": 645
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-empty/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-empty/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 270747
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-empty/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 638803
+      }
+    },
+    {
+      "name": "capture-draft",
+      "route": "capture-draft",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-draft",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-draft --unit-slug matrix-capture-draft --route capture-draft",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-draft/design-review.json",
+        "exists": true,
+        "bytes": 645
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-draft/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-draft/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 324659
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-draft/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 638803
+      }
+    },
+    {
+      "name": "capture-offline-retry",
+      "route": "capture-offline-retry",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-offline-retry",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-offline-retry --unit-slug matrix-capture-offline-retry --route capture-offline-retry",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-offline-retry/design-review.json",
+        "exists": true,
+        "bytes": 669
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-offline-retry/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-offline-retry/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 326633
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-offline-retry/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 650283
+      }
+    },
+    {
+      "name": "capture-provider-blocked",
+      "route": "capture-provider-blocked",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-provider-blocked",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-provider-blocked --unit-slug matrix-capture-provider-blocked --route capture-provider-blocked",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-provider-blocked/design-review.json",
+        "exists": true,
+        "bytes": 678
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-provider-blocked/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-provider-blocked/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 330352
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-provider-blocked/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 638803
+      }
+    },
+    {
+      "name": "capture-signed-out",
+      "route": "capture-signed-out",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-signed-out",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-signed-out --unit-slug matrix-capture-signed-out --route capture-signed-out",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-signed-out/design-review.json",
+        "exists": true,
+        "bytes": 650
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-signed-out/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-signed-out/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 230462
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/capture-signed-out/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 557759
+      }
+    },
+    {
+      "name": "settings",
+      "route": "settings",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings --unit-slug matrix-settings --route settings",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings/design-review.json",
+        "exists": true,
+        "bytes": 962
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 252331
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 656724
+      }
+    },
+    {
+      "name": "settings-notifications",
+      "route": "settings",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-notifications",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-notifications --unit-slug matrix-settings-notifications --route settings",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-notifications/design-review.json",
+        "exists": true,
+        "bytes": 1189
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-notifications/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-notifications/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 347069
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-notifications/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 787245
+      }
+    },
+    {
+      "name": "settings-signed-out",
+      "route": "settings",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-signed-out",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-signed-out --unit-slug matrix-settings-signed-out --route settings",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-signed-out/design-review.json",
+        "exists": true,
+        "bytes": 994
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-signed-out/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-signed-out/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 228511
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-signed-out/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 533570
+      }
+    },
+    {
+      "name": "settings-apns-denied",
+      "route": "settings",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-denied",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-denied --unit-slug matrix-settings-apns-denied --route settings",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-denied/design-review.json",
+        "exists": true,
+        "bytes": 1171
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-denied/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-denied/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 362456
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-denied/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 799757
+      }
+    },
+    {
+      "name": "settings-apns-not-determined",
+      "route": "settings",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-not-determined",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-not-determined --unit-slug matrix-settings-apns-not-determined --route settings",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-not-determined/design-review.json",
+        "exists": true,
+        "bytes": 1219
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-not-determined/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-not-determined/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 347682
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-not-determined/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 780753
+      }
+    },
+    {
+      "name": "settings-apns-authorized",
+      "route": "settings",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-authorized",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-authorized --unit-slug matrix-settings-apns-authorized --route settings",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-authorized/design-review.json",
+        "exists": true,
+        "bytes": 1201
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-authorized/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-authorized/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 348314
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-authorized/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 780284
+      }
+    },
+    {
+      "name": "settings-apns-unregistered",
+      "route": "settings",
+      "artifactRoot": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-unregistered",
+      "status": "pass",
+      "command": "SPOONJOY_SCREENSHOT_IOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app SPOONJOY_SCREENSHOT_MACOS_APP_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app scripts/capture-native-screenshots.sh --artifact-root /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-unregistered --unit-slug matrix-settings-apns-unregistered --route settings",
+      "blocked": false,
+      "missingDesignReview": false,
+      "designReview": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-unregistered/design-review.json",
+        "exists": true,
+        "bytes": 1213
+      },
+      "designReviewBlocked": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-unregistered/design-review-blocked.json",
+        "exists": false,
+        "bytes": null
+      },
+      "iosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-unregistered/screenshots/ios-mobile.png",
+        "exists": true,
+        "bytes": 347500
+      },
+      "macosScreenshot": {
+        "path": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/settings-apns-unregistered/screenshots/macos-desktop.png",
+        "exists": true,
+        "bytes": 780284
+      }
+    }
+  ],
+  "failedRoutes": [
+
+  ],
+  "blockedRoutes": [
+
+  ],
+  "missingDesignReviewRoutes": [
+
+  ]
+}

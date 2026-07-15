@@ -1,0 +1,24 @@
+{
+  "mobileScreenshot": true,
+  "desktopScreenshot": true,
+  "screenshotRoute": "capture",
+  "dynamicType": true,
+  "voiceOverLabels": true,
+  "keyboardNavigation": true,
+  "reduceMotion": true,
+  "contrast": true,
+  "kitchenTableHierarchy": true,
+  "noOverlap": true,
+  "accessibilityProofArtifacts": [
+    "apple/matrix-capture-signed-out-accessibility-proof-ios.json",
+    "apple/matrix-capture-signed-out-accessibility-proof-macos.json"
+  ],
+  "blockers": [
+
+  ],
+  "captureSurfaceVariant": "signed-out",
+  "captureSignedOutSurface": true,
+  "captureNativeSurface": false,
+  "captureSeedAccountID": "signed-out",
+  "captureScreenshotAuth": "0"
+}

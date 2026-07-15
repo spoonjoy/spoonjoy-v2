@@ -1,0 +1,93 @@
+{
+  "bundleIdentifier": "app.spoonjoy",
+  "contrast": true,
+  "dynamicType": true,
+  "emittedBy": "SpoonjoyApp",
+  "keyboardNavigation": true,
+  "kitchenTableHierarchy": true,
+  "launchEnvironmentProof": {
+    "apiBaseURL": "",
+    "screenshotAccountID": "chef_kitchen_capture",
+    "screenshotAPNsPermissionState": "",
+    "screenshotAPNsRegistrationState": "",
+    "screenshotAuth": "1",
+    "screenshotRestoreCacheOnly": "1"
+  },
+  "minimumTargetSize": 44,
+  "noOverlap": true,
+  "noTinyClusters": true,
+  "observedDynamicTypeSize": "large",
+  "observedReduceMotion": false,
+  "offlineIndicatorProof": {
+    "dismissButtonLabel": "Hide offline status",
+    "dismissibleStates": [
+      "offline",
+      "stale"
+    ],
+    "hiddenStates": [
+      "synced",
+      "dismissed"
+    ],
+    "severeStates": [
+      "queuedWork",
+      "syncFailure",
+      "conflict",
+      "blocker",
+      "destructiveConfirmation"
+    ],
+    "severityCorrect": true,
+    "source": "OfflineStatusView",
+    "visibleStates": [
+      "offline",
+      "stale",
+      "queuedWork",
+      "syncFailure",
+      "conflict",
+      "blocker",
+      "destructiveConfirmation"
+    ],
+    "voiceOverLabel": true
+  },
+  "platform": "ios",
+  "reduceMotion": true,
+  "route": "saved-recipes",
+  "routeEvidence": {
+    "contrastPairs": [
+      "charcoal on bone",
+      "brass on bone",
+      "secondary text on bone"
+    ],
+    "dynamicTypeTextStyles": [
+      "KitchenTableTheme.displayTitle",
+      "KitchenTableTheme.bodyNote",
+      "KitchenTableTheme.uiLabel"
+    ],
+    "hierarchyAnchors": [
+      "SavedRecipesView",
+      "RecipesView",
+      "KitchenTableHeader",
+      "RecipeCatalogLead",
+      "RecipeIndexRow"
+    ],
+    "keyboardNavigationTargets": [
+      "saved recipe lead button",
+      "RecipeIndexRow buttons",
+      "search field"
+    ],
+    "layoutGuards": [
+      "scroll-view",
+      "text-fit",
+      "no-tiny-clusters",
+      "dock-safe-area"
+    ],
+    "voiceOverLabels": [
+      "Saved Recipes",
+      "Recipe index",
+      "Loading saved recipes"
+    ]
+  },
+  "source": "SavedRecipesView",
+  "textFits": true,
+  "voiceOverLabels": true,
+  "writtenAt": "2026-07-15T10:30:24Z"
+}

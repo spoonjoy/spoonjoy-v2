@@ -1,0 +1,5 @@
+Using prebuilt macOS app from SPOONJOY_SCREENSHOT_MACOS_APP_PATH: /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app
+macOS build exit code: 0
+com.apple.finder
+Launching macOS app: /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app
+macOS smoke ok: search:recipes:codex-smoke-route-1784111501

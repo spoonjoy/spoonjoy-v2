@@ -1,0 +1,12 @@
+{
+  "route": "settings",
+  "source": "SettingsView",
+  "visibleSections": [
+    "Session",
+    "Environment",
+    "Offline"
+  ],
+  "visualFocus": "signed-out",
+  "writtenAt": "2026-07-15T10:54:16Z",
+  "platform": "macos"
+}

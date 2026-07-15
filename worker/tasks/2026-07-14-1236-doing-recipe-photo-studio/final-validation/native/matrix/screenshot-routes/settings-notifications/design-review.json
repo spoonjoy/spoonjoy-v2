@@ -1,0 +1,40 @@
+{
+  "mobileScreenshot": true,
+  "desktopScreenshot": true,
+  "screenshotRoute": "settings",
+  "dynamicType": true,
+  "voiceOverLabels": true,
+  "keyboardNavigation": true,
+  "reduceMotion": true,
+  "contrast": true,
+  "kitchenTableHierarchy": true,
+  "noOverlap": true,
+  "accessibilityProofArtifacts": [
+    "apple/matrix-settings-notifications-accessibility-proof-ios.json",
+    "apple/matrix-settings-notifications-accessibility-proof-macos.json"
+  ],
+  "blockers": [
+
+  ],
+  "settingsCaptureVariant": "profile",
+  "settingsScreenshotAuth": "1",
+  "settingsSignedInSurface": true,
+  "settingsSignedOutSurface": false,
+  "settingsVisualFocus": "notifications",
+  "settingsSurfaceProofArtifacts": [
+    "apple/matrix-settings-notifications-screenshot-proof-ios.json",
+    "apple/matrix-settings-notifications-screenshot-proof-macos.json"
+  ],
+  "settingsNotificationAPNsSurface": true,
+  "settingsAPNsPermissionState": "not-determined",
+  "settingsAPNsRegistrationState": "registered",
+  "settingsSections": [
+    "Notifications",
+    "This Device",
+    "Push Delivery",
+    "Notification Sync",
+    "Agent Access",
+    "Offline"
+  ],
+  "settingsSeedAccountID": "chef_settings_capture"
+}

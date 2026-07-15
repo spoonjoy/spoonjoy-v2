@@ -1,0 +1,174 @@
+{
+  "generatedAt": "2026-07-15T03:25:25-07:00",
+  "url": "https://spoonjoy.app/.well-known/apple-app-site-association",
+  "httpsNoRedirectExpected": true,
+  "redirected": false,
+  "expectedAppleTeamID": null,
+  "validatedAppleTeamID": "743GT2AJ24",
+  "appleTeamIDValidationError": null,
+  "requiredBundleIDs": [
+    "app.spoonjoy",
+    "app.spoonjoy.mac"
+  ],
+  "requiredAppIDs": [
+    "743GT2AJ24.app.spoonjoy",
+    "743GT2AJ24.app.spoonjoy.mac"
+  ],
+  "expectedRoutes": [
+    "https://spoonjoy.app/",
+    "https://spoonjoy.app/recipes",
+    "https://spoonjoy.app/saved-recipes",
+    "https://spoonjoy.app/recipes/{id}",
+    "https://spoonjoy.app/recipes/{id}/edit",
+    "https://spoonjoy.app/recipes/{id}#cook",
+    "https://spoonjoy.app/recipes/{id}?mode=cook",
+    "https://spoonjoy.app/cookbooks",
+    "https://spoonjoy.app/cookbooks/{id}",
+    "https://spoonjoy.app/chefs",
+    "https://spoonjoy.app/users/{identifier}",
+    "https://spoonjoy.app/users/{identifier}/fellow-chefs?page={page}",
+    "https://spoonjoy.app/users/{identifier}/kitchen-visitors?page={page}",
+    "https://spoonjoy.app/shopping-list",
+    "https://spoonjoy.app/search",
+    "https://spoonjoy.app/search?q={query}&scope={all|recipes|cookbooks|chefs|shopping-list}",
+    "https://spoonjoy.app/recipes/new",
+    "https://spoonjoy.app/account/settings"
+  ],
+  "expectedComponents": [
+    {
+      "/": "/"
+    },
+    {
+      "/": "/recipes"
+    },
+    {
+      "/": "/saved-recipes"
+    },
+    {
+      "/": "/recipes/*"
+    },
+    {
+      "/": "/cookbooks"
+    },
+    {
+      "/": "/cookbooks/*"
+    },
+    {
+      "/": "/chefs"
+    },
+    {
+      "/": "/users/*"
+    },
+    {
+      "/": "/shopping-list"
+    },
+    {
+      "/": "/search"
+    },
+    {
+      "/": "/search",
+      "?": {
+        "*": "*"
+      }
+    },
+    {
+      "/": "/recipes/new"
+    },
+    {
+      "/": "/account/settings"
+    }
+  ],
+  "discoveredComponents": [
+    {
+      "/": "/"
+    },
+    {
+      "/": "/recipes"
+    },
+    {
+      "/": "/recipes/*"
+    },
+    {
+      "/": "/cookbooks"
+    },
+    {
+      "/": "/cookbooks/*"
+    },
+    {
+      "/": "/users/*"
+    },
+    {
+      "/": "/my-recipes"
+    },
+    {
+      "/": "/saved-recipes"
+    },
+    {
+      "/": "/chefs"
+    },
+    {
+      "/": "/shopping-list"
+    },
+    {
+      "/": "/search"
+    },
+    {
+      "/": "/search",
+      "?": {
+        "*": "*"
+      }
+    },
+    {
+      "/": "/recipes/new"
+    },
+    {
+      "/": "/account/settings"
+    },
+    {
+      "/": "/oauth/callback"
+    },
+    {
+      "/": "/oauth/callback",
+      "?": {
+        "*": "*"
+      }
+    }
+  ],
+  "missingComponents": [
+
+  ],
+  "fetched": {
+    "status": 200,
+    "contentType": "application/json",
+    "location": null,
+    "bodySHA256": "e299961efae18e4d17efc9c0f6f51b462a9ee55054c9ad9d1049137b20fd27ab",
+    "bodyBytes": 533
+  },
+  "successfulStatus": true,
+  "validContentType": true,
+  "validJSON": true,
+  "discoveredAppIDs": [
+    "743GT2AJ24.app.spoonjoy",
+    "743GT2AJ24.app.spoonjoy.mac",
+    "743GT2AJ24.app.spoonjoy.Spoonjoy",
+    "743GT2AJ24.app.spoonjoy.Spoonjoy.mac"
+  ],
+  "discoveredAppleTeamIDsByBundle": {
+    "app.spoonjoy": [
+      "743GT2AJ24"
+    ],
+    "app.spoonjoy.mac": [
+      "743GT2AJ24"
+    ]
+  },
+  "discoveredCommonAppleTeamIDs": [
+    "743GT2AJ24"
+  ],
+  "ambiguousAppleTeamIDs": [
+
+  ],
+  "missingAppIDBundles": [
+
+  ],
+  "ok": true
+}

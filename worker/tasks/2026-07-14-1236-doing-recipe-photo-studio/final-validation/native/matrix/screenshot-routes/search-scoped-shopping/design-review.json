@@ -1,0 +1,36 @@
+{
+  "mobileScreenshot": true,
+  "desktopScreenshot": true,
+  "screenshotRoute": "search",
+  "dynamicType": true,
+  "voiceOverLabels": true,
+  "keyboardNavigation": true,
+  "reduceMotion": true,
+  "contrast": true,
+  "kitchenTableHierarchy": true,
+  "noOverlap": true,
+  "accessibilityProofArtifacts": [
+    "apple/matrix-search-scoped-shopping-accessibility-proof-ios.json",
+    "apple/matrix-search-scoped-shopping-accessibility-proof-macos.json"
+  ],
+  "blockers": [
+
+  ],
+  "searchNativeSurface": true,
+  "searchScopes": [
+    "all",
+    "recipes",
+    "cookbooks",
+    "chefs",
+    "shopping-list"
+  ],
+  "searchSeedAccountID": "chef_search_capture",
+  "searchSurfaceVariant": "scoped-shopping",
+  "expectedQuery": "lemons",
+  "expectedScope": "shopping-list",
+  "expectedRouteIdentifier": "search:shopping-list:lemons",
+  "searchSurfaceProofArtifacts": [
+    "apple/matrix-search-scoped-shopping-screenshot-proof-ios.json",
+    "apple/matrix-search-scoped-shopping-screenshot-proof-macos.json"
+  ]
+}

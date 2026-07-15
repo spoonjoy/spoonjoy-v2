@@ -1,0 +1,96 @@
+{
+  "bundleIdentifier": "app.spoonjoy",
+  "contrast": true,
+  "dynamicType": true,
+  "emittedBy": "SpoonjoyApp",
+  "keyboardNavigation": true,
+  "kitchenTableHierarchy": true,
+  "launchEnvironmentProof": {
+    "apiBaseURL": "",
+    "screenshotAccountID": "chef_shopping_capture",
+    "screenshotAPNsPermissionState": "",
+    "screenshotAPNsRegistrationState": "",
+    "screenshotAuth": "1",
+    "screenshotRestoreCacheOnly": "1"
+  },
+  "minimumTargetSize": 44,
+  "noOverlap": true,
+  "noTinyClusters": true,
+  "observedDynamicTypeSize": "large",
+  "observedReduceMotion": false,
+  "offlineIndicatorProof": {
+    "dismissButtonLabel": "Hide offline status",
+    "dismissibleStates": [
+      "offline",
+      "stale"
+    ],
+    "hiddenStates": [
+      "synced",
+      "dismissed"
+    ],
+    "severeStates": [
+      "queuedWork",
+      "syncFailure",
+      "conflict",
+      "blocker",
+      "destructiveConfirmation"
+    ],
+    "severityCorrect": true,
+    "source": "OfflineStatusView",
+    "visibleStates": [
+      "offline",
+      "stale",
+      "queuedWork",
+      "syncFailure",
+      "conflict",
+      "blocker",
+      "destructiveConfirmation"
+    ],
+    "voiceOverLabel": true
+  },
+  "platform": "ios",
+  "reduceMotion": true,
+  "route": "shopping-list",
+  "routeEvidence": {
+    "contrastPairs": [
+      "charcoal on bone",
+      "brass label on bone",
+      "destructive action role"
+    ],
+    "dynamicTypeTextStyles": [
+      "KitchenTableTheme.displayTitle",
+      "KitchenTableTheme.bodyNote",
+      "KitchenTableTheme.uiLabel"
+    ],
+    "hierarchyAnchors": [
+      "ShoppingListView",
+      "shoppingHeaderTools",
+      "shoppingReceiptComposer",
+      "shoppingReceiptState",
+      "TabView"
+    ],
+    "keyboardNavigationTargets": [
+      "shopping receipt composer",
+      "receipt actions menu",
+      "native tab bar"
+    ],
+    "layoutGuards": [
+      "scroll-list",
+      "text-fit",
+      "no-tiny-clusters",
+      "tab-bar-safe-area"
+    ],
+    "voiceOverLabels": [
+      "Shopping",
+      "Kitchen",
+      "Receipt actions",
+      "Add item",
+      "Add from recipe",
+      "Clear checked"
+    ]
+  },
+  "source": "ShoppingListView",
+  "textFits": true,
+  "voiceOverLabels": true,
+  "writtenAt": "2026-07-15T10:36:28Z"
+}

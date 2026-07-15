@@ -1,0 +1,22 @@
+{
+  "mobileScreenshot": true,
+  "desktopScreenshot": true,
+  "screenshotRoute": "shopping-list",
+  "dynamicType": true,
+  "voiceOverLabels": true,
+  "keyboardNavigation": true,
+  "reduceMotion": true,
+  "contrast": true,
+  "kitchenTableHierarchy": true,
+  "noOverlap": true,
+  "accessibilityProofArtifacts": [
+    "apple/matrix-shopping-list-all-complete-accessibility-proof-ios.json",
+    "apple/matrix-shopping-list-all-complete-accessibility-proof-macos.json"
+  ],
+  "blockers": [
+
+  ],
+  "shoppingListSurface": true,
+  "shoppingSeedAccountID": "chef_shopping_capture",
+  "shoppingListVariant": "all-complete"
+}
