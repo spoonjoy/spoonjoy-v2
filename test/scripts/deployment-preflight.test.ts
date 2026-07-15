@@ -741,6 +741,18 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
   });
 
+  it("rejects a disabled production deploy step", () => {
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
+      "        run: pnpm run deploy:auto",
+      "        if: ${{ false }}\n        run: pnpm run deploy:auto",
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
   it("rejects validation that runs after the deploy command", () => {
     const inputs = validInputs();
     const workflow = secureProductionDeployWorkflow();

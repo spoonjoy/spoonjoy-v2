@@ -110,11 +110,13 @@ const REQUIRED_SCRIPT_COVERAGE_INCLUDES = [
   "scripts/smoke-api-live.mjs",
   "scripts/qa-preflight.ts",
   "scripts/deployment-preflight.ts",
+  "scripts/deploy-production-canary.ts",
 ] as const;
 
 const REQUIRED_SCRIPT_TYPECHECK_INCLUDES = [
   "scripts/build-output-hygiene.ts",
   "scripts/deployment-preflight.ts",
+  "scripts/deploy-production-canary.ts",
   "scripts/qa-preflight.ts",
   "scripts/react-router-build.ts",
 ] as const;
@@ -304,25 +306,92 @@ function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
 
   const dispatchInputs = childBlock(lines, workflowDispatch[0], workflowDispatch[1], "inputs");
   const sourceSha = dispatchInputs ? childBlock(lines, dispatchInputs[0], dispatchInputs[1], "source_sha") : null;
-  if (!sourceSha) return false;
+  const allowRollback = dispatchInputs ? childBlock(lines, dispatchInputs[0], dispatchInputs[1], "allow_rollback") : null;
+  if (!sourceSha || !allowRollback) return false;
 
-  const activeText = lines.map((line) => line.text).join("\n");
-  const requiredFragments = [
-    "workflows: [CI]",
-    "branches: [main]",
-    "types: [completed]",
-    "SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.source_sha }}",
+  const permissionsIndex = lines.findIndex((line) => line.indent === 0 && line.text === "permissions:");
+  if (permissionsIndex === -1) return false;
+  const permissions = blockScalarChildMap(lines, permissionsIndex, blockEnd(lines, permissionsIndex));
+  if (permissions.get("issues") === "write") return false;
+
+  const jobs = workflowJobBlocks(lines);
+  const deploy = jobs.find(([start]) => lines[start].text === "deploy:");
+  const report = jobs.find(([start]) => lines[start].text === "report-canary:");
+  if (!deploy || !report) return false;
+
+  const deployCondition = blockScalarChildValue(lines, deploy[0], deploy[1], "if") ?? "";
+  const deployConditionFragments = [
     "github.event.workflow_run.conclusion == 'success'",
     "github.event.workflow_run.event == 'push'",
     "github.event.workflow_run.head_branch == 'main'",
-    "ref: ${{ env.SOURCE_SHA }}",
-    "name: Validate release source",
-    "grep -Eq '^[0-9a-f]{40}$'",
-    'git merge-base --is-ancestor "$SOURCE_SHA" origin/main',
-    'gh run list --workflow CI --branch main --commit "$SOURCE_SHA" --event push --status success',
-    "name: Record release source",
-    "Source SHA: `%s`",
+    "github.event.workflow_run.path == '.github/workflows/ci.yml'",
+    "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'",
   ];
+  if (
+    blockScalarChildValue(lines, deploy[0], deploy[1], "environment") !== "production" ||
+    !deployConditionFragments.every((fragment) => deployCondition.includes(fragment))
+  ) {
+    return false;
+  }
+
+  const reportPermissions = childBlock(lines, report[0], report[1], "permissions");
+  if (
+    !reportPermissions ||
+    blockScalarChildValue(lines, reportPermissions[0], reportPermissions[1], "contents") !== "read" ||
+    blockScalarChildValue(lines, reportPermissions[0], reportPermissions[1], "issues") !== "write"
+  ) {
+    return false;
+  }
+
+  const steps = childBlock(lines, deploy[0], deploy[1], "steps");
+  if (!steps) return false;
+  let checkoutStep = -1;
+  let validationStep = -1;
+  let deployStep = -1;
+  let recordStep = -1;
+
+  for (const [stepStart, stepEnd] of stepBlocks(lines, steps[0], steps[1])) {
+    const run = stepRunText(lines, stepStart, stepEnd);
+    if (
+      stepUses(lines, stepStart, stepEnd, "actions/checkout@") &&
+      stepWithValue(lines, stepStart, stepEnd, "ref") === "${{ env.SOURCE_SHA }}" &&
+      stepWithValue(lines, stepStart, stepEnd, "fetch-depth") === "0" &&
+      stepWithValue(lines, stepStart, stepEnd, "persist-credentials") === "false"
+    ) {
+      checkoutStep = stepStart;
+    }
+    if (stepPropertyValue(lines, stepStart, stepEnd, "name") === "Validate release source") {
+      const requiredRunFragments = [
+        "grep -Eq '^[0-9a-f]{40}$'",
+        'git merge-base --is-ancestor "$SOURCE_SHA" origin/main',
+        `test "$WORKFLOW_RUN_PATH" = '.github/workflows/ci.yml' || test "$GITHUB_EVENT_NAME" = 'workflow_dispatch'`,
+        'test "$(git rev-parse origin/main)" = "$SOURCE_SHA" || test "$ALLOW_ROLLBACK" = "true"',
+        'gh run list --workflow .github/workflows/ci.yml --branch main --commit "$SOURCE_SHA" --event push --status success',
+        'required_checks=\'["coverage","e2e","build-storybook"]\'',
+        "repos/$GITHUB_REPOSITORY/commits/$SOURCE_SHA/check-runs",
+      ];
+      if (
+        stepPropertyValue(lines, stepStart, stepEnd, "if") === null &&
+        stepHasEnvKeys(lines, stepStart, stepEnd, ["GH_TOKEN", "ALLOW_ROLLBACK", "WORKFLOW_RUN_PATH"]) &&
+        requiredRunFragments.every((fragment) => run.includes(fragment))
+      ) {
+        validationStep = stepStart;
+      }
+    }
+    if (
+      stepRunsDeployAuto(lines, stepStart, stepEnd) &&
+      stepPropertyValue(lines, stepStart, stepEnd, "if") === null &&
+      stepHasEnvKeys(lines, stepStart, stepEnd, ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"])
+    ) {
+      deployStep = stepStart;
+    }
+    if (
+      stepPropertyValue(lines, stepStart, stepEnd, "name") === "Record release source" &&
+      run.includes("Source SHA: `%s`")
+    ) {
+      recordStep = stepStart;
+    }
+  }
 
   return (
     workflowHasOnlyTriggers(lines, onIndex, onEnd, ["workflow_run", "workflow_dispatch"]) &&
@@ -331,7 +400,13 @@ function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
     blockScalarChildValue(lines, workflowRun[0], workflowRun[1], "types") === "[completed]" &&
     blockScalarChildValue(lines, sourceSha[0], sourceSha[1], "required") === "true" &&
     blockScalarChildValue(lines, sourceSha[0], sourceSha[1], "type") === "string" &&
-    requiredFragments.every((fragment) => activeText.includes(fragment)) &&
+    blockScalarChildValue(lines, allowRollback[0], allowRollback[1], "required") === "true" &&
+    blockScalarChildValue(lines, allowRollback[0], allowRollback[1], "default") === "false" &&
+    blockScalarChildValue(lines, allowRollback[0], allowRollback[1], "type") === "boolean" &&
+    checkoutStep >= 0 &&
+    validationStep > checkoutStep &&
+    deployStep > validationStep &&
+    recordStep > deployStep &&
     workflowActionReferencesArePinned(workflow)
   );
 }
@@ -916,6 +991,11 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
       "wrangler.json must bind the recipe/profile photo bucket as PHOTOS."
     ),
     check(
+      "Worker version metadata",
+      objectRecord(inputs.wrangler.version_metadata).binding === "CF_VERSION_METADATA",
+      "wrangler.json must bind Worker version metadata as CF_VERSION_METADATA for exact-version canary verification."
+    ),
+    check(
       "QA environment",
       hasBinding(qaConfig.d1_databases, "DB", ["database_name", "database_id"]) &&
         hasBinding(qaConfig.r2_buckets, "PHOTOS", ["bucket_name"]) &&
@@ -985,14 +1065,8 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     ),
     check(
       "deploy:auto script",
-      typeof scripts["deploy:auto"] === "string" &&
-        scripts["deploy:auto"].includes("SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run deploy:preflight") &&
-        scripts["deploy:auto"].includes("pnpm run build") &&
-        scripts["deploy:auto"].includes("pnpm exec wrangler d1 migrations apply DB --remote") &&
-        scripts["deploy:auto"].includes("pnpm exec wrangler deploy") &&
-        scripts["deploy:auto"].indexOf("pnpm exec wrangler d1 migrations apply DB --remote") <
-          scripts["deploy:auto"].lastIndexOf("pnpm run deploy:preflight"),
-      "package.json deploy:auto must skip only the initial remote preflight, apply D1 migrations, rerun full preflight, then deploy."
+      scripts["deploy:auto"] === "tsx scripts/deploy-production-canary.ts",
+      "package.json deploy:auto must run the staged production canary orchestrator."
     ),
     check(
       "preflight script",
@@ -1039,7 +1113,7 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     ),
     check(
       "Cloudflare Env typing",
-      ["DB", "PHOTOS", ...REQUIRED_SECRET_NAMES, ...IMAGE_PROVIDER_ENV_NAMES].every((name) => inputs.cloudflareEnvDts.includes(`${name}?`)),
+      ["DB", "PHOTOS", "CF_VERSION_METADATA", ...REQUIRED_SECRET_NAMES, ...IMAGE_PROVIDER_ENV_NAMES].every((name) => inputs.cloudflareEnvDts.includes(`${name}?`)),
       "app/cloudflare-env.d.ts must type all Cloudflare bindings and documented secrets."
     ),
     check(
