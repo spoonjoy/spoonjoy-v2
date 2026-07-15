@@ -1650,6 +1650,33 @@ const exampleRecipeCover = {
   sourceImageUrl: "https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg",
   createdAt: exampleTimestamp,
 };
+const exampleUploadedRecipeCover = {
+  ...exampleRecipeCover,
+  id: "cover_upload_1",
+  sourceType: "chef-upload",
+  imageUrl: "https://spoonjoy.app/photos/uploads/cover-raw.jpg",
+  stylizedImageUrl: null,
+  displayUrl: "https://spoonjoy.app/photos/uploads/cover-raw.jpg",
+  activeVariant: "image",
+  provenanceLabel: "Original photo",
+  sourceSpoonId: null,
+  generationStatus: "processing",
+  sourceImageUrl: "https://spoonjoy.app/photos/uploads/cover-raw.jpg",
+};
+const exampleGeneratedPlaceholderCover = {
+  ...exampleRecipeCover,
+  id: "cover_ai_1",
+  status: "processing",
+  sourceType: "ai-placeholder",
+  imageUrl: null,
+  stylizedImageUrl: null,
+  displayUrl: null,
+  activeVariant: null,
+  provenanceLabel: "AI generated",
+  sourceSpoonId: null,
+  generationStatus: "processing",
+  sourceImageUrl: null,
+};
 const exampleRecipeCoverSpoonImage = {
   id: "spoon_1",
   recipeId: "recipe_1",
@@ -2493,7 +2520,7 @@ const requestExamples: Record<string, unknown> = {
   SetRecipeNoCoverRequest: { clientMutationId: "device-uuid-cover-none", confirmNoCover: true },
   CreateRecipeCoverRequest: {
     clientMutationId: "device-uuid-cover-create",
-    imageUrl: "/photos/recipes/chef_1/recipe_1/cover-raw.jpg",
+    imageUrl: "https://spoonjoy.app/photos/uploads/cover-raw.jpg",
     activate: true,
     generateEditorial: true,
   },
@@ -2570,8 +2597,24 @@ function responseExampleFor(schemaName: string, path: ResourcePath, method: Http
   const clientMutationId = clientMutationIdFromRequestExample(requestExampleFor(requestSchemaName, path, method));
   if (!clientMutationId) return example;
 
-  const operationExample = JSON.parse(JSON.stringify(example)) as { data: { mutation: { clientMutationId: string } } };
+  const operationExample = JSON.parse(JSON.stringify(example)) as {
+    data: {
+      activeCover?: unknown;
+      createdCover?: unknown;
+      generationStatus?: string | null;
+      mutation: { clientMutationId: string };
+    };
+  };
   operationExample.data.mutation.clientMutationId = clientMutationId;
+  if (schemaName === "RecipeCoverMutationEnvelope" && path === "/api/v1/recipes/{id}/covers" && method === "POST") {
+    operationExample.data.activeCover = exampleUploadedRecipeCover;
+    operationExample.data.createdCover = exampleUploadedRecipeCover;
+    operationExample.data.generationStatus = "processing";
+  }
+  if (schemaName === "RecipeCoverMutationEnvelope" && path === "/api/v1/recipes/{id}/covers/generate" && method === "POST") {
+    operationExample.data.createdCover = exampleGeneratedPlaceholderCover;
+    operationExample.data.generationStatus = "processing";
+  }
   return operationExample;
 }
 
@@ -3934,6 +3977,7 @@ const SDK_PATHS = new Set([
   "/api/v1/recipes/{id}/image",
   "/api/v1/recipes/{id}/covers",
   "/api/v1/recipes/{id}/covers/{coverId}",
+  "/api/v1/recipes/{id}/covers/generate",
   "/api/v1/recipes/{id}/covers/regenerate",
   "/api/v1/recipes/{id}/covers/from-spoon/{spoonId}",
   "/api/v1/cookbooks",

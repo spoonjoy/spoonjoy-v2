@@ -5448,12 +5448,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
             "description": "2026-06-01T00:00:00.000Z"
           }
         ],
-        "example": "{\n  \"clientMutationId\": \"device-uuid-recipe-image\",\n  \"photo\": \"(binary image file)\",\n  \"activate\": true,\n  \"generateEditorial\": true,\n  \"postAsSpoon\": true,\n  \"note\": \"Added more lemon.\",\n  \"nextTime\": \"Try a wider pan.\",\n  \"cookedAt\": \"2026-06-01T00:00:00.000Z\"\n}",
+        "example": "const body = new FormData();\nbody.append(\"clientMutationId\", \"device-uuid-recipe-image\");\nbody.append(\"photo\", file);\nbody.append(\"activate\", \"true\");\nbody.append(\"generateEditorial\", \"true\");\nbody.append(\"postAsSpoon\", \"true\");\nbody.append(\"note\", \"Added more lemon.\");\nbody.append(\"nextTime\", \"Try a wider pan.\");\nbody.append(\"cookedAt\", \"2026-06-01T00:00:00.000Z\");\n\nawait fetch(\"/api/v1/recipes/recipe_1/image\", {\n  method: \"POST\",\n  headers: { Authorization: \"Bearer sj_...\" },\n  body,\n});\n\n# curl --form example; omit Content-Type so curl adds the multipart boundary.\ncurl -fsS -X POST 'https://spoonjoy.app/api/v1/recipes/recipe_1/image' \\\n  -H 'Authorization: Bearer sj_...' \\\n  --form 'clientMutationId=device-uuid-recipe-image' \\\n  --form 'photo=@./photo.jpg;type=image/jpeg' \\\n  --form 'activate=true' \\\n  --form 'generateEditorial=true' \\\n  --form 'postAsSpoon=true' \\\n  --form 'note=Added more lemon.' \\\n  --form 'nextTime=Try a wider pan.' \\\n  --form 'cookedAt=2026-06-01T00:00:00.000Z'",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-recipe-image\",\n  \"photo\": \"(binary image file)\",\n  \"activate\": true,\n  \"generateEditorial\": true,\n  \"postAsSpoon\": true,\n  \"note\": \"Added more lemon.\",\n  \"nextTime\": \"Try a wider pan.\",\n  \"cookedAt\": \"2026-06-01T00:00:00.000Z\"\n}"
+            "example": "const body = new FormData();\nbody.append(\"clientMutationId\", \"device-uuid-recipe-image\");\nbody.append(\"photo\", file);\nbody.append(\"activate\", \"true\");\nbody.append(\"generateEditorial\", \"true\");\nbody.append(\"postAsSpoon\", \"true\");\nbody.append(\"note\", \"Added more lemon.\");\nbody.append(\"nextTime\", \"Try a wider pan.\");\nbody.append(\"cookedAt\", \"2026-06-01T00:00:00.000Z\");\n\nawait fetch(\"/api/v1/recipes/recipe_1/image\", {\n  method: \"POST\",\n  headers: { Authorization: \"Bearer sj_...\" },\n  body,\n});\n\n# curl --form example; omit Content-Type so curl adds the multipart boundary.\ncurl -fsS -X POST 'https://spoonjoy.app/api/v1/recipes/recipe_1/image' \\\n  -H 'Authorization: Bearer sj_...' \\\n  --form 'clientMutationId=device-uuid-recipe-image' \\\n  --form 'photo=@./photo.jpg;type=image/jpeg' \\\n  --form 'activate=true' \\\n  --form 'generateEditorial=true' \\\n  --form 'postAsSpoon=true' \\\n  --form 'note=Added more lemon.' \\\n  --form 'nextTime=Try a wider pan.' \\\n  --form 'cookedAt=2026-06-01T00:00:00.000Z'"
           }
         ]
       },
@@ -5847,12 +5847,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "required": true,
         "contentType": "application/json",
         "fields": [],
-        "example": "{\n  \"clientMutationId\": \"device-uuid-cover-create\",\n  \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/cover-raw.jpg\",\n  \"activate\": true,\n  \"generateEditorial\": true\n}",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-cover-create\",\n  \"imageUrl\": \"https://spoonjoy.app/photos/uploads/cover-raw.jpg\",\n  \"activate\": true,\n  \"generateEditorial\": true\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-cover-create\",\n  \"imageUrl\": \"/photos/recipes/chef_1/recipe_1/cover-raw.jpg\",\n  \"activate\": true,\n  \"generateEditorial\": true\n}"
+            "example": "{\n  \"clientMutationId\": \"device-uuid-cover-create\",\n  \"imageUrl\": \"https://spoonjoy.app/photos/uploads/cover-raw.jpg\",\n  \"activate\": true,\n  \"generateEditorial\": true\n}"
           }
         ]
       },
@@ -5910,7 +5910,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorial photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorial photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"archivedCover\": null,\n    \"generationStatus\": \"processing\",\n    \"warnings\": [],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-cover-create\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_upload_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/uploads/cover-raw.jpg\",\n      \"stylizedImageUrl\": null,\n      \"displayUrl\": \"https://spoonjoy.app/photos/uploads/cover-raw.jpg\",\n      \"activeVariant\": \"image\",\n      \"provenanceLabel\": \"Original photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"processing\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/uploads/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_upload_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"chef-upload\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/uploads/cover-raw.jpg\",\n      \"stylizedImageUrl\": null,\n      \"displayUrl\": \"https://spoonjoy.app/photos/uploads/cover-raw.jpg\",\n      \"activeVariant\": \"image\",\n      \"provenanceLabel\": \"Original photo\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"processing\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/uploads/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"archivedCover\": null,\n    \"generationStatus\": \"processing\",\n    \"warnings\": [],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-cover-create\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -6593,7 +6593,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "method": "POST",
       "path": "/api/v1/recipes/{id}/covers/generate",
       "profiles": [
-        "full"
+        "full",
+        "sdk"
       ],
       "tag": "Recipe Covers",
       "auth": "authenticated",
@@ -6733,7 +6734,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorial photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorial photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"archivedCover\": null,\n    \"generationStatus\": \"processing\",\n    \"warnings\": [],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-cover-generate\",\n      \"replayed\": false\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"activeCover\": {\n      \"id\": \"cover_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"ready\",\n      \"sourceType\": \"spoon\",\n      \"imageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"stylizedImageUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"displayUrl\": \"https://spoonjoy.app/photos/covers/cover-editorial.jpg\",\n      \"activeVariant\": \"stylized\",\n      \"provenanceLabel\": \"Editorial photo\",\n      \"sourceSpoonId\": \"spoon_1\",\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"succeeded\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": \"https://spoonjoy.app/photos/spoons/chef_1/uploads/cover-raw.jpg\",\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"previousActiveCover\": null,\n    \"createdCover\": {\n      \"id\": \"cover_ai_1\",\n      \"recipeId\": \"recipe_1\",\n      \"status\": \"processing\",\n      \"sourceType\": \"ai-placeholder\",\n      \"imageUrl\": null,\n      \"stylizedImageUrl\": null,\n      \"displayUrl\": null,\n      \"activeVariant\": null,\n      \"provenanceLabel\": \"AI generated\",\n      \"sourceSpoonId\": null,\n      \"createdById\": \"chef_1\",\n      \"archivedAt\": null,\n      \"generationStatus\": \"processing\",\n      \"failureReason\": null,\n      \"sourceImageUrl\": null,\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\"\n    },\n    \"archivedCover\": null,\n    \"generationStatus\": \"processing\",\n    \"warnings\": [],\n    \"mutation\": {\n      \"clientMutationId\": \"device-uuid-cover-generate\",\n      \"replayed\": false\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -9230,12 +9231,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
             "description": "(binary image file)"
           }
         ],
-        "example": "{\n  \"clientMutationId\": \"device-uuid-profile-photo\",\n  \"photo\": \"(binary image file)\"\n}",
+        "example": "const body = new FormData();\nbody.append(\"clientMutationId\", \"device-uuid-profile-photo\");\nbody.append(\"photo\", file);\n\nawait fetch(\"/api/v1/me/photo\", {\n  method: \"POST\",\n  headers: { Authorization: \"Bearer sj_...\" },\n  body,\n});\n\n# curl --form example; omit Content-Type so curl adds the multipart boundary.\ncurl -fsS -X POST 'https://spoonjoy.app/api/v1/me/photo' \\\n  -H 'Authorization: Bearer sj_...' \\\n  --form 'clientMutationId=device-uuid-profile-photo' \\\n  --form 'photo=@./photo.jpg;type=image/jpeg'",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-profile-photo\",\n  \"photo\": \"(binary image file)\"\n}"
+            "example": "const body = new FormData();\nbody.append(\"clientMutationId\", \"device-uuid-profile-photo\");\nbody.append(\"photo\", file);\n\nawait fetch(\"/api/v1/me/photo\", {\n  method: \"POST\",\n  headers: { Authorization: \"Bearer sj_...\" },\n  body,\n});\n\n# curl --form example; omit Content-Type so curl adds the multipart boundary.\ncurl -fsS -X POST 'https://spoonjoy.app/api/v1/me/photo' \\\n  -H 'Authorization: Bearer sj_...' \\\n  --form 'clientMutationId=device-uuid-profile-photo' \\\n  --form 'photo=@./photo.jpg;type=image/jpeg'"
           }
         ]
       },

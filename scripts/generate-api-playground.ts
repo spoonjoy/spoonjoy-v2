@@ -166,7 +166,54 @@ function resolveSchema(document: OpenApiDocument, schema: OpenApiSchema | undefi
   return document.components?.schemas?.[match[1]] as OpenApiSchema | undefined;
 }
 
-function requestBodyExample(document: OpenApiDocument, operation: OpenApiOperation) {
+function samplePath(path: string) {
+  return path
+    .replaceAll("{id}", "recipe_1")
+    .replaceAll("{coverId}", "cover_1")
+    .replaceAll("{spoonId}", "spoon_1")
+    .replaceAll("{itemId}", "item_1")
+    .replaceAll("{credentialId}", "cred_1")
+    .replaceAll("{recipeId}", "recipe_1");
+}
+
+function multipartFormDataValue(name: string, value: unknown) {
+  if (name === "photo") return "file";
+  if (value === null || value === undefined) return "\"\"";
+  return JSON.stringify(String(value));
+}
+
+function multipartCurlValue(name: string, value: unknown) {
+  if (name === "photo") return "photo=@./photo.jpg;type=image/jpeg";
+  return `${name}=${String(value ?? "")}`;
+}
+
+function renderMultipartExample(path: string, method: string, value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  const fields = Object.entries(value as Record<string, unknown>);
+  const url = `https://spoonjoy.app${samplePath(path)}`;
+  const formDataLines = [
+    "const body = new FormData();",
+    ...fields.map(([name, item]) => `body.append("${name}", ${multipartFormDataValue(name, item)});`),
+    "",
+    `await fetch("${samplePath(path)}", {`,
+    `  method: "${method.toUpperCase()}",`,
+    "  headers: { Authorization: \"Bearer sj_...\" },",
+    "  body,",
+    "});",
+  ];
+  const curlLines = [
+    "# curl --form example; omit Content-Type so curl adds the multipart boundary.",
+    `curl -fsS -X ${method.toUpperCase()} '${url}' \\`,
+    "  -H 'Authorization: Bearer sj_...' \\",
+    ...fields.map(([name, item], index) => {
+      const suffix = index === fields.length - 1 ? "" : " \\";
+      return `  --form '${multipartCurlValue(name, item)}'${suffix}`;
+    }),
+  ];
+  return [...formDataLines, "", ...curlLines].join("\n");
+}
+
+function requestBodyExample(document: OpenApiDocument, path: string, method: string, operation: OpenApiOperation) {
   const jsonMedia = operation.requestBody?.content?.["application/json"];
   const formMedia = operation.requestBody?.content?.["application/x-www-form-urlencoded"];
   const multipartMedia = operation.requestBody?.content?.["multipart/form-data"];
@@ -207,7 +254,7 @@ function requestBodyExample(document: OpenApiDocument, operation: OpenApiOperati
       ? JSON.stringify(value, null, 2)
       : contentType === "application/x-www-form-urlencoded"
         ? new URLSearchParams(Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, String(item)])).toString()
-        : JSON.stringify(value, null, 2);
+        : renderMultipartExample(path, method, value);
   const renderedExample = renderExample(example);
   return {
     required: Boolean(operation.requestBody?.required),
@@ -379,7 +426,7 @@ function operationFromOpenApi(
     risk: operationRisk(path, method),
     guide: operationGuide(path, method, operation),
     params: (operation.parameters ?? []).map((parameter) => parameterFromOpenApi(path, parameter)),
-    requestBody: requestBodyExample(document, operation),
+    requestBody: requestBodyExample(document, path, method, operation),
     responseStatuses: responseSummaries(operation).map((response) => response.status),
     responseSummaries: responseSummaries(operation),
     responseExamples: responseExamples(operation),

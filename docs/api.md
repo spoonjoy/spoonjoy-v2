@@ -493,9 +493,11 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 | `DELETE` | `/api/v1/recipes/{id}/spoons/{spoonId}` | Authenticated chef | `kitchen:write` |
 | `POST` | `/api/v1/recipes/{id}/image` | Authenticated chef | `kitchen:write` |
 | `GET` | `/api/v1/recipes/{id}/covers` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/recipes/{id}/covers` | Authenticated chef | `kitchen:write` |
 | `PATCH` | `/api/v1/recipes/{id}/covers` | Authenticated chef | `kitchen:write` |
 | `PATCH` | `/api/v1/recipes/{id}/covers/{coverId}` | Authenticated chef | `kitchen:write` |
 | `DELETE` | `/api/v1/recipes/{id}/covers/{coverId}` | Authenticated chef | `kitchen:write` |
+| `POST` | `/api/v1/recipes/{id}/covers/generate` | Authenticated chef | `kitchen:write` |
 | `POST` | `/api/v1/recipes/{id}/covers/regenerate` | Authenticated chef | `kitchen:write` |
 | `POST` | `/api/v1/recipes/{id}/covers/from-spoon/{spoonId}` | Authenticated chef | `kitchen:write` |
 | `GET` | `/api/v1/cookbooks` | Optional | `cookbooks:read` when authenticated |
@@ -570,7 +572,7 @@ Recipe spoon mutations require `kitchen:write` and are idempotent with `clientMu
 
 Recipe cover management endpoints are owner-scoped native app surface, not public catalog writes. They require the authenticated chef to own the recipe and to have `kitchen:write`. `GET /api/v1/recipes/{id}/covers` returns cover candidates, the current `activeCover`, spoon photo sources in `spoonImages`, and offset pagination. Pass `includeArchived=true` only for management UIs that need archived candidates.
 
-Recipe-cover mutations are idempotent with `clientMutationId` and return `activeCover`, `previousActiveCover`, optional `createdCover` or `archivedCover`, optional `generationStatus`, warnings, and replay metadata. `PATCH /api/v1/recipes/{id}/covers` sets an explicit no-cover state and requires `confirmNoCover: true`. `PATCH /api/v1/recipes/{id}/covers/{coverId}` activates an existing candidate variant. `DELETE /api/v1/recipes/{id}/covers/{coverId}` archives a candidate and can either promote a replacement variant or confirm that the recipe should have no active cover. `POST /api/v1/recipes/{id}/covers/regenerate` schedules a new editorial image for an existing candidate. `POST /api/v1/recipes/{id}/covers/from-spoon/{spoonId}` creates a candidate from one of the recipe's spoon photos and can request editorial generation.
+Recipe-cover mutations are idempotent with `clientMutationId` and return `activeCover`, `previousActiveCover`, optional `createdCover` or `archivedCover`, optional `generationStatus`, warnings, and replay metadata. `POST /api/v1/recipes/{id}/covers` creates a cover candidate from a Spoonjoy uploaded image URL and can activate the original immediately while editorialization runs. `POST /api/v1/recipes/{id}/covers/generate` creates an AI placeholder cover candidate and accepts optional `promptAddition` plus `activateWhenReady`. `PATCH /api/v1/recipes/{id}/covers` sets an explicit no-cover state and requires `confirmNoCover: true`. `PATCH /api/v1/recipes/{id}/covers/{coverId}` activates an existing candidate variant. `DELETE /api/v1/recipes/{id}/covers/{coverId}` archives a candidate and can either promote a replacement variant or confirm that the recipe should have no active cover. `POST /api/v1/recipes/{id}/covers/regenerate` schedules a new editorial image for an existing candidate and accepts optional `promptAddition` plus `activateWhenReady`. `POST /api/v1/recipes/{id}/covers/from-spoon/{spoonId}` creates a candidate from one of the recipe's spoon photos and can request editorial generation.
 
 The full OpenAPI document, SDK profile, and playground include cookbook write and recipe-cover operations. The no-code connector profile includes cookbook JSON actions but omits recipe-cover operations because owner-scoped visual management does not import cleanly into connector action builders.
 
@@ -636,6 +638,16 @@ curl -fsS -X DELETE 'https://spoonjoy.app/api/v1/recipes/recipe_1/spoons/spoon_1
 curl -fsS 'https://spoonjoy.app/api/v1/recipes/recipe_1/covers' \
   -H 'Authorization: Bearer sj_...'
 
+curl -fsS -X POST 'https://spoonjoy.app/api/v1/recipes/recipe_1/covers' \
+  -H 'Authorization: Bearer sj_...' \
+  -H 'Content-Type: application/json' \
+  -d '{"clientMutationId":"cover-create:recipe_1","imageUrl":"https://spoonjoy.app/photos/uploads/cover-raw.jpg","activate":true,"generateEditorial":true}'
+
+curl -fsS -X POST 'https://spoonjoy.app/api/v1/recipes/recipe_1/covers/generate' \
+  -H 'Authorization: Bearer sj_...' \
+  -H 'Content-Type: application/json' \
+  -d '{"clientMutationId":"cover-generate:recipe_1","promptAddition":"brighter herbs and tighter crop","activateWhenReady":true}'
+
 curl -fsS -X PATCH 'https://spoonjoy.app/api/v1/recipes/recipe_1/covers/cover_1' \
   -H 'Authorization: Bearer sj_...' \
   -H 'Content-Type: application/json' \
@@ -654,7 +666,7 @@ curl -fsS -X DELETE 'https://spoonjoy.app/api/v1/recipes/recipe_1/covers/cover_1
 curl -fsS -X POST 'https://spoonjoy.app/api/v1/recipes/recipe_1/covers/regenerate' \
   -H 'Authorization: Bearer sj_...' \
   -H 'Content-Type: application/json' \
-  -d '{"clientMutationId":"cover-regenerate:recipe_1:cover_1","coverId":"cover_1","activateWhenReady":true}'
+  -d '{"clientMutationId":"cover-regenerate:recipe_1:cover_1","coverId":"cover_1","promptAddition":"keep the plating but brighten the background","activateWhenReady":true}'
 
 curl -fsS -X POST 'https://spoonjoy.app/api/v1/recipes/recipe_1/covers/from-spoon/spoon_1' \
   -H 'Authorization: Bearer sj_...' \
