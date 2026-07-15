@@ -31,6 +31,8 @@ import {
   usesLocalD1,
 } from "../../scripts/smoke-live-helpers.mjs";
 
+const CANDIDATE_VERSION = "22222222-2222-4222-8222-222222222222";
+
 describe("smoke-live helpers", () => {
   it("detects local D1 targets from localhost base URLs", () => {
     expect(usesLocalD1("http://localhost:5173")).toBe(true);
@@ -236,16 +238,20 @@ describe("smoke-live helpers", () => {
       "mcp-oauth-canary-artifacts",
       "--keep-smoke-data",
       "--skip-legacy-db-probe",
+      "--worker-version-id",
+      CANDIDATE_VERSION,
     ])).toMatchObject({
       targetEnv: "production",
       baseUrl: "https://spoonjoy.app",
       outDir: "mcp-oauth-canary-artifacts",
       shouldCleanup: false,
       includeLegacyDbProbe: false,
+      workerVersionId: CANDIDATE_VERSION,
     });
     expect(parseMcpCanaryArgs(["--base-url", "http://localhost:5173"])).toMatchObject({
       targetEnv: "local",
       includeLegacyDbProbe: true,
+      workerVersionId: null,
     });
   });
 

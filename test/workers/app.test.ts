@@ -81,6 +81,31 @@ describe("Cloudflare worker app", () => {
     expect(mcpPostRoute).not.toHaveBeenCalled();
   });
 
+  it("exposes the executing Worker version for release-canary verification", async () => {
+    requestHandler.mockClear();
+    const env = {
+      CF_VERSION_METADATA: {
+        id: "22222222-2222-4222-8222-222222222222",
+        tag: "release",
+        timestamp: "2026-07-15T00:00:00Z",
+      },
+    } as CloudflareEnvironment;
+
+    const response = await worker.fetch(new Request("https://spoonjoy.app/health"), env, context());
+
+    expect(response.headers.get("X-Spoonjoy-Worker-Version")).toBe("22222222-2222-4222-8222-222222222222");
+  });
+
+  it("omits the release-version header outside the versioned Workers runtime", async () => {
+    const response = await worker.fetch(
+      new Request("https://spoonjoy.app/health"),
+      {} as CloudflareEnvironment,
+      context(),
+    );
+
+    expect(response.headers.get("X-Spoonjoy-Worker-Version")).toBeNull();
+  });
+
   it("answers MCP POST requests as raw JSON before React Router renders the landing page", async () => {
     requestHandler.mockClear();
     mcpPostRoute.mockClear();

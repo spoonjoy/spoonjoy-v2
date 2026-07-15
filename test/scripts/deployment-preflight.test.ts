@@ -29,10 +29,13 @@ function secureProductionDeployWorkflow(): string {
     "      source_sha:",
     "        required: true",
     "        type: string",
+    "      allow_rollback:",
+    "        required: true",
+    "        default: false",
+    "        type: boolean",
     "permissions:",
     "  actions: read",
     "  contents: read",
-    "  issues: write",
     "env:",
     "  GIT_CONFIG_COUNT: '1'",
     "  GIT_CONFIG_KEY_0: init.defaultBranch",
@@ -40,21 +43,29 @@ function secureProductionDeployWorkflow(): string {
     "  SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.source_sha }}",
     "jobs:",
     "  deploy:",
-    "    if: (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main') || github.event_name == 'workflow_dispatch'",
+    "    if: (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.path == '.github/workflows/ci.yml') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')",
     "    runs-on: ubuntu-latest",
+    "    environment: production",
     "    steps:",
     `      - uses: ${CHECKOUT_ACTION} # v6`,
     "        with:",
     "          ref: ${{ env.SOURCE_SHA }}",
     "          fetch-depth: 0",
+    "          persist-credentials: false",
     "      - name: Validate release source",
     "        env:",
     "          GH_TOKEN: ${{ github.token }}",
+    "          ALLOW_ROLLBACK: ${{ inputs.allow_rollback || false }}",
+    "          WORKFLOW_RUN_PATH: ${{ github.event.workflow_run.path }}",
     "        run: |",
     "          grep -Eq '^[0-9a-f]{40}$' <<<\"$SOURCE_SHA\"",
     "          git fetch --no-tags origin main",
     "          git merge-base --is-ancestor \"$SOURCE_SHA\" origin/main",
-    "          gh run list --workflow CI --branch main --commit \"$SOURCE_SHA\" --event push --status success",
+    "          test \"$WORKFLOW_RUN_PATH\" = '.github/workflows/ci.yml' || test \"$GITHUB_EVENT_NAME\" = 'workflow_dispatch'",
+    "          test \"$(git rev-parse origin/main)\" = \"$SOURCE_SHA\" || test \"$ALLOW_ROLLBACK\" = \"true\"",
+    "          gh run list --workflow .github/workflows/ci.yml --branch main --commit \"$SOURCE_SHA\" --event push --status success",
+    "          required_checks='[\"coverage\",\"e2e\",\"build-storybook\"]'",
+    "          gh api \"repos/$GITHUB_REPOSITORY/commits/$SOURCE_SHA/check-runs\"",
     `      - uses: ${SETUP_NODE_ACTION} # v6`,
     "        with:",
     "          node-version: '22'",
@@ -69,6 +80,25 @@ function secureProductionDeployWorkflow(): string {
     "        run: pnpm run deploy:auto",
     "      - name: Record release source",
     "        run: printf 'Source SHA: `%s`\\n' \"$SOURCE_SHA\" >> \"$GITHUB_STEP_SUMMARY\"",
+    "  report-canary:",
+    "    if: always()",
+    "    needs: deploy",
+    "    permissions:",
+    "      contents: read",
+    "      issues: write",
+    "    runs-on: ubuntu-latest",
+    "    steps:",
+    `      - uses: ${CHECKOUT_ACTION} # v6`,
+    "        with:",
+    "          ref: ${{ env.SOURCE_SHA }}",
+    "          persist-credentials: false",
+    `      - uses: ${SETUP_NODE_ACTION} # v6`,
+    "        with:",
+    "          node-version: '22'",
+    "      - name: Activate pnpm",
+    "        run: |",
+    "          corepack enable",
+    "          corepack prepare pnpm@10.28.1 --activate",
   ].join("\n");
 }
 
@@ -276,6 +306,7 @@ function validInputs(): DeploymentPreflightInputs {
       main: "./workers/app.ts",
       compatibility_flags: ["nodejs_compat"],
       assets: { directory: "./build/client" },
+      version_metadata: { binding: "CF_VERSION_METADATA" },
       d1_databases: [{ binding: "DB", database_name: "spoonjoy", database_id: "database-id" }],
       r2_buckets: [{ binding: "PHOTOS", bucket_name: "spoonjoy-photos" }],
       ratelimits: [
@@ -312,8 +343,7 @@ function validInputs(): DeploymentPreflightInputs {
         deploy: "pnpm run deploy:preflight && pnpm run build && pnpm exec wrangler deploy",
         "deploy:qa":
           "SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run qa:preflight && CLOUDFLARE_ENV=qa pnpm run build && pnpm run qa:migrate && SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG=1 pnpm run qa:preflight && pnpm exec wrangler deploy --env qa",
-        "deploy:auto":
-          "SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run deploy:preflight && pnpm run build && pnpm exec wrangler d1 migrations apply DB --remote && pnpm run deploy:preflight && pnpm exec wrangler deploy",
+        "deploy:auto": "tsx scripts/deploy-production-canary.ts",
         "deploy:preflight": "tsx scripts/deployment-preflight.ts",
         "qa:preflight": "tsx scripts/qa-preflight.ts",
         "qa:migrate": "pnpm exec wrangler d1 migrations apply DB --remote --env qa",
@@ -342,13 +372,13 @@ function validInputs(): DeploymentPreflightInputs {
     storybookWorkflow: validStorybookWorkflow(),
     gitignore: validGitignore(),
     pnpmWorkspace: validPnpmWorkspace(),
-    cloudflareEnvDts: "DB?: D1Database; PHOTOS?: R2Bucket; SESSION_SECRET?: string; OPENAI_API_KEY?: string; GOOGLE_API_KEY?: string; GEMINI_API_KEY?: string; GEMINI_IMAGE_MODEL?: string; GEMINI_IMAGE_TIMEOUT_MS?: string; IMAGE_PROVIDER_PRIMARY?: string; IMAGE_PROVIDER_FALLBACKS?: string; GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string; GITHUB_CLIENT_ID?: string; GITHUB_CLIENT_SECRET?: string; APPLE_CLIENT_ID?: string; APPLE_NATIVE_CLIENT_IDS?: string; APPLE_TEAM_ID?: string; APPLE_KEY_ID?: string; APPLE_PRIVATE_KEY?: string; VAPID_PUBLIC_KEY?: string; VAPID_PRIVATE_KEY?: string; VAPID_SUBJECT?: string; POSTHOG_KEY?: string; POSTHOG_HOST?: string; POSTHOG_DISABLED?: string;",
+    cloudflareEnvDts: "DB?: D1Database; PHOTOS?: R2Bucket; CF_VERSION_METADATA?: WorkerVersionMetadata; SESSION_SECRET?: string; OPENAI_API_KEY?: string; GOOGLE_API_KEY?: string; GEMINI_API_KEY?: string; GEMINI_IMAGE_MODEL?: string; GEMINI_IMAGE_TIMEOUT_MS?: string; IMAGE_PROVIDER_PRIMARY?: string; IMAGE_PROVIDER_FALLBACKS?: string; GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string; GITHUB_CLIENT_ID?: string; GITHUB_CLIENT_SECRET?: string; APPLE_CLIENT_ID?: string; APPLE_NATIVE_CLIENT_IDS?: string; APPLE_TEAM_ID?: string; APPLE_KEY_ID?: string; APPLE_PRIVATE_KEY?: string; VAPID_PUBLIC_KEY?: string; VAPID_PRIVATE_KEY?: string; VAPID_SUBJECT?: string; POSTHOG_KEY?: string; POSTHOG_HOST?: string; POSTHOG_DISABLED?: string;",
     readme: "pnpm run deploy:preflight wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_NATIVE_CLIENT_IDS APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY GOOGLE_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT GEMINI_API_KEY GEMINI_IMAGE_MODEL GEMINI_IMAGE_TIMEOUT_MS gemini-3.1-flash-image IMAGE_PROVIDER_PRIMARY IMAGE_PROVIDER_FALLBACKS VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry docs/analytics-privacy.md cleanup:local cleanup:local:apply cleanup:remote:qa cleanup:remote:qa:apply cleanup:production target-env local target-env qa target-env production broad production cleanup is read-only",
     deploymentDoc: "pnpm run deploy:preflight smoke:api wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_NATIVE_CLIENT_IDS APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY GOOGLE_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT GEMINI_API_KEY GEMINI_IMAGE_MODEL GEMINI_IMAGE_TIMEOUT_MS gemini-3.1-flash-image IMAGE_PROVIDER_PRIMARY IMAGE_PROVIDER_FALLBACKS wrangler secret put POSTHOG_KEY VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry cleanup:local cleanup:local:apply cleanup:remote:qa cleanup:remote:qa:apply cleanup:production target-env local target-env qa target-env production broad production cleanup is read-only",
     migrationFiles: ["0000_init.sql"],
-    vitestConfig: "scripts/script-environment.mjs scripts/cleanup-local-qa-data.mjs scripts/smoke-api-live.mjs scripts/qa-preflight.ts scripts/deployment-preflight.ts",
+    vitestConfig: "scripts/script-environment.mjs scripts/cleanup-local-qa-data.mjs scripts/smoke-api-live.mjs scripts/qa-preflight.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts",
     tsconfigScripts:
-      "scripts/build-output-hygiene.ts scripts/deployment-preflight.ts scripts/qa-preflight.ts scripts/react-router-build.ts",
+      "scripts/build-output-hygiene.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts scripts/qa-preflight.ts scripts/react-router-build.ts",
   };
 }
 
@@ -459,6 +489,23 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).not.toContain("R2 photos binding");
   });
 
+  it("requires Worker version metadata in config and environment typing", () => {
+    const missingConfig = validInputs();
+    delete missingConfig.wrangler.version_metadata;
+    const missingTyping = validInputs();
+    missingTyping.cloudflareEnvDts = missingTyping.cloudflareEnvDts.replace(
+      "CF_VERSION_METADATA?: WorkerVersionMetadata;",
+      "",
+    );
+
+    expect(validateDeploymentConfig(missingConfig).errors.map((item) => item.name)).toContain(
+      "Worker version metadata",
+    );
+    expect(validateDeploymentConfig(missingTyping).errors.map((item) => item.name)).toContain(
+      "Cloudflare Env typing",
+    );
+  });
+
   it("requires deploy:auto in REQUIRED_PACKAGE_SCRIPTS", () => {
     const inputs = validInputs();
     delete (inputs.packageJson.scripts as Record<string, string>)["deploy:auto"];
@@ -477,7 +524,7 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).toContain("package scripts");
   });
 
-  it("requires deploy:auto to apply migrations before the full remote preflight", () => {
+  it("requires deploy:auto to use the staged production canary orchestrator", () => {
     const inputs = validInputs();
     (inputs.packageJson.scripts as Record<string, string>)["deploy:auto"] =
       "pnpm run deploy:preflight && pnpm run build && pnpm exec wrangler d1 migrations apply DB --remote && pnpm exec wrangler deploy";
@@ -642,21 +689,80 @@ describe("deployment preflight", () => {
     ["a required manual source SHA", "        required: true", "        required: false"],
     ["manual dispatch inputs", "    inputs:", "    invalid_inputs:"],
     ["the source_sha input", "      source_sha:", "      invalid_source_sha:"],
+    ["an explicit rollback input", "      allow_rollback:", "      invalid_allow_rollback:"],
     [
       "a successful workflow-run conclusion",
       "github.event.workflow_run.conclusion == 'success'",
       "github.event.workflow_run.conclusion == 'failure'",
     ],
     ["an exact-SHA checkout", "          ref: ${{ env.SOURCE_SHA }}", "          ref: main"],
+    ["a credential-free checkout", "          persist-credentials: false", "          persist-credentials: true"],
+    ["the protected production environment", "    environment: production", "    environment: preview"],
+    [
+      "the canonical CI workflow path",
+      "github.event.workflow_run.path == '.github/workflows/ci.yml'",
+      "github.event.workflow_run.path == '.github/workflows/fake.yml'",
+    ],
+    [
+      "main-only manual dispatch",
+      "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'",
+      "github.event_name == 'workflow_dispatch'",
+    ],
+    [
+      "automatic current-main freshness or explicit rollback",
+      "test \"$(git rev-parse origin/main)\" = \"$SOURCE_SHA\" || test \"$ALLOW_ROLLBACK\" = \"true\"",
+      "git merge-base --is-ancestor \"$SOURCE_SHA\" origin/main",
+    ],
     [
       "a successful push-CI lookup for manual releases",
-      "gh run list --workflow CI --branch main --commit \"$SOURCE_SHA\" --event push --status success",
-      "gh run list --workflow CI --branch main",
+      "gh run list --workflow .github/workflows/ci.yml --branch main --commit \"$SOURCE_SHA\" --event push --status success",
+      "gh run list --workflow .github/workflows/ci.yml --branch main",
     ],
+    ["all required branch checks", "required_checks='[\"coverage\",\"e2e\",\"build-storybook\"]'", "required_checks='[]'"],
     ["immutable action references", CHECKOUT_ACTION, "actions/checkout@v6"],
   ])("requires %s", (_name, expected, replacement) => {
     const inputs = validInputs();
     inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(expected, replacement);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it("rejects a disabled release-source validation step", () => {
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
+      "      - name: Validate release source\n        env:",
+      "      - name: Validate release source\n        if: ${{ false }}\n        env:",
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it("rejects validation that runs after the deploy command", () => {
+    const inputs = validInputs();
+    const workflow = secureProductionDeployWorkflow();
+    const validationStart = workflow.indexOf("      - name: Validate release source");
+    const validationEnd = workflow.indexOf("      - uses:", validationStart);
+    const validation = workflow.slice(validationStart, validationEnd);
+    inputs.productionDeployWorkflow = workflow.slice(0, validationStart) + workflow.slice(validationEnd).replace(
+      "      - name: Record release source",
+      `${validation}      - name: Record release source`,
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it("rejects workflow-wide issue write access", () => {
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
+      "permissions:\n  actions: read\n  contents: read",
+      "permissions:\n  actions: read\n  contents: read\n  issues: write",
+    );
 
     const result = validateDeploymentConfig(inputs);
 
@@ -1989,15 +2095,13 @@ describe("package.json deploy scripts", () => {
     );
   });
 
-  it("deploy:auto skips only the first remote preflight, then builds, migrates, fully preflights, and deploys", async () => {
+  it("deploy:auto runs the staged production canary orchestrator", async () => {
     const pkgRaw = await import("node:fs/promises").then((mod) =>
       mod.readFile(`${process.cwd()}/package.json`, "utf8"),
     );
     const pkg = JSON.parse(pkgRaw) as { scripts: Record<string, string> };
 
-    expect(pkg.scripts["deploy:auto"]).toBe(
-      "SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run deploy:preflight && pnpm run build && pnpm exec wrangler d1 migrations apply DB --remote && pnpm run deploy:preflight && pnpm exec wrangler deploy",
-    );
+    expect(pkg.scripts["deploy:auto"]).toBe("tsx scripts/deploy-production-canary.ts");
   });
 
   it("exposes QA preflight, migration, seed, deploy, and smoke scripts", async () => {
