@@ -793,9 +793,21 @@ const schemas = {
     clientMutationId: shortTextSchema,
     confirmNoCover: { const: true },
   }),
+  CreateRecipeCoverRequest: objectSchema(["clientMutationId", "imageUrl"], {
+    clientMutationId: shortTextSchema,
+    imageUrl: { type: "string", maxLength: 2048 },
+    activate: { type: "boolean", default: false },
+    generateEditorial: { type: "boolean", default: true },
+  }),
+  GenerateRecipeCoverRequest: objectSchema(["clientMutationId"], {
+    clientMutationId: shortTextSchema,
+    promptAddition: { type: ["string", "null"], maxLength: 240 },
+    activateWhenReady: { type: "boolean", default: false },
+  }),
   RegenerateRecipeCoverRequest: objectSchema(["clientMutationId", "coverId"], {
     clientMutationId: shortTextSchema,
     coverId: idSchema,
+    promptAddition: { type: ["string", "null"], maxLength: 240 },
     activateWhenReady: { type: "boolean", default: false },
   }),
   ArchiveRecipeCoverRequest: objectSchema(["clientMutationId"], {
@@ -1428,11 +1440,15 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/recipes/{id}/covers": {
     GET: { operationId: "getApiV1RecipeCovers", tags: ["Recipe Covers"], summary: "List owner recipe cover candidates and spoon photo sources", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverListEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, queryParameters.includeArchived, queryParameters.limit, queryParameters.offset] },
+    POST: { operationId: "postApiV1RecipeCovers", tags: ["Recipe Covers"], summary: "Create a cover candidate from an uploaded image URL", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "RecipeCoverMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "CreateRecipeCoverRequest" },
     PATCH: { operationId: "patchApiV1RecipeCovers", tags: ["Recipe Covers"], summary: "Set an explicit no-cover state", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "SetRecipeNoCoverRequest" },
   },
   "/api/v1/recipes/{id}/covers/{coverId}": {
     PATCH: { operationId: "patchApiV1RecipeCover", tags: ["Recipe Covers"], summary: "Set an existing cover variant active", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.coverId], requestBody: "SetRecipeCoverRequest" },
     DELETE: { operationId: "deleteApiV1RecipeCover", tags: ["Recipe Covers"], summary: "Archive a recipe cover candidate", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.id, pathParameters.coverId), requestBody: "ArchiveRecipeCoverRequest", requestBodyRequired: false },
+  },
+  "/api/v1/recipes/{id}/covers/generate": {
+    POST: { operationId: "postApiV1RecipeCoverGenerate", tags: ["Recipe Covers"], summary: "Generate an AI placeholder cover candidate", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "RecipeCoverMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "GenerateRecipeCoverRequest" },
   },
   "/api/v1/recipes/{id}/covers/regenerate": {
     POST: { operationId: "postApiV1RecipeCoverRegenerate", tags: ["Recipe Covers"], summary: "Regenerate the editorial image for a cover", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "RecipeCoverMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "RegenerateRecipeCoverRequest" },
@@ -2475,7 +2491,23 @@ const requestExamples: Record<string, unknown> = {
   },
   SetRecipeCoverRequest: { clientMutationId: "device-uuid-cover-active", variant: "stylized" },
   SetRecipeNoCoverRequest: { clientMutationId: "device-uuid-cover-none", confirmNoCover: true },
-  RegenerateRecipeCoverRequest: { clientMutationId: "device-uuid-cover-regenerate", coverId: "cover_1", activateWhenReady: true },
+  CreateRecipeCoverRequest: {
+    clientMutationId: "device-uuid-cover-create",
+    imageUrl: "/photos/recipes/chef_1/recipe_1/cover-raw.jpg",
+    activate: true,
+    generateEditorial: true,
+  },
+  GenerateRecipeCoverRequest: {
+    clientMutationId: "device-uuid-cover-generate",
+    promptAddition: "brighter herbs and tighter crop",
+    activateWhenReady: true,
+  },
+  RegenerateRecipeCoverRequest: {
+    clientMutationId: "device-uuid-cover-regenerate",
+    coverId: "cover_1",
+    promptAddition: "keep the plating but brighten the background",
+    activateWhenReady: true,
+  },
   ArchiveRecipeCoverRequest: { clientMutationId: "device-uuid-cover-archive", confirmNoCover: true, deleteSafeObjects: false },
   CreateRecipeCoverFromSpoonRequest: { clientMutationId: "device-uuid-cover-spoon", activate: true, generateEditorial: true },
   RecipeImportRequest: {
@@ -2971,11 +3003,14 @@ function idempotencyPolicyFor(path: ResourcePath, method: HttpMethod) {
     };
   }
   if (isIdempotentCoverMutation(path, method)) {
+    const createsCover = path === "/api/v1/recipes/{id}/covers" ||
+      path === "/api/v1/recipes/{id}/covers/generate" ||
+      path === "/api/v1/recipes/{id}/covers/from-spoon/{spoonId}";
     return {
       key: "clientMutationId",
       location: method === "DELETE" ? "jsonBody, query, or X-Client-Mutation-Id" : "jsonBody",
       retentionHours: 24,
-      replayStatus: method === "POST" && path === "/api/v1/recipes/{id}/covers/from-spoon/{spoonId}" ? [201] : [200],
+      replayStatus: method === "POST" && createsCover ? [201] : [200],
       conflictStatus: 409,
       inProgressRetryAfterSeconds: 2,
       retryBodyRule: "Persist and retry the same mutation body and path for this clientMutationId. Delete requests may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header.",
