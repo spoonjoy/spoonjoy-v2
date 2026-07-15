@@ -118,7 +118,7 @@ Ship the accepted Clem feedback end to end: correct shopping-list restoration, a
 **Acceptance**: `pnpm prisma:generate`, local migration tests, targeted coverage, and `pnpm run typecheck` pass with no warning or migration collision.
 
 ### ⬜ Unit 5a: Cook State Core Tests
-**What**: Add red pure tests for canonical snapshot serialization/SHA-256 fingerprint, attempt initialization/replacement, stable-id operations, scale boundaries, revision conflicts, stale attempt rejection, mutation-id dedupe/eviction, terminal/purging state rules, exact adoption schema/validation/outcomes, first-writer/server-wins arbitration, and rebase ordering.
+**What**: Add red pure tests for canonical snapshot serialization/SHA-256 fingerprint, attempt initialization/replacement, stable-id operations, scale boundaries, revision conflicts, stale attempt rejection, bounded progress-mutation dedupe, 24-hour/64-entry non-evicting start-request idempotency and backpressure, terminal/PURGING request fencing, exact adoption schema/validation/outcomes, first-writer/server-wins arbitration, and rebase ordering.
 **Output**: `test/lib/cook-session-state.test.ts`.
 **Acceptance**: `pnpm exec vitest run test/lib/cook-session-state.test.ts` fails because `app/lib/cook-session-state.ts` and `app/lib/cook-session-types.ts` are absent.
 
@@ -148,14 +148,14 @@ Ship the accepted Clem feedback end to end: correct shopping-list restoration, a
 **Acceptance**: Worker coverage for the class is 100%; `pnpm run deploy:preflight` and QA preflight source-mode checks pass without remote mutation.
 
 ### ⬜ Unit 7a: Internal Cook HTTP And WebSocket Tests
-**What**: Add real Worker red tests for deterministic user/recipe routing, blank/adoption start races and replay, API-safe 401, same-origin checks, initial recipe visibility, attempt-bound snapshot/patch/409 payloads, private no-store on every non-101 response/error, complete/abandon/purge idempotency, WebSocket 101 retention, initial/broadcast snapshots, stale-attempt socket closure, hibernation attachments, malformed methods/bodies, and missing attempts.
+**What**: Add real Worker red tests for deterministic user/recipe routing, blank/adoption start races, 24-hour replay, ledger expiry/full backpressure, API-safe 401, same-origin checks, initial recipe visibility, attempt-bound snapshot/patch/409 payloads, private no-store on every non-101 response/error, complete/abandon/purge idempotency, PURGING rejection for every non-delete method/upgrade, WebSocket 101 retention, initial/broadcast snapshots, purge code-4001 closure, stale-attempt socket closure, hibernation attachments, malformed methods/bodies, and missing attempts.
 **Output**: `test/workers/app-cook-sessions.test.ts`, additions to `test/workers/cook-session-do.test.ts`, `test/workers/app.test.ts`.
 **Acceptance**: `pnpm test:workers -- test/workers/app-cook-sessions.test.ts test/workers/cook-session-do.test.ts` fails because the Worker-level internal API is absent.
 
 ### ⬜ Unit 7b: Internal Cook HTTP And WebSocket Implementation
 **What**: Intercept `/api/cook-sessions` in `workers/app.ts` before React Router; authenticate with `getUserId`; derive the DO from authenticated user id plus route/body recipe id; provide a server-built recipe snapshot only when a pristine DO starts its first attempt; implement exact `/api/cook-sessions/recipes/:recipeId` lifecycle routing and hibernation WebSockets; bypass response rebuilding only for 101 while applying security/no-store headers to ordinary responses.
 **Output**: `app/lib/cook-session-http.server.ts`, `workers/app.ts`, `workers/cook-session-do.ts`, `app/lib/cook-session-index.server.ts`.
-**Acceptance**: Unit 7a passes; no cook route is registered in `app/routes.ts` or OpenAPI; D1 freshness is not required for authorization or start/resume; any server attempt wins over client adoption; old attempt ids cannot mutate new attempts; ordinary responses are private no-store; full default-export WebSocket tests receive a usable socket.
+**Acceptance**: Unit 7a passes; no cook route is registered in `app/routes.ts` or OpenAPI; D1 freshness is not required for authorization or start/resume; any server attempt wins over client adoption; old attempt ids cannot mutate new attempts; PURGING appends no new work; ordinary responses are private no-store; full default-export WebSocket tests receive a usable socket.
 
 ### ⬜ Unit 7c: Internal Cook API Coverage
 **What**: Cover HTTP parser/auth/origin/proxy failures and WebSocket close/error/message branches in the Workers runtime.
