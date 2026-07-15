@@ -96,6 +96,13 @@ function imageRunner() {
   };
 }
 
+function placeholderRunner() {
+  return {
+    textToImage: vi.fn().mockResolvedValue({ bytes: GENERATED_BYTES, contentType: "image/png" }),
+    imageToImage: vi.fn(),
+  };
+}
+
 async function mcpCoverMutationHash(
   operation: string,
   recipeId: string,
@@ -1102,6 +1109,20 @@ describe("spoonjoy-api spoon operations", () => {
         "create_recipe_cover_from_upload",
         {
           recipeId: recipe.id,
+          imageUrl: dataUrl(),
+          postAsSpoon: true,
+          cookedAt: "2025-06-01T12:00:00Z",
+        },
+        { db, principal: chef, allowLocalImageFallback: true },
+      )).rejects.toMatchObject({
+        status: 400,
+        message: expect.stringMatching(/cookedAt must be a valid ISO date string/i),
+      });
+
+      await expect(callSpoonjoyApiOperation(
+        "create_recipe_cover_from_upload",
+        {
+          recipeId: recipe.id,
           imageUrl: `data:image/gif;base64,${Buffer.from("gif").toString("base64")}`,
           idempotencyKey: "invalid-image-cleans-reservation",
         },
@@ -1175,6 +1196,99 @@ describe("spoonjoy-api spoon operations", () => {
         { db, principal: sessionChef, allowLocalImageFallback: true },
       ) as { mutation: { idempotencyKey: string | null } };
       expect(sessionResult.mutation.idempotencyKey).toBe("session-cover-upload");
+    });
+
+    it("dry-runs placeholder generation with nullable prompt additions", async () => {
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const active = await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: "/photos/current.jpg",
+          sourceType: "chef-upload",
+          status: "ready",
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipe.id },
+        data: { activeCoverId: active.id, activeCoverVariant: "image", coverMode: "manual" },
+      });
+
+      const result = await callSpoonjoyApiOperation(
+        "generate_recipe_cover_placeholder",
+        {
+          recipeId: recipe.id,
+          promptAddition: null,
+          activateWhenReady: true,
+          idempotencyKey: "dry-run-placeholder-null-prompt",
+          dryRun: true,
+        },
+        { db, principal: chef },
+      ) as {
+        activeCover: { id: string } | null;
+        previousActiveCover: { id: string } | null;
+        createdCover: null;
+        generationStatus: string;
+        nextActions: string[];
+      };
+
+      expect(result).toMatchObject({
+        activeCover: { id: active.id },
+        previousActiveCover: { id: active.id },
+        createdCover: null,
+        generationStatus: "dry_run",
+      });
+      expect(result.nextActions).toContain("generate_recipe_cover_placeholder");
+      await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
+    });
+
+    it("queues placeholder generation through waitUntil and normalizes blank prompt additions", async () => {
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const captured: Promise<unknown>[] = [];
+      const runner = placeholderRunner();
+
+      const result = await callSpoonjoyApiOperation(
+        "generate_recipe_cover_placeholder",
+        {
+          recipeId: recipe.id,
+          promptAddition: "   ",
+          activateWhenReady: false,
+          idempotencyKey: "queued-placeholder-blank-prompt",
+        },
+        {
+          db,
+          principal: chef,
+          bucket: mockR2(),
+          imageGenRunner: runner,
+          waitUntil: (promise) => captured.push(promise),
+        },
+      ) as {
+        activeCover: null;
+        createdCover: { id: string; sourceType: string; status: string; generationStatus: string };
+        generationStatus: string;
+      };
+
+      expect(result).toMatchObject({
+        activeCover: null,
+        createdCover: {
+          sourceType: "ai-placeholder",
+          status: "processing",
+          generationStatus: "processing",
+        },
+        generationStatus: "processing",
+      });
+      expect(captured).toHaveLength(1);
+      await Promise.all(captured);
+      expect(runner.textToImage).toHaveBeenCalledTimes(1);
+      await expect(db.recipeCover.findUniqueOrThrow({
+        where: { id: result.createdCover.id },
+        select: { status: true, generationStatus: true, promptAddition: true },
+      })).resolves.toEqual({
+        status: "ready",
+        generationStatus: "succeeded",
+        promptAddition: null,
+      });
     });
 
     it("creates editorialized and verbatim upload covers only when explicitly activated", async () => {

@@ -3510,7 +3510,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
               requestBody: {
                 required: meta.requestBodyRequired ?? true,
                 content: meta.requestBodyContentType === "multipart/form-data"
-                  ? multipartContent(ref(meta.requestBody), requestExampleFor(meta.requestBody, path, method), meta.requestBodyEncoding ?? {})
+                  ? multipartContent(ref(meta.requestBody), requestExampleFor(meta.requestBody, path, method), meta.requestBodyEncoding!)
                   : jsonContent(ref(meta.requestBody), requestExampleFor(meta.requestBody, path, method)),
               },
             }

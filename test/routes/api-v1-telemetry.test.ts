@@ -91,6 +91,27 @@ function apiJsonRequest(
   };
 }
 
+function apiFormRequest(
+  method: "POST",
+  path: string,
+  requestId: string,
+  headers: Record<string, string>,
+  formData: UndiciFormData,
+) {
+  return new UndiciRequest(`http://localhost/api/v1/${path}`, {
+    method,
+    headers: {
+      "X-Request-Id": requestId,
+      Origin: "https://client.example",
+      Referer: "https://docs.example/start?token=secret",
+      "User-Agent": "PostmanRuntime/7.39.0",
+      ...headers,
+    },
+    body: formData,
+    duplex: "half",
+  }) as unknown as Request;
+}
+
 async function sessionCookie(userId: string) {
   const session = await sessionStorage.getSession();
   session.set("userId", userId);
@@ -1057,6 +1078,40 @@ describe("API v1 mutation and validation telemetry", () => {
       errorCode: "not_found",
       idempotencyOutcome: "aborted",
       forbidden: ["raw-cover-from-spoon-id", "missing_spoon_for_telemetry", fromSpoon.bodyText, recipe.id],
+    });
+  });
+
+  it("captures recipe image upload operation names on authentication failures", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const recipe = await db.recipe.create({
+      data: {
+        ...createTestRecipe(user.id),
+        title: `Telemetry Image Upload Recipe ${faker.string.alphanumeric(8)}`,
+      },
+    });
+    const formData = new UndiciFormData();
+    formData.append("clientMutationId", "raw-recipe-image-upload-id");
+    formData.append("activateWhenReady", "true");
+    const request = apiFormRequest(
+      "POST",
+      `recipes/${recipe.id}/image`,
+      "req_recipe_image_upload_missing_auth_operation",
+      {},
+      formData,
+    );
+
+    const response = await action(routeArgs(request, `recipes/${recipe.id}/image`).args);
+
+    expect(response.status).toBe(401);
+    expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/recipes/{id}/image",
+      requestId: "req_recipe_image_upload_missing_auth_operation",
+      operation: "recipes.image.upload",
+      status: 401,
+      errorCode: "authentication_required",
+      authMode: "anonymous",
+      privacyClass: "private",
+      forbidden: ["raw-recipe-image-upload-id", recipe.id],
     });
   });
 

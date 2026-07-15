@@ -59,6 +59,7 @@ function recipeImageForm(input: {
   clientMutationId?: string;
   photo?: File;
   activate?: boolean;
+  activateWhenReady?: boolean;
   generateEditorial?: boolean;
   postAsSpoon?: boolean;
   note?: string;
@@ -70,6 +71,7 @@ function recipeImageForm(input: {
   appendMultipartValue(formData, "clientMutationId", input.clientMutationId);
   appendMultipartValue(formData, "photo", input.photo);
   appendMultipartValue(formData, "activate", input.activate);
+  appendMultipartValue(formData, "activateWhenReady", input.activateWhenReady);
   appendMultipartValue(formData, "generateEditorial", input.generateEditorial);
   appendMultipartValue(formData, "postAsSpoon", input.postAsSpoon);
   appendMultipartValue(formData, "note", input.note);
@@ -270,7 +272,7 @@ describe("API v1 recipe cover management", () => {
     const formData = recipeImageForm({
       clientMutationId: "first-photo-spoon-editorial",
       photo: photoFile("first-photo.png"),
-      activate: true,
+      activateWhenReady: true,
       postAsSpoon: true,
       note: "  Weeknight version  ",
       nextTime: "Use more lemon",
@@ -892,6 +894,56 @@ describe("API v1 recipe cover management", () => {
       })).resolves.toBeNull();
     } finally {
       db.$transaction = originalTransaction;
+    }
+  });
+
+  it("keeps first-photo activation failures when best-effort row cleanup also fails", async () => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    const originalTransaction = db.$transaction;
+    const originalCoverDeleteMany = db.recipeCover.deleteMany;
+    const originalSpoonDeleteMany = db.recipeSpoon.deleteMany;
+    const originalRecipeUpdate = db.recipe.update;
+    const transactionSpy = vi.fn().mockRejectedValueOnce(new Error("activation failed before cleanup"));
+    db.$transaction = transactionSpy as unknown as typeof db.$transaction;
+    db.recipeCover.deleteMany = vi.fn().mockRejectedValue(new Error("cover cleanup failed")) as unknown as typeof db.recipeCover.deleteMany;
+    db.recipeSpoon.deleteMany = vi.fn().mockRejectedValue(new Error("spoon cleanup failed")) as unknown as typeof db.recipeSpoon.deleteMany;
+    db.recipe.update = vi.fn().mockRejectedValue(new Error("recipe restore failed")) as unknown as typeof db.recipe.update;
+
+    try {
+      const response = await action(routeArgs(
+        recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_recipe_image_cleanup_failure_mask", recipeImageForm({
+          clientMutationId: "first-photo-cleanup-failure-mask",
+          photo: photoFile("cleanup-failure-mask.png"),
+          activateWhenReady: true,
+          postAsSpoon: true,
+          generateEditorial: false,
+        })),
+        `recipes/${fixture.recipe.id}/image`,
+        backgroundContext({ PHOTOS: photoBucket.bucket }),
+      ));
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        ok: false,
+        requestId: "req_recipe_image_cleanup_failure_mask",
+        error: { code: "validation_error", status: 400, message: "activation failed before cleanup" },
+      });
+      expect(db.recipeCover.deleteMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ recipeId: fixture.recipe.id }),
+      }));
+      expect(db.recipeSpoon.deleteMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ recipeId: fixture.recipe.id }),
+      }));
+      expect(db.recipe.update).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: fixture.recipe.id },
+      }));
+      expect(photoBucket.bucket.delete).toHaveBeenCalled();
+    } finally {
+      db.$transaction = originalTransaction;
+      db.recipeCover.deleteMany = originalCoverDeleteMany;
+      db.recipeSpoon.deleteMany = originalSpoonDeleteMany;
+      db.recipe.update = originalRecipeUpdate;
     }
   });
 
