@@ -1,38 +1,4 @@
-import { describe, expect, it, beforeEach, vi } from "vitest";
-
-const legacySpoonjoyCookbookLabel = ["Spoonjoy", "cookbook"].join(" ");
-
-const mocks = vi.hoisted(() => {
-  return {
-    create: vi.fn(async (_element: unknown, options: { headers?: Record<string, string>; width?: number; height?: number }) =>
-      new Response("PNG", {
-        headers: {
-          "Content-Type": "image/png",
-          "X-OG-Width": String(options.width),
-          "X-OG-Height": String(options.height),
-          ...options.headers,
-        },
-      }),
-    ),
-    setExecutionContext: vi.fn(),
-    GoogleFont: vi.fn(function GoogleFont(
-      this: { name: string; data: Promise<ArrayBuffer>; weight?: number; style?: string },
-      family: string,
-      options?: { weight?: number; style?: string },
-    ) {
-      this.name = family;
-      this.data = Promise.resolve(new ArrayBuffer(0));
-      this.weight = options?.weight;
-      this.style = options?.style;
-    }),
-  };
-});
-
-vi.mock("cf-workers-og/workerd", () => ({
-  ImageResponse: { create: mocks.create },
-  cache: { setExecutionContext: mocks.setExecutionContext },
-  GoogleFont: mocks.GoogleFont,
-}));
+import { describe, expect, it } from "vitest";
 
 import {
   OG_IMAGE_HEIGHT,
@@ -53,23 +19,21 @@ import {
   recipeOgPath,
 } from "~/lib/og-image.server";
 
-function collectReactText(node: unknown): string[] {
-  if (node === null || node === undefined || typeof node === "boolean") return [];
-  if (typeof node === "string" || typeof node === "number") return [String(node)];
-  if (Array.isArray(node)) return node.flatMap(collectReactText);
-  if (typeof node === "object" && "props" in node) {
-    return collectReactText((node as { props?: { children?: unknown } }).props?.children);
-  }
-  return [];
+async function expectSvgResponse(response: Response) {
+  const svg = await response.text();
+  expect(response.headers.get("Content-Type")).toContain("image/svg+xml");
+  expect(response.headers.get("X-OG-Width")).toBe(String(OG_IMAGE_WIDTH));
+  expect(response.headers.get("X-OG-Height")).toBe(String(OG_IMAGE_HEIGHT));
+  expect(svg).toContain("<svg");
+  expect(svg).toContain("</svg>");
+  return svg;
+}
+
+function imageHrefs(svg: string) {
+  return [...svg.matchAll(/<image href="([^"]+)"/g)].map((match) => match[1]);
 }
 
 describe("OG image helpers", () => {
-  beforeEach(() => {
-    mocks.create.mockClear();
-    mocks.setExecutionContext.mockClear();
-    mocks.GoogleFont.mockClear();
-  });
-
   it("builds absolute image and card URLs from the current request", () => {
     expect(absoluteUrlFromRequest("https://spoonjoy.app/recipes/r1", "/photos/r1.jpg")).toBe("https://spoonjoy.app/photos/r1.jpg");
     expect(absoluteUrlFromRequest("https://spoonjoy.app/recipes/r1", "https://cdn.example.com/r1.jpg")).toBe("https://cdn.example.com/r1.jpg");
@@ -95,9 +59,7 @@ describe("OG image helpers", () => {
     expect(pageOgInput("missing")).toBeNull();
   });
 
-  it("creates recipe OG responses with recipe photos and Workers font caching", async () => {
-    const ctx = { waitUntil: vi.fn() };
-
+  it("creates recipe OG responses with recipe photos", async () => {
     const response = await createRecipeOgImageResponse(
       {
         title: "Charred Tomato Toast",
@@ -106,26 +68,18 @@ describe("OG image helpers", () => {
         servingsLabel: "4 servings",
         coverImageUrl: "https://cdn.example.com/tomato.jpg",
       },
-      ctx,
+      { waitUntil() {} },
     );
 
-    expect(await response.text()).toBe("PNG");
-    expect(response.headers.get("X-OG-Width")).toBe(String(OG_IMAGE_WIDTH));
-    expect(response.headers.get("X-OG-Height")).toBe(String(OG_IMAGE_HEIGHT));
+    const svg = await expectSvgResponse(response);
     expect(response.headers.get("Cache-Control")).toContain("s-maxage=86400");
-    expect(mocks.setExecutionContext).toHaveBeenCalledWith(ctx);
-    expect(mocks.GoogleFont).toHaveBeenCalledTimes(3);
-    expect(mocks.create).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        width: OG_IMAGE_WIDTH,
-        height: OG_IMAGE_HEIGHT,
-      }),
-    );
+    expect(svg).toContain("SPOONJOY RECIPE");
+    expect(svg).toContain("Charred");
+    expect(imageHrefs(svg)).toContain("https://cdn.example.com/tomato.jpg");
   });
 
   it("creates recipe OG elements without photos or serving labels", () => {
-    const element = createRecipeOgElement(
+    const svg = createRecipeOgElement(
       {
         title: "Plain Rice",
         description: null,
@@ -136,10 +90,45 @@ describe("OG image helpers", () => {
       "A Spoonjoy recipe by rowan.",
     );
 
-    expect(element.type).toBe("div");
+    expect(svg).toContain("Plain Rice");
+    expect(imageHrefs(svg)).toEqual([]);
   });
 
-  it("creates cookbook OG responses and exercises fallback execution context", async () => {
+  it("escapes and truncates oversized SVG recipe copy", () => {
+    const svg = createRecipeOgElement(
+      {
+        title: "Antidisestablishmentarianism & toast",
+        description: null,
+        chefUsername: "rowan",
+        servingsLabel: null,
+        coverImageUrl: "https://cdn.example.com/a.jpg?caption=\"fish&chips\"",
+      },
+      "bright crunchy acidic salty sweet spicy savory smoky tender juicy buttery herbaceous citrusy peppery briny floral",
+    );
+
+    expect(svg).toContain("Antidisesta...");
+    expect(svg).toContain("fish&amp;chips");
+    expect(svg).toContain("&quot;");
+    expect(svg).not.toContain("floral");
+  });
+
+  it("keeps empty SVG text nodes stable for incomplete records", () => {
+    const svg = createRecipeOgElement(
+      {
+        title: "   ",
+        description: null,
+        chefUsername: "rowan",
+        servingsLabel: null,
+        coverImageUrl: null,
+      },
+      "",
+    );
+
+    expect(svg).toContain('aria-label=""');
+    expect(svg).toContain('<tspan x="686" dy="0"></tspan>');
+  });
+
+  it("creates cookbook OG responses", async () => {
     const response = await createCookbookOgImageResponse({
       title: "Weeknight Book",
       authorUsername: "ari",
@@ -147,15 +136,15 @@ describe("OG image helpers", () => {
       coverImageUrls: ["https://cdn.example.com/a.jpg", "https://cdn.example.com/b.jpg"],
     });
 
-    expect(response.headers.get("Content-Type")).toContain("image/png");
-    expect(mocks.setExecutionContext).toHaveBeenCalledTimes(1);
-    const fallbackContext = mocks.setExecutionContext.mock.calls[0][0] as { waitUntil(promise: Promise<unknown>): void };
-    expect(() => fallbackContext.waitUntil(Promise.resolve())).not.toThrow();
-    expect(mocks.GoogleFont).toHaveBeenCalledTimes(3);
+    const svg = await expectSvgResponse(response);
+    expect(svg).toContain("Weeknight");
+    expect(svg).toContain("BY ARI");
+    expect(svg).toContain("2 RECIPES");
+    expect(imageHrefs(svg)).toEqual(["https://cdn.example.com/a.jpg", "https://cdn.example.com/b.jpg"]);
   });
 
   it("creates cookbook OG elements with and without cover photos", () => {
-    const cookbookElement = createCookbookOgElement(
+    const cookbookSvg = createCookbookOgElement(
       {
         title: "Sunday Sauces",
         authorUsername: "ari",
@@ -170,8 +159,9 @@ describe("OG image helpers", () => {
       },
       "4 recipes",
     );
-    expect(cookbookElement.type).toBe("div");
-    expect(collectReactText(cookbookElement).join(" ")).not.toContain(legacySpoonjoyCookbookLabel);
+    expect(cookbookSvg).toContain("Sunday");
+    expect(cookbookSvg).not.toContain("Spoonjoy cookbook");
+    expect(imageHrefs(cookbookSvg)).toHaveLength(4);
 
     expect(
       createCookbookOgElement(
@@ -182,8 +172,8 @@ describe("OG image helpers", () => {
           coverImageUrls: [],
         },
         "0 recipes",
-      ).type,
-    ).toBe("div");
+      ),
+    ).toContain("Empty Book");
 
     expect(
       createCookbookOgElement(
@@ -194,30 +184,17 @@ describe("OG image helpers", () => {
           coverImageUrls: [null, "", "https://cdn.example.com/real.jpg"],
         },
         "2 recipes",
-      ).type,
-    ).toBe("div");
+      ),
+    ).toContain("https://cdn.example.com/real.jpg");
   });
 
   it("creates page OG responses and elements for developer surfaces", async () => {
     const input = pageOgInput("api-playground")!;
     const response = await createPageOgImageResponse(input);
 
-    expect(await response.text()).toBe("PNG");
-    expect(response.headers.get("X-OG-Width")).toBe(String(OG_IMAGE_WIDTH));
-    expect(response.headers.get("X-OG-Height")).toBe(String(OG_IMAGE_HEIGHT));
-    expect(mocks.GoogleFont).toHaveBeenCalledTimes(3);
-    expect(createPageOgElement(input).type).toBe("div");
-    expect(createPageOgElement(pageOgInput("api")!).type).toBe("div");
-  });
-
-  it("creates page OG responses and elements for developer surfaces", async () => {
-    const input = pageOgInput("api-playground")!;
-    const response = await createPageOgImageResponse(input);
-
-    expect(await response.text()).toBe("PNG");
-    expect(response.headers.get("X-OG-Width")).toBe(String(OG_IMAGE_WIDTH));
-    expect(response.headers.get("X-OG-Height")).toBe(String(OG_IMAGE_HEIGHT));
-    expect(mocks.GoogleFont).toHaveBeenCalledTimes(3);
-    expect(createPageOgElement(input).type).toBe("div");
+    const svg = await expectSvgResponse(response);
+    expect(svg).toContain("Spoonjoy API");
+    expect(createPageOgElement(input)).toContain("Playground");
+    expect(createPageOgElement(pageOgInput("api")!)).toContain("REST API");
   });
 });

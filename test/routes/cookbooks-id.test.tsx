@@ -987,7 +987,7 @@ describe("Cookbooks $id Route", () => {
         { property: "og:image", content: "https://spoonjoy.app/og/cookbooks/cb-1.png" },
         { property: "og:image:width", content: "1200" },
         { property: "og:image:height", content: "630" },
-        { property: "og:image:type", content: "image/png" },
+        { property: "og:image:type", content: "image/svg+xml" },
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:title", content: "Weeknight Book" },
         { name: "twitter:description", content: "Weeknight Book by ari on Spoonjoy with 1 recipe." },
