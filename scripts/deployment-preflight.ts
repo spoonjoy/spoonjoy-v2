@@ -110,11 +110,13 @@ const REQUIRED_SCRIPT_COVERAGE_INCLUDES = [
   "scripts/smoke-api-live.mjs",
   "scripts/qa-preflight.ts",
   "scripts/deployment-preflight.ts",
+  "scripts/deploy-production-canary.ts",
 ] as const;
 
 const REQUIRED_SCRIPT_TYPECHECK_INCLUDES = [
   "scripts/build-output-hygiene.ts",
   "scripts/deployment-preflight.ts",
+  "scripts/deploy-production-canary.ts",
   "scripts/qa-preflight.ts",
   "scripts/react-router-build.ts",
 ] as const;
@@ -131,6 +133,8 @@ const STORYBOOK_PAGES_PROJECT_NAME = "spoonjoy-storybook";
 const STORYBOOK_PAGES_DEPLOY_COMMAND =
   "pages deploy --project-name=spoonjoy-storybook --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }} --commit-dirty=true";
 const REQUIRED_PNPM_PACKAGE_MANAGER = "pnpm@10.28.1";
+const PINNED_SETUP_NODE_ACTION = "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38";
+const PINNED_WRANGLER_ACTION = "cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0";
 const REQUIRED_IGNORED_BUILD_PACKAGES = [
   "@prisma/client",
   "@prisma/engines",
@@ -279,19 +283,224 @@ function blockHasMainBranch(lines: WorkflowLine[], branchesStart: number, branch
 }
 
 function workflowTriggerTargetsMain(lines: WorkflowLine[], onIndex: number, onEnd: number, trigger: string): boolean {
-  const triggerBlock = childBlock(lines, onIndex, onEnd, trigger);
-  if (!triggerBlock) return false;
+  const triggerBlock = childBlock(lines, onIndex, onEnd, trigger)!;
   const branches = childBlock(lines, triggerBlock[0], triggerBlock[1], "branches");
   return branches ? blockHasMainBranch(lines, branches[0], branches[1]) : false;
 }
 
-function workflowDeploysPushesToMain(workflow: string): boolean {
+function workflowActionReferencesArePinned(workflow: string): boolean {
+  const actionReferences = workflowLines(workflow)
+    .map((line) => line.text.match(/^(?:-\s+)?uses:\s*(\S+)$/)?.[1] ?? null)
+    .filter((reference): reference is string => reference !== null);
+  return actionReferences.length > 0 && actionReferences.every((reference) => /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+@[0-9a-f]{40}$/.test(reference));
+}
+
+function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
   const lines = workflowLines(workflow);
   const onIndex = lines.findIndex((line) => line.indent === 0 && line.text === "on:");
   if (onIndex === -1) return false;
   const onEnd = blockEnd(lines, onIndex);
+  const workflowRun = childBlock(lines, onIndex, onEnd, "workflow_run");
   const workflowDispatch = childBlock(lines, onIndex, onEnd, "workflow_dispatch");
-  return Boolean(workflowDispatch) && workflowTriggerTargetsMain(lines, onIndex, onEnd, "push");
+  if (!workflowRun || !workflowDispatch) return false;
+
+  const dispatchInputs = childBlock(lines, workflowDispatch[0], workflowDispatch[1], "inputs");
+  const sourceSha = dispatchInputs ? childBlock(lines, dispatchInputs[0], dispatchInputs[1], "source_sha") : null;
+  const rollbackVersion = dispatchInputs
+    ? childBlock(lines, dispatchInputs[0], dispatchInputs[1], "rollback_version_id")
+    : null;
+  if (!sourceSha || !rollbackVersion) return false;
+
+  const permissionsIndex = lines.findIndex((line) => line.indent === 0 && line.text === "permissions:");
+  if (permissionsIndex === -1) return false;
+  const permissions = blockScalarChildMap(lines, permissionsIndex, blockEnd(lines, permissionsIndex));
+  if (permissions.get("issues") === "write") return false;
+
+  const jobs = workflowJobBlocks(lines);
+  const deploy = jobs.find(([start]) => lines[start].text === "deploy:");
+  const report = jobs.find(([start]) => lines[start].text === "report-canary:");
+  if (!deploy || !report) return false;
+
+  const deployCondition = blockScalarChildValue(lines, deploy[0], deploy[1], "if") ?? "";
+  const deployConditionFragments = [
+    "github.event.workflow_run.conclusion == 'success'",
+    "github.event.workflow_run.event == 'push'",
+    "github.event.workflow_run.head_branch == 'main'",
+    "github.event.workflow_run.path == '.github/workflows/ci.yml'",
+    "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'",
+  ];
+  if (
+    blockScalarChildValue(lines, deploy[0], deploy[1], "environment") !== "production" ||
+    !deployConditionFragments.every((fragment) => deployCondition.includes(fragment))
+  ) {
+    return false;
+  }
+
+  const reportPermissions = childBlock(lines, report[0], report[1], "permissions");
+  if (
+    blockScalarChildValue(lines, report[0], report[1], "if") !== "always() && needs.deploy.result != 'skipped'" ||
+    blockScalarChildValue(lines, report[0], report[1], "needs") !== "deploy" ||
+    !reportPermissions ||
+    blockScalarChildValue(lines, reportPermissions[0], reportPermissions[1], "contents") !== "read" ||
+    blockScalarChildValue(lines, reportPermissions[0], reportPermissions[1], "issues") !== "write"
+  ) {
+    return false;
+  }
+
+  const steps = childBlock(lines, deploy[0], deploy[1], "steps");
+  if (!steps) return false;
+  let sourceCheckoutStep = -1;
+  let rollbackCheckoutStep = -1;
+  let validationStep = -1;
+  let deployStep = -1;
+  let recordStep = -1;
+  let ensureArtifactStep = -1;
+  let uploadArtifactStep = -1;
+
+  for (const [stepStart, stepEnd] of stepBlocks(lines, steps[0], steps[1])) {
+    const run = stepRunText(lines, stepStart, stepEnd);
+    if (
+      stepUses(lines, stepStart, stepEnd, "actions/checkout@") &&
+      stepWithValue(lines, stepStart, stepEnd, "ref") === "${{ env.SOURCE_SHA }}" &&
+      stepWithValue(lines, stepStart, stepEnd, "fetch-depth") === "0" &&
+      stepWithValue(lines, stepStart, stepEnd, "persist-credentials") === "false" &&
+      stepIfEquals(lines, stepStart, stepEnd, "env.ROLLBACK_VERSION_ID == ''")
+    ) {
+      sourceCheckoutStep = stepStart;
+    }
+    if (
+      stepUses(lines, stepStart, stepEnd, "actions/checkout@") &&
+      stepWithValue(lines, stepStart, stepEnd, "ref") === "${{ github.workflow_sha }}" &&
+      stepWithValue(lines, stepStart, stepEnd, "fetch-depth") === "0" &&
+      stepWithValue(lines, stepStart, stepEnd, "persist-credentials") === "false" &&
+      stepIfEquals(lines, stepStart, stepEnd, "env.ROLLBACK_VERSION_ID != ''")
+    ) {
+      rollbackCheckoutStep = stepStart;
+    }
+    if (stepPropertyValue(lines, stepStart, stepEnd, "name") === "Validate release source") {
+      const requiredRunFragments = [
+        "grep -Eq '^[0-9a-f]{40}$'",
+        'git merge-base --is-ancestor "$SOURCE_SHA" origin/main',
+        `test "$WORKFLOW_RUN_PATH" = '.github/workflows/ci.yml' || test "$GITHUB_EVENT_NAME" = 'workflow_dispatch'`,
+        'test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"',
+        'gh run list --workflow .github/workflows/ci.yml --branch main --commit "$SOURCE_SHA" --event push --status success',
+        "--json databaseId,headSha",
+        'gh run view "$ci_run_id" --json jobs',
+        '.name == $required_job and .conclusion == "success"',
+        'gh run list --workflow .github/workflows/storybook.yml --branch main --commit "$SOURCE_SHA" --event push --status success',
+        'gh run view "$storybook_run_id" --json jobs',
+        '.name == "build-storybook" and .conclusion == "success"',
+      ];
+      if (
+        stepPropertyValue(lines, stepStart, stepEnd, "if") === null &&
+        stepHasEnvKeys(lines, stepStart, stepEnd, ["GH_TOKEN", "WORKFLOW_RUN_PATH"]) &&
+        requiredRunFragments.every((fragment) => run.includes(fragment))
+      ) {
+        validationStep = stepStart;
+      }
+    }
+    if (
+      stepRunsDeployAuto(lines, stepStart, stepEnd) &&
+      stepPropertyValue(lines, stepStart, stepEnd, "if") === null &&
+      stepHasEnvKeys(lines, stepStart, stepEnd, [
+        "CLOUDFLARE_ACCOUNT_ID",
+        "CLOUDFLARE_D1_API_TOKEN",
+        "CLOUDFLARE_WORKERS_API_TOKEN",
+      ]) &&
+      run.includes('--rollback-version-id "$ROLLBACK_VERSION_ID"')
+    ) {
+      deployStep = stepStart;
+    }
+    if (
+      stepPropertyValue(lines, stepStart, stepEnd, "name") === "Record release source" &&
+      stepIfEquals(lines, stepStart, stepEnd, "always()") &&
+      run.includes("Source SHA: `%s`")
+    ) {
+      recordStep = stepStart;
+    }
+    if (
+      stepPropertyValue(lines, stepStart, stepEnd, "name") === "Ensure release artifact exists" &&
+      stepIfEquals(lines, stepStart, stepEnd, "always()") &&
+      run.includes("mkdir -p mcp-oauth-canary-artifacts") &&
+      run.includes("mcp-oauth-canary-artifacts/production-release.json") &&
+      run.includes("jq -n --arg source_sha") &&
+      run.includes('reviewedMigrations: []') &&
+      run.includes('migrationApply: "not_started"') &&
+      run.includes("databaseRollbackSupported: false")
+    ) {
+      ensureArtifactStep = stepStart;
+    }
+    if (
+      stepUses(lines, stepStart, stepEnd, "actions/upload-artifact@") &&
+      stepIfEquals(lines, stepStart, stepEnd, "always()") &&
+      stepWithValue(lines, stepStart, stepEnd, "name") === "mcp-oauth-canary-artifacts" &&
+      stepWithValue(lines, stepStart, stepEnd, "path") === "mcp-oauth-canary-artifacts/" &&
+      stepWithValue(lines, stepStart, stepEnd, "if-no-files-found") === "error"
+    ) {
+      uploadArtifactStep = stepStart;
+    }
+  }
+
+  const reportSteps = childBlock(lines, report[0], report[1], "steps");
+  if (!reportSteps) return false;
+  let reportCheckoutStep = -1;
+  let downloadArtifactStep = -1;
+  let reportCanaryStep = -1;
+  for (const [stepStart, stepEnd] of stepBlocks(lines, reportSteps[0], reportSteps[1])) {
+    const run = stepRunText(lines, stepStart, stepEnd);
+    if (
+      stepUses(lines, stepStart, stepEnd, "actions/checkout@") &&
+      stepWithValue(lines, stepStart, stepEnd, "ref") === "${{ github.workflow_sha }}" &&
+      stepWithValue(lines, stepStart, stepEnd, "persist-credentials") === "false"
+    ) {
+      reportCheckoutStep = stepStart;
+    }
+    if (
+      stepUses(lines, stepStart, stepEnd, "actions/download-artifact@") &&
+      stepPropertyValue(lines, stepStart, stepEnd, "continue-on-error") === "true" &&
+      stepWithValue(lines, stepStart, stepEnd, "name") === "mcp-oauth-canary-artifacts" &&
+      stepWithValue(lines, stepStart, stepEnd, "path") === "mcp-oauth-canary-artifacts"
+    ) {
+      downloadArtifactStep = stepStart;
+    }
+    if (
+      stepPropertyValue(lines, stepStart, stepEnd, "name") === "Report MCP OAuth canary" &&
+      stepIfEquals(lines, stepStart, stepEnd, "always()") &&
+      stepHasEnvKeys(lines, stepStart, stepEnd, [
+        "GITHUB_TOKEN",
+        "MCP_CANARY_STATUS",
+        "MCP_CANARY_WORKFLOW_RUN_URL",
+        "MCP_CANARY_ARTIFACT_URL",
+      ]) &&
+      run.includes("node scripts/report-mcp-oauth-canary.mjs") &&
+      run.includes("--manage-issue")
+    ) {
+      reportCanaryStep = stepStart;
+    }
+  }
+
+  return (
+    workflowHasOnlyTriggers(lines, onIndex, onEnd, ["workflow_run", "workflow_dispatch"]) &&
+    blockScalarChildValue(lines, workflowRun[0], workflowRun[1], "workflows") === "[CI]" &&
+    blockScalarChildValue(lines, workflowRun[0], workflowRun[1], "branches") === "[main]" &&
+    blockScalarChildValue(lines, workflowRun[0], workflowRun[1], "types") === "[completed]" &&
+    blockScalarChildValue(lines, sourceSha[0], sourceSha[1], "required") === "true" &&
+    blockScalarChildValue(lines, sourceSha[0], sourceSha[1], "type") === "string" &&
+    blockScalarChildValue(lines, rollbackVersion[0], rollbackVersion[1], "required") === "false" &&
+    blockScalarChildValue(lines, rollbackVersion[0], rollbackVersion[1], "default") === "" &&
+    blockScalarChildValue(lines, rollbackVersion[0], rollbackVersion[1], "type") === "string" &&
+    sourceCheckoutStep >= 0 &&
+    rollbackCheckoutStep > sourceCheckoutStep &&
+    validationStep > rollbackCheckoutStep &&
+    deployStep > validationStep &&
+    recordStep > deployStep &&
+    ensureArtifactStep > recordStep &&
+    uploadArtifactStep > ensureArtifactStep &&
+    reportCheckoutStep >= 0 &&
+    downloadArtifactStep > reportCheckoutStep &&
+    reportCanaryStep > downloadArtifactStep &&
+    workflowActionReferencesArePinned(workflow)
+  );
 }
 
 function workflowBuildsPushesAndPullRequestsToMain(workflow: string): boolean {
@@ -357,9 +566,6 @@ function workflowJobBlocks(lines: WorkflowLine[]): Array<[number, number]> {
 }
 
 function stepRunsDeployAuto(lines: WorkflowLine[], stepStart: number, stepEnd: number): boolean {
-  const inlineRun = lines[stepStart].text.match(/^-\s+run:\s*(.+)$/);
-  if (inlineRun && inlineRun[1].trim() === "pnpm run deploy:auto") return true;
-
   const runIndent = lines[stepStart].indent + 2;
   for (let index = stepStart + 1; index < stepEnd; index += 1) {
     if (lines[index].indent !== runIndent) continue;
@@ -367,7 +573,6 @@ function stepRunsDeployAuto(lines: WorkflowLine[], stepStart: number, stepEnd: n
     if (!run) continue;
 
     const value = run[1].trim();
-    if (value === "pnpm run deploy:auto") return true;
     if (value !== "|" && value !== ">") continue;
 
     for (let commandIndex = index + 1; commandIndex < stepEnd; commandIndex += 1) {
@@ -469,24 +674,6 @@ function stepHasEnvKeys(lines: WorkflowLine[], stepStart: number, stepEnd: numbe
   return keys.every((key) => found.has(key));
 }
 
-function workflowHasCloudflareDeployAutoStep(workflow: string): boolean {
-  const lines = workflowLines(workflow);
-  for (const [jobStart, jobEnd] of workflowJobBlocks(lines)) {
-    const steps = childBlock(lines, jobStart, jobEnd, "steps");
-    if (!steps) continue;
-
-    for (const [stepStart, stepEnd] of stepBlocks(lines, steps[0], steps[1])) {
-      if (
-        stepRunsDeployAuto(lines, stepStart, stepEnd) &&
-        stepHasEnvKeys(lines, stepStart, stepEnd, ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"])
-      ) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
 function workflowHasGitDefaultBranchConfig(workflow: string): boolean {
   const lines = workflowLines(workflow);
   const envIndex = lines.findIndex((line) => line.indent === 0 && line.text === "env:");
@@ -523,7 +710,8 @@ function workflowUsesCorepackPnpmSetup(workflow: string): boolean {
 
     for (const [stepStart, stepEnd] of stepBlocks(lines, steps[0], steps[1])) {
       if (
-        stepUsesExactly(lines, stepStart, stepEnd, "actions/setup-node@v6") &&
+        (stepUsesExactly(lines, stepStart, stepEnd, "actions/setup-node@v6") ||
+          stepUsesExactly(lines, stepStart, stepEnd, PINNED_SETUP_NODE_ACTION)) &&
         stepWithValue(lines, stepStart, stepEnd, "node-version") === "22"
       ) {
         nodeSetupStep = stepStart;
@@ -735,7 +923,8 @@ function storybookDeployPrepRunIsClean(run: string): boolean {
 
 function storybookWranglerDeployStepIsClean(lines: WorkflowLine[], stepStart: number, stepEnd: number): boolean {
   return (
-    stepUsesExactly(lines, stepStart, stepEnd, "cloudflare/wrangler-action@v4") &&
+    (stepUsesExactly(lines, stepStart, stepEnd, "cloudflare/wrangler-action@v4") ||
+      stepUsesExactly(lines, stepStart, stepEnd, PINNED_WRANGLER_ACTION)) &&
     stepWithValue(lines, stepStart, stepEnd, "apiToken") === "${{ secrets.CLOUDFLARE_API_TOKEN }}" &&
     stepWithValue(lines, stepStart, stepEnd, "accountId") === "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" &&
     stepWithValue(lines, stepStart, stepEnd, "workingDirectory") === STORYBOOK_PAGES_DEPLOY_DIR &&
@@ -872,6 +1061,11 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
       "wrangler.json must bind the recipe/profile photo bucket as PHOTOS."
     ),
     check(
+      "Worker version metadata",
+      objectRecord(inputs.wrangler.version_metadata).binding === "CF_VERSION_METADATA",
+      "wrangler.json must bind Worker version metadata as CF_VERSION_METADATA for exact-version canary verification."
+    ),
+    check(
       "QA environment",
       hasBinding(qaConfig.d1_databases, "DB", ["database_name", "database_id"]) &&
         hasBinding(qaConfig.r2_buckets, "PHOTOS", ["bucket_name"]) &&
@@ -941,14 +1135,8 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     ),
     check(
       "deploy:auto script",
-      typeof scripts["deploy:auto"] === "string" &&
-        scripts["deploy:auto"].includes("SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run deploy:preflight") &&
-        scripts["deploy:auto"].includes("pnpm run build") &&
-        scripts["deploy:auto"].includes("pnpm exec wrangler d1 migrations apply DB --remote") &&
-        scripts["deploy:auto"].includes("pnpm exec wrangler deploy") &&
-        scripts["deploy:auto"].indexOf("pnpm exec wrangler d1 migrations apply DB --remote") <
-          scripts["deploy:auto"].lastIndexOf("pnpm run deploy:preflight"),
-      "package.json deploy:auto must skip only the initial remote preflight, apply D1 migrations, rerun full preflight, then deploy."
+      scripts["deploy:auto"] === "tsx scripts/deploy-production-canary.ts",
+      "package.json deploy:auto must run the staged production canary orchestrator."
     ),
     check(
       "preflight script",
@@ -964,11 +1152,10 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     ),
     check(
       "production deploy workflow",
-      workflowDeploysPushesToMain(inputs.productionDeployWorkflow) &&
-        workflowHasCloudflareDeployAutoStep(inputs.productionDeployWorkflow) &&
+      workflowDeploysSuccessfulCiSha(inputs.productionDeployWorkflow) &&
         workflowHasGitDefaultBranchConfig(inputs.productionDeployWorkflow) &&
         workflowUsesCorepackPnpmSetup(inputs.productionDeployWorkflow),
-      ".github/workflows/production-deploy.yml must auto-deploy pushes to main with deploy:auto while keeping manual dispatch, Cloudflare credentials, checkout warning suppression, and Corepack pnpm activation wired."
+      ".github/workflows/production-deploy.yml must deploy only an exact successful main-branch CI SHA, validate exact-SHA manual dispatches, pin every action, run deploy:auto with Cloudflare credentials, and record the released SHA."
     ),
     check(
       "QA image-cover smoke workflow",
@@ -995,7 +1182,7 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     ),
     check(
       "Cloudflare Env typing",
-      ["DB", "PHOTOS", ...REQUIRED_SECRET_NAMES, ...IMAGE_PROVIDER_ENV_NAMES].every((name) => inputs.cloudflareEnvDts.includes(`${name}?`)),
+      ["DB", "PHOTOS", "CF_VERSION_METADATA", ...REQUIRED_SECRET_NAMES, ...IMAGE_PROVIDER_ENV_NAMES].every((name) => inputs.cloudflareEnvDts.includes(`${name}?`)),
       "app/cloudflare-env.d.ts must type all Cloudflare bindings and documented secrets."
     ),
     check(

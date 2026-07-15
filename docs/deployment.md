@@ -265,21 +265,33 @@ Do not set this in production deploy workflows — the whole point of the check 
 The GitHub workflow requires repository secrets:
 
 - `CLOUDFLARE_ACCOUNT_ID`: the Cloudflare account that owns D1 `spoonjoy`, R2 `spoonjoy-photos`, and Worker `spoonjoy-v2`.
-- `CLOUDFLARE_API_TOKEN`: a Cloudflare dashboard-created API token scoped to that account. Cloudflare's current Workers GitHub Actions docs recommend the **Edit Cloudflare Workers** policy for Wrangler deploys; Spoonjoy's `deploy:auto` also applies D1 migrations, so include D1 edit access for the same account. Do not use a local Wrangler OAuth token as this secret because it is interactive/user-session auth, not a durable CI token.
+- `CLOUDFLARE_D1_API_TOKEN`: a dashboard-created account token with only D1 write access. The orchestrator exposes it only to D1 migration and remote-preflight commands.
+- `CLOUDFLARE_WORKERS_API_TOKEN`: a dashboard-created account token with only Workers Scripts write and Workers R2 Storage write access. The orchestrator exposes it only to Worker version commands.
 
-The shortest path for a production release is `pnpm deploy:auto`, which chains:
+Build, Playwright, smoke, and Git commands receive none of the Cloudflare credentials. Do not use a local Wrangler OAuth token for either secret because it is interactive user-session auth, not durable CI auth.
 
+The production release command requires the exact 40-character lowercase source SHA:
+
+```bash
+SOURCE_SHA="$(git rev-parse HEAD)" pnpm deploy:auto
 ```
-SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run deploy:preflight && pnpm run build && pnpm exec wrangler d1 migrations apply DB --remote && pnpm run deploy:preflight && pnpm exec wrangler deploy
-```
 
-In one command this:
+`pnpm deploy:auto` runs `scripts/deploy-production-canary.ts`. In one command it:
 
-1. Runs local deploy preflight checks while skipping only the remote-migration check.
-2. Builds the client bundle.
-3. Applies any pending remote D1 migrations.
-4. Reruns the full preflight, including the remote-migration check.
-5. Deploys the Worker.
+1. Verifies that `HEAD` is exactly `SOURCE_SHA`, the tracked tree is clean, and records the immutable Git tree hash.
+2. Runs local deploy preflight checks while skipping only the remote-migration check, builds without Cloudflare credentials, and rejects tracked build-output changes.
+3. Lists every pending remote D1 migration, reads the matching local SQL, and refuses destructive or non-additive statements.
+4. Applies the reviewed additive migrations and reruns the full preflight, including the remote-migration check.
+5. Resolves the current single-version production deployment, uploads a Worker version tagged with `SOURCE_SHA`, and stages it at 0% traffic beside the prior version at 100%.
+6. Runs the MCP OAuth smoke against the exact candidate Worker version.
+7. Promotes the candidate to 100% only after the candidate smoke passes, then verifies both Cloudflare's active deployment and the public `X-Spoonjoy-Worker-Version` header.
+8. Restores and verifies the prior version after any failure once staging has succeeded.
+
+The command writes a sanitized `production-release.json` under `mcp-oauth-canary-artifacts/` on success or failure. It records the Git tree, reviewed migration names, migration-apply state, and the fact that database rollback is unsupported; it never contains environment values, command output, access tokens, or stack traces.
+
+For an intentional Worker rollback, manually dispatch the production workflow with the historical `source_sha` and its exact source-tagged `rollback_version_id`. The workflow checks out current `main` tooling, confirms that the version ID is tagged with that SHA, deploys the known version directly, and verifies public convergence. It never executes scripts from the historical commit and does not attempt to roll D1 back.
+
+D1 migrations are not Worker-versioned and cannot be rolled back by a Worker traffic change. Automatic releases therefore accept only additive SQL that remains compatible with the prior Worker version. Destructive schema/data migrations require a separately reviewed maintenance plan and must not be sent through `deploy:auto`.
 
 For full deploys with the longer test/typecheck gate:
 
@@ -290,7 +302,7 @@ pnpm run deploy:preflight
 pnpm typecheck
 pnpm test:coverage
 pnpm test:e2e
-pnpm deploy:auto
+SOURCE_SHA="$(git rev-parse HEAD)" pnpm deploy:auto
 ```
 
 If you prefer the manual two-step (no auto-apply of migrations), use:
@@ -310,7 +322,9 @@ pnpm run deploy
 | OAuth buttons redirect back with `oauthError` | Missing or mismatched OAuth secret/callback config | Re-check provider callback URLs and `wrangler secret put` values |
 | Uploaded images work locally but not in production | Missing `PHOTOS` R2 bucket/binding or R2 is not enabled for the deploy account | Enable R2 in the Dashboard, create `spoonjoy-photos`, and verify `wrangler.json` binding |
 | Ingredient parsing returns fallback/manual review | Missing or invalid `OPENAI_API_KEY` | Set the secret or keep deterministic fallback behavior |
-| Production schema is stale | D1 migrations not applied remotely | Run `wrangler d1 migrations apply DB --remote` before deploy, or use `pnpm deploy:auto` to apply + deploy in one step |
-| `pnpm run deploy:preflight` fails with "Remote D1 has N pending migration(s)" | Local code references a schema change that has not been applied to remote D1 | Run `pnpm exec wrangler d1 migrations apply DB --remote` or `pnpm deploy:auto` (which applies pending migrations, reruns preflight, then deploys) |
+| Production schema is stale | D1 migrations not applied remotely | Review the pending SQL, then run `SOURCE_SHA="$(git rev-parse HEAD)" pnpm deploy:auto` for additive migrations |
+| `pnpm run deploy:preflight` fails with "Remote D1 has N pending migration(s)" | Local code references a schema change that has not been applied to remote D1 | Use `deploy:auto` for additive migrations; use a separately reviewed maintenance plan for destructive migrations |
+| `deploy:auto` rejects a migration as non-additive | Pending SQL could make the prior Worker incompatible, so automatic rollback would be unsafe | Stop the release and design a staged expand/migrate/contract sequence |
+| Candidate smoke or promotion fails | The candidate did not pass the exact-version gate | Confirm `mcp-oauth-canary-artifacts/production-release.json` reports `rolled_back`, then inspect the MCP OAuth smoke artifacts |
 | Intermittent 1102 / "Worker exceeded CPU time limit" on SSR routes | Worker Free CPU headroom is too close to React Router SSR + Prisma/D1 render cost | Reproduce with `wrangler tail`, then either reduce the hot route's server work or move the Worker to a paid plan before setting `limits.cpu_ms` |
 | Sessions reset across deploys | Missing/rotating `SESSION_SECRET` | Set a stable high-entropy production secret |

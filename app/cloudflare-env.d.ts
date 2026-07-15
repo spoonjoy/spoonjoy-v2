@@ -47,6 +47,12 @@ declare global {
     limit(input: { key: string }): Promise<{ success: boolean }>;
   }
 
+  interface WorkerVersionMetadata {
+    id: string;
+    tag: string;
+    timestamp: string;
+  }
+
   interface Env {
     DB?: D1Database;
     PHOTOS?: R2Bucket;
@@ -56,6 +62,7 @@ declare global {
     API_IP_RATE_LIMITER?: RateLimitBinding;
     /** Tighter per-IP throttle for anonymous auth attempts (login/signup/passkey). */
     AUTH_IP_RATE_LIMITER?: RateLimitBinding;
+    CF_VERSION_METADATA?: WorkerVersionMetadata;
     SESSION_SECRET?: string;
     SPOONJOY_BASE_URL?: string;
     SPOONJOY_ALLOW_INSECURE_LOCAL_SESSIONS?: string;

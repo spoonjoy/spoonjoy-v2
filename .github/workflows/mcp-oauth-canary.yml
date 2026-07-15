@@ -38,12 +38,12 @@ jobs:
           fi
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         if: steps.cloudflare.outputs.ready == 'true'
 
       - name: Setup Node.js
         if: steps.cloudflare.outputs.ready == 'true'
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "22"
 
@@ -84,7 +84,7 @@ jobs:
 
       - name: Upload MCP OAuth canary artifacts
         if: always() && steps.cloudflare.outputs.ready == 'true'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: mcp-oauth-canary-artifacts
           path: mcp-oauth-canary-artifacts/
