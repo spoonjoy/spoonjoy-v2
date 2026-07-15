@@ -62,11 +62,11 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 1b: Shopping Mutation Matrix Implementation
 **What**: Implement `app/lib/shopping-list-mutations.server.ts`; route web, v1, and MCP additions through it; update public behavior descriptions/examples.
-**Output**: New helper; updates to `app/lib/shopping-list.server.ts`, `app/lib/api-v1.server.ts`, `app/lib/spoonjoy-api.server.ts`, OpenAPI/generator/generated playground.
+**Output**: `app/lib/shopping-list-mutations.server.ts`, `app/lib/shopping-list.server.ts`, `app/lib/api-v1.server.ts`, `app/lib/spoonjoy-api.server.ts`, `app/lib/api-v1-openapi.server.ts`, `scripts/generate-api-playground.ts`, `app/lib/generated/api-v1-playground.ts`.
 **Acceptance**: Unit 1a tests and OpenAPI/generator tests pass; no duplicate add/restore implementation remains.
 
-### ⬜ Unit 1c: Shopping Coverage And Refactor
-**What**: Cover every helper branch and run generator stability/build.
+### ⬜ Unit 1c: Shopping Verification
+**What**: Run the complete Unit 1a suite with coverage, generator idempotency, typecheck, and build; record evidence only.
 **Output**: `unit-1-shopping.log`.
 **Acceptance**: New helper coverage is 100%, targeted tests pass twice, generator is idempotent, build and `git diff --check` pass.
 
@@ -87,31 +87,31 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 3a: REST Base Metadata Tests
 **What**: Add red tests for additive `stepCount`, `sourceDisplayName` normalization/null/malformed handling, unchanged legacy fields, OpenAPI/contract/generator/playground propagation, and anonymous list/detail/search behavior.
-**Output**: `test/lib/api-v1-recipe-metadata.server.test.ts`, recipe/list/search/native-sync/write/cookbook/OpenAPI/contract/generator/playground tests.
+**Output**: `test/lib/api-v1-recipe-metadata.server.test.ts`, `test/routes/api-v1-recipes.test.ts`, `test/routes/api-v1-search.test.ts`, `test/routes/api-v1-native-sync.test.ts`, `test/routes/api-v1-recipe-writes.test.ts`, `test/routes/api-v1-cookbooks.test.ts`, `test/lib/api-v1-openapi.server.test.ts`, `test/routes/api-v1-openapi.test.ts`, `test/scripts/generate-api-playground.test.ts`, `test/routes/developers-playground.test.tsx`.
 **Acceptance**: Named tests fail only on missing base metadata.
 
 ### ⬜ Unit 3b: REST Base Metadata Implementation
 **What**: Implement `stepCount` and `sourceDisplayName` exactly; preserve `sourceHost`, `servings`, and all existing field types.
-**Output**: New `app/lib/api-v1-recipe-metadata.server.ts`; updates to v1 server/OpenAPI/contract/generator/generated playground/developer docs.
+**Output**: `app/lib/api-v1-recipe-metadata.server.ts`, `app/lib/api-v1.server.ts`, `app/lib/api-v1-openapi.server.ts`, `app/lib/api-v1-contract.server.ts`, `scripts/generate-api-playground.ts`, `app/lib/generated/api-v1-playground.ts`, `app/routes/developers.playground.tsx`, `app/routes/developers.tsx`, `docs/api.md`.
 **Acceptance**: Unit 3a passes; malformed host yields null and shared response consumers remain compatible.
 
-### ⬜ Unit 3c: REST Base Metadata Coverage
-**What**: Cover normalization boundaries and all shared builder consumers.
+### ⬜ Unit 3c: REST Base Metadata Verification
+**What**: Run the complete Unit 3a suite with coverage, generator idempotency, typecheck, and build; record evidence only.
 **Output**: `unit-3-api-metadata.log`.
 **Acceptance**: Helper coverage is 100%; targeted cross-contract suite, typecheck, and build pass.
 
 ### ⬜ Unit 4a: REST Scaling Projection Tests
 **What**: Add red tests for exactly one unsigned decimal `scaleFactor`, `0.25..50`, invalid/multiple/nonfinite forms, null quantities, six-decimal rounding, negative-zero normalization, immutable recipe data, and unchanged list/search behavior.
-**Output**: `test/lib/api-v1-recipe-scaling.server.test.ts`, recipe/OpenAPI/contract/generator/playground tests.
+**Output**: `test/lib/api-v1-recipe-scaling.server.test.ts`, `test/routes/api-v1-recipes.test.ts`, `test/lib/api-v1-openapi.server.test.ts`, `test/routes/api-v1-openapi.test.ts`, `test/scripts/generate-api-playground.test.ts`, `test/routes/developers-playground.test.tsx`.
 **Acceptance**: Named tests fail only on absent scaling projection/validation.
 
 ### ⬜ Unit 4b: REST Scaling Projection Implementation
 **What**: Add detail-only `scaleFactor` and `scaledQuantity` while preserving original `quantity`/`servings` and performing no writes.
-**Output**: New `app/lib/api-v1-recipe-scaling.server.ts`; v1 server/OpenAPI/contract/generator/generated playground/docs updates.
+**Output**: `app/lib/api-v1-recipe-scaling.server.ts`, `app/lib/api-v1.server.ts`, `app/lib/api-v1-openapi.server.ts`, `app/lib/api-v1-contract.server.ts`, `scripts/generate-api-playground.ts`, `app/lib/generated/api-v1-playground.ts`, `app/routes/developers.playground.tsx`, `app/routes/developers.tsx`, `docs/api.md`.
 **Acceptance**: Unit 4a passes; invalid input uses existing `validation_error`; stored quantities remain unchanged.
 
-### ⬜ Unit 4c: REST Scaling Coverage
-**What**: Cover numeric grammar/rounding/error branches and shared response consumers.
+### ⬜ Unit 4c: REST Scaling Verification
+**What**: Run the complete Unit 4a suite with coverage, generator idempotency, typecheck, and build; record evidence only.
 **Output**: `unit-4-api-scaling.log`.
 **Acceptance**: New helper coverage is 100%; targeted suite, typecheck, and build pass.
 
@@ -126,7 +126,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Unit 5a passes; terminal-old then active-new preserves one active row; other users see nothing.
 
 ### ⬜ Unit 5c: Cook Index Verification
-**What**: Run Prisma generation, local D1 migration/rerun, helper coverage, typecheck, and build.
+**What**: Run the complete Unit 5a suite with coverage, Prisma generation, local D1 migration/rerun, typecheck, and build; record evidence only.
 **Output**: `unit-5-cook-index.log`.
 **Acceptance**: Commands pass with 100% helper coverage and no migration collision/warning.
 
@@ -141,7 +141,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Unit 6a passes; canonical fingerprint is stable and changes for every pinned content/quantity/unit/stable-id edit.
 
 ### ⬜ Unit 6c: Recipe Snapshot Verification
-**What**: Cover all snapshot branches and run typecheck/build.
+**What**: Run the complete Unit 6a suite with coverage, typecheck, and build; record evidence only.
 **Output**: `unit-6-cook-snapshot.log`.
 **Acceptance**: New modules are 100% covered with no server-only client import.
 
@@ -152,11 +152,11 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 7b: Cook Progress State Implementation
 **What**: Implement deterministic operation-based transitions and rebase helpers.
-**Output**: `app/lib/cook-session-state.ts`, updates to `app/lib/cook-session-types.ts`.
+**Output**: `app/lib/cook-session-state.ts`, `app/lib/cook-session-types.ts`.
 **Acceptance**: Unit 7a passes; unknown stable ids fail; set operations are replay-safe; terminal sessions reject progress changes.
 
 ### ⬜ Unit 7c: Cook Progress State Verification
-**What**: Cover every state/error branch and run typecheck/build.
+**What**: Run the complete Unit 7a suite with coverage, typecheck, and build; record evidence only.
 **Output**: `unit-7-cook-state.log`.
 **Acceptance**: New code is 100% covered and commands pass.
 
@@ -167,11 +167,11 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 8b: Start And Adoption Arbitration Implementation
 **What**: Implement attempt UUID creation, coordinator metadata, adoption outcomes, and non-evicting start replay ledger.
-**Output**: `app/lib/cook-session-start.ts`, updates to types/state modules.
+**Output**: `app/lib/cook-session-start.ts`, `app/lib/cook-session-types.ts`, `app/lib/cook-session-state.ts`.
 **Acceptance**: Unit 8a passes; client time is ignored; parallel starts produce one attempt; unexpired replay is exact or 429 backpressure applies.
 
 ### ⬜ Unit 8c: Start And Adoption Verification
-**What**: Cover race/expiry/full/error branches and run typecheck/build.
+**What**: Run the complete Unit 8a suite with coverage, typecheck, and build; record evidence only.
 **Output**: `unit-8-cook-start.log`.
 **Acceptance**: New code is 100% covered and commands pass.
 
@@ -186,7 +186,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Unit 9a passes; parallel starts serialize; restart persists state; both envs bind/export the class.
 
 ### ⬜ Unit 9c: Durable Object Storage Verification
-**What**: Exercise storage failures/restarts and validate Wrangler source/generated config.
+**What**: Run the complete Unit 9a Workers/config suite with coverage, Wrangler source/generated-config validation, typecheck, and build; record evidence only.
 **Output**: `unit-9-do-storage.log`.
 **Acceptance**: Worker class paths are 100% covered; preflight, typecheck, and build pass.
 
@@ -201,7 +201,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Unit 10a passes; D1 freshness is irrelevant to auth/start; all non-101 responses are private no-store.
 
 ### ⬜ Unit 10c: Internal Cook HTTP Verification
-**What**: Cover parser/auth/origin/proxy/error branches and run Workers coverage/typecheck/build.
+**What**: Run the complete Unit 10a Workers suite with coverage, typecheck, and build; record evidence only.
 **Output**: `unit-10-cook-http.log`.
 **Acceptance**: New HTTP/Worker code is 100% covered and commands pass.
 
@@ -216,7 +216,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Unit 11a passes; subscribers receive accepted snapshots and hibernated sockets recover metadata.
 
 ### ⬜ Unit 11c: Cook WebSocket Verification
-**What**: Cover all socket event/upgrade branches and run Workers coverage/typecheck/build.
+**What**: Run the complete Unit 11a Workers suite with coverage, typecheck, and build; record evidence only.
 **Output**: `unit-11-cook-websocket.log`.
 **Acceptance**: New WebSocket paths are 100% covered and commands pass.
 
@@ -231,13 +231,13 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Unit 12a passes; accepted DO mutations survive D1 failure/new attempt; repeated alarms do not duplicate history.
 
 ### ⬜ Unit 12c: D1 Projection Verification
-**What**: Cover every alarm/retry/order branch and run Workers/app coverage/typecheck/build.
+**What**: Run the complete Unit 12a Workers/app suite with coverage, typecheck, and build; record evidence only.
 **Output**: `unit-12-cook-projection.log`.
 **Acceptance**: New projection code is 100% covered; no RecipeSpoon/notification integration appears.
 
 ### ⬜ Unit 13a: Cook Purge Fence Tests
 **What**: Add real Workers red tests for matching/stale/repeated DELETE, PURGING rejection for every other HTTP/upgrade, code-4001 closure, FIFO barrier, old-terminal/new-attempt/purge order, delayed start replay 410, newer-attempt isolation, atomic content deletion, and every D1/local failure boundary.
-**Output**: `test/workers/cook-session-purge.test.ts`, HTTP/WebSocket test additions.
+**Output**: `test/workers/cook-session-purge.test.ts`, `test/workers/app-cook-session-http.test.ts`, `test/workers/app-cook-session-websocket.test.ts`, `test/workers/cook-session-do-websocket.test.ts`.
 **Acceptance**: Tests fail because purge state machine is absent.
 
 ### ⬜ Unit 13b: Cook Purge Fence Implementation
@@ -246,7 +246,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Unit 13a passes; purge cannot erase older repair/newer attempt; purged start replay cannot recreate/adopt state.
 
 ### ⬜ Unit 13c: Cook Purge Verification
-**What**: Cover every interleaving/failure/replay path and run Workers coverage/typecheck/build.
+**What**: Run the complete Unit 13a Workers suite with coverage, typecheck, and build; record evidence only.
 **Output**: `unit-13-cook-purge.log`.
 **Acceptance**: New purge code is 100% covered and commands pass.
 
@@ -261,22 +261,22 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Unit 14a passes; every outbound URL/body/header is asserted independently from response handling.
 
 ### ⬜ Unit 14c: Cook Client Transport Verification
-**What**: Cover transport/decode/socket branches and run coverage/typecheck/build.
+**What**: Run the complete Unit 14a suite with coverage, typecheck, and build; record evidence only.
 **Output**: `unit-14-cook-client-transport.log`.
 **Acceptance**: Adapter is 100% covered and commands pass.
 
 ### ⬜ Unit 15a: Cook Client Reconciliation Tests
 **What**: Add red hook/controller tests for operation queue, optimistic state, WebSocket snapshots, 409 rebase/retry, same-field reconnect precedence, stale attempts, offline cache non-authority, exact adoption outcomes, anonymous mode, record cleanup, and storage failure.
-**Output**: `test/hooks/use-cook-session.test.ts`, anonymous parser tests in `test/routes/recipes-id.test.tsx`.
+**Output**: `test/hooks/use-cook-session.test.ts`, `test/routes/recipes-id.test.tsx`.
 **Acceptance**: Tests fail because hook/controller is absent.
 
 ### ⬜ Unit 15b: Cook Client Reconciliation Implementation
 **What**: Implement `useCookSession`; retain anonymous local parser and separate authenticated cache/operation queue.
-**Output**: `app/hooks/useCookSession.ts`, targeted exports in `app/routes/recipes.$id.tsx`.
+**Output**: `app/hooks/useCookSession.ts`, `app/routes/recipes.$id.tsx`.
 **Acceptance**: Unit 15a passes; client time never overrides server; anonymous record clears after any start outcome; queue clears only after acceptance.
 
 ### ⬜ Unit 15c: Cook Client Reconciliation Verification
-**What**: Cover hook lifecycle/reconnect/storage branches and run coverage/typecheck/build.
+**What**: Run the complete Unit 15a suite with coverage, typecheck, and build; record evidence only.
 **Output**: `unit-15-cook-client-state.log`.
 **Acceptance**: New hook code is 100% covered and anonymous regressions pass.
 
@@ -291,7 +291,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Unit 16a passes; edits never remap silently; Start fresh abandons before start; scale persists via DO operations.
 
 ### ⬜ Unit 16c: Recipe Cook UI Verification
-**What**: Cover every UI state/action and run route/coverage/typecheck/build.
+**What**: Run the complete Unit 16a route/component suite with coverage, typecheck, and build; record evidence only.
 **Output**: `unit-16-cook-ui.log`.
 **Acceptance**: New UI code is 100% covered and recipe/dock regressions pass.
 
@@ -302,7 +302,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 17a: Owner-Only Continue Cooking Tests
 **What**: Add red loader/render tests for owner active cards, stale/empty/terminal removal, soft-deleted recipe, and strict absence/query suppression for authenticated/anonymous visitors.
-**Output**: `test/routes/index.test.tsx`, `test/components/recipe/ContinueCookingList.test.tsx`, nav regression test.
+**Output**: `test/routes/index.test.tsx`, `test/components/recipe/ContinueCookingList.test.tsx`, `test/components/navigation/mobile-nav.test.tsx`.
 **Acceptance**: Tests fail only because owner-only section is absent; dock links remain unchanged.
 
 ### ⬜ Unit 17b: Owner-Only Continue Cooking Implementation
@@ -311,7 +311,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Unit 17a passes; non-owner loader data/query contains no private session metadata.
 
 ### ⬜ Unit 17c: Continue Cooking Verification
-**What**: Cover owner/privacy/stale-card branches and run coverage/typecheck/build.
+**What**: Run the complete Unit 17a suite with coverage, typecheck, and build; record evidence only.
 **Output**: `unit-17-continue-cooking.log`.
 **Acceptance**: New code is 100% covered and nav/privacy regressions pass.
 
@@ -331,7 +331,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Unit 18a passes; owner is `Cookbook.authorId`; rerun harmless; unsave only deletes SavedRecipe.
 
 ### ⬜ Unit 18c: SavedRecipe Data Verification
-**What**: Run Prisma generation, migration/rerun, helper coverage, typecheck/build.
+**What**: Run the complete Unit 18a suite with coverage, Prisma generation, migration/rerun, typecheck, and build; record evidence only.
 **Output**: `unit-18-saved-data.log`.
 **Acceptance**: New helper is 100% covered and commands pass.
 
@@ -346,7 +346,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Unit 19a passes across web/MCP/REST; removal/unsave remain independent; notifications unchanged.
 
 ### ⬜ Unit 19c: Cookbook Writer Verification
-**What**: Cover duplicate/missing/non-owner/deleted/transaction errors and run coverage/typecheck/build.
+**What**: Run the complete Unit 19a suite with coverage, typecheck, and build; record evidence only.
 **Output**: `unit-19-saved-compat.log`.
 **Acceptance**: Changed branches are 100% covered and cookbook/MCP/API suites pass.
 
@@ -386,8 +386,8 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: The targeted run fails because functional isSaved projection is absent.
 
 ### ⬜ Unit 20.3b: Recipe isSaved Projection Implementation
-**What**: Wire viewer-scoped SavedRecipe lookup into shared recipe builders and populate the already-additive nullable field without changing anonymous caching.
-**Output**: `app/lib/api-v1.server.ts`, `app/lib/api-v1-openapi.server.ts`, `scripts/generate-api-playground.ts`, generated playground, developer docs.
+**What**: Add the nullable `isSaved` field to v1 contracts, wire viewer-scoped SavedRecipe lookup into shared recipe builders, and preserve anonymous caching.
+**Output**: `app/lib/api-v1.server.ts`, `app/lib/api-v1-contract.server.ts`, `app/lib/api-v1-openapi.server.ts`, `scripts/generate-api-playground.ts`, `app/lib/generated/api-v1-playground.ts`, `app/routes/developers.playground.tsx`, `app/routes/developers.tsx`, `docs/api.md`.
 **Acceptance**: Unit 20.3a passes; anonymous/public-token is null, authenticated is boolean, and save state never becomes a public count.
 
 ### ⬜ Unit 20.3c: Recipe isSaved Projection Verification
@@ -402,11 +402,11 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 21b: Saved Controls And Route Implementation
 **What**: Use SavedRecipe on `/saved-recipes` and recipe detail; add explicit save button without changing cookbook control.
-**Output**: `app/routes/saved-recipes.tsx`, `app/routes/recipes.$id.tsx`, `app/components/recipe/SaveRecipeButton.tsx`, existing cookbook dropdown only for integration.
+**Output**: `app/routes/saved-recipes.tsx`, `app/routes/recipes.$id.tsx`, `app/components/recipe/SaveRecipeButton.tsx`, `app/components/recipe/SaveToCookbookDropdown.tsx`.
 **Acceptance**: Unit 21a passes; save/cookbook copy/actions are distinct.
 
 ### ⬜ Unit 21c: Saved Controls Verification
-**What**: Cover route/control states and run coverage/typecheck/build.
+**What**: Run the complete Unit 21a suite with coverage, typecheck, and build; record evidence only.
 **Output**: `unit-21-saved-controls.log`.
 **Acceptance**: New code is 100% covered and commands pass.
 
@@ -426,7 +426,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Unit 22a passes; global metadata has no private save state and no duplicate recipe results.
 
 ### ⬜ Unit 22c: Saved Search Verification
-**What**: Cover privacy/query/error branches and run coverage/typecheck/build.
+**What**: Run the complete Unit 22a suite with coverage, typecheck, and build; record evidence only.
 **Output**: `unit-22-saved-search.log`.
 **Acceptance**: New code is 100% covered and search regressions pass.
 
@@ -437,11 +437,11 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 23b: Owner-Only Saved Kitchen Implementation
 **What**: Load/render SavedRecipe section only when viewer owns the kitchen; do not edit dock.
-**Output**: `app/routes/_index.tsx`, new `app/components/recipe/SavedRecipeList.tsx`.
+**Output**: `app/routes/_index.tsx`, `app/components/recipe/SavedRecipeList.tsx`.
 **Acceptance**: Unit 23a passes; no private save data enters visitor loader output.
 
 ### ⬜ Unit 23c: Saved Kitchen Verification
-**What**: Cover privacy/empty/error branches and run coverage/typecheck/build.
+**What**: Run the complete Unit 23a suite with coverage, typecheck, and build; record evidence only.
 **Output**: `unit-23-saved-kitchen.log`.
 **Acceptance**: New code is 100% covered and nav/privacy tests pass.
 
@@ -461,7 +461,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Unit 24a passes; one allowed course maximum; normalization deterministic; source MANUAL.
 
 ### ⬜ Unit 24c: RecipeTag Data Verification
-**What**: Run Prisma generation/migrations, service coverage, typecheck/build.
+**What**: Run the complete Unit 24a suite with coverage, Prisma generation, local migrations/rerun, typecheck, and build; record evidence only.
 **Output**: `unit-24-tags-data.log`.
 **Acceptance**: New service is 100% covered and commands pass.
 
@@ -472,11 +472,11 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 25b: Tag Authoring Implementation
 **What**: Add course/custom fields to RecipeBuilder and create/edit services/routes.
-**Output**: `app/components/recipe/RecipeBuilder.tsx`, `app/lib/recipe-create.server.ts`, `app/lib/recipe-detail.server.ts`, new/edit routes.
+**Output**: `app/components/recipe/RecipeBuilder.tsx`, `app/lib/recipe-create.server.ts`, `app/lib/recipe-detail.server.ts`, `app/routes/recipes.new.tsx`, `app/routes/recipes.$id.edit.tsx`.
 **Acceptance**: Unit 25a passes; only owners mutate and invalid input is server-rejected.
 
 ### ⬜ Unit 25c: Tag Authoring Verification
-**What**: Cover authoring/error branches and run coverage/typecheck/build.
+**What**: Run the complete Unit 25a suite with coverage, typecheck, and build; record evidence only.
 **Output**: `unit-25-tags-authoring.log`.
 **Acceptance**: New authoring code is 100% covered and commands pass.
 
@@ -492,11 +492,11 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 26b: Tag Display Implementation
 **What**: Add compact course/custom display using existing design primitives.
-**Output**: recipe detail/index routes and `app/components/pantry/RecipeGrid.tsx`.
+**Output**: `app/routes/recipes.$id.tsx`, `app/routes/recipes._index.tsx`, `app/components/pantry/RecipeGrid.tsx`.
 **Acceptance**: Unit 26a passes; casing/order match contract and empty tags add no chrome.
 
 ### ⬜ Unit 26c: Tag Display Verification
-**What**: Cover empty/dense display branches and run coverage/typecheck/build.
+**What**: Run the complete Unit 26a suite with coverage, typecheck, and build; record evidence only.
 **Output**: `unit-26-tags-display.log`.
 **Acceptance**: New display code is 100% covered and commands pass.
 
@@ -542,11 +542,11 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 28b: Tag Discovery Filter Implementation
 **What**: Add shared tag filter parsing/querying and controls to the three discovery surfaces without dock edits.
-**Output**: new `app/lib/recipe-tag-filter.ts`, recipes index/My Kitchen/Search routes, RecipeGrid.
+**Output**: `app/lib/recipe-tag-filter.ts`, `app/routes/recipes._index.tsx`, `app/routes/_index.tsx`, `app/routes/search.tsx`, `app/components/pantry/RecipeGrid.tsx`.
 **Acceptance**: Unit 28a passes; unfiltered results unchanged and private kitchen sections remain owner-only.
 
 ### ⬜ Unit 28c: Tag Discovery Verification
-**What**: Cover parser/query/filter/error branches and run coverage/typecheck/build.
+**What**: Run the complete Unit 28a suite with coverage, typecheck, and build; record evidence only.
 **Output**: `unit-28-tags-filters.log`.
 **Acceptance**: New code is 100% covered and discovery regressions pass.
 
@@ -555,20 +555,10 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Output**: `visual-tags-discovery/` evidence and closed ledgers.
 **Acceptance**: No dock churn, overlap, crowding, or ready visual issue remains.
 
-### ⬜ Unit 29a: Feedback Boundary Regression Tests
-**What**: Add scoped assertions for unchanged dock/drawer, no first-party import entry, agent/API import docs, no changed-surface Pebble contract, and no AI tag surface.
-**Output**: `test/components/navigation/mobile-nav.test.tsx`, `test/repo-hygiene.test.ts`, `test/docs/developer-platform-docs.test.ts`, `test/docs/developer-platform-guide.test.ts`.
-**Acceptance**: Tests are green or fail only on stale changed-surface copy; unrelated telemetry and redirect-only `api.docs.ts` are not targeted.
-
-### ⬜ Unit 29b: Feedback Boundary Cleanup
-**What**: Make only failing evidence-backed copy/doc fixes; do not edit mobile nav without a proven defect.
-**Output**: `app/routes/developers.tsx`, `app/routes/mcp.tsx`, `docs/api.md`, generated docs only when required.
-**Acceptance**: Unit 29a/nav/docs pass with no import UI, AI UI, Pebble API, or unnecessary dock change.
-
-### ⬜ Unit 29c: Feedback Disposition Audit
-**What**: Re-read feedback source against final diff and record proof/rejection for every row.
-**Output**: `unit-29-feedback-audit.md`.
-**Acceptance**: No source item is missing, silently deferred, or unsupported by evidence.
+### ⬜ Unit 29: Feedback Boundary And Disposition Audit
+**What**: Run scoped existing navigation/repo-hygiene/developer-doc tests, inspect the final diff for import UI/AI/Pebble/dock changes, and map every feedback-source row to code/test evidence or its explicit rejection.
+**Output**: `unit-29-feedback-audit.md`; logs for `test/components/navigation/mobile-nav.test.tsx`, `test/repo-hygiene.test.ts`, `test/docs/developer-platform-docs.test.ts`, and `test/docs/developer-platform-guide.test.ts`.
+**Acceptance**: Tests pass; no source item is missing/silently deferred; no first-party import UI, AI tag surface, Pebble contract, or unproven dock edit exists.
 
 ### ⬜ Unit 30a: Two-Client Smoke Tests
 **What**: Add red script tests for two authenticated browser contexts sharing one attempt, WebSocket step/check/scale sync, edit warning, complete/abandon, and failure artifact capture.
@@ -581,22 +571,22 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Unit 30a passes; successful and failed synchronization produce useful artifacts.
 
 ### ⬜ Unit 30c: Two-Client Smoke Verification
-**What**: Cover lifecycle smoke branches and run script coverage/typecheck.
+**What**: Run the complete Unit 30a script suite with coverage and script typecheck; record evidence only.
 **Output**: `unit-30-smoke-sync.log`.
 **Acceptance**: New lifecycle smoke logic is 100% covered and commands pass.
 
 ### ⬜ Unit 31a: Smoke Purge And Cleanup Tests
 **What**: Add red tests for finally cleanup, async DELETE retry to 204, D1 row/content-state removal, tolerated coordinator tombstone, user deletion, partial failure, and residue reporting.
-**Output**: `test/scripts/smoke-live-cleanup.test.ts`, smoke helper tests.
+**Output**: `test/scripts/smoke-live-cleanup.test.ts`, `test/scripts/smoke-live-helpers.test.ts`.
 **Acceptance**: Tests fail because cleanup reliability is absent.
 
 ### ⬜ Unit 31b: Smoke Purge And Cleanup Implementation
 **What**: Purge every current attempt before user deletion, retry to 204, inspect D1/DO attempt residue, and always record unresolved residue.
-**Output**: smoke scripts/helpers.
+**Output**: `scripts/smoke-live.mjs`, `scripts/smoke-live-helpers.mjs`.
 **Acceptance**: Unit 31a passes; failed smoke still cleans and reports; only documented non-content tombstone may remain before user cleanup.
 
 ### ⬜ Unit 31c: Smoke Cleanup Verification
-**What**: Cover every cleanup/failure/retry branch and run local dry-run residue inspection.
+**What**: Run the complete Unit 31a script suite with coverage, script typecheck, and local dry-run residue inspection; record evidence only.
 **Output**: `unit-31-smoke-cleanup.log`.
 **Acceptance**: New cleanup logic is 100% covered and `pnpm cleanup:qa` reports no disposable local data.
 
