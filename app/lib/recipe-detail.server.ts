@@ -23,6 +23,7 @@ import {
   SpoonValidationError,
 } from "~/lib/recipe-spoon.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
+import { scheduleAiPlaceholderCover, type SchedulePlaceholderInput } from "~/lib/ai-placeholder-cover.server";
 import { getUserId, requireUserId } from "~/lib/session.server";
 import { notifySpoonOnMyRecipe } from "~/lib/notification-triggers.server";
 import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
@@ -197,6 +198,17 @@ async function runOrQueueSpoonCoverStylization(
     return;
   }
   await scheduleSpoonCoverStylization(input);
+}
+
+async function runOrQueueAiPlaceholderCover(
+  input: SchedulePlaceholderInput,
+  waitUntil?: (promise: Promise<unknown>) => void,
+): Promise<void> {
+  if (waitUntil) {
+    waitUntil(deferBackgroundTask(() => scheduleAiPlaceholderCover(input)));
+    return;
+  }
+  await scheduleAiPlaceholderCover(input);
 }
 
 export async function loadRecipeDetail({ request, params, context }: RecipeDetailRouteArgs) {
@@ -859,6 +871,7 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
       chefId: true,
       deletedAt: true,
       title: true,
+      description: true,
       activeCoverId: true,
       activeCoverVariant: true,
       coverMode: true,
@@ -917,6 +930,7 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
   if (intent === "createCoverFromSpoon") {
     const spoonId = formData.get("spoonId");
     const activateWhenReady = formData.get("activateWhenReady") === "true";
+    const promptAddition = sanitizeImagePromptAddition(optionalFormText(formData, "promptAddition"));
     if (typeof spoonId !== "string" || !spoonId) {
       throw new Response("spoonId is required", { status: 400 });
     }
@@ -937,6 +951,7 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
       createdById: userId,
       sourceImageUrl: spoon.photoUrl,
       generationStatus: "processing",
+      promptAddition,
     });
     await runOrQueueSpoonCoverStylization(
       {
@@ -948,6 +963,7 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
         recipeTitle: recipe.title,
         env,
         bucket,
+        promptAddition,
         activateWhenReady,
         suppressAutoActivation: !activateWhenReady,
         activationGuard: activateWhenReady
@@ -963,9 +979,50 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
     return { success: true, intent: "createCoverFromSpoon", coverId: cover.id };
   }
 
+  if (intent === "generateRecipeCoverPlaceholder") {
+    const activateWhenReady = formData.get("activateWhenReady") === "true";
+    const promptAddition = sanitizeImagePromptAddition(optionalFormText(formData, "promptAddition"));
+    const { bucket, env, waitUntil } = getCloudflareCtx(context);
+    const cover = await createCover(database, {
+      recipeId: id,
+      imageUrl: "",
+      sourceType: "ai-placeholder",
+      sourceSpoonId: null,
+      status: "processing",
+      createdById: userId,
+      sourceImageUrl: null,
+      generationStatus: "processing",
+      promptAddition,
+    });
+    await runOrQueueAiPlaceholderCover(
+      {
+        db: database,
+        userId,
+        recipeId: id,
+        coverId: cover.id,
+        title: recipe.title,
+        description: recipe.description,
+        env,
+        bucket,
+        promptAddition,
+        activateWhenReady,
+        activationGuard: activateWhenReady
+          ? {
+              activeCoverId: recipe.activeCoverId,
+              activeCoverVariant: recipe.activeCoverVariant,
+              coverMode: recipe.coverMode,
+            }
+          : undefined,
+      },
+      waitUntil,
+    );
+    return { success: true, intent: "generateRecipeCoverPlaceholder", coverId: cover.id };
+  }
+
   if (intent === "regenerateRecipeCover") {
     const coverId = formData.get("coverId");
     const activateWhenReady = formData.get("activateWhenReady") === "true";
+    const promptAddition = sanitizeImagePromptAddition(optionalFormText(formData, "promptAddition"));
     if (typeof coverId !== "string" || !coverId) {
       throw new Response("coverId is required", { status: 400 });
     }
@@ -990,6 +1047,8 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
         generationStatus: "processing",
         failureReason: null,
         sourceImageUrl: cover.sourceImageUrl ?? rawPhotoUrl,
+        promptAddition,
+        parentCoverId: cover.id,
       },
     });
     await runOrQueueSpoonCoverStylization(
@@ -1003,6 +1062,8 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
         env,
         bucket,
         sourceType: cover.sourceType === "spoon" ? "spoon" : "chef-upload",
+        parentCoverId: cover.id,
+        promptAddition,
         activateWhenReady,
         suppressAutoActivation: !activateWhenReady,
         activationGuard: activateWhenReady

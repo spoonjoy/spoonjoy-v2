@@ -6,9 +6,12 @@ export function normalizeCoverProvenanceLabel(label?: string | null): string | n
 }
 
 export function normalizeRequiredCoverProvenanceLabel(label: string): string {
-  if (label === "Chef photo") return "Original photo";
-  if (label === "Editorialized chef photo") return "Editorial photo";
-  return label;
+  const normalized = label.trim();
+  const legacyLabel = normalized.toLowerCase();
+  if (legacyLabel === "chef photo") return "Original photo";
+  if (legacyLabel === "editorialized chef photo") return "Editorial photo";
+  if (legacyLabel === "spoonjoy cookbook" || legacyLabel === "on the counter") return "Saved cover";
+  return normalized;
 }
 
 export function CoverProvenanceBadge({
