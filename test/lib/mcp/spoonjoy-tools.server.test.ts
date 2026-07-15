@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { getLocalDb } from "~/lib/db.server";
 import { authenticateApiToken, createApiCredential } from "~/lib/api-auth.server";
+import { buildApiV1OpenApiDocument } from "~/lib/api-v1-openapi.server";
 import { callSpoonjoyMcpTool, listSpoonjoyMcpTools, type SpoonjoyMcpContext } from "~/lib/mcp/spoonjoy-tools.server";
 import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "~/lib/recipe-title-uniqueness.server";
 import { cleanupDatabase } from "../../helpers/cleanup";
@@ -397,6 +398,18 @@ describe("spoonjoy MCP tools", () => {
         additionalProperties: false,
       },
     });
+  });
+
+  it("keeps first-photo activation field names aligned across REST and MCP surfaces", () => {
+    const document = buildApiV1OpenApiDocument();
+    const restProperties = document.components.schemas.RecipeImageUploadRequest.properties;
+    const mcpProperties = (toolByName("create_recipe_cover_from_upload")?.inputSchema as {
+      properties?: Record<string, unknown>;
+    } | undefined)?.properties ?? {};
+    const activationFields = ["activate", "activateWhenReady"] as const;
+
+    expect(activationFields.filter((field) => field in restProperties)).toEqual(["activateWhenReady"]);
+    expect(activationFields.filter((field) => field in mcpProperties)).toEqual(["activateWhenReady"]);
   });
 
   it("describes Photo Studio schema fields so agents can choose the right cover workflow", () => {

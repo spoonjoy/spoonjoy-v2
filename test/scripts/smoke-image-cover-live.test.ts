@@ -514,6 +514,7 @@ describe("image-cover live smoke flow", () => {
       promptAddition: expect.stringContaining("editorial"),
       idempotencyKey: "codex-unit2a-ai-placeholder",
     });
+    expect(placeholderCall?.args).not.toHaveProperty("activate");
 
     const spoonBackedCoverCall = harness.calls.find((call) =>
       call.kind === "mcp" &&
@@ -532,11 +533,13 @@ describe("image-cover live smoke flow", () => {
       promptAddition: expect.stringContaining("editorial"),
       idempotencyKey: "codex-unit2a-editorial-spoon-upload",
     });
+    expect(spoonBackedCoverCall?.args).not.toHaveProperty("activate");
 
     const regenerateCall = harness.calls.find((call) => call.kind === "mcp" && call.name === "regenerate_recipe_cover");
     expect(regenerateCall?.args).toMatchObject({
       promptAddition: expect.stringContaining("brighter"),
     });
+    expect(regenerateCall?.args).not.toHaveProperty("activate");
 
     expect(report.exif).toEqual({
       sourceOrientation: 6,

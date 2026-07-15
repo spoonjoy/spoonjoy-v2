@@ -56,13 +56,16 @@ describe("generate-api-playground", () => {
     expect(upload.requestBody?.fields).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: "clientMutationId", required: true }),
       expect.objectContaining({ name: "photo", required: true, accept: "image/jpeg,image/png,image/webp" }),
-      expect.objectContaining({ name: "activate", required: false }),
+      expect.objectContaining({ name: "activateWhenReady", required: false }),
       expect.objectContaining({ name: "generateEditorial", required: false }),
       expect.objectContaining({ name: "postAsSpoon", required: false }),
       expect.objectContaining({ name: "note", required: false }),
     ]));
+    expect(upload.requestBody?.fields.map((field) => field.name)).not.toContain("activate");
     expect(upload.requestBody?.example).toContain("const body = new FormData();");
     expect(upload.requestBody?.example).toContain("body.append(\"photo\", file);");
+    expect(upload.requestBody?.example).toContain("body.append(\"activateWhenReady\"");
+    expect(upload.requestBody?.example).not.toContain("body.append(\"activate\"");
     expect(upload.requestBody?.example).toContain("curl --form");
     expect(upload.requestBody?.example).not.toContain("\"Content-Type\": \"multipart/form-data\"");
     expect(upload.requestBody?.example).not.toContain("-H 'Content-Type: multipart/form-data'");

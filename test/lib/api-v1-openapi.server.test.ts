@@ -1010,17 +1010,18 @@ describe("API v1 OpenAPI document", () => {
 	        photo: { type: "string", format: "binary" },
 	      },
 	    });
-    expect(components.schemas.RecipeImageUploadRequest).toMatchObject({
+	    expect(components.schemas.RecipeImageUploadRequest).toMatchObject({
       additionalProperties: false,
       required: ["clientMutationId", "photo"],
       properties: {
         clientMutationId: { type: "string", minLength: 1, maxLength: 160 },
         photo: { type: "string", format: "binary" },
-        activate: { type: "boolean", default: true },
+        activateWhenReady: { type: "boolean", default: true },
         generateEditorial: { type: "boolean", default: true },
         postAsSpoon: { type: "boolean", default: false },
       },
     });
+    expect(components.schemas.RecipeImageUploadRequest.properties.activate).toBeUndefined();
 	    expect(components.schemas.UpdateNotificationPreferencesRequest.required).toEqual([
 	      "clientMutationId",
 	      "notifySpoonOnMyRecipe",
@@ -1095,16 +1096,18 @@ describe("API v1 OpenAPI document", () => {
       encoding: { photo: { contentType: "image/jpeg,image/png,image/webp" } },
     });
     expect(imageUpload.requestBody.content["application/json"]).toBeUndefined();
-    expect(requestExample(document, "/api/v1/recipes/{id}/image", "POST")).toMatchObject({
+    const imageUploadExample = requestExample(document, "/api/v1/recipes/{id}/image", "POST");
+    expect(imageUploadExample).toMatchObject({
       clientMutationId: "device-uuid-recipe-image",
       photo: "(binary image file)",
-      activate: true,
+      activateWhenReady: true,
       generateEditorial: true,
       postAsSpoon: true,
       note: "Added more lemon.",
       nextTime: "Try a wider pan.",
       cookedAt: expect.stringMatching(/^2026-06-01T/),
     });
+    expect(imageUploadExample).not.toHaveProperty("activate");
     expect(imageUpload["x-idempotency"]).toMatchObject({
       key: "clientMutationId",
       location: "multipartFormData",
