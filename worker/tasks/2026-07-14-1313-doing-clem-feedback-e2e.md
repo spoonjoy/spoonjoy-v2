@@ -217,7 +217,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: New HTTP/Worker code is 100% covered and commands pass.
 
 ### ⬜ Unit 11a: Cook WebSocket Tests
-**What**: Add real Workers red tests for same-origin upgrade, 101 handle retention, initial/broadcast snapshots, exact hibernation attachment/restart, and every post-upgrade frame/order: stale error+optional latest snapshot then 4000, purge-race error+PURGING then 4001, missing error/no snapshot then 4000, internal error/no snapshot then 1011, ordinary purge snapshot then 4001, immediate no-frame 1003 for text/binary client data, and normal 1000; cover auth/origin non-101 and send/close failures.
+**What**: Add real Workers red tests for same-origin upgrade, 101 handle retention, initial/broadcast snapshots, exact hibernation attachment/restart, every post-upgrade frame/order, and non-purge fanout failure after accepted commit: healthy sockets continue, failed send gets 1011, failed close is swallowed/retried only on a later broadcast, HTTP remains 200, and no fanout alarm/rollback occurs; cover purge's separate behavior.
 **Output**: `test/workers-runtime/app-cook-session-websocket.test.ts`, `test/workers-runtime/cook-session-do-websocket.test.ts`.
 **Acceptance**: Tests fail because live subscription is absent.
 
@@ -277,7 +277,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Adapter is 100% covered and commands pass.
 
 ### ⬜ Unit 15a: Cook Client Reconciliation Tests
-**What**: Add red hook/controller tests for exact authenticated `{pending,inFlight}` parser/isolation/logout, coalescing/overflow, one persisted inFlight/64/order, canonical persisted base versus derived optimistic rendering, write-before-side-effect, same-attempt versus different-attempt persistence failures with old-operation quarantine/reload/repeated replacement, snapshot reconciliation, same-attempt-guarded command conflict recovery, and every other exact error disposition; add anonymous v2 fingerprint/legacy/clear timing and all storage failures.
+**What**: Add red hook/controller tests for authenticated parser/queue, canonical base versus optimistic rendering, write-before-side-effect, accepted-response persistence failure rendering accepted base plus pending-only and same-mount write retry, every-mount GET bootstrap barrier, offline/read-error hidden disk state and disabled controls, same/different-attempt persistence/quarantine/reload, inFlight replay after bootstrap, snapshot/error reconciliation, and anonymous v2/legacy/clear timing.
 **Output**: `test/hooks/use-cook-session.test.ts`, `test/routes/recipes-id.test.tsx`.
 **Acceptance**: Tests fail because hook/controller is absent.
 
@@ -462,7 +462,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: No privacy exposure, dock churn, or ready visual issue remains.
 
 ### ⬜ Unit 24a: RecipeTag Migration And Service Tests
-**What**: Add red tests for accepted-only schema, owner auth, MANUAL source, singular lowercase controlled course, Unicode-whitespace collapse, NFKC/lowercase identity, duplicate-keeps-existing casing, hard-delete/re-add-resets casing, 1/40/41-code-point bounds, 10/11-tag bounds, reserved course words, normalized uniqueness/order, blank service rejection/form omission, soft-delete, and exact migration.
+**What**: Add red tests for accepted-only schema, owner auth, MANUAL source, singular lowercase controlled course, Unicode-whitespace collapse, NFKC/lowercase identity, duplicate-keeps-existing casing, hard-delete/re-add-resets casing, 1/40/41-code-point bounds, 10/11-tag bounds, reserved course words, normalized uniqueness/order, blank service rejection/form omission, soft-delete, parent Recipe updatedAt on state changes but not duplicate/no-op calls, and exact migration.
 **Output**: `test/models/recipe-tag.test.ts`, `test/lib/recipe-tags.server.test.ts`, `test/scripts/migration-0027-recipe-tags.test.ts`.
 **Acceptance**: Tests fail because tag schema/service/migration are absent.
 
@@ -517,12 +517,12 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: No card crowding, overflow, or ready visual issue remains.
 
 ### ⬜ Unit 27.1a: Tag Search Index Tests
-**What**: Add red tests for accepted course/custom labels in SearchDocument content/fingerprint, reindex on add/remove/replace-course, normalized order, no private save metadata, and no AI proposal content.
+**What**: Add red tests for accepted labels in SearchDocument content and RecipeTag count/latest/content fingerprint; lazy rebuild on add/remove/replace-course; mutation success without synchronous rebuild; one non-interactive delete/insert/metadata transaction; injected statement failures preserving the old complete index/metadata, returning error without querying, then successful repair; normalized order, cache-window/freshness, privacy, and no AI content.
 **Output**: `test/lib/search.server.test.ts`, `test/lib/recipe-tags.server.test.ts`.
 **Acceptance**: The exact two-file Vitest run fails because tag indexing is absent.
 
 ### ⬜ Unit 27.1b: Tag Search Index Implementation
-**What**: Include accepted manual tags in recipe search documents/fingerprints and trigger reindex from tag mutations.
+**What**: Include accepted manual tags and RecipeTag source fingerprint in search; make state-changing tag mutations bump Recipe updatedAt but never synchronously rebuild; convert rebuild replacement/metadata to one non-interactive transaction and retain existing ensure-before-query repair/cache policy.
 **Output**: `app/lib/search.server.ts`, `app/lib/recipe-tags.server.ts`.
 **Acceptance**: Unit 27.1a passes; saved privacy remains intact and only canonical accepted tags are indexed.
 
@@ -607,7 +607,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Tests fail because cleanup reliability is absent.
 
 ### ⬜ Unit 31b: Smoke Purge And Cleanup Implementation
-**What**: Implement the planning-defined 20-request/90-second pass and exact parser/status/deadline rules. Run it in `finally`; after primary failure, record evidence, wait exactly 5 seconds, and run one fresh-budget pass at latest target. A clean recovery deletes the user but retains incident/nonzero reporting; double failure sets `cleanupIncomplete`, records both passes/inspections, and leaves the user for external cleanup. Require owner residue and environment-safe remote D1 attempt count zero before user delete; any bounded unexpired non-content replay tombstones are allowed and recorded.
+**What**: Implement the planning-defined pass in `finally` and exact two-pass recovery. Emit separate `residueClean`, `cleanupRecovered`, and `cleanupIncomplete`; exit zero only for functional success plus primary cleanup success. Recovery success deletes the user but exits nonzero; double failure leaves it for external cleanup. Require owner residue and environment-safe remote D1 attempt count zero before user delete; bounded non-content replay tombstones are allowed/recorded.
 **Output**: `scripts/smoke-live.mjs`, `scripts/smoke-live-helpers.mjs`.
 **Acceptance**: Unit 31a passes; functional smoke failure still cleans; recoverable cleanup failure gets one bounded clean recovery; irrecoverable cleanup is never reported clean and blocks ship until a later rerun proves zero content/residue.
 
@@ -624,7 +624,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 ### ⬜ Unit 33: QA Deploy And Cross-Device Gate
 **What**: Record `HEAD=$(git rev-parse HEAD)` and `pnpm exec wrangler deployments list --env qa --json` before deploy; run `pnpm cleanup:remote:qa`, `pnpm run qa:preflight`, `pnpm deploy:qa`, and the same deployment-list command after, preserving all new ids/output. Use the tested attestation helper to poll cache-busted QA `/health` every 5s for max 180s until body and `X-Spoonjoy-Build-Sha` both equal HEAD; timeout/wrong mismatch fails before smoke. Then run QA web/API/two-client smoke. Before user deletion require zero `/residue` counts and zero remote D1 attempt row. In `finally` run the exact purge retry/user cleanup and post `pnpm cleanup:remote:qa`.
 **Output**: external Desk iteration `artifacts/unit-33-qa.md`, deploy version/URL, smoke screenshots/logs, cleanup and DO/D1 residue logs; no tracked branch edit.
-**Acceptance**: QA deploy/smokes pass for the exact recorded branch HEAD SHA before PR merge; owner DO diagnostic and D1 query prove no attempt content/row; no disposable data remains.
+**Acceptance**: QA deploy/smokes exit zero for the exact recorded branch HEAD SHA before PR merge, including primary-pass cleanup without `cleanupRecovered`; owner DO diagnostic and D1 query prove no attempt content/row; no disposable data remains.
 
 ### ⬜ Unit 34: PR Creation And Fresh Review
 **What**: Invoke `work-merger`; `git fetch origin main`; integrate origin/main before the final gates; rerun affected conflict tests; and push. Any HEAD change for any reason, including a history-only rewrite or tracked task-doc/evidence commit, invalidates the prior exact-SHA gate and requires Units 32-33 on the new HEAD. After a successful Unit 33, do not amend, rebase, merge, or commit on the branch. Open a ready PR and run newly spawned implementation, design/visual, test/coverage, security/privacy, migration/DO, and API-compatibility reviewers against that PR head. A reviewer fix changes HEAD and loops through Units 32-33 plus all PR reviews again.
@@ -668,3 +668,4 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 - 2026-07-15 Ambiguity Round 4 fixed post-replacement/purge mutation tombstones, single-inFlight offline batching and storage-write safety, fingerprinted anonymous v2 with legacy isolation, scaling overflow, and exact cleanup retry classification/deadline order.
 - 2026-07-15 Ambiguity Round 5 fixed version-first shopping reads, exhaustive client error/persistence behavior, principal cache partitions, bounded cleanup recovery, terminal/start precedence, anonymous clear timing, and omitted-factor projection.
 - 2026-07-15 Ambiguity Round 6 fixed request/error precedence, same-attempt terminal retry safety, attempt-replacement persistence failure, exact cleanup oracle, and pinned-session behavior after recipe deletion.
+- 2026-07-15 Ambiguity Round 7 fixed cleanup exit/result separation, accepted-response rendering, authenticated bootstrap quarantine, fanout failure isolation, lazy tag-index repair/cache consistency, and hard-delete scope.
