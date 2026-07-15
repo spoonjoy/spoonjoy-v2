@@ -20,11 +20,11 @@ Close every actionable 2026-07-15 shipped-work audit finding across Spoonjoy web
 
 - Planning is drafting.
 - Native and operations explorers returned concrete findings; the web explorer is being stopped after exceeding its bounded exploration window.
-- Next gate is harsh planning review; human approval is not required under the active delegated autopilot mandate.
+- Planning review Round 1 found major traceability, verification, release-closure, cleanup-safety, and human-only credential gaps. A stricter independent review also found release-containment, rebaseline, image/mutation-contract, OAuth rollout, and workstream-isolation gaps; the plan is being revised before a fresh gate.
 
 ## Next Action
 
-Commit the initial planning state, incorporate explorer evidence, run harsh reviewer convergence, create the doing doc, and begin the P0 cross-client image and mutation fixes with strict TDD.
+Commit the Round 1 plan revision, run a fresh harsh reviewer to convergence, create the doing doc, and begin the P0 cross-client image and mutation fixes with strict TDD.
 
 ## Hard Exceptions
 
