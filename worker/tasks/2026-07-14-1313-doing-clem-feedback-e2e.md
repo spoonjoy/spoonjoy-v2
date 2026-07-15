@@ -118,7 +118,7 @@ Ship the accepted Clem feedback end to end: correct shopping-list restoration, a
 **Acceptance**: `pnpm prisma:generate`, local migration tests, targeted coverage, and `pnpm run typecheck` pass with no warning or migration collision.
 
 ### ⬜ Unit 5a: Cook State Core Tests
-**What**: Add red pure tests for canonical snapshot serialization/SHA-256 fingerprint, attempt initialization/replacement, stable-id operations, scale boundaries, revision conflicts, stale attempt rejection, mutation-id dedupe/eviction, terminal/purging state rules, adoption validation, and rebase ordering.
+**What**: Add red pure tests for canonical snapshot serialization/SHA-256 fingerprint, attempt initialization/replacement, stable-id operations, scale boundaries, revision conflicts, stale attempt rejection, mutation-id dedupe/eviction, terminal/purging state rules, exact adoption schema/validation/outcomes, first-writer/server-wins arbitration, and rebase ordering.
 **Output**: `test/lib/cook-session-state.test.ts`.
 **Acceptance**: `pnpm exec vitest run test/lib/cook-session-state.test.ts` fails because `app/lib/cook-session-state.ts` and `app/lib/cook-session-types.ts` are absent.
 
@@ -148,14 +148,14 @@ Ship the accepted Clem feedback end to end: correct shopping-list restoration, a
 **Acceptance**: Worker coverage for the class is 100%; `pnpm run deploy:preflight` and QA preflight source-mode checks pass without remote mutation.
 
 ### ⬜ Unit 7a: Internal Cook HTTP And WebSocket Tests
-**What**: Add real Worker red tests for deterministic user/recipe routing, start/resume races, API-safe 401, same-origin checks, recipe visibility, attempt-bound snapshot/patch/409 payloads, complete/abandon/purge idempotency, WebSocket 101 retention, initial/broadcast snapshots, stale-attempt socket closure, hibernation attachments, malformed methods/bodies, and missing attempts.
+**What**: Add real Worker red tests for deterministic user/recipe routing, blank/adoption start races and replay, API-safe 401, same-origin checks, initial recipe visibility, attempt-bound snapshot/patch/409 payloads, private no-store on every non-101 response/error, complete/abandon/purge idempotency, WebSocket 101 retention, initial/broadcast snapshots, stale-attempt socket closure, hibernation attachments, malformed methods/bodies, and missing attempts.
 **Output**: `test/workers/app-cook-sessions.test.ts`, additions to `test/workers/cook-session-do.test.ts`, `test/workers/app.test.ts`.
 **Acceptance**: `pnpm test:workers -- test/workers/app-cook-sessions.test.ts test/workers/cook-session-do.test.ts` fails because the Worker-level internal API is absent.
 
 ### ⬜ Unit 7b: Internal Cook HTTP And WebSocket Implementation
-**What**: Intercept `/api/cook-sessions` in `workers/app.ts` before React Router; authenticate with `getUserId`; derive the DO from authenticated user id plus route/body recipe id; verify recipe visibility; implement exact `/api/cook-sessions/recipes/:recipeId` lifecycle routing and hibernation WebSockets; bypass response rebuilding only for 101 while applying security headers to ordinary responses.
+**What**: Intercept `/api/cook-sessions` in `workers/app.ts` before React Router; authenticate with `getUserId`; derive the DO from authenticated user id plus route/body recipe id; provide a server-built recipe snapshot only when a pristine DO starts its first attempt; implement exact `/api/cook-sessions/recipes/:recipeId` lifecycle routing and hibernation WebSockets; bypass response rebuilding only for 101 while applying security/no-store headers to ordinary responses.
 **Output**: `app/lib/cook-session-http.server.ts`, `workers/app.ts`, `workers/cook-session-do.ts`, `app/lib/cook-session-index.server.ts`.
-**Acceptance**: Unit 7a passes; no cook route is registered in `app/routes.ts` or OpenAPI; D1 freshness is not required for authorization or start/resume; old attempt ids cannot mutate new attempts; full default-export WebSocket tests receive a usable socket.
+**Acceptance**: Unit 7a passes; no cook route is registered in `app/routes.ts` or OpenAPI; D1 freshness is not required for authorization or start/resume; any server attempt wins over client adoption; old attempt ids cannot mutate new attempts; ordinary responses are private no-store; full default-export WebSocket tests receive a usable socket.
 
 ### ⬜ Unit 7c: Internal Cook API Coverage
 **What**: Cover HTTP parser/auth/origin/proxy failures and WebSocket close/error/message branches in the Workers runtime.
@@ -163,14 +163,14 @@ Ship the accepted Clem feedback end to end: correct shopping-list restoration, a
 **Acceptance**: New Worker/API code is 100% covered; `pnpm test:workers:coverage`, `pnpm run typecheck`, and `pnpm build` pass.
 
 ### ⬜ Unit 8a: D1 Projection Alarm Tests
-**What**: Add real Workers red tests for ordered projection-queue persistence on create/update/complete/abandon, idempotent D1 writes, terminal-old-before-active-new ordering, at-least-once alarm replay, transient failure, retry exhaustion/reschedule, stale My Kitchen projection recovery, and purge failures before/after D1 delete and before DO `deleteAll()`.
+**What**: Add real Workers red tests for ordered projection-queue persistence on create/update/complete/abandon, idempotent D1 writes, terminal-old-before-active-new ordering, at-least-once alarm replay, transient failure, retry exhaustion/reschedule, stale My Kitchen projection recovery, FIFO purge barriers, `old terminal pending -> new attempt -> purge`, and failures before/after D1 delete and before DO `deleteAll()`.
 **Output**: `test/workers/cook-session-alarm.test.ts`, additions to `test/lib/cook-session-index.server.test.ts`.
 **Acceptance**: Targeted worker/app tests fail because all projection transitions and retry markers are not alarm-driven.
 
 ### ⬜ Unit 8b: D1 Projection Alarm Implementation
-**What**: Persist an ordered projection/purge queue in the DO, schedule/reschedule alarms, reconcile every lifecycle mutation to D1 without making D1 canonical, and execute purge as persisted PURGING -> idempotent D1 delete -> DO `deleteAll()`.
+**What**: Persist one ordered projection queue in the DO, schedule/reschedule alarms, reconcile every lifecycle mutation to D1 without making D1 canonical, and execute purge as persisted PURGING -> drain older FIFO projections -> idempotent current-attempt D1 delete -> DO `deleteAll()`.
 **Output**: `workers/cook-session-do.ts`, `app/lib/cook-session-index.server.ts`.
-**Acceptance**: Unit 8a passes; accepted DO mutations and older terminal projections survive D1 failure/new-attempt creation; repeated alarms do not duplicate history; every purge failure resumes safely; completion creates no RecipeSpoon or notification.
+**Acceptance**: Unit 8a passes; accepted DO mutations and older terminal projections survive D1 failure/new-attempt creation; repeated alarms do not duplicate history; purge cannot erase an older repair; every purge failure resumes safely; completion creates no RecipeSpoon or notification.
 
 ### ⬜ Unit 8c: Projection Coverage
 **What**: Cover alarm retries and verify no RecipeSpoon integration was added.
@@ -178,14 +178,14 @@ Ship the accepted Clem feedback end to end: correct shopping-list restoration, a
 **Acceptance**: Worker/index coverage is 100%; `test/models/recipe-spoon.test.ts` and notification regression tests remain green.
 
 ### ⬜ Unit 9a: Cook Client Controller Tests
-**What**: Add red browser tests for recipe-keyed create/resume discovery, attempt-bound operation queueing, WebSocket snapshots, stale-attempt handling, 409 rebase/retry, reconnect same-field precedence, offline cache as non-canonical, anonymous local mode, adoption eligibility, and cleanup.
+**What**: Add red browser tests for recipe-keyed create/resume discovery, exact adoption body, adopted/server-won/not-requested outcomes, anonymous record cleanup, attempt-bound operation queueing, WebSocket snapshots, stale-attempt handling, 409 rebase/retry, reconnect same-field precedence, offline cache as non-canonical, anonymous local mode, and storage failure.
 **Output**: `test/lib/cook-session-client.test.ts`, updates to `test/routes/recipes-id.test.tsx` for loader inputs only.
 **Acceptance**: Targeted tests fail because `app/lib/cook-session-client.ts` and `app/hooks/useCookSession.ts` are absent.
 
 ### ⬜ Unit 9b: Cook Client Controller Implementation
 **What**: Implement fetch/WebSocket transport and `useCookSession`; retain current versioned local parser for anonymous mode and use a separate authenticated cache/operation queue.
 **Output**: `app/lib/cook-session-client.ts`, `app/hooks/useCookSession.ts`, targeted exports/loader data in `app/routes/recipes.$id.tsx`.
-**Acceptance**: Unit 9a passes; authenticated UI never treats local cache as authoritative; queued operations survive reconnect and clear only after server acceptance.
+**Acceptance**: Unit 9a passes; authenticated UI never compares client time to override server state; it clears the anonymous record after any start outcome; queued operations survive reconnect and clear only after server acceptance.
 
 ### ⬜ Unit 9c: Cook Client Coverage
 **What**: Cover network, JSON, socket, 401/403/404/409, retry, unload, and storage-unavailable branches.
@@ -355,7 +355,7 @@ Ship the accepted Clem feedback end to end: correct shopping-list restoration, a
 ### ⬜ Unit 20b: Live Smoke Lifecycle Implementation
 **What**: Extend smoke helpers to create disposable `codex-smoke-*` state, validate two-context synchronization, purge each current attempt through its recipe-keyed deterministic DO before deleting D1 users, and verify no D1/DO test residue remains.
 **Output**: `scripts/smoke-live.mjs`, `scripts/smoke-live-helpers.mjs`.
-**Acceptance**: Unit 20a passes; cleanup executes in `finally`; failed smoke still attempts purge/user cleanup and records residue.
+**Acceptance**: Unit 20a passes; cleanup executes in `finally`; smoke retries asynchronous purge to `204` before deleting the user; failed smoke still attempts purge/user cleanup and records residue.
 
 ### ⬜ Unit 20c: Smoke Coverage
 **What**: Cover successful/failing/partial cleanup branches and dry-run local residue checks.

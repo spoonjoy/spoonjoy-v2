@@ -20,7 +20,7 @@ Ship every accepted part of Clem's feedback as coherent Spoonjoy primitives: rel
 - Add an internal same-origin cookie-session cook API at `/api/cook-sessions`; it is not a public v1 API and is excluded from OpenAPI.
 - Add start/resume, snapshot, operation patch, live subscription, complete, abandon, and owner-authorized current-attempt purge lifecycle contracts.
 - Keep authenticated offline state as a non-canonical operation queue; reconcile through revisioned, deduplicated operations when connectivity returns.
-- Keep anonymous cook progress entirely in localStorage and allow explicit one-time adoption when a user signs in and no newer server session exists.
+- Keep anonymous cook progress entirely in localStorage and allow explicit one-time adoption only when the deterministic server object has never created an attempt.
 - Pin a normalized recipe snapshot and fingerprint in each active Durable Object so recipe edits never silently remap progress.
 - Store only owner-private query/history projection data in D1 for My Kitchen; reconcile every projection change from the Durable Object with idempotent alarms.
 - Add private `SavedRecipe` state distinct from cookbook membership, with migration backfill, web UI, privacy-safe search, and private REST v1 endpoints.
@@ -50,7 +50,7 @@ Ship every accepted part of Clem's feedback as coherent Spoonjoy primitives: rel
 Recipe batch adds aggregate equal ingredient-reference/unit pairs before mutation: numeric requested quantities sum, while an all-null group remains null. They allocate distinct monotonic sort indices. Web, REST, and MCP call the same D1-safe helper.
 
 ### Cook-Session Ownership And Lifecycle
-- `POST /api/cook-sessions` accepts `{ recipeId, adoption? }`, uses API-safe 401/403/404 responses, and atomically creates or resumes one active attempt per `(userId, recipeId)`.
+- `POST /api/cook-sessions` accepts `{ recipeId, mutationId, adoption? }`, uses API-safe 401/403/404 responses, and atomically creates or resumes one active attempt per `(userId, recipeId)`. `adoption`, when present, is `{ version: 1, fingerprint, activeStepIndex, scaleFactor, checkedIngredientIds, checkedStepOutputIds }` and is validated against the server-built current recipe snapshot.
 - The Worker derives the canonical DO address as `idFromName("${userId}:${recipeId}")`. That deterministic per-user/per-recipe object, not D1, arbitrates start/resume and guarantees one active attempt. Parallel starts serialize in the same object.
 - Every new attempt gets a random `attemptId` UUID stored inside the DO and returned in snapshots. D1 stores one history/index row per attempt and retains nullable unique `activeKey = "${userId}:${recipeId}"` as a projection integrity check, but start/resume never consults D1 to decide canonical state.
 - `GET /api/cook-sessions/recipes/:recipeId` returns the current attempt snapshot from the authenticated user's deterministic DO.
@@ -58,14 +58,14 @@ Recipe batch adds aggregate equal ingredient-reference/unit pairs before mutatio
 - A stale base revision returns `409` with the latest snapshot. The client rebases queued operations on that snapshot and retries; unrelated fields merge, and the reconnecting same-field operation wins when accepted.
 - `GET /api/cook-sessions/recipes/:recipeId/live` requires a same-origin WebSocket upgrade and emits an initial snapshot plus snapshots after accepted mutations or terminal transitions. Socket attachments include `attemptId`; stale sockets are closed when a new attempt begins.
 - `POST .../complete` and `POST .../abandon` include `attemptId` and are idempotent terminal transitions that enqueue an ordered D1 projection clearing `activeKey`. Completion is private history only and never creates a `RecipeSpoon` or notification.
-- `DELETE /api/cook-sessions/recipes/:recipeId` includes `attemptId` and initiates owner-authorized current-attempt purge for smoke cleanup or explicit deletion. The DO first persists `PURGING` plus an alarm-backed purge job, rejects further mutation, idempotently deletes that D1 attempt row, and only then calls `deleteAll()` on its own storage. Retry starts from the persisted job; an already-empty object returns success. Injected failure tests cover every boundary so neither private DO state nor an unpurgeable D1 row is orphaned.
-- State-changing HTTP requests and upgrades enforce same-origin `Origin`; all endpoints use cookie sessions and are intentionally excluded from public v1/OpenAPI.
+- `DELETE /api/cook-sessions/recipes/:recipeId` includes `attemptId` and initiates owner-authorized current-attempt purge for smoke cleanup or explicit deletion. The DO first persists `PURGING` and appends a purge barrier after every older projection. The alarm drains all earlier projections in FIFO order, idempotently deletes the current attempt row at the barrier, and only then calls `deleteAll()`. A request returns `202` while the barrier remains and `204` for an already-empty object; smoke retries until `204`. Injected tests cover `old terminal pending -> new attempt -> purge` and every failure boundary so neither private DO state nor an unrepairable D1 row is orphaned.
+- State-changing HTTP requests and upgrades enforce same-origin `Origin`; all endpoints use cookie sessions and are intentionally excluded from public v1/OpenAPI. Every non-101 cook response, including errors and terminal responses, sets `Cache-Control: private, no-store`.
 
 ### Cook Snapshot, Offline, And Projection
 - The server creates a normalized snapshot from recipe id/title/cover, ordered stable step ids and text, ingredient ids/reference ids/names/quantities/unit ids+names, and step-output-use ids. A deterministic SHA-256 of canonical JSON is the fingerprint.
 - The DO key already encodes authenticated owner/recipe identity; storage repeats and verifies immutable owner/recipe ids. It stores the current attempt id, pinned recipe snapshot/fingerprint, revision, active step, scale factor bounded to `0.25..50`, checked stable ids, status, timestamps, bounded mutation ids, and an ordered pending D1 projection queue.
 - Active cooking renders the pinned snapshot. When the current recipe fingerprint differs, the UI offers `Continue original` or `Start fresh`; start-fresh abandons the old attempt before creating a new one.
-- For authenticated users, local storage may cache a snapshot and queued operations for offline UX but is never authoritative. Anonymous versioned local progress remains local-only. Adoption is accepted only for the same fingerprint and only when no newer active server state exists.
+- For authenticated users, local storage may cache a snapshot and queued operations for offline UX but is never authoritative. Anonymous versioned local progress remains local-only. Adoption never trusts client time: a server object with any current or prior attempt always wins and ignores adoption. Only a pristine object may atomically create its first attempt from a same-fingerprint, bounds-valid adoption; parallel blank/adopt starts serialize and the first accepted start wins. Replaying the same `mutationId` returns the same outcome. The response reports `adoptionOutcome: "adopted" | "server_won" | "not_requested"`, after which the authenticated client clears the anonymous record.
 - The DO is canonical. D1 contains owner-private active/history metadata needed for My Kitchen and may temporarily show a stale card; opening it rechecks the DO and revalidates the page. Create/update/complete/abandon projections are processed in attempt order, idempotently, so a terminal old attempt clears its active key before a new attempt claims it. A persisted queue plus a DO alarm retries transient failures and reschedules after exhausted platform retries. Starting a new attempt never discards an older pending terminal projection.
 
 ### SavedRecipe
@@ -92,7 +92,7 @@ Recipe batch adds aggregate equal ingredient-reference/unit pairs before mutatio
 ## Completion Criteria
 - [ ] Every line of the feedback source has an implemented or explicitly rejected disposition.
 - [ ] Shopping re-add behavior matches the state matrix across web, REST v1, and MCP under repeated and concurrent calls.
-- [ ] Workers-runtime tests prove deterministic user/recipe arbitration, SQLite DO persistence, attempt isolation, revision conflict/rebase, mutation dedupe, ordered alarms, hibernation WebSockets, partial-failure-safe purge, and the full Worker 101 response path.
+- [ ] Workers-runtime tests prove deterministic user/recipe arbitration, first-writer/server-wins adoption, SQLite DO persistence, attempt isolation, revision conflict/rebase, mutation dedupe, ordered alarms, purge barriers, private no-store responses, hibernation WebSockets, and the full Worker 101 response path.
 - [ ] Two authenticated clients start/resume one session and synchronize step, checklist, and scale state; anonymous progress remains local-only.
 - [ ] Recipe edits display pinned-state choices and never silently remap progress.
 - [ ] My Kitchen cook/saved sections are owner-only for owner, authenticated visitor, and anonymous visitor cases.
@@ -116,6 +116,7 @@ Recipe batch adds aggregate equal ingredient-reference/unit pairs before mutatio
 - Use one deterministic DO per user/recipe and one active attempt UUID inside it, with explicit complete, abandon/start-fresh, and partial-failure-safe current-attempt purge lifecycle.
 - Do not create RecipeSpoon entries from private cooking progress.
 - Keep anonymous cooking local; authenticated local cache/queue is non-canonical.
+- Adopt anonymous local progress only into a pristine server object; any server attempt wins regardless of client timestamp.
 - Add SavedRecipe as private canonical save state and bridge all cookbook writers for compatibility.
 - Keep global recipe search free of private save metadata.
 - Ship manual accepted tags only; defer AI suggestions until a review model and UX exist.
