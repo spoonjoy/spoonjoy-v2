@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import * as smokeHelpers from "../../scripts/smoke-live-helpers.mjs";
 import {
   assertWorkerVersionResponse,
+  buildWorkerVersionRequestHeaders,
   buildD1CommandArgs,
   buildMcpCanaryCleanupD1Args,
   buildMcpCanaryConnectionResourceD1Args,
@@ -18,6 +19,7 @@ import {
   buildCleanupD1Args,
   buildUserCountD1Args,
   buildWorkerVersionOverrideHeaders,
+  createWorkerVersionResponseTracker,
   decideMcpCanaryIssueAction,
   findMcpCanarySecretLeaks,
   isQaR2ObjectMissingError,
@@ -33,6 +35,7 @@ import {
   serializeSanitizedMcpCanaryReport,
   shouldRunAppleOAuthCheck,
   usesLocalD1,
+  waitForWorkerVersionReady,
 } from "../../scripts/smoke-live-helpers.mjs";
 
 const CANDIDATE_VERSION = "22222222-2222-4222-8222-222222222222";
@@ -294,7 +297,7 @@ describe("smoke-live helpers", () => {
     expect(() => buildWorkerVersionOverrideHeaders("not-a-uuid")).toThrow(/valid UUID/i);
   });
 
-  it("requires the protected response to prove the exact candidate Worker version", () => {
+  it("requires every labeled Spoonjoy response to prove the exact candidate Worker version", () => {
     expect(() => assertWorkerVersionResponse({}, null)).not.toThrow();
     expect(() => assertWorkerVersionResponse(
       { "x-spoonjoy-worker-version": CANDIDATE_VERSION },
@@ -312,7 +315,234 @@ describe("smoke-live helpers", () => {
     expect(() => assertWorkerVersionResponse(
       { "x-spoonjoy-worker-version": "33333333-3333-4333-8333-333333333333" },
       CANDIDATE_VERSION,
-    )).toThrow(/expected.*22222222.*received.*33333333/i);
+      "OAuth token exchange",
+    )).toThrow(/OAuth token exchange.*expected.*22222222.*received.*33333333/i);
+    expect(() => assertWorkerVersionResponse(
+      { "x-spoonjoy-worker-version": CANDIDATE_VERSION.toUpperCase() },
+      CANDIDATE_VERSION,
+    )).not.toThrow();
+    expect(() => assertWorkerVersionResponse(null, CANDIDATE_VERSION)).toThrow(/missing/i);
+  });
+
+  it("adds the override only to same-origin requests and strips it everywhere else", () => {
+    const existingHeaders = {
+      Authorization: "Bearer token",
+      "cloudflare-workers-version-overrides": "stale-worker=\"stale-version\"",
+      Accept: "application/json",
+    };
+
+    expect(buildWorkerVersionRequestHeaders({
+      baseUrl: "https://spoonjoy.app",
+      requestUrl: "https://spoonjoy.app/oauth/token?flow=refresh",
+      headers: existingHeaders,
+      workerVersionId: CANDIDATE_VERSION,
+    })).toEqual({
+      Authorization: "Bearer token",
+      Accept: "application/json",
+      "Cloudflare-Workers-Version-Overrides": `spoonjoy-v2="${CANDIDATE_VERSION}"`,
+    });
+
+    for (const requestUrl of [
+      "https://claude.ai/api/mcp/auth_callback",
+      "https://assets.spoonjoy.app/image.jpg",
+      "http://spoonjoy.app/oauth/token",
+      "https://spoonjoy.app:444/oauth/token",
+      "not a URL",
+    ]) {
+      expect(buildWorkerVersionRequestHeaders({
+        baseUrl: "https://spoonjoy.app",
+        requestUrl,
+        headers: existingHeaders,
+        workerVersionId: CANDIDATE_VERSION,
+      })).toEqual({
+        Authorization: "Bearer token",
+        Accept: "application/json",
+      });
+    }
+
+    expect(buildWorkerVersionRequestHeaders({
+      baseUrl: "https://spoonjoy.app",
+      requestUrl: "https://spoonjoy.app/signup",
+      headers: new Headers({ "X-Test": "yes" }),
+      workerVersionId: null,
+    })).toEqual({ "X-Test": "yes" });
+    expect(() => buildWorkerVersionRequestHeaders({
+      baseUrl: "https://spoonjoy.app",
+      requestUrl: "https://spoonjoy.app/signup",
+      workerVersionId: "not-a-uuid",
+    })).toThrow(/valid UUID/i);
+  });
+
+  it("waits through Cloudflare override propagation before declaring the candidate ready", async () => {
+    const responses = [
+      {},
+      { "x-spoonjoy-worker-version": "33333333-3333-4333-8333-333333333333" },
+      { "x-spoonjoy-worker-version": CANDIDATE_VERSION },
+    ];
+    let now = 1_000;
+    const sleep = vi.fn(async (delayMs: number) => {
+      now += delayMs;
+    });
+    const probe = vi.fn(async () => responses.shift() ?? {});
+
+    await expect(waitForWorkerVersionReady({
+      workerVersionId: CANDIDATE_VERSION,
+      probe,
+      timeoutMs: 2_000,
+      intervalMs: 250,
+      now: () => now,
+      sleep,
+    })).resolves.toEqual({
+      attempts: 3,
+      elapsedMs: 500,
+      workerVersionId: CANDIDATE_VERSION,
+    });
+    expect(probe).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenNthCalledWith(1, 250);
+    expect(sleep).toHaveBeenNthCalledWith(2, 250);
+  });
+
+  it("uses the bounded real timer when no sleep dependency is supplied", async () => {
+    let attempts = 0;
+    await expect(waitForWorkerVersionReady({
+      workerVersionId: CANDIDATE_VERSION,
+      probe: async () => {
+        attempts += 1;
+        return attempts === 1 ? {} : { "x-spoonjoy-worker-version": CANDIDATE_VERSION };
+      },
+      timeoutMs: 100,
+      intervalMs: 1,
+    })).resolves.toMatchObject({ attempts: 2, workerVersionId: CANDIDATE_VERSION });
+  });
+
+  it("bounds Worker override readiness and reports the last observed version", async () => {
+    let now = 5_000;
+    const sleep = vi.fn(async (delayMs: number) => {
+      now += delayMs;
+    });
+
+    await expect(waitForWorkerVersionReady({
+      workerVersionId: CANDIDATE_VERSION,
+      probe: async () => ({
+        "x-spoonjoy-worker-version": "33333333-3333-4333-8333-333333333333",
+      }),
+      timeoutMs: 600,
+      intervalMs: 250,
+      now: () => now,
+      sleep,
+    })).rejects.toThrow(/not ready after 4 attempts and 600ms.*33333333/i);
+    expect(sleep.mock.calls).toEqual([[250], [250], [100]]);
+
+    await expect(waitForWorkerVersionReady({
+      workerVersionId: CANDIDATE_VERSION,
+      probe: async () => ({}),
+      timeoutMs: 1,
+      intervalMs: 1,
+      now: (() => {
+        let current = 0;
+        return () => current++;
+      })(),
+      sleep: async () => undefined,
+    })).rejects.toThrow(/last observed version: missing/i);
+  });
+
+  it("skips readiness without a candidate and rejects invalid polling configuration", async () => {
+    const probe = vi.fn(async () => ({}));
+    await expect(waitForWorkerVersionReady({
+      workerVersionId: null,
+      probe,
+    })).resolves.toEqual({
+      attempts: 0,
+      elapsedMs: 0,
+      workerVersionId: null,
+    });
+    expect(probe).not.toHaveBeenCalled();
+
+    for (const input of [
+      { probe: null, timeoutMs: 1, intervalMs: 1 },
+      { probe, timeoutMs: 0, intervalMs: 1 },
+      { probe, timeoutMs: 1, intervalMs: 0 },
+      { probe, timeoutMs: Number.POSITIVE_INFINITY, intervalMs: 1 },
+    ]) {
+      await expect(waitForWorkerVersionReady({
+        workerVersionId: CANDIDATE_VERSION,
+        ...input,
+      })).rejects.toThrow(/readiness/i);
+    }
+
+    const failure = new Error("probe failed");
+    await expect(waitForWorkerVersionReady({
+      workerVersionId: CANDIDATE_VERSION,
+      probe: async () => {
+        throw failure;
+      },
+    })).rejects.toBe(failure);
+  });
+
+  it("tracks every same-origin browser response between flow checkpoints", () => {
+    const tracker = createWorkerVersionResponseTracker({
+      baseUrl: "https://spoonjoy.app",
+      workerVersionId: CANDIDATE_VERSION,
+    });
+    const signupCheckpoint = tracker.checkpoint();
+
+    expect(tracker.record({
+      url: "https://claude.ai/api/mcp/auth_callback",
+      headers: {},
+      label: "Claude callback",
+    })).toBe(false);
+    expect(tracker.record({
+      url: "https://spoonjoy.app/signup",
+      headers: { "x-spoonjoy-worker-version": CANDIDATE_VERSION },
+      label: "GET /signup",
+    })).toBe(true);
+    expect(() => tracker.assertSince(signupCheckpoint, "signup page")).not.toThrow();
+
+    const submitCheckpoint = tracker.checkpoint();
+    tracker.record({
+      url: "https://spoonjoy.app/signup",
+      headers: {},
+      label: "POST /signup",
+    });
+    tracker.record({
+      url: "https://spoonjoy.app/my-recipes",
+      headers: { "x-spoonjoy-worker-version": "33333333-3333-4333-8333-333333333333" },
+      label: "GET /my-recipes",
+    });
+    expect(() => tracker.assertSince(submitCheckpoint, "signup submission")).toThrow(
+      /signup submission.*POST \/signup.*missing.*GET \/my-recipes.*expected/i,
+    );
+    expect(() => tracker.assertAll("browser flow")).toThrow(/browser flow.*POST \/signup/i);
+  });
+
+  it("requires browser phases to observe responses and validates tracker checkpoints", () => {
+    const tracker = createWorkerVersionResponseTracker({
+      baseUrl: "https://spoonjoy.app",
+      workerVersionId: CANDIDATE_VERSION,
+    });
+    expect(() => tracker.assertSince(0, "authorize page")).toThrow(/observed no Spoonjoy responses/i);
+    expect(() => tracker.assertSince(-1, "invalid phase")).toThrow(/checkpoint/i);
+    expect(() => tracker.assertSince(1, "future phase")).toThrow(/checkpoint/i);
+
+    const disabled = createWorkerVersionResponseTracker({
+      baseUrl: "https://spoonjoy.app",
+      workerVersionId: null,
+    });
+    expect(disabled.record({ url: "https://spoonjoy.app/signup", headers: {} })).toBe(false);
+    expect(() => disabled.assertSince(0, "local signup")).not.toThrow();
+    expect(() => disabled.assertAll("local browser flow")).not.toThrow();
+
+    const hostileHeaders = new Proxy({}, {
+      ownKeys() {
+        throw "header enumeration failed";
+      },
+    });
+    tracker.record({
+      url: "https://spoonjoy.app/oauth/authorize",
+      headers: hostileHeaders,
+      label: "hostile response",
+    });
+    expect(() => tracker.assertAll("defensive response handling")).toThrow(/header enumeration failed/i);
   });
 
   it("keeps the candidate ID while redacting the persisted MCP canary report", () => {
@@ -328,18 +558,39 @@ describe("smoke-live helpers", () => {
     expect(serialized).not.toContain("sj_abcdefghijklmnopqrstuvwxyz0123456789");
   });
 
-  it("wires the candidate override, first-response proof, and sanitized report into the live canary", () => {
+  it("wires pre-mutation readiness, exhaustive response proof, scoped overrides, and sanitized reporting into the live canary", () => {
     const source = readFileSync("scripts/smoke-mcp-oauth-live.mjs", "utf8");
     const wrangler = JSON.parse(readFileSync("wrangler.json", "utf8"));
-    const protectedResource = source.match(
-      /async function readProtectedResource[\s\S]*?\n}\n/,
-    )?.[0] ?? "";
 
-    expect(source).toContain("extraHTTPHeaders: buildWorkerVersionOverrideHeaders(workerVersionId)");
-    expect(protectedResource).toContain("assertWorkerVersionResponse(response.headers(), workerVersionId)");
-    expect(protectedResource.indexOf("assertWorkerVersionResponse")).toBeLessThan(
-      protectedResource.indexOf("responseJson"),
+    expect(source).not.toContain("extraHTTPHeaders");
+    expect(source).toContain("buildWorkerVersionRequestHeaders({");
+    expect(source).toContain('context.route("**/*"');
+    expect(source).toContain('context.on("response"');
+    expect(source).toContain("createWorkerVersionResponseTracker({");
+    expect(source).toContain("assertWorkerVersionResponse(response.headers(), workerVersionId, label)");
+    expect(source).toContain("return waitForWorkerVersionReady({");
+    expect(source.indexOf('check("candidate Worker override readiness"')).toBeLessThan(
+      source.indexOf('check("signup disposable user"'),
     );
+    expect(source).toContain("responseTracker.assertAll(\"complete browser flow\")");
+    expect(source).toContain("maxRedirects: 0");
+    expect(source).toContain('serviceWorkers: "block"');
+    expect(source.indexOf('check("candidate Worker override readiness"')).toBeLessThan(
+      source.indexOf("canaryMutationStarted = true"),
+    );
+    for (const functionName of [
+      "readProtectedResource",
+      "registerClaudeClient",
+      "exchangeCodeForTokens",
+      "refreshTokens",
+      "expectRefreshReplayRejected",
+      "mcpRpc",
+    ]) {
+      const functionSource = source.match(
+        new RegExp(`async function ${functionName}\\([\\s\\S]*?\\n}\\n`),
+      )?.[0] ?? "";
+      expect(functionSource, `${functionName} must use the verified request wrapper`).toContain("spoonjoyRequest(request");
+    }
     expect(source).toContain("workerVersionId,");
     expect(source).toContain("serializeSanitizedMcpCanaryReport(report)");
     expect(wrangler.version_metadata).toEqual({ binding: "CF_VERSION_METADATA" });
