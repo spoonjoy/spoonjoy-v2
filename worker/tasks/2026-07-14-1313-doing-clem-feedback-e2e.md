@@ -40,11 +40,10 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 - `workers/**` uses the real Cloudflare Workers Vitest project; app code uses the existing project.
 
 ## TDD Requirements
-1. Write the named failing tests first.
-2. Capture the expected red command/output in the unit artifact.
-3. Implement without changing those tests.
-4. Run green, build, refactor, rerun, commit, and push.
-5. Update the unit emoji/progress log and run a fresh unit review.
+1. In each `a` unit, write every behavioral/error/coverage test named by the group, capture the expected red command/output, then commit and push that intentional-red test checkpoint.
+2. In the matching `b` unit, implement without changing the `a` tests, run green plus build/typecheck, then commit and push the green implementation checkpoint.
+3. The matching `c` unit is verification-only: run coverage/refactor/build commands and record evidence; do not add behavioral tests or implementation. If `c` finds a gap, reopen `a` with a new failing test, repeat `b`, then rerun `c`.
+4. A group is complete only after `c` passes; update all three emojis/progress entries and run a fresh group review. Commit/push docs and verification artifacts according to Work Doer.
 
 ## Work Units
 
@@ -338,12 +337,12 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 19a: Cookbook Writer Compatibility Tests
 **What**: Add red tests for all four membership writers ensuring owner save, repeat idempotency, remove-without-unsave, unsave-without-membership-removal, auth, and unchanged notifications.
-**Output**: recipe-detail, cookbook route, MCP notification, v1 cookbook, and saved helper tests.
+**Output**: `test/lib/recipe-detail.server.test.ts`, `test/routes/cookbooks-id.test.tsx`, `test/lib/spoonjoy-api-cookbook-notification.test.ts`, `test/routes/api-v1-cookbooks.test.ts`, `test/lib/saved-recipes.server.test.ts`.
 **Acceptance**: Tests fail because membership creation does not ensure SavedRecipe.
 
 ### ⬜ Unit 19b: Cookbook Writer Compatibility Implementation
 **What**: Call canonical save helper from `recipe-detail.server.ts`, `cookbooks.$id.tsx`, `spoonjoy-api.server.ts`, and `api-v1.server.ts` within existing transaction boundaries.
-**Output**: Those four files plus `app/lib/saved-recipes.server.ts`.
+**Output**: `app/lib/recipe-detail.server.ts`, `app/routes/cookbooks.$id.tsx`, `app/lib/spoonjoy-api.server.ts`, `app/lib/api-v1.server.ts`, `app/lib/saved-recipes.server.ts`.
 **Acceptance**: Unit 19a passes across web/MCP/REST; removal/unsave remain independent; notifications unchanged.
 
 ### ⬜ Unit 19c: Cookbook Writer Verification
@@ -351,20 +350,50 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Output**: `unit-19-saved-compat.log`.
 **Acceptance**: Changed branches are 100% covered and cookbook/MCP/API suites pass.
 
-### ⬜ Unit 20a: Saved REST v1 Tests
-**What**: Add red tests for private list and idempotent put/delete, clientMutationId conventions, scopes, session/bearer auth, no-store, pagination/errors, soft-delete, and `isSaved` null/boolean.
-**Output**: `test/routes/api-v1-saved-recipes.test.ts`, recipe/scopes/route-coverage/OpenAPI/contract/generator/playground tests.
-**Acceptance**: Tests fail because saved endpoints/functional isSaved are absent.
+### ⬜ Unit 20.1a: Saved REST List Tests
+**What**: Add red tests for private GET `/api/v1/me/saved-recipes`, session/bearer auth, `recipes:read`, no-store, pagination/cursors, soft-deleted recipes, empty/error envelopes, route registry, and OpenAPI.
+**Output**: `test/routes/api-v1-saved-recipes.test.ts`, `test/routes/api-v1-scopes.test.ts`, `test/config/api-v1-route-coverage.test.ts`, `test/lib/api-v1-openapi.server.test.ts`, `test/routes/api-v1-openapi.test.ts`.
+**Acceptance**: The exact five-file Vitest run fails because the list endpoint is absent.
 
-### ⬜ Unit 20b: Saved REST v1 Implementation
-**What**: Implement GET `/api/v1/me/saved-recipes` and PUT/DELETE `/:recipeId` with existing mutation conventions; wire viewer-specific isSaved.
-**Output**: v1 server/contract/OpenAPI/dynamic route/generator/generated playground/developer docs.
-**Acceptance**: Unit 20a passes; anonymous/public-token isSaved null; authenticated boolean; private responses no-store.
+### ⬜ Unit 20.1b: Saved REST List Implementation
+**What**: Implement the private paginated GET endpoint with existing v1 auth/error/no-store conventions and document it.
+**Output**: `app/lib/api-v1.server.ts`, `app/lib/api-v1-contract.server.ts`, `app/lib/api-v1-openapi.server.ts`, `app/routes/api.$.ts`, `scripts/generate-api-playground.ts`, `app/lib/generated/api-v1-playground.ts`, `app/routes/developers.tsx`, `docs/api.md`.
+**Acceptance**: Unit 20.1a passes; only the authenticated viewer's active recipes are returned with private no-store.
 
-### ⬜ Unit 20c: Saved REST Verification
-**What**: Cover endpoints and all shared recipe/list/search/native-sync/write/cookbook consumers.
-**Output**: `unit-20-saved-api.log`.
-**Acceptance**: New API code is 100% covered and cross-contract suite passes.
+### ⬜ Unit 20.1c: Saved REST List Verification
+**What**: Run list endpoint coverage, generator idempotency, typecheck, and build without adding behavior.
+**Output**: `unit-20.1-saved-list.log`.
+**Acceptance**: New list code is 100% covered and all commands pass.
+
+### ⬜ Unit 20.2a: Saved REST Mutation Tests
+**What**: Add red tests for idempotent PUT/DELETE `/api/v1/me/saved-recipes/:recipeId`, `clientMutationId` body/header/query conventions, `recipes:write`, session/bearer auth, replay/conflict/in-progress errors, missing/deleted recipe, no-store, route registry, and OpenAPI.
+**Output**: `test/routes/api-v1-saved-recipes.test.ts`, `test/routes/api-v1-idempotent-recovery.test.ts`, `test/routes/api-v1-scopes.test.ts`, `test/config/api-v1-route-coverage.test.ts`, `test/lib/api-v1-openapi.server.test.ts`, `test/routes/api-v1-openapi.test.ts`.
+**Acceptance**: The targeted run fails because mutation endpoints are absent.
+
+### ⬜ Unit 20.2b: Saved REST Mutation Implementation
+**What**: Implement PUT/DELETE with canonical SavedRecipe helper and existing v1 idempotency/auth/error envelopes; update contracts/generated docs.
+**Output**: `app/lib/api-v1.server.ts`, `app/lib/api-v1-contract.server.ts`, `app/lib/api-v1-openapi.server.ts`, `app/routes/api.$.ts`, `scripts/generate-api-playground.ts`, `app/lib/generated/api-v1-playground.ts`, `app/routes/developers.tsx`, `docs/api.md`.
+**Acceptance**: Unit 20.2a passes; retries replay safely; unsave does not remove cookbook memberships.
+
+### ⬜ Unit 20.2c: Saved REST Mutation Verification
+**What**: Run mutation/idempotency coverage, generator idempotency, typecheck, and build without adding behavior.
+**Output**: `unit-20.2-saved-mutations.log`.
+**Acceptance**: New mutation code is 100% covered and commands pass.
+
+### ⬜ Unit 20.3a: Recipe isSaved Projection Tests
+**What**: Add red tests for `isSaved: null` on anonymous/public-token summary/detail/search/native-sync/cookbook payloads and viewer-specific boolean on authenticated equivalents, with no public count or cache leak.
+**Output**: `test/routes/api-v1-recipes.test.ts`, `test/routes/api-v1-search.test.ts`, `test/routes/api-v1-native-sync.test.ts`, `test/routes/api-v1-recipe-writes.test.ts`, `test/routes/api-v1-cookbooks.test.ts`, `test/lib/api-v1-openapi.server.test.ts`, `test/routes/api-v1-openapi.test.ts`, `test/scripts/generate-api-playground.test.ts`.
+**Acceptance**: The targeted run fails because functional isSaved projection is absent.
+
+### ⬜ Unit 20.3b: Recipe isSaved Projection Implementation
+**What**: Wire viewer-scoped SavedRecipe lookup into shared recipe builders and populate the already-additive nullable field without changing anonymous caching.
+**Output**: `app/lib/api-v1.server.ts`, `app/lib/api-v1-openapi.server.ts`, `scripts/generate-api-playground.ts`, generated playground, developer docs.
+**Acceptance**: Unit 20.3a passes; anonymous/public-token is null, authenticated is boolean, and save state never becomes a public count.
+
+### ⬜ Unit 20.3c: Recipe isSaved Projection Verification
+**What**: Run every shared builder consumer, coverage, generator idempotency, typecheck, and build without adding behavior.
+**Output**: `unit-20.3-is-saved.log`.
+**Acceptance**: New projection branches are 100% covered and cross-contract suite passes.
 
 ### ⬜ Unit 21a: Saved Controls And Route Tests
 **What**: Add red tests for `/saved-recipes` canonical loader/query/empty states and explicit recipe save control distinct from cookbook control.
@@ -438,7 +467,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 25a: Tag Authoring Tests
 **What**: Add red tests for optional course/custom controls, create/edit persistence, owner auth, server validation display, duplicate normalization, and no AI wording.
-**Output**: RecipeBuilder/new/edit/create/detail-service tests.
+**Output**: `test/components/recipe/RecipeBuilder.test.tsx`, `test/routes/recipes-new.test.tsx`, `test/routes/recipes-id-edit.test.tsx`, `test/lib/recipe-create.server.test.ts`, `test/lib/recipe-detail.server.test.ts`.
 **Acceptance**: Tests fail because authoring is absent.
 
 ### ⬜ Unit 25b: Tag Authoring Implementation
@@ -458,7 +487,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 26a: Tag Display Tests
 **What**: Add red tests for controlled course/custom display order/casing on detail, recipe list, and RecipeGrid cards, including empty/dense states.
-**Output**: recipe detail/index/RecipeGrid tests.
+**Output**: `test/routes/recipes-id.test.tsx`, `test/routes/recipes-index.test.tsx`, `test/components/pantry/RecipeGrid.test.tsx`.
 **Acceptance**: Tests fail because display is absent.
 
 ### ⬜ Unit 26b: Tag Display Implementation
@@ -476,24 +505,39 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Output**: `visual-tags-display/` evidence and closed ledgers.
 **Acceptance**: No card crowding, overflow, or ready visual issue remains.
 
-### ⬜ Unit 27a: Tag Search Index And REST Tests
-**What**: Add red tests for search fingerprint/content, reindex on tag changes, REST course/custom order, OpenAPI/contract/generator/playground/docs, and no AI contract.
-**Output**: search, recipe/search REST, OpenAPI/contract/generator/docs tests.
-**Acceptance**: Tests fail because index/API projection is absent.
+### ⬜ Unit 27.1a: Tag Search Index Tests
+**What**: Add red tests for accepted course/custom labels in SearchDocument content/fingerprint, reindex on add/remove/replace-course, normalized order, no private save metadata, and no AI proposal content.
+**Output**: `test/lib/search.server.test.ts`, `test/lib/recipe-tags.server.test.ts`.
+**Acceptance**: The exact two-file Vitest run fails because tag indexing is absent.
 
-### ⬜ Unit 27b: Tag Search Index And REST Implementation
-**What**: Index accepted tags and populate REST course/tags with exact casing/order; update generated/public docs.
-**Output**: `app/lib/search.server.ts`, v1 server/contract/OpenAPI/generator/generated playground/developer docs.
-**Acceptance**: Unit 27a passes; only accepted manual tags are indexed/projected; saved privacy remains intact.
+### ⬜ Unit 27.1b: Tag Search Index Implementation
+**What**: Include accepted manual tags in recipe search documents/fingerprints and trigger reindex from tag mutations.
+**Output**: `app/lib/search.server.ts`, `app/lib/recipe-tags.server.ts`.
+**Acceptance**: Unit 27.1a passes; saved privacy remains intact and only canonical accepted tags are indexed.
 
-### ⬜ Unit 27c: Tag Search/REST Verification
-**What**: Cover index/API branches and all shared response consumers.
-**Output**: `unit-27-tags-index-api.log`.
-**Acceptance**: New code is 100% covered; API generation stable; typecheck/build pass.
+### ⬜ Unit 27.1c: Tag Search Index Verification
+**What**: Run search/tag coverage, typecheck, and build without adding behavior.
+**Output**: `unit-27.1-tags-index.log`.
+**Acceptance**: New index/reindex code is 100% covered and commands pass.
+
+### ⬜ Unit 27.2a: Tag REST Projection Tests
+**What**: Add red tests for lowercase singular course, custom-only tags preserving display casing and normalized order, anonymous/authenticated list/detail/search/native-sync/cookbook propagation, OpenAPI/contract/generator/playground/docs, and no AI contract.
+**Output**: `test/routes/api-v1-recipes.test.ts`, `test/routes/api-v1-search.test.ts`, `test/routes/api-v1-native-sync.test.ts`, `test/routes/api-v1-cookbooks.test.ts`, `test/lib/api-v1-openapi.server.test.ts`, `test/routes/api-v1-openapi.test.ts`, `test/scripts/generate-api-playground.test.ts`, `test/routes/developers-playground.test.tsx`, `test/docs/developer-platform-docs.test.ts`, `test/docs/developer-platform-guide.test.ts`.
+**Acceptance**: The targeted run fails because REST tag projection is absent.
+
+### ⬜ Unit 27.2b: Tag REST Projection Implementation
+**What**: Populate REST course/tags in shared builders with exact casing/order and update contracts/generated/public docs.
+**Output**: `app/lib/api-v1.server.ts`, `app/lib/api-v1-contract.server.ts`, `app/lib/api-v1-openapi.server.ts`, `scripts/generate-api-playground.ts`, `app/lib/generated/api-v1-playground.ts`, `app/routes/developers.playground.tsx`, `app/routes/developers.tsx`, `docs/api.md`.
+**Acceptance**: Unit 27.2a passes; existing field types/caches remain compatible and no AI contract appears.
+
+### ⬜ Unit 27.2c: Tag REST Projection Verification
+**What**: Run all shared response consumers, coverage, generator idempotency, typecheck, and build without adding behavior.
+**Output**: `unit-27.2-tags-api.log`.
+**Acceptance**: New projection code is 100% covered and cross-contract suite passes.
 
 ### ⬜ Unit 28a: Tag Discovery Filter Tests
 **What**: Add red tests for exact course/custom filters, URL/query behavior, combinations, empty results, and unfiltered behavior in My Recipes, owner My Kitchen, and Search.
-**Output**: recipes-index/index/search/RecipeGrid tests.
+**Output**: `test/routes/recipes-index.test.tsx`, `test/routes/index.test.tsx`, `test/routes/search.test.tsx`, `test/components/pantry/RecipeGrid.test.tsx`.
 **Acceptance**: Tests fail because filters are absent.
 
 ### ⬜ Unit 28b: Tag Discovery Filter Implementation
@@ -513,7 +557,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 29a: Feedback Boundary Regression Tests
 **What**: Add scoped assertions for unchanged dock/drawer, no first-party import entry, agent/API import docs, no changed-surface Pebble contract, and no AI tag surface.
-**Output**: mobile-nav, repo-hygiene, developer-platform docs/guide tests.
+**Output**: `test/components/navigation/mobile-nav.test.tsx`, `test/repo-hygiene.test.ts`, `test/docs/developer-platform-docs.test.ts`, `test/docs/developer-platform-guide.test.ts`.
 **Acceptance**: Tests are green or fail only on stale changed-surface copy; unrelated telemetry and redirect-only `api.docs.ts` are not targeted.
 
 ### ⬜ Unit 29b: Feedback Boundary Cleanup
@@ -588,7 +632,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ## Execution
 - Tests -> confirmed red -> implementation -> green -> refactor for every a/b/c group.
-- Update unit emoji/progress log, commit, push, and run a fresh unit review after each non-trivial unit.
+- Commit/push each intentional-red `a` checkpoint and green `b` checkpoint; keep `c` verification-only, then update group emojis/progress and run a fresh group review.
 - Store every command/log/screenshot in the artifact directory.
 - Invoke `visual-qa-dogfood` for every d unit, `work-merger` at Unit 34, and `stay-in-turn` through CI/deploy.
 - Never leave smoke/manual users, recipes, sessions, saves, or tags behind.
