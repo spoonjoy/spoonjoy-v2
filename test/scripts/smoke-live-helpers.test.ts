@@ -547,6 +547,36 @@ describe("smoke-live helpers", () => {
     expect(() => tracker.assertAll("browser flow")).toThrow(/browser flow.*POST \/signup/i);
   });
 
+  it("requires Worker proof from application responses while ignoring static asset binding responses", () => {
+    const tracker = createWorkerVersionResponseTracker({
+      baseUrl: "https://spoonjoy.app",
+      workerVersionId: CANDIDATE_VERSION,
+    });
+    const checkpoint = tracker.checkpoint();
+
+    expect(tracker.record({
+      url: "https://spoonjoy.app/assets/entry.client-example.js",
+      headers: {},
+      label: "GET /assets/entry.client-example.js",
+    })).toBe(false);
+    expect(tracker.record({
+      url: "https://spoonjoy.app/signup",
+      headers: { "x-spoonjoy-worker-version": CANDIDATE_VERSION },
+      label: "GET /signup",
+    })).toBe(true);
+    expect(() => tracker.assertSince(checkpoint, "signup page")).not.toThrow();
+
+    const assetsOnlyCheckpoint = tracker.checkpoint();
+    expect(tracker.record({
+      url: "https://spoonjoy.app/assets/root-example.css",
+      headers: {},
+      label: "GET /assets/root-example.css",
+    })).toBe(false);
+    expect(() => tracker.assertSince(assetsOnlyCheckpoint, "assets-only phase")).toThrow(
+      /observed no Spoonjoy responses/i,
+    );
+  });
+
   it("requires browser phases to observe responses and validates tracker checkpoints", () => {
     const tracker = createWorkerVersionResponseTracker({
       baseUrl: "https://spoonjoy.app",

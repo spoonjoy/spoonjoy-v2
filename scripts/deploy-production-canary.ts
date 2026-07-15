@@ -10,7 +10,7 @@ const MIGRATION_NAME_PATTERN = /^\d{4}_[A-Za-z0-9][A-Za-z0-9_.-]*\.sql$/;
 const MIGRATION_FILE_PATTERN = /\b\d{4}_[A-Za-z0-9][A-Za-z0-9_.-]*\.sql\b/g;
 const NO_PENDING_MIGRATIONS_PATTERN = /no migrations to apply/i;
 const RELEASE_ARTIFACT_NAME = "production-release.json";
-const DEFAULT_VERIFICATION_ATTEMPTS = 20;
+const DEFAULT_VERIFICATION_ATTEMPTS = 60;
 const VERIFICATION_DELAY_MS = 1_000;
 const CLOUDFLARE_SECRET_ENV_NAMES = [
   "CF_API_KEY",
@@ -161,8 +161,9 @@ export async function readPublicWorkerVersion(
   if (!response.ok) {
     throw new Error(`Public release verification failed with HTTP ${response.status}.`);
   }
-  const version = response.headers.get("X-Spoonjoy-Worker-Version");
-  return version && WORKER_VERSION_PATTERN.test(version) ? version : null;
+  const headerName = "X-Spoonjoy-Worker-Version";
+  if (!response.headers.has(headerName)) return null;
+  return requireWorkerVersionId(response.headers.get(headerName), "Public release verification");
 }
 
 function requireWorkerVersionId(value: unknown, context: string): string {
@@ -531,6 +532,7 @@ async function waitForProductionVersion(
   deps: ProductionVerificationDeps,
   expectedVersionId: string,
   workersEnv: NodeJS.ProcessEnv,
+  options: { allowLegacyMissingPublicVersion?: boolean } = {},
 ): Promise<void> {
   requireWorkerVersionId(expectedVersionId, "Production verification");
   const attempts = deps.verificationAttempts ?? DEFAULT_VERIFICATION_ATTEMPTS;
@@ -538,10 +540,12 @@ async function waitForProductionVersion(
     throw new Error("Production verification attempts must be a positive integer.");
   }
   const baseUrl = deps.env?.SPOONJOY_MCP_CANARY_BASE_URL ?? "https://spoonjoy.app";
+  let consecutiveLegacyControlPlaneMatches = 0;
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     let deploymentVersion: string | null = null;
     let publicVersion: string | null = null;
+    let publicProbeSucceeded = false;
     try {
       const deployments = await deps.runCommand(
         "pnpm",
@@ -554,10 +558,22 @@ async function waitForProductionVersion(
     }
     try {
       publicVersion = await deps.readPublicWorkerVersion(baseUrl);
+      publicProbeSucceeded = true;
     } catch {
       publicVersion = null;
     }
     if (deploymentVersion === expectedVersionId && publicVersion === expectedVersionId) return;
+    if (
+      options.allowLegacyMissingPublicVersion === true
+      && deploymentVersion === expectedVersionId
+      && publicProbeSucceeded
+      && publicVersion === null
+    ) {
+      consecutiveLegacyControlPlaneMatches += 1;
+      if (consecutiveLegacyControlPlaneMatches >= 2) return;
+    } else {
+      consecutiveLegacyControlPlaneMatches = 0;
+    }
     if (attempt < attempts) await deps.sleep(VERIFICATION_DELAY_MS);
   }
 
@@ -668,7 +684,9 @@ export async function runProductionRollback(
           "--message", `Restore after failed rollback ${sourceSha}`,
         ], { env: workersEnv });
         phase = "verify_rollback";
-        await waitForProductionVersion(deps, previousVersionId, workersEnv);
+        await waitForProductionVersion(deps, previousVersionId, workersEnv, {
+          allowLegacyMissingPublicVersion: true,
+        });
       } catch (rollbackError) {
         const artifact: ReleaseArtifact = {
           status: "rollback_failed",
@@ -855,7 +873,9 @@ export async function runProductionCanaryRelease(
           "--message", `Restore after failed ${sourceSha}`,
         ], { env: workersEnv });
         phase = "verify_rollback";
-        await waitForProductionVersion(deps, previousVersionId, workersEnv);
+        await waitForProductionVersion(deps, previousVersionId, workersEnv, {
+          allowLegacyMissingPublicVersion: true,
+        });
       } catch (rollbackError) {
         const artifact: ReleaseArtifact = {
           status: "rollback_failed",
