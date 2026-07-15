@@ -56,7 +56,7 @@ export function meta({ data }: Route.MetaArgs) {
     { property: "og:image", content: data.ogImageUrl },
     { property: "og:image:width", content: "1200" },
     { property: "og:image:height", content: "630" },
-    { property: "og:image:type", content: "image/png" },
+    { property: "og:image:type", content: "image/svg+xml" },
     { name: "twitter:card", content: "summary_large_image" },
     { name: "twitter:title", content: data.recipe.title },
     { name: "twitter:description", content: description },

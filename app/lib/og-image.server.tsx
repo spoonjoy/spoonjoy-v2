@@ -38,20 +38,10 @@ const DYNAMIC_OG_HEADERS = {
   "Cache-Control": "public, no-cache, must-revalidate",
 };
 
-const FALLBACK_EXECUTION_CONTEXT = {
-  waitUntil() {
-    return undefined;
-  },
-};
+const SVG_CONTENT_TYPE = "image/svg+xml; charset=utf-8";
 
 export interface OgExecutionContext {
   waitUntil(promise: Promise<unknown>): void;
-}
-
-type OgRuntime = typeof import("cf-workers-og/workerd");
-
-async function loadOgRuntime(): Promise<OgRuntime> {
-  return import("cf-workers-og/workerd");
 }
 
 export function recipeOgDescription(input: Pick<RecipeOgInput, "description" | "chefUsername">) {
@@ -63,17 +53,6 @@ export function recipeOgDescription(input: Pick<RecipeOgInput, "description" | "
 
 export function cookbookRecipeLabel(recipeCount: number) {
   return `${recipeCount} ${recipeCount === 1 ? "recipe" : "recipes"}`;
-}
-
-function ogFonts(runtime: OgRuntime, text: string, ctx?: OgExecutionContext) {
-  runtime.cache.setExecutionContext((ctx ?? FALLBACK_EXECUTION_CONTEXT) as ExecutionContext);
-  const sampleText = `${text} SPOONJOY COOKBOOK RECIPE by servings`;
-
-  return [
-    new runtime.GoogleFont("Fraunces", { weight: 700, text: sampleText }),
-    new runtime.GoogleFont("Fraunces", { weight: 500, text: sampleText }),
-    new runtime.GoogleFont("IBM Plex Sans Condensed", { weight: 600, text: sampleText.toUpperCase() }),
-  ];
 }
 
 function dynamicOgHeaders(cacheKey?: string) {
@@ -95,349 +74,94 @@ function weakOgEtag(cacheKey: string) {
   return `W/"og-${(hash >>> 0).toString(16)}-${cacheKey.length}"`;
 }
 
-export async function createRecipeOgImageResponse(input: RecipeOgInput, ctx?: OgExecutionContext, cacheKey?: string) {
-  const runtime = await loadOgRuntime();
+export async function createRecipeOgImageResponse(input: RecipeOgInput, _ctx?: OgExecutionContext, cacheKey?: string) {
   const description = recipeOgDescription(input);
-  const text = [input.title, description, input.chefUsername, input.servingsLabel].filter(Boolean).join(" ");
-
-  return runtime.ImageResponse.create(createRecipeOgElement(input, description), {
-    width: OG_IMAGE_WIDTH,
-    height: OG_IMAGE_HEIGHT,
-    fonts: ogFonts(runtime, text, ctx),
-    headers: dynamicOgHeaders(cacheKey),
-  });
+  return svgResponse(createRecipeOgElement(input, description), dynamicOgHeaders(cacheKey));
 }
 
-export async function createCookbookOgImageResponse(input: CookbookOgInput, ctx?: OgExecutionContext, cacheKey?: string) {
-  const runtime = await loadOgRuntime();
+export async function createCookbookOgImageResponse(input: CookbookOgInput, _ctx?: OgExecutionContext, cacheKey?: string) {
   const recipeLabel = cookbookRecipeLabel(input.recipeCount);
-  const text = [input.title, input.authorUsername, recipeLabel].join(" ");
-
-  return runtime.ImageResponse.create(createCookbookOgElement(input, recipeLabel), {
-    width: OG_IMAGE_WIDTH,
-    height: OG_IMAGE_HEIGHT,
-    fonts: ogFonts(runtime, text, ctx),
-    headers: dynamicOgHeaders(cacheKey),
-  });
+  return svgResponse(createCookbookOgElement(input, recipeLabel), dynamicOgHeaders(cacheKey));
 }
 
-export async function createPageOgImageResponse(input: PageOgInput, ctx?: OgExecutionContext) {
-  const runtime = await loadOgRuntime();
-  const text = [input.eyebrow, input.title, input.description, ...input.highlights].join(" ");
-
-  return runtime.ImageResponse.create(createPageOgElement(input), {
-    width: OG_IMAGE_WIDTH,
-    height: OG_IMAGE_HEIGHT,
-    fonts: ogFonts(runtime, text, ctx),
-    headers: OG_HEADERS,
-  });
+export async function createPageOgImageResponse(input: PageOgInput, _ctx?: OgExecutionContext) {
+  return svgResponse(createPageOgElement(input), OG_HEADERS);
 }
 
 export function createRecipeOgElement(input: RecipeOgInput, description: string) {
-  return (
-    <div
-      style={{
-        width: `${OG_IMAGE_WIDTH}px`,
-        height: `${OG_IMAGE_HEIGHT}px`,
-        display: "flex",
-        background: COLORS.paper,
-        color: COLORS.ink,
-        fontFamily: "Fraunces",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      {MediaPanel({ imageUrl: input.coverImageUrl, title: input.title, fallbackLabel: "Recipe" })}
-      <div
-        style={{
-          width: "48%",
-          height: "100%",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          padding: "58px 68px 60px 62px",
-          background: COLORS.paper,
-        }}
-      >
-        <div
-          style={{
-            fontFamily: "IBM Plex Sans Condensed",
-            fontSize: 24,
-            fontWeight: 600,
-            letterSpacing: "0.18em",
-            textTransform: "uppercase",
-            color: COLORS.brass,
-          }}
-        >
-          Spoonjoy recipe
-        </div>
-        <div
-          style={{
-            marginTop: 26,
-            fontSize: 78,
-            fontWeight: 700,
-            lineHeight: 0.96,
-            color: COLORS.ink,
-            maxWidth: 480,
-          }}
-        >
-          {input.title}
-        </div>
-        <div
-          style={{
-            marginTop: 28,
-            paddingLeft: 18,
-            borderLeft: `5px solid ${COLORS.action}`,
-            fontSize: 28,
-            lineHeight: 1.34,
-            color: COLORS.inkSoft,
-            maxWidth: 460,
-            fontWeight: 500,
-          }}
-        >
-          {description}
-        </div>
-        <div
-          style={{
-            marginTop: 36,
-            display: "flex",
-            gap: 18,
-            alignItems: "center",
-            fontFamily: "IBM Plex Sans Condensed",
-            fontSize: 22,
-            fontWeight: 600,
-            letterSpacing: "0.12em",
-            textTransform: "uppercase",
-            color: COLORS.inkSoft,
-          }}
-        >
-          <span>By {input.chefUsername}</span>
-          {input.servingsLabel ? <span style={{ color: COLORS.brass }}>{input.servingsLabel}</span> : null}
-        </div>
-      </div>
-    </div>
-  );
+  const titleLines = wrapSvgLines(input.title, 14, 3);
+  const descriptionLines = wrapSvgLines(description, 30, 4);
+  const byline = ["By", input.chefUsername, input.servingsLabel].filter(Boolean).join("  /  ");
+
+  return svgShell(input.title, [
+    mediaPanelSvg({ imageUrl: input.coverImageUrl, title: input.title, fallbackLabel: "Recipe" }),
+    `<rect x="624" y="0" width="576" height="630" fill="${COLORS.paper}" />`,
+    textBlock({ lines: ["SPOONJOY RECIPE"], x: 686, y: 106, fontSize: 24, lineHeight: 24, weight: 700, fill: COLORS.brass, family: "ui", letterSpacing: 6 }),
+    textBlock({ lines: titleLines, x: 686, y: 182, fontSize: 70, lineHeight: 66, weight: 800, fill: COLORS.ink, family: "display" }),
+    `<rect x="686" y="386" width="5" height="118" fill="${COLORS.action}" />`,
+    textBlock({ lines: descriptionLines, x: 710, y: 408, fontSize: 27, lineHeight: 36, weight: 500, fill: COLORS.inkSoft, family: "serif" }),
+    textBlock({ lines: [byline.toUpperCase()], x: 686, y: 560, fontSize: 21, lineHeight: 21, weight: 700, fill: COLORS.inkSoft, family: "ui", letterSpacing: 3 }),
+  ]);
 }
 
 export function createCookbookOgElement(input: CookbookOgInput, recipeLabel: string) {
   const images = input.coverImageUrls
     .filter((url): url is string => Boolean(url && url.length > 0))
     .slice(0, 4);
+  const titleLines = wrapSvgLines(input.title, 14, 4);
 
-  return (
-    <div
-      style={{
-        width: `${OG_IMAGE_WIDTH}px`,
-        height: `${OG_IMAGE_HEIGHT}px`,
-        display: "flex",
-        background: COLORS.paper,
-        color: COLORS.ink,
-        fontFamily: "Fraunces",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          width: "52%",
-          height: "100%",
-          display: "flex",
-          background: COLORS.charcoal,
-          padding: 40,
-        }}
-      >
-        {images.length > 0 ? CookbookPhotoGrid({ images }) : CookbookFallbackArt({ title: input.title })}
-      </div>
-      <div
-        style={{
-          width: "48%",
-          height: "100%",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          padding: "64px",
-          background: COLORS.paper,
-        }}
-      >
-        <div
-          style={{
-            fontSize: 82,
-            fontWeight: 700,
-            lineHeight: 0.96,
-            color: COLORS.ink,
-            maxWidth: 480,
-          }}
-        >
-          {input.title}
-        </div>
-        <div
-          style={{
-            marginTop: 34,
-            display: "flex",
-            flexDirection: "column",
-            gap: 10,
-            fontFamily: "IBM Plex Sans Condensed",
-            fontSize: 24,
-            fontWeight: 600,
-            letterSpacing: "0.12em",
-            textTransform: "uppercase",
-            color: COLORS.inkSoft,
-          }}
-        >
-          <span>By {input.authorUsername}</span>
-          <span style={{ color: COLORS.brass }}>{recipeLabel}</span>
-        </div>
-      </div>
-    </div>
-  );
+  return svgShell(input.title, [
+    `<rect x="0" y="0" width="624" height="630" fill="${COLORS.charcoal}" />`,
+    images.length > 0 ? cookbookGridSvg(images) : cookbookFallbackSvg(input.title),
+    `<rect x="624" y="0" width="576" height="630" fill="${COLORS.paper}" />`,
+    textBlock({ lines: titleLines, x: 686, y: 190, fontSize: 72, lineHeight: 68, weight: 800, fill: COLORS.ink, family: "display" }),
+    textBlock({ lines: [`BY ${input.authorUsername.toUpperCase()}`, recipeLabel.toUpperCase()], x: 686, y: 470, fontSize: 24, lineHeight: 40, weight: 700, fill: COLORS.inkSoft, family: "ui", letterSpacing: 3 }),
+    `<rect x="686" y="548" width="220" height="5" fill="${COLORS.action}" />`,
+  ]);
 }
 
 export function createPageOgElement(input: PageOgInput) {
   const displayUrl = input.slug === "api" ? "spoonjoy.app/api" : "spoonjoy.app/api/playground";
+  const titleLines = wrapSvgLines(input.title, 16, 3);
+  const descriptionLines = wrapSvgLines(input.description, 34, 4);
 
-  return (
-    <div
-      style={{
-        width: `${OG_IMAGE_WIDTH}px`,
-        height: `${OG_IMAGE_HEIGHT}px`,
-        display: "flex",
-        background: COLORS.paper,
-        color: COLORS.ink,
-        fontFamily: "Fraunces",
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          width: "44%",
-          height: "100%",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "space-between",
-          padding: "54px 48px",
-          background: COLORS.charcoal,
-          color: COLORS.white,
-        }}
-      >
-        <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-          <div
-            style={{
-              fontFamily: "IBM Plex Sans Condensed",
-              fontSize: 24,
-              fontWeight: 600,
-              letterSpacing: "0.16em",
-              textTransform: "uppercase",
-              color: COLORS.brass,
-            }}
-          >
-            {input.eyebrow}
-          </div>
-          <div
-            style={{
-              width: 148,
-              height: 148,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              border: `2px solid ${COLORS.brass}`,
-              fontSize: 86,
-              lineHeight: 1,
-              fontWeight: 700,
-              color: COLORS.paper,
-            }}
-          >
-            sj
-          </div>
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-          {input.highlights.map((highlight) => (
-            <div
-              key={highlight}
-              style={{
-                display: "flex",
-                border: `1px solid ${COLORS.brass}`,
-                padding: "10px 14px",
-                fontFamily: "IBM Plex Sans Condensed",
-                fontSize: 18,
-                fontWeight: 600,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                color: COLORS.white,
-              }}
-            >
-              {highlight}
-            </div>
-          ))}
-        </div>
-      </div>
-      <div
-        style={{
-          width: "56%",
-          height: "100%",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          padding: "60px 70px",
-          background: COLORS.paper,
-        }}
-      >
-        <div
-          style={{
-            fontFamily: "IBM Plex Sans Condensed",
-            fontSize: 24,
-            fontWeight: 600,
-            letterSpacing: "0.18em",
-            textTransform: "uppercase",
-            color: COLORS.brass,
-          }}
-        >
-          Spoonjoy
-        </div>
-        <div
-          style={{
-            marginTop: 26,
-            fontSize: 80,
-            fontWeight: 700,
-            lineHeight: 0.96,
-            color: COLORS.ink,
-            maxWidth: 570,
-          }}
-        >
-          {input.title}
-        </div>
-        <div
-          style={{
-            marginTop: 30,
-            paddingLeft: 18,
-            borderLeft: `5px solid ${COLORS.action}`,
-            fontSize: 29,
-            lineHeight: 1.32,
-            color: COLORS.inkSoft,
-            maxWidth: 540,
-            fontWeight: 500,
-          }}
-        >
-          {input.description}
-        </div>
-        <div
-          style={{
-            marginTop: 40,
-            fontFamily: "IBM Plex Sans Condensed",
-            fontSize: 22,
-            fontWeight: 600,
-            letterSpacing: "0.12em",
-            textTransform: "uppercase",
-            color: COLORS.brass,
-          }}
-        >
-          {displayUrl}
-        </div>
-      </div>
-    </div>
-  );
+  return svgShell(input.title, [
+    `<rect x="0" y="0" width="528" height="630" fill="${COLORS.charcoal}" />`,
+    textBlock({ lines: [input.eyebrow.toUpperCase()], x: 54, y: 82, fontSize: 24, lineHeight: 24, weight: 700, fill: COLORS.brass, family: "ui", letterSpacing: 5 }),
+    `<rect x="54" y="130" width="148" height="148" fill="none" stroke="${COLORS.brass}" stroke-width="2" />`,
+    textBlock({ lines: ["sj"], x: 88, y: 236, fontSize: 86, lineHeight: 86, weight: 800, fill: COLORS.paper, family: "display" }),
+    highlightsSvg(input.highlights),
+    `<rect x="528" y="0" width="672" height="630" fill="${COLORS.paper}" />`,
+    textBlock({ lines: ["SPOONJOY"], x: 598, y: 104, fontSize: 24, lineHeight: 24, weight: 700, fill: COLORS.brass, family: "ui", letterSpacing: 6 }),
+    textBlock({ lines: titleLines, x: 598, y: 184, fontSize: 72, lineHeight: 70, weight: 800, fill: COLORS.ink, family: "display" }),
+    `<rect x="598" y="396" width="5" height="118" fill="${COLORS.action}" />`,
+    textBlock({ lines: descriptionLines, x: 622, y: 416, fontSize: 28, lineHeight: 37, weight: 500, fill: COLORS.inkSoft, family: "serif" }),
+    textBlock({ lines: [displayUrl.toUpperCase()], x: 598, y: 568, fontSize: 22, lineHeight: 22, weight: 700, fill: COLORS.brass, family: "ui", letterSpacing: 3 }),
+  ]);
 }
 
-function MediaPanel({
+function svgResponse(svg: string, headers: Record<string, string>) {
+  return new Response(svg, {
+    headers: {
+      ...headers,
+      "Content-Type": SVG_CONTENT_TYPE,
+      "X-Content-Type-Options": "nosniff",
+      "X-OG-Width": String(OG_IMAGE_WIDTH),
+      "X-OG-Height": String(OG_IMAGE_HEIGHT),
+    },
+  });
+}
+
+function svgShell(title: string, children: string[]) {
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${OG_IMAGE_WIDTH}" height="${OG_IMAGE_HEIGHT}" viewBox="0 0 ${OG_IMAGE_WIDTH} ${OG_IMAGE_HEIGHT}" role="img" aria-label="${escapeAttribute(title.trim())}">`,
+    `<style>text{font-family:Georgia,serif}.ui{font-family:"IBM Plex Sans Condensed","Arial Narrow",Arial,sans-serif}.display{font-family:Fraunces,Georgia,serif}.serif{font-family:Fraunces,Georgia,serif}</style>`,
+    ...children,
+    `</svg>`,
+  ].join("");
+}
+
+function mediaPanelSvg({
   imageUrl,
   title,
   fallbackLabel,
@@ -446,114 +170,140 @@ function MediaPanel({
   title: string;
   fallbackLabel: string;
 }) {
-  return (
-    <div
-      style={{
-        width: "52%",
-        height: "100%",
-        position: "relative",
-        display: "flex",
-        background: COLORS.charcoal,
-        overflow: "hidden",
-      }}
-    >
-      {imageUrl ? (
-        <img
-          src={imageUrl}
-          alt={title}
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-          }}
-        />
-      ) : (
-        <div
-          style={{
-            width: "100%",
-            height: "100%",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-            padding: 58,
-            background: COLORS.charcoal,
-            color: COLORS.white,
-          }}
-        >
-          <div style={{ fontFamily: "IBM Plex Sans Condensed", fontSize: 24, letterSpacing: "0.18em", textTransform: "uppercase", color: COLORS.brass }}>
-            {fallbackLabel}
-          </div>
-          <div style={{ marginTop: 24, fontSize: 88, fontWeight: 700, lineHeight: 0.95 }}>{title}</div>
-        </div>
-      )}
-      <div
-        style={{
-          position: "absolute",
-          left: 0,
-          right: 0,
-          bottom: 0,
-          height: 150,
-          background: "rgba(33,29,24,0.52)",
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          left: 42,
-          bottom: 34,
-          fontFamily: "IBM Plex Sans Condensed",
-          fontSize: 28,
-          fontWeight: 600,
-          letterSpacing: "0.18em",
-          textTransform: "uppercase",
-          color: COLORS.white,
-        }}
-      >
-        SPOONJOY
-      </div>
-    </div>
-  );
+  const fallbackLines = wrapSvgLines(title, 12, 4);
+  return [
+    `<rect x="0" y="0" width="624" height="630" fill="${COLORS.charcoal}" />`,
+    imageUrl
+      ? `<image href="${escapeAttribute(imageUrl)}" x="0" y="0" width="624" height="630" preserveAspectRatio="xMidYMid slice" />`
+      : [
+          `<rect x="0" y="0" width="624" height="630" fill="${COLORS.paper}" />`,
+          `<rect x="40" y="40" width="544" height="550" fill="none" stroke="${COLORS.brass}" stroke-width="2" />`,
+          textBlock({ lines: [fallbackLabel.toUpperCase()], x: 58, y: 110, fontSize: 24, lineHeight: 24, weight: 700, fill: COLORS.brass, family: "ui", letterSpacing: 5 }),
+          textBlock({ lines: fallbackLines, x: 58, y: 220, fontSize: 78, lineHeight: 74, weight: 800, fill: COLORS.ink, family: "display" }),
+        ].join(""),
+    `<rect x="0" y="480" width="624" height="150" fill="${COLORS.charcoal}" fill-opacity="0.62" />`,
+    textBlock({ lines: ["SPOONJOY"], x: 42, y: 568, fontSize: 28, lineHeight: 28, weight: 700, fill: COLORS.white, family: "ui", letterSpacing: 6 }),
+  ].join("");
 }
 
-function CookbookPhotoGrid({ images }: { images: string[] }) {
-  return (
-    <div style={{ display: "flex", flexWrap: "wrap", width: "100%", height: "100%", border: `1px solid ${COLORS.brass}` }}>
-      {images.map((imageUrl) => (
-        <img
-          key={imageUrl}
-          src={imageUrl}
-          alt=""
-          style={{
-            width: images.length === 1 ? "100%" : "50%",
-            height: images.length <= 2 ? "100%" : "50%",
-            objectFit: "cover",
-          }}
-        />
-      ))}
-    </div>
-  );
+function cookbookGridSvg(images: string[]) {
+  const boxes = images.length === 1
+    ? [{ x: 40, y: 40, width: 544, height: 550 }]
+    : images.length === 2
+      ? [
+          { x: 40, y: 40, width: 272, height: 550 },
+          { x: 312, y: 40, width: 272, height: 550 },
+        ]
+      : [
+          { x: 40, y: 40, width: 272, height: 275 },
+          { x: 312, y: 40, width: 272, height: 275 },
+          { x: 40, y: 315, width: 272, height: 275 },
+          { x: 312, y: 315, width: 272, height: 275 },
+        ];
+
+  return [
+    `<rect x="40" y="40" width="544" height="550" fill="none" stroke="${COLORS.brass}" stroke-width="1" />`,
+    ...images.map((imageUrl, index) => {
+      const box = boxes[index];
+      return `<image href="${escapeAttribute(imageUrl)}" x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" preserveAspectRatio="xMidYMid slice" />`;
+    }),
+  ].join("");
 }
 
-function CookbookFallbackArt({ title }: { title: string }) {
-  return (
-    <div
-      style={{
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-        border: `1px solid ${COLORS.brass}`,
-        padding: 44,
-        background: COLORS.paper,
-        color: COLORS.ink,
-      }}
-    >
-      <div style={{ fontFamily: "IBM Plex Sans Condensed", fontSize: 26, fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase", color: COLORS.brass }}>
-        Spoonjoy
-      </div>
-      <div style={{ fontSize: 86, fontWeight: 700, lineHeight: 0.96 }}>{title}</div>
-      <div style={{ height: 4, width: 220, background: COLORS.action }} />
-    </div>
-  );
+function cookbookFallbackSvg(title: string) {
+  return [
+    `<rect x="40" y="40" width="544" height="550" fill="${COLORS.paper}" stroke="${COLORS.brass}" stroke-width="1" />`,
+    textBlock({ lines: ["SPOONJOY"], x: 84, y: 112, fontSize: 26, lineHeight: 26, weight: 700, fill: COLORS.brass, family: "ui", letterSpacing: 6 }),
+    textBlock({ lines: wrapSvgLines(title, 11, 4), x: 84, y: 262, fontSize: 82, lineHeight: 78, weight: 800, fill: COLORS.ink, family: "display" }),
+    `<rect x="84" y="520" width="220" height="4" fill="${COLORS.action}" />`,
+  ].join("");
+}
+
+function highlightsSvg(highlights: string[]) {
+  let x = 54;
+  let y = 482;
+  return highlights.map((highlight) => {
+    const width = Math.max(104, Math.min(190, highlight.length * 12 + 34));
+    if (x + width > 474) {
+      x = 54;
+      y += 50;
+    }
+    const svg = [
+      `<rect x="${x}" y="${y}" width="${width}" height="34" fill="none" stroke="${COLORS.brass}" stroke-width="1" />`,
+      textBlock({ lines: [highlight.toUpperCase()], x: x + 14, y: y + 23, fontSize: 17, lineHeight: 17, weight: 700, fill: COLORS.white, family: "ui", letterSpacing: 1 }),
+    ].join("");
+    x += width + 12;
+    return svg;
+  }).join("");
+}
+
+function textBlock({
+  lines,
+  x,
+  y,
+  fontSize,
+  lineHeight,
+  weight,
+  fill,
+  family,
+  letterSpacing = 0,
+}: {
+  lines: string[];
+  x: number;
+  y: number;
+  fontSize: number;
+  lineHeight: number;
+  weight: number;
+  fill: string;
+  family: "display" | "serif" | "ui";
+  letterSpacing?: number;
+}) {
+  const tspans = lines.map((line, index) =>
+    `<tspan x="${x}" dy="${index === 0 ? 0 : lineHeight}">${escapeText(line)}</tspan>`
+  ).join("");
+  const letterSpacingAttribute = letterSpacing > 0 ? ` letter-spacing="${letterSpacing}"` : "";
+  return `<text class="${family}" x="${x}" y="${y}" font-size="${fontSize}" font-weight="${weight}" fill="${fill}"${letterSpacingAttribute}>${tspans}</text>`;
+}
+
+function wrapSvgLines(value: string, maxChars: number, maxLines: number) {
+  const words = value.trim().replace(/\s+/g, " ").split(" ").filter(Boolean);
+  if (words.length === 0) return [""];
+
+  const lines: string[] = [];
+  for (const word of words) {
+    const current = lines.at(-1);
+    if (!current) {
+      lines.push(word);
+      continue;
+    }
+    if (`${current} ${word}`.length <= maxChars) {
+      lines[lines.length - 1] = `${current} ${word}`;
+      continue;
+    }
+    if (lines.length >= maxLines) {
+      lines[lines.length - 1] = ellipsize(current, maxChars);
+      return lines;
+    }
+    lines.push(word);
+  }
+
+  return lines.map((line) => ellipsize(line, maxChars));
+}
+
+function ellipsize(value: string, maxChars: number) {
+  if (value.length <= maxChars) return value;
+  return `${value.slice(0, Math.max(0, maxChars - 3))}...`;
+}
+
+function escapeText(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function escapeAttribute(value: string) {
+  return escapeText(value)
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }

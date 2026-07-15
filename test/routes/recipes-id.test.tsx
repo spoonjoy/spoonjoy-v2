@@ -259,7 +259,7 @@ describe("Recipes $id Route", () => {
         { property: "og:image", content: "https://spoonjoy.app/og/recipes/recipe-1.png" },
         { property: "og:image:width", content: "1200" },
         { property: "og:image:height", content: "630" },
-        { property: "og:image:type", content: "image/png" },
+        { property: "og:image:type", content: "image/svg+xml" },
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:title", content: "Charred Tomato Toast" },
         { name: "twitter:description", content: "A fast lunch with real crunch." },

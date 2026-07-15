@@ -449,7 +449,7 @@ export function meta({ data }: { data?: { canonicalUrl?: string; ogImageUrl?: st
     { property: "og:image", content: ogImageUrl },
     { property: "og:image:width", content: String(OG_IMAGE_WIDTH) },
     { property: "og:image:height", content: String(OG_IMAGE_HEIGHT) },
-    { property: "og:image:type", content: "image/png" },
+    { property: "og:image:type", content: "image/svg+xml" },
     { name: "twitter:card", content: "summary_large_image" },
     { name: "twitter:title", content: DEVELOPER_OG_CARD.title },
     { name: "twitter:description", content: DEVELOPER_OG_CARD.description },
