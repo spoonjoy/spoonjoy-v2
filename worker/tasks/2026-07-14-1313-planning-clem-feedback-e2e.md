@@ -1,6 +1,6 @@
 # Planning: Clem Feedback E2E
 
-**Status**: NEEDS_REVIEW
+**Status**: approved
 **Created**: 2026-07-14 13:15
 **Re-audited**: 2026-07-15 against `origin/main` at `b22c5fec`
 
@@ -146,3 +146,4 @@ The task is deliberately broad because the feedback describes an end-to-end prod
 - 2026-07-14 13:24 Initial planning approved after two review rounds.
 - 2026-07-15 Latest-model audit invalidated stale assumptions after eight upstream commits.
 - 2026-07-15 Added durable feedback disposition, real Workers testing, executable cook lifecycle, privacy boundaries, exact data/API contracts, and QA-before-merge sequencing; returned to `NEEDS_REVIEW`.
+- 2026-07-15 Planning re-approved after five fresh hostile rounds converged on deterministic DO arbitration, ordered projection, adoption replay, purge fencing, and exact REST compatibility contracts.
