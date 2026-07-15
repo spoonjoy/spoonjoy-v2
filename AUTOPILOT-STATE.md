@@ -18,13 +18,13 @@ Close every actionable 2026-07-15 shipped-work audit finding across Spoonjoy web
 
 ## Gate State
 
-- Planning is `NEEDS_REVIEW`; the rollback matrix now maps findings 1-12 explicitly and includes the Clem credential recovery boundary.
+- Planning is approved after final fresh reviewer PASS; the rollback matrix maps findings 1-12 explicitly and includes the Clem credential recovery boundary.
 - Native and operations explorers returned concrete findings; the web explorer is being stopped after exceeding its bounded exploration window.
 - Planning review Round 1 found major traceability, verification, release-closure, cleanup-safety, and human-only credential gaps. A stricter independent review also found release-containment, rebaseline, image/mutation-contract, OAuth rollout, and workstream-isolation gaps. One fresh gate passed at 2026-07-15 12:16, but a second independent gate found missing rollback/recovery and direct web visual-evidence requirements; those are now patched and awaiting fresh convergence.
 
 ## Next Action
 
-Run a fresh planning gate on the rollback/recovery revision, then reviewer-gate the drafted doing doc before Unit 0.
+Run the harsh doing-doc granularity/validation gate, fix any BLOCKER/MAJOR findings, mark it `READY_FOR_EXECUTION`, and begin Unit 0.
 
 ## Hard Exceptions
 
