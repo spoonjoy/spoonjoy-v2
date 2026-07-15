@@ -133,7 +133,7 @@ Ship the accepted Clem feedback end to end: correct shopping-list restoration, a
 **Acceptance**: Core coverage is 100%, `pnpm run typecheck` and `pnpm build` pass.
 
 ### ⬜ Unit 6a: Durable Object Binding And Storage Tests
-**What**: Add real Workers red tests for deterministic `idFromName(userId:recipeId)` arbitration, SQLite-backed `CookSessionDurableObject`, immutable identity, attempt replacement, storage restart, revision/dedupe behavior, top-level and QA bindings/migrations, Env types, export, and generated deployment config checks.
+**What**: Add real Workers red tests for deterministic `idFromName(userId:recipeId)` arbitration, SQLite-backed `CookSessionDurableObject`, immutable identity, non-content coordinator versus attempt-bearing storage keys, attempt replacement, storage restart, revision/dedupe behavior, top-level and QA bindings/migrations, Env types, export, and generated deployment config checks.
 **Output**: `test/workers/cook-session-do.test.ts`, `test/config/wrangler-durable-objects.test.ts`, updates to `test/scripts/deployment-preflight.test.ts`.
 **Acceptance**: `pnpm test:workers -- test/workers/cook-session-do.test.ts` and config tests fail because class/bindings/checks are absent.
 
@@ -148,7 +148,7 @@ Ship the accepted Clem feedback end to end: correct shopping-list restoration, a
 **Acceptance**: Worker coverage for the class is 100%; `pnpm run deploy:preflight` and QA preflight source-mode checks pass without remote mutation.
 
 ### ⬜ Unit 7a: Internal Cook HTTP And WebSocket Tests
-**What**: Add real Worker red tests for deterministic user/recipe routing, blank/adoption start races, 24-hour replay, ledger expiry/full backpressure, API-safe 401, same-origin checks, initial recipe visibility, attempt-bound snapshot/patch/409 payloads, private no-store on every non-101 response/error, complete/abandon/purge idempotency, PURGING rejection for every non-delete method/upgrade, WebSocket 101 retention, initial/broadcast snapshots, purge code-4001 closure, stale-attempt socket closure, hibernation attachments, malformed methods/bodies, and missing attempts.
+**What**: Add real Worker red tests for deterministic user/recipe routing, blank/adoption start races, 24-hour replay, post-purge replay returning 410, ledger expiry/full backpressure, API-safe 401, same-origin checks, initial recipe visibility, attempt-bound snapshot/patch/409 payloads, private no-store on every non-101 response/error, matching/repeated/stale-attempt DELETE behavior, PURGING rejection for every non-delete method/upgrade, WebSocket 101 retention, initial/broadcast snapshots, purge code-4001 closure, stale-attempt socket closure, hibernation attachments, malformed methods/bodies, and missing attempts.
 **Output**: `test/workers/app-cook-sessions.test.ts`, additions to `test/workers/cook-session-do.test.ts`, `test/workers/app.test.ts`.
 **Acceptance**: `pnpm test:workers -- test/workers/app-cook-sessions.test.ts test/workers/cook-session-do.test.ts` fails because the Worker-level internal API is absent.
 
@@ -163,14 +163,14 @@ Ship the accepted Clem feedback end to end: correct shopping-list restoration, a
 **Acceptance**: New Worker/API code is 100% covered; `pnpm test:workers:coverage`, `pnpm run typecheck`, and `pnpm build` pass.
 
 ### ⬜ Unit 8a: D1 Projection Alarm Tests
-**What**: Add real Workers red tests for ordered projection-queue persistence on create/update/complete/abandon, idempotent D1 writes, terminal-old-before-active-new ordering, at-least-once alarm replay, transient failure, retry exhaustion/reschedule, stale My Kitchen projection recovery, FIFO purge barriers, `old terminal pending -> new attempt -> purge`, and failures before/after D1 delete and before DO `deleteAll()`.
+**What**: Add real Workers red tests for ordered projection-queue persistence on create/update/complete/abandon, idempotent D1 writes, terminal-old-before-active-new ordering, at-least-once alarm replay, transient failure, retry exhaustion/reschedule, stale My Kitchen projection recovery, FIFO purge barriers, `old terminal pending -> new attempt -> purge`, delayed accepted-start replay after purge, stale DELETE after a newer start, and failures before/after D1 delete and before atomic attempt-key deletion.
 **Output**: `test/workers/cook-session-alarm.test.ts`, additions to `test/lib/cook-session-index.server.test.ts`.
 **Acceptance**: Targeted worker/app tests fail because all projection transitions and retry markers are not alarm-driven.
 
 ### ⬜ Unit 8b: D1 Projection Alarm Implementation
-**What**: Persist one ordered projection queue in the DO, schedule/reschedule alarms, reconcile every lifecycle mutation to D1 without making D1 canonical, and execute purge as persisted PURGING -> drain older FIFO projections -> idempotent current-attempt D1 delete -> DO `deleteAll()`.
+**What**: Persist one ordered projection queue in the DO, schedule/reschedule alarms, reconcile every lifecycle mutation to D1 without making D1 canonical, and execute purge as persisted PURGING -> drain older FIFO projections -> idempotent current-attempt D1 delete -> atomic deletion of attempt-bearing keys while retaining the replay/coordinator tombstone.
 **Output**: `workers/cook-session-do.ts`, `app/lib/cook-session-index.server.ts`.
-**Acceptance**: Unit 8a passes; accepted DO mutations and older terminal projections survive D1 failure/new-attempt creation; repeated alarms do not duplicate history; purge cannot erase an older repair; every purge failure resumes safely; completion creates no RecipeSpoon or notification.
+**Acceptance**: Unit 8a passes; accepted DO mutations and older terminal projections survive D1 failure/new-attempt creation; repeated alarms do not duplicate history; purge cannot erase an older repair or newer attempt; purged starts cannot be replayed into new state; every purge failure resumes safely; completion creates no RecipeSpoon or notification.
 
 ### ⬜ Unit 8c: Projection Coverage
 **What**: Cover alarm retries and verify no RecipeSpoon integration was added.
@@ -353,7 +353,7 @@ Ship the accepted Clem feedback end to end: correct shopping-list restoration, a
 **Acceptance**: Tests fail because live smoke does not exercise or purge Durable Object state.
 
 ### ⬜ Unit 20b: Live Smoke Lifecycle Implementation
-**What**: Extend smoke helpers to create disposable `codex-smoke-*` state, validate two-context synchronization, purge each current attempt through its recipe-keyed deterministic DO before deleting D1 users, and verify no D1/DO test residue remains.
+**What**: Extend smoke helpers to create disposable `codex-smoke-*` state, validate two-context synchronization, purge each current attempt through its recipe-keyed deterministic DO before deleting D1 users, verify D1 rows and DO attempt-bearing state are gone, and tolerate only the documented non-content replay tombstone until user cleanup invalidates the session.
 **Output**: `scripts/smoke-live.mjs`, `scripts/smoke-live-helpers.mjs`.
 **Acceptance**: Unit 20a passes; cleanup executes in `finally`; smoke retries asynchronous purge to `204` before deleting the user; failed smoke still attempts purge/user cleanup and records residue.
 
