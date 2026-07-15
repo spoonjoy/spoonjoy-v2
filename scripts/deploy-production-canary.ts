@@ -161,8 +161,9 @@ export async function readPublicWorkerVersion(
   if (!response.ok) {
     throw new Error(`Public release verification failed with HTTP ${response.status}.`);
   }
-  const version = response.headers.get("X-Spoonjoy-Worker-Version");
-  return version ? requireWorkerVersionId(version, "Public release verification") : null;
+  const headerName = "X-Spoonjoy-Worker-Version";
+  if (!response.headers.has(headerName)) return null;
+  return requireWorkerVersionId(response.headers.get(headerName), "Public release verification");
 }
 
 function requireWorkerVersionId(value: unknown, context: string): string {

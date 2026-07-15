@@ -253,10 +253,11 @@ describe("trusted production rollback orchestration", () => {
         deploymentPayload(PREVIOUS_VERSION),
         deploymentPayload(PREVIOUS_VERSION),
         deploymentPayload(PREVIOUS_VERSION),
+        deploymentPayload(PREVIOUS_VERSION),
       ],
     });
     const deps = rollbackDeps(runCommand);
-    deps.readPublicWorkerVersion.mockResolvedValue(PREVIOUS_VERSION);
+    deps.readPublicWorkerVersion.mockResolvedValue(null);
 
     await expect(runProductionRollback(deps)).rejects.toThrow("did not converge");
 
@@ -267,6 +268,7 @@ describe("trusted production rollback orchestration", () => {
       status: "rolled_back",
       phase: "verify_promotion",
     }));
+    expect(deps.sleep).toHaveBeenCalledTimes(2);
   });
 
   it("records failure when restoring after a failed rollback also fails", async () => {
@@ -465,6 +467,38 @@ describe("production canary release orchestration", () => {
     expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(expect.objectContaining({
       status: "rolled_back",
       previousVersionId: PREVIOUS_VERSION,
+    }));
+  });
+
+  it.each([
+    ["a transient public probe failure", new Error("edge unavailable")],
+    ["a mismatched public version", CANDIDATE_VERSION],
+  ])("resets legacy restore convergence after %s", async (_label, interruption) => {
+    const smokeCommand = `pnpm run smoke:mcp:oauth -- --out mcp-oauth-canary-artifacts --worker-version-id ${CANDIDATE_VERSION}`;
+    const runCommand = successfulRunner({
+      [smokeCommand]: new Error("canary failed"),
+      "pnpm exec wrangler deployments list --json": Array.from(
+        { length: 5 },
+        () => deploymentPayload(PREVIOUS_VERSION),
+      ),
+    });
+    const deps = releaseDeps(runCommand);
+    deps.verificationAttempts = 5;
+    deps.readPublicWorkerVersion.mockResolvedValueOnce(null);
+    if (interruption instanceof Error) {
+      deps.readPublicWorkerVersion.mockRejectedValueOnce(interruption);
+    } else {
+      deps.readPublicWorkerVersion.mockResolvedValueOnce(interruption);
+    }
+    deps.readPublicWorkerVersion
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+
+    await expect(runProductionCanaryRelease(deps)).rejects.toThrow("canary failed");
+
+    expect(deps.sleep).toHaveBeenCalledTimes(3);
+    expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(expect.objectContaining({
+      status: "rolled_back",
     }));
   });
 
@@ -1178,6 +1212,9 @@ describe("release artifact and CLI boundary", () => {
 
     await expect(readPublicWorkerVersion("https://spoonjoy.app", async () => (
       new Response("{}", { headers: { "X-Spoonjoy-Worker-Version": "latest" }, status: 200 })
+    ))).rejects.toThrow(/valid Worker version/i);
+    await expect(readPublicWorkerVersion("https://spoonjoy.app", async () => (
+      new Response("{}", { headers: { "X-Spoonjoy-Worker-Version": "" }, status: 200 })
     ))).rejects.toThrow(/valid Worker version/i);
     await expect(readPublicWorkerVersion("https://spoonjoy.app", async () => (
       new Response("{}", { status: 200 })
