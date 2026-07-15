@@ -17,11 +17,24 @@ const requestHandler = createRequestHandler(
   import.meta.env.MODE
 );
 
+function finalizeResponse(
+  response: Response,
+  env: CloudflareEnvironment,
+  nonce?: string,
+): Response {
+  const finalized = withSecurityHeaders(response, nonce);
+  const workerVersionId = env.CF_VERSION_METADATA?.id;
+  if (workerVersionId) {
+    finalized.headers.set("X-Spoonjoy-Worker-Version", workerVersionId);
+  }
+  return finalized;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const oauthPreflight = oauthCorsPreflightResponse(request);
     if (oauthPreflight) {
-      return withSecurityHeaders(oauthPreflight);
+      return finalizeResponse(oauthPreflight, env);
     }
 
     const canonicalUrl =
@@ -29,7 +42,7 @@ export default {
       canonicalizeRequestUrlForHost(request.url, request.headers.get("Host"));
 
     if (canonicalUrl) {
-      return withSecurityHeaders(Response.redirect(canonicalUrl.toString(), 308));
+      return finalizeResponse(Response.redirect(canonicalUrl.toString(), 308), env);
     }
 
     try {
@@ -37,7 +50,7 @@ export default {
         const response = await handleMcpPostRouteRequest(request, {
           cloudflare: { env, ctx },
         });
-        return withSecurityHeaders(response);
+        return finalizeResponse(response, env);
       }
 
       // One nonce per request: it must appear identically in the report-only
@@ -48,7 +61,7 @@ export default {
         cloudflare: { env, ctx },
         nonce,
       });
-      return withSecurityHeaders(response, nonce);
+      return finalizeResponse(response, env, nonce);
     } catch (error) {
       // Outer catch: errors that escaped React Router's onError (e.g. thrown
       // before the response stream started, or from a non-route boundary).

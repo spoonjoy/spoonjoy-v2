@@ -24,6 +24,39 @@ export {
 };
 
 export const IMAGE_COVER_SMOKE_FLAG = "--include-image-cover-smoke";
+const WORKER_VERSION_ID_FLAG = "--worker-version-id";
+const WORKER_VERSION_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const WORKER_VERSION_RESPONSE_HEADER = "X-Spoonjoy-Worker-Version";
+
+function normalizeWorkerVersionId(value) {
+  if (typeof value !== "string" || !WORKER_VERSION_UUID.test(value)) {
+    throw new Error("--worker-version-id must be supplied exactly once with a valid UUID.");
+  }
+  return value.toLowerCase();
+}
+
+export function buildWorkerVersionOverrideHeaders(workerVersionId) {
+  if (workerVersionId === null) return {};
+  const normalized = normalizeWorkerVersionId(workerVersionId);
+  return {
+    "Cloudflare-Workers-Version-Overrides": `spoonjoy-v2="${normalized}"`,
+  };
+}
+
+export function assertWorkerVersionResponse(headers, workerVersionId) {
+  if (workerVersionId === null) return;
+  const expected = normalizeWorkerVersionId(workerVersionId);
+  const actual = headers instanceof Headers
+    ? headers.get(WORKER_VERSION_RESPONSE_HEADER)
+    : Object.entries(headers).find(([name]) => name.toLowerCase() === WORKER_VERSION_RESPONSE_HEADER.toLowerCase())?.[1] ?? null;
+
+  if (!actual) {
+    throw new Error(`Protected-resource response is missing ${WORKER_VERSION_RESPONSE_HEADER}; candidate Worker ${expected} was not proven.`);
+  }
+  if (actual !== expected) {
+    throw new Error(`Protected-resource response expected candidate Worker ${expected} but received ${actual}.`);
+  }
+}
 
 export function sqlString(value) {
   return `'${value.replaceAll("'", "''")}'`;
@@ -62,6 +95,13 @@ export function parseMcpCanaryArgs(argv = process.argv.slice(2), env = process.e
     env,
     defaultBaseUrl: env.SPOONJOY_MCP_CANARY_BASE_URL ?? "https://spoonjoy.app",
   });
+  const versionFlagCount = argv.filter((value) => value === WORKER_VERSION_ID_FLAG).length;
+  if (versionFlagCount > 1) {
+    throw new Error("--worker-version-id must be supplied exactly once with a valid UUID.");
+  }
+  const rawWorkerVersionId = arg(argv, WORKER_VERSION_ID_FLAG, null);
+  const workerVersionId = rawWorkerVersionId === null ? null : normalizeWorkerVersionId(rawWorkerVersionId);
+
   return {
     baseUrl: target.baseUrl,
     outDir: arg(argv, "--out", "mcp-oauth-canary-artifacts"),
@@ -69,6 +109,7 @@ export function parseMcpCanaryArgs(argv = process.argv.slice(2), env = process.e
     target,
     shouldCleanup: !argv.includes("--keep-smoke-data"),
     includeLegacyDbProbe: !argv.includes("--skip-legacy-db-probe"),
+    workerVersionId,
   };
 }
 
@@ -268,6 +309,10 @@ export function redactMcpCanaryText(value) {
     (text, rule) => text.replace(rule.pattern, rule.replacement),
     String(value),
   );
+}
+
+export function serializeSanitizedMcpCanaryReport(report) {
+  return redactMcpCanaryText(JSON.stringify(report, null, 2));
 }
 
 export function findMcpCanarySecretLeaks(value) {

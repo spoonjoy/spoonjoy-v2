@@ -8,15 +8,18 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 
 import {
+  assertWorkerVersionResponse,
   buildMcpCanaryCleanupD1Args,
   buildMcpCanaryConnectionResourceD1Args,
   buildMcpCanaryLegacyRefreshInsertD1Args,
   buildMcpCanaryUserLookupD1Args,
   buildUserCountD1Args,
+  buildWorkerVersionOverrideHeaders,
   parseD1CountOutput,
   parseD1RowsOutput,
   parseMcpCanaryArgs,
   readGitMetadata,
+  serializeSanitizedMcpCanaryReport,
 } from "./smoke-live-helpers.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -46,9 +49,10 @@ function mcpResourceForTarget({ baseUrl, targetEnv }) {
   return targetEnv === "production" ? "https://spoonjoy.app/mcp" : new URL("/mcp", baseUrl).toString();
 }
 
-async function readProtectedResource(request, baseUrl) {
+async function readProtectedResource(request, baseUrl, workerVersionId) {
   const response = await request.get(new URL("/.well-known/oauth-protected-resource/mcp", baseUrl).toString());
   assert.equal(response.status(), 200, `protected-resource metadata failed with ${response.status()}`);
+  assertWorkerVersionResponse(response.headers(), workerVersionId);
   const body = await responseJson(response, "MCP protected-resource metadata");
   assert.match(body.resource, /^https?:\/\/.+\/mcp$/);
   return body.resource;
@@ -304,7 +308,7 @@ async function cleanupCanary({ email, clientId, connectionKey, targetEnv }) {
 }
 
 async function main() {
-  const { baseUrl, includeLegacyDbProbe, outDir, shouldCleanup, target, targetEnv } = parseMcpCanaryArgs();
+  const { baseUrl, includeLegacyDbProbe, outDir, shouldCleanup, target, targetEnv, workerVersionId } = parseMcpCanaryArgs();
   const stamp = Date.now().toString(36);
   const email = `codex-mcp-canary-${stamp}@example.com`;
   const username = `codex_mcp_${stamp}`;
@@ -326,6 +330,7 @@ async function main() {
     username,
     redirectUri: CLAUDE_MCP_REDIRECT_URI,
     resource,
+    workerVersionId,
     screenshots: [],
     checks: [],
     cleanup: null,
@@ -346,7 +351,10 @@ async function main() {
 
   try {
     browser = await chromium.launch({ headless: true });
-    context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    context = await browser.newContext({
+      viewport: { width: 1440, height: 900 },
+      extraHTTPHeaders: buildWorkerVersionOverrideHeaders(workerVersionId),
+    });
     const page = await context.newPage();
     const verifier = randomToken("");
     const challenge = sha256Base64Url(verifier);
@@ -357,7 +365,7 @@ async function main() {
     });
 
     await check("protected-resource metadata", async () => {
-      resource = await readProtectedResource(page.request, baseUrl);
+      resource = await readProtectedResource(page.request, baseUrl, workerVersionId);
       report.resource = resource;
     });
 
@@ -420,7 +428,7 @@ async function main() {
       report.cleanup = { skipped: true, reason: "--keep-smoke-data" };
     }
 
-    writeFileSync(join(outDir, "mcp-oauth-canary-results.json"), JSON.stringify(report, null, 2));
+    writeFileSync(join(outDir, "mcp-oauth-canary-results.json"), serializeSanitizedMcpCanaryReport(report));
   }
 
   if (failure) {

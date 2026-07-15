@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import * as smokeHelpers from "../../scripts/smoke-live-helpers.mjs";
 import {
+  assertWorkerVersionResponse,
   buildD1CommandArgs,
   buildMcpCanaryCleanupD1Args,
   buildMcpCanaryConnectionResourceD1Args,
@@ -15,6 +17,7 @@ import {
   buildQaR2GetArgs,
   buildCleanupD1Args,
   buildUserCountD1Args,
+  buildWorkerVersionOverrideHeaders,
   decideMcpCanaryIssueAction,
   findMcpCanarySecretLeaks,
   isQaR2ObjectMissingError,
@@ -27,6 +30,7 @@ import {
   parseSmokeArgs,
   readGitMetadata,
   redactMcpCanaryText,
+  serializeSanitizedMcpCanaryReport,
   shouldRunAppleOAuthCheck,
   usesLocalD1,
 } from "../../scripts/smoke-live-helpers.mjs";
@@ -253,6 +257,92 @@ describe("smoke-live helpers", () => {
       includeLegacyDbProbe: true,
       workerVersionId: null,
     });
+  });
+
+  it("normalizes valid Worker version UUIDs and rejects ambiguous or malformed values", () => {
+    expect(parseMcpCanaryArgs([
+      "--base-url",
+      "http://localhost:5173",
+      "--worker-version-id",
+      CANDIDATE_VERSION.toUpperCase(),
+    ])).toMatchObject({ workerVersionId: CANDIDATE_VERSION });
+
+    for (const argv of [
+      ["--base-url", "http://localhost:5173", "--worker-version-id"],
+      ["--base-url", "http://localhost:5173", "--worker-version-id", "not-a-uuid"],
+      ["--base-url", "http://localhost:5173", "--worker-version-id", "22222222222242228222222222222222"],
+      ["--base-url", "http://localhost:5173", "--worker-version-id", "22222222-2222-0222-8222-222222222222"],
+      ["--base-url", "http://localhost:5173", "--worker-version-id", "22222222-2222-4222-7222-222222222222"],
+      [
+        "--base-url",
+        "http://localhost:5173",
+        "--worker-version-id",
+        CANDIDATE_VERSION,
+        "--worker-version-id",
+        "33333333-3333-4333-8333-333333333333",
+      ],
+    ]) {
+      expect(() => parseMcpCanaryArgs(argv)).toThrow(/--worker-version-id.*valid UUID/i);
+    }
+  });
+
+  it("builds an exact Cloudflare structured Worker-version override header", () => {
+    expect(buildWorkerVersionOverrideHeaders(null)).toEqual({});
+    expect(buildWorkerVersionOverrideHeaders(CANDIDATE_VERSION)).toEqual({
+      "Cloudflare-Workers-Version-Overrides": `spoonjoy-v2="${CANDIDATE_VERSION}"`,
+    });
+    expect(() => buildWorkerVersionOverrideHeaders("not-a-uuid")).toThrow(/valid UUID/i);
+  });
+
+  it("requires the protected response to prove the exact candidate Worker version", () => {
+    expect(() => assertWorkerVersionResponse({}, null)).not.toThrow();
+    expect(() => assertWorkerVersionResponse(
+      { "x-spoonjoy-worker-version": CANDIDATE_VERSION },
+      CANDIDATE_VERSION,
+    )).not.toThrow();
+    expect(() => assertWorkerVersionResponse(
+      { "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION },
+      CANDIDATE_VERSION,
+    )).not.toThrow();
+    expect(() => assertWorkerVersionResponse(
+      new Headers({ "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION }),
+      CANDIDATE_VERSION,
+    )).not.toThrow();
+    expect(() => assertWorkerVersionResponse({}, CANDIDATE_VERSION)).toThrow(/missing.*candidate Worker/i);
+    expect(() => assertWorkerVersionResponse(
+      { "x-spoonjoy-worker-version": "33333333-3333-4333-8333-333333333333" },
+      CANDIDATE_VERSION,
+    )).toThrow(/expected.*22222222.*received.*33333333/i);
+  });
+
+  it("keeps the candidate ID while redacting the persisted MCP canary report", () => {
+    const serialized = serializeSanitizedMcpCanaryReport({
+      workerVersionId: CANDIDATE_VERSION,
+      failure: { message: "Authorization: Bearer sj_abcdefghijklmnopqrstuvwxyz0123456789" },
+    });
+
+    expect(JSON.parse(serialized)).toEqual({
+      workerVersionId: CANDIDATE_VERSION,
+      failure: { message: "Authorization: Bearer [REDACTED]" },
+    });
+    expect(serialized).not.toContain("sj_abcdefghijklmnopqrstuvwxyz0123456789");
+  });
+
+  it("wires the candidate override, first-response proof, and sanitized report into the live canary", () => {
+    const source = readFileSync("scripts/smoke-mcp-oauth-live.mjs", "utf8");
+    const wrangler = JSON.parse(readFileSync("wrangler.json", "utf8"));
+    const protectedResource = source.match(
+      /async function readProtectedResource[\s\S]*?\n}\n/,
+    )?.[0] ?? "";
+
+    expect(source).toContain("extraHTTPHeaders: buildWorkerVersionOverrideHeaders(workerVersionId)");
+    expect(protectedResource).toContain("assertWorkerVersionResponse(response.headers(), workerVersionId)");
+    expect(protectedResource.indexOf("assertWorkerVersionResponse")).toBeLessThan(
+      protectedResource.indexOf("responseJson"),
+    );
+    expect(source).toContain("workerVersionId,");
+    expect(source).toContain("serializeSanitizedMcpCanaryReport(report)");
+    expect(wrangler.version_metadata).toEqual({ binding: "CF_VERSION_METADATA" });
   });
 
   it("uses process defaults for omitted MCP canary args", () => {
@@ -639,6 +729,10 @@ describe("smoke-live helpers", () => {
   });
 
   it("reads git metadata with unknown fallbacks", () => {
+    expect(readGitMetadata()).toEqual({
+      branch: expect.stringMatching(/\S/),
+      commit: expect.stringMatching(/^[0-9a-f]{12}$/),
+    });
     expect(readGitMetadata(() => "")).toEqual({ branch: "unknown", commit: "unknown" });
 
     let calls = 0;
