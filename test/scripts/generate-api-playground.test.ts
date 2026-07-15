@@ -123,10 +123,11 @@ describe("generate-api-playground", () => {
                     properties: {
                       photo: { type: "string", format: "binary" },
                       caption: { type: "string" },
+                      sauce: { type: ["string", "null"], description: "Optional sauce note." },
                     },
                   },
                   examples: {
-                    example: { value: { photo: "(binary image file)", caption: "Optional caption" } },
+                    example: { value: { photo: "(binary image file)", caption: "Optional caption", sauce: null } },
                   },
                   encoding: {
                     photo: { contentType: "image/png" },
@@ -156,6 +157,30 @@ describe("generate-api-playground", () => {
             responses: { "200": { description: "OK" } },
           },
         },
+        "/custom/null-upload-example": {
+          post: {
+            operationId: "postCustomNullUploadExample",
+            tags: ["Custom"],
+            summary: "Null upload example",
+            requestBody: {
+              required: true,
+              content: {
+                "multipart/form-data": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      photo: { type: "string", format: "binary" },
+                    },
+                  },
+                  examples: {
+                    example: { value: null },
+                  },
+                },
+              },
+            },
+            responses: { "200": { description: "OK" } },
+          },
+        },
       },
       components: { schemas: {} },
     } as ReturnType<typeof buildApiV1OpenApiDocument>;
@@ -165,10 +190,19 @@ describe("generate-api-playground", () => {
     expect(manifest.operations.find((operation) => operation.id === "POST /custom/inline-upload")?.requestBody?.fields).toEqual([
       expect.objectContaining({ name: "photo", required: true, accept: "image/png" }),
       expect.objectContaining({ name: "caption", required: false }),
+      expect.objectContaining({ name: "sauce", required: false, description: "Optional sauce note." }),
     ]);
+    expect(manifest.operations.find((operation) => operation.id === "POST /custom/inline-upload")?.requestBody?.example)
+      .toContain("body.append(\"sauce\", \"\");");
     expect(manifest.operations.find((operation) => operation.id === "POST /custom/unsupported-ref-upload")?.requestBody?.fields).toEqual([
       expect.objectContaining({ name: "photo", required: false }),
     ]);
+    expect(manifest.operations.find((operation) => operation.id === "POST /custom/null-upload-example")?.requestBody)
+      .toMatchObject({
+        contentType: "multipart/form-data",
+        fields: [],
+        example: "",
+      });
   });
 
   it("documents Photo Studio cover operations in docs/api.md", async () => {
