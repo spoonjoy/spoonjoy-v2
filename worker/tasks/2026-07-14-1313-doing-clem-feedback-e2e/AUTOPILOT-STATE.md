@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`, pushed through `72b21714`.
+- Branch: `worker/clem-feedback-e2e`, pushed through `aa1574f1`; Ambiguity Round 1 fixes are the current uncommitted checkpoint.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is approved after five fresh hostile rounds.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation has not started.
-- Active gate: complete doing-doc granularity, validation, ambiguity, quality, and alternating scrutiny chain; Granularity is running.
+- Active gate: Ambiguity Round 1 findings are fixed locally; rerun a fresh Ambiguity pass, then complete Quality and alternating Scrutiny until one clean Tinfoil pass and one immediately consecutive clean Stranger pass.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Consume the Granularity pass, fix every BLOCKER/MAJOR, commit it, then continue through Validation, Ambiguity, Quality, and alternating Scrutiny until two consecutive scrutiny passes converge.
+Commit/push the Ambiguity Round 1 contract fixes, run a fresh Ambiguity reviewer, fix and re-review until clean, then continue through Quality and alternating Scrutiny until two consecutive scrutiny passes converge.
 
 ## Operator-Locked Rules
 
@@ -41,9 +41,9 @@ Consume the Granularity pass, fix every BLOCKER/MAJOR, commit it, then continue 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
 | Planning reviewer gate | deferred by scope | Planning approved at `2c3b4759` after convergence | Closed |
-| Doing review chain | needs reviewer gate | Draft doing doc exists; Granularity reviewer is active | Converge every mandatory pass |
-| Work Doer Units 0-24 | ready | Full doing queue is defined | Start after doing review convergence |
-| PR/QA/merge/production | ready | Units 22-24 define delivery path | Execute after implementation/local validation |
+| Doing review chain | needs reviewer gate | Granularity and Validation converged; Ambiguity Round 1 findings are fixed locally | Re-review Ambiguity, then Quality and alternating Scrutiny |
+| Work Doer Units 0-37 | ready | Full red/green/verify/visual/ship queue is defined | Start after doing review convergence |
+| PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
 
 ## Recovery Instructions
 
