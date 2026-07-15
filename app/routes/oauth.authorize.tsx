@@ -13,7 +13,11 @@ import {
   type OAuthAuthorizeTelemetryMetadata,
 } from "~/lib/oauth-routes.server";
 import { getOAuthClient } from "~/lib/oauth-server.server";
-import { redirectTo, resolveOAuthProviderHintStartPath } from "~/lib/oauth-route.server";
+import {
+  getOAuthProviderHint,
+  redirectTo,
+  resolveOAuthProviderHintStartPath,
+} from "~/lib/oauth-route.server";
 import { enforceRateLimit, rateLimitedResponse, type RateLimitScope } from "~/lib/rate-limit.server";
 import {
   captureEvent,
@@ -139,7 +143,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   // Router performs them; consent/error views are returned for rendering.
   if (result instanceof Response) {
     const telemetry = oauthAuthorizeTelemetryFor(result);
-    if (telemetry.outcome === "login_redirect") {
+    if (telemetry.outcome === "login_redirect" && getOAuthProviderHint(request)) {
       const clientId = new URL(request.url).searchParams.get("client_id")!;
       const client = await getOAuthClient(db, clientId);
       const providerStartPath = resolveOAuthProviderHintStartPath(request, client);

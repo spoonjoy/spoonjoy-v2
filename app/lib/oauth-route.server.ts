@@ -8,7 +8,7 @@ import { getCloudflareEnv } from "~/lib/route-platform.server";
 import { getOAuthSessionStorage, getUserId, sanitizeSessionRedirect, type SessionEnv } from "~/lib/session.server";
 
 export type OAuthProvider = "google" | "github" | "apple";
-type OAuthProviderHint = Extract<OAuthProvider, "google" | "github">;
+export type OAuthProviderHint = Extract<OAuthProvider, "google" | "github">;
 
 export interface OAuthStartSessionData {
   state: string;
@@ -88,16 +88,21 @@ export function sanitizeInternalRedirect(value: string | null | undefined, fallb
   return sanitizeSessionRedirect(value, fallback);
 }
 
+export function getOAuthProviderHint(request: Request): OAuthProviderHint | null {
+  const providerHints = new URL(request.url).searchParams.getAll("provider");
+  if (providerHints.length !== 1) return null;
+
+  const provider = providerHints[0];
+  return provider === "google" || provider === "github" ? provider : null;
+}
+
 export function resolveOAuthProviderHintStartPath(
   request: Request,
   client: RegisteredOAuthClient | null,
 ): string | null {
   const url = new URL(request.url);
-  const providerHints = url.searchParams.getAll("provider");
-  if (providerHints.length !== 1) return null;
-
-  const provider = providerHints[0];
-  if (provider !== "google" && provider !== "github") return null;
+  const provider = getOAuthProviderHint(request);
+  if (!provider) return null;
   if (
     !client
     || client.clientName !== FIRST_PARTY_OAUTH_CLIENT_NAME
@@ -110,7 +115,7 @@ export function resolveOAuthProviderHintStartPath(
   const returnTo = `${url.pathname}${url.search}`;
   const failureRedirect = `/login?${new URLSearchParams({ redirectTo: returnTo })}`;
   const providerParams = new URLSearchParams({ redirectTo: returnTo, failureRedirect });
-  return `/auth/${provider satisfies OAuthProviderHint}?${providerParams}`;
+  return `/auth/${provider}?${providerParams}`;
 }
 
 function sameOriginReferer(request: Request): URL | null {
