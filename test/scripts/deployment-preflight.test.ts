@@ -638,6 +638,29 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).not.toContain("production deploy workflow");
   });
 
+  it.each([
+    ["a required manual source SHA", "        required: true", "        required: false"],
+    [
+      "a successful workflow-run conclusion",
+      "github.event.workflow_run.conclusion == 'success'",
+      "github.event.workflow_run.conclusion == 'failure'",
+    ],
+    ["an exact-SHA checkout", "          ref: ${{ env.SOURCE_SHA }}", "          ref: main"],
+    [
+      "a successful push-CI lookup for manual releases",
+      "gh run list --workflow CI --branch main --commit \"$SOURCE_SHA\" --event push --status success",
+      "gh run list --workflow CI --branch main",
+    ],
+    ["immutable action references", CHECKOUT_ACTION, "actions/checkout@v6"],
+  ])("requires %s", (_name, expected, replacement) => {
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(expected, replacement);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
   it("requires warning-clean CI workflow setup", () => {
     const valid = validateDeploymentConfig(validInputs());
     const missingGitConfig = validateDeploymentConfig({
