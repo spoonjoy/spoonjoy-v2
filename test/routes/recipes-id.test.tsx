@@ -408,6 +408,59 @@ describe("Recipes $id Route", () => {
       });
     });
 
+    it("tracks generation-status-only processing and omits ready active covers", async () => {
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const setCookieHeader = await sessionStorage.commitSession(session);
+      const headers = new Headers({ Cookie: setCookieHeader.split(";")[0] });
+      const activeCover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "/photos/detail-raw.jpg",
+          sourceImageUrl: "/photos/detail-raw.jpg",
+          sourceType: "spoon",
+          status: "ready",
+          generationStatus: "processing",
+          createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: {
+          activeCoverId: activeCover.id,
+          activeCoverVariant: "image",
+          coverMode: "manual",
+        },
+      });
+
+      const pendingResult = await loader({
+        request: new UndiciRequest(`http://localhost:3000/recipes/${recipeId}`, { headers }),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(pendingResult.activeCoverProcessing).toEqual({
+        coverId: activeCover.id,
+        activeVariant: "image",
+        targetVariant: "stylized",
+        status: "ready",
+        generationStatus: "processing",
+      });
+
+      await db.recipeCover.update({
+        where: { id: activeCover.id },
+        data: { generationStatus: "succeeded" },
+      });
+
+      const readyResult = await loader({
+        request: new UndiciRequest(`http://localhost:3000/recipes/${recipeId}`, { headers }),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(readyResult.activeCoverProcessing).toBeNull();
+    });
+
     it("returns owner-only cover history with active variant and provenance labels", async () => {
       const session = await sessionStorage.getSession();
       session.set("userId", testUserId);
