@@ -1653,6 +1653,7 @@ const exampleRecipeCover = {
 const exampleUploadedRecipeCover = {
   ...exampleRecipeCover,
   id: "cover_upload_1",
+  status: "processing",
   sourceType: "chef-upload",
   imageUrl: "https://spoonjoy.app/photos/uploads/cover-raw.jpg",
   stylizedImageUrl: null,
@@ -1676,6 +1677,11 @@ const exampleGeneratedPlaceholderCover = {
   sourceSpoonId: null,
   generationStatus: "processing",
   sourceImageUrl: null,
+};
+const exampleRegeneratingRecipeCover = {
+  ...exampleRecipeCover,
+  status: "processing",
+  generationStatus: "processing",
 };
 const exampleRecipeCoverSpoonImage = {
   id: "spoon_1",
@@ -2613,6 +2619,11 @@ function responseExampleFor(schemaName: string, path: ResourcePath, method: Http
   }
   if (schemaName === "RecipeCoverMutationEnvelope" && path === "/api/v1/recipes/{id}/covers/generate" && method === "POST") {
     operationExample.data.createdCover = exampleGeneratedPlaceholderCover;
+    operationExample.data.generationStatus = "processing";
+  }
+  if (schemaName === "RecipeCoverMutationEnvelope" && path === "/api/v1/recipes/{id}/covers/regenerate" && method === "POST") {
+    operationExample.data.activeCover = exampleRegeneratingRecipeCover;
+    operationExample.data.createdCover = exampleRegeneratingRecipeCover;
     operationExample.data.generationStatus = "processing";
   }
   return operationExample;

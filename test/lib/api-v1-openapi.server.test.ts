@@ -1138,8 +1138,15 @@ describe("API v1 OpenAPI document", () => {
     });
     expect(responseExample(document, "/api/v1/recipes/{id}/covers", "POST", "201").data)
       .toMatchObject({
+        activeCover: expect.objectContaining({
+          sourceType: "chef-upload",
+          status: "processing",
+          generationStatus: "processing",
+        }),
         createdCover: expect.objectContaining({
           sourceType: "chef-upload",
+          status: "processing",
+          generationStatus: "processing",
           sourceImageUrl: "https://spoonjoy.app/photos/uploads/cover-raw.jpg",
         }),
         generationStatus: "processing",
@@ -1182,6 +1189,21 @@ describe("API v1 OpenAPI document", () => {
       location: "jsonBody",
       replayStatus: [200],
     });
+    expect(responseExample(document, "/api/v1/recipes/{id}/covers/regenerate", "POST", "200").data)
+      .toMatchObject({
+        activeCover: expect.objectContaining({
+          id: "cover_1",
+          status: "processing",
+          generationStatus: "processing",
+        }),
+        createdCover: expect.objectContaining({
+          id: "cover_1",
+          status: "processing",
+          generationStatus: "processing",
+        }),
+        generationStatus: "processing",
+        mutation: { clientMutationId: "device-uuid-cover-regenerate", replayed: false },
+      });
   });
 
   it("publishes an OpenAPI 3.0 REST-only connector profile for no-code importers", () => {
