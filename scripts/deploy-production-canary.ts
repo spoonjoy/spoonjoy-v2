@@ -10,7 +10,7 @@ const MIGRATION_NAME_PATTERN = /^\d{4}_[A-Za-z0-9][A-Za-z0-9_.-]*\.sql$/;
 const MIGRATION_FILE_PATTERN = /\b\d{4}_[A-Za-z0-9][A-Za-z0-9_.-]*\.sql\b/g;
 const NO_PENDING_MIGRATIONS_PATTERN = /no migrations to apply/i;
 const RELEASE_ARTIFACT_NAME = "production-release.json";
-const DEFAULT_VERIFICATION_ATTEMPTS = 20;
+const DEFAULT_VERIFICATION_ATTEMPTS = 60;
 const VERIFICATION_DELAY_MS = 1_000;
 const CLOUDFLARE_SECRET_ENV_NAMES = [
   "CF_API_KEY",

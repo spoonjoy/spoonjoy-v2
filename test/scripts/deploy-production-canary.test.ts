@@ -421,6 +421,30 @@ describe("production canary release orchestration", () => {
     }));
   });
 
+  it("allows the default rollback verification window to outlast delayed Cloudflare convergence", async () => {
+    const smokeCommand = `pnpm run smoke:mcp:oauth -- --out mcp-oauth-canary-artifacts --worker-version-id ${CANDIDATE_VERSION}`;
+    const delayedDeployments = [
+      deploymentPayload(PREVIOUS_VERSION, "2026-07-15T00:00:00Z"),
+      ...Array.from({ length: 20 }, () => deploymentPayload(CANDIDATE_VERSION)),
+      deploymentPayload(PREVIOUS_VERSION),
+    ];
+    const runCommand = successfulRunner({
+      [smokeCommand]: new Error("canary failed"),
+      "pnpm exec wrangler deployments list --json": delayedDeployments,
+    });
+    const deps = releaseDeps(runCommand);
+    delete (deps as { verificationAttempts?: number }).verificationAttempts;
+    deps.readPublicWorkerVersion.mockResolvedValue(PREVIOUS_VERSION);
+
+    await expect(runProductionCanaryRelease(deps)).rejects.toThrow("canary failed");
+
+    expect(deps.sleep).toHaveBeenCalledTimes(20);
+    expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(expect.objectContaining({
+      status: "rolled_back",
+      previousVersionId: PREVIOUS_VERSION,
+    }));
+  });
+
   it("does not create a rollback deployment when staging itself fails", async () => {
     const stageCommand = `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@0% ${PREVIOUS_VERSION}@100% -y --message Stage ${RELEASE_SHA} for canary`;
     const runCommand = successfulRunner({ [stageCommand]: new Error("stage failed") });

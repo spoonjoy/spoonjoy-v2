@@ -97,6 +97,11 @@ function isSameOrigin(requestUrl, baseUrl) {
   }
 }
 
+function isStaticAssetBindingUrl(requestUrl) {
+  const pathname = new URL(requestUrl).pathname;
+  return pathname === "/assets" || pathname.startsWith("/assets/");
+}
+
 export function buildWorkerVersionRequestHeaders({ baseUrl, requestUrl, headers = {}, workerVersionId }) {
   const normalized = workerVersionId === null ? null : normalizeWorkerVersionId(workerVersionId);
   const scopedHeaders = Object.fromEntries(
@@ -186,7 +191,7 @@ export function createWorkerVersionResponseTracker({ baseUrl, workerVersionId })
       return records.length;
     },
     record({ url, headers, label = url }) {
-      if (expected === null || !isSameOrigin(url, baseUrl)) return false;
+      if (expected === null || !isSameOrigin(url, baseUrl) || isStaticAssetBindingUrl(url)) return false;
       let error = null;
       try {
         assertWorkerVersionResponse(headers, expected, label);
