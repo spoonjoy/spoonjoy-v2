@@ -72,12 +72,12 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 2a: Workers Runtime Harness Tests
 **What**: Add red config tests requiring official Workers Vitest, SQLite DO/D1 bindings, separate worker coverage, normal-pool exclusion, and CI execution.
-**Output**: `test/config/workers-vitest.test.ts`, `test/repo-hygiene.test.ts`.
+**Output**: `test/config/workers-vitest.test.ts`, `test/repo-hygiene.test.ts`, `test/workers/runtime.test.ts`.
 **Acceptance**: Targeted tests fail because scripts/config/CI are absent.
 
 ### ⬜ Unit 2b: Workers Runtime Harness Implementation
 **What**: Install/configure `@cloudflare/vitest-pool-workers` without moving happy-dom tests.
-**Output**: `package.json`, `pnpm-lock.yaml`, `vitest.config.ts`, new `vitest.config.workers.ts`, `test/workers/env.d.ts`, `test/workers/runtime.test.ts`, `.github/workflows/ci.yml`.
+**Output**: `package.json`, `pnpm-lock.yaml`, `vitest.config.ts`, `vitest.config.workers.ts`, `test/workers/env.d.ts`, `.github/workflows/ci.yml`.
 **Acceptance**: Unit 2a passes; `pnpm test:workers` runs a real binding/runtime smoke; worker coverage enforces 100%; app coverage excludes worker tests.
 
 ### ⬜ Unit 2c: Workers Harness Verification
