@@ -21,6 +21,7 @@ import { ScaleSelector } from "~/components/recipe/ScaleSelector";
 import { RecipeProvenance } from "~/components/recipe/RecipeProvenance";
 import { ForkRecipeButton } from "~/components/recipe/ForkRecipeButton";
 import { RecipeCoverHistory } from "~/components/recipe/RecipeCoverHistory";
+import { RecipePhotoStudio } from "~/components/recipe/RecipePhotoStudio";
 import { SpoonDialog } from "~/components/recipe/SpoonDialog";
 import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
 import { StepCard } from "~/components/recipe/StepCard";
@@ -925,7 +926,11 @@ export default function RecipeDetail() {
                     Delete
                   </Button>
                 </div>
-                <div className="mt-6">
+                <div className="mt-6 space-y-6">
+                  <RecipePhotoStudio
+                    recipeTitle={recipe.title}
+                    hasActiveCover={Boolean(coverImageUrl ?? recipeCoverImageUrl)}
+                  />
                   <RecipeCoverHistory covers={coverHistory} spoonImages={spoonImages} />
                 </div>
               </div>

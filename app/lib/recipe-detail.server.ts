@@ -47,6 +47,14 @@ import {
 } from "~/lib/spoon-cover-decision.server";
 import type { RecipeCover } from "@prisma/client";
 import type { ScheduleSpoonStylizationInput } from "~/lib/spoon-cover-stylization.server";
+import {
+  deleteStoredImage,
+  RECIPE_IMAGE_TYPES,
+  storeImage,
+  validateImageFileForStorage,
+} from "~/lib/image-storage.server";
+import { FOOD_IMAGE_SIZE_MESSAGE, FOOD_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
+import { sanitizeImagePromptAddition } from "~/lib/image-gen.server";
 
 interface CloudflareContextLike {
   cloudflare?: {
@@ -525,6 +533,195 @@ async function handleCreateSpoon(
   };
 }
 
+function optionalFormText(formData: FormData, field: string): string | undefined {
+  const value = formData.get(field);
+  return typeof value === "string" ? value : undefined;
+}
+
+function parseOptionalCookedAt(value: FormDataEntryValue | null): Date | undefined {
+  if (typeof value !== "string" || value.trim() === "") {
+    return undefined;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Response("Invalid cookedAt", { status: 400 });
+  }
+  return parsed;
+}
+
+async function validateAndStoreDirectRecipePhoto(
+  photoFile: File,
+  input: {
+    bucket?: R2Bucket;
+    userId: string;
+    recipeId: string;
+  },
+) {
+  const photoError = await validateImageFileForStorage(photoFile, {
+    allowedTypes: RECIPE_IMAGE_TYPES,
+    messages: {
+      invalidType: FOOD_IMAGE_TYPE_MESSAGE,
+      fileTooLarge: FOOD_IMAGE_SIZE_MESSAGE,
+    },
+  });
+  if (photoError) {
+    throw new Response(photoError, { status: 400 });
+  }
+  return storeImage({
+    bucket: input.bucket,
+    file: photoFile,
+    namespace: `recipes/${input.userId}/${input.recipeId}`,
+  });
+}
+
+async function cleanupFirstPhotoCoverAttempt(
+  database: Awaited<ReturnType<typeof getRequestDb>>,
+  input: {
+    bucket?: R2Bucket;
+    recipeId: string;
+    coverId: string | null;
+    spoonId: string | null;
+    photoUrl: string | null;
+  },
+) {
+  if (input.coverId) {
+    await database.recipeCover.deleteMany({
+      where: { id: input.coverId, recipeId: input.recipeId },
+    }).catch(() => undefined);
+  }
+  if (input.spoonId) {
+    await database.recipeSpoon.deleteMany({
+      where: { id: input.spoonId, recipeId: input.recipeId },
+    }).catch(() => undefined);
+  }
+  if (input.photoUrl) {
+    await deleteStoredImage({ bucket: input.bucket, imageUrl: input.photoUrl }).catch(() => false);
+  }
+}
+
+async function handleCreateFirstPhotoCover(
+  database: Awaited<ReturnType<typeof getRequestDb>>,
+  userId: string,
+  recipeId: string,
+  recipe: {
+    title: string;
+  },
+  formData: FormData,
+  context: AppLoadContext,
+) {
+  const photoEntry = formData.get("photo");
+  const photoFile = photoEntry instanceof File && photoEntry.size > 0 ? photoEntry : null;
+  if (!photoFile) {
+    throw new Response("Please select a photo to upload", { status: 400 });
+  }
+
+  const postAsSpoon = formData.get("postAsSpoon") === "true";
+  const generateEditorial = formData.get("generateEditorial") !== "false";
+  const activateWhenReady = formData.get("activateWhenReady") !== "false";
+  const note = optionalFormText(formData, "note");
+  const nextTime = optionalFormText(formData, "nextTime");
+  const cookedAt = parseOptionalCookedAt(formData.get("cookedAt"));
+  const promptAddition = sanitizeImagePromptAddition(optionalFormText(formData, "promptAddition"));
+  const { bucket, env, waitUntil } = getCloudflareCtx(context);
+  let photoUrl: string | null = null;
+  let sourceSpoonId: string | null = null;
+  let coverId: string | null = null;
+
+  try {
+    if (postAsSpoon) {
+      const spoonResult = await createSpoon(
+        database,
+        {
+          chefId: userId,
+          recipeId,
+          photoFile,
+          note,
+          nextTime,
+          cookedAt,
+        },
+        { bucket },
+      ).catch(spoonErrorToResponse);
+      photoUrl = spoonResult.spoon.photoUrl;
+      sourceSpoonId = spoonResult.spoon.id;
+    } else {
+      photoUrl = await validateAndStoreDirectRecipePhoto(photoFile, {
+        bucket,
+        userId,
+        recipeId,
+      });
+    }
+
+    if (!photoUrl) {
+      throw new Response("Please select a photo to upload", { status: 400 });
+    }
+
+    const sourceType = sourceSpoonId ? "spoon" : "chef-upload";
+    const cover = await createCover(database, {
+      recipeId,
+      imageUrl: photoUrl,
+      sourceType,
+      sourceSpoonId,
+      status: generateEditorial ? "processing" : "ready",
+      createdById: userId,
+      sourceImageUrl: photoUrl,
+      generationStatus: generateEditorial ? "processing" : "none",
+      promptAddition,
+    });
+    coverId = cover.id;
+
+    if (activateWhenReady) {
+      await setActiveRecipeCover(database, {
+        recipeId,
+        coverId: cover.id,
+        variant: "image",
+      });
+    }
+
+    if (generateEditorial) {
+      await runOrQueueSpoonCoverStylization(
+        {
+          db: database,
+          userId,
+          recipeId,
+          coverId: cover.id,
+          rawPhotoUrl: photoUrl,
+          recipeTitle: recipe.title,
+          env,
+          bucket,
+          sourceType,
+          promptAddition,
+          activateWhenReady,
+          suppressAutoActivation: !activateWhenReady,
+          activationGuard: activateWhenReady
+            ? {
+                activeCoverId: cover.id,
+                activeCoverVariant: "image",
+                coverMode: "manual",
+              }
+            : undefined,
+        },
+        waitUntil,
+      );
+    }
+
+    return {
+      success: true,
+      intent: "createFirstPhotoCover",
+      spoon: sourceSpoonId ? { id: sourceSpoonId } : null,
+      coverId: cover.id,
+    };
+  } catch (error) {
+    await cleanupFirstPhotoCoverAttempt(database, {
+      bucket,
+      recipeId,
+      coverId,
+      spoonId: sourceSpoonId,
+      photoUrl,
+    });
+    throw error;
+  }
+}
+
 async function handleDeleteSpoon(
   database: Awaited<ReturnType<typeof getRequestDb>>,
   userId: string,
@@ -646,6 +843,10 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
 
   if (recipe.chefId !== userId) {
     throw new Response("Unauthorized", { status: 403 });
+  }
+
+  if (intent === "createFirstPhotoCover") {
+    return handleCreateFirstPhotoCover(database, userId, id, recipe, formData, context);
   }
 
   if (intent === "setRecipeCover") {
