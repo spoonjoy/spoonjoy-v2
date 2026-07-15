@@ -627,6 +627,87 @@ describe("spoonjoy MCP tools", () => {
     });
   });
 
+  it("creates uploaded covers as Spoons and forwards MCP prompt additions for editorialization", async () => {
+    const chef = await context.db.user.create({
+      data: {
+        email: uniqueEmail("cover-upload-spoon-chef"),
+        username: `cover_upload_spoon_chef_${faker.string.alphanumeric(6).toLowerCase()}`,
+      },
+    });
+    const principal = {
+      id: chef.id,
+      email: chef.email,
+      username: chef.username,
+      source: "bearer" as const,
+      scopes: ["recipes:read", "kitchen:write"],
+    };
+    const recipe = await context.db.recipe.create({
+      data: {
+        title: `MCP Upload Spoon ${faker.string.alphanumeric(6)}`,
+        chefId: chef.id,
+      },
+    });
+    const runner = {
+      textToImage: vi.fn(),
+      imageToImage: vi.fn().mockResolvedValue({ bytes: VALID_PNG_BYTES, contentType: "image/png" }),
+    };
+
+    const created = parseJson(await callSpoonjoyMcpTool(
+      "create_recipe_cover_from_upload",
+      {
+        recipeId: recipe.id,
+        imageUrl: `data:image/png;base64,${b64(VALID_PNG_BYTES)}`,
+        generateEditorial: true,
+        postAsSpoon: true,
+        note: "  weeknight cook  ",
+        nextTime: "  more lemon  ",
+        cookedAt: "2026-02-03T04:05:06.000Z",
+        promptAddition: "  brighter   table  ",
+        activateWhenReady: true,
+        idempotencyKey: "mcp-upload-spoon-editorial",
+      },
+      { db: context.db, principal, allowLocalImageFallback: true, imageGenRunner: runner },
+    ));
+
+    expect(created).toMatchObject({
+      activeCover: { id: created.createdCover.id, activeVariant: "stylized" },
+      previousActiveCover: null,
+      createdCover: {
+        recipeId: recipe.id,
+        sourceType: "spoon",
+        status: "ready",
+        generationStatus: "succeeded",
+        stylizedImageUrl: `data:image/png;base64,${b64(VALID_PNG_BYTES)}`,
+      },
+      generationStatus: "succeeded",
+      mutation: { idempotencyKey: "mcp-upload-spoon-editorial", replayed: false },
+    });
+    expect(runner.imageToImage).toHaveBeenCalledWith(
+      expect.any(File),
+      expect.stringContaining("Additional direction: brighter table."),
+      expect.any(Object),
+    );
+    await expect(context.db.recipeSpoon.findMany({
+      where: { recipeId: recipe.id, chefId: chef.id },
+      select: { id: true, note: true, nextTime: true, cookedAt: true, photoUrl: true },
+    })).resolves.toEqual([
+      expect.objectContaining({
+        id: created.createdCover.sourceSpoonId,
+        note: "weeknight cook",
+        nextTime: "more lemon",
+        cookedAt: new Date("2026-02-03T04:05:06.000Z"),
+        photoUrl: `data:image/png;base64,${b64(VALID_PNG_BYTES)}`,
+      }),
+    ]);
+    await expect(context.db.recipeCover.findUniqueOrThrow({
+      where: { id: created.createdCover.id },
+      select: { sourceSpoonId: true, promptAddition: true },
+    })).resolves.toEqual({
+      sourceSpoonId: created.createdCover.sourceSpoonId,
+      promptAddition: "brighter table",
+    });
+  });
+
   it("generates AI placeholder cover candidates and reports provider blockers over MCP JSON", async () => {
     const chef = await context.db.user.create({
       data: {
