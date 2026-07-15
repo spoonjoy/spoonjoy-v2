@@ -4,6 +4,11 @@ import { FormData as UndiciFormData, Request as UndiciRequest } from "undici";
 import { action, loader } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { getLocalDb } from "~/lib/db.server";
+import {
+  FOOD_IMAGE_SIZE_MESSAGE,
+  FOOD_IMAGE_TYPE_MESSAGE,
+  IMAGE_MAX_FILE_SIZE,
+} from "~/lib/recipe-image";
 import { SpoonValidationError } from "~/lib/recipe-spoon.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser } from "../utils";
@@ -42,12 +47,26 @@ function jsonRequest(url: string, method: string, token: string, requestId: stri
 }
 
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const JPEG_BYTES = new Uint8Array([0xff, 0xd8, 0xff]);
 const WEBP_BYTES = new Uint8Array([
   0x52, 0x49, 0x46, 0x46, 0x10, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
+]);
+const HEIC_BYTES = new Uint8Array([
+  0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63,
+]);
+const HEIF_BYTES = new Uint8Array([
+  0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x6d, 0x69, 0x66, 0x31,
 ]);
 
 function photoFile(name = "dish.png", bytes: Uint8Array = PNG_BYTES, type = "image/png") {
   return new File([bytes], name, { type });
+}
+
+function jpegFileAtSize(name: string, size: number) {
+  const bytes = new Uint8Array(size);
+  bytes.set(JPEG_BYTES);
+  bytes.set([0xff, 0xd9], size - 2);
+  return photoFile(name, bytes, "image/jpeg");
 }
 
 function appendMultipartValue(formData: UndiciFormData, name: string, value: string | boolean | File | undefined) {
@@ -394,6 +413,117 @@ describe("API v1 recipe cover management", () => {
       },
     });
     await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+  });
+
+  it.each([
+    { boundary: "one byte below", size: IMAGE_MAX_FILE_SIZE - 1 },
+    { boundary: "at", size: IMAGE_MAX_FILE_SIZE },
+  ])("accepts normalized native JPEG covers $boundary the authoritative 5 MiB ceiling", async ({ size }) => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    const normalizedNativeCover = jpegFileAtSize("native-cover.jpg", size);
+
+    expect(normalizedNativeCover.type).toBe("image/jpeg");
+    expect(normalizedNativeCover.size).toBe(size);
+    expect(normalizedNativeCover.size).toBeLessThanOrEqual(IMAGE_MAX_FILE_SIZE);
+
+    const response = await action(routeArgs(
+      recipeImageUploadRequest(
+        fixture.recipe.id,
+        fixture.ownerKitchenWrite.token,
+        `req_native_cover_${size}`,
+        recipeImageForm({
+          clientMutationId: `native-cover-${size}`,
+          photo: normalizedNativeCover,
+          activate: true,
+          generateEditorial: false,
+          postAsSpoon: false,
+        }),
+      ),
+      `recipes/${fixture.recipe.id}/image`,
+      backgroundContext({ PHOTOS: photoBucket.bucket }),
+    ));
+
+    expect(response.status).toBe(201);
+    expect(photoBucket.bucket.put).toHaveBeenCalledTimes(1);
+    const [storedKey, storedFile, storedOptions] = vi.mocked(photoBucket.bucket.put).mock.calls[0];
+    expect(storedKey).toMatch(new RegExp(`^recipes/${fixture.owner.id}/${fixture.recipe.id}/\\d+-.*\\.jpg$`));
+    expect(storedFile).toBeInstanceOf(File);
+    expect((storedFile as File).type).toBe("image/jpeg");
+    expect((storedFile as File).size).toBe(size);
+    expect((storedFile as File).size).toBeLessThanOrEqual(IMAGE_MAX_FILE_SIZE);
+    expect(new Uint8Array(await (storedFile as File).arrayBuffer()).slice(0, JPEG_BYTES.length))
+      .toEqual(JPEG_BYTES);
+    expect(storedOptions).toMatchObject({ httpMetadata: { contentType: "image/jpeg" } });
+  });
+
+  it("rejects a normalized JPEG cover above the authoritative 5 MiB ceiling", async () => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    const oversizedNativeCover = jpegFileAtSize("native-cover.jpg", IMAGE_MAX_FILE_SIZE + 1);
+
+    const response = await action(routeArgs(
+      recipeImageUploadRequest(
+        fixture.recipe.id,
+        fixture.ownerKitchenWrite.token,
+        "req_native_cover_oversized",
+        recipeImageForm({
+          clientMutationId: "native-cover-oversized",
+          photo: oversizedNativeCover,
+        }),
+      ),
+      `recipes/${fixture.recipe.id}/image`,
+      backgroundContext({ PHOTOS: photoBucket.bucket }),
+    ));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_native_cover_oversized",
+      error: {
+        code: "validation_error",
+        status: 400,
+        message: FOOD_IMAGE_SIZE_MESSAGE,
+        details: { field: "photo" },
+      },
+    });
+    expect(photoBucket.bucket.put).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { format: "HEIC", extension: "heic", type: "image/heic", bytes: HEIC_BYTES },
+    { format: "HEIF", extension: "heif", type: "image/heif", bytes: HEIF_BYTES },
+  ])("rejects raw native $format covers before storage", async ({ format, extension, type, bytes }) => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    const rawNativeCover = photoFile(`native-cover.${extension}`, bytes, type);
+
+    const response = await action(routeArgs(
+      recipeImageUploadRequest(
+        fixture.recipe.id,
+        fixture.ownerKitchenWrite.token,
+        `req_native_cover_raw_${format.toLowerCase()}`,
+        recipeImageForm({
+          clientMutationId: `native-cover-raw-${format.toLowerCase()}`,
+          photo: rawNativeCover,
+        }),
+      ),
+      `recipes/${fixture.recipe.id}/image`,
+      backgroundContext({ PHOTOS: photoBucket.bucket }),
+    ));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      requestId: `req_native_cover_raw_${format.toLowerCase()}`,
+      error: {
+        code: "validation_error",
+        status: 400,
+        message: FOOD_IMAGE_TYPE_MESSAGE,
+        details: { field: "photo" },
+      },
+    });
+    expect(photoBucket.bucket.put).not.toHaveBeenCalled();
   });
 
   it("can queue editorial generation for an uploaded photo without activating the cover", async () => {
