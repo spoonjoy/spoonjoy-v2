@@ -1,0 +1,406 @@
+[
+  {
+    "viewport": "desktop",
+    "state": "no-photo-photo-studio",
+    "screenshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/desktop-no-photo-photo-studio.png",
+    "snapshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/desktop-no-photo-photo-studio.snapshot.txt",
+    "expanded": {
+      "expanded": true,
+      "attempts": 1
+    },
+    "fills": [
+      {
+        "label": "Editorial direction",
+        "result": "filled"
+      }
+    ],
+    "placement": {
+      "found": true,
+      "last": {
+        "bodyScrollWidth": 1440,
+        "bottom": 623,
+        "docScrollWidth": 1440,
+        "height": 527,
+        "scrollY": 829,
+        "top": 96,
+        "viewportHeight": 900,
+        "viewportWidth": 1440
+      }
+    },
+    "hasError": false,
+    "visibleOverflow": []
+  },
+  {
+    "viewport": "desktop",
+    "state": "no-photo-cover-history",
+    "screenshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/desktop-no-photo-cover-history.png",
+    "snapshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/desktop-no-photo-cover-history.snapshot.txt",
+    "expanded": {
+      "expanded": true,
+      "attempts": 1
+    },
+    "fills": [
+      {
+        "label": "Placeholder direction",
+        "result": "filled"
+      }
+    ],
+    "placement": {
+      "found": true,
+      "last": {
+        "bodyScrollWidth": 1440,
+        "bottom": 430,
+        "docScrollWidth": 1440,
+        "height": 334.5,
+        "scrollY": 1380.5,
+        "top": 95.5,
+        "viewportHeight": 900,
+        "viewportWidth": 1440
+      }
+    },
+    "hasError": false,
+    "visibleOverflow": []
+  },
+  {
+    "viewport": "desktop",
+    "state": "processing-original-cover-history",
+    "screenshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/desktop-processing-original-cover-history.png",
+    "snapshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/desktop-processing-original-cover-history.snapshot.txt",
+    "expanded": {
+      "expanded": true,
+      "attempts": 1
+    },
+    "fills": [],
+    "placement": {
+      "found": true,
+      "last": {
+        "bodyScrollWidth": 1440,
+        "bottom": 639,
+        "docScrollWidth": 1440,
+        "height": 543,
+        "scrollY": 1412,
+        "top": 96,
+        "viewportHeight": 900,
+        "viewportWidth": 1440
+      }
+    },
+    "hasError": false,
+    "visibleOverflow": []
+  },
+  {
+    "viewport": "desktop",
+    "state": "editorial-ready-cover-history",
+    "screenshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/desktop-editorial-ready-cover-history.png",
+    "snapshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/desktop-editorial-ready-cover-history.snapshot.txt",
+    "expanded": {
+      "expanded": true,
+      "attempts": 2
+    },
+    "fills": [
+      {
+        "label": "Regeneration direction",
+        "result": "filled"
+      },
+      {
+        "label": "Spoon photo direction for codex_photo_mrlnaoxt",
+        "result": "filled"
+      }
+    ],
+    "placement": {
+      "found": true,
+      "last": {
+        "bodyScrollWidth": 1440,
+        "bottom": 946,
+        "docScrollWidth": 1440,
+        "height": 850.5,
+        "scrollY": 1348.5,
+        "top": 95.5,
+        "viewportHeight": 900,
+        "viewportWidth": 1440
+      }
+    },
+    "hasError": false,
+    "visibleOverflow": []
+  },
+  {
+    "viewport": "desktop",
+    "state": "generated-placeholder-cover-history",
+    "screenshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/desktop-generated-placeholder-cover-history.png",
+    "snapshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/desktop-generated-placeholder-cover-history.snapshot.txt",
+    "expanded": {
+      "expanded": true,
+      "attempts": 1
+    },
+    "fills": [
+      {
+        "label": "Regeneration direction",
+        "result": "filled"
+      }
+    ],
+    "placement": {
+      "found": true,
+      "last": {
+        "bodyScrollWidth": 1440,
+        "bottom": 639,
+        "docScrollWidth": 1440,
+        "height": 543,
+        "scrollY": 1412,
+        "top": 96,
+        "viewportHeight": 900,
+        "viewportWidth": 1440
+      }
+    },
+    "hasError": false,
+    "visibleOverflow": []
+  },
+  {
+    "viewport": "mobile",
+    "state": "no-photo-photo-studio",
+    "screenshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/mobile-no-photo-photo-studio.png",
+    "snapshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/mobile-no-photo-photo-studio.snapshot.txt",
+    "expanded": {
+      "expanded": true,
+      "attempts": 1
+    },
+    "fills": [
+      {
+        "label": "Editorial direction",
+        "result": "filled"
+      }
+    ],
+    "placement": {
+      "found": true,
+      "last": {
+        "bodyScrollWidth": 390,
+        "bottom": 682.8359375,
+        "docScrollWidth": 390,
+        "height": 595,
+        "scrollY": 1092,
+        "top": 87.8359375,
+        "viewportHeight": 844,
+        "viewportWidth": 390
+      }
+    },
+    "hasError": false,
+    "visibleOverflow": []
+  },
+  {
+    "viewport": "mobile",
+    "state": "no-photo-cover-history",
+    "screenshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/mobile-no-photo-cover-history.png",
+    "snapshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/mobile-no-photo-cover-history.snapshot.txt",
+    "expanded": {
+      "expanded": true,
+      "attempts": 1
+    },
+    "fills": [
+      {
+        "label": "Placeholder direction",
+        "result": "filled"
+      }
+    ],
+    "placement": {
+      "found": true,
+      "last": {
+        "bodyScrollWidth": 390,
+        "bottom": 536.8359375,
+        "docScrollWidth": 390,
+        "height": 448.5,
+        "scrollY": 1710.5,
+        "top": 88.3359375,
+        "viewportHeight": 844,
+        "viewportWidth": 390
+      }
+    },
+    "hasError": false,
+    "visibleOverflow": []
+  },
+  {
+    "viewport": "mobile",
+    "state": "processing-original-cover-history",
+    "screenshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/mobile-processing-original-cover-history.png",
+    "snapshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/mobile-processing-original-cover-history.snapshot.txt",
+    "expanded": {
+      "expanded": true,
+      "attempts": 1
+    },
+    "fills": [],
+    "placement": {
+      "found": true,
+      "last": {
+        "bodyScrollWidth": 390,
+        "bottom": 1176.8359375,
+        "docScrollWidth": 390,
+        "height": 1089,
+        "scrollY": 1803,
+        "top": 87.8359375,
+        "viewportHeight": 844,
+        "viewportWidth": 390
+      }
+    },
+    "hasError": false,
+    "visibleOverflow": []
+  },
+  {
+    "viewport": "mobile",
+    "state": "editorial-ready-cover-history",
+    "screenshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/mobile-editorial-ready-cover-history.png",
+    "snapshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/mobile-editorial-ready-cover-history.snapshot.txt",
+    "expanded": {
+      "expanded": true,
+      "attempts": 1
+    },
+    "fills": [
+      {
+        "label": "Regeneration direction",
+        "result": "filled"
+      },
+      {
+        "label": "Spoon photo direction for codex_photo_mrlnaoxt",
+        "result": "filled"
+      }
+    ],
+    "placement": {
+      "found": true,
+      "last": {
+        "bodyScrollWidth": 390,
+        "bottom": 1608.8359375,
+        "docScrollWidth": 390,
+        "height": 1521,
+        "scrollY": 1695,
+        "top": 87.8359375,
+        "viewportHeight": 844,
+        "viewportWidth": 390
+      }
+    },
+    "hasError": false,
+    "visibleOverflow": []
+  },
+  {
+    "viewport": "mobile",
+    "state": "generated-placeholder-cover-history",
+    "screenshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/mobile-generated-placeholder-cover-history.png",
+    "snapshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/mobile-generated-placeholder-cover-history.snapshot.txt",
+    "expanded": {
+      "expanded": true,
+      "attempts": 1
+    },
+    "fills": [
+      {
+        "label": "Regeneration direction",
+        "result": "filled"
+      }
+    ],
+    "placement": {
+      "found": true,
+      "last": {
+        "bodyScrollWidth": 390,
+        "bottom": 1176.8359375,
+        "docScrollWidth": 390,
+        "height": 1089,
+        "scrollY": 1767,
+        "top": 87.8359375,
+        "viewportHeight": 844,
+        "viewportWidth": 390
+      }
+    },
+    "hasError": false,
+    "visibleOverflow": []
+  },
+  {
+    "viewport": "mobile",
+    "state": "editorial-ready-regeneration-controls",
+    "screenshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/mobile-editorial-ready-regeneration-controls.png",
+    "snapshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/mobile-editorial-ready-regeneration-controls.snapshot.txt",
+    "expanded": {
+      "expanded": true,
+      "attempts": 1
+    },
+    "fills": [
+      {
+        "label": "Regeneration direction",
+        "result": "filled"
+      }
+    ],
+    "placement": {
+      "found": true,
+      "last": {
+        "bodyScrollWidth": 390,
+        "bottom": 217.8359375,
+        "docScrollWidth": 390,
+        "height": 46,
+        "id": "recipe-cover-regenerate-cmrlnap2z000c6vi506kofeib",
+        "scrollY": 2601,
+        "top": 171.8359375,
+        "viewportHeight": 844,
+        "viewportWidth": 390
+      }
+    },
+    "hasError": false,
+    "visibleOverflow": []
+  },
+  {
+    "viewport": "mobile",
+    "state": "editorial-ready-spoon-photo-controls",
+    "screenshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/mobile-editorial-ready-spoon-photo-controls.png",
+    "snapshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/mobile-editorial-ready-spoon-photo-controls.snapshot.txt",
+    "expanded": {
+      "expanded": true,
+      "attempts": 1
+    },
+    "fills": [
+      {
+        "label": "Spoon photo direction for codex_photo_mrlnaoxt",
+        "result": "filled"
+      }
+    ],
+    "placement": {
+      "found": true,
+      "last": {
+        "bodyScrollWidth": 390,
+        "bottom": 217.8359375,
+        "docScrollWidth": 390,
+        "height": 46,
+        "id": "recipe-cover-spoon-direction-cmrlnap2t000a6vi5edytshju",
+        "scrollY": 3019,
+        "top": 171.8359375,
+        "viewportHeight": 844,
+        "viewportWidth": 390
+      }
+    },
+    "hasError": false,
+    "visibleOverflow": []
+  },
+  {
+    "viewport": "mobile",
+    "state": "generated-placeholder-regeneration-controls",
+    "screenshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/mobile-generated-placeholder-regeneration-controls.png",
+    "snapshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/visual-qa/mobile-generated-placeholder-regeneration-controls.snapshot.txt",
+    "expanded": {
+      "expanded": true,
+      "attempts": 2
+    },
+    "fills": [
+      {
+        "label": "Regeneration direction",
+        "result": "filled"
+      }
+    ],
+    "placement": {
+      "found": true,
+      "last": {
+        "bodyScrollWidth": 390,
+        "bottom": 217.8359375,
+        "docScrollWidth": 390,
+        "height": 46,
+        "id": "recipe-cover-regenerate-cmrlnap3j000g6vi54j6hssws",
+        "scrollY": 2601,
+        "top": 171.8359375,
+        "viewportHeight": 844,
+        "viewportWidth": 390
+      }
+    },
+    "hasError": false,
+    "visibleOverflow": []
+  }
+]
