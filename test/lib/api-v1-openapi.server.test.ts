@@ -1018,6 +1018,7 @@ describe("API v1 OpenAPI document", () => {
         photo: { type: "string", format: "binary" },
         activateWhenReady: { type: "boolean", default: true },
         generateEditorial: { type: "boolean", default: true },
+        promptAddition: { type: ["string", "null"], maxLength: 240 },
         postAsSpoon: { type: "boolean", default: false },
       },
     });
@@ -1075,6 +1076,17 @@ describe("API v1 OpenAPI document", () => {
         confirmNoCover: { const: true },
       },
     });
+    expect(components.schemas.CreateRecipeCoverRequest).toMatchObject({
+      additionalProperties: false,
+      required: ["clientMutationId", "imageUrl"],
+      properties: {
+        clientMutationId: { type: "string", minLength: 1, maxLength: 160 },
+        imageUrl: { type: "string", maxLength: 2048 },
+        activate: { type: "boolean", default: false },
+        generateEditorial: { type: "boolean", default: true },
+        promptAddition: { type: ["string", "null"], maxLength: 240 },
+      },
+    });
     expect(components.schemas.ArchiveRecipeCoverRequest).toMatchObject({
       additionalProperties: false,
       required: ["clientMutationId"],
@@ -1102,6 +1114,7 @@ describe("API v1 OpenAPI document", () => {
       photo: "(binary image file)",
       activateWhenReady: true,
       generateEditorial: true,
+      promptAddition: "moodier window light",
       postAsSpoon: true,
       note: "Added more lemon.",
       nextTime: "Try a wider pan.",
@@ -1133,6 +1146,7 @@ describe("API v1 OpenAPI document", () => {
       imageUrl: "https://spoonjoy.app/photos/uploads/cover-raw.jpg",
       activate: true,
       generateEditorial: true,
+      promptAddition: "brighter herbs and tighter crop",
     });
     expect(jsonCoverCreate["x-idempotency"]).toMatchObject({
       key: "clientMutationId",

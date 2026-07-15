@@ -5420,6 +5420,13 @@ export const API_V1_PLAYGROUND_MANIFEST = {
             "description": ""
           },
           {
+            "name": "promptAddition",
+            "label": "Prompt Addition",
+            "required": false,
+            "accept": "",
+            "description": "moodier window light"
+          },
+          {
             "name": "postAsSpoon",
             "label": "Post As Spoon",
             "required": false,
@@ -5448,12 +5455,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
             "description": "2026-06-01T00:00:00.000Z"
           }
         ],
-        "example": "const body = new FormData();\nbody.append(\"clientMutationId\", \"device-uuid-recipe-image\");\nbody.append(\"photo\", file);\nbody.append(\"activateWhenReady\", \"true\");\nbody.append(\"generateEditorial\", \"true\");\nbody.append(\"postAsSpoon\", \"true\");\nbody.append(\"note\", \"Added more lemon.\");\nbody.append(\"nextTime\", \"Try a wider pan.\");\nbody.append(\"cookedAt\", \"2026-06-01T00:00:00.000Z\");\n\nawait fetch(\"/api/v1/recipes/recipe_1/image\", {\n  method: \"POST\",\n  headers: { Authorization: \"Bearer sj_...\" },\n  body,\n});\n\n# curl --form example; omit Content-Type so curl adds the multipart boundary.\ncurl -fsS -X POST 'https://spoonjoy.app/api/v1/recipes/recipe_1/image' \\\n  -H 'Authorization: Bearer sj_...' \\\n  --form 'clientMutationId=device-uuid-recipe-image' \\\n  --form 'photo=@./photo.jpg;type=image/jpeg' \\\n  --form 'activateWhenReady=true' \\\n  --form 'generateEditorial=true' \\\n  --form 'postAsSpoon=true' \\\n  --form 'note=Added more lemon.' \\\n  --form 'nextTime=Try a wider pan.' \\\n  --form 'cookedAt=2026-06-01T00:00:00.000Z'",
+        "example": "const body = new FormData();\nbody.append(\"clientMutationId\", \"device-uuid-recipe-image\");\nbody.append(\"photo\", file);\nbody.append(\"activateWhenReady\", \"true\");\nbody.append(\"generateEditorial\", \"true\");\nbody.append(\"promptAddition\", \"moodier window light\");\nbody.append(\"postAsSpoon\", \"true\");\nbody.append(\"note\", \"Added more lemon.\");\nbody.append(\"nextTime\", \"Try a wider pan.\");\nbody.append(\"cookedAt\", \"2026-06-01T00:00:00.000Z\");\n\nawait fetch(\"/api/v1/recipes/recipe_1/image\", {\n  method: \"POST\",\n  headers: { Authorization: \"Bearer sj_...\" },\n  body,\n});\n\n# curl --form example; omit Content-Type so curl adds the multipart boundary.\ncurl -fsS -X POST 'https://spoonjoy.app/api/v1/recipes/recipe_1/image' \\\n  -H 'Authorization: Bearer sj_...' \\\n  --form 'clientMutationId=device-uuid-recipe-image' \\\n  --form 'photo=@./photo.jpg;type=image/jpeg' \\\n  --form 'activateWhenReady=true' \\\n  --form 'generateEditorial=true' \\\n  --form 'promptAddition=moodier window light' \\\n  --form 'postAsSpoon=true' \\\n  --form 'note=Added more lemon.' \\\n  --form 'nextTime=Try a wider pan.' \\\n  --form 'cookedAt=2026-06-01T00:00:00.000Z'",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "const body = new FormData();\nbody.append(\"clientMutationId\", \"device-uuid-recipe-image\");\nbody.append(\"photo\", file);\nbody.append(\"activateWhenReady\", \"true\");\nbody.append(\"generateEditorial\", \"true\");\nbody.append(\"postAsSpoon\", \"true\");\nbody.append(\"note\", \"Added more lemon.\");\nbody.append(\"nextTime\", \"Try a wider pan.\");\nbody.append(\"cookedAt\", \"2026-06-01T00:00:00.000Z\");\n\nawait fetch(\"/api/v1/recipes/recipe_1/image\", {\n  method: \"POST\",\n  headers: { Authorization: \"Bearer sj_...\" },\n  body,\n});\n\n# curl --form example; omit Content-Type so curl adds the multipart boundary.\ncurl -fsS -X POST 'https://spoonjoy.app/api/v1/recipes/recipe_1/image' \\\n  -H 'Authorization: Bearer sj_...' \\\n  --form 'clientMutationId=device-uuid-recipe-image' \\\n  --form 'photo=@./photo.jpg;type=image/jpeg' \\\n  --form 'activateWhenReady=true' \\\n  --form 'generateEditorial=true' \\\n  --form 'postAsSpoon=true' \\\n  --form 'note=Added more lemon.' \\\n  --form 'nextTime=Try a wider pan.' \\\n  --form 'cookedAt=2026-06-01T00:00:00.000Z'"
+            "example": "const body = new FormData();\nbody.append(\"clientMutationId\", \"device-uuid-recipe-image\");\nbody.append(\"photo\", file);\nbody.append(\"activateWhenReady\", \"true\");\nbody.append(\"generateEditorial\", \"true\");\nbody.append(\"promptAddition\", \"moodier window light\");\nbody.append(\"postAsSpoon\", \"true\");\nbody.append(\"note\", \"Added more lemon.\");\nbody.append(\"nextTime\", \"Try a wider pan.\");\nbody.append(\"cookedAt\", \"2026-06-01T00:00:00.000Z\");\n\nawait fetch(\"/api/v1/recipes/recipe_1/image\", {\n  method: \"POST\",\n  headers: { Authorization: \"Bearer sj_...\" },\n  body,\n});\n\n# curl --form example; omit Content-Type so curl adds the multipart boundary.\ncurl -fsS -X POST 'https://spoonjoy.app/api/v1/recipes/recipe_1/image' \\\n  -H 'Authorization: Bearer sj_...' \\\n  --form 'clientMutationId=device-uuid-recipe-image' \\\n  --form 'photo=@./photo.jpg;type=image/jpeg' \\\n  --form 'activateWhenReady=true' \\\n  --form 'generateEditorial=true' \\\n  --form 'promptAddition=moodier window light' \\\n  --form 'postAsSpoon=true' \\\n  --form 'note=Added more lemon.' \\\n  --form 'nextTime=Try a wider pan.' \\\n  --form 'cookedAt=2026-06-01T00:00:00.000Z'"
           }
         ]
       },
@@ -5847,12 +5854,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "required": true,
         "contentType": "application/json",
         "fields": [],
-        "example": "{\n  \"clientMutationId\": \"device-uuid-cover-create\",\n  \"imageUrl\": \"https://spoonjoy.app/photos/uploads/cover-raw.jpg\",\n  \"activate\": true,\n  \"generateEditorial\": true\n}",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-cover-create\",\n  \"imageUrl\": \"https://spoonjoy.app/photos/uploads/cover-raw.jpg\",\n  \"activate\": true,\n  \"generateEditorial\": true,\n  \"promptAddition\": \"brighter herbs and tighter crop\"\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-cover-create\",\n  \"imageUrl\": \"https://spoonjoy.app/photos/uploads/cover-raw.jpg\",\n  \"activate\": true,\n  \"generateEditorial\": true\n}"
+            "example": "{\n  \"clientMutationId\": \"device-uuid-cover-create\",\n  \"imageUrl\": \"https://spoonjoy.app/photos/uploads/cover-raw.jpg\",\n  \"activate\": true,\n  \"generateEditorial\": true,\n  \"promptAddition\": \"brighter herbs and tighter crop\"\n}"
           }
         ]
       },

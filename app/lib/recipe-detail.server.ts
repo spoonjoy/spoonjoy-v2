@@ -167,7 +167,13 @@ function activeCoverProcessingFor(recipe: {
   activeCoverId: string | null;
   activeCoverVariant: string | null;
   activeCover?: RecipeCover | null;
-}) {
+}): {
+  coverId: string;
+  activeVariant: "image";
+  targetVariant: "stylized";
+  status: string;
+  generationStatus: string;
+} | null {
   const activeCover = recipe.activeCover;
   if (!activeCover || activeCover.id !== recipe.activeCoverId || activeCover.archivedAt) {
     return null;
@@ -182,7 +188,7 @@ function activeCoverProcessingFor(recipe: {
 
   return {
     coverId: activeCover.id,
-    activeVariant,
+    activeVariant: "image",
     targetVariant: "stylized" as const,
     status: activeCover.status,
     generationStatus: activeCover.generationStatus,

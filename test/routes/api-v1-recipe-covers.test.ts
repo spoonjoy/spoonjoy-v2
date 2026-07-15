@@ -61,6 +61,7 @@ function recipeImageForm(input: {
   activate?: boolean;
   activateWhenReady?: boolean;
   generateEditorial?: boolean;
+  promptAddition?: string;
   postAsSpoon?: boolean;
   note?: string;
   nextTime?: string;
@@ -73,6 +74,7 @@ function recipeImageForm(input: {
   appendMultipartValue(formData, "activate", input.activate);
   appendMultipartValue(formData, "activateWhenReady", input.activateWhenReady);
   appendMultipartValue(formData, "generateEditorial", input.generateEditorial);
+  appendMultipartValue(formData, "promptAddition", input.promptAddition);
   appendMultipartValue(formData, "postAsSpoon", input.postAsSpoon);
   appendMultipartValue(formData, "note", input.note);
   appendMultipartValue(formData, "nextTime", input.nextTime);
@@ -273,6 +275,7 @@ describe("API v1 recipe cover management", () => {
       clientMutationId: "first-photo-spoon-editorial",
       photo: photoFile("first-photo.png"),
       activateWhenReady: true,
+      promptAddition: "  moodier   window\nlight  ",
       postAsSpoon: true,
       note: "  Weeknight version  ",
       nextTime: "Use more lemon",
@@ -322,6 +325,12 @@ describe("API v1 recipe cover management", () => {
       },
     });
     expect(payload.data.createdCover.sourceSpoonId).toBe(payload.data.spoon.id);
+    await expect(db.recipeCover.findUniqueOrThrow({
+      where: { id: payload.data.createdCover.id },
+      select: { promptAddition: true },
+    })).resolves.toEqual({
+      promptAddition: "moodier window light",
+    });
     await expect(db.recipeSpoon.findMany({ where: { chefId: fixture.owner.id, recipeId: fixture.recipe.id } }))
       .resolves.toMatchObject([{
         photoUrl: `/photos/${uploadedKey}`,
@@ -479,6 +488,16 @@ describe("API v1 recipe cover management", () => {
         formData: recipeImageForm({ clientMutationId: "first-photo-note-file", photo: photoFile() }),
         mutate(formData: UndiciFormData) {
           formData.append("note", photoFile("note.png"));
+        },
+        status: 400,
+        code: "validation_error",
+      },
+      {
+        requestId: "req_recipe_image_prompt_file",
+        token: fixture.ownerKitchenWrite.token,
+        formData: recipeImageForm({ clientMutationId: "first-photo-prompt-file", photo: photoFile() }),
+        mutate(formData: UndiciFormData) {
+          formData.append("promptAddition", photoFile("prompt.png"));
         },
         status: 400,
         code: "validation_error",
@@ -1155,12 +1174,15 @@ describe("API v1 recipe cover management", () => {
     const fixture = await createCoverFixture(db);
     const url = `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers`;
     const splat = `recipes/${fixture.recipe.id}/covers`;
+    const photoBucket = mockPhotoBucket();
+    const imageKey = `recipes/${fixture.owner.id}/${fixture.recipe.id}/json-url-cover.jpg`;
+    photoBucket.keys.add(imageKey);
     const response = await action(routeArgs(jsonRequest(url, "POST", fixture.ownerKitchenWrite.token, "req_cover_create_url", {
       clientMutationId: "cover-create-url",
-      imageUrl: "/photos/uploads/json-url-cover.jpg",
+      imageUrl: `/photos/${imageKey}`,
       activate: true,
       generateEditorial: false,
-    }), splat));
+    }), splat, backgroundContext({ PHOTOS: photoBucket.bucket })));
     const payload = await readJson(response);
 
     expect(response.status).toBe(201);
@@ -1170,7 +1192,7 @@ describe("API v1 recipe cover management", () => {
       data: {
         activeCover: expect.objectContaining({
           activeVariant: "image",
-          displayUrl: "https://spoonjoy.app/photos/uploads/json-url-cover.jpg",
+          displayUrl: `https://spoonjoy.app/photos/${imageKey}`,
           generationStatus: "none",
           provenanceLabel: "Original photo",
           sourceType: "chef-upload",
@@ -1180,8 +1202,8 @@ describe("API v1 recipe cover management", () => {
           activeVariant: "stylized",
         }),
         createdCover: expect.objectContaining({
-          imageUrl: "https://spoonjoy.app/photos/uploads/json-url-cover.jpg",
-          sourceImageUrl: "https://spoonjoy.app/photos/uploads/json-url-cover.jpg",
+          imageUrl: `https://spoonjoy.app/photos/${imageKey}`,
+          sourceImageUrl: `https://spoonjoy.app/photos/${imageKey}`,
           sourceType: "chef-upload",
           status: "ready",
           generationStatus: "none",
@@ -1202,8 +1224,8 @@ describe("API v1 recipe cover management", () => {
         generationStatus: true,
       },
     })).resolves.toEqual({
-      imageUrl: "/photos/uploads/json-url-cover.jpg",
-      sourceImageUrl: "/photos/uploads/json-url-cover.jpg",
+      imageUrl: `/photos/${imageKey}`,
+      sourceImageUrl: `/photos/${imageKey}`,
       sourceType: "chef-upload",
       status: "ready",
       generationStatus: "none",
@@ -1222,12 +1244,19 @@ describe("API v1 recipe cover management", () => {
     const fixture = await createCoverFixture(db);
     const url = `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers`;
     const splat = `recipes/${fixture.recipe.id}/covers`;
+    const photoBucket = mockPhotoBucket();
+    const inactiveImageKey = `recipes/${fixture.owner.id}/${fixture.recipe.id}/json-url-editorial.jpg`;
+    const activatingImageKey = `recipes/${fixture.owner.id}/${fixture.recipe.id}/json-url-editorial-activate.jpg`;
+    photoBucket.keys.add(inactiveImageKey);
+    photoBucket.keys.add(activatingImageKey);
+    const immediatePhotoContext = { cloudflare: { env: { PHOTOS: photoBucket.bucket } } };
     const response = await action(routeArgs(jsonRequest(url, "POST", fixture.ownerKitchenWrite.token, "req_cover_create_url_editorial", {
       clientMutationId: "cover-create-url-editorial",
-      imageUrl: "https://spoonjoy.app/photos/uploads/json-url-editorial.jpg",
+      imageUrl: `https://spoonjoy.app/photos/${inactiveImageKey}`,
       activate: false,
       generateEditorial: true,
-    }), splat));
+      promptAddition: "  soft   morning\nsteam  ",
+    }), splat, immediatePhotoContext));
     const payload = await readJson(response);
 
     expect(response.status).toBe(201);
@@ -1240,8 +1269,8 @@ describe("API v1 recipe cover management", () => {
           activeVariant: "stylized",
         }),
         createdCover: expect.objectContaining({
-          imageUrl: "https://spoonjoy.app/photos/uploads/json-url-editorial.jpg",
-          sourceImageUrl: "https://spoonjoy.app/photos/uploads/json-url-editorial.jpg",
+          imageUrl: `https://spoonjoy.app/photos/${inactiveImageKey}`,
+          sourceImageUrl: `https://spoonjoy.app/photos/${inactiveImageKey}`,
           sourceType: "chef-upload",
           status: "ready",
           generationStatus: "failed",
@@ -1252,6 +1281,12 @@ describe("API v1 recipe cover management", () => {
       },
     });
     expect(payload.data.createdCover.activeVariant).toBeNull();
+    await expect(db.recipeCover.findUniqueOrThrow({
+      where: { id: payload.data.createdCover.id },
+      select: { promptAddition: true },
+    })).resolves.toEqual({
+      promptAddition: "soft morning steam",
+    });
     await expect(db.recipe.findUniqueOrThrow({
       where: { id: fixture.recipe.id },
       select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
@@ -1263,10 +1298,11 @@ describe("API v1 recipe cover management", () => {
 
     const activatingResponse = await action(routeArgs(jsonRequest(url, "POST", fixture.ownerKitchenWrite.token, "req_cover_create_url_editorial_activate", {
       clientMutationId: "cover-create-url-editorial-activate",
-      imageUrl: "https://spoonjoy.app/photos/uploads/json-url-editorial-activate.jpg",
+      imageUrl: `https://spoonjoy.app/photos/${activatingImageKey}`,
       activate: true,
       generateEditorial: true,
-    }), splat));
+      promptAddition: "brighter herbs",
+    }), splat, immediatePhotoContext));
     const activatingPayload = await readJson(activatingResponse);
 
     expect(activatingResponse.status).toBe(201);
@@ -1275,11 +1311,11 @@ describe("API v1 recipe cover management", () => {
       requestId: "req_cover_create_url_editorial_activate",
       data: {
         activeCover: expect.objectContaining({
-          imageUrl: "https://spoonjoy.app/photos/uploads/json-url-editorial-activate.jpg",
+          imageUrl: `https://spoonjoy.app/photos/${activatingImageKey}`,
           activeVariant: "image",
         }),
         createdCover: expect.objectContaining({
-          imageUrl: "https://spoonjoy.app/photos/uploads/json-url-editorial-activate.jpg",
+          imageUrl: `https://spoonjoy.app/photos/${activatingImageKey}`,
           status: "ready",
           generationStatus: "failed",
           failureReason: expect.stringContaining("missing_image_provider_config"),
@@ -1295,7 +1331,21 @@ describe("API v1 recipe cover management", () => {
     const createUrl = `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers`;
     const generateUrl = `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers/generate`;
     const initialCoverCount = await db.recipeCover.count({ where: { recipeId: fixture.recipe.id } });
-    const cases = [
+    const photoBucket = mockPhotoBucket();
+    const foreignOwnerKey = `recipes/${fixture.outsider.id}/${fixture.recipe.id}/foreign-cover.jpg`;
+    const generatedCoverKey = `covers/generated-cover.jpg`;
+    const missingOwnerKey = `recipes/${fixture.owner.id}/${fixture.recipe.id}/missing-cover.jpg`;
+    photoBucket.keys.add(foreignOwnerKey);
+    photoBucket.keys.add(generatedCoverKey);
+    const coverUrlContext = backgroundContext({ PHOTOS: photoBucket.bucket });
+    const cases: Array<{
+      requestId: string;
+      url: string;
+      splat: string;
+      body: Record<string, unknown>;
+      message: string;
+      context?: ReturnType<typeof backgroundContext>;
+    }> = [
       {
         requestId: "req_cover_create_bad_host",
         url: createUrl,
@@ -1357,6 +1407,39 @@ describe("API v1 recipe cover management", () => {
         message: "imageUrl must be a clean Spoonjoy uploaded image URL",
       },
       {
+        requestId: "req_cover_create_foreign_owner",
+        url: createUrl,
+        splat: `recipes/${fixture.recipe.id}/covers`,
+        body: {
+          clientMutationId: "cover-create-foreign-owner",
+          imageUrl: `/photos/${foreignOwnerKey}`,
+        },
+        message: "Recipe imageUrl must belong to the recipe owner.",
+        context: coverUrlContext,
+      },
+      {
+        requestId: "req_cover_create_generated_cover_namespace",
+        url: createUrl,
+        splat: `recipes/${fixture.recipe.id}/covers`,
+        body: {
+          clientMutationId: "cover-create-generated-cover-namespace",
+          imageUrl: `/photos/${generatedCoverKey}`,
+        },
+        message: "Recipe imageUrl must belong to the recipe owner.",
+        context: coverUrlContext,
+      },
+      {
+        requestId: "req_cover_create_missing_object",
+        url: createUrl,
+        splat: `recipes/${fixture.recipe.id}/covers`,
+        body: {
+          clientMutationId: "cover-create-missing-object",
+          imageUrl: `/photos/${missingOwnerKey}`,
+        },
+        message: "Recipe imageUrl does not exist in storage.",
+        context: coverUrlContext,
+      },
+      {
         requestId: "req_cover_generate_bad_prompt",
         url: generateUrl,
         splat: `recipes/${fixture.recipe.id}/covers/generate`,
@@ -1372,10 +1455,10 @@ describe("API v1 recipe cover management", () => {
       const response = await action(routeArgs(jsonRequest(
         testCase.url,
         "POST",
-        fixture.ownerKitchenWrite.token,
-        testCase.requestId,
-        testCase.body,
-      ), testCase.splat));
+          fixture.ownerKitchenWrite.token,
+          testCase.requestId,
+          testCase.body,
+      ), testCase.splat, testCase.context));
       expect(response.status).toBe(400);
       await expect(response.json()).resolves.toMatchObject({
         ok: false,
@@ -1387,6 +1470,56 @@ describe("API v1 recipe cover management", () => {
         },
       });
     }
+
+    const missingBucketKey = `recipes/${fixture.owner.id}/${fixture.recipe.id}/no-bucket-cover.jpg`;
+    const missingBucketResponse = await action(routeArgs(jsonRequest(
+      createUrl,
+      "POST",
+      fixture.ownerKitchenWrite.token,
+      "req_cover_create_missing_bucket",
+      {
+        clientMutationId: "cover-create-missing-bucket",
+        imageUrl: `/photos/${missingBucketKey}`,
+      },
+    ), `recipes/${fixture.recipe.id}/covers`));
+    expect(missingBucketResponse.status).toBe(500);
+    await expect(missingBucketResponse.json()).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_cover_create_missing_bucket",
+      error: {
+        code: "internal_error",
+        status: 500,
+        message: "Stored recipe image assignment requires the PHOTOS bucket.",
+      },
+    });
+
+    const storageFailureKey = `recipes/${fixture.owner.id}/${fixture.recipe.id}/storage-failure-cover.jpg`;
+    const throwingBucket = {
+      get: vi.fn(async () => {
+        throw new Error("R2 read failed");
+      }),
+    } as unknown as R2Bucket;
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const storageFailureResponse = await action(routeArgs(jsonRequest(
+      createUrl,
+      "POST",
+      fixture.ownerKitchenWrite.token,
+      "req_cover_create_storage_failure",
+      {
+        clientMutationId: "cover-create-storage-failure",
+        imageUrl: `/photos/${storageFailureKey}`,
+      },
+    ), `recipes/${fixture.recipe.id}/covers`, backgroundContext({ PHOTOS: throwingBucket })));
+    expect(storageFailureResponse.status).toBe(500);
+    await expect(storageFailureResponse.json()).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_cover_create_storage_failure",
+      error: {
+        code: "internal_error",
+        status: 500,
+        message: "Internal error",
+      },
+    });
 
     await expect(db.recipeCover.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(initialCoverCount);
   });
@@ -2213,12 +2346,15 @@ describe("API v1 recipe cover management", () => {
     }));
     const { action: mockedAction } = await import("~/routes/api.v1.$");
     const url = `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers`;
+    const photoBucket = mockPhotoBucket();
+    const imageKey = `recipes/${fixture.owner.id}/${fixture.recipe.id}/activation-failure.jpg`;
+    photoBucket.keys.add(imageKey);
     const response = await mockedAction(routeArgs(jsonRequest(url, "POST", fixture.ownerKitchenWrite.token, "req_cover_create_activation_failure", {
       clientMutationId: "cover-create-activation-failure",
-      imageUrl: "/photos/uploads/activation-failure.jpg",
+      imageUrl: `/photos/${imageKey}`,
       activate: true,
       generateEditorial: false,
-    }), `recipes/${fixture.recipe.id}/covers`));
+    }), `recipes/${fixture.recipe.id}/covers`, backgroundContext({ PHOTOS: photoBucket.bucket })));
 
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toMatchObject({

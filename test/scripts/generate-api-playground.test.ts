@@ -58,6 +58,7 @@ describe("generate-api-playground", () => {
       expect.objectContaining({ name: "photo", required: true, accept: "image/jpeg,image/png,image/webp" }),
       expect.objectContaining({ name: "activateWhenReady", required: false }),
       expect.objectContaining({ name: "generateEditorial", required: false }),
+      expect.objectContaining({ name: "promptAddition", required: false }),
       expect.objectContaining({ name: "postAsSpoon", required: false }),
       expect.objectContaining({ name: "note", required: false }),
     ]));
@@ -65,6 +66,7 @@ describe("generate-api-playground", () => {
     expect(upload.requestBody?.example).toContain("const body = new FormData();");
     expect(upload.requestBody?.example).toContain("body.append(\"photo\", file);");
     expect(upload.requestBody?.example).toContain("body.append(\"activateWhenReady\"");
+    expect(upload.requestBody?.example).toContain("body.append(\"promptAddition\"");
     expect(upload.requestBody?.example).not.toContain("body.append(\"activate\"");
     expect(upload.requestBody?.example).toContain("curl --form");
     expect(upload.requestBody?.example).not.toContain("\"Content-Type\": \"multipart/form-data\"");
@@ -82,6 +84,8 @@ describe("generate-api-playground", () => {
       },
       idempotency: expect.objectContaining({ replayStatus: [201] }),
     });
+    expect(operation(manifest, "POST /api/v1/recipes/{id}/covers").requestBody?.example)
+      .toContain("\"promptAddition\": \"brighter herbs and tighter crop\"");
     expect(operation(manifest, "POST /api/v1/recipes/{id}/covers/generate")).toMatchObject({
       profiles: ["full", "sdk"],
       requestBody: {

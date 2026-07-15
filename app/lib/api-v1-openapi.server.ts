@@ -644,6 +644,7 @@ const schemas = {
     photo: { type: "string", format: "binary", description: "JPG, PNG, or WebP recipe photo up to 5MB." },
     activateWhenReady: { type: "boolean", default: true },
     generateEditorial: { type: "boolean", default: true },
+    promptAddition: { type: ["string", "null"], maxLength: 240 },
     postAsSpoon: { type: "boolean", default: false },
     note: boundedNullableStringSchema,
     nextTime: boundedNullableStringSchema,
@@ -798,6 +799,7 @@ const schemas = {
     imageUrl: { type: "string", maxLength: 2048 },
     activate: { type: "boolean", default: false },
     generateEditorial: { type: "boolean", default: true },
+    promptAddition: { type: ["string", "null"], maxLength: 240 },
   }),
   GenerateRecipeCoverRequest: objectSchema(["clientMutationId"], {
     clientMutationId: shortTextSchema,
@@ -2517,6 +2519,7 @@ const requestExamples: Record<string, unknown> = {
     photo: "(binary image file)",
     activateWhenReady: true,
     generateEditorial: true,
+    promptAddition: "moodier window light",
     postAsSpoon: true,
     note: "Added more lemon.",
     nextTime: "Try a wider pan.",
@@ -2529,6 +2532,7 @@ const requestExamples: Record<string, unknown> = {
     imageUrl: "https://spoonjoy.app/photos/uploads/cover-raw.jpg",
     activate: true,
     generateEditorial: true,
+    promptAddition: "brighter herbs and tighter crop",
   },
   GenerateRecipeCoverRequest: {
     clientMutationId: "device-uuid-cover-generate",

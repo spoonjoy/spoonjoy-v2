@@ -186,6 +186,7 @@ describe("/developers/playground", () => {
         { name: "photo", required: true, accept: "image/jpeg,image/png,image/webp" },
         { name: "activateWhenReady", required: false, accept: "" },
         { name: "generateEditorial", required: false, accept: "" },
+        { name: "promptAddition", required: false, accept: "" },
         { name: "postAsSpoon", required: false, accept: "" },
         { name: "note", required: false, accept: "" },
         { name: "nextTime", required: false, accept: "" },

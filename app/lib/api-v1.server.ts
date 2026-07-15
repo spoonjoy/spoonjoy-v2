@@ -132,7 +132,7 @@ import {
 } from "~/lib/recipe-spoon.server";
 import { activateSpoonCoverForDecision } from "~/lib/spoon-cover-activation.server";
 import { decideSpoonCoverCreation } from "~/lib/spoon-cover-decision.server";
-import { validateSpoonPhotoAssignment } from "~/lib/recipe-image-assignment.server";
+import { validateRecipeImageAssignment, validateSpoonPhotoAssignment } from "~/lib/recipe-image-assignment.server";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { deferBackgroundTask } from "~/lib/background-task.server";
 import { scheduleAiPlaceholderCover } from "~/lib/ai-placeholder-cover.server";
@@ -1554,6 +1554,26 @@ async function validateApiV1SpoonPhotoUrl(args: ApiV1RouteArgs, principal: ApiPr
   }
 }
 
+async function validateApiV1RecipeCoverImageUrl(args: ApiV1RouteArgs, principal: ApiPrincipal, imageUrl: string) {
+  const cf = apiV1CloudflareFor(args);
+  try {
+    await validateRecipeImageAssignment({
+      imageUrl,
+      ownerId: principal.id,
+      bucket: cf?.env?.PHOTOS,
+      allowLocalImageFallback: false,
+    });
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      if (error.status === 400) {
+        throw new ApiV1Error("validation_error", error.message);
+      }
+      throw new ApiV1Error("internal_error", error.message);
+    }
+    throw error;
+  }
+}
+
 async function validateApiV1SpoonPhotoUrlForWrite(input: {
   args: ApiV1RouteArgs;
   principal: ApiPrincipal;
@@ -2422,6 +2442,11 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
     ? optionalFormDataBoolean(formData, "activateWhenReady", true)
     : optionalFormDataBoolean(formData, "activate", true);
   const generateEditorial = optionalFormDataBoolean(formData, "generateEditorial", true);
+  const promptAdditionValue = singleFormDataValue(formData, "promptAddition");
+  if (promptAdditionValue instanceof File) {
+    throw new ApiV1Error("validation_error", "promptAddition must be a string", { field: "promptAddition" });
+  }
+  const promptAddition = optionalPromptAddition(promptAdditionValue);
   const postAsSpoon = optionalFormDataBoolean(formData, "postAsSpoon", false);
   const note = optionalFormDataString(formData, "note");
   const nextTime = optionalFormDataString(formData, "nextTime");
@@ -2431,6 +2456,7 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
     photo: await accountPhotoIdempotencyValue(photo),
     activateWhenReady,
     generateEditorial,
+    promptAddition,
     postAsSpoon,
     note,
     nextTime,
@@ -2481,6 +2507,7 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
         createdById: principal.id,
         sourceImageUrl: uploadedImageUrl,
         generationStatus: generateEditorial ? "processing" : "none",
+        promptAddition,
       });
       createdCoverId = createdCover.id;
 
@@ -2519,6 +2546,7 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
           userId: principal.id,
           recipeId,
           coverId: createdCover.id,
+          promptAddition,
           rawPhotoUrl: uploadedImageUrl,
           recipeTitle: recipe.title,
           sourceType,
@@ -2627,17 +2655,19 @@ async function handleRecipeCoverList(args: ApiV1RouteArgs, requestId: string, pr
 
 async function handleRecipeCoverCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
   const body = await parseApiV1JsonBody(args.request);
-  assertKnownFields(body, ["clientMutationId", "imageUrl", "activate", "generateEditorial"]);
+  assertKnownFields(body, ["clientMutationId", "imageUrl", "activate", "generateEditorial", "promptAddition"]);
   const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
   const origin = publicContentOrigin(args);
   const imageUrl = normalizeRecipeCoverImageUrl(body.imageUrl, origin);
   const activate = optionalBoolean(body.activate, "activate");
   const generateEditorial = optionalBoolean(body.generateEditorial, "generateEditorial", true);
-  const idempotencyBody = { clientMutationId, imageUrl, activate, generateEditorial };
+  const promptAddition = optionalPromptAddition(body.promptAddition);
+  const idempotencyBody = { clientMutationId, imageUrl, activate, generateEditorial, promptAddition };
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.covers.create", async (db) => {
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
     const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
+    await validateApiV1RecipeCoverImageUrl(args, principal, imageUrl);
     const cover = await createCover(db, {
       recipeId,
       imageUrl,
@@ -2647,6 +2677,7 @@ async function handleRecipeCoverCreate(args: ApiV1RouteArgs, requestId: string, 
       createdById: principal.id,
       sourceImageUrl: imageUrl,
       generationStatus: generateEditorial ? "processing" : "none",
+      promptAddition,
     });
 
     if (activate) {
@@ -2663,6 +2694,7 @@ async function handleRecipeCoverCreate(args: ApiV1RouteArgs, requestId: string, 
         userId: principal.id,
         recipeId,
         coverId: cover.id,
+        promptAddition,
         rawPhotoUrl: imageUrl,
         recipeTitle: recipe.title,
         sourceType: "chef-upload",
@@ -4531,6 +4563,7 @@ const RECIPE_IMAGE_UPLOAD_FIELDS = [
   // Legacy alias accepted for older native builds and pre-canonical automation clients.
   "activate",
   "generateEditorial",
+  "promptAddition",
   "postAsSpoon",
   "note",
   "nextTime",
