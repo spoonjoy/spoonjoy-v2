@@ -18,13 +18,13 @@ Close every actionable 2026-07-15 shipped-work audit finding across Spoonjoy web
 
 ## Gate State
 
-- Planning is approved after fresh reviewer convergence.
+- Planning is `NEEDS_REVIEW` after a second independent gate found rollback/recovery and direct web visual-evidence gaps.
 - Native and operations explorers returned concrete findings; the web explorer is being stopped after exceeding its bounded exploration window.
-- Planning review Round 1 found major traceability, verification, release-closure, cleanup-safety, and human-only credential gaps. A stricter independent review also found release-containment, rebaseline, image/mutation-contract, OAuth rollout, and workstream-isolation gaps. The revised plan passed a fresh gate at 2026-07-15 12:16.
+- Planning review Round 1 found major traceability, verification, release-closure, cleanup-safety, and human-only credential gaps. A stricter independent review also found release-containment, rebaseline, image/mutation-contract, OAuth rollout, and workstream-isolation gaps. One fresh gate passed at 2026-07-15 12:16, but a second independent gate found missing rollback/recovery and direct web visual-evidence requirements; those are now patched and awaiting fresh convergence.
 
 ## Next Action
 
-Create and reviewer-gate the doing doc, then begin Unit 0 rebaseline and Unit 1 release containment before functional implementation.
+Run a fresh planning gate on the rollback/recovery revision, then reviewer-gate the drafted doing doc before Unit 0.
 
 ## Hard Exceptions
 
