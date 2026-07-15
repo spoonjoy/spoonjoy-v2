@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   getGoogleOAuthConfig,
+  getAppleOAuthCallbackConfig,
   getAppleOAuthConfig,
   getGitHubOAuthConfig,
   getAppleNativeAuthConfig,
@@ -290,6 +291,66 @@ describe('Environment Config Validation', () => {
 
       expect(() => getAppleOAuthConfig(env)).toThrow(
         'Missing required environment variable: APPLE_PRIVATE_KEY'
+      )
+    })
+  })
+
+  describe('getAppleOAuthCallbackConfig', () => {
+    it('defaults social Apple starts to the registered legacy callback', () => {
+      expect(getAppleOAuthCallbackConfig({})).toEqual({
+        mode: 'legacy',
+        cleanCallbackRegistered: false,
+      })
+    })
+
+    it('allows the clean callback only after registration is asserted', () => {
+      expect(getAppleOAuthCallbackConfig({
+        APPLE_OAUTH_CALLBACK_MODE: 'clean',
+        APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED: 'true',
+      })).toEqual({
+        mode: 'clean',
+        cleanCallbackRegistered: true,
+      })
+    })
+
+    it('keeps legacy mode available as the one-step rollback after clean registration', () => {
+      expect(getAppleOAuthCallbackConfig({
+        APPLE_OAUTH_CALLBACK_MODE: 'legacy',
+        APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED: 'true',
+      })).toEqual({
+        mode: 'legacy',
+        cleanCallbackRegistered: true,
+      })
+    })
+
+    it('normalizes quoted callback configuration values', () => {
+      expect(getAppleOAuthCallbackConfig({
+        APPLE_OAUTH_CALLBACK_MODE: '"legacy"',
+        APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED: "'false'",
+      })).toEqual({
+        mode: 'legacy',
+        cleanCallbackRegistered: false,
+      })
+    })
+
+    it('rejects unsupported callback modes', () => {
+      expect(() => getAppleOAuthCallbackConfig({
+        APPLE_OAUTH_CALLBACK_MODE: 'automatic',
+      })).toThrow('APPLE_OAUTH_CALLBACK_MODE must be "legacy" or "clean"')
+    })
+
+    it('rejects invalid clean-registration assertions', () => {
+      expect(() => getAppleOAuthCallbackConfig({
+        APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED: 'yes',
+      })).toThrow('APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED must be "true" or "false"')
+    })
+
+    it('rejects clean starts until the clean callback is registered', () => {
+      expect(() => getAppleOAuthCallbackConfig({
+        APPLE_OAUTH_CALLBACK_MODE: 'clean',
+        APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED: 'false',
+      })).toThrow(
+        'APPLE_OAUTH_CALLBACK_MODE=clean requires APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED=true'
       )
     })
   })

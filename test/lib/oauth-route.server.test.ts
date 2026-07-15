@@ -1,10 +1,15 @@
 // @vitest-environment node
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
+  APPLE_CLEAN_RETURN_PATH,
+  APPLE_LEGACY_RETURN_PATH,
   APPLE_REGISTERED_RETURN_PATH,
   appendOAuthError,
   assertCanStartOAuthLinking,
   buildAppleReturnUrl,
+  buildRegisteredAppleReturnUrls,
   buildOAuthCallbackUrl,
   commitOAuthStartSession,
   generateOAuthState,
@@ -59,7 +64,9 @@ describe("oauth-route.server", () => {
   // expected string — change it only after updating the Apple Developer portal,
   // and re-run scripts/smoke-apple-oauth.ts against the live endpoint.
   it("pins the Apple redirect_uri to the registered Service ID Return URL", () => {
+    expect(APPLE_LEGACY_RETURN_PATH).toBe("/.redwood/functions/auth/oauth");
     expect(APPLE_REGISTERED_RETURN_PATH).toBe("/.redwood/functions/auth/oauth");
+    expect(APPLE_CLEAN_RETURN_PATH).toBe("/auth/apple/callback");
     const request = new Request("https://spoonjoy.app/auth/apple");
     expect(buildAppleReturnUrl(request, "loginWithApple")).toBe(
       "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple"
@@ -67,6 +74,48 @@ describe("oauth-route.server", () => {
     expect(buildAppleReturnUrl(request, "linkAppleAccount")).toBe(
       "https://spoonjoy.app/.redwood/functions/auth/oauth?method=linkAppleAccount"
     );
+    expect(buildAppleReturnUrl(request, "loginWithApple", "clean")).toBe(
+      "https://spoonjoy.app/auth/apple/callback"
+    );
+  });
+
+  it("builds only provider-registered Apple return URLs", () => {
+    const request = new Request("https://spoonjoy.app/auth/apple");
+
+    expect(buildRegisteredAppleReturnUrls(request, "loginWithApple", {
+      mode: "legacy",
+      cleanCallbackRegistered: false,
+    })).toEqual([
+      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple",
+    ]);
+    expect(buildRegisteredAppleReturnUrls(request, "linkAppleAccount", {
+      mode: "clean",
+      cleanCallbackRegistered: true,
+    })).toEqual([
+      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=linkAppleAccount",
+      "https://spoonjoy.app/auth/apple/callback",
+    ]);
+  });
+
+  it("keeps callback config, runtime types, and operator docs in parity", () => {
+    const files = [
+      ".env.example",
+      "app/cloudflare-env.d.ts",
+      "DEPLOY.md",
+      "docs/production-cutover.md",
+    ].map((file) => readFileSync(resolve(process.cwd(), file), "utf8"));
+
+    for (const contents of files) {
+      expect(contents).toContain("APPLE_OAUTH_CALLBACK_MODE");
+      expect(contents).toContain("APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED");
+    }
+
+    expect(files[0]).toContain('APPLE_OAUTH_CALLBACK_MODE="legacy"');
+    expect(files[0]).toContain('APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED="false"');
+    expect(files[2]).toContain("https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple");
+    expect(files[2]).toContain("https://spoonjoy.app/auth/apple/callback");
+    expect(files[3]).toContain("https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple");
+    expect(files[3]).toContain("https://spoonjoy.app/auth/apple/callback");
   });
 
   it("canonicalizes www callback URLs to the apex Spoonjoy host", () => {
