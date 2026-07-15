@@ -43,7 +43,8 @@ describe("production release provenance", () => {
     expect(production).toContain("    types: [completed]");
     expect(production).toContain("      source_sha:");
     expect(production).toContain("        required: true");
-    expect(production).toContain("      allow_rollback:");
+    expect(production).toContain("      rollback_version_id:");
+    expect(production).not.toContain("      allow_rollback:");
     expect(production).toContain("github.event.workflow_run.conclusion == 'success'");
     expect(production).toContain("github.event.workflow_run.event == 'push'");
     expect(production).toContain("github.event.workflow_run.head_branch == 'main'");
@@ -63,7 +64,9 @@ describe("production release provenance", () => {
     expect(production).toContain('gh run list --workflow .github/workflows/ci.yml --branch main --commit "$SOURCE_SHA"');
     expect(production).toContain("--event push --status success");
     expect(production).toContain('test "$(git rev-parse origin/main)" = "$SOURCE_SHA"');
-    expect(production).toContain('test "$ALLOW_ROLLBACK" = "true"');
+    expect(production).toContain("ROLLBACK_VERSION_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.rollback_version_id || '' }}");
+    expect(production).toContain('pnpm run deploy:auto -- --rollback-version-id "$ROLLBACK_VERSION_ID"');
+    expect(production).not.toContain("ALLOW_ROLLBACK");
     expect(production).toContain('pnpm run deploy:auto');
     expect(production).toContain('Source SHA: `%s`');
     expect(production).not.toMatch(/^\s{2}issues:\s+write$/m);
