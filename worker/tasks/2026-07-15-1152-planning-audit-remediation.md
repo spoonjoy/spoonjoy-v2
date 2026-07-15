@@ -1,7 +1,7 @@
 # Planning: Spoonjoy Audit Remediation
 
 **Status**: drafting
-**Created**: pending initial commit
+**Created**: 2026-07-15 11:54
 
 ## Goal
 Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, performance, and release surfaces to done-quality across the web, native Apple, REST, and MCP clients. Close every actionable finding from the 2026-07-15 audit, ship the resulting changes, and verify the consuming production and TestFlight surfaces.
@@ -81,4 +81,4 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 Repo-local `subagents/work-planner.md` and `subagents/work-doer.md` were unavailable, so the current installed Work Suite skills are the execution source.
 
 ## Progress Log
-- pending initial commit Created
+- 2026-07-15 11:54 Created
