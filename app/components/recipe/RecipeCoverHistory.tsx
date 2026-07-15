@@ -1,5 +1,8 @@
 import { Form } from "react-router";
 import { Button } from "~/components/ui/button";
+import { Field, Label } from "~/components/ui/fieldset";
+import { Input } from "~/components/ui/input";
+import { normalizeRequiredCoverProvenanceLabel } from "~/components/recipe/CoverProvenanceBadge";
 
 export type RecipeCoverHistoryVariant = {
   variant: "image" | "stylized";
@@ -105,6 +108,24 @@ export function RecipeCoverHistory({
         </span>
       </div>
 
+      <Form method="post" className="grid gap-3 border-b border-[var(--sj-border)] pb-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+        <input type="hidden" name="intent" value="generateRecipeCoverPlaceholder" />
+        <input type="hidden" name="activateWhenReady" value="true" />
+        <Field>
+          <Label htmlFor="recipe-cover-placeholder-direction">Placeholder direction</Label>
+          <Input
+            id="recipe-cover-placeholder-direction"
+            name="promptAddition"
+            type="text"
+            maxLength={240}
+            placeholder="Bright window light, golden edges, linen backdrop"
+          />
+        </Field>
+        <Button type="submit" plain>
+          Generate placeholder cover
+        </Button>
+      </Form>
+
       {covers.length === 0 ? (
         <p className="border-y border-[var(--sj-border)] py-6 font-sj-ui text-sm text-[var(--sj-ink-soft)]">
           No saved covers yet.
@@ -122,7 +143,7 @@ export function RecipeCoverHistory({
                 candidate.variants.map((variant) => ({
                   coverId: candidate.id,
                   variant: variant.variant,
-                  label: variant.provenanceLabel,
+                  label: normalizeRequiredCoverProvenanceLabel(variant.provenanceLabel),
                 })),
               );
             return (
@@ -164,52 +185,66 @@ export function RecipeCoverHistory({
                     </p>
                   ) : (
                     <div className="grid gap-2 sm:grid-cols-2">
-                      {cover.variants.map((variant) => (
-                        <div
-                          key={`${cover.id}-${variant.variant}`}
-                          className="flex min-h-16 items-center justify-between gap-3 border border-[var(--sj-border)] px-3 py-2"
-                        >
-                          <div className="min-w-0">
-                            <p className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
-                              {variant.provenanceLabel}
-                            </p>
-                            <p className="font-sj-ui text-xs uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]">
-                              {variantName(variant.variant)}
-                            </p>
+                      {cover.variants.map((variant) => {
+                        const provenanceLabel = normalizeRequiredCoverProvenanceLabel(variant.provenanceLabel);
+                        return (
+                          <div
+                            key={`${cover.id}-${variant.variant}`}
+                            className="flex min-h-16 items-center justify-between gap-3 border border-[var(--sj-border)] px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
+                                {provenanceLabel}
+                              </p>
+                              <p className="font-sj-ui text-xs uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]">
+                                {variantName(variant.variant)}
+                              </p>
+                            </div>
+                            {variant.isActive ? (
+                              <span className="shrink-0 font-sj-ui text-xs font-semibold text-[var(--sj-brass)]">
+                                Active variant
+                              </span>
+                            ) : canActivate ? (
+                              <Form method="post" className="shrink-0">
+                                <input type="hidden" name="intent" value="setRecipeCover" />
+                                <input type="hidden" name="coverId" value={cover.id} />
+                                <input type="hidden" name="variant" value={variant.variant} />
+                                <Button
+                                  type="submit"
+                                  plain
+                                  aria-label={`Use ${provenanceLabel} cover`}
+                                >
+                                  Use
+                                </Button>
+                              </Form>
+                            ) : (
+                              <span className="shrink-0 font-sj-ui text-xs font-semibold text-[var(--sj-ink-soft)]">
+                                Unavailable
+                              </span>
+                            )}
                           </div>
-                          {variant.isActive ? (
-                            <span className="shrink-0 font-sj-ui text-xs font-semibold text-[var(--sj-brass)]">
-                              Active variant
-                            </span>
-                          ) : canActivate ? (
-                            <Form method="post" className="shrink-0">
-                              <input type="hidden" name="intent" value="setRecipeCover" />
-                              <input type="hidden" name="coverId" value={cover.id} />
-                              <input type="hidden" name="variant" value={variant.variant} />
-                              <Button
-                                type="submit"
-                                plain
-                                aria-label={`Use ${variant.provenanceLabel} cover`}
-                              >
-                                Use
-                              </Button>
-                            </Form>
-                          ) : (
-                            <span className="shrink-0 font-sj-ui text-xs font-semibold text-[var(--sj-ink-soft)]">
-                              Unavailable
-                            </span>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                   <div className="flex flex-wrap gap-2">
                     {canQueueGeneration ? (
-                      <Form method="post">
+                      <Form method="post" className="grid w-full gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
                         <input type="hidden" name="intent" value="regenerateRecipeCover" />
                         <input type="hidden" name="coverId" value={cover.id} />
+                        <input type="hidden" name="activateWhenReady" value="true" />
+                        <Field>
+                          <Label htmlFor={`recipe-cover-regenerate-${cover.id}`}>Regeneration direction</Label>
+                          <Input
+                            id={`recipe-cover-regenerate-${cover.id}`}
+                            name="promptAddition"
+                            type="text"
+                            maxLength={240}
+                            placeholder="What should change?"
+                          />
+                        </Field>
                         <Button type="submit" plain>
-                          Regenerate cover
+                          Regenerate with direction
                         </Button>
                       </Form>
                     ) : null}
@@ -294,12 +329,24 @@ export function RecipeCoverHistory({
                   <Form method="post">
                     <input type="hidden" name="intent" value="createCoverFromSpoon" />
                     <input type="hidden" name="spoonId" value={spoon.id} />
+                    <input type="hidden" name="activateWhenReady" value="true" />
+                    <Field>
+                      <Label htmlFor={`recipe-cover-spoon-direction-${spoon.id}`}>Spoon photo direction for {spoon.chef.username}</Label>
+                      <Input
+                        id={`recipe-cover-spoon-direction-${spoon.id}`}
+                        name="promptAddition"
+                        type="text"
+                        maxLength={240}
+                        placeholder="Editorial direction"
+                      />
+                    </Field>
                     <Button
                       type="submit"
                       plain
-                      aria-label={`Create cover from spoon photo by ${spoon.chef.username}`}
+                      className="mt-2"
+                      aria-label={`Editorialize spoon photo by ${spoon.chef.username}`}
                     >
-                      Create cover
+                      Editorialize cover
                     </Button>
                   </Form>
                 </div>

@@ -137,7 +137,7 @@ describe("spoon-cover-decision.server", () => {
         shouldCreateCover: true,
         reason: "auto-seed",
         coverMode: "auto",
-        activeCoverVariant: null,
+        activeCoverVariant: "image",
       });
     });
 

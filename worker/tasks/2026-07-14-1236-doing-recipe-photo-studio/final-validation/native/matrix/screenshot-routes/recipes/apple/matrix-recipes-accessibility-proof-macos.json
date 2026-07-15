@@ -1,0 +1,93 @@
+{
+  "bundleIdentifier" : "app.spoonjoy.mac",
+  "contrast" : true,
+  "dynamicType" : true,
+  "emittedBy" : "SpoonjoyApp",
+  "keyboardNavigation" : true,
+  "kitchenTableHierarchy" : true,
+  "launchEnvironmentProof" : {
+    "apiBaseURL" : "https:\/\/spoonjoy.app",
+    "screenshotAccountID" : "chef_kitchen_capture",
+    "screenshotAPNsPermissionState" : "",
+    "screenshotAPNsRegistrationState" : "",
+    "screenshotAuth" : "1",
+    "screenshotRestoreCacheOnly" : "1"
+  },
+  "minimumTargetSize" : 44,
+  "noOverlap" : true,
+  "noTinyClusters" : true,
+  "observedDynamicTypeSize" : "large",
+  "observedReduceMotion" : false,
+  "offlineIndicatorProof" : {
+    "dismissButtonLabel" : "Hide offline status",
+    "dismissibleStates" : [
+      "offline",
+      "stale"
+    ],
+    "hiddenStates" : [
+      "synced",
+      "dismissed"
+    ],
+    "severeStates" : [
+      "queuedWork",
+      "syncFailure",
+      "conflict",
+      "blocker",
+      "destructiveConfirmation"
+    ],
+    "severityCorrect" : true,
+    "source" : "OfflineStatusView",
+    "visibleStates" : [
+      "offline",
+      "stale",
+      "queuedWork",
+      "syncFailure",
+      "conflict",
+      "blocker",
+      "destructiveConfirmation"
+    ],
+    "voiceOverLabel" : true
+  },
+  "platform" : "macos",
+  "reduceMotion" : true,
+  "route" : "recipes",
+  "routeEvidence" : {
+    "contrastPairs" : [
+      "charcoal on bone",
+      "brass on bone",
+      "secondary text on bone"
+    ],
+    "dynamicTypeTextStyles" : [
+      "KitchenTableTheme.displayTitle",
+      "KitchenTableTheme.bodyNote",
+      "KitchenTableTheme.uiLabel"
+    ],
+    "hierarchyAnchors" : [
+      "RecipesView",
+      "KitchenTableHeader",
+      "RecipeCatalogLead",
+      "RecipeIndexRow"
+    ],
+    "keyboardNavigationTargets" : [
+      "recipe lead button",
+      "RecipeIndexRow buttons",
+      "search field"
+    ],
+    "layoutGuards" : [
+      "scroll-view",
+      "text-fit",
+      "no-tiny-clusters",
+      "dock-safe-area"
+    ],
+    "voiceOverLabels" : [
+      "Recipes",
+      "On the Counter",
+      "Recipe index",
+      "Loading recipes"
+    ]
+  },
+  "source" : "RecipesView",
+  "textFits" : true,
+  "voiceOverLabels" : true,
+  "writtenAt" : "2026-07-15T12:36:18Z"
+}

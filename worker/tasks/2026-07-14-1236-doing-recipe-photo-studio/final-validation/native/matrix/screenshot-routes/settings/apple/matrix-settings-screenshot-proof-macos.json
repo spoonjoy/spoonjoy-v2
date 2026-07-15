@@ -1,0 +1,11 @@
+{
+  "route": "settings",
+  "source": "SettingsView",
+  "visibleSections": [
+    "Profile",
+    "Security"
+  ],
+  "visualFocus": "profile",
+  "writtenAt": "2026-07-15T13:00:47Z",
+  "platform": "macos"
+}

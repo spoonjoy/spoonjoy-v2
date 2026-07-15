@@ -1,0 +1,95 @@
+{
+  "bundleIdentifier" : "app.spoonjoy.mac",
+  "contrast" : true,
+  "dynamicType" : true,
+  "emittedBy" : "SpoonjoyApp",
+  "keyboardNavigation" : true,
+  "kitchenTableHierarchy" : true,
+  "launchEnvironmentProof" : {
+    "apiBaseURL" : "https:\/\/spoonjoy.app",
+    "screenshotAccountID" : "chef_kitchen_capture",
+    "screenshotAPNsPermissionState" : "",
+    "screenshotAPNsRegistrationState" : "",
+    "screenshotAuth" : "1",
+    "screenshotRestoreCacheOnly" : "1"
+  },
+  "minimumTargetSize" : 44,
+  "noOverlap" : true,
+  "noTinyClusters" : true,
+  "observedDynamicTypeSize" : "large",
+  "observedReduceMotion" : false,
+  "offlineIndicatorProof" : {
+    "dismissButtonLabel" : "Hide offline status",
+    "dismissibleStates" : [
+      "offline",
+      "stale"
+    ],
+    "hiddenStates" : [
+      "synced",
+      "dismissed"
+    ],
+    "severeStates" : [
+      "queuedWork",
+      "syncFailure",
+      "conflict",
+      "blocker",
+      "destructiveConfirmation"
+    ],
+    "severityCorrect" : true,
+    "source" : "OfflineStatusView",
+    "visibleStates" : [
+      "offline",
+      "stale",
+      "queuedWork",
+      "syncFailure",
+      "conflict",
+      "blocker",
+      "destructiveConfirmation"
+    ],
+    "voiceOverLabel" : true
+  },
+  "platform" : "macos",
+  "reduceMotion" : true,
+  "route" : "cookbooks",
+  "routeEvidence" : {
+    "contrastPairs" : [
+      "charcoal on bone",
+      "brass on bone",
+      "secondary text on bone"
+    ],
+    "dynamicTypeTextStyles" : [
+      "KitchenTableTheme.displayTitle",
+      "KitchenTableTheme.bodyNote",
+      "KitchenTableTheme.uiLabel"
+    ],
+    "hierarchyAnchors" : [
+      "CookbooksView",
+      "KitchenTableHeader",
+      "CookbookCoverArt",
+      "CookbookShelf",
+      "KitchenTableObjectRow"
+    ],
+    "keyboardNavigationTargets" : [
+      "cookbook shelf buttons",
+      "cookbook index rows",
+      "share buttons",
+      "new cookbook action"
+    ],
+    "layoutGuards" : [
+      "scroll-view",
+      "text-fit",
+      "no-tiny-clusters",
+      "dock-safe-area"
+    ],
+    "voiceOverLabels" : [
+      "Cookbooks",
+      "Shelf",
+      "Index",
+      "New Cookbook"
+    ]
+  },
+  "source" : "CookbooksView",
+  "textFits" : true,
+  "voiceOverLabels" : true,
+  "writtenAt" : "2026-07-15T12:39:50Z"
+}

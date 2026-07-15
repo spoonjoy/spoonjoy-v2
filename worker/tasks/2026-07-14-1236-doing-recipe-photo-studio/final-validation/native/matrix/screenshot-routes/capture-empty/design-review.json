@@ -1,0 +1,24 @@
+{
+  "mobileScreenshot": true,
+  "desktopScreenshot": true,
+  "screenshotRoute": "capture",
+  "dynamicType": true,
+  "voiceOverLabels": true,
+  "keyboardNavigation": true,
+  "reduceMotion": true,
+  "contrast": true,
+  "kitchenTableHierarchy": true,
+  "noOverlap": true,
+  "accessibilityProofArtifacts": [
+    "apple/matrix-capture-empty-accessibility-proof-ios.json",
+    "apple/matrix-capture-empty-accessibility-proof-macos.json"
+  ],
+  "blockers": [
+
+  ],
+  "captureSurfaceVariant": "empty",
+  "captureSignedOutSurface": false,
+  "captureNativeSurface": true,
+  "captureSeedAccountID": "chef_kitchen_capture",
+  "captureScreenshotAuth": "1"
+}

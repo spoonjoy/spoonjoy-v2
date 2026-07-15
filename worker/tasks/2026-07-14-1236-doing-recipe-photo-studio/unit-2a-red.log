@@ -1,0 +1,1247 @@
+
+> spoonjoy-v2@1.0.0 api:playground:generate /Users/arimendelow/Projects/spoonjoy-v2-photo-studio
+> tsx scripts/generate-api-playground.ts
+
+Generated app/lib/generated/api-v1-playground.ts
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2-photo-studio
+
+ ❯ test/lib/recipe-cover.server.test.ts (57 tests | 5 failed) 549ms
+       ✓ inserts a cover with the supplied fields 20ms
+       ✓ stores optional stylizedImageUrl and sourceSpoonId 9ms
+       ✓ stores status, generation, provenance, and prompt metadata 22ms
+       ✓ rejects an invalid source type 9ms
+       ✓ rejects an invalid lifecycle status 7ms
+       ✓ rejects an invalid generation status 6ms
+       ✓ returns covers ordered by createdAt desc, id desc 11ms
+       ✓ returns [] when the recipe has no covers 6ms
+       ✓ returns the explicitly active cover instead of the latest row 11ms
+       ✓ returns null when the recipe has no active cover 7ms
+       ✓ keeps getCurrentCover as an explicit-active compatibility alias 9ms
+       ✓ returns the requested active stylized variant 6ms
+       ✓ returns the requested active image variant 6ms
+       ✓ returns null when coverMode is intentionally none 5ms
+       ✓ does not fall back to newest row when the active cover is missing 6ms
+       ✓ returns null when the active cover is archived 5ms
+       ✓ uses raw image as temporary display for a processing active cover with no variant 10ms
+       ✓ falls back to the preferred variant when a ready active cover has no selected variant 6ms
+       ✓ treats a missing coverMode as auto for compatibility 7ms
+       ✓ returns null when no variant is selected and the ready cover has no displayable URL 6ms
+       ✓ returns null when the selected variant URL is empty 8ms
+       ✓ returns null for an invalid override variant 7ms
+       ✓ returns null for an invalid active cover variant 7ms
+       ✓ returns null for an invalid cover mode 7ms
+       ✓ returns null for a failed active cover 6ms
+       ✓ returns null for an invalid active cover status 6ms
+       ✓ does not throw when recipe.title is an empty string 7ms
+       × formats standalone provenance labels 12ms
+       ✓ returns only same-recipe active covers and serializes cache snapshots 9ms
+       ✓ labels ai-placeholder/image as AI generated 6ms
+       × labels chef-upload/image as Original photo 9ms
+       × labels chef-upload/stylized as Editorial photo 6ms
+       × labels spoon/image as Original photo 8ms
+       × labels spoon/stylized as Editorial photo 6ms
+       ✓ labels import/image as Imported photo 7ms
+       ✓ does not mislabel an unknown source type as AI generated 6ms
+       ✓ sets recipe active cover, variant, and manual cover mode 9ms
+       ✓ rejects an archived cover 10ms
+       ✓ rejects a missing stylized variant URL 8ms
+       ✓ rejects a missing cover 8ms
+       ✓ rejects an invalid requested variant 8ms
+       ✓ rejects a failed cover 9ms
+       ✓ allows the original image when editorial generation failed but the raw photo remains 10ms
+       ✓ rejects a cover with an invalid status 9ms
+       ✓ archives an inactive cover 10ms
+       ✓ rejects a missing cover 8ms
+       ✓ requires a replacement or explicit no-cover state for the active cover 10ms
+       ✓ rejects replacing the active cover with the same cover being archived 10ms
+       ✓ requires a replacement variant when replacing the active cover 11ms
+       ✓ sets coverMode none when archiving the active cover with confirmation 10ms
+       ✓ switches active cover before archiving the previous active cover 11ms
+       ✓ chooses the newest ready non-archived cover with a non-empty display URL 9ms
+       ✓ leaves active fields null when no ready displayable cover exists 9ms
+       ✓ ignores failed, processing, archived, and invalid-status covers 9ms
+       ✓ returns a data URL and matching byte buffer 7ms
+       ✓ escapes special characters in the title 6ms
+       ✓ renders an empty title without throwing 7ms
+ ❯ test/components/recipe/RecipeHeader.test.tsx (27 tests | 3 failed) 141ms
+       ✓ renders chef name without link when chefId is not provided 20ms
+       ✓ renders chef name as link when chefId is provided 6ms
+       ✓ prefers canonical chef profile href over chefId fallback 3ms
+       ✓ renders chef avatar with initials 3ms
+       ✓ renders chef avatar with photo when provided 3ms
+       ✓ renders recipe title 6ms
+       ✓ renders description when provided 3ms
+       ✓ does not render description section when not provided 3ms
+       ✓ does not render generic cookbook-view or origin labels without real context 3ms
+       ✓ renders masthead and provenance slots when provided 4ms
+       ✓ uses a full-bleed editorial spread instead of a constrained split hero 2ms
+       ✓ renders recipe image when imageUrl is provided 2ms
+       × renders cover provenance badge when provided 6ms
+       × uses a high-contrast overlay treatment for cover provenance on bright photos 3ms
+       ✓ renders placeholder when imageUrl is not provided 2ms
+       × renders explicit awaiting-chef-photo placeholder copy for owners 3ms
+       ✓ renders placeholder when coverImageUrl is empty 6ms
+       ✓ renders placeholder when coverImageUrl is null 2ms
+       ✓ renders scale selector with current scale factor 2ms
+       ✓ calls onScaleChange when scale is changed 2ms
+       ✓ displays scaled servings when servings text is provided 2ms
+       ✓ does not display original servings note when scale factor is not 1 2ms
+       ✓ does not display original servings note when scale factor is 1 2ms
+       ✓ renders clear progress button when onClearProgress is provided 3ms
+       ✓ calls onClearProgress when button is clicked 16ms
+       ✓ does not render clear progress button when onClearProgress is not provided 3ms
+       ✓ does not render edit, delete, share, or save buttons 3ms
+ ❯ test/components/recipe/RecipeCoverHistory.test.tsx (3 tests | 2 failed) 127ms
+     ✓ renders an explicit empty history state 27ms
+     × labels processing, editorial-failed, archived, invalid-date, and no-variant rows 63ms
+     × submits set-cover and no-cover forms 13ms
+ ❯ test/lib/spoon-cover-activation.server.test.ts (3 tests | 1 failed) 83ms
+     × auto-activates a first spoon cover as the original image while editorialization is still processing 22ms
+     ✓ does not overwrite a real cover that appears during auto-seed activation 14ms
+     ✓ activates explicit owner opt-in covers as manual image covers 22ms
+ ❯ test/lib/spoon-cover-stylization.server.test.ts (40 tests | 1 failed) 684ms
+     ✓ writes stylizedImageUrl on success via the supplied runner 23ms
+     ✓ persists prompt addition and parent cover lineage for editorial regeneration 17ms
+     ✓ auto-activates a completed editorial cover only when the recipe has no real active cover 17ms
+     × promotes an auto-seeded original spoon cover to editorial when the same cover is still active 17ms
+     ✓ activates an explicitly requested editorial cover when the guarded active state is unchanged 15ms
+     ✓ does not activate an explicitly requested editorial cover when the guarded state is stale 14ms
+     ✓ does not auto-activate candidate-only editorial jobs 14ms
+     ✓ does not activate explicit editorial jobs without an activation guard 18ms
+     ✓ does not replace a manual raw recipe upload when editorial generation completes 19ms
+     ✓ does not replace a different manual cover selected while a stale job is running 17ms
+     ✓ does not replace a different real active cover on auto-mode recipes 18ms
+     ✓ treats image and fallback active variants as real covers 22ms
+     ✓ replaces a pure AI placeholder active cover after editorialization succeeds 18ms
+     ✓ replaces a different active cover that is not ready yet 19ms
+     ✓ does not revive a cover archived while generation is running 17ms
+     ✓ logs non-Error scheduler failures without throwing 11ms
+     ✓ does not let a corrupt cross-recipe active pointer block auto-activation 18ms
+     ✓ does not overwrite a real active cover that appears during the activation write 21ms
+     ✓ ignores archived stale jobs without consuming quota 16ms
+     ✓ does nothing when stylization quota is exhausted 22ms
+     ✓ returns silently before consuming quota when no image provider config is available 18ms
+     ✓ does not mark a provider skip failed when another worker has cleared processing 18ms
+     ✓ returns silently before consuming quota when env is null 17ms
+     ✓ returns silently when the OpenAI runner factory returns null 16ms
+     ✓ uses a legacy createRunner factory when it returns a runner 16ms
+     ✓ logs errors and leaves stylizedImageUrl null when the runner throws 18ms
+     ✓ does not duplicate matching provider failure messages 17ms
+     ✓ marks a processing cover failed without consuming quota when the source image is missing 16ms
+     ✓ logs nested aggregate errors in serializable form 19ms
+     ✓ falls back to a configured secondary provider within one consumed quota unit 25ms
+     ✓ constructs the default Gemini runner from image provider env 31ms
+     ✓ uses the default Gemini image model when none is configured 19ms
+     ✓ skips when a custom image edit attempt factory returns null 12ms
+     ✓ captures normalized provider metadata when all configured providers fail 14ms
+     ✓ falls back to the default console logger when none is supplied 13ms
+     ✓ uses the OpenAI runner factory when OPENAI_API_KEY is provided 14ms
+     ✓ constructs a real OpenAI runner when no explicit runner is passed and the API key is set 14ms
+     ✓ captures exception telemetry without optional error details 0ms
+     ✓ defaults to openai then gemini 0ms
+     ✓ uses configured primary and fallbacks while ignoring duplicates and unsupported providers 0ms
+ ❯ test/components/cookbook/CookbookCoverArt.test.tsx (7 tests | 2 failed) 55ms
+     ✓ filters missing covers and keeps the first four real images 1ms
+     ✓ renders an editorial fallback cover for empty cookbooks 14ms
+     ✓ defaults to an editorial fallback cover when images are omitted 2ms
+     × renders a single-photo cover 9ms
+     × normalizes stale editorial cover labels before rendering cookbook badges 2ms
+     ✓ renders a two-photo cover 2ms
+     ✓ renders a four-photo cover and ignores extra images 1ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 14 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/lib/recipe-cover.server.test.ts > recipe-cover.server > active cover payload helpers > formats standalone provenance labels
+AssertionError: expected 'Editorialized chef photo' to be 'Editorial photo' // Object.is equality
+
+Expected: "Editorial photo"
+Received: "Editorialized chef photo"
+
+ ❯ test/lib/recipe-cover.server.test.ts:355:66
+    353|   describe("active cover payload helpers", () => {
+    354|     it("formats standalone provenance labels", () => {
+    355|       expect(getRecipeCoverProvenanceLabel("spoon", "stylized")).toBe(…
+       |                                                                  ^
+    356|       expect(getRecipeCoverProvenanceLabel("chef-upload", "image")).to…
+    357|       expect(getRecipeCoverProvenanceLabel("spoon", "image")).toBe("Or…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/14]⎯
+
+ FAIL  test/lib/recipe-cover.server.test.ts > recipe-cover.server > getRecipeCoverDisplay > labels chef-upload/image as Original photo
+ FAIL  test/lib/recipe-cover.server.test.ts > recipe-cover.server > getRecipeCoverDisplay > labels spoon/image as Original photo
+AssertionError: expected { coverId: 'active', …(8) } to match object { coverId: 'active', …(2) }
+(21 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "activeVariant": "image",
+    "coverId": "active",
+-   "provenanceLabel": "Original photo",
++   "provenanceLabel": "Chef photo",
+  }
+
+ ❯ test/lib/recipe-cover.server.test.ts:411:23
+    409|         [fakeCover({ id: "active", sourceType, imageUrl: "raw", styliz…
+    410|       );
+    411|       expect(display).toMatchObject({
+       |                       ^
+    412|         coverId: "active",
+    413|         activeVariant: variant,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/14]⎯
+
+ FAIL  test/lib/recipe-cover.server.test.ts > recipe-cover.server > getRecipeCoverDisplay > labels chef-upload/stylized as Editorial photo
+ FAIL  test/lib/recipe-cover.server.test.ts > recipe-cover.server > getRecipeCoverDisplay > labels spoon/stylized as Editorial photo
+AssertionError: expected { coverId: 'active', …(8) } to match object { coverId: 'active', …(2) }
+(21 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "activeVariant": "stylized",
+    "coverId": "active",
+-   "provenanceLabel": "Editorial photo",
++   "provenanceLabel": "Editorialized chef photo",
+  }
+
+ ❯ test/lib/recipe-cover.server.test.ts:411:23
+    409|         [fakeCover({ id: "active", sourceType, imageUrl: "raw", styliz…
+    410|       );
+    411|       expect(display).toMatchObject({
+       |                       ^
+    412|         coverId: "active",
+    413|         activeVariant: variant,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/14]⎯
+
+ FAIL  test/lib/spoon-cover-activation.server.test.ts > spoon-cover-activation.server > auto-activates a first spoon cover as the original image while editorialization is still processing
+AssertionError: expected { …(3) } to deeply equal { …(3) }
+
+- Expected
++ Received
+
+  {
+    "activeCoverId": "cmrl6c2tx00046v658vvpf2dl",
+-   "activeCoverVariant": "image",
++   "activeCoverVariant": null,
+    "coverMode": "auto",
+  }
+
+ ❯ test/lib/spoon-cover-activation.server.test.ts:57:5
+     55|     })).resolves.toBe(true);
+     56| 
+     57|     await expect(
+       |     ^
+     58|       db.recipe.findUniqueOrThrow({
+     59|         where: { id: recipeId },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/14]⎯
+
+ FAIL  test/lib/spoon-cover-stylization.server.test.ts > scheduleSpoonCoverStylization > promotes an auto-seeded original spoon cover to editorial when the same cover is still active
+AssertionError: expected { …(3) } to deeply equal { …(3) }
+
+- Expected
++ Received
+
+  {
+    "activeCoverId": "cmrl6c3cj000r6v67ndeutuzq",
+-   "activeCoverVariant": "image",
++   "activeCoverVariant": null,
+    "coverMode": "auto",
+  }
+
+ ❯ test/lib/spoon-cover-stylization.server.test.ts:214:5
+    212|       previousActiveCoverId: null,
+    213|     })).resolves.toBe(true);
+    214|     await expect(
+       |     ^
+    215|       db.recipe.findUniqueOrThrow({
+    216|         where: { id: recipeId },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/14]⎯
+
+ FAIL  test/components/cookbook/CookbookCoverArt.test.tsx > CookbookCoverArt > renders a single-photo cover
+Error: expect(element).toHaveTextContent()
+
+Expected element to have text content:
+  Original photo
+Received:
+  Chef photo
+ ❯ test/components/cookbook/CookbookCoverArt.test.tsx:44:19
+     42|     expect(screen.getByRole("img", { name: "A" })).toHaveAttribute("sr…
+     43|     const badge = screen.getByTestId("cover-provenance-badge");
+     44|     expect(badge).toHaveTextContent("Original photo");
+       |                   ^
+     45|     expect(screen.queryByText("Chef photo")).not.toBeInTheDocument();
+     46|     expect(badge).toHaveClass("bg-[rgba(37,34,31,0.96)]");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/14]⎯
+
+ FAIL  test/components/cookbook/CookbookCoverArt.test.tsx > CookbookCoverArt > normalizes stale editorial cover labels before rendering cookbook badges
+Error: expect(element).toHaveTextContent()
+
+Expected element to have text content:
+  Editorial photo
+Received:
+  Editorialized chef photo
+ ❯ test/components/cookbook/CookbookCoverArt.test.tsx:57:19
+     55| 
+     56|     const badge = screen.getByTestId("cover-provenance-badge");
+     57|     expect(badge).toHaveTextContent("Editorial photo");
+       |                   ^
+     58|     expect(screen.queryByText("Editorialized chef photo")).not.toBeInT…
+     59|     expect(screen.queryByText("Spoonjoy cookbook")).not.toBeInTheDocum…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/14]⎯
+
+ FAIL  test/components/recipe/RecipeCoverHistory.test.tsx > RecipeCoverHistory > labels processing, editorial-failed, archived, invalid-date, and no-variant rows
+TestingLibraryElementError: Unable to find an accessible element with the role "button" and name "Use Original photo cover"
+
+Here are the accessible roles:
+
+  region:
+
+  Name "Recipe covers":
+  [36m<section[39m
+    [33maria-labelledby[39m=[32m"recipe-cover-history-heading"[39m
+    [33mclass[39m=[32m"space-y-4 border-t border-[var(--sj-border)] pt-5"[39m
+    [33mdata-testid[39m=[32m"recipe-cover-history"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  heading:
+
+  Name "Recipe covers":
+  [36m<h3[39m
+    [33mclass[39m=[32m"font-sj-display text-xl font-semibold leading-7 text-[var(--sj-ink)]"[39m
+    [33mid[39m=[32m"recipe-cover-history-heading"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"font-sj-ui text-sm leading-6 text-[var(--sj-ink-soft)]"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"font-sj-ui text-sm text-[var(--sj-ink-soft)]"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"font-sj-ui text-sm font-semibold text-[var(--sj-ink)]"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"font-sj-ui text-xs uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"font-sj-ui text-sm font-semibold text-[var(--sj-ink)]"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"font-sj-ui text-xs uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"font-sj-ui text-sm font-semibold text-[var(--sj-ink)]"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"font-sj-ui text-xs uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"font-sj-ui text-sm font-semibold text-[var(--sj-ink)]"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"font-sj-ui text-xs uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"font-sj-ui text-sm font-semibold text-[var(--sj-ink)]"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"font-sj-ui text-xs uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Set no cover":
+  [36m<button[39m
+    [33mclass[39m=[32m"font-sj-ui relative isolate inline-flex min-h-11 items-center justify-center gap-x-2 rounded-[var(--sj-radius-control)] border text-base/6 font-semibold tracking-[0.01em] px-[calc(--spacing(4)-1px)] py-[calc(--spacing(2.75)-1px)] shadow-none transition sm:px-[calc(--spacing(3.5)-1px)] sm:py-[calc(--spacing(1.75)-1px)] sm:text-sm/6 focus:not-data-focus:outline-hidden data-focus:outline-2 data-focus:outline-offset-2 data-focus:outline-[var(--sj-brass)] data-disabled:opacity-50 *:data-[slot=icon]:-mx-0.5 *:data-[slot=icon]:my-0.5 *:data-[slot=icon]:size-5 *:data-[slot=icon]:shrink-0 *:data-[slot=icon]:self-center *:data-[slot=icon]:text-(--btn-icon) sm:*:data-[slot=icon]:my-1 sm:*:data-[slot=icon]:size-4 forced-colors:[--btn-icon:ButtonText] forced-colors:data-hover:[--btn-icon:ButtonText] border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_72%,transparent)] text-[var(--sj-ink)] data-active:bg-[var(--sj-flour)] data-hover:border-[var(--sj-border-strong)] data-hover:bg-[var(--sj-flour)] [--btn-icon:var(--sj-ink-soft)] data-active:[--btn-icon:var(--sj-ink)] data-hover:[--btn-icon:var(--sj-ink)] cursor-default"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mtype[39m=[32m"submit"[39m
+  [36m/>[39m
+
+  Name "Regenerate cover":
+  [36m<button[39m
+    [33mclass[39m=[32m"font-sj-ui relative isolate inline-flex min-h-11 items-center justify-center gap-x-2 rounded-[var(--sj-radius-control)] border text-base/6 font-semibold tracking-[0.01em] px-[calc(--spacing(4)-1px)] py-[calc(--spacing(2.75)-1px)] shadow-none transition sm:px-[calc(--spacing(3.5)-1px)] sm:py-[calc(--spacing(1.75)-1px)] sm:text-sm/6 focus:not-data-focus:outline-hidden data-focus:outline-2 data-focus:outline-offset-2 data-focus:outline-[var(--sj-brass)] data-disabled:opacity-50 *:data-[slot=icon]:-mx-0.5 *:data-[slot=icon]:my-0.5 *:data-[slot=icon]:size-5 *:data-[slot=icon]:shrink-0 *:data-[slot=icon]:self-center *:data-[slot=icon]:text-(--btn-icon) sm:*:data-[slot=icon]:my-1 sm:*:data-[slot=icon]:size-4 forced-colors:[--btn-icon:ButtonText] forced-colors:data-hover:[--btn-icon:ButtonText] border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_72%,transparent)] text-[var(--sj-ink)] data-active:bg-[var(--sj-flour)] data-hover:border-[var(--sj-border-strong)] data-hover:bg-[var(--sj-flour)] [--btn-icon:var(--sj-ink-soft)] data-active:[--btn-icon:var(--sj-ink)] data-hover:[--btn-icon:var(--sj-ink)] cursor-default"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mtype[39m=[32m"submit"[39m
+  [36m/>[39m
+
+  Name "Archive cover":
+  [36m<button[39m
+    [33mclass[39m=[32m"font-sj-ui relative isolate inline-flex min-h-11 items-center justify-center gap-x-2 rounded-[var(--sj-radius-control)] border text-base/6 font-semibold tracking-[0.01em] px-[calc(--spacing(4)-1px)] py-[calc(--spacing(2.75)-1px)] shadow-none transition sm:px-[calc(--spacing(3.5)-1px)] sm:py-[calc(--spacing(1.75)-1px)] sm:text-sm/6 focus:not-data-focus:outline-hidden data-focus:outline-2 data-focus:outline-offset-2 data-focus:outline-[var(--sj-brass)] data-disabled:opacity-50 *:data-[slot=icon]:-mx-0.5 *:data-[slot=icon]:my-0.5 *:data-[slot=icon]:size-5 *:data-[slot=icon]:shrink-0 *:data-[slot=icon]:self-center *:data-[slot=icon]:text-(--btn-icon) sm:*:data-[slot=icon]:my-1 sm:*:data-[slot=icon]:size-4 forced-colors:[--btn-icon:ButtonText] forced-colors:data-hover:[--btn-icon:ButtonText] border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_72%,transparent)] text-[var(--sj-ink)] data-active:bg-[var(--sj-flour)] data-hover:border-[var(--sj-border-strong)] data-hover:bg-[var(--sj-flour)] [--btn-icon:var(--sj-ink-soft)] data-active:[--btn-icon:var(--sj-ink)] data-hover:[--btn-icon:var(--sj-ink)] cursor-default"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mtype[39m=[32m"submit"[39m
+  [36m/>[39m
+
+  Name "Use Chef photo cover":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Use Chef photo cover"[39m
+    [33mclass[39m=[32m"font-sj-ui relative isolate inline-flex min-h-11 items-center justify-center gap-x-2 rounded-[var(--sj-radius-control)] border text-base/6 font-semibold tracking-[0.01em] px-[calc(--spacing(4)-1px)] py-[calc(--spacing(2.75)-1px)] shadow-none transition sm:px-[calc(--spacing(3.5)-1px)] sm:py-[calc(--spacing(1.75)-1px)] sm:text-sm/6 focus:not-data-focus:outline-hidden data-focus:outline-2 data-focus:outline-offset-2 data-focus:outline-[var(--sj-brass)] data-disabled:opacity-50 *:data-[slot=icon]:-mx-0.5 *:data-[slot=icon]:my-0.5 *:data-[slot=icon]:size-5 *:data-[slot=icon]:shrink-0 *:data-[slot=icon]:self-center *:data-[slot=icon]:text-(--btn-icon) sm:*:data-[slot=icon]:my-1 sm:*:data-[slot=icon]:size-4 forced-colors:[--btn-icon:ButtonText] forced-colors:data-hover:[--btn-icon:ButtonText] border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_72%,transparent)] text-[var(--sj-ink)] data-active:bg-[var(--sj-flour)] data-hover:border-[var(--sj-border-strong)] data-hover:bg-[var(--sj-flour)] [--btn-icon:var(--sj-ink-soft)] data-active:[--btn-icon:var(--sj-ink)] data-hover:[--btn-icon:var(--sj-ink)] cursor-default"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mtype[39m=[32m"submit"[39m
+  [36m/>[39m
+
+  Name "Regenerate cover":
+  [36m<button[39m
+    [33mclass[39m=[32m"font-sj-ui relative isolate inline-flex min-h-11 items-center justify-center gap-x-2 rounded-[var(--sj-radius-control)] border text-base/6 font-semibold tracking-[0.01em] px-[calc(--spacing(4)-1px)] py-[calc(--spacing(2.75)-1px)] shadow-none transition sm:px-[calc(--spacing(3.5)-1px)] sm:py-[calc(--spacing(1.75)-1px)] sm:text-sm/6 focus:not-data-focus:outline-hidden data-focus:outline-2 data-focus:outline-offset-2 data-focus:outline-[var(--sj-brass)] data-disabled:opacity-50 *:data-[slot=icon]:-mx-0.5 *:data-[slot=icon]:my-0.5 *:data-[slot=icon]:size-5 *:data-[slot=icon]:shrink-0 *:data-[slot=icon]:self-center *:data-[slot=icon]:text-(--btn-icon) sm:*:data-[slot=icon]:my-1 sm:*:data-[slot=icon]:size-4 forced-colors:[--btn-icon:ButtonText] forced-colors:data-hover:[--btn-icon:ButtonText] border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_72%,transparent)] text-[var(--sj-ink)] data-active:bg-[var(--sj-flour)] data-hover:border-[var(--sj-border-strong)] data-hover:bg-[var(--sj-flour)] [--btn-icon:var(--sj-ink-soft)] data-active:[--btn-icon:var(--sj-ink)] data-hover:[--btn-icon:var(--sj-ink)] cursor-default"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mtype[39m=[32m"submit"[39m
+  [36m/>[39m
+
+  Name "Archive cover":
+  [36m<button[39m
+    [33mclass[39m=[32m"font-sj-ui relative isolate inline-flex min-h-11 items-center justify-center gap-x-2 rounded-[var(--sj-radius-control)] border text-base/6 font-semibold tracking-[0.01em] px-[calc(--spacing(4)-1px)] py-[calc(--spacing(2.75)-1px)] shadow-none transition sm:px-[calc(--spacing(3.5)-1px)] sm:py-[calc(--spacing(1.75)-1px)] sm:text-sm/6 focus:not-data-focus:outline-hidden data-focus:outline-2 data-focus:outline-offset-2 data-focus:outline-[var(--sj-brass)] data-disabled:opacity-50 *:data-[slot=icon]:-mx-0.5 *:data-[slot=icon]:my-0.5 *:data-[slot=icon]:size-5 *:data-[slot=icon]:shrink-0 *:data-[slot=icon]:self-center *:data-[slot=icon]:text-(--btn-icon) sm:*:data-[slot=icon]:my-1 sm:*:data-[slot=icon]:size-4 forced-colors:[--btn-icon:ButtonText] forced-colors:data-hover:[--btn-icon:ButtonText] border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_72%,transparent)] text-[var(--sj-ink)] data-active:bg-[var(--sj-flour)] data-hover:border-[var(--sj-border-strong)] data-hover:bg-[var(--sj-flour)] [--btn-icon:var(--sj-ink-soft)] data-active:[--btn-icon:var(--sj-ink)] data-hover:[--btn-icon:var(--sj-ink)] cursor-default"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mtype[39m=[32m"submit"[39m
+  [36m/>[39m
+
+  Name "Regenerate cover":
+  [36m<button[39m
+    [33mclass[39m=[32m"font-sj-ui relative isolate inline-flex min-h-11 items-center justify-center gap-x-2 rounded-[var(--sj-radius-control)] border text-base/6 font-semibold tracking-[0.01em] px-[calc(--spacing(4)-1px)] py-[calc(--spacing(2.75)-1px)] shadow-none transition sm:px-[calc(--spacing(3.5)-1px)] sm:py-[calc(--spacing(1.75)-1px)] sm:text-sm/6 focus:not-data-focus:outline-hidden data-focus:outline-2 data-focus:outline-offset-2 data-focus:outline-[var(--sj-brass)] data-disabled:opacity-50 *:data-[slot=icon]:-mx-0.5 *:data-[slot=icon]:my-0.5 *:data-[slot=icon]:size-5 *:data-[slot=icon]:shrink-0 *:data-[slot=icon]:self-center *:data-[slot=icon]:text-(--btn-icon) sm:*:data-[slot=icon]:my-1 sm:*:data-[slot=icon]:size-4 forced-colors:[--btn-icon:ButtonText] forced-colors:data-hover:[--btn-icon:ButtonText] border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_72%,transparent)] text-[var(--sj-ink)] data-active:bg-[var(--sj-flour)] data-hover:border-[var(--sj-border-strong)] data-hover:bg-[var(--sj-flour)] [--btn-icon:var(--sj-ink-soft)] data-active:[--btn-icon:var(--sj-ink)] data-hover:[--btn-icon:var(--sj-ink)] cursor-default"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mtype[39m=[32m"submit"[39m
+  [36m/>[39m
+
+  Name "Archive cover":
+  [36m<button[39m
+    [33mclass[39m=[32m"font-sj-ui relative isolate inline-flex min-h-11 items-center justify-center gap-x-2 rounded-[var(--sj-radius-control)] border text-base/6 font-semibold tracking-[0.01em] px-[calc(--spacing(4)-1px)] py-[calc(--spacing(2.75)-1px)] shadow-none transition sm:px-[calc(--spacing(3.5)-1px)] sm:py-[calc(--spacing(1.75)-1px)] sm:text-sm/6 focus:not-data-focus:outline-hidden data-focus:outline-2 data-focus:outline-offset-2 data-focus:outline-[var(--sj-brass)] data-disabled:opacity-50 *:data-[slot=icon]:-mx-0.5 *:data-[slot=icon]:my-0.5 *:data-[slot=icon]:size-5 *:data-[slot=icon]:shrink-0 *:data-[slot=icon]:self-center *:data-[slot=icon]:text-(--btn-icon) sm:*:data-[slot=icon]:my-1 sm:*:data-[slot=icon]:size-4 forced-colors:[--btn-icon:ButtonText] forced-colors:data-hover:[--btn-icon:ButtonText] border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_72%,transparent)] text-[var(--sj-ink)] data-active:bg-[var(--sj-flour)] data-hover:border-[var(--sj-border-strong)] data-hover:bg-[var(--sj-flour)] [--btn-icon:var(--sj-ink-soft)] data-active:[--btn-icon:var(--sj-ink)] data-hover:[--btn-icon:var(--sj-ink)] cursor-default"[39m
+    [33mdata-headlessui-state[39m=[32m""[39m
+    [33mtype[39m=[32m"submit"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  article:
+
+  Name "":
+  [36m<article[39m
+    [33mclass[39m=[32m"grid gap-4 py-4 sm:grid-cols-[5rem_minmax(0,1fr)]"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<article[39m
+    [33mclass[39m=[32m"grid gap-4 py-4 sm:grid-cols-[5rem_minmax(0,1fr)]"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<article[39m
+    [33mclass[39m=[32m"grid gap-4 py-4 sm:grid-cols-[5rem_minmax(0,1fr)]"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<article[39m
+    [33mclass[39m=[32m"grid gap-4 py-4 sm:grid-cols-[5rem_minmax(0,1fr)]"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<article[39m
+    [33mclass[39m=[32m"grid gap-4 py-4 sm:grid-cols-[5rem_minmax(0,1fr)]"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<article[39m
+    [33mclass[39m=[32m"grid gap-4 py-4 sm:grid-cols-[5rem_minmax(0,1fr)]"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  presentation:
+
+  Name "":
+  [36m<img[39m
+    [33malt[39m=[32m""[39m
+    [33mclass[39m=[32m"h-full w-full object-cover"[39m
+    [33msrc[39m=[32m"/photos/failed-raw.jpg"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<img[39m
+    [33malt[39m=[32m""[39m
+    [33mclass[39m=[32m"h-full w-full object-cover"[39m
+    [33msrc[39m=[32m"/photos/archived-raw.jpg"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<img[39m
+    [33malt[39m=[32m""[39m
+    [33mclass[39m=[32m"h-full w-full object-cover"[39m
+    [33msrc[39m=[32m"/photos/archived-at-raw.jpg"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<img[39m
+    [33malt[39m=[32m""[39m
+    [33mclass[39m=[32m"h-full w-full object-cover"[39m
+    [33msrc[39m=[32m"/photos/invalid-status.jpg"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<img[39m
+    [33malt[39m=[32m""[39m
+    [33mclass[39m=[32m"h-full w-full object-cover"[39m
+    [33msrc[39m=[32m"/photos/failed-cover-row.jpg"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<section[39m
+      [33maria-labelledby[39m=[32m"recipe-cover-history-heading"[39m
+      [33mclass[39m=[32m"space-y-4 border-t border-[var(--sj-border)] pt-5"[39m
+      [33mdata-testid[39m=[32m"recipe-cover-history"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"[39m
+      [36m>[39m
+        [36m<div>[39m
+          [36m<h3[39m
+            [33mclass[39m=[32m"font-sj-display text-xl font-semibold leading-7 text-[var(--sj-ink)]"[39m
+            [33mid[39m=[32m"recipe-cover-history-heading"[39m
+          [36m>[39m
+            [0mRecipe covers[0m
+          [36m</h3>[39m
+          [36m<p[39m
+            [33mclass[39m=[32m"font-sj-ui text-sm leading-6 text-[var(--sj-ink-soft)]"[39m
+          [36m>[39m
+            [0mKeep originals and editorial versions available for this recipe.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<form[39m
+          [33maction[39m=[32m"/"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mmethod[39m=[32m"post"[39m
+        [36m>[39m
+          [36m<input[39m
+            [33mname[39m=[32m"intent"[39m
+            [33mtype[39m=[32m"hidden"[39m
+            [33mvalue[39m=[32m"setRecipeNoCover"[39m
+          [36m/>[39m
+          [36m<input[39m
+            [33mname[39m=[32m"confirmNoCover"[39m
+            [33mtype[39m=[32m"hidden"[39m
+            [33mvalue[39m=[32m"true"[39m
+          [36m/>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"font-sj-ui relative isolate inline-flex min-h-11 items-center justify-center gap-x-2 rounded-[var(--sj-radius-control)] border text-base/6 font-semibold tracking-[0.01em] px-[calc(--spacing(4)-1px)] py-[calc(--spacing(2.75)-1px)] shadow-none transition sm:px-[calc(--spacing(3.5)-1px)] sm:py-[calc(--spacing(1.75)-1px)] sm:text-sm/6 focus:not-data-focus:outline-hidden data-focus:outline-2 data-focus:outline-offset-2 data-focus:outline-[var(--sj-brass)] data-disabled:opacity-50 *:data-[slot=icon]:-mx-0.5 *:data-[slot=icon]:my-0.5 *:data-[slot=icon]:size-5 *:data-[slot=icon]:shrink-0 *:data-[slot=icon]:self-center *:data-[slot=icon]:text-(--btn-icon) sm:*:data-[slot=icon]:my-1 sm:*:data-[slot=icon]:size-4 forced-colors:[--btn-icon:ButtonText] forced-colors:data-hover:[--btn-icon:ButtonText] border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_72%,transparent)] text-[var(--sj-ink)] data-active:bg-[var(--sj-flour)] data-hover:border-[var(--sj-border-strong)] data-hover:bg-[var(--sj-flour)] [--btn-icon:var(--sj-ink-soft)] data-active:[--btn-icon:var(--sj-ink)] data-hover:[--btn-icon:var(--sj-ink)] cursor-default"[39m
+            [33mdata-headlessui-state[39m=[32m""[39m
+            [33mtype[39m=[32m"submit"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"absolute top-1/2 left-1/2 size-[max(100%,2.75rem)] -translate-x-1/2 -translate-y-1/2 pointer-fine:hidden"[39m
+              [33mdata-slot[39m=[32m"touch-target"[39m
+            [36m/>[39m
+            [0mSet no cover[0m
+          [36m</button>[39m
+        [36m</form>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex items-center justify-between gap-3 border-y border-[var(--sj-border)] py-3"[39m
+      [36m>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"font-sj-ui text-sm font-semibold text-[var(--sj-ink)]"[39m
+        [36m>[39m
+          [0mNo cover selected[0m
+        [36m</span>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"font-sj-ui text-xs uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]"[39m
+        [36m>[39m
+          [0mExplicit empty state[0m
+        [36m</span>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"divide-y divide-[var(--sj-border)] border-y border-[var(--sj-border)]"[39m
+      [36m>[39m
+        [36m<article[39m
+          [33mclass[39m=[32m"grid gap-4 py-4 sm:grid-cols-[5rem_minmax(0,1fr)]"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"aspect-square overflow-hidden bg-[var(--sj-photo-charcoal)]"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"grid h-full place-items-center px-2 text-center font-sj-ui text-xs text-[var(--sj-paper)]"[39m
+            [36m>[39m
+              [0mNo image[0m
+            [36m</div>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"min-w-0 space-y-3"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex flex-wrap items-center gap-2"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"font-sj-ui text-xs uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]"[39m
+              [36m>[39m
+                [0mProcessing[0m
+              [36m</span>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"font-sj-ui text-xs text-[var(--sj-ink-soft)]"[39m
+              [36m>[39m
+                [0mSaved cover[0m
+              [36m</span>[39m
+            [36m</div>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"font-sj-ui text-sm text-[var(--sj-ink-soft)]"[39m
+            [36m>[39m
+              [0mNo usable image variants.[0m
+            [36m</p>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex flex-wrap gap-2"[39m
+            [36m>[39m
+              [36m<form[39m
+                [33maction[39m=[32m"/"[39m
+                [33mdata-discover[39m=[32m"true"[39m
+                [33mmethod[39m=[32m"post"[39m
+              [36m>[39m
+                [36m<input[39m
+                  [33mname[39m=[32m"intent"[39m
+                  [33mtype[39m=[32m"hidden"[39m
+                  [33mvalue[39m=[32m"regenerateRecipeCover"[39m
+                [36m/>[39m
+                [36m<input[39m
+                  [33mname[39m=[32m"coverId"[39m
+                  [33mtype[39m=[32m"hidden"[39m
+                  [33mvalue[39m=[32m"processing-cover"[39m
+                [36m/>[39m
+                [36m<button[39m
+                  [33mclass[39m=[32m"font-sj-ui relative isolate inline-flex min-h-11 items-center justify-center gap-x-2 rounded-[var(--sj-radius-control)] border text-base/6 font-semibold tracking-[0.01em] px-[calc(--spacing(4)-1px)] py-[calc(--spacing(2.75)-1px)] shadow-none transition sm:px-[calc(--spacing(3.5)-1px)] sm:py-[calc(--spacing(1.75)-1px)] sm:text-sm/6 focus:not-data-focus:outline-hidden data-focus:outline-2 data-focus:outline-offset-2 data-focus:outline-[var(--sj-brass)] data-disabled:opacity-50 *:data-[slot=icon]:-mx-0.5 *:data-[slot=icon]:my-0.5 *:data-[slot=icon]:size-5 *:data-[slot=icon]:...
+ ❯ Object.getElementError node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:109:15
+ ❯ test/components/recipe/RecipeCoverHistory.test.tsx:152:19
+    150|     expect(screen.getByText("No usable image variants.")).toBeInTheDoc…
+    151|     expect(screen.getByText("No image")).toBeInTheDocument();
+    152|     expect(screen.getAllByRole("button", { name: "Use Original photo c…
+       |                   ^
+    153|     expect(screen.queryByRole("button", { name: "Use Imported photo co…
+    154|     expect(screen.queryByText("Chef photo")).toBeNull();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/14]⎯
+
+ FAIL  test/components/recipe/RecipeCoverHistory.test.tsx > RecipeCoverHistory > submits set-cover and no-cover forms
+TestingLibraryElementError: Unable to find an element with the text: Original photo. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<section[39m
+      [33maria-labelledby[39m=[32m"recipe-cover-history-heading"[39m
+      [33mclass[39m=[32m"space-y-4 border-t border-[var(--sj-border)] pt-5"[39m
+      [33mdata-testid[39m=[32m"recipe-cover-history"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"[39m
+      [36m>[39m
+        [36m<div>[39m
+          [36m<h3[39m
+            [33mclass[39m=[32m"font-sj-display text-xl font-semibold leading-7 text-[var(--sj-ink)]"[39m
+            [33mid[39m=[32m"recipe-cover-history-heading"[39m
+          [36m>[39m
+            [0mRecipe covers[0m
+          [36m</h3>[39m
+          [36m<p[39m
+            [33mclass[39m=[32m"font-sj-ui text-sm leading-6 text-[var(--sj-ink-soft)]"[39m
+          [36m>[39m
+            [0mKeep originals and editorial versions available for this recipe.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<form[39m
+          [33maction[39m=[32m"/"[39m
+          [33mdata-discover[39m=[32m"true"[39m
+          [33mmethod[39m=[32m"post"[39m
+        [36m>[39m
+          [36m<input[39m
+            [33mname[39m=[32m"intent"[39m
+            [33mtype[39m=[32m"hidden"[39m
+            [33mvalue[39m=[32m"setRecipeNoCover"[39m
+          [36m/>[39m
+          [36m<input[39m
+            [33mname[39m=[32m"confirmNoCover"[39m
+            [33mtype[39m=[32m"hidden"[39m
+            [33mvalue[39m=[32m"true"[39m
+          [36m/>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"font-sj-ui relative isolate inline-flex min-h-11 items-center justify-center gap-x-2 rounded-[var(--sj-radius-control)] border text-base/6 font-semibold tracking-[0.01em] px-[calc(--spacing(4)-1px)] py-[calc(--spacing(2.75)-1px)] shadow-none transition sm:px-[calc(--spacing(3.5)-1px)] sm:py-[calc(--spacing(1.75)-1px)] sm:text-sm/6 focus:not-data-focus:outline-hidden data-focus:outline-2 data-focus:outline-offset-2 data-focus:outline-[var(--sj-brass)] data-disabled:opacity-50 *:data-[slot=icon]:-mx-0.5 *:data-[slot=icon]:my-0.5 *:data-[slot=icon]:size-5 *:data-[slot=icon]:shrink-0 *:data-[slot=icon]:self-center *:data-[slot=icon]:text-(--btn-icon) sm:*:data-[slot=icon]:my-1 sm:*:data-[slot=icon]:size-4 forced-colors:[--btn-icon:ButtonText] forced-colors:data-hover:[--btn-icon:ButtonText] border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_72%,transparent)] text-[var(--sj-ink)] data-active:bg-[var(--sj-flour)] data-hover:border-[var(--sj-border-strong)] data-hover:bg-[var(--sj-flour)] [--btn-icon:var(--sj-ink-soft)] data-active:[--btn-icon:var(--sj-ink)] data-hover:[--btn-icon:var(--sj-ink)] cursor-default"[39m
+            [33mdata-headlessui-state[39m=[32m""[39m
+            [33mtype[39m=[32m"submit"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"absolute top-1/2 left-1/2 size-[max(100%,2.75rem)] -translate-x-1/2 -translate-y-1/2 pointer-fine:hidden"[39m
+              [33mdata-slot[39m=[32m"touch-target"[39m
+            [36m/>[39m
+            [0mSet no cover[0m
+          [36m</button>[39m
+        [36m</form>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex items-center justify-between gap-3 border-y border-[var(--sj-border)] py-3"[39m
+      [36m>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"font-sj-ui text-sm font-semibold text-[var(--sj-ink)]"[39m
+        [36m>[39m
+          [0mNo cover selected[0m
+        [36m</span>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"font-sj-ui text-xs uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]"[39m
+        [36m>[39m
+          [0mExplicit empty state[0m
+        [36m</span>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"divide-y divide-[var(--sj-border)] border-y border-[var(--sj-border)]"[39m
+      [36m>[39m
+        [36m<article[39m
+          [33mclass[39m=[32m"grid gap-4 py-4 sm:grid-cols-[5rem_minmax(0,1fr)]"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"aspect-square overflow-hidden bg-[var(--sj-photo-charcoal)]"[39m
+          [36m>[39m
+            [36m<img[39m
+              [33malt[39m=[32m""[39m
+              [33mclass[39m=[32m"h-full w-full object-cover"[39m
+              [33msrc[39m=[32m"/photos/raw.jpg"[39m
+            [36m/>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"min-w-0 space-y-3"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex flex-wrap items-center gap-2"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"inline-flex min-h-6 items-center border border-[var(--sj-brass)] px-2 font-sj-ui text-xs font-semibold text-[var(--sj-brass)]"[39m
+              [36m>[39m
+                [0mCurrent[0m
+              [36m</span>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"font-sj-ui text-xs uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]"[39m
+              [36m>[39m
+                [0mReady[0m
+              [36m</span>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"font-sj-ui text-xs text-[var(--sj-ink-soft)]"[39m
+              [36m>[39m
+                [0mDec 31, 2025[0m
+              [36m</span>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"grid gap-2 sm:grid-cols-2"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"flex min-h-16 items-center justify-between gap-3 border border-[var(--sj-border)] px-3 py-2"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"min-w-0"[39m
+                [36m>[39m
+                  [36m<p[39m
+                    [33mclass[39m=[32m"font-sj-ui text-sm font-semibold text-[var(--sj-ink)]"[39m
+                  [36m>[39m
+                    [0mChef photo[0m
+                  [36m</p>[39m
+                  [36m<p[39m
+                    [33mclass[39m=[32m"font-sj-ui text-xs uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]"[39m
+                  [36m>[39m
+                    [0mOriginal[0m
+                  [36m</p>[39m
+                [36m</div>[39m
+                [36m<form[39m
+                  [33maction[39m=[32m"/"[39m
+                  [33mclass[39m=[32m"shrink-0"[39m
+                  [33mdata-discover[39m=[32m"true"[39m
+                  [33mmethod[39m=[32m"post"[39m
+                [36m>[39m
+                  [36m<input[39m
+                    [33mname[39m=[32m"intent"[39m
+                    [33mtype[39m=[32m"hidden"[39m
+                    [33mvalu...
+ ❯ Object.getElementError node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ test/components/recipe/RecipeCoverHistory.test.tsx:230:19
+    228|     expect(screen.getByText("Active variant")).toBeInTheDocument();
+    229| 
+    230|     expect(screen.getByText("Original photo")).toBeInTheDocument();
+       |                   ^
+    231|     expect(screen.getByText("Editorial photo")).toBeInTheDocument();
+    232|     expect(screen.queryByText("Chef photo")).toBeNull();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/14]⎯
+
+ FAIL  test/components/recipe/RecipeHeader.test.tsx > RecipeHeader > recipe image > renders cover provenance badge when provided
+TestingLibraryElementError: Unable to find an element with the text: Editorial photo. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<header[39m
+      [33mclass[39m=[32m"w-full overflow-hidden border-b border-[var(--sj-border-strong)]"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"grid lg:min-h-[clamp(34rem,72svh,50rem)] lg:grid-cols-[minmax(0,58vw)_minmax(28rem,1fr)] xl:grid-cols-[minmax(0,60vw)_minmax(30rem,1fr)]"[39m
+        [33mdata-testid[39m=[32m"recipe-header-layout"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"relative h-[36svh] min-h-[16rem] max-h-[20rem] bg-[var(--sj-photo-charcoal)] lg:h-[clamp(34rem,72svh,50rem)] lg:max-h-none lg:min-h-0"[39m
+          [33mdata-testid[39m=[32m"recipe-image"[39m
+        [36m>[39m
+          [36m<img[39m
+            [33malt[39m=[32m"Photo of Test Recipe"[39m
+            [33mclass[39m=[32m"h-full min-h-[16rem] w-full object-cover lg:min-h-0"[39m
+            [33msrc[39m=[32m"https://example.com/recipe.jpg"[39m
+          [36m/>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"font-sj-ui inline-flex min-h-6 max-w-full items-center border border-[rgba(255,252,246,0.76)] bg-[rgba(37,34,31,0.96)] px-2 py-0.5 text-xs/5 font-semibold text-[var(--sj-paper)] shadow-[0_3px_18px_rgba(0,0,0,0.45)] backdrop-blur-sm [text-shadow:0_1px_1px_rgba(0,0,0,0.62)] absolute bottom-4 left-4 max-w-[calc(100%-2rem)]"[39m
+            [33mdata-testid[39m=[32m"cover-provenance-badge"[39m
+          [36m>[39m
+            [0mEditorialized chef photo[0m
+          [36m</span>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex flex-col justify-center px-5 py-6 sm:px-8 sm:py-8 lg:min-h-[clamp(34rem,72svh,50rem)] lg:px-10 lg:py-10 xl:px-14"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"mt-6 max-w-[43rem] lg:mt-10"[39m
+          [36m>[39m
+            [36m<h1[39m
+              [33mclass[39m=[32m"font-sj-display max-w-4xl break-words text-5xl/12 font-extrabold text-[var(--sj-ink)] sm:text-6xl/14 xl:text-7xl/16 2xl:text-8xl/18"[39m
+            [36m>[39m
+              [0mTest Recipe[0m
+            [36m</h1>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"mt-5 flex min-h-11 items-center gap-2"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mdata-testid[39m=[32m"chef-avatar"[39m
+              [36m>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"size-9 border border-[var(--sj-border)] inline-grid shrink-0 align-middle [--avatar-radius:20%] *:col-start-1 *:row-start-1 outline -outline-offset-1 outline-black/10 dark:outline-white/10 rounded-full *:rounded-full"[39m
+                  [33mdata-slot[39m=[32m"avatar"[39m
+                [36m>[39m
+                  [36m<svg[39m
+                    [33mclass[39m=[32m"size-full fill-current p-[5%] text-[48px] font-medium uppercase select-none"[39m
+                    [33mviewBox[39m=[32m"0 0 100 100"[39m
+                  [36m>[39m
+                    [36m<title>[39m
+                      [0mTest Chef[0m
+                    [36m</title>[39m
+                    [36m<text[39m
+                      [33malignment-baseline[39m=[32m"middle"[39m
+                      [33mdominant-baseline[39m=[32m"middle"[39m
+                      [33mdy[39m=[32m".125em"[39m
+                      [33mtext-anchor[39m=[32m"middle"[39m
+                      [33mx[39m=[32m"50%"[39m
+                      [33my[39m=[32m"50%"[39m
+                    [36m>[39m
+                      [0mT[0m
+                    [36m</text>[39m
+                  [36m</svg>[39m
+                  [36m<img[39m
+                    [33malt[39m=[32m"Test Chef"[39m
+                    [33mclass[39m=[32m"size-full object-cover"[39m
+                    [33msrc[39m=[32m"/images/chef-rj.png"[39m
+                  [36m/>[39m
+                [36m</span>[39m
+              [36m</span>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"font-sj-ui text-sm font-semibold text-[var(--sj-ink-soft)]"[39m
+              [36m>[39m
+                [0mBy [0m
+                [36m<strong[39m
+                  [33mclass[39m=[32m"text-[var(--sj-ink)]"[39m
+                [36m>[39m
+                  [0mTest Chef[0m
+                [36m</strong>[39m
+              [36m</span>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"mt-8 max-w-[43rem]"[39m
+            [33mdata-testid[39m=[32m"recipe-header-controls"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"grid gap-4 sm:grid-cols-[minmax(16rem,26rem)_auto] sm:items-center sm:justify-between"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"grid w-full grid-cols-[3rem_minmax(0,1fr)_3rem] items-stretch border-y border-[var(--sj-border-strong)] text-[var(--sj-ink)] sm:max-w-[28rem]"[39m
+                [33mdata-testid[39m=[32m"scale-selector"[39m
+              [36m>[39m
+                [36m<button[39m
+                  [33maria-label[39m=[32m"Decrease scale"[39m
+                  [33mclass[39m=[32m"grid min-h-16 place-items-center border-r border-[var(--sj-border)] text-[var(--sj-ink)] transition hover:bg-[var(--sj-flour)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)] disabled:text-[var(--sj-border-strong)] disabled:hover:bg-transparent"[39m
+                  [33mdata-testid[39m=[32m"scale-minus"[39m
+                  [33mtype[39m=[32m"button"[39m
+                [36m>[39m
+                  [36m<svg[39m
+                    [33maria-hidden[39m=[32m"true"[39m
+                    [33mclass[39m=[32m"lucide lucide-minus size-5"[39m
+                    [33mfill[39m=[32m"none"[39m
+                    [33mheight[39m=[32m"24"[39m
+                    [33mstroke[39m=[32m"currentColor"[39m
+                    [33mstroke-linecap[39m=[32m"round"[39m
+                    [33mstroke-linejoin[39m=[32m"round"[39m
+                    [33mstroke-width[39m=[32m"2"[39m
+                    [33mviewBox[39m=[32m"0 0 24 24"[39m
+                    [33mwidth[39m=[32m"24"[39m
+                    [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                  [36m>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M5 12h14"[39m
+                    [36m/>[39m
+                  [36m</svg>[39m
+                [36m</button>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"grid min-h-16 min-w-0 place-items-center px-3 py-2 text-center sm:px-4"[39m
+                [36m>[39m
+                  [36m<span[39m
+                    [33mclass[39m=[32m"font-sj-ui text-[0.62rem]/4 font-bold uppercase tracking-[0.22em] text-[var(--sj-ink-soft)]"[39m
+                  [36m>[39m
+                    [0mScale[0m
+                  [36m</span>[39m
+                  [36m<span[39m
+                    [33maria-live[39m=[32m"polite"[39m
+                    [33mclass[39m=[32m"font-sj-display max-w-full break-words text-balance text-xl/7 font-semibold text-[var(--sj-ink)] sm:text-2xl/8"[39m
+                    [33mdata-testid[39m=[32m"scale-display"[39m
+                  [36m>[39m
+                    [0m1×[0m
+                  [36m</span>[39m
+                [36m</span>[39m
+                [36m<button[39m
+                  [33maria-label[39m=[32m"Increase scale"[39m
+                  [33mclass[39m=[32m"grid min-h-16 place-items-center border-l border-[var(--sj-border)] text-[var(--sj-ink)] transition hover:bg-[var(--sj-flour)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)] disabled:text-[var(--sj-border-strong)] disabled:hover:bg-transparent"[39m
+                  [33mdata-testid[39m=[32m"scale-plus"[39m
+                  [33mtype[39m=[32m"button"[39m
+                [36m>[39m
+                  [36m<svg[39m
+                    [33maria-hidden[39m=[32m"true"[39m
+                    [33mclass[39m=[32m"lucide lucide-plus size-5"[39m
+                    [33mfill[39m=[32m"none"[39m
+                    [33mheight[39m=[32m"24"[39m
+                    [33mstroke[39m=[32m"currentColor"[39m
+                    [33mstroke-linecap[39m=[32m"round"[39m
+                    [33mstroke-linejoin[39m=[32m"round"[39m
+                    [33mstroke-width[39m=[32m"2"[39m
+                    [33mviewBox[39m=[32m"0 0 24 24"[39m
+                    [33mwidth[39m=[32m"24"[39m
+                    [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                  [36m>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M5 12h14"[39m
+                    [36m/>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M12 5v14"[39m
+                    [36m/>[39m
+                  [36m</svg>[39m
+                [36m</button>[39m
+              [36m</div>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</header>[39m
+  [36m</div>[39m
+[36m</body>[39m
+ ❯ Object.getElementError node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ test/components/recipe/RecipeHeader.test.tsx:129:21
+    127|       )
+    128| 
+    129|       expect(screen.getByText('Editorial photo')).toBeInTheDocument()
+       |                     ^
+    130|       expect(screen.queryByText('Editorialized chef photo')).toBeNull()
+    131|     })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/14]⎯
+
+ FAIL  test/components/recipe/RecipeHeader.test.tsx > RecipeHeader > recipe image > uses a high-contrast overlay treatment for cover provenance on bright photos
+Error: expect(element).toHaveTextContent()
+
+Expected element to have text content:
+  Original photo
+Received:
+  Chef photo
+ ❯ test/components/recipe/RecipeHeader.test.tsx:143:21
+    141| 
+    142|       const badge = screen.getByTestId('cover-provenance-badge')
+    143|       expect(badge).toHaveTextContent('Original photo')
+       |                     ^
+    144|       expect(screen.queryByText('Chef photo')).toBeNull()
+    145|       expect(badge).toHaveClass('bg-[rgba(37,34,31,0.96)]')
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/14]⎯
+
+ FAIL  test/components/recipe/RecipeHeader.test.tsx > RecipeHeader > recipe image > renders explicit awaiting-chef-photo placeholder copy for owners
+TestingLibraryElementError: Unable to find an element with the text: Awaiting first photo. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<header[39m
+      [33mclass[39m=[32m"w-full overflow-hidden border-b border-[var(--sj-border-strong)]"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"grid lg:min-h-[clamp(34rem,72svh,50rem)] lg:grid-cols-[minmax(0,58vw)_minmax(28rem,1fr)] xl:grid-cols-[minmax(0,60vw)_minmax(30rem,1fr)]"[39m
+        [33mdata-testid[39m=[32m"recipe-header-layout"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex h-[36svh] min-h-[16rem] max-h-[20rem] items-center justify-center bg-[var(--sj-flour)] lg:h-[clamp(34rem,72svh,50rem)] lg:max-h-none lg:min-h-0"[39m
+          [33mdata-testid[39m=[32m"recipe-image-placeholder"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex flex-col items-center gap-3 text-[var(--sj-ink-soft)]"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"rounded-[var(--sj-radius-control)] border border-[var(--sj-border-strong)] p-5"[39m
+            [36m>[39m
+              [36m<svg[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"lucide lucide-image-off size-12 sm:size-16"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<line[39m
+                  [33mx1[39m=[32m"2"[39m
+                  [33mx2[39m=[32m"22"[39m
+                  [33my1[39m=[32m"2"[39m
+                  [33my2[39m=[32m"22"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M10.41 10.41a2 2 0 1 1-2.83-2.83"[39m
+                [36m/>[39m
+                [36m<line[39m
+                  [33mx1[39m=[32m"13.5"[39m
+                  [33mx2[39m=[32m"6"[39m
+                  [33my1[39m=[32m"13.5"[39m
+                  [33my2[39m=[32m"21"[39m
+                [36m/>[39m
+                [36m<line[39m
+                  [33mx1[39m=[32m"18"[39m
+                  [33mx2[39m=[32m"21"[39m
+                  [33my1[39m=[32m"12"[39m
+                  [33my2[39m=[32m"15"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M3.59 3.59A1.99 1.99 0 0 0 3 5v14a2 2 0 0 0 2 2h14c.55 0 1.052-.22 1.41-.59"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M21 15V5a2 2 0 0 0-2-2H9"[39m
+                [36m/>[39m
+              [36m</svg>[39m
+            [36m</div>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"font-sj-ui text-sm font-semibold"[39m
+            [36m>[39m
+              [0mAwaiting first chef photo[0m
+            [36m</span>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex flex-col justify-center px-5 py-6 sm:px-8 sm:py-8 lg:min-h-[clamp(34rem,72svh,50rem)] lg:px-10 lg:py-10 xl:px-14"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"mt-6 max-w-[43rem] lg:mt-10"[39m
+          [36m>[39m
+            [36m<h1[39m
+              [33mclass[39m=[32m"font-sj-display max-w-4xl break-words text-5xl/12 font-extrabold text-[var(--sj-ink)] sm:text-6xl/14 xl:text-7xl/16 2xl:text-8xl/18"[39m
+            [36m>[39m
+              [0mTest Recipe[0m
+            [36m</h1>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"mt-5 flex min-h-11 items-center gap-2"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mdata-testid[39m=[32m"chef-avatar"[39m
+              [36m>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"size-9 border border-[var(--sj-border)] inline-grid shrink-0 align-middle [--avatar-radius:20%] *:col-start-1 *:row-start-1 outline -outline-offset-1 outline-black/10 dark:outline-white/10 rounded-full *:rounded-full"[39m
+                  [33mdata-slot[39m=[32m"avatar"[39m
+                [36m>[39m
+                  [36m<svg[39m
+                    [33mclass[39m=[32m"size-full fill-current p-[5%] text-[48px] font-medium uppercase select-none"[39m
+                    [33mviewBox[39m=[32m"0 0 100 100"[39m
+                  [36m>[39m
+                    [36m<title>[39m
+                      [0mTest Chef[0m
+                    [36m</title>[39m
+                    [36m<text[39m
+                      [33malignment-baseline[39m=[32m"middle"[39m
+                      [33mdominant-baseline[39m=[32m"middle"[39m
+                      [33mdy[39m=[32m".125em"[39m
+                      [33mtext-anchor[39m=[32m"middle"[39m
+                      [33mx[39m=[32m"50%"[39m
+                      [33my[39m=[32m"50%"[39m
+                    [36m>[39m
+                      [0mT[0m
+                    [36m</text>[39m
+                  [36m</svg>[39m
+                  [36m<img[39m
+                    [33malt[39m=[32m"Test Chef"[39m
+                    [33mclass[39m=[32m"size-full object-cover"[39m
+                    [33msrc[39m=[32m"/images/chef-rj.png"[39m
+                  [36m/>[39m
+                [36m</span>[39m
+              [36m</span>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"font-sj-ui text-sm font-semibold text-[var(--sj-ink-soft)]"[39m
+              [36m>[39m
+                [0mBy [0m
+                [36m<strong[39m
+                  [33mclass[39m=[32m"text-[var(--sj-ink)]"[39m
+                [36m>[39m
+                  [0mTest Chef[0m
+                [36m</strong>[39m
+              [36m</span>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"mt-8 max-w-[43rem]"[39m
+            [33mdata-testid[39m=[32m"recipe-header-controls"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"grid gap-4 sm:grid-cols-[minmax(16rem,26rem)_auto] sm:items-center sm:justify-between"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"grid w-full grid-cols-[3rem_minmax(0,1fr)_3rem] items-stretch border-y border-[var(--sj-border-strong)] text-[var(--sj-ink)] sm:max-w-[28rem]"[39m
+                [33mdata-testid[39m=[32m"scale-selector"[39m
+              [36m>[39m
+                [36m<button[39m
+                  [33maria-label[39m=[32m"Decrease scale"[39m
+                  [33mclass[39m=[32m"grid min-h-16 place-items-center border-r border-[var(--sj-border)] text-[var(--sj-ink)] transition hover:bg-[var(--sj-flour)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)] disabled:text-[var(--sj-border-strong)] disabled:hover:bg-transparent"[39m
+                  [33mdata-testid[39m=[32m"scale-minus"[39m
+                  [33mtype[39m=[32m"button"[39m
+                [36m>[39m
+                  [36m<svg[39m
+                    [33maria-hidden[39m=[32m"true"[39m
+                    [33mclass[39m=[32m"lucide lucide-minus size-5"[39m
+                    [33mfill[39m=[32m"none"[39m
+                    [33mheight[39m=[32m"24"[39m
+                    [33mstroke[39m=[32m"currentColor"[39m
+                    [33mstroke-linecap[39m=[32m"round"[39m
+                    [33mstroke-linejoin[39m=[32m"round"[39m
+                    [33mstroke-width[39m=[32m"2"[39m
+                    [33mviewBox[39m=[32m"0 0 24 24"[39m
+                    [33mwidth[39m=[32m"24"[39m
+                    [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                  [36m>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M5 12h14"[39m
+                    [36m/>[39m
+                  [36m</svg>[39m
+                [36m</button>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"grid min-h-16 min-w-0 place-items-center px-3 py-2 text-center sm:px-4"[39m
+                [36m>[39m
+                  [36m<span[39m
+                    [33mclass[39m=[32m"font-sj-ui text-[0.62rem]/4 font-bold uppercase tracking-[0.22em] text-[var(--sj-ink-soft)]"[39m
+                  [36m>[39m
+                    [0mScale[0m
+                  [36m</span>[39m
+                  [36m<span[39m
+                    [33maria-live[39m=[32m"polite"[39m
+                    [33mclass[39m=[32m"font-sj-display max-w-full break-words text-balance text-xl/7 font-semibold text-[var(--sj-ink)] sm:text-2xl/8"[39m
+                    [33mdata-testid[39m=[32m"scale-display"[39m
+                  [36m>[39m
+                    [0m1×[0m
+                  [36m</span>[39m
+                [36m</span>[39m
+                [36m<button[39m
+                  [33maria-label[39m=[32m"Increase scale"[39m
+                  [33mclass[39m=[32m"grid min-h-16 place-items-center border-l border-[var(--sj-border)] text-[var(--sj-ink)] transition hover:bg-[var(--sj-flour)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)] disabled:text-[var(--sj-border-strong)] disabled:hover:bg-transparent"[39m
+                  [33mdata-testid[39m=[32m"scale-plus"[39m
+                  [33mtype[39m=[32m"button"[39m
+                [36m>[39m
+                  [36m<svg[39m
+                    [33maria-hidden[39m=[32m"true"[39m
+                    [33mclass[39m=[32m"lucide lucide-plus size-5"[39m
+                    [33mfill[39m=[32m"none"[39m
+                    [33mheight[39m=[32m"24"[39m
+                    [33mstroke[39m=[32m"currentColor"[39m
+                    [33mstroke-linecap[39m=[32m"round"[39m
+                    [33mstroke-linejoin[39m=[32m"round"[39m
+                    [33mstroke-width[39m=[32m"2"[39m
+                    [33mviewBox[39m=[32m"0 0 24 24"[39m
+                    [33mwidth[39m=[32m"24"[39m
+                    [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                  [36m>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M5 12h14"[39m
+                    [36m/>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M12 5v14"[39m
+                    [36m/>[39m
+                  [36m</svg>[39m
+                [36m</button>[39m
+              [36m</div>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</header>[39m
+  [36m</div>[39m
+[36m</body>[39m
+ ❯ Object.getElementError node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ test/components/recipe/RecipeHeader.test.tsx:163:21
+    161|       renderWithRouter(<RecipeHeader {...defaultProps} coverPlaceholde…
+    162|       expect(screen.getByTestId('recipe-image-placeholder')).toBeInThe…
+    163|       expect(screen.getByText('Awaiting first photo')).toBeInTheDocume…
+       |                     ^
+    164|       expect(screen.queryByText('Awaiting first chef photo')).toBeNull…
+    165|     })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/14]⎯
+
+
+ Test Files  6 failed (6)
+      Tests  14 failed | 123 passed (137)
+   Start at  14:39:20
+   Duration  4.91s (transform 232ms, setup 384ms, import 1.18s, tests 1.64s, environment 992ms)
+

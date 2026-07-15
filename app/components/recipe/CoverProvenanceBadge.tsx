@@ -1,5 +1,19 @@
 import clsx from "clsx";
 
+export function normalizeCoverProvenanceLabel(label?: string | null): string | null {
+  if (!label) return null;
+  return normalizeRequiredCoverProvenanceLabel(label);
+}
+
+export function normalizeRequiredCoverProvenanceLabel(label: string): string {
+  const normalized = label.trim();
+  const legacyLabel = normalized.toLowerCase();
+  if (legacyLabel === "chef photo") return "Original photo";
+  if (legacyLabel === "editorialized chef photo") return "Editorial photo";
+  if (legacyLabel === "spoonjoy cookbook" || legacyLabel === "on the counter") return "Saved cover";
+  return normalized;
+}
+
 export function CoverProvenanceBadge({
   label,
   className,
@@ -7,7 +21,8 @@ export function CoverProvenanceBadge({
   label?: string | null;
   className?: string;
 }) {
-  if (!label) return null;
+  const displayLabel = normalizeCoverProvenanceLabel(label);
+  if (!displayLabel) return null;
 
   return (
     <span
@@ -17,7 +32,7 @@ export function CoverProvenanceBadge({
         className,
       )}
     >
-      {label}
+      {displayLabel}
     </span>
   );
 }

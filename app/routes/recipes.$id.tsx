@@ -1,5 +1,5 @@
 import type { Route } from "./+types/recipes.$id";
-import { useActionData, useFetcher, useLoaderData, useSubmit } from "react-router";
+import { useActionData, useFetcher, useLoaderData, useRevalidator, useSubmit } from "react-router";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { MouseEvent } from "react";
 import { usePostHog } from "@posthog/react";
@@ -21,6 +21,7 @@ import { ScaleSelector } from "~/components/recipe/ScaleSelector";
 import { RecipeProvenance } from "~/components/recipe/RecipeProvenance";
 import { ForkRecipeButton } from "~/components/recipe/ForkRecipeButton";
 import { RecipeCoverHistory } from "~/components/recipe/RecipeCoverHistory";
+import { RecipePhotoStudio } from "~/components/recipe/RecipePhotoStudio";
 import { SpoonDialog } from "~/components/recipe/SpoonDialog";
 import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
 import { StepCard } from "~/components/recipe/StepCard";
@@ -101,6 +102,7 @@ const recipeMastheadPrimaryActionClass =
   "text-[var(--sj-action)] hover:text-[var(--sj-tomato)]";
 
 const COOK_PROGRESS_STORAGE_VERSION = 1;
+const COVER_PROCESSING_POLL_INTERVAL_MS = 3000;
 
 interface CookProgressSnapshot {
   version: typeof COOK_PROGRESS_STORAGE_VERSION;
@@ -261,7 +263,14 @@ export function applyCreatedCookbookState(
 export default function RecipeDetail() {
   const loaderData = useLoaderData<typeof loader>();
   const actionData = useActionData() as RecipeDetailActionData | undefined;
-  const { recipe, coverImageUrl, coverProvenanceLabel, isOwner, hasIngredientsInShoppingList = false } = loaderData;
+  const {
+    recipe,
+    coverImageUrl,
+    coverProvenanceLabel,
+    activeCoverProcessing = null,
+    isOwner,
+    hasIngredientsInShoppingList = false,
+  } = loaderData;
   const recipeCoverFields = recipe as unknown as {
     coverImageUrl?: unknown;
     coverProvenanceLabel?: unknown;
@@ -281,6 +290,7 @@ export default function RecipeDetail() {
   const isOriginCookCandidate = loaderData.isOriginCookCandidate ?? false;
   const coverPromptMode = loaderData.coverPromptMode ?? "none";
   const submit = useSubmit();
+  const revalidator = useRevalidator();
   const addToListFetcher = useFetcher();
   const createCookbookFetcher = useFetcher<typeof action>();
   const posthog = usePostHog();
@@ -348,6 +358,20 @@ export default function RecipeDetail() {
       }
     };
   }, [recipe.id, recipe.chef.id, recipe.steps.length, isOwner, posthog]);
+
+  useEffect(() => {
+    if (!activeCoverProcessing?.coverId) {
+      return;
+    }
+
+    const intervalId = globalThis.setInterval(() => {
+      revalidator.revalidate();
+    }, COVER_PROCESSING_POLL_INTERVAL_MS);
+
+    return () => {
+      globalThis.clearInterval(intervalId);
+    };
+  }, [activeCoverProcessing?.coverId, revalidator]);
 
   // PostHog: Track scale changes
   const handleScaleChange = (newScale: number) => {
@@ -880,7 +904,8 @@ export default function RecipeDetail() {
         chefPhotoUrl={recipe.chef.photoUrl ?? undefined}
         coverImageUrl={coverImageUrl ?? recipeCoverImageUrl}
         coverProvenanceLabel={coverProvenanceLabel ?? recipeCoverProvenanceLabel}
-        coverPlaceholderLabel={isOwner ? "Awaiting first chef photo" : "Cover coming soon"}
+        coverPlaceholderLabel={isOwner ? "Awaiting first photo" : "Cover coming soon"}
+        activeCoverProcessing={activeCoverProcessing}
         servings={recipe.servings ?? undefined}
         scaleFactor={scaleFactor}
         onScaleChange={handleScaleChange}
@@ -925,7 +950,12 @@ export default function RecipeDetail() {
                     Delete
                   </Button>
                 </div>
-                <div className="mt-6">
+                <div className="mt-6 space-y-6">
+                  <RecipePhotoStudio
+                    recipeTitle={recipe.title}
+                    hasActiveCover={Boolean(coverImageUrl ?? recipeCoverImageUrl)}
+                    activeCoverProcessing={activeCoverProcessing}
+                  />
                   <RecipeCoverHistory covers={coverHistory} spoonImages={spoonImages} />
                 </div>
               </div>

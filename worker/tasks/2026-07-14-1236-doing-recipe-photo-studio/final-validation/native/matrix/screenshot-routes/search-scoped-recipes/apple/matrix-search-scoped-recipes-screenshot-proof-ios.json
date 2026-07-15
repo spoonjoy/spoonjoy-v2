@@ -1,0 +1,20 @@
+{
+  "accountID": "chef_search_capture",
+  "query": "lemon",
+  "route": "search",
+  "routeIdentifier": "search:recipes:lemon",
+  "scope": "recipes",
+  "searchScopes": [
+    "all",
+    "recipes",
+    "cookbooks",
+    "chefs",
+    "shopping-list"
+  ],
+  "source": "SearchView",
+  "visibleSections": [
+    "Recipes"
+  ],
+  "writtenAt": "2026-07-15T12:50:47Z",
+  "platform": "ios"
+}

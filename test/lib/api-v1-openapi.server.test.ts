@@ -40,10 +40,13 @@ const OPERATION_SCOPES = {
   "POST /api/v1/recipes/{id}/spoons": ["kitchen:write"],
   "PATCH /api/v1/recipes/{id}/spoons/{spoonId}": ["kitchen:write"],
   "DELETE /api/v1/recipes/{id}/spoons/{spoonId}": ["kitchen:write"],
+  "POST /api/v1/recipes/{id}/image": ["kitchen:write"],
   "GET /api/v1/recipes/{id}/covers": ["kitchen:write"],
+  "POST /api/v1/recipes/{id}/covers": ["kitchen:write"],
   "PATCH /api/v1/recipes/{id}/covers": ["kitchen:write"],
   "PATCH /api/v1/recipes/{id}/covers/{coverId}": ["kitchen:write"],
   "DELETE /api/v1/recipes/{id}/covers/{coverId}": ["kitchen:write"],
+  "POST /api/v1/recipes/{id}/covers/generate": ["kitchen:write"],
   "POST /api/v1/recipes/{id}/covers/regenerate": ["kitchen:write"],
   "POST /api/v1/recipes/{id}/covers/from-spoon/{spoonId}": ["kitchen:write"],
   "GET /api/v1/cookbooks": ["cookbooks:read"],
@@ -427,7 +430,7 @@ describe("API v1 OpenAPI document", () => {
       limit: 20,
       recipes: [expect.objectContaining({
         title: "Pasta",
-        coverProvenanceLabel: "Chef photo",
+        coverProvenanceLabel: "Original photo",
         coverSourceType: "chef-upload",
         coverVariant: "image",
       })],
@@ -441,7 +444,7 @@ describe("API v1 OpenAPI document", () => {
         expect.objectContaining({
           type: "recipe",
           canonicalUrl: "https://spoonjoy.app/recipes/recipe_1",
-          metadata: expect.objectContaining({ coverProvenanceLabel: "Chef photo" }),
+          metadata: expect.objectContaining({ coverProvenanceLabel: "Original photo" }),
         }),
         expect.objectContaining({
           type: "shopping-list-item",
@@ -451,7 +454,7 @@ describe("API v1 OpenAPI document", () => {
       ],
     });
     expect(responseExample(document, "/api/v1/recipes/{id}", "GET", "200").data.recipe).toMatchObject({
-      coverProvenanceLabel: "Chef photo",
+      coverProvenanceLabel: "Original photo",
       coverSourceType: "chef-upload",
       coverVariant: "image",
     });
@@ -482,7 +485,7 @@ describe("API v1 OpenAPI document", () => {
       mutation: { clientMutationId: "device-uuid-spoon-delete", replayed: false },
     });
     expect(responseExample(document, "/api/v1/cookbooks/{id}", "GET", "200").data.cookbook.recipes[0]).toMatchObject({
-      coverProvenanceLabel: "Chef photo",
+      coverProvenanceLabel: "Original photo",
       coverSourceType: "chef-upload",
       coverVariant: "image",
     });
@@ -840,6 +843,10 @@ describe("API v1 OpenAPI document", () => {
 
     expect(operation(document, "/api/v1/me/photo", "POST").requestBody.content["multipart/form-data"].schema.$ref)
       .toBe("#/components/schemas/ProfilePhotoUploadRequest");
+    expect(operation(document, "/api/v1/me/photo", "POST").requestBody.content["multipart/form-data"].encoding.photo.contentType)
+      .toBe("image/jpeg,image/png,image/gif,image/webp");
+    expect(operation(document, "/api/v1/recipes/{id}/image", "POST").requestBody.content["multipart/form-data"].encoding.photo.contentType)
+      .toBe("image/jpeg,image/png,image/webp");
     expect(operation(document, "/api/v1/me/photo", "POST").requestBody.content["application/json"]).toBeUndefined();
 	    expect(operation(document, "/api/v1/me/photo", "POST").responses["200"].content["application/json"].schema.$ref)
 	      .toBe("#/components/schemas/AccountProfileMutationEnvelope");
@@ -1003,6 +1010,19 @@ describe("API v1 OpenAPI document", () => {
 	        photo: { type: "string", format: "binary" },
 	      },
 	    });
+	    expect(components.schemas.RecipeImageUploadRequest).toMatchObject({
+      additionalProperties: false,
+      required: ["clientMutationId", "photo"],
+      properties: {
+        clientMutationId: { type: "string", minLength: 1, maxLength: 160 },
+        photo: { type: "string", format: "binary" },
+        activateWhenReady: { type: "boolean", default: true },
+        generateEditorial: { type: "boolean", default: true },
+        promptAddition: { type: ["string", "null"], maxLength: 240 },
+        postAsSpoon: { type: "boolean", default: false },
+      },
+    });
+    expect(components.schemas.RecipeImageUploadRequest.properties.activate).toBeUndefined();
 	    expect(components.schemas.UpdateNotificationPreferencesRequest.required).toEqual([
 	      "clientMutationId",
 	      "notifySpoonOnMyRecipe",
@@ -1056,6 +1076,17 @@ describe("API v1 OpenAPI document", () => {
         confirmNoCover: { const: true },
       },
     });
+    expect(components.schemas.CreateRecipeCoverRequest).toMatchObject({
+      additionalProperties: false,
+      required: ["clientMutationId", "imageUrl"],
+      properties: {
+        clientMutationId: { type: "string", minLength: 1, maxLength: 160 },
+        imageUrl: { type: "string", maxLength: 2048 },
+        activate: { type: "boolean", default: false },
+        generateEditorial: { type: "boolean", default: true },
+        promptAddition: { type: ["string", "null"], maxLength: 240 },
+      },
+    });
     expect(components.schemas.ArchiveRecipeCoverRequest).toMatchObject({
       additionalProperties: false,
       required: ["clientMutationId"],
@@ -1066,6 +1097,130 @@ describe("API v1 OpenAPI document", () => {
       },
     });
     expect(components.schemas.ArchiveRecipeCoverRequest.properties.coverId).toBeUndefined();
+  });
+
+  it("declares exact Photo Studio schemas, examples, and idempotency metadata", () => {
+    const document = buildApiV1OpenApiDocument();
+
+    const imageUpload = operation(document, "/api/v1/recipes/{id}/image", "POST");
+    expect(imageUpload.requestBody.content["multipart/form-data"]).toMatchObject({
+      schema: { $ref: "#/components/schemas/RecipeImageUploadRequest" },
+      encoding: { photo: { contentType: "image/jpeg,image/png,image/webp" } },
+    });
+    expect(imageUpload.requestBody.content["application/json"]).toBeUndefined();
+    const imageUploadExample = requestExample(document, "/api/v1/recipes/{id}/image", "POST");
+    expect(imageUploadExample).toMatchObject({
+      clientMutationId: "device-uuid-recipe-image",
+      photo: "(binary image file)",
+      activateWhenReady: true,
+      generateEditorial: true,
+      promptAddition: "moodier window light",
+      postAsSpoon: true,
+      note: "Added more lemon.",
+      nextTime: "Try a wider pan.",
+      cookedAt: expect.stringMatching(/^2026-06-01T/),
+    });
+    expect(imageUploadExample).not.toHaveProperty("activate");
+    expect(imageUpload["x-idempotency"]).toMatchObject({
+      key: "clientMutationId",
+      location: "multipartFormData",
+      replayStatus: [201],
+      retryBodyRule: expect.stringContaining("uploaded file digest"),
+    });
+    expect(responseExample(document, "/api/v1/recipes/{id}/image", "POST", "201").data)
+      .toMatchObject({
+        spoon: expect.objectContaining({ photoUrl: expect.stringContaining("/photos/spoons/") }),
+        createdCover: expect.objectContaining({
+          sourceType: "spoon",
+          sourceImageUrl: expect.stringContaining("/photos/spoons/"),
+        }),
+        generationStatus: "processing",
+        mutation: { clientMutationId: "device-uuid-recipe-image", replayed: false },
+      });
+
+    const jsonCoverCreate = operation(document, "/api/v1/recipes/{id}/covers", "POST");
+    expect(jsonCoverCreate.requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/CreateRecipeCoverRequest");
+    expect(requestExample(document, "/api/v1/recipes/{id}/covers", "POST")).toEqual({
+      clientMutationId: "device-uuid-cover-create",
+      imageUrl: "https://spoonjoy.app/photos/uploads/cover-raw.jpg",
+      activate: true,
+      generateEditorial: true,
+      promptAddition: "brighter herbs and tighter crop",
+    });
+    expect(jsonCoverCreate["x-idempotency"]).toMatchObject({
+      key: "clientMutationId",
+      location: "jsonBody",
+      replayStatus: [201],
+    });
+    expect(responseExample(document, "/api/v1/recipes/{id}/covers", "POST", "201").data)
+      .toMatchObject({
+        activeCover: expect.objectContaining({
+          sourceType: "chef-upload",
+          status: "processing",
+          generationStatus: "processing",
+        }),
+        createdCover: expect.objectContaining({
+          sourceType: "chef-upload",
+          status: "processing",
+          generationStatus: "processing",
+          sourceImageUrl: "https://spoonjoy.app/photos/uploads/cover-raw.jpg",
+        }),
+        generationStatus: "processing",
+      });
+
+    const generatedPlaceholder = operation(document, "/api/v1/recipes/{id}/covers/generate", "POST");
+    expect(generatedPlaceholder.requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/GenerateRecipeCoverRequest");
+    expect(requestExample(document, "/api/v1/recipes/{id}/covers/generate", "POST")).toEqual({
+      clientMutationId: "device-uuid-cover-generate",
+      promptAddition: "brighter herbs and tighter crop",
+      activateWhenReady: true,
+    });
+    expect(generatedPlaceholder["x-idempotency"]).toMatchObject({
+      key: "clientMutationId",
+      location: "jsonBody",
+      replayStatus: [201],
+    });
+    expect(responseExample(document, "/api/v1/recipes/{id}/covers/generate", "POST", "201").data)
+      .toMatchObject({
+        createdCover: expect.objectContaining({
+          sourceType: "ai-placeholder",
+          status: "processing",
+          generationStatus: "processing",
+        }),
+        generationStatus: "processing",
+      });
+
+    const regenerate = operation(document, "/api/v1/recipes/{id}/covers/regenerate", "POST");
+    expect(regenerate.requestBody.content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/RegenerateRecipeCoverRequest");
+    expect(requestExample(document, "/api/v1/recipes/{id}/covers/regenerate", "POST")).toEqual({
+      clientMutationId: "device-uuid-cover-regenerate",
+      coverId: "cover_1",
+      promptAddition: "keep the plating but brighten the background",
+      activateWhenReady: true,
+    });
+    expect(regenerate["x-idempotency"]).toMatchObject({
+      key: "clientMutationId",
+      location: "jsonBody",
+      replayStatus: [200],
+    });
+    expect(responseExample(document, "/api/v1/recipes/{id}/covers/regenerate", "POST", "200").data)
+      .toMatchObject({
+        activeCover: expect.objectContaining({
+          id: "cover_1",
+          status: "processing",
+          generationStatus: "processing",
+        }),
+        createdCover: expect.objectContaining({
+          id: "cover_1",
+          status: "processing",
+          generationStatus: "processing",
+        }),
+        generationStatus: "processing",
+        mutation: { clientMutationId: "device-uuid-cover-regenerate", replayed: false },
+      });
   });
 
   it("publishes an OpenAPI 3.0 REST-only connector profile for no-code importers", () => {
@@ -1089,7 +1244,10 @@ describe("API v1 OpenAPI document", () => {
       "/api/v1/shopping-list/sync",
     ].sort());
     expect(connector.paths["/mcp"]).toBeUndefined();
+    expect(connector.paths["/api/v1/recipes/{id}/image"]).toBeUndefined();
     expect(connector.paths["/api/v1/recipes/{id}/covers"]).toBeUndefined();
+    expect(connector.paths["/api/v1/recipes/{id}/covers/generate"]).toBeUndefined();
+    expect(connector.paths["/api/v1/recipes/{id}/covers/regenerate"]).toBeUndefined();
     expect(connector.paths["/oauth/authorize"]).toBeUndefined();
     expect(connector.components.securitySchemes.cookieAuth).toBeUndefined();
     expect(JSON.stringify(connector.paths)).not.toContain("cookieAuth");
@@ -1161,6 +1319,43 @@ describe("API v1 OpenAPI document", () => {
     expect(sdk.paths["/api/v1/recipes/{id}/covers"].patch["x-idempotency"]).toMatchObject({
       key: "clientMutationId",
       location: "jsonBody",
+    });
+    expect(sdk.paths["/api/v1/recipes/{id}/covers"].post).toMatchObject({
+      operationId: "postApiV1RecipeCovers",
+      "x-scopes": ["kitchen:write"],
+    });
+    expect(sdk.paths["/api/v1/recipes/{id}/covers/generate"]).toBeDefined();
+    expect(sdk.paths["/api/v1/recipes/{id}/covers/generate"].post).toMatchObject({
+      operationId: "postApiV1RecipeCoverGenerate",
+      "x-scopes": ["kitchen:write"],
+      requestBody: {
+        content: {
+          "application/json": {
+            schema: { $ref: "#/components/schemas/GenerateRecipeCoverRequest" },
+          },
+        },
+      },
+      "x-idempotency": {
+        key: "clientMutationId",
+        location: "jsonBody",
+        replayStatus: [201],
+      },
+    });
+    expect(sdk.paths["/api/v1/recipes/{id}/image"].post).toMatchObject({
+      operationId: "postApiV1RecipeImage",
+      "x-scopes": ["kitchen:write"],
+      requestBody: {
+        content: {
+          "multipart/form-data": {
+            schema: { $ref: "#/components/schemas/RecipeImageUploadRequest" },
+          },
+        },
+      },
+      "x-idempotency": {
+        key: "clientMutationId",
+        location: "multipartFormData",
+        replayStatus: [201],
+      },
     });
     expect(sdk.paths["/api/v1/recipes/{id}/covers/from-spoon/{spoonId}"].post).toMatchObject({
       operationId: "postApiV1RecipeCoverFromSpoon",

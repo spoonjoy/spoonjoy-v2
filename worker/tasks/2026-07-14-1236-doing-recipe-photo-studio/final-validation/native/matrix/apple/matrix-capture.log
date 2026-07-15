@@ -1,0 +1,73 @@
+building shared iOS simulator app for route matrix
+building shared macOS app for route matrix
+route matrix using shared iOS app: /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-iOS/Build/Products/BootstrapDebug-iphonesimulator/Spoonjoy.app
+route matrix using shared macOS app: /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app
+resetting iOS simulator before route kitchen
+capturing native route kitchen (kitchen)
+resetting iOS simulator before route recipes
+capturing native route recipes (recipes)
+resetting iOS simulator before route saved-recipes
+capturing native route saved-recipes (saved-recipes)
+resetting iOS simulator before route recipe-detail
+capturing native route recipe-detail (recipe-detail)
+resetting iOS simulator before route cook-mode
+capturing native route cook-mode (cook-mode)
+resetting iOS simulator before route cookbooks
+capturing native route cookbooks (cookbooks)
+resetting iOS simulator before route cookbook-detail
+capturing native route cookbook-detail (cookbook-detail)
+resetting iOS simulator before route shopping-list
+capturing native route shopping-list (shopping-list)
+resetting iOS simulator before route shopping-list-empty
+capturing native route shopping-list-empty (shopping-list-empty)
+resetting iOS simulator before route shopping-list-all-complete
+capturing native route shopping-list-all-complete (shopping-list-all-complete)
+resetting iOS simulator before route shopping-list-duplicate
+capturing native route shopping-list-duplicate (shopping-list-duplicate)
+resetting iOS simulator before route shopping-list-conflict
+capturing native route shopping-list-conflict (shopping-list-conflict)
+resetting iOS simulator before route shopping-list-offline-queued
+capturing native route shopping-list-offline-queued (shopping-list-offline-queued)
+resetting iOS simulator before route chefs
+capturing native route chefs (chefs)
+resetting iOS simulator before route search
+capturing native route search (search)
+resetting iOS simulator before route search-typed-results
+capturing native route search-typed-results (search-typed-results)
+resetting iOS simulator before route search-scoped-recipes
+capturing native route search-scoped-recipes (search-scoped-recipes)
+resetting iOS simulator before route search-scoped-cookbooks
+capturing native route search-scoped-cookbooks (search-scoped-cookbooks)
+resetting iOS simulator before route search-scoped-chefs
+capturing native route search-scoped-chefs (search-scoped-chefs)
+resetting iOS simulator before route search-scoped-shopping
+capturing native route search-scoped-shopping (search-scoped-shopping)
+resetting iOS simulator before route search-no-results
+capturing native route search-no-results (search-no-results)
+resetting iOS simulator before route capture
+capturing native route capture (capture)
+resetting iOS simulator before route capture-empty
+capturing native route capture-empty (capture-empty)
+resetting iOS simulator before route capture-draft
+capturing native route capture-draft (capture-draft)
+resetting iOS simulator before route capture-offline-retry
+capturing native route capture-offline-retry (capture-offline-retry)
+resetting iOS simulator before route capture-provider-blocked
+capturing native route capture-provider-blocked (capture-provider-blocked)
+resetting iOS simulator before route capture-signed-out
+capturing native route capture-signed-out (capture-signed-out)
+resetting iOS simulator before route settings
+capturing native route settings (settings)
+resetting iOS simulator before route settings-notifications
+capturing native route settings-notifications (settings)
+resetting iOS simulator before route settings-signed-out
+capturing native route settings-signed-out (settings)
+resetting iOS simulator before route settings-apns-denied
+capturing native route settings-apns-denied (settings)
+resetting iOS simulator before route settings-apns-not-determined
+capturing native route settings-apns-not-determined (settings)
+resetting iOS simulator before route settings-apns-authorized
+capturing native route settings-apns-authorized (settings)
+resetting iOS simulator before route settings-apns-unregistered
+capturing native route settings-apns-unregistered (settings)
+native screenshot route matrix complete: /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/apple/matrix-route-matrix.json

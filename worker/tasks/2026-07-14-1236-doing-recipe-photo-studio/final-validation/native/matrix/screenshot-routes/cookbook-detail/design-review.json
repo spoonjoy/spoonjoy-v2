@@ -1,0 +1,24 @@
+{
+  "mobileScreenshot": true,
+  "desktopScreenshot": true,
+  "screenshotRoute": "cookbook-detail",
+  "dynamicType": true,
+  "voiceOverLabels": true,
+  "keyboardNavigation": true,
+  "reduceMotion": true,
+  "contrast": true,
+  "kitchenTableHierarchy": true,
+  "noOverlap": true,
+  "accessibilityProofArtifacts": [
+    "apple/matrix-cookbook-detail-accessibility-proof-ios.json",
+    "apple/matrix-cookbook-detail-accessibility-proof-macos.json"
+  ],
+  "blockers": [
+
+  ],
+  "cookbookDetailSurface": true,
+  "cookbookSeedAccountID": "chef_kitchen_capture",
+  "cookbookID": "cookbook_weeknights",
+  "cookbookContentsIndex": true,
+  "cookbookOwnerToolsDisclosure": true
+}

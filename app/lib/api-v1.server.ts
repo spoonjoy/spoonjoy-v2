@@ -98,10 +98,17 @@ import {
 import {
   deleteStoredImageWithCapture,
   hasUploadedImageFile,
+  RECIPE_IMAGE_TYPES,
   storeImage,
   validateImageFile,
+  validateImageFileForStorage,
 } from "~/lib/image-storage.server";
-import { IMAGE_MAX_FILE_SIZE, PROFILE_IMAGE_TYPES } from "~/lib/recipe-image";
+import {
+  FOOD_IMAGE_SIZE_MESSAGE,
+  FOOD_IMAGE_TYPE_MESSAGE,
+  IMAGE_MAX_FILE_SIZE,
+  PROFILE_IMAGE_TYPES,
+} from "~/lib/recipe-image";
 import { listUserPasskeys } from "~/lib/webauthn-route.server";
 import {
   archiveRecipeCover,
@@ -125,9 +132,10 @@ import {
 } from "~/lib/recipe-spoon.server";
 import { activateSpoonCoverForDecision } from "~/lib/spoon-cover-activation.server";
 import { decideSpoonCoverCreation } from "~/lib/spoon-cover-decision.server";
-import { validateSpoonPhotoAssignment } from "~/lib/recipe-image-assignment.server";
+import { validateRecipeImageAssignment, validateSpoonPhotoAssignment } from "~/lib/recipe-image-assignment.server";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { deferBackgroundTask } from "~/lib/background-task.server";
+import { scheduleAiPlaceholderCover } from "~/lib/ai-placeholder-cover.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
 import {
   ImportRecipeError,
@@ -136,7 +144,7 @@ import {
   type NativeRecipeImportCapture,
   type NativeRecipeImportSource,
 } from "~/lib/recipe-import.server";
-import type { ImageGenEnv } from "~/lib/image-gen.server";
+import { sanitizeImagePromptAddition, type ImageGenEnv, type ImageGenRunner } from "~/lib/image-gen.server";
 import type { PostHogServerEnv } from "~/lib/analytics-server";
 
 const DEFAULT_LIST_LIMIT = 20;
@@ -522,6 +530,8 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "recipes.spoons.update";
     case "DELETE recipe-spoon":
       return "recipes.spoons.delete";
+    case "POST recipe-image":
+      return "recipes.image.upload";
     case "GET recipe-covers":
       return "recipes.covers.list";
     case "PATCH recipe-covers":
@@ -622,6 +632,7 @@ function defaultIdempotencyOutcome(operation: string | undefined, errorCode: Api
     operation !== "recipes.update" &&
     operation !== "recipes.delete" &&
     operation !== "recipes.fork" &&
+    !operation.startsWith("recipes.image.") &&
     !operation.startsWith("recipes.spoons.") &&
     !operation.startsWith("recipes.covers.") &&
     !operation.startsWith("cookbooks.") &&
@@ -1295,6 +1306,7 @@ function recipeDetail(recipe: RecipeRow, origin: string) {
 type RecipeCoverOwnerRow = {
   id: string;
   title: string;
+  description: string | null;
   chefId: string;
   activeCoverId: string | null;
   activeCoverVariant: string | null;
@@ -1360,6 +1372,7 @@ async function loadOwnedCoverRecipe(db: ApiV1Db, principal: ApiPrincipal, recipe
     select: {
       id: true,
       title: true,
+      description: true,
       chefId: true,
       activeCoverId: true,
       activeCoverVariant: true,
@@ -1381,6 +1394,7 @@ async function loadActiveRecipeForSpoons(db: ApiV1Db, recipeId: string): Promise
     select: {
       id: true,
       title: true,
+      description: true,
       chefId: true,
       activeCoverId: true,
       activeCoverVariant: true,
@@ -1448,6 +1462,52 @@ function optionalCoverVariant(value: unknown): RecipeCoverVariant | null {
   return requiredCoverVariant(value);
 }
 
+function optionalPromptAddition(value: unknown): string | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string") {
+    throw new ApiV1Error("validation_error", "promptAddition must be a string", { field: "promptAddition" });
+  }
+  return sanitizeImagePromptAddition(value);
+}
+
+function normalizeRecipeCoverImageUrl(value: unknown, origin: string): string {
+  const raw = nonblankString(value, "imageUrl", 2048);
+  let pathname = raw;
+
+  if (URL.canParse(raw)) {
+    const parsed = new URL(raw);
+    const expectedOrigin = new URL(origin);
+    if (parsed.protocol !== expectedOrigin.protocol || normalizedHost(parsed.hostname) !== normalizedHost(expectedOrigin.hostname)) {
+      throw new ApiV1Error("validation_error", "imageUrl must be a Spoonjoy uploaded image URL", { field: "imageUrl" });
+    }
+    if (parsed.search || parsed.hash) {
+      throw new ApiV1Error("validation_error", "imageUrl must not include query parameters or fragments", { field: "imageUrl" });
+    }
+    pathname = parsed.pathname;
+  }
+
+  if (!pathname.startsWith("/photos/")) {
+    throw new ApiV1Error("validation_error", "imageUrl must be a Spoonjoy uploaded image URL", { field: "imageUrl" });
+  }
+
+  const key = pathname.slice("/photos/".length);
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(key);
+  } catch {
+    throw new ApiV1Error("validation_error", "imageUrl must be a clean Spoonjoy uploaded image URL", { field: "imageUrl" });
+  }
+  if (
+    decoded !== key ||
+    decoded.includes("\\") ||
+    decoded.split("/").some((part) => !part || part === "." || part === "..")
+  ) {
+    throw new ApiV1Error("validation_error", "imageUrl must be a clean Spoonjoy uploaded image URL", { field: "imageUrl" });
+  }
+
+  return pathname;
+}
+
 function coverMutationError(error: unknown, coverId: string): ApiV1Error {
   const message = error instanceof Error ? error.message : "Cover mutation failed";
   if (/cover was not found/i.test(message)) {
@@ -1494,6 +1554,26 @@ async function validateApiV1SpoonPhotoUrl(args: ApiV1RouteArgs, principal: ApiPr
   }
 }
 
+async function validateApiV1RecipeCoverImageUrl(args: ApiV1RouteArgs, principal: ApiPrincipal, imageUrl: string) {
+  const cf = apiV1CloudflareFor(args);
+  try {
+    await validateRecipeImageAssignment({
+      imageUrl,
+      ownerId: principal.id,
+      bucket: cf?.env?.PHOTOS,
+      allowLocalImageFallback: false,
+    });
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      if (error.status === 400) {
+        throw new ApiV1Error("validation_error", error.message);
+      }
+      throw new ApiV1Error("internal_error", error.message);
+    }
+    throw error;
+  }
+}
+
 async function validateApiV1SpoonPhotoUrlForWrite(input: {
   args: ApiV1RouteArgs;
   principal: ApiPrincipal;
@@ -1510,6 +1590,8 @@ async function runOrQueueCoverStylization(
     userId: string;
     recipeId: string;
     coverId: string;
+    parentCoverId?: string | null;
+    promptAddition?: string | null;
     rawPhotoUrl: string;
     recipeTitle: string;
     sourceType: "chef-upload" | "spoon";
@@ -1524,6 +1606,8 @@ async function runOrQueueCoverStylization(
     userId: input.userId,
     recipeId: input.recipeId,
     coverId: input.coverId,
+    parentCoverId: input.parentCoverId,
+    promptAddition: input.promptAddition,
     rawPhotoUrl: input.rawPhotoUrl,
     recipeTitle: input.recipeTitle,
     env,
@@ -1531,6 +1615,43 @@ async function runOrQueueCoverStylization(
     sourceType: input.sourceType,
     activateWhenReady: input.activateWhenReady,
     suppressAutoActivation: input.suppressAutoActivation,
+    activationGuard: input.activationGuard,
+  }));
+  if (waitUntil) {
+    waitUntil(task);
+    return;
+  }
+  await task;
+}
+
+async function runOrQueuePlaceholderGeneration(
+  args: ApiV1RouteArgs,
+  input: {
+    db: ApiV1Db;
+    userId: string;
+    recipeId: string;
+    coverId: string;
+    title: string;
+    description: string | null;
+    promptAddition?: string | null;
+    activateWhenReady: boolean;
+    activationGuard?: { activeCoverId: string | null; activeCoverVariant: string | null; coverMode: string };
+  },
+) {
+  const { bucket, env, waitUntil } = coverCloudflare(args);
+  const task = deferBackgroundTask(() => scheduleAiPlaceholderCover({
+    db: input.db,
+    userId: input.userId,
+    recipeId: input.recipeId,
+    coverId: input.coverId,
+    title: input.title,
+    description: input.description,
+    promptAddition: input.promptAddition,
+    env,
+    bucket,
+    runner: (args.context as { imageGenRunner?: ImageGenRunner }).imageGenRunner,
+    activateWhenReady: input.activateWhenReady,
+    suppressAutoActivation: !input.activateWhenReady,
     activationGuard: input.activationGuard,
   }));
   if (waitUntil) {
@@ -2246,6 +2367,229 @@ async function handleRecipeSpoonDelete(args: ApiV1RouteArgs, requestId: string, 
   });
 }
 
+async function recipeImageUploadData(
+  args: ApiV1RouteArgs,
+  input: {
+    db: ApiV1Db;
+    principal: ApiPrincipal;
+    recipeId: string;
+    coverId: string;
+    spoonId: string | null;
+    clientMutationId: string;
+    previousActiveCover: ReturnType<typeof fullCoverPayload> | null;
+  },
+) {
+  const origin = publicContentOrigin(args);
+  const recipe = await loadOwnedCoverRecipe(input.db, input.principal, input.recipeId);
+  const cover = await input.db.recipeCover.findFirstOrThrow({ where: { id: input.coverId, recipeId: input.recipeId } });
+  const spoon = input.spoonId
+    ? await input.db.recipeSpoon.findFirstOrThrow({
+        where: { id: input.spoonId, recipeId: input.recipeId },
+        include: { chef: { select: API_V1_SPOON_CHEF_SELECT } },
+      })
+    : null;
+  return {
+    spoon: spoon ? spoonPayload(spoon, origin) : null,
+    activeCover: await activeFullCoverPayload(input.db, recipe, origin),
+    previousActiveCover: input.previousActiveCover,
+    createdCover: fullCoverPayload(cover, recipe, origin),
+    generationStatus: cover.generationStatus,
+    mutation: { clientMutationId: input.clientMutationId, replayed: false },
+  };
+}
+
+async function recoverRecipeImageUpload(
+  args: ApiV1RouteArgs,
+  input: {
+    db: ApiV1Db;
+    principal: ApiPrincipal;
+    recipeId: string;
+    clientMutationId: string;
+    record: ApiIdempotencyKey;
+  },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  await loadOwnedCoverRecipe(input.db, input.principal, input.recipeId);
+  const cover = await input.db.recipeCover.findFirst({
+    where: {
+      id: input.record.id,
+      recipeId: input.recipeId,
+      createdById: input.principal.id,
+    },
+    select: { id: true, sourceSpoonId: true },
+  });
+  if (!cover) return null;
+
+  return {
+    status: 201,
+    data: await recipeImageUploadData(args, {
+      db: input.db,
+      principal: input.principal,
+      recipeId: input.recipeId,
+      coverId: cover.id,
+      spoonId: cover.sourceSpoonId,
+      clientMutationId: input.clientMutationId,
+      previousActiveCover: null,
+    }),
+  };
+}
+
+async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  const formData = await accountPhotoFormDataWithinLimit(args.request);
+  assertKnownFormDataFields(formData, RECIPE_IMAGE_UPLOAD_FIELDS);
+  const clientMutationId = clientMutationIdFromFormDataHeaderOrQuery(args, formData);
+  const photo = singleFormDataValue(formData, "photo");
+  const activateWhenReady = formData.has("activateWhenReady")
+    ? optionalFormDataBoolean(formData, "activateWhenReady", true)
+    : optionalFormDataBoolean(formData, "activate", true);
+  const generateEditorial = optionalFormDataBoolean(formData, "generateEditorial", true);
+  const promptAdditionValue = singleFormDataValue(formData, "promptAddition");
+  if (promptAdditionValue instanceof File) {
+    throw new ApiV1Error("validation_error", "promptAddition must be a string", { field: "promptAddition" });
+  }
+  const promptAddition = optionalPromptAddition(promptAdditionValue);
+  const postAsSpoon = optionalFormDataBoolean(formData, "postAsSpoon", false);
+  const note = optionalFormDataString(formData, "note");
+  const nextTime = optionalFormDataString(formData, "nextTime");
+  const cookedAt = optionalFormDataIsoDate(formData, "cookedAt");
+  const idempotencyBody = {
+    clientMutationId,
+    photo: await accountPhotoIdempotencyValue(photo),
+    activateWhenReady,
+    generateEditorial,
+    promptAddition,
+    postAsSpoon,
+    note,
+    nextTime,
+    cookedAt: cookedAt?.toISOString() ?? null,
+  };
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.image.upload", async (db, reservation) => {
+    const origin = publicContentOrigin(args);
+    const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
+    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
+
+    if (!hasUploadedImageFile(photo)) {
+      throw new ApiV1Error("validation_error", "Please select a photo to upload", { field: "photo", reason: "missing" });
+    }
+
+    const photoError = await validateImageFileForStorage(photo, {
+      allowedTypes: RECIPE_IMAGE_TYPES,
+      messages: {
+        invalidType: FOOD_IMAGE_TYPE_MESSAGE,
+        fileTooLarge: FOOD_IMAGE_SIZE_MESSAGE,
+      },
+    });
+    if (photoError) {
+      throw new ApiV1Error("validation_error", photoError, { field: "photo" });
+    }
+
+    let uploadedImageUrl: string | null = null;
+    let createdCoverId: string | null = null;
+    let createdSpoonId: string | null = null;
+
+    try {
+      uploadedImageUrl = await storeImage({
+        bucket: apiV1CloudflareFor(args)?.env?.PHOTOS,
+        file: photo,
+        namespace: postAsSpoon
+          ? `spoons/${principal.id}/${recipeId}`
+          : `recipes/${principal.id}/${recipeId}`,
+      });
+
+      const sourceType = postAsSpoon ? "spoon" : "chef-upload";
+      let createdCover = await createCover(db, {
+        id: reservation.id,
+        recipeId,
+        imageUrl: uploadedImageUrl,
+        sourceType,
+        sourceSpoonId: null,
+        status: generateEditorial ? "processing" : "ready",
+        createdById: principal.id,
+        sourceImageUrl: uploadedImageUrl,
+        generationStatus: generateEditorial ? "processing" : "none",
+        promptAddition,
+      });
+      createdCoverId = createdCover.id;
+
+      if (postAsSpoon) {
+        let created: Awaited<ReturnType<typeof createSpoon>>;
+        try {
+          created = await createSpoon(db, {
+            chefId: principal.id,
+            recipeId,
+            photoUrl: uploadedImageUrl,
+            note,
+            nextTime,
+            cookedAt,
+          });
+        } catch (error) {
+          throw mapSpoonDomainErrorForApiV1(error);
+        }
+        createdSpoonId = created.spoon.id;
+        createdCover = await db.recipeCover.update({
+          where: { id: createdCover.id },
+          data: { sourceSpoonId: created.spoon.id },
+        });
+      }
+
+      if (activateWhenReady) {
+        try {
+          await setActiveRecipeCover(db, { recipeId, coverId: createdCover.id, variant: "image" });
+        } catch (error) {
+          throw coverMutationError(error, createdCover.id);
+        }
+      }
+
+      if (generateEditorial) {
+        await runOrQueueCoverStylization(args, {
+          db,
+          userId: principal.id,
+          recipeId,
+          coverId: createdCover.id,
+          promptAddition,
+          rawPhotoUrl: uploadedImageUrl,
+          recipeTitle: recipe.title,
+          sourceType,
+          activateWhenReady,
+          suppressAutoActivation: !activateWhenReady,
+          activationGuard: activateWhenReady ? {
+            activeCoverId: createdCover.id,
+            activeCoverVariant: "image",
+            coverMode: "manual",
+          } : undefined,
+        });
+      }
+
+      return {
+        status: 201,
+        data: await recipeImageUploadData(args, {
+          db,
+          principal,
+          recipeId,
+          coverId: createdCover.id,
+          spoonId: createdSpoonId,
+          clientMutationId,
+          previousActiveCover,
+        }),
+      };
+    } catch (error) {
+      if (uploadedImageUrl) {
+        await cleanupRecipeImageUploadRows(db, { recipe, coverId: createdCoverId, spoonId: createdSpoonId });
+        await cleanupUploadedRecipeImageObject(args, principal, uploadedImageUrl);
+      }
+      throw error;
+    }
+  }, {
+    recoverInFlight: async (db, record) => recoverRecipeImageUpload(args, {
+      db,
+      principal,
+      recipeId,
+      clientMutationId,
+      record,
+    }),
+  });
+}
+
 async function handleRecipeCoverList(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
   const db = await getRequestDb(args.context);
   const origin = publicContentOrigin(args);
@@ -2306,6 +2650,131 @@ async function handleRecipeCoverList(args: ApiV1RouteArgs, requestId: string, pr
       nextOffset: covers.length > limit ? offset + page.length : null,
       hasMore: covers.length > limit,
     },
+  });
+}
+
+async function handleRecipeCoverCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId", "imageUrl", "activate", "generateEditorial", "promptAddition"]);
+  const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
+  const origin = publicContentOrigin(args);
+  const imageUrl = normalizeRecipeCoverImageUrl(body.imageUrl, origin);
+  const activate = optionalBoolean(body.activate, "activate");
+  const generateEditorial = optionalBoolean(body.generateEditorial, "generateEditorial", true);
+  const promptAddition = optionalPromptAddition(body.promptAddition);
+  const idempotencyBody = { clientMutationId, imageUrl, activate, generateEditorial, promptAddition };
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.covers.create", async (db) => {
+    const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
+    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
+    await validateApiV1RecipeCoverImageUrl(args, principal, imageUrl);
+    const cover = await createCover(db, {
+      recipeId,
+      imageUrl,
+      sourceType: "chef-upload",
+      sourceSpoonId: null,
+      status: generateEditorial ? "processing" : "ready",
+      createdById: principal.id,
+      sourceImageUrl: imageUrl,
+      generationStatus: generateEditorial ? "processing" : "none",
+      promptAddition,
+    });
+
+    if (activate) {
+      try {
+        await setActiveRecipeCover(db, { recipeId, coverId: cover.id, variant: "image" });
+      } catch (error) {
+        throw coverMutationError(error, cover.id);
+      }
+    }
+
+    if (generateEditorial) {
+      await runOrQueueCoverStylization(args, {
+        db,
+        userId: principal.id,
+        recipeId,
+        coverId: cover.id,
+        promptAddition,
+        rawPhotoUrl: imageUrl,
+        recipeTitle: recipe.title,
+        sourceType: "chef-upload",
+        activateWhenReady: activate,
+        suppressAutoActivation: !activate,
+        activationGuard: activate ? {
+          activeCoverId: cover.id,
+          activeCoverVariant: "image",
+          coverMode: "manual",
+        } : undefined,
+      });
+    }
+
+    const nextRecipe = await loadOwnedCoverRecipe(db, principal, recipeId);
+    const createdCover = await db.recipeCover.findFirstOrThrow({ where: { id: cover.id, recipeId } });
+    return {
+      status: 201,
+      data: {
+        activeCover: await activeFullCoverPayload(db, nextRecipe, origin),
+        previousActiveCover,
+        createdCover: fullCoverPayload(createdCover, nextRecipe, origin),
+        generationStatus: createdCover.generationStatus,
+        mutation: { clientMutationId, replayed: false },
+      },
+    };
+  });
+}
+
+async function handleRecipeCoverGenerate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId", "promptAddition", "activateWhenReady"]);
+  const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
+  const promptAddition = optionalPromptAddition(body.promptAddition);
+  const activateWhenReady = optionalBoolean(body.activateWhenReady, "activateWhenReady");
+  const idempotencyBody = { clientMutationId, promptAddition, activateWhenReady };
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.covers.generate", async (db) => {
+    const origin = publicContentOrigin(args);
+    const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
+    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
+    const cover = await createCover(db, {
+      recipeId,
+      imageUrl: "",
+      sourceType: "ai-placeholder",
+      sourceSpoonId: null,
+      status: "processing",
+      createdById: principal.id,
+      sourceImageUrl: null,
+      generationStatus: "processing",
+      promptAddition,
+    });
+
+    await runOrQueuePlaceholderGeneration(args, {
+      db,
+      userId: principal.id,
+      recipeId,
+      coverId: cover.id,
+      title: recipe.title,
+      description: recipe.description,
+      promptAddition,
+      activateWhenReady,
+      activationGuard: activateWhenReady ? {
+        activeCoverId: recipe.activeCoverId,
+        activeCoverVariant: recipe.activeCoverVariant,
+        coverMode: recipe.coverMode,
+      } : undefined,
+    });
+
+    const nextRecipe = await loadOwnedCoverRecipe(db, principal, recipeId);
+    const createdCover = await db.recipeCover.findFirstOrThrow({ where: { id: cover.id, recipeId } });
+    return {
+      status: 201,
+      data: {
+        activeCover: await activeFullCoverPayload(db, nextRecipe, origin),
+        previousActiveCover,
+        createdCover: fullCoverPayload(createdCover, nextRecipe, origin),
+        generationStatus: createdCover.generationStatus,
+        mutation: { clientMutationId, replayed: false },
+      },
+    };
   });
 }
 
@@ -2409,12 +2878,14 @@ async function handleRecipeCoverArchive(args: ApiV1RouteArgs, requestId: string,
 
 async function handleRecipeCoverRegenerate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
   const body = await parseApiV1JsonBody(args.request);
-  assertKnownFields(body, ["clientMutationId", "coverId", "activateWhenReady"]);
+  assertKnownFields(body, ["clientMutationId", "coverId", "promptAddition", "activateWhenReady"]);
   const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
   const coverId = nonblankString(body.coverId, "coverId");
+  const promptAddition = optionalPromptAddition(body.promptAddition);
   const activateWhenReady = optionalBoolean(body.activateWhenReady, "activateWhenReady");
+  const idempotencyBody = { clientMutationId, coverId, promptAddition, activateWhenReady };
 
-  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "recipes.covers.regenerate", async (db) => {
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.covers.regenerate", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
     const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
@@ -2436,6 +2907,8 @@ async function handleRecipeCoverRegenerate(args: ApiV1RouteArgs, requestId: stri
         generationStatus: "processing",
         failureReason: null,
         sourceImageUrl: cover.sourceImageUrl ?? rawPhotoUrl,
+        promptAddition,
+        parentCoverId: cover.id,
       },
     });
     await runOrQueueCoverStylization(args, {
@@ -2443,6 +2916,8 @@ async function handleRecipeCoverRegenerate(args: ApiV1RouteArgs, requestId: stri
       userId: principal.id,
       recipeId,
       coverId: cover.id,
+      parentCoverId: cover.id,
+      promptAddition,
       rawPhotoUrl,
       recipeTitle: recipe.title,
       sourceType: cover.sourceType === "spoon" ? "spoon" : "chef-upload",
@@ -3559,6 +4034,14 @@ export async function runIdempotentApiV1Mutation(
     });
   } catch (error) {
     if (!options.recoverInFlight) throw error;
+    try {
+      await completeIdempotencyKey(db, reservation.record.id, {
+        status: result.status,
+        body: responseBody,
+      });
+    } catch {
+      // Leave the reserved key recoverable; the committed write is more important than a duplicate response write failure.
+    }
   }
 
   return withApiV1Telemetry(Response.json(responseBody, {
@@ -4071,6 +4554,105 @@ async function accountPhotoIdempotencyValue(photo: FormDataEntryValue | null) {
     return { kind: "field", value: photo };
   }
   return { kind: "missing" };
+}
+
+const RECIPE_IMAGE_UPLOAD_FIELDS = [
+  "clientMutationId",
+  "photo",
+  "activateWhenReady",
+  // Legacy alias accepted for older native builds and pre-canonical automation clients.
+  "activate",
+  "generateEditorial",
+  "promptAddition",
+  "postAsSpoon",
+  "note",
+  "nextTime",
+  "cookedAt",
+] as const;
+
+function assertKnownFormDataFields(formData: FormData, allowed: readonly string[]) {
+  const allowedSet = new Set(allowed);
+  const unknown = Array.from(new Set(Array.from(formData.keys())))
+    .filter((key) => !allowedSet.has(key));
+  if (unknown.length > 0) {
+    throw new ApiV1Error("validation_error", "Unknown request body fields", { fields: unknown });
+  }
+}
+
+function singleFormDataValue(formData: FormData, field: string): FormDataEntryValue | null {
+  const values = formData.getAll(field);
+  if (values.length > 1) {
+    throw new ApiV1Error("validation_error", `${field} must be provided once`, { field });
+  }
+  return values[0] ?? null;
+}
+
+function optionalFormDataString(formData: FormData, field: string, maxLength = MAX_SHORT_TEXT_LENGTH): string | null {
+  const value = singleFormDataValue(formData, field);
+  if (value === null) return null;
+  if (value instanceof File) {
+    throw new ApiV1Error("validation_error", `${field} must be a string or null`, { field });
+  }
+  return optionalNullableString(value, field, maxLength);
+}
+
+function optionalFormDataBoolean(formData: FormData, field: string, fallback: boolean): boolean {
+  const value = singleFormDataValue(formData, field);
+  if (value === null) return fallback;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new ApiV1Error("validation_error", `${field} must be true or false`, { field });
+}
+
+function optionalFormDataIsoDate(formData: FormData, field: string): Date | undefined {
+  const value = singleFormDataValue(formData, field);
+  if (value === null) return undefined;
+  if (value instanceof File) {
+    throw new ApiV1Error("validation_error", `${field} must be an ISO datetime string`, { field });
+  }
+  return optionalIsoDate(value, field);
+}
+
+function recipeImageUploadPostHogConfig(args: ApiV1RouteArgs) {
+  const env = apiV1CloudflareFor(args)?.env;
+  return env
+    ? resolvePostHogServerConfig(env)
+    : ({ enabled: false, reason: "missing-key" } as const);
+}
+
+async function cleanupUploadedRecipeImageObject(args: ApiV1RouteArgs, principal: ApiPrincipal, imageUrl: string | null) {
+  await deleteStoredImageWithCapture({
+    bucket: apiV1CloudflareFor(args)?.env?.PHOTOS,
+    imageUrl,
+    event: "spoonjoy.storage.recipe_image_upload_cleanup_failed",
+    postHogConfig: recipeImageUploadPostHogConfig(args),
+    waitUntil: apiV1WaitUntilFor(args),
+    distinctId: principal.id,
+  });
+}
+
+async function cleanupRecipeImageUploadRows(
+  db: ApiV1Db,
+  input: {
+    recipe: RecipeCoverOwnerRow;
+    coverId: string | null;
+    spoonId: string | null;
+  },
+) {
+  if (input.coverId) {
+    await db.recipeCover.deleteMany({ where: { id: input.coverId, recipeId: input.recipe.id } }).catch(() => undefined);
+  }
+  if (input.spoonId) {
+    await db.recipeSpoon.deleteMany({ where: { id: input.spoonId, recipeId: input.recipe.id } }).catch(() => undefined);
+  }
+  await db.recipe.update({
+    where: { id: input.recipe.id },
+    data: {
+      activeCoverId: input.recipe.activeCoverId,
+      activeCoverVariant: input.recipe.activeCoverVariant,
+      coverMode: input.recipe.coverMode,
+    },
+  }).catch(() => undefined);
 }
 
 function booleanField(body: Record<string, unknown>, field: keyof NotificationPreferenceFlags): boolean {
@@ -6158,9 +6740,21 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
+    if (args.request.method === "POST" && segments[0] === "recipes" && segments[2] === "image" && segments.length === 3) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeImageUpload(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
     if (args.request.method === "GET" && segments[0] === "recipes" && segments[2] === "covers" && segments.length === 3) {
       const principal = await authorize(path) as ApiPrincipal;
       const response = await handleRecipeCoverList(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && segments[0] === "recipes" && segments[2] === "covers" && segments.length === 3) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeCoverCreate(args, requestId, principal, segments[1]);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
@@ -6179,6 +6773,12 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "DELETE" && segments[0] === "recipes" && segments[2] === "covers" && segments.length === 4) {
       const principal = await authorize(path) as ApiPrincipal;
       const response = await handleRecipeCoverArchive(args, requestId, principal, segments[1], segments[3]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && segments[0] === "recipes" && segments[2] === "covers" && segments[3] === "generate" && segments.length === 4) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleRecipeCoverGenerate(args, requestId, principal, segments[1]);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 

@@ -198,12 +198,12 @@ describe("Kitchen Index Route", () => {
       expect(result.recipes[0]).toMatchObject({
         id: recipe.id,
         coverImageUrl: "/photos/kitchen-editorial.jpg",
-        coverProvenanceLabel: "Editorialized chef photo",
+        coverProvenanceLabel: "Editorial photo",
       });
       expect(result.cookbooks[0].recipes[0].recipe).toMatchObject({
         title: recipe.title,
         coverImageUrl: "/photos/kitchen-editorial.jpg",
-        coverProvenanceLabel: "Editorialized chef photo",
+        coverProvenanceLabel: "Editorial photo",
       });
     });
 
@@ -392,7 +392,7 @@ describe("Kitchen Index Route", () => {
                 description: "Cheese and wine",
                 servings: "4",
                 coverImageUrl: "https://example.com/fondue.jpg",
-                coverProvenanceLabel: "Chef photo",
+                coverProvenanceLabel: "Original photo",
               },
               {
                 id: "recipe-2",
@@ -437,7 +437,7 @@ describe("Kitchen Index Route", () => {
       expect(screen.getByRole("region", { name: "Cookbooks" })).toBeInTheDocument();
       expect(screen.getByText("3 recipes and 1 cookbook")).toBeInTheDocument();
       expect(screen.getAllByText("Cheese Night").length).toBeGreaterThan(0);
-      expect(screen.getByText("Chef photo")).toBeInTheDocument();
+      expect(screen.getByText("Original photo")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Open Recipe" })).toHaveAttribute("href", "/recipes/recipe-1");
       expect(screen.getByText("Fondue")).toBeInTheDocument();
       expect(screen.getAllByRole("link", { name: "Fondue" }).some((link) => link.classList.contains("min-h-11"))).toBe(true);

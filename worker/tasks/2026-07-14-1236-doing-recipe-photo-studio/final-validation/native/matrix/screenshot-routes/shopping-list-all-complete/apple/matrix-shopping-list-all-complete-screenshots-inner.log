@@ -1,0 +1,30 @@
+Running iOS simulator smoke
+iOS simulator smoke ok
+Running macOS launch smoke
+macOS smoke ok
+app.spoonjoy: 54773
+
+run_with_timeout simulator launch timeout (30s): env SIMCTL_CHILD_SPOONJOY_SCREENSHOT_AUTH=1 SIMCTL_CHILD_SPOONJOY_SCREENSHOT_RESTORE_CACHE_ONLY=1 SIMCTL_CHILD_SPOONJOY_SCREENSHOT_ACCOUNT_ID=chef_shopping_capture SIMCTL_CHILD_SPOONJOY_SCREENSHOT_SETTINGS_FOCUS=profile SIMCTL_CHILD_SPOONJOY_SCREENSHOT_DISABLE_SEARCH_FOCUS=0 SIMCTL_CHILD_SPOONJOY_SCREENSHOT_RECIPE_DETAIL_FOCUS= SIMCTL_CHILD_SPOONJOY_SCREENSHOT_APNS_PERMISSION_STATE= SIMCTL_CHILD_SPOONJOY_SCREENSHOT_APNS_REGISTRATION_STATE= SIMCTL_CHILD_SPOONJOY_SCREENSHOT_SHOPPING_CONFLICT_CLIENT_MUTATION_ID= SIMCTL_CHILD_SPOONJOY_SCREENSHOT_EXPECTED_ROUTE=shopping-list SIMCTL_CHILD_SPOONJOY_SCREENSHOT_PROOF_PATH=/Users/arimendelow/Library/Developer/CoreSimulator/Devices/4EAF4563-339C-4CCA-A13B-AD395C7A1F65/data/Containers/Data/Application/ED08E132-5E43-4A77-B05B-4F838D970C7B/Library/Application Support/Spoonjoy/native-screenshot-proof.json SIMCTL_CHILD_SPOONJOY_SCREENSHOT_ACCESSIBILITY_PROOF_PATH=/Users/arimendelow/Library/Developer/CoreSimulator/Devices/4EAF4563-339C-4CCA-A13B-AD395C7A1F65/data/Containers/Data/Application/ED08E132-5E43-4A77-B05B-4F838D970C7B/Library/Application Support/Spoonjoy/native-accessibility-proof.json xcrun simctl launch --terminate-running-process 4EAF4563-339C-4CCA-A13B-AD395C7A1F65 app.spoonjoy
+getpwuid_r did not find a match for uid 501
+Timestamp               Ty Process[PID:TID]
+2026-07-15 05:43:08.965 Df SpringBoard[54598:427feef] [com.apple.SpringBoard:Common] Front display did change: <SBApplication: 0x10a771200; app.spoonjoy>
+Detected file type from extension: PNG
+Note: No display specified. Defaulting to display: 7235B215-94EA-4C88-B199-48A8A68D94BB (screenID: 1, name: LCD)
+Wrote screenshot to: /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-all-complete/screenshots/ios-mobile.png
+
+run_with_timeout cleanup timeout (5s): osascript -e tell application id "app.spoonjoy.mac" to quit
+
+run_with_timeout cleanup timeout (5s): pkill -x Spoonjoy
+
+run_with_timeout macOS launch timeout (30s): env SPOONJOY_SCREENSHOT_AUTH=1 SPOONJOY_SCREENSHOT_RESTORE_CACHE_ONLY=1 SPOONJOY_SCREENSHOT_ACCOUNT_ID=chef_shopping_capture SPOONJOY_SCREENSHOT_SETTINGS_FOCUS=profile SPOONJOY_SCREENSHOT_DISABLE_SEARCH_FOCUS=0 SPOONJOY_SCREENSHOT_RECIPE_DETAIL_FOCUS= SPOONJOY_SCREENSHOT_APNS_PERMISSION_STATE= SPOONJOY_SCREENSHOT_APNS_REGISTRATION_STATE= SPOONJOY_SCREENSHOT_SHOPPING_CONFLICT_CLIENT_MUTATION_ID= SPOONJOY_SCREENSHOT_EXPECTED_ROUTE=shopping-list SPOONJOY_SCREENSHOT_PROOF_PATH=/Users/arimendelow/Library/Application Support/Spoonjoy/native-screenshot-proof.json SPOONJOY_SCREENSHOT_ACCESSIBILITY_PROOF_PATH=/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/screenshot-routes/shopping-list-all-complete/apple/matrix-shopping-list-all-complete-accessibility-proof-macos.json SPOONJOY_API_BASE_URL=https://spoonjoy.app open -n /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app
+55032
+
+run_with_timeout macOS launch timeout (30s): pgrep -x Spoonjoy
+
+run_with_timeout macOS launch timeout (30s): osascript -e tell application id "app.spoonjoy.mac" to open location "spoonjoy://shopping-list"
+
+run_with_timeout macOS launch timeout (30s): osascript -e tell application "/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/shared-builds/DerivedData-macOS/Build/Products/BootstrapDebug/Spoonjoy.app" to activate
+
+run_with_timeout cleanup timeout (5s): osascript -e tell application id "app.spoonjoy.mac" to quit
+
+run_with_timeout cleanup timeout (5s): pkill -x Spoonjoy

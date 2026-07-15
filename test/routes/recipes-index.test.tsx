@@ -103,7 +103,7 @@ describe("Recipes Index Route", () => {
     expect(result.recipes[0]).toMatchObject({
       id: recipe.id,
       coverImageUrl: "/photos/active-editorial.jpg",
-      coverProvenanceLabel: "Editorialized chef photo",
+      coverProvenanceLabel: "Editorial photo",
     });
   });
 

@@ -1,5 +1,7 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 
+const legacySpoonjoyCookbookLabel = ["Spoonjoy", "cookbook"].join(" ");
+
 const mocks = vi.hoisted(() => {
   return {
     create: vi.fn(async (_element: unknown, options: { headers?: Record<string, string>; width?: number; height?: number }) =>
@@ -169,7 +171,7 @@ describe("OG image helpers", () => {
       "4 recipes",
     );
     expect(cookbookElement.type).toBe("div");
-    expect(collectReactText(cookbookElement).join(" ")).not.toContain("Spoonjoy cookbook");
+    expect(collectReactText(cookbookElement).join(" ")).not.toContain(legacySpoonjoyCookbookLabel);
 
     expect(
       createCookbookOgElement(

@@ -96,6 +96,13 @@ function imageRunner() {
   };
 }
 
+function placeholderRunner() {
+  return {
+    textToImage: vi.fn().mockResolvedValue({ bytes: GENERATED_BYTES, contentType: "image/png" }),
+    imageToImage: vi.fn(),
+  };
+}
+
 async function mcpCoverMutationHash(
   operation: string,
   recipeId: string,
@@ -277,7 +284,7 @@ describe("spoonjoy-api spoon operations", () => {
       expect(result.recipe).toMatchObject({
         imageUrl: "/photos/raw.jpg",
         coverImageUrl: "/photos/raw.jpg",
-        coverProvenanceLabel: "Chef photo",
+        coverProvenanceLabel: "Original photo",
         coverSourceType: "spoon",
         coverVariant: "image",
         coverStatus: "processing",
@@ -288,7 +295,7 @@ describe("spoonjoy-api spoon operations", () => {
           displayUrl: "/photos/raw.jpg",
           sourceType: "spoon",
           activeVariant: "image",
-          provenanceLabel: "Chef photo",
+          provenanceLabel: "Original photo",
           status: "processing",
           generationStatus: "processing",
         },
@@ -412,7 +419,7 @@ describe("spoonjoy-api spoon operations", () => {
         recipeId: recipe.id,
         displayUrl: "/photos/editorial.jpg",
         activeVariant: "stylized",
-        provenanceLabel: "Editorialized chef photo",
+        provenanceLabel: "Editorial photo",
         sourceSpoonId: spoon.id,
         createdById: chef.id,
         generationStatus: "succeeded",
@@ -474,7 +481,7 @@ describe("spoonjoy-api spoon operations", () => {
         displayUrl: "/photos/raw.jpg",
         sourceType: "chef-upload",
         activeVariant: "image",
-        provenanceLabel: "Chef photo",
+        provenanceLabel: "Original photo",
         status: "ready",
         generationStatus: "failed",
       });
@@ -761,7 +768,7 @@ describe("spoonjoy-api spoon operations", () => {
         {
           recipeId: recipe.id,
           imageUrl: dataUrl(),
-          activate: true,
+          activateWhenReady: true,
           generateEditorial: true,
           idempotencyKey: "dry-run-cover-upload",
           dryRun: true,
@@ -1091,11 +1098,25 @@ describe("spoonjoy-api spoon operations", () => {
 
       await expect(callSpoonjoyApiOperation(
         "create_recipe_cover_from_upload",
-        { recipeId: recipe.id, imageUrl: dataUrl(), activate: "yes" },
+        { recipeId: recipe.id, imageUrl: dataUrl(), activateWhenReady: "yes" },
         { db, principal: chef, allowLocalImageFallback: true },
       )).rejects.toMatchObject({
         status: 400,
-        message: expect.stringMatching(/activate must be a boolean/i),
+        message: expect.stringMatching(/activateWhenReady must be a boolean/i),
+      });
+
+      await expect(callSpoonjoyApiOperation(
+        "create_recipe_cover_from_upload",
+        {
+          recipeId: recipe.id,
+          imageUrl: dataUrl(),
+          postAsSpoon: true,
+          cookedAt: "2025-06-01T12:00:00Z",
+        },
+        { db, principal: chef, allowLocalImageFallback: true },
+      )).rejects.toMatchObject({
+        status: 400,
+        message: expect.stringMatching(/cookedAt must be a valid ISO date string/i),
       });
 
       await expect(callSpoonjoyApiOperation(
@@ -1177,6 +1198,99 @@ describe("spoonjoy-api spoon operations", () => {
       expect(sessionResult.mutation.idempotencyKey).toBe("session-cover-upload");
     });
 
+    it("dry-runs placeholder generation with nullable prompt additions", async () => {
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const active = await db.recipeCover.create({
+        data: {
+          recipeId: recipe.id,
+          imageUrl: "/photos/current.jpg",
+          sourceType: "chef-upload",
+          status: "ready",
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipe.id },
+        data: { activeCoverId: active.id, activeCoverVariant: "image", coverMode: "manual" },
+      });
+
+      const result = await callSpoonjoyApiOperation(
+        "generate_recipe_cover_placeholder",
+        {
+          recipeId: recipe.id,
+          promptAddition: null,
+          activateWhenReady: true,
+          idempotencyKey: "dry-run-placeholder-null-prompt",
+          dryRun: true,
+        },
+        { db, principal: chef },
+      ) as {
+        activeCover: { id: string } | null;
+        previousActiveCover: { id: string } | null;
+        createdCover: null;
+        generationStatus: string;
+        nextActions: string[];
+      };
+
+      expect(result).toMatchObject({
+        activeCover: { id: active.id },
+        previousActiveCover: { id: active.id },
+        createdCover: null,
+        generationStatus: "dry_run",
+      });
+      expect(result.nextActions).toContain("generate_recipe_cover_placeholder");
+      await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
+    });
+
+    it("queues placeholder generation through waitUntil and normalizes blank prompt additions", async () => {
+      const { principal: chef } = await makeUser(db);
+      const recipe = await makeRecipe(db, chef.id);
+      const captured: Promise<unknown>[] = [];
+      const runner = placeholderRunner();
+
+      const result = await callSpoonjoyApiOperation(
+        "generate_recipe_cover_placeholder",
+        {
+          recipeId: recipe.id,
+          promptAddition: "   ",
+          activateWhenReady: false,
+          idempotencyKey: "queued-placeholder-blank-prompt",
+        },
+        {
+          db,
+          principal: chef,
+          bucket: mockR2(),
+          imageGenRunner: runner,
+          waitUntil: (promise) => captured.push(promise),
+        },
+      ) as {
+        activeCover: null;
+        createdCover: { id: string; sourceType: string; status: string; generationStatus: string };
+        generationStatus: string;
+      };
+
+      expect(result).toMatchObject({
+        activeCover: null,
+        createdCover: {
+          sourceType: "ai-placeholder",
+          status: "processing",
+          generationStatus: "processing",
+        },
+        generationStatus: "processing",
+      });
+      expect(captured).toHaveLength(1);
+      await Promise.all(captured);
+      expect(runner.textToImage).toHaveBeenCalledTimes(1);
+      await expect(db.recipeCover.findUniqueOrThrow({
+        where: { id: result.createdCover.id },
+        select: { status: true, generationStatus: true, promptAddition: true },
+      })).resolves.toEqual({
+        status: "ready",
+        generationStatus: "succeeded",
+        promptAddition: null,
+      });
+    });
+
     it("creates editorialized and verbatim upload covers only when explicitly activated", async () => {
       const { principal: chef } = await makeUser(db);
       const editorialRecipe = await makeRecipe(db, chef.id);
@@ -1187,7 +1301,7 @@ describe("spoonjoy-api spoon operations", () => {
         {
           recipeId: editorialRecipe.id,
           imageUrl: dataUrl(),
-          activate: true,
+          activateWhenReady: true,
         },
         { db, principal: chef, allowLocalImageFallback: true, imageGenRunner: runner },
       ) as {
@@ -1230,7 +1344,7 @@ describe("spoonjoy-api spoon operations", () => {
         {
           recipeId: verbatimRecipe.id,
           imageUrl: dataUrl(),
-          activate: true,
+          activateWhenReady: true,
           generateEditorial: false,
         },
         { db, principal: chef, allowLocalImageFallback: true },
@@ -2833,7 +2947,7 @@ describe("spoonjoy-api spoon operations", () => {
       expect(result.spoons[0].chef.username).toBe(cook.username);
       expect(result.spoons[0]).toMatchObject({
         coverImageUrl: "/photos/editorial.jpg",
-        coverProvenanceLabel: "Editorialized chef photo",
+        coverProvenanceLabel: "Editorial photo",
         coverSourceType: "spoon",
         coverVariant: "stylized",
         coverStatus: "ready",
@@ -3026,7 +3140,7 @@ describe("spoonjoy-api spoon operations", () => {
       expect(result.spoons[0].recipe.title).toBe(recipe.title);
       expect(result.spoons[0]).toMatchObject({
         coverImageUrl: "/photos/original.jpg",
-        coverProvenanceLabel: "Chef photo",
+        coverProvenanceLabel: "Original photo",
         coverSourceType: "chef-upload",
         coverVariant: "image",
         coverStatus: "ready",

@@ -8,6 +8,15 @@ import {
 } from "../app/lib/api-v1-openapi.server";
 
 type OpenApiDocument = ReturnType<typeof buildApiV1OpenApiDocument>;
+type OpenApiMultipartEncoding = Record<string, { contentType?: string }>;
+type OpenApiSchema = {
+  $ref?: string;
+  type?: string | string[];
+  format?: string;
+  description?: string;
+  required?: string[];
+  properties?: Record<string, OpenApiSchema>;
+};
 type ApiPlaygroundProfile = "full" | "connector" | "sdk";
 type ApiPlaygroundAuthFlow = {
   id: string;
@@ -51,12 +60,16 @@ type OpenApiOperation = {
     required?: boolean;
     content?: {
       "application/json"?: {
+        schema?: OpenApiSchema;
         examples?: Record<string, { value?: unknown }>;
       };
       "application/x-www-form-urlencoded"?: {
+        schema?: OpenApiSchema;
         examples?: Record<string, { value?: unknown }>;
       };
       "multipart/form-data"?: {
+        schema?: OpenApiSchema;
+        encoding?: OpenApiMultipartEncoding;
         examples?: Record<string, { value?: unknown }>;
       };
     };
@@ -146,10 +159,67 @@ function parameterFromOpenApi(path: string, parameter: OpenApiParameter) {
   };
 }
 
-function requestBodyExample(operation: OpenApiOperation) {
-  const jsonExamples = operation.requestBody?.content?.["application/json"]?.examples;
-  const formExamples = operation.requestBody?.content?.["application/x-www-form-urlencoded"]?.examples;
-  const multipartExamples = operation.requestBody?.content?.["multipart/form-data"]?.examples;
+function resolveSchema(document: OpenApiDocument, schema: OpenApiSchema | undefined): OpenApiSchema | undefined {
+  if (!schema?.$ref) return schema;
+  const match = /^#\/components\/schemas\/([^/]+)$/.exec(schema.$ref);
+  if (!match) return schema;
+  return document.components?.schemas?.[match[1]] as OpenApiSchema | undefined;
+}
+
+function samplePath(path: string) {
+  return path
+    .replaceAll("{id}", "recipe_1")
+    .replaceAll("{coverId}", "cover_1")
+    .replaceAll("{spoonId}", "spoon_1")
+    .replaceAll("{itemId}", "item_1")
+    .replaceAll("{credentialId}", "cred_1")
+    .replaceAll("{recipeId}", "recipe_1");
+}
+
+function multipartFormDataValue(name: string, value: unknown) {
+  if (name === "photo") return "file";
+  if (value === null || value === undefined) return "\"\"";
+  return JSON.stringify(String(value));
+}
+
+function multipartCurlValue(name: string, value: unknown) {
+  if (name === "photo") return "photo=@./photo.jpg;type=image/jpeg";
+  return `${name}=${String(value ?? "")}`;
+}
+
+function renderMultipartExample(path: string, method: string, value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  const fields = Object.entries(value as Record<string, unknown>);
+  const url = `https://spoonjoy.app${samplePath(path)}`;
+  const formDataLines = [
+    "const body = new FormData();",
+    ...fields.map(([name, item]) => `body.append("${name}", ${multipartFormDataValue(name, item)});`),
+    "",
+    `await fetch("${samplePath(path)}", {`,
+    `  method: "${method.toUpperCase()}",`,
+    "  headers: { Authorization: \"Bearer sj_...\" },",
+    "  body,",
+    "});",
+  ];
+  const curlLines = [
+    "# curl --form example; omit Content-Type so curl adds the multipart boundary.",
+    `curl -fsS -X ${method.toUpperCase()} '${url}' \\`,
+    "  -H 'Authorization: Bearer sj_...' \\",
+    ...fields.map(([name, item], index) => {
+      const suffix = index === fields.length - 1 ? "" : " \\";
+      return `  --form '${multipartCurlValue(name, item)}'${suffix}`;
+    }),
+  ];
+  return [...formDataLines, "", ...curlLines].join("\n");
+}
+
+function requestBodyExample(document: OpenApiDocument, path: string, method: string, operation: OpenApiOperation) {
+  const jsonMedia = operation.requestBody?.content?.["application/json"];
+  const formMedia = operation.requestBody?.content?.["application/x-www-form-urlencoded"];
+  const multipartMedia = operation.requestBody?.content?.["multipart/form-data"];
+  const jsonExamples = jsonMedia?.examples;
+  const formExamples = formMedia?.examples;
+  const multipartExamples = multipartMedia?.examples;
   const examples = jsonExamples ?? formExamples ?? multipartExamples;
   const example = examples?.example?.value ?? Object.values(examples ?? {})[0]?.value;
   if (example === undefined) return null;
@@ -158,14 +228,25 @@ function requestBodyExample(operation: OpenApiOperation) {
     : formExamples
       ? "application/x-www-form-urlencoded"
       : "multipart/form-data";
+  const multipartSchema = contentType === "multipart/form-data"
+    ? resolveSchema(document, multipartMedia?.schema)
+    : undefined;
+  const multipartEncoding = contentType === "multipart/form-data"
+    ? multipartMedia?.encoding ?? {}
+    : {};
+  const requiredMultipartFields = new Set(multipartSchema?.required ?? []);
+  const multipartProperties = multipartSchema?.properties ?? {};
   const multipartFields = contentType === "multipart/form-data" && example && typeof example === "object" && !Array.isArray(example)
-    ? Object.entries(example as Record<string, unknown>).map(([name, value]) => ({
-        name,
-        label: titleCase(name),
-        required: Boolean(operation.requestBody?.required),
-        accept: name === "photo" ? "image/jpeg,image/png,image/gif,image/webp" : "",
-        description: typeof value === "string" ? value : "",
-      }))
+    ? Object.entries(example as Record<string, unknown>).map(([name, value]) => {
+        const fieldSchema = multipartProperties[name];
+        return {
+          name,
+          label: titleCase(name),
+          required: requiredMultipartFields.has(name),
+          accept: multipartEncoding[name]?.contentType ?? "",
+          description: typeof value === "string" ? value : fieldSchema?.description ?? "",
+        };
+      })
     : [];
   const renderExample = (value: unknown) => typeof value === "string"
     ? value
@@ -173,7 +254,7 @@ function requestBodyExample(operation: OpenApiOperation) {
       ? JSON.stringify(value, null, 2)
       : contentType === "application/x-www-form-urlencoded"
         ? new URLSearchParams(Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, String(item)])).toString()
-        : JSON.stringify(value, null, 2);
+        : renderMultipartExample(path, method, value);
   const renderedExample = renderExample(example);
   return {
     required: Boolean(operation.requestBody?.required),
@@ -312,6 +393,7 @@ function operationIds(document: Pick<OpenApiDocument, "paths">): Set<string> {
 }
 
 function operationFromOpenApi(
+  document: OpenApiDocument,
   path: string,
   method: string,
   operation: OpenApiOperation,
@@ -344,7 +426,7 @@ function operationFromOpenApi(
     risk: operationRisk(path, method),
     guide: operationGuide(path, method, operation),
     params: (operation.parameters ?? []).map((parameter) => parameterFromOpenApi(path, parameter)),
-    requestBody: requestBodyExample(operation),
+    requestBody: requestBodyExample(document, path, method, operation),
     responseStatuses: responseSummaries(operation).map((response) => response.status),
     responseSummaries: responseSummaries(operation),
     responseExamples: responseExamples(operation),
@@ -360,7 +442,7 @@ export function buildApiPlaygroundManifest(document: OpenApiDocument = buildApiV
     const operationsByMethod = pathItem as Record<string, OpenApiOperation>;
     for (const [method, operation] of Object.entries(operationsByMethod)) {
       if (!OPENAPI_OPERATION_METHOD_SET.has(method)) continue;
-      operations.push(operationFromOpenApi(path, method, operation, connectorOperations, sdkOperations));
+      operations.push(operationFromOpenApi(document, path, method, operation, connectorOperations, sdkOperations));
     }
   }
 

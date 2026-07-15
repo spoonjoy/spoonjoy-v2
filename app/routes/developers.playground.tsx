@@ -1351,7 +1351,7 @@ export default function DeveloperPlayground() {
                             <input
                               id={fieldId}
                               type="text"
-                              value={multipartValues[field.name]!}
+                              value={multipartValues[field.name] ?? ""}
                               required={field.required}
                               aria-required={field.required}
                               aria-describedby={hintId}

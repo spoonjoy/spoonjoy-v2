@@ -1,0 +1,10 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2-photo-studio
+
+ ✓ test/scripts/smoke-image-cover-live.test.ts (35 tests) 46ms
+
+ Test Files  1 passed (1)
+      Tests  35 passed (35)
+   Start at  15:04:46
+   Duration  427ms (transform 66ms, setup 88ms, import 37ms, tests 46ms, environment 142ms)
+

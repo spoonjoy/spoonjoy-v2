@@ -1,0 +1,390 @@
+
+> spoonjoy-v2@1.0.0 api:playground:generate /Users/arimendelow/Projects/spoonjoy-v2-photo-studio
+> tsx scripts/generate-api-playground.ts
+
+Generated app/lib/generated/api-v1-playground.ts
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2-photo-studio
+
+ ❯ test/lib/ai-placeholder-cover.server.test.ts (19 tests | 1 failed) 1654ms
+     ✓ marks the generated placeholder ready and activates it only after success 22ms
+     × persists the sanitized prompt addition and forwards it to the provider 15ms
+     ✓ returns silently when the quota is exhausted 23ms
+     ✓ returns silently when no placeholder image provider is configured 9ms
+     ✓ returns silently when the OpenAI runner factory returns null 8ms
+     ✓ uses a custom runner factory when it returns a runner 9ms
+     ✓ returns silently when env is null 7ms
+     ✓ logs and swallows runner errors without throwing 9ms
+     ✓ includes non-Error provider failures in the visible failure reason 9ms
+     ✓ does not duplicate wrapper and cause messages when they match 9ms
+     ✓ defaults logger to console when none provided and the runner fails 8ms
+     ✓ logs when a failed placeholder row can no longer be updated 9ms
+     ✓ uses the OpenAI runner factory when OPENAI_API_KEY is provided 7ms
+     ✓ constructs a real OpenAI runner when no explicit runner is passed and the API key is set  1400ms
+     ✓ constructs a real Gemini placeholder runner when only GOOGLE_API_KEY is set 12ms
+     ✓ falls back to Gemini defaults when provider order and timeout config are noisy 10ms
+     ✓ uses the default Gemini timeout when timeout config is omitted 10ms
+     ✓ captures generation exceptions with image-generation metadata 9ms
+     ✓ does not replace a manual cover when placeholder generation finishes later 11ms
+ ❯ test/lib/spoon-cover-stylization.server.test.ts (39 tests | 1 failed) 636ms
+     ✓ writes stylizedImageUrl on success via the supplied runner 24ms
+     × persists prompt addition and parent cover lineage for editorial regeneration 23ms
+     ✓ auto-activates a completed editorial cover only when the recipe has no real active cover 18ms
+     ✓ activates an explicitly requested editorial cover when the guarded active state is unchanged 16ms
+     ✓ does not activate an explicitly requested editorial cover when the guarded state is stale 17ms
+     ✓ does not auto-activate candidate-only editorial jobs 15ms
+     ✓ does not activate explicit editorial jobs without an activation guard 15ms
+     ✓ does not replace a manual raw recipe upload when editorial generation completes 17ms
+     ✓ does not replace a different manual cover selected while a stale job is running 17ms
+     ✓ does not replace a different real active cover on auto-mode recipes 17ms
+     ✓ treats image and fallback active variants as real covers 22ms
+     ✓ replaces a pure AI placeholder active cover after editorialization succeeds 17ms
+     ✓ replaces a different active cover that is not ready yet 23ms
+     ✓ does not revive a cover archived while generation is running 16ms
+     ✓ logs non-Error scheduler failures without throwing 13ms
+     ✓ does not let a corrupt cross-recipe active pointer block auto-activation 18ms
+     ✓ does not overwrite a real active cover that appears during the activation write 18ms
+     ✓ ignores archived stale jobs without consuming quota 11ms
+     ✓ does nothing when stylization quota is exhausted 15ms
+     ✓ returns silently before consuming quota when no image provider config is available 14ms
+     ✓ does not mark a provider skip failed when another worker has cleared processing 14ms
+     ✓ returns silently before consuming quota when env is null 14ms
+     ✓ returns silently when the OpenAI runner factory returns null 15ms
+     ✓ uses a legacy createRunner factory when it returns a runner 16ms
+     ✓ logs errors and leaves stylizedImageUrl null when the runner throws 16ms
+     ✓ does not duplicate matching provider failure messages 15ms
+     ✓ marks a processing cover failed without consuming quota when the source image is missing 13ms
+     ✓ logs nested aggregate errors in serializable form 15ms
+     ✓ falls back to a configured secondary provider within one consumed quota unit 19ms
+     ✓ constructs the default Gemini runner from image provider env 19ms
+     ✓ uses the default Gemini image model when none is configured 20ms
+     ✓ skips when a custom image edit attempt factory returns null 16ms
+     ✓ captures normalized provider metadata when all configured providers fail 16ms
+     ✓ falls back to the default console logger when none is supplied 15ms
+     ✓ uses the OpenAI runner factory when OPENAI_API_KEY is provided 15ms
+     ✓ constructs a real OpenAI runner when no explicit runner is passed and the API key is set 17ms
+     ✓ captures exception telemetry without optional error details 0ms
+     ✓ defaults to openai then gemini 0ms
+     ✓ uses configured primary and fallbacks while ignoring duplicates and unsupported providers 0ms
+ ❯ test/lib/image-gen.server.test.ts (89 tests | 4 failed) 66ms
+     ✓ composes the placeholder prompt verbatim with title + description 1ms
+     ✓ omits the description clause when description is null 0ms
+     × appends a sanitized bounded prompt addition to placeholder prompts 10ms
+     ✓ returns the verbatim stylization prompt 0ms
+     × appends a sanitized bounded prompt addition to stylization prompts 4ms
+     ✓ returns a text-only fallback prompt for DALL-E 3 0ms
+     ✓ re-exports the SVG fallback helper 0ms
+     ✓ declares the OpenAI fallback error codes 0ms
+     ✓ calls textToImage with the composed prompt and the DALL-E 3 model 1ms
+     × forwards prompt additions to textToImage 2ms
+     ✓ passes an explicit placeholder model to textToImage 0ms
+     ✓ uploads generated bytes to R2 under a unique covers key and returns /photos/... 0ms
+     ✓ uses unique generated cover keys for same-millisecond calls 0ms
+     ✓ uses file extensions matching non-PNG generated content types 0ms
+     ✓ defaults generated byte content type to PNG 0ms
+     ✓ returns a deterministic data URL when bucket is absent and local fallback is explicit 0ms
+     ✓ throws when bucket is absent and local fallback is not explicit 0ms
+     ✓ throws when generated output has empty bytes and no URL 0ms
+     ✓ wraps runner failures in ImageGenError preserving the cause 0ms
+     ✓ preserves the OpenAI code/type/status on the wrapping ImageGenError 0ms
+     ✓ throws ImageGenError when the bucket fetch returns a non-OK response 0ms
+     ✓ falls back to global fetch for legacy URL outputs 0ms
+     ✓ resolves a data URL source to a validated File before imageToImage 1ms
+     × forwards prompt additions to imageToImage 1ms
+     ✓ resolves an R2 /photos source to a validated File before imageToImage 0ms
+     ✓ fetches an HTTPS source through the safe image fetch path before imageToImage 2ms
+     ✓ rejects plaintext HTTP source URLs before imageToImage 0ms
+     ✓ uses a fallback filename for HTTPS source URLs without a path filename 0ms
+     ✓ does not fall back to text generation after an image edit failure 0ms
+     ✓ returns usedModel=gpt-image-2 when the primary call succeeds 0ms
+     ✓ falls back to the next GPT Image edit model for model access failures 0ms
+     ✓ falls back when OpenAI reports a status-only 404 model error 0ms
+     ✓ falls back when OpenAI nests a model error code in the response payload 0ms
+     ✓ falls back across configured providers for retryable provider failures 0ms
+     ✓ falls back when the Gemini runner returns an empty image response 1ms
+     ✓ does not fall back across providers for non-retryable image input failures 0ms
+     ✓ rethrows as ImageGenError on a non-fallback error 0ms
+     ✓ rejects unsafe source bytes before imageToImage 0ms
+     ✓ rejects stored /photos sources when no bucket is available 0ms
+     ✓ rejects stored /photos sources when the object is missing 0ms
+     ✓ infers stored /photos source content type image/png when metadata is missing 0ms
+     ✓ infers stored /photos source content type image/jpeg when metadata is missing 0ms
+     ✓ infers stored /photos source content type image/webp when metadata is missing 0ms
+     ✓ rejects stored /photos sources with missing metadata and unknown bytes 0ms
+     ✓ rejects malformed source URLs before imageToImage 0ms
+     ✓ rejects unsupported source URL schemes before imageToImage 0ms
+     ✓ returns a data URL when bucket is absent on success and local fallback is explicit 0ms
+     ✓ throws when stylization succeeds without a bucket or explicit local fallback 0ms
+     ✓ throws when no image edit attempts or runner are configured 0ms
+     ✓ calls client.images.generate for textToImage and decodes b64_json 0ms
+     ✓ calls client.images.edit for imageToImage and decodes b64_json 0ms
+     ✓ throws when the OpenAI response contains neither b64_json nor URL 0ms
+     ✓ still returns URL responses for legacy image clients 0ms
+     ✓ treats non-object thrown values as non-fallback errors 0ms
+     ✓ treats non-string error codes as non-fallback errors 0ms
+     ✓ falls back to Date.now and crypto.randomUUID when no overrides are supplied 0ms
+     ✓ throws when imageToImage returns no URL 0ms
+     ✓ marks retryable provider failures 0 0ms
+     ✓ marks retryable provider failures 1 0ms
+     ✓ marks retryable provider failures 2 0ms
+     ✓ marks retryable provider failures 3 0ms
+     ✓ marks retryable provider failures 4 0ms
+     ✓ marks retryable provider failures 5 0ms
+     ✓ marks retryable provider failures 6 0ms
+     ✓ marks retryable provider failures 7 0ms
+     ✓ does not mark user/input failures retryable 0 0ms
+     ✓ does not mark user/input failures retryable 1 0ms
+     ✓ does not mark user/input failures retryable 2 0ms
+     ✓ does not mark user/input failures retryable 3 0ms
+     ✓ does not mark user/input failures retryable 4 0ms
+     ✓ calls Gemini generateContent for textToImage and decodes inlineData 0ms
+     ✓ calls Gemini generateContent with inline source image data for imageToImage 0ms
+     ✓ defaults Gemini imageToImage source MIME type to PNG when File.type is empty 0ms
+     ✓ uses global fetch when no Gemini fetch implementation is supplied 0ms
+     ✓ throws retryable provider-shaped errors for Gemini quota responses 0ms
+     ✓ defaults Gemini inlineData without a supported MIME type to PNG 0ms
+     ✓ supports Gemini inlineData with snake-case MIME metadata 0ms
+     ✓ throws provider-shaped Gemini errors when the error body is not JSON 0ms
+     ✓ throws a retryable empty-output error when Gemini returns no inline image data 0ms
+     ✓ throws a non-retryable error when Gemini returns a blocked no-image response 0 0ms
+     ✓ throws a non-retryable error when Gemini returns a blocked no-image response 1 0ms
+     ✓ throws a non-retryable error when Gemini returns a blocked no-image response 2 2ms
+     ✓ throws a non-retryable error when Gemini returns a blocked no-image response 3 0ms
+     ✓ throws a non-retryable error when Gemini returns a blocked no-image response 4 0ms
+     ✓ throws a non-retryable error when Gemini returns a blocked no-image response 5 0ms
+     ✓ treats neutral Gemini text-only output as retryable empty output 0ms
+     ✓ throws retryable empty-output errors when Gemini returns no candidates or content parts 0ms
+     ✓ times out slow Gemini requests with retryable provider-shaped metadata 2ms
+     ✓ propagates non-timeout Gemini fetch failures 0ms
+ ❯ test/scripts/migration-0023-recipe-cover-prompt-lineage.test.ts (6 tests | 6 failed) 32ms
+     × adds nullable prompt and parent lineage fields 6ms
+     × creates a parent cover lookup index 1ms
+     × preserves existing covers and allows regenerated covers to store lineage 0ms
+     × adds nullable prompt and parent lineage fields 0ms
+     × creates a parent cover lookup index 0ms
+     × preserves existing covers and allows regenerated covers to store lineage 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/scripts/migration-0023-recipe-cover-prompt-lineage.test.ts > migration 0023 — recipe cover prompt lineage (root D1 migration) > adds nullable prompt and parent lineage fields
+ FAIL  test/scripts/migration-0023-recipe-cover-prompt-lineage.test.ts > migration 0023 — recipe cover prompt lineage (root D1 migration) > creates a parent cover lookup index
+ FAIL  test/scripts/migration-0023-recipe-cover-prompt-lineage.test.ts > migration 0023 — recipe cover prompt lineage (root D1 migration) > preserves existing covers and allows regenerated covers to store lineage
+Error: ENOENT: no such file or directory, open '/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/migrations/0023_recipe_cover_prompt_lineage.sql'
+ ❯ test/scripts/migration-0023-recipe-cover-prompt-lineage.test.ts:122:13
+    120|   beforeEach(() => {
+    121|     db = freshDb();
+    122|     db.exec(readFileSync(migrationPath, "utf8"));
+       |             ^
+    123|   });
+    124| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+ FAIL  test/scripts/migration-0023-recipe-cover-prompt-lineage.test.ts > migration 0023 — recipe cover prompt lineage (Prisma migration) > adds nullable prompt and parent lineage fields
+ FAIL  test/scripts/migration-0023-recipe-cover-prompt-lineage.test.ts > migration 0023 — recipe cover prompt lineage (Prisma migration) > creates a parent cover lookup index
+ FAIL  test/scripts/migration-0023-recipe-cover-prompt-lineage.test.ts > migration 0023 — recipe cover prompt lineage (Prisma migration) > preserves existing covers and allows regenerated covers to store lineage
+Error: ENOENT: no such file or directory, open '/Users/arimendelow/Projects/spoonjoy-v2-photo-studio/prisma/migrations/20260714123600_recipe_cover_prompt_lineage/migration.sql'
+ ❯ test/scripts/migration-0023-recipe-cover-prompt-lineage.test.ts:122:13
+    120|   beforeEach(() => {
+    121|     db = freshDb();
+    122|     db.exec(readFileSync(migrationPath, "utf8"));
+       |             ^
+    123|   });
+    124| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯
+
+ FAIL  test/lib/ai-placeholder-cover.server.test.ts > ai-placeholder-cover.server scheduleAiPlaceholderCover > persists the sanitized prompt addition and forwards it to the provider
+AssertionError: expected "vi.fn()" to be called with arguments: [ StringContaining{…}, …(1) ]
+
+Received: 
+
+  1st vi.fn() call:
+
+  [
+-   StringContaining "Additional direction: brighter herbs and tighter crop.",
++   "Warm editorial food photograph of Pasta. Plated on cream ceramic with brass-toned cutlery, soft golden afternoon light, weathered oak surface. Style: intimate cookbook photography, muted palette of cream, terracotta, sage, and brass. Single dish, shallow depth of field. No text, no watermarks, no people.",
+    {
+      "model": "dall-e-3",
+    },
+  ]
+
+
+Number of calls: 1
+
+ ❯ test/lib/ai-placeholder-cover.server.test.ts:140:32
+    138|     });
+    139| 
+    140|     expect(runner.textToImage).toHaveBeenCalledWith(
+       |                                ^
+    141|       expect.stringContaining("Additional direction: brighter herbs an…
+    142|       { model: "dall-e-3" },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯
+
+ FAIL  test/lib/image-gen.server.test.ts > image-gen.server prompts and constants > appends a sanitized bounded prompt addition to placeholder prompts
+AssertionError: expected 'Warm editorial food photograph of Tom…' to contain 'Additional direction: brighter herbs …'
+
+Expected: "Additional direction: brighter herbs xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+Received: "Warm editorial food photograph of Tomato Soup. Plated on cream ceramic with brass-toned cutlery, soft golden afternoon light, weathered oak surface. Style: intimate cookbook photography, muted palette of cream, terracotta, sage, and brass. Single dish, shallow depth of field. No text, no watermarks, no people."
+
+ ❯ test/lib/image-gen.server.test.ts:79:20
+     77|       promptAddition: `  brighter   herbs\n${"x".repeat(260)}  `,
+     78|     });
+     79|     expect(prompt).toContain(`Additional direction: brighter herbs ${"…
+       |                    ^
+     80|     expect(prompt).not.toContain("\n");
+     81|     expect(prompt).not.toContain("x".repeat(226));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/12]⎯
+
+ FAIL  test/lib/image-gen.server.test.ts > image-gen.server prompts and constants > appends a sanitized bounded prompt addition to stylization prompts
+AssertionError: expected 'Create an appetizing editorial food p…' to contain 'Additional direction: keep same plate…'
+
+Expected: "Additional direction: keep same plate xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx."
+Received: "Create an appetizing editorial food photograph based on the provided dish image. Preserve the actual dish, ingredients, plating, orientation, and overall composition. Improve lighting, color, texture, and background polish so it feels natural, warm, and realistic for a recipe app. Do not add text, logos, utensils, hands, new ingredients, or fantasy elements. Do not crop out the main dish."
+
+ ❯ test/lib/image-gen.server.test.ts:98:20
+     96|       promptAddition: `  keep   same\nplate ${"x".repeat(260)}  `,
+     97|     });
+     98|     expect(prompt).toContain(`Additional direction: ${boundedAddition}…
+       |                    ^
+     99|     expect(prompt).not.toContain("\n");
+    100|     expect(prompt).not.toContain("x".repeat(225));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/12]⎯
+
+ FAIL  test/lib/image-gen.server.test.ts > generatePlaceholderImage > forwards prompt additions to textToImage
+AssertionError: expected "vi.fn()" to be called with arguments: [ StringContaining{…}, …(1) ]
+
+Received: 
+
+  1st vi.fn() call:
+
+  [
+-   StringContaining "Additional direction: use a blue linen napkin.",
++   "Warm editorial food photograph of Pasta. Plated on cream ceramic with brass-toned cutlery, soft golden afternoon light, weathered oak surface. Style: intimate cookbook photography, muted palette of cream, terracotta, sage, and brass. Single dish, shallow depth of field. No text, no watermarks, no people.",
+    {
+      "model": "dall-e-3",
+    },
+  ]
+
+
+Number of calls: 1
+
+ ❯ test/lib/image-gen.server.test.ts:160:32
+    158|     });
+    159| 
+    160|     expect(runner.textToImage).toHaveBeenCalledWith(
+       |                                ^
+    161|       expect.stringContaining("Additional direction: use a blue linen …
+    162|       { model: "dall-e-3" },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/12]⎯
+
+ FAIL  test/lib/image-gen.server.test.ts > stylizeSpoonPhoto > forwards prompt additions to imageToImage
+AssertionError: expected "vi.fn()" to be called with arguments: [ Array(3) ]
+
+Received: 
+
+  1st vi.fn() call:
+
+  [
+-   Any<File>,
+-   StringContaining "Additional direction: preserve the garnish but brighten the background.",
++   File {
++     "lastModified": 1784062505341,
++     "name": "source-image",
++     "type": "image/png",
++     Symbol(buffer): {
++       "data": [
++         137,
++         80,
++         78,
++         71,
++         13,
++         10,
++         26,
++         10,
++         1,
++         2,
++         3,
++       ],
++       "type": "Buffer",
++     },
++   },
++   "Create an appetizing editorial food photograph based on the provided dish image. Preserve the actual dish, ingredients, plating, orientation, and overall composition. Improve lighting, color, texture, and background polish so it feels natural, warm, and realistic for a recipe app. Do not add text, logos, utensils, hands, new ingredients, or fantasy elements. Do not crop out the main dish.",
+    {
+      "model": "gpt-image-2",
+    },
+  ]
+
+
+Number of calls: 1
+
+ ❯ test/lib/image-gen.server.test.ts:409:33
+    407|     });
+    408| 
+    409|     expect(runner.imageToImage).toHaveBeenCalledWith(
+       |                                 ^
+    410|       expect.any(File),
+    411|       expect.stringContaining(
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/12]⎯
+
+ FAIL  test/lib/spoon-cover-stylization.server.test.ts > scheduleSpoonCoverStylization > persists prompt addition and parent cover lineage for editorial regeneration
+AssertionError: expected "vi.fn()" to be called with arguments: [ Array(3) ]
+
+Received: 
+
+  1st vi.fn() call:
+
+  [
+-   Any<File>,
+-   StringContaining "Additional direction: keep same plate xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.",
++   File {
++     "lastModified": 1784062504385,
++     "name": "source-image",
++     "type": "image/png",
++     Symbol(buffer): {
++       "data": [
++         137,
++         80,
++         78,
++         71,
++         13,
++         10,
++         26,
++         10,
++         1,
++         2,
++         3,
++       ],
++       "type": "Buffer",
++     },
++   },
++   "Create an appetizing editorial food photograph based on the provided dish image. Preserve the actual dish, ingredients, plating, orientation, and overall composition. Improve lighting, color, texture, and background polish so it feels natural, warm, and realistic for a recipe app. Do not add text, logos, utensils, hands, new ingredients, or fantasy elements. Do not crop out the main dish.",
+    {
+      "model": "gpt-image-2",
+    },
+  ]
+
+
+Number of calls: 1
+
+ ❯ test/lib/spoon-cover-stylization.server.test.ts:147:33
+    145|     });
+    146| 
+    147|     expect(runner.imageToImage).toHaveBeenCalledWith(
+       |                                 ^
+    148|       expect.any(File),
+    149|       expect.stringContaining(`Additional direction: ${boundedAddition…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/12]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  12 failed | 141 passed (153)
+   Start at  13:55:01
+   Duration  4.24s (transform 182ms, setup 269ms, import 452ms, tests 2.39s, environment 665ms)
+

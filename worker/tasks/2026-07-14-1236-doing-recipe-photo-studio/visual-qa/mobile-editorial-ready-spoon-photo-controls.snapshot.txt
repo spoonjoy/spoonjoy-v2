@@ -1,0 +1,116 @@
+- link "Skip to main content":
+  - /url: "#main"
+- main:
+  - img "Photo of Codex Photo Studio Ready mrlnaoxt"
+  - generic: Editorial photo
+  - link "Recipes":
+    - /url: /recipes
+    - text: Recipes
+  - link "Cook mode":
+    - /url: /recipes/cmrlnap2n00086vi589n7po8g#cook
+  - button "Save"
+  - button "Add to list"
+  - button "Share"
+  - button "Log cook"
+  - heading "Codex Photo Studio Ready mrlnaoxt" [level=1]
+  - link "codex_photo_mrlnaoxt":
+    - /url: /users/codex_photo_mrlnaoxt
+    - img "codex_photo_mrlnaoxt":
+      - generic: C
+    - img "codex_photo_mrlnaoxt"
+    - text: By
+    - strong: codex_photo_mrlnaoxt
+  - paragraph: Editorial cover with source Spoon photos and regeneration controls.
+  - button "Decrease scale":
+  - generic: Yield
+  - generic: Serves 4
+  - button "Increase scale":
+  - button "Clear progress"
+  - button "Recipe maintenance Close" [expanded]:
+    - generic: Recipe maintenance
+    - generic: Close
+  - link "Edit recipe":
+    - /url: /recipes/cmrlnap2n00086vi589n7po8g/edit
+  - button "Make a variation"
+  - button "Delete"
+  - region "Photo studio":
+    - heading "Photo studio" [level=3]
+    - paragraph: Add cover photo
+    - text: Recipe photo
+    - button "Recipe photo Codex Photo Studio Ready mrlnaoxt No photo selected JPG, PNG, or WebP. 5 MB max."
+    - generic: Codex Photo Studio Ready mrlnaoxt
+    - generic: No photo selected
+    - generic: JPG, PNG, or WebP. 5 MB max.
+    - checkbox "Post as Spoon" [checked]:
+    - generic: Post as Spoon
+    - checkbox "Editorialize cover" [checked]:
+    - generic: Editorialize cover
+    - button "Spoon details":
+      - text: Spoon details
+    - text: Editorial direction
+    - textbox "Editorial direction":
+      - /placeholder: Brighter light, cleaner table, keep the plating
+    - button "Save photo" [disabled]:
+      - text: Save photo
+  - region "Recipe covers":
+    - heading "Recipe covers" [level=3]
+    - paragraph: Keep originals and editorial versions available for this recipe.
+    - button "Set no cover"
+    - generic: No cover selected
+    - generic: Explicit empty state
+    - text: Placeholder direction
+    - textbox "Placeholder direction":
+      - /placeholder: Bright window light, golden edges, linen backdrop
+    - button "Generate placeholder cover"
+    - article:
+      - generic: Current
+      - generic: Ready
+      - generic: Jul 13, 2026
+      - paragraph: Original photo
+      - paragraph: Original
+      - button "Use Original photo cover": Use
+      - paragraph: Editorial photo
+      - paragraph: Editorial
+      - generic: Active variant
+      - text: Regeneration direction
+      - textbox "Regeneration direction":
+        - /placeholder: What should change?
+      - button "Regenerate with direction"
+      - generic "Archive active cover options":
+        - button "Archive and set no cover"
+    - heading "Spoon photos" [level=4]
+    - paragraph: Create a saved cover candidate from a photo already posted to this recipe.
+    - article:
+      - paragraph: codex_photo_mrlnaoxt
+      - paragraph: Jul 13, 2026
+      - generic: Spoon photo direction for codex_photo_mrlnaoxt
+      - textbox "Spoon photo direction for codex_photo_mrlnaoxt" [active]:
+        - /placeholder: Editorial direction
+        - text: Spoon crop
+      - button "Editorialize spoon photo by codex_photo_mrlnaoxt": Editorialize cover
+  - paragraph: Cook mode
+  - heading "Steps" [level=2]
+  - paragraph: Tap ingredients as you go
+  - paragraph: No steps added yet
+  - link "Add Steps":
+    - /url: /recipes/cmrlnap2n00086vi589n7po8g/edit
+  - heading "Cooks" [level=2]
+  - list:
+    - link "codex_photo_mrlnaoxt":
+      - /url: /users/codex_photo_mrlnaoxt
+    - generic: 1 days ago
+    - img "Cook by codex_photo_mrlnaoxt"
+- navigation "Spoonjoy navigation":
+  - link "Back recipes":
+    - /url: /recipes
+    - generic: Back
+    - generic: recipes
+  - button "Cook":
+    - generic: Cook
+  - button "Add ingredients to shopping list":
+    - generic: List
+  - button "Share":
+    - generic: Share
+  - link "Edit":
+    - /url: /recipes/cmrlnap2n00086vi589n7po8g/edit
+    - generic: Edit

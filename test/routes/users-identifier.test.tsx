@@ -154,16 +154,16 @@ describe("Users $identifier Route", () => {
       expect(result.recipes[0]).toMatchObject({
         id: recipe.id,
         coverImageUrl: "/photos/profile-editorial.jpg",
-        coverProvenanceLabel: "Editorialized chef photo",
+        coverProvenanceLabel: "Editorial photo",
       });
       expect(result.cookbooks[0].recipes[0].recipe).toMatchObject({
         title: recipe.title,
         coverImageUrl: "/photos/profile-editorial.jpg",
-        coverProvenanceLabel: "Editorialized chef photo",
+        coverProvenanceLabel: "Editorial photo",
       });
       expect(result.recentSpoons[0]).toMatchObject({
         coverImageUrl: "/photos/profile-editorial.jpg",
-        coverProvenanceLabel: "Editorialized chef photo",
+        coverProvenanceLabel: "Editorial photo",
       });
     });
 
@@ -347,7 +347,7 @@ describe("Users $identifier Route", () => {
                 title: "Miso Soup",
                 description: "Comfort in a bowl",
                 coverImageUrl: "https://example.com/miso.jpg",
-                coverProvenanceLabel: "Chef photo",
+                coverProvenanceLabel: "Original photo",
                 servings: "4",
               },
               {
@@ -367,7 +367,7 @@ describe("Users $identifier Route", () => {
                   {
                     recipe: {
                       coverImageUrl: "https://example.com/miso.jpg",
-                      coverProvenanceLabel: "Chef photo",
+                      coverProvenanceLabel: "Original photo",
                       title: "Miso Soup",
                     },
                   },
@@ -381,7 +381,7 @@ describe("Users $identifier Route", () => {
       render(<Stub initialEntries={["/users/chef-rowan"]} />);
 
       expect(await screen.findByRole("heading", { name: "chef-rowan" })).toBeInTheDocument();
-      expect(screen.getAllByText("Chef photo").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Original photo").length).toBeGreaterThan(0);
       expect(screen.getByText("Joined May 2026 • 2 recipes • 1 cookbook")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Open kitchen view" })).toHaveAttribute("href", "/?chef=chef-rowan");
       expect(screen.queryByText("Canonical profile: /users/chef-rowan")).toBeNull();

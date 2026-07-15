@@ -18,14 +18,12 @@ export type SpoonjoyMcpToolInfo = SpoonjoyMcpToolDescriptor;
 //   `openWorldHint: true`) — the connector's only outbound web access. The
 //   agent-driven flow (agent reads the page, calls `create_recipe`) replaces
 //   it for MCP clients, so it stays REST-only and the MCP surface has no web access.
-// - `regenerate_recipe_cover` and `create_recipe_cover_from_spoon` produce
-//   AI-generated "editorial" cover images. The Anthropic Connectors Directory lists
-//   AI-generated images as an unsupported category, so these stay REST-only (the web
-//   app still uses them) and are kept off the MCP surface. The plain upload tool
-//   `create_recipe_cover_from_upload` (a user image, no AI) remains available.
+// - `create_recipe_cover_from_spoon` is REST-only. MCP clients can preserve
+//   original photos by creating a Spoon or using `postAsSpoon` on uploaded
+//   cover creation, then drive bounded Photo Studio generation/regeneration
+//   through the explicit MCP cover tools.
 const MCP_EXCLUDED_TOOLS = new Set([
   "import_recipe_from_url",
-  "regenerate_recipe_cover",
   "create_recipe_cover_from_spoon",
 ]);
 

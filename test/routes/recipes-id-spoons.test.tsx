@@ -508,7 +508,7 @@ describe("Recipes $id route — spoons + provenance", () => {
       }),
     ).resolves.toEqual({
       activeCoverId: covers[0].id,
-      activeCoverVariant: null,
+      activeCoverVariant: "image",
       coverMode: "auto",
     });
     expect(waitUntil).toHaveBeenCalledTimes(1);
