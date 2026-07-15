@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("~/lib/apple-oauth.server", () => ({
   createAppleAuthorizationURL: mocks.createAppleAuthorizationURL,
+  createRegisteredAppleAuthorizationURL: mocks.createAppleAuthorizationURL,
   verifyAppleCallback: mocks.verifyAppleCallback,
 }));
 
@@ -64,7 +65,8 @@ describe("Apple OAuth routes", () => {
         privateKey: "apple-private-key",
       },
       legacyAppleRedirectUri,
-      expect.any(String)
+      expect.any(String),
+      [legacyAppleRedirectUri]
     );
   });
 
@@ -129,6 +131,78 @@ describe("Apple OAuth routes", () => {
       expect.anything(),
       "https://spoonjoy.app/.redwood/functions/auth/oauth?method=linkAppleAccount",
       expect.any(String),
+      ["https://spoonjoy.app/.redwood/functions/auth/oauth?method=linkAppleAccount"],
+    );
+  });
+
+  it("refuses clean Apple starts until the clean callback is registered", async () => {
+    const request = new Request("https://spoonjoy.app/auth/apple");
+    const response = await loader({
+      request,
+      context: {
+        cloudflare: {
+          env: {
+            ...appleEnv,
+            APPLE_OAUTH_CALLBACK_MODE: "clean",
+            APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED: "false",
+          },
+        },
+      },
+      params: {},
+    } as any);
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe("/login?oauthError=oauth_unconfigured");
+    expect(mocks.createAppleAuthorizationURL).not.toHaveBeenCalled();
+  });
+
+  it("can select the clean callback only after registration is asserted", async () => {
+    const request = new Request("https://spoonjoy.app/auth/apple");
+    const response = await loader({
+      request,
+      context: {
+        cloudflare: {
+          env: {
+            ...appleEnv,
+            APPLE_OAUTH_CALLBACK_MODE: "clean",
+            APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED: "true",
+          },
+        },
+      },
+      params: {},
+    } as any);
+
+    expect(response.status).toBe(302);
+    expect(mocks.createAppleAuthorizationURL).toHaveBeenCalledWith(
+      expect.anything(),
+      appleRedirectUri,
+      expect.any(String),
+      [legacyAppleRedirectUri, appleRedirectUri],
+    );
+  });
+
+  it("rolls starts back to legacy with one config change", async () => {
+    const request = new Request("https://spoonjoy.app/auth/apple");
+    const response = await loader({
+      request,
+      context: {
+        cloudflare: {
+          env: {
+            ...appleEnv,
+            APPLE_OAUTH_CALLBACK_MODE: "legacy",
+            APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED: "true",
+          },
+        },
+      },
+      params: {},
+    } as any);
+
+    expect(response.status).toBe(302);
+    expect(mocks.createAppleAuthorizationURL).toHaveBeenCalledWith(
+      expect.anything(),
+      legacyAppleRedirectUri,
+      expect.any(String),
+      [legacyAppleRedirectUri, appleRedirectUri],
     );
   });
 

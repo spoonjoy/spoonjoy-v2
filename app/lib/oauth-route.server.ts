@@ -2,7 +2,11 @@ import type { AppLoadContext } from "react-router";
 import { redirect } from "react-router";
 import { generateState } from "arctic";
 import { requestCanonicalOrigin } from "~/lib/canonical-host.server";
-import type { OAuthEnv } from "~/lib/env.server";
+import type {
+  AppleOAuthCallbackConfig,
+  AppleOAuthCallbackMode,
+  OAuthEnv,
+} from "~/lib/env.server";
 import type { RegisteredOAuthClient } from "~/lib/oauth-server.server";
 import { getCloudflareEnv } from "~/lib/route-platform.server";
 import { getOAuthSessionStorage, getUserId, sanitizeSessionRedirect, type SessionEnv } from "~/lib/session.server";
@@ -64,14 +68,40 @@ export function buildOAuthCallbackUrl(request: Request, provider: OAuthProvider)
  *   - the golden pin test in test/lib/oauth-route.server.test.ts, and
  *   - scripts/smoke-apple-oauth.ts (hits Apple's real authorize endpoint).
  */
-export const APPLE_REGISTERED_RETURN_PATH = "/.redwood/functions/auth/oauth";
+export const APPLE_LEGACY_RETURN_PATH = "/.redwood/functions/auth/oauth";
+export const APPLE_CLEAN_RETURN_PATH = "/auth/apple/callback";
+
+// Backward-compatible export for code and tests that pin the currently
+// registered legacy Service ID return path.
+export const APPLE_REGISTERED_RETURN_PATH = APPLE_LEGACY_RETURN_PATH;
 
 /**
  * Build the Apple `redirect_uri` Apple will accept. `method` is `loginWithApple`
  * for sign-in/up and `linkAppleAccount` when linking an existing account.
  */
-export function buildAppleReturnUrl(request: Request, method: "loginWithApple" | "linkAppleAccount"): string {
-  return `${requestCanonicalOrigin(request)}${APPLE_REGISTERED_RETURN_PATH}?method=${method}`;
+export function buildAppleReturnUrl(
+  request: Request,
+  method: "loginWithApple" | "linkAppleAccount",
+  mode: AppleOAuthCallbackMode = "legacy"
+): string {
+  const origin = requestCanonicalOrigin(request);
+  if (mode === "clean") {
+    return `${origin}${APPLE_CLEAN_RETURN_PATH}`;
+  }
+
+  return `${origin}${APPLE_LEGACY_RETURN_PATH}?method=${method}`;
+}
+
+export function buildRegisteredAppleReturnUrls(
+  request: Request,
+  method: "loginWithApple" | "linkAppleAccount",
+  config: AppleOAuthCallbackConfig
+): string[] {
+  const registered = [buildAppleReturnUrl(request, method, "legacy")];
+  if (config.cleanCallbackRegistered) {
+    registered.push(buildAppleReturnUrl(request, method, "clean"));
+  }
+  return registered;
 }
 
 export function redirectTo(location: string, headers?: HeadersInit) {

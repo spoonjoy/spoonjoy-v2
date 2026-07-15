@@ -36,7 +36,8 @@ Feature secrets:
 
 - Google OAuth: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
 - GitHub OAuth: `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`
-- Apple OAuth: `APPLE_CLIENT_ID`, `APPLE_NATIVE_CLIENT_IDS`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`
+- Apple social OAuth: `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`, `APPLE_OAUTH_CALLBACK_MODE`, `APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED`
+- Native Sign in with Apple: `APPLE_NATIVE_CLIENT_IDS` (separate App ID audience contract)
 - AI features: `OPENAI_API_KEY`
 
 If a feature secret group is missing, either set it before cutover or confirm the UI does not advertise that feature. OAuth buttons are environment-aware in v2 and should only show configured providers.
@@ -84,13 +85,23 @@ Rollback (general, applies to any import that goes wrong):
 Before deploying code that generates new OAuth callback URLs, update provider
 dashboards.
 
-The legacy `.redwood/functions/auth/oauth` route remains a compatibility
-handler for in-flight OAuth sessions and old provider settings, but new
-authorization starts should use the clean callback URLs:
+The legacy `.redwood/functions/auth/oauth` route and the clean Apple callback
+are both active handlers. Apple social starts remain on the legacy registered
+return URL until the clean URL is added in the Apple Developer portal and both
+paths pass canaries:
 
 - Google authorized redirect URI: `https://spoonjoy.app/auth/google/callback`
 - GitHub authorization callback URL: `https://spoonjoy.app/auth/github/callback`
-- Apple redirect URI: `https://spoonjoy.app/auth/apple/callback`
+- Apple current start redirect URI: `https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple`
+- Apple clean callback handler, not yet selected by starts: `https://spoonjoy.app/auth/apple/callback`
+
+`APPLE_OAUTH_CALLBACK_MODE` defaults to `legacy`, and
+`APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED` defaults to `false`. Selecting `clean`
+without the registration assertion fails closed before an Apple authorization
+URL is generated. After portal registration and canaries, set the registration
+assertion first and switch starts separately. Roll back by restoring
+`APPLE_OAUTH_CALLBACK_MODE=legacy`; do not remove either callback while sessions
+may be in flight.
 
 After DNS switch, test OAuth start routes. If a provider is not configured, it should not appear on `/login` or `/signup`.
 

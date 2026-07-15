@@ -1,12 +1,16 @@
 import type { Route } from "./+types/auth.apple";
 import { redirect } from "react-router";
-import { getAppleOAuthConfig } from "~/lib/env.server";
-import { createAppleAuthorizationURL } from "~/lib/apple-oauth.server";
+import {
+  getAppleOAuthCallbackConfig,
+  getAppleOAuthConfig,
+} from "~/lib/env.server";
+import { createRegisteredAppleAuthorizationURL } from "~/lib/apple-oauth.server";
 import { authTelemetryFromContext } from "~/lib/auth-telemetry.server";
 import {
   appendOAuthError,
   assertCanStartOAuthLinking,
   buildAppleReturnUrl,
+  buildRegisteredAppleReturnUrls,
   commitOAuthStartSession,
   generateOAuthState,
   getOAuthEnv,
@@ -24,23 +28,32 @@ async function initiateAppleOAuth({ request, context }: Route.LoaderArgs | Route
   const telemetry = authTelemetryFromContext(context);
 
   let config;
+  let callbackConfig;
   try {
-    config = getAppleOAuthConfig(getOAuthEnv(context));
+    const oauthEnv = getOAuthEnv(context);
+    config = getAppleOAuthConfig(oauthEnv);
+    callbackConfig = getAppleOAuthCallbackConfig(oauthEnv);
   } catch (error) {
     telemetry.captureException(error, { provider: "apple", phase: "initiate" });
     return redirect(appendOAuthError(sessionData.failureRedirect, "oauth_unconfigured"));
   }
 
-  // Apple validates redirect_uri against the Service ID's registered Return
-  // URLs — which is the legacy RedwoodJS dbAuth-oauth path, not /auth/apple/
-  // callback. Send the registered path so Apple doesn't reject on its consent
-  // screen. The compat route (routes/redwood-functions-auth-oauth.tsx) handles
-  // the form_post callback.
-  const redirectUri = buildAppleReturnUrl(request, sessionData.linking ? "linkAppleAccount" : "loginWithApple");
+  const callbackMethod = sessionData.linking ? "linkAppleAccount" : "loginWithApple";
+  const redirectUri = buildAppleReturnUrl(request, callbackMethod, callbackConfig.mode);
+  const registeredRedirectUris = buildRegisteredAppleReturnUrls(
+    request,
+    callbackMethod,
+    callbackConfig
+  );
   sessionData.redirectUri = redirectUri;
   let authorizationUrl;
   try {
-    authorizationUrl = createAppleAuthorizationURL(config, redirectUri, state);
+    authorizationUrl = createRegisteredAppleAuthorizationURL(
+      config,
+      redirectUri,
+      state,
+      registeredRedirectUris
+    );
   } catch (error) {
     telemetry.captureException(error, { provider: "apple", phase: "initiate" });
     return redirect(appendOAuthError(sessionData.failureRedirect, "oauth_unconfigured"));
