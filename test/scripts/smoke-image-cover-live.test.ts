@@ -106,7 +106,13 @@ function createFlowHarness(overrides: Record<string, unknown> = {}) {
     }
     if (name === "create_spoon") return { spoon: { id: "spoon-1", photoUrl: "/photos/spoons/user-1/uploads/spoon.png" } };
     if (name === "list_recipe_spoon_images") return { spoonImages: [{ id: "spoon-1", photoUrl: "/photos/spoons/user-1/uploads/spoon.png" }] };
+    if (name === "generate_recipe_cover_placeholder") {
+      return { createdCover: { ...AI_PLACEHOLDER_COVER, imageUrl: null, displayUrl: null, generationStatus: "processing" }, generationStatus: "processing" };
+    }
     if (name === "create_recipe_cover_from_upload") {
+      if (args.postAsSpoon === true) {
+        return { createdCover: { ...SPOON_EDITORIAL_COVER, stylizedImageUrl: null, generationStatus: "processing" }, generationStatus: "processing" };
+      }
       return args.generateEditorial === false
         ? { createdCover: CHEF_PHOTO_COVER, activeCover: CHEF_PHOTO_COVER, generationStatus: "none" }
         : { createdCover: { ...EDITORIAL_COVER, stylizedImageUrl: null, generationStatus: "processing" }, generationStatus: "processing" };
@@ -119,7 +125,9 @@ function createFlowHarness(overrides: Record<string, unknown> = {}) {
     }
     if (name === "get_cover_generation_status") {
       const coverId = String(args.coverId);
-      const cover = coverId === "cover-spoon" ? SPOON_EDITORIAL_COVER : EDITORIAL_COVER;
+      const cover = coverId === "cover-ai"
+        ? AI_PLACEHOLDER_COVER
+        : coverId === "cover-spoon" ? SPOON_EDITORIAL_COVER : EDITORIAL_COVER;
       return { cover: terminalStatusCover(cover), activeCover: terminalStatusCover(cover) };
     }
     if (name === "set_active_recipe_cover") return { activeCover: CHEF_PHOTO_COVER };
@@ -440,10 +448,9 @@ describe("smoke image-cover helpers", () => {
 
   it("names every MCP tool the image-cover smoke must prove", () => {
     expect(IMAGE_COVER_REQUIRED_MCP_TOOLS).toEqual([
-      "create_spoon",
       "list_recipe_spoon_images",
       "create_recipe_cover_from_upload",
-      "create_recipe_cover_from_spoon",
+      "generate_recipe_cover_placeholder",
       "regenerate_recipe_cover",
       "get_cover_generation_status",
       "set_active_recipe_cover",
@@ -497,6 +504,39 @@ describe("image-cover live smoke flow", () => {
       .filter((call) => call.kind === "mcp")
       .map((call) => call.name);
     expect(mcpToolNames).toEqual(expect.arrayContaining(IMAGE_COVER_REQUIRED_MCP_TOOLS));
+    expect(mcpToolNames).not.toContain("create_recipe_cover_from_spoon");
+    expect(mcpToolNames).not.toContain("create_spoon");
+
+    const placeholderCall = harness.calls.find((call) => call.kind === "mcp" && call.name === "generate_recipe_cover_placeholder");
+    expect(placeholderCall?.args).toMatchObject({
+      recipeId: "recipe-1",
+      activateWhenReady: true,
+      promptAddition: expect.stringContaining("editorial"),
+      idempotencyKey: "codex-unit2a-ai-placeholder",
+    });
+
+    const spoonBackedCoverCall = harness.calls.find((call) =>
+      call.kind === "mcp" &&
+      call.name === "create_recipe_cover_from_upload" &&
+      (call.args as Record<string, unknown>).postAsSpoon === true
+    );
+    expect(spoonBackedCoverCall?.args).toMatchObject({
+      recipeId: "recipe-1",
+      imageUrl: "/photos/spoons/user-1/uploads/spoon.png",
+      postAsSpoon: true,
+      generateEditorial: true,
+      activateWhenReady: true,
+      note: expect.stringContaining("Codex image-cover smoke"),
+      nextTime: expect.stringContaining("Codex"),
+      cookedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      promptAddition: expect.stringContaining("editorial"),
+      idempotencyKey: "codex-unit2a-editorial-spoon-upload",
+    });
+
+    const regenerateCall = harness.calls.find((call) => call.kind === "mcp" && call.name === "regenerate_recipe_cover");
+    expect(regenerateCall?.args).toMatchObject({
+      promptAddition: expect.stringContaining("brighter"),
+    });
 
     expect(report.exif).toEqual({
       sourceOrientation: 6,
@@ -510,13 +550,12 @@ describe("image-cover live smoke flow", () => {
     ]));
     expect(report.operations).toEqual(expect.arrayContaining([
       "tools/list",
+      "generate_recipe_cover_placeholder",
       "upload_recipe_image",
       "upload_recipe_image:gif_rejected",
       "upload_spoon_photo",
-      "create_spoon",
       "list_recipe_spoon_images",
       "create_recipe_cover_from_upload",
-      "create_recipe_cover_from_spoon",
       "regenerate_recipe_cover",
       "get_cover_generation_status",
       "set_active_recipe_cover",
@@ -537,6 +576,7 @@ describe("image-cover live smoke flow", () => {
       "/photos/covers/spoon-editorial.jpg",
     ]));
     expect(report.generationPolling).toEqual(expect.arrayContaining([
+      { coverId: "cover-ai", status: "ready", generationStatus: "succeeded" },
       { coverId: "cover-editorial", status: "ready", generationStatus: "succeeded" },
       { coverId: "cover-spoon", status: "ready", generationStatus: "succeeded" },
     ]));
@@ -704,9 +744,10 @@ describe("image-cover live smoke flow", () => {
         name === "create_recipe_cover_from_upload" && args.generateEditorial === true,
     },
     {
-      label: "editorial spoon cover id",
-      expected: /editorial spoon cover/i,
-      mutate: (name: string) => name === "create_recipe_cover_from_spoon",
+      label: "spoon-backed editorial cover id",
+      expected: /spoon-backed editorial cover/i,
+      mutate: (name: string, args: Record<string, unknown>) =>
+        name === "create_recipe_cover_from_upload" && args.postAsSpoon === true,
     },
   ])("fails cleanly when MCP omits $label", async ({ expected, mutate }) => {
     const harness = createFlowHarness();
