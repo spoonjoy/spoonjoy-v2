@@ -67,7 +67,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Artifact records `0023_recipe_cover_prompt_lineage.sql` as current plus exact cleanup/deploy/smoke commands, and every named baseline command is green with no disposable residue. A pre-existing failure does not permit execution to continue: reproduce it on untouched `origin/main`, open a focused red/fix/green sub-unit on this branch, and rerun Unit 0 until green.
 
 ### ⬜ Unit 1a: Shopping Mutation Matrix Tests
-**What**: Add red tests for active-unchecked, active-checked, tombstone, null quantity, three-state and last-explicit aggregate category/icon override, aggregation order, repeated calls, version/UUID-lease guarded no-op, all-or-nothing multi-pair batch, empty-list zero allocator, atomic contiguous range allocation, every move-to-end writer, both D1 commit orders, exact-once numeric sums, fixed 5..320 ms seven-delay/eight-attempt retry, exhaustion adapter errors, and concurrent web/v1/MCP behavior; test exact/rerunnable migration backfill.
+**What**: Add red tests for active-unchecked, active-checked, tombstone, null quantity, three-state and last-explicit aggregate category/icon override, aggregation order, repeated calls, mandatory version-first/items-second reads, paused races before/during/after item read proving stale bases cannot acquire, version/UUID-lease guarded no-op, all-or-nothing multi-pair batch, empty-list zero allocator, atomic contiguous range allocation, every move-to-end writer, both D1 commit orders, exact-once numeric sums, fixed 5..320 ms seven-delay/eight-attempt retry, exhaustion adapter errors, and concurrent web/v1/MCP behavior; test exact/rerunnable migration backfill.
 **Output**: `test/lib/shopping-list-mutations.server.test.ts`, `test/routes/shopping-list-route.test.ts`, `test/routes/api-v1-shopping-mutations.test.ts`, `test/routes/api-v1-shopping-d1.test.ts`, `test/lib/mcp/spoonjoy-tools.server.test.ts`, `test/scripts/migration-0024-shopping-list-mutation-coordination.test.ts`.
 **Acceptance**: The targeted Vitest command fails only on the missing shared semantics.
 
@@ -112,7 +112,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Helper coverage is 100%; targeted cross-contract suite, typecheck, and build pass.
 
 ### ⬜ Unit 4a: REST Scaling Projection Tests
-**What**: Add red tests for exactly one unsigned decimal `scaleFactor`, `0.25..50`, invalid/multiple/nonfinite forms, required numeric quantities, shortest-decimal/scientific expansion, exact base-10 multiplication, below/at/above half ties away from zero, trailing-zero JSON numbers, negative zero, Number.MAX_VALUE boundary and `1e308*50` overflow `400 validation_error` message/no-null, immutable recipe data, and unchanged list/search behavior.
+**What**: Add red tests for omitted factor defaulting to returned `scaleFactor: 1` with always-present rounded `scaledQuantity`, exactly one supplied unsigned decimal `scaleFactor`, `0.25..50`, invalid/multiple/nonfinite forms, required numeric quantities, shortest-decimal/scientific expansion, exact base-10 multiplication, below/at/above half ties away from zero, trailing-zero JSON numbers, negative zero, Number.MAX_VALUE boundary and `1e308*50` overflow `400 validation_error` message/no-null, immutable recipe data, and unchanged list/search behavior.
 **Output**: `test/lib/api-v1-recipe-scaling.server.test.ts`, `test/routes/api-v1-recipes.test.ts`, `test/lib/api-v1-openapi.server.test.ts`, `test/routes/api-v1-openapi.test.ts`, `test/scripts/generate-api-playground.test.ts`, `test/routes/developers-playground.test.tsx`.
 **Acceptance**: Named tests fail only on absent scaling projection/validation.
 
@@ -202,7 +202,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Worker class paths are 100% covered; preflight, typecheck, and build pass.
 
 ### ⬜ Unit 10a: Internal Cook HTTP Lifecycle Tests
-**What**: Add real Worker red tests for every planning-defined start/get/patch/complete/abandon request and success/error envelope; 201 new/after-terminal vs 200 active resume/replay; valid/invalid/generated request-id equality; exact messages/Retry-After; exact Allow strings for start, recipe base, live, complete, abandon, and residue including HEAD/unknown behavior; any-owner active recipe access; indistinguishable missing/soft-deleted/inaccessible 404; canonical payload hashing, atomic operation rejection; UUID validation; accepted-only ledger, replay, capacity, attempt, revision, terminal, auth, origin, JSON, validation, method, and internal errors; and no OpenAPI/React Router registration.
+**What**: Add real Worker red tests for every planning-defined start/get/patch/complete/abandon request and success/error envelope; 201 new/after-terminal vs 200 active resume/replay with recorded adoption outcome plus current evolved/terminal snapshot; valid/invalid/generated request-id equality; exact messages/Retry-After; exact Allow strings for start, recipe base, live, complete, abandon, and residue including HEAD/unknown behavior; any-owner active recipe access; indistinguishable missing/soft-deleted/inaccessible 404; canonical payload hashing, atomic operation rejection; UUID validation; accepted-only ledger, replay, capacity, attempt, revision, terminal-before-base-revision precedence, auth, origin, JSON, validation, method, and internal errors; and no OpenAPI/React Router registration.
 **Output**: `test/workers-runtime/app-cook-session-http.test.ts`, `test/workers/app.test.ts`.
 **Acceptance**: Tests fail because Worker-level HTTP handler is absent.
 
@@ -277,14 +277,14 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Adapter is 100% covered and commands pass.
 
 ### ⬜ Unit 15a: Cook Client Reconciliation Tests
-**What**: Add red hook/controller tests for exact authenticated `{pending,inFlight}` record parser/isolation/logout, pending coalescing/256 overflow, one inFlight formed from first 64 with one id/revision, no cross-batch regrouping, write-before-optimism/send, failure reversion/blocking and accepted-response persistence failure replay safety, snapshot reconciliation, stale/network/error dispositions; add anonymous v2 fingerprint schema, new-v2 writing, v1 local-only continuation/non-adoption, mismatched-v2 reset, adoption clear timing, and storage failures.
+**What**: Add red hook/controller tests for exact authenticated `{pending,inFlight}` parser/isolation/logout, coalescing/overflow, one persisted inFlight/64/order, canonical persisted base versus derived optimistic rendering, write-before-side-effect, local/accepted-response/higher-revision/different-attempt/recovery persistence failures with reload behavior and send blocking, snapshot reconciliation, command-specific mutation-conflict recovery, and every other exact error disposition: stale revision/attempt, replaced/purged, terminal conflict/state, purging, not-found, 401, network, 429/Retry-After, 500, protocol 4xx, unknown status; add anonymous v2 fingerprint schema, new-v2 writing, v1 local-only continuation/non-adoption, mismatched-v2 reset, successful-200/201-only clear timing, HTTP/network preservation, and storage failures.
 **Output**: `test/hooks/use-cook-session.test.ts`, `test/routes/recipes-id.test.tsx`.
 **Acceptance**: Tests fail because hook/controller is absent.
 
 ### ⬜ Unit 15b: Cook Client Reconciliation Implementation
 **What**: Implement `useCookSession`; add anonymous v2 parser/writer while retaining v1 local-only behavior; implement write-gated authenticated pending/single-inFlight state machine and exact reconciliation/error rules.
 **Output**: `app/hooks/useCookSession.ts`, `app/routes/recipes.$id.tsx`.
-**Acceptance**: Unit 15a passes; client time never overrides server; anonymous record clears after any start outcome; queue clears only after acceptance.
+**Acceptance**: Unit 15a passes; client time never overrides server; anonymous record clears only after a successful 200/201 start; queue transitions follow the exhaustive persisted disposition table.
 
 ### ⬜ Unit 15c: Cook Client Reconciliation Verification
 **What**: Run the complete Unit 15a suite with coverage, typecheck, and build; record evidence only.
@@ -392,7 +392,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: New mutation code is 100% covered and commands pass.
 
 ### ⬜ Unit 20.3a: Recipe isSaved Projection Tests
-**What**: Add red tests for `isSaved: null` only with no principal and viewer-specific boolean for session, bearer, and environment principals across summary/detail/search/native-sync/cookbook payloads, including bearer scope enforcement, with no public count or cache leak.
+**What**: Add red tests for `isSaved: null` only with no principal and viewer-specific boolean for session, bearer, and environment principals across summary/detail/search/native-sync/cookbook payloads, including bearer scope enforcement; assert anonymous existing public Cache-Control/ETag plus deduplicated `Vary: Cookie, Authorization`, and principal `private, no-store`/Pragma/same Vary, with no public count or cache leak.
 **Output**: `test/routes/api-v1-recipes.test.ts`, `test/routes/api-v1-search.test.ts`, `test/routes/api-v1-native-sync.test.ts`, `test/routes/api-v1-recipe-writes.test.ts`, `test/routes/api-v1-cookbooks.test.ts`, `test/lib/api-v1-openapi.server.test.ts`, `test/routes/api-v1-openapi.test.ts`, `test/scripts/generate-api-playground.test.ts`.
 **Acceptance**: The targeted run fails because functional isSaved projection is absent.
 
@@ -602,14 +602,14 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: New lifecycle smoke logic is 100% covered and commands pass.
 
 ### ⬜ Unit 31a: Smoke Purge And Cleanup Tests
-**What**: Add red fake-clock tests for exact cleanup state machine: deadline before request/sleep, per-request abort, 204 success, 202/network/408/425/429/5xx retry, nonnegative-integer delta-seconds Retry-After parsing with malformed/date values ignored, 409 stale-attempt target switch only with latest snapshot, fatal 401/403/404/other-4xx/unexpected-2xx/409-without-snapshot, 500ms exponential cap-5s, max 20 requests/90s, no final over-deadline sleep, post-204 residue/D1 zero proof, user delete only after proof, and complete fatal/exhaustion artifacts.
+**What**: Add red fake-clock tests for exact cleanup state machine: deadline before request/sleep, per-request abort, retry/status/Retry-After/stale-target/fatal classifications, 500ms exponential cap-5s, max 20 requests/90s, no final over-deadline sleep, post-204 residue/D1/user proof, primary failure then exact 5-second wait and one fresh-budget/latest-target recovery pass, functional failure with clean cleanup, recovery success incident, double-failure `cleanupIncomplete`/retained user, plural bounded non-content tombstones, and complete artifacts.
 **Output**: `test/scripts/smoke-live-cleanup.test.ts`, `test/scripts/smoke-live-helpers.test.ts`.
 **Acceptance**: Tests fail because cleanup reliability is absent.
 
 ### ⬜ Unit 31b: Smoke Purge And Cleanup Implementation
-**What**: At start set deadline `now+90s`; before each request fail if expired; abort each request after `min(10s, remaining)`. Count every request. On 204 proceed to proof. Retry network, 202, 408, 425, 429, and 5xx; parse Retry-After only as nonnegative integer delta-seconds and ignore malformed or HTTP-date values; delay is `max(parsedRetryAfterMsOrZero, min(500*2^(attempt-1),5000))`; fail before sleep when attempt 20 or `now+delay >= deadline`. On 409 stale-attempt with latest snapshot, record/switch target and continue same counters; all other 409 and 401/403/404/other 4xx/unexpected 2xx are fatal. On success require owner residue and environment-safe remote D1 count zero, then delete user. Fatal/exhaustion still attempt inspections and record target history, every status/body/time/delay, errors/results, screenshot/log paths; leave user for subsequent cleanup retry rather than hiding DO residue.
+**What**: Implement the planning-defined 20-request/90-second pass and exact parser/status/deadline rules. Run it in `finally`; after primary failure, record evidence, wait exactly 5 seconds, and run one fresh-budget pass at latest target. A clean recovery deletes the user but retains incident/nonzero reporting; double failure sets `cleanupIncomplete`, records both passes/inspections, and leaves the user for external cleanup. Require owner residue and environment-safe remote D1 attempt count zero before user delete; any bounded unexpired non-content replay tombstones are allowed and recorded.
 **Output**: `scripts/smoke-live.mjs`, `scripts/smoke-live-helpers.mjs`.
-**Acceptance**: Unit 31a passes; failed smoke still cleans and reports; only documented non-content tombstone may remain before user cleanup.
+**Acceptance**: Unit 31a passes; functional smoke failure still cleans; recoverable cleanup failure gets one bounded clean recovery; irrecoverable cleanup is never reported clean and blocks ship until a later rerun proves zero content/residue.
 
 ### ⬜ Unit 31c: Smoke Cleanup Verification
 **What**: Run the complete Unit 31a script suite with coverage, script typecheck, and local dry-run residue inspection; record evidence only.
@@ -666,3 +666,4 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 - 2026-07-15 Ambiguity Round 2 fixed exact-SHA gate deadlock, rejected mutation/rebase semantics, terminal restart, projection schema, recipe visibility, principal-scoped saves, typed adoption, concurrent shopping coordination, remote residue proof, request ids/messages, decimal ties, and tag casing reset.
 - 2026-07-15 Ambiguity Round 3 fixed transactional shopping retry/oracles, canonical cook mutations/defaults/methods/WebSockets, authenticated offline reconciliation, stale-card repair ownership, atomic tag replacement, DELETE/smoke retry precedence, and health-based deployment SHA attestation.
 - 2026-07-15 Ambiguity Round 4 fixed post-replacement/purge mutation tombstones, single-inFlight offline batching and storage-write safety, fingerprinted anonymous v2 with legacy isolation, scaling overflow, and exact cleanup retry classification/deadline order.
+- 2026-07-15 Ambiguity Round 5 fixed version-first shopping reads, exhaustive client error/persistence behavior, principal cache partitions, bounded cleanup recovery, terminal/start precedence, anonymous clear timing, and omitted-factor projection.
