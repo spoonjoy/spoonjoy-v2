@@ -8,6 +8,7 @@ import { handleGitHubOAuthCallback } from "~/lib/github-oauth-callback.server";
 import { verifyGitHubCallback } from "~/lib/github-oauth.server";
 import { handleGoogleOAuthCallback } from "~/lib/google-oauth-callback.server";
 import { verifyGoogleCallback } from "~/lib/google-oauth.server";
+import type { OAuthProviderFailureKind } from "~/lib/oauth-provider-call.server";
 import {
   type AuthFailurePhase,
   type AuthProvider,
@@ -27,6 +28,37 @@ import {
 
 const SOCIAL_CALLBACK_EVENT = "spoonjoy.oauth.social_callback";
 
+interface OAuthFailureTelemetry {
+  failureKind: OAuthProviderFailureKind;
+  retryable: boolean;
+}
+
+function oauthFailureTelemetry(
+  errorCode: string | undefined,
+  supplied?: Partial<OAuthFailureTelemetry>,
+): OAuthFailureTelemetry | undefined {
+  if (supplied?.failureKind && supplied.retryable !== undefined) {
+    return {
+      failureKind: supplied.failureKind,
+      retryable: supplied.retryable,
+    };
+  }
+
+  if (errorCode === "provider_timeout") {
+    return { failureKind: "timeout", retryable: true };
+  }
+  if (errorCode === "network_error") {
+    return { failureKind: "network", retryable: true };
+  }
+  if (errorCode === "upstream_error") {
+    return { failureKind: "upstream", retryable: true };
+  }
+  if (errorCode === "email_required") {
+    return { failureKind: "missing_email", retryable: false };
+  }
+  return undefined;
+}
+
 /**
  * Emit a `spoonjoy.oauth.social_callback` error event for an OAuth callback
  * exit, then return the user-facing error redirect. Every dark
@@ -43,12 +75,16 @@ function redirectWithCapturedOAuthError(
   errorCode: string | undefined,
   phase: AuthFailurePhase,
   env?: Parameters<typeof redirectWithOAuthError>[4],
+  failure?: OAuthFailureTelemetry,
 ) {
   telemetry.captureEvent(SOCIAL_CALLBACK_EVENT, "server", {
     provider,
     outcome: "error",
     error_code: errorCode ?? "oauth_error",
     phase,
+    ...(failure
+      ? { failure_kind: failure.failureKind, retryable: failure.retryable }
+      : {}),
   });
   return redirectWithOAuthError(request, provider, failureRedirect, errorCode, env);
 }
@@ -62,8 +98,14 @@ function verifyCaptureFor(
   telemetry: AuthTelemetry,
   provider: AuthProvider,
 ): (input: AuthVerifyCapture) => void {
-  return ({ error, phase, httpStatus }) => {
-    telemetry.captureException(error, { provider, phase, httpStatus });
+  return ({ error, phase, httpStatus, failureKind, retryable }) => {
+    telemetry.captureException(error, {
+      provider,
+      phase,
+      httpStatus,
+      ...(failureKind ? { failure_kind: failureKind } : {}),
+      ...(retryable !== undefined ? { retryable } : {}),
+    });
   };
 }
 
@@ -223,7 +265,16 @@ export async function handleGitHubCallback(request: Request, context: AppLoadCon
   }
 
   if (!verifyResult.success || !verifyResult.githubUser) {
-    return redirectWithCapturedOAuthError(telemetry, request, "github", failureRedirect, verifyResult.error, "verify", env);
+    return redirectWithCapturedOAuthError(
+      telemetry,
+      request,
+      "github",
+      failureRedirect,
+      verifyResult.error,
+      "verify",
+      env,
+      oauthFailureTelemetry(verifyResult.error, verifyResult),
+    );
   }
 
   const currentUserId = stored.linking
@@ -242,7 +293,16 @@ export async function handleGitHubCallback(request: Request, context: AppLoadCon
   });
 
   if (!callbackResult.success || !callbackResult.userId) {
-    return redirectWithCapturedOAuthError(telemetry, request, "github", failureRedirect, callbackResult.error, "link_account", env);
+    return redirectWithCapturedOAuthError(
+      telemetry,
+      request,
+      "github",
+      failureRedirect,
+      callbackResult.error,
+      "link_account",
+      env,
+      oauthFailureTelemetry(callbackResult.error),
+    );
   }
 
   const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request);
@@ -304,7 +364,16 @@ export async function handleGoogleCallback(request: Request, context: AppLoadCon
   }
 
   if (!verifyResult.success || !verifyResult.googleUser) {
-    return redirectWithCapturedOAuthError(telemetry, request, "google", failureRedirect, verifyResult.error, "verify", env);
+    return redirectWithCapturedOAuthError(
+      telemetry,
+      request,
+      "google",
+      failureRedirect,
+      verifyResult.error,
+      "verify",
+      env,
+      oauthFailureTelemetry(verifyResult.error, verifyResult),
+    );
   }
 
   const currentUserId = stored.linking
@@ -323,7 +392,16 @@ export async function handleGoogleCallback(request: Request, context: AppLoadCon
   });
 
   if (!callbackResult.success || !callbackResult.userId) {
-    return redirectWithCapturedOAuthError(telemetry, request, "google", failureRedirect, callbackResult.error, "link_account", env);
+    return redirectWithCapturedOAuthError(
+      telemetry,
+      request,
+      "google",
+      failureRedirect,
+      callbackResult.error,
+      "link_account",
+      env,
+      oauthFailureTelemetry(callbackResult.error),
+    );
   }
 
   const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request);

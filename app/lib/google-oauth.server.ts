@@ -6,17 +6,26 @@
  */
 
 import {
+  ArcticFetchError,
   Google,
+  UnexpectedErrorResponseBodyError,
+  UnexpectedResponseError,
   generateCodeVerifier as arcticGenerateCodeVerifier,
 } from "arctic";
 import type { GoogleOAuthConfig } from "./env.server";
 import type { AuthVerifyCapture } from "./auth-telemetry.server";
+import {
+  OAuthProviderCallError,
+  fetchOAuthProviderJson,
+  isRetryableProviderStatus,
+  withOAuthProviderTimeout,
+  type OAuthProviderFailureKind,
+} from "./oauth-provider-call.server";
 
 /**
  * Optional capture callback threaded in by the callback-route orchestration.
- * Lets a provider outage (token exchange, JWKS, userinfo non-2xx, network) be
- * captured with the ORIGINAL error before it is flattened to a generic error
- * code, without coupling this helper to the PostHog config.
+ * Lets provider failures be captured with their original error, phase, and
+ * retry classification without coupling this helper to the PostHog config.
  */
 export type AuthVerifyCaptureFn = (input: AuthVerifyCapture) => void;
 
@@ -60,6 +69,8 @@ export interface GoogleCallbackResult {
   googleUser?: GoogleUser;
   error?: string;
   message?: string;
+  failureKind?: OAuthProviderFailureKind;
+  retryable?: boolean;
 }
 
 /**
@@ -117,6 +128,53 @@ interface GoogleUserinfoResponse {
   picture?: string;
 }
 
+function providerCallFailureResult(
+  error: unknown,
+  capture?: AuthVerifyCaptureFn,
+): GoogleCallbackResult | null {
+  if (!(error instanceof OAuthProviderCallError)) return null;
+
+  capture?.({
+    error: error.originalError ?? error,
+    phase: error.phase,
+    httpStatus: error.httpStatus,
+    failureKind: error.failureKind,
+    retryable: error.retryable,
+  });
+  return {
+    success: false,
+    error: error.code,
+    message: error.message,
+    failureKind: error.failureKind,
+    retryable: error.retryable,
+  };
+}
+
+function oauthClientFailure(message: string): GoogleCallbackResult {
+  return {
+    success: false,
+    error: "oauth_error",
+    message: message || "OAuth error occurred",
+    failureKind: "client",
+    retryable: false,
+  };
+}
+
+function errorStatus(error: unknown): number | undefined {
+  if (!(error instanceof Error) || !("status" in error)) return undefined;
+  return typeof error.status === "number" ? error.status : undefined;
+}
+
+function isUnexpectedOAuthResponseError(error: unknown): boolean {
+  return (
+    error instanceof UnexpectedResponseError ||
+    error instanceof UnexpectedErrorResponseBodyError ||
+    (error instanceof Error &&
+      (error.name === "UnexpectedResponseError" ||
+        error.name === "UnexpectedErrorResponseBodyError"))
+  );
+}
+
 /**
  * Verifies Google OAuth callback and extracts user data.
  *
@@ -140,6 +198,8 @@ export async function verifyGoogleCallback(
       success: false,
       error: "invalid_state",
       message: "Missing state parameter",
+      failureKind: "client",
+      retryable: false,
     };
   }
 
@@ -149,6 +209,8 @@ export async function verifyGoogleCallback(
       success: false,
       error: "invalid_code",
       message: "Missing authorization code",
+      failureKind: "client",
+      retryable: false,
     };
   }
 
@@ -158,70 +220,40 @@ export async function verifyGoogleCallback(
       success: false,
       error: "invalid_code_verifier",
       message: "Missing code verifier",
+      failureKind: "client",
+      retryable: false,
     };
   }
 
   try {
     // Import Arctic's Google class dynamically to enable mocking
-    const { Google, OAuth2RequestError } = await import("arctic");
+    const { Google } = await import("arctic");
 
     // Create Arctic Google client
     const google = new Google(config.clientId, config.clientSecret, redirectUri);
 
     // Exchange authorization code for tokens (PKCE)
-    const tokens = await google.validateAuthorizationCode(
-      callbackData.code,
-      callbackData.codeVerifier
+    const tokens = await withOAuthProviderTimeout(
+      google.validateAuthorizationCode(
+        callbackData.code,
+        callbackData.codeVerifier,
+      ),
+      "token_exchange",
     );
 
     // Fetch user info from Google's userinfo endpoint
     const accessToken = tokens.accessToken();
 
-    let userinfo: GoogleUserinfoResponse;
-    try {
-      const response = await fetch(
-        "https://openidconnect.googleapis.com/v1/userinfo",
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        // A non-2xx userinfo response (token revoked, Google 5xx) is otherwise
-        // invisible — preserve the upstream status for incident triage.
-        capture?.({
-          error: new Error(`Google userinfo responded ${response.status}`),
-          phase: "userinfo",
-          httpStatus: response.status,
-        });
-        return {
-          success: false,
-          error: "userinfo_error",
-          message: "Failed to fetch user info from Google",
-        };
-      }
-
-      userinfo = (await response.json()) as GoogleUserinfoResponse;
-    } catch (error) {
-      // Handle network errors during userinfo fetch
-      if (
-        error instanceof Error &&
-        (error.message.includes("fetch") ||
-          error.message.includes("network") ||
-          error.name === "TypeError")
-      ) {
-        capture?.({ error, phase: "userinfo" });
-        return {
-          success: false,
-          error: "network_error",
-          message:
-            "Network error occurred while fetching user info from Google",
-        };
-      }
-      throw error;
-    }
+    const userinfo = await fetchOAuthProviderJson<GoogleUserinfoResponse>(
+      "https://openidconnect.googleapis.com/v1/userinfo",
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+      "userinfo",
+      "Google userinfo",
+    );
 
     const googleUser: GoogleUser = {
       id: userinfo.sub,
@@ -238,39 +270,73 @@ export async function verifyGoogleCallback(
       googleUser,
     };
   } catch (error) {
+    const providerFailure = providerCallFailureResult(error, capture);
+    if (providerFailure) return providerFailure;
+
     // Handle OAuth2RequestError from Arctic (check name for mock compatibility)
     if (error instanceof Error && error.name === "OAuth2RequestError") {
-      capture?.({ error, phase: "token_exchange" });
-      return {
-        success: false,
-        error: "oauth_error",
-        message: error.message || "OAuth error occurred",
-      };
+      capture?.({
+        error,
+        phase: "token_exchange",
+        failureKind: "client",
+        retryable: false,
+      });
+      return oauthClientFailure(error.message);
+    }
+
+    if (isUnexpectedOAuthResponseError(error)) {
+      const status = errorStatus(error);
+      const upstream = new OAuthProviderCallError(
+        "upstream_error",
+        "upstream",
+        status === undefined || isRetryableProviderStatus(status),
+        "token_exchange",
+        status === undefined
+          ? "Google token exchange returned an invalid response"
+          : `Google token exchange responded ${status}`,
+        status,
+        error,
+      );
+      return providerCallFailureResult(upstream, capture)!;
     }
 
     // Handle network/fetch errors during token exchange
     if (
-      error instanceof Error &&
-      (error.message.includes("fetch") ||
-        error.message.includes("network") ||
-        error.name === "TypeError")
+      error instanceof ArcticFetchError ||
+      (error instanceof Error &&
+        (error.message.includes("fetch") ||
+          error.message.includes("network") ||
+          error.name === "TypeError"))
     ) {
-      capture?.({ error, phase: "token_exchange" });
+      capture?.({
+        error,
+        phase: "token_exchange",
+        failureKind: "network",
+        retryable: true,
+      });
       return {
         success: false,
         error: "network_error",
         message: "Network error occurred while validating authorization code",
+        failureKind: "network",
+        retryable: true,
       };
     }
 
-    // Anything else (JWKS, unexpected token-exchange failures) is flattened to a
-    // generic `invalid_code`. Capture the ORIGINAL error so a Google outage is
-    // distinguishable from a genuinely bad authorization code.
-    capture?.({ error, phase: "token_exchange" });
+    // Preserve the legacy invalid-code behavior for unknown token failures.
+    // Known Arctic transport and protocol failures are classified above.
+    capture?.({
+      error,
+      phase: "token_exchange",
+      failureKind: "client",
+      retryable: false,
+    });
     return {
       success: false,
       error: "invalid_code",
       message: "Invalid authorization code",
+      failureKind: "client",
+      retryable: false,
     };
   }
 }
