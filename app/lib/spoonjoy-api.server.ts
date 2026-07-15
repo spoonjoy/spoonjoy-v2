@@ -1522,15 +1522,15 @@ const getRecipeTool: SpoonjoyApiOperation = {
 
 const listRecipeCoversTool: SpoonjoyApiOperation = {
   name: "list_recipe_covers",
-  description: "List recipe cover candidates. Owners with kitchen write access receive full cover history; other readers receive active public cover metadata only.",
+  description: "List Recipe Photo Studio cover candidates. Owners with kitchen write access receive full cover history; other readers receive active public cover metadata only.",
   requiredScopes: ["recipes:read"],
   inputSchema: {
     type: "object",
     properties: {
-      recipeId: { type: "string" },
-      includeArchived: { type: "boolean" },
-      limit: { type: "number", minimum: 1, maximum: MAX_LIMIT },
-      offset: { type: "number", minimum: 0 },
+      recipeId: { type: "string", description: "Recipe whose cover candidates should be listed." },
+      includeArchived: { type: "boolean", description: "Include archived cover candidates in the owner-only history." },
+      limit: { type: "number", minimum: 1, maximum: MAX_LIMIT, description: "Maximum number of cover candidates to return." },
+      offset: { type: "number", minimum: 0, description: "Zero-based pagination offset." },
     },
     required: ["recipeId"],
     additionalProperties: false,
@@ -1592,14 +1592,14 @@ const listRecipeCoversTool: SpoonjoyApiOperation = {
 
 const listRecipeSpoonImagesTool: SpoonjoyApiOperation = {
   name: "list_recipe_spoon_images",
-  description: "List owner-only spoon photos that can be used as recipe cover sources.",
+  description: "List owner-only Spoon photos that can be used as Recipe Photo Studio cover sources.",
   requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
     properties: {
-      recipeId: { type: "string" },
-      limit: { type: "number", minimum: 1, maximum: MAX_LIMIT },
-      offset: { type: "number", minimum: 0 },
+      recipeId: { type: "string", description: "Recipe whose Spoon photos should be listed." },
+      limit: { type: "number", minimum: 1, maximum: MAX_LIMIT, description: "Maximum number of Spoon photos to return." },
+      offset: { type: "number", minimum: 0, description: "Zero-based pagination offset." },
     },
     required: ["recipeId"],
     additionalProperties: false,
@@ -1658,17 +1658,23 @@ const listRecipeSpoonImagesTool: SpoonjoyApiOperation = {
 
 const createRecipeCoverFromUploadTool: SpoonjoyApiOperation = {
   name: "create_recipe_cover_from_upload",
-  description: "Create a recipe cover candidate from an uploaded Spoonjoy image URL.",
+  description: "Create a Recipe Photo Studio cover candidate from an uploaded recipe or spoon photo URL.",
   requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
     properties: {
-      recipeId: { type: "string" },
-      imageUrl: { type: "string" },
-      activate: { type: "boolean" },
-      generateEditorial: { type: "boolean" },
-      idempotencyKey: { type: "string" },
-      dryRun: { type: "boolean" },
+      recipeId: { type: "string", description: "Recipe that will receive the cover candidate." },
+      imageUrl: { type: "string", description: "Spoonjoy uploaded recipe or spoon photo URL to use as the original cover source." },
+      activate: { type: "boolean", description: "Legacy alias for activateWhenReady; retained for older MCP clients." },
+      activateWhenReady: { type: "boolean", description: "Make the cover active when the editorial image is ready." },
+      generateEditorial: { type: "boolean", description: "Generate an editorialized cover from the uploaded original photo." },
+      promptAddition: { type: "string", maxLength: 240, description: "Optional bounded instruction to guide editorial cover generation." },
+      postAsSpoon: { type: "boolean", description: "Also create a Spoon entry to preserve the original photo with optional cook notes." },
+      note: { type: "string", description: "Spoon note used when postAsSpoon preserves the original photo." },
+      nextTime: { type: "string", description: "Spoon next-time note used when postAsSpoon preserves the original photo." },
+      cookedAt: { type: "string", format: "date-time", description: "ISO date-time for the Spoon cook when postAsSpoon preserves the original photo." },
+      idempotencyKey: { type: "string", description: "Stable key for replay-safe cover creation." },
+      dryRun: { type: "boolean", description: "Validate inputs and return planned next actions without writing a cover." },
     },
     required: ["recipeId", "imageUrl"],
     additionalProperties: false,
@@ -1677,10 +1683,15 @@ const createRecipeCoverFromUploadTool: SpoonjoyApiOperation = {
     const principal = requireApiPrincipal(context.principal);
     const recipeId = requiredString(args, "recipeId");
     const imageUrl = requiredString(args, "imageUrl");
-    const activate = optionalBooleanArgument(args, "activate");
+    const activate = optionalBooleanArgument(args, "activateWhenReady", optionalBooleanArgument(args, "activate"));
     const generateEditorial = optionalBooleanArgument(args, "generateEditorial", true);
     const dryRun = optionalBooleanArgument(args, "dryRun");
     const idempotencyKey = optionalString(args.idempotencyKey);
+    optionalString(args.promptAddition);
+    optionalBooleanArgument(args, "postAsSpoon");
+    optionalString(args.note);
+    optionalString(args.nextTime);
+    optionalString(args.cookedAt);
 
     const recipe = await findOwnedCoverMutationRecipe(context, principal, recipeId);
     const previousActiveCover = await activeFullCoverPayload(context, recipe);
@@ -1759,6 +1770,34 @@ const createRecipeCoverFromUploadTool: SpoonjoyApiOperation = {
         });
       },
     });
+  },
+};
+
+const generateRecipeCoverPlaceholderTool: SpoonjoyApiOperation = {
+  name: "generate_recipe_cover_placeholder",
+  description: "Generate an AI placeholder cover candidate for a recipe with an optional prompt addition.",
+  requiredScopes: ["kitchen:write"],
+  inputSchema: {
+    type: "object",
+    properties: {
+      recipeId: { type: "string", description: "Recipe that will receive the generated AI placeholder cover." },
+      promptAddition: { type: "string", maxLength: 240, description: "Optional bounded instruction to guide AI placeholder generation." },
+      activateWhenReady: { type: "boolean", description: "Make the generated cover active when the generated cover is ready." },
+      idempotencyKey: { type: "string", description: "Stable key for replay-safe placeholder generation." },
+      dryRun: { type: "boolean", description: "Validate inputs and return planned next actions without writing a cover." },
+    },
+    required: ["recipeId", "idempotencyKey"],
+    additionalProperties: false,
+  },
+  async handle(args, context) {
+    const principal = requireApiPrincipal(context.principal);
+    const recipeId = requiredString(args, "recipeId");
+    requiredString(args, "idempotencyKey");
+    optionalString(args.promptAddition);
+    optionalBooleanArgument(args, "activateWhenReady");
+    optionalBooleanArgument(args, "dryRun");
+    await findOwnedCoverMutationRecipe(context, principal, recipeId);
+    throw new ApiAuthError("generate_recipe_cover_placeholder is not implemented yet", 501);
   },
 };
 
@@ -1876,18 +1915,19 @@ const createRecipeCoverFromSpoonTool: SpoonjoyApiOperation = {
 
 const regenerateRecipeCoverTool: SpoonjoyApiOperation = {
   name: "regenerate_recipe_cover",
-  description: "Regenerate the editorial image for a recipe cover candidate.",
+  description: "Regenerate the editorial image for a recipe cover candidate with an optional prompt addition.",
   requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
     properties: {
-      recipeId: { type: "string" },
-      coverId: { type: "string" },
-      activateWhenReady: { type: "boolean" },
-      idempotencyKey: { type: "string" },
-      dryRun: { type: "boolean" },
+      recipeId: { type: "string", description: "Recipe that owns the cover candidate." },
+      coverId: { type: "string", description: "Existing cover candidate to regenerate." },
+      promptAddition: { type: "string", maxLength: 240, description: "Optional bounded instruction to guide regenerated editorial output." },
+      activateWhenReady: { type: "boolean", description: "Make the regenerated cover active when the regenerated cover is ready." },
+      idempotencyKey: { type: "string", description: "Stable key for replay-safe regeneration." },
+      dryRun: { type: "boolean", description: "Validate inputs and return planned next actions without writing a cover." },
     },
-    required: ["recipeId", "coverId"],
+    required: ["recipeId", "coverId", "idempotencyKey"],
     additionalProperties: false,
   },
   async handle(args, context) {
@@ -1897,6 +1937,7 @@ const regenerateRecipeCoverTool: SpoonjoyApiOperation = {
     const activateWhenReady = optionalBooleanArgument(args, "activateWhenReady");
     const dryRun = optionalBooleanArgument(args, "dryRun");
     const idempotencyKey = optionalString(args.idempotencyKey);
+    optionalString(args.promptAddition);
     const recipe = await findOwnedCoverMutationRecipe(context, principal, recipeId);
     const previousActiveCover = await activeFullCoverPayload(context, recipe);
 
@@ -1971,13 +2012,13 @@ const regenerateRecipeCoverTool: SpoonjoyApiOperation = {
 
 const getCoverGenerationStatusTool: SpoonjoyApiOperation = {
   name: "get_cover_generation_status",
-  description: "Fetch recipe cover generation status and active-cover context.",
+  description: "Fetch Recipe Photo Studio generation status and active-cover context.",
   requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
     properties: {
-      recipeId: { type: "string" },
-      coverId: { type: "string" },
+      recipeId: { type: "string", description: "Recipe that owns the cover candidate." },
+      coverId: { type: "string", description: "Recipe cover candidate whose generation status should be fetched." },
     },
     required: ["recipeId", "coverId"],
     additionalProperties: false,
@@ -1998,15 +2039,15 @@ const getCoverGenerationStatusTool: SpoonjoyApiOperation = {
 
 const setActiveRecipeCoverTool: SpoonjoyApiOperation = {
   name: "set_active_recipe_cover",
-  description: "Set one existing recipe cover variant as the active recipe cover.",
+  description: "Set one existing Recipe Photo Studio cover variant as the active recipe cover.",
   requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
     properties: {
-      recipeId: { type: "string" },
-      coverId: { type: "string" },
-      variant: { type: "string", enum: ["image", "stylized"] },
-      idempotencyKey: { type: "string" },
+      recipeId: { type: "string", description: "Recipe that owns the cover candidate." },
+      coverId: { type: "string", description: "Cover candidate to activate." },
+      variant: { type: "string", enum: ["image", "stylized"], description: "Cover variant to activate: image or stylized." },
+      idempotencyKey: { type: "string", description: "Stable key for replay-safe activation." },
     },
     required: ["recipeId", "coverId", "variant"],
     additionalProperties: false,
@@ -2046,20 +2087,46 @@ const setActiveRecipeCoverTool: SpoonjoyApiOperation = {
   },
 };
 
-const archiveRecipeCoverTool: SpoonjoyApiOperation = {
-  name: "archive_recipe_cover",
-  description: "Archive a recipe cover. Archiving the active cover requires a replacement or explicit no-cover confirmation.",
+const setRecipeNoCoverTool: SpoonjoyApiOperation = {
+  name: "set_recipe_no_cover",
+  description: "Set an explicit no-cover state for a recipe after destructive no-cover confirmation.",
   requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
     properties: {
-      recipeId: { type: "string" },
-      coverId: { type: "string" },
-      replacementCoverId: { type: "string" },
-      replacementVariant: { type: "string", enum: ["image", "stylized"] },
-      confirmNoCover: { type: "boolean" },
-      deleteSafeObjects: { type: "boolean" },
-      idempotencyKey: { type: "string" },
+      recipeId: { type: "string", description: "Recipe that should intentionally display no cover." },
+      confirmNoCover: { const: true, description: "Required explicit confirmation before entering no-cover mode." },
+      idempotencyKey: { type: "string", description: "Stable key for replay-safe no-cover changes." },
+    },
+    required: ["recipeId", "confirmNoCover", "idempotencyKey"],
+    additionalProperties: false,
+  },
+  async handle(args, context) {
+    const principal = requireApiPrincipal(context.principal);
+    const recipeId = requiredString(args, "recipeId");
+    if (args.confirmNoCover !== true) {
+      throw new ApiAuthError("confirmNoCover must be true", 400);
+    }
+    requiredString(args, "idempotencyKey");
+    await findOwnedCoverMutationRecipe(context, principal, recipeId);
+    throw new ApiAuthError("set_recipe_no_cover is not implemented yet", 501);
+  },
+};
+
+const archiveRecipeCoverTool: SpoonjoyApiOperation = {
+  name: "archive_recipe_cover",
+  description: "Archive a Recipe Photo Studio cover. Archiving the active cover requires a replacement or explicit no-cover confirmation.",
+  requiredScopes: ["kitchen:write"],
+  inputSchema: {
+    type: "object",
+    properties: {
+      recipeId: { type: "string", description: "Recipe that owns the cover candidate." },
+      coverId: { type: "string", description: "Cover candidate to archive." },
+      replacementCoverId: { type: "string", description: "Replacement cover candidate to activate when archiving the active cover." },
+      replacementVariant: { type: "string", enum: ["image", "stylized"], description: "Replacement variant to activate: image or stylized." },
+      confirmNoCover: { type: "boolean", description: "Use explicit no-cover mode when archiving the active cover without a replacement." },
+      deleteSafeObjects: { type: "boolean", description: "Request deletion of safe owned image objects after archive when supported." },
+      idempotencyKey: { type: "string", description: "Stable key for replay-safe archiving." },
     },
     required: ["recipeId", "coverId"],
     additionalProperties: false,
@@ -3497,10 +3564,12 @@ const tools: SpoonjoyApiOperation[] = [
   listRecipeCoversTool,
   listRecipeSpoonImagesTool,
   createRecipeCoverFromUploadTool,
+  generateRecipeCoverPlaceholderTool,
   createRecipeCoverFromSpoonTool,
   regenerateRecipeCoverTool,
   getCoverGenerationStatusTool,
   setActiveRecipeCoverTool,
+  setRecipeNoCoverTool,
   archiveRecipeCoverTool,
   createRecipeTool,
   updateRecipeTool,
@@ -3547,10 +3616,12 @@ const TOOL_ANNOTATIONS = {
   list_recipe_covers: { title: "List recipe covers", readOnlyHint: true },
   list_recipe_spoon_images: { title: "List recipe spoon images", readOnlyHint: true },
   create_recipe_cover_from_upload: { title: "Create recipe cover from upload", readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  generate_recipe_cover_placeholder: { title: "Generate recipe cover placeholder", readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   create_recipe_cover_from_spoon: { title: "Create recipe cover from spoon", readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   regenerate_recipe_cover: { title: "Regenerate recipe cover", readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   get_cover_generation_status: { title: "Get cover generation status", readOnlyHint: true },
   set_active_recipe_cover: { title: "Set active recipe cover", readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  set_recipe_no_cover: { title: "Set recipe no cover", readOnlyHint: false, destructiveHint: true, idempotentHint: true },
   archive_recipe_cover: { title: "Archive recipe cover", readOnlyHint: false, destructiveHint: true, idempotentHint: true },
   create_recipe: { title: "Create recipe", readOnlyHint: false, destructiveHint: false },
   update_recipe: { title: "Update recipe", readOnlyHint: false, destructiveHint: true },
