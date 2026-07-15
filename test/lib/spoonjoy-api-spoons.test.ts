@@ -761,7 +761,7 @@ describe("spoonjoy-api spoon operations", () => {
         {
           recipeId: recipe.id,
           imageUrl: dataUrl(),
-          activate: true,
+          activateWhenReady: true,
           generateEditorial: true,
           idempotencyKey: "dry-run-cover-upload",
           dryRun: true,
@@ -1091,11 +1091,11 @@ describe("spoonjoy-api spoon operations", () => {
 
       await expect(callSpoonjoyApiOperation(
         "create_recipe_cover_from_upload",
-        { recipeId: recipe.id, imageUrl: dataUrl(), activate: "yes" },
+        { recipeId: recipe.id, imageUrl: dataUrl(), activateWhenReady: "yes" },
         { db, principal: chef, allowLocalImageFallback: true },
       )).rejects.toMatchObject({
         status: 400,
-        message: expect.stringMatching(/activate must be a boolean/i),
+        message: expect.stringMatching(/activateWhenReady must be a boolean/i),
       });
 
       await expect(callSpoonjoyApiOperation(
@@ -1187,7 +1187,7 @@ describe("spoonjoy-api spoon operations", () => {
         {
           recipeId: editorialRecipe.id,
           imageUrl: dataUrl(),
-          activate: true,
+          activateWhenReady: true,
         },
         { db, principal: chef, allowLocalImageFallback: true, imageGenRunner: runner },
       ) as {
@@ -1230,7 +1230,7 @@ describe("spoonjoy-api spoon operations", () => {
         {
           recipeId: verbatimRecipe.id,
           imageUrl: dataUrl(),
-          activate: true,
+          activateWhenReady: true,
           generateEditorial: false,
         },
         { db, principal: chef, allowLocalImageFallback: true },

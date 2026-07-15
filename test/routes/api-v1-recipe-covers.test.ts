@@ -1397,10 +1397,15 @@ describe("API v1 recipe cover management", () => {
   it("queues AI placeholder generation through waitUntil for polling", async () => {
     const fixture = await createCoverFixture(db);
     const url = `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers/generate`;
+    const imageGenRunner = {
+      textToImage: vi.fn(async () => ({ bytes: PNG_BYTES, contentType: "image/png" })),
+      imageToImage: vi.fn(),
+    };
+    const { bucket } = mockPhotoBucket();
     const response = await action(routeArgs(jsonRequest(url, "POST", fixture.ownerKitchenWrite.token, "req_cover_generate_placeholder_wait_until", {
       clientMutationId: "cover-generate-placeholder-wait-until",
       activateWhenReady: false,
-    }), `recipes/${fixture.recipe.id}/covers/generate`, backgroundContext()));
+    }), `recipes/${fixture.recipe.id}/covers/generate`, { ...backgroundContext({ PHOTOS: bucket }), imageGenRunner }));
     const payload = await readJson(response);
 
     expect(response.status).toBe(201);

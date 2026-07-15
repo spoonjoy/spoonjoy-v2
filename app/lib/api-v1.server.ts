@@ -144,7 +144,7 @@ import {
   type NativeRecipeImportCapture,
   type NativeRecipeImportSource,
 } from "~/lib/recipe-import.server";
-import { sanitizeImagePromptAddition, type ImageGenEnv } from "~/lib/image-gen.server";
+import { sanitizeImagePromptAddition, type ImageGenEnv, type ImageGenRunner } from "~/lib/image-gen.server";
 import type { PostHogServerEnv } from "~/lib/analytics-server";
 
 const DEFAULT_LIST_LIMIT = 20;
@@ -1629,6 +1629,7 @@ async function runOrQueuePlaceholderGeneration(
     promptAddition: input.promptAddition,
     env,
     bucket,
+    runner: (args.context as { imageGenRunner?: ImageGenRunner }).imageGenRunner,
     activateWhenReady: input.activateWhenReady,
     suppressAutoActivation: !input.activateWhenReady,
     activationGuard: input.activationGuard,
