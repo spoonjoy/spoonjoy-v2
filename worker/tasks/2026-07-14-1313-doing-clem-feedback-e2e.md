@@ -202,7 +202,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Worker class paths are 100% covered; preflight, typecheck, and build pass.
 
 ### ⬜ Unit 10a: Internal Cook HTTP Lifecycle Tests
-**What**: Add real Worker red tests for every planning-defined start/get/patch/complete/abandon request and success/error envelope; 201 new/after-terminal vs 200 active resume/replay with recorded adoption outcome plus current evolved/terminal snapshot; valid/invalid/generated request-id equality; exact messages/Retry-After; exact Allow strings for start, recipe base, live, complete, abandon, and residue including HEAD/unknown behavior; any-owner active recipe access; indistinguishable missing/soft-deleted/inaccessible 404; canonical payload hashing, atomic operation rejection; UUID validation; accepted-only ledger, replay, capacity, attempt, revision, terminal-before-base-revision precedence, auth, origin, JSON, validation, method, and internal errors; and no OpenAPI/React Router registration.
+**What**: Add real Worker red tests for every planning-defined start/get/patch/complete/abandon request and success/error envelope; active resume and pinned access after edit/soft-delete versus new/terminal-to-new visibility 404; current evolved start replay; request ids/messages/Retry-After/Allow/HEAD/unknown; canonical validation; accepted ledger; and pairwise compound-fault precedence for route/method, auth, origin, JSON/schema, replay/hash/tombstone, attempt, purge, terminal target/state, revision, visibility, capacity, and injected storage failure; verify no OpenAPI/React Router registration.
 **Output**: `test/workers-runtime/app-cook-session-http.test.ts`, `test/workers/app.test.ts`.
 **Acceptance**: Tests fail because Worker-level HTTP handler is absent.
 
@@ -277,7 +277,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Adapter is 100% covered and commands pass.
 
 ### ⬜ Unit 15a: Cook Client Reconciliation Tests
-**What**: Add red hook/controller tests for exact authenticated `{pending,inFlight}` parser/isolation/logout, coalescing/overflow, one persisted inFlight/64/order, canonical persisted base versus derived optimistic rendering, write-before-side-effect, local/accepted-response/higher-revision/different-attempt/recovery persistence failures with reload behavior and send blocking, snapshot reconciliation, command-specific mutation-conflict recovery, and every other exact error disposition: stale revision/attempt, replaced/purged, terminal conflict/state, purging, not-found, 401, network, 429/Retry-After, 500, protocol 4xx, unknown status; add anonymous v2 fingerprint schema, new-v2 writing, v1 local-only continuation/non-adoption, mismatched-v2 reset, successful-200/201-only clear timing, HTTP/network preservation, and storage failures.
+**What**: Add red hook/controller tests for exact authenticated `{pending,inFlight}` parser/isolation/logout, coalescing/overflow, one persisted inFlight/64/order, canonical persisted base versus derived optimistic rendering, write-before-side-effect, same-attempt versus different-attempt persistence failures with old-operation quarantine/reload/repeated replacement, snapshot reconciliation, same-attempt-guarded command conflict recovery, and every other exact error disposition; add anonymous v2 fingerprint/legacy/clear timing and all storage failures.
 **Output**: `test/hooks/use-cook-session.test.ts`, `test/routes/recipes-id.test.tsx`.
 **Acceptance**: Tests fail because hook/controller is absent.
 
@@ -292,7 +292,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: New hook code is 100% covered and anonymous regressions pass.
 
 ### ⬜ Unit 16a: Recipe Cook Lifecycle UI Tests
-**What**: Add red route tests for server snapshot, persisted step/check/scale, adoption outcome, edit warning, Continue original, Start fresh order, complete, abandon, reconnect, and terminal/error UI.
+**What**: Add red route tests for server snapshot, persisted step/check/scale, adoption outcome, edit warning, Continue original, Start fresh order, complete, abandon, reconnect, terminal/error UI, and cook-only fallback after recipe soft-delete/inaccessibility for an authenticated caller with that caller's own pinned attempt; anonymous callers and authenticated callers with no own attempt remain 404, and terminal-to-new is forbidden.
 **Output**: `test/routes/recipes-id.test.tsx`, `test/routes/recipes-id-scaling.test.tsx`, `test/components/recipe/CookSessionStatus.test.tsx`.
 **Acceptance**: Tests fail only on missing UI integration.
 
@@ -312,7 +312,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: No ready visual issue, overlap, layout shift, inaccessible control, or dock collision remains.
 
 ### ⬜ Unit 17a: Owner-Only Continue Cooking Tests
-**What**: Add red loader/render/interaction tests for owner active cards; activation preflight GET ACTIVE navigation; terminal/404 local invalidation plus alarm scheduling/revalidator behavior and no same-mount reappearance; eventual loader repair; network retry without hiding; stale/empty/soft-deleted removal; and strict absence/query suppression for authenticated/anonymous visitors.
+**What**: Add red loader/render/interaction tests for owner active cards; activation preflight GET ACTIVE navigation; terminal/404 local invalidation plus alarm scheduling/revalidator behavior and no same-mount reappearance; eventual loader repair; network retry without hiding; stale/empty removal; soft-deleted recipe with active DO retained via pinned projection versus soft-deleted/no-current stale projection removal; and strict absence/query suppression for authenticated/anonymous visitors.
 **Output**: `test/routes/index.test.tsx`, `test/components/recipe/ContinueCookingList.test.tsx`, `test/components/navigation/mobile-nav.test.tsx`.
 **Acceptance**: Tests fail only because owner-only section is absent; dock links remain unchanged.
 
@@ -667,3 +667,4 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 - 2026-07-15 Ambiguity Round 3 fixed transactional shopping retry/oracles, canonical cook mutations/defaults/methods/WebSockets, authenticated offline reconciliation, stale-card repair ownership, atomic tag replacement, DELETE/smoke retry precedence, and health-based deployment SHA attestation.
 - 2026-07-15 Ambiguity Round 4 fixed post-replacement/purge mutation tombstones, single-inFlight offline batching and storage-write safety, fingerprinted anonymous v2 with legacy isolation, scaling overflow, and exact cleanup retry classification/deadline order.
 - 2026-07-15 Ambiguity Round 5 fixed version-first shopping reads, exhaustive client error/persistence behavior, principal cache partitions, bounded cleanup recovery, terminal/start precedence, anonymous clear timing, and omitted-factor projection.
+- 2026-07-15 Ambiguity Round 6 fixed request/error precedence, same-attempt terminal retry safety, attempt-replacement persistence failure, exact cleanup oracle, and pinned-session behavior after recipe deletion.
