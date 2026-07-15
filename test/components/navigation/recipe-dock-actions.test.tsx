@@ -30,7 +30,7 @@ describe('Recipe Dock Actions', () => {
   })
 
   describe('useRecipeDetailActions', () => {
-    function RecipeDetailPage({ recipeId, chefId, chefProfileHref, isOwner, isInShoppingList, onSave, onAddToList, onShare, onCook }: {
+    function RecipeDetailPage({ recipeId, chefId, chefProfileHref, isOwner, isInShoppingList, onSave, onAddToList, onShare, onCook, disabled }: {
       recipeId: string
       chefId: string
       chefProfileHref?: string
@@ -40,8 +40,9 @@ describe('Recipe Dock Actions', () => {
       onAddToList?: () => void
       onShare?: () => void
       onCook?: () => void
+      disabled?: boolean
     }) {
-      useRecipeDetailActions({ recipeId, chefId, chefProfileHref, isOwner, isInShoppingList, onSave, onAddToList, onShare, onCook })
+      useRecipeDetailActions({ recipeId, chefId, chefProfileHref, isOwner, isInShoppingList, onSave, onAddToList, onShare, onCook, disabled })
       return <div data-testid="recipe-detail">Recipe Detail</div>
     }
 
@@ -64,6 +65,13 @@ describe('Recipe Dock Actions', () => {
       expect(screen.getByTestId('action-labels')).toHaveTextContent('Back,Cook,List,Save,Share')
       expect(capturedActions?.find(a => a.id === 'edit')).toBeUndefined()
       expect(capturedActions?.find(a => a.id === 'recipe-back')?.onAction).toBe('/recipes')
+    })
+
+    it('clears the contextual dock while recipe management is expanded', () => {
+      render(<MemoryRouter><DockContextProvider><ContextDisplay /><RecipeDetailPage recipeId="123" chefId="chef-1" isOwner={true} disabled /></DockContextProvider></MemoryRouter>)
+      expect(screen.getByTestId('is-contextual')).toHaveTextContent('no')
+      expect(screen.getByTestId('action-count')).toHaveTextContent('0')
+      expect(capturedActions).toBeNull()
     })
 
     it('keeps chef profile navigation out of the dock when a canonical href is provided', () => {

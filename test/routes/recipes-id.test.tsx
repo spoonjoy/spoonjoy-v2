@@ -3277,7 +3277,7 @@ describe("Recipes $id Route", () => {
       expect(within(history).getByText("Original photo")).toBeInTheDocument();
       expect(within(history).getByText("Editorial photo")).toBeInTheDocument();
       expect(within(history).getByText("Imported photo")).toBeInTheDocument();
-      expect(within(history).getByText("No cover selected")).toBeInTheDocument();
+      expect(within(history).queryByText("No cover selected")).toBeNull();
       expect(screen.getByRole("heading", { name: "Photo studio" })).toBeInTheDocument();
       expect(screen.getByText("Add cover photo")).toBeInTheDocument();
       expect(screen.getByRole("checkbox", { name: "Post as Spoon" })).toBeChecked();
@@ -3368,6 +3368,12 @@ describe("Recipes $id Route", () => {
         return 1 as unknown as ReturnType<typeof setInterval>;
       });
       const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval").mockImplementation(() => undefined);
+      const originalVisibilityDescriptor = Object.getOwnPropertyDescriptor(document, "visibilityState");
+      let visibilityState: DocumentVisibilityState = "hidden";
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        get: () => visibilityState,
+      });
       try {
         let isReady = false;
         const processingData = {
@@ -3413,18 +3419,39 @@ describe("Recipes $id Route", () => {
         const initialLoaderCalls = loader.mock.calls.length;
         expect(intervalCallbacks.length).toBeGreaterThan(0);
 
+        await act(async () => {
+          intervalCallbacks.at(-1)!();
+          await Promise.resolve();
+        });
+
+        expect(loader.mock.calls.length).toBe(initialLoaderCalls);
+
+        visibilityState = "visible";
+        await act(async () => {
+          document.dispatchEvent(new Event("visibilitychange"));
+          await Promise.resolve();
+        });
+
+        expect(loader.mock.calls.length).toBeGreaterThan(initialLoaderCalls);
+        const visibleLoaderCalls = loader.mock.calls.length;
+
         isReady = true;
         await act(async () => {
           intervalCallbacks.at(-1)!();
           await Promise.resolve();
         });
 
-        expect(loader.mock.calls.length).toBeGreaterThan(initialLoaderCalls);
+        expect(loader.mock.calls.length).toBeGreaterThan(visibleLoaderCalls);
         expect(screen.getByAltText("Photo of Autoswap Recipe")).toHaveAttribute("src", "/photos/editorial-spoon.jpg");
         expect(screen.queryByText("Editorializing cover")).toBeNull();
       } finally {
         setIntervalSpy.mockRestore();
         clearIntervalSpy.mockRestore();
+        if (originalVisibilityDescriptor) {
+          Object.defineProperty(document, "visibilityState", originalVisibilityDescriptor);
+        } else {
+          delete (document as Document & { visibilityState?: DocumentVisibilityState }).visibilityState;
+        }
       }
     });
 

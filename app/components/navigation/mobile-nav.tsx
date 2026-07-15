@@ -253,14 +253,14 @@ interface MobileNavProps {
 
 export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
   const location = useLocation();
-  const { config, actions } = useDockContext();
+  const { config, actions, isSuppressed } = useDockContext();
   const [isPantryOpen, setIsPantryOpen] = useState(false);
 
   useEffect(() => {
     setIsPantryOpen(false);
   }, [location.pathname, location.search]);
 
-  if (shouldHideDock(location.pathname, isAuthenticated)) {
+  if (isSuppressed || shouldHideDock(location.pathname, isAuthenticated)) {
     return null;
   }
 

@@ -41,6 +41,7 @@ describe("RecipeCoverHistory", () => {
 
     expect(await screen.findByRole("heading", { name: "Recipe covers" })).toBeInTheDocument();
     expect(screen.getByText("No cover selected")).toBeInTheDocument();
+    expect(screen.getByText("Current setting")).toBeInTheDocument();
     expect(screen.getByText("No saved covers yet.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Set no cover" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Spoon photos" })).toBeNull();
@@ -232,11 +233,16 @@ describe("RecipeCoverHistory", () => {
 
     expect(await screen.findByText("Current")).toBeInTheDocument();
     expect(screen.getByText("Active variant")).toBeInTheDocument();
+    expect(screen.queryByText("No cover selected")).toBeNull();
 
     expect(screen.getByText("Original photo")).toBeInTheDocument();
     expect(screen.getByText("Editorial photo")).toBeInTheDocument();
     expect(screen.queryByText(legacyChefPhotoLabel)).toBeNull();
     expect(screen.queryByText(legacyEditorializedChefPhotoLabel)).toBeNull();
+    expect(document.querySelector('img[src="/photos/raw.jpg"]')).toHaveAttribute("loading", "lazy");
+    expect(document.querySelector('img[src="/photos/raw.jpg"]')).toHaveAttribute("decoding", "async");
+    expect(document.querySelector('img[src="/photos/spoon-source.jpg"]')).toHaveAttribute("loading", "lazy");
+    expect(document.querySelector('img[src="/photos/spoon-source.jpg"]')).toHaveAttribute("decoding", "async");
 
     await user.click(screen.getByRole("button", { name: "Use Original photo cover" }));
     await waitFor(() => {

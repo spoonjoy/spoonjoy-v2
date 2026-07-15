@@ -3,7 +3,7 @@ import { Form, useNavigation, useSubmit } from "react-router";
 import { ChevronDown, ImagePlus, Loader2, Sparkles } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Checkbox, CheckboxField } from "~/components/ui/checkbox";
-import { Field, Label } from "~/components/ui/fieldset";
+import { Description, Field, Label } from "~/components/ui/fieldset";
 import { Input } from "~/components/ui/input";
 import { Textarea } from "~/components/ui/textarea";
 import {
@@ -58,6 +58,7 @@ export function RecipePhotoStudio({
   const [generateEditorial, setGenerateEditorial] = useState(true);
   const [showSpoonDetails, setShowSpoonDetails] = useState(false);
   const [submitStarted, setSubmitStarted] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!postAsSpoon) {
@@ -72,14 +73,41 @@ export function RecipePhotoStudio({
     }
   }, [navigation.state]);
 
+  useEffect(() => {
+    if (!photoFile || typeof URL.createObjectURL !== "function") {
+      setPreviewUrl(null);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(photoFile);
+    setPreviewUrl(objectUrl);
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [photoFile]);
+
   const isRouterPostingPhoto =
     navigation.state !== "idle" &&
     navigation.formData?.get("intent") === "createFirstPhotoCover";
   const isPosting = submitStarted || isRouterPostingPhoto;
-  const showEditorializingStatus = isPosting || activeCoverProcessing !== null;
+  const statusLabel = activeCoverProcessing
+    ? "Editorializing cover"
+    : generateEditorial
+      ? "Editorializing cover"
+      : postAsSpoon
+        ? "Saving Spoon photo"
+        : "Saving cover photo";
+  const showProgressStatus = isPosting || activeCoverProcessing !== null;
   const canSubmit = photoFile !== null && photoError === null && !isPosting;
   const titleLabel = hasActiveCover ? "Add cover photo" : "Add first photo";
   const photoDescription = photoFile ? photoFile.name : "No photo selected";
+  const submitLabel = isPosting
+    ? statusLabel
+    : !photoFile
+      ? "Save photo"
+      : generateEditorial
+        ? postAsSpoon ? "Save Spoon + cover" : "Save editorial cover"
+        : postAsSpoon ? "Save Spoon photo" : "Save cover photo";
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
@@ -149,14 +177,14 @@ export function RecipePhotoStudio({
             {titleLabel}
           </p>
         </div>
-        {showEditorializingStatus ? (
+        {showProgressStatus ? (
           <span
             role="status"
             aria-live="polite"
             className="inline-flex min-h-7 items-center gap-2 border border-[var(--sj-brass)] px-2 font-sj-ui text-xs font-semibold text-[var(--sj-brass)]"
           >
             <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-            Editorializing cover
+            {statusLabel}
           </span>
         ) : null}
       </div>
@@ -175,7 +203,7 @@ export function RecipePhotoStudio({
           <label
             data-slot="control"
             data-testid="recipe-photo-picker"
-            className="group flex min-h-24 cursor-pointer items-center gap-4 border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-4 py-4 transition hover:border-[var(--sj-ink)] hover:bg-[var(--sj-panel-solid)]"
+            className="group flex min-h-28 cursor-pointer items-center gap-4 border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-4 py-4 transition hover:border-[var(--sj-ink)] hover:bg-[var(--sj-panel-solid)]"
           >
             <input
               id={photoId}
@@ -187,8 +215,17 @@ export function RecipePhotoStudio({
               onChange={handleFileChange}
               className="peer sr-only"
             />
-            <span className="grid size-12 shrink-0 place-items-center bg-[var(--sj-ink)] text-[var(--sj-paper)] transition group-hover:bg-[var(--sj-action-deep)] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-[var(--sj-brass)]">
-              <ImagePlus className="size-5" aria-hidden="true" />
+            <span className="grid size-20 shrink-0 place-items-center overflow-hidden bg-[var(--sj-ink)] text-[var(--sj-paper)] transition group-hover:bg-[var(--sj-action-deep)] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-[var(--sj-brass)] sm:size-24">
+              {previewUrl ? (
+                <img
+                  src={previewUrl}
+                  alt=""
+                  className="h-full w-full object-cover"
+                  data-testid="recipe-photo-preview"
+                />
+              ) : (
+                <ImagePlus className="size-6" aria-hidden="true" />
+              )}
             </span>
             <span className="min-w-0 flex-1">
               <span className="block font-sj-ui text-base font-semibold leading-6 text-[var(--sj-ink)]">
@@ -219,6 +256,7 @@ export function RecipePhotoStudio({
               disabled={isPosting}
             />
             <Label>Post as Spoon</Label>
+            <Description>Keeps the true photo with the cook note.</Description>
           </CheckboxField>
           <CheckboxField className="border-y border-[var(--sj-border)] py-3 sm:border">
             <Checkbox
@@ -229,6 +267,7 @@ export function RecipePhotoStudio({
               disabled={isPosting}
             />
             <Label>Editorialize cover</Label>
+            <Description>Makes a polished cover from the original photo.</Description>
           </CheckboxField>
         </div>
 
@@ -246,7 +285,7 @@ export function RecipePhotoStudio({
                 data-slot="icon"
                 aria-hidden="true"
               />
-              Spoon details
+              Optional Spoon details
             </Button>
             {showSpoonDetails ? (
               <div className="grid gap-4 sm:grid-cols-2">
@@ -286,6 +325,9 @@ export function RecipePhotoStudio({
 
         <Field>
           <Label htmlFor={promptAdditionId}>Editorial direction</Label>
+          <Description>
+            Optional: say what should change while keeping the food recognizable.
+          </Description>
           <Input
             id={promptAdditionId}
             name="promptAddition"
@@ -303,7 +345,7 @@ export function RecipePhotoStudio({
             ) : (
               <Sparkles className="size-4" data-slot="icon" aria-hidden="true" />
             )}
-            Save photo
+            {submitLabel}
           </Button>
         </div>
       </Form>
