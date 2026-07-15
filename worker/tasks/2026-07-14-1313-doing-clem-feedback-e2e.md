@@ -537,12 +537,12 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 28a: Tag Discovery Filter Tests
 **What**: Add red tests for exact course/custom filters, URL/query behavior, combinations, empty results, and unfiltered behavior in My Recipes, owner My Kitchen, and Search.
-**Output**: `test/routes/recipes-index.test.tsx`, `test/routes/index.test.tsx`, `test/routes/search.test.tsx`, `test/components/pantry/RecipeGrid.test.tsx`.
+**Output**: `test/routes/my-recipes.test.tsx`, `test/routes/index.test.tsx`, `test/routes/search.test.tsx`, `test/components/pantry/RecipeGrid.test.tsx`.
 **Acceptance**: Tests fail because filters are absent.
 
 ### ⬜ Unit 28b: Tag Discovery Filter Implementation
 **What**: Add shared tag filter parsing/querying and controls to the three discovery surfaces without dock edits.
-**Output**: `app/lib/recipe-tag-filter.ts`, `app/routes/recipes._index.tsx`, `app/routes/_index.tsx`, `app/routes/search.tsx`, `app/components/pantry/RecipeGrid.tsx`.
+**Output**: `app/lib/recipe-tag-filter.ts`, `app/routes/my-recipes.tsx`, `app/routes/_index.tsx`, `app/routes/search.tsx`, `app/components/pantry/RecipeGrid.tsx`.
 **Acceptance**: Unit 28a passes; unfiltered results unchanged and private kitchen sections remain owner-only.
 
 ### ⬜ Unit 28c: Tag Discovery Verification
