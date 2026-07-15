@@ -1592,6 +1592,37 @@ describe("Recipes $id Route", () => {
       expect(waitUntil).toHaveBeenCalledTimes(1);
     });
 
+    it("runs AI placeholder generation synchronously when waitUntil is unavailable", async () => {
+      const request = await createFormRequest(
+        {
+          intent: "generateRecipeCoverPlaceholder",
+          promptAddition: "  moody   marble\ncounter  ",
+        },
+        testUserId,
+      );
+
+      const result = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(result).toEqual(expect.objectContaining({
+        success: true,
+        intent: "generateRecipeCoverPlaceholder",
+        coverId: expect.any(String),
+      }));
+      await expect(db.recipeCover.findUniqueOrThrow({ where: { id: result.coverId } }))
+        .resolves.toMatchObject({
+          recipeId,
+          sourceType: "ai-placeholder",
+          status: "failed",
+          generationStatus: "failed",
+          failureReason: "missing_image_provider_config",
+          promptAddition: "moody marble counter",
+        });
+    });
+
     it("rejects deleted spoon photos as cover sources", async () => {
       const spoon = await db.recipeSpoon.create({
         data: {
