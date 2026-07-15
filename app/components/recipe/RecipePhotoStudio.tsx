@@ -27,11 +27,19 @@ function validateClientFile(file: File): string | null {
 export interface RecipePhotoStudioProps {
   recipeTitle: string;
   hasActiveCover: boolean;
+  activeCoverProcessing?: {
+    coverId: string;
+    activeVariant: "image" | "stylized";
+    targetVariant: "stylized";
+    status: string;
+    generationStatus: string;
+  } | null;
 }
 
 export function RecipePhotoStudio({
   recipeTitle,
   hasActiveCover,
+  activeCoverProcessing = null,
 }: RecipePhotoStudioProps) {
   const photoId = useId();
   const photoHintId = useId();
@@ -68,6 +76,7 @@ export function RecipePhotoStudio({
     navigation.state !== "idle" &&
     navigation.formData?.get("intent") === "createFirstPhotoCover";
   const isPosting = submitStarted || isRouterPostingPhoto;
+  const showEditorializingStatus = isPosting || activeCoverProcessing !== null;
   const canSubmit = photoFile !== null && photoError === null && !isPosting;
   const titleLabel = hasActiveCover ? "Add cover photo" : "Add first photo";
   const photoDescription = photoFile ? photoFile.name : "No photo selected";
@@ -140,14 +149,14 @@ export function RecipePhotoStudio({
             {titleLabel}
           </p>
         </div>
-        {isPosting ? (
+        {showEditorializingStatus ? (
           <span
             role="status"
             aria-live="polite"
             className="inline-flex min-h-7 items-center gap-2 border border-[var(--sj-brass)] px-2 font-sj-ui text-xs font-semibold text-[var(--sj-brass)]"
           >
             <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-            Editorializing
+            Editorializing cover
           </span>
         ) : null}
       </div>

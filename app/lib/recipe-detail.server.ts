@@ -162,6 +162,32 @@ function recipeCoverHistoryFor(recipe: {
   });
 }
 
+function activeCoverProcessingFor(recipe: {
+  activeCoverId: string | null;
+  activeCoverVariant: string | null;
+  activeCover?: RecipeCover | null;
+}) {
+  const activeCover = recipe.activeCover;
+  if (!activeCover || activeCover.id !== recipe.activeCoverId || activeCover.archivedAt) {
+    return null;
+  }
+  const activeVariant = recipe.activeCoverVariant === "stylized" ? "stylized" : "image";
+  if (activeVariant !== "image" || !nonEmpty(activeCover.imageUrl)) {
+    return null;
+  }
+  if (activeCover.status !== "processing" && activeCover.generationStatus !== "processing") {
+    return null;
+  }
+
+  return {
+    coverId: activeCover.id,
+    activeVariant,
+    targetVariant: "stylized" as const,
+    status: activeCover.status,
+    generationStatus: activeCover.generationStatus,
+  };
+}
+
 async function runOrQueueSpoonCoverStylization(
   input: ScheduleSpoonStylizationInput,
   waitUntil?: (promise: Promise<unknown>) => void,
@@ -239,6 +265,7 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
   const activeRealCover = hasActiveRealRecipeCover(recipe);
   const coverImageUrl = coverDisplay?.displayUrl ?? null;
   const coverProvenanceLabel = coverDisplay?.provenanceLabel ?? null;
+  const activeCoverProcessing = activeCoverProcessingFor(recipe);
   const publicOrigin = resolveIssuerOrigin(request.url, context.cloudflare?.env?.SPOONJOY_BASE_URL);
   const canonicalUrl = absoluteUrlFromRequest(publicOrigin, `/recipes/${id}`);
   const ogImageUrl = absoluteUrlFromRequest(publicOrigin, recipeOgPath(id));
@@ -347,6 +374,7 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
     recipe: recipeForClient,
     coverImageUrl,
     coverProvenanceLabel,
+    activeCoverProcessing,
     canonicalUrl,
     ogImageUrl,
     recipeJsonLd,

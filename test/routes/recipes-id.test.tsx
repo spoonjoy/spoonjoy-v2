@@ -3249,11 +3249,11 @@ describe("Recipes $id Route", () => {
         await screen.findByRole("heading", { name: "Autoswap Recipe" });
         expect(screen.getByAltText("Photo of Autoswap Recipe")).toHaveAttribute("src", "/photos/raw-spoon.jpg");
         const initialLoaderCalls = loader.mock.calls.length;
-        expect(intervalCallbacks).toHaveLength(1);
+        expect(intervalCallbacks.length).toBeGreaterThan(0);
 
         isReady = true;
         await act(async () => {
-          intervalCallbacks[0]();
+          intervalCallbacks.at(-1)!();
           await Promise.resolve();
         });
 

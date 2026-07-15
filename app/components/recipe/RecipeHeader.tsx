@@ -1,4 +1,4 @@
-import { ImageOff } from 'lucide-react'
+import { ImageOff, Loader2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from '../ui/link'
 import { Avatar } from '../ui/avatar'
@@ -30,6 +30,14 @@ export interface RecipeHeaderProps {
   coverProvenanceLabel?: string | null
   /** Placeholder copy when no cover image is available. */
   coverPlaceholderLabel?: string
+  /** Active cover generation metadata while an original waits on the editorial variant. */
+  activeCoverProcessing?: {
+    coverId: string
+    activeVariant: 'image' | 'stylized'
+    targetVariant: 'stylized'
+    status: string
+    generationStatus: string
+  } | null
   /** Servings text (e.g., "Serves 4") */
   servings?: string
   /** Current scale factor */
@@ -63,6 +71,7 @@ export function RecipeHeader({
   coverImageUrl,
   coverProvenanceLabel,
   coverPlaceholderLabel = 'Cover coming soon',
+  activeCoverProcessing,
   servings,
   scaleFactor,
   onScaleChange,
@@ -127,6 +136,16 @@ export function RecipeHeader({
               label={coverProvenanceLabel}
               className="absolute bottom-4 left-4 max-w-[calc(100%-2rem)]"
             />
+            {activeCoverProcessing ? (
+              <span
+                role="status"
+                aria-live="polite"
+                className="absolute left-4 top-4 inline-flex min-h-7 max-w-[calc(100%-2rem)] items-center gap-2 border border-[rgba(255,252,246,0.76)] bg-[rgba(37,34,31,0.96)] px-2 font-sj-ui text-xs font-semibold text-[var(--sj-paper)] shadow-[0_3px_18px_rgba(0,0,0,0.45)] [text-shadow:0_1px_1px_rgba(0,0,0,0.62)]"
+              >
+                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                Editorializing cover
+              </span>
+            ) : null}
           </div>
         ) : (
           <div
