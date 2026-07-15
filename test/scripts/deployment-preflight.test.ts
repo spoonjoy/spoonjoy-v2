@@ -13,6 +13,65 @@ import {
   type DeploymentPreflightInputs,
 } from "../../scripts/deployment-preflight";
 
+const CHECKOUT_ACTION = "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10";
+const SETUP_NODE_ACTION = "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38";
+
+function secureProductionDeployWorkflow(): string {
+  return [
+    "name: Production Deploy",
+    "on:",
+    "  workflow_run:",
+    "    workflows: [CI]",
+    "    branches: [main]",
+    "    types: [completed]",
+    "  workflow_dispatch:",
+    "    inputs:",
+    "      source_sha:",
+    "        required: true",
+    "        type: string",
+    "permissions:",
+    "  actions: read",
+    "  contents: read",
+    "  issues: write",
+    "env:",
+    "  GIT_CONFIG_COUNT: '1'",
+    "  GIT_CONFIG_KEY_0: init.defaultBranch",
+    "  GIT_CONFIG_VALUE_0: main",
+    "  SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.source_sha }}",
+    "jobs:",
+    "  deploy:",
+    "    if: (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main') || github.event_name == 'workflow_dispatch'",
+    "    runs-on: ubuntu-latest",
+    "    steps:",
+    `      - uses: ${CHECKOUT_ACTION} # v6`,
+    "        with:",
+    "          ref: ${{ env.SOURCE_SHA }}",
+    "          fetch-depth: 0",
+    "      - name: Validate release source",
+    "        env:",
+    "          GH_TOKEN: ${{ github.token }}",
+    "        run: |",
+    "          grep -Eq '^[0-9a-f]{40}$' <<<\"$SOURCE_SHA\"",
+    "          git fetch --no-tags origin main",
+    "          git merge-base --is-ancestor \"$SOURCE_SHA\" origin/main",
+    "          gh run list --workflow CI --branch main --commit \"$SOURCE_SHA\" --event push --status success",
+    `      - uses: ${SETUP_NODE_ACTION} # v6`,
+    "        with:",
+    "          node-version: '22'",
+    "      - name: Activate pnpm",
+    "        run: |",
+    "          corepack enable",
+    "          corepack prepare pnpm@10.28.1 --activate",
+    "      - name: Deploy to Cloudflare Workers",
+    "        env:",
+    "          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+    "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+    "        run: pnpm run deploy:auto",
+    "      - name: Record release source",
+    "        run: printf 'Source SHA: `%s`\\n' \"$SOURCE_SHA\" >> \"$GITHUB_STEP_SUMMARY\"",
+  ].join("\n");
+}
+
 function validQaImageCoverSmokeWorkflow(): string {
   return [
     "name: QA Image Cover Smoke",
@@ -277,35 +336,7 @@ function validInputs(): DeploymentPreflightInputs {
         "db:seed": "pnpm exec tsx prisma/seed.ts",
       },
     },
-    productionDeployWorkflow: [
-      "name: Production Deploy",
-      "on:",
-      "  push:",
-      "    branches:",
-      "      - main",
-      "  workflow_dispatch:",
-      "env:",
-      "  GIT_CONFIG_COUNT: '1'",
-      "  GIT_CONFIG_KEY_0: init.defaultBranch",
-      "  GIT_CONFIG_VALUE_0: main",
-      "jobs:",
-      "  deploy:",
-      "    runs-on: ubuntu-latest",
-      "    steps:",
-      "      - uses: actions/checkout@v6",
-      "      - uses: actions/setup-node@v6",
-      "        with:",
-      "          node-version: '22'",
-      "      - name: Activate pnpm",
-      "        run: |",
-      "          corepack enable",
-      "          corepack prepare pnpm@10.28.1 --activate",
-      "      - name: Deploy to Cloudflare Workers",
-      "        env:",
-      "          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
-      "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
-      "        run: pnpm run deploy:auto",
-    ].join("\n"),
+    productionDeployWorkflow: secureProductionDeployWorkflow(),
     ciWorkflow: validCiWorkflow(),
     qaImageCoverSmokeWorkflow: validQaImageCoverSmokeWorkflow(),
     storybookWorkflow: validStorybookWorkflow(),
@@ -456,7 +487,7 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).toContain("deploy:auto script");
   });
 
-  it("requires the production deploy workflow to run on pushes to main", () => {
+  it("rejects production deploy workflows that run directly on pushes to main", () => {
     const inputs = validInputs();
     inputs.productionDeployWorkflow = [
       "on:",
@@ -595,35 +626,12 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
   });
 
-  it("accepts deploy:auto from a block-style production workflow run step", () => {
+  it("accepts deploy:auto from a block-style secure production workflow run step", () => {
     const inputs = validInputs();
-    inputs.productionDeployWorkflow = [
-      "on:",
-      "  push:",
-      "    branches:",
-      "      - main",
-      "  workflow_dispatch:",
-      "env:",
-      "  GIT_CONFIG_COUNT: '1'",
-      "  GIT_CONFIG_KEY_0: init.defaultBranch",
-      "  GIT_CONFIG_VALUE_0: main",
-      "jobs:",
-      "  deploy:",
-      "    steps:",
-      "      - uses: actions/setup-node@v6",
-      "        with:",
-      "          node-version: '22'",
-      "      - name: Activate pnpm",
-      "        run: |",
-      "          corepack enable",
-      "          corepack prepare pnpm@10.28.1 --activate",
-      "      - name: Deploy",
-      "        run: |",
-      "          pnpm run deploy:auto",
-      "        env:",
-      "          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
-      "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
-    ].join("\n");
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
+      "        run: pnpm run deploy:auto",
+      "        run: |\n          pnpm run deploy:auto",
+    );
 
     const result = validateDeploymentConfig(inputs);
 
