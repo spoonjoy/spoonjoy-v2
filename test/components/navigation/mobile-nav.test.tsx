@@ -239,6 +239,26 @@ describe("MobileNav", () => {
       expect(nav).toHaveClass("justify-between");
     });
 
+    it("does not render the dock while a route suppresses it", () => {
+      render(
+        <MemoryRouter initialEntries={["/recipes/r1"]}>
+          <DockContext.Provider value={{
+            actions: null,
+            setActions: () => {},
+            config: null,
+            setConfig: () => {},
+            isContextual: false,
+            isSuppressed: true,
+            setSuppressed: () => {},
+          }}>
+            <MobileNav isAuthenticated />
+          </DockContext.Provider>
+        </MemoryRouter>,
+      );
+
+      expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
+    });
+
     it("provides explicit back navigation for profile-style screens", () => {
       render(
         <MemoryRouter initialEntries={["/users/ari/fellow-chefs"]}>
@@ -330,7 +350,7 @@ describe("MobileNav", () => {
 
       render(
         <MemoryRouter initialEntries={["/users/ari"]}>
-          <DockContext.Provider value={{ actions, setActions: () => {}, config: null, setConfig: () => {}, isContextual: true }}>
+          <DockContext.Provider value={{ actions, setActions: () => {}, config: null, setConfig: () => {}, isContextual: true, isSuppressed: false, setSuppressed: () => {} }}>
             <MobileNav />
           </DockContext.Provider>
         </MemoryRouter>,
@@ -352,7 +372,7 @@ describe("MobileNav", () => {
 
       render(
         <MemoryRouter initialEntries={["/users/ari"]}>
-          <DockContext.Provider value={{ actions, setActions: () => {}, config: null, setConfig: () => {}, isContextual: true }}>
+          <DockContext.Provider value={{ actions, setActions: () => {}, config: null, setConfig: () => {}, isContextual: true, isSuppressed: false, setSuppressed: () => {} }}>
             <MobileNav />
           </DockContext.Provider>
         </MemoryRouter>,
@@ -372,7 +392,7 @@ describe("MobileNav", () => {
 
       const { rerender } = render(
         <MemoryRouter initialEntries={["/users/ari"]}>
-          <DockContext.Provider value={{ actions, setActions: () => {}, config: null, setConfig: () => {}, isContextual: true }}>
+          <DockContext.Provider value={{ actions, setActions: () => {}, config: null, setConfig: () => {}, isContextual: true, isSuppressed: false, setSuppressed: () => {} }}>
             <MobileNav />
           </DockContext.Provider>
         </MemoryRouter>,
@@ -382,7 +402,7 @@ describe("MobileNav", () => {
 
       rerender(
         <MemoryRouter initialEntries={["/users/ari"]}>
-          <DockContext.Provider value={{ actions: null, setActions: () => {}, config: null, setConfig: () => {}, isContextual: false }}>
+          <DockContext.Provider value={{ actions: null, setActions: () => {}, config: null, setConfig: () => {}, isContextual: false, isSuppressed: false, setSuppressed: () => {} }}>
             <MobileNav />
           </DockContext.Provider>
         </MemoryRouter>,
@@ -396,7 +416,7 @@ describe("MobileNav", () => {
     it("renders the center slot even when a contextual caller has no actions", () => {
       render(
         <MemoryRouter initialEntries={["/users/ari"]}>
-          <DockContext.Provider value={{ actions: null, setActions: () => {}, config: null, setConfig: () => {}, isContextual: true }}>
+          <DockContext.Provider value={{ actions: null, setActions: () => {}, config: null, setConfig: () => {}, isContextual: true, isSuppressed: false, setSuppressed: () => {} }}>
             <MobileNav />
           </DockContext.Provider>
         </MemoryRouter>,

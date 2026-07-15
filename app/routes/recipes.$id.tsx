@@ -27,7 +27,7 @@ import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
 import { StepCard } from "~/components/recipe/StepCard";
 import { IngredientList, type Ingredient } from "~/components/recipe/IngredientList";
 import type { StepReference } from "~/components/recipe/StepOutputUseCallout";
-import { shareContent, useRecipeDetailActions } from "~/components/navigation";
+import { shareContent, useDockSuppressed, useRecipeDetailActions } from "~/components/navigation";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
@@ -364,12 +364,18 @@ export default function RecipeDetail() {
       return;
     }
 
-    const intervalId = globalThis.setInterval(() => {
-      revalidator.revalidate();
-    }, COVER_PROCESSING_POLL_INTERVAL_MS);
+    const revalidateIfVisible = () => {
+      if (document.visibilityState !== "hidden") {
+        revalidator.revalidate();
+      }
+    };
+
+    const intervalId = globalThis.setInterval(revalidateIfVisible, COVER_PROCESSING_POLL_INTERVAL_MS);
+    document.addEventListener("visibilitychange", revalidateIfVisible);
 
     return () => {
       globalThis.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", revalidateIfVisible);
     };
   }, [activeCoverProcessing?.coverId, revalidator]);
 
@@ -743,7 +749,9 @@ export default function RecipeDetail() {
     onAddToList: handleAddToList,
     onShare: handleShare,
     onCook: enterCookMode,
+    disabled: showOwnerTools,
   });
+  useDockSuppressed(showOwnerTools);
 
   useEffect(() => {
     setAvailableCookbooks(cookbooks);

@@ -1,12 +1,17 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestRoutesStub } from "../../utils";
 import { RecipePhotoStudio } from "~/components/recipe/RecipePhotoStudio";
 
 function makeFile(name: string, type: string, size = 1024): File {
   return new File([new Uint8Array(size)], name, { type });
 }
+
+const originalCreateObjectURL = URL.createObjectURL;
+const originalRevokeObjectURL = URL.revokeObjectURL;
+const createObjectURLMock = vi.fn((file: Blob) => `blob:${file instanceof File ? file.name : "preview"}`);
+const revokeObjectURLMock = vi.fn();
 
 function renderStudio(
   props: Partial<React.ComponentProps<typeof RecipePhotoStudio>> = {},
@@ -32,6 +37,38 @@ function renderStudio(
 }
 
 describe("RecipePhotoStudio", () => {
+  beforeEach(() => {
+    createObjectURLMock.mockClear();
+    revokeObjectURLMock.mockClear();
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: createObjectURLMock,
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: revokeObjectURLMock,
+    });
+  });
+
+  afterEach(() => {
+    if (originalCreateObjectURL) {
+      Object.defineProperty(URL, "createObjectURL", {
+        configurable: true,
+        value: originalCreateObjectURL,
+      });
+    } else {
+      delete (URL as typeof URL & { createObjectURL?: typeof URL.createObjectURL }).createObjectURL;
+    }
+    if (originalRevokeObjectURL) {
+      Object.defineProperty(URL, "revokeObjectURL", {
+        configurable: true,
+        value: originalRevokeObjectURL,
+      });
+    } else {
+      delete (URL as typeof URL & { revokeObjectURL?: typeof URL.revokeObjectURL }).revokeObjectURL;
+    }
+  });
+
   it("defaults a missing-cover upload to a Spoon-backed editorial cover", async () => {
     const user = userEvent.setup();
     let captured: FormData | null = null;
@@ -47,13 +84,15 @@ describe("RecipePhotoStudio", () => {
 
     await user.upload(screen.getByLabelText("Recipe photo"), makeFile("finished-pasta.png", "image/png"));
     expect(screen.getByTestId("recipe-photo-picker")).toHaveTextContent("finished-pasta.png");
+    expect(await screen.findByTestId("recipe-photo-preview")).toHaveAttribute("src", "blob:finished-pasta.png");
+    expect(screen.getByRole("button", { name: "Save Spoon + cover" })).toBeEnabled();
 
-    await user.click(screen.getByRole("button", { name: "Spoon details" }));
+    await user.click(screen.getByRole("button", { name: "Optional Spoon details" }));
     await user.type(screen.getByLabelText("Note"), "Ate this for Tuesday dinner.");
     await user.type(screen.getByLabelText("Next time"), "More lemon.");
     await user.type(screen.getByLabelText("Cooked at"), "2026-07-14T19:30");
     await user.type(screen.getByLabelText("Editorial direction"), "brighter window light");
-    await user.click(screen.getByRole("button", { name: "Save photo" }));
+    await user.click(screen.getByRole("button", { name: "Save Spoon + cover" }));
 
     await waitFor(() => expect(captured).not.toBeNull());
     expect(captured!.get("intent")).toBe("createFirstPhotoCover");
@@ -77,9 +116,9 @@ describe("RecipePhotoStudio", () => {
     expect(await screen.findByText("Add cover photo")).toBeInTheDocument();
     await user.click(screen.getByRole("checkbox", { name: "Post as Spoon" }));
 
-    expect(screen.queryByRole("button", { name: "Spoon details" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Optional Spoon details" })).toBeNull();
     await user.upload(screen.getByLabelText("Recipe photo"), makeFile("cover-only.png", "image/png"));
-    await user.click(screen.getByRole("button", { name: "Save photo" }));
+    await user.click(screen.getByRole("button", { name: "Save editorial cover" }));
 
     await waitFor(() => expect(captured).not.toBeNull());
     expect(captured!.get("intent")).toBe("createFirstPhotoCover");
@@ -148,11 +187,53 @@ describe("RecipePhotoStudio", () => {
 
     await user.upload(await screen.findByLabelText("Recipe photo"), makeFile("verbatim.png", "image/png"));
     await user.click(screen.getByRole("checkbox", { name: "Editorialize cover" }));
-    await user.click(screen.getByRole("button", { name: "Save photo" }));
+    expect(screen.getByRole("button", { name: "Save Spoon photo" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Save Spoon photo" }));
 
     await waitFor(() => expect(captured).not.toBeNull());
     expect(captured!.get("generateEditorial")).toBeNull();
     expect(captured!.get("promptAddition")).toBeNull();
     expect((captured!.get("photo") as File).name).toBe("verbatim.png");
+  });
+
+  it("labels direct cover uploads when Spoon posting and editorialization are off", async () => {
+    const user = userEvent.setup();
+    let captured: FormData | null = null;
+    renderStudio({ hasActiveCover: true }, (formData) => {
+      captured = formData;
+    });
+
+    await user.click(await screen.findByRole("checkbox", { name: "Post as Spoon" }));
+    await user.click(screen.getByRole("checkbox", { name: "Editorialize cover" }));
+    await user.upload(screen.getByLabelText("Recipe photo"), makeFile("plain-cover.png", "image/png"));
+
+    expect(screen.getByRole("button", { name: "Save cover photo" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Save cover photo" }));
+
+    await waitFor(() => expect(captured).not.toBeNull());
+    expect(captured!.get("postAsSpoon")).toBeNull();
+    expect(captured!.get("generateEditorial")).toBeNull();
+    expect((captured!.get("photo") as File).name).toBe("plain-cover.png");
+  });
+
+  it("cleans up local preview URLs when the selected photo changes or clears", async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderStudio();
+    const input = await screen.findByLabelText("Recipe photo") as HTMLInputElement;
+
+    await user.upload(input, makeFile("first.png", "image/png"));
+    expect(await screen.findByTestId("recipe-photo-preview")).toHaveAttribute("src", "blob:first.png");
+
+    await user.upload(input, makeFile("second.png", "image/png"));
+    expect(await screen.findByTestId("recipe-photo-preview")).toHaveAttribute("src", "blob:second.png");
+    expect(revokeObjectURLMock).toHaveBeenCalledWith("blob:first.png");
+
+    Object.defineProperty(input, "files", { value: [], configurable: true });
+    fireEvent.change(input);
+    expect(screen.queryByTestId("recipe-photo-preview")).toBeNull();
+    expect(revokeObjectURLMock).toHaveBeenCalledWith("blob:second.png");
+
+    unmount();
+    expect(revokeObjectURLMock).toHaveBeenCalledTimes(2);
   });
 });

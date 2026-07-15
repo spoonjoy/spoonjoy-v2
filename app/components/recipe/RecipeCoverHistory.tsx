@@ -72,6 +72,10 @@ export function RecipeCoverHistory({
   covers: RecipeCoverHistoryItem[];
   spoonImages?: RecipeCoverSpoonImage[];
 }) {
+  const hasCurrentCover = covers.some((cover) =>
+    cover.isActive && cover.status !== "archived" && !cover.archivedAt
+  );
+
   return (
     <section
       className="space-y-4 border-t border-[var(--sj-border)] pt-5"
@@ -87,7 +91,7 @@ export function RecipeCoverHistory({
             Recipe covers
           </h3>
           <p className="font-sj-ui text-sm leading-6 text-[var(--sj-ink-soft)]">
-            Keep originals and editorial versions available for this recipe.
+            Choose the active cover, regenerate variants, or retire old candidates.
           </p>
         </div>
         <Form method="post">
@@ -99,14 +103,16 @@ export function RecipeCoverHistory({
         </Form>
       </div>
 
-      <div className="flex items-center justify-between gap-3 border-y border-[var(--sj-border)] py-3">
-        <span className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
-          No cover selected
-        </span>
-        <span className="font-sj-ui text-xs uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]">
-          Explicit empty state
-        </span>
-      </div>
+      {!hasCurrentCover ? (
+        <div className="flex items-center justify-between gap-3 border-y border-[var(--sj-border)] py-3">
+          <span className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
+            No cover selected
+          </span>
+          <span className="font-sj-ui text-xs uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]">
+            Current setting
+          </span>
+        </div>
+      ) : null}
 
       <Form method="post" className="grid gap-3 border-b border-[var(--sj-border)] pb-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
         <input type="hidden" name="intent" value="generateRecipeCoverPlaceholder" />
@@ -149,13 +155,15 @@ export function RecipeCoverHistory({
             return (
               <article
                 key={cover.id}
-                className="grid gap-4 py-4 sm:grid-cols-[5rem_minmax(0,1fr)]"
+                className="grid grid-cols-[5rem_minmax(0,1fr)] gap-3 py-4 sm:gap-4"
               >
                 <div className="aspect-square overflow-hidden bg-[var(--sj-photo-charcoal)]">
                   {thumbnail ? (
                     <img
                       src={thumbnail}
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                       className="h-full w-full object-cover"
                     />
                   ) : (
@@ -314,6 +322,8 @@ export function RecipeCoverHistory({
                   <img
                     src={spoon.photoUrl}
                     alt=""
+                    loading="lazy"
+                    decoding="async"
                     className="h-full w-full object-cover"
                   />
                 </div>

@@ -9,6 +9,7 @@ export {
   useDockContext,
   useDockActions,
   useDockConfig,
+  useDockSuppressed,
   type DockAction,
   type DockButton,
   type DockConfig,
