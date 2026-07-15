@@ -72,13 +72,13 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 2a: Workers Runtime Harness Tests
 **What**: Add red config tests requiring official Workers Vitest, SQLite DO/D1 bindings, separate worker coverage, normal-pool exclusion, and CI execution.
-**Output**: `test/config/workers-vitest.test.ts`, `test/repo-hygiene.test.ts`, `test/workers/runtime.test.ts`.
+**Output**: `test/config/workers-vitest.test.ts`, `test/repo-hygiene.test.ts`, `test/workers-runtime/runtime.test.ts`.
 **Acceptance**: Targeted tests fail because scripts/config/CI are absent.
 
 ### ⬜ Unit 2b: Workers Runtime Harness Implementation
 **What**: Install/configure `@cloudflare/vitest-pool-workers` without moving happy-dom tests.
-**Output**: `package.json`, `pnpm-lock.yaml`, `vitest.config.ts`, `vitest.config.workers.ts`, `test/workers/env.d.ts`, `.github/workflows/ci.yml`.
-**Acceptance**: Unit 2a passes; `pnpm test:workers` runs a real binding/runtime smoke; worker coverage enforces 100%; app coverage excludes worker tests.
+**Output**: `package.json`, `pnpm-lock.yaml`, `vitest.config.ts`, `vitest.config.workers.ts`, `test/workers-runtime/env.d.ts`, `.github/workflows/ci.yml`.
+**Acceptance**: Unit 2a passes; `pnpm test:workers` includes exactly `test/workers-runtime/**/*.test.ts`; normal Vitest excludes exactly `test/workers-runtime/**` and retains existing Node-mocked `test/workers/app.test.ts`; worker coverage enforces 100%.
 
 ### ⬜ Unit 2c: Workers Harness Verification
 **What**: Run Workers/app coverage, CI-config tests, typecheck, and build.
@@ -101,7 +101,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Helper coverage is 100%; targeted cross-contract suite, typecheck, and build pass.
 
 ### ⬜ Unit 4a: REST Scaling Projection Tests
-**What**: Add red tests for exactly one unsigned decimal `scaleFactor`, `0.25..50`, invalid/multiple/nonfinite forms, null quantities, six-decimal rounding, negative-zero normalization, immutable recipe data, and unchanged list/search behavior.
+**What**: Add red tests for exactly one unsigned decimal `scaleFactor`, `0.25..50`, invalid/multiple/nonfinite forms, required numeric quantities, six-decimal rounding, negative-zero normalization, immutable recipe data, and unchanged list/search behavior.
 **Output**: `test/lib/api-v1-recipe-scaling.server.test.ts`, `test/routes/api-v1-recipes.test.ts`, `test/lib/api-v1-openapi.server.test.ts`, `test/routes/api-v1-openapi.test.ts`, `test/scripts/generate-api-playground.test.ts`, `test/routes/developers-playground.test.tsx`.
 **Acceptance**: Named tests fail only on absent scaling projection/validation.
 
@@ -177,7 +177,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 9a: Durable Object Binding And Storage Tests
 **What**: Add real Workers red tests for deterministic user/recipe arbitration, SQLite storage, coordinator/attempt key separation, immutable identity, attempt replacement, restart, Env/export, production/QA binding/migration, and preflight checks.
-**Output**: `test/workers/cook-session-do-storage.test.ts`, `test/config/wrangler-durable-objects.test.ts`, `test/scripts/deployment-preflight.test.ts`.
+**Output**: `test/workers-runtime/cook-session-do-storage.test.ts`, `test/config/wrangler-durable-objects.test.ts`, `test/scripts/deployment-preflight.test.ts`.
 **Acceptance**: Worker/config tests fail because class/bindings/checks are absent.
 
 ### ⬜ Unit 9b: Durable Object Binding And Storage Implementation
@@ -192,7 +192,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 10a: Internal Cook HTTP Lifecycle Tests
 **What**: Add real Worker red tests for recipe-keyed start/get/patch/complete/abandon, API-safe auth, initial visibility, same-origin, exact bodies/statuses, attempt/revision conflicts, no-store responses/errors, malformed methods/body, and no OpenAPI/route registration.
-**Output**: `test/workers/app-cook-session-http.test.ts`, `test/workers/app.test.ts`.
+**Output**: `test/workers-runtime/app-cook-session-http.test.ts`, `test/workers/app.test.ts`.
 **Acceptance**: Tests fail because Worker-level HTTP handler is absent.
 
 ### ⬜ Unit 10b: Internal Cook HTTP Lifecycle Implementation
@@ -207,7 +207,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 11a: Cook WebSocket Tests
 **What**: Add real Workers red tests for same-origin upgrade, 101 handle retention through default export, initial/broadcast snapshots, hibernation attachments/restart, stale-attempt closure, malformed messages, and close/error paths.
-**Output**: `test/workers/app-cook-session-websocket.test.ts`, `test/workers/cook-session-do-websocket.test.ts`.
+**Output**: `test/workers-runtime/app-cook-session-websocket.test.ts`, `test/workers-runtime/cook-session-do-websocket.test.ts`.
 **Acceptance**: Tests fail because live subscription is absent.
 
 ### ⬜ Unit 11b: Cook WebSocket Implementation
@@ -222,7 +222,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 12a: D1 Projection Alarm Tests
 **What**: Add real Workers red tests for ordered create/update/terminal projections, terminal-old-before-active-new, idempotent replay, transient D1 failure, retry exhaustion/reschedule, and stale My Kitchen card recovery.
-**Output**: `test/workers/cook-session-projection.test.ts`, `test/lib/cook-session-index.server.test.ts`.
+**Output**: `test/workers-runtime/cook-session-projection.test.ts`, `test/lib/cook-session-index.server.test.ts`.
 **Acceptance**: Tests fail because alarm-backed projection is absent.
 
 ### ⬜ Unit 12b: D1 Projection Alarm Implementation
@@ -237,7 +237,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 13a: Cook Purge Fence Tests
 **What**: Add real Workers red tests for matching/stale/repeated DELETE, PURGING rejection for every other HTTP/upgrade, code-4001 closure, FIFO barrier, old-terminal/new-attempt/purge order, delayed start replay 410, newer-attempt isolation, atomic content deletion, and every D1/local failure boundary.
-**Output**: `test/workers/cook-session-purge.test.ts`, `test/workers/app-cook-session-http.test.ts`, `test/workers/app-cook-session-websocket.test.ts`, `test/workers/cook-session-do-websocket.test.ts`.
+**Output**: `test/workers-runtime/cook-session-purge.test.ts`, `test/workers-runtime/app-cook-session-http.test.ts`, `test/workers-runtime/app-cook-session-websocket.test.ts`, `test/workers-runtime/cook-session-do-websocket.test.ts`.
 **Acceptance**: Tests fail because purge state machine is absent.
 
 ### ⬜ Unit 13b: Cook Purge Fence Implementation
@@ -321,7 +321,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: No private leakage, overlap, dock churn, or ready visual issue remains.
 
 ### ⬜ Unit 18a: SavedRecipe Migration Tests
-**What**: Add red tests for hard-delete saves, unique pair, owner-derived distinct active-recipe backfill, rerun, soft-delete hide/restore, and exact migration.
+**What**: Add red tests for hard-delete saves, unique pair, owner-derived distinct backfill with explicit Recipe join/`deletedAt IS NULL`, rerun, soft-delete hide/restore, and exact migration.
 **Output**: `test/models/saved-recipe.test.ts`, `test/scripts/migration-0025-saved-recipes.test.ts`, `test/lib/saved-recipes.server.test.ts`.
 **Acceptance**: Tests fail because schema/migration/helper are absent.
 
@@ -336,13 +336,13 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: New helper is 100% covered and commands pass.
 
 ### ⬜ Unit 19a: Cookbook Writer Compatibility Tests
-**What**: Add red tests for all four membership writers ensuring owner save, repeat idempotency, remove-without-unsave, unsave-without-membership-removal, auth, and unchanged notifications.
+**What**: Add red tests for all four membership writers ensuring owner save, repeat idempotency, non-interactive array-transaction batching, remove-without-unsave, unsave-without-membership-removal, auth, and unchanged notifications.
 **Output**: `test/lib/recipe-detail.server.test.ts`, `test/routes/cookbooks-id.test.tsx`, `test/lib/spoonjoy-api-cookbook-notification.test.ts`, `test/routes/api-v1-cookbooks.test.ts`, `test/lib/saved-recipes.server.test.ts`.
 **Acceptance**: Tests fail because membership creation does not ensure SavedRecipe.
 
 ### ⬜ Unit 19b: Cookbook Writer Compatibility Implementation
-**What**: Call canonical save helper from `recipe-detail.server.ts`, `cookbooks.$id.tsx`, `spoonjoy-api.server.ts`, and `api-v1.server.ts` within existing transaction boundaries.
-**Output**: `app/lib/recipe-detail.server.ts`, `app/routes/cookbooks.$id.tsx`, `app/lib/spoonjoy-api.server.ts`, `app/lib/api-v1.server.ts`, `app/lib/saved-recipes.server.ts`.
+**What**: Route all four membership writers through one canonical helper that batches membership create/upsert plus SavedRecipe upsert with non-interactive `$transaction([promise, promise])`; do not use callback/interactive transactions.
+**Output**: `app/lib/recipe-detail.server.ts`, `app/routes/cookbooks.$id.tsx`, `app/lib/spoonjoy-api.server.ts`, `app/lib/api-v1.server.ts`, `app/lib/saved-recipes.server.ts`, new `app/lib/cookbook-recipe-save.server.ts`.
 **Acceptance**: Unit 19a passes across web/MCP/REST; removal/unsave remain independent; notifications unchanged.
 
 ### ⬜ Unit 19c: Cookbook Writer Verification
@@ -357,7 +357,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 20.1b: Saved REST List Implementation
 **What**: Implement the private paginated GET endpoint with existing v1 auth/error/no-store conventions and document it.
-**Output**: `app/lib/api-v1.server.ts`, `app/lib/api-v1-contract.server.ts`, `app/lib/api-v1-openapi.server.ts`, `app/routes/api.$.ts`, `scripts/generate-api-playground.ts`, `app/lib/generated/api-v1-playground.ts`, `app/routes/developers.tsx`, `docs/api.md`.
+**Output**: `app/lib/api-v1.server.ts`, `app/lib/api-v1-contract.server.ts`, `app/lib/api-v1-openapi.server.ts`, `scripts/generate-api-playground.ts`, `app/lib/generated/api-v1-playground.ts`, `app/routes/developers.tsx`, `docs/api.md`.
 **Acceptance**: Unit 20.1a passes; only the authenticated viewer's active recipes are returned with private no-store.
 
 ### ⬜ Unit 20.1c: Saved REST List Verification
@@ -372,7 +372,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 
 ### ⬜ Unit 20.2b: Saved REST Mutation Implementation
 **What**: Implement PUT/DELETE with canonical SavedRecipe helper and existing v1 idempotency/auth/error envelopes; update contracts/generated docs.
-**Output**: `app/lib/api-v1.server.ts`, `app/lib/api-v1-contract.server.ts`, `app/lib/api-v1-openapi.server.ts`, `app/routes/api.$.ts`, `scripts/generate-api-playground.ts`, `app/lib/generated/api-v1-playground.ts`, `app/routes/developers.tsx`, `docs/api.md`.
+**Output**: `app/lib/api-v1.server.ts`, `app/lib/api-v1-contract.server.ts`, `app/lib/api-v1-openapi.server.ts`, `scripts/generate-api-playground.ts`, `app/lib/generated/api-v1-playground.ts`, `app/routes/developers.tsx`, `docs/api.md`.
 **Acceptance**: Unit 20.2a passes; retries replay safely; unsave does not remove cookbook memberships.
 
 ### ⬜ Unit 20.2c: Saved REST Mutation Verification

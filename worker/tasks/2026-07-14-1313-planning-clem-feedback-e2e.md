@@ -70,8 +70,8 @@ Recipe batch adds aggregate equal ingredient-reference/unit pairs before mutatio
 
 ### SavedRecipe
 - `SavedRecipe(userId, recipeId, createdAt)` is hard-deleted on explicit unsave and unique by `(userId, recipeId)`.
-- Migration `0025_saved_recipes.sql` backfills active recipes with `SELECT DISTINCT Cookbook.authorId, RecipeInCookbook.recipeId`, conflict-ignore semantics, and no replacement/deletion. `addedById` does not determine ownership. Rerunning is harmless.
-- Adding cookbook membership through `recipe-detail.server.ts`, `cookbooks.$id.tsx`, `spoonjoy-api.server.ts`, or `api-v1.server.ts` ensures the cookbook owner has a saved row. Removing membership never unsaves; explicit unsave never removes cookbook membership. Re-save is idempotent. Soft-deleted recipes remain referenced but are hidden until restored.
+- Migration `0025_saved_recipes.sql` backfills active recipes with `SELECT DISTINCT Cookbook.authorId, RecipeInCookbook.recipeId` plus an explicit `JOIN Recipe ON Recipe.id = RecipeInCookbook.recipeId WHERE Recipe.deletedAt IS NULL`, conflict-ignore semantics, and no replacement/deletion. `addedById` does not determine ownership. Rerunning is harmless.
+- Adding cookbook membership through `recipe-detail.server.ts`, `cookbooks.$id.tsx`, `spoonjoy-api.server.ts`, or `api-v1.server.ts` uses one shared D1-safe helper that submits membership create/upsert and SavedRecipe upsert together through Prisma's non-interactive `$transaction([promise, promise])` batch form; callback/interactive transactions are forbidden for this helper. Removing membership never unsaves; explicit unsave never removes cookbook membership. Re-save is idempotent. Soft-deleted recipes remain referenced but are hidden until restored.
 - `/saved-recipes` and owner-only My Kitchen sections use SavedRecipe. Saved search intersects recipe-search results with the viewer's saved ids; private save state is never written to global `SearchDocument` metadata.
 - Public v1 adds private `GET /api/v1/me/saved-recipes` and idempotent `PUT`/`DELETE /api/v1/me/saved-recipes/:recipeId` with existing `recipes:read`/`recipes:write` scope, error, idempotency, and private no-store conventions.
 
@@ -86,7 +86,7 @@ Recipe batch adds aggregate equal ingredient-reference/unit pairs before mutatio
 - Recipe summary/detail add `stepCount: number`, `course: string | null`, `tags: string[]`, and `isSaved: boolean | null`; anonymous/public-token responses use `null` only for `isSaved`, while an authenticated user receives a boolean. `course` is the lowercase controlled course. `tags` contains custom tags only, preserving the owner's trimmed/collapsed display casing and sorting by `normalizedLabel` then id.
 - Attribution preserves raw `sourceHost` and adds `sourceDisplayName`. Null/empty/malformed raw hosts yield null; otherwise parse as a hostname, lowercase it, remove a trailing dot and one leading `www.`, and return the URL parser's ASCII hostname form.
 - Detail-only `GET /api/v1/recipes/{id}?scaleFactor=<number>` accepts exactly one unsigned decimal matching `^(?:\d+(?:\.\d*)?|\.\d+)$` and numeric range `0.25..50`; signs, exponent/hex notation, whitespace-only, malformed, multiple, nonfinite, and out-of-range values return the existing `validation_error` shape. List/search behavior is unchanged.
-- Detail preserves ingredient `quantity` and adds `scaledQuantity`; the response includes `scaleFactor`. For non-null numeric quantities, multiplication is rounded to at most six decimal places and negative zero is normalized to zero. Null quantities remain null. Scaling does not write recipe data. `servings` remains the original nullable freeform string.
+- Detail preserves required numeric ingredient `quantity` and adds required numeric `scaledQuantity`; the response includes `scaleFactor`. Multiplication is rounded to at most six decimal places and negative zero is normalized to zero. Scaling does not write recipe data. `servings` remains the original nullable freeform string.
 - OpenAPI, `api-v1-contract.server.ts`, generator output, developer playground, examples, REST tests, and MCP shopping metadata remain synchronized.
 
 ## Completion Criteria
@@ -127,7 +127,7 @@ Recipe batch adds aggregate equal ingredient-reference/unit pairs before mutatio
 - `./2026-07-14-1313-clem-feedback-source.md`
 - `app/routes/recipes.$id.tsx` currently stores `spoonjoy-cook-progress:${recipeId}` locally and already bounds scale to `0.25..50`.
 - `workers/app.ts` is the Worker entrypoint; `withSecurityHeaders` currently rebuilds responses and drops a Cloudflare WebSocket attachment.
-- `vitest.config.ts` uses happy-dom/forks and excludes `workers/**`; a separate Workers pool is required.
+- `vitest.config.ts` uses happy-dom/forks and currently includes existing Node-mocked `test/workers/app.test.ts`. The new Workers pool must include only `test/workers-runtime/**/*.test.ts`; the normal pool must exclude exactly `test/workers-runtime/**` while retaining `test/workers/**`.
 - `migrations/0023_recipe_cover_prompt_lineage.sql` is current, so new D1 migrations are `0024`, `0025`, and `0026`.
 - `app/routes/_index.tsx` can render another user's kitchen, so private sections must be loaded/rendered only for the owner.
 - `app/lib/search.server.ts` uses global recipe documents; SavedRecipe must remain a viewer-scoped overlay.
