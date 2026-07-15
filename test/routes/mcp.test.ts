@@ -158,6 +158,57 @@ describe("/mcp route", () => {
     });
   });
 
+  it("round-trips explicit no-cover results through tools/call", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail("no-cover-route"), username: faker.internet.username() } });
+    const recipe = await db.recipe.create({
+      data: {
+        title: `MCP Route No Cover ${faker.string.alphanumeric(6)}`,
+        chefId: user.id,
+      },
+    });
+    const cover = await db.recipeCover.create({
+      data: {
+        recipeId: recipe.id,
+        imageUrl: "/photos/current.jpg",
+        stylizedImageUrl: "/photos/current-editorial.jpg",
+        sourceType: "chef-upload",
+        status: "ready",
+        generationStatus: "succeeded",
+        createdById: user.id,
+      },
+    });
+    await db.recipe.update({
+      where: { id: recipe.id },
+      data: { activeCoverId: cover.id, activeCoverVariant: "stylized", coverMode: "manual" },
+    });
+    const { token } = await createApiCredential(db, user.id, "route no-cover token", { scopes: ["recipes:read", "kitchen:write"] });
+
+    const response = await action(routeArgs(rpc(
+      {
+        jsonrpc: "2.0",
+        id: 7,
+        method: "tools/call",
+        params: {
+          name: "set_recipe_no_cover",
+          arguments: {
+            recipeId: recipe.id,
+            confirmNoCover: true,
+            idempotencyKey: "route-set-no-cover",
+          },
+        },
+      },
+      { Authorization: `Bearer ${token}` },
+    )));
+    expect(response.status).toBe(200);
+    const body = await response.json() as { result: { content: { text: string }[] } };
+    expect(body).toMatchObject({ result: { content: [{ text: expect.any(String) }] } });
+    expect(JSON.parse(body.result.content[0].text)).toMatchObject({
+      activeCover: null,
+      previousActiveCover: { id: cover.id, activeVariant: "stylized" },
+      mutation: { idempotencyKey: "route-set-no-cover", replayed: false },
+    });
+  });
+
   it("accepts OAuth tokens bound to /mcp and rejects tokens bound elsewhere", async () => {
     const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
     const matching = await createApiCredential(db, user.id, "MCP OAuth token", {

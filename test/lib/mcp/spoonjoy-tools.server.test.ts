@@ -1034,6 +1034,73 @@ describe("spoonjoy MCP tools", () => {
     expect(archived.archivedCover.archivedAt).toEqual(expect.any(String));
   });
 
+  it("sets explicit no-cover state over MCP JSON with idempotent replay", async () => {
+    const chef = await context.db.user.create({
+      data: {
+        email: uniqueEmail("cover-none-chef"),
+        username: `cover_none_chef_${faker.string.alphanumeric(6).toLowerCase()}`,
+      },
+    });
+    const principal = {
+      id: chef.id,
+      email: chef.email,
+      username: chef.username,
+      source: "bearer" as const,
+      scopes: ["recipes:read", "kitchen:write"],
+    };
+    const recipe = await context.db.recipe.create({
+      data: {
+        title: `MCP No Cover ${faker.string.alphanumeric(6)}`,
+        chefId: chef.id,
+      },
+    });
+    const cover = await context.db.recipeCover.create({
+      data: {
+        recipeId: recipe.id,
+        imageUrl: "/photos/current.jpg",
+        stylizedImageUrl: "/photos/current-editorial.jpg",
+        sourceType: "chef-upload",
+        status: "ready",
+        generationStatus: "succeeded",
+        createdById: chef.id,
+      },
+    });
+    await context.db.recipe.update({
+      where: { id: recipe.id },
+      data: { activeCoverId: cover.id, activeCoverVariant: "stylized", coverMode: "manual" },
+    });
+    const args = {
+      recipeId: recipe.id,
+      confirmNoCover: true,
+      idempotencyKey: "mcp-set-no-cover",
+    };
+
+    const first = parseJson(await callSpoonjoyMcpTool("set_recipe_no_cover", args, { db: context.db, principal }));
+    const replay = parseJson(await callSpoonjoyMcpTool("set_recipe_no_cover", args, { db: context.db, principal }));
+
+    expect(first).toMatchObject({
+      activeCover: null,
+      previousActiveCover: { id: cover.id, activeVariant: "stylized" },
+      archivedCover: null,
+      warnings: [],
+      nextActions: ["list_recipe_covers", "get_recipe"],
+      mutation: { idempotencyKey: "mcp-set-no-cover", replayed: false },
+    });
+    expect(replay).toMatchObject({
+      activeCover: null,
+      previousActiveCover: { id: cover.id, activeVariant: "stylized" },
+      mutation: { idempotencyKey: "mcp-set-no-cover", replayed: true },
+    });
+    await expect(context.db.recipe.findUniqueOrThrow({
+      where: { id: recipe.id },
+      select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+    })).resolves.toEqual({
+      activeCoverId: null,
+      activeCoverVariant: null,
+      coverMode: "none",
+    });
+  });
+
   it("uploads recipe and spoon photos to owner-scoped R2 namespaces", async () => {
     const bucket = mockR2();
     const recipePayload = parseJson(await callSpoonjoyMcpTool("upload_recipe_image", {
