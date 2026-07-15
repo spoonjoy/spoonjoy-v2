@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`, pushed through `aa1574f1`; Ambiguity Round 1 fixes are the current uncommitted checkpoint.
+- Branch: `worker/clem-feedback-e2e`, pushed through `b58df050`; Ambiguity Round 2 fixes are the current uncommitted checkpoint.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is approved after five fresh hostile rounds.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation has not started.
-- Active gate: Ambiguity Round 1 findings are fixed locally; rerun a fresh Ambiguity pass, then complete Quality and alternating Scrutiny until one clean Tinfoil pass and one immediately consecutive clean Stranger pass.
+- Active gate: Ambiguity Round 2 findings are fixed locally; rerun a fresh Ambiguity pass, then complete Quality and alternating Scrutiny until one clean Tinfoil pass and one immediately consecutive clean Stranger pass.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Commit/push the Ambiguity Round 1 contract fixes, run a fresh Ambiguity reviewer, fix and re-review until clean, then continue through Quality and alternating Scrutiny until two consecutive scrutiny passes converge.
+Commit/push the Ambiguity Round 2 contract fixes, run a fresh Ambiguity reviewer, fix and re-review until clean, then continue through Quality and alternating Scrutiny until two consecutive scrutiny passes converge.
 
 ## Operator-Locked Rules
 
@@ -41,7 +41,7 @@ Commit/push the Ambiguity Round 1 contract fixes, run a fresh Ambiguity reviewer
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
 | Planning reviewer gate | deferred by scope | Planning approved at `2c3b4759` after convergence | Closed |
-| Doing review chain | needs reviewer gate | Granularity and Validation converged; Ambiguity Round 1 findings are fixed locally | Re-review Ambiguity, then Quality and alternating Scrutiny |
+| Doing review chain | needs reviewer gate | Granularity and Validation converged; Ambiguity Round 2 findings are fixed locally | Re-review Ambiguity, then Quality and alternating Scrutiny |
 | Work Doer Units 0-37 | ready | Full red/green/verify/visual/ship queue is defined | Start after doing review convergence |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
 
