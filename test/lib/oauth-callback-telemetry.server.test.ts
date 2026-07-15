@@ -11,9 +11,16 @@ const verifyMocks = vi.hoisted(() => ({
   verifyGoogleCallback: vi.fn(),
 }));
 
+const callbackMocks = vi.hoisted(() => ({
+  handleGitHubOAuthCallback: vi.fn(),
+}));
+
 vi.mock("~/lib/apple-oauth.server", () => ({ verifyAppleCallback: verifyMocks.verifyAppleCallback }));
 vi.mock("~/lib/github-oauth.server", () => ({ verifyGitHubCallback: verifyMocks.verifyGitHubCallback }));
 vi.mock("~/lib/google-oauth.server", () => ({ verifyGoogleCallback: verifyMocks.verifyGoogleCallback }));
+vi.mock("~/lib/github-oauth-callback.server", () => ({
+  handleGitHubOAuthCallback: callbackMocks.handleGitHubOAuthCallback,
+}));
 
 // Real config resolution would need env; stub the config getters to succeed by
 // default so we reach the verify step. Individual tests override to throw.
@@ -93,6 +100,7 @@ beforeEach(() => {
   configMocks.getAppleOAuthConfig.mockReturnValue({ clientId: "apple" });
   configMocks.getGitHubOAuthConfig.mockReturnValue({ clientId: "github" });
   configMocks.getGoogleOAuthConfig.mockReturnValue({ clientId: "google" });
+  callbackMocks.handleGitHubOAuthCallback.mockReset();
 });
 
 afterEach(() => {
@@ -188,11 +196,22 @@ describe("OAuth social-callback telemetry", () => {
   });
 
   describe("deep provider capture (verify helper invokes its capture callback)", () => {
-    it("threads provider + phase + httpStatus through to captureException (Google userinfo)", async () => {
+    it("threads provider + phase + upstream classification through to callback telemetry", async () => {
       const { context } = telemetryContext();
       verifyMocks.verifyGoogleCallback.mockImplementation(async (_cfg, _uri, _data, capture) => {
-        capture?.({ error: new Error("userinfo 503"), phase: "userinfo", httpStatus: 503 });
-        return { success: false, error: "userinfo_error" };
+        capture?.({
+          error: new Error("userinfo 503"),
+          phase: "userinfo",
+          httpStatus: 503,
+          failureKind: "upstream",
+          retryable: true,
+        });
+        return {
+          success: false,
+          error: "upstream_error",
+          failureKind: "upstream",
+          retryable: true,
+        };
       });
       const cookie = await storedCookie("google");
       const request = new Request("https://spoonjoy.app/auth/google/callback?state=state&code=c", {
@@ -201,16 +220,116 @@ describe("OAuth social-callback telemetry", () => {
 
       const response = await handleGoogleCallback(request, context);
 
-      expect(response.headers.get("Location")).toBe("/login?oauthError=userinfo_error");
+      expect(response.headers.get("Location")).toBe("/login?oauthError=upstream_error");
       expect(captureException).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
-          extras: { provider: "google", phase: "userinfo", httpStatus: 503 },
+          extras: {
+            provider: "google",
+            phase: "userinfo",
+            httpStatus: 503,
+            failure_kind: "upstream",
+            retryable: true,
+          },
         }),
       );
       // The flattened verify failure also emits a verify-phase social event.
       expect(socialCallbackEvents().at(-1)).toMatchObject({
-        properties: { provider: "google", error_code: "userinfo_error", phase: "verify" },
+        properties: {
+          provider: "google",
+          error_code: "upstream_error",
+          phase: "verify",
+          failure_kind: "upstream",
+          retryable: true,
+        },
+      });
+    });
+
+    it("classifies a provider timeout as retryable without collapsing it to upstream failure", async () => {
+      const { context } = telemetryContext();
+      verifyMocks.verifyGitHubCallback.mockResolvedValueOnce({
+        success: false,
+        error: "provider_timeout",
+        failureKind: "timeout",
+        retryable: true,
+      });
+      const cookie = await storedCookie("github");
+      const request = new Request("https://spoonjoy.app/auth/github/callback?state=state&code=c", {
+        headers: { Cookie: cookie },
+      });
+
+      const response = await handleGitHubCallback(request, context);
+
+      expect(response.headers.get("Location")).toBe("/login?oauthError=provider_timeout");
+      expect(socialCallbackEvents().at(-1)).toMatchObject({
+        properties: {
+          provider: "github",
+          error_code: "provider_timeout",
+          phase: "verify",
+          failure_kind: "timeout",
+          retryable: true,
+        },
+      });
+    });
+
+    it.each([
+      ["provider_timeout", "timeout"],
+      ["network_error", "network"],
+      ["upstream_error", "upstream"],
+    ])("derives %s callback telemetry when a compatible verifier omits metadata", async (error, failureKind) => {
+      const { context } = telemetryContext();
+      verifyMocks.verifyGoogleCallback.mockResolvedValueOnce({ success: false, error });
+      const cookie = await storedCookie("google");
+      const request = new Request("https://spoonjoy.app/auth/google/callback?state=state&code=c", {
+        headers: { Cookie: cookie },
+      });
+
+      await handleGoogleCallback(request, context);
+
+      expect(socialCallbackEvents().at(-1)).toMatchObject({
+        properties: {
+          provider: "google",
+          error_code: error,
+          failure_kind: failureKind,
+          retryable: true,
+        },
+      });
+    });
+
+    it("classifies genuinely missing GitHub verified email as non-retryable missing_email", async () => {
+      const { context } = telemetryContext();
+      verifyMocks.verifyGitHubCallback.mockResolvedValueOnce({
+        success: true,
+        githubUser: {
+          id: "github-user",
+          email: null,
+          emailVerified: false,
+          login: "chef",
+          name: null,
+          avatarUrl: null,
+        },
+      });
+      callbackMocks.handleGitHubOAuthCallback.mockResolvedValueOnce({
+        success: false,
+        error: "email_required",
+        redirectTo: "/recipes",
+      });
+      const cookie = await storedCookie("github");
+      const request = new Request("https://spoonjoy.app/auth/github/callback?state=state&code=c", {
+        headers: { Cookie: cookie },
+      });
+
+      const response = await handleGitHubCallback(request, context);
+
+      expect(response.headers.get("Location")).toBe("/login?oauthError=email_required");
+      expect(socialCallbackEvents().at(-1)).toMatchObject({
+        properties: {
+          provider: "github",
+          error_code: "email_required",
+          phase: "link_account",
+          failure_kind: "missing_email",
+          retryable: false,
+        },
       });
     });
 

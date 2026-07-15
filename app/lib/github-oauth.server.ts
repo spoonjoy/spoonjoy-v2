@@ -5,16 +5,27 @@
  * only have GitHub OAuth records and no password/passkey/Apple login path.
  */
 
-import { GitHub } from "arctic";
+import {
+  ArcticFetchError,
+  GitHub,
+  UnexpectedErrorResponseBodyError,
+  UnexpectedResponseError,
+} from "arctic";
 import type { GitHubOAuthConfig } from "./env.server";
 import type { AuthVerifyCapture } from "./auth-telemetry.server";
+import {
+  OAuthProviderCallError,
+  fetchOAuthProviderJson,
+  isRetryableProviderStatus,
+  withOAuthProviderTimeout,
+  type OAuthProviderFailureKind,
+} from "./oauth-provider-call.server";
 
 /**
  * Optional capture callback threaded in by the callback-route orchestration.
  * Lets a provider outage (token exchange, /user or /user/emails non-2xx,
- * network) be captured with the upstream status before it is flattened to a
- * generic `userinfo_error`/`email_required`, without coupling this helper to
- * the PostHog config.
+ * network) be captured with its truthful failure class and upstream status,
+ * without coupling this helper to the PostHog config.
  */
 export type AuthVerifyCaptureFn = (input: AuthVerifyCapture) => void;
 
@@ -37,6 +48,8 @@ export interface GitHubCallbackResult {
   githubUser?: GitHubUser;
   error?: string;
   message?: string;
+  failureKind?: OAuthProviderFailureKind;
+  retryable?: boolean;
 }
 
 interface GitHubUserResponse {
@@ -71,48 +84,69 @@ function isOAuthRequestError(error: unknown): boolean {
 }
 
 function isUnexpectedOAuthResponseError(error: unknown): boolean {
-  return error instanceof Error && (
-    error.name === "UnexpectedResponseError" ||
-    error.name === "UnexpectedErrorResponseBodyError"
+  return (
+    error instanceof UnexpectedResponseError ||
+    error instanceof UnexpectedErrorResponseBodyError ||
+    (error instanceof Error &&
+      (error.name === "UnexpectedResponseError" ||
+        error.name === "UnexpectedErrorResponseBodyError"))
   );
 }
 
 function isNetworkError(error: unknown): boolean {
-  return error instanceof Error && (
-    error.message.includes("fetch") ||
-    error.message.includes("network") ||
-    error.name === "TypeError"
+  return (
+    error instanceof ArcticFetchError ||
+    (error instanceof Error &&
+      (error.message.includes("fetch") ||
+        error.message.includes("network") ||
+        error.name === "TypeError"))
   );
+}
+
+function errorStatus(error: unknown): number | undefined {
+  if (!(error instanceof Error) || !("status" in error)) return undefined;
+  return typeof error.status === "number" ? error.status : undefined;
+}
+
+function providerCallFailureResult(
+  error: unknown,
+  capture?: AuthVerifyCaptureFn,
+): GitHubCallbackResult | null {
+  if (!(error instanceof OAuthProviderCallError)) return null;
+
+  capture?.({
+    error: error.originalError ?? error,
+    phase: error.phase,
+    httpStatus: error.httpStatus,
+    failureKind: error.failureKind,
+    retryable: error.retryable,
+  });
+  return {
+    success: false,
+    error: error.code,
+    message: error.message,
+    failureKind: error.failureKind,
+    retryable: error.retryable,
+  };
 }
 
 async function fetchGitHubJson<T>(
   url: string,
   accessToken: string,
-  phase: AuthVerifyCapture["phase"],
-  capture?: AuthVerifyCaptureFn,
-): Promise<T | null> {
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${accessToken}`,
-      "User-Agent": "Spoonjoy",
-      "X-GitHub-Api-Version": "2022-11-28",
+): Promise<T> {
+  return fetchOAuthProviderJson<T>(
+    url,
+    {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${accessToken}`,
+        "User-Agent": "Spoonjoy",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
     },
-  });
-
-  if (!response.ok) {
-    // The non-2xx status + body are otherwise discarded (we just return null).
-    // Capture the upstream status so a GitHub outage is distinguishable from a
-    // user who simply has no verified email.
-    capture?.({
-      error: new Error(`GitHub ${url} responded ${response.status}`),
-      phase,
-      httpStatus: response.status,
-    });
-    return null;
-  }
-
-  return (await response.json()) as T;
+    "userinfo",
+    `GitHub ${url}`,
+  );
 }
 
 function primaryVerifiedEmail(emails: GitHubEmailResponse[]): string | null {
@@ -133,6 +167,8 @@ export async function verifyGitHubCallback(
       success: false,
       error: "invalid_state",
       message: "Missing state parameter",
+      failureKind: "client",
+      retryable: false,
     };
   }
 
@@ -141,46 +177,30 @@ export async function verifyGitHubCallback(
       success: false,
       error: "invalid_code",
       message: "Missing authorization code",
+      failureKind: "client",
+      retryable: false,
     };
   }
 
   try {
     const github = new GitHub(config.clientId, config.clientSecret, redirectUri);
-    const tokens = await github.validateAuthorizationCode(callbackData.code);
+    const tokens = await withOAuthProviderTimeout(
+      github.validateAuthorizationCode(callbackData.code),
+      "token_exchange",
+    );
     const accessToken = tokens.accessToken();
 
     const profile = await fetchGitHubJson<GitHubUserResponse>(
       "https://api.github.com/user",
       accessToken,
-      "userinfo",
-      capture,
     );
-    if (!profile) {
-      return {
-        success: false,
-        error: "userinfo_error",
-        message: "Failed to fetch user info from GitHub",
-      };
-    }
 
     let email = profile.email ?? null;
     if (!email) {
       const emails = await fetchGitHubJson<GitHubEmailResponse[]>(
         "https://api.github.com/user/emails",
         accessToken,
-        "userinfo",
-        capture,
       );
-      if (!emails) {
-        // Note: `email_required` is misleading — it is returned when the emails
-        // API CALL itself failed (captured above with the upstream status), not
-        // because the user genuinely lacks a verified email.
-        return {
-          success: false,
-          error: "email_required",
-          message: "Unable to read a verified email address from GitHub",
-        };
-      }
       email = primaryVerifiedEmail(emails);
     }
 
@@ -196,21 +216,57 @@ export async function verifyGitHubCallback(
       },
     };
   } catch (error) {
-    if (isOAuthRequestError(error) || isUnexpectedOAuthResponseError(error)) {
-      capture?.({ error, phase: "token_exchange" });
+    const providerFailure = providerCallFailureResult(error, capture);
+    if (providerFailure) return providerFailure;
+
+    if (isOAuthRequestError(error)) {
+      capture?.({
+        error,
+        phase: "token_exchange",
+        failureKind: "client",
+        retryable: false,
+      });
       return {
         success: false,
         error: "oauth_error",
-        message: error instanceof Error && error.message ? error.message : "OAuth error occurred",
+        message:
+          error instanceof Error && error.message
+            ? error.message
+            : "OAuth error occurred",
+        failureKind: "client",
+        retryable: false,
       };
     }
 
+    if (isUnexpectedOAuthResponseError(error)) {
+      const status = errorStatus(error);
+      const upstream = new OAuthProviderCallError(
+        "upstream_error",
+        "upstream",
+        status === undefined || isRetryableProviderStatus(status),
+        "token_exchange",
+        status === undefined
+          ? "GitHub token exchange returned an invalid response"
+          : `GitHub token exchange responded ${status}`,
+        status,
+        error,
+      );
+      return providerCallFailureResult(upstream, capture)!;
+    }
+
     if (isNetworkError(error)) {
-      capture?.({ error, phase: "token_exchange" });
+      capture?.({
+        error,
+        phase: "token_exchange",
+        failureKind: "network",
+        retryable: true,
+      });
       return {
         success: false,
         error: "network_error",
         message: "Network error occurred while validating GitHub OAuth",
+        failureKind: "network",
+        retryable: true,
       };
     }
 
