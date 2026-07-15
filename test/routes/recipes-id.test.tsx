@@ -366,6 +366,48 @@ describe("Recipes $id Route", () => {
       expect(result.coverProvenanceLabel).toBe("Editorial photo");
     });
 
+    it("returns active-cover processing data while editorialization is pending", async () => {
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const setCookieHeader = await sessionStorage.commitSession(session);
+      const headers = new Headers({ Cookie: setCookieHeader.split(";")[0] });
+      const activeCover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "/photos/detail-raw.jpg",
+          sourceImageUrl: "/photos/detail-raw.jpg",
+          sourceType: "spoon",
+          status: "processing",
+          generationStatus: "processing",
+          createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: {
+          activeCoverId: activeCover.id,
+          activeCoverVariant: "image",
+          coverMode: "manual",
+        },
+      });
+
+      const result = await loader({
+        request: new UndiciRequest(`http://localhost:3000/recipes/${recipeId}`, { headers }),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(result.coverImageUrl).toBe("/photos/detail-raw.jpg");
+      expect(result.coverProvenanceLabel).toBe("Original photo");
+      expect(result.activeCoverProcessing).toEqual({
+        coverId: activeCover.id,
+        activeVariant: "image",
+        targetVariant: "stylized",
+        status: "processing",
+        generationStatus: "processing",
+      });
+    });
+
     it("returns owner-only cover history with active variant and provenance labels", async () => {
       const session = await sessionStorage.getSession();
       session.set("userId", testUserId);
@@ -3111,6 +3153,117 @@ describe("Recipes $id Route", () => {
       render(<PublicStub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findAllByRole("heading", { name: "Cover History Recipe" });
       expect(screen.queryByTestId("recipe-cover-history")).toBeNull();
+    });
+
+    it("renders processing state over the active original cover and owner photo studio", async () => {
+      const user = userEvent.setup();
+      const ownerData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Processing Cover Recipe",
+          description: null,
+          servings: null,
+          coverImageUrl: "/photos/raw-spoon.jpg",
+          chef: { id: "user-1", username: "testchef" },
+          steps: [],
+        },
+        coverImageUrl: "/photos/raw-spoon.jpg",
+        coverProvenanceLabel: "Original photo",
+        activeCoverProcessing: {
+          coverId: "cover-processing",
+          activeVariant: "image",
+          targetVariant: "stylized",
+          status: "processing",
+          generationStatus: "processing",
+        },
+        isOwner: true,
+        coverHistory: [],
+      };
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader: () => ownerData,
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+      await screen.findByRole("heading", { name: "Processing Cover Recipe" });
+      expect(screen.getByAltText("Photo of Processing Cover Recipe")).toHaveAttribute("src", "/photos/raw-spoon.jpg");
+      expect(screen.getByTestId("cover-provenance-badge")).toHaveTextContent("Original photo");
+      expect(screen.getByRole("status")).toHaveTextContent("Editorializing cover");
+
+      await user.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
+      expect(await screen.findByRole("heading", { name: "Photo studio" })).toBeInTheDocument();
+      expect(screen.getAllByRole("status").map((status) => status.textContent)).toContain("Editorializing cover");
+    });
+
+    it("polls while the active cover is processing and swaps to the editorial variant", async () => {
+      const intervalCallbacks: Array<() => void> = [];
+      const setIntervalSpy = vi.spyOn(globalThis, "setInterval").mockImplementation((callback: TimerHandler) => {
+        intervalCallbacks.push(callback as () => void);
+        return 1 as unknown as ReturnType<typeof setInterval>;
+      });
+      const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval").mockImplementation(() => undefined);
+      try {
+        let isReady = false;
+        const processingData = {
+          recipe: {
+            id: "recipe-1",
+            title: "Autoswap Recipe",
+            description: null,
+            servings: null,
+            coverImageUrl: "/photos/raw-spoon.jpg",
+            chef: { id: "user-1", username: "testchef" },
+            steps: [],
+          },
+          coverImageUrl: "/photos/raw-spoon.jpg",
+          coverProvenanceLabel: "Original photo",
+          activeCoverProcessing: {
+            coverId: "cover-processing",
+            activeVariant: "image",
+            targetVariant: "stylized",
+            status: "processing",
+            generationStatus: "processing",
+          },
+          isOwner: true,
+          coverHistory: [],
+        };
+        const readyData = {
+          ...processingData,
+          coverImageUrl: "/photos/editorial-spoon.jpg",
+          coverProvenanceLabel: "Editorial photo",
+          activeCoverProcessing: null,
+        };
+        const loader = vi.fn(() => (isReady ? readyData : processingData));
+        const Stub = createTestRoutesStub([
+          {
+            path: "/recipes/:id",
+            Component: RecipeDetail,
+            loader,
+          },
+        ]);
+
+        render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+        await screen.findByRole("heading", { name: "Autoswap Recipe" });
+        expect(screen.getByAltText("Photo of Autoswap Recipe")).toHaveAttribute("src", "/photos/raw-spoon.jpg");
+        const initialLoaderCalls = loader.mock.calls.length;
+        expect(intervalCallbacks).toHaveLength(1);
+
+        isReady = true;
+        await act(async () => {
+          intervalCallbacks[0]();
+          await Promise.resolve();
+        });
+
+        expect(loader.mock.calls.length).toBeGreaterThan(initialLoaderCalls);
+        expect(screen.getByAltText("Photo of Autoswap Recipe")).toHaveAttribute("src", "/photos/editorial-spoon.jpg");
+        expect(screen.queryByText("Editorializing cover")).toBeNull();
+      } finally {
+        setIntervalSpy.mockRestore();
+        clearIntervalSpy.mockRestore();
+      }
     });
 
     it("should not render description when null", async () => {

@@ -88,6 +88,22 @@ describe("RecipePhotoStudio", () => {
     expect((captured!.get("photo") as File).name).toBe("cover-only.png");
   });
 
+  it("shows when the active original cover is being editorialized", async () => {
+    renderStudio({
+      hasActiveCover: true,
+      activeCoverProcessing: {
+        coverId: "cover-processing",
+        activeVariant: "image",
+        targetVariant: "stylized",
+        status: "processing",
+        generationStatus: "processing",
+      },
+    });
+
+    expect(await screen.findByRole("heading", { name: "Photo studio" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Editorializing cover");
+  });
+
   it("blocks empty submits and rejects invalid photo files inline", async () => {
     const user = userEvent.setup({ applyAccept: false });
     let captured: FormData | null = null;

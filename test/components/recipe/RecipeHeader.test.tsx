@@ -130,6 +130,27 @@ describe('RecipeHeader', () => {
       expect(screen.queryByText('Editorialized chef photo')).toBeNull()
     })
 
+    it('keeps the original active image visible while the editorial cover is processing', () => {
+      renderWithRouter(
+        <RecipeHeader
+          {...defaultProps}
+          coverImageUrl="/photos/raw-spoon.jpg"
+          coverProvenanceLabel="Original photo"
+          activeCoverProcessing={{
+            coverId: 'cover-processing',
+            activeVariant: 'image',
+            targetVariant: 'stylized',
+            status: 'processing',
+            generationStatus: 'processing',
+          }}
+        />
+      )
+
+      expect(screen.getByAltText('Photo of Test Recipe')).toHaveAttribute('src', '/photos/raw-spoon.jpg')
+      expect(screen.getByTestId('cover-provenance-badge')).toHaveTextContent('Original photo')
+      expect(screen.getByRole('status')).toHaveTextContent('Editorializing cover')
+    })
+
     it('uses a high-contrast overlay treatment for cover provenance on bright photos', () => {
       renderWithRouter(
         <RecipeHeader
