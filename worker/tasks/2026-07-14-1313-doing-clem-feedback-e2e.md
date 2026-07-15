@@ -112,7 +112,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Helper coverage is 100%; targeted cross-contract suite, typecheck, and build pass.
 
 ### ⬜ Unit 4a: REST Scaling Projection Tests
-**What**: Add red tests for exactly one unsigned decimal `scaleFactor`, `0.25..50`, invalid/multiple/nonfinite forms, required numeric quantities, quantity shortest-decimal/scientific-form conversion, exact base-10 multiplication, below/at/above half ties with away-from-zero behavior at six decimals, trailing-zero JSON number behavior, negative-zero normalization, immutable recipe data, and unchanged list/search behavior.
+**What**: Add red tests for exactly one unsigned decimal `scaleFactor`, `0.25..50`, invalid/multiple/nonfinite forms, required numeric quantities, shortest-decimal/scientific expansion, exact base-10 multiplication, below/at/above half ties away from zero, trailing-zero JSON numbers, negative zero, Number.MAX_VALUE boundary and `1e308*50` overflow `400 validation_error` message/no-null, immutable recipe data, and unchanged list/search behavior.
 **Output**: `test/lib/api-v1-recipe-scaling.server.test.ts`, `test/routes/api-v1-recipes.test.ts`, `test/lib/api-v1-openapi.server.test.ts`, `test/routes/api-v1-openapi.test.ts`, `test/scripts/generate-api-playground.test.ts`, `test/routes/developers-playground.test.tsx`.
 **Acceptance**: Named tests fail only on absent scaling projection/validation.
 
@@ -157,7 +157,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: New modules are 100% covered with no server-only client import.
 
 ### ⬜ Unit 7a: Cook Progress State Tests
-**What**: Add red pure tests for exact revision-zero defaults/equal timestamps, all four operation variants, 1..64 bounds, canonical parsed-payload hash equivalence/difference, ordered duplicate last-wins, whole-request invalid-operation rejection, scale bounds, same-value accepted revision/monotonic-time increment, stale responses, terminal idempotency/conflict, accepted-only replay-before-conflict ledger, 24-hour/256-entry capacity, hash conflict, and client rebase order.
+**What**: Add red pure tests for revision-zero defaults/equal timestamps, operations/bounds, canonical payload hash, duplicate last-wins, whole-request rejection, scale, same-value monotonic increment, stale/terminal rules, accepted-only replay ledger while current, atomic replacement/purge conversion to non-content 410 tombstones, 24-hour expiry/natural bound, hash conflict, and client rebase order.
 **Output**: `test/lib/cook-session-state.test.ts`.
 **Acceptance**: Tests fail because state module is absent.
 
@@ -247,7 +247,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: New projection code is 100% covered; no RecipeSpoon/notification integration appears.
 
 ### ⬜ Unit 13a: Cook Purge Fence Tests
-**What**: Add real Workers red tests for exact 202/body and bodyless-204 DELETE behavior; current-attempt-first precedence where an old last-purged id returns 409 while newer current exists; exact owner-only `/residue` pre/post state and no content fields; matching/stale/unknown/repeated ids; PURGING rejection for every other HTTP/upgrade; code-4001 closure; FIFO barrier; old-terminal/new-attempt/purge order; delayed start replay 410; newer-attempt isolation; atomic content deletion; and separate seven injected failure boundaries from planning.
+**What**: Add real Workers red tests for exact DELETE/precedence/residue/PURGING/socket/FIFO behavior; old-terminal/new-attempt/purge; delayed start/progress/terminal replays as correct replaced/purged 410 tombstones with no response content; natural tombstone bound/expiry; newer-attempt isolation; atomic content deletion/conversion; and separate seven injected failure boundaries.
 **Output**: `test/workers-runtime/cook-session-purge.test.ts`, `test/workers-runtime/app-cook-session-http.test.ts`, `test/workers-runtime/app-cook-session-websocket.test.ts`, `test/workers-runtime/cook-session-do-websocket.test.ts`.
 **Acceptance**: Tests fail because purge state machine is absent.
 
@@ -277,12 +277,12 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Adapter is 100% covered and commands pass.
 
 ### ⬜ Unit 15a: Cook Client Reconciliation Tests
-**What**: Add red hook/controller tests for exact `spoonjoy-auth-cook:v1:<userId>:<recipeId>` schema/parser, embedded identity isolation/logout cleanup, unsent same-target remove+append coalescing, 256 overflow, FIFO 64 batches, mutation assignment/persistence, optimistic reapply, higher/lower/equal-identical/equal-divergent/different-attempt WebSocket snapshots, received-409 fresh-UUID rebase, network-uncertain original replay, and exact stale_attempt/attempt_replaced/attempt_purged/401/429/network dispositions; cover anonymous adoption and storage failures.
+**What**: Add red hook/controller tests for exact authenticated `{pending,inFlight}` record parser/isolation/logout, pending coalescing/256 overflow, one inFlight formed from first 64 with one id/revision, no cross-batch regrouping, write-before-optimism/send, failure reversion/blocking and accepted-response persistence failure replay safety, snapshot reconciliation, stale/network/error dispositions; add anonymous v2 fingerprint schema, new-v2 writing, v1 local-only continuation/non-adoption, mismatched-v2 reset, adoption clear timing, and storage failures.
 **Output**: `test/hooks/use-cook-session.test.ts`, `test/routes/recipes-id.test.tsx`.
 **Acceptance**: Tests fail because hook/controller is absent.
 
 ### ⬜ Unit 15b: Cook Client Reconciliation Implementation
-**What**: Implement `useCookSession`; retain anonymous local parser and separate authenticated cache/operation queue.
+**What**: Implement `useCookSession`; add anonymous v2 parser/writer while retaining v1 local-only behavior; implement write-gated authenticated pending/single-inFlight state machine and exact reconciliation/error rules.
 **Output**: `app/hooks/useCookSession.ts`, `app/routes/recipes.$id.tsx`.
 **Acceptance**: Unit 15a passes; client time never overrides server; anonymous record clears after any start outcome; queue clears only after acceptance.
 
@@ -602,12 +602,12 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: New lifecycle smoke logic is 100% covered and commands pass.
 
 ### ⬜ Unit 31a: Smoke Purge And Cleanup Tests
-**What**: Add red tests for `finally` cleanup; async DELETE retry with 500ms exponential delay capped 5s, max 20 requests and 90s deadline, to bodyless 204; exact post-purge `/residue` zero-count response; target-aware Wrangler attempt count zero; user deletion only after proof; and separately injected HTTP failure, deadline/attempt exhaustion, DO/D1 inspection failure/nonzero row, user-delete failure, combined failure, and terminal artifact fields.
+**What**: Add red fake-clock tests for exact cleanup state machine: deadline before request/sleep, per-request abort, 204 success, 202/network/408/425/429/5xx retry, nonnegative-integer delta-seconds Retry-After parsing with malformed/date values ignored, 409 stale-attempt target switch only with latest snapshot, fatal 401/403/404/other-4xx/unexpected-2xx/409-without-snapshot, 500ms exponential cap-5s, max 20 requests/90s, no final over-deadline sleep, post-204 residue/D1 zero proof, user delete only after proof, and complete fatal/exhaustion artifacts.
 **Output**: `test/scripts/smoke-live-cleanup.test.ts`, `test/scripts/smoke-live-helpers.test.ts`.
 **Acceptance**: Tests fail because cleanup reliability is absent.
 
 ### ⬜ Unit 31b: Smoke Purge And Cleanup Implementation
-**What**: Purge every current attempt using the exact retry schedule/deadline, call owner `/residue`, run environment-safe Wrangler attempt-row count (`--env qa` for QA, no env for production; always remote), require all zeroes, then delete the user. Exhaustion records attemptId, every status/body/timestamp/delay, last residue result/error, D1 result/error, screenshot/log paths, and leaves the user for subsequent cleanup retry rather than hiding DO residue.
+**What**: At start set deadline `now+90s`; before each request fail if expired; abort each request after `min(10s, remaining)`. Count every request. On 204 proceed to proof. Retry network, 202, 408, 425, 429, and 5xx; parse Retry-After only as nonnegative integer delta-seconds and ignore malformed or HTTP-date values; delay is `max(parsedRetryAfterMsOrZero, min(500*2^(attempt-1),5000))`; fail before sleep when attempt 20 or `now+delay >= deadline`. On 409 stale-attempt with latest snapshot, record/switch target and continue same counters; all other 409 and 401/403/404/other 4xx/unexpected 2xx are fatal. On success require owner residue and environment-safe remote D1 count zero, then delete user. Fatal/exhaustion still attempt inspections and record target history, every status/body/time/delay, errors/results, screenshot/log paths; leave user for subsequent cleanup retry rather than hiding DO residue.
 **Output**: `scripts/smoke-live.mjs`, `scripts/smoke-live-helpers.mjs`.
 **Acceptance**: Unit 31a passes; failed smoke still cleans and reports; only documented non-content tombstone may remain before user cleanup.
 
@@ -665,3 +665,4 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 - 2026-07-15 Ambiguity Round 1 fixed the full cook wire protocol, revision/ledger/retry/purge transitions, canonical hashing, saved pagination/mutation envelopes, tag normalization/filter semantics, baseline policy, reviewer definition, and exact local/QA/CI/production commands.
 - 2026-07-15 Ambiguity Round 2 fixed exact-SHA gate deadlock, rejected mutation/rebase semantics, terminal restart, projection schema, recipe visibility, principal-scoped saves, typed adoption, concurrent shopping coordination, remote residue proof, request ids/messages, decimal ties, and tag casing reset.
 - 2026-07-15 Ambiguity Round 3 fixed transactional shopping retry/oracles, canonical cook mutations/defaults/methods/WebSockets, authenticated offline reconciliation, stale-card repair ownership, atomic tag replacement, DELETE/smoke retry precedence, and health-based deployment SHA attestation.
+- 2026-07-15 Ambiguity Round 4 fixed post-replacement/purge mutation tombstones, single-inFlight offline batching and storage-write safety, fingerprinted anonymous v2 with legacy isolation, scaling overflow, and exact cleanup retry classification/deadline order.
