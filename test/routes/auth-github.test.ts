@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { sessionStorage } from "~/lib/session.server";
-import { commitOAuthStartSession } from "~/lib/oauth-route.server";
+import { commitOAuthStartSession, readOAuthStartSession } from "~/lib/oauth-route.server";
 
 const mocks = vi.hoisted(() => ({
   createGitHubAuthorizationURL: vi.fn(() => new URL("https://github.com/login/oauth/authorize?state=mock-state")),
@@ -65,6 +65,31 @@ describe("GitHub OAuth routes", () => {
     expect(response.headers.get("Location")).toContain("github.com");
   });
 
+  it("preserves a provider-hinted authorize handoff in the signed GitHub state session", async () => {
+    const returnTo = "/oauth/authorize?client_id=cm_native&state=state_0123456789abcdef&provider=github";
+    const failureRedirect = `/login?redirectTo=${encodeURIComponent(returnTo)}`;
+    const request = new Request(
+      `https://spoonjoy.app/auth/github?redirectTo=${encodeURIComponent(returnTo)}&failureRedirect=${encodeURIComponent(failureRedirect)}`,
+    );
+    const response = await loader({ request, context: { cloudflare: { env: githubEnv } }, params: {} } as any);
+    const setCookie = response.headers.get("Set-Cookie") ?? "";
+    const stored = await readOAuthStartSession(
+      new Request("https://spoonjoy.app/auth/github/callback", { headers: { Cookie: cookieHeader(setCookie) } }),
+      "github",
+    );
+
+    expect(mocks.createGitHubAuthorizationURL).toHaveBeenCalledWith(
+      { clientId: "github-client", clientSecret: "github-secret" },
+      "https://spoonjoy.app/auth/github/callback",
+      stored?.state,
+    );
+    expect(stored).toMatchObject({
+      redirectTo: returnTo,
+      failureRedirect,
+      linking: false,
+    });
+  });
+
   it("redirects to OAuth error when GitHub env is missing", async () => {
     const request = new Request("https://spoonjoy.app/auth/github", {
       headers: { Referer: "https://spoonjoy.app/signup" },
@@ -94,6 +119,25 @@ describe("GitHub OAuth routes", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("Location")).toBe("/login?oauthError=access_denied");
+  });
+
+  it("returns provider cancellation to login with the authorize retry intact", async () => {
+    const returnTo = "/oauth/authorize?client_id=cm_native&state=state_0123456789abcdef&provider=github";
+    const failureRedirect = `/login?redirectTo=${encodeURIComponent(returnTo)}`;
+    const cookie = await commitOAuthStartSession(new Request("https://spoonjoy.app/auth/github"), "github", {
+      state: "state",
+      redirectTo: returnTo,
+      failureRedirect,
+      linking: false,
+    });
+    const request = new Request("https://spoonjoy.app/auth/github/callback?error=access_denied", {
+      headers: { Cookie: cookieHeader(cookie) },
+    });
+    const response = await callbackLoader({ request, context: { cloudflare: { env: githubEnv } }, params: {} } as any);
+
+    expect(response.headers.get("Location")).toBe(
+      `/login?redirectTo=${encodeURIComponent(returnTo)}&oauthError=access_denied`,
+    );
   });
 
   it("rejects callbacks with missing stored state", async () => {
