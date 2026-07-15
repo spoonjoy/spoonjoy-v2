@@ -115,6 +115,49 @@ describe("/mcp route", () => {
     expect(JSON.parse(callBody.result.content[0].text)).toHaveProperty("shoppingList");
   });
 
+  it("round-trips generated placeholder cover results through tools/call", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail("placeholder-route"), username: faker.internet.username() } });
+    const recipe = await db.recipe.create({
+      data: {
+        title: `MCP Route Placeholder ${faker.string.alphanumeric(6)}`,
+        description: "Route-level placeholder test",
+        chefId: user.id,
+      },
+    });
+    const { token } = await createApiCredential(db, user.id, "route cover token", { scopes: ["recipes:read", "kitchen:write"] });
+
+    const response = await action(routeArgs(rpc(
+      {
+        jsonrpc: "2.0",
+        id: 6,
+        method: "tools/call",
+        params: {
+          name: "generate_recipe_cover_placeholder",
+          arguments: {
+            recipeId: recipe.id,
+            promptAddition: "brighter greens",
+            activateWhenReady: true,
+            idempotencyKey: "route-placeholder-cover",
+          },
+        },
+      },
+      { Authorization: `Bearer ${token}` },
+    )));
+    expect(response.status).toBe(200);
+    const body = await response.json() as { result: { content: { text: string }[] } };
+    expect(body).toMatchObject({ result: { content: [{ text: expect.any(String) }] } });
+    expect(JSON.parse(body.result.content[0].text)).toMatchObject({
+      createdCover: {
+        recipeId: recipe.id,
+        sourceType: "ai-placeholder",
+        generationStatus: "failed",
+        failureReason: expect.stringContaining("missing_image_provider_config"),
+      },
+      generationStatus: "failed",
+      mutation: { idempotencyKey: "route-placeholder-cover", replayed: false },
+    });
+  });
+
   it("accepts OAuth tokens bound to /mcp and rejects tokens bound elsewhere", async () => {
     const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
     const matching = await createApiCredential(db, user.id, "MCP OAuth token", {
