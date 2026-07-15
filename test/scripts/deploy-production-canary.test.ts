@@ -445,6 +445,29 @@ describe("production canary release orchestration", () => {
     }));
   });
 
+  it("accepts a healthy legacy restore only after repeated exact control-plane observations", async () => {
+    const smokeCommand = `pnpm run smoke:mcp:oauth -- --out mcp-oauth-canary-artifacts --worker-version-id ${CANDIDATE_VERSION}`;
+    const runCommand = successfulRunner({
+      [smokeCommand]: new Error("canary failed"),
+      "pnpm exec wrangler deployments list --json": [
+        deploymentPayload(PREVIOUS_VERSION, "2026-07-15T00:00:00Z"),
+        deploymentPayload(CANDIDATE_VERSION),
+        deploymentPayload(PREVIOUS_VERSION),
+        deploymentPayload(PREVIOUS_VERSION),
+      ],
+    });
+    const deps = releaseDeps(runCommand);
+    deps.readPublicWorkerVersion.mockResolvedValue(null);
+
+    await expect(runProductionCanaryRelease(deps)).rejects.toThrow("canary failed");
+
+    expect(deps.sleep).toHaveBeenCalledTimes(2);
+    expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(expect.objectContaining({
+      status: "rolled_back",
+      previousVersionId: PREVIOUS_VERSION,
+    }));
+  });
+
   it("does not create a rollback deployment when staging itself fails", async () => {
     const stageCommand = `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@0% ${PREVIOUS_VERSION}@100% -y --message Stage ${RELEASE_SHA} for canary`;
     const runCommand = successfulRunner({ [stageCommand]: new Error("stage failed") });
@@ -1155,6 +1178,9 @@ describe("release artifact and CLI boundary", () => {
 
     await expect(readPublicWorkerVersion("https://spoonjoy.app", async () => (
       new Response("{}", { headers: { "X-Spoonjoy-Worker-Version": "latest" }, status: 200 })
+    ))).rejects.toThrow(/valid Worker version/i);
+    await expect(readPublicWorkerVersion("https://spoonjoy.app", async () => (
+      new Response("{}", { status: 200 })
     ))).resolves.toBeNull();
     await expect(readPublicWorkerVersion("https://spoonjoy.app", async () => (
       new Response("nope", { status: 503 })
