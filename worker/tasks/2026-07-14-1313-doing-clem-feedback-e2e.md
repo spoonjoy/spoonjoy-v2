@@ -556,7 +556,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: No dock churn, overlap, crowding, or ready visual issue remains.
 
 ### ⬜ Unit 29: Feedback Boundary And Disposition Audit
-**What**: Run scoped existing navigation/repo-hygiene/developer-doc tests, inspect the final diff for import UI/AI/Pebble/dock changes, and map every feedback-source row to code/test evidence or its explicit rejection.
+**What**: Run scoped existing navigation/repo-hygiene/developer-doc tests, inspect the completed product-feature diff from Units 1–28 for import UI/AI/Pebble/dock changes, and map every feedback-source row to code/test evidence or its explicit rejection. Units 30–31 touch smoke/cleanup infrastructure only.
 **Output**: `unit-29-feedback-audit.md`; logs for `test/components/navigation/mobile-nav.test.tsx`, `test/repo-hygiene.test.ts`, `test/docs/developer-platform-docs.test.ts`, and `test/docs/developer-platform-guide.test.ts`.
 **Acceptance**: Tests pass; no source item is missing/silently deferred; no first-party import UI, AI tag surface, Pebble contract, or unproven dock edit exists.
 
@@ -598,22 +598,22 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 ### ⬜ Unit 33: QA Deploy And Cross-Device Gate
 **What**: Inspect QA residue, run `pnpm deploy:qa`, QA readiness/web/API/two-client smoke, purge/cleanup, and post-run residue inspection.
 **Output**: `unit-33-qa.md`, deploy version/URL, smoke screenshots/logs, cleanup logs.
-**Acceptance**: QA deploy/smokes pass before PR merge and leave no disposable attempt/D1 data.
+**Acceptance**: QA deploy/smokes pass for the recorded current branch HEAD SHA before PR merge and leave no disposable attempt/D1 data.
 
 ### ⬜ Unit 34: PR Creation And Fresh Review
-**What**: Invoke `work-merger`, sync origin/main, resolve conflicts from task docs, open ready PR, and run fresh implementation/design/test/security reviews.
+**What**: Invoke `work-merger`, sync origin/main, resolve conflicts from task docs, open ready PR, and run fresh implementation/design/test/security reviews. Any code, migration, config, UI, or smoke behavior change after Unit 33 reopens and reruns Units 32–33 before this unit may complete.
 **Output**: PR URL and `unit-34-pr-review.md`.
 **Acceptance**: PR exists with no unresolved BLOCKER/MAJOR review finding; all fixes are committed/pushed.
 
 ### ⬜ Unit 35: CI Convergence
-**What**: Wait for every PR check including Workers coverage/e2e; diagnose/fix failures and rerun reviews for substantive repairs.
+**What**: Wait for every PR check including Workers coverage/e2e; diagnose/fix failures and rerun reviews for substantive repairs. Any code, migration, config, UI, or smoke behavior repair reopens and reruns Units 32–33, then refreshes PR review and CI for the new head.
 **Output**: Green check URLs and `unit-35-ci.md`.
 **Acceptance**: Every required check is green for current head SHA with no unresolved review comment.
 
 ### ⬜ Unit 36: Merge
 **What**: Reconfirm merge readiness, merge the ready PR, and record exact merge SHA without manual production deployment.
 **Output**: Merge evidence and `unit-36-merge.md`.
-**Acceptance**: PR is merged to main and exact SHA is recorded.
+**Acceptance**: Current PR head SHA exactly equals the SHA recorded by the latest successful Unit 33 QA gate; every required check/review is green for that head; PR is merged and exact merge SHA recorded.
 
 ### ⬜ Unit 37: Production Deploy, Smoke, Cleanup, And Handoff
 **What**: Wait for automatic Production Deploy on exact merge SHA; then run readiness, production web/API/two-client smoke, purge/cleanup, continuation scan, Desk/git/worktree cleanup, and Slugger notification.
