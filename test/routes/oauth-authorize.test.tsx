@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { render, screen } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
@@ -9,6 +9,19 @@ import { db } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestUser } from "../utils";
+
+const getOAuthClientCalls = vi.hoisted(() => vi.fn());
+
+vi.mock("~/lib/oauth-server.server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("~/lib/oauth-server.server")>();
+  return {
+    ...actual,
+    getOAuthClient: async (...args: Parameters<typeof actual.getOAuthClient>) => {
+      getOAuthClientCalls(...args);
+      return actual.getOAuthClient(...args);
+    },
+  };
+});
 
 // undici's Request preserves the `Cookie` header that happy-dom's global drops.
 const Request = UndiciRequest as unknown as typeof globalThis.Request;
@@ -31,7 +44,10 @@ const redirectUri = "https://claude.ai/cb";
 const nativeRedirectUri = "https://spoonjoy.app/oauth/callback";
 
 describe("oauth.authorize route", () => {
-  beforeEach(async () => { await cleanupDatabase(); });
+  beforeEach(async () => {
+    getOAuthClientCalls.mockClear();
+    await cleanupDatabase();
+  });
   afterEach(async () => { await cleanupDatabase(); });
 
   async function setup(options: {
@@ -86,6 +102,14 @@ describe("oauth.authorize route", () => {
     expect(response.headers.get("Location")).toBe(
       `/login?redirectTo=${encodeURIComponent(`/oauth/authorize?${query}`)}`,
     );
+  });
+
+  it("does not perform an extra client lookup for the no-hint login redirect", async () => {
+    const { query } = await setup();
+
+    await thrownResponse(new Request(`https://spoonjoy.app/oauth/authorize?${query}`));
+
+    expect(getOAuthClientCalls).toHaveBeenCalledTimes(1);
   });
 
   it.each(["google", "github"] as const)(
