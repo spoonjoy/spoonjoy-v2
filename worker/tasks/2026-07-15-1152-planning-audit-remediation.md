@@ -19,12 +19,15 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 - Add direct web and native visual QA coverage for Photo Studio states and nearby responsive surfaces.
 - Remove active Spoonjoy demo identities, credentials, and fixture assumptions from seeds, docs, and end-to-end workflows; require explicit local-only targets and teardown.
 - Remove tracked generated task/QA output from current repository trees and add durable repository-size and artifact guardrails.
+- Privately scan tracked databases, environment backups, and generated evidence for credentials; rotate any confirmed live secret before removal.
 - Add bounded OAuth provider calls, truthful error classification, and migrate Apple callback starts to the clean callback while retaining compatibility during rollout.
 - Make TestFlight release notes build-specific and validate them before publishing.
 - Provide a supported local OAuth test-residue teardown path and leave disposable local data clean.
 - Extract Photo Studio behavior from oversized web and native modules without changing public contracts.
 - Enforce a production CSP after compatibility validation, move My Recipes search work into the database boundary, and expose following content below the public home hero.
 - Restore dependency-advisory visibility with a supported CI scanner.
+- Gate production deployment and TestFlight publishing on successful checks for the exact source SHA, and pin mutable release-tool dependencies where practical.
+- Reconcile runtime environment examples and docs with every deployed OAuth/native-Apple flow.
 - Merge, deploy, publish a new internal TestFlight build, run production/native smoke and visual QA, clean worktrees, and perform a durable continuation scan.
 - Retire Clem's emergency password only after a non-password provider is linked and recovery is verified.
 
@@ -40,12 +43,14 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 - [ ] Native Photo Studio has truthful minimum-click controls, processing/error states, and direct screenshot coverage on supported Apple form factors.
 - [ ] Active seeds, guides, and end-to-end tests contain no fixed Spoonjoy demo identities or reusable demo credentials.
 - [ ] Current web and native trees contain no generated task/QA artifact dumps, and CI rejects future artifact and PR-size regressions.
+- [ ] Tracked databases and environment backups are removed after private secret triage, with any confirmed live credential rotated before cleanup.
 - [ ] OAuth provider calls are bounded and classified accurately; clean Apple callbacks are the default start path with compatibility preserved.
 - [ ] TestFlight release notes are current for the exact build and publishing rejects stale notes.
 - [ ] Local disposable data and OAuth test residue cleanly tear down without touching non-disposable users.
 - [ ] Photo Studio code is split into maintainable service/orchestration boundaries with unchanged REST, MCP, and native public behavior.
 - [ ] Production CSP is enforced, My Recipes search is database-bounded, the home hero reveals following content, and dependency advisory CI is operational.
 - [ ] Web changes are merged and deployed, native changes are merged and available to the internal TestFlight group, and consuming-surface smoke checks pass.
+- [ ] Production deploy and TestFlight publishing require green validation for the exact source SHA and no longer rely on mutable release-tool revisions without a recorded reason.
 - [ ] Clem's emergency password is retired after replacement authentication is verified, or the exact remaining human-only action is durably recorded without blocking independent completion.
 - [ ] All stale task worktrees from this effort and prior Spoonjoy agent runs are safely removed.
 - [ ] 100% test coverage on all new code
@@ -69,6 +74,7 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 - Treat cover editorialization as the default and keep the original image on a Spoon only when Spoon creation is enabled.
 - Replace fixed demo accounts with per-run disposable identities and explicit teardown; keep historical applied migrations immutable.
 - Remove generated evidence from current product trees and store future evidence outside tracked source; do not rewrite shared history as part of ordinary cleanup.
+- Treat the legacy social Apple callback, first-party native OAuth callback, and native Apple identity-token exchange as distinct flows during migration and documentation.
 - Land work in small atomic cross-repo changes, each reviewer-gated, before final deployment and TestFlight verification.
 
 ## Context / References
@@ -76,9 +82,11 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 - Web repository: `/Users/arimendelow/Projects/spoonjoy-v2-audit-remediation`
 - Native repository: `/Users/arimendelow/Projects/spoonjoy-apple-audit-remediation`
 - Project `AGENTS.md` files and Work Suite skills
+- Desk task: `/Users/arimendelow/desk/spoonjoy/audit-remediation/task.md`
 
 ## Notes
 Repo-local `subagents/work-planner.md` and `subagents/work-doer.md` were unavailable, so the current installed Work Suite skills are the execution source.
 
 ## Progress Log
 - 2026-07-15 11:54 Created
+- 2026-07-15 12:02 Added cross-repo artifact, secret-triage, and exact-SHA release-gate findings from independent exploration.

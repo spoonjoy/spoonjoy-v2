@@ -19,7 +19,7 @@ Close every actionable 2026-07-15 shipped-work audit finding across Spoonjoy web
 ## Gate State
 
 - Planning is drafting.
-- Three independent explorers are mapping web, native, and operations details.
+- Native and operations explorers returned concrete findings; the web explorer is being stopped after exceeding its bounded exploration window.
 - Next gate is harsh planning review; human approval is not required under the active delegated autopilot mandate.
 
 ## Next Action
@@ -37,6 +37,8 @@ Commit the initial planning state, incorporate explorer evidence, run harsh revi
 - GitHub CLI 2.86.0 authenticated as `arimendelow`; `jq` 1.7.1 available.
 - Remote heads fetched: web `b22c5fec`, native `bad81b49`.
 - Audit verified production web deployment at `b22c5fec` and TestFlight build 35 from native `bad81b49`.
+- Operations exploration found roughly 57.5 MiB of tracked web task evidence and 296 MiB of tracked native task/evidence roots, including a tracked SQLite database and environment backups requiring private secret triage.
+- Native exploration confirmed the 5 MiB server image limit conflicts with native's raw HEIC/25 MiB staging path and mapped executable test seams for image normalization, single-flight mutation state, provider-specific OAuth, form semantics, screenshot routes, and release metadata.
 
 ## Stop Condition
 
