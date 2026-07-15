@@ -103,14 +103,14 @@ Ship the accepted Clem feedback end to end: correct shopping-list restoration, a
 **Acceptance**: `pnpm exec vitest run test/routes/api-v1-recipes.test.ts test/routes/api-v1-search.test.ts test/routes/api-v1-native-sync.test.ts test/routes/api-v1-recipe-writes.test.ts test/routes/api-v1-cookbooks.test.ts test/lib/api-v1-openapi.server.test.ts test/routes/api-v1-openapi.test.ts test/scripts/generate-api-playground.test.ts test/routes/developers-playground.test.tsx` passes; helper coverage is 100%.
 
 ### ⬜ Unit 4a: Cook Index Migration Tests
-**What**: Add red tests for `CookSessionIndex`, nullable unique `activeKey`, owner/recipe/status/timestamp metadata, terminal history, foreign keys, and exact dual migration files.
+**What**: Add red tests for `CookSessionIndex`, per-attempt UUID rows, nullable unique `activeKey` as projection integrity (not arbitration), owner/recipe/status/timestamp metadata, terminal history, foreign keys, and exact dual migration files.
 **Output**: `test/models/cook-session-index.test.ts`, `test/scripts/migration-0024-cook-session-index.test.ts`, `test/lib/cook-session-index.server.test.ts`.
 **Acceptance**: Targeted tests fail because schema, migration `0024`, and helper are absent.
 
 ### ⬜ Unit 4b: Cook Index Migration Implementation
 **What**: Add the D1/Prisma model and deterministic helper operations for active insert race recovery, owner lookup, projection upsert, terminal transition, owner-only list, and purge.
 **Output**: `prisma/schema.prisma`, `migrations/0024_cook_session_index.sql`, `prisma/migrations/20260715100000_cook_session_index/migration.sql`, `app/lib/cook-session-index.server.ts`.
-**Acceptance**: Unit 4a passes; concurrent create returns one active row; completed/abandoned rows have null activeKey; other-user lookup/list/purge returns no private data.
+**Acceptance**: Unit 4a passes; projection upsert is idempotent by attemptId; ordered terminal-then-new-active writes preserve one active row; completed/abandoned rows have null activeKey; other-user list/delete returns no private data.
 
 ### ⬜ Unit 4c: Cook Index Coverage And Migration Verification
 **What**: Run Prisma generation, local D1 migration application, migration rerun checks, helper coverage, and typecheck.
@@ -118,7 +118,7 @@ Ship the accepted Clem feedback end to end: correct shopping-list restoration, a
 **Acceptance**: `pnpm prisma:generate`, local migration tests, targeted coverage, and `pnpm run typecheck` pass with no warning or migration collision.
 
 ### ⬜ Unit 5a: Cook State Core Tests
-**What**: Add red pure tests for canonical snapshot serialization/SHA-256 fingerprint, state initialization, stable-id operations, scale boundaries, revision conflicts, mutation-id dedupe/eviction, terminal state rules, adoption validation, and rebase ordering.
+**What**: Add red pure tests for canonical snapshot serialization/SHA-256 fingerprint, attempt initialization/replacement, stable-id operations, scale boundaries, revision conflicts, stale attempt rejection, mutation-id dedupe/eviction, terminal/purging state rules, adoption validation, and rebase ordering.
 **Output**: `test/lib/cook-session-state.test.ts`.
 **Acceptance**: `pnpm exec vitest run test/lib/cook-session-state.test.ts` fails because `app/lib/cook-session-state.ts` and `app/lib/cook-session-types.ts` are absent.
 
@@ -133,14 +133,14 @@ Ship the accepted Clem feedback end to end: correct shopping-list restoration, a
 **Acceptance**: Core coverage is 100%, `pnpm run typecheck` and `pnpm build` pass.
 
 ### ⬜ Unit 6a: Durable Object Binding And Storage Tests
-**What**: Add real Workers red tests for SQLite-backed `CookSessionDurableObject`, immutable identity, storage restart, revision/dedupe behavior, top-level and QA bindings/migrations, Env types, export, and generated deployment config checks.
+**What**: Add real Workers red tests for deterministic `idFromName(userId:recipeId)` arbitration, SQLite-backed `CookSessionDurableObject`, immutable identity, attempt replacement, storage restart, revision/dedupe behavior, top-level and QA bindings/migrations, Env types, export, and generated deployment config checks.
 **Output**: `test/workers/cook-session-do.test.ts`, `test/config/wrangler-durable-objects.test.ts`, updates to `test/scripts/deployment-preflight.test.ts`.
 **Acceptance**: `pnpm test:workers -- test/workers/cook-session-do.test.ts` and config tests fail because class/bindings/checks are absent.
 
 ### ⬜ Unit 6b: Durable Object Binding And Storage Implementation
 **What**: Implement SQLite DO persistence and configure `new_sqlite_classes` explicitly for production and QA; export the class and extend Cloudflare Env types/preflight checks.
 **Output**: `workers/cook-session-do.ts`, `workers/app.ts`, `wrangler.json`, `app/cloudflare-env.d.ts`, `scripts/deployment-preflight.ts`.
-**Acceptance**: Unit 6a passes; both envs bind `COOK_SESSIONS`; state survives object restart; owner/recipe identity cannot be reinitialized differently.
+**Acceptance**: Unit 6a passes; both envs bind `COOK_SESSIONS`; parallel starts serialize to one attempt; state survives object restart; owner/recipe identity cannot be reinitialized differently.
 
 ### ⬜ Unit 6c: Durable Object Storage Coverage
 **What**: Exercise all DO storage/state errors in the Workers pool and validate Wrangler source/generated config.
@@ -148,14 +148,14 @@ Ship the accepted Clem feedback end to end: correct shopping-list restoration, a
 **Acceptance**: Worker coverage for the class is 100%; `pnpm run deploy:preflight` and QA preflight source-mode checks pass without remote mutation.
 
 ### ⬜ Unit 7a: Internal Cook HTTP And WebSocket Tests
-**What**: Add real Worker red tests for start/resume races, API-safe 401, owner checks, same-origin checks, snapshot/patch/409 payloads, complete/abandon/purge idempotency, WebSocket 101 retention, initial/broadcast snapshots, hibernation attachments, malformed methods/bodies, and missing sessions.
+**What**: Add real Worker red tests for deterministic user/recipe routing, start/resume races, API-safe 401, same-origin checks, recipe visibility, attempt-bound snapshot/patch/409 payloads, complete/abandon/purge idempotency, WebSocket 101 retention, initial/broadcast snapshots, stale-attempt socket closure, hibernation attachments, malformed methods/bodies, and missing attempts.
 **Output**: `test/workers/app-cook-sessions.test.ts`, additions to `test/workers/cook-session-do.test.ts`, `test/workers/app.test.ts`.
 **Acceptance**: `pnpm test:workers -- test/workers/app-cook-sessions.test.ts test/workers/cook-session-do.test.ts` fails because the Worker-level internal API is absent.
 
 ### ⬜ Unit 7b: Internal Cook HTTP And WebSocket Implementation
-**What**: Intercept `/api/cook-sessions` in `workers/app.ts` before React Router; authenticate with `getUserId` and D1 ownership; implement exact lifecycle routing and hibernation WebSockets; bypass response rebuilding only for 101 while applying security headers to ordinary responses.
+**What**: Intercept `/api/cook-sessions` in `workers/app.ts` before React Router; authenticate with `getUserId`; derive the DO from authenticated user id plus route/body recipe id; verify recipe visibility; implement exact `/api/cook-sessions/recipes/:recipeId` lifecycle routing and hibernation WebSockets; bypass response rebuilding only for 101 while applying security headers to ordinary responses.
 **Output**: `app/lib/cook-session-http.server.ts`, `workers/app.ts`, `workers/cook-session-do.ts`, `app/lib/cook-session-index.server.ts`.
-**Acceptance**: Unit 7a passes; no cook route is registered in `app/routes.ts` or OpenAPI; opaque session ids alone grant no access; full default-export WebSocket tests receive a usable socket.
+**Acceptance**: Unit 7a passes; no cook route is registered in `app/routes.ts` or OpenAPI; D1 freshness is not required for authorization or start/resume; old attempt ids cannot mutate new attempts; full default-export WebSocket tests receive a usable socket.
 
 ### ⬜ Unit 7c: Internal Cook API Coverage
 **What**: Cover HTTP parser/auth/origin/proxy failures and WebSocket close/error/message branches in the Workers runtime.
@@ -163,14 +163,14 @@ Ship the accepted Clem feedback end to end: correct shopping-list restoration, a
 **Acceptance**: New Worker/API code is 100% covered; `pnpm test:workers:coverage`, `pnpm run typecheck`, and `pnpm build` pass.
 
 ### ⬜ Unit 8a: D1 Projection Alarm Tests
-**What**: Add real Workers red tests for pending projection persistence on create/update/complete/abandon, idempotent D1 writes, at-least-once alarm replay, transient failure, retry exhaustion/reschedule, terminal activeKey clearing, and purge cleanup.
+**What**: Add real Workers red tests for ordered projection-queue persistence on create/update/complete/abandon, idempotent D1 writes, terminal-old-before-active-new ordering, at-least-once alarm replay, transient failure, retry exhaustion/reschedule, stale My Kitchen projection recovery, and purge failures before/after D1 delete and before DO `deleteAll()`.
 **Output**: `test/workers/cook-session-alarm.test.ts`, additions to `test/lib/cook-session-index.server.test.ts`.
 **Acceptance**: Targeted worker/app tests fail because all projection transitions and retry markers are not alarm-driven.
 
 ### ⬜ Unit 8b: D1 Projection Alarm Implementation
-**What**: Persist pending projection data in the DO, schedule/reschedule alarms, and reconcile every lifecycle mutation to D1 without making D1 canonical.
+**What**: Persist an ordered projection/purge queue in the DO, schedule/reschedule alarms, reconcile every lifecycle mutation to D1 without making D1 canonical, and execute purge as persisted PURGING -> idempotent D1 delete -> DO `deleteAll()`.
 **Output**: `workers/cook-session-do.ts`, `app/lib/cook-session-index.server.ts`.
-**Acceptance**: Unit 8a passes; accepted DO mutations survive D1 failure; repeated alarm delivery does not duplicate history; completion creates no RecipeSpoon or notification.
+**Acceptance**: Unit 8a passes; accepted DO mutations and older terminal projections survive D1 failure/new-attempt creation; repeated alarms do not duplicate history; every purge failure resumes safely; completion creates no RecipeSpoon or notification.
 
 ### ⬜ Unit 8c: Projection Coverage
 **What**: Cover alarm retries and verify no RecipeSpoon integration was added.
@@ -178,7 +178,7 @@ Ship the accepted Clem feedback end to end: correct shopping-list restoration, a
 **Acceptance**: Worker/index coverage is 100%; `test/models/recipe-spoon.test.ts` and notification regression tests remain green.
 
 ### ⬜ Unit 9a: Cook Client Controller Tests
-**What**: Add red browser tests for create/resume discovery, operation queueing, WebSocket snapshots, 409 rebase/retry, reconnect same-field precedence, offline cache as non-canonical, anonymous local mode, adoption eligibility, and cleanup.
+**What**: Add red browser tests for recipe-keyed create/resume discovery, attempt-bound operation queueing, WebSocket snapshots, stale-attempt handling, 409 rebase/retry, reconnect same-field precedence, offline cache as non-canonical, anonymous local mode, adoption eligibility, and cleanup.
 **Output**: `test/lib/cook-session-client.test.ts`, updates to `test/routes/recipes-id.test.tsx` for loader inputs only.
 **Acceptance**: Targeted tests fail because `app/lib/cook-session-client.ts` and `app/hooks/useCookSession.ts` are absent.
 
@@ -353,7 +353,7 @@ Ship the accepted Clem feedback end to end: correct shopping-list restoration, a
 **Acceptance**: Tests fail because live smoke does not exercise or purge Durable Object state.
 
 ### ⬜ Unit 20b: Live Smoke Lifecycle Implementation
-**What**: Extend smoke helpers to create disposable `codex-smoke-*` state, validate two-context synchronization, purge each session before deleting D1 users, and verify no D1/DO test residue remains.
+**What**: Extend smoke helpers to create disposable `codex-smoke-*` state, validate two-context synchronization, purge each current attempt through its recipe-keyed deterministic DO before deleting D1 users, and verify no D1/DO test residue remains.
 **Output**: `scripts/smoke-live.mjs`, `scripts/smoke-live-helpers.mjs`.
 **Acceptance**: Unit 20a passes; cleanup executes in `finally`; failed smoke still attempts purge/user cleanup and records residue.
 
