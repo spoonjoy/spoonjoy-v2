@@ -12,6 +12,7 @@ import {
   isValidOAuthState,
   readOAuthStartSession,
   redirectWithOAuthError,
+  resolveOAuthProviderHintStartPath,
   resolveOAuthStartSessionData,
   sanitizeInternalRedirect,
 } from "~/lib/oauth-route.server";
@@ -208,6 +209,92 @@ describe("oauth-route.server", () => {
       failureRedirect: "/signup",
       linking: false,
     });
+  });
+
+  it("preserves a provider-hinted authorize handoff and cancellation target without enabling linking", () => {
+    const returnTo = "/oauth/authorize?client_id=cm_native&state=state_0123456789abcdef&provider=google";
+    const failureRedirect = `/login?redirectTo=${encodeURIComponent(returnTo)}`;
+    const request = new Request(
+      `https://spoonjoy.app/auth/google?redirectTo=${encodeURIComponent(returnTo)}&failureRedirect=${encodeURIComponent(failureRedirect)}`,
+    );
+
+    const data = resolveOAuthStartSessionData(request, "provider-state", { codeVerifier: "provider-verifier" });
+    expect(data).toEqual({
+      state: "provider-state",
+      codeVerifier: "provider-verifier",
+      redirectTo: returnTo,
+      failureRedirect,
+      linking: false,
+    });
+    expect(appendOAuthError(data.failureRedirect, "access_denied")).toBe(
+      `/login?redirectTo=${encodeURIComponent(returnTo)}&oauthError=access_denied`,
+    );
+  });
+
+  it.each(["google", "github"] as const)(
+    "builds the exact %s start path for a validated first-party authorize request",
+    (provider) => {
+      const returnTo = `/oauth/authorize?client_id=cm_native&redirect_uri=${encodeURIComponent("https://spoonjoy.app/oauth/callback")}&provider=${provider}`;
+      const request = new Request(`https://spoonjoy.app${returnTo}`);
+
+      const path = resolveOAuthProviderHintStartPath(request, {
+        clientId: "cm_native",
+        clientName: "Spoonjoy Apple",
+        redirectUris: ["https://spoonjoy.app/oauth/callback"],
+      });
+      const location = new URL(path ?? "", "https://spoonjoy.app");
+
+      expect(location.pathname).toBe(`/auth/${provider}`);
+      expect(location.searchParams.get("redirectTo")).toBe(returnTo);
+      expect(location.searchParams.get("failureRedirect")).toBe(
+        `/login?redirectTo=${encodeURIComponent(returnTo)}`,
+      );
+    },
+  );
+
+  it.each([
+    {
+      label: "missing hint",
+      query: "",
+      client: { clientId: "cm", clientName: "Spoonjoy Apple", redirectUris: ["https://spoonjoy.app/oauth/callback"] },
+    },
+    {
+      label: "duplicate hint",
+      query: "&provider=google&provider=github",
+      client: { clientId: "cm", clientName: "Spoonjoy Apple", redirectUris: ["https://spoonjoy.app/oauth/callback"] },
+    },
+    {
+      label: "unsupported hint",
+      query: "&provider=apple",
+      client: { clientId: "cm", clientName: "Spoonjoy Apple", redirectUris: ["https://spoonjoy.app/oauth/callback"] },
+    },
+    { label: "deleted client", query: "&provider=google", client: null },
+    {
+      label: "third-party name",
+      query: "&provider=google",
+      client: { clientId: "cm", clientName: "Example App", redirectUris: ["https://spoonjoy.app/oauth/callback"] },
+    },
+    {
+      label: "registration without native callback",
+      query: "&provider=google",
+      client: { clientId: "cm", clientName: "Spoonjoy Apple", redirectUris: ["https://example.com/callback"] },
+    },
+    {
+      label: "non-native selected callback",
+      query: "&provider=google",
+      client: {
+        clientId: "cm",
+        clientName: "Spoonjoy Apple",
+        redirectUris: ["https://spoonjoy.app/oauth/callback", "https://example.com/callback"],
+      },
+      redirectUri: "https://example.com/callback",
+    },
+  ])("rejects a $label", ({ query, client, redirectUri = "https://spoonjoy.app/oauth/callback" }) => {
+    const request = new Request(
+      `https://spoonjoy.app/oauth/authorize?client_id=cm&redirect_uri=${encodeURIComponent(redirectUri)}${query}`,
+    );
+
+    expect(resolveOAuthProviderHintStartPath(request, client)).toBeNull();
   });
 
   it("allows non-linking starts without a user", async () => {

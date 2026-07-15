@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { sessionStorage } from "~/lib/session.server";
-import { commitOAuthStartSession } from "~/lib/oauth-route.server";
+import { commitOAuthStartSession, readOAuthStartSession } from "~/lib/oauth-route.server";
 
 const mocks = vi.hoisted(() => ({
   createGoogleAuthorizationURL: vi.fn(() => new URL("https://accounts.google.com/o/oauth2/v2/auth?state=mock-state")),
@@ -69,6 +69,33 @@ describe("Google OAuth routes", () => {
     expect(response.headers.get("Location")).toContain("accounts.google.com");
   });
 
+  it("preserves a provider-hinted authorize handoff in the signed Google state and PKCE session", async () => {
+    const returnTo = "/oauth/authorize?client_id=cm_native&state=state_0123456789abcdef&provider=google";
+    const failureRedirect = `/login?redirectTo=${encodeURIComponent(returnTo)}`;
+    const request = new Request(
+      `https://spoonjoy.app/auth/google?redirectTo=${encodeURIComponent(returnTo)}&failureRedirect=${encodeURIComponent(failureRedirect)}`,
+    );
+    const response = await loader({ request, context: { cloudflare: { env: googleEnv } }, params: {} } as any);
+    const setCookie = response.headers.get("Set-Cookie") ?? "";
+    const stored = await readOAuthStartSession(
+      new Request("https://spoonjoy.app/auth/google/callback", { headers: { Cookie: cookieHeader(setCookie) } }),
+      "google",
+    );
+
+    expect(mocks.createGoogleAuthorizationURL).toHaveBeenCalledWith(
+      { clientId: "google-client", clientSecret: "google-secret" },
+      "https://spoonjoy.app/auth/google/callback",
+      stored?.state,
+      "mock-code-verifier",
+    );
+    expect(stored).toMatchObject({
+      codeVerifier: "mock-code-verifier",
+      redirectTo: returnTo,
+      failureRedirect,
+      linking: false,
+    });
+  });
+
   it("redirects to OAuth error when Google env is missing", async () => {
     const request = new Request("https://spoonjoy.app/auth/google", {
       headers: { Referer: "https://spoonjoy.app/signup" },
@@ -98,6 +125,26 @@ describe("Google OAuth routes", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("Location")).toBe("/login?oauthError=access_denied");
+  });
+
+  it("returns provider cancellation to login with the authorize retry intact", async () => {
+    const returnTo = "/oauth/authorize?client_id=cm_native&state=state_0123456789abcdef&provider=google";
+    const failureRedirect = `/login?redirectTo=${encodeURIComponent(returnTo)}`;
+    const cookie = await commitOAuthStartSession(new Request("https://spoonjoy.app/auth/google"), "google", {
+      state: "state",
+      codeVerifier: "verifier",
+      redirectTo: returnTo,
+      failureRedirect,
+      linking: false,
+    });
+    const request = new Request("https://spoonjoy.app/auth/google/callback?error=access_denied", {
+      headers: { Cookie: cookieHeader(cookie) },
+    });
+    const response = await callbackLoader({ request, context: { cloudflare: { env: googleEnv } }, params: {} } as any);
+
+    expect(response.headers.get("Location")).toBe(
+      `/login?redirectTo=${encodeURIComponent(returnTo)}&oauthError=access_denied`,
+    );
   });
 
   it("rejects callbacks with missing stored state", async () => {

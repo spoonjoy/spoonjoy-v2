@@ -3,10 +3,12 @@ import { redirect } from "react-router";
 import { generateState } from "arctic";
 import { requestCanonicalOrigin } from "~/lib/canonical-host.server";
 import type { OAuthEnv } from "~/lib/env.server";
+import type { RegisteredOAuthClient } from "~/lib/oauth-server.server";
 import { getCloudflareEnv } from "~/lib/route-platform.server";
 import { getOAuthSessionStorage, getUserId, sanitizeSessionRedirect, type SessionEnv } from "~/lib/session.server";
 
 export type OAuthProvider = "google" | "github" | "apple";
+type OAuthProviderHint = Extract<OAuthProvider, "google" | "github">;
 
 export interface OAuthStartSessionData {
   state: string;
@@ -19,6 +21,8 @@ export interface OAuthStartSessionData {
 }
 
 const OAUTH_SESSION_PREFIX = "oauth";
+const FIRST_PARTY_OAUTH_CLIENT_NAME = "Spoonjoy Apple";
+const FIRST_PARTY_OAUTH_REDIRECT_URI = "https://spoonjoy.app/oauth/callback";
 const CALLBACK_PATHS: Record<OAuthProvider, string> = {
   apple: "/auth/apple/callback",
   github: "/auth/github/callback",
@@ -82,6 +86,31 @@ export function redirectTo(location: string, headers?: HeadersInit) {
 
 export function sanitizeInternalRedirect(value: string | null | undefined, fallback: string): string {
   return sanitizeSessionRedirect(value, fallback);
+}
+
+export function resolveOAuthProviderHintStartPath(
+  request: Request,
+  client: RegisteredOAuthClient | null,
+): string | null {
+  const url = new URL(request.url);
+  const providerHints = url.searchParams.getAll("provider");
+  if (providerHints.length !== 1) return null;
+
+  const provider = providerHints[0];
+  if (provider !== "google" && provider !== "github") return null;
+  if (
+    !client
+    || client.clientName !== FIRST_PARTY_OAUTH_CLIENT_NAME
+    || !client.redirectUris.includes(FIRST_PARTY_OAUTH_REDIRECT_URI)
+    || url.searchParams.get("redirect_uri") !== FIRST_PARTY_OAUTH_REDIRECT_URI
+  ) {
+    return null;
+  }
+
+  const returnTo = `${url.pathname}${url.search}`;
+  const failureRedirect = `/login?${new URLSearchParams({ redirectTo: returnTo })}`;
+  const providerParams = new URLSearchParams({ redirectTo: returnTo, failureRedirect });
+  return `/auth/${provider satisfies OAuthProviderHint}?${providerParams}`;
 }
 
 function sameOriginReferer(request: Request): URL | null {
