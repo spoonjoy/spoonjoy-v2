@@ -45,6 +45,15 @@ function extractResponseData(response: any): { data: any; status: number } {
   return { data: response, status: 200 };
 }
 
+const VALID_PNG_BYTES = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+  0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+]);
+
+function makePngFile(name = "recipe-photo.png"): File {
+  return new File([VALID_PNG_BYTES], name, { type: "image/png" });
+}
+
 describe("Recipes $id Route", () => {
   let testUserId: string;
   let otherUserId: string;
@@ -1092,7 +1101,7 @@ describe("Recipes $id Route", () => {
 
   describe("action", () => {
     async function createFormRequest(
-      formFields: Record<string, string>,
+      formFields: Record<string, string | File>,
       userId?: string
     ): Promise<UndiciRequest> {
       const formData = new UndiciFormData();
@@ -1238,6 +1247,73 @@ describe("Recipes $id Route", () => {
         activeCoverVariant: null,
         coverMode: "none",
       });
+    });
+
+    it("creates a Spoon-backed first photo cover and queues editorialization by default", async () => {
+      const waitUntil = vi.fn();
+      const request = await createFormRequest(
+        {
+          intent: "createFirstPhotoCover",
+          photo: makePngFile("finished-pasta.png"),
+          postAsSpoon: "true",
+          generateEditorial: "true",
+          activateWhenReady: "true",
+          note: "Ate this for Tuesday dinner.",
+          nextTime: "More lemon.",
+          cookedAt: "2026-07-14T19:30",
+          promptAddition: "brighter window light",
+        },
+        testUserId,
+      );
+
+      const result = await action({
+        request,
+        context: { cloudflare: { env: null, ctx: { waitUntil } } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(result).toEqual(expect.objectContaining({
+        success: true,
+        intent: "createFirstPhotoCover",
+        spoon: expect.objectContaining({ id: expect.any(String) }),
+        coverId: expect.any(String),
+      }));
+      const spoon = await db.recipeSpoon.findUniqueOrThrow({
+        where: { id: result.spoon.id },
+      });
+      expect(spoon).toMatchObject({
+        recipeId,
+        chefId: testUserId,
+        note: "Ate this for Tuesday dinner.",
+        nextTime: "More lemon.",
+      });
+      expect(spoon.photoUrl).toMatch(/^data:image\/png;base64,/);
+
+      const cover = await db.recipeCover.findUniqueOrThrow({
+        where: { id: result.coverId },
+      });
+      expect(cover).toMatchObject({
+        recipeId,
+        imageUrl: spoon.photoUrl,
+        sourceImageUrl: spoon.photoUrl,
+        sourceType: "spoon",
+        sourceSpoonId: spoon.id,
+        createdById: testUserId,
+        status: "processing",
+        generationStatus: "processing",
+        promptAddition: "brighter window light",
+      });
+      await expect(
+        db.recipe.findUniqueOrThrow({
+          where: { id: recipeId },
+          select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+        }),
+      ).resolves.toEqual({
+        activeCoverId: cover.id,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      });
+      expect(waitUntil).toHaveBeenCalledTimes(1);
     });
 
     it("rejects cover activation from non-owners", async () => {
@@ -2998,6 +3074,10 @@ describe("Recipes $id Route", () => {
       expect(within(history).getByText("Editorial photo")).toBeInTheDocument();
       expect(within(history).getByText("Imported photo")).toBeInTheDocument();
       expect(within(history).getByText("No cover selected")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Photo studio" })).toBeInTheDocument();
+      expect(screen.getByText("Add cover photo")).toBeInTheDocument();
+      expect(screen.getByRole("checkbox", { name: "Post as Spoon" })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: "Editorialize cover" })).toBeChecked();
 
       await user.click(within(history).getByRole("button", { name: "Use Imported photo cover" }));
       await waitFor(() => {
