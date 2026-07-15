@@ -68,12 +68,43 @@ describe("/mcp route", () => {
     await expect(initResponse.json()).resolves.toMatchObject({ result: { serverInfo: { name: "spoonjoy" } } });
 
     const listResponse = await action(routeArgs(rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }, auth)));
-    const listBody = await listResponse.json() as { result: { tools: { name: string }[] } };
+    const listBody = await listResponse.json() as {
+      result: {
+        tools: Array<{
+          name: string;
+          description?: string;
+          inputSchema?: { properties?: Record<string, unknown>; required?: string[] };
+        }>;
+      };
+    };
     expect(listBody.result.tools.map((t) => t.name)).toContain("get_shopping_list");
     expect(listBody.result.tools.map((t) => t.name)).toEqual(expect.arrayContaining([
       "upload_recipe_image",
       "upload_spoon_photo",
+      "create_recipe_cover_from_upload",
+      "generate_recipe_cover_placeholder",
+      "regenerate_recipe_cover",
+      "set_recipe_no_cover",
     ]));
+    const byName = new Map(listBody.result.tools.map((tool) => [tool.name, tool]));
+    expect(byName.get("generate_recipe_cover_placeholder")).toMatchObject({
+      description: expect.stringContaining("AI placeholder"),
+      inputSchema: {
+        required: ["recipeId", "idempotencyKey"],
+        properties: {
+          promptAddition: expect.objectContaining({ maxLength: 240 }),
+          activateWhenReady: expect.any(Object),
+        },
+      },
+    });
+    expect(byName.get("regenerate_recipe_cover")).toMatchObject({
+      inputSchema: {
+        required: ["recipeId", "coverId", "idempotencyKey"],
+        properties: {
+          promptAddition: expect.objectContaining({ maxLength: 240 }),
+        },
+      },
+    });
 
     const callResponse = await action(routeArgs(rpc(
       { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "get_shopping_list", arguments: {} } },
