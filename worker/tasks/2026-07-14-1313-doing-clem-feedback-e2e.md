@@ -29,6 +29,8 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 - D1 projection uses the planning doc's exact `CookSessionIndex` columns/indexes and version-1 UPSERT/DELETE queue schema. Remote cleanup proves both owner-only residue counts and `CookSessionIndex` attempt-row count zero before deleting the smoke user.
 - Saved REST list is newest-first with default 20/max 50 and `v1.<base64url({ createdAt, recipeId })>` cursor; response data is `{ limit, cursor, nextCursor, hasMore, recipes }`. PUT/DELETE source `clientMutationId` body -> `X-Client-Mutation-Id` -> query and return the exact 200 `{ recipeId, saved, mutation }` payload.
 - Tag normalization is trim + Unicode-whitespace collapse + NFKC lowercase identity, 1..40 code points, 10 custom tags max, course-word reservation, first-label display casing, and normalized-label/id order. Filters are one `course`, repeatable `tag`, AND across all scopes/tags, with malformed/over-limit input returning 400.
+- Shopping batches use the planning doc's list-level version/lease transaction, empty-list zero allocator, original-order aggregate override rule, eight-attempt fixed backoff, and exact web/REST/MCP busy errors. Cook idempotency hashes canonical validated payloads, applies ordered duplicate operations last-wins, and atomically rejects any invalid operation.
+- Authenticated offline state uses the exact user-scoped v1 record/queue schema and 256/64 bounds in planning. Deploy correctness is proven by no-store `/health` body/header build SHA, not deployment timestamps.
 
 ## Completion Criteria
 - [ ] Every feedback-source row has shipped proof or an explicit rejected disposition.
@@ -65,13 +67,13 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Artifact records `0023_recipe_cover_prompt_lineage.sql` as current plus exact cleanup/deploy/smoke commands, and every named baseline command is green with no disposable residue. A pre-existing failure does not permit execution to continue: reproduce it on untouched `origin/main`, open a focused red/fix/green sub-unit on this branch, and rerun Unit 0 until green.
 
 ### ⬜ Unit 1a: Shopping Mutation Matrix Tests
-**What**: Add red tests for active-unchecked, active-checked, tombstone, null quantity, category/icon override, aggregation, repeated calls, `mutationVersion` compare/retry, atomic `nextSortIndex` range allocation/gaps, every move-to-end writer, both D1 commit orders for conflicting concurrent requests, exact-once numeric sums, and concurrent web/v1/MCP behavior; test exact/rerunnable migration backfill.
+**What**: Add red tests for active-unchecked, active-checked, tombstone, null quantity, three-state and last-explicit aggregate category/icon override, aggregation order, repeated calls, version/UUID-lease guarded no-op, all-or-nothing multi-pair batch, empty-list zero allocator, atomic contiguous range allocation, every move-to-end writer, both D1 commit orders, exact-once numeric sums, fixed 5..320 ms seven-delay/eight-attempt retry, exhaustion adapter errors, and concurrent web/v1/MCP behavior; test exact/rerunnable migration backfill.
 **Output**: `test/lib/shopping-list-mutations.server.test.ts`, `test/routes/shopping-list-route.test.ts`, `test/routes/api-v1-shopping-mutations.test.ts`, `test/routes/api-v1-shopping-d1.test.ts`, `test/lib/mcp/spoonjoy-tools.server.test.ts`, `test/scripts/migration-0024-shopping-list-mutation-coordination.test.ts`.
 **Acceptance**: The targeted Vitest command fails only on the missing shared semantics.
 
 ### ⬜ Unit 1b: Shopping Mutation Matrix Implementation
-**What**: Add shopping mutation coordination schema/migration; implement `app/lib/shopping-list-mutations.server.ts` with compare-and-swap retry and atomic allocator; route every item mutation/move-to-end plus web, v1, and MCP add/restore through shared primitives; update public behavior descriptions/examples.
-**Output**: `prisma/schema.prisma`, `migrations/0024_shopping_list_mutation_coordination.sql`, `prisma/migrations/20260715095500_shopping_list_mutation_coordination/migration.sql`, `app/lib/shopping-list-mutations.server.ts`, `app/lib/shopping-list.server.ts`, `app/lib/api-v1.server.ts`, `app/lib/spoonjoy-api.server.ts`, `app/lib/api-v1-openapi.server.ts`, `scripts/generate-api-playground.ts`, `app/lib/generated/api-v1-playground.ts`.
+**What**: Add list-level mutationVersion/mutationLease/nextSortIndex schema/migration; implement guarded non-interactive batch, fixed retry, `ShoppingListBusyError`, and allocator in `app/lib/shopping-list-mutations.server.ts`; route every item mutation/move-to-end plus web, v1, and MCP add/restore through shared primitives; add v1 `write_conflict`; update public behavior descriptions/examples.
+**Output**: `prisma/schema.prisma`, `migrations/0024_shopping_list_mutation_coordination.sql`, `prisma/migrations/20260715095500_shopping_list_mutation_coordination/migration.sql`, `app/lib/shopping-list-mutations.server.ts`, `app/lib/shopping-list.server.ts`, `app/lib/api-v1.server.ts`, `app/lib/api-v1-contract.server.ts`, `app/lib/spoonjoy-api.server.ts`, `app/lib/api-v1-openapi.server.ts`, `scripts/generate-api-playground.ts`, `app/lib/generated/api-v1-playground.ts`.
 **Acceptance**: Unit 1a tests and OpenAPI/generator tests pass; every mutation increments version, every end allocation is unique/monotonic, and no duplicate add/restore or max-plus-one allocator remains.
 
 ### ⬜ Unit 1c: Shopping Verification
@@ -155,7 +157,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: New modules are 100% covered with no server-only client import.
 
 ### ⬜ Unit 7a: Cook Progress State Tests
-**What**: Add red pure tests for revision-zero initialization, all four exact stable-id operation variants, 1..64 operation bounds, scale bounds, one increment per accepted request, stale-attempt/revision snapshot responses, terminal idempotency/conflict rules, replay-before-conflict behavior, 24-hour/256-entry non-evicting mutation ledger, hash conflict, 429 capacity, and client rebase order.
+**What**: Add red pure tests for exact revision-zero defaults/equal timestamps, all four operation variants, 1..64 bounds, canonical parsed-payload hash equivalence/difference, ordered duplicate last-wins, whole-request invalid-operation rejection, scale bounds, same-value accepted revision/monotonic-time increment, stale responses, terminal idempotency/conflict, accepted-only replay-before-conflict ledger, 24-hour/256-entry capacity, hash conflict, and client rebase order.
 **Output**: `test/lib/cook-session-state.test.ts`.
 **Acceptance**: Tests fail because state module is absent.
 
@@ -200,7 +202,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Worker class paths are 100% covered; preflight, typecheck, and build pass.
 
 ### ⬜ Unit 10a: Internal Cook HTTP Lifecycle Tests
-**What**: Add real Worker red tests for every planning-defined start/get/patch/complete/abandon request and success/error envelope; 201 new/after-terminal vs 200 active resume/replay; valid/invalid/generated request-id equality; exact error messages and Allow/Retry-After; any-owner active recipe access; indistinguishable missing/soft-deleted/inaccessible 404; every operation variant/limit; UUID validation; accepted-only ledger, replay, capacity, attempt, revision, terminal, auth, origin, JSON, validation, method, and internal errors; and no OpenAPI/React Router registration.
+**What**: Add real Worker red tests for every planning-defined start/get/patch/complete/abandon request and success/error envelope; 201 new/after-terminal vs 200 active resume/replay; valid/invalid/generated request-id equality; exact messages/Retry-After; exact Allow strings for start, recipe base, live, complete, abandon, and residue including HEAD/unknown behavior; any-owner active recipe access; indistinguishable missing/soft-deleted/inaccessible 404; canonical payload hashing, atomic operation rejection; UUID validation; accepted-only ledger, replay, capacity, attempt, revision, terminal, auth, origin, JSON, validation, method, and internal errors; and no OpenAPI/React Router registration.
 **Output**: `test/workers-runtime/app-cook-session-http.test.ts`, `test/workers/app.test.ts`.
 **Acceptance**: Tests fail because Worker-level HTTP handler is absent.
 
@@ -215,7 +217,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: New HTTP/Worker code is 100% covered and commands pass.
 
 ### ⬜ Unit 11a: Cook WebSocket Tests
-**What**: Add real Workers red tests for same-origin upgrade, 101 handle retention through default export, exact initial/broadcast `snapshot` and `error` frames, exact hibernation attachment/restart, `1003` client-data rejection, `4000` replacement, `4001` purge, normal `1000`, auth/origin non-101 errors, malformed text/binary messages, and socket error paths.
+**What**: Add real Workers red tests for same-origin upgrade, 101 handle retention, initial/broadcast snapshots, exact hibernation attachment/restart, and every post-upgrade frame/order: stale error+optional latest snapshot then 4000, purge-race error+PURGING then 4001, missing error/no snapshot then 4000, internal error/no snapshot then 1011, ordinary purge snapshot then 4001, immediate no-frame 1003 for text/binary client data, and normal 1000; cover auth/origin non-101 and send/close failures.
 **Output**: `test/workers-runtime/app-cook-session-websocket.test.ts`, `test/workers-runtime/cook-session-do-websocket.test.ts`.
 **Acceptance**: Tests fail because live subscription is absent.
 
@@ -245,7 +247,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: New projection code is 100% covered; no RecipeSpoon/notification integration appears.
 
 ### ⬜ Unit 13a: Cook Purge Fence Tests
-**What**: Add real Workers red tests for exact 202/body and bodyless-204 DELETE behavior; exact owner-only `/residue` pre/post state and no content fields; matching/stale/unknown/repeated ids; PURGING rejection for every other HTTP/upgrade; code-4001 closure; FIFO barrier; old-terminal/new-attempt/purge order; delayed start replay 410; newer-attempt isolation; atomic content deletion; and separate injected tests for (1) pre-fence local failure, (2) post-fence broadcast/close failure, (3) older-projection D1 failure, (4) current-row D1 delete failure, (5) crash after idempotent D1 delete, (6) local deletion/tombstone transaction failure, and (7) success only after committed tombstone plus absent attempt keys.
+**What**: Add real Workers red tests for exact 202/body and bodyless-204 DELETE behavior; current-attempt-first precedence where an old last-purged id returns 409 while newer current exists; exact owner-only `/residue` pre/post state and no content fields; matching/stale/unknown/repeated ids; PURGING rejection for every other HTTP/upgrade; code-4001 closure; FIFO barrier; old-terminal/new-attempt/purge order; delayed start replay 410; newer-attempt isolation; atomic content deletion; and separate seven injected failure boundaries from planning.
 **Output**: `test/workers-runtime/cook-session-purge.test.ts`, `test/workers-runtime/app-cook-session-http.test.ts`, `test/workers-runtime/app-cook-session-websocket.test.ts`, `test/workers-runtime/cook-session-do-websocket.test.ts`.
 **Acceptance**: Tests fail because purge state machine is absent.
 
@@ -275,7 +277,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Adapter is 100% covered and commands pass.
 
 ### ⬜ Unit 15a: Cook Client Reconciliation Tests
-**What**: Add red hook/controller tests for operation queue, optimistic state, WebSocket snapshots, received-409 rebase with fresh UUID, network-uncertain byte-equivalent original replay before rebase, rejected-id non-recording, same-field reconnect precedence, stale attempts, offline cache non-authority, exact adoption outcomes, anonymous mode, record cleanup, and storage failure.
+**What**: Add red hook/controller tests for exact `spoonjoy-auth-cook:v1:<userId>:<recipeId>` schema/parser, embedded identity isolation/logout cleanup, unsent same-target remove+append coalescing, 256 overflow, FIFO 64 batches, mutation assignment/persistence, optimistic reapply, higher/lower/equal-identical/equal-divergent/different-attempt WebSocket snapshots, received-409 fresh-UUID rebase, network-uncertain original replay, and exact stale_attempt/attempt_replaced/attempt_purged/401/429/network dispositions; cover anonymous adoption and storage failures.
 **Output**: `test/hooks/use-cook-session.test.ts`, `test/routes/recipes-id.test.tsx`.
 **Acceptance**: Tests fail because hook/controller is absent.
 
@@ -310,17 +312,17 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: No ready visual issue, overlap, layout shift, inaccessible control, or dock collision remains.
 
 ### ⬜ Unit 17a: Owner-Only Continue Cooking Tests
-**What**: Add red loader/render tests for owner active cards, stale/empty/terminal removal, soft-deleted recipe, and strict absence/query suppression for authenticated/anonymous visitors.
+**What**: Add red loader/render/interaction tests for owner active cards; activation preflight GET ACTIVE navigation; terminal/404 local invalidation plus alarm scheduling/revalidator behavior and no same-mount reappearance; eventual loader repair; network retry without hiding; stale/empty/soft-deleted removal; and strict absence/query suppression for authenticated/anonymous visitors.
 **Output**: `test/routes/index.test.tsx`, `test/components/recipe/ContinueCookingList.test.tsx`, `test/components/navigation/mobile-nav.test.tsx`.
 **Acceptance**: Tests fail only because owner-only section is absent; dock links remain unchanged.
 
 ### ⬜ Unit 17b: Owner-Only Continue Cooking Implementation
-**What**: Load D1 active projection only for owner and render unframed Continue Cooking without dock edits.
-**Output**: `app/routes/_index.tsx`, `app/components/recipe/ContinueCookingList.tsx`.
-**Acceptance**: Unit 17a passes; non-owner loader data/query contains no private session metadata.
+**What**: Load D1 active projection only for owner; make Continue Cooking activation preflight the canonical DO, schedule pending projection alarm through GET, invalidate stale cards locally, and revalidate the owner route; render unframed list without dock edits.
+**Output**: `app/routes/_index.tsx`, `app/components/recipe/ContinueCookingList.tsx`, `app/lib/cook-session-client.ts`, `workers/cook-session-do.ts`.
+**Acceptance**: Unit 17a passes; stale cards cannot navigate/resurface in the same mount, active cards navigate, later D1 loader repairs, and non-owner loader/query contains no private metadata.
 
 ### ⬜ Unit 17c: Continue Cooking Verification
-**What**: Run the complete Unit 17a suite with coverage, typecheck, and build; record evidence only.
+**What**: Run the complete Unit 17a app suite plus affected Workers alarm/GET suite with both coverage projects, typecheck, and build; record evidence only.
 **Output**: `unit-17-continue-cooking.log`.
 **Acceptance**: New code is 100% covered and nav/privacy regressions pass.
 
@@ -475,12 +477,12 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: New service is 100% covered and commands pass.
 
 ### ⬜ Unit 25a: Tag Authoring Tests
-**What**: Add red tests for optional course/custom controls, create/edit persistence, owner auth, server validation display, duplicate normalization, and no AI wording.
+**What**: Add red tests for exactly one `course` plus repeated `customTag` FormData, missing/repeated/blank/invalid handling, first-occurrence normalization/order, create nested atomicity, edit full desired replacement retaining existing ids/casing, delete/new/course behavior, non-interactive array transaction ordering, injected rollback at every write, owner auth, submitted-value 400 display, and no AI wording.
 **Output**: `test/components/recipe/RecipeBuilder.test.tsx`, `test/routes/recipes-new.test.tsx`, `test/routes/recipes-id-edit.test.tsx`, `test/lib/recipe-create.server.test.ts`, `test/lib/recipe-detail.server.test.ts`.
 **Acceptance**: Tests fail because authoring is absent.
 
 ### ⬜ Unit 25b: Tag Authoring Implementation
-**What**: Add course/custom fields to RecipeBuilder and create/edit services/routes.
+**What**: Add exact course/custom fields and parser to RecipeBuilder; create tags through nested recipe create; edit through planned retain/delete/create full replacement in one non-interactive array transaction.
 **Output**: `app/components/recipe/RecipeBuilder.tsx`, `app/lib/recipe-create.server.ts`, `app/lib/recipe-detail.server.ts`, `app/routes/recipes.new.tsx`, `app/routes/recipes.$id.edit.tsx`.
 **Acceptance**: Unit 25a passes; only owners mutate and invalid input is server-rejected.
 
@@ -565,9 +567,24 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: No dock churn, overlap, crowding, or ready visual issue remains.
 
 ### ⬜ Unit 29: Feedback Boundary And Disposition Audit
-**What**: Run scoped existing navigation/repo-hygiene/developer-doc tests, inspect the completed product-feature diff from Units 1–28 for import UI/AI/Pebble/dock changes, and map every feedback-source row to code/test evidence or its explicit rejection. Units 30–31 touch smoke/cleanup infrastructure only.
+**What**: Run scoped existing navigation/repo-hygiene/developer-doc tests, inspect the completed product-feature diff from Units 1–28 for import UI/AI/Pebble/dock changes, and map every feedback-source row to code/test evidence or its explicit rejection. Units 29.1–31 touch deployment/smoke/cleanup infrastructure only.
 **Output**: `unit-29-feedback-audit.md`; logs for `test/components/navigation/mobile-nav.test.tsx`, `test/repo-hygiene.test.ts`, `test/docs/developer-platform-docs.test.ts`, and `test/docs/developer-platform-guide.test.ts`.
 **Acceptance**: Tests pass; no source item is missing/silently deferred; no first-party import UI, AI tag surface, Pebble contract, or unproven dock edit exists.
+
+### ⬜ Unit 29.1a: Deployment SHA Attestation Tests
+**What**: Add red tests for compile-time 40-char lowercase HEAD resolution/validation, non-development failure, public `/health` additive `buildSha`, matching header, no-store, and smoke helpers that poll 5 seconds up to 180 seconds and reject body/header mismatch or wrong SHA.
+**Output**: `test/config/vite-build-sha.test.ts`, `test/lib/health.server.test.ts`, `test/scripts/smoke-live-helpers.test.ts`.
+**Acceptance**: The exact three-file run fails because build/deploy attestation is absent.
+
+### ⬜ Unit 29.1b: Deployment SHA Attestation Implementation
+**What**: Define exact `__SPOONJOY_BUILD_SHA__` from git HEAD through Vite without generated-file writes; use literal development only in dev; add build SHA to health body/header/no-store; implement cache-busted exact-SHA polling and deployment-record capture helpers.
+**Output**: `vite.config.ts`, `app/lib/health.server.ts`, `app/routes/health.ts`, `app/cloudflare-env.d.ts`, `scripts/smoke-live-helpers.mjs`, `scripts/deployment-preflight.ts`.
+**Acceptance**: Unit 29.1a passes; production builds fail without valid SHA; local development uses explicit `development`; health remains auth/DB independent.
+
+### ⬜ Unit 29.1c: Deployment SHA Attestation Verification
+**What**: Run the complete Unit 29.1a suite with coverage, script typecheck, deployment preflight, typecheck, and build; record evidence only.
+**Output**: `unit-29.1-deploy-attestation.log`.
+**Acceptance**: New build/health/polling code is 100% covered and a local production build reports current HEAD without dirtying git.
 
 ### ⬜ Unit 30a: Two-Client Smoke Tests
 **What**: Add red script tests for two authenticated browser contexts sharing one attempt, WebSocket step/check/scale sync, edit warning, complete/abandon, owner-only residue inspection, attempt-id capture, and failure artifact capture.
@@ -585,12 +602,12 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: New lifecycle smoke logic is 100% covered and commands pass.
 
 ### ⬜ Unit 31a: Smoke Purge And Cleanup Tests
-**What**: Add red tests for `finally` cleanup; async DELETE 202 retry to bodyless 204; exact post-purge `/residue` zero-count response; target-aware Wrangler `SELECT COUNT(*) FROM CookSessionIndex WHERE attemptId = <validated UUID>` returning zero; user deletion; and separately injected HTTP purge failure, retry exhaustion, DO inspection failure, D1 inspection failure/nonzero row, user-delete failure, combined cleanup failure, and unresolved-residue reporting.
+**What**: Add red tests for `finally` cleanup; async DELETE retry with 500ms exponential delay capped 5s, max 20 requests and 90s deadline, to bodyless 204; exact post-purge `/residue` zero-count response; target-aware Wrangler attempt count zero; user deletion only after proof; and separately injected HTTP failure, deadline/attempt exhaustion, DO/D1 inspection failure/nonzero row, user-delete failure, combined failure, and terminal artifact fields.
 **Output**: `test/scripts/smoke-live-cleanup.test.ts`, `test/scripts/smoke-live-helpers.test.ts`.
 **Acceptance**: Tests fail because cleanup reliability is absent.
 
 ### ⬜ Unit 31b: Smoke Purge And Cleanup Implementation
-**What**: Purge every current attempt before user deletion, retry to 204, call same-origin owner `/residue`, run the environment-safe Wrangler attempt-row count query (`--env qa` for QA, no env for production; always `--remote`), require all zeroes, then delete the user; always record unresolved residue.
+**What**: Purge every current attempt using the exact retry schedule/deadline, call owner `/residue`, run environment-safe Wrangler attempt-row count (`--env qa` for QA, no env for production; always remote), require all zeroes, then delete the user. Exhaustion records attemptId, every status/body/timestamp/delay, last residue result/error, D1 result/error, screenshot/log paths, and leaves the user for subsequent cleanup retry rather than hiding DO residue.
 **Output**: `scripts/smoke-live.mjs`, `scripts/smoke-live-helpers.mjs`.
 **Acceptance**: Unit 31a passes; failed smoke still cleans and reports; only documented non-content tombstone may remain before user cleanup.
 
@@ -605,7 +622,7 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Every command exits zero with zero warnings and 100% new-code coverage; local migrations are rerunnable; generated output is clean; every actionable reviewer finding is fixed and the full command/review gate rerun on the resulting HEAD; git/local disposable residue is clean.
 
 ### ⬜ Unit 33: QA Deploy And Cross-Device Gate
-**What**: Record `git rev-parse HEAD`, then run `pnpm cleanup:remote:qa`, `pnpm run qa:preflight`, `pnpm deploy:qa`, `pnpm exec wrangler deployments list --env qa --json`, `pnpm smoke:qa`, `node scripts/smoke-api-live.mjs --target-env qa --base-url https://spoonjoy-v2-qa.mendelow-studio.workers.dev --out qa-api-smoke-artifacts`, and the extended smoke's two-client cook/purge path. Before disposable-user deletion require `/residue` attempt-bearing/pending/socket counts zero and run `pnpm exec wrangler d1 execute DB --remote --env qa --command "SELECT COUNT(*) AS count FROM CookSessionIndex WHERE attemptId = '<validated-smoke-attempt-uuid>';"` with zero result. In a `finally` path run purge/user cleanup, then `pnpm cleanup:remote:qa` again. Preserve deploy id, URL, HEAD SHA, logs, and screenshots externally.
+**What**: Record `HEAD=$(git rev-parse HEAD)` and `pnpm exec wrangler deployments list --env qa --json` before deploy; run `pnpm cleanup:remote:qa`, `pnpm run qa:preflight`, `pnpm deploy:qa`, and the same deployment-list command after, preserving all new ids/output. Use the tested attestation helper to poll cache-busted QA `/health` every 5s for max 180s until body and `X-Spoonjoy-Build-Sha` both equal HEAD; timeout/wrong mismatch fails before smoke. Then run QA web/API/two-client smoke. Before user deletion require zero `/residue` counts and zero remote D1 attempt row. In `finally` run the exact purge retry/user cleanup and post `pnpm cleanup:remote:qa`.
 **Output**: external Desk iteration `artifacts/unit-33-qa.md`, deploy version/URL, smoke screenshots/logs, cleanup and DO/D1 residue logs; no tracked branch edit.
 **Acceptance**: QA deploy/smokes pass for the exact recorded branch HEAD SHA before PR merge; owner DO diagnostic and D1 query prove no attempt content/row; no disposable data remains.
 
@@ -620,18 +637,18 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 **Acceptance**: Every required check is green for current head SHA with no unresolved review comment.
 
 ### ⬜ Unit 36: Merge
-**What**: Run `gh pr view "$PR" --json headRefOid,mergeStateStatus,reviewDecision,statusCheckRollup`; verify head equals Unit 33 SHA and all required checks/reviews are green; merge through `work-merger`; then record `gh pr view "$PR" --json state,mergedAt,mergeCommit` without manual production deployment.
+**What**: Run `gh pr view "$PR" --json headRefOid,mergeStateStatus,reviewDecision,statusCheckRollup`; verify head equals Unit 33 SHA, all checks/reviews green, and a cache-busted QA `/health` body/header still equal that head immediately before merge. Any mismatch reruns Unit 33. Merge through `work-merger`; then record `gh pr view "$PR" --json state,mergedAt,mergeCommit` without manual production deployment.
 **Output**: Merge evidence and external Desk iteration `artifacts/unit-36-merge.md`.
 **Acceptance**: Current PR head SHA exactly equals the SHA recorded by the latest successful Unit 33 QA gate; every required check/review is green for that head; PR is merged and exact merge SHA recorded.
 
 ### ⬜ Unit 37: Production Deploy, Smoke, Cleanup, And Handoff
-**What**: Locate the `Production Deploy` run for the exact merge SHA with `gh run list --workflow "Production Deploy" --commit "$MERGE_SHA" --json databaseId,headSha,status,conclusion,url`; wait via `gh run watch "$RUN_ID" --exit-status`; verify job `deploy` succeeded and the Wrangler deployment identifies the merge. Then run `pnpm production:readiness`, `node scripts/smoke-live.mjs --target-env production --base-url https://spoonjoy.app --out production-live-smoke-artifacts` including two-client cook/purge, owner `/residue` zero counts, and remote production `CookSessionIndex` attempt-row count zero; run `pnpm smoke:api` and `pnpm cleanup:production` in the smoke `finally` path and once more afterward. Scan planning/doing/reviewer/CI/QA/production artifacts for ready in-scope work; close Desk lifecycle; remove the worktree only after clean merged state; and run `ouro msg --to slugger "Done: shipped Clem feedback end to end"`.
+**What**: Poll `gh run list --workflow "Production Deploy" --commit "$MERGE_SHA" --limit 20 --json databaseId,headSha,status,conclusion,url,createdAt,event` every 10s for max 5m until an exact-head candidate exists; retain all candidates, choose newest non-cancelled by `createdAt` then `databaseId`, and poll `gh run view "$RUN_ID" --json headSha,status,conclusion,jobs,url` for at most 30m. Require exact head, workflow success, and job named `deploy` success. Record production `pnpm exec wrangler deployments list --json` before/after and newest post-run deployment. Use the tested helper to poll cache-busted canonical `/health` every 5s for max 180s until body/header both equal merge SHA; this is authoritative live proof. Then run readiness, production web/API/two-client smoke, owner residue zero, remote D1 row zero, and exact purge/user cleanup. Run continuation scan, close Desk/git/worktree, and notify Slugger.
 **Output**: external Desk iteration `artifacts/unit-37-production.md`, workflow/version URLs, `https://spoonjoy.app` evidence, cleanup/continuation logs, and `ouro msg --to slugger "Done: shipped Clem feedback end to end"` result.
 **Acceptance**: Exact SHA is live; all smokes pass; no disposable data or ready in-scope follow-up remains; git/Desk terminal and clean; Slugger notified.
 
 ## Execution
 - Tests -> confirmed red -> implementation -> green -> refactor for every a/b/c group.
-- Commit/push each intentional-red `a` checkpoint and green `b` checkpoint; keep `c` verification-only, then update group emojis/progress and run a newly spawned, context-independent group reviewer after every a/b/c group (Units 1-28 and 30-31). "Fresh" means a new sub-agent given only the approved planning/doing docs, current diff/commits, and test evidence. Every actionable finding is fixed with a new red/green cycle and re-reviewed; no severity is silently waived.
+- Commit/push each intentional-red `a` checkpoint and green `b` checkpoint; keep `c` verification-only, then update group emojis/progress and run a newly spawned, context-independent group reviewer after every a/b/c group (Units 1-28, 29.1, and 30-31). "Fresh" means a new sub-agent given only the approved planning/doing docs, current diff/commits, and test evidence. Every actionable finding is fixed with a new red/green cycle and re-reviewed; no severity is silently waived.
 - Every `d` unit runs `visual-qa-dogfood` plus a newly spawned visual reviewer after fixes. Units 29, 32, and 34 are their own explicit audit/review gates; Units 0 and 33-37 use their named acceptance gates rather than the group-review rule.
 - Store every command/log/screenshot in the artifact directory.
 - Before Unit 32, commit/push the final in-repo doing/progress/AUTOPILOT state and hand continuity to the adopted external Desk iteration. Units 32-37 write operational evidence only to external Desk/GitHub/Cloudflare surfaces; they must not create an unvalidated branch HEAD. Any later tracked change invalidates the gate and loops through Units 32-33.
@@ -647,3 +664,4 @@ Ship every accepted Clem feedback item end to end: correct shopping restoration,
 - 2026-07-15 Validation converged after three fresh rounds; every existing path/convention and planned-new file family aligns with current HEAD.
 - 2026-07-15 Ambiguity Round 1 fixed the full cook wire protocol, revision/ledger/retry/purge transitions, canonical hashing, saved pagination/mutation envelopes, tag normalization/filter semantics, baseline policy, reviewer definition, and exact local/QA/CI/production commands.
 - 2026-07-15 Ambiguity Round 2 fixed exact-SHA gate deadlock, rejected mutation/rebase semantics, terminal restart, projection schema, recipe visibility, principal-scoped saves, typed adoption, concurrent shopping coordination, remote residue proof, request ids/messages, decimal ties, and tag casing reset.
+- 2026-07-15 Ambiguity Round 3 fixed transactional shopping retry/oracles, canonical cook mutations/defaults/methods/WebSockets, authenticated offline reconciliation, stale-card repair ownership, atomic tag replacement, DELETE/smoke retry precedence, and health-based deployment SHA attestation.
