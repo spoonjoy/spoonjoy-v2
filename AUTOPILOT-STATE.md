@@ -18,13 +18,13 @@ Close every actionable 2026-07-15 shipped-work audit finding across Spoonjoy web
 
 ## Gate State
 
-- Planning is `NEEDS_REVIEW` after the doing-doc audit added installed TestFlight access to the human-only boundary.
+- Planning is approved and the doing doc is `READY_FOR_EXECUTION` after fresh reviewer PASS on both.
 - Native and operations explorers returned concrete findings; the web explorer is being stopped after exceeding its bounded exploration window.
 - Planning review Round 1 found major traceability, verification, release-closure, cleanup-safety, and human-only credential gaps. A stricter independent review also found release-containment, rebaseline, image/mutation-contract, OAuth rollout, and workstream-isolation gaps. One fresh gate passed at 2026-07-15 12:16, but a second independent gate found missing rollback/recovery and direct web visual-evidence requirements; those are now patched and awaiting fresh convergence.
 
 ## Next Action
 
-Run fresh planning and doing re-reviews after the granularity/release-trust revisions, then mark the doing doc `READY_FOR_EXECUTION` and begin Unit 0.
+Begin Unit 0 rebaseline, private inventory, rollback instantiation, and human-action initiation.
 
 ## Hard Exceptions
 

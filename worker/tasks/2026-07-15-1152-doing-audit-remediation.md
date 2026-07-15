@@ -1,6 +1,6 @@
 # Doing: Spoonjoy Audit Remediation
 
-**Status**: drafting
+**Status**: READY_FOR_EXECUTION
 **Execution Mode**: direct
 **Created**: 2026-07-15 11:54
 **Planning**: ./2026-07-15-1152-planning-audit-remediation.md
@@ -476,3 +476,4 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 ## Progress Log
 - 2026-07-15 12:16 Created from approved planning doc
 - 2026-07-15 12:29 Split OAuth, cross-repo contracts, repository cleanup, extraction, and advisory work into independent TDD PRs; made coverage/warning and release trust-chain gates concrete.
+- 2026-07-15 12:34 Fresh doing-doc re-review passed; execution is ready.

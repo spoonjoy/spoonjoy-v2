@@ -1,6 +1,6 @@
 # Planning: Spoonjoy Audit Remediation
 
-**Status**: NEEDS_REVIEW
+**Status**: approved
 **Created**: 2026-07-15 11:54
 
 ## Goal
@@ -145,3 +145,4 @@ Repo-local `subagents/work-planner.md` and `subagents/work-doer.md` were unavail
 - 2026-07-15 12:20 Mapped every audit finding to rollback coverage and added the missing Clem credential recovery boundary.
 - 2026-07-15 12:22 Final fresh planning gate passed with all 12 findings, rollback/recovery, visual evidence, release closure, and human-only actions covered.
 - 2026-07-15 12:29 Reopened review after doing-doc audit to add installed TestFlight access as a human-only action and tighten execution granularity.
+- 2026-07-15 12:34 Fresh planning re-review passed after the installed TestFlight human-only boundary was added.
