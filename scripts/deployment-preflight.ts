@@ -131,6 +131,8 @@ const STORYBOOK_PAGES_PROJECT_NAME = "spoonjoy-storybook";
 const STORYBOOK_PAGES_DEPLOY_COMMAND =
   "pages deploy --project-name=spoonjoy-storybook --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }} --commit-dirty=true";
 const REQUIRED_PNPM_PACKAGE_MANAGER = "pnpm@10.28.1";
+const PINNED_SETUP_NODE_ACTION = "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38";
+const PINNED_WRANGLER_ACTION = "cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0";
 const REQUIRED_IGNORED_BUILD_PACKAGES = [
   "@prisma/client",
   "@prisma/engines",
@@ -279,19 +281,59 @@ function blockHasMainBranch(lines: WorkflowLine[], branchesStart: number, branch
 }
 
 function workflowTriggerTargetsMain(lines: WorkflowLine[], onIndex: number, onEnd: number, trigger: string): boolean {
-  const triggerBlock = childBlock(lines, onIndex, onEnd, trigger);
-  if (!triggerBlock) return false;
+  const triggerBlock = childBlock(lines, onIndex, onEnd, trigger)!;
   const branches = childBlock(lines, triggerBlock[0], triggerBlock[1], "branches");
   return branches ? blockHasMainBranch(lines, branches[0], branches[1]) : false;
 }
 
-function workflowDeploysPushesToMain(workflow: string): boolean {
+function workflowActionReferencesArePinned(workflow: string): boolean {
+  const actionReferences = workflowLines(workflow)
+    .map((line) => line.text.match(/^(?:-\s+)?uses:\s*(\S+)$/)?.[1] ?? null)
+    .filter((reference): reference is string => reference !== null);
+  return actionReferences.length > 0 && actionReferences.every((reference) => /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+@[0-9a-f]{40}$/.test(reference));
+}
+
+function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
   const lines = workflowLines(workflow);
   const onIndex = lines.findIndex((line) => line.indent === 0 && line.text === "on:");
   if (onIndex === -1) return false;
   const onEnd = blockEnd(lines, onIndex);
+  const workflowRun = childBlock(lines, onIndex, onEnd, "workflow_run");
   const workflowDispatch = childBlock(lines, onIndex, onEnd, "workflow_dispatch");
-  return Boolean(workflowDispatch) && workflowTriggerTargetsMain(lines, onIndex, onEnd, "push");
+  if (!workflowRun || !workflowDispatch) return false;
+
+  const dispatchInputs = childBlock(lines, workflowDispatch[0], workflowDispatch[1], "inputs");
+  const sourceSha = dispatchInputs ? childBlock(lines, dispatchInputs[0], dispatchInputs[1], "source_sha") : null;
+  if (!sourceSha) return false;
+
+  const activeText = lines.map((line) => line.text).join("\n");
+  const requiredFragments = [
+    "workflows: [CI]",
+    "branches: [main]",
+    "types: [completed]",
+    "SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.source_sha }}",
+    "github.event.workflow_run.conclusion == 'success'",
+    "github.event.workflow_run.event == 'push'",
+    "github.event.workflow_run.head_branch == 'main'",
+    "ref: ${{ env.SOURCE_SHA }}",
+    "name: Validate release source",
+    "grep -Eq '^[0-9a-f]{40}$'",
+    'git merge-base --is-ancestor "$SOURCE_SHA" origin/main',
+    'gh run list --workflow CI --branch main --commit "$SOURCE_SHA" --event push --status success',
+    "name: Record release source",
+    "Source SHA: `%s`",
+  ];
+
+  return (
+    workflowHasOnlyTriggers(lines, onIndex, onEnd, ["workflow_run", "workflow_dispatch"]) &&
+    blockScalarChildValue(lines, workflowRun[0], workflowRun[1], "workflows") === "[CI]" &&
+    blockScalarChildValue(lines, workflowRun[0], workflowRun[1], "branches") === "[main]" &&
+    blockScalarChildValue(lines, workflowRun[0], workflowRun[1], "types") === "[completed]" &&
+    blockScalarChildValue(lines, sourceSha[0], sourceSha[1], "required") === "true" &&
+    blockScalarChildValue(lines, sourceSha[0], sourceSha[1], "type") === "string" &&
+    requiredFragments.every((fragment) => activeText.includes(fragment)) &&
+    workflowActionReferencesArePinned(workflow)
+  );
 }
 
 function workflowBuildsPushesAndPullRequestsToMain(workflow: string): boolean {
@@ -523,7 +565,8 @@ function workflowUsesCorepackPnpmSetup(workflow: string): boolean {
 
     for (const [stepStart, stepEnd] of stepBlocks(lines, steps[0], steps[1])) {
       if (
-        stepUsesExactly(lines, stepStart, stepEnd, "actions/setup-node@v6") &&
+        (stepUsesExactly(lines, stepStart, stepEnd, "actions/setup-node@v6") ||
+          stepUsesExactly(lines, stepStart, stepEnd, PINNED_SETUP_NODE_ACTION)) &&
         stepWithValue(lines, stepStart, stepEnd, "node-version") === "22"
       ) {
         nodeSetupStep = stepStart;
@@ -735,7 +778,8 @@ function storybookDeployPrepRunIsClean(run: string): boolean {
 
 function storybookWranglerDeployStepIsClean(lines: WorkflowLine[], stepStart: number, stepEnd: number): boolean {
   return (
-    stepUsesExactly(lines, stepStart, stepEnd, "cloudflare/wrangler-action@v4") &&
+    (stepUsesExactly(lines, stepStart, stepEnd, "cloudflare/wrangler-action@v4") ||
+      stepUsesExactly(lines, stepStart, stepEnd, PINNED_WRANGLER_ACTION)) &&
     stepWithValue(lines, stepStart, stepEnd, "apiToken") === "${{ secrets.CLOUDFLARE_API_TOKEN }}" &&
     stepWithValue(lines, stepStart, stepEnd, "accountId") === "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" &&
     stepWithValue(lines, stepStart, stepEnd, "workingDirectory") === STORYBOOK_PAGES_DEPLOY_DIR &&
@@ -964,11 +1008,11 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     ),
     check(
       "production deploy workflow",
-      workflowDeploysPushesToMain(inputs.productionDeployWorkflow) &&
+      workflowDeploysSuccessfulCiSha(inputs.productionDeployWorkflow) &&
         workflowHasCloudflareDeployAutoStep(inputs.productionDeployWorkflow) &&
         workflowHasGitDefaultBranchConfig(inputs.productionDeployWorkflow) &&
         workflowUsesCorepackPnpmSetup(inputs.productionDeployWorkflow),
-      ".github/workflows/production-deploy.yml must auto-deploy pushes to main with deploy:auto while keeping manual dispatch, Cloudflare credentials, checkout warning suppression, and Corepack pnpm activation wired."
+      ".github/workflows/production-deploy.yml must deploy only an exact successful main-branch CI SHA, validate exact-SHA manual dispatches, pin every action, run deploy:auto with Cloudflare credentials, and record the released SHA."
     ),
     check(
       "QA image-cover smoke workflow",

@@ -640,6 +640,8 @@ describe("deployment preflight", () => {
 
   it.each([
     ["a required manual source SHA", "        required: true", "        required: false"],
+    ["manual dispatch inputs", "    inputs:", "    invalid_inputs:"],
+    ["the source_sha input", "      source_sha:", "      invalid_source_sha:"],
     [
       "a successful workflow-run conclusion",
       "github.event.workflow_run.conclusion == 'success'",
@@ -655,6 +657,86 @@ describe("deployment preflight", () => {
   ])("requires %s", (_name, expected, replacement) => {
     const inputs = validInputs();
     inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(expected, replacement);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it("accepts a secure production workflow whose deploy command is an inline step", () => {
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
+      [
+        "      - name: Deploy to Cloudflare Workers",
+        "        env:",
+        "          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+        "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+        "        run: pnpm run deploy:auto",
+      ].join("\n"),
+      [
+        "      - run: pnpm run deploy:auto",
+        "        env:",
+        "          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+        "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+      ].join("\n"),
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).not.toContain("production deploy workflow");
+  });
+
+  it("rejects a secure production workflow whose block deploy step never deploys", () => {
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
+      [
+        "      - name: Deploy to Cloudflare Workers",
+        "        env:",
+        "          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+        "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+        "        run: pnpm run deploy:auto",
+      ].join("\n"),
+      [
+        "      - name: Deploy to Cloudflare Workers",
+        "        run: |",
+        "          echo no-deploy-command",
+        "        env:",
+        "          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+        "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+      ].join("\n"),
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it("rejects extra production jobs without warning-clean setup", () => {
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
+      "jobs:\n  deploy:",
+      "jobs:\n  metadata:\n    runs-on: ubuntu-latest\n  deploy:",
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it("rejects nested and malformed deploy credential entries in a secure workflow", () => {
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
+      [
+        "          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+        "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+      ].join("\n"),
+      [
+        "          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+        "          nested:",
+        "            CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+        "          - malformed-env-line",
+      ].join("\n"),
+    );
 
     const result = validateDeploymentConfig(inputs);
 
@@ -727,6 +809,22 @@ describe("deployment preflight", () => {
         "    no_steps:\n      - uses: actions/checkout@v6",
       ),
     });
+    const multilineBranches = validateDeploymentConfig({
+      ...validInputs(),
+      ciWorkflow: validCiWorkflow()
+        .replace("    branches: [main]", "    branches:\n      - main")
+        .replace("    branches: [main]", "    branches:\n      - main"),
+    });
+    const multilineBranchesWithoutMain = validateDeploymentConfig({
+      ...validInputs(),
+      ciWorkflow: validCiWorkflow()
+        .replace("    branches: [main]", "    branches:\n      - feature/not-main")
+        .replace("    branches: [main]", "    branches:\n      - feature/not-main"),
+    });
+    const pushWithoutBranches = validateDeploymentConfig({
+      ...validInputs(),
+      ciWorkflow: validCiWorkflow().replace("  push:\n    branches: [main]", "  push:"),
+    });
 
     expect(valid.errors.map((item) => item.name)).not.toContain("CI workflow");
     expect(missingGitConfig.errors.map((item) => item.name)).toContain("CI workflow");
@@ -736,6 +834,9 @@ describe("deployment preflight", () => {
     expect(missingOnBlock.errors.map((item) => item.name)).toContain("CI workflow");
     expect(missingJobs.errors.map((item) => item.name)).toContain("CI workflow");
     expect(missingSteps.errors.map((item) => item.name)).toContain("CI workflow");
+    expect(multilineBranches.errors.map((item) => item.name)).not.toContain("CI workflow");
+    expect(multilineBranchesWithoutMain.errors.map((item) => item.name)).toContain("CI workflow");
+    expect(pushWithoutBranches.errors.map((item) => item.name)).toContain("CI workflow");
   });
 
   it("rejects a block-style production workflow run step that does not deploy", () => {
