@@ -19,21 +19,21 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 - None
 
 ## Completion Criteria
-- [ ] Recipe management exposes a polished Photo Studio web workflow for no-photo and has-photo recipes.
+- [x] Recipe management exposes a polished Photo Studio web workflow for no-photo and has-photo recipes.
 - [x] Uploading the first photo can create a Spoon with optional Spoon fields and defaults to creating an editorialized recipe cover while preserving the original photo on the Spoon.
 - [x] The active recipe photo shows the original immediately while editorialization is processing, displays a clear loading chip, and refreshes to the editorial variant when ready.
-- [ ] Backend cover lifecycle supports upload, Spoon-origin cover creation, AI placeholder generation, regeneration with prompt additions, activation, archive, no-cover mode, status polling, and owner media validation.
-- [ ] REST API v1 exposes the native-required real cover upload/create/regenerate/status contracts with request-shape tests and docs/OpenAPI/playground drift coverage.
+- [x] Backend cover lifecycle supports upload, Spoon-origin cover creation, AI placeholder generation, regeneration with prompt additions, activation, archive, no-cover mode, status polling, and owner media validation.
+- [x] REST API v1 exposes the native-required real cover upload/create/regenerate/status contracts with request-shape tests and docs/OpenAPI/playground drift coverage.
 - [x] Native queued cover uploads preserve `clientMutationId`, Spoon-posting fields, activation choice, and editorialization choice without dropping staged media on validation or cancellation errors.
 - [x] MCP/agent tools expose the same core cover lifecycle, including generated placeholders and prompt additions.
 - [x] Native Apple Photo Studio uses the real backend contracts and platform-native upload/Spoon/detail/editorial controls.
 - [x] User-facing cover labels no longer say misleading "Chef photo" or generic "Spoonjoy cookbook" for all covers.
 - [x] Prompt additions and cover lineage are persisted and tested for AI placeholder/editorial generation paths.
 - [ ] Web changes are merged and verified on production; native changes are merged and verified through local native validation plus TestFlight/publish status only when existing credentials permit it.
-- [ ] 100% test coverage on all new code
-- [ ] All tests pass
-- [ ] No warnings
-- [ ] If UI/rendering/layout changed: `visual-qa-dogfood` evidence captured, absurdity ledger closed, and automated visual metrics still pass
+- [x] 100% test coverage on all new code
+- [x] All tests pass
+- [x] No warnings
+- [x] If UI/rendering/layout changed: `visual-qa-dogfood` evidence captured, absurdity ledger closed, and automated visual metrics still pass
 
 ## Code Coverage Requirements
 **MANDATORY: 100% coverage on all new code.**
@@ -353,12 +353,12 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 **Output**: Native PR URL and PR body snapshot under `./2026-07-14-1236-doing-recipe-photo-studio/pr-review/native-pr.md`.
 **Acceptance**: `gh pr view --json url,headRefName,baseRefName,statusCheckRollup` from `/Users/arimendelow/Projects/spoonjoy-apple-photo-studio` returns a PR whose `headRefName` is `worker/recipe-photo-studio`, and `native-pr.md` records the URL plus validation artifact paths.
 
-### ⬜ Unit 23: Cold Implementation Review Gates
+### ✅ Unit 23: Cold Implementation Review Gates
 **What**: Run cold reviewer agents against web and native diffs plus validation artifacts, then record reviewer reports.
 **Output**: Reviewer reports under `./2026-07-14-1236-doing-recipe-photo-studio/pr-review/reviewer-reports.md`.
 **Acceptance**: `reviewer-reports.md` contains separate web and native reviewer sections, each ending in `CONVERGED` or listing concrete findings for Unit 24.
 
-### ⬜ Unit 24: Reviewer Finding Fixes
+### ✅ Unit 24: Reviewer Finding Fixes
 **What**: Address any BLOCKER/MAJOR reviewer findings from Unit 23 with focused patches, tests, commits, and re-review.
 **Output**: Fix commits, focused validation logs, and reviewer follow-up notes.
 **Acceptance**: `reviewer-reports.md` has no unresolved `BLOCKER` or `MAJOR` findings after re-review; the focused commands tied to each fix pass; if any fix changes web/backend source, rerun Unit 19 final web validation before Unit 25; if any fix changes native source, rerun Unit 20 final native validation before Unit 26; if any fix changes UI, rerun Unit 11 visual QA before Unit 25 or Unit 26.
@@ -492,3 +492,5 @@ Build Recipe Photo Studio as the owner-facing recipe-management workflow for add
 - 2026-07-15 03:01 Unit 19 complete: fixed final web coverage-gate misses with targeted tests for canonical first-photo upload telemetry/parsing, recipe-detail first-photo direct/error/cleanup branches, MCP placeholder dry-run/waitUntil/null/blank prompt branches, and API v1 cleanup catch paths; committed/pushed `7cf2c527`. Final web coverage passed at 100% statements/branches/functions/lines with 355 files / 6,865 tests (`./2026-07-14-1236-doing-recipe-photo-studio/final-validation/web/pnpm-test-coverage.log`), build passed (`./2026-07-14-1236-doing-recipe-photo-studio/final-validation/web/pnpm-build.log`), local QA cleanup removed disposable residue and post-cleanup scan reported all zero counts (`./2026-07-14-1236-doing-recipe-photo-studio/final-validation/web/pnpm-cleanup-qa-apply.log`, `./2026-07-14-1236-doing-recipe-photo-studio/final-validation/web/pnpm-cleanup-qa-after.log`), and the final warning/failure scan passed (`./2026-07-14-1236-doing-recipe-photo-studio/final-validation/web/warning-scan.log`).
 - 2026-07-15 04:00 Unit 20 complete: fixed final native coverage-gate misses with compatibility-shim tests for `activateWhenReady`, committed/pushed native test fix `e9f2bdcf`, and reran final native validation. Final Swift test passed (587 tests / 52 suites, `./2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/swift-test.log`); final native matrix passed with 39/39 validation steps, 34/34 screenshot/design-review routes, zero failed/blocked/missing-review routes (`./2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/apple/validation-matrix.json`, `./2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/apple/matrix-route-matrix.json`); coverage enforcement passed at 100.00% (26,810 / 26,810, `./2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/apple/matrix-coverage-enforce.log`); final warning scan passed (`./2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/fail-on-warning-final.log`).
 - 2026-07-15 04:04 Units 21-22 complete: opened web PR https://github.com/spoonjoy/spoonjoy-v2/pull/253 and native PR https://github.com/spoonjoy/spoonjoy-apple/pull/47 against `main`, saved PR body snapshots under `./2026-07-14-1236-doing-recipe-photo-studio/pr-review/`, verified both PRs report `headRefName=worker/recipe-photo-studio` and `baseRefName=main`; GitHub CI is running on both PRs.
+- 2026-07-15 06:08 Unit 23 complete: recorded cold implementation reviews in `./2026-07-14-1236-doing-recipe-photo-studio/pr-review/reviewer-reports.md`. Web reviewer Boole found MAJOR REST owner-validation, prompt/idempotency, and typecheck issues; native reviewer Helmholtz found MAJOR offline placeholder runtime-copy and source-contract scoping issues. Both review paths now list concrete fix evidence.
+- 2026-07-15 06:08 Unit 24 complete: addressed reviewer findings with web commit `fcebc376` and native commit `7826ed2b`, then reran final validations. Web PR checks are green (`coverage`, `e2e`, `build-storybook`), native PR checks are green (`Swift tests`, `Native scenario verifier`, `App bundle`, `Coverage`), web warning scan over final logs is clean, and refreshed native validation passed 39/39 validation rows plus 34/34 route screenshot rows with no blocked/missing-review routes.

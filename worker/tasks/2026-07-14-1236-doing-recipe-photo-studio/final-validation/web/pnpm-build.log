@@ -81,9 +81,9 @@ build/client/assets/shopping-bag-CI1_Y5IO.js                               0.47 
 build/client/assets/jsx-runtime-u17CrQMm.js                                0.48 kB │ gzip:  0.31 kB
 build/client/assets/settings-Bsq7Behk.js                                   0.49 kB │ gzip:  0.26 kB
 build/client/assets/sparkles-BuD1IXFN.js                                   0.51 kB │ gzip:  0.29 kB
-build/client/assets/api-BptRKt5D.js                                        0.54 kB │ gzip:  0.33 kB
-build/client/assets/api.playground-Br14ZamO.js                             0.54 kB │ gzip:  0.33 kB
-build/client/assets/api.try-Br14ZamO.js                                    0.54 kB │ gzip:  0.33 kB
+build/client/assets/api-Bd6Zc_Hq.js                                        0.54 kB │ gzip:  0.33 kB
+build/client/assets/api.playground-Ol21zDp_.js                             0.54 kB │ gzip:  0.33 kB
+build/client/assets/api.try-Ol21zDp_.js                                    0.54 kB │ gzip:  0.33 kB
 build/client/assets/confirmation-dialog-BPlIYcHD.js                        0.56 kB │ gzip:  0.34 kB
 build/client/assets/hidden-BdGWekbs.js                                     0.60 kB │ gzip:  0.43 kB
 build/client/assets/validation-error-HqTYKZOa.js                           0.64 kB │ gzip:  0.41 kB
@@ -152,15 +152,15 @@ build/client/assets/listbox-C8A3ynE7.js                                   22.54 
 build/client/assets/account.settings-BZkTZYF9.js                          23.09 kB │ gzip:  6.65 kB
 build/client/assets/use-text-value-s3YBdWJh.js                            34.53 kB │ gzip: 13.26 kB
 build/client/assets/root-CaP12eX3.js                                      37.57 kB │ gzip: 12.27 kB
-build/client/assets/developers.playground-DIsLAu6I.js                     44.78 kB │ gzip: 11.84 kB
-build/client/assets/developers-FWgCUcS8.js                                50.74 kB │ gzip: 14.68 kB
+build/client/assets/developers.playground-CggPCXse.js                     44.78 kB │ gzip: 11.84 kB
+build/client/assets/developers-l2OqBsi1.js                                50.74 kB │ gzip: 14.68 kB
 build/client/assets/recipes._id-Boe9UcDs.js                               64.15 kB │ gzip: 17.29 kB
 build/client/assets/proxy-CgfgtWEe.js                                    115.78 kB │ gzip: 37.98 kB
 build/client/assets/chunk-JZWAC4HX-B0pGvS2Z.js                           125.17 kB │ gzip: 42.32 kB
 build/client/assets/index-2tACxc1o.js                                    175.88 kB │ gzip: 57.86 kB
 build/client/assets/entry.client-DB-7Y-h9.js                             187.13 kB │ gzip: 59.17 kB
-build/client/assets/og-metadata-JdlY4fP2.js                              400.57 kB │ gzip: 27.98 kB
-✓ built in 4.24s
+build/client/assets/og-metadata-CQAZQouj.js                              401.00 kB │ gzip: 28.08 kB
+✓ built in 3.86s
 vite v7.3.1 building ssr environment for production...
 transforming...
 ✓ 3215 modules transformed.
@@ -175,14 +175,14 @@ build/server/assets/resvg-Blvrv-U2.wasm             2,478.61 kB
 build/server/assets/server-build-7-R47ruk.css         150.81 kB
 build/server/assets/wasm-worker-loader-BRtQh8vu.js      0.11 kB
 build/server/_worker.js                                 0.15 kB
-build/server/assets/index-BmBLcNtP.js                  80.88 kB
-build/server/assets/default-CGoA4rPL.js               266.48 kB
+build/server/assets/index-CG4a7W38.js                  80.88 kB
+build/server/assets/default-Cu4qV47V.js               266.48 kB
 build/server/assets/index-gksP9o8C.js                 936.72 kB
-build/server/assets/worker-entry-BeuLVQ94.js        1,097.89 kB
-build/server/assets/server-build-CS3DWERP.js        4,146.98 kB
+build/server/assets/worker-entry-C9VomWD6.js        1,097.93 kB
+build/server/assets/server-build-LNlj4P-H.js        4,148.95 kB
 
 ✓ 1 asset copied from React Router server build to client assets.
 build/client/assets/server-build-7-R47ruk.css
 
 
-✓ built in 5.45s
+✓ built in 4.63s

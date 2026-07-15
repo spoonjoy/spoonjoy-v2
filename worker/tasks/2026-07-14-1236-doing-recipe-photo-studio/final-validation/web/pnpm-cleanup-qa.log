@@ -23,18 +23,6 @@ Use --remote if you want to access the remote instance.
     "results": [
       {
         "item": "hard-delete recipes owned by disposable users",
-        "count": 4
-      }
-    ],
-    "success": true,
-    "meta": {
-      "duration": 0
-    }
-  },
-  {
-    "results": [
-      {
-        "item": "soft-delete suspicious recipes owned by non-disposable users",
         "count": 0
       }
     ],
@@ -46,8 +34,20 @@ Use --remote if you want to access the remote instance.
   {
     "results": [
       {
+        "item": "soft-delete suspicious recipes owned by non-disposable users",
+        "count": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [
+      {
         "item": "active suspicious recipes",
-        "count": 4
+        "count": 0
       }
     ],
     "success": true,
@@ -71,19 +71,19 @@ Use --remote if you want to access the remote instance.
     "results": [
       {
         "item": "disposable users",
-        "count": 1
+        "count": 0
       }
     ],
     "success": true,
     "meta": {
-      "duration": 0
+      "duration": 1
     }
   },
   {
     "results": [
       {
         "item": "disposable spoons by chef or note",
-        "count": 1
+        "count": 0
       }
     ],
     "success": true,

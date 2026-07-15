@@ -11,10 +11,10 @@ Booting simulator: xcrun simctl boot 4EAF4563-339C-4CCA-A13B-AD395C7A1F65
 simulator boot exit code: 0
 Checking reusable iOS simulator app install marker: /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/apple/matrix-ios-installed.marker
 simulator reusable app container lookup exit code: 0
-/Users/arimendelow/Library/Developer/CoreSimulator/Devices/4EAF4563-339C-4CCA-A13B-AD395C7A1F65/data/Containers/Data/Application/C716F5BD-922E-4EA6-AE74-B0E1967272CA
+/Users/arimendelow/Library/Developer/CoreSimulator/Devices/4EAF4563-339C-4CCA-A13B-AD395C7A1F65/data/Containers/Data/Application/ED08E132-5E43-4A77-B05B-4F838D970C7B
 Reusing installed iOS simulator app for this screenshot route
 Launching app: xcrun simctl launch --terminate-running-process app.spoonjoy
 simulator launch attempt 1/3
-app.spoonjoy: 98005
+app.spoonjoy: 49656
 simulator launch attempt 1 exit code: 0
 simulator launch exit code: 0

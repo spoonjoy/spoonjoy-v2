@@ -16,6 +16,6 @@ simulator install exit code: 0
 Wrote reusable iOS simulator app install marker: /Users/arimendelow/Projects/spoonjoy-v2-photo-studio/worker/tasks/2026-07-14-1236-doing-recipe-photo-studio/final-validation/native/matrix/apple/matrix-ios-installed.marker
 Launching app: xcrun simctl launch --terminate-running-process app.spoonjoy
 simulator launch attempt 1/3
-app.spoonjoy: 93561
+app.spoonjoy: 43943
 simulator launch attempt 1 exit code: 0
 simulator launch exit code: 0
