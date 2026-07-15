@@ -550,13 +550,13 @@ describe("API v1 recipe spoons", () => {
         isOriginCook: true,
         createdCover: expect.objectContaining({
           sourceType: "spoon",
-          activeVariant: null,
+          activeVariant: "image",
         }),
       },
     });
     expect(recipe).toMatchObject({
       activeCoverId: payload.data.createdCover.id,
-      activeCoverVariant: null,
+      activeCoverVariant: "image",
       coverMode: "auto",
     });
 

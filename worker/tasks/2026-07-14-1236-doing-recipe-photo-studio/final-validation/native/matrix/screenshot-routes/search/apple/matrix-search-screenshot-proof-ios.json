@@ -1,0 +1,23 @@
+{
+  "accountID": "chef_search_capture",
+  "query": "",
+  "route": "search",
+  "routeIdentifier": "search:all:",
+  "scope": "all",
+  "searchScopes": [
+    "all",
+    "recipes",
+    "cookbooks",
+    "chefs",
+    "shopping-list"
+  ],
+  "source": "SearchView",
+  "visibleSections": [
+    "Recipes",
+    "Cookbooks",
+    "Chefs",
+    "Shopping"
+  ],
+  "writtenAt": "2026-07-15T12:49:04Z",
+  "platform": "ios"
+}

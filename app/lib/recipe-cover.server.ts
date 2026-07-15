@@ -30,11 +30,14 @@ export const RECIPE_COVER_DISPLAY_SELECT = {
   failureReason: true,
   promptVersion: true,
   styleVersion: true,
+  promptAddition: true,
+  parentCoverId: true,
   archivedAt: true,
   createdAt: true,
 } satisfies Record<keyof RecipeCover, true>;
 
 export interface CreateCoverInput {
+  id?: string;
   recipeId: string;
   imageUrl: string;
   stylizedImageUrl?: string | null;
@@ -47,6 +50,8 @@ export interface CreateCoverInput {
   failureReason?: string | null;
   promptVersion?: string | null;
   styleVersion?: string | null;
+  promptAddition?: string | null;
+  parentCoverId?: string | null;
   archivedAt?: Date | null;
 }
 
@@ -96,6 +101,7 @@ export async function createCover(
 
   return db.recipeCover.create({
     data: {
+      id: input.id,
       recipeId: input.recipeId,
       imageUrl: input.imageUrl,
       stylizedImageUrl: input.stylizedImageUrl ?? null,
@@ -108,6 +114,8 @@ export async function createCover(
       failureReason: input.failureReason ?? null,
       promptVersion: input.promptVersion ?? null,
       styleVersion: input.styleVersion ?? null,
+      promptAddition: input.promptAddition ?? null,
+      parentCoverId: input.parentCoverId ?? null,
       archivedAt: input.archivedAt ?? null,
     },
   });
@@ -177,6 +185,8 @@ export function recipeCoverCacheSnapshot(cover: RecipeCover | null) {
     failureReason: cover.failureReason,
     promptVersion: cover.promptVersion,
     styleVersion: cover.styleVersion,
+    promptAddition: cover.promptAddition,
+    parentCoverId: cover.parentCoverId,
     archivedAt: cover.archivedAt?.toISOString() ?? null,
     createdAt: cover.createdAt.toISOString(),
   };
@@ -395,9 +405,9 @@ export function getRecipeCoverProvenanceLabel(
 
 function provenanceLabel(sourceType: string, variant: RecipeCoverVariant): string {
   if ((sourceType === "chef-upload" || sourceType === "spoon") && variant === "stylized") {
-    return "Editorialized chef photo";
+    return "Editorial photo";
   }
-  if (sourceType === "chef-upload" || sourceType === "spoon") return "Chef photo";
+  if (sourceType === "chef-upload" || sourceType === "spoon") return "Original photo";
   if (sourceType === "import") return "Imported photo";
   if (sourceType === "ai-placeholder") return "AI generated";
   return "Unknown source";

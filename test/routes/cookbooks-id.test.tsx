@@ -956,7 +956,7 @@ describe("Cookbooks $id Route", () => {
 
       expect(result.coverImageUrls).toContain("/photos/covered-editorial.jpg");
       expect(result.coverImageUrls).toContain(null);
-      expect(result.cookbook.recipes[0].recipe.coverProvenanceLabel).toBe("Editorialized chef photo");
+      expect(result.cookbook.recipes[0].recipe.coverProvenanceLabel).toBe("Editorial photo");
       expect(result.canonicalUrl).toBe(`http://localhost:3000/cookbooks/${cookbookId}`);
       expect(result.ogImageUrl).toBe(`http://localhost:3000/og/cookbooks/${cookbookId}.png`);
     });
@@ -987,7 +987,7 @@ describe("Cookbooks $id Route", () => {
         { property: "og:image", content: "https://spoonjoy.app/og/cookbooks/cb-1.png" },
         { property: "og:image:width", content: "1200" },
         { property: "og:image:height", content: "630" },
-        { property: "og:image:type", content: "image/png" },
+        { property: "og:image:type", content: "image/svg+xml" },
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:title", content: "Weeknight Book" },
         { name: "twitter:description", content: "Weeknight Book by ari on Spoonjoy with 1 recipe." },
@@ -1113,7 +1113,7 @@ describe("Cookbooks $id Route", () => {
                 description: "Classic pasta",
                 servings: "2",
                 coverImageUrl: "https://example.com/spaghetti.jpg",
-                coverProvenanceLabel: "Editorialized chef photo",
+                coverProvenanceLabel: "Editorial photo",
                 chef: { username: "testchef" },
               },
             },
@@ -1146,9 +1146,9 @@ describe("Cookbooks $id Route", () => {
 
       expect(await screen.findByRole("heading", { name: "Recipe Collection", level: 1 })).toBeInTheDocument();
       expect(screen.getAllByText("2 recipes").length).toBeGreaterThan(0);
-      expect(within(screen.getByLabelText("Recipe Collection cover photos")).getByText("Editorialized chef photo")).toBeInTheDocument();
+      expect(within(screen.getByLabelText("Recipe Collection cover photos")).getByText("Editorial photo")).toBeInTheDocument();
       const recipesSection = screen.getByRole("region", { name: "Recipes" });
-      expect(within(recipesSection).getByText("Editorialized chef photo")).toBeInTheDocument();
+      expect(within(recipesSection).getByText("Editorial photo")).toBeInTheDocument();
       expect(within(recipesSection).getByRole("link", { name: "Spaghetti" })).toHaveAttribute(
         "href",
         "/recipes/recipe-1"

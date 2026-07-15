@@ -1,0 +1,35 @@
+{
+  "mobileScreenshot": true,
+  "desktopScreenshot": true,
+  "screenshotRoute": "settings",
+  "dynamicType": true,
+  "voiceOverLabels": true,
+  "keyboardNavigation": true,
+  "reduceMotion": true,
+  "contrast": true,
+  "kitchenTableHierarchy": true,
+  "noOverlap": true,
+  "accessibilityProofArtifacts": [
+    "apple/matrix-settings-signed-out-accessibility-proof-ios.json",
+    "apple/matrix-settings-signed-out-accessibility-proof-macos.json"
+  ],
+  "blockers": [
+
+  ],
+  "settingsCaptureVariant": "signed-out",
+  "settingsScreenshotAuth": "0",
+  "settingsSignedInSurface": false,
+  "settingsSignedOutSurface": true,
+  "settingsVisualFocus": "signed-out",
+  "settingsSurfaceProofArtifacts": [
+    "apple/matrix-settings-signed-out-screenshot-proof-ios.json",
+    "apple/matrix-settings-signed-out-screenshot-proof-macos.json"
+  ],
+  "settingsSignedOutHandoffSurface": true,
+  "settingsSections": [
+    "Session",
+    "Environment",
+    "Offline"
+  ],
+  "settingsSeedAccountID": "signed-out"
+}

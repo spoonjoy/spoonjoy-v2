@@ -1,0 +1,88 @@
+- link "Skip to main content":
+  - /url: "#main"
+- main:
+  - generic: Awaiting first photo
+  - link "Recipes":
+    - /url: /recipes
+    - text: Recipes
+  - link "Cook mode":
+    - /url: /recipes/cmrlnap1q00026vi50xw9y9xo#cook
+  - button "Save"
+  - button "Add to list"
+  - button "Share"
+  - button "Log cook"
+  - heading "Codex Photo Studio No Photo mrlnaoxt" [level=1]
+  - link "codex_photo_mrlnaoxt":
+    - /url: /users/codex_photo_mrlnaoxt
+    - img "codex_photo_mrlnaoxt":
+      - generic: C
+    - img "codex_photo_mrlnaoxt"
+    - text: By
+    - strong: codex_photo_mrlnaoxt
+  - paragraph: Visual QA fixture with no cover yet.
+  - button "Decrease scale":
+  - generic: Yield
+  - generic: Serves 4
+  - button "Increase scale":
+  - button "Clear progress"
+  - button "Recipe maintenance Close" [expanded]:
+    - generic: Recipe maintenance
+    - generic: Close
+  - link "Edit recipe":
+    - /url: /recipes/cmrlnap1q00026vi50xw9y9xo/edit
+  - button "Make a variation"
+  - button "Delete"
+  - region "Photo studio":
+    - heading "Photo studio" [level=3]
+    - paragraph: Add first photo
+    - text: Recipe photo
+    - button "Recipe photo Codex Photo Studio No Photo mrlnaoxt No photo selected JPG, PNG, or WebP. 5 MB max."
+    - generic: Codex Photo Studio No Photo mrlnaoxt
+    - generic: No photo selected
+    - generic: JPG, PNG, or WebP. 5 MB max.
+    - checkbox "Post as Spoon" [checked]:
+    - generic: Post as Spoon
+    - checkbox "Editorialize cover" [checked]:
+    - generic: Editorialize cover
+    - button "Spoon details":
+      - text: Spoon details
+    - text: Editorial direction
+    - textbox "Editorial direction":
+      - /placeholder: Brighter light, cleaner table, keep the plating
+    - button "Save photo" [disabled]:
+      - text: Save photo
+  - region "Recipe covers":
+    - heading "Recipe covers" [level=3]
+    - paragraph: Keep originals and editorial versions available for this recipe.
+    - button "Set no cover"
+    - generic: No cover selected
+    - generic: Explicit empty state
+    - text: Placeholder direction
+    - textbox "Placeholder direction" [active]:
+      - /placeholder: Bright window light, golden edges, linen backdrop
+      - text: Bright linen
+    - button "Generate placeholder cover"
+    - paragraph: No saved covers yet.
+  - paragraph: Cook mode
+  - heading "Steps" [level=2]
+  - paragraph: Tap ingredients as you go
+  - paragraph: No steps added yet
+  - link "Add Steps":
+    - /url: /recipes/cmrlnap1q00026vi50xw9y9xo/edit
+  - heading "Cooks" [level=2]
+  - paragraph: No cooks yet.
+  - button "Log the first cook"
+- navigation "Spoonjoy navigation":
+  - link "Back recipes":
+    - /url: /recipes
+    - generic: Back
+    - generic: recipes
+  - button "Cook":
+    - generic: Cook
+  - button "Add ingredients to shopping list":
+    - generic: List
+  - button "Share":
+    - generic: Share
+  - link "Edit":
+    - /url: /recipes/cmrlnap1q00026vi50xw9y9xo/edit
+    - generic: Edit

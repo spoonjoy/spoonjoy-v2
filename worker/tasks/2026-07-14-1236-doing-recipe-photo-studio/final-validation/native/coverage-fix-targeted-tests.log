@@ -1,0 +1,131 @@
+[0/1] Planning build
+Building for debugging...
+[0/9] Write sources
+[1/9] Write swift-version--58304C5D6DBC2206.txt
+[3/57] Emitting module SpoonjoyNativeDogfood
+[4/57] Compiling SpoonjoyNativeDogfood main.swift
+[4/57] Write Objects.LinkFileList
+[5/57] Linking SpoonjoyNativeDogfood
+[6/57] Applying SpoonjoyNativeDogfood
+[8/57] Compiling SpoonjoyCoreTests NotificationIntentTests.swift
+[9/57] Compiling SpoonjoyCoreTests OAuthRequestTests.swift
+[10/57] Compiling SpoonjoyCoreTests OfflineStoreTests.swift
+[11/57] Compiling SpoonjoyCoreTests OpenSearchShareCookIntentTests.swift
+[12/57] Compiling SpoonjoyCoreTests ProfileChefGraphSurfaceTests.swift
+[13/62] Emitting module SpoonjoyCoreTests
+[14/62] Compiling SpoonjoyCoreTests ProfileSettingsIntentTests.swift
+[15/62] Compiling SpoonjoyCoreTests RecipeActionIntentTests.swift
+[16/62] Compiling SpoonjoyCoreTests RecipeActionParityTests.swift
+[17/62] Compiling SpoonjoyCoreTests RecipeCatalogDetailTests.swift
+[18/62] Compiling SpoonjoyCoreTests RecipeCookbookEntityTests.swift
+[19/62] Compiling SpoonjoyCoreTests ShoppingEntityTests.swift
+[20/62] Compiling SpoonjoyCoreTests ShoppingIntentTests.swift
+[21/62] Compiling SpoonjoyCoreTests ShoppingSurfaceParityTests.swift
+[22/62] Compiling SpoonjoyCoreTests SpoonCookLogSurfaceTests.swift
+[23/62] Compiling SpoonjoyCoreTests SpoonEntityTests.swift
+[24/62] Compiling SpoonjoyCoreTests SpoonIntentTests.swift
+[25/62] Compiling SpoonjoyCoreTests SpoonjoyCoreBootstrapTests.swift
+[26/62] Compiling SpoonjoyCoreTests SpotlightShortcutTransferTests.swift
+[27/62] Compiling SpoonjoyCoreTests TestFlightAutomationContractTests.swift
+[28/62] Compiling SpoonjoyCoreTests TokenRefreshTests.swift
+[29/62] Compiling SpoonjoyCoreTests CaptureImportIntentTests.swift
+[30/62] Compiling SpoonjoyCoreTests CaptureImportSurfaceTests.swift
+[31/62] Compiling SpoonjoyCoreTests ChefProfileEntityTests.swift
+[32/62] Compiling SpoonjoyCoreTests CookModeParityTests.swift
+[33/62] Compiling SpoonjoyCoreTests CookbookIntentTests.swift
+[34/62] Compiling SpoonjoyCoreTests CookbookSurfaceParityTests.swift
+[35/62] Compiling SpoonjoyCoreTests RecipeCookbookTests.swift
+[36/62] Compiling SpoonjoyCoreTests RecipeEditorParityTests.swift
+[37/62] Compiling SpoonjoyCoreTests SettingsAuthSurfaceContractTests.swift
+[38/62] Compiling SpoonjoyCoreTests SettingsTokenConnectionTests.swift
+[39/62] Compiling SpoonjoyCoreTests ShoppingAPIClientTests.swift
+[40/62] Compiling SpoonjoyCoreTests APIReadClientTests.swift
+[41/62] Compiling SpoonjoyCoreTests APITransportTests.swift
+[42/62] Compiling SpoonjoyCoreTests AppIntentAvailabilityTelemetryContractTests.swift
+[43/62] Compiling SpoonjoyCoreTests AppStateTests.swift
+[44/62] Compiling SpoonjoyCoreTests AuthTelemetryContractTests.swift
+[45/62] Compiling SpoonjoyCoreTests CaptureDraftEntityTests.swift
+[46/62] Compiling SpoonjoyCoreTests CoverControlSurfaceTests.swift
+[47/62] Compiling SpoonjoyCoreTests DeepLinkRouterTests.swift
+[48/62] Compiling SpoonjoyCoreTests KitchenNavigationDocumentationContractTests.swift
+[49/62] Compiling SpoonjoyCoreTests KitchenRecipesStructureContractTests.swift
+[50/62] Compiling SpoonjoyCoreTests KitchenStateTests.swift
+[51/62] Compiling SpoonjoyCoreTests NativeAPIExpansionTests.swift
+[52/62] Compiling SpoonjoyCoreTests NativeAuthSessionTests.swift
+[53/62] Compiling SpoonjoyCoreTests NativeCacheFreshnessTests.swift
+[54/62] Compiling SpoonjoyCoreTests NativeLiveStoreTests.swift
+[55/62] Compiling SpoonjoyCoreTests NativeMobileDesignContractTests.swift
+[56/62] Compiling SpoonjoyCoreTests NativeScenarioTests.swift
+[57/62] Compiling SpoonjoyCoreTests NativeSearchSurfaceTests.swift
+[58/62] Compiling SpoonjoyCoreTests NativeSharingTests.swift
+[59/62] Compiling SpoonjoyCoreTests NativeSyncEngineTests.swift
+[60/62] Compiling SpoonjoyCoreTests NotificationAPNsSurfaceTests.swift
+[61/64] Compiling SpoonjoyApplePackageTests runner.swift
+[62/64] Emitting module SpoonjoyApplePackageTests
+[62/64] Write Objects.LinkFileList
+[63/64] Linking SpoonjoyApplePackageTests
+Build complete! (31.32s)
+◇ Test run started.
+↳ Testing Library Version: 1902
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite "Native expanded REST v1 request builders" started.
+◇ Suite "Native cover control surface parity" started.
+◇ Test "recipe write and step builders encode idempotent JSON and delete fallback forms" started.
+◇ Test "private account sync token and APNs requests use bearer auth and exact paths" started.
+◇ Test "native photo studio exposes upload spoon editorial placeholder and regeneration controls" started.
+◇ Test "optional public profile and search requests omit bearer by default but can include it" started.
+◇ Test "recipe import builders preserve source variants in idempotent JSON bodies" started.
+◇ Test "cover photo staging accounts for queued uploads and replacement drafts without silent eviction" started.
+◇ Test "API error envelopes preserve structured details for native recovery decisions" started.
+◇ Test "snapshot and cover rows expose current variant labels replacement options and empty states" started.
+◇ Test "native telemetry omits nil and blank optional fields" started.
+◇ Test "cover action preparation copy hides raw implementation errors" started.
+◇ Test "recipe cover and spoon builders cover multipart JSON and optional public list auth" started.
+◇ Test "offline cover actions queue without remote requests" started.
+◇ Test "live cover repository fetches archived cover history and spoon images" started.
+◇ Test "photo studio upload and generation actions plan exact requests" started.
+◇ Test "profile notification token and APNs mutations encode JSON or multipart bodies" started.
+◇ Test "cover photo staging uses real picker bytes and preserves existing staged media on rejection" started.
+◇ Test "archive cover action carries nullable replacement values and query idempotency" started.
+◇ Test "cover candidates decode server backing default and explicit fallback flag" started.
+◇ Test "coverage edges preserve nullable JSON idempotency multipart and import contracts" started.
+◇ Test "cover action success messages stay stable for Siri and UI feedback" started.
+◇ Test "public catalog reads stay anonymous by default and carry public cache policy" started.
+◇ Test "native photo studio view loads PhotosPicker bytes through cover staging policy" started.
+◇ Test "cover rows classify status provenance variants and dates" started.
+◇ Test "online cover actions plan exact REST mutations with offline fallbacks" started.
+◇ Test "multipart builders reject unsafe header values and use unique boundaries" started.
+◇ Test "provider-secret blockers classify API errors and expose shell blocker display" started.
+◇ Test "cookbook and shopping parity builders encode idempotent bodies" started.
+◇ Test "discovery and generated contract requests are anonymous exact GETs" started.
+✔ Test "cover photo staging accounts for queued uploads and replacement drafts without silent eviction" passed after 0.013 seconds.
+✔ Test "API error envelopes preserve structured details for native recovery decisions" passed after 0.013 seconds.
+✔ Test "optional public profile and search requests omit bearer by default but can include it" passed after 0.013 seconds.
+✔ Test "live cover repository fetches archived cover history and spoon images" passed after 0.013 seconds.
+✔ Test "cover action preparation copy hides raw implementation errors" passed after 0.013 seconds.
+✔ Test "offline cover actions queue without remote requests" passed after 0.013 seconds.
+✔ Test "cover photo staging uses real picker bytes and preserves existing staged media on rejection" passed after 0.013 seconds.
+✔ Test "archive cover action carries nullable replacement values and query idempotency" passed after 0.013 seconds.
+✔ Test "native telemetry omits nil and blank optional fields" passed after 0.013 seconds.
+✔ Test "cover candidates decode server backing default and explicit fallback flag" passed after 0.013 seconds.
+✔ Test "cover action success messages stay stable for Siri and UI feedback" passed after 0.013 seconds.
+✔ Test "profile notification token and APNs mutations encode JSON or multipart bodies" passed after 0.013 seconds.
+✔ Test "recipe import builders preserve source variants in idempotent JSON bodies" passed after 0.013 seconds.
+✔ Test "private account sync token and APNs requests use bearer auth and exact paths" passed after 0.013 seconds.
+✔ Test "online cover actions plan exact REST mutations with offline fallbacks" passed after 0.013 seconds.
+✔ Test "recipe write and step builders encode idempotent JSON and delete fallback forms" passed after 0.013 seconds.
+✔ Test "public catalog reads stay anonymous by default and carry public cache policy" passed after 0.013 seconds.
+✔ Test "provider-secret blockers classify API errors and expose shell blocker display" passed after 0.013 seconds.
+✔ Test "discovery and generated contract requests are anonymous exact GETs" passed after 0.013 seconds.
+✔ Test "cookbook and shopping parity builders encode idempotent bodies" passed after 0.013 seconds.
+✔ Test "photo studio upload and generation actions plan exact requests" passed after 0.013 seconds.
+✔ Test "multipart builders reject unsafe header values and use unique boundaries" passed after 0.013 seconds.
+✔ Test "recipe cover and spoon builders cover multipart JSON and optional public list auth" passed after 0.013 seconds.
+✔ Test "coverage edges preserve nullable JSON idempotency multipart and import contracts" passed after 0.014 seconds.
+✔ Suite "Native expanded REST v1 request builders" passed after 0.014 seconds.
+✔ Test "native photo studio exposes upload spoon editorial placeholder and regeneration controls" passed after 0.017 seconds.
+✔ Test "snapshot and cover rows expose current variant labels replacement options and empty states" passed after 0.017 seconds.
+✔ Test "cover rows classify status provenance variants and dates" passed after 0.018 seconds.
+✔ Test "native photo studio view loads PhotosPicker bytes through cover staging policy" passed after 0.020 seconds.
+✔ Suite "Native cover control surface parity" passed after 0.020 seconds.
+✔ Test run with 28 tests in 2 suites passed after 0.021 seconds.

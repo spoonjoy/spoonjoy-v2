@@ -1,0 +1,98 @@
+{
+  "bundleIdentifier": "app.spoonjoy",
+  "contrast": true,
+  "dynamicType": true,
+  "emittedBy": "SpoonjoyApp",
+  "keyboardNavigation": true,
+  "kitchenTableHierarchy": true,
+  "launchEnvironmentProof": {
+    "apiBaseURL": "",
+    "screenshotAccountID": "chef_kitchen_capture",
+    "screenshotAPNsPermissionState": "",
+    "screenshotAPNsRegistrationState": "",
+    "screenshotAuth": "1",
+    "screenshotRestoreCacheOnly": "1"
+  },
+  "minimumTargetSize": 44,
+  "noOverlap": true,
+  "noTinyClusters": true,
+  "observedDynamicTypeSize": "large",
+  "observedReduceMotion": false,
+  "offlineIndicatorProof": {
+    "dismissButtonLabel": "Hide offline status",
+    "dismissibleStates": [
+      "offline",
+      "stale"
+    ],
+    "hiddenStates": [
+      "synced",
+      "dismissed"
+    ],
+    "severeStates": [
+      "queuedWork",
+      "syncFailure",
+      "conflict",
+      "blocker",
+      "destructiveConfirmation"
+    ],
+    "severityCorrect": true,
+    "source": "OfflineStatusView",
+    "visibleStates": [
+      "offline",
+      "stale",
+      "queuedWork",
+      "syncFailure",
+      "conflict",
+      "blocker",
+      "destructiveConfirmation"
+    ],
+    "voiceOverLabel": true
+  },
+  "platform": "ios",
+  "reduceMotion": true,
+  "route": "cookbook-detail",
+  "routeEvidence": {
+    "contrastPairs": [
+      "charcoal on bone",
+      "brass on bone",
+      "secondary text on bone"
+    ],
+    "dynamicTypeTextStyles": [
+      "KitchenTableTheme.displayTitle",
+      "KitchenTableTheme.bodyNote",
+      "KitchenTableTheme.uiLabel"
+    ],
+    "hierarchyAnchors": [
+      "CookbookDetailView",
+      "KitchenTableHeader",
+      "CookbookCoverArt",
+      "CookbookDetailHero",
+      "CookbookRecipeIndexRow",
+      "CookbookOwnerToolsDisclosure"
+    ],
+    "keyboardNavigationTargets": [
+      "cookbook primary actions",
+      "CookbookRecipeIndexRow buttons",
+      "share menu",
+      "CookbookOwnerToolsDisclosure"
+    ],
+    "layoutGuards": [
+      "scroll-view",
+      "text-fit",
+      "no-tiny-clusters",
+      "dock-safe-area"
+    ],
+    "voiceOverLabels": [
+      "Weeknights",
+      "Contents",
+      "Share Cookbook",
+      "Owner tools",
+      "Lemon Pantry Pasta",
+      "Tomato Toast"
+    ]
+  },
+  "source": "CookbookDetailView",
+  "textFits": true,
+  "voiceOverLabels": true,
+  "writtenAt": "2026-07-15T12:40:28Z"
+}

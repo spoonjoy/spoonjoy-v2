@@ -352,8 +352,9 @@ describe("recipe-cover.server", () => {
 
   describe("active cover payload helpers", () => {
     it("formats standalone provenance labels", () => {
-      expect(getRecipeCoverProvenanceLabel("spoon", "stylized")).toBe("Editorialized chef photo");
-      expect(getRecipeCoverProvenanceLabel("chef-upload", "image")).toBe("Chef photo");
+      expect(getRecipeCoverProvenanceLabel("spoon", "stylized")).toBe("Editorial photo");
+      expect(getRecipeCoverProvenanceLabel("chef-upload", "image")).toBe("Original photo");
+      expect(getRecipeCoverProvenanceLabel("spoon", "image")).toBe("Original photo");
       expect(getRecipeCoverProvenanceLabel("import", "image")).toBe("Imported photo");
       expect(getRecipeCoverProvenanceLabel("ai-placeholder", "image")).toBe("AI generated");
       expect(getRecipeCoverProvenanceLabel("mystery", "image")).toBe("Unknown source");
@@ -397,10 +398,10 @@ describe("recipe-cover.server", () => {
   describe("getRecipeCoverDisplay", () => {
     it.each([
       ["ai-placeholder", "image", "AI generated"],
-      ["chef-upload", "image", "Chef photo"],
-      ["chef-upload", "stylized", "Editorialized chef photo"],
-      ["spoon", "image", "Chef photo"],
-      ["spoon", "stylized", "Editorialized chef photo"],
+      ["chef-upload", "image", "Original photo"],
+      ["chef-upload", "stylized", "Editorial photo"],
+      ["spoon", "image", "Original photo"],
+      ["spoon", "stylized", "Editorial photo"],
       ["import", "image", "Imported photo"],
     ] as const)("labels %s/%s as %s", (sourceType, variant, provenanceLabel) => {
       const display = getRecipeCoverDisplay(

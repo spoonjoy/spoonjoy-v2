@@ -1,0 +1,21 @@
+{
+  "mobileScreenshot": true,
+  "desktopScreenshot": true,
+  "screenshotRoute": "recipes",
+  "dynamicType": true,
+  "voiceOverLabels": true,
+  "keyboardNavigation": true,
+  "reduceMotion": true,
+  "contrast": true,
+  "kitchenTableHierarchy": true,
+  "noOverlap": true,
+  "accessibilityProofArtifacts": [
+    "apple/matrix-recipes-accessibility-proof-ios.json",
+    "apple/matrix-recipes-accessibility-proof-macos.json"
+  ],
+  "blockers": [
+
+  ],
+  "recipesNativeSurface": true,
+  "recipeSeedAccountID": "chef_kitchen_capture"
+}

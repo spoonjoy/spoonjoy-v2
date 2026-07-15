@@ -5,16 +5,22 @@ export const SPOON_PHOTO_FIXTURE_PATH = "e2e/fixtures/spoon-test-photo.png";
 export const DIRTY_APP1_MARKER = "SPOONJOY_CODEX_DIRTY_APP1";
 export const SMOKE_TOKEN_SCOPES = ["recipes:read", "kitchen:write"];
 export const IMAGE_COVER_REQUIRED_MCP_TOOLS = [
-  "create_spoon",
   "list_recipe_spoon_images",
   "create_recipe_cover_from_upload",
-  "create_recipe_cover_from_spoon",
+  "generate_recipe_cover_placeholder",
   "regenerate_recipe_cover",
   "get_cover_generation_status",
   "set_active_recipe_cover",
   "archive_recipe_cover",
   "list_recipe_covers",
 ];
+
+const AI_PLACEHOLDER_PROMPT_ADDITION = "editorial overhead composition with warm natural light";
+const UPLOAD_EDITORIAL_PROMPT_ADDITION = "editorial plating, natural light, clean background";
+const SPOON_EDITORIAL_PROMPT_ADDITION = "editorial plating while preserving the original spoon photo details";
+const REGENERATE_PROMPT_ADDITION = "brighter table light and cleaner editorial styling";
+const SPOON_SMOKE_NOTE = "Codex image-cover smoke original photo";
+const SPOON_SMOKE_NEXT_TIME = "Codex smoke: compare this Spoon against the editorial cover";
 
 const EXIF_HEADER = new Uint8Array([0x45, 0x78, 0x69, 0x66, 0x00, 0x00]);
 const REJECTED_GIF_BYTES = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00]);
@@ -470,6 +476,40 @@ export async function runImageCoverSmokeFlow(options) {
       wait,
     }, state);
 
+    const callMcp = async (name, args) => {
+      state.operations.push(name);
+      const payload = await options.mcpTool(name, args, bearerToken);
+      addObservedCoverArtifacts(payload, state);
+      return payload;
+    };
+    const pollCover = (coverId) => pollCoverGeneration({
+      recipeId: options.recipeId,
+      coverId,
+      maxAttempts: maxPollAttempts,
+      delayMs: pollDelayMs,
+      wait,
+      getStatus: async (args) => {
+        const payload = await callMcp("get_cover_generation_status", args);
+        if (!payload?.cover) throw new Error(`Missing generation status cover payload for ${coverId}.`);
+        state.generationPolling.push({
+          coverId,
+          status: payload.cover.status,
+          generationStatus: payload.cover.generationStatus,
+        });
+        return payload;
+      },
+    });
+
+    const generatedPlaceholderPayload = await callMcp("generate_recipe_cover_placeholder", {
+      recipeId: options.recipeId,
+      activateWhenReady: true,
+      promptAddition: AI_PLACEHOLDER_PROMPT_ADDITION,
+      idempotencyKey: `codex-${options.stamp}-ai-placeholder`,
+    });
+    const generatedPlaceholderId = generatedPlaceholderPayload?.createdCover?.id;
+    if (!generatedPlaceholderId) throw new Error("Image-cover smoke could not generate an AI placeholder cover.");
+    addObservedCoverArtifacts(await pollCover(generatedPlaceholderId), state);
+
     const cleanJpegBytes = await options.readFileBytes(ORIENTED_JPEG_FIXTURE_PATH);
     const dirtyJpegBytes = addDirtyApp1Marker(cleanJpegBytes);
     const sourceOrientation = extractJpegExifOrientation(dirtyJpegBytes);
@@ -518,44 +558,10 @@ export async function runImageCoverSmokeFlow(options) {
       generatedCoverKeys: state.generatedCoverKeys,
     }));
 
-    const callMcp = async (name, args) => {
-      state.operations.push(name);
-      const payload = await options.mcpTool(name, args, bearerToken);
-      addObservedCoverArtifacts(payload, state);
-      return payload;
-    };
-    const pollCover = (coverId) => pollCoverGeneration({
-      recipeId: options.recipeId,
-      coverId,
-      maxAttempts: maxPollAttempts,
-      delayMs: pollDelayMs,
-      wait,
-      getStatus: async (args) => {
-        const payload = await callMcp("get_cover_generation_status", args);
-        if (!payload?.cover) throw new Error(`Missing generation status cover payload for ${coverId}.`);
-        state.generationPolling.push({
-          coverId,
-          status: payload.cover.status,
-          generationStatus: payload.cover.generationStatus,
-        });
-        return payload;
-      },
-    });
-
-    const spoonPayload = await callMcp("create_spoon", {
-      recipeId: options.recipeId,
-      photoUrl: spoonImageUrl,
-      note: "Codex image-cover smoke",
-    });
-    const spoonId = spoonPayload?.spoon?.id;
-    if (!spoonId) throw new Error("Image-cover smoke could not create a spoon.");
-
-    await callMcp("list_recipe_spoon_images", { recipeId: options.recipeId, limit: 20 });
-
     const chefCoverPayload = await callMcp("create_recipe_cover_from_upload", {
       recipeId: options.recipeId,
       imageUrl: recipeImageUrl,
-      activate: true,
+      activateWhenReady: true,
       generateEditorial: false,
       idempotencyKey: `codex-${options.stamp}-chef-photo`,
     });
@@ -565,29 +571,38 @@ export async function runImageCoverSmokeFlow(options) {
     const editorialPayload = await callMcp("create_recipe_cover_from_upload", {
       recipeId: options.recipeId,
       imageUrl: recipeImageUrl,
-      activate: true,
+      activateWhenReady: true,
       generateEditorial: true,
+      promptAddition: UPLOAD_EDITORIAL_PROMPT_ADDITION,
       idempotencyKey: `codex-${options.stamp}-editorial-upload`,
     });
     const editorialCoverId = editorialPayload?.createdCover?.id;
     if (!editorialCoverId) throw new Error("Image-cover smoke could not create an editorial upload cover.");
     addObservedCoverArtifacts(await pollCover(editorialCoverId), state);
 
-    const spoonCoverPayload = await callMcp("create_recipe_cover_from_spoon", {
+    const spoonCoverPayload = await callMcp("create_recipe_cover_from_upload", {
       recipeId: options.recipeId,
-      spoonId,
-      activate: true,
+      imageUrl: spoonImageUrl,
+      postAsSpoon: true,
+      note: SPOON_SMOKE_NOTE,
+      nextTime: SPOON_SMOKE_NEXT_TIME,
+      cookedAt: new Date().toISOString(),
+      activateWhenReady: true,
       generateEditorial: true,
-      idempotencyKey: `codex-${options.stamp}-editorial-spoon`,
+      promptAddition: SPOON_EDITORIAL_PROMPT_ADDITION,
+      idempotencyKey: `codex-${options.stamp}-editorial-spoon-upload`,
     });
     const spoonCoverId = spoonCoverPayload?.createdCover?.id;
-    if (!spoonCoverId) throw new Error("Image-cover smoke could not create an editorial spoon cover.");
+    if (!spoonCoverId) throw new Error("Image-cover smoke could not create a spoon-backed editorial cover.");
     addObservedCoverArtifacts(await pollCover(spoonCoverId), state);
+
+    await callMcp("list_recipe_spoon_images", { recipeId: options.recipeId, limit: 20 });
 
     await callMcp("regenerate_recipe_cover", {
       recipeId: options.recipeId,
       coverId: editorialCoverId,
       activateWhenReady: true,
+      promptAddition: REGENERATE_PROMPT_ADDITION,
       idempotencyKey: `codex-${options.stamp}-regenerate`,
     });
     addObservedCoverArtifacts(await pollCover(editorialCoverId), state);
@@ -611,7 +626,7 @@ export async function runImageCoverSmokeFlow(options) {
       limit: 50,
     }), state);
 
-    for (const label of ["AI generated", "Chef photo", "Editorialized chef photo"]) {
+    for (const label of ["AI generated", "Original photo", "Editorial photo"]) {
       if (!state.provenanceLabels.has(label)) {
         throw new Error(`Image-cover smoke did not observe provenance label: ${label}`);
       }

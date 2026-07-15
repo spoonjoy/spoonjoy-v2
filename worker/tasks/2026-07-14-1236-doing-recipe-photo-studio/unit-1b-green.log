@@ -1,0 +1,19 @@
+
+> spoonjoy-v2@1.0.0 api:playground:generate /Users/arimendelow/Projects/spoonjoy-v2-photo-studio
+> tsx scripts/generate-api-playground.ts
+
+Generated app/lib/generated/api-v1-playground.ts
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2-photo-studio
+
+ ✓ test/lib/ai-placeholder-cover.server.test.ts (19 tests) 1545ms
+     ✓ constructs a real OpenAI runner when no explicit runner is passed and the API key is set  1295ms
+ ✓ test/lib/spoon-cover-stylization.server.test.ts (39 tests) 596ms
+ ✓ test/lib/image-gen.server.test.ts (89 tests) 53ms
+ ✓ test/scripts/migration-0023-recipe-cover-prompt-lineage.test.ts (6 tests) 34ms
+
+ Test Files  4 passed (4)
+      Tests  153 passed (153)
+   Start at  14:02:20
+   Duration  3.98s (transform 167ms, setup 255ms, import 419ms, tests 2.23s, environment 629ms)
+

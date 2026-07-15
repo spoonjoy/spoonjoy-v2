@@ -6,6 +6,7 @@ import {
   DEFAULT_GEMINI_IMAGE_TIMEOUT_MS,
   ImageProviderAttemptError,
   OPENAI_IMAGE_EDIT_MODELS,
+  sanitizeImagePromptAddition,
   stylizeSpoonPhoto,
   type ImageEditAttempt,
   type ImageGenEnv,
@@ -44,6 +45,8 @@ export interface ScheduleSpoonStylizationInput {
   userId: string;
   recipeId: string;
   coverId: string;
+  parentCoverId?: string | null;
+  promptAddition?: string | null;
   rawPhotoUrl: string;
   recipeTitle: string;
   env?: ImageGenerationSchedulerEnv | null;
@@ -231,6 +234,7 @@ async function currentCoverForLifecycle(input: ScheduleSpoonStylizationInput) {
 
 async function markStylizationProcessing(input: ScheduleSpoonStylizationInput): Promise<boolean> {
   const updatedAt = new Date();
+  const promptAddition = sanitizeImagePromptAddition(input.promptAddition);
   const result = await input.db.recipeCover.updateMany({
     where: {
       id: input.coverId,
@@ -244,6 +248,8 @@ async function markStylizationProcessing(input: ScheduleSpoonStylizationInput): 
       failureReason: null,
       promptVersion: STYLIZATION_PROMPT_VERSION,
       styleVersion: STYLIZATION_STYLE_VERSION,
+      promptAddition,
+      ...(input.parentCoverId !== undefined ? { parentCoverId: input.parentCoverId } : {}),
     },
   });
   if (result.count > 0) {
@@ -260,6 +266,7 @@ async function markStylizationSucceeded(
   stylizedImageUrl: string,
 ): Promise<boolean> {
   const updatedAt = new Date();
+  const promptAddition = sanitizeImagePromptAddition(input.promptAddition);
   const result = await input.db.recipeCover.updateMany({
     where: {
       id: input.coverId,
@@ -274,6 +281,8 @@ async function markStylizationSucceeded(
       failureReason: null,
       promptVersion: STYLIZATION_PROMPT_VERSION,
       styleVersion: STYLIZATION_STYLE_VERSION,
+      promptAddition,
+      ...(input.parentCoverId !== undefined ? { parentCoverId: input.parentCoverId } : {}),
     },
   });
   if (result.count > 0) {
@@ -296,6 +305,7 @@ async function markStylizationFailed(
   if (!options.force && !wasRequested) return;
 
   const updatedAt = new Date();
+  const promptAddition = sanitizeImagePromptAddition(input.promptAddition);
   await input.db.recipeCover.update({
     where: { id: cover.id },
     data: {
@@ -304,6 +314,8 @@ async function markStylizationFailed(
       failureReason,
       promptVersion: STYLIZATION_PROMPT_VERSION,
       styleVersion: STYLIZATION_STYLE_VERSION,
+      promptAddition,
+      ...(input.parentCoverId !== undefined ? { parentCoverId: input.parentCoverId } : {}),
     },
   });
   await input.db.$transaction([
@@ -677,6 +689,8 @@ export async function scheduleSpoonCoverStylization(
       bucket: input.bucket,
       now: input.now,
       allowLocalImageFallback: input.allowLocalImageFallback,
+    }, {
+      promptAddition: input.promptAddition,
     });
 
     const coverUpdatedAfterGeneration = await markStylizationSucceeded(input, result.url);

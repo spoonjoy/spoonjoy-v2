@@ -460,11 +460,14 @@ model RecipeCover {
   failureReason    String?
   promptVersion    String?
   styleVersion     String?
+  promptAddition   String?
+  parentCoverId    String?
   archivedAt       DateTime?
   createdAt        DateTime     @default(now())
 
   @@index([recipeId, createdAt])
   @@index([sourceSpoonId])
+  @@index([parentCoverId])
   @@index([recipeId, status, createdAt])
   @@index([status])
 }

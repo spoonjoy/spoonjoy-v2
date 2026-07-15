@@ -1,0 +1,21 @@
+{
+  "mobileScreenshot": true,
+  "desktopScreenshot": true,
+  "screenshotRoute": "kitchen",
+  "dynamicType": true,
+  "voiceOverLabels": true,
+  "keyboardNavigation": true,
+  "reduceMotion": true,
+  "contrast": true,
+  "kitchenTableHierarchy": true,
+  "noOverlap": true,
+  "accessibilityProofArtifacts": [
+    "apple/matrix-accessibility-proof-ios.json",
+    "apple/matrix-accessibility-proof-macos.json"
+  ],
+  "blockers": [
+
+  ],
+  "kitchenSignedInSurface": true,
+  "kitchenSeedAccountID": "chef_kitchen_capture"
+}

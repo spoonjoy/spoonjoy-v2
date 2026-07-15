@@ -1,0 +1,29 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2-photo-studio
+
+ ✓ test/routes/recipes-id.test.tsx (106 tests) 17657ms
+       ✓ keeps save modal open after creating a cookbook and marks it saved  314ms
+ ✓ test/routes/cookbooks-id.test.tsx (47 tests) 7467ms
+ ✓ test/routes/recipes-id-spoons.test.tsx (25 tests) 4292ms
+     ✓ closes the SpoonDialog and shows a status toast after a successful cook log  302ms
+ ✓ test/lib/spoonjoy-api-spoons.test.ts (84 tests) 1169ms
+ ✓ test/lib/mcp/spoonjoy-tools.server.test.ts (50 tests) 855ms
+ ✓ test/routes/index.test.tsx (18 tests) 783ms
+ ✓ test/routes/users-identifier.test.tsx (15 tests) 685ms
+ ✓ test/routes/recipes-index.test.tsx (8 tests) 449ms
+ ✓ test/routes/cookbooks-index.test.tsx (6 tests) 428ms
+ ✓ test/routes/api-v1-recipe-covers.test.ts (12 tests) 369ms
+ ✓ test/routes/api-v1-recipe-spoons.test.ts (10 tests) 301ms
+ ✓ test/routes/api-v1-cookbooks.test.ts (11 tests) 275ms
+ ✓ test/routes/search.test.tsx (10 tests) 218ms
+ ✓ test/routes/api-v1-recipes.test.ts (9 tests) 281ms
+ ✓ test/lib/search.server.test.ts (7 tests) 223ms
+ ✓ test/lib/api-v1-openapi.server.test.ts (11 tests) 106ms
+ ✓ test/components/pantry/RecipeGrid.test.tsx (25 tests) 108ms
+ ✓ test/lib/spoon-cover-decision.server.test.ts (14 tests) 27ms
+
+ Test Files  18 passed (18)
+      Tests  468 passed (468)
+   Start at  14:57:16
+   Duration  47.44s (transform 1.17s, setup 943ms, import 6.09s, tests 35.69s, environment 2.68s)
+

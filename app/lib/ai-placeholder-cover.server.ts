@@ -5,6 +5,7 @@ import {
   DEFAULT_GEMINI_IMAGE_MODEL,
   DEFAULT_GEMINI_IMAGE_TIMEOUT_MS,
   generatePlaceholderImage,
+  sanitizeImagePromptAddition,
   type ImageGenEnv,
   type ImageGenRunner,
 } from "~/lib/image-gen.server";
@@ -16,6 +17,7 @@ import {
 } from "~/lib/image-gen-telemetry.server";
 import { createOpenAIClient } from "~/lib/openai-client.server";
 import type { PostHogServerConfig, PostHogServerEnv } from "~/lib/analytics-server";
+import { touchNativeSyncCookbooksForRecipeOperation } from "~/lib/native-sync-invalidation.server";
 
 const OPENAI_PLACEHOLDER_MODEL = "dall-e-3";
 
@@ -35,6 +37,7 @@ export interface SchedulePlaceholderInput {
   coverId: string;
   title: string;
   description: string | null;
+  promptAddition?: string | null;
   env?: ImageGenerationSchedulerEnv | null;
   bucket?: R2Bucket;
   runner?: ImageGenRunner;
@@ -44,6 +47,13 @@ export interface SchedulePlaceholderInput {
   analyticsFetchImpl?: typeof fetch;
   now?: () => number;
   logger?: Pick<Console, "error">;
+  activateWhenReady?: boolean;
+  suppressAutoActivation?: boolean;
+  activationGuard?: {
+    activeCoverId: string | null;
+    activeCoverVariant: string | null;
+    coverMode: string;
+  };
 }
 
 function trimmed(value: string | undefined): string {
@@ -190,6 +200,7 @@ async function markPlaceholderFailed(
 async function activatePlaceholderIfStillAutomatic(
   input: SchedulePlaceholderInput,
 ): Promise<void> {
+  if (input.suppressAutoActivation) return;
   await input.db.recipe.updateMany({
     where: {
       id: input.recipeId,
@@ -202,6 +213,30 @@ async function activatePlaceholderIfStillAutomatic(
       coverMode: "auto",
     },
   });
+}
+
+async function activatePlaceholderIfStillRequested(
+  input: SchedulePlaceholderInput,
+): Promise<void> {
+  if (!input.activateWhenReady || !input.activationGuard) return;
+  const updatedAt = new Date();
+  const result = await input.db.recipe.updateMany({
+    where: {
+      id: input.recipeId,
+      activeCoverId: input.activationGuard.activeCoverId,
+      activeCoverVariant: input.activationGuard.activeCoverVariant,
+      coverMode: input.activationGuard.coverMode,
+    },
+    data: {
+      activeCoverId: input.coverId,
+      activeCoverVariant: "image",
+      coverMode: "manual",
+      updatedAt,
+    },
+  });
+  if (result.count > 0) {
+    await touchNativeSyncCookbooksForRecipeOperation(input.db, input.recipeId, updatedAt);
+  }
 }
 
 function failureReasonFor(error: unknown): string {
@@ -253,6 +288,8 @@ export async function scheduleAiPlaceholderCover(
       fetchImpl: input.fetchImpl,
       bucket: input.bucket,
       now: input.now,
+    }, {
+      promptAddition: input.promptAddition,
     });
 
     await input.db.recipeCover.update({
@@ -262,9 +299,14 @@ export async function scheduleAiPlaceholderCover(
         status: "ready",
         generationStatus: "succeeded",
         failureReason: null,
+        promptAddition: sanitizeImagePromptAddition(input.promptAddition),
       },
     });
-    await activatePlaceholderIfStillAutomatic(input);
+    if (input.activateWhenReady) {
+      await activatePlaceholderIfStillRequested(input);
+    } else {
+      await activatePlaceholderIfStillAutomatic(input);
+    }
   } catch (error) {
     await captureGenerationException(input, error, model);
     await markPlaceholderFailed(input, failureReasonFor(error), logger);

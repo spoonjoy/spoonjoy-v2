@@ -1,0 +1,36 @@
+{
+  "mobileScreenshot": true,
+  "desktopScreenshot": true,
+  "screenshotRoute": "settings",
+  "dynamicType": true,
+  "voiceOverLabels": true,
+  "keyboardNavigation": true,
+  "reduceMotion": true,
+  "contrast": true,
+  "kitchenTableHierarchy": true,
+  "noOverlap": true,
+  "accessibilityProofArtifacts": [
+    "apple/matrix-settings-accessibility-proof-ios.json",
+    "apple/matrix-settings-accessibility-proof-macos.json"
+  ],
+  "blockers": [
+
+  ],
+  "settingsCaptureVariant": "profile",
+  "settingsScreenshotAuth": "1",
+  "settingsSignedInSurface": true,
+  "settingsSignedOutSurface": false,
+  "settingsVisualFocus": "profile",
+  "settingsSurfaceProofArtifacts": [
+    "apple/matrix-settings-screenshot-proof-ios.json",
+    "apple/matrix-settings-screenshot-proof-macos.json"
+  ],
+  "settingsProfileSurface": true,
+  "settingsSections": [
+    "Profile",
+    "Security",
+    "Environment",
+    "Offline"
+  ],
+  "settingsSeedAccountID": "chef_settings_capture"
+}

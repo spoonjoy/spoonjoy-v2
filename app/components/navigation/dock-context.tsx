@@ -45,7 +45,9 @@ export interface DockContextValue {
   actions: DockAction[] | null;
   setConfig: (config: DockConfig | null) => void;
   setActions: (actions: DockAction[] | null) => void;
+  setSuppressed: (suppressed: boolean) => void;
   isContextual: boolean;
+  isSuppressed: boolean;
 }
 
 const defaultValue: DockContextValue = {
@@ -53,7 +55,9 @@ const defaultValue: DockContextValue = {
   actions: null,
   setConfig: () => {},
   setActions: () => {},
+  setSuppressed: () => {},
   isContextual: false,
+  isSuppressed: false,
 };
 
 export const DockContext = createContext<DockContextValue>(defaultValue);
@@ -90,6 +94,7 @@ function actionsFromConfig(config: DockConfig | null): DockAction[] | null {
 export function DockContextProvider({ children }: DockContextProviderProps) {
   const [config, setConfigState] = useState<DockConfig | null>(null);
   const [actions, setActionsState] = useState<DockAction[] | null>(null);
+  const [isSuppressed, setSuppressed] = useState(false);
 
   const setConfig = useCallback((newConfig: DockConfig | null) => {
     setActionsState(actionsFromConfig(newConfig));
@@ -109,9 +114,11 @@ export function DockContextProvider({ children }: DockContextProviderProps) {
       actions,
       setConfig,
       setActions,
+      setSuppressed,
       isContextual,
+      isSuppressed,
     }),
-    [config, actions, setConfig, setActions, isContextual],
+    [config, actions, setConfig, setActions, isContextual, isSuppressed],
   );
 
   return <DockContext.Provider value={value}>{children}</DockContext.Provider>;
@@ -141,6 +148,20 @@ export function useDockConfig(config: DockConfig | null): void {
       setConfig(null);
     };
   }, [setConfig]);
+}
+
+export function useDockSuppressed(suppressed: boolean): void {
+  const { setSuppressed } = useDockContext();
+
+  useEffect(() => {
+    setSuppressed(suppressed);
+  }, [suppressed, setSuppressed]);
+
+  useEffect(() => {
+    return () => {
+      setSuppressed(false);
+    };
+  }, [setSuppressed]);
 }
 
 export function useDockActions(actions: DockAction[] | null): void {

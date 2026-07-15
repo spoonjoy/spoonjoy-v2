@@ -103,6 +103,7 @@ describe("/developers/playground", () => {
     expect(data.manifest.operations.map((operation) => operation.id)).toContain("POST /api/v1/tokens");
     expect(data.manifest.operations.map((operation) => operation.id)).toContain("PATCH /api/v1/shopping-list/items/{itemId}");
     expect(data.manifest.operations.map((operation) => operation.id)).toEqual(expect.arrayContaining([
+      "POST /api/v1/recipes/{id}/image",
       "GET /api/v1/recipes/{id}/covers",
       "PATCH /api/v1/recipes/{id}/covers",
       "PATCH /api/v1/recipes/{id}/covers/{coverId}",
@@ -166,6 +167,7 @@ describe("/developers/playground", () => {
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/me/sync")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes/{id}/spoons")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/recipes/{id}/spoons")?.profiles).toEqual(["full", "sdk"]);
+    expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/recipes/{id}/image")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes/{id}/covers")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "PUT /api/v1/recipes/{id}/step-output-uses")?.risk).toBe("mutating");
     expect(data.manifest.operations.find((operation) => operation.id === "POST /oauth/token")?.profiles).toEqual(["full", "sdk"]);
@@ -177,7 +179,21 @@ describe("/developers/playground", () => {
         { name: "photo", required: true, accept: "image/jpeg,image/png,image/gif,image/webp" },
       ],
     });
-    expect(data.manifest.operations.length).toBe(69);
+    expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/recipes/{id}/image")?.requestBody).toMatchObject({
+      contentType: "multipart/form-data",
+      fields: [
+        { name: "clientMutationId", required: true, accept: "" },
+        { name: "photo", required: true, accept: "image/jpeg,image/png,image/webp" },
+        { name: "activateWhenReady", required: false, accept: "" },
+        { name: "generateEditorial", required: false, accept: "" },
+        { name: "promptAddition", required: false, accept: "" },
+        { name: "postAsSpoon", required: false, accept: "" },
+        { name: "note", required: false, accept: "" },
+        { name: "nextTime", required: false, accept: "" },
+        { name: "cookedAt", required: false, accept: "" },
+      ],
+    });
+    expect(data.manifest.operations.length).toBe(72);
   });
 
   it("uses the configured public origin for playground OG URLs", async () => {
@@ -230,7 +246,7 @@ describe("/developers/playground", () => {
       { property: "og:image", content: "https://local.spoonjoy.test/og/pages/api-playground.png" },
       { property: "og:image:width", content: "1200" },
       { property: "og:image:height", content: "630" },
-      { property: "og:image:type", content: "image/png" },
+      { property: "og:image:type", content: "image/svg+xml" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "Spoonjoy API Playground" },
       {
@@ -739,19 +755,19 @@ describe("/developers/playground", () => {
     await renderPlayground();
     fireEvent.click(await screen.findByRole("button", { name: /Upload the authenticated account profile photo/i }));
     expect(screen.getAllByText("account:write").length).toBeGreaterThan(0);
-	    expect(screen.getByLabelText("Multipart body")).toHaveTextContent("\"clientMutationId\": \"device-uuid-profile-photo\"");
-	    expect(screen.getByLabelText("Multipart body")).toHaveTextContent("\"photo\": \"(binary image file)\"");
+    expect(screen.getByLabelText("Multipart body")).toHaveTextContent("body.append(\"clientMutationId\", \"device-uuid-profile-photo\")");
+    expect(screen.getByLabelText("Multipart body")).toHaveTextContent("body.append(\"photo\", file)");
 
-	    const mutationIdInput = screen.getByLabelText(/Client Mutation Id/) as HTMLInputElement;
-	    expect(mutationIdInput).toHaveAttribute("type", "text");
-	    expect(mutationIdInput).toHaveValue("device-uuid-profile-photo");
+    const mutationIdInput = screen.getByLabelText(/Client Mutation Id/) as HTMLInputElement;
+    expect(mutationIdInput).toHaveAttribute("type", "text");
+    expect(mutationIdInput).toHaveValue("");
 	    expect(mutationIdInput).toBeRequired();
 	    const photoInput = screen.getByLabelText(/Photo/) as HTMLInputElement;
 	    expect(photoInput).toHaveAttribute("type", "file");
     expect(photoInput).toHaveAttribute("accept", "image/jpeg,image/png,image/gif,image/webp");
     expect(photoInput).toBeRequired();
     expect(photoInput).toHaveAccessibleDescription("multipart required - (binary image file)");
-	    expect(screen.getAllByText("Select photo before sending.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Select client mutation id before sending.").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Send Request" })).toBeDisabled();
     fireEvent.change(photoInput, { target: { files: [] } });
     expect(screen.getByRole("button", { name: "Send Request" })).toBeDisabled();
@@ -1029,7 +1045,7 @@ describe("/developers/playground", () => {
     expect(curlFor("/api/v1/tokens", createToken, "bearer", "{\"name\":\"Client\"}")).toContain(
       "--data '{\"name\":\"Client\"}'",
     );
-    expect(curlFor("/api/v1/me/photo", uploadPhoto, "bearer", "")).toContain("-F 'clientMutationId=device-uuid-profile-photo'");
+    expect(curlFor("/api/v1/me/photo", uploadPhoto, "bearer", "")).toContain("-F 'clientMutationId=REPLACE_clientMutationId'");
     expect((curlFor as (...args: unknown[]) => string)(
       "/api/v1/me/photo",
       uploadPhoto,
@@ -1042,7 +1058,7 @@ describe("/developers/playground", () => {
     expect(curlFor("/api/v1/me/photo", uploadPhoto, "bearer", "")).toContain("-F 'photo=@profile.jpg;type=image/jpeg'");
     expect(curlFor("/api/v1/me/photo", uploadPhoto, "bearer", "")).not.toContain("Content-Type");
     expect(curlFor("/api/v1/me/photo", uploadPhoto, "session", "")).toContain("const body = new FormData();");
-    expect(curlFor("/api/v1/me/photo", uploadPhoto, "session", "")).toContain("body.append(\"clientMutationId\", \"device-uuid-profile-photo\");");
+    expect(curlFor("/api/v1/me/photo", uploadPhoto, "session", "")).toContain("body.append(\"clientMutationId\", \"REPLACE_clientMutationId\");");
     expect((curlFor as (...args: unknown[]) => string)(
       "/api/v1/me/photo",
       uploadPhoto,

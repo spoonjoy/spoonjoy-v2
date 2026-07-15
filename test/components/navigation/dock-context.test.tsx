@@ -7,6 +7,7 @@ import {
   useDockContext,
   useDockActions,
   useDockConfig,
+  useDockSuppressed,
   type DockAction,
 } from '~/components/navigation/dock-context'
 import { ArrowLeft, Edit, Share, ShoppingCart } from 'lucide-react'
@@ -53,7 +54,9 @@ describe('DockContext', () => {
 
       expect(result.current.actions).toBeNull()
       expect(result.current.isContextual).toBe(false)
+      expect(result.current.isSuppressed).toBe(false)
       expect(typeof result.current.setActions).toBe('function')
+      expect(typeof result.current.setSuppressed).toBe('function')
     })
 
     it('default setActions is a no-op function (function coverage)', () => {
@@ -63,10 +66,12 @@ describe('DockContext', () => {
       // The default setActions should be callable but do nothing
       expect(() => {
         result.current.setActions(sampleActions)
+        result.current.setSuppressed(true)
       }).not.toThrow()
 
       // Since we're not in a provider, actions should still be null
       expect(result.current.actions).toBeNull()
+      expect(result.current.isSuppressed).toBe(false)
     })
 
     it('returns context value when in provider', () => {
@@ -79,6 +84,7 @@ describe('DockContext', () => {
       expect(result.current.actions).toBeNull()
       expect(result.current.isContextual).toBe(false)
       expect(typeof result.current.setActions).toBe('function')
+      expect(typeof result.current.setSuppressed).toBe('function')
     })
 
     it('setActions updates the actions', () => {
@@ -115,6 +121,59 @@ describe('DockContext', () => {
       })
       expect(result.current.actions).toBeNull()
       expect(result.current.isContextual).toBe(false)
+    })
+
+    it('setSuppressed toggles dock suppression', () => {
+      const wrapper = ({ children }: { children: React.ReactNode }) => (
+        <DockContextProvider>{children}</DockContextProvider>
+      )
+
+      const { result } = renderHook(() => useDockContext(), { wrapper })
+
+      act(() => {
+        result.current.setSuppressed(true)
+      })
+      expect(result.current.isSuppressed).toBe(true)
+
+      act(() => {
+        result.current.setSuppressed(false)
+      })
+      expect(result.current.isSuppressed).toBe(false)
+    })
+  })
+
+  describe('useDockSuppressed', () => {
+    it('suppresses the dock while mounted and restores it on cleanup', () => {
+      function TestPage({ suppressed }: { suppressed: boolean }) {
+        useDockSuppressed(suppressed)
+        return <div>Suppression test</div>
+      }
+
+      function TestApp({ suppressed }: { suppressed: boolean }) {
+        const context = useDockContext()
+        return (
+          <>
+            <div data-testid="suppressed-state">{context.isSuppressed ? 'yes' : 'no'}</div>
+            <TestPage suppressed={suppressed} />
+          </>
+        )
+      }
+
+      const { rerender, unmount } = render(
+        <DockContextProvider>
+          <TestApp suppressed />
+        </DockContextProvider>
+      )
+      expect(screen.getByTestId('suppressed-state')).toHaveTextContent('yes')
+
+      rerender(
+        <DockContextProvider>
+          <TestApp suppressed={false} />
+        </DockContextProvider>
+      )
+      expect(screen.getByTestId('suppressed-state')).toHaveTextContent('no')
+
+      unmount()
     })
   })
 

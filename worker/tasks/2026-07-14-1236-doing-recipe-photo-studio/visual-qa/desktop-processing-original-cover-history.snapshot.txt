@@ -1,0 +1,113 @@
+- link "Skip to main content":
+  - /url: "#main"
+- banner:
+  - navigation "Main navigation":
+    - link "SPOONJOY":
+      - /url: /
+      - generic: SPOONJOY
+    - link "Kitchen":
+      - /url: /
+    - link "My Recipes":
+      - /url: /my-recipes
+    - link "Saved":
+      - /url: /saved-recipes
+    - link "Cookbooks":
+      - /url: /cookbooks
+    - link "Shopping List":
+      - /url: /shopping-list
+    - link "Chefs":
+      - /url: /chefs
+    - link "Kitchen Search":
+      - /url: /search
+    - button "Switch theme to dark mode":
+    - link "Account":
+      - /url: /account/settings
+    - button "Log out": Logout
+- main:
+  - img "Photo of Codex Photo Studio Processing mrlnaoxt"
+  - generic: Original photo
+  - status:
+    - text: Editorializing cover
+  - link "Recipes":
+    - /url: /recipes
+    - text: Recipes
+  - link "Cook mode":
+    - /url: /recipes/cmrlnap2100046vi5bvjet568#cook
+  - button "Save"
+  - button "Add to list"
+  - button "Share"
+  - button "Log cook"
+  - heading "Codex Photo Studio Processing mrlnaoxt" [level=1]
+  - link "codex_photo_mrlnaoxt":
+    - /url: /users/codex_photo_mrlnaoxt
+    - img "codex_photo_mrlnaoxt":
+      - generic: C
+    - img "codex_photo_mrlnaoxt"
+    - text: By
+    - strong: codex_photo_mrlnaoxt
+  - paragraph: Original cover should stay visible while editorializing.
+  - button "Decrease scale":
+  - generic: Yield
+  - generic: Serves 4
+  - button "Increase scale":
+  - button "Clear progress"
+  - button "Recipe maintenance Close" [expanded] [active]:
+    - generic: Recipe maintenance
+    - generic: Close
+  - link "Edit recipe":
+    - /url: /recipes/cmrlnap2100046vi5bvjet568/edit
+  - button "Make a variation"
+  - button "Delete"
+  - region "Photo studio":
+    - heading "Photo studio" [level=3]
+    - paragraph: Add cover photo
+    - status:
+      - text: Editorializing cover
+    - text: Recipe photo
+    - button "Recipe photo Codex Photo Studio Processing mrlnaoxt No photo selected JPG, PNG, or WebP. 5 MB max."
+    - generic: Codex Photo Studio Processing mrlnaoxt
+    - generic: No photo selected
+    - generic: JPG, PNG, or WebP. 5 MB max.
+    - checkbox "Post as Spoon" [checked]:
+    - generic: Post as Spoon
+    - checkbox "Editorialize cover" [checked]:
+    - generic: Editorialize cover
+    - button "Spoon details":
+      - text: Spoon details
+    - text: Editorial direction
+    - textbox "Editorial direction":
+      - /placeholder: Brighter light, cleaner table, keep the plating
+    - button "Save photo" [disabled]:
+      - text: Save photo
+  - region "Recipe covers":
+    - heading "Recipe covers" [level=3]
+    - paragraph: Keep originals and editorial versions available for this recipe.
+    - button "Set no cover"
+    - generic: No cover selected
+    - generic: Explicit empty state
+    - text: Placeholder direction
+    - textbox "Placeholder direction":
+      - /placeholder: Bright window light, golden edges, linen backdrop
+    - button "Generate placeholder cover"
+    - article:
+      - generic: Current
+      - generic: Processing
+      - generic: Jul 14, 2026
+      - paragraph: Original photo
+      - paragraph: Original
+      - generic: Active variant
+      - text: Regeneration direction
+      - textbox "Regeneration direction":
+        - /placeholder: What should change?
+      - button "Regenerate with direction"
+      - generic "Archive active cover options":
+        - button "Archive and set no cover"
+  - paragraph: Cook mode
+  - heading "Steps" [level=2]
+  - paragraph: Tap ingredients as you go
+  - paragraph: No steps added yet
+  - link "Add Steps":
+    - /url: /recipes/cmrlnap2100046vi5bvjet568/edit
+  - heading "Cooks" [level=2]
+  - paragraph: No cooks yet.
+  - button "Log the first cook"

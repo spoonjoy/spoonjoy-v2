@@ -1,0 +1,99 @@
+{
+  "bundleIdentifier": "app.spoonjoy",
+  "contrast": true,
+  "dynamicType": true,
+  "emittedBy": "SpoonjoyApp",
+  "keyboardNavigation": true,
+  "kitchenTableHierarchy": true,
+  "launchEnvironmentProof": {
+    "apiBaseURL": "",
+    "screenshotAccountID": "chef_kitchen_capture",
+    "screenshotAPNsPermissionState": "",
+    "screenshotAPNsRegistrationState": "",
+    "screenshotAuth": "1",
+    "screenshotRestoreCacheOnly": "1"
+  },
+  "minimumTargetSize": 44,
+  "noOverlap": true,
+  "noTinyClusters": true,
+  "observedDynamicTypeSize": "large",
+  "observedReduceMotion": false,
+  "offlineIndicatorProof": {
+    "dismissButtonLabel": "Hide offline status",
+    "dismissibleStates": [
+      "offline",
+      "stale"
+    ],
+    "hiddenStates": [
+      "synced",
+      "dismissed"
+    ],
+    "severeStates": [
+      "queuedWork",
+      "syncFailure",
+      "conflict",
+      "blocker",
+      "destructiveConfirmation"
+    ],
+    "severityCorrect": true,
+    "source": "OfflineStatusView",
+    "visibleStates": [
+      "offline",
+      "stale",
+      "queuedWork",
+      "syncFailure",
+      "conflict",
+      "blocker",
+      "destructiveConfirmation"
+    ],
+    "voiceOverLabel": true
+  },
+  "platform": "ios",
+  "reduceMotion": true,
+  "route": "capture",
+  "routeEvidence": {
+    "contrastPairs": [
+      "charcoal on bone",
+      "brass on bone",
+      "destructive action role",
+      "status label on bone"
+    ],
+    "dynamicTypeTextStyles": [
+      "KitchenTableTheme.displayTitle",
+      "KitchenTableTheme.bodyNote",
+      "KitchenTableTheme.uiLabel"
+    ],
+    "hierarchyAnchors": [
+      "CaptureDraftView",
+      "KitchenTableHeader",
+      "CaptureImportEntryPoint",
+      "ImportStatusPanel",
+      "CaptureDraft",
+      "OfflineStatusView"
+    ],
+    "keyboardNavigationTargets": [
+      "entry point ledger",
+      "saved capture actions",
+      "Retry when online",
+      "offline status dismiss"
+    ],
+    "layoutGuards": [
+      "scroll-view",
+      "text-fit",
+      "no-tiny-clusters",
+      "dock-safe-area",
+      "offline-status-section"
+    ],
+    "voiceOverLabels": [
+      "Import queue",
+      "Capture",
+      "Submit import",
+      "Retry when online",
+      "Hide offline status"
+    ]
+  },
+  "source": "CaptureDraftView",
+  "textFits": true,
+  "voiceOverLabels": true,
+  "writtenAt": "2026-07-15T12:57:04Z"
+}

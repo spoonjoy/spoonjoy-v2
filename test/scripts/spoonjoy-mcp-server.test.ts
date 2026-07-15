@@ -66,7 +66,10 @@ describe("spoonjoy MCP stdio server", () => {
 
       expect(tools).toContain("upload_recipe_image");
       expect(tools).toContain("list_recipe_covers");
+      expect(tools).toContain("generate_recipe_cover_placeholder");
+      expect(tools).toContain("regenerate_recipe_cover");
       expect(tools).toContain("set_active_recipe_cover");
+      expect(tools).toContain("set_recipe_no_cover");
     } finally {
       await rm(home, { recursive: true, force: true });
     }

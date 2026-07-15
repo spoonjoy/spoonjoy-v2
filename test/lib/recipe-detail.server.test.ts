@@ -6,6 +6,9 @@ import { sessionStorage } from "~/lib/session.server";
 import { loadRecipeDetail, handleRecipeDetailAction } from "~/lib/recipe-detail.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 
+const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const GIF_BYTES = new Uint8Array([0x47, 0x49, 0x46, 0x38, 1, 2, 3]);
+
 async function makeAuthedRequest(userId: string, recipeId: string) {
   const session = await sessionStorage.getSession();
   session.set("userId", userId);
@@ -37,6 +40,17 @@ async function makeUser() {
       username: faker.internet.username() + "_" + faker.string.alphanumeric(8),
     },
   });
+}
+
+function photoFile(name = "recipe-photo.png", bytes: Uint8Array = PNG_BYTES, type = "image/png") {
+  return new File([bytes], name, { type });
+}
+
+function mockPhotoBucket() {
+  return {
+    put: vi.fn(async () => undefined),
+    delete: vi.fn(async () => undefined),
+  } as unknown as R2Bucket;
 }
 
 describe("loadRecipeDetail sourceRecipe", () => {
@@ -258,6 +272,244 @@ describe("handleRecipeDetailAction cover generation actions", () => {
       generationStatus: "processing",
     });
     await Promise.all(captured);
+  });
+
+  it("creates a direct first-photo cover without posting a Spoon or generating editorial art", async () => {
+    const chef = await makeUser();
+    const recipe = await db.recipe.create({
+      data: { title: "Direct First Photo", chefId: chef.id },
+    });
+    const formData = new UndiciFormData();
+    formData.append("intent", "createFirstPhotoCover");
+    formData.append("photo", photoFile("direct.png"));
+    formData.append("postAsSpoon", "false");
+    formData.append("generateEditorial", "false");
+    formData.append("activateWhenReady", "false");
+
+    const result = await handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(chef.id, recipe.id, formData) as unknown as Request,
+      params: { id: recipe.id },
+      context: { cloudflare: { env: null } } as any,
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      intent: "createFirstPhotoCover",
+      spoon: null,
+      coverId: expect.any(String),
+    });
+    const cover = await db.recipeCover.findUniqueOrThrow({
+      where: { id: (result as { coverId: string }).coverId },
+    });
+    expect(cover).toMatchObject({
+      recipeId: recipe.id,
+      sourceType: "chef-upload",
+      sourceSpoonId: null,
+      status: "ready",
+      generationStatus: "none",
+    });
+    await expect(db.recipeSpoon.count({ where: { recipeId: recipe.id } })).resolves.toBe(0);
+    await expect(db.recipe.findUniqueOrThrow({
+      where: { id: recipe.id },
+      select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+    })).resolves.toEqual({
+      activeCoverId: null,
+      activeCoverVariant: null,
+      coverMode: "auto",
+    });
+  });
+
+  it("rejects missing photos, invalid cookedAt values, and unsupported direct upload images", async () => {
+    const chef = await makeUser();
+    const recipe = await db.recipe.create({
+      data: { title: "First Photo Rejections", chefId: chef.id },
+    });
+    const noPhoto = new UndiciFormData();
+    noPhoto.append("intent", "createFirstPhotoCover");
+
+    await expect(handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(chef.id, recipe.id, noPhoto) as unknown as Request,
+      params: { id: recipe.id },
+      context: { cloudflare: { env: null } } as any,
+    })).rejects.toMatchObject({ status: 400 });
+
+    const invalidCookedAt = new UndiciFormData();
+    invalidCookedAt.append("intent", "createFirstPhotoCover");
+    invalidCookedAt.append("photo", photoFile("invalid-cooked-at.png"));
+    invalidCookedAt.append("cookedAt", "not-a-date");
+    await expect(handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(chef.id, recipe.id, invalidCookedAt) as unknown as Request,
+      params: { id: recipe.id },
+      context: { cloudflare: { env: null } } as any,
+    })).rejects.toMatchObject({ status: 400 });
+
+    const gif = new UndiciFormData();
+    gif.append("intent", "createFirstPhotoCover");
+    gif.append("photo", photoFile("animated.gif", GIF_BYTES, "image/gif"));
+    gif.append("postAsSpoon", "false");
+    await expect(handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(chef.id, recipe.id, gif) as unknown as Request,
+      params: { id: recipe.id },
+      context: { cloudflare: { env: null } } as any,
+    })).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("rejects first-photo Spoon preservation when the saved Spoon has no photo URL", async () => {
+    const chef = await makeUser();
+    const recipe = await db.recipe.create({
+      data: { title: "Null Spoon Photo", chefId: chef.id },
+    });
+    const originalCreate = db.recipeSpoon.create;
+    db.recipeSpoon.create = vi.fn(async ({ data }: Parameters<typeof db.recipeSpoon.create>[0]) => ({
+      id: "spoon_without_photo",
+      recipeId: data.recipeId as string,
+      chefId: data.chefId as string,
+      note: null,
+      nextTime: null,
+      photoUrl: null,
+      cookedAt: null,
+      deletedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })) as unknown as typeof db.recipeSpoon.create;
+    const formData = new UndiciFormData();
+    formData.append("intent", "createFirstPhotoCover");
+    formData.append("photo", photoFile("null-spoon-photo.png"));
+    formData.append("postAsSpoon", "true");
+    formData.append("generateEditorial", "false");
+
+    try {
+      await expect(handleRecipeDetailAction({
+        request: await makeAuthedPostRequest(chef.id, recipe.id, formData) as unknown as Request,
+        params: { id: recipe.id },
+        context: { cloudflare: { env: null } } as any,
+      })).rejects.toMatchObject({ status: 400 });
+    } finally {
+      db.recipeSpoon.create = originalCreate;
+    }
+  });
+
+  it("queues direct first-photo editorialization without activation when requested", async () => {
+    const chef = await makeUser();
+    const recipe = await db.recipe.create({
+      data: { title: "Inactive Editorial First Photo", chefId: chef.id },
+    });
+    const captured: Promise<unknown>[] = [];
+    const formData = new UndiciFormData();
+    formData.append("intent", "createFirstPhotoCover");
+    formData.append("photo", photoFile("inactive-editorial.png"));
+    formData.append("postAsSpoon", "false");
+    formData.append("generateEditorial", "true");
+    formData.append("activateWhenReady", "false");
+
+    const result = await handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(chef.id, recipe.id, formData) as unknown as Request,
+      params: { id: recipe.id },
+      context: {
+        cloudflare: {
+          env: null,
+          ctx: { waitUntil: (promise: Promise<unknown>) => captured.push(promise) },
+        },
+      } as any,
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      intent: "createFirstPhotoCover",
+      spoon: null,
+      coverId: expect.any(String),
+    });
+    expect(captured).toHaveLength(1);
+    await expect(db.recipe.findUniqueOrThrow({
+      where: { id: recipe.id },
+      select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+    })).resolves.toEqual({
+      activeCoverId: null,
+      activeCoverVariant: null,
+      coverMode: "auto",
+    });
+    await Promise.all(captured);
+  });
+
+  it("queues spoon-photo cover creation without an activation guard by default", async () => {
+    const chef = await makeUser();
+    const recipe = await db.recipe.create({
+      data: { title: "Unguarded Spoon Cover", chefId: chef.id },
+    });
+    const spoon = await db.recipeSpoon.create({
+      data: {
+        recipeId: recipe.id,
+        chefId: chef.id,
+        photoUrl: "/photos/spoons/unguarded.jpg",
+      },
+    });
+    const formData = new UndiciFormData();
+    formData.append("intent", "createCoverFromSpoon");
+    formData.append("spoonId", spoon.id);
+    const captured: Promise<unknown>[] = [];
+
+    const result = await handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(chef.id, recipe.id, formData) as unknown as Request,
+      params: { id: recipe.id },
+      context: {
+        cloudflare: {
+          env: null,
+          ctx: { waitUntil: (promise: Promise<unknown>) => captured.push(promise) },
+        },
+      } as any,
+    });
+
+    expect(result).toMatchObject({ success: true, intent: "createCoverFromSpoon" });
+    expect(captured).toHaveLength(1);
+    await expect(db.recipe.findUniqueOrThrow({
+      where: { id: recipe.id },
+      select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+    })).resolves.toEqual({
+      activeCoverId: null,
+      activeCoverVariant: null,
+      coverMode: "auto",
+    });
+    await Promise.all(captured);
+  });
+
+  it("keeps the original first-photo failure when best-effort cleanup also fails", async () => {
+    const chef = await makeUser();
+    const recipe = await db.recipe.create({
+      data: { title: "Cleanup Failure", chefId: chef.id },
+    });
+    const bucket = mockPhotoBucket();
+    vi.mocked(bucket.delete).mockRejectedValue(new Error("delete failed"));
+    const originalTransaction = db.$transaction;
+    const originalCoverDeleteMany = db.recipeCover.deleteMany;
+    const originalSpoonDeleteMany = db.recipeSpoon.deleteMany;
+    db.$transaction = vi.fn().mockRejectedValue(new Error("activation failed")) as unknown as typeof db.$transaction;
+    db.recipeCover.deleteMany = vi.fn().mockRejectedValue(new Error("cover cleanup failed")) as unknown as typeof db.recipeCover.deleteMany;
+    db.recipeSpoon.deleteMany = vi.fn().mockRejectedValue(new Error("spoon cleanup failed")) as unknown as typeof db.recipeSpoon.deleteMany;
+    const formData = new UndiciFormData();
+    formData.append("intent", "createFirstPhotoCover");
+    formData.append("photo", photoFile("cleanup.png"));
+    formData.append("postAsSpoon", "true");
+    formData.append("generateEditorial", "false");
+    formData.append("activateWhenReady", "true");
+
+    try {
+      await expect(handleRecipeDetailAction({
+        request: await makeAuthedPostRequest(chef.id, recipe.id, formData) as unknown as Request,
+        params: { id: recipe.id },
+        context: { cloudflare: { env: { PHOTOS: bucket } } } as any,
+      })).rejects.toThrow("activation failed");
+      expect(db.recipeCover.deleteMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ recipeId: recipe.id }),
+      }));
+      expect(db.recipeSpoon.deleteMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ recipeId: recipe.id }),
+      }));
+      expect(bucket.delete).toHaveBeenCalled();
+    } finally {
+      db.$transaction = originalTransaction;
+      db.recipeCover.deleteMany = originalCoverDeleteMany;
+      db.recipeSpoon.deleteMany = originalSpoonDeleteMany;
+    }
   });
 
   it("touches containing cookbooks when explicitly setting a recipe to no cover", async () => {

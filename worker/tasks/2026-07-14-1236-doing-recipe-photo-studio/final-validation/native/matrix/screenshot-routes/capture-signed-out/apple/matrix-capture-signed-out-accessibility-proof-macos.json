@@ -1,0 +1,94 @@
+{
+  "bundleIdentifier" : "app.spoonjoy.mac",
+  "contrast" : true,
+  "dynamicType" : true,
+  "emittedBy" : "SpoonjoyApp",
+  "keyboardNavigation" : true,
+  "kitchenTableHierarchy" : true,
+  "launchEnvironmentProof" : {
+    "apiBaseURL" : "https:\/\/spoonjoy.app",
+    "screenshotAccountID" : "signed-out",
+    "screenshotAPNsPermissionState" : "",
+    "screenshotAPNsRegistrationState" : "",
+    "screenshotAuth" : "0",
+    "screenshotRestoreCacheOnly" : "1"
+  },
+  "minimumTargetSize" : 44,
+  "noOverlap" : true,
+  "noTinyClusters" : true,
+  "observedDynamicTypeSize" : "large",
+  "observedReduceMotion" : false,
+  "offlineIndicatorProof" : {
+    "dismissButtonLabel" : "Hide offline status",
+    "dismissibleStates" : [
+      "offline",
+      "stale"
+    ],
+    "hiddenStates" : [
+      "synced",
+      "dismissed"
+    ],
+    "severeStates" : [
+      "queuedWork",
+      "syncFailure",
+      "conflict",
+      "blocker",
+      "destructiveConfirmation"
+    ],
+    "severityCorrect" : true,
+    "source" : "OfflineStatusView",
+    "visibleStates" : [
+      "offline",
+      "stale",
+      "queuedWork",
+      "syncFailure",
+      "conflict",
+      "blocker",
+      "destructiveConfirmation"
+    ],
+    "voiceOverLabel" : true
+  },
+  "platform" : "macos",
+  "reduceMotion" : true,
+  "route" : "capture",
+  "routeEvidence" : {
+    "contrastPairs" : [
+      "charcoal on bone",
+      "herb button on bone",
+      "brass status on bone"
+    ],
+    "dynamicTypeTextStyles" : [
+      "KitchenTableTheme.bodyNote",
+      "KitchenTableTheme.uiLabel",
+      ".headline"
+    ],
+    "hierarchyAnchors" : [
+      "SignedOutSetupView",
+      "SpoonjoyIdentityMark",
+      "pendingRouteLabel",
+      "SignInWithAppleButton"
+    ],
+    "keyboardNavigationTargets" : [
+      "native sign-in email or username",
+      "native sign-in password",
+      "native Apple sign-in",
+      "Settings"
+    ],
+    "layoutGuards" : [
+      "scroll-view",
+      "text-fit",
+      "no-tiny-clusters"
+    ],
+    "voiceOverLabels" : [
+      "Spoonjoy",
+      "Sign in",
+      "Opening Capture after sign-in",
+      "native Apple sign-in",
+      "native password sign-in"
+    ]
+  },
+  "source" : "SignedOutSetupView",
+  "textFits" : true,
+  "voiceOverLabels" : true,
+  "writtenAt" : "2026-07-15T12:59:56Z"
+}

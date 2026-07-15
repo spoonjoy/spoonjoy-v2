@@ -45,7 +45,25 @@ describe("GET /api/v1/openapi.json", () => {
       expect(response.status).toBe(200);
       expect(response.headers.get("Content-Type")).toContain("application/json");
       expect(response.headers.get("X-Request-Id")).toBe(`req_${splat}`);
-      await expect(readJson(response)).resolves.toEqual(expected);
+      const document = await readJson(response);
+
+      expect(document).toEqual(expected);
+      if (splat === "openapi.sdk.json") {
+        expect(document.paths["/api/v1/recipes/{id}/image"].post.operationId)
+          .toBe("postApiV1RecipeImage");
+        expect(document.paths["/api/v1/recipes/{id}/covers"].post.operationId)
+          .toBe("postApiV1RecipeCovers");
+        expect(document.paths["/api/v1/recipes/{id}/covers/generate"]).toBeDefined();
+        expect(document.paths["/api/v1/recipes/{id}/covers/generate"].post.operationId)
+          .toBe("postApiV1RecipeCoverGenerate");
+        expect(document.paths["/api/v1/recipes/{id}/covers/regenerate"].post.operationId)
+          .toBe("postApiV1RecipeCoverRegenerate");
+      } else {
+        expect(document.paths["/api/v1/recipes/{id}/image"]).toBeUndefined();
+        expect(document.paths["/api/v1/recipes/{id}/covers"]).toBeUndefined();
+        expect(document.paths["/api/v1/recipes/{id}/covers/generate"]).toBeUndefined();
+        expect(document.paths["/api/v1/recipes/{id}/covers/regenerate"]).toBeUndefined();
+      }
     }
   });
 });

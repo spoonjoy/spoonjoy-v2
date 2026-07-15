@@ -1,0 +1,14 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2-photo-studio
+
+ ✓ test/lib/spoonjoy-api-spoons.test.ts (86 tests) 1341ms
+ ✓ test/routes/api-v1-recipe-covers.test.ts (34 tests) 987ms
+ ✓ test/routes/api-v1-telemetry.test.ts (27 tests) 554ms
+ ✓ test/lib/recipe-detail.server.test.ts (12 tests) 216ms
+ ✓ test/lib/api-v1-openapi.server.test.ts (12 tests) 118ms
+
+ Test Files  5 passed (5)
+      Tests  171 passed (171)
+   Start at  02:42:47
+   Duration  7.01s (transform 775ms, setup 340ms, import 2.03s, tests 3.22s, environment 836ms)
+

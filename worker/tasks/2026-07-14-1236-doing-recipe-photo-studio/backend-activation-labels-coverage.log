@@ -1,0 +1,51 @@
+
+ RUN  v4.0.18 /Users/arimendelow/Projects/spoonjoy-v2-photo-studio
+      Coverage enabled with istanbul
+
+ ✓ test/lib/spoon-cover-stylization.server.test.ts (40 tests) 656ms
+ ✓ test/lib/recipe-cover.server.test.ts (57 tests) 426ms
+ ✓ test/components/recipe/RecipeCoverHistory.test.tsx (3 tests) 239ms
+ ✓ test/components/recipe/RecipeHeader.test.tsx (27 tests) 135ms
+ ✓ test/lib/spoon-cover-activation.server.test.ts (3 tests) 77ms
+ ✓ test/components/cookbook/CookbookCoverArt.test.tsx (7 tests) 50ms
+
+ Test Files  6 passed (6)
+      Tests  137 passed (137)
+   Start at  15:19:52
+   Duration  5.41s (transform 936ms, setup 416ms, import 1.77s, tests 1.58s, environment 922ms)
+
+ % Coverage report from istanbul
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   54.46 |    53.38 |   68.84 |   54.74 |                   
+ ...nents/cookbook |     100 |      100 |     100 |     100 |                   
+  ...kCoverArt.tsx |     100 |      100 |     100 |     100 |                   
+ components/recipe |   98.43 |    98.91 |    90.9 |   98.11 |                   
+  ...anceBadge.tsx |     100 |      100 |     100 |     100 |                   
+  ...erHistory.tsx |     100 |      100 |     100 |     100 |                   
+  RecipeHeader.tsx |     100 |      100 |     100 |     100 |                   
+  ...eSelector.tsx |    90.9 |    88.88 |      50 |    90.9 | 63                
+ components/ui     |      70 |    47.91 |   85.71 |    87.5 |                   
+  avatar.tsx       |      50 |       50 |      50 |      50 | 68-74             
+  button.tsx       |     100 |    33.33 |     100 |     100 | 43-46             
+  link.tsx         |   66.66 |       50 |     100 |   93.33 | 82                
+ lib               |   51.61 |    49.27 |   65.33 |   51.75 |                   
+  ...ics-server.ts |   47.42 |    32.96 |   71.42 |   53.08 | ...60,173,194-199 
+  analytics.ts     |   16.12 |     3.44 |   11.11 |   20.45 | 69-140            
+  chef-avatar.ts   |   81.81 |     87.5 |     100 |   81.81 | 5,12              
+  db.server.ts     |   35.71 |       25 |   42.85 |   35.71 | 8-10,19-28,42-56  
+  ...ger.server.ts |      80 |       55 |     100 |   81.48 | 57,61,100-111     
+  ...try.server.ts |     100 |      100 |     100 |     100 |                   
+  ...gen.server.ts |   58.07 |    39.54 |   63.82 |   56.68 | ...85,792,823-831 
+  ...age.server.ts |   15.02 |     12.5 |      24 |   15.06 | ...13-336,344-405 
+  ...ion.server.ts |      25 |     5.55 |   33.33 |   27.27 | 18-56,75,102-111  
+  ...ent.server.ts |     100 |      100 |     100 |     100 |                   
+  quantity.ts      |   15.78 |      7.5 |   28.57 |   15.78 | ...53,157,173-201 
+  ...ver.server.ts |     100 |      100 |     100 |     100 |                   
+  recipe-image.ts  |     100 |      100 |     100 |     100 |                   
+  ...tch.server.ts |    9.85 |     6.25 |      25 |   10.74 | ...38-139,145-264 
+  ...tch.server.ts |   29.26 |    27.65 |      50 |   29.87 | ...53,157-162,168 
+  ...ion.server.ts |     100 |      100 |     100 |     100 |                   
+  ...ion.server.ts |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------

@@ -1,0 +1,109 @@
+{
+  "bundleIdentifier" : "app.spoonjoy.mac",
+  "contrast" : true,
+  "dynamicType" : true,
+  "emittedBy" : "SpoonjoyApp",
+  "keyboardNavigation" : true,
+  "kitchenTableHierarchy" : true,
+  "launchEnvironmentProof" : {
+    "apiBaseURL" : "https:\/\/spoonjoy.app",
+    "screenshotAccountID" : "chef_settings_capture",
+    "screenshotAPNsPermissionState" : "authorized",
+    "screenshotAPNsRegistrationState" : "registered",
+    "screenshotAuth" : "1",
+    "screenshotRestoreCacheOnly" : "1"
+  },
+  "minimumTargetSize" : 44,
+  "noOverlap" : true,
+  "noTinyClusters" : true,
+  "observedDynamicTypeSize" : "large",
+  "observedReduceMotion" : false,
+  "offlineIndicatorProof" : {
+    "dismissButtonLabel" : "Hide offline status",
+    "dismissibleStates" : [
+      "offline",
+      "stale"
+    ],
+    "hiddenStates" : [
+      "synced",
+      "dismissed"
+    ],
+    "severeStates" : [
+      "queuedWork",
+      "syncFailure",
+      "conflict",
+      "blocker",
+      "destructiveConfirmation"
+    ],
+    "severityCorrect" : true,
+    "source" : "OfflineStatusView",
+    "visibleStates" : [
+      "offline",
+      "stale",
+      "queuedWork",
+      "syncFailure",
+      "conflict",
+      "blocker",
+      "destructiveConfirmation"
+    ],
+    "voiceOverLabel" : true
+  },
+  "platform" : "macos",
+  "reduceMotion" : true,
+  "route" : "settings",
+  "routeEvidence" : {
+    "contrastPairs" : [
+      "charcoal on bone",
+      "brass label on bone",
+      "destructive action role"
+    ],
+    "dynamicTypeTextStyles" : [
+      "KitchenTableTheme.bodyNote",
+      "KitchenTableTheme.uiLabel",
+      ".headline"
+    ],
+    "hierarchyAnchors" : [
+      "SettingsView",
+      "KitchenTableHeader",
+      "KitchenTableSection",
+      "SettingsPanel",
+      "NotificationAPNsSettingsView",
+      "AppleDeveloperProgramBlockerView",
+      "NotificationDiagnosticsDisclosure",
+      "OfflineStatusView"
+    ],
+    "keyboardNavigationTargets" : [
+      "profile form fields",
+      "security token controls",
+      "session handoff controls",
+      "APNs device controls",
+      "notification toggles",
+      "notification sync status",
+      "offline status dismiss"
+    ],
+    "layoutGuards" : [
+      "kitchen-table-page",
+      "text-fit",
+      "no-tiny-clusters",
+      "bottom-offline-row"
+    ],
+    "voiceOverLabels" : [
+      "Settings",
+      "Profile",
+      "Security",
+      "Session",
+      "Sign In",
+      "Notifications",
+      "This Device",
+      "Push Delivery",
+      "Notification Sync",
+      "Turn On for This Device",
+      "Open System Settings",
+      "Hide offline status"
+    ]
+  },
+  "source" : "SettingsView",
+  "textFits" : true,
+  "voiceOverLabels" : true,
+  "writtenAt" : "2026-07-15T13:07:22Z"
+}

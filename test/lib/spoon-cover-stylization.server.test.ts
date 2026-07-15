@@ -5,8 +5,10 @@ import {
   resolveImageProviderOrder,
   scheduleSpoonCoverStylization,
 } from "~/lib/spoon-cover-stylization.server";
+import { activateSpoonCoverForDecision } from "~/lib/spoon-cover-activation.server";
 import { captureImageGenerationException } from "~/lib/image-gen-telemetry.server";
 import type { ImageGenRunner } from "~/lib/image-gen.server";
+import type { SpoonCoverCreationDecision } from "~/lib/spoon-cover-decision.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 
 type Database = Awaited<ReturnType<typeof getLocalDb>>;
@@ -115,6 +117,51 @@ describe("scheduleSpoonCoverStylization", () => {
     expect(runner.imageToImage).toHaveBeenCalledTimes(1);
   });
 
+  it("persists prompt addition and parent cover lineage for editorial regeneration", async () => {
+    const parentCover = await db.recipeCover.create({
+      data: {
+        recipeId,
+        imageUrl: "https://stub.test/original-parent.png",
+        stylizedImageUrl: "https://stub.test/original-editorial.png",
+        sourceType: "chef-upload",
+        status: "ready",
+        generationStatus: "succeeded",
+      },
+    });
+    const runner = makeRunner();
+    const boundedAddition = `keep same plate ${"x".repeat(224)}`;
+
+    await scheduleSpoonCoverStylization({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      parentCoverId: parentCover.id,
+      promptAddition: `  keep   same\nplate ${"x".repeat(260)}  `,
+      rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
+      recipeTitle: "Stylize Me",
+      runner,
+      bucket: mockR2(),
+      now: () => 1234,
+      logger: errorSpy,
+    });
+
+    expect(runner.imageToImage).toHaveBeenCalledWith(
+      expect.any(File),
+      expect.stringContaining(`Additional direction: ${boundedAddition}.`),
+      { model: "gpt-image-2" },
+    );
+    await expect(
+      db.recipeCover.findUniqueOrThrow({
+        where: { id: coverId },
+        select: { parentCoverId: true, promptAddition: true },
+      }),
+    ).resolves.toEqual({
+      parentCoverId: parentCover.id,
+      promptAddition: boundedAddition,
+    });
+  });
+
   it("auto-activates a completed editorial cover only when the recipe has no real active cover", async () => {
     await db.recipeCover.update({
       where: { id: coverId },
@@ -129,6 +176,60 @@ describe("scheduleSpoonCoverStylization", () => {
       rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
       recipeTitle: "Stylize Me",
       runner,
+      bucket: mockR2(),
+      now: () => 1234,
+      logger: errorSpy,
+    });
+
+    await expect(
+      db.recipe.findUniqueOrThrow({
+        where: { id: recipeId },
+        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+      }),
+    ).resolves.toEqual({
+      activeCoverId: coverId,
+      activeCoverVariant: "stylized",
+      coverMode: "auto",
+    });
+  });
+
+  it("promotes an auto-seeded original spoon cover to editorial when the same cover is still active", async () => {
+    const autoSeedDecision = {
+      shouldCreateCover: true,
+      reason: "auto-seed",
+      coverMode: "auto",
+      activeCoverVariant: null,
+    } satisfies SpoonCoverCreationDecision;
+    await db.recipeCover.update({
+      where: { id: coverId },
+      data: { status: "processing", generationStatus: "processing" },
+    });
+
+    await expect(activateSpoonCoverForDecision(db, {
+      recipeId,
+      coverId,
+      decision: autoSeedDecision,
+      previousActiveCoverId: null,
+    })).resolves.toBe(true);
+    await expect(
+      db.recipe.findUniqueOrThrow({
+        where: { id: recipeId },
+        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+      }),
+    ).resolves.toEqual({
+      activeCoverId: coverId,
+      activeCoverVariant: "image",
+      coverMode: "auto",
+    });
+
+    await scheduleSpoonCoverStylization({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
+      recipeTitle: "Stylize Me",
+      runner: makeRunner(),
       bucket: mockR2(),
       now: () => 1234,
       logger: errorSpy,
@@ -1047,6 +1148,15 @@ describe("scheduleSpoonCoverStylization", () => {
   });
 
   it("logs errors and leaves stylizedImageUrl null when the runner throws", async () => {
+    const parentCover = await db.recipeCover.create({
+      data: {
+        recipeId,
+        imageUrl: "https://stub.test/failed-parent.png",
+        sourceType: "chef-upload",
+        status: "ready",
+        generationStatus: "succeeded",
+      },
+    });
     const analyticsFetchImpl = postHogFetchSpy();
     const runner: ImageGenRunner = {
       textToImage: vi.fn().mockRejectedValue(new Error("text failed")),
@@ -1057,6 +1167,8 @@ describe("scheduleSpoonCoverStylization", () => {
       userId,
       recipeId,
       coverId,
+      parentCoverId: parentCover.id,
+      promptAddition: "  try   a brighter table  ",
       rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
       recipeTitle: "Stylize Me",
       runner,
@@ -1072,6 +1184,8 @@ describe("scheduleSpoonCoverStylization", () => {
       generationStatus: "failed",
       promptVersion: "spoon-photo-editorial-v1",
       styleVersion: "mendelow-phone-to-editorial-v1",
+      parentCoverId: parentCover.id,
+      promptAddition: "try a brighter table",
     });
     expect(cover.failureReason).toContain("Stylization failed");
     expect(cover.failureReason).toContain("img failed");

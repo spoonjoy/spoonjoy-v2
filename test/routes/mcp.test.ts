@@ -68,12 +68,43 @@ describe("/mcp route", () => {
     await expect(initResponse.json()).resolves.toMatchObject({ result: { serverInfo: { name: "spoonjoy" } } });
 
     const listResponse = await action(routeArgs(rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }, auth)));
-    const listBody = await listResponse.json() as { result: { tools: { name: string }[] } };
+    const listBody = await listResponse.json() as {
+      result: {
+        tools: Array<{
+          name: string;
+          description?: string;
+          inputSchema?: { properties?: Record<string, unknown>; required?: string[] };
+        }>;
+      };
+    };
     expect(listBody.result.tools.map((t) => t.name)).toContain("get_shopping_list");
     expect(listBody.result.tools.map((t) => t.name)).toEqual(expect.arrayContaining([
       "upload_recipe_image",
       "upload_spoon_photo",
+      "create_recipe_cover_from_upload",
+      "generate_recipe_cover_placeholder",
+      "regenerate_recipe_cover",
+      "set_recipe_no_cover",
     ]));
+    const byName = new Map(listBody.result.tools.map((tool) => [tool.name, tool]));
+    expect(byName.get("generate_recipe_cover_placeholder")).toMatchObject({
+      description: expect.stringContaining("AI placeholder"),
+      inputSchema: {
+        required: ["recipeId", "idempotencyKey"],
+        properties: {
+          promptAddition: expect.objectContaining({ maxLength: 240 }),
+          activateWhenReady: expect.any(Object),
+        },
+      },
+    });
+    expect(byName.get("regenerate_recipe_cover")).toMatchObject({
+      inputSchema: {
+        required: ["recipeId", "coverId", "idempotencyKey"],
+        properties: {
+          promptAddition: expect.objectContaining({ maxLength: 240 }),
+        },
+      },
+    });
 
     const callResponse = await action(routeArgs(rpc(
       { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "get_shopping_list", arguments: {} } },
@@ -82,6 +113,100 @@ describe("/mcp route", () => {
     expect(callResponse.status).toBe(200);
     const callBody = await callResponse.json() as { result: { content: { text: string }[] } };
     expect(JSON.parse(callBody.result.content[0].text)).toHaveProperty("shoppingList");
+  });
+
+  it("round-trips generated placeholder cover results through tools/call", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail("placeholder-route"), username: faker.internet.username() } });
+    const recipe = await db.recipe.create({
+      data: {
+        title: `MCP Route Placeholder ${faker.string.alphanumeric(6)}`,
+        description: "Route-level placeholder test",
+        chefId: user.id,
+      },
+    });
+    const { token } = await createApiCredential(db, user.id, "route cover token", { scopes: ["recipes:read", "kitchen:write"] });
+
+    const response = await action(routeArgs(rpc(
+      {
+        jsonrpc: "2.0",
+        id: 6,
+        method: "tools/call",
+        params: {
+          name: "generate_recipe_cover_placeholder",
+          arguments: {
+            recipeId: recipe.id,
+            promptAddition: "brighter greens",
+            activateWhenReady: true,
+            idempotencyKey: "route-placeholder-cover",
+          },
+        },
+      },
+      { Authorization: `Bearer ${token}` },
+    )));
+    expect(response.status).toBe(200);
+    const body = await response.json() as { result: { content: { text: string }[] } };
+    expect(body).toMatchObject({ result: { content: [{ text: expect.any(String) }] } });
+    expect(JSON.parse(body.result.content[0].text)).toMatchObject({
+      createdCover: {
+        recipeId: recipe.id,
+        sourceType: "ai-placeholder",
+        generationStatus: "failed",
+        failureReason: expect.stringContaining("missing_image_provider_config"),
+      },
+      generationStatus: "failed",
+      mutation: { idempotencyKey: "route-placeholder-cover", replayed: false },
+    });
+  });
+
+  it("round-trips explicit no-cover results through tools/call", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail("no-cover-route"), username: faker.internet.username() } });
+    const recipe = await db.recipe.create({
+      data: {
+        title: `MCP Route No Cover ${faker.string.alphanumeric(6)}`,
+        chefId: user.id,
+      },
+    });
+    const cover = await db.recipeCover.create({
+      data: {
+        recipeId: recipe.id,
+        imageUrl: "/photos/current.jpg",
+        stylizedImageUrl: "/photos/current-editorial.jpg",
+        sourceType: "chef-upload",
+        status: "ready",
+        generationStatus: "succeeded",
+        createdById: user.id,
+      },
+    });
+    await db.recipe.update({
+      where: { id: recipe.id },
+      data: { activeCoverId: cover.id, activeCoverVariant: "stylized", coverMode: "manual" },
+    });
+    const { token } = await createApiCredential(db, user.id, "route no-cover token", { scopes: ["recipes:read", "kitchen:write"] });
+
+    const response = await action(routeArgs(rpc(
+      {
+        jsonrpc: "2.0",
+        id: 7,
+        method: "tools/call",
+        params: {
+          name: "set_recipe_no_cover",
+          arguments: {
+            recipeId: recipe.id,
+            confirmNoCover: true,
+            idempotencyKey: "route-set-no-cover",
+          },
+        },
+      },
+      { Authorization: `Bearer ${token}` },
+    )));
+    expect(response.status).toBe(200);
+    const body = await response.json() as { result: { content: { text: string }[] } };
+    expect(body).toMatchObject({ result: { content: [{ text: expect.any(String) }] } });
+    expect(JSON.parse(body.result.content[0].text)).toMatchObject({
+      activeCover: null,
+      previousActiveCover: { id: cover.id, activeVariant: "stylized" },
+      mutation: { idempotencyKey: "route-set-no-cover", replayed: false },
+    });
   });
 
   it("accepts OAuth tokens bound to /mcp and rejects tokens bound elsewhere", async () => {
