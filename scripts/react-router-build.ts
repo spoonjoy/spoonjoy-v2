@@ -1,7 +1,15 @@
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { resolvePostHogBuildHost } from "../app/lib/security-headers.server";
 import { filterViteBuildErrorOutput } from "./build-output-hygiene";
 
+const wrangler = JSON.parse(readFileSync("wrangler.json", "utf8")) as Record<string, unknown>;
+const buildEnv = {
+  ...process.env,
+  VITE_POSTHOG_HOST: resolvePostHogBuildHost(wrangler, process.env.CLOUDFLARE_ENV),
+};
 const child = spawn("pnpm", ["exec", "react-router", "build"], {
+  env: buildEnv,
   stdio: ["ignore", "pipe", "pipe"],
 });
 

@@ -204,7 +204,7 @@ describe("production readiness helpers", () => {
     ]);
 
     const missingTelemetry = new Headers({
-      "Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'",
+      "Content-Security-Policy": buildContentSecurityPolicy(),
       "X-Spoonjoy-Worker-Version": "22222222-2222-4222-8222-222222222222",
     });
     expect(validateCspHeaderSet(missingTelemetry)).toEqual([
@@ -219,7 +219,7 @@ describe("production readiness helpers", () => {
 
   it("validates candidate CSP version and nonce contract failure modes", () => {
     const missingNonce = new Headers({
-      "Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://us-assets.i.posthog.com; report-uri /csp-report; report-to csp-endpoint",
+      "Content-Security-Policy": buildContentSecurityPolicy(),
       "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
       "X-Spoonjoy-Worker-Version": "33333333-3333-4333-8333-333333333333",
     });
@@ -231,9 +231,19 @@ describe("production readiness helpers", () => {
       "X-Spoonjoy-Worker-Version exact candidate",
       "CSP nonce contract",
     ]);
+
+    const missingScriptDirective = new Headers({
+      "Content-Security-Policy": buildContentSecurityPolicy("live").replace(/script-src[^;]+; /, ""),
+      "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+      "X-Spoonjoy-Worker-Version": "22222222-2222-4222-8222-222222222222",
+    });
+    expect(validateCspHeaderSet(missingScriptDirective, { requireNonce: true })).toEqual([
+      "CSP nonce contract",
+      "CSP script-src exact sources",
+    ]);
   });
 
-  it("ignores empty CSP segments and duplicate directives after the first locked directive", () => {
+  it("rejects duplicate directives even when the first occurrence is secure", () => {
     const csp = [
       buildContentSecurityPolicy("live"),
       "",
@@ -250,7 +260,85 @@ describe("production readiness helpers", () => {
     expect(validateCspHeaderSet(headers, {
       expectedWorkerVersionId: "22222222-2222-4222-8222-222222222222",
       requireNonce: true,
+    })).toEqual([
+      "CSP duplicate directive: default-src",
+      "CSP duplicate directive: object-src",
+    ]);
+  });
+
+  it.each([
+    ["style-src", "style-src 'self' https://evil.example"],
+    ["font-src", "font-src 'self' https://evil.example"],
+    ["img-src", "img-src 'self' data: blob: https: https://evil.example"],
+    ["connect-src", "connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://evil.example"],
+  ])("rejects a weakened %s directive", (directive, replacement) => {
+    const csp = buildContentSecurityPolicy("live").replace(
+      new RegExp(`${directive}[^;]+`),
+      replacement,
+    );
+    const headers = new Headers({
+      "Content-Security-Policy": csp,
+      "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+      "X-Spoonjoy-Worker-Version": "22222222-2222-4222-8222-222222222222",
+    });
+
+    expect(validateCspHeaderSet(headers, { requireNonce: true })).toContain(
+      `CSP ${directive} exact sources`,
+    );
+  });
+
+  it("rejects extra script origins, forged reporting tokens, and unknown directives", () => {
+    const base = buildContentSecurityPolicy("live");
+    const hostilePolicies = [
+      [
+        base.replace(
+          "script-src 'self' 'nonce-live' https://us-assets.i.posthog.com",
+          "script-src 'self' 'nonce-live' https://us-assets.i.posthog.com https://evil.example",
+        ),
+        "CSP script-src exact sources",
+      ],
+      [
+        base.replace("report-uri /csp-report", "report-uri /csp-report-evil"),
+        "CSP report-uri exact sources",
+      ],
+      [
+        base.replace("report-to csp-endpoint", "report-to csp-endpoint-evil"),
+        "CSP report-to exact sources",
+      ],
+      [`${base}; upgrade-insecure-requests`, "CSP unknown directive: upgrade-insecure-requests"],
+    ] as const;
+
+    for (const [csp, expectedFailure] of hostilePolicies) {
+      const headers = new Headers({
+        "Content-Security-Policy": csp,
+        "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+        "X-Spoonjoy-Worker-Version": "22222222-2222-4222-8222-222222222222",
+      });
+      expect(validateCspHeaderSet(headers, { requireNonce: true })).toContain(expectedFailure);
+    }
+  });
+
+  it("validates PostHog script and connection origins against the configured host only", () => {
+    const customHost = "https://analytics.example.com";
+    const valid = new Headers({
+      "Content-Security-Policy": buildContentSecurityPolicy("live", {
+        VITE_POSTHOG_HOST: customHost,
+      }),
+      "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+      "X-Spoonjoy-Worker-Version": "22222222-2222-4222-8222-222222222222",
+    });
+    expect(validateCspHeaderSet(valid, {
+      postHogHost: customHost,
+      requireNonce: true,
     })).toEqual([]);
+
+    expect(validateCspHeaderSet(valid, {
+      postHogHost: "https://eu.i.posthog.com",
+      requireNonce: true,
+    })).toEqual(expect.arrayContaining([
+      "CSP script-src exact sources",
+      "CSP connect-src exact sources",
+    ]));
   });
 
   it("rejects wildcard and unsafe CSP directives before production promotion", () => {
@@ -269,9 +357,11 @@ describe("production readiness helpers", () => {
       "CSP object-src lockdown",
       "CSP frame-ancestors lockdown",
       "CSP form-action lockdown",
-      "CSP script-src wildcard",
-      "CSP script-src unsafe-inline",
-      "CSP script-src unsafe-eval",
+      "CSP script-src exact sources",
+      "CSP style-src exact sources",
+      "CSP font-src exact sources",
+      "CSP img-src exact sources",
+      "CSP connect-src exact sources",
     ]);
   });
 

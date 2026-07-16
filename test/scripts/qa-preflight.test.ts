@@ -179,6 +179,7 @@ async function createStaticConfigRoot(overrides: {
     mkdir(path.join(root, "app"), { recursive: true }),
     mkdir(path.join(root, "docs"), { recursive: true }),
     mkdir(path.join(root, "migrations"), { recursive: true }),
+    mkdir(path.join(root, "scripts"), { recursive: true }),
   ]);
   await Promise.all([
     copyFile(path.join(process.cwd(), "wrangler.json"), path.join(root, "wrangler.json")),
@@ -196,6 +197,10 @@ async function createStaticConfigRoot(overrides: {
       path.join(root, ".github/workflows/qa-image-cover-smoke.yml"),
     ),
     copyFile(path.join(process.cwd(), "app/cloudflare-env.d.ts"), path.join(root, "app/cloudflare-env.d.ts")),
+    copyFile(
+      path.join(process.cwd(), "scripts/react-router-build.ts"),
+      path.join(root, "scripts/react-router-build.ts"),
+    ),
     copyFile(path.join(process.cwd(), "README.md"), path.join(root, "README.md")),
     copyFile(path.join(process.cwd(), "docs/deployment.md"), path.join(root, "docs/deployment.md")),
     copyFile(path.join(process.cwd(), "vitest.config.ts"), path.join(root, "vitest.config.ts")),

@@ -1,6 +1,7 @@
 import { execFile as nodeExecFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { resolvePostHogBuildHost } from "../app/lib/security-headers.server";
 import { validateCspHeaderSet } from "./production-readiness";
 
 const RELEASE_SHA_PATTERN = /^[0-9a-f]{40}$/;
@@ -11,6 +12,7 @@ const MIGRATION_NAME_PATTERN = /^\d{4}_[A-Za-z0-9][A-Za-z0-9_.-]*\.sql$/;
 const MIGRATION_FILE_PATTERN = /\b\d{4}_[A-Za-z0-9][A-Za-z0-9_.-]*\.sql\b/g;
 const NO_PENDING_MIGRATIONS_PATTERN = /no migrations to apply/i;
 const RELEASE_ARTIFACT_NAME = "production-release.json";
+const CSP_REPORT_ONLY_BREAK_GLASS_ACK = "ACK_REPORT_ONLY_CSP_ROLLBACK";
 const DEFAULT_VERIFICATION_ATTEMPTS = 60;
 const VERIFICATION_DELAY_MS = 1_000;
 const CLOUDFLARE_SECRET_ENV_NAMES = [
@@ -78,6 +80,7 @@ export interface ReleaseArtifact {
 interface RunProductionCanaryReleaseDeps {
   artifactDir: string;
   env?: NodeJS.ProcessEnv;
+  postHogHost: string;
   readCandidateCspHeaders?: (baseUrl: string, candidateVersionId: string) => Promise<Headers>;
   readMigrationFile: (filePath: string) => Promise<string>;
   readPublicWorkerVersion: (baseUrl: string) => Promise<string | null>;
@@ -91,6 +94,8 @@ interface RunProductionCanaryReleaseDeps {
 interface RunProductionRollbackDeps {
   artifactDir: string;
   env?: NodeJS.ProcessEnv;
+  postHogHost: string;
+  readCandidateCspHeaders: (baseUrl: string, candidateVersionId: string) => Promise<Headers>;
   readPublicWorkerVersion: (baseUrl: string) => Promise<string | null>;
   releaseSha: string;
   rollbackVersionId: string;
@@ -663,6 +668,28 @@ export async function runProductionRollback(
       throw new Error("The requested rollback version is already active in production.");
     }
 
+    phase = "candidate_csp";
+    const baseUrl = deps.env?.SPOONJOY_MCP_CANARY_BASE_URL ?? "https://spoonjoy.app";
+    const candidateCspHeaders = await deps.readCandidateCspHeaders(baseUrl, candidateVersionId);
+    const observedCandidateVersion = candidateCspHeaders.get("X-Spoonjoy-Worker-Version");
+    if (observedCandidateVersion?.toLowerCase() !== candidateVersionId.toLowerCase()) {
+      throw new Error("Rollback candidate identity could not be verified from the exact-version probe.");
+    }
+    const cspFailures = validateCspHeaderSet(candidateCspHeaders, {
+      expectedWorkerVersionId: candidateVersionId,
+      postHogHost: deps.postHogHost,
+      requireNonce: true,
+    });
+    if (
+      cspFailures.length > 0 &&
+      baseEnv.SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS !== CSP_REPORT_ONLY_BREAK_GLASS_ACK
+    ) {
+      throw new Error(
+        `Rollback candidate CSP validation failed: ${cspFailures.join(", ")}. ` +
+        `Set SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS=${CSP_REPORT_ONLY_BREAK_GLASS_ACK} only for an intentional insecure-CSP rollback.`,
+      );
+    }
+
     phase = "promote";
     deployed = true;
     await deps.runCommand("pnpm", [
@@ -872,6 +899,7 @@ export async function runProductionCanaryRelease(
     )(baseUrl, candidateVersionId);
     const cspFailures = validateCspHeaderSet(candidateCspHeaders, {
       expectedWorkerVersionId: candidateVersionId,
+      postHogHost: deps.postHogHost,
       requireNonce: true,
     });
     if (cspFailures.length > 0) {
@@ -1048,6 +1076,7 @@ interface ReleaseCliDeps {
   argv?: readonly string[];
   env?: NodeJS.ProcessEnv;
   execFileImpl?: ExecFileLike;
+  readWranglerConfig?: () => Promise<Record<string, unknown>>;
   readCandidateCspHeaders?: (baseUrl: string, candidateVersionId: string) => Promise<Headers>;
   readMigrationFile?: (filePath: string) => Promise<string>;
   readPublicWorkerVersion?: (baseUrl: string) => Promise<string | null>;
@@ -1060,9 +1089,15 @@ interface ReleaseCliDeps {
 export async function runProductionReleaseCli(deps: ReleaseCliDeps): Promise<ReleaseArtifact> {
   const env = deps.env ?? process.env;
   const options = parseReleaseCliOptions(deps.argv ?? [], env);
+  const wrangler = await (
+    deps.readWranglerConfig ?? (async () => JSON.parse(
+      await readFile("wrangler.json", "utf8"),
+    ) as Record<string, unknown>)
+  )();
   const shared = {
     artifactDir: options.artifactDir,
     env,
+    postHogHost: resolvePostHogBuildHost(wrangler),
     readCandidateCspHeaders: deps.readCandidateCspHeaders ?? readCandidateCspHeaders,
     readPublicWorkerVersion: deps.readPublicWorkerVersion ?? readPublicWorkerVersion,
     releaseSha: options.releaseSha,

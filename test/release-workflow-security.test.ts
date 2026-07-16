@@ -68,6 +68,7 @@ describe("production release provenance", () => {
     expect(production).toContain('pnpm run deploy:auto -- --rollback-version-id "$ROLLBACK_VERSION_ID"');
     expect(production).not.toContain("ALLOW_ROLLBACK");
     expect(production).toContain('pnpm run deploy:auto');
+    expect(production).not.toMatch(/^\s{2}VITE_POSTHOG_HOST:/m);
     expect(production).toContain('Source SHA: `%s`');
     expect(production).not.toMatch(/^\s{2}issues:\s+write$/m);
     expect(production).toMatch(/report-canary:[\s\S]*permissions:[\s\S]*issues: write/);

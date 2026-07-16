@@ -17,7 +17,7 @@ on:
         default: ""
         type: string
       csp_report_only_break_glass:
-        description: Type ACK_REPORT_ONLY_CSP_ROLLBACK only for an intentional report-only CSP rollback
+        description: Type ACK_REPORT_ONLY_CSP_ROLLBACK only for an intentional rollback to report-only, absent, or weakened CSP
         required: false
         default: ""
         type: string
@@ -37,7 +37,6 @@ env:
   SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.source_sha }}
   ROLLBACK_VERSION_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.rollback_version_id || '' }}
   SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: ${{ github.event_name == 'workflow_dispatch' && inputs.csp_report_only_break_glass || '' }}
-  VITE_POSTHOG_HOST: https://us.i.posthog.com
 
 jobs:
   deploy:

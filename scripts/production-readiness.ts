@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { resolvePostHogCspOrigins } from "../app/lib/security-headers.server";
 
 export const REQUIRED_RUNTIME_SECRETS = [
   "SESSION_SECRET",
@@ -59,6 +60,7 @@ export interface CheckResult {
 
 export interface ValidateCspHeaderOptions {
   expectedWorkerVersionId?: string;
+  postHogHost?: string | null;
   requireNonce?: boolean;
 }
 
@@ -102,18 +104,23 @@ export function validateCutoverRunbook(content: string): string[] {
   return CUTOVER_RUNBOOK_TERMS.filter((term) => !content.includes(term));
 }
 
-function parseCspDirectives(csp: string): Map<string, string[]> {
+interface ParsedCspDirectives {
+  directives: Map<string, string[]>;
+  duplicates: string[];
+}
+
+function parseCspDirectives(csp: string): ParsedCspDirectives {
   const directives = new Map<string, string[]>();
+  const duplicates: string[] = [];
   for (const segment of csp.split(";")) {
     const tokens = segment.trim().split(/\s+/).filter(Boolean);
     const [directive, ...sources] = tokens;
     if (!directive) continue;
     const name = directive.toLowerCase();
-    if (!directives.has(name)) {
-      directives.set(name, sources);
-    }
+    if (directives.has(name)) duplicates.push(name);
+    else directives.set(name, sources);
   }
-  return directives;
+  return { directives, duplicates };
 }
 
 function directiveEquals(
@@ -125,47 +132,82 @@ function directiveEquals(
   return Boolean(
     sources &&
       sources.length === expected.length &&
-      expected.every((source, index) => sources[index] === source),
+      new Set(sources).size === sources.length &&
+      expected.every((source) => sources.includes(source)),
   );
 }
 
-function hasWildcardSource(sources: readonly string[] | undefined): boolean {
-  return Boolean(
-    sources?.some((source) => (
-      source === "*" ||
-      source.startsWith("*.") ||
-      source.includes("://*.") ||
-      source === "http:" ||
-      source === "https:"
-    )),
-  );
+const NONCE_SOURCE_PATTERN = /^'nonce-[^'\s;]+'$/;
+
+function expectedCspDirectives(postHogHost?: string | null): Map<string, readonly string[]> {
+  const postHog = resolvePostHogCspOrigins({ VITE_POSTHOG_HOST: postHogHost });
+  return new Map([
+    ["default-src", ["'self'"]],
+    ["base-uri", ["'self'"]],
+    ["object-src", ["'none'"]],
+    ["frame-ancestors", ["'none'"]],
+    ["form-action", ["'self'"]],
+    ["script-src", Array.from(new Set(["'self'", postHog.assetsOrigin]))],
+    ["style-src", ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"]],
+    ["font-src", ["'self'", "https://fonts.gstatic.com"]],
+    ["img-src", ["'self'", "data:", "blob:", "https:"]],
+    ["connect-src", Array.from(new Set(["'self'", postHog.ingestOrigin, postHog.assetsOrigin]))],
+    ["report-uri", ["/csp-report"]],
+    ["report-to", ["csp-endpoint"]],
+  ]);
 }
 
-function validateCspDirectiveLockdown(csp: string): string[] {
+function validateCspDirectiveLockdown(
+  csp: string,
+  options: ValidateCspHeaderOptions,
+): string[] {
   const missing: string[] = [];
-  const directives = parseCspDirectives(csp);
+  const parsed = parseCspDirectives(csp);
+  const { directives } = parsed;
+  const expected = expectedCspDirectives(options.postHogHost);
 
-  for (const [name, expected, failure] of [
+  for (const duplicate of parsed.duplicates) {
+    missing.push(`CSP duplicate directive: ${duplicate}`);
+  }
+  for (const name of directives.keys()) {
+    if (!expected.has(name)) missing.push(`CSP unknown directive: ${name}`);
+  }
+
+  for (const [name, sources, failure] of [
     ["default-src", ["'self'"], "CSP default-src lockdown"],
     ["base-uri", ["'self'"], "CSP base-uri lockdown"],
     ["object-src", ["'none'"], "CSP object-src lockdown"],
     ["frame-ancestors", ["'none'"], "CSP frame-ancestors lockdown"],
     ["form-action", ["'self'"], "CSP form-action lockdown"],
   ] as const) {
-    if (!directiveEquals(directives, name, expected)) {
+    if (!directiveEquals(directives, name, sources)) {
       missing.push(failure);
     }
   }
 
-  const scriptSources = directives.get("script-src");
-  if (hasWildcardSource(scriptSources)) {
-    missing.push("CSP script-src wildcard");
+  const scriptSources = directives.get("script-src") ?? [];
+  const nonceSources = scriptSources.filter((source) => NONCE_SOURCE_PATTERN.test(source));
+  if (options.requireNonce && nonceSources.length !== 1) {
+    missing.push("CSP nonce contract");
   }
-  if (scriptSources?.includes("'unsafe-inline'")) {
-    missing.push("CSP script-src unsafe-inline");
+  const scriptSourcesWithoutNonce = scriptSources.filter(
+    (source) => !NONCE_SOURCE_PATTERN.test(source),
+  );
+  if (
+    !directiveEquals(
+      new Map([["script-src", scriptSourcesWithoutNonce]]),
+      "script-src",
+      expected.get("script-src")!,
+    ) ||
+    nonceSources.length > 1
+  ) {
+    missing.push("CSP script-src exact sources");
   }
-  if (scriptSources?.includes("'unsafe-eval'")) {
-    missing.push("CSP script-src unsafe-eval");
+
+  for (const name of ["style-src", "font-src", "img-src", "connect-src", "report-uri", "report-to"] as const) {
+    if (!directiveEquals(directives, name, expected.get(name)!)) {
+      missing.push(`CSP ${name} exact sources`);
+    }
   }
 
   return missing;
@@ -192,21 +234,11 @@ export function validateCspHeaderSet(
   ) {
     missing.push("X-Spoonjoy-Worker-Version exact candidate");
   }
-  if (
-    csp &&
-    (
-      !csp.includes("report-uri /csp-report") ||
-      !csp.includes("report-to csp-endpoint") ||
-      !headers.get("Reporting-Endpoints")?.includes("/csp-report")
-    )
-  ) {
+  if (csp && headers.get("Reporting-Endpoints")?.trim() !== 'csp-endpoint="/csp-report"') {
     missing.push("CSP violation reporting");
   }
-  if (options.requireNonce && csp && !/script-src[^;]*'nonce-[^'\s;]+'/i.test(csp)) {
-    missing.push("CSP nonce contract");
-  }
   if (csp) {
-    missing.push(...validateCspDirectiveLockdown(csp));
+    missing.push(...validateCspDirectiveLockdown(csp, options));
   }
   return missing;
 }

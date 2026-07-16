@@ -47,6 +47,7 @@ describe("warning gate", () => {
     ]);
     expect(findUnexpectedWarnings("warning-gate.ts  |   59.09 |    62.06 |")).toEqual([]);
     expect(findUnexpectedWarnings("warnings-summary.log")).toEqual([]);
+    expect(findUnexpectedWarnings("✓ should display appropriate UI warning for one auth method")).toEqual([]);
 
     expect(findUnexpectedWarnings("▲ [WARNING] bundle contains dynamic import")).toEqual([
       "▲ [WARNING] bundle contains dynamic import",
@@ -62,6 +63,18 @@ describe("warning gate", () => {
     ]);
     expect(findUnexpectedWarnings("WARNING: browser console noise")).toEqual([
       "WARNING: browser console noise",
+    ]);
+    expect(findUnexpectedWarnings("⚠️ Missing unit for imported ingredient")).toEqual([
+      "⚠️ Missing unit for imported ingredient",
+    ]);
+    expect(findUnexpectedWarnings("WARN[build] generated chunk is oversized")).toEqual([
+      "WARN[build] generated chunk is oversized",
+    ]);
+    expect(findUnexpectedWarnings("warning(build) generated chunk is oversized")).toEqual([
+      "warning(build) generated chunk is oversized",
+    ]);
+    expect(findUnexpectedWarnings("foo-warning: generated chunk is oversized")).toEqual([
+      "foo-warning: generated chunk is oversized",
     ]);
     expect(findUnexpectedWarnings(`${prismaWarning} Warning: appended bypass`)).toEqual([
       `${prismaWarning} Warning: appended bypass`,
@@ -81,6 +94,7 @@ describe("warning gate", () => {
     expect(result.exitCode).toBe(0);
     expect(result.output).toContain("out");
     expect(result.output).toContain("err");
+    expect(result.warningOutput).toBe("err");
     expect(stdout).toHaveBeenCalledWith("out");
     expect(stderr).toHaveBeenCalledWith("err");
   });
@@ -135,6 +149,21 @@ describe("warning gate", () => {
     expect(runCommand).toHaveBeenCalledTimes(2);
     expect(result.exitCode).toBe(1);
     expect(result.unexpectedWarnings).toEqual(["Warning: leaked warning"]);
+  });
+
+  it("fails successful commands that write otherwise unmarked output to the warning channel", async () => {
+    const runCommand = vi.fn().mockResolvedValue({
+      exitCode: 0,
+      output: "ordinary stdout\n",
+      warningOutput: "Missing unit fallback was used\n",
+    });
+
+    const result = await runWarningGate(["--", "pnpm", "run", "build"], { runCommand });
+
+    expect(result).toEqual({
+      exitCode: 1,
+      unexpectedWarnings: ["Missing unit fallback was used"],
+    });
   });
 
   it("preserves a non-zero command exit after scanning warning output", async () => {

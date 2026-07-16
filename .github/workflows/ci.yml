@@ -28,7 +28,7 @@ jobs:
       - name: 📦 Activate pnpm
         run: |
           corepack enable
-          corepack prepare pnpm@10.28.1 --activate
+          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate
 
       - name: 🔒 Install pinned OSV-Scanner
         env:
@@ -44,15 +44,15 @@ jobs:
           printf '%s  %s\n' "$OSV_SCANNER_LINUX_AMD64_SHA256" ".cache/osv-scanner/osv-scanner" | sha256sum -c -
           chmod +x .cache/osv-scanner/osv-scanner
           printf 'OSV-Scanner %s verified tag %s\n' "$OSV_SCANNER_VERSION" "$actual_tag_sha"
-          .cache/osv-scanner/osv-scanner --version
+          node scripts/warning-gate.ts -- .cache/osv-scanner/osv-scanner --version
 
       - name: 📥 Install advisory dependencies without lifecycle scripts
-        run: pnpm install --frozen-lockfile --ignore-scripts
+        run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile --ignore-scripts
 
       - name: 🔒 Run dependency advisory scan
         run: |
           test -f pnpm-lock.yaml
-          pnpm exec tsx scripts/warning-gate.ts -- pnpm run advisory:scan -- --scanner .cache/osv-scanner/osv-scanner --output .advisory/osv-results.json
+          node scripts/warning-gate.ts -- pnpm run advisory:scan -- --scanner .cache/osv-scanner/osv-scanner --output .advisory/osv-results.json
 
   coverage:
     name: coverage
@@ -70,24 +70,24 @@ jobs:
       - name: 📦 Activate pnpm
         run: |
           corepack enable
-          corepack prepare pnpm@10.28.1 --activate
+          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate
 
       - name: 📥 Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile
 
       - name: 🔧 Generate Prisma client
-        run: pnpm prisma:generate
+        run: node scripts/warning-gate.ts -- pnpm prisma:generate
 
       - name: 🔒 Verify blake3 override resolution
         run: |
-          pnpm why blake3-wasm
-          pnpm why @c4312/blake3-internal
+          node scripts/warning-gate.ts -- pnpm why blake3-wasm
+          node scripts/warning-gate.ts -- pnpm why @c4312/blake3-internal
 
       - name: 🗄️ Apply D1 migrations (local)
-        run: pnpm exec wrangler d1 migrations apply DB --local
+        run: node scripts/warning-gate.ts -- pnpm exec wrangler d1 migrations apply DB --local
 
       - name: 🗄️ Apply Prisma schema to test database
-        run: DATABASE_URL="file:./test.db" pnpm exec prisma db push --skip-generate
+        run: DATABASE_URL="file:./test.db" node scripts/warning-gate.ts -- pnpm exec prisma db push --skip-generate
 
       - name: 🔎 CI preflight - seed backend + migration status
         run: |
@@ -96,22 +96,22 @@ jobs:
           echo "DATABASE_URL=$DATABASE_URL"
           echo ""
           echo "Migrations status (wrangler):"
-          pnpm exec wrangler d1 migrations list DB --local
+          node scripts/warning-gate.ts -- pnpm exec wrangler d1 migrations list DB --local
           echo ""
           echo "Tables before seed:"
-          pnpm exec wrangler d1 execute DB --local --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
+          node scripts/warning-gate.ts -- pnpm exec wrangler d1 execute DB --local --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
 
       - name: 🌱 Seed local D1 database
-        run: pnpm exec tsx scripts/warning-gate.ts -- pnpm db:seed
+        run: node scripts/warning-gate.ts -- pnpm db:seed
 
       - name: 🔍 Typecheck
-        run: pnpm exec tsx scripts/warning-gate.ts -- pnpm run typecheck
+        run: node scripts/warning-gate.ts -- pnpm run typecheck
 
       - name: 🧪 Test & Coverage
         run: pnpm test:coverage
 
       - name: 🏗️ Build
-        run: pnpm exec tsx scripts/warning-gate.ts -- pnpm build
+        run: node scripts/warning-gate.ts -- pnpm build
 
   e2e:
     name: e2e
@@ -132,27 +132,27 @@ jobs:
       - name: 📦 Activate pnpm
         run: |
           corepack enable
-          corepack prepare pnpm@10.28.1 --activate
+          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate
 
       - name: 📥 Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile
 
       - name: 🔧 Generate Prisma client
-        run: pnpm prisma:generate
+        run: node scripts/warning-gate.ts -- pnpm prisma:generate
 
       - name: 🔒 Verify blake3 override resolution
         run: |
-          pnpm why blake3-wasm
-          pnpm why @c4312/blake3-internal
+          node scripts/warning-gate.ts -- pnpm why blake3-wasm
+          node scripts/warning-gate.ts -- pnpm why @c4312/blake3-internal
 
       - name: 🎭 Install Playwright Browsers
-        run: pnpm exec playwright install --with-deps chromium
+        run: node scripts/warning-gate.ts -- pnpm exec playwright install --with-deps chromium
 
       - name: 🗄️ Apply D1 migrations
-        run: pnpm exec wrangler d1 migrations apply DB --local
+        run: node scripts/warning-gate.ts -- pnpm exec wrangler d1 migrations apply DB --local
 
       - name: 🌱 Seed local D1 database
-        run: pnpm exec tsx scripts/warning-gate.ts -- pnpm db:seed
+        run: node scripts/warning-gate.ts -- pnpm db:seed
 
       - name: 🔐 Configure local Worker secrets
         run: |

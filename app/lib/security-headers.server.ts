@@ -49,6 +49,14 @@ export interface PostHogCspOrigins {
   assetsOrigin: string;
 }
 
+interface WranglerPostHogEnvironment {
+  vars?: unknown;
+}
+
+interface WranglerPostHogConfig extends WranglerPostHogEnvironment {
+  env?: unknown;
+}
+
 function safeHttpsOrigin(raw: string | null | undefined): string | null {
   const value = (raw ?? "").trim();
   if (!value) return null;
@@ -79,6 +87,35 @@ export function resolvePostHogCspOrigins(env?: PostHogCspEnv | null): PostHogCsp
     ingestOrigin,
     assetsOrigin: postHogAssetsOriginFor(ingestOrigin),
   };
+}
+
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+export function resolvePostHogBuildHost(
+  wrangler: WranglerPostHogConfig,
+  environment?: string,
+): string {
+  const root = objectValue(wrangler);
+  const environmentConfig = environment
+    ? objectValue(objectValue(root?.env)?.[environment])
+    : root;
+  if (!environmentConfig) {
+    throw new Error(`Wrangler environment ${environment ?? "production"} is missing.`);
+  }
+
+  const configured = objectValue(environmentConfig.vars)?.VITE_POSTHOG_HOST;
+  const raw = typeof configured === "string" ? configured.trim() : "";
+  const origin = safeHttpsOrigin(raw);
+  if (!origin || raw !== origin) {
+    throw new Error(
+      `Wrangler environment ${environment ?? "production"} must define an origin-only HTTPS VITE_POSTHOG_HOST.`,
+    );
+  }
+  return origin;
 }
 
 function uniqueSources(sources: readonly string[]): readonly string[] {

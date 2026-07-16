@@ -23,6 +23,7 @@ export interface DeploymentPreflightInputs {
   gitignore: string;
   pnpmWorkspace: string;
   cloudflareEnvDts: string;
+  reactRouterBuild: string;
   readme: string;
   deploymentDoc: string;
   vitestConfig: string;
@@ -430,12 +431,12 @@ function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
         'gh run list --workflow .github/workflows/storybook.yml --branch main --commit "$SOURCE_SHA" --event push --status success',
         'gh run view "$storybook_run_id" --json jobs',
         '.name == "build-storybook" and .conclusion == "success"',
-        'csp_report_only_break_glass must be ACK_REPORT_ONLY_CSP_ROLLBACK',
       ];
       if (
         stepPropertyValue(lines, stepStart, stepEnd, "if") === null &&
         stepHasEnvKeys(lines, stepStart, stepEnd, ["GH_TOKEN", "WORKFLOW_RUN_PATH"]) &&
-        requiredRunFragments.every((fragment) => run.includes(fragment))
+        requiredRunFragments.every((fragment) => run.includes(fragment)) &&
+        breakGlassValidationRunIsSafe(run)
       ) {
         validationStep = stepStart;
       }
@@ -562,13 +563,6 @@ function workflowBuildsPushesAndPullRequestsToMain(workflow: string): boolean {
   );
 }
 
-function workflowTopLevelEnvValue(workflow: string, key: string): string | null {
-  const lines = workflowLines(workflow);
-  const envIndex = lines.findIndex((line) => line.indent === 0 && line.text === "env:");
-  if (envIndex === -1) return null;
-  return blockScalarChildValue(lines, envIndex, blockEnd(lines, envIndex), key);
-}
-
 function workflowHasRunCommand(workflow: string, expected: string, minimumCount = 1): boolean {
   const lines = workflowLines(workflow);
   let count = 0;
@@ -584,12 +578,56 @@ function workflowHasRunCommand(workflow: string, expected: string, minimumCount 
   return count >= minimumCount;
 }
 
+const WARNING_GATE_COMMAND_PATTERN = /^(?:[A-Z_][A-Z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*node scripts\/warning-gate\.ts -- (.+)$/;
+const UNGATED_CI_COMMAND_PATTERN = /(?:^|[\s;&|($`])(?:pnpm|npm|npx|tsx|vitest|playwright|prisma|wrangler|react-router)(?=\s|$)/;
+
+function warningGatedPayload(command: string): string | null {
+  return command.match(WARNING_GATE_COMMAND_PATTERN)?.[1] ?? null;
+}
+
+function workflowHasWarningGatedPayload(workflow: string, payload: string, minimumCount = 1): boolean {
+  const lines = workflowLines(workflow);
+  let count = 0;
+  for (const [jobStart, jobEnd] of workflowJobBlocks(lines)) {
+    const steps = childBlock(lines, jobStart, jobEnd, "steps");
+    if (!steps) continue;
+    for (const [stepStart, stepEnd] of stepBlocks(lines, steps[0], steps[1])) {
+      for (const command of runCommandLines(stepRunText(lines, stepStart, stepEnd))) {
+        if (warningGatedPayload(command) === payload) count += 1;
+      }
+    }
+  }
+  return count >= minimumCount;
+}
+
+function workflowHasNoUngatedCiCommands(workflow: string): boolean {
+  const lines = workflowLines(workflow);
+  for (const [jobStart, jobEnd] of workflowJobBlocks(lines)) {
+    const steps = childBlock(lines, jobStart, jobEnd, "steps");
+    if (!steps) continue;
+    for (const [stepStart, stepEnd] of stepBlocks(lines, steps[0], steps[1])) {
+      for (const command of runCommandLines(stepRunText(lines, stepStart, stepEnd))) {
+        if (warningGatedPayload(command)) continue;
+        if (command === "pnpm test:coverage" || command === "pnpm test:e2e") continue;
+        if (command === "corepack enable") continue;
+        if (/^(?:echo|printf)(?:\s|$)/.test(command) && !command.includes("$(")) continue;
+        if (command.startsWith("corepack prepare ") || UNGATED_CI_COMMAND_PATTERN.test(command)) {
+          return false;
+        }
+      }
+    }
+  }
+  return true;
+}
+
 function workflowHasWarningCleanCiOutputPaths(workflow: string): boolean {
   return (
-    workflowHasRunCommand(workflow, "pnpm exec tsx scripts/warning-gate.ts -- pnpm db:seed", 2) &&
-    workflowHasRunCommand(workflow, "pnpm exec tsx scripts/warning-gate.ts -- pnpm run typecheck") &&
+    workflowHasNoUngatedCiCommands(workflow) &&
+    workflowHasWarningGatedPayload(workflow, "pnpm install --frozen-lockfile", 2) &&
+    workflowHasWarningGatedPayload(workflow, "pnpm db:seed", 2) &&
+    workflowHasWarningGatedPayload(workflow, "pnpm run typecheck") &&
     workflowHasRunCommand(workflow, "pnpm test:coverage") &&
-    workflowHasRunCommand(workflow, "pnpm exec tsx scripts/warning-gate.ts -- pnpm build") &&
+    workflowHasWarningGatedPayload(workflow, "pnpm build") &&
     workflowHasRunCommand(workflow, "pnpm test:e2e")
   );
 }
@@ -771,10 +809,15 @@ function workflowHasGitDefaultBranchConfig(workflow: string): boolean {
 }
 
 function corepackPnpmRunIsClean(run: string): boolean {
+  const commands = runCommandLines(run);
   return commandLinesEqual(run, [
     "corepack enable",
     `corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`,
-  ]);
+  ]) || (
+    commands.length === 2 &&
+    commands[0] === "corepack enable" &&
+    warningGatedPayload(commands[1]) === `corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`
+  );
 }
 
 function workflowUsesCorepackPnpmSetup(workflow: string): boolean {
@@ -865,6 +908,30 @@ function runCommandLines(run: string): string[] {
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0 && !line.startsWith("#"));
+}
+
+function breakGlassValidationRunIsSafe(run: string): boolean {
+  const commands = runCommandLines(run);
+  const expected = [
+    'if [ -n "$SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS" ] && [ "$SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS" != "ACK_REPORT_ONLY_CSP_ROLLBACK" ]; then',
+    'echo "csp_report_only_break_glass must be ACK_REPORT_ONLY_CSP_ROLLBACK" >&2',
+    "exit 1",
+    "fi",
+  ];
+  let matches = 0;
+  for (let index = 0; index <= commands.length - expected.length; index += 1) {
+    if (expected.every((command, offset) => commands[index + offset] === command)) matches += 1;
+  }
+  return matches === 1;
+}
+
+function reactRouterBuildThreadsAuthoritativePostHogHost(source: string): boolean {
+  return [
+    "resolvePostHogBuildHost",
+    'readFileSync("wrangler.json", "utf8")',
+    "CLOUDFLARE_ENV",
+    "VITE_POSTHOG_HOST",
+  ].every((fragment) => source.includes(fragment));
 }
 
 function commandLinesEqual(run: string, expected: string[]): boolean {
@@ -1131,9 +1198,6 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
   const hasCspBreakGlass = inputs.cspReportOnlyBreakGlass === CSP_REPORT_ONLY_BREAK_GLASS_ACK;
   const productionPostHogOrigin = normalizedHttpsOrigin(productionVars.VITE_POSTHOG_HOST);
   const qaPostHogOrigin = normalizedHttpsOrigin(qaVars.VITE_POSTHOG_HOST);
-  const productionDeployPostHogOrigin = normalizedHttpsOrigin(
-    workflowTopLevelEnvValue(inputs.productionDeployWorkflow, "VITE_POSTHOG_HOST"),
-  );
   const ciTargetsMain = workflowBuildsPushesAndPullRequestsToMain(inputs.ciWorkflow);
   const ciHasGitConfig = workflowHasGitDefaultBranchConfig(inputs.ciWorkflow);
   const ciHasWarningCleanOutputPaths = workflowHasWarningCleanCiOutputPaths(inputs.ciWorkflow);
@@ -1197,11 +1261,10 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
       Boolean(
         productionPostHogOrigin &&
           qaPostHogOrigin &&
-          productionDeployPostHogOrigin &&
           productionPostHogOrigin === qaPostHogOrigin &&
-          productionPostHogOrigin === productionDeployPostHogOrigin,
+          reactRouterBuildThreadsAuthoritativePostHogHost(inputs.reactRouterBuild),
       ),
-      "wrangler.json production/QA vars and production-deploy.yml must set the same origin-only HTTPS VITE_POSTHOG_HOST used by the CSP PostHog ingest/assets policy."
+      "wrangler.json production/QA vars must set the same origin-only HTTPS VITE_POSTHOG_HOST, and the React Router build must inject that exact Wrangler value into the client bundle."
     ),
     check(
       "QA resource isolation",
@@ -1578,6 +1641,7 @@ export async function runDeploymentPreflight(
     gitignore,
     pnpmWorkspace,
     cloudflareEnvDts,
+    reactRouterBuild,
     readme,
     deploymentDoc,
     vitestConfig,
@@ -1593,6 +1657,7 @@ export async function runDeploymentPreflight(
     readFile(path.join(rootDir, ".gitignore"), "utf8"),
     readFile(path.join(rootDir, "pnpm-workspace.yaml"), "utf8"),
     readFile(path.join(rootDir, "app/cloudflare-env.d.ts"), "utf8"),
+    readFile(path.join(rootDir, "scripts/react-router-build.ts"), "utf8"),
     readFile(path.join(rootDir, "README.md"), "utf8"),
     readFile(path.join(rootDir, "docs/deployment.md"), "utf8"),
     readFile(path.join(rootDir, "vitest.config.ts"), "utf8"),
@@ -1610,6 +1675,7 @@ export async function runDeploymentPreflight(
     gitignore,
     pnpmWorkspace,
     cloudflareEnvDts,
+    reactRouterBuild,
     readme,
     deploymentDoc,
     vitestConfig,

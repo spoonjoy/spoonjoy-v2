@@ -49,7 +49,6 @@ function secureProductionDeployWorkflow(): string {
     "  SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.source_sha }}",
     "  ROLLBACK_VERSION_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.rollback_version_id || '' }}",
     "  SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: ${{ github.event_name == 'workflow_dispatch' && inputs.csp_report_only_break_glass || '' }}",
-    "  VITE_POSTHOG_HOST: https://us.i.posthog.com",
     "jobs:",
     "  deploy:",
     "    if: (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.path == '.github/workflows/ci.yml') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')",
@@ -309,12 +308,12 @@ function validCiWorkflow(): string {
     "      - name: Activate pnpm",
     "        run: |",
     "          corepack enable",
-    "          corepack prepare pnpm@10.28.1 --activate",
-    "      - run: pnpm install --frozen-lockfile",
-    "      - run: pnpm exec tsx scripts/warning-gate.ts -- pnpm db:seed",
-    "      - run: pnpm exec tsx scripts/warning-gate.ts -- pnpm run typecheck",
+    "          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate",
+    "      - run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile",
+    "      - run: node scripts/warning-gate.ts -- pnpm db:seed",
+    "      - run: node scripts/warning-gate.ts -- pnpm run typecheck",
     "      - run: pnpm test:coverage",
-    "      - run: pnpm exec tsx scripts/warning-gate.ts -- pnpm build",
+    "      - run: node scripts/warning-gate.ts -- pnpm build",
     "  e2e:",
     "    runs-on: ubuntu-latest",
     "    steps:",
@@ -325,9 +324,9 @@ function validCiWorkflow(): string {
     "      - name: Activate pnpm",
     "        run: |",
     "          corepack enable",
-    "          corepack prepare pnpm@10.28.1 --activate",
-    "      - run: pnpm install --frozen-lockfile",
-    "      - run: pnpm exec tsx scripts/warning-gate.ts -- pnpm db:seed",
+    "          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate",
+    "      - run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile",
+    "      - run: node scripts/warning-gate.ts -- pnpm db:seed",
     "      - run: pnpm test:e2e",
   ].join("\n");
 }
@@ -444,6 +443,7 @@ function validInputs(): DeploymentPreflightInputs {
     gitignore: validGitignore(),
     pnpmWorkspace: validPnpmWorkspace(),
     cloudflareEnvDts: "DB?: D1Database; PHOTOS?: R2Bucket; CF_VERSION_METADATA?: WorkerVersionMetadata; SPOONJOY_CSP_MODE?: string; VITE_POSTHOG_HOST?: string; SESSION_SECRET?: string; OPENAI_API_KEY?: string; GOOGLE_API_KEY?: string; GEMINI_API_KEY?: string; GEMINI_IMAGE_MODEL?: string; GEMINI_IMAGE_TIMEOUT_MS?: string; IMAGE_PROVIDER_PRIMARY?: string; IMAGE_PROVIDER_FALLBACKS?: string; GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string; GITHUB_CLIENT_ID?: string; GITHUB_CLIENT_SECRET?: string; APPLE_CLIENT_ID?: string; APPLE_NATIVE_CLIENT_IDS?: string; APPLE_TEAM_ID?: string; APPLE_KEY_ID?: string; APPLE_PRIVATE_KEY?: string; VAPID_PUBLIC_KEY?: string; VAPID_PRIVATE_KEY?: string; VAPID_SUBJECT?: string; POSTHOG_KEY?: string; POSTHOG_HOST?: string; POSTHOG_DISABLED?: string;",
+    reactRouterBuild: "resolvePostHogBuildHost readFileSync(\"wrangler.json\", \"utf8\") CLOUDFLARE_ENV VITE_POSTHOG_HOST",
     readme: "pnpm run deploy:preflight wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_NATIVE_CLIENT_IDS APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY GOOGLE_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT GEMINI_API_KEY GEMINI_IMAGE_MODEL GEMINI_IMAGE_TIMEOUT_MS gemini-3.1-flash-image IMAGE_PROVIDER_PRIMARY IMAGE_PROVIDER_FALLBACKS SPOONJOY_CSP_MODE Content-Security-Policy-Report-Only one-commit rollback SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS ACK_REPORT_ONLY_CSP_ROLLBACK VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry docs/analytics-privacy.md cleanup:local cleanup:local:apply cleanup:remote:qa cleanup:remote:qa:apply cleanup:production target-env local target-env qa target-env production broad production cleanup is read-only warning-gate.ts",
     deploymentDoc: "pnpm run deploy:preflight smoke:api wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_NATIVE_CLIENT_IDS APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY GOOGLE_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT GEMINI_API_KEY GEMINI_IMAGE_MODEL GEMINI_IMAGE_TIMEOUT_MS gemini-3.1-flash-image IMAGE_PROVIDER_PRIMARY IMAGE_PROVIDER_FALLBACKS SPOONJOY_CSP_MODE Content-Security-Policy-Report-Only one-commit rollback SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS ACK_REPORT_ONLY_CSP_ROLLBACK wrangler secret put POSTHOG_KEY VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry cleanup:local cleanup:local:apply cleanup:remote:qa cleanup:remote:qa:apply cleanup:production target-env local target-env qa target-env production broad production cleanup is read-only warning-gate.ts",
     migrationFiles: ["0000_init.sql"],
@@ -464,15 +464,19 @@ describe("deployment preflight", () => {
     expect(result.checks.map((item) => item.name)).toContain("remote D1 migrations");
   });
 
-  it("keeps Worker CSP generated-type comments mode-neutral", async () => {
-    const [cloudflareEnvDts, workerApp] = await Promise.all([
+  it("keeps CSP runtime comments mode-neutral", async () => {
+    const [cloudflareEnvDts, workerApp, entryServer, cspReport] = await Promise.all([
       readFile("app/cloudflare-env.d.ts", "utf8"),
       readFile("workers/app.ts", "utf8"),
+      readFile("app/entry.server.tsx", "utf8"),
+      readFile("app/routes/csp-report.ts", "utf8"),
     ]);
 
     expect(cloudflareEnvDts).toContain("VITE_POSTHOG_HOST?: string;");
     expect(cloudflareEnvDts).not.toContain("report-only CSP `script-src`");
     expect(workerApp).not.toContain("report-only CSP header");
+    expect(entryServer).not.toContain("once the CSP flips from report-only to enforce");
+    expect(cspReport).not.toContain("The report-only CSP");
   });
 
   it("surfaces remote-migration failures as errors", async () => {
@@ -838,6 +842,18 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
   });
 
+  it("rejects a break-glass validation message hidden behind a false condition", () => {
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
+      'if [ -n "$SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS" ] && [ "$SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS" != "ACK_REPORT_ONLY_CSP_ROLLBACK" ]; then',
+      "if false; then",
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
   it("rejects a disabled production deploy step", () => {
     const inputs = validInputs();
     inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
@@ -1028,7 +1044,7 @@ describe("deployment preflight", () => {
           "      - name: Activate pnpm",
           "        run: |",
           "          corepack enable",
-          "          corepack prepare pnpm@10.28.1 --activate",
+          "          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate",
         ].join("\n"),
         "      - uses: pnpm/action-setup@v6",
       ),
@@ -1040,7 +1056,7 @@ describe("deployment preflight", () => {
           "      - name: Activate pnpm",
           "        run: |",
           "          corepack enable",
-          "          corepack prepare pnpm@10.28.1 --activate",
+          "          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate",
         ].join("\n") + "\n",
         "",
       ),
@@ -1097,22 +1113,49 @@ describe("deployment preflight", () => {
     const unwrappedSeed = validateDeploymentConfig({
       ...validInputs(),
       ciWorkflow: validCiWorkflow().replace(
-        "      - run: pnpm exec tsx scripts/warning-gate.ts -- pnpm db:seed",
+        "      - run: node scripts/warning-gate.ts -- pnpm db:seed",
         "      - run: pnpm db:seed",
       ),
     });
     const unwrappedTypecheck = validateDeploymentConfig({
       ...validInputs(),
       ciWorkflow: validCiWorkflow().replace(
-        "      - run: pnpm exec tsx scripts/warning-gate.ts -- pnpm run typecheck",
+        "      - run: node scripts/warning-gate.ts -- pnpm run typecheck",
         "      - run: pnpm run typecheck",
       ),
     });
     const unwrappedBuild = validateDeploymentConfig({
       ...validInputs(),
       ciWorkflow: validCiWorkflow().replace(
-        "      - run: pnpm exec tsx scripts/warning-gate.ts -- pnpm build",
+        "      - run: node scripts/warning-gate.ts -- pnpm build",
         "      - run: pnpm build",
+      ),
+    });
+    const unwrappedInstall = validateDeploymentConfig({
+      ...validInputs(),
+      ciWorkflow: validCiWorkflow().replace(
+        "      - run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile",
+        "      - run: pnpm install --frozen-lockfile",
+      ),
+    });
+    const ungatedDuplicate = validateDeploymentConfig({
+      ...validInputs(),
+      ciWorkflow: validCiWorkflow().replace(
+        "      - run: node scripts/warning-gate.ts -- pnpm build",
+        [
+          "      - run: node scripts/warning-gate.ts -- pnpm build",
+          "      - run: pnpm build",
+        ].join("\n"),
+      ),
+    });
+    const ungatedNewCommand = validateDeploymentConfig({
+      ...validInputs(),
+      ciWorkflow: validCiWorkflow().replace(
+        "      - run: pnpm test:e2e",
+        [
+          "      - run: pnpm test:e2e",
+          "      - run: pnpm exec playwright install --with-deps chromium",
+        ].join("\n"),
       ),
     });
 
@@ -1130,6 +1173,9 @@ describe("deployment preflight", () => {
     expect(unwrappedSeed.errors.map((item) => item.name)).toContain("CI workflow");
     expect(unwrappedTypecheck.errors.map((item) => item.name)).toContain("CI workflow");
     expect(unwrappedBuild.errors.map((item) => item.name)).toContain("CI workflow");
+    expect(unwrappedInstall.errors.map((item) => item.name)).toContain("CI workflow");
+    expect(ungatedDuplicate.errors.map((item) => item.name)).toContain("CI workflow");
+    expect(ungatedNewCommand.errors.map((item) => item.name)).toContain("CI workflow");
   });
 
   it("rejects a block-style production workflow run step that does not deploy", () => {
@@ -1154,6 +1200,39 @@ describe("deployment preflight", () => {
     const result = validateDeploymentConfig(inputs);
 
     expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it("rejects a command-free CI metadata job without warning-clean setup", () => {
+    const inputs = validInputs();
+    inputs.ciWorkflow = validCiWorkflow().replace(
+      "jobs:\n  coverage:",
+      "jobs:\n  metadata:\n    runs-on: ubuntu-latest\n  coverage:",
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("CI workflow");
+  });
+
+  it.each([
+    "pnpm prisma:generate",
+    "pnpm why blake3-wasm",
+    "pnpm exec wrangler d1 migrations apply DB --local",
+    'DATABASE_URL="file:./test.db" pnpm exec prisma db push --skip-generate',
+    "pnpm run deploy:preflight",
+    "pnpm exec playwright install --with-deps chromium",
+    "if pnpm run typecheck; then echo typed; fi",
+    'resolution="$(pnpm why blake3-wasm)"',
+  ])("rejects a newly added ungated CI command: %s", (command) => {
+    const inputs = validInputs();
+    inputs.ciWorkflow = validCiWorkflow().replace(
+      "      - run: pnpm test:e2e",
+      ["      - run: pnpm test:e2e", `      - run: ${command}`].join("\n"),
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("CI workflow");
   });
 
   it("requires deploy:auto and Cloudflare credentials on a real deploy step", () => {
@@ -1371,7 +1450,7 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
   });
 
-  it("requires one authoritative HTTPS PostHog host in production, QA, and deploy build vars", () => {
+  it("requires one authoritative HTTPS PostHog host in production, QA, and the client build", () => {
     const missingProduction = validInputs();
     delete (missingProduction.wrangler.vars as Record<string, unknown>).VITE_POSTHOG_HOST;
 
@@ -1389,26 +1468,13 @@ describe("deployment preflight", () => {
     const mismatchedQaVars = ((mismatched.wrangler.env as Record<string, { vars: Record<string, unknown> }>).qa).vars;
     mismatchedQaVars.VITE_POSTHOG_HOST = "https://eu.i.posthog.com";
 
-    const missingDeploy = validInputs();
-    missingDeploy.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
-      "  VITE_POSTHOG_HOST: https://us.i.posthog.com",
-      "  VITE_POSTHOG_HOST: ''",
-    );
-
-    const mismatchedDeploy = validInputs();
-    mismatchedDeploy.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
-      "  VITE_POSTHOG_HOST: https://us.i.posthog.com",
-      "  VITE_POSTHOG_HOST: https://eu.i.posthog.com",
-    );
+    const missingBuildWiring = validInputs();
+    missingBuildWiring.reactRouterBuild = "pnpm exec react-router build";
 
     const eu = validInputs();
     (eu.wrangler.vars as Record<string, unknown>).VITE_POSTHOG_HOST = "https://eu.i.posthog.com";
     const euQaVars = ((eu.wrangler.env as Record<string, { vars: Record<string, unknown> }>).qa).vars;
     euQaVars.VITE_POSTHOG_HOST = "https://eu.i.posthog.com";
-    eu.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
-      "  VITE_POSTHOG_HOST: https://us.i.posthog.com",
-      "  VITE_POSTHOG_HOST: https://eu.i.posthog.com",
-    );
 
     expect(validateDeploymentConfig(missingProduction).errors.map((item) => item.name)).toContain(
       "PostHog CSP host config",
@@ -1425,10 +1491,7 @@ describe("deployment preflight", () => {
     expect(validateDeploymentConfig(mismatched).errors.map((item) => item.name)).toContain(
       "PostHog CSP host config",
     );
-    expect(validateDeploymentConfig(missingDeploy).errors.map((item) => item.name)).toContain(
-      "PostHog CSP host config",
-    );
-    expect(validateDeploymentConfig(mismatchedDeploy).errors.map((item) => item.name)).toContain(
+    expect(validateDeploymentConfig(missingBuildWiring).errors.map((item) => item.name)).toContain(
       "PostHog CSP host config",
     );
     expect(validateDeploymentConfig(eu).errors.map((item) => item.name)).not.toContain(
@@ -2319,6 +2382,20 @@ describe("deployment docs", () => {
   it("DEPLOY.md documents SPOONJOY_PREFLIGHT_SKIP_REMOTE", async () => {
     const doc = await readFile(`${process.cwd()}/DEPLOY.md`, "utf8");
     expect(doc).toContain("SPOONJOY_PREFLIGHT_SKIP_REMOTE");
+  });
+
+  it("documents fail-closed CSP inspection for historical Worker rollbacks", async () => {
+    const docs = await Promise.all([
+      readFile(`${process.cwd()}/DEPLOY.md`, "utf8"),
+      readFile(`${process.cwd()}/docs/deployment.md`, "utf8"),
+    ]);
+
+    for (const doc of docs) {
+      expect(doc).toContain("exact rollback candidate CSP");
+      expect(doc).toContain("ACK_REPORT_ONLY_CSP_ROLLBACK");
+      expect(doc).toContain("fails closed");
+      expect(doc).toContain("enforcing CSP needs no break-glass acknowledgement");
+    }
   });
 
   it("documents the full PostHog client and server telemetry setup", async () => {

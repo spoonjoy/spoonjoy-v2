@@ -5,12 +5,15 @@ export const EXPECTED_PRISMA_D1_TRANSACTION_WARNING =
 
 const ANSI_PATTERN = /\u001b\[[0-9;]*m/g;
 const BRACKETED_WARNING_PATTERN = /(?:^|[\s([<{])\[warning\](?::|\s|$)/i;
-const WARNING_WORD_PATTERN = /(?:^|[\s([<{])(?:[a-z]+warning|warning|warn)(?::|\s|$)/i;
+const WARNING_WORD_PATTERN = /(?:^|[^A-Za-z0-9])(?:[A-Za-z]+warning|warning|warn)(?=[:\s([<{]|$)/i;
 const PRISMA_WARNING_PATTERN = /(?:^|[\s([<{])prisma:warn(?::|\s|$)/i;
+const WARNING_SYMBOL_PATTERN = /⚠/;
+const TEST_RESULT_LINE_PATTERN = /^[✓↓×]\s/;
 
 export interface WarningGateCommandResult {
   exitCode: number;
   output: string;
+  warningOutput?: string;
 }
 
 export interface WarningGateResult {
@@ -27,10 +30,12 @@ function stripAnsi(value: string): string {
 }
 
 function isWarningLine(line: string): boolean {
+  if (TEST_RESULT_LINE_PATTERN.test(line)) return false;
   return (
     BRACKETED_WARNING_PATTERN.test(line) ||
     WARNING_WORD_PATTERN.test(line) ||
-    PRISMA_WARNING_PATTERN.test(line)
+    PRISMA_WARNING_PATTERN.test(line) ||
+    WARNING_SYMBOL_PATTERN.test(line)
   );
 }
 
@@ -93,6 +98,7 @@ export function runSpawnedCommand(command: readonly string[]): Promise<WarningGa
       stdio: ["ignore", "pipe", "pipe"],
     });
     let output = "";
+    let warningOutput = "";
 
     child.stdout.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8");
@@ -102,11 +108,15 @@ export function runSpawnedCommand(command: readonly string[]): Promise<WarningGa
     child.stderr.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8");
       output += text;
+      warningOutput += text;
       process.stderr.write(text);
     });
     child.on("error", reject);
     child.on("close", (code, signal) => {
-      resolve(resolveSpawnedCommandClose(code, signal, output));
+      resolve({
+        ...resolveSpawnedCommandClose(code, signal, output),
+        ...(warningOutput ? { warningOutput } : {}),
+      });
     });
   });
 }
@@ -119,16 +129,25 @@ export async function runWarningGate(
   const runCommand = deps.runCommand ?? runSpawnedCommand;
   let exitCode = 0;
   let output = "";
+  let warningOutput = "";
 
   for (const command of commands) {
     const result = await runCommand(command);
     output += result.output;
+    warningOutput += result.warningOutput ?? "";
     if (result.exitCode !== 0 && exitCode === 0) {
       exitCode = result.exitCode;
     }
   }
 
-  const unexpectedWarnings = findUnexpectedWarnings(output);
+  const warningChannelLines = warningOutput
+    .split(/\r?\n/)
+    .map((line) => stripAnsi(line).trim())
+    .filter(Boolean);
+  const unexpectedWarnings = Array.from(new Set([
+    ...findUnexpectedWarnings(output),
+    ...warningChannelLines,
+  ]));
   return {
     exitCode: unexpectedWarnings.length > 0 ? 1 : exitCode,
     unexpectedWarnings,

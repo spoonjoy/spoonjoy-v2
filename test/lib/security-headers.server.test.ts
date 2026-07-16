@@ -3,6 +3,7 @@ import {
   SECURITY_HEADERS,
   buildContentSecurityPolicy,
   generateNonce,
+  resolvePostHogBuildHost,
   resolvePostHogCspOrigins,
   withSecurityHeaders,
 } from "~/lib/security-headers.server";
@@ -219,6 +220,34 @@ describe("buildContentSecurityPolicy", () => {
     const csp = buildContentSecurityPolicy();
     expect(directiveSources(csp, "report-uri")).toEqual(["/csp-report"]);
     expect(directiveSources(csp, "report-to")).toEqual(["csp-endpoint"]);
+  });
+});
+
+describe("resolvePostHogBuildHost", () => {
+  it.each([
+    ["US", "https://us.i.posthog.com"],
+    ["EU", "https://eu.i.posthog.com"],
+    ["custom", "https://analytics.example.com"],
+  ])("uses the authoritative Wrangler host for %s production and QA builds", (_label, host) => {
+    const wrangler = {
+      vars: { VITE_POSTHOG_HOST: host },
+      env: { qa: { vars: { VITE_POSTHOG_HOST: host } } },
+    };
+
+    expect(resolvePostHogBuildHost(wrangler)).toBe(host);
+    expect(resolvePostHogBuildHost(wrangler, "qa")).toBe(host);
+  });
+
+  it("fails closed for a missing environment or an invalid deployment host", () => {
+    const wrangler = {
+      vars: { VITE_POSTHOG_HOST: "http://us.i.posthog.com" },
+      env: { qa: { vars: {} } },
+    };
+
+    expect(() => resolvePostHogBuildHost(wrangler)).toThrow(/origin-only HTTPS/);
+    expect(() => resolvePostHogBuildHost(wrangler, "qa")).toThrow(/origin-only HTTPS/);
+    expect(() => resolvePostHogBuildHost(wrangler, "missing")).toThrow(/missing/);
+    expect(() => resolvePostHogBuildHost(null as never)).toThrow(/production.*missing/);
   });
 });
 
