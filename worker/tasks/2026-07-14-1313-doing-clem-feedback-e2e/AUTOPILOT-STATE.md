@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `23afdf16e0e9b05809e5a47431f96674113a2697` integrates `origin/main@2f392840`. All prior clean scrutiny passes are historical because Tinfoil Round 10 changed template, cleanup-evidence, coverage, and pagination contracts.
+- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `38ef143009c1a394e7868e413752fdd798b581ee` integrates `origin/main@2f392840`. All prior clean scrutiny passes are historical because Tinfoil Round 11 changed post-freeze continuity, build-SHA coverage, deployed visual-evidence, and Unit32 sequencing contracts.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is `NEEDS_REVIEW` after the mandatory main-drift audit.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation and dependency setup have not started.
-- Active gate: Quality Round 12 converged at reviewer-input `fa7841e0`; scrutiny restarts at zero with fresh Tinfoil, followed by fresh Stranger only if no contract changes. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
+- Active gate: fresh Quality Round 13 on reviewer-input `38ef1430`, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Synchronize the main-drift contract into Desk, run fresh Quality plus consecutive clean Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
+Synchronize checkpoint `38ef1430` into Desk, run fresh Quality plus consecutive clean Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
 
 ## Operator-Locked Rules
 
@@ -40,8 +40,8 @@ Synchronize the main-drift contract into Desk, run fresh Quality plus consecutiv
 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
-| Planning reviewer gate | active | Tinfoil Round 10 findings fixed at `23afdf16` | Run fresh Quality and scrutiny convergence |
-| Doing review chain | active | Template/evidence/coverage/pagination contracts changed | Re-converge and restore final handoff |
+| Planning reviewer gate | active | Tinfoil Round 11 findings fixed at `38ef1430` | Run fresh Quality and scrutiny convergence |
+| Doing review chain | active | Continuity/SHA-coverage/production-visual/Unit32 contracts changed | Re-converge and restore final handoff |
 | Work Doer Units 0-37 | deferred by gate | Full red/green/verify/visual/ship queue is defined | Restart Unit0a only after fresh final handoff |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
 
@@ -55,3 +55,5 @@ Synchronize the main-drift contract into Desk, run fresh Quality plus consecutiv
 ## Stop Condition
 
 Not satisfied. The reopened reviewer gate and all delivery work remain.
+
+Last updated: 2026-07-16 10:16:19 PDT.
