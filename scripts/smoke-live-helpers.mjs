@@ -215,6 +215,47 @@ export async function waitForBrowserWorkerVersionReady({
   });
 }
 
+export async function waitForWorkerChannelsReady({
+  workerVersionId,
+  probes,
+  timeoutMs = WORKER_VERSION_READINESS_TIMEOUT_MS,
+  intervalMs = WORKER_VERSION_READINESS_INTERVAL_MS,
+  now = Date.now,
+  sleep,
+}) {
+  if (workerVersionId === null) {
+    return { attempts: 0, elapsedMs: 0, workerVersionId: null };
+  }
+  if (!Array.isArray(probes) || probes.length < 2 || probes.some((probe) => typeof probe !== "function")) {
+    throw new Error("Worker channel readiness requires at least two channel probe functions.");
+  }
+  const expected = normalizeWorkerVersionId(workerVersionId);
+  let consecutiveReadyCycles = 0;
+
+  return waitForWorkerVersionReady({
+    workerVersionId,
+    timeoutMs,
+    intervalMs,
+    now,
+    sleep,
+    probe: async (attempt, remainingMs) => {
+      const responses = await Promise.all(probes.map(async (probe) => {
+        try {
+          return await probe({ attempt, timeoutMs: remainingMs });
+        } catch {
+          return null;
+        }
+      }));
+      const allChannelsReady = responses.every((response) => (
+        response?.status === 200
+        && workerVersionResponseId(response.headers)?.toLowerCase() === expected
+      ));
+      consecutiveReadyCycles = allChannelsReady ? consecutiveReadyCycles + 1 : 0;
+      return consecutiveReadyCycles >= 2 ? { [WORKER_VERSION_RESPONSE_HEADER]: expected } : {};
+    },
+  });
+}
+
 export function createWorkerVersionResponseTracker({ baseUrl, workerVersionId }) {
   const expected = workerVersionId === null ? null : normalizeWorkerVersionId(workerVersionId);
   const records = [];
