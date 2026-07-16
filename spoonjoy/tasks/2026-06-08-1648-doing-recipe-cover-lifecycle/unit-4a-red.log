@@ -420,20 +420,20 @@ AssertionError: expected '/**\n * Database Seed Script for Spoo…' to contain '
 +     photoUrl: CHEF_RJ_AVATAR_URL,
 +   },
 +   {
-+     email: "chef.julia@example.com",
-+     username: "seeded_chef",
++     email: "redacted@example.invalid",
++     username: "redacted_user",
 +     password: "Redacted-Test-Credential",
 +     photoUrl: CHEF_RJ_AVATAR_URL,
 +   },
 +   {
-+     email: "marco.rossi@example.com",
-+     username: "marco_rossi",
++     email: "redacted@example.invalid",
++     username: "redacted_user",
 +     password: "Redacted-Test-Credential",
 +     photoUrl: CHEF_RJ_AVATAR_URL,
 +   },
 +   {
-+     email: "sarah.chen@example.com",
-+     username: "sarah_chen",
++     email: "redacted@example.invalid",
++     username: "redacted_user",
 +     password: "Redacted-Test-Credential",
 +     photoUrl: CHEF_RJ_AVATAR_URL,
 +   },
@@ -2340,4 +2340,3 @@ AssertionError: expected { …(15) } to match object { sourceType: 'ai-placehold
       Tests  22 failed | 115 passed (137)
    Start at  20:11:27
    Duration  21.54s (transform 375ms, setup 217ms, import 1.54s, tests 18.76s, environment 565ms)
-

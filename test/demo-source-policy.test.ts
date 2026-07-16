@@ -18,7 +18,12 @@ const FORBIDDEN_DEMO_PATTERNS = [
   { id: "reusable-example-password", regex: /\bpassword123\b/i },
   { id: "fixed-qa-demo-namespace", regex: /\bsj-qa-demo(?:[-_a-z0-9]*)?\b/i },
   { id: "legacy-primary-username", regex: /\bdemo_chef\b/i },
+  { id: "legacy-julia-email", regex: /\bchef\.julia@example\.com\b/i },
   { id: "legacy-secondary-username", regex: /\bchef_julia\b/i },
+  { id: "legacy-marco-email", regex: /\bmarco\.rossi@example\.com\b/i },
+  { id: "legacy-marco-username", regex: /\bmarco_rossi\b/i },
+  { id: "legacy-sarah-email", regex: /\bsarah\.chen@example\.com\b/i },
+  { id: "legacy-sarah-username", regex: /\bsarah_chen\b/i },
 ];
 
 const SOURCE_ROOTS = ["."];

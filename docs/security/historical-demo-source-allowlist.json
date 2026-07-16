@@ -10,7 +10,16 @@
     "path": "migrations/0004_reseed.sql",
     "kind": "historical-applied-migration",
     "immutable": true,
-    "patterns": ["legacy-demo-email", "legacy-primary-username", "legacy-secondary-username"],
-    "reason": "Historical applied migration retained for D1 migration integrity; active seeds no longer use this demo identity."
+    "patterns": [
+      "legacy-demo-email",
+      "legacy-primary-username",
+      "legacy-julia-email",
+      "legacy-secondary-username",
+      "legacy-marco-email",
+      "legacy-marco-username",
+      "legacy-sarah-email",
+      "legacy-sarah-username"
+    ],
+    "reason": "Historical applied migration retained for D1 migration integrity; active seeds no longer use these fixed fixture identities."
   }
 ]
