@@ -30,6 +30,7 @@ export type CommandRunner = (command: string, args: string[]) => Promise<Command
 export interface AdvisoryAllowlistEntry {
   id: string;
   packageName: string;
+  version: string;
   ecosystem: string;
   reason: string;
   expiresOn: string;
@@ -269,6 +270,7 @@ function parseAllowlistEntry(entry: unknown, location: string, now: Date): Advis
   const id = requiredString(entry, "id", location);
   const expiresOn = requiredString(entry, "expiresOn", location);
   const packageName = requiredString(entry, "packageName", location);
+  const version = requiredString(entry, "version", location);
   const ecosystem = requiredString(entry, "ecosystem", location);
   const reason = requiredString(entry, "reason", location);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(expiresOn)) {
@@ -281,7 +283,7 @@ function parseAllowlistEntry(entry: unknown, location: string, now: Date): Advis
   if (expiry.getTime() < now.getTime()) {
     throw new Error(`${location} expired on ${expiresOn}`);
   }
-  return { id, packageName, ecosystem, reason, expiresOn };
+  return { id, packageName, version, ecosystem, reason, expiresOn };
 }
 
 function isFindingAllowed(finding: AdvisoryFinding, allowlist: AdvisoryAllowlist): boolean {
@@ -290,6 +292,7 @@ function isFindingAllowed(finding: AdvisoryFinding, allowlist: AdvisoryAllowlist
     (entry) =>
       findingIds.has(entry.id) &&
       entry.packageName === finding.packageName &&
+      entry.version === finding.version &&
       entry.ecosystem.toLowerCase() === finding.ecosystem.toLowerCase(),
   );
 }

@@ -29,8 +29,9 @@ Temporary exceptions live in `security/advisory-allowlist.json`. Each entry must
 
 - `id`: OSV/GHSA/CVE identifier to allow
 - `packageName`: exact package name from the OSV result
+- `version`: exact package version from the OSV result
 - `ecosystem`: exact ecosystem, such as `npm`
 - `reason`: human-readable review rationale
 - `expiresOn`: future date in `YYYY-MM-DD` format
 
-Expired entries fail before the scanner runs. Broad package overrides are not allowed for this web gate.
+Expired entries fail before the scanner runs. Broad package or package-version overrides are not allowed for this web gate.

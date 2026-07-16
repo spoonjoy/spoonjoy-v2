@@ -126,6 +126,7 @@ describe("advisory allowlist policy", () => {
             {
               id: "GHSA-bad-date",
               packageName: "left-pad",
+              version: "1.1.1",
               ecosystem: "npm",
               reason: "synthetic fixture",
               expiresOn: "20260716",
@@ -150,6 +151,7 @@ describe("advisory allowlist policy", () => {
             {
               id: "GHSA-impossible-date",
               packageName: "left-pad",
+              version: "1.1.1",
               ecosystem: "npm",
               reason: "synthetic fixture",
               expiresOn: "2026-99-99",
@@ -174,6 +176,7 @@ describe("advisory allowlist policy", () => {
             {
               id: "GHSA-expired",
               packageName: "left-pad",
+              version: "1.1.1",
               ecosystem: "npm",
               reason: "synthetic fixture",
               expiresOn: "2026-07-15",
@@ -327,6 +330,7 @@ describe("advisory scan gate", () => {
             {
               id: "CVE-2099-0001",
               packageName: "left-pad",
+              version: "1.1.1",
               ecosystem: "npm",
               reason: "synthetic fixture does not ship",
               expiresOn: "2026-07-17",
