@@ -142,28 +142,30 @@ describe("advisory allowlist policy", () => {
   });
 
   it("rejects impossible expiry dates", async () => {
-    await withTempDir(async (directory) => {
-      const allowlistPath = path.join(directory, "allowlist.json");
-      await writeFile(
-        allowlistPath,
-        JSON.stringify({
-          allowedVulnerabilities: [
-            {
-              id: "GHSA-impossible-date",
-              packageName: "left-pad",
-              version: "1.1.1",
-              ecosystem: "npm",
-              reason: "synthetic fixture",
-              expiresOn: "2026-99-99",
-            },
-          ],
-        }),
-      );
+    for (const expiresOn of ["2026-99-99", "2026-02-30"]) {
+      await withTempDir(async (directory) => {
+        const allowlistPath = path.join(directory, "allowlist.json");
+        await writeFile(
+          allowlistPath,
+          JSON.stringify({
+            allowedVulnerabilities: [
+              {
+                id: "GHSA-impossible-date",
+                packageName: "left-pad",
+                version: "1.1.1",
+                ecosystem: "npm",
+                reason: "synthetic fixture",
+                expiresOn,
+              },
+            ],
+          }),
+        );
 
-      await expect(loadAdvisoryAllowlist(allowlistPath, new Date("2026-07-16T00:00:00Z"))).rejects.toThrow(
-        "valid date",
-      );
-    });
+        await expect(loadAdvisoryAllowlist(allowlistPath, new Date("2026-07-16T00:00:00Z"))).rejects.toThrow(
+          "valid date",
+        );
+      });
+    }
   });
 
   it("rejects expired allowlists before the scanner runs", async () => {
@@ -393,60 +395,103 @@ describe("advisory scan gate", () => {
     });
   });
 
-  it("tolerates empty or partial OSV result shapes as no findings", async () => {
-    await withTempDir(async (directory) => {
-      const runner: CommandRunner = async () => {
-        await writeFile(
-          path.join(directory, "osv.json"),
-          JSON.stringify({
-            ignored: true,
-            results: [
-              null,
-              {},
-              { source: null, packages: [null] },
-              { source: { path: "pnpm-lock.yaml" }, packages: [{ package: { name: "ok" } }] },
-              { source: { path: "pnpm-lock.yaml" }, packages: [{ vulnerabilities: [null] }] },
-            ],
+  it("fails closed on structurally invalid OSV output", async () => {
+    const malformedReports = [
+      { label: "missing results", report: { ignored: true }, message: ".results must be an array" },
+      { label: "non-object result", report: { results: [null] }, message: "results[0] must be an object" },
+      { label: "missing source", report: { results: [{ packages: [] }] }, message: "results[0].source must be an object" },
+      {
+        label: "missing packages",
+        report: { results: [{ source: { path: "pnpm-lock.yaml" } }] },
+        message: "results[0].packages must be an array",
+      },
+      {
+        label: "non-object package result",
+        report: { results: [{ source: { path: "pnpm-lock.yaml" }, packages: [null] }] },
+        message: "results[0].packages[0] must be an object",
+      },
+      {
+        label: "missing package",
+        report: { results: [{ source: { path: "pnpm-lock.yaml" }, packages: [{ vulnerabilities: [] }] }] },
+        message: "results[0].packages[0].package must be an object",
+      },
+      {
+        label: "missing package version",
+        report: {
+          results: [
+            {
+              source: { path: "pnpm-lock.yaml" },
+              packages: [{ package: { name: "left-pad", ecosystem: "npm" }, vulnerabilities: [] }],
+            },
+          ],
+        },
+        message: "results[0].packages[0].package.version is required",
+      },
+      {
+        label: "missing vulnerabilities",
+        report: {
+          results: [
+            {
+              source: { path: "pnpm-lock.yaml" },
+              packages: [{ package: { name: "left-pad", version: "1.1.1", ecosystem: "npm" } }],
+            },
+          ],
+        },
+        message: "results[0].packages[0].vulnerabilities must be an array",
+      },
+      {
+        label: "non-object vulnerability",
+        report: {
+          results: [
+            {
+              source: { path: "pnpm-lock.yaml" },
+              packages: [
+                { package: { name: "left-pad", version: "1.1.1", ecosystem: "npm" }, vulnerabilities: [null] },
+              ],
+            },
+          ],
+        },
+        message: "results[0].packages[0].vulnerabilities[0] must be an object",
+      },
+      {
+        label: "missing vulnerability id",
+        report: {
+          results: [
+            {
+              source: { path: "pnpm-lock.yaml" },
+              packages: [
+                { package: { name: "left-pad", version: "1.1.1", ecosystem: "npm" }, vulnerabilities: [{}] },
+              ],
+            },
+          ],
+        },
+        message: "results[0].packages[0].vulnerabilities[0].id is required",
+      },
+    ];
+
+    for (const { label, message, report } of malformedReports) {
+      await withTempDir(async (directory) => {
+        const runner: CommandRunner = async () => {
+          await writeFile(path.join(directory, "osv.json"), JSON.stringify(report));
+          return { exitCode: 0, stdout: "", stderr: "" };
+        };
+        await writeFile(path.join(directory, "allowlist.json"), JSON.stringify({ allowedVulnerabilities: [] }));
+
+        await expect(
+          runAdvisoryScan({
+            allowlistPath: path.join(directory, "allowlist.json"),
+            outputPath: path.join(directory, "osv.json"),
+            runner,
+            scannerPath: "/tmp/osv-scanner",
+            now: new Date("2026-07-16T00:00:00Z"),
           }),
-        );
-        return { exitCode: 0, stdout: "", stderr: "" };
-      };
-      await writeFile(path.join(directory, "allowlist.json"), JSON.stringify({ allowedVulnerabilities: [] }));
-
-      const result = await runAdvisoryScan({
-        allowlistPath: path.join(directory, "allowlist.json"),
-        outputPath: path.join(directory, "osv.json"),
-        runner,
-        scannerPath: "/tmp/osv-scanner",
-        now: new Date("2026-07-16T00:00:00Z"),
+          label,
+        ).rejects.toThrow(message);
       });
-
-      expect(result.ok).toBe(true);
-      expect(result.vulnerabilities).toEqual([]);
-    });
+    }
   });
 
-  it("tolerates OSV reports without a results array as no findings", async () => {
-    await withTempDir(async (directory) => {
-      const runner: CommandRunner = async () => {
-        await writeFile(path.join(directory, "osv.json"), JSON.stringify({ ignored: true }));
-        return { exitCode: 0, stdout: "", stderr: "" };
-      };
-      await writeFile(path.join(directory, "allowlist.json"), JSON.stringify({ allowedVulnerabilities: [] }));
-
-      const result = await runAdvisoryScan({
-        allowlistPath: path.join(directory, "allowlist.json"),
-        outputPath: path.join(directory, "osv.json"),
-        runner,
-        scannerPath: "/tmp/osv-scanner",
-        now: new Date("2026-07-16T00:00:00Z"),
-      });
-
-      expect(result.vulnerabilities).toEqual([]);
-    });
-  });
-
-  it("normalizes unknown package, source, alias, and severity fields", async () => {
+  it("normalizes optional alias, summary, and severity fields", async () => {
     await withTempDir(async (directory) => {
       const runner: CommandRunner = async () => {
         await writeFile(
@@ -454,12 +499,13 @@ describe("advisory scan gate", () => {
           JSON.stringify({
             results: [
               {
-                source: null,
+                source: { path: "pnpm-lock.yaml" },
                 packages: [
                   {
+                    package: { name: "left-pad", version: "1.1.1", ecosystem: "npm" },
                     vulnerabilities: [
                       {
-                        id: "",
+                        id: "GHSA-optional-fields",
                         severity: [null, { score: 9 }],
                       },
                     ],
@@ -483,12 +529,12 @@ describe("advisory scan gate", () => {
 
       expect(result.vulnerabilities).toEqual([
         {
-          id: "<unknown>",
+          id: "GHSA-optional-fields",
           aliases: [],
-          packageName: "<unknown>",
-          version: "<unknown>",
-          ecosystem: "<unknown>",
-          source: "<unknown>",
+          packageName: "left-pad",
+          version: "1.1.1",
+          ecosystem: "npm",
+          source: "pnpm-lock.yaml",
           severity: "unknown",
           summary: "",
         },

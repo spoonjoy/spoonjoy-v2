@@ -234,23 +234,32 @@ function optionValue(argv: string[], name: string, fallback: string): string {
 
 async function readScannerFindings(outputPath: string): Promise<AdvisoryFinding[]> {
   const report = parseJson(await readFile(outputPath, "utf8"), `OSV output ${outputPath}`);
-  if (!isRecord(report) || !Array.isArray(report.results)) return [];
+  const reportLocation = `OSV output ${outputPath}`;
+  if (!isRecord(report) || !Array.isArray(report.results)) {
+    throw new Error(`${reportLocation}.results must be an array`);
+  }
 
   const findings: AdvisoryFinding[] = [];
-  for (const result of report.results) {
-    if (!isRecord(result) || !Array.isArray(result.packages)) continue;
-    const source = parseSourcePath(result.source);
-    for (const packageResult of result.packages) {
-      if (!isRecord(packageResult)) continue;
-      const packageInfo = isRecord(packageResult.package) ? packageResult.package : {};
-      const packageName = stringField(packageInfo, "name", "<unknown>");
-      const version = stringField(packageInfo, "version", "<unknown>");
-      const ecosystem = stringField(packageInfo, "ecosystem", "<unknown>");
-      const vulnerabilities = Array.isArray(packageResult.vulnerabilities) ? packageResult.vulnerabilities : [];
-      for (const vulnerability of vulnerabilities) {
-        if (!isRecord(vulnerability)) continue;
+  for (const [resultIndex, result] of report.results.entries()) {
+    const resultLocation = `${reportLocation}.results[${resultIndex}]`;
+    if (!isRecord(result)) throw new Error(`${resultLocation} must be an object`);
+    const source = parseSourcePath(result.source, `${resultLocation}.source`);
+    if (!Array.isArray(result.packages)) throw new Error(`${resultLocation}.packages must be an array`);
+    for (const [packageIndex, packageResult] of result.packages.entries()) {
+      const packageLocation = `${resultLocation}.packages[${packageIndex}]`;
+      if (!isRecord(packageResult)) throw new Error(`${packageLocation} must be an object`);
+      if (!isRecord(packageResult.package)) throw new Error(`${packageLocation}.package must be an object`);
+      const packageName = requiredString(packageResult.package, "name", `${packageLocation}.package`);
+      const version = requiredString(packageResult.package, "version", `${packageLocation}.package`);
+      const ecosystem = requiredString(packageResult.package, "ecosystem", `${packageLocation}.package`);
+      if (!Array.isArray(packageResult.vulnerabilities)) {
+        throw new Error(`${packageLocation}.vulnerabilities must be an array`);
+      }
+      for (const [vulnerabilityIndex, vulnerability] of packageResult.vulnerabilities.entries()) {
+        const vulnerabilityLocation = `${packageLocation}.vulnerabilities[${vulnerabilityIndex}]`;
+        if (!isRecord(vulnerability)) throw new Error(`${vulnerabilityLocation} must be an object`);
         findings.push({
-          id: stringField(vulnerability, "id", "<unknown>"),
+          id: requiredString(vulnerability, "id", vulnerabilityLocation),
           aliases: stringArray(vulnerability.aliases),
           packageName,
           version,
@@ -276,8 +285,14 @@ function parseAllowlistEntry(entry: unknown, location: string, now: Date): Advis
   if (!/^\d{4}-\d{2}-\d{2}$/.test(expiresOn)) {
     throw new Error(`${location}.expiresOn must be YYYY-MM-DD`);
   }
-  const expiry = new Date(`${expiresOn}T23:59:59.999Z`);
-  if (Number.isNaN(expiry.getTime())) {
+  const [year, month, day] = expiresOn.split("-").map(Number);
+  const expiry = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
+  if (
+    Number.isNaN(expiry.getTime()) ||
+    expiry.getUTCFullYear() !== year ||
+    expiry.getUTCMonth() !== month - 1 ||
+    expiry.getUTCDate() !== day
+  ) {
     throw new Error(`${location}.expiresOn must be a valid date`);
   }
   if (expiry.getTime() < now.getTime()) {
@@ -305,9 +320,9 @@ function summarizeSeverity(value: unknown): string {
   return scores.length === 0 ? "unknown" : scores.join(", ");
 }
 
-function parseSourcePath(value: unknown): string {
-  if (!isRecord(value)) return "<unknown>";
-  return stringField(value, "path", "<unknown>");
+function parseSourcePath(value: unknown, location: string): string {
+  if (!isRecord(value)) throw new Error(`${location} must be an object`);
+  return requiredString(value, "path", location);
 }
 
 function parseJson(source: string, label: string): unknown {
