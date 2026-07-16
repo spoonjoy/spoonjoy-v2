@@ -166,6 +166,22 @@ describe("warning gate", () => {
     });
   });
 
+  it("still rejects Prisma's CI update banner when it reaches stderr", async () => {
+    const updateBanner = "Update available 6.19.2 -> 7.8.0\n";
+    const runCommand = vi.fn().mockResolvedValue({
+      exitCode: 0,
+      output: updateBanner,
+      warningOutput: updateBanner,
+    });
+
+    const result = await runWarningGate(["--", "pnpm", "prisma:generate"], { runCommand });
+
+    expect(result).toEqual({
+      exitCode: 1,
+      unexpectedWarnings: ["Update available 6.19.2 -> 7.8.0"],
+    });
+  });
+
   it("preserves a non-zero command exit after scanning warning output", async () => {
     const runCommand = vi.fn().mockResolvedValue({
       exitCode: 7,

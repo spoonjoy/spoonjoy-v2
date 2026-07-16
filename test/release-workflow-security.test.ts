@@ -115,3 +115,37 @@ describe("web dependency advisory gate", () => {
     expect(production).toContain("required_job=advisory");
   });
 });
+
+describe("CI warning suppression at source", () => {
+  const ci = workflowSource("ci.yml");
+  const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
+    scripts: Record<string, string>;
+  };
+
+  it("hides only Prisma's supported update message before every gated client generation", () => {
+    const envIndex = ci.indexOf('  PRISMA_HIDE_UPDATE_MESSAGE: "1"');
+    const jobsIndex = ci.indexOf("\njobs:");
+    const generateCommands = Array.from(
+      ci.matchAll(/node scripts\/warning-gate\.ts -- pnpm prisma:generate/g),
+      (match) => match.index,
+    );
+
+    expect(envIndex).toBeGreaterThan(-1);
+    expect(envIndex).toBeLessThan(jobsIndex);
+    expect(generateCommands).toHaveLength(2);
+    expect(generateCommands.every((index) => index > envIndex)).toBe(true);
+    expect(packageJson.scripts.postinstall).toBe(
+      "PRISMA_HIDE_UPDATE_MESSAGE=1 prisma generate",
+    );
+    expect(packageJson.scripts["prisma:generate"]).toBe(
+      "PRISMA_HIDE_UPDATE_MESSAGE=1 prisma generate",
+    );
+  });
+
+  it("does not add a Prisma update-banner allowance to the warning gate", () => {
+    const warningGate = readFileSync("scripts/warning-gate.ts", "utf8");
+
+    expect(warningGate).not.toContain("PRISMA_HIDE_UPDATE_MESSAGE");
+    expect(warningGate).not.toContain("Update available 6.19.2 -> 7.8.0");
+  });
+});

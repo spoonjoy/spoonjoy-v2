@@ -9,7 +9,7 @@
     "pnpm": "10.28.1"
   },
   "scripts": {
-    "postinstall": "prisma generate",
+    "postinstall": "PRISMA_HIDE_UPDATE_MESSAGE=1 prisma generate",
     "dev": "react-router dev",
     "api:playground:generate": "tsx scripts/generate-api-playground.ts",
     "build": "pnpm run api:playground:generate && tsx scripts/react-router-build.ts",
@@ -35,7 +35,7 @@
     "test": "pnpm run api:playground:generate && vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then pnpm exec vitest run --coverage --fileParallelism=false",
-    "prisma:generate": "prisma generate",
+    "prisma:generate": "PRISMA_HIDE_UPDATE_MESSAGE=1 prisma generate",
     "prisma:push": "prisma db push",
     "prisma:studio": "prisma studio",
     "db:seed": "pnpm exec tsx prisma/seed.ts",
