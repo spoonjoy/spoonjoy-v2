@@ -38,6 +38,7 @@ import {
   serializeSanitizedMcpCanaryReport,
   shouldRunAppleOAuthCheck,
   usesLocalD1,
+  waitForBrowserWorkerVersionReady,
   waitForWorkerVersionReady,
 } from "../../scripts/smoke-live-helpers.mjs";
 
@@ -478,7 +479,7 @@ describe("smoke-live helpers", () => {
       intervalMs: 250,
       now: () => now,
       sleep,
-    })).rejects.toThrow(/not ready after 4 attempts and 600ms.*33333333/i);
+    })).rejects.toThrow(/not ready after 3 attempts and 600ms.*33333333/i);
     expect(sleep.mock.calls).toEqual([[250], [250], [100]]);
 
     await expect(waitForWorkerVersionReady({
@@ -492,6 +493,107 @@ describe("smoke-live helpers", () => {
       })(),
       sleep: async () => undefined,
     })).rejects.toThrow(/last observed version: missing/i);
+  });
+
+  it("allows a full minute for default Worker override propagation", async () => {
+    let now = 0;
+    const sleep = vi.fn(async (delayMs: number) => {
+      now += delayMs;
+    });
+
+    await expect(waitForWorkerVersionReady({
+      workerVersionId: CANDIDATE_VERSION,
+      probe: async () => ({}),
+      now: () => now,
+      sleep,
+    })).rejects.toThrow(/not ready after 120 attempts and 60000ms/i);
+    expect(sleep).toHaveBeenCalledTimes(120);
+  });
+
+  it("proves readiness on the browser path and caps navigation at the remaining budget", async () => {
+    let now = 1_000;
+    const sleep = vi.fn(async (delayMs: number) => {
+      now += delayMs;
+    });
+    const navigate = vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(new Error("browser connection reset"))
+      .mockResolvedValueOnce({ status: 503, headers: { "x-spoonjoy-worker-version": CANDIDATE_VERSION } })
+      .mockResolvedValueOnce({ status: 200, headers: { "x-spoonjoy-worker-version": "33333333-3333-4333-8333-333333333333" } })
+      .mockResolvedValueOnce({ status: 200, headers: { "x-spoonjoy-worker-version": CANDIDATE_VERSION } });
+
+    await expect(waitForBrowserWorkerVersionReady({
+      workerVersionId: CANDIDATE_VERSION,
+      navigate,
+      timeoutMs: 2_000,
+      intervalMs: 250,
+      now: () => now,
+      sleep,
+    })).resolves.toEqual({ attempts: 5, elapsedMs: 1_000, workerVersionId: CANDIDATE_VERSION });
+    expect(navigate.mock.calls.map(([input]) => input.timeoutMs)).toEqual([2_000, 1_750, 1_500, 1_250, 1_000]);
+
+    const boundedNavigate = vi.fn(async ({ timeoutMs }: { timeoutMs: number }) => {
+      now += timeoutMs;
+      throw new Error("navigation timed out");
+    });
+    now = 0;
+    await expect(waitForBrowserWorkerVersionReady({
+      workerVersionId: CANDIDATE_VERSION,
+      navigate: boundedNavigate,
+      timeoutMs: 1_000,
+      intervalMs: 250,
+      now: () => now,
+      sleep,
+    })).rejects.toThrow(/not ready after 1 attempt and 1000ms/i);
+    expect(boundedNavigate).toHaveBeenCalledWith({ attempt: 1, timeoutMs: 1_000 });
+
+    await expect(waitForBrowserWorkerVersionReady({
+      workerVersionId: null,
+      navigate: undefined,
+    })).resolves.toEqual({ attempts: 0, elapsedMs: 0, workerVersionId: null });
+    await expect(waitForBrowserWorkerVersionReady({
+      workerVersionId: CANDIDATE_VERSION,
+      navigate: undefined,
+    })).rejects.toThrow(/navigate function/i);
+  });
+
+  it("rejects candidate browser responses at or after the readiness deadline", async () => {
+    let now = 0;
+    const lateCandidate = vi.fn(async ({ timeoutMs }: { timeoutMs: number }) => {
+      now += timeoutMs + 1;
+      return { status: 200, headers: { "x-spoonjoy-worker-version": CANDIDATE_VERSION } };
+    });
+
+    await expect(waitForBrowserWorkerVersionReady({
+      workerVersionId: CANDIDATE_VERSION,
+      navigate: lateCandidate,
+      timeoutMs: 1_000,
+      intervalMs: 1_000,
+      now: () => now,
+      sleep: async (delayMs) => {
+        now += delayMs;
+      },
+    })).rejects.toThrow(/not ready after 1 attempt and 1001ms/i);
+    expect(lateCandidate).toHaveBeenCalledOnce();
+
+    now = 0;
+    const deadlineCandidate = vi.fn()
+      .mockResolvedValueOnce({
+        status: 200,
+        headers: { "x-spoonjoy-worker-version": "33333333-3333-4333-8333-333333333333" },
+      })
+      .mockResolvedValueOnce({ status: 200, headers: { "x-spoonjoy-worker-version": CANDIDATE_VERSION } });
+    await expect(waitForBrowserWorkerVersionReady({
+      workerVersionId: CANDIDATE_VERSION,
+      navigate: deadlineCandidate,
+      timeoutMs: 1_000,
+      intervalMs: 1_000,
+      now: () => now,
+      sleep: async (delayMs) => {
+        now += delayMs;
+      },
+    })).rejects.toThrow(/not ready after 1 attempt and 1000ms/i);
+    expect(deadlineCandidate).toHaveBeenCalledOnce();
   });
 
   it("skips readiness without a candidate and rejects invalid polling configuration", async () => {
@@ -646,9 +748,16 @@ describe("smoke-live helpers", () => {
     expect(source).toContain('context.on("response"');
     expect(source).toContain("createWorkerVersionResponseTracker({");
     expect(source).toContain("assertWorkerVersionResponse(response.headers(), workerVersionId, label)");
-    expect(source).toContain("return waitForWorkerVersionReady({");
+    expect(source).toContain("return waitForBrowserWorkerVersionReady({");
+    const readinessSource = source.match(/async function waitForCandidateWorker\([\s\S]*?\n}\n/)?.[0] ?? "";
+    expect(readinessSource).toContain("page.goto(url");
+    expect(readinessSource).toContain("timeout: timeoutMs");
+    expect(source).toContain("waitForCandidateWorker(page, { baseUrl, workerVersionId })");
     expect(source.indexOf('check("candidate Worker override readiness"')).toBeLessThan(
       source.indexOf('check("signup disposable user"'),
+    );
+    expect(source.indexOf('check("candidate Worker override readiness"')).toBeLessThan(
+      source.indexOf('context.on("response"'),
     );
     expect(source).toContain("responseTracker.assertAll(\"complete browser flow\")");
     expect(source).toContain("maxRedirects: 0");

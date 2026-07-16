@@ -28,7 +28,7 @@ const WORKER_VERSION_ID_FLAG = "--worker-version-id";
 const WORKER_VERSION_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const WORKER_VERSION_OVERRIDE_HEADER = "Cloudflare-Workers-Version-Overrides";
 const WORKER_VERSION_RESPONSE_HEADER = "X-Spoonjoy-Worker-Version";
-const WORKER_VERSION_READINESS_TIMEOUT_MS = 20_000;
+const WORKER_VERSION_READINESS_TIMEOUT_MS = 60_000;
 const WORKER_VERSION_READINESS_INTERVAL_MS = 500;
 const CLOUDFLARE_SECRET_ENV_NAMES = [
   "CF_API_KEY",
@@ -87,6 +87,12 @@ function headerValue(headers, name) {
 function workerVersionResponseId(headers) {
   const value = headerValue(headers, WORKER_VERSION_RESPONSE_HEADER);
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
+}
+
+function workerVersionReadinessError(expected, attempts, elapsedMs, lastObserved) {
+  return new Error(
+    `Candidate Worker ${expected} was not ready after ${attempts} ${attempts === 1 ? "attempt" : "attempts"} and ${elapsedMs}ms; last observed version: ${lastObserved ?? "missing"}.`,
+  );
 }
 
 function isSameOrigin(requestUrl, baseUrl) {
@@ -163,19 +169,50 @@ export async function waitForWorkerVersionReady({
   let attempts = 0;
   let lastObserved = null;
   while (true) {
+    const elapsedBeforeProbe = Math.max(0, now() - startedAt);
+    if (attempts > 0 && elapsedBeforeProbe >= timeoutMs) {
+      throw workerVersionReadinessError(expected, attempts, elapsedBeforeProbe, lastObserved);
+    }
     attempts += 1;
-    lastObserved = workerVersionResponseId(await probe(attempts));
+    const remainingMs = Math.max(1, timeoutMs - elapsedBeforeProbe);
+    lastObserved = workerVersionResponseId(await probe(attempts, remainingMs));
     const elapsedMs = Math.max(0, now() - startedAt);
+    if (elapsedMs >= timeoutMs) {
+      throw workerVersionReadinessError(expected, attempts, elapsedMs, lastObserved);
+    }
     if (lastObserved?.toLowerCase() === expected) {
       return { attempts, elapsedMs, workerVersionId: expected };
     }
-    if (elapsedMs >= timeoutMs) {
-      throw new Error(
-        `Candidate Worker ${expected} was not ready after ${attempts} attempts and ${elapsedMs}ms; last observed version: ${lastObserved ?? "missing"}.`,
-      );
-    }
     await sleep(Math.min(intervalMs, timeoutMs - elapsedMs));
   }
+}
+
+export async function waitForBrowserWorkerVersionReady({
+  workerVersionId,
+  navigate,
+  timeoutMs = WORKER_VERSION_READINESS_TIMEOUT_MS,
+  intervalMs = WORKER_VERSION_READINESS_INTERVAL_MS,
+  now = Date.now,
+  sleep,
+}) {
+  if (workerVersionId !== null && typeof navigate !== "function") {
+    throw new Error("Browser Worker readiness requires a navigate function.");
+  }
+  return waitForWorkerVersionReady({
+    workerVersionId,
+    timeoutMs,
+    intervalMs,
+    now,
+    sleep,
+    probe: async (attempt, remainingMs) => {
+      try {
+        const response = await navigate({ attempt, timeoutMs: remainingMs });
+        return response?.status === 200 ? response.headers : {};
+      } catch {
+        return {};
+      }
+    },
+  });
 }
 
 export function createWorkerVersionResponseTracker({ baseUrl, workerVersionId }) {
