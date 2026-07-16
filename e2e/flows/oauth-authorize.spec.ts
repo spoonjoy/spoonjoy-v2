@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
-import { loginAsSeedUser } from '../support/auth';
+import { loginAsDisposableUser } from '../support/auth';
 
 /**
  * OAuth 2.1 authorize + consent flow against a real browser.
@@ -207,14 +207,14 @@ test.describe('OAuth authorize + consent flow', () => {
     await expect(page).toHaveURL(/\/login\?redirectTo=/);
     expect(decodeURIComponent(page.url())).toContain('/oauth/authorize');
 
-    // Log in as the seed user; the preserved redirectTo lands us on consent.
+    // Log in as the disposable e2e user; the preserved redirectTo lands us on consent.
     const consentDocument = page.waitForResponse((response) => {
       const url = new URL(response.url());
       return url.pathname === '/oauth/authorize'
         && response.request().method() === 'GET'
         && response.headers()['content-type']?.includes('text/html') === true;
     });
-    await loginAsSeedUser(page, /\/oauth\/authorize\?/);
+    await loginAsDisposableUser(page, /\/oauth\/authorize\?/);
     const consentResponse = await consentDocument;
     expect(consentResponse.headers()['content-security-policy']).toContain(
       "form-action 'self' https://client.example",
@@ -254,7 +254,7 @@ test.describe('OAuth authorize + consent flow', () => {
     await page.goto(authorize);
     await expect(page).toHaveURL(/\/login\?redirectTo=/);
 
-    await loginAsSeedUser(page, /\/oauth\/authorize\?/);
+    await loginAsDisposableUser(page, /\/oauth\/authorize\?/);
 
     const deny = page.getByRole('button', { name: /^deny$/i });
     await expect(deny).toBeVisible();

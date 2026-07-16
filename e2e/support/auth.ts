@@ -1,4 +1,5 @@
 import { expect, type Page } from '@playwright/test';
+import { readLatestDisposableE2EUser } from './disposable-auth';
 
 export async function fillLoginEmail(page: Page, emailAddress: string) {
   const email = page.getByLabel('Email').first();
@@ -34,9 +35,11 @@ export async function submitPasswordLogin(page: Page, emailAddress: string, pass
   }
 }
 
-export async function loginAsSeedUser(page: Page, expectedUrl: string | RegExp = /\/recipes(?:[?#].*)?$/) {
+export async function loginAsDisposableUser(page: Page, expectedUrl: string | RegExp = /\/recipes(?:[?#].*)?$/) {
+  const user = readLatestDisposableE2EUser();
+
   await Promise.all([
     page.waitForURL(expectedUrl, { timeout: 15_000 }),
-    submitPasswordLogin(page, 'demo@spoonjoy.com', 'demo1234'),
+    submitPasswordLogin(page, user.email, user.password),
   ]);
 }

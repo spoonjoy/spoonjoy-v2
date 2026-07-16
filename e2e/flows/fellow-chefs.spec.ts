@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import path from 'node:path';
-import { openPublicRecipeByChef } from '../support/recipes';
+import { readLatestDisposableE2EUser } from '../support/disposable-auth';
+import { currentRecipeOwnerUsername, openPublicRecipe } from '../support/recipes';
 
 const FIXTURE_PHOTO = path.resolve('e2e/fixtures/spoon-test-photo.png');
 
@@ -25,10 +26,11 @@ async function expectProfileLinkEventually(
 }
 
 test.describe('Fellow chefs + Kitchen visitors flow', () => {
-  test('demo_chef spoons a chef_julia recipe and both appear on the derived-graph pages', async ({ page }) => {
-    // 1) demo_chef (logged in) spoons one of chef_julia's recipes —
-    //    same shape as the existing spoon-a-recipe.spec.ts.
-    await openPublicRecipeByChef(page, 'chef_julia');
+  test('disposable user spoons a public recipe and both chefs appear on derived-graph pages', async ({ page }) => {
+    // 1) The disposable logged-in user spoons a seeded public recipe they do not own.
+    await openPublicRecipe(page);
+    const ownerUsername = await currentRecipeOwnerUsername(page);
+    const viewerUsername = readLatestDisposableE2EUser().username;
 
     const logCookButton = page.getByTestId('recipe-header-log-cook-action');
     await expect(logCookButton).toBeVisible({ timeout: 5_000 });
@@ -61,23 +63,25 @@ test.describe('Fellow chefs + Kitchen visitors flow', () => {
     await submit.click();
     await expect(page.getByText(note)).toBeVisible({ timeout: 15_000 });
 
-    // 2) Visit demo_chef's Fellow chefs page — chef_julia should appear.
-    await expectProfileLinkEventually(page, '/users/demo_chef/fellow-chefs', 'chef_julia');
+    // 2) Visit the disposable user's Fellow chefs page — the recipe owner should appear.
+    await expectProfileLinkEventually(page, `/users/${viewerUsername}/fellow-chefs`, ownerUsername);
 
-    // 3) Visit chef_julia's Kitchen visitors page — demo_chef should appear.
-    await expectProfileLinkEventually(page, '/users/chef_julia/kitchen-visitors', 'demo_chef');
+    // 3) Visit the owner's Kitchen visitors page — the disposable user should appear.
+    await expectProfileLinkEventually(page, `/users/${ownerUsername}/kitchen-visitors`, viewerUsername);
   });
 
   test('profile page exposes Fellow chefs and Kitchen visitors entry links', async ({ page }) => {
-    await page.goto('/users/demo_chef');
-    await expect(page.getByRole('heading', { name: 'demo_chef' })).toBeVisible({
+    const viewerUsername = readLatestDisposableE2EUser().username;
+
+    await page.goto(`/users/${viewerUsername}`);
+    await expect(page.getByRole('heading', { name: viewerUsername })).toBeVisible({
       timeout: 10_000,
     });
     await expect(
       page.getByRole('link', { name: /fellow chefs/i }),
-    ).toHaveAttribute('href', '/users/demo_chef/fellow-chefs');
+    ).toHaveAttribute('href', `/users/${viewerUsername}/fellow-chefs`);
     await expect(
       page.getByRole('link', { name: /kitchen visitors/i }),
-    ).toHaveAttribute('href', '/users/demo_chef/kitchen-visitors');
+    ).toHaveAttribute('href', `/users/${viewerUsername}/kitchen-visitors`);
   });
 });

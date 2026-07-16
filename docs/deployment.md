@@ -31,7 +31,7 @@ QA resources:
 - D1 database: `spoonjoy-qa`
 - R2 bucket: `spoonjoy-photos-qa`
 - Rate-limit namespaces: `2001`, `2002`, `2003`
-- Disposable seed namespace: `sj-qa-demo`
+- Disposable seed namespace: `codex-qa-seed-`
 - Disposable smoke users: `codex-smoke-...@example.com`
 
 First-time QA resource creation:
@@ -71,7 +71,7 @@ pnpm run deploy:qa
 pnpm run smoke:qa
 ```
 
-`pnpm run smoke:qa` passes `--target-env qa`, creates a `codex-smoke-` user, cleans it from QA D1 with `--env qa`, and verifies the user count returns to zero. Do not run broad production cleanup. Production smoke cleanup must stay narrow to the one disposable `codex-smoke-` account created by that smoke run.
+`pnpm run qa:seed` creates a per-run `codex-qa-seed-` user and tears it down by default. `pnpm run smoke:qa` passes `--target-env qa`, creates a `codex-smoke-` user, cleans it from QA D1 with `--env qa`, and verifies the user count returns to zero. Do not run broad production cleanup. Production smoke cleanup must stay narrow to the one disposable `codex-smoke-` account created by that smoke run.
 
 ## Cleanup Target Contract
 

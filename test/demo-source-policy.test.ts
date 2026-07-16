@@ -29,7 +29,6 @@ const SOURCE_ROOTS = [
   "prisma",
   "README.md",
   "scripts",
-  "test",
   "GUIDE.md",
 ];
 
@@ -113,7 +112,7 @@ describe("demo-source policy", () => {
     }
   });
 
-  it("keeps active source, docs, CI, tests, and feedback free of fixed demo identities", () => {
+  it("keeps active source, docs, CI, e2e auth, and feedback free of fixed demo identities", () => {
     const allowedPaths = new Set(readPolicyAllowlist().map((entry) => entry.path));
 
     expect(findForbiddenReferences(allowedPaths)).toEqual([]);

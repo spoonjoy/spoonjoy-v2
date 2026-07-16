@@ -19,7 +19,7 @@ const STATIC_ROUTES: { path: string; label: string }[] = [
   { path: '/shopping-list', label: 'shopping list' },
   { path: '/account/settings', label: 'account' },
   { path: '/cookbooks', label: 'cookbooks' },
-  { path: '/users/demo_chef', label: 'users/profile' },
+  { path: '/account/settings', label: 'users/profile' },
 ];
 
 async function getDock(page: Page) {

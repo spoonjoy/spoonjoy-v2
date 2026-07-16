@@ -1,17 +1,23 @@
 import { test as setup } from '@playwright/test';
-import { loginAsSeedUser } from './support/auth';
+import { createDisposableE2EUser, recordDisposableE2EUser } from './support/disposable-auth';
 
 const authFile = './e2e/.auth/user.json';
 
 setup('authenticate', async ({ page }) => {
-  // Go to login page
-  await page.goto('/login');
+  const user = createDisposableE2EUser();
 
-  await loginAsSeedUser(page);
+  await page.goto('/signup');
+  await page.locator('input[name="email"]:visible').fill(user.email);
+  await page.locator('input[name="username"]:visible').fill(user.username);
+  await page.locator('input[name="password"]:visible').fill(user.password);
+  await page.locator('input[name="confirmPassword"]:visible').fill(user.password);
+  await page.getByRole('button', { name: /sign up/i }).first().click();
 
-  // Wait for redirect away from /login — login redirects to /recipes by default,
+  // Wait for redirect away from /signup — signup redirects to /recipes by default,
   // but tests may follow up by navigating elsewhere.
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'));
+  await page.waitForURL((url) => !url.pathname.startsWith('/signup'));
+
+  recordDisposableE2EUser(user);
 
   // Save storage state
   await page.context().storageState({ path: authFile });

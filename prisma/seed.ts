@@ -17,6 +17,7 @@ import { PrismaClient } from "@prisma/client";
 import { faker } from "@faker-js/faker";
 import bcrypt from "bcryptjs";
 import { getPlatformProxy } from "wrangler";
+import { randomUUID } from "node:crypto";
 import type { D1Database } from "@cloudflare/workers-types";
 import { EXPECTED_PRISMA_D1_TRANSACTION_WARNING } from "../scripts/warning-gate";
 
@@ -287,11 +288,24 @@ async function seedIngredientRefs() {
 // ============================================================================
 
 interface SeedUser {
+  role: string;
   email: string;
   username: string;
   password?: string;
   photoUrl?: string;
   oauth?: { provider: string; providerUserId: string; providerUsername: string };
+}
+
+interface DisposableLocalSeedRun {
+  stamp: string;
+  token: string;
+}
+
+interface SeededUser {
+  id: string;
+  email: string;
+  username: string;
+  role: string;
 }
 
 const CHEF_RJ_AVATAR_URL = "/images/chef-rj.png";
@@ -300,59 +314,92 @@ function isGeneratedSeedAvatarUrl(photoUrl: string | null | undefined): boolean 
   return Boolean(photoUrl?.includes("api.dicebear.com"));
 }
 
-const SEED_USERS: SeedUser[] = [
-  {
-    email: "demo@spoonjoy.com",
-    username: "demo_chef",
-    password: "demo1234",
-    photoUrl: CHEF_RJ_AVATAR_URL,
-  },
-  {
-    email: "chef.julia@example.com",
-    username: "chef_julia",
-    password: "password123",
-    photoUrl: CHEF_RJ_AVATAR_URL,
-  },
-  {
-    email: "marco.rossi@example.com",
-    username: "marco_rossi",
-    password: "password123",
-    photoUrl: CHEF_RJ_AVATAR_URL,
-  },
-  {
-    email: "sarah.chen@example.com",
-    username: "sarah_chen",
-    password: "password123",
-    photoUrl: CHEF_RJ_AVATAR_URL,
-  },
-  {
-    email: "alex.google@example.com",
-    username: "alex_gourmet",
-    photoUrl: CHEF_RJ_AVATAR_URL,
-    oauth: {
-      provider: "google",
-      providerUserId: "google_123456789",
-      providerUsername: "alex.google@gmail.com",
-    },
-  },
-  {
-    email: "jamie.apple@example.com",
-    username: "jamie_kitchen",
-    photoUrl: CHEF_RJ_AVATAR_URL,
-    oauth: {
-      provider: "apple",
-      providerUserId: "apple_987654321",
-      providerUsername: "jamie.apple@icloud.com",
-    },
-  },
-];
+export function parseLocalSeedArgs(argv = process.argv.slice(2)) {
+  const targetEnvIndex = argv.indexOf("--target-env");
+  const targetEnv = targetEnvIndex === -1 ? undefined : argv[targetEnvIndex + 1];
+  if (targetEnv !== "local") {
+    throw new Error("Local development seeding requires explicit `--target-env local`.");
+  }
+  return { targetEnv };
+}
 
-async function seedUsers() {
+function stampDate(date: Date) {
+  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "z").toLowerCase();
+}
+
+function disposableToken(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 16) || "run";
+}
+
+export function createDisposableLocalSeedRun({
+  now = () => new Date(),
+  random = () => randomUUID(),
+}: {
+  now?: () => Date;
+  random?: () => string;
+} = {}): DisposableLocalSeedRun {
+  return {
+    stamp: stampDate(now()),
+    token: disposableToken(random()),
+  };
+}
+
+function localSeedEmail(seedRun: DisposableLocalSeedRun, role: string) {
+  return `codex-seed-local-${seedRun.stamp}-${seedRun.token}-${role}@example.com`;
+}
+
+function localSeedUsername(seedRun: DisposableLocalSeedRun, role: string) {
+  return `codex_seed_local_${seedRun.stamp}_${seedRun.token}_${role}`;
+}
+
+function localSeedPassword(seedRun: DisposableLocalSeedRun, role: string) {
+  return `LocalSeed-${seedRun.stamp}-${seedRun.token}-${role}-${disposableToken(randomUUID())}`;
+}
+
+function createSeedUsers(seedRun: DisposableLocalSeedRun): SeedUser[] {
+  const passwordRoles = ["primary", "julia", "marco", "sarah"];
+  const users: SeedUser[] = passwordRoles.map((role) => ({
+    role,
+    email: localSeedEmail(seedRun, role),
+    username: localSeedUsername(seedRun, role),
+    password: localSeedPassword(seedRun, role),
+    photoUrl: CHEF_RJ_AVATAR_URL,
+  }));
+
+  users.push(
+    {
+      role: "google",
+      email: localSeedEmail(seedRun, "google"),
+      username: localSeedUsername(seedRun, "google"),
+      photoUrl: CHEF_RJ_AVATAR_URL,
+      oauth: {
+        provider: "google",
+        providerUserId: `google_${seedRun.stamp}_${seedRun.token}`,
+        providerUsername: localSeedEmail(seedRun, "google-oauth"),
+      },
+    },
+    {
+      role: "apple",
+      email: localSeedEmail(seedRun, "apple"),
+      username: localSeedUsername(seedRun, "apple"),
+      photoUrl: CHEF_RJ_AVATAR_URL,
+      oauth: {
+        provider: "apple",
+        providerUserId: `apple_${seedRun.stamp}_${seedRun.token}`,
+        providerUsername: localSeedEmail(seedRun, "apple-oauth"),
+      },
+    },
+  );
+
+  return users;
+}
+
+async function seedUsers(seedRun: DisposableLocalSeedRun) {
   log("👤", "Seeding users...");
 
-  const users: { id: string; email: string; username: string }[] = [];
+  const users: SeededUser[] = [];
 
-  for (const userData of SEED_USERS) {
+  for (const userData of createSeedUsers(seedRun)) {
     // Check if user exists
     const existing = await prisma.user.findUnique({
       where: { email: userData.email },
@@ -382,7 +429,7 @@ async function seedUsers() {
         });
       }
 
-      users.push({ id: existing.id, email: existing.email, username: existing.username });
+      users.push({ id: existing.id, email: existing.email, username: existing.username, role: userData.role });
       continue;
     }
 
@@ -422,7 +469,7 @@ async function seedUsers() {
       });
     }
 
-    users.push({ id: user.id, email: user.email, username: user.username });
+    users.push({ id: user.id, email: user.email, username: user.username, role: userData.role });
   }
 
   log("✅", `Seeded ${users.length} users`);
@@ -482,7 +529,7 @@ interface RecipeData {
   title: string;
   description: string;
   servings: string;
-  chefUsername?: string;
+  chefRole?: string;
   imageUrl?: string;
   steps: {
     stepTitle?: string;
@@ -903,7 +950,7 @@ const RECIPES: RecipeData[] = [
     description:
       "A crunchy-edged skillet sandwich with molten cheddar, a parmesan lace crust, and a swipe of tomato paste for depth.",
     servings: "2 sandwiches",
-    chefUsername: "demo_chef",
+    chefRole: "primary",
     imageUrl: "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=900&q=82",
     steps: [
       {
@@ -938,7 +985,7 @@ const RECIPES: RecipeData[] = [
     description:
       "A bright, sturdy salad with chickpeas, cucumber, herbs, and feta that can sit on the counter while everyone drifts in.",
     servings: "4 servings",
-    chefUsername: "demo_chef",
+    chefRole: "primary",
     imageUrl: "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=900&q=82",
     steps: [
       {
@@ -984,7 +1031,7 @@ const RECIPES: RecipeData[] = [
     description:
       "Creamy white beans in tomato-brown butter with sage and parmesan, halfway between pantry dinner and restaurant side.",
     servings: "4 servings",
-    chefUsername: "demo_chef",
+    chefRole: "primary",
     imageUrl: "https://images.unsplash.com/photo-1547592166-23ac45744acd?w=900&q=82",
     steps: [
       {
@@ -1026,7 +1073,7 @@ const RECIPES: RecipeData[] = [
     description:
       "Broccoli roasted hard, tossed with lemony parmesan dressing, crisp crumbs, and enough herbs to keep it lively.",
     servings: "4 servings",
-    chefUsername: "demo_chef",
+    chefRole: "primary",
     imageUrl: "https://images.unsplash.com/photo-1625944525533-473f1a3d54e7?w=900&q=82",
     steps: [
       {
@@ -1069,7 +1116,7 @@ const RECIPES: RecipeData[] = [
     description:
       "Slippery udon, browned mushrooms, miso butter, and scallions for the fastest bowl that still feels considered.",
     servings: "2 bowls",
-    chefUsername: "demo_chef",
+    chefRole: "primary",
     imageUrl: "https://images.unsplash.com/photo-1618841557871-b4664fbf0cb3?w=900&q=82",
     steps: [
       {
@@ -1110,7 +1157,7 @@ const RECIPES: RecipeData[] = [
     description:
       "A plush, not-too-sweet cake with orange zest, olive oil, and yogurt. Better the next morning with coffee.",
     servings: "1 cake",
-    chefUsername: "demo_chef",
+    chefRole: "primary",
     imageUrl: "https://images.unsplash.com/photo-1464195244916-405fa0a82545?w=900&q=82",
     steps: [
       {
@@ -1152,7 +1199,7 @@ const RECIPES: RecipeData[] = [
     description:
       "Tender turkey meatballs with parsley, dill, and lemon, built for bowls, sandwiches, or a quiet plate with yogurt.",
     servings: "4 servings",
-    chefUsername: "demo_chef",
+    chefRole: "primary",
     imageUrl: "https://images.unsplash.com/photo-1529042410759-befb1204b468?w=900&q=82",
     steps: [
       {
@@ -1194,7 +1241,7 @@ const RECIPES: RecipeData[] = [
     description:
       "A soft, golden pot of lentils, coconut milk, ginger, and lime that tastes like someone looked after you.",
     servings: "6 servings",
-    chefUsername: "demo_chef",
+    chefRole: "primary",
     imageUrl: "https://images.unsplash.com/photo-1547592180-85f173990554?w=900&q=82",
     steps: [
       {
@@ -1239,7 +1286,7 @@ const RECIPES: RecipeData[] = [
     description:
       "Thick toast, lemony ricotta, herbs, and honey. Breakfast, snack, appetizer, all depending on the plate.",
     servings: "4 toasts",
-    chefUsername: "demo_chef",
+    chefRole: "primary",
     imageUrl: "https://images.unsplash.com/photo-1484723091739-30a097e8f929?w=900&q=82",
     steps: [
       {
@@ -1321,7 +1368,7 @@ async function upsertSeedRecipeCover(recipeId: string, imageUrl: string) {
 }
 
 async function seedRecipes(
-  users: { id: string; email: string; username: string }[],
+  users: SeededUser[],
   units: { id: string; name: string }[],
   ingredientRefs: { id: string; name: string }[]
 ) {
@@ -1329,7 +1376,7 @@ async function seedRecipes(
 
   const unitMap = new Map(units.map((u) => [u.name, u.id]));
   const ingredientMap = new Map(ingredientRefs.map((i) => [i.name, i.id]));
-  const chefByUsername = new Map(users.map((user) => [user.username, user]));
+  const chefByRole = new Map(users.map((user) => [user.role, user]));
 
   const createdRecipes: {
     id: string;
@@ -1339,8 +1386,8 @@ async function seedRecipes(
 
   for (let i = 0; i < RECIPES.length; i++) {
     const recipeData = RECIPES[i];
-    const chef = recipeData.chefUsername
-      ? chefByUsername.get(recipeData.chefUsername) ?? users[i % users.length]
+    const chef = recipeData.chefRole
+      ? chefByRole.get(recipeData.chefRole) ?? users[i % users.length]
       : users[i % users.length];
 
     // Check if recipe exists
@@ -1453,7 +1500,7 @@ async function seedRecipes(
 
 interface CookbookData {
   title: string;
-  authorUsername?: string;
+  authorRole?: string;
   recipeIndices: number[]; // indices into RECIPES array
 }
 
@@ -1484,29 +1531,29 @@ const COOKBOOKS: CookbookData[] = [
   },
   {
     title: "Weeknight Winners",
-    authorUsername: "demo_chef",
+    authorRole: "primary",
     recipeIndices: [8, 10, 12, 14, 15],
   },
   {
     title: "Pantry Dinners",
-    authorUsername: "demo_chef",
+    authorRole: "primary",
     recipeIndices: [9, 11, 12, 16],
   },
 ];
 
 async function seedCookbooks(
-  users: { id: string; email: string; username: string }[],
+  users: SeededUser[],
   recipes: { id: string; title: string; chefId: string }[]
 ) {
   log("📚", "Seeding cookbooks...");
 
   const createdCookbooks: { id: string; title: string }[] = [];
-  const authorByUsername = new Map(users.map((user) => [user.username, user]));
+  const authorByRole = new Map(users.map((user) => [user.role, user]));
 
   for (let i = 0; i < COOKBOOKS.length; i++) {
     const cbData = COOKBOOKS[i];
-    const author = cbData.authorUsername
-      ? authorByUsername.get(cbData.authorUsername) ?? users[i % users.length]
+    const author = cbData.authorRole
+      ? authorByRole.get(cbData.authorRole) ?? users[i % users.length]
       : users[i % users.length];
 
     // Check if cookbook exists
@@ -1560,7 +1607,7 @@ async function seedCookbooks(
 // ============================================================================
 
 async function seedShoppingLists(
-  users: { id: string; email: string; username: string }[],
+  users: SeededUser[],
   units: { id: string; name: string }[],
   ingredientRefs: { id: string; name: string }[]
 ) {
@@ -1670,8 +1717,9 @@ async function seedShoppingLists(
 // MAIN SEED FUNCTION
 // ============================================================================
 
-async function main() {
-  const restorePrismaD1Warning = suppressExpectedPrismaD1TransactionWarningOutput();
+async function main(argv = process.argv.slice(2)) {
+  parseLocalSeedArgs(argv);
+  const seedRun = createDisposableLocalSeedRun();
 
   console.log("\n" + "=".repeat(60));
   console.log("🌱 Spoonjoy v2 Database Seeding");
@@ -1685,7 +1733,8 @@ async function main() {
     // Seed in order of dependencies
     const units = await seedUnits();
     const ingredientRefs = await seedIngredientRefs();
-    const users = await seedUsers();
+    const users = await seedUsers(seedRun);
+    log("🔐", "Generated disposable local seed credentials for this run; passwords are not printed.");
     await cleanupLocalQaRecipes();
     await cleanupLocalQaCookbooks();
     const recipes = await seedRecipes(users, units, ingredientRefs);
@@ -1699,12 +1748,10 @@ async function main() {
   } catch (error) {
     console.error("\n❌ Seeding failed:", error);
     throw error;
-  } finally {
-    restorePrismaD1Warning();
   }
 }
 
-main()
+main(process.argv.slice(2))
   .catch((e) => {
     console.error(e);
     process.exit(1);

@@ -49,7 +49,7 @@
     "prisma:generate": "PRISMA_HIDE_UPDATE_MESSAGE=1 prisma generate",
     "prisma:push": "prisma db push",
     "prisma:studio": "prisma studio",
-    "db:seed": "pnpm exec tsx prisma/seed.ts",
+    "db:seed": "pnpm exec tsx prisma/seed.ts --target-env local",
     "ui:inventory": "node scripts/inventory-ui.mjs .",
     "ui:crawl": "node scripts/crawl-ui.mjs",
     "smoke:live": "node scripts/smoke-live.mjs --target-env production --base-url https://spoonjoy-v2.mendelow-studio.workers.dev",

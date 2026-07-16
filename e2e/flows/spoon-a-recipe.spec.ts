@@ -1,14 +1,14 @@
 import { test, expect } from '@playwright/test';
 import path from 'node:path';
-import { openPublicRecipeByChef } from '../support/recipes';
+import { openPublicRecipe } from '../support/recipes';
 
 const FIXTURE_PHOTO = path.resolve('e2e/fixtures/spoon-test-photo.png');
 
 test.describe('Spoon a recipe flow', () => {
   test('user can log a cook and see it appear in the spoons strip', async ({ page }) => {
     // Land on the kitchen view; pick any seeded recipe owned by another chef
-    // so the demo user lands on the non-origin-cook path (photo not required).
-    await openPublicRecipeByChef(page, 'chef_julia');
+    // so the disposable user lands on the non-origin-cook path (photo not required).
+    await openPublicRecipe(page);
 
     // Open the spoon dialog.
     const logCookButton = page.getByTestId('recipe-header-log-cook-action');
@@ -32,7 +32,7 @@ test.describe('Spoon a recipe flow', () => {
     }
     await expect(dialogHeading).toBeVisible();
 
-    // Demo viewer is not the recipe owner here, so a note alone satisfies
+    // The disposable viewer is not the recipe owner here, so a note alone satisfies
     // the form validation (no photo required for non-origin-cook spoons).
     const uniqueNote = `e2e spoon ${Date.now()}`;
     const noteLabel = page.getByLabel(/^note/i);

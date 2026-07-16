@@ -1,13 +1,13 @@
 import { test, expect } from '@playwright/test';
-import { openPublicRecipeByChef } from '../support/recipes';
+import { currentRecipeOwnerUsername, openPublicRecipe } from '../support/recipes';
 
 test.describe('Fork recipe flow', () => {
-  test('viewer (demo) forks a recipe owned by chef_julia and lands on the fork', async ({ page }) => {
-    // Land on the kitchen, browse chef_julia's recipes — demo user is not the owner,
-    // so the Fork button label should be exactly "Fork".
-    await openPublicRecipeByChef(page, 'chef_julia');
+  test('disposable viewer forks a public recipe and lands on the fork', async ({ page }) => {
+    // Land on a seeded public recipe owned by someone other than the disposable viewer.
+    await openPublicRecipe(page);
+    const ownerUsername = await currentRecipeOwnerUsername(page);
 
-    // The page should now show a "Fork" button (demo is not the owner).
+    // The page should now show a "Fork" button.
     const forkButton = page.getByTestId('recipe-header-fork-action');
     await expect(forkButton).toBeVisible({ timeout: 10_000 });
     await expect(forkButton).toBeEnabled();
@@ -34,11 +34,10 @@ test.describe('Fork recipe flow', () => {
     await page.waitForLoadState('networkidle', { timeout: 15_000 });
 
     // The provenance line "forked from <chef-username>" should now be visible.
-    // It renders as `<p><span>forked from </span><Link>chef_julia · Title</Link></p>`.
     await expect(
       page.locator('p', { hasText: /forked from/i }).first(),
     ).toBeAttached({ timeout: 15_000 });
-    const provenanceLink = page.locator('a[href^="/recipes/"]').filter({ hasText: /chef_julia/i }).first();
+    const provenanceLink = page.locator('a[href^="/recipes/"]').filter({ hasText: new RegExp(ownerUsername, 'i') }).first();
     await expect(provenanceLink).toHaveAttribute('href', /\/recipes\/[a-z0-9]+/);
   });
 });

@@ -275,7 +275,7 @@ function validInputs(): DeploymentPreflightInputs {
           "node scripts/smoke-live.mjs --target-env qa --base-url https://spoonjoy-v2-qa.mendelow-studio.workers.dev --out qa-live-smoke-artifacts",
         "smoke:qa:image-cover":
           "node scripts/smoke-live.mjs --target-env qa --base-url https://spoonjoy-v2-qa.mendelow-studio.workers.dev --out qa-image-cover-smoke-artifacts --include-image-cover-smoke",
-        "db:seed": "pnpm exec tsx prisma/seed.ts",
+        "db:seed": "pnpm exec tsx prisma/seed.ts --target-env local",
       },
     },
     productionDeployWorkflow: secureProductionDeployWorkflow(),
@@ -3094,7 +3094,7 @@ describe("deployment docs", () => {
       "IMAGE_PROVIDER_PRIMARY=gemini",
       "OAuth callback",
       "WebAuthn",
-      "sj-qa-demo",
+      "codex-qa-seed-",
       "codex-smoke-",
       "--target-env qa",
       "Do not run broad production cleanup",

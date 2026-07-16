@@ -44,3 +44,28 @@ export async function openPublicRecipeByChef(page: Page, username: string) {
   await page.goto(href);
   await expect(page).toHaveURL(/\/recipes\/[^/]+$/, { timeout: 10_000 });
 }
+
+export async function publicRecipeHref(page: Page) {
+  await page.goto('/recipes');
+  await expect(page.getByRole('heading', { name: /recipes worth opening/i })).toBeVisible({
+    timeout: 10_000,
+  });
+  const href = await publicRecipeLinks(page).first().getAttribute('href');
+  expect(href, 'expected a visible public recipe').toBeTruthy();
+  return href!;
+}
+
+export async function openPublicRecipe(page: Page) {
+  const href = await publicRecipeHref(page);
+  await page.goto(href);
+  await expect(page).toHaveURL(/\/recipes\/[^/]+$/, { timeout: 10_000 });
+}
+
+export async function currentRecipeOwnerUsername(page: Page) {
+  const href = await page
+    .locator('main a[href^="/users/"]')
+    .first()
+    .getAttribute('href');
+  expect(href, 'expected recipe owner link').toMatch(/^\/users\/[^/]+$/);
+  return href!.split('/').at(-1)!;
+}

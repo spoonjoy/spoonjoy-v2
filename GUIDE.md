@@ -62,22 +62,20 @@ pnpm exec wrangler d1 migrations apply DB --local
 
 That's it! The local D1 database is ready.
 
-### Optional: Seed Demo Data
+### Optional: Seed Disposable Local Data
 
-To populate the database with sample recipes and a demo user:
+To populate the database with sample recipes and per-run disposable local users:
 
 ```bash
 pnpm db:seed
 ```
 
 This creates:
-- **Demo account** — Ready to log in immediately
+- **Disposable local accounts** — Unique to the seed run; passwords are not printed
 - **3 sample recipes** — Including step dependencies (StepOutputUse)
 - **Units & ingredients** — Common cooking measurements
 
-**Demo login credentials:**
-- Email: `demo@spoonjoy.com`
-- Password: `demo1234`
+For manual sign-in, create a fresh account through `/signup` or use the Playwright disposable-auth setup. Do not add reusable demo credentials to source, docs, or CI.
 
 > **Note:** No `.env` file needed for basic local development. Session secrets and other config have sensible defaults.
 > Optional PostHog analytics is disabled unless `VITE_POSTHOG_KEY` is configured. See `docs/analytics-privacy.md` for the full privacy posture and the `VITE_POSTHOG_DISABLED` hard-disable switch.
