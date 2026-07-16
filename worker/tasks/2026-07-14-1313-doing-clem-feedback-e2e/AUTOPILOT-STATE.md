@@ -8,20 +8,20 @@
 - QA deploy, cross-device smoke, purge, and residue inspection pass before merge.
 - A reviewed PR merges with green CI.
 - The exact merge SHA's automatic production deploy passes readiness, web/API/cross-device smoke, and cleanup.
-- Desk/git/worktree state is terminal and clean; Slugger is notified.
+- Desk/git/worktree state is terminal and clean; the post-completion Slugger handoff is attempted and any failure reported.
 
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; the previous pushed checkpoint is `f0b9c6b1`. Local docs contain Ambiguity Round 15's reconciliation of all 34 frozen-checkpoint findings plus the latest-model end-to-end self-audit.
+- Branch: `worker/clem-feedback-e2e`; the previous pushed checkpoint is `cfb7c71f`. Local docs contain Ambiguity Round 16's fixes for the fresh reviewer's 2 blockers, 8 majors, and 1 minor.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is approved after five fresh hostile rounds.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation has not started.
-- Active gate: commit/push and synchronize the Round 15 checkpoint, then run a fresh context-independent Ambiguity pass. After Ambiguity is clean, complete Quality and alternating Scrutiny until one clean Tinfoil pass and one immediately consecutive clean Stranger pass.
+- Active gate: commit/push and synchronize the Round 16 checkpoint, then run a different fresh context-independent Ambiguity reviewer. After Ambiguity is clean, complete Quality and alternating Scrutiny until one clean Tinfoil pass and one immediately consecutive clean Stranger pass.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Commit/push this Ambiguity Round 15 checkpoint and its synchronized Desk copy, run a fresh Ambiguity reviewer, fix and re-review until clean, then continue through Quality and alternating Scrutiny until two consecutive scrutiny passes converge.
+Commit/push this Ambiguity Round 16 checkpoint and its synchronized Desk copy, run a different fresh Ambiguity reviewer, fix and re-review until clean, then continue through Quality and alternating Scrutiny until two consecutive scrutiny passes converge.
 
 ## Operator-Locked Rules
 
@@ -41,7 +41,7 @@ Commit/push this Ambiguity Round 15 checkpoint and its synchronized Desk copy, r
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
 | Planning reviewer gate | deferred by scope | Planning approved at `2c3b4759` after convergence | Closed |
-| Doing review chain | needs reviewer gate | Granularity and Validation converged; Round 15 reconciles the frozen reviewer's 34 findings plus latest-model self-audit locally | Commit/sync, re-review Ambiguity, then Quality and alternating Scrutiny |
+| Doing review chain | needs reviewer gate | Granularity and Validation converged; Round 16 fixes all 11 findings from fresh Ambiguity review locally | Commit/sync, re-review Ambiguity with a different fresh agent, then Quality and alternating Scrutiny |
 | Work Doer Units 0-37 | ready | Full red/green/verify/visual/ship queue is defined | Start after doing review convergence |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
 
