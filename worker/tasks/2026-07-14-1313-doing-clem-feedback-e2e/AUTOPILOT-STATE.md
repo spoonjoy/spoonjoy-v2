@@ -13,10 +13,10 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `2e55c06c149081b083eda9a5b449ea3ed326363f` integrates `origin/main@2f392840`. The prior clean reviewer pair is historical because the main-overlap contract changed afterward.
+- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `23afdf16e0e9b05809e5a47431f96674113a2697` integrates `origin/main@2f392840`. All prior clean scrutiny passes are historical because Tinfoil Round 10 changed template, cleanup-evidence, coverage, and pagination contracts.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is `NEEDS_REVIEW` after the mandatory main-drift audit.
-- Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `NEEDS_REVIEW`; implementation and dependency setup have not started.
-- Active gate: Quality Round 11 converged at reviewer-input `2e7ce49b`; fresh Tinfoil scrutiny runs next, followed immediately by fresh Stranger scrutiny only if no contract changes. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
+- Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation and dependency setup have not started.
+- Active gate: Tinfoil Round 10 findings are fixed; fresh Quality must reconverge, then scrutiny restarts at zero with Tinfoil followed by Stranger only if no contract changes. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
@@ -40,8 +40,8 @@ Synchronize the main-drift contract into Desk, run fresh Quality plus consecutiv
 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
-| Planning reviewer gate | active | Main advanced to `2f392840`; overlap contract changed at `2e55c06c` | Run fresh Quality and scrutiny convergence |
-| Doing review chain | active | Prior pair predates latest-main overlap changes | Re-converge and restore final handoff |
+| Planning reviewer gate | active | Tinfoil Round 10 findings fixed at `23afdf16` | Run fresh Quality and scrutiny convergence |
+| Doing review chain | active | Template/evidence/coverage/pagination contracts changed | Re-converge and restore final handoff |
 | Work Doer Units 0-37 | deferred by gate | Full red/green/verify/visual/ship queue is defined | Restart Unit0a only after fresh final handoff |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
 
