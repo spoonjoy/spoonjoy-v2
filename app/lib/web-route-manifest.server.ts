@@ -121,6 +121,7 @@ export const WEB_ROUTE_MANIFEST = [
   route("routes/well-known.oauth-protected-resource.ts", "/.well-known/oauth-protected-resource", "api-or-oauth"),
   route("routes/well-known.oauth-protected-resource.mcp.ts", "/.well-known/oauth-protected-resource/mcp", "api-or-oauth"),
   route("routes/well-known.apple-app-site-association.ts", "/.well-known/apple-app-site-association", "platform-asset"),
+  route("routes/well-known.spoonjoy-release-readiness.tsx", "/.well-known/spoonjoy-release-readiness", "platform-asset"),
   route("routes/photos.$.tsx", "/photos/*", "platform-asset"),
   route("routes/devtools-well-known.tsx", "/.well-known/appspecific/com.chrome.devtools.json", "platform-asset"),
   route("routes/$.tsx", "/*", "intentional-exclude", { universalLink: false }),

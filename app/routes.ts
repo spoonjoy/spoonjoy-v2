@@ -79,6 +79,7 @@ export default [
   route(".well-known/oauth-protected-resource", "routes/well-known.oauth-protected-resource.ts"),
   route(".well-known/oauth-protected-resource/mcp", "routes/well-known.oauth-protected-resource.mcp.ts"),
   route(".well-known/apple-app-site-association", "routes/well-known.apple-app-site-association.ts"),
+  route(".well-known/spoonjoy-release-readiness", "routes/well-known.spoonjoy-release-readiness.tsx"),
   route("photos/*", "routes/photos.$.tsx"),
   route(".well-known/appspecific/com.chrome.devtools.json", "routes/devtools-well-known.tsx"),
   route("*", "routes/$.tsx"),

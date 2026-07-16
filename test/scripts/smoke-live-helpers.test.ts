@@ -25,6 +25,7 @@ import {
   decideMcpCanaryIssueAction,
   findMcpCanarySecretLeaks,
   isRouteActionResponse,
+  installWorkerVersionBrowserRouting,
   isQaR2ObjectMissingError,
   mcpOAuthAuditHasFailures,
   normalizeMcpOAuthAuditRows,
@@ -423,6 +424,111 @@ describe("smoke-live helpers", () => {
     })).toThrow(/valid UUID/i);
   });
 
+  it("routes every Chromium request through redirect-safe Worker-version interception", async () => {
+    let requestPaused: ((event: any) => Promise<void>) | undefined;
+    const session = {
+      send: vi.fn(async () => undefined),
+      on: vi.fn((event: string, handler: (input: any) => Promise<void>) => {
+        expect(event).toBe("Fetch.requestPaused");
+        requestPaused = handler;
+      }),
+    };
+    const page = {
+      context: () => ({ newCDPSession: vi.fn(async () => session) }),
+    };
+    const interceptRequest = vi.fn(async (request: { url: string }) => (
+      request.url.startsWith("https://claude.ai/api/mcp/auth_callback")
+        ? {
+            status: 200,
+            headers: { "Content-Type": "text/plain" },
+            body: "intercepted",
+          }
+        : null
+    ));
+
+    const routing = await installWorkerVersionBrowserRouting(page, {
+      baseUrl: "https://spoonjoy.app",
+      workerVersionId: CANDIDATE_VERSION,
+      interceptRequest,
+    });
+
+    expect(session.send).toHaveBeenNthCalledWith(1, "Fetch.enable", {
+      patterns: [{ requestStage: "Request", urlPattern: "*" }],
+    });
+    await requestPaused?.({
+      requestId: "same-origin-hop",
+      request: {
+        url: "https://spoonjoy.app/oauth/authorize",
+        method: "POST",
+        headers: {
+          Accept: "text/html",
+          "cloudflare-workers-version-overrides": `spoonjoy-v2="${CANDIDATE_VERSION}"`,
+        },
+      },
+    });
+    expect(session.send).toHaveBeenNthCalledWith(2, "Fetch.continueRequest", {
+      requestId: "same-origin-hop",
+      headers: [
+        { name: "Accept", value: "text/html" },
+        {
+          name: "Cloudflare-Workers-Version-Overrides",
+          value: `spoonjoy-v2="${CANDIDATE_VERSION}"`,
+        },
+      ],
+    });
+
+    await requestPaused?.({
+      requestId: "external-hop",
+      request: {
+        url: "https://claude.ai/api/mcp/auth_callback?code=secret&state=opaque",
+        method: "GET",
+        headers: {
+          Accept: "text/html",
+          "Cloudflare-Workers-Version-Overrides": `spoonjoy-v2="${CANDIDATE_VERSION}"`,
+        },
+      },
+    });
+    expect(session.send).toHaveBeenNthCalledWith(3, "Fetch.fulfillRequest", {
+      requestId: "external-hop",
+      responseCode: 200,
+      responseHeaders: [{ name: "Content-Type", value: "text/plain" }],
+      body: Buffer.from("intercepted").toString("base64"),
+    });
+    expect(interceptRequest).toHaveBeenCalledTimes(2);
+    expect(() => routing.assertHealthy()).not.toThrow();
+  });
+
+  it("fails closed and reports Chromium interception errors", async () => {
+    let requestPaused: ((event: any) => Promise<void>) | undefined;
+    const session = {
+      send: vi.fn(async (method: string) => {
+        if (method === "Fetch.failRequest") throw new Error("page already closed");
+      }),
+      on: vi.fn((_event: string, handler: (input: any) => Promise<void>) => {
+        requestPaused = handler;
+      }),
+    };
+    const page = { context: () => ({ newCDPSession: vi.fn(async () => session) }) };
+    const routing = await installWorkerVersionBrowserRouting(page, {
+      baseUrl: "https://spoonjoy.app",
+      workerVersionId: null,
+      interceptRequest: async () => {
+        throw new Error("interceptor exploded");
+      },
+    });
+
+    await requestPaused?.({
+      requestId: "failed-hop",
+      request: { url: "https://spoonjoy.app/signup", method: "GET", headers: {} },
+    });
+
+    expect(session.send).toHaveBeenLastCalledWith("Fetch.failRequest", {
+      requestId: "failed-hop",
+      errorReason: "Aborted",
+    });
+    expect(() => routing.assertHealthy()).toThrow(/Chromium request interception failed.*interceptor exploded/i);
+  });
+
   it("waits through Cloudflare override propagation before declaring the candidate ready", async () => {
     const responses = [
       {},
@@ -597,7 +703,7 @@ describe("smoke-live helpers", () => {
     expect(deadlineCandidate).toHaveBeenCalledOnce();
   });
 
-  it("requires stable candidate readiness across browser and API channels in the same cycles", async () => {
+  it("requires stable candidate readiness across navigation, API, and browser mutation channels", async () => {
     let now = 1_000;
     const sleep = vi.fn(async (delayMs: number) => {
       now += delayMs;
@@ -611,15 +717,22 @@ describe("smoke-live helpers", () => {
       .mockResolvedValueOnce(candidate)
       .mockResolvedValueOnce(candidate);
     const apiProbe = vi.fn()
+      .mockResolvedValueOnce(candidate)
       .mockResolvedValueOnce({
         status: 200,
+        headers: { "x-spoonjoy-worker-version": "33333333-3333-4333-8333-333333333333" },
+      })
+      .mockResolvedValue(candidate);
+    const mutationProbe = vi.fn()
+      .mockResolvedValueOnce({
+        status: 405,
         headers: { "x-spoonjoy-worker-version": "33333333-3333-4333-8333-333333333333" },
       })
       .mockResolvedValue(candidate);
 
     await expect(waitForWorkerChannelsReady({
       workerVersionId: CANDIDATE_VERSION,
-      probes: [browserProbe, apiProbe],
+      probes: [browserProbe, apiProbe, mutationProbe],
       timeoutMs: 2_000,
       intervalMs: 250,
       now: () => now,
@@ -627,8 +740,10 @@ describe("smoke-live helpers", () => {
     })).resolves.toEqual({ attempts: 6, elapsedMs: 1_250, workerVersionId: CANDIDATE_VERSION });
     expect(browserProbe).toHaveBeenCalledTimes(6);
     expect(apiProbe).toHaveBeenCalledTimes(6);
+    expect(mutationProbe).toHaveBeenCalledTimes(6);
     expect(browserProbe.mock.calls.map(([input]) => input.timeoutMs)).toEqual([2_000, 1_750, 1_500, 1_250, 1_000, 750]);
     expect(apiProbe.mock.calls.map(([input]) => input.timeoutMs)).toEqual([2_000, 1_750, 1_500, 1_250, 1_000, 750]);
+    expect(mutationProbe.mock.calls.map(([input]) => input.timeoutMs)).toEqual([2_000, 1_750, 1_500, 1_250, 1_000, 750]);
 
     await expect(waitForWorkerChannelsReady({
       workerVersionId: null,
@@ -640,6 +755,39 @@ describe("smoke-live helpers", () => {
         probes,
       })).rejects.toThrow(/at least two channel probe functions/i);
     }
+  });
+
+  it("enforces the readiness deadline around probes that never settle", async () => {
+    let now = 0;
+    let deadlineAdvanced = false;
+    const setTimer = vi.fn((callback: () => void, delayMs: number) => {
+      if (!deadlineAdvanced) {
+        now += delayMs;
+        deadlineAdvanced = true;
+      }
+      callback();
+      return 17;
+    });
+    const clearTimer = vi.fn();
+    const neverSettles = vi.fn(() => new Promise(() => undefined));
+    const candidate = vi.fn(async () => ({
+      status: 200,
+      headers: { "x-spoonjoy-worker-version": CANDIDATE_VERSION },
+    }));
+
+    await expect(waitForWorkerChannelsReady({
+      workerVersionId: CANDIDATE_VERSION,
+      probes: [neverSettles, candidate],
+      timeoutMs: 1_000,
+      intervalMs: 100,
+      now: () => now,
+      sleep: async () => undefined,
+      setTimer,
+      clearTimer,
+    })).rejects.toThrow(/not ready after 1 attempt and 1000ms/i);
+    expect(setTimer).toHaveBeenCalledTimes(2);
+    expect(setTimer).toHaveBeenCalledWith(expect.any(Function), 1_000);
+    expect(clearTimer.mock.calls).toEqual([[17], [17]]);
   });
 
   it("skips readiness without a candidate and rejects invalid polling configuration", async () => {
@@ -789,8 +937,10 @@ describe("smoke-live helpers", () => {
     const wrangler = JSON.parse(readFileSync("wrangler.json", "utf8"));
 
     expect(source).not.toContain("extraHTTPHeaders");
-    expect(source).toContain("buildWorkerVersionRequestHeaders({");
-    expect(source).toContain('context.route("**/*"');
+    expect(source).toContain("installWorkerVersionBrowserRouting(page, {");
+    expect(source).toContain("installWorkerVersionBrowserRouting(mutationPage, {");
+    expect(source).not.toContain('context.route("**/*"');
+    expect(source).not.toContain('page.context().route("**/api/mcp/auth_callback**"');
     expect(source).toContain('context.on("response"');
     expect(source).toContain("createWorkerVersionResponseTracker({");
     expect(source).toContain("assertWorkerVersionResponse(response.headers(), workerVersionId, label)");
@@ -798,8 +948,15 @@ describe("smoke-live helpers", () => {
     const readinessSource = source.match(/async function waitForCandidateWorker\([\s\S]*?\n}\n/)?.[0] ?? "";
     expect(readinessSource).toContain("page.goto(url");
     expect(readinessSource).toContain("request.get(url");
+    expect(readinessSource).toContain("mutationPage.goto(mutationUrl");
+    expect(readinessSource).toContain("mutationPage.waitForResponse(");
+    expect(readinessSource).toContain("isRouteActionResponse({");
+    expect(readinessSource).toContain("routePath: mutationPath");
+    expect(readinessSource).toContain('getByRole("button", { name: "Probe Worker mutation channel" }).click');
+    expect(readinessSource).not.toContain("mutationPage.evaluate(");
+    expect(readinessSource).toContain('const mutationPath = "/.well-known/spoonjoy-release-readiness"');
     expect(readinessSource).toContain("timeout: timeoutMs");
-    expect(source).toContain("waitForCandidateWorker(page, page.request, { baseUrl, workerVersionId })");
+    expect(source).toContain("waitForCandidateWorker(page, mutationPage, page.request, { baseUrl, workerVersionId })");
     expect(source.indexOf('check("candidate Worker override readiness"')).toBeLessThan(
       source.indexOf('check("signup disposable user"'),
     );
