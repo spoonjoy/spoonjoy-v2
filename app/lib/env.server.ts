@@ -8,6 +8,8 @@
  * - Google OAuth: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
  * - GitHub OAuth: GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
  * - Apple OAuth: APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY
+ * - Apple social callback rollout: APPLE_OAUTH_CALLBACK_MODE,
+ *   APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED
  * - Native Apple Sign in: APPLE_NATIVE_CLIENT_IDS (or APPLE_NATIVE_CLIENT_ID)
  *
  * Set secrets in production via: wrangler secret put <SECRET_NAME>
@@ -23,6 +25,13 @@ export interface AppleOAuthConfig {
   teamId: string;
   keyId: string;
   privateKey: string;
+}
+
+export type AppleOAuthCallbackMode = "legacy" | "clean";
+
+export interface AppleOAuthCallbackConfig {
+  mode: AppleOAuthCallbackMode;
+  cleanCallbackRegistered: boolean;
 }
 
 export interface AppleNativeAuthConfig {
@@ -45,6 +54,8 @@ export interface OAuthEnv {
   APPLE_TEAM_ID?: string;
   APPLE_KEY_ID?: string;
   APPLE_PRIVATE_KEY?: string;
+  APPLE_OAUTH_CALLBACK_MODE?: string;
+  APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED?: string;
 }
 
 export type OAuthProvider = "google" | "github" | "apple";
@@ -128,6 +139,35 @@ export function getAppleOAuthConfig(env: OAuthEnv): AppleOAuthConfig {
     keyId: requireEnvValue(env, "APPLE_KEY_ID"),
     privateKey: requireEnvValue(env, "APPLE_PRIVATE_KEY"),
   };
+}
+
+/**
+ * Resolves the social Apple callback rollout state. The legacy callback is the
+ * safe default and remains selectable after the clean callback is registered.
+ * Clean starts fail closed until registration is explicitly asserted.
+ */
+export function getAppleOAuthCallbackConfig(env: OAuthEnv): AppleOAuthCallbackConfig {
+  const mode = normalizeEnvValue(env.APPLE_OAUTH_CALLBACK_MODE) ?? "legacy";
+  if (mode !== "legacy" && mode !== "clean") {
+    throw new Error('APPLE_OAUTH_CALLBACK_MODE must be "legacy" or "clean"');
+  }
+
+  const registeredValue =
+    normalizeEnvValue(env.APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED) ?? "false";
+  if (registeredValue !== "true" && registeredValue !== "false") {
+    throw new Error(
+      'APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED must be "true" or "false"'
+    );
+  }
+
+  const cleanCallbackRegistered = registeredValue === "true";
+  if (mode === "clean" && !cleanCallbackRegistered) {
+    throw new Error(
+      "APPLE_OAUTH_CALLBACK_MODE=clean requires APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED=true"
+    );
+  }
+
+  return { mode, cleanCallbackRegistered };
 }
 
 export function getAppleNativeAuthConfig(env: OAuthEnv): AppleNativeAuthConfig {

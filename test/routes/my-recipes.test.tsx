@@ -127,6 +127,52 @@ describe("My Recipes drawer route", () => {
     ]);
   });
 
+  it("returns one bounded page of owned recipes while preserving updated order", async () => {
+    const viewer = await createDrawerUser("my-recipes-page");
+
+    for (let index = 0; index < 51; index += 1) {
+      await createDrawerRecipe({
+        chefId: viewer.id,
+        title: `Paged Pantry Pasta ${index.toString().padStart(2, "0")}`,
+        updatedAt: new Date(Date.UTC(2026, 0, index + 1, 0, 0, 0)),
+      });
+    }
+
+    const firstPage = await loader({
+      request: new UndiciRequest("http://localhost:3000/my-recipes?page=1", {
+        headers: await sessionHeaders(viewer.id),
+      }),
+      context: { cloudflare: { env: null } },
+      params: {},
+    } as any);
+    const secondPage = await loader({
+      request: new UndiciRequest("http://localhost:3000/my-recipes?page=2", {
+        headers: await sessionHeaders(viewer.id),
+      }),
+      context: { cloudflare: { env: null } },
+      params: {},
+    } as any);
+
+    expect(firstPage.recipes).toHaveLength(50);
+    expect(firstPage.recipes[0].title).toBe("Paged Pantry Pasta 50");
+    expect(firstPage.recipes.at(-1)?.title).toBe("Paged Pantry Pasta 01");
+    expect(firstPage).toMatchObject({
+      page: 1,
+      pageSize: 50,
+      hasPreviousPage: false,
+      hasNextPage: true,
+    });
+    expect(secondPage.recipes.map((recipe: { title: string }) => recipe.title)).toEqual([
+      "Paged Pantry Pasta 00",
+    ]);
+    expect(secondPage).toMatchObject({
+      page: 2,
+      pageSize: 50,
+      hasPreviousPage: true,
+      hasNextPage: false,
+    });
+  });
+
   it("batches ingredient lookup so large kitchens stay under D1 variable limits", async () => {
     const recipeIds = Array.from(
       { length: INGREDIENT_LOOKUP_BATCH_SIZE * 2 + 3 },
@@ -173,6 +219,10 @@ describe("My Recipes drawer route", () => {
         Component: MyRecipes,
         loader: () => ({
           query: "",
+          page: 1,
+          pageSize: 50,
+          hasPreviousPage: false,
+          hasNextPage: false,
           recipes: [
             {
               id: "recipe-1",
@@ -212,6 +262,10 @@ describe("My Recipes drawer route", () => {
         Component: MyRecipes,
         loader: () => ({
           query: "",
+          page: 1,
+          pageSize: 50,
+          hasPreviousPage: false,
+          hasNextPage: false,
           recipes: [],
         }),
       },
@@ -220,6 +274,10 @@ describe("My Recipes drawer route", () => {
         Component: MyRecipes,
         loader: () => ({
           query: "turnip",
+          page: 1,
+          pageSize: 50,
+          hasPreviousPage: false,
+          hasNextPage: false,
           recipes: [],
         }),
       },
@@ -236,5 +294,96 @@ describe("My Recipes drawer route", () => {
     expect(await screen.findByRole("heading", { name: "No matching recipes" })).toBeInTheDocument();
     expect(screen.getByText("Try another title, ingredient, serving size, or note.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Clear" })).toHaveAttribute("href", "/my-recipes-filtered");
+  });
+
+  it("renders pagination links that preserve the drawer search query", async () => {
+    const Stub = createTestRoutesStub([
+      {
+        path: "/my-recipes-paged",
+        Component: MyRecipes,
+        loader: () => ({
+          query: "turnip greens",
+          page: 2,
+          pageSize: 50,
+          hasPreviousPage: true,
+          hasNextPage: true,
+          recipes: [{
+            id: "recipe-page",
+            title: "Turnip Greens",
+            description: null,
+            servings: null,
+            chef: { id: "chef-1", username: "ari" },
+            ingredientNames: [],
+          }],
+        }),
+      },
+      {
+        path: "/my-recipes-paged-empty-query",
+        Component: MyRecipes,
+        loader: () => ({
+          query: "",
+          page: 2,
+          pageSize: 50,
+          hasPreviousPage: true,
+          hasNextPage: false,
+          recipes: [{
+            id: "recipe-page-empty",
+            title: "Plain Rice",
+            description: null,
+            servings: null,
+            chef: { id: "chef-1", username: "ari" },
+            ingredientNames: [],
+          }],
+        }),
+      },
+      {
+        path: "/my-recipes-paged-first-page",
+        Component: MyRecipes,
+        loader: () => ({
+          query: "",
+          page: 1,
+          pageSize: 50,
+          hasPreviousPage: false,
+          hasNextPage: true,
+          recipes: [{
+            id: "recipe-page-first",
+            title: "First Page Rice",
+            description: null,
+            servings: null,
+            chef: { id: "chef-1", username: "ari" },
+            ingredientNames: [],
+          }],
+        }),
+      },
+    ]);
+
+    const { unmount } = render(<Stub initialEntries={["/my-recipes-paged?q=turnip+greens&page=2"]} />);
+
+    expect(await screen.findByRole("navigation", { name: "My recipes pagination" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Previous page" })).toHaveAttribute(
+      "href",
+      "/my-recipes-paged?q=turnip+greens",
+    );
+    expect(screen.getByRole("link", { name: "Next page" })).toHaveAttribute(
+      "href",
+      "/my-recipes-paged?q=turnip+greens&page=3",
+    );
+
+    unmount();
+    render(<Stub initialEntries={["/my-recipes-paged-empty-query?page=2"]} />);
+
+    expect(await screen.findByRole("link", { name: "Previous page" })).toHaveAttribute(
+      "href",
+      "/my-recipes-paged-empty-query",
+    );
+
+    unmount();
+    render(<Stub initialEntries={["/my-recipes-paged-first-page"]} />);
+
+    expect(await screen.findByRole("button", { name: "Previous page" })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "Next page" })).toHaveAttribute(
+      "href",
+      "/my-recipes-paged-first-page?page=2",
+    );
   });
 });

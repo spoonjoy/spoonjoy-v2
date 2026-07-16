@@ -208,14 +208,14 @@ export default function Index() {
   if (!kitchenUser) {
     return (
       <div className="sj-page">
-        <section className="relative min-h-[92svh] overflow-hidden">
+        <section className="relative min-h-[clamp(32rem,70svh,42rem)] overflow-hidden">
           <img
             src={LANDING_FOOD_PHOTOS[2].src}
             alt={LANDING_FOOD_PHOTOS[2].alt}
             className="absolute inset-0 h-full w-full object-cover"
           />
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(34,32,28,0.82),rgba(34,32,28,0.34)_58%,rgba(34,32,28,0.10)),linear-gradient(0deg,rgba(34,32,28,0.56),transparent_42%)]" />
-          <div className="relative z-10 flex min-h-[92svh] flex-col justify-end px-5 pb-[calc(9rem+env(safe-area-inset-bottom))] pt-20 sm:px-8 sm:pb-24 lg:px-12 lg:pb-28">
+          <div className="relative z-10 flex min-h-[clamp(32rem,70svh,42rem)] flex-col justify-end px-5 pb-[calc(3rem+env(safe-area-inset-bottom))] pt-20 sm:px-8 sm:pb-20 lg:px-12 lg:pb-24">
             <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.2em] text-[var(--sj-on-photo-muted)]">
               The Recipe App
             </p>

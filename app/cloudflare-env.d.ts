@@ -89,6 +89,8 @@ declare global {
     APPLE_TEAM_ID?: string;
     APPLE_KEY_ID?: string;
     APPLE_PRIVATE_KEY?: string;
+    APPLE_OAUTH_CALLBACK_MODE?: string;
+    APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED?: string;
     VAPID_PUBLIC_KEY?: string;
     VAPID_PRIVATE_KEY?: string;
     VAPID_SUBJECT?: string;

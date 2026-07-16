@@ -152,6 +152,23 @@ export function createAppleAuthorizationURL(
 }
 
 /**
+ * Generates an Apple authorization URL only when its exact redirect URI is in
+ * the caller's provider-registration allowlist.
+ */
+export function createRegisteredAppleAuthorizationURL(
+  config: AppleOAuthConfig,
+  redirectUri: string,
+  state: string,
+  registeredRedirectUris: readonly string[]
+): URL {
+  if (!registeredRedirectUris.includes(redirectUri)) {
+    throw new Error(`Apple OAuth redirect URI is not registered: ${redirectUri}`);
+  }
+
+  return createAppleAuthorizationURL(config, redirectUri, state);
+}
+
+/**
  * Interface for Apple's ID token claims.
  */
 interface AppleIdTokenClaims {
