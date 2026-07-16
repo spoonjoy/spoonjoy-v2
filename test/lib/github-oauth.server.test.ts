@@ -1,4 +1,9 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
+import {
+  ArcticFetchError,
+  UnexpectedErrorResponseBodyError,
+  UnexpectedResponseError,
+} from "arctic";
 import type { GitHubOAuthConfig } from "~/lib/env.server";
 
 const githubMock = vi.hoisted(() => ({
@@ -41,6 +46,10 @@ describe("github-oauth.server", () => {
     githubMock.validateAuthorizationCode.mockResolvedValue({
       accessToken: () => "github-access-token",
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   function callbackData(overrides?: Partial<GitHubCallbackData>): GitHubCallbackData {
@@ -107,6 +116,19 @@ describe("github-oauth.server", () => {
       },
     });
     expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(githubMock.validateAuthorizationCode).toHaveBeenCalledWith("valid-code");
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://api.github.com/user",
+      {
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: "Bearer github-access-token",
+          "User-Agent": "Spoonjoy",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+        signal: expect.any(AbortSignal),
+      },
+    );
   });
 
   it("falls back to the primary verified email endpoint when profile email is private", async () => {
@@ -128,6 +150,19 @@ describe("github-oauth.server", () => {
     expect(result.success).toBe(true);
     expect(result.githubUser?.email).toBe("primary@example.com");
     expect(result.githubUser?.emailVerified).toBe(true);
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      "https://api.github.com/user/emails",
+      {
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: "Bearer github-access-token",
+          "User-Agent": "Spoonjoy",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+        signal: expect.any(AbortSignal),
+      },
+    );
   });
 
   it("uses a non-primary verified email when no primary verified address exists", async () => {
@@ -170,12 +205,14 @@ describe("github-oauth.server", () => {
     expect(result.githubUser?.emailVerified).toBe(false);
   });
 
-  it("reports userinfo and email endpoint failures", async () => {
+  it("classifies userinfo and email endpoint failures without claiming email is missing", async () => {
     mockFetch.mockResolvedValueOnce(mockJsonResponse({ error: "bad" }, false));
 
     await expect(verifyGitHubCallback(config, redirectUri, callbackData())).resolves.toMatchObject({
       success: false,
-      error: "userinfo_error",
+      error: "upstream_error",
+      retryable: true,
+      failureKind: "upstream",
     });
 
     mockFetch
@@ -184,7 +221,185 @@ describe("github-oauth.server", () => {
 
     await expect(verifyGitHubCallback(config, redirectUri, callbackData())).resolves.toMatchObject({
       success: false,
-      error: "email_required",
+      error: "upstream_error",
+      retryable: true,
+      failureKind: "upstream",
+    });
+  });
+
+  it("marks non-transient provider 4xx responses non-retryable", async () => {
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: "bad token" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    }));
+
+    await expect(verifyGitHubCallback(config, redirectUri, callbackData())).resolves.toMatchObject({
+      success: false,
+      error: "upstream_error",
+      retryable: false,
+      failureKind: "upstream",
+    });
+  });
+
+  it.each([
+    [408, true],
+    [425, true],
+    [429, true],
+    [499, false],
+    [500, true],
+    [599, true],
+  ])("classifies upstream HTTP %i retryability as %s", async (status, retryable) => {
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: "provider" }), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    }));
+
+    await expect(verifyGitHubCallback(config, redirectUri, callbackData())).resolves.toMatchObject({
+      success: false,
+      error: "upstream_error",
+      retryable,
+      failureKind: "upstream",
+    });
+  });
+
+  it("classifies malformed successful provider JSON as a retryable upstream failure", async () => {
+    mockFetch.mockResolvedValueOnce(new Response("not-json", {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+
+    await expect(verifyGitHubCallback(config, redirectUri, callbackData())).resolves.toMatchObject({
+      success: false,
+      error: "upstream_error",
+      retryable: true,
+      failureKind: "upstream",
+    });
+  });
+
+  it("bounds a stalled token exchange", async () => {
+    vi.useFakeTimers();
+    githubMock.validateAuthorizationCode.mockReturnValueOnce(new Promise(() => {}));
+
+    const resultPromise = verifyGitHubCallback(config, redirectUri, callbackData());
+    await vi.advanceTimersByTimeAsync(8_000);
+    const unsettled = Symbol("unsettled");
+    const result = await Promise.race([resultPromise, Promise.resolve(unsettled)]);
+
+    expect(result).not.toBe(unsettled);
+    expect(result).toMatchObject({
+      success: false,
+      error: "provider_timeout",
+      retryable: true,
+      failureKind: "timeout",
+    });
+    expect(githubMock.validateAuthorizationCode).toHaveBeenCalledWith("valid-code");
+  });
+
+  it("bounds and aborts a stalled profile request", async () => {
+    vi.useFakeTimers();
+    mockFetch.mockImplementationOnce((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+      init.signal?.addEventListener("abort", () => {
+        reject(new DOMException("aborted", "AbortError"));
+      });
+    }));
+
+    const resultPromise = verifyGitHubCallback(config, redirectUri, callbackData());
+    await vi.advanceTimersByTimeAsync(8_000);
+    const unsettled = Symbol("unsettled");
+    const result = await Promise.race([resultPromise, Promise.resolve(unsettled)]);
+
+    expect(result).not.toBe(unsettled);
+    expect(result).toMatchObject({
+      success: false,
+      error: "provider_timeout",
+      retryable: true,
+      failureKind: "timeout",
+    });
+    expect(mockFetch.mock.calls[0]?.[1]).toMatchObject({ signal: expect.any(AbortSignal) });
+    expect((mockFetch.mock.calls[0]?.[1] as RequestInit).signal?.aborted).toBe(true);
+  });
+
+  it("bounds and aborts a stalled profile response body", async () => {
+    vi.useFakeTimers();
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => new Promise(() => {}),
+    });
+
+    const resultPromise = verifyGitHubCallback(config, redirectUri, callbackData());
+    await vi.advanceTimersByTimeAsync(8_000);
+    const unsettled = Symbol("unsettled");
+    const result = await Promise.race([resultPromise, Promise.resolve(unsettled)]);
+
+    expect(result).not.toBe(unsettled);
+    expect(result).toMatchObject({
+      success: false,
+      error: "provider_timeout",
+      retryable: true,
+      failureKind: "timeout",
+    });
+    expect((mockFetch.mock.calls[0]?.[1] as RequestInit).signal?.aborted).toBe(true);
+  });
+
+  it("treats a statusless unexpected token response as retryable upstream failure", async () => {
+    const error = new Error("Unexpected error response");
+    error.name = "UnexpectedResponseError";
+    githubMock.validateAuthorizationCode.mockRejectedValueOnce(error);
+
+    await expect(verifyGitHubCallback(config, redirectUri, callbackData())).resolves.toMatchObject({
+      success: false,
+      error: "upstream_error",
+      retryable: true,
+      failureKind: "upstream",
+    });
+  });
+
+  it("treats a non-numeric unexpected token status as retryable upstream failure", async () => {
+    const error = Object.assign(new Error("Unexpected error response"), {
+      name: "UnexpectedResponseError",
+      status: "503",
+    });
+    githubMock.validateAuthorizationCode.mockRejectedValueOnce(error);
+
+    await expect(verifyGitHubCallback(config, redirectUri, callbackData())).resolves.toMatchObject({
+      success: false,
+      error: "upstream_error",
+      retryable: true,
+      failureKind: "upstream",
+    });
+  });
+
+  it("classifies Arctic token protocol errors as upstream failures", async () => {
+    for (const error of [
+      new UnexpectedResponseError(503),
+      new UnexpectedErrorResponseBodyError(502, { invalid: "body" }),
+    ]) {
+      githubMock.validateAuthorizationCode.mockRejectedValueOnce(error);
+
+      await expect(
+        verifyGitHubCallback(config, redirectUri, callbackData()),
+      ).resolves.toMatchObject({
+        success: false,
+        error: "upstream_error",
+        retryable: true,
+        failureKind: "upstream",
+      });
+    }
+  });
+
+  it("classifies Arctic token transport failures as retryable network errors", async () => {
+    githubMock.validateAuthorizationCode.mockRejectedValueOnce(
+      new ArcticFetchError(new TypeError("fetch failed")),
+    );
+
+    await expect(
+      verifyGitHubCallback(config, redirectUri, callbackData()),
+    ).resolves.toMatchObject({
+      success: false,
+      error: "network_error",
+      retryable: true,
+      failureKind: "network",
     });
   });
 
@@ -196,6 +411,8 @@ describe("github-oauth.server", () => {
     await expect(verifyGitHubCallback(config, redirectUri, callbackData())).resolves.toMatchObject({
       success: false,
       error: "oauth_error",
+      retryable: false,
+      failureKind: "client",
       message: "bad verifier",
     });
 
@@ -209,22 +426,26 @@ describe("github-oauth.server", () => {
 
     const unexpectedResponseError = new Error("Unexpected error response");
     unexpectedResponseError.name = "UnexpectedResponseError";
+    Object.assign(unexpectedResponseError, { status: 503 });
     githubMock.validateAuthorizationCode.mockRejectedValueOnce(unexpectedResponseError);
 
     await expect(verifyGitHubCallback(config, redirectUri, callbackData())).resolves.toMatchObject({
       success: false,
-      error: "oauth_error",
-      message: "Unexpected error response",
+      error: "upstream_error",
+      retryable: true,
+      failureKind: "upstream",
     });
 
     const unexpectedBodyError = new Error("Unexpected error response body");
     unexpectedBodyError.name = "UnexpectedErrorResponseBodyError";
+    Object.assign(unexpectedBodyError, { status: 502 });
     githubMock.validateAuthorizationCode.mockRejectedValueOnce(unexpectedBodyError);
 
     await expect(verifyGitHubCallback(config, redirectUri, callbackData())).resolves.toMatchObject({
       success: false,
-      error: "oauth_error",
-      message: "Unexpected error response body",
+      error: "upstream_error",
+      retryable: true,
+      failureKind: "upstream",
     });
 
     githubMock.validateAuthorizationCode.mockRejectedValueOnce(new TypeError("fetch failed"));
@@ -232,6 +453,8 @@ describe("github-oauth.server", () => {
     await expect(verifyGitHubCallback(config, redirectUri, callbackData())).resolves.toMatchObject({
       success: false,
       error: "network_error",
+      retryable: true,
+      failureKind: "network",
     });
   });
 
@@ -266,10 +489,15 @@ describe("github-oauth.server", () => {
 
       const result = await verifyGitHubCallback(config, redirectUri, callbackData(), capture);
 
-      expect(result.error).toBe("userinfo_error");
+      expect(result.error).toBe("upstream_error");
       expect(capture).toHaveBeenCalledTimes(1);
       expect(capture).toHaveBeenCalledWith(
-        expect.objectContaining({ phase: "userinfo", httpStatus: 500 }),
+        expect.objectContaining({
+          phase: "userinfo",
+          httpStatus: 500,
+          retryable: true,
+          failureKind: "upstream",
+        }),
       );
       expect(capture.mock.calls[0][0].error).toBeInstanceOf(Error);
     });
@@ -282,10 +510,15 @@ describe("github-oauth.server", () => {
 
       const result = await verifyGitHubCallback(config, redirectUri, callbackData(), capture);
 
-      expect(result.error).toBe("email_required");
+      expect(result.error).toBe("upstream_error");
       expect(capture).toHaveBeenCalledTimes(1);
       expect(capture).toHaveBeenCalledWith(
-        expect.objectContaining({ phase: "userinfo", httpStatus: 500 }),
+        expect.objectContaining({
+          phase: "userinfo",
+          httpStatus: 500,
+          retryable: true,
+          failureKind: "upstream",
+        }),
       );
     });
 
@@ -312,7 +545,12 @@ describe("github-oauth.server", () => {
 
       expect(result.error).toBe("network_error");
       expect(capture).toHaveBeenCalledWith(
-        expect.objectContaining({ error: networkError, phase: "token_exchange" }),
+        expect.objectContaining({
+          error: networkError,
+          phase: "token_exchange",
+          retryable: true,
+          failureKind: "network",
+        }),
       );
     });
 

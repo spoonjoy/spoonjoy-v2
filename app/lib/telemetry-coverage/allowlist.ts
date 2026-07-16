@@ -200,6 +200,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "Sole catch is in sameOriginReferer(): a malformed/absent Referer header is parsed to null so no same-origin default redirect is derived. Pure parse fallback; no user-facing failure is hidden, so no exception capture is warranted.",
   },
   {
+    file: "app/lib/oauth-provider-call.server.ts",
+    category: "rethrow",
+    reason:
+      "The bounded provider wrapper converts timeout and transport catches into OAuthProviderCallError with phase, retryability, upstream status, and original error. Google/GitHub verification catches that typed error and invokes the callback route's auth-telemetry capture sink; no failure is swallowed here.",
+  },
+  {
     file: "app/lib/oauth-routes.server.ts",
     category: "rethrow",
     reason:
