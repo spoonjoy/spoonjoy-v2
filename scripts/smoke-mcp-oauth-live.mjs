@@ -18,6 +18,7 @@ import {
   buildUserCountD1Args,
   buildWorkerVersionRequestHeaders,
   createWorkerVersionResponseTracker,
+  isRouteActionResponse,
   parseD1CountOutput,
   parseD1RowsOutput,
   parseMcpCanaryArgs,
@@ -137,12 +138,12 @@ async function signupDisposableUser(page, { baseUrl, email, username, password, 
   await page.locator('input[name="password"]:visible').fill(password);
   await page.locator('input[name="confirmPassword"]:visible').fill(password);
   const submitCheckpoint = responseTracker.checkpoint();
-  const signupResponse = page.waitForResponse((response) => {
-    const url = new URL(response.url());
-    return url.origin === new URL(baseUrl).origin
-      && url.pathname === "/signup"
-      && response.request().method() === "POST";
-  }, { timeout: 20_000 });
+  const signupResponse = page.waitForResponse((response) => isRouteActionResponse({
+    baseUrl,
+    responseUrl: response.url(),
+    routePath: "/signup",
+    requestMethod: response.request().method(),
+  }), { timeout: 20_000 });
   await page.getByRole("button", { name: /sign up/i }).first().click();
   await signupResponse;
   await page.waitForURL((url) => !url.pathname.startsWith("/signup"), { timeout: 20_000 });
@@ -223,12 +224,12 @@ async function approveConsent(page, { baseUrl, clientId, codeChallenge, resource
     timeout: 20_000,
   });
   const consentCheckpoint = responseTracker.checkpoint();
-  const consentResponse = page.waitForResponse((response) => {
-    const url = new URL(response.url());
-    return url.origin === new URL(baseUrl).origin
-      && url.pathname === "/oauth/authorize"
-      && response.request().method() === "POST";
-  }, { timeout: 20_000 });
+  const consentResponse = page.waitForResponse((response) => isRouteActionResponse({
+    baseUrl,
+    responseUrl: response.url(),
+    routePath: "/oauth/authorize",
+    requestMethod: response.request().method(),
+  }), { timeout: 20_000 });
   await allow.click();
   const [callbackRequestValue] = await Promise.all([callbackRequest, consentResponse]);
   responseTracker.assertSince(consentCheckpoint, "authorization consent submission");
