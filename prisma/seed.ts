@@ -309,9 +309,44 @@ interface SeededUser {
 }
 
 const CHEF_RJ_AVATAR_URL = "/images/chef-rj.png";
+const D1_TRANSACTION_WARNING = "Cloudflare D1 does not support transactions yet";
 
 function isGeneratedSeedAvatarUrl(photoUrl: string | null | undefined): boolean {
   return Boolean(photoUrl?.includes("api.dicebear.com"));
+}
+
+async function withoutKnownSeedWarnings<T>(callback: () => Promise<T>): Promise<T> {
+  const originalWarn = console.warn;
+  const originalError = console.error;
+  const originalInfo = console.info;
+  const shouldSuppress = (args: unknown[]) => args.map(String).join(" ").includes(D1_TRANSACTION_WARNING);
+
+  console.warn = (...args: unknown[]) => {
+    if (shouldSuppress(args)) {
+      return;
+    }
+    originalWarn(...args);
+  };
+  console.error = (...args: unknown[]) => {
+    if (shouldSuppress(args)) {
+      return;
+    }
+    originalError(...args);
+  };
+  console.info = (...args: unknown[]) => {
+    if (shouldSuppress(args)) {
+      return;
+    }
+    originalInfo(...args);
+  };
+
+  try {
+    return await callback();
+  } finally {
+    console.warn = originalWarn;
+    console.error = originalError;
+    console.info = originalInfo;
+  }
 }
 
 export function parseLocalSeedArgs(argv = process.argv.slice(2)) {
@@ -1751,7 +1786,7 @@ async function main(argv = process.argv.slice(2)) {
   }
 }
 
-main(process.argv.slice(2))
+withoutKnownSeedWarnings(() => main(process.argv.slice(2)))
   .catch((e) => {
     console.error(e);
     process.exit(1);
