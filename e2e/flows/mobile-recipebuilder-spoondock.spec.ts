@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { publicRecipeHrefByTitle } from '../support/recipes';
 
 test.use({
   viewport: { width: 390, height: 844 },
@@ -15,21 +16,7 @@ async function getDock(page: Page) {
 }
 
 async function getFirstRecipeHref(page: Page) {
-  await page.goto('/recipes');
-  await page.waitForLoadState('domcontentloaded');
-
-  const href = await page.locator('a[href^="/recipes/"]').evaluateAll((links) => {
-    return links
-      .map((link) => link.getAttribute('href'))
-      .find((candidate) => (
-        !!candidate &&
-        candidate !== '/recipes/new' &&
-        /^\/recipes\/[^/]+$/.test(candidate)
-      ));
-  });
-
-  expect(href, 'expected at least one seeded recipe link').toBeTruthy();
-  return href!;
+  return publicRecipeHrefByTitle(page, 'Thai Green Curry');
 }
 
 async function expectTouchTarget(locator: Locator, label: string) {
@@ -159,7 +146,7 @@ test.describe('Mobile RecipeBuilder and SpoonDock audit', () => {
   test('shopping-list mobile controls have touch targets and dock clearance', async ({ page }) => {
     await page.goto('/shopping-list');
 
-    await expect(page.getByRole('heading', { name: 'Shopping List' })).toBeVisible();
+    await expect(page.getByTestId('shopping-list-page-header').getByRole('heading', { name: 'Shopping list' })).toBeVisible();
     const dock = await getDock(page);
 
     await expectTouchTarget(dock.getByRole('link', { name: /Shopping List/i }), 'shopping dock Shopping List link');

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { publicRecipeHref, publicRecipeLinks } from '../support/recipes';
+import { publicRecipeHrefByTitle, publicRecipeLinks } from '../support/recipes';
 
 function recipeDetailLinks(page: Page) {
   return publicRecipeLinks(page);
@@ -43,7 +43,7 @@ test.describe('Recipe Flow', () => {
   });
 
   test('recipe detail shows steps and ingredients', async ({ page }) => {
-    const href = await publicRecipeHref(page);
+    const href = await publicRecipeHrefByTitle(page, 'Classic Margherita Pizza');
     
     // Navigate to the recipe detail page
     await page.goto(href);

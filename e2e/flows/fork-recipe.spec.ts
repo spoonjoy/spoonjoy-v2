@@ -1,11 +1,14 @@
 import { test, expect } from '@playwright/test';
-import { currentRecipeOwnerUsername, openPublicRecipe } from '../support/recipes';
+import { readLatestDisposableE2EUser } from '../support/disposable-auth';
+import { currentRecipeOwnerUsername, openPublicRecipeByTitle } from '../support/recipes';
 
 test.describe('Fork recipe flow', () => {
   test('disposable viewer forks a public recipe and lands on the fork', async ({ page }) => {
     // Land on a seeded public recipe owned by someone other than the disposable viewer.
-    await openPublicRecipe(page);
+    const viewerUsername = readLatestDisposableE2EUser().username;
+    await openPublicRecipeByTitle(page, 'Fresh Guacamole');
     const ownerUsername = await currentRecipeOwnerUsername(page);
+    expect(ownerUsername).not.toBe(viewerUsername);
 
     // The page should now show a "Fork" button.
     const forkButton = page.getByTestId('recipe-header-fork-action');

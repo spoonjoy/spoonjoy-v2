@@ -14,8 +14,8 @@ import { loginAsDisposableUser } from '../support/auth';
  * The redirect_uri is intercepted so the assertion reads the exact callback URL
  * the server emits, independent of whatever that in-app route would do next.
  *
- * Runs in the `oauth` project (no stored auth state) and uses the shared seed
- * user — it only reads, so it never mutates the seed account.
+ * Runs in the `oauth` project (no stored auth state) and logs in with the
+ * per-run disposable e2e user created by the setup project.
  */
 
 const REDIRECT_URI = 'https://client.example/oauth/e2e-callback';

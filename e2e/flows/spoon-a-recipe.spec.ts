@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import path from 'node:path';
-import { openPublicRecipe } from '../support/recipes';
+import { readLatestDisposableE2EUser } from '../support/disposable-auth';
+import { currentRecipeOwnerUsername, openPublicRecipeByTitle } from '../support/recipes';
 
 const FIXTURE_PHOTO = path.resolve('e2e/fixtures/spoon-test-photo.png');
 
@@ -8,7 +9,9 @@ test.describe('Spoon a recipe flow', () => {
   test('user can log a cook and see it appear in the spoons strip', async ({ page }) => {
     // Land on the kitchen view; pick any seeded recipe owned by another chef
     // so the disposable user lands on the non-origin-cook path (photo not required).
-    await openPublicRecipe(page);
+    const viewerUsername = readLatestDisposableE2EUser().username;
+    await openPublicRecipeByTitle(page, 'Creamy Mushroom Risotto');
+    expect(await currentRecipeOwnerUsername(page)).not.toBe(viewerUsername);
 
     // Open the spoon dialog.
     const logCookButton = page.getByTestId('recipe-header-log-cook-action');

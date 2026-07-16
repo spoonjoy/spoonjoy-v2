@@ -1,9 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
-import path from 'node:path';
-import { readLatestDisposableE2EUser } from '../support/disposable-auth';
-import { currentRecipeOwnerUsername, openPublicRecipe } from '../support/recipes';
-
-const FIXTURE_PHOTO = path.resolve('e2e/fixtures/spoon-test-photo.png');
+import { createDisposableE2EUser, readLatestDisposableE2EUser } from '../support/disposable-auth';
+import { currentRecipeOwnerUsername, openPublicRecipeByTitle } from '../support/recipes';
 
 async function expectProfileLinkEventually(
   page: Page,
@@ -26,48 +23,54 @@ async function expectProfileLinkEventually(
 }
 
 test.describe('Fellow chefs + Kitchen visitors flow', () => {
-  test('disposable user spoons a public recipe and both chefs appear on derived-graph pages', async ({ page }) => {
-    // 1) The disposable logged-in user spoons a seeded public recipe they do not own.
-    await openPublicRecipe(page);
-    const ownerUsername = await currentRecipeOwnerUsername(page);
-    const viewerUsername = readLatestDisposableE2EUser().username;
+  test.setTimeout(90_000);
 
-    const logCookButton = page.getByTestId('recipe-header-log-cook-action');
-    await expect(logCookButton).toBeVisible({ timeout: 5_000 });
-    await expect(logCookButton).toBeEnabled();
-    await logCookButton.scrollIntoViewIfNeeded();
-    const dialogHeading = page.getByRole('heading', { name: /log a cook/i });
+  test('disposable user forks a public recipe and both chefs appear on derived-graph pages', async ({ browser }) => {
+    const context = await browser.newContext({
+      baseURL: 'http://localhost:5173',
+      storageState: { cookies: [], origins: [] },
+    });
+    const page = await context.newPage();
+    const user = createDisposableE2EUser();
+    await page.goto('/signup');
+    await page.locator('input[name="email"]:visible').fill(user.email);
+    await page.locator('input[name="username"]:visible').fill(user.username);
+    await page.locator('input[name="password"]:visible').fill(user.password);
+    await page.locator('input[name="confirmPassword"]:visible').fill(user.password);
+    await page.getByRole('button', { name: /sign up/i }).first().click();
+    await page.waitForURL((url) => !url.pathname.startsWith('/signup'));
+
+    // 1) The disposable logged-in user forks a seeded public recipe they do not own.
+    const viewerUsername = user.username;
+    await openPublicRecipeByTitle(page, 'Chicken Stir-Fry with Vegetables');
+    const ownerUsername = await currentRecipeOwnerUsername(page);
+    expect(ownerUsername).not.toBe(viewerUsername);
+
+    const forkButton = page.getByTestId('recipe-header-fork-action');
+    await expect(forkButton).toBeVisible({ timeout: 10_000 });
+    await expect(forkButton).toBeEnabled();
+    await forkButton.scrollIntoViewIfNeeded();
+    const dialogForkSubmit = page
+      .locator('form[action$="/fork"] button[type="submit"]')
+      .first();
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      await logCookButton.click();
-      if (await dialogHeading.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      await forkButton.click();
+      if (await dialogForkSubmit.isVisible({ timeout: 1_000 }).catch(() => false)) {
         break;
       }
     }
-    if (!(await dialogHeading.isVisible({ timeout: 500 }).catch(() => false))) {
-      const firstCookButton = page.getByRole('button', { name: /log the first cook/i });
-      if (await firstCookButton.isVisible({ timeout: 1_000 }).catch(() => false)) {
-        await firstCookButton.scrollIntoViewIfNeeded();
-        await firstCookButton.click();
-      }
-    }
-    await expect(dialogHeading).toBeVisible();
-
-    const noteField = page.getByLabel(/^note/i);
-    await expect(noteField).toBeVisible({ timeout: 5_000 });
-
-    const note = `e2e fellow-chefs spoon ${Date.now()}`;
-    await noteField.fill(note);
-    await page.locator('input[type="file"]').setInputFiles(FIXTURE_PHOTO);
-    const submit = page.getByRole('button', { name: /save spoon/i });
-    await expect(submit).toBeEnabled();
-    await submit.click();
-    await expect(page.getByText(note)).toBeVisible({ timeout: 15_000 });
+    await expect(dialogForkSubmit).toBeVisible({ timeout: 5_000 });
+    await dialogForkSubmit.click();
+    await expect(page).toHaveURL(/\/recipes\/[^/]+$/, { timeout: 15_000 });
+    await expect(page.locator('p', { hasText: /forked from/i }).first()).toBeAttached({ timeout: 15_000 });
 
     // 2) Visit the disposable user's Fellow chefs page — the recipe owner should appear.
     await expectProfileLinkEventually(page, `/users/${viewerUsername}/fellow-chefs`, ownerUsername);
 
     // 3) Visit the owner's Kitchen visitors page — the disposable user should appear.
     await expectProfileLinkEventually(page, `/users/${ownerUsername}/kitchen-visitors`, viewerUsername);
+
+    await context.close();
   });
 
   test('profile page exposes Fellow chefs and Kitchen visitors entry links', async ({ page }) => {
