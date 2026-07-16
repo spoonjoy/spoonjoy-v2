@@ -146,18 +146,13 @@ export function parseJsonArrayFromWranglerOutput(output: string): unknown[] {
     throw new Error("Wrangler output did not contain a JSON array.");
   }
 
-  const parsed = JSON.parse(output.slice(start, end + 1)) as unknown;
-  if (!Array.isArray(parsed)) {
-    throw new Error("Wrangler output JSON was not an array.");
-  }
-
-  return parsed;
+  return JSON.parse(output.slice(start, end + 1)) as unknown[];
 }
 
 type ExecFileSyncLike = typeof execFileSync;
 
 export function createWranglerSecretsLister(
-  execFile: ExecFileSyncLike = execFileSync,
+  execFile: ExecFileSyncLike,
 ): () => string[] {
   return () => {
     const output = execFile("pnpm", ["exec", "wrangler", "secret", "list"], {
@@ -171,12 +166,8 @@ export function createWranglerSecretsLister(
   };
 }
 
-function listWranglerSecrets(): string[] {
-  return createWranglerSecretsLister()();
-}
-
 export function createRemoteUserColumnsReader(
-  execFile: ExecFileSyncLike = execFileSync,
+  execFile: ExecFileSyncLike,
 ): () => Array<{ name?: unknown }> {
   return () => {
     const output = execFile(
@@ -200,10 +191,6 @@ export function createRemoteUserColumnsReader(
   };
 }
 
-function getRemoteUserColumns(): Array<{ name?: unknown }> {
-  return createRemoteUserColumnsReader()();
-}
-
 export function formatCheck(check: CheckResult): string {
   return `${check.status} ${check.name}: ${check.message}`;
 }
@@ -214,6 +201,30 @@ export interface ProductionReadinessDeps {
   exists: (path: string) => boolean;
   readText: (path: string) => string;
   log?: (message: string) => void;
+}
+
+export interface ProductionReadinessDefaultDepsOptions {
+  execFile?: ExecFileSyncLike;
+  exists?: (path: string) => boolean;
+  readText?: (path: string) => string;
+  log?: (message: string) => void;
+}
+
+function readTextFile(filePath: string): string {
+  return readFileSync(filePath, "utf8");
+}
+
+export function createProductionReadinessDeps(
+  options: ProductionReadinessDefaultDepsOptions = {},
+): ProductionReadinessDeps {
+  const execFile = options.execFile ?? execFileSync;
+  return {
+    listWranglerSecrets: createWranglerSecretsLister(execFile),
+    getRemoteUserColumns: createRemoteUserColumnsReader(execFile),
+    exists: options.exists ?? existsSync,
+    readText: options.readText ?? readTextFile,
+    log: options.log ?? console.log,
+  };
 }
 
 export function collectProductionReadinessChecks(deps: ProductionReadinessDeps): CheckResult[] {
@@ -266,15 +277,7 @@ export function collectProductionReadinessChecks(deps: ProductionReadinessDeps):
   return checks;
 }
 
-export function runProductionReadiness(
-  deps: ProductionReadinessDeps = {
-    listWranglerSecrets,
-    getRemoteUserColumns,
-    exists: existsSync,
-    readText: (filePath) => readFileSync(filePath, "utf8"),
-    log: console.log,
-  },
-): number {
+export function runProductionReadiness(deps: ProductionReadinessDeps): number {
   const checks = collectProductionReadinessChecks(deps);
   for (const check of checks) {
     (deps.log ?? console.log)(formatCheck(check));
@@ -282,6 +285,11 @@ export function runProductionReadiness(
   return checks.some((check) => check.status === "FAIL") ? 1 : 0;
 }
 
+export function runProductionReadinessCli(deps: ProductionReadinessDeps): void {
+  process.exitCode = runProductionReadiness(deps);
+}
+
+/* istanbul ignore if -- @preserve CLI boundary constructs real Wrangler/file-system side-effect deps. */
 if (import.meta.url === `file://${process.argv[1]}`) {
-  process.exitCode = runProductionReadiness();
+  runProductionReadinessCli(createProductionReadinessDeps());
 }

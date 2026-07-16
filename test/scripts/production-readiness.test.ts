@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   collectProductionReadinessChecks,
+  createProductionReadinessDeps,
   createRemoteUserColumnsReader,
   createWranglerSecretsLister,
   formatCheck,
@@ -11,12 +12,18 @@ import {
   hasUserPhotoUrlColumn,
   parseJsonArrayFromWranglerOutput,
   runProductionReadiness,
+  runProductionReadinessCli,
   validateCspHeaderSet,
   validatePwaAssetSet,
   validateCutoverRunbook,
 } from "../../scripts/production-readiness";
 
 describe("production readiness helpers", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.exitCode = undefined;
+  });
+
   it("passes required runtime secrets and reports missing optional feature groups", () => {
     const result = evaluateSecretReadiness([
       ...REQUIRED_RUNTIME_SECRETS,
@@ -30,6 +37,56 @@ describe("production readiness helpers", () => {
     expect(result.configuredFeatureGroups).toEqual(["Google OAuth", "GitHub OAuth"]);
     expect(result.missingFeatureGroups).toEqual(["Apple OAuth", "OpenAI AI features"]);
     expect(result.intentionallyDisabledFeatureGroups).toEqual([]);
+  });
+
+  it("can classify an intentionally disabled optional feature group", () => {
+    (INTENTIONALLY_DISABLED_FEATURE_GROUPS as unknown as string[]).push("Google OAuth");
+    try {
+      const result = evaluateSecretReadiness([
+        ...REQUIRED_RUNTIME_SECRETS,
+        "GITHUB_CLIENT_ID",
+        "GITHUB_CLIENT_SECRET",
+        "APPLE_CLIENT_ID",
+        "APPLE_NATIVE_CLIENT_IDS",
+        "APPLE_TEAM_ID",
+        "APPLE_KEY_ID",
+        "APPLE_PRIVATE_KEY",
+        "OPENAI_API_KEY",
+      ]);
+
+      expect(result.requiredMissing).toEqual([]);
+      expect(result.configuredFeatureGroups).toEqual([
+        "GitHub OAuth",
+        "Apple OAuth",
+        "OpenAI AI features",
+      ]);
+      expect(result.missingFeatureGroups).toEqual([]);
+      expect(result.intentionallyDisabledFeatureGroups).toEqual(["Google OAuth"]);
+
+      const checks = collectProductionReadinessChecks({
+        listWranglerSecrets: () => [
+          ...REQUIRED_RUNTIME_SECRETS,
+          "GITHUB_CLIENT_ID",
+          "GITHUB_CLIENT_SECRET",
+          "APPLE_CLIENT_ID",
+          "APPLE_NATIVE_CLIENT_IDS",
+          "APPLE_TEAM_ID",
+          "APPLE_KEY_ID",
+          "APPLE_PRIVATE_KEY",
+          "OPENAI_API_KEY",
+        ],
+        getRemoteUserColumns: () => [{ name: "photoUrl" }],
+        exists: () => true,
+        readText: () => "data migration\nDNS\nOAuth\nsmoke test\nrollback\n",
+      });
+      expect(checks).toContainEqual(expect.objectContaining({
+        name: "optional feature secrets",
+        status: "PASS",
+        message: "configured GitHub OAuth, Apple OAuth, OpenAI AI features; intentionally disabled Google OAuth",
+      }));
+    } finally {
+      (INTENTIONALLY_DISABLED_FEATURE_GROUPS as unknown as string[]).pop();
+    }
   });
 
   it("reports missing Google OAuth when its production secrets are absent", () => {
@@ -152,6 +209,11 @@ describe("production readiness helpers", () => {
     expect(validateCspHeaderSet(missingTelemetry)).toEqual([
       "CSP violation reporting",
     ]);
+
+    expect(validateCspHeaderSet(new Headers())).toEqual([
+      "Content-Security-Policy",
+      "X-Spoonjoy-Worker-Version",
+    ]);
   });
 
   it("validates candidate CSP version and nonce contract failure modes", () => {
@@ -192,6 +254,39 @@ describe("production readiness helpers", () => {
 
     expect(createWranglerSecretsLister(execFile)()).toEqual(["SESSION_SECRET"]);
     expect(createRemoteUserColumnsReader(execFile)()).toEqual([{ name: "id" }, { name: "photoUrl" }]);
+
+    const emptyColumnsExecFile = (() => JSON.stringify([{ noResults: [] }])) as unknown as typeof import("node:child_process").execFileSync;
+    expect(createRemoteUserColumnsReader(emptyColumnsExecFile)()).toEqual([]);
+  });
+
+  it("constructs injectable and default production readiness side-effect adapters", () => {
+    const logs: string[] = [];
+    const execFile = ((command: string, args: readonly string[]) => {
+      if (command !== "pnpm") throw new Error("wrong command");
+      if (args.join(" ") === "exec wrangler secret list") {
+        return JSON.stringify([{ name: "SESSION_SECRET" }]);
+      }
+      return JSON.stringify([{ results: [{ name: "photoUrl" }] }]);
+    }) as unknown as typeof import("node:child_process").execFileSync;
+
+    const injected = createProductionReadinessDeps({
+      execFile,
+      exists: (filePath) => filePath === "docs/production-cutover.md",
+      readText: () => "data migration\nDNS\nOAuth\nsmoke test\nrollback\n",
+      log: (message) => logs.push(message),
+    });
+
+    expect(injected.listWranglerSecrets()).toEqual(["SESSION_SECRET"]);
+    expect(injected.getRemoteUserColumns()).toEqual([{ name: "photoUrl" }]);
+    expect(injected.exists("docs/production-cutover.md")).toBe(true);
+    expect(injected.readText("docs/production-cutover.md")).toContain("rollback");
+    injected.log?.("ready");
+    expect(logs).toEqual(["ready"]);
+
+    const defaults = createProductionReadinessDeps();
+    expect(defaults.exists("package.json")).toBe(true);
+    expect(defaults.readText("package.json")).toContain("spoonjoy-v2");
+    expect(defaults.log).toBe(console.log);
   });
 
   it("collects and prints production readiness checks through injectable side effects", () => {
@@ -216,5 +311,69 @@ describe("production readiness helpers", () => {
 
     expect(runProductionReadiness(deps)).toBe(1);
     expect(logs).toContain("FAIL PWA assets: missing public/sw.js");
+  });
+
+  it("passes and logs through the console fallback when every readiness check is healthy", () => {
+    const consoleLog = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const deps = {
+      listWranglerSecrets: () => [
+        ...REQUIRED_RUNTIME_SECRETS,
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+        "GITHUB_CLIENT_ID",
+        "GITHUB_CLIENT_SECRET",
+        "APPLE_CLIENT_ID",
+        "APPLE_NATIVE_CLIENT_IDS",
+        "APPLE_TEAM_ID",
+        "APPLE_KEY_ID",
+        "APPLE_PRIVATE_KEY",
+        "OPENAI_API_KEY",
+      ],
+      getRemoteUserColumns: () => [{ name: "photoUrl" }],
+      exists: () => true,
+      readText: () => "data migration\nDNS\nOAuth\nsmoke test\nrollback\n",
+    };
+
+    expect(collectProductionReadinessChecks(deps).map((check) => check.status)).toEqual([
+      "PASS",
+      "PASS",
+      "PASS",
+      "PASS",
+      "PASS",
+    ]);
+    expect(runProductionReadiness(deps)).toBe(0);
+    expect(consoleLog).toHaveBeenCalledWith("PASS required runtime secrets: all required runtime secrets are present");
+
+    runProductionReadinessCli({ ...deps, log: () => undefined });
+    expect(process.exitCode).toBe(0);
+  });
+
+  it("fails readiness when the runbook or remote schema evidence is absent", () => {
+    const deps = {
+      listWranglerSecrets: () => ["SESSION_SECRET"],
+      getRemoteUserColumns: () => [{ name: "id" }],
+      exists: () => false,
+      readText: () => "",
+      log: () => undefined,
+    };
+
+    const checks = collectProductionReadinessChecks(deps);
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        name: "required runtime secrets",
+        status: "FAIL",
+        message: "missing VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT",
+      }),
+      expect.objectContaining({
+        name: "production cutover runbook",
+        status: "FAIL",
+        message: "missing docs/production-cutover.md",
+      }),
+      expect.objectContaining({
+        name: "remote User.photoUrl schema",
+        status: "FAIL",
+        message: "remote User table is missing photoUrl",
+      }),
+    ]));
   });
 });

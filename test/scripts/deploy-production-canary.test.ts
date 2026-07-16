@@ -405,6 +405,38 @@ describe("production canary release orchestration", () => {
     expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(result);
   });
 
+  it("uses the built-in candidate CSP reader when release deps do not override it", async () => {
+    const runCommand = successfulRunner();
+    const deps = releaseDeps(runCommand);
+    delete (deps as { readCandidateCspHeaders?: unknown }).readCandidateCspHeaders;
+    const fetchImpl = vi.fn(async () => new Response("<!doctype html>", {
+      status: 200,
+      headers: {
+        "Content-Security-Policy": "default-src 'self'; script-src 'self' 'nonce-live' https://us-assets.i.posthog.com; report-uri /csp-report; report-to csp-endpoint",
+        "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+        "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+      },
+    }));
+    vi.stubGlobal("fetch", fetchImpl);
+
+    await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({
+      status: "promoted",
+      candidateVersionId: CANDIDATE_VERSION,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(String(url)).toBe("https://spoonjoy.app/?candidate_csp_verification=1");
+    expect(init).toMatchObject({
+      cache: "no-store",
+      redirect: "error",
+      headers: {
+        Accept: "text/html",
+        "Cloudflare-Workers-Version-Overrides": `spoonjoy-v2=\"${CANDIDATE_VERSION}\"`,
+      },
+    });
+  });
+
   it("restores the previous version when the candidate smoke fails", async () => {
     const smokeCommand = `pnpm run smoke:mcp:oauth -- --out mcp-oauth-canary-artifacts --worker-version-id ${CANDIDATE_VERSION}`;
     const runCommand = successfulRunner({

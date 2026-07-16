@@ -5,7 +5,7 @@ export const EXPECTED_PRISMA_D1_TRANSACTION_WARNING =
 
 const ANSI_PATTERN = /\u001b\[[0-9;]*m/g;
 const WARNING_LINE_PATTERN =
-  /^\s*(?:\([^)]*\)\s*)?(?:prisma:warn\b|warn(?:ing)?\b:?|[A-Za-z]+Warning:)/i;
+  /^\s*(?:\([^)]*\)\s*)?(?:prisma:warn\b|warn(?:ing)?(?::|\s)|[A-Za-z]+Warning:)/i;
 
 export interface WarningGateCommandResult {
   exitCode: number;
@@ -69,6 +69,20 @@ export function parseWarningGateCommands(argv: readonly string[]): string[][] {
   return commands;
 }
 
+export function resolveSpawnedCommandClose(
+  code: number | null,
+  signal: NodeJS.Signals | null,
+  output: string,
+): WarningGateCommandResult {
+  if (signal) {
+    return {
+      exitCode: 1,
+      output: `${output}warning-gate child terminated by ${signal}\n`,
+    };
+  }
+  return { exitCode: code ?? 1, output };
+}
+
 export function runSpawnedCommand(command: readonly string[]): Promise<WarningGateCommandResult> {
   const [file, ...args] = command;
   if (!file) throw new Error("warning-gate received an empty command.");
@@ -92,19 +106,14 @@ export function runSpawnedCommand(command: readonly string[]): Promise<WarningGa
     });
     child.on("error", reject);
     child.on("close", (code, signal) => {
-      if (signal) {
-        output += `warning-gate child terminated by ${signal}\n`;
-        resolve({ exitCode: 1, output });
-        return;
-      }
-      resolve({ exitCode: code ?? 1, output });
+      resolve(resolveSpawnedCommandClose(code, signal, output));
     });
   });
 }
 
 export async function runWarningGate(
   argv: readonly string[],
-  deps: { runCommand?: WarningGateCommandRunner } = {},
+  deps: { runCommand?: WarningGateCommandRunner },
 ): Promise<WarningGateResult> {
   const commands = parseWarningGateCommands(argv);
   const runCommand = deps.runCommand ?? runSpawnedCommand;
@@ -126,10 +135,19 @@ export async function runWarningGate(
   };
 }
 
-async function main(): Promise<void> {
-  const result = await runWarningGate(process.argv.slice(2));
+export interface WarningGateMainDeps {
+  runCommand?: WarningGateCommandRunner;
+  writeStderr?: (message: string) => void;
+  setExitCode?: (exitCode: number) => void;
+}
+
+export async function main(
+  argv: readonly string[],
+  deps: WarningGateMainDeps,
+): Promise<WarningGateResult> {
+  const result = await runWarningGate(argv, { runCommand: deps.runCommand });
   if (result.unexpectedWarnings.length > 0) {
-    process.stderr.write(
+    (deps.writeStderr ?? ((message) => process.stderr.write(message)))(
       [
         "warning-gate failed: unexpected warning output detected.",
         ...result.unexpectedWarnings.map((line) => `- ${line}`),
@@ -137,12 +155,15 @@ async function main(): Promise<void> {
       ].join("\n"),
     );
   }
-  process.exitCode = result.exitCode;
+  (deps.setExitCode ?? ((exitCode) => {
+    process.exitCode = exitCode;
+  }))(result.exitCode);
+  return result;
 }
 
 /* istanbul ignore if -- @preserve CLI boundary delegates to tested functions above. */
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch((error) => {
+  main(process.argv.slice(2), {}).catch((error) => {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;
   });
