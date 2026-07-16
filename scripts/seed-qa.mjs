@@ -90,9 +90,26 @@ export function main(argv = process.argv.slice(2), execFile = execFileSync, io =
     return;
   }
 
-  execFile("pnpm", wranglerQaSeedArgs(seedSql), { stdio: "inherit" });
-  if (!options.skipTeardown) {
-    execFile("pnpm", wranglerQaSeedArgs(teardownSql), { stdio: "inherit" });
+  if (options.skipTeardown) {
+    execFile("pnpm", wranglerQaSeedArgs(seedSql), { stdio: "inherit" });
+    return;
+  }
+
+  let seedError;
+  try {
+    execFile("pnpm", wranglerQaSeedArgs(seedSql), { stdio: "inherit" });
+  } catch (error) {
+    seedError = error;
+    throw error;
+  } finally {
+    try {
+      execFile("pnpm", wranglerQaSeedArgs(teardownSql), { stdio: "inherit" });
+    } catch (teardownError) {
+      if (seedError) {
+        throw new AggregateError([seedError, teardownError], "QA seed and teardown both failed");
+      }
+      throw teardownError;
+    }
   }
 }
 

@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   buildQaSeedTeardownSql,
   buildQaSeedSql,
   createQaSeedRun,
+  main,
   parseSeedQaArgs,
   wranglerQaSeedArgs,
 } from "../../scripts/seed-qa.mjs";
@@ -81,5 +82,89 @@ describe("seed-qa", () => {
   it("refuses production and missing target envs", () => {
     expect(() => parseSeedQaArgs([])).toThrow(/--target-env qa/);
     expect(() => parseSeedQaArgs(["--target-env", "production"])).toThrow(/refuses/);
+  });
+
+  it("tears down the exact run after a successful seed", () => {
+    const execFile = vi.fn();
+
+    main(["--target-env", "qa"], execFile, { log: vi.fn() });
+
+    expect(execFile).toHaveBeenCalledTimes(2);
+    expect(execFile.mock.calls[0]?.[0]).toBe("pnpm");
+    expect(execFile.mock.calls[0]?.[1]).toContain("--remote");
+    expect(execFile.mock.calls[0]?.[1].at(-1)).toContain("INSERT INTO \"User\"");
+    expect(execFile.mock.calls[1]?.[0]).toBe("pnpm");
+    expect(execFile.mock.calls[1]?.[1]).toContain("--remote");
+    expect(execFile.mock.calls[1]?.[1].at(-1)).toContain("DELETE FROM \"User\"");
+  });
+
+  it("still tears down when seeding fails after partially writing rows", () => {
+    const seedFailure = new Error("seed failed");
+    const execFile = vi.fn()
+      .mockImplementationOnce(() => {
+        throw seedFailure;
+      })
+      .mockImplementationOnce(() => undefined);
+
+    expect(() => main(["--target-env", "qa"], execFile, { log: vi.fn() })).toThrow(seedFailure);
+    expect(execFile).toHaveBeenCalledTimes(2);
+    expect(execFile.mock.calls[1]?.[1].at(-1)).toContain("DELETE FROM \"User\"");
+  });
+
+  it("propagates teardown failures after a successful seed", () => {
+    const teardownFailure = new Error("teardown failed");
+    const execFile = vi.fn()
+      .mockImplementationOnce(() => undefined)
+      .mockImplementationOnce(() => {
+        throw teardownFailure;
+      });
+
+    expect(() => main(["--target-env", "qa"], execFile, { log: vi.fn() })).toThrow(teardownFailure);
+    expect(execFile).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports both failures when seeding and teardown fail", () => {
+    const seedFailure = new Error("seed failed");
+    const teardownFailure = new Error("teardown failed");
+    const execFile = vi.fn()
+      .mockImplementationOnce(() => {
+        throw seedFailure;
+      })
+      .mockImplementationOnce(() => {
+        throw teardownFailure;
+      });
+    let thrown: unknown;
+
+    try {
+      main(["--target-env", "qa"], execFile, { log: vi.fn() });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(AggregateError);
+    expect((thrown as AggregateError).errors).toEqual([seedFailure, teardownFailure]);
+    expect(execFile).toHaveBeenCalledTimes(2);
+  });
+
+  it("honors explicit teardown retention even when seeding fails", () => {
+    const seedFailure = new Error("seed failed");
+    const execFile = vi.fn(() => {
+      throw seedFailure;
+    });
+
+    expect(() => main(["--target-env", "qa", "--skip-teardown"], execFile, { log: vi.fn() })).toThrow(seedFailure);
+    expect(execFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("prints both statements without executing during a dry run", () => {
+    const execFile = vi.fn();
+    const log = vi.fn();
+
+    main(["--target-env", "qa", "--dry-run"], execFile, { log });
+
+    expect(execFile).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledOnce();
+    expect(log.mock.calls[0]?.[0]).toContain("INSERT INTO \"User\"");
+    expect(log.mock.calls[0]?.[0]).toContain("DELETE FROM \"User\"");
   });
 });
