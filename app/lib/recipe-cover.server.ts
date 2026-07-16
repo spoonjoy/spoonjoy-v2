@@ -3,18 +3,28 @@ import {
   touchNativeSyncCookbooksForRecipe,
   touchNativeSyncCookbooksForRecipeOperation,
 } from "~/lib/native-sync-invalidation.server";
+import {
+  assertRecipeCoverGenerationStatus as assertGenerationStatus,
+  assertRecipeCoverSourceType as assertSourceType,
+  assertRecipeCoverStatus as assertCoverStatus,
+  assertRecipeCoverVariant as assertCoverVariant,
+  normalizeRecipeCoverMode as normalizeCoverMode,
+  normalizeRecipeCoverStatus as normalizeCoverStatus,
+  normalizeRecipeCoverVariant as normalizeVariant,
+  type RecipeCoverGenerationStatus,
+  type RecipeCoverMode,
+  type RecipeCoverSourceType,
+  type RecipeCoverStatus,
+  type RecipeCoverVariant,
+} from "~/lib/recipe-cover-schema.server";
 
-export type RecipeCoverSourceType = "ai-placeholder" | "import" | "chef-upload" | "spoon";
-export type RecipeCoverVariant = "image" | "stylized";
-export type RecipeCoverMode = "auto" | "manual" | "none";
-export type RecipeCoverStatus = "processing" | "ready" | "failed" | "archived";
-export type RecipeCoverGenerationStatus = "none" | "processing" | "succeeded" | "failed";
-
-const COVER_SOURCE_TYPES = ["ai-placeholder", "import", "chef-upload", "spoon"] as const;
-const COVER_VARIANTS = ["image", "stylized"] as const;
-const COVER_MODES = ["auto", "manual", "none"] as const;
-const COVER_STATUSES = ["processing", "ready", "failed", "archived"] as const;
-const COVER_GENERATION_STATUSES = ["none", "processing", "succeeded", "failed"] as const;
+export type {
+  RecipeCoverGenerationStatus,
+  RecipeCoverMode,
+  RecipeCoverSourceType,
+  RecipeCoverStatus,
+  RecipeCoverVariant,
+} from "~/lib/recipe-cover-schema.server";
 
 export const RECIPE_COVER_DISPLAY_SELECT = {
   id: true,
@@ -339,26 +349,6 @@ export async function backfillActiveCoverForRecipe(
   });
 }
 
-function normalizeVariant(value: string | null | undefined): RecipeCoverVariant | null {
-  return isOneOf(value, COVER_VARIANTS) ? value : null;
-}
-
-function normalizeCoverMode(value: string | null | undefined): RecipeCoverMode | null {
-  if (value == null) return "auto";
-  return isOneOf(value, COVER_MODES) ? value : null;
-}
-
-function normalizeCoverStatus(value: string | null | undefined): RecipeCoverStatus | null {
-  return isOneOf(value, COVER_STATUSES) ? value : null;
-}
-
-function isOneOf<T extends string>(
-  value: string | null | undefined,
-  options: readonly T[],
-): value is T {
-  return options.includes(value as T);
-}
-
 function hasNonEmptyUrl(value: string | null | undefined): value is string {
   return typeof value === "string" && value.length > 0;
 }
@@ -432,29 +422,6 @@ function assertVariantAvailable(cover: RecipeCover, variant: RecipeCoverVariant)
   }
 }
 
-function assertSourceType(sourceType: string): asserts sourceType is RecipeCoverSourceType {
-  if (!isOneOf(sourceType, COVER_SOURCE_TYPES)) {
-    throw new Error("Invalid cover source type");
-  }
-}
-
-function assertCoverStatus(status: string): asserts status is RecipeCoverStatus {
-  if (!isOneOf(status, COVER_STATUSES)) {
-    throw new Error("Invalid cover status");
-  }
-}
-
-function assertGenerationStatus(status: string): asserts status is RecipeCoverGenerationStatus {
-  if (!isOneOf(status, COVER_GENERATION_STATUSES)) {
-    throw new Error("Invalid cover generation status");
-  }
-}
-
-function assertCoverVariant(variant: string): asserts variant is RecipeCoverVariant {
-  if (!isOneOf(variant, COVER_VARIANTS)) {
-    throw new Error("Invalid cover variant");
-  }
-}
 
 function xmlEscape(value: string): string {
   return value
