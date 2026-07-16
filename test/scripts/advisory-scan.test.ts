@@ -7,6 +7,7 @@ import {
   createAdvisoryScannerCommand,
   loadAdvisoryAllowlist,
   runAdvisoryScan,
+  runAdvisoryScanCli,
   type CommandRunner,
 } from "../../scripts/advisory-scan";
 
@@ -195,6 +196,36 @@ describe("advisory scan gate", () => {
           source: "pnpm-lock.yaml",
         }),
       ]);
+    });
+  });
+});
+
+describe("advisory scan CLI", () => {
+  it("returns a failing status for actionable findings", async () => {
+    await withTempDir(async (directory) => {
+      const runner: CommandRunner = async () => {
+        await writeFile(path.join(directory, "osv.json"), vulnerableScannerJson());
+        return { exitCode: 1, stdout: "", stderr: "" };
+      };
+      const messages: string[] = [];
+      await writeFile(path.join(directory, "allowlist.json"), JSON.stringify({ allowedVulnerabilities: [] }));
+
+      const exitCode = await runAdvisoryScanCli(
+        [
+          "--scanner",
+          "/tmp/osv-scanner",
+          "--allowlist",
+          path.join(directory, "allowlist.json"),
+          "--output",
+          path.join(directory, "osv.json"),
+        ],
+        runner,
+        { error: (message) => messages.push(message), log: (message) => messages.push(message) },
+        new Date("2026-07-16T00:00:00Z"),
+      );
+
+      expect(exitCode).toBe(1);
+      expect(messages.join("\n")).toContain("GHSA-test-vuln");
     });
   });
 });
