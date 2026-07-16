@@ -19,6 +19,17 @@ async function getFirstRecipeHref(page: Page) {
   return publicRecipeHrefByTitle(page, 'Thai Green Curry');
 }
 
+async function addFirstRecipeStep(page: Page) {
+  const stepCards = page.locator('article[aria-label^="Step"]');
+  const addStepButton = page.getByRole('button', { name: /add step/i }).first();
+  await expect(async () => {
+    if (await stepCards.count() === 0) {
+      await addStepButton.click();
+    }
+    await expect(stepCards).toHaveCount(1, { timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
+  return stepCards.first().getByLabel(/instructions/i);
+}
 async function expectTouchTarget(locator: Locator, label: string) {
   await expect(locator, `${label} should be visible`).toBeVisible();
 
@@ -52,17 +63,11 @@ test.describe('Mobile RecipeBuilder and SpoonDock audit', () => {
     await expect(page.getByRole('heading', { name: 'Write the version future-you can actually cook.' })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Spoonjoy navigation' })).toHaveCount(0);
 
-    await page.getByLabel(/^Title$/).last().fill(`Mobile Audit ${Date.now()}`);
-    const addStepButton = page.getByRole('button', { name: 'Add Step' });
-    const instructions = page.getByRole('textbox', { name: 'Instructions' });
-    await expect(addStepButton).toBeVisible();
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      await addStepButton.click();
-      if (await instructions.isVisible({ timeout: 1_000 }).catch(() => false)) {
-        break;
-      }
-    }
-    await expect(instructions).toBeVisible();
+    const instructions = await addFirstRecipeStep(page);
+    const title = page.getByLabel(/^Title$/).last();
+    const uniqueTitle = `Mobile Audit ${Date.now()}`;
+    await title.fill(uniqueTitle);
+    await expect(title).toHaveValue(uniqueTitle);
     await instructions.fill('Stir until glossy.');
 
     await expectTouchTarget(page.getByRole('button', { name: 'Save' }).first(), 'step Save button');
@@ -85,7 +90,6 @@ test.describe('Mobile RecipeBuilder and SpoonDock audit', () => {
       await createAction.click();
       await expect(page).toHaveURL(/\/recipes\/(?!new$)[A-Za-z0-9_-]+$/, { timeout: 15_000 });
       recipeHref = new URL(page.url()).pathname;
-
       await page.goto(`${recipeHref}/edit`);
       await page.waitForLoadState('networkidle');
       await expect(page.getByRole('heading', { name: 'Edit Recipe' })).toBeVisible();

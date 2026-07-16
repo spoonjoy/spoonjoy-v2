@@ -19,7 +19,6 @@ import { loginAsDisposableUser } from '../support/auth';
  */
 
 const REDIRECT_URI = 'https://client.example/oauth/e2e-callback';
-const MCP_RESOURCE = 'https://spoonjoy.app/mcp';
 const APPROVE_STATE = 'oauth-e2e-approve-state';
 const DENY_STATE = 'oauth-e2e-deny-state';
 
@@ -50,7 +49,15 @@ async function registerClient(request: APIRequestContext): Promise<string> {
   return body.client_id;
 }
 
-function authorizeUrl(opts: { clientId: string; codeChallenge: string; state: string }): string {
+async function advertisedMcpResource(request: APIRequestContext): Promise<string> {
+  const response = await request.get('/.well-known/oauth-protected-resource/mcp');
+  expect(response.status()).toBe(200);
+  const body = (await response.json()) as { resource?: unknown };
+  expect(body.resource).toMatch(/^https?:\/\/.+\/mcp$/);
+  return body.resource as string;
+}
+
+function authorizeUrl(opts: { clientId: string; codeChallenge: string; state: string; resource: string }): string {
   const params = new URLSearchParams({
     client_id: opts.clientId,
     redirect_uri: REDIRECT_URI,
@@ -59,7 +66,7 @@ function authorizeUrl(opts: { clientId: string; codeChallenge: string; state: st
     code_challenge_method: 'S256',
     scope: 'kitchen:read',
     state: opts.state,
-    resource: MCP_RESOURCE,
+    resource: opts.resource,
   });
   return `/oauth/authorize?${params}`;
 }
@@ -197,9 +204,10 @@ test.describe('OAuth authorize + consent flow', () => {
   test('unauthenticated authorize gates to login, then consent grants a code', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const clientId = await registerClient(page.request);
+    const resource = await advertisedMcpResource(page.request);
     const verifier = randomVerifier();
     const challenge = await pkceChallenge(verifier);
-    const authorize = authorizeUrl({ clientId, codeChallenge: challenge, state: APPROVE_STATE });
+    const authorize = authorizeUrl({ clientId, codeChallenge: challenge, state: APPROVE_STATE, resource });
 
     // Unauthenticated: the authorize endpoint must redirect to /login, carrying
     // the authorize URL forward in redirectTo so we return after signing in.
@@ -247,9 +255,10 @@ test.describe('OAuth authorize + consent flow', () => {
 
   test('denying consent redirects back with access_denied', async ({ page }) => {
     const clientId = await registerClient(page.request);
+    const resource = await advertisedMcpResource(page.request);
     const verifier = randomVerifier();
     const challenge = await pkceChallenge(verifier);
-    const authorize = authorizeUrl({ clientId, codeChallenge: challenge, state: DENY_STATE });
+    const authorize = authorizeUrl({ clientId, codeChallenge: challenge, state: DENY_STATE, resource });
 
     await page.goto(authorize);
     await expect(page).toHaveURL(/\/login\?redirectTo=/);
