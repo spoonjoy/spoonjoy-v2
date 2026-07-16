@@ -148,7 +148,7 @@ jobs:
 
       - name: 🎭 Install Playwright Browsers
         run: |
-          node scripts/warning-gate.ts -- sudo env NEEDRESTART_SUSPEND=1 "PATH=$PATH" pnpm exec playwright install-deps chromium
+          node scripts/warning-gate.ts -- sudo env NEEDRESTART_SUSPEND=1 "PATH=$PATH" node node_modules/@playwright/test/cli.js install-deps chromium
           node scripts/warning-gate.ts -- pnpm exec playwright install chromium
 
       - name: 🗄️ Apply D1 migrations

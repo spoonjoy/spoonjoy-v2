@@ -153,7 +153,7 @@ describe("CI warning suppression at source", () => {
     expect(ci).toContain([
       "      - name: 🎭 Install Playwright Browsers",
       "        run: |",
-      '          node scripts/warning-gate.ts -- sudo env NEEDRESTART_SUSPEND=1 "PATH=$PATH" pnpm exec playwright install-deps chromium',
+      '          node scripts/warning-gate.ts -- sudo env NEEDRESTART_SUSPEND=1 "PATH=$PATH" node node_modules/@playwright/test/cli.js install-deps chromium',
       "          node scripts/warning-gate.ts -- pnpm exec playwright install chromium",
     ].join("\n"));
     expect(ci.match(/NEEDRESTART_SUSPEND=1/g)).toHaveLength(1);
