@@ -26,6 +26,7 @@ describe("shared recipe cover service architecture", () => {
     expect(serviceSource).toContain("scheduleRecipeCoverStylization");
     expect(serviceSource).toContain("scheduleRecipePlaceholderGeneration");
     expect(serviceSource).toContain("activateRecipeCoverWithBestAvailableVariant");
+    expect(serviceSource).toContain("validateRecipeCoverImageSource");
     expect(restSource).toContain('from "~/lib/recipe-cover-service.server"');
     expect(mcpSource).toContain('from "~/lib/recipe-cover-service.server"');
   });
@@ -37,6 +38,7 @@ describe("shared recipe cover service architecture", () => {
     for (const adapterSource of [restSource, mcpSource]) {
       expect(adapterSource).not.toContain('from "~/lib/spoon-cover-stylization.server"');
       expect(adapterSource).not.toContain('from "~/lib/ai-placeholder-cover.server"');
+      expect(adapterSource).not.toContain("validateRecipeImageAssignment");
       expect(adapterSource).not.toContain("scheduleSpoonCoverStylization(");
       expect(adapterSource).not.toContain("scheduleAiPlaceholderCover(");
     }
