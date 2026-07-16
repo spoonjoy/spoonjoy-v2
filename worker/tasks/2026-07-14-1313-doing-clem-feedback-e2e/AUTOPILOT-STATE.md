@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; reviewed contract checkpoint `011043f056da82ba4e706db8112e223b3cc2c392` integrates `origin/main@dcf296bd`; latest completed reviewer input HEAD is `08ef7082defc42965fe11a58cf48569f6536feb0`. Quality converged there; one keychain-limited non-review is discarded. Commits after that input may only record/synchronize the valid verdict and gate until Tinfoil receives the resulting exact HEAD.
+- Branch: `worker/clem-feedback-e2e`; reviewed contract checkpoint `2bd442756b78b674e33dc8575fc93625ad72e5a1` integrates `origin/main@dcf296bd`; latest completed reviewer input HEAD is `499240918a95889635a729f573350335af2adaa6`. Tinfoil found one health implementation-owner blocker; this checkpoint fixes it. Commits after that input may only record/synchronize its verdict and gate until the next reviewer receives the resulting exact HEAD.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is approved after five fresh hostile rounds.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation has not started.
-- Active gate: Quality is clean; Scrutiny is at zero consecutive clean passes. Commit/push/synchronize this state-only record, then run fresh Tinfoil followed immediately by Stranger when clean.
+- Active gate: the Unit29.1 health ownership change invalidates prior Quality and resets Scrutiny. Commit/push/synchronize this checkpoint, re-run fresh Quality, then restart Tinfoil followed immediately by Stranger when clean.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Commit/push this exact Quality record, synchronize/push the active Desk mirrors and task metadata while leaving Desk drafting/planning incomplete, then run fresh Tinfoil.
+Commit/push this exact checkpoint state, synchronize/push the active Desk mirrors and task metadata while leaving Desk drafting/planning incomplete, then re-run fresh Quality.
 
 ## Operator-Locked Rules
 
@@ -41,7 +41,7 @@ Commit/push this exact Quality record, synchronize/push the active Desk mirrors 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
 | Planning reviewer gate | deferred by scope | Planning approved at `2c3b4759` after convergence | Closed |
-| Doing review chain | needs reviewer gate | Granularity, Validation, Ambiguity, and continuity/current-main Quality converged; Scrutiny is reset | Commit/sync exact Quality record, then restart Tinfoil |
+| Doing review chain | needs reviewer gate | Granularity, Validation, and Ambiguity converged; Tinfoil Round 7's health ownership blocker is fixed, resetting Quality/Scrutiny | Commit/sync exact checkpoint, re-run Quality, then restart Tinfoil |
 | Work Doer Units 0-37 | ready | Full red/green/verify/visual/ship queue is defined | Start after doing review convergence |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
 
