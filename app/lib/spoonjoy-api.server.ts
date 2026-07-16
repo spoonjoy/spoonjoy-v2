@@ -30,10 +30,7 @@ import {
 } from "~/lib/recipe-cover.server";
 import { uploadFoodImage } from "~/lib/image-upload-tools.server";
 import { FOOD_IMAGE_TYPES } from "~/lib/recipe-image";
-import {
-  validateRecipeImageAssignment,
-  validateSpoonPhotoAssignment,
-} from "~/lib/recipe-image-assignment.server";
+import { validateSpoonPhotoAssignment } from "~/lib/recipe-image-assignment.server";
 import { normalizeSearchScope, searchSpoonjoy } from "~/lib/search.server";
 import {
   createSpoon as createRecipeSpoon,
@@ -46,9 +43,14 @@ import {
   SpoonAuthError,
   SpoonNotFoundError,
 } from "~/lib/recipe-spoon.server";
-import { scheduleAiPlaceholderCover } from "~/lib/ai-placeholder-cover.server";
-import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
-import { sanitizeImagePromptAddition, type ImageGenEnv, type ImageGenRunner } from "~/lib/image-gen.server";
+import {
+  activateRecipeCoverWithBestAvailableVariant,
+  sanitizeRecipeCoverPromptAddition,
+  scheduleRecipeCoverStylization,
+  scheduleRecipePlaceholderGeneration,
+  validateRecipeCoverImageSource,
+} from "~/lib/recipe-cover-service.server";
+import type { ImageGenEnv, ImageGenRunner } from "~/lib/image-gen.server";
 import {
   resolvePostHogServerConfig,
   type PostHogServerEnv,
@@ -355,106 +357,6 @@ function runOrSchedule(
     return Promise.resolve();
   }
   return task;
-}
-
-async function scheduleCoverStylization(
-  context: SpoonjoyApiContext,
-  input: {
-    userId: string;
-    recipeId: string;
-    coverId: string;
-    parentCoverId?: string | null;
-    promptAddition?: string | null;
-    rawPhotoUrl: string;
-    recipeTitle: string;
-    sourceType: "chef-upload" | "spoon";
-    activateWhenReady?: boolean;
-    suppressAutoActivation?: boolean;
-    activationGuard?: {
-      activeCoverId: string | null;
-      activeCoverVariant: string | null;
-      coverMode: string;
-    };
-  },
-): Promise<void> {
-  const task = scheduleSpoonCoverStylization({
-    db: context.db,
-    userId: input.userId,
-    recipeId: input.recipeId,
-    coverId: input.coverId,
-    parentCoverId: input.parentCoverId,
-    promptAddition: input.promptAddition,
-    rawPhotoUrl: input.rawPhotoUrl,
-    recipeTitle: input.recipeTitle,
-    env: context.env ?? null,
-    bucket: context.bucket,
-    runner: context.imageGenRunner,
-    allowLocalImageFallback: context.allowLocalImageFallback,
-    sourceType: input.sourceType,
-    activateWhenReady: input.activateWhenReady,
-    suppressAutoActivation: input.suppressAutoActivation,
-    activationGuard: input.activationGuard,
-    logger: context.logger,
-  });
-  await task;
-}
-
-async function schedulePlaceholderCover(
-  context: SpoonjoyApiContext,
-  input: {
-    userId: string;
-    recipeId: string;
-    coverId: string;
-    title: string;
-    description: string | null;
-    promptAddition?: string | null;
-    activateWhenReady?: boolean;
-    activationGuard?: {
-      activeCoverId: string | null;
-      activeCoverVariant: string | null;
-      coverMode: string;
-    };
-  },
-): Promise<void> {
-  const task = scheduleAiPlaceholderCover({
-    db: context.db,
-    userId: input.userId,
-    recipeId: input.recipeId,
-    coverId: input.coverId,
-    title: input.title,
-    description: input.description,
-    promptAddition: input.promptAddition,
-    env: context.env ?? null,
-    bucket: context.bucket,
-    runner: context.imageGenRunner,
-    activateWhenReady: input.activateWhenReady,
-    suppressAutoActivation: !input.activateWhenReady,
-    activationGuard: input.activationGuard,
-    logger: context.logger,
-  });
-  if (context.waitUntil) {
-    context.waitUntil(task);
-    return;
-  }
-  await task;
-}
-
-async function activateUploadedRecipeCover(
-  context: SpoonjoyApiContext,
-  input: {
-    recipeId: string;
-    coverId: string;
-  },
-): Promise<void> {
-  const cover = await context.db.recipeCover.findUnique({
-    where: { id: input.coverId },
-    select: { stylizedImageUrl: true },
-  });
-  await setActiveRecipeCover(context.db, {
-    recipeId: input.recipeId,
-    coverId: input.coverId,
-    variant: cover?.stylizedImageUrl ? "stylized" : "image",
-  });
 }
 
 function formatSpoon(spoon: {
@@ -1753,7 +1655,7 @@ const createRecipeCoverFromUploadTool: SpoonjoyApiOperation = {
     const generateEditorial = optionalBooleanArgument(args, "generateEditorial", true);
     const dryRun = optionalBooleanArgument(args, "dryRun");
     const idempotencyKey = optionalString(args.idempotencyKey);
-    const promptAddition = sanitizeImagePromptAddition(optionalStringArgument(args, "promptAddition"));
+    const promptAddition = sanitizeRecipeCoverPromptAddition(optionalStringArgument(args, "promptAddition"));
     const postAsSpoon = optionalBooleanArgument(args, "postAsSpoon");
     const note = optionalStringArgument(args, "note") ?? null;
     const nextTime = optionalStringArgument(args, "nextTime") ?? null;
@@ -1769,7 +1671,7 @@ const createRecipeCoverFromUploadTool: SpoonjoyApiOperation = {
       idempotencyKey,
       dryRun,
       write: async (mutationKey) => {
-        await validateRecipeImageAssignment({
+        await validateRecipeCoverImageSource({
           imageUrl,
           ownerId: principal.id,
           bucket: context.bucket,
@@ -1811,7 +1713,7 @@ const createRecipeCoverFromUploadTool: SpoonjoyApiOperation = {
         });
 
         if (generateEditorial) {
-          await scheduleCoverStylization(context, {
+          await scheduleRecipeCoverStylization(context, {
             userId: principal.id,
             recipeId,
             coverId: cover.id,
@@ -1873,7 +1775,7 @@ const generateRecipeCoverPlaceholderTool: SpoonjoyApiOperation = {
     const principal = requireApiPrincipal(context.principal);
     const recipeId = requiredString(args, "recipeId");
     const idempotencyKey = requiredString(args, "idempotencyKey");
-    const promptAddition = sanitizeImagePromptAddition(optionalStringArgument(args, "promptAddition"));
+    const promptAddition = sanitizeRecipeCoverPromptAddition(optionalStringArgument(args, "promptAddition"));
     const activateWhenReady = optionalBooleanArgument(args, "activateWhenReady");
     const dryRun = optionalBooleanArgument(args, "dryRun");
     const recipe = await findOwnedCoverMutationRecipe(context, principal, recipeId);
@@ -1907,7 +1809,7 @@ const generateRecipeCoverPlaceholderTool: SpoonjoyApiOperation = {
           promptAddition,
         });
 
-        await schedulePlaceholderCover(context, {
+        await scheduleRecipePlaceholderGeneration(context, {
           userId: principal.id,
           recipeId,
           coverId: cover.id,
@@ -1922,6 +1824,8 @@ const generateRecipeCoverPlaceholderTool: SpoonjoyApiOperation = {
                 coverMode: recipe.coverMode,
               }
             : undefined,
+        }, {
+          scheduling: "waitUntil",
         });
 
         const nextRecipe = await reloadCoverMutationRecipe(context, recipeId);
@@ -2011,7 +1915,7 @@ const createRecipeCoverFromSpoonTool: SpoonjoyApiOperation = {
         });
 
         if (generateEditorial) {
-          await scheduleCoverStylization(context, {
+          await scheduleRecipeCoverStylization(context, {
             userId: principal.id,
             recipeId,
             coverId: cover.id,
@@ -2076,7 +1980,7 @@ const regenerateRecipeCoverTool: SpoonjoyApiOperation = {
     const activateWhenReady = optionalBooleanArgument(args, "activateWhenReady");
     const dryRun = optionalBooleanArgument(args, "dryRun");
     const idempotencyKey = optionalString(args.idempotencyKey);
-    const promptAddition = sanitizeImagePromptAddition(optionalStringArgument(args, "promptAddition"));
+    const promptAddition = sanitizeRecipeCoverPromptAddition(optionalStringArgument(args, "promptAddition"));
     const recipe = await findOwnedCoverMutationRecipe(context, principal, recipeId);
     const previousActiveCover = await activeFullCoverPayload(context, recipe);
 
@@ -2117,7 +2021,7 @@ const regenerateRecipeCoverTool: SpoonjoyApiOperation = {
             parentCoverId: cover.id,
           },
         });
-        await scheduleCoverStylization(context, {
+        await scheduleRecipeCoverStylization(context, {
           userId: principal.id,
           recipeId,
           coverId: cover.id,
@@ -2401,7 +2305,7 @@ const createRecipeTool: SpoonjoyApiOperation = {
     });
     if (!titleUniqueness.valid) throw new Error(titleUniqueness.error);
     if (imageUrl) {
-      await validateRecipeImageAssignment({
+      await validateRecipeCoverImageSource({
         imageUrl,
         ownerId: owner.id,
         bucket: context.bucket,
@@ -2426,7 +2330,7 @@ const createRecipeTool: SpoonjoyApiOperation = {
         imageUrl,
         sourceType: "chef-upload",
       });
-      await scheduleCoverStylization(context, {
+      await scheduleRecipeCoverStylization(context, {
         userId: owner.id,
         recipeId: created.id,
         coverId: cover.id,
@@ -2434,7 +2338,7 @@ const createRecipeTool: SpoonjoyApiOperation = {
         recipeTitle: title,
         sourceType: "chef-upload",
       });
-      await activateUploadedRecipeCover(context, {
+      await activateRecipeCoverWithBestAvailableVariant(context.db, {
         recipeId: created.id,
         coverId: cover.id,
       });
@@ -2530,7 +2434,7 @@ const updateRecipeTool: SpoonjoyApiOperation = {
     if (sourceUrl !== undefined) data.sourceUrl = sourceUrl;
 
     if (imageUrl) {
-      await validateRecipeImageAssignment({
+      await validateRecipeCoverImageSource({
         imageUrl,
         ownerId: owner.id,
         bucket: context.bucket,
@@ -2552,7 +2456,7 @@ const updateRecipeTool: SpoonjoyApiOperation = {
         imageUrl,
         sourceType: "chef-upload",
       });
-      await scheduleCoverStylization(context, {
+      await scheduleRecipeCoverStylization(context, {
         userId: owner.id,
         recipeId: existing.id,
         coverId: cover.id,
@@ -2560,7 +2464,7 @@ const updateRecipeTool: SpoonjoyApiOperation = {
         recipeTitle: title ?? existing.title,
         sourceType: "chef-upload",
       });
-      await activateUploadedRecipeCover(context, {
+      await activateRecipeCoverWithBestAvailableVariant(context.db, {
         recipeId: existing.id,
         coverId: cover.id,
       });
@@ -3302,7 +3206,7 @@ const createSpoonTool: SpoonjoyApiOperation = {
         sourceSpoonId: result.spoon.id,
       });
       if (photoAssignment.stylizable) {
-        await scheduleCoverStylization(context, {
+        await scheduleRecipeCoverStylization(context, {
           userId: principal.id,
           recipeId,
           coverId: cover.id,
@@ -3431,7 +3335,7 @@ const updateSpoonTool: SpoonjoyApiOperation = {
           sourceSpoonId: spoon.id,
         });
         if (photoAssignment.stylizable) {
-          await scheduleCoverStylization(context, {
+          await scheduleRecipeCoverStylization(context, {
             userId: principal.id,
             recipeId: spoon.recipeId,
             coverId: cover.id,

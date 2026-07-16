@@ -132,11 +132,17 @@ import {
 } from "~/lib/recipe-spoon.server";
 import { activateSpoonCoverForDecision } from "~/lib/spoon-cover-activation.server";
 import { decideSpoonCoverCreation } from "~/lib/spoon-cover-decision.server";
-import { validateRecipeImageAssignment, validateSpoonPhotoAssignment } from "~/lib/recipe-image-assignment.server";
+import { validateSpoonPhotoAssignment } from "~/lib/recipe-image-assignment.server";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
-import { deferBackgroundTask } from "~/lib/background-task.server";
-import { scheduleAiPlaceholderCover } from "~/lib/ai-placeholder-cover.server";
-import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
+import {
+  sanitizeRecipeCoverPromptAddition,
+  scheduleRecipeCoverStylization,
+  scheduleRecipePlaceholderGeneration,
+  validateRecipeCoverImageSource,
+  type RecipeCoverGenerationContext,
+  type ScheduleRecipeCoverStylizationInput,
+  type ScheduleRecipePlaceholderGenerationInput,
+} from "~/lib/recipe-cover-service.server";
 import {
   ImportRecipeError,
   importRecipeFromSource,
@@ -144,7 +150,6 @@ import {
   type NativeRecipeImportCapture,
   type NativeRecipeImportSource,
 } from "~/lib/recipe-import.server";
-import { sanitizeImagePromptAddition, type ImageGenEnv, type ImageGenRunner } from "~/lib/image-gen.server";
 import type { PostHogServerEnv } from "~/lib/analytics-server";
 
 const DEFAULT_LIST_LIMIT = 20;
@@ -1467,7 +1472,7 @@ function optionalPromptAddition(value: unknown): string | null {
   if (typeof value !== "string") {
     throw new ApiV1Error("validation_error", "promptAddition must be a string", { field: "promptAddition" });
   }
-  return sanitizeImagePromptAddition(value);
+  return sanitizeRecipeCoverPromptAddition(value);
 }
 
 function normalizeRecipeCoverImageUrl(value: unknown, origin: string): string {
@@ -1524,12 +1529,14 @@ async function activeFullCoverPayload(db: ApiV1Db, recipe: RecipeCoverOwnerRow, 
   return cover ? fullCoverPayload(cover, recipe, origin) : null;
 }
 
-function coverCloudflare(args: ApiV1RouteArgs) {
+function coverGenerationContext(args: ApiV1RouteArgs, db: ApiV1Db): RecipeCoverGenerationContext {
   const cf = apiV1CloudflareFor(args);
   return {
+    db,
     bucket: cf?.env?.PHOTOS,
-    env: (cf?.env ?? null) as (ImageGenEnv & PostHogServerEnv) | null,
+    env: (cf?.env ?? null) as RecipeCoverGenerationContext["env"],
     waitUntil: apiV1WaitUntilFor(args),
+    imageGenRunner: (args.context as { imageGenRunner?: RecipeCoverGenerationContext["imageGenRunner"] }).imageGenRunner,
   };
 }
 
@@ -1557,7 +1564,7 @@ async function validateApiV1SpoonPhotoUrl(args: ApiV1RouteArgs, principal: ApiPr
 async function validateApiV1RecipeCoverImageUrl(args: ApiV1RouteArgs, principal: ApiPrincipal, imageUrl: string) {
   const cf = apiV1CloudflareFor(args);
   try {
-    await validateRecipeImageAssignment({
+    await validateRecipeCoverImageSource({
       imageUrl,
       ownerId: principal.id,
       bucket: cf?.env?.PHOTOS,
@@ -1583,82 +1590,27 @@ async function validateApiV1SpoonPhotoUrlForWrite(input: {
   await validateApiV1SpoonPhotoUrl(input.args, input.principal, input.photoUrl);
 }
 
-async function runOrQueueCoverStylization(
+type ApiRecipeCoverStylizationInput = ScheduleRecipeCoverStylizationInput & { db: ApiV1Db };
+type ApiRecipePlaceholderGenerationInput = ScheduleRecipePlaceholderGenerationInput & { db: ApiV1Db };
+
+async function queueApiRecipeCoverStylization(
   args: ApiV1RouteArgs,
-  input: {
-    db: ApiV1Db;
-    userId: string;
-    recipeId: string;
-    coverId: string;
-    parentCoverId?: string | null;
-    promptAddition?: string | null;
-    rawPhotoUrl: string;
-    recipeTitle: string;
-    sourceType: "chef-upload" | "spoon";
-    activateWhenReady: boolean;
-    suppressAutoActivation: boolean;
-    activationGuard?: { activeCoverId: string | null; activeCoverVariant: string | null; coverMode: string };
-  },
+  input: ApiRecipeCoverStylizationInput,
 ) {
-  const { bucket, env, waitUntil } = coverCloudflare(args);
-  const task = deferBackgroundTask(() => scheduleSpoonCoverStylization({
-    db: input.db,
-    userId: input.userId,
-    recipeId: input.recipeId,
-    coverId: input.coverId,
-    parentCoverId: input.parentCoverId,
-    promptAddition: input.promptAddition,
-    rawPhotoUrl: input.rawPhotoUrl,
-    recipeTitle: input.recipeTitle,
-    env,
-    bucket,
-    sourceType: input.sourceType,
-    activateWhenReady: input.activateWhenReady,
-    suppressAutoActivation: input.suppressAutoActivation,
-    activationGuard: input.activationGuard,
-  }));
-  if (waitUntil) {
-    waitUntil(task);
-    return;
-  }
-  await task;
+  await scheduleRecipeCoverStylization(coverGenerationContext(args, input.db), input, {
+    scheduling: "waitUntil",
+    defer: true,
+  });
 }
 
-async function runOrQueuePlaceholderGeneration(
+async function queueApiRecipePlaceholderGeneration(
   args: ApiV1RouteArgs,
-  input: {
-    db: ApiV1Db;
-    userId: string;
-    recipeId: string;
-    coverId: string;
-    title: string;
-    description: string | null;
-    promptAddition?: string | null;
-    activateWhenReady: boolean;
-    activationGuard?: { activeCoverId: string | null; activeCoverVariant: string | null; coverMode: string };
-  },
+  input: ApiRecipePlaceholderGenerationInput,
 ) {
-  const { bucket, env, waitUntil } = coverCloudflare(args);
-  const task = deferBackgroundTask(() => scheduleAiPlaceholderCover({
-    db: input.db,
-    userId: input.userId,
-    recipeId: input.recipeId,
-    coverId: input.coverId,
-    title: input.title,
-    description: input.description,
-    promptAddition: input.promptAddition,
-    env,
-    bucket,
-    runner: (args.context as { imageGenRunner?: ImageGenRunner }).imageGenRunner,
-    activateWhenReady: input.activateWhenReady,
-    suppressAutoActivation: !input.activateWhenReady,
-    activationGuard: input.activationGuard,
-  }));
-  if (waitUntil) {
-    waitUntil(task);
-    return;
-  }
-  await task;
+  await scheduleRecipePlaceholderGeneration(coverGenerationContext(args, input.db), input, {
+    scheduling: "waitUntil",
+    defer: true,
+  });
 }
 
 type RecipeRow = NonNullable<Awaited<ReturnType<typeof loadRecipeById>>>;
@@ -2109,7 +2061,7 @@ async function maybeCreateSpoonCover(
     decision,
     previousActiveCoverId: input.recipe.activeCoverId,
   });
-  await runOrQueueCoverStylization(args, {
+  await queueApiRecipeCoverStylization(args, {
     db: input.db,
     userId: input.principal.id,
     recipeId: input.recipe.id,
@@ -2541,7 +2493,7 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
       }
 
       if (generateEditorial) {
-        await runOrQueueCoverStylization(args, {
+        await queueApiRecipeCoverStylization(args, {
           db,
           userId: principal.id,
           recipeId,
@@ -2689,7 +2641,7 @@ async function handleRecipeCoverCreate(args: ApiV1RouteArgs, requestId: string, 
     }
 
     if (generateEditorial) {
-      await runOrQueueCoverStylization(args, {
+      await queueApiRecipeCoverStylization(args, {
         db,
         userId: principal.id,
         recipeId,
@@ -2747,7 +2699,7 @@ async function handleRecipeCoverGenerate(args: ApiV1RouteArgs, requestId: string
       promptAddition,
     });
 
-    await runOrQueuePlaceholderGeneration(args, {
+    await queueApiRecipePlaceholderGeneration(args, {
       db,
       userId: principal.id,
       recipeId,
@@ -2911,7 +2863,7 @@ async function handleRecipeCoverRegenerate(args: ApiV1RouteArgs, requestId: stri
         parentCoverId: cover.id,
       },
     });
-    await runOrQueueCoverStylization(args, {
+    await queueApiRecipeCoverStylization(args, {
       db,
       userId: principal.id,
       recipeId,
@@ -2973,7 +2925,7 @@ async function handleRecipeCoverFromSpoon(args: ApiV1RouteArgs, requestId: strin
       generationStatus: generateEditorial ? "processing" : "none",
     });
     if (generateEditorial) {
-      await runOrQueueCoverStylization(args, {
+      await queueApiRecipeCoverStylization(args, {
         db,
         userId: principal.id,
         recipeId,

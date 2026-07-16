@@ -113,6 +113,11 @@ jobs:
               exit 1
             fi
           done
+          required_job=advisory
+          if ! jq -e --arg required_job "$required_job" '[.jobs[] | select(.name == $required_job and .conclusion == "success")] | length == 1' <<<"$ci_jobs" >/dev/null; then
+            echo "Canonical CI run $ci_run_id is missing successful job: $required_job" >&2
+            exit 1
+          fi
 
           for attempt in $(seq 1 30); do
             storybook_runs="$(gh run list --workflow .github/workflows/storybook.yml --branch main --commit "$SOURCE_SHA" --event push --status success --limit 100 --json databaseId,headSha)"

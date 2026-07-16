@@ -22,6 +22,7 @@
     "qa:migrate": "pnpm exec wrangler d1 migrations apply DB --remote --env qa",
     "qa:seed": "node scripts/seed-qa.mjs --target-env qa",
     "production:readiness": "tsx scripts/production-readiness.ts",
+    "advisory:scan": "tsx scripts/advisory-scan.ts",
     "cleanup:qa": "node scripts/cleanup-local-qa-data.mjs --target-env local",
     "cleanup:local": "node scripts/cleanup-local-qa-data.mjs --target-env local",
     "cleanup:local:apply": "node scripts/cleanup-local-qa-data.mjs --target-env local --apply",
