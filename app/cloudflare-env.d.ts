@@ -63,6 +63,7 @@ declare global {
     /** Tighter per-IP throttle for anonymous auth attempts (login/signup/passkey). */
     AUTH_IP_RATE_LIMITER?: RateLimitBinding;
     CF_VERSION_METADATA?: WorkerVersionMetadata;
+    SPOONJOY_CSP_MODE?: string;
     SESSION_SECRET?: string;
     SPOONJOY_BASE_URL?: string;
     SPOONJOY_ALLOW_INSECURE_LOCAL_SESSIONS?: string;

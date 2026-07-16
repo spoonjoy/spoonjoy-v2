@@ -22,7 +22,7 @@ function finalizeResponse(
   env: CloudflareEnvironment,
   nonce?: string,
 ): Response {
-  const finalized = withSecurityHeaders(response, nonce);
+  const finalized = withSecurityHeaders(response, nonce, env);
   const workerVersionId = env.CF_VERSION_METADATA?.id;
   if (workerVersionId) {
     finalized.headers.set("X-Spoonjoy-Worker-Version", workerVersionId);

@@ -117,6 +117,7 @@ const REQUIRED_SCRIPT_TYPECHECK_INCLUDES = [
   "scripts/build-output-hygiene.ts",
   "scripts/deployment-preflight.ts",
   "scripts/deploy-production-canary.ts",
+  "scripts/production-readiness.ts",
   "scripts/qa-preflight.ts",
   "scripts/react-router-build.ts",
 ] as const;
@@ -1027,6 +1028,7 @@ function workflowHasStorybookDeployContract(workflow: string): boolean {
 export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): DeploymentPreflightResult {
   const scripts = packageScripts(inputs.packageJson);
   const readmeAndDeploymentDoc = `${inputs.readme}\n${inputs.deploymentDoc}`;
+  const productionVars = objectRecord(inputs.wrangler.vars);
   const envConfig = objectRecord(inputs.wrangler.env);
   const qaConfig = objectRecord(envConfig.qa);
   const qaVars = objectRecord(qaConfig.vars);
@@ -1075,6 +1077,12 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
       "wrangler.json must define env.qa with DB, PHOTOS, rate limits, NODE_ENV=production, and the QA Worker base URL."
     ),
     check(
+      "CSP enforcement config",
+      productionVars.SPOONJOY_CSP_MODE === "enforce" &&
+        qaVars.SPOONJOY_CSP_MODE === "enforce",
+      "wrangler.json must set SPOONJOY_CSP_MODE=enforce for production and QA; use report-only only as an explicit rollback."
+    ),
+    check(
       "QA resource isolation",
       qaDb?.database_name === "spoonjoy-qa" &&
         qaDb.database_id === "c6c99e80-bd51-4cf2-b7c7-b7a6e27d3f34" &&
@@ -1087,7 +1095,7 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     ),
     check(
       "production node env",
-      (inputs.wrangler.vars as Record<string, unknown> | undefined)?.NODE_ENV === "production",
+      productionVars.NODE_ENV === "production",
       "wrangler.json vars should set NODE_ENV=production for deploy builds.",
       "warning"
     ),
@@ -1182,7 +1190,7 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     ),
     check(
       "Cloudflare Env typing",
-      ["DB", "PHOTOS", "CF_VERSION_METADATA", ...REQUIRED_SECRET_NAMES, ...IMAGE_PROVIDER_ENV_NAMES].every((name) => inputs.cloudflareEnvDts.includes(`${name}?`)),
+      ["DB", "PHOTOS", "CF_VERSION_METADATA", "SPOONJOY_CSP_MODE", ...REQUIRED_SECRET_NAMES, ...IMAGE_PROVIDER_ENV_NAMES].every((name) => inputs.cloudflareEnvDts.includes(`${name}?`)),
       "app/cloudflare-env.d.ts must type all Cloudflare bindings and documented secrets."
     ),
     check(
@@ -1223,6 +1231,15 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
         "POSTHOG_DISABLED",
       ].every((item) => readmeAndDeploymentDoc.includes(item)),
       "Deployment docs must show how to enable or intentionally disable PostHog without printing secret values."
+    ),
+    check(
+      "CSP rollback documentation",
+      [
+        "SPOONJOY_CSP_MODE",
+        "Content-Security-Policy-Report-Only",
+        "one-commit rollback",
+      ].every((item) => readmeAndDeploymentDoc.includes(item)),
+      "README/deployment docs must document CSP enforcement and the report-only one-commit rollback."
     ),
     check(
       "cleanup documentation",

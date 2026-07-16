@@ -1,5 +1,5 @@
 /**
- * Baseline security response headers + a report-only Content-Security-Policy,
+ * Baseline security response headers + a mode-controlled Content-Security-Policy,
  * applied to every Worker response by {@link withSecurityHeaders}.
  *
  * Static headers (never depend on per-request state):
@@ -13,9 +13,8 @@
  *   intentionally does NOT touch `publickey-credentials-*`, so passkeys keep
  *   their default `self` allowance.
  *
- * `Content-Security-Policy-Report-Only` is built per-request by
- * {@link buildContentSecurityPolicy}. It is still NON-enforcing (report-only):
- * it never blocks a request, only POSTs violations to `/csp-report`.
+ * `SPOONJOY_CSP_MODE=enforce` emits `Content-Security-Policy`; every other
+ * value emits `Content-Security-Policy-Report-Only` as a rollback-safe default.
  *
  * `script-src` is **nonce-based**: a per-request nonce ({@link generateNonce},
  * generated once in `workers/app.ts`) is threaded both into this header AND into
@@ -25,9 +24,7 @@
  * any inline script lacking the nonce (e.g. a third-party snippet) before
  * enforcing. `style-src` deliberately KEEPS `'unsafe-inline'`: a CSP nonce covers
  * `<style>` elements but NOT inline `style="…"` attributes, which React emits
- * everywhere — so a nonce cannot replace `'unsafe-inline'` for styles. Flipping
- * report-only → enforce is the remaining follow-up, after a clean report-only
- * window confirms nothing legitimate is blocked.
+ * everywhere — so a nonce cannot replace `'unsafe-inline'` for styles.
  */
 
 /**
@@ -35,8 +32,8 @@
  * per-request `nonce`; every other directive is static. Each non-`self` origin
  * is justified against a real dependency: PostHog (`us-assets.i.posthog.com`
  * bundle, `us.i.posthog.com` ingest), Google Fonts (`fonts.googleapis.com`
- * stylesheet, `fonts.gstatic.com` files). `img-src` stays broad (`https:`) for
- * the report-only pass and is tightened later.
+ * stylesheet, `fonts.gstatic.com` files). `img-src` stays broad (`https:`)
+ * because legacy/imported recipe and profile images can still be external.
  */
 function cspDirectives(nonce?: string): Record<string, readonly string[]> {
   return {
@@ -74,6 +71,20 @@ export function buildContentSecurityPolicy(nonce?: string): string {
     .join("; ");
 }
 
+export type ContentSecurityPolicyMode = "enforce" | "report-only";
+
+interface ContentSecurityPolicyEnv {
+  SPOONJOY_CSP_MODE?: string | null;
+}
+
+export function resolveContentSecurityPolicyMode(
+  env?: ContentSecurityPolicyEnv | null,
+): ContentSecurityPolicyMode {
+  return env?.SPOONJOY_CSP_MODE?.trim().toLowerCase() === "enforce"
+    ? "enforce"
+    : "report-only";
+}
+
 /**
  * A fresh per-request CSP nonce: 16 cryptographically-random bytes, base64.
  * Generated once per request in `workers/app.ts` and used for BOTH the CSP
@@ -108,9 +119,9 @@ export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
 };
 
 /**
- * Return a copy of `response` with the baseline security headers + the
- * report-only CSP added. Pass the per-request `nonce` for HTML renders so the
- * CSP's nonce-based `script-src` matches the SSR inline-script nonces.
+ * Return a copy of `response` with the baseline security headers + the selected
+ * CSP mode added. Pass the per-request `nonce` for HTML renders so the CSP's
+ * nonce-based `script-src` matches the SSR inline-script nonces.
  *
  * Rebuilds the response so a streamed SSR body, a redirect (null body +
  * `Location`), or an immutable `Response.redirect` result all pick the headers
@@ -118,7 +129,11 @@ export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
  * any key collision, except an explicit `Referrer-Policy: no-referrer`, which
  * is stricter than the baseline for sensitive callback routes.
  */
-export function withSecurityHeaders(response: Response, nonce?: string): Response {
+export function withSecurityHeaders(
+  response: Response,
+  nonce?: string,
+  env?: ContentSecurityPolicyEnv | null,
+): Response {
   const headers = new Headers(response.headers);
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
     if (name === "Referrer-Policy" && headers.get(name)?.trim().toLowerCase() === "no-referrer") {
@@ -126,10 +141,12 @@ export function withSecurityHeaders(response: Response, nonce?: string): Respons
     }
     headers.set(name, value);
   }
-  headers.set(
-    "Content-Security-Policy-Report-Only",
-    buildContentSecurityPolicy(nonce),
-  );
+  const cspHeaderName = resolveContentSecurityPolicyMode(env) === "enforce"
+    ? "Content-Security-Policy"
+    : "Content-Security-Policy-Report-Only";
+  headers.delete("Content-Security-Policy");
+  headers.delete("Content-Security-Policy-Report-Only");
+  headers.set(cspHeaderName, buildContentSecurityPolicy(nonce));
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,

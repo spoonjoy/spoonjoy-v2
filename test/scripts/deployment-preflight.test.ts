@@ -428,7 +428,7 @@ function validInputs(): DeploymentPreflightInputs {
     migrationFiles: ["0000_init.sql"],
     vitestConfig: "scripts/script-environment.mjs scripts/cleanup-local-qa-data.mjs scripts/smoke-api-live.mjs scripts/qa-preflight.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts",
     tsconfigScripts:
-      "scripts/build-output-hygiene.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts scripts/qa-preflight.ts scripts/react-router-build.ts",
+      "scripts/build-output-hygiene.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts scripts/production-readiness.ts scripts/qa-preflight.ts scripts/react-router-build.ts",
   };
 }
 
@@ -1180,7 +1180,7 @@ describe("deployment preflight", () => {
 
   it("reports NODE_ENV as a warning instead of a hard failure", () => {
     const inputs = validInputs();
-    inputs.wrangler.vars = { NODE_ENV: "development" };
+    inputs.wrangler.vars = { NODE_ENV: "development", SPOONJOY_CSP_MODE: "enforce" };
 
     const result = validateDeploymentConfig(inputs);
 

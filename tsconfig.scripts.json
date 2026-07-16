@@ -14,6 +14,7 @@
     "scripts/deploy-production-canary.ts",
     "scripts/migrate-cloudinary-covers-to-r2.ts",
     "scripts/native-dogfood-api-server.ts",
+    "scripts/production-readiness.ts",
     "scripts/react-router-build.ts",
     "scripts/qa-preflight.ts"
   ]

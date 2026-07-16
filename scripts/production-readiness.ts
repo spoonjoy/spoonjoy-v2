@@ -97,6 +97,28 @@ export function validateCutoverRunbook(content: string): string[] {
   return CUTOVER_RUNBOOK_TERMS.filter((term) => !content.includes(term));
 }
 
+export function validateCspHeaderSet(headers: Pick<Headers, "get">): string[] {
+  const missing: string[] = [];
+  const csp = headers.get("Content-Security-Policy");
+  if (!csp) {
+    missing.push("Content-Security-Policy");
+  }
+  if (!headers.get("X-Spoonjoy-Worker-Version")) {
+    missing.push("X-Spoonjoy-Worker-Version");
+  }
+  if (
+    csp &&
+    (
+      !csp.includes("report-uri /csp-report") ||
+      !csp.includes("report-to csp-endpoint") ||
+      !headers.get("Reporting-Endpoints")?.includes("/csp-report")
+    )
+  ) {
+    missing.push("CSP violation reporting");
+  }
+  return missing;
+}
+
 function parseJsonArrayFromWranglerOutput(output: string): unknown[] {
   const start = output.indexOf("[");
   const end = output.lastIndexOf("]");

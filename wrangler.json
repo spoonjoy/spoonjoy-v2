@@ -46,7 +46,8 @@
 
   "vars": {
     "NODE_ENV": "production",
-    "SPOONJOY_BASE_URL": "https://spoonjoy.app"
+    "SPOONJOY_BASE_URL": "https://spoonjoy.app",
+    "SPOONJOY_CSP_MODE": "enforce"
   },
 
   "env": {
@@ -83,7 +84,8 @@
       ],
       "vars": {
         "NODE_ENV": "production",
-        "SPOONJOY_BASE_URL": "https://spoonjoy-v2-qa.mendelow-studio.workers.dev"
+        "SPOONJOY_BASE_URL": "https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
+        "SPOONJOY_CSP_MODE": "enforce"
       }
     }
   }

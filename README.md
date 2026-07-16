@@ -212,6 +212,8 @@ pnpm exec prisma migrate diff --from-empty --to-schema-datamodel=./prisma/schema
 
    Optional telemetry: set `POSTHOG_KEY` with `wrangler secret put POSTHOG_KEY` only when you want server lifecycle telemetry/error capture. Build-time client analytics also needs `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST`, and optionally `VITE_POSTHOG_DISABLED` in the deploy build environment; do not set those with secret values in source files.
 
+   CSP enforcement is controlled by the non-secret `SPOONJOY_CSP_MODE` Worker var. Production and QA source config use `SPOONJOY_CSP_MODE=enforce`, which emits the blocking `Content-Security-Policy` header while continuing to report violations to `/csp-report`. The one-commit rollback is to set `SPOONJOY_CSP_MODE=report-only` in `wrangler.json` and deploy that exact rollback SHA; browsers then receive `Content-Security-Policy-Report-Only` instead of the enforcing header.
+
 6. Run the deployment preflight:
    ```bash
    pnpm run deploy:preflight
@@ -226,7 +228,7 @@ pnpm exec prisma migrate diff --from-empty --to-schema-datamodel=./prisma/schema
 
 See [docs/deployment.md](./docs/deployment.md) for the full production checklist, local `.dev.vars` guidance, and common failure modes.
 
-The dedicated QA environment uses D1 `spoonjoy-qa`, R2 `spoonjoy-photos-qa`, seed namespace `sj-qa-demo`, and disposable `codex-smoke-` users. Configure QA secrets with commands such as `wrangler secret put SESSION_SECRET --env qa` and verify them with `wrangler secret list --env qa`. QA docs also cover `POSTHOG_DISABLED=true`, `IMAGE_PROVIDER_PRIMARY=gemini`, OAuth callback setup, WebAuthn origins, and the rule: Do not run broad production cleanup.
+The dedicated QA environment uses D1 `spoonjoy-qa`, R2 `spoonjoy-photos-qa`, seed namespace `sj-qa-demo`, disposable `codex-smoke-` users, and `SPOONJOY_CSP_MODE=enforce`. Configure QA secrets with commands such as `wrangler secret put SESSION_SECRET --env qa` and verify them with `wrangler secret list --env qa`. QA docs also cover `POSTHOG_DISABLED=true`, `IMAGE_PROVIDER_PRIMARY=gemini`, OAuth callback setup, WebAuthn origins, and the rule: Do not run broad production cleanup.
 
 ## Project Structure
 

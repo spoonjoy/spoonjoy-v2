@@ -247,6 +247,7 @@ export function validateQaGeneratedBuildConfig(config: Record<string, unknown>):
   const ok =
     config.name === "spoonjoy-v2-qa" &&
     vars.SPOONJOY_BASE_URL === QA_BASE_URL &&
+    vars.SPOONJOY_CSP_MODE === "enforce" &&
     db?.database_name === "spoonjoy-qa" &&
     db.database_id === QA_D1_DATABASE_ID &&
     photos?.bucket_name === QA_R2_BUCKET &&
@@ -258,7 +259,7 @@ export function validateQaGeneratedBuildConfig(config: Record<string, unknown>):
     ok,
     ok
       ? "Generated Worker config uses QA Worker name, base URL, D1, R2, and rate-limit bindings."
-      : "Generated Worker config is not isolated to QA. Rebuild with `CLOUDFLARE_ENV=qa pnpm run build` before `wrangler deploy --env qa`.",
+      : "Generated Worker config is not isolated to QA or is missing SPOONJOY_CSP_MODE=enforce. Rebuild with `CLOUDFLARE_ENV=qa pnpm run build` before `wrangler deploy --env qa`.",
   );
 }
 
