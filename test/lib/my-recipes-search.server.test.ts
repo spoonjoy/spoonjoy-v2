@@ -295,4 +295,43 @@ describe("my-recipes-search.server", () => {
     expect(result.recipes).toHaveLength(MY_RECIPES_PAGE_SIZE);
     expect(result.hasNextPage).toBe(true);
   });
+
+  it("clamps service-only page sizes while keeping SQL row reads bounded", async () => {
+    const database = {
+      $queryRawUnsafe: vi.fn(async () => []),
+    };
+
+    const defaulted = await searchMyRecipes(database, {
+      ownerId: "owner_defaulted",
+      ownerUsername: "defaulted",
+      pageSize: 0,
+    });
+    const capped = await searchMyRecipes(database, {
+      ownerId: "owner_capped",
+      ownerUsername: "capped",
+      pageSize: 999,
+    });
+    const floored = await searchMyRecipes(database, {
+      ownerId: "owner_floored",
+      ownerUsername: "floored",
+      pageSize: 2.8,
+    });
+    const minimum = await searchMyRecipes(database, {
+      ownerId: "owner_minimum",
+      ownerUsername: "minimum",
+      pageSize: -2,
+    });
+
+    expect(defaulted.pageSize).toBe(MY_RECIPES_PAGE_SIZE);
+    expect(capped.pageSize).toBe(MY_RECIPES_PAGE_SIZE);
+    expect(floored.pageSize).toBe(2);
+    expect(minimum.pageSize).toBe(1);
+    expect(database.$queryRawUnsafe).toHaveBeenCalledTimes(4);
+    expect(database.$queryRawUnsafe.mock.calls.map((call) => call.at(-2))).toEqual([
+      MY_RECIPES_PAGE_SIZE + 1,
+      MY_RECIPES_PAGE_SIZE + 1,
+      3,
+      2,
+    ]);
+  });
 });
