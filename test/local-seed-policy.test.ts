@@ -12,7 +12,7 @@ describe("local development seed policy", () => {
     };
     const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
 
-    expect(packageJson.scripts["db:seed"]).toBe("pnpm exec tsx prisma/seed.ts --target-env local");
+    expect(packageJson.scripts["db:seed"]).toBe("PRISMA_DISABLE_WARNINGS=1 pnpm exec tsx prisma/seed.ts --target-env local");
     expect(ciWorkflow).toContain("pnpm db:seed");
     expect(ciWorkflow).toContain("pnpm run cleanup:local:apply");
     expect(ciWorkflow).not.toMatch(/\bpnpm exec tsx prisma\/seed\.ts(?! --target-env local)/);
