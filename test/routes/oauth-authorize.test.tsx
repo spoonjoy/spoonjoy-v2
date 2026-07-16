@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { render, screen } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
@@ -9,6 +9,19 @@ import { db } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestUser } from "../utils";
+
+const getOAuthClientCalls = vi.hoisted(() => vi.fn());
+
+vi.mock("~/lib/oauth-server.server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("~/lib/oauth-server.server")>();
+  return {
+    ...actual,
+    getOAuthClient: async (...args: Parameters<typeof actual.getOAuthClient>) => {
+      getOAuthClientCalls(...args);
+      return actual.getOAuthClient(...args);
+    },
+  };
+});
 
 // undici's Request preserves the `Cookie` header that happy-dom's global drops.
 const Request = UndiciRequest as unknown as typeof globalThis.Request;
@@ -28,17 +41,29 @@ async function authedCookie(userId: string): Promise<string> {
 }
 
 const redirectUri = "https://claude.ai/cb";
+const nativeRedirectUri = "https://spoonjoy.app/oauth/callback";
 
 describe("oauth.authorize route", () => {
-  beforeEach(async () => { await cleanupDatabase(); });
+  beforeEach(async () => {
+    getOAuthClientCalls.mockClear();
+    await cleanupDatabase();
+  });
   afterEach(async () => { await cleanupDatabase(); });
 
-  async function setup() {
+  async function setup(options: {
+    clientName?: string;
+    redirectUri?: string;
+    redirectUris?: string[];
+  } = {}) {
     const user = await db.user.create({ data: createTestUser() });
-    const client = await registerOAuthClient(db, { clientName: "Claude", redirectUris: [redirectUri] });
+    const requestedRedirectUri = options.redirectUri ?? redirectUri;
+    const client = await registerOAuthClient(db, {
+      clientName: options.clientName ?? "Claude",
+      redirectUris: options.redirectUris ?? [requestedRedirectUri],
+    });
     const query = new URLSearchParams({
       client_id: client.clientId,
-      redirect_uri: redirectUri,
+      redirect_uri: requestedRedirectUri,
       response_type: "code",
       code_challenge: await challengeFor(VERIFIER),
       code_challenge_method: "S256",
@@ -49,25 +74,131 @@ describe("oauth.authorize route", () => {
     return { userId: user.id, clientId: client.clientId, query };
   }
 
+  async function thrownResponse(request: Request): Promise<Response> {
+    try {
+      await loader({ request, context: { cloudflare: { env: null } }, params: {} } as any);
+    } catch (error) {
+      expect(error).toBeInstanceOf(Response);
+      return error as Response;
+    }
+    throw new Error("Expected the authorize loader to throw a Response");
+  }
+
+  function providerStartLocation(response: Response, provider: "google" | "github", returnTo: string) {
+    expect(response.status).toBe(302);
+    const location = new URL(response.headers.get("Location") ?? "", "https://spoonjoy.app");
+    expect(location.pathname).toBe(`/auth/${provider}`);
+    expect(location.searchParams.get("redirectTo")).toBe(returnTo);
+    expect(location.searchParams.get("failureRedirect")).toBe(
+      `/login?redirectTo=${encodeURIComponent(returnTo)}`,
+    );
+  }
+
   it("loader throws a redirect Response when not authenticated", async () => {
     const { query } = await setup();
     const request = new Request(`https://spoonjoy.app/oauth/authorize?${query}`);
-    await expect(
-      loader({ request, context: { cloudflare: { env: null } }, params: {} } as any),
-    ).rejects.toSatisfy((thrown: Response) => {
-      expect(thrown).toBeInstanceOf(Response);
-      expect(thrown.status).toBe(302);
-      return true;
-    });
+    const response = await thrownResponse(request);
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe(
+      `/login?redirectTo=${encodeURIComponent(`/oauth/authorize?${query}`)}`,
+    );
+  });
+
+  it("does not perform an extra client lookup for the no-hint login redirect", async () => {
+    const { query } = await setup();
+
+    await thrownResponse(new Request(`https://spoonjoy.app/oauth/authorize?${query}`));
+
+    expect(getOAuthClientCalls).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["google", "github"] as const)(
+    "routes a validated first-party %s hint directly to that provider",
+    async (provider) => {
+      const { query } = await setup({ clientName: "Spoonjoy Apple", redirectUri: nativeRedirectUri });
+      query.set("provider", provider);
+      const returnTo = `/oauth/authorize?${query}`;
+      const response = await thrownResponse(new Request(`https://spoonjoy.app${returnTo}`));
+
+      providerStartLocation(response, provider, returnTo);
+    },
+  );
+
+  it.each([
+    { label: "unknown", providers: ["apple"] },
+    { label: "empty", providers: [""] },
+    { label: "duplicate", providers: ["google", "github"] },
+  ])("ignores $label provider hints", async ({ providers }) => {
+    const { query } = await setup({ clientName: "Spoonjoy Apple", redirectUri: nativeRedirectUri });
+    for (const provider of providers) query.append("provider", provider);
+    const returnTo = `/oauth/authorize?${query}`;
+    const response = await thrownResponse(new Request(`https://spoonjoy.app${returnTo}`));
+
+    expect(response.headers.get("Location")).toBe(`/login?redirectTo=${encodeURIComponent(returnTo)}`);
+  });
+
+  it.each([
+    {
+      label: "third-party client name",
+      clientName: "Example App",
+      requestedRedirectUri: nativeRedirectUri,
+      redirectUris: [nativeRedirectUri],
+    },
+    {
+      label: "untrusted callback",
+      clientName: "Spoonjoy Apple",
+      requestedRedirectUri: "https://example.com/oauth/callback",
+      redirectUris: ["https://example.com/oauth/callback"],
+    },
+    {
+      label: "untrusted selected callback on a mixed registration",
+      clientName: "Spoonjoy Apple",
+      requestedRedirectUri: "https://example.com/oauth/callback",
+      redirectUris: [nativeRedirectUri, "https://example.com/oauth/callback"],
+    },
+  ])("does not honor a hint for a $label", async ({ clientName, requestedRedirectUri, redirectUris }) => {
+    const { query } = await setup({ clientName, redirectUri: requestedRedirectUri, redirectUris });
+    query.set("provider", "google");
+    const returnTo = `/oauth/authorize?${query}`;
+    const response = await thrownResponse(new Request(`https://spoonjoy.app${returnTo}`));
+
+    expect(response.headers.get("Location")).toBe(`/login?redirectTo=${encodeURIComponent(returnTo)}`);
+  });
+
+  it.each([
+    { field: "state", value: "short", error: "invalid_request" },
+    { field: "code_challenge", value: "not-valid", error: "invalid_request" },
+  ])("validates $field before honoring a provider hint", async ({ field, value, error }) => {
+    const { query } = await setup({ clientName: "Spoonjoy Apple", redirectUri: nativeRedirectUri });
+    query.set("provider", "google");
+    query.set(field, value);
+    const response = await thrownResponse(
+      new Request(`https://spoonjoy.app/oauth/authorize?${query}`),
+    );
+    const location = new URL(response.headers.get("Location") ?? "");
+
+    expect(location.origin + location.pathname).toBe(nativeRedirectUri);
+    expect(location.searchParams.get("error")).toBe(error);
+    expect(location.searchParams.get("state")).toBe(query.get("state"));
   });
 
   it("loader returns the consent view when authenticated", async () => {
-    const { userId, query } = await setup();
+    const { userId, query } = await setup({ clientName: "Spoonjoy Apple", redirectUri: nativeRedirectUri });
+    query.set("provider", "google");
     const headers = new Headers();
     headers.set("Cookie", await authedCookie(userId));
     const request = new Request(`https://spoonjoy.app/oauth/authorize?${query}`, { headers });
     const result = await loader({ request, context: { cloudflare: { env: null } }, params: {} } as any);
-    expect(result).toMatchObject({ kind: "consent", scope: "kitchen:read" });
+    expect(result).toMatchObject({
+      kind: "consent",
+      scope: "kitchen:read",
+      params: {
+        clientId: query.get("client_id"),
+        redirectUri: nativeRedirectUri,
+        state: query.get("state"),
+        codeChallenge: query.get("code_challenge"),
+      },
+    });
   });
 
   it("loader returns 429 when the IP rate limiter denies the request", async () => {
@@ -122,6 +253,31 @@ describe("oauth.authorize route", () => {
     expect(response.status).toBe(302);
     expect(response.headers.get("Location")).toContain(`${redirectUri}?code=`);
     expect(clientId).toBeTruthy();
+  });
+
+  it.each([
+    { decision: "approve", expectedError: null },
+    { decision: "deny", expectedError: "access_denied" },
+  ])("keeps first-party consent $decision independent of the provider hint", async ({ decision, expectedError }) => {
+    const { userId, query } = await setup({ clientName: "Spoonjoy Apple", redirectUri: nativeRedirectUri });
+    query.set("provider", "github");
+    const headers = new Headers();
+    headers.set("Cookie", await authedCookie(userId));
+    headers.set("Content-Type", "application/x-www-form-urlencoded");
+    const body = new URLSearchParams(query);
+    body.set("decision", decision);
+    const response = await action({
+      request: new Request("https://spoonjoy.app/oauth/authorize", { method: "POST", headers, body }),
+      context: { cloudflare: { env: null } },
+      params: {},
+    } as any);
+    const location = new URL(response.headers.get("Location") ?? "");
+
+    expect(location.origin + location.pathname).toBe(nativeRedirectUri);
+    expect(location.searchParams.get("state")).toBe(query.get("state"));
+    expect(location.searchParams.get("error")).toBe(expectedError);
+    expect(location.searchParams.has("provider")).toBe(false);
+    expect(location.searchParams.has(decision === "approve" ? "code" : "error")).toBe(true);
   });
 
   function renderView(view: AuthorizeView) {

@@ -503,20 +503,22 @@ describe("Login Route", () => {
       });
 
       it("carries redirectTo into the OAuth form action so login returns to the connector", async () => {
-        const returnTo = "/oauth/authorize?client_id=abc&response_type=code";
+        const returnTo = "/oauth/authorize?client_id=abc&response_type=code&provider=google";
         const Stub = createTestRoutesStub([
           {
             path: "/login",
             Component: Login,
-            loader: () => ({ oauthProviders: ["apple"] }),
+            loader: () => ({ oauthProviders: ["google", "github"] }),
           },
         ]);
 
         render(<Stub initialEntries={[`/login?redirectTo=${encodeURIComponent(returnTo)}`]} />);
 
         await screen.findByRole("heading", { name: "Log In" });
-        const form = screen.getByRole("button", { name: /continue with apple/i }).closest("form");
-        expect(form).toHaveAttribute("action", `/auth/apple?redirectTo=${encodeURIComponent(returnTo)}`);
+        const googleForm = screen.getByRole("button", { name: /continue with google/i }).closest("form");
+        const githubForm = screen.getByRole("button", { name: /continue with github/i }).closest("form");
+        expect(googleForm).toHaveAttribute("action", `/auth/google?redirectTo=${encodeURIComponent(returnTo)}`);
+        expect(githubForm).toHaveAttribute("action", `/auth/github?redirectTo=${encodeURIComponent(returnTo)}`);
       });
 
       it("should display OAuth separator between password form and OAuth buttons", async () => {
