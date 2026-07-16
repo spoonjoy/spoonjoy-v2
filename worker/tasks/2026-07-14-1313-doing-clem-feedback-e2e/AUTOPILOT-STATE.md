@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; reviewed contract checkpoint `fdbc42920188c6c3b956933d56106927d84658d3` integrates `origin/main@7b06c496`; latest completed reviewer input HEAD is `2ea77f5dc4f78a206c6cde26e270f9dc84d78c60`. Commits after that input may only record/synchronize its verdict and gate until the next reviewer receives the resulting exact HEAD.
+- Branch: `worker/clem-feedback-e2e`; reviewed contract checkpoint `fdbc42920188c6c3b956933d56106927d84658d3` integrates `origin/main@7b06c496`; latest completed reviewer input HEAD is `d817e911ed0e2e219f66171bca99c2533833b29b`. Tinfoil converged there with no findings. Commits after that input may only record/synchronize its verdict and gate until Stranger receives the resulting exact HEAD.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is approved after five fresh hostile rounds.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation has not started.
-- Active gate: Tinfoil Round 4 reported only stale review metadata. Commit/push this state-only correction and its byte-equal Desk mirror, then re-run fresh Tinfoil on the resulting exact HEAD; Stranger follows immediately only if Tinfoil is clean.
+- Active gate: Tinfoil is clean, giving one consecutive clean Scrutiny pass. Commit/push this state-only record and byte-equal Desk mirror, then immediately run a fresh Stranger With Candy pass on the resulting exact HEAD.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Commit/push this exact review record, synchronize/push the active Desk mirrors and task metadata, then re-run fresh Tinfoil on the record commit.
+Commit/push this exact clean-Tinfoil record, synchronize/push the active Desk mirrors and task metadata, then run the fresh Stranger pass with no intervening contract change.
 
 ## Operator-Locked Rules
 
@@ -41,7 +41,7 @@ Commit/push this exact review record, synchronize/push the active Desk mirrors a
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
 | Planning reviewer gate | deferred by scope | Planning approved at `2c3b4759` after convergence | Closed |
-| Doing review chain | needs reviewer gate | Granularity, Validation, Ambiguity, and Quality converged; Tinfoil Round 4's sole metadata finding is addressed without a contract change | Commit/sync exact review record, then re-run Tinfoil |
+| Doing review chain | needs reviewer gate | Granularity, Validation, Ambiguity, and Quality converged; Tinfoil Round 5 is clean, one consecutive Scrutiny pass | Commit/sync exact clean record, then run fresh Stranger immediately |
 | Work Doer Units 0-37 | ready | Full red/green/verify/visual/ship queue is defined | Start after doing review convergence |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
 
