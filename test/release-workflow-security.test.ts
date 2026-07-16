@@ -148,4 +148,15 @@ describe("CI warning suppression at source", () => {
     expect(warningGate).not.toContain("PRISMA_HIDE_UPDATE_MESSAGE");
     expect(warningGate).not.toContain("Update available 6.19.2 -> 7.8.0");
   });
+
+  it("disables only the ephemeral runner's needrestart hook during gated Playwright setup", () => {
+    expect(ci).toContain([
+      "      - name: 🎭 Install Playwright Browsers",
+      "        env:",
+      '          NEEDRESTART_SUSPEND: "1"',
+      "        run: node scripts/warning-gate.ts -- pnpm exec playwright install --with-deps chromium",
+    ].join("\n"));
+    expect(ci.match(/^\s*NEEDRESTART_SUSPEND:/gm)).toHaveLength(1);
+    expect(ci).not.toMatch(/^ {0,8}NEEDRESTART_SUSPEND:/m);
+  });
 });
