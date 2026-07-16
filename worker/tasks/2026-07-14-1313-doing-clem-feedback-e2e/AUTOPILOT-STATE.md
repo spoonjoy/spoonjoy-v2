@@ -16,7 +16,7 @@
 - Branch: `worker/clem-feedback-e2e`; current contract checkpoint `2e55c06c149081b083eda9a5b449ea3ed326363f` integrates `origin/main@2f392840`. The prior clean reviewer pair is historical because the main-overlap contract changed afterward.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is `NEEDS_REVIEW` after the mandatory main-drift audit.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `NEEDS_REVIEW`; implementation and dependency setup have not started.
-- Active gate: fresh Quality review, then consecutive clean Tinfoil and Stranger scrutiny on the synchronized current checkpoint. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
+- Active gate: Quality Round 10 found and fixed the stale initial-adoption lifecycle sentence; a fresh Quality Round 11 runs next, followed by consecutive clean Tinfoil and Stranger scrutiny. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
