@@ -84,3 +84,33 @@ describe("production release provenance", () => {
     expect(deploy).toBeLessThan(record);
   });
 });
+
+describe("web dependency advisory gate", () => {
+  const ci = workflowSource("ci.yml");
+
+  it("runs a fail-closed OSV-compatible pnpm-lock advisory scan in canonical CI", () => {
+    expect(ci).toContain("advisory");
+    expect(ci).toContain("pnpm run advisory:scan");
+    expect(ci).toContain("pnpm-lock.yaml");
+    expect(ci).toContain("osv-scanner_linux_amd64");
+    expect(ci).toContain("bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc");
+    expect(ci).toContain("https://api.github.com/repos/google/osv-scanner/git/ref/tags/${OSV_SCANNER_VERSION}");
+    expect(ci).toContain('test "$actual_tag_sha" = "$OSV_SCANNER_TAG_SHA"');
+    expect(ci).toContain("pnpm install --frozen-lockfile --ignore-scripts");
+
+    const tagVerification = ci.indexOf('test "$actual_tag_sha" = "$OSV_SCANNER_TAG_SHA"');
+    const binaryDownload = ci.indexOf("osv-scanner_linux_amd64");
+    const dependencyInstall = ci.indexOf("pnpm install --frozen-lockfile --ignore-scripts");
+    const advisoryRun = ci.indexOf("pnpm run advisory:scan");
+    expect(tagVerification).toBeGreaterThan(-1);
+    expect(binaryDownload).toBeGreaterThan(tagVerification);
+    expect(dependencyInstall).toBeGreaterThan(binaryDownload);
+    expect(advisoryRun).toBeGreaterThan(dependencyInstall);
+  });
+
+  it("requires the advisory job before production deploy can release an exact SHA", () => {
+    const production = workflowSource("production-deploy.yml");
+
+    expect(production).toContain("required_job=advisory");
+  });
+});

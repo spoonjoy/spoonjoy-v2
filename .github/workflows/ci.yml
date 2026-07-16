@@ -12,6 +12,48 @@ env:
   GIT_CONFIG_VALUE_0: main
 
 jobs:
+  advisory:
+    name: advisory
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+
+      - name: 📦 Activate pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.28.1 --activate
+
+      - name: 🔒 Install pinned OSV-Scanner
+        env:
+          OSV_SCANNER_VERSION: v2.3.8
+          OSV_SCANNER_TAG_SHA: 408fcd6f8707999a29e7ba45e15809764cf24f67
+          OSV_SCANNER_LINUX_AMD64_SHA256: bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/osv-scanner
+          actual_tag_sha="$(curl -fsSL --retry 3 --retry-delay 2 "https://api.github.com/repos/google/osv-scanner/git/ref/tags/${OSV_SCANNER_VERSION}" | jq -er '.object | select(.type == "commit") | .sha')"
+          test "$actual_tag_sha" = "$OSV_SCANNER_TAG_SHA"
+          curl -fsSL --retry 3 --retry-delay 2 "https://github.com/google/osv-scanner/releases/download/${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64" -o .cache/osv-scanner/osv-scanner
+          printf '%s  %s\n' "$OSV_SCANNER_LINUX_AMD64_SHA256" ".cache/osv-scanner/osv-scanner" | sha256sum -c -
+          chmod +x .cache/osv-scanner/osv-scanner
+          printf 'OSV-Scanner %s verified tag %s\n' "$OSV_SCANNER_VERSION" "$actual_tag_sha"
+          .cache/osv-scanner/osv-scanner --version
+
+      - name: 📥 Install advisory dependencies without lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: 🔒 Run dependency advisory scan
+        run: |
+          test -f pnpm-lock.yaml
+          pnpm run advisory:scan -- --scanner .cache/osv-scanner/osv-scanner --output .advisory/osv-results.json
+
   coverage:
     name: coverage
     runs-on: ubuntu-latest
