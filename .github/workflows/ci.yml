@@ -147,9 +147,9 @@ jobs:
           node scripts/warning-gate.ts -- pnpm why @c4312/blake3-internal
 
       - name: 🎭 Install Playwright Browsers
-        env:
-          NEEDRESTART_SUSPEND: "1"
-        run: node scripts/warning-gate.ts -- pnpm exec playwright install --with-deps chromium
+        run: |
+          node scripts/warning-gate.ts -- sudo env NEEDRESTART_SUSPEND=1 "PATH=$PATH" pnpm exec playwright install-deps chromium
+          node scripts/warning-gate.ts -- pnpm exec playwright install chromium
 
       - name: 🗄️ Apply D1 migrations
         run: node scripts/warning-gate.ts -- pnpm exec wrangler d1 migrations apply DB --local
