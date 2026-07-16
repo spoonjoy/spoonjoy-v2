@@ -16,7 +16,7 @@
 - Branch: `worker/clem-feedback-e2e`; current contract checkpoint `23afdf16e0e9b05809e5a47431f96674113a2697` integrates `origin/main@2f392840`. All prior clean scrutiny passes are historical because Tinfoil Round 10 changed template, cleanup-evidence, coverage, and pagination contracts.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is `NEEDS_REVIEW` after the mandatory main-drift audit.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation and dependency setup have not started.
-- Active gate: Tinfoil Round 10 findings are fixed; fresh Quality must reconverge, then scrutiny restarts at zero with Tinfoil followed by Stranger only if no contract changes. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
+- Active gate: Quality Round 12 converged at reviewer-input `fa7841e0`; scrutiny restarts at zero with fresh Tinfoil, followed by fresh Stranger only if no contract changes. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
