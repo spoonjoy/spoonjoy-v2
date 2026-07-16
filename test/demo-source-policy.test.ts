@@ -105,6 +105,13 @@ describe("demo-source policy", () => {
     expect(allowlist.map((entry) => entry.path).sort()).toEqual(["migrations/0002_seed.sql", "migrations/0004_reseed.sql"]);
     for (const entry of allowlist) {
       const source = readFileSync(entry.path, "utf8");
+      const matchingPatternIds = FORBIDDEN_DEMO_PATTERNS
+        .filter((pattern) => pattern.regex.test(source))
+        .map((pattern) => pattern.id)
+        .sort();
+      expect(entry.patterns.toSorted(), `${entry.path} must declare every quarantined pattern`).toEqual(
+        matchingPatternIds,
+      );
       for (const patternId of entry.patterns) {
         const pattern = FORBIDDEN_DEMO_PATTERNS.find((candidate) => candidate.id === patternId);
         expect(pattern, `${entry.path} references unknown policy pattern ${patternId}`).toBeDefined();

@@ -48,6 +48,7 @@ describe("cleanup-local-qa-data", () => {
     expect(sql).toContain("lower(title) LIKE 'e2e %'");
     expect(sql).toContain("lower(title) LIKE 'mobile dock save%'");
     expect(sql).toContain("lower(title) LIKE 'codex %'");
+    expect(sql).toContain("id IN ('demo_user_001', 'user_demo', 'user_julia', 'user_marco', 'user_sarah')");
     expect(sql).toContain("email LIKE 'codex-%'");
     expect(sql).toContain("email LIKE 'e2e-passkey-%'");
     expect(sql).toContain("clientName = 'E2E OAuth Client'");

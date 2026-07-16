@@ -3,14 +3,14 @@
     "path": "migrations/0002_seed.sql",
     "kind": "historical-applied-migration",
     "immutable": true,
-    "patterns": ["legacy-demo-email", "legacy-demo-password"],
+    "patterns": ["legacy-demo-email", "legacy-demo-password", "legacy-primary-username"],
     "reason": "Historical applied migration retained for D1 migration integrity; active seeds no longer use these demo credentials."
   },
   {
     "path": "migrations/0004_reseed.sql",
     "kind": "historical-applied-migration",
     "immutable": true,
-    "patterns": ["legacy-demo-email"],
+    "patterns": ["legacy-demo-email", "legacy-primary-username", "legacy-secondary-username"],
     "reason": "Historical applied migration retained for D1 migration integrity; active seeds no longer use this demo identity."
   }
 ]

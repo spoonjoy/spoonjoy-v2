@@ -24,6 +24,7 @@ export const SUSPICIOUS_RECIPE_WHERE = [
 ].join("\n    OR ");
 
 export const DISPOSABLE_USER_WHERE = [
+  "id IN ('demo_user_001', 'user_demo', 'user_julia', 'user_marco', 'user_sarah')",
   "email LIKE 'codex-%'",
   "email LIKE 'e2e-passkey-%'",
   "username LIKE 'codex_%'",
