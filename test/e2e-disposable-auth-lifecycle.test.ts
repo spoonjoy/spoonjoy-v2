@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -36,13 +36,13 @@ describe("e2e disposable auth lifecycle", () => {
     expect(first.password).not.toBe(second.password);
   });
 
-  it("records disposable users in an ignored manifest for teardown", () => {
+  it("replaces stale manifest credentials with the current disposable user", () => {
     const tempDir = mkdtempSync(path.join(tmpdir(), "spoonjoy-e2e-auth-"));
     tempDirs.push(tempDir);
     const manifestPath = path.join(tempDir, "users.json");
     const user = createDisposableE2EUser({ now: () => new Date("2026-07-15T12:00:00Z"), random: () => "abc123" });
 
-    recordDisposableE2EUser(user, manifestPath);
+    recordDisposableE2EUser(createDisposableE2EUser({ random: () => "stale" }), manifestPath);
     recordDisposableE2EUser(user, manifestPath);
 
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as unknown[];
@@ -50,15 +50,31 @@ describe("e2e disposable auth lifecycle", () => {
   });
 
   it("tears down disposable auth residue with local-only cleanup", async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "spoonjoy-e2e-teardown-"));
+    tempDirs.push(tempDir);
+    const authPaths = [path.join(tempDir, "user.json"), path.join(tempDir, "users.json")];
+    for (const authPath of authPaths) writeFileSync(authPath, "secret");
     const runCommand = vi.fn(async () => ({ stdout: "[]", stderr: "" }));
 
-    await runDisposableE2ETeardown({ runCommand });
+    await runDisposableE2ETeardown({ runCommand, authPaths });
 
     expect(runCommand).toHaveBeenCalledWith(
       "pnpm",
       ["run", "cleanup:local:apply"],
       expect.objectContaining({ encoding: "utf8" }),
     );
+    expect(authPaths.every((authPath) => !existsSync(authPath))).toBe(true);
+  });
+
+  it("removes local auth files when database cleanup fails", async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "spoonjoy-e2e-teardown-failure-"));
+    tempDirs.push(tempDir);
+    const authPaths = [path.join(tempDir, "user.json"), path.join(tempDir, "users.json")];
+    for (const authPath of authPaths) writeFileSync(authPath, "secret");
+    const runCommand = vi.fn().mockRejectedValueOnce(new Error("cleanup failed"));
+
+    await expect(runDisposableE2ETeardown({ runCommand, authPaths })).rejects.toThrow("cleanup failed");
+    expect(authPaths.every((authPath) => !existsSync(authPath))).toBe(true);
   });
 
   it("wires Playwright setup and teardown without a seed-user login", () => {

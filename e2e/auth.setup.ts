@@ -1,7 +1,9 @@
 import { test as setup } from '@playwright/test';
-import { createDisposableE2EUser, recordDisposableE2EUser } from './support/disposable-auth';
-
-const authFile = './e2e/.auth/user.json';
+import {
+  createDisposableE2EUser,
+  DISPOSABLE_E2E_AUTH_STATE,
+  recordDisposableE2EUser,
+} from './support/disposable-auth';
 
 setup('authenticate', async ({ page }) => {
   const user = createDisposableE2EUser();
@@ -20,5 +22,5 @@ setup('authenticate', async ({ page }) => {
   recordDisposableE2EUser(user);
 
   // Save storage state
-  await page.context().storageState({ path: authFile });
+  await page.context().storageState({ path: DISPOSABLE_E2E_AUTH_STATE });
 });

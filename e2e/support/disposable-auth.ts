@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -22,6 +22,7 @@ type RunCommand = (
 ) => Promise<{ stdout?: string; stderr?: string }>;
 
 export const DISPOSABLE_E2E_USERS_MANIFEST = "e2e/.auth/disposable-users.json";
+export const DISPOSABLE_E2E_AUTH_STATE = "e2e/.auth/user.json";
 
 function stampDate(date: Date) {
   return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "z").toLowerCase();
@@ -60,20 +61,24 @@ export function readLatestDisposableE2EUser(manifestPath = DISPOSABLE_E2E_USERS_
 
 export function recordDisposableE2EUser(user: DisposableE2EUser, manifestPath = DISPOSABLE_E2E_USERS_MANIFEST) {
   mkdirSync(path.dirname(manifestPath), { recursive: true });
-  const users = readDisposableE2EUsers(manifestPath);
-  if (!users.some((existing) => existing.email === user.email)) {
-    users.push(user);
-  }
-  writeFileSync(manifestPath, `${JSON.stringify(users, null, 2)}\n`, { mode: 0o600 });
+  writeFileSync(manifestPath, `${JSON.stringify([user], null, 2)}\n`, { mode: 0o600 });
 }
 
 export async function runDisposableE2ETeardown({
   runCommand = promisify(execFile) as RunCommand,
+  authPaths = [DISPOSABLE_E2E_AUTH_STATE, DISPOSABLE_E2E_USERS_MANIFEST],
 }: {
   runCommand?: RunCommand;
+  authPaths?: string[];
 } = {}) {
-  await runCommand("pnpm", ["run", "cleanup:local:apply"], {
-    encoding: "utf8",
-    maxBuffer: 1024 * 1024 * 8,
-  });
+  try {
+    await runCommand("pnpm", ["run", "cleanup:local:apply"], {
+      encoding: "utf8",
+      maxBuffer: 1024 * 1024 * 8,
+    });
+  } finally {
+    for (const authPath of authPaths) {
+      rmSync(authPath, { force: true });
+    }
+  }
 }
