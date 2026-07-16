@@ -95,7 +95,7 @@ describe("Login Route", () => {
     it("returns 429 when the auth rate limiter is exhausted", async () => {
       const formData = new FormData();
       formData.set("email", "test@example.com");
-      formData.set("password", "password123");
+      formData.set("password", "Valid-Test-Password-42!");
 
       const request = new Request("http://localhost:3000/login", {
         method: "POST",
@@ -121,7 +121,7 @@ describe("Login Route", () => {
     it("should return validation errors for invalid email", async () => {
       const formData = new FormData();
       formData.set("email", "invalid-email");
-      formData.set("password", "password123");
+      formData.set("password", "Valid-Test-Password-42!");
 
       const request = new Request("http://localhost:3000/login", {
         method: "POST",
@@ -163,7 +163,7 @@ describe("Login Route", () => {
     it("should return error for invalid credentials", async () => {
       const formData = new FormData();
       formData.set("email", "nonexistent@example.com");
-      formData.set("password", "password123");
+      formData.set("password", "Valid-Test-Password-42!");
 
       const request = new Request("http://localhost:3000/login", {
         method: "POST",

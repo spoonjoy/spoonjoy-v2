@@ -17,24 +17,19 @@ const FORBIDDEN_DEMO_PATTERNS = [
   { id: "legacy-demo-password", regex: /\bdemo1234\b/i },
   { id: "reusable-example-password", regex: /\bpassword123\b/i },
   { id: "fixed-qa-demo-namespace", regex: /\bsj-qa-demo(?:[-_a-z0-9]*)?\b/i },
+  { id: "legacy-primary-username", regex: /\bdemo_chef\b/i },
+  { id: "legacy-secondary-username", regex: /\bchef_julia\b/i },
 ];
 
-const SOURCE_ROOTS = [
-  ".github",
-  "docs",
-  "e2e",
-  "feedback",
-  "migrations",
-  "package.json",
-  "prisma",
-  "README.md",
-  "scripts",
-  "GUIDE.md",
-];
+const SOURCE_ROOTS = ["."];
 
 const IGNORED_PATH_PARTS = new Set([
   ".git",
+  ".cache",
+  ".playwright",
   ".react-router",
+  ".vite",
+  ".wrangler",
   "build",
   "coverage",
   "node_modules",
@@ -44,13 +39,19 @@ const IGNORED_PATH_PARTS = new Set([
 ]);
 
 const SCANNED_EXTENSIONS = new Set([
+  ".css",
+  ".html",
   ".js",
   ".json",
+  ".log",
   ".md",
   ".mjs",
+  ".sh",
   ".sql",
+  ".swift",
   ".ts",
   ".tsx",
+  ".txt",
   ".yaml",
   ".yml",
 ]);
@@ -112,7 +113,7 @@ describe("demo-source policy", () => {
     }
   });
 
-  it("keeps active source, docs, CI, e2e auth, and feedback free of fixed demo identities", () => {
+  it("keeps the complete active source tree free of fixed demo identities", () => {
     const allowedPaths = new Set(readPolicyAllowlist().map((entry) => entry.path));
 
     expect(findForbiddenReferences(allowedPaths)).toEqual([]);

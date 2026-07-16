@@ -61,7 +61,7 @@ describe("spoonjoy MCP stdio server", () => {
         HOME: home,
         SPOONJOY_MCP_API_BASE_URL: "",
         SPOONJOY_MCP_API_TOKEN: "",
-        SPOONJOY_MCP_USER_EMAIL: "demo@spoonjoy.com",
+        SPOONJOY_MCP_USER_EMAIL: "unused-mcp-user@example.test",
       });
 
       expect(tools).toContain("upload_recipe_image");

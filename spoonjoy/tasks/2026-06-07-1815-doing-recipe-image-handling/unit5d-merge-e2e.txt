@@ -23,9 +23,9 @@ Running 59 tests using 5 workers
 [1A[2K[16/59] [chromium] › e2e/flows/cookbooks.spec.ts:36:3 › Cookbook Flow › cookbook detail shows recipes
 [1A[2K[17/59] [chromium] › e2e/flows/create-recipe.spec.ts:15:3 › Create recipe flow › demo user can create a minimal recipe from the new-recipe form
 [1A[2K[18/59] [chromium] › e2e/flows/create-recipe.spec.ts:64:3 › Create recipe flow › demo user can reorder draft recipe steps by dragging the step handle
-[1A[2K[19/59] [chromium] › e2e/flows/fellow-chefs.spec.ts:7:3 › Fellow chefs + Kitchen visitors flow › demo_chef spoons a chef_julia recipe and both appear on the derived-graph pages
+[1A[2K[19/59] [chromium] › e2e/flows/fellow-chefs.spec.ts:7:3 › Fellow chefs + Kitchen visitors flow › disposable_user spoons a seeded_chef recipe and both appear on the derived-graph pages
 [1A[2K[20/59] [chromium] › e2e/flows/fellow-chefs.spec.ts:62:3 › Fellow chefs + Kitchen visitors flow › profile page exposes Fellow chefs and Kitchen visitors entry links
-[1A[2K[21/59] [chromium] › e2e/flows/fork-recipe.spec.ts:4:3 › Fork recipe flow › viewer (demo) forks a recipe owned by chef_julia and lands on the fork
+[1A[2K[21/59] [chromium] › e2e/flows/fork-recipe.spec.ts:4:3 › Fork recipe flow › disposable viewer forks a recipe owned by seeded_chef and lands on the fork
 [1A[2K[22/59] [chromium] › e2e/flows/mobile-recipebuilder-spoondock.spec.ts:80:3 › Mobile RecipeBuilder and SpoonDock audit › create flow keeps RecipeBuilder controls reachable without the fixed dock
 [1A[2K[23/59] [chromium] › e2e/flows/recipe-image-handling.spec.ts:46:3 › Recipe image handling › uploaded EXIF-oriented recipe photos remain upright after save and reload
 [1A[2K[24/59] [chromium] › e2e/flows/recipes.spec.ts:8:3 › Recipe Flow › recipes page shows recipe cards
