@@ -24,7 +24,7 @@ import {
   parseMcpCanaryArgs,
   readGitMetadata,
   serializeSanitizedMcpCanaryReport,
-  waitForBrowserWorkerVersionReady,
+  waitForWorkerChannelsReady,
 } from "./smoke-live-helpers.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -69,15 +69,29 @@ async function spoonjoyRequest(request, { baseUrl, workerVersionId, method, url,
   return response;
 }
 
-async function waitForCandidateWorker(page, { baseUrl, workerVersionId }) {
+async function waitForCandidateWorker(page, request, { baseUrl, workerVersionId }) {
   const url = new URL("/.well-known/oauth-protected-resource/mcp", baseUrl).toString();
-  return waitForBrowserWorkerVersionReady({
+  return waitForWorkerChannelsReady({
     workerVersionId,
-    navigate: async ({ timeoutMs }) => {
-      const response = await page.goto(url, { waitUntil: "commit", timeout: timeoutMs });
-      if (response === null) return null;
-      return { status: response.status(), headers: response.headers() };
-    },
+    probes: [
+      async ({ timeoutMs }) => {
+        const response = await page.goto(url, { waitUntil: "commit", timeout: timeoutMs });
+        if (response === null) return null;
+        return { status: response.status(), headers: response.headers() };
+      },
+      async ({ timeoutMs }) => {
+        const response = await request.get(url, {
+          maxRedirects: 0,
+          timeout: timeoutMs,
+          headers: buildWorkerVersionRequestHeaders({
+            baseUrl,
+            requestUrl: url,
+            workerVersionId,
+          }),
+        });
+        return { status: response.status(), headers: response.headers() };
+      },
+    ],
   });
 }
 
@@ -479,7 +493,7 @@ async function main() {
     const challenge = sha256Base64Url(verifier);
 
     await check("candidate Worker override readiness", async () => {
-      report.workerVersionReadiness = await waitForCandidateWorker(page, { baseUrl, workerVersionId });
+      report.workerVersionReadiness = await waitForCandidateWorker(page, page.request, { baseUrl, workerVersionId });
     });
 
     responseTracker = createWorkerVersionResponseTracker({ baseUrl, workerVersionId });
