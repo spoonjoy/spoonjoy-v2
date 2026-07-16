@@ -10,6 +10,7 @@
     "scripts/build-output-hygiene.ts",
     "scripts/script-environment.mjs",
     "scripts/deployment-preflight.ts",
+    "scripts/deploy-production-canary.ts",
     "scripts/migrate-cloudinary-covers-to-r2.ts",
     "scripts/native-dogfood-api-server.ts",
     "scripts/react-router-build.ts",

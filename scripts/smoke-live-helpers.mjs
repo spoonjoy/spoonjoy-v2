@@ -24,6 +24,200 @@ export {
 };
 
 export const IMAGE_COVER_SMOKE_FLAG = "--include-image-cover-smoke";
+const WORKER_VERSION_ID_FLAG = "--worker-version-id";
+const WORKER_VERSION_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const WORKER_VERSION_OVERRIDE_HEADER = "Cloudflare-Workers-Version-Overrides";
+const WORKER_VERSION_RESPONSE_HEADER = "X-Spoonjoy-Worker-Version";
+const WORKER_VERSION_READINESS_TIMEOUT_MS = 20_000;
+const WORKER_VERSION_READINESS_INTERVAL_MS = 500;
+const CLOUDFLARE_SECRET_ENV_NAMES = [
+  "CF_API_KEY",
+  "CF_API_TOKEN",
+  "CLOUDFLARE_API_KEY",
+  "CLOUDFLARE_API_TOKEN",
+  "CLOUDFLARE_D1_API_TOKEN",
+  "CLOUDFLARE_EMAIL",
+  "CLOUDFLARE_WORKERS_API_TOKEN",
+];
+
+function withoutCloudflareSecrets(env) {
+  const sanitized = { ...env };
+  for (const name of CLOUDFLARE_SECRET_ENV_NAMES) delete sanitized[name];
+  return sanitized;
+}
+
+export function buildD1CommandEnvironment(env) {
+  const token = env.CLOUDFLARE_D1_API_TOKEN ?? env.CLOUDFLARE_API_TOKEN;
+  const scoped = withoutCloudflareSecrets(env);
+  if (token) scoped.CLOUDFLARE_API_TOKEN = token;
+  return scoped;
+}
+
+export function buildBrowserEnvironment(env) {
+  const scoped = withoutCloudflareSecrets(env);
+  delete scoped.CLOUDFLARE_ACCOUNT_ID;
+  return scoped;
+}
+
+function normalizeWorkerVersionId(value) {
+  if (typeof value !== "string" || !WORKER_VERSION_UUID.test(value)) {
+    throw new Error("--worker-version-id must be supplied exactly once with a valid UUID.");
+  }
+  return value.toLowerCase();
+}
+
+export function buildWorkerVersionOverrideHeaders(workerVersionId) {
+  if (workerVersionId === null) return {};
+  const normalized = normalizeWorkerVersionId(workerVersionId);
+  return {
+    [WORKER_VERSION_OVERRIDE_HEADER]: `spoonjoy-v2="${normalized}"`,
+  };
+}
+
+function headerEntries(headers) {
+  if (headers instanceof Headers) return [...headers.entries()];
+  if (typeof headers !== "object" || headers === null) return [];
+  return Object.entries(headers);
+}
+
+function headerValue(headers, name) {
+  return headerEntries(headers).find(([headerName]) => headerName.toLowerCase() === name.toLowerCase())?.[1] ?? null;
+}
+
+function workerVersionResponseId(headers) {
+  const value = headerValue(headers, WORKER_VERSION_RESPONSE_HEADER);
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
+}
+
+function isSameOrigin(requestUrl, baseUrl) {
+  try {
+    return new URL(requestUrl).origin === new URL(baseUrl).origin;
+  } catch {
+    return false;
+  }
+}
+
+export function isRouteActionResponse({ baseUrl, responseUrl, routePath, requestMethod }) {
+  if (requestMethod.toUpperCase() !== "POST") return false;
+  try {
+    const response = new URL(responseUrl);
+    return response.origin === new URL(baseUrl).origin
+      && (response.pathname === routePath || response.pathname === `${routePath}.data`);
+  } catch {
+    return false;
+  }
+}
+
+function isStaticAssetBindingUrl(requestUrl) {
+  const pathname = new URL(requestUrl).pathname;
+  return pathname === "/assets" || pathname.startsWith("/assets/");
+}
+
+export function buildWorkerVersionRequestHeaders({ baseUrl, requestUrl, headers = {}, workerVersionId }) {
+  const normalized = workerVersionId === null ? null : normalizeWorkerVersionId(workerVersionId);
+  const scopedHeaders = Object.fromEntries(
+    headerEntries(headers).filter(([name]) => name.toLowerCase() !== WORKER_VERSION_OVERRIDE_HEADER.toLowerCase()),
+  );
+  if (normalized !== null && isSameOrigin(requestUrl, baseUrl)) {
+    scopedHeaders[WORKER_VERSION_OVERRIDE_HEADER] = `spoonjoy-v2="${normalized}"`;
+  }
+  return scopedHeaders;
+}
+
+export function assertWorkerVersionResponse(headers, workerVersionId, label = "Spoonjoy response") {
+  if (workerVersionId === null) return;
+  const expected = normalizeWorkerVersionId(workerVersionId);
+  const actual = workerVersionResponseId(headers);
+
+  if (!actual) {
+    throw new Error(`${label} is missing ${WORKER_VERSION_RESPONSE_HEADER}; candidate Worker ${expected} was not proven.`);
+  }
+  if (actual.toLowerCase() !== expected) {
+    throw new Error(`${label} expected candidate Worker ${expected} but received ${actual}.`);
+  }
+}
+
+export async function waitForWorkerVersionReady({
+  workerVersionId,
+  probe,
+  timeoutMs = WORKER_VERSION_READINESS_TIMEOUT_MS,
+  intervalMs = WORKER_VERSION_READINESS_INTERVAL_MS,
+  now = Date.now,
+  sleep = (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)),
+}) {
+  if (workerVersionId === null) {
+    return { attempts: 0, elapsedMs: 0, workerVersionId: null };
+  }
+  const expected = normalizeWorkerVersionId(workerVersionId);
+  if (typeof probe !== "function") {
+    throw new Error("Worker version readiness requires a probe function.");
+  }
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new Error("Worker version readiness timeout must be a positive finite number.");
+  }
+  if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
+    throw new Error("Worker version readiness interval must be a positive finite number.");
+  }
+
+  const startedAt = now();
+  let attempts = 0;
+  let lastObserved = null;
+  while (true) {
+    attempts += 1;
+    lastObserved = workerVersionResponseId(await probe(attempts));
+    const elapsedMs = Math.max(0, now() - startedAt);
+    if (lastObserved?.toLowerCase() === expected) {
+      return { attempts, elapsedMs, workerVersionId: expected };
+    }
+    if (elapsedMs >= timeoutMs) {
+      throw new Error(
+        `Candidate Worker ${expected} was not ready after ${attempts} attempts and ${elapsedMs}ms; last observed version: ${lastObserved ?? "missing"}.`,
+      );
+    }
+    await sleep(Math.min(intervalMs, timeoutMs - elapsedMs));
+  }
+}
+
+export function createWorkerVersionResponseTracker({ baseUrl, workerVersionId }) {
+  const expected = workerVersionId === null ? null : normalizeWorkerVersionId(workerVersionId);
+  const records = [];
+
+  const assertSince = (checkpoint, phase) => {
+    if (expected === null) return;
+    if (!Number.isInteger(checkpoint) || checkpoint < 0 || checkpoint > records.length) {
+      throw new Error(`${phase} used an invalid Worker response checkpoint.`);
+    }
+    const phaseRecords = records.slice(checkpoint);
+    if (phaseRecords.length === 0) {
+      throw new Error(`${phase} observed no Spoonjoy responses to verify.`);
+    }
+    const failures = phaseRecords.filter((record) => record.error !== null);
+    if (failures.length > 0) {
+      throw new Error(`${phase}: ${failures.map((record) => record.error.message).join(" ")}`);
+    }
+  };
+
+  return {
+    checkpoint() {
+      return records.length;
+    },
+    record({ url, headers, label = url }) {
+      if (expected === null || !isSameOrigin(url, baseUrl) || isStaticAssetBindingUrl(url)) return false;
+      let error = null;
+      try {
+        assertWorkerVersionResponse(headers, expected, label);
+      } catch (caught) {
+        error = caught instanceof Error ? caught : new Error(String(caught));
+      }
+      records.push({ error });
+      return true;
+    },
+    assertSince,
+    assertAll(phase) {
+      assertSince(0, phase);
+    },
+  };
+}
 
 export function sqlString(value) {
   return `'${value.replaceAll("'", "''")}'`;
@@ -62,6 +256,13 @@ export function parseMcpCanaryArgs(argv = process.argv.slice(2), env = process.e
     env,
     defaultBaseUrl: env.SPOONJOY_MCP_CANARY_BASE_URL ?? "https://spoonjoy.app",
   });
+  const versionFlagCount = argv.filter((value) => value === WORKER_VERSION_ID_FLAG).length;
+  if (versionFlagCount > 1) {
+    throw new Error("--worker-version-id must be supplied exactly once with a valid UUID.");
+  }
+  const rawWorkerVersionId = arg(argv, WORKER_VERSION_ID_FLAG, null);
+  const workerVersionId = rawWorkerVersionId === null ? null : normalizeWorkerVersionId(rawWorkerVersionId);
+
   return {
     baseUrl: target.baseUrl,
     outDir: arg(argv, "--out", "mcp-oauth-canary-artifacts"),
@@ -69,6 +270,7 @@ export function parseMcpCanaryArgs(argv = process.argv.slice(2), env = process.e
     target,
     shouldCleanup: !argv.includes("--keep-smoke-data"),
     includeLegacyDbProbe: !argv.includes("--skip-legacy-db-probe"),
+    workerVersionId,
   };
 }
 
@@ -268,6 +470,10 @@ export function redactMcpCanaryText(value) {
     (text, rule) => text.replace(rule.pattern, rule.replacement),
     String(value),
   );
+}
+
+export function serializeSanitizedMcpCanaryReport(report) {
+  return redactMcpCanaryText(JSON.stringify(report, null, 2));
 }
 
 export function findMcpCanarySecretLeaks(value) {

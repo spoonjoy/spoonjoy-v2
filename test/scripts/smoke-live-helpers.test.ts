@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { describe, expect, it, vi } from "vitest";
 
 import * as smokeHelpers from "../../scripts/smoke-live-helpers.mjs";
 import {
+  assertWorkerVersionResponse,
+  buildWorkerVersionRequestHeaders,
   buildD1CommandArgs,
   buildMcpCanaryCleanupD1Args,
   buildMcpCanaryConnectionResourceD1Args,
@@ -15,8 +18,13 @@ import {
   buildQaR2GetArgs,
   buildCleanupD1Args,
   buildUserCountD1Args,
+  buildWorkerVersionOverrideHeaders,
+  buildBrowserEnvironment,
+  buildD1CommandEnvironment,
+  createWorkerVersionResponseTracker,
   decideMcpCanaryIssueAction,
   findMcpCanarySecretLeaks,
+  isRouteActionResponse,
   isQaR2ObjectMissingError,
   mcpOAuthAuditHasFailures,
   normalizeMcpOAuthAuditRows,
@@ -27,11 +35,60 @@ import {
   parseSmokeArgs,
   readGitMetadata,
   redactMcpCanaryText,
+  serializeSanitizedMcpCanaryReport,
   shouldRunAppleOAuthCheck,
   usesLocalD1,
+  waitForWorkerVersionReady,
 } from "../../scripts/smoke-live-helpers.mjs";
 
+const CANDIDATE_VERSION = "22222222-2222-4222-8222-222222222222";
+
 describe("smoke-live helpers", () => {
+  it("recognizes React Router action responses at canonical and data URLs", () => {
+    const input = {
+      baseUrl: "https://spoonjoy.app",
+      routePath: "/signup",
+      requestMethod: "POST",
+    };
+
+    expect(isRouteActionResponse({ ...input, responseUrl: "https://spoonjoy.app/signup" })).toBe(true);
+    expect(isRouteActionResponse({ ...input, responseUrl: "https://spoonjoy.app/signup.data?_routes=routes/signup" })).toBe(true);
+    expect(isRouteActionResponse({ ...input, responseUrl: "https://spoonjoy.app/signup", requestMethod: "GET" })).toBe(false);
+    expect(isRouteActionResponse({ ...input, responseUrl: "https://spoonjoy.app/login.data" })).toBe(false);
+    expect(isRouteActionResponse({ ...input, responseUrl: "https://example.com/signup.data" })).toBe(false);
+    expect(isRouteActionResponse({ ...input, responseUrl: "not a url" })).toBe(false);
+  });
+
+  it("isolates the D1 token from Chromium and the Workers token from D1 commands", () => {
+    const env = {
+      PATH: "/test/bin",
+      CLOUDFLARE_ACCOUNT_ID: "account-id",
+      CLOUDFLARE_API_TOKEN: "legacy-token",
+      CLOUDFLARE_D1_API_TOKEN: "d1-token",
+      CLOUDFLARE_WORKERS_API_TOKEN: "workers-token",
+      CF_API_KEY: "api-key",
+      CF_API_TOKEN: "cf-token",
+      CLOUDFLARE_EMAIL: "ari@example.test",
+      SAFE_VALUE: "visible",
+    };
+
+    expect(buildD1CommandEnvironment(env)).toEqual({
+      PATH: "/test/bin",
+      CLOUDFLARE_ACCOUNT_ID: "account-id",
+      CLOUDFLARE_API_TOKEN: "d1-token",
+      SAFE_VALUE: "visible",
+    });
+    expect(buildBrowserEnvironment(env)).toEqual({
+      PATH: "/test/bin",
+      SAFE_VALUE: "visible",
+    });
+    expect(buildD1CommandEnvironment({ PATH: "/test/bin", CLOUDFLARE_API_TOKEN: "legacy-token" })).toEqual({
+      PATH: "/test/bin",
+      CLOUDFLARE_API_TOKEN: "legacy-token",
+    });
+    expect(buildD1CommandEnvironment({ PATH: "/test/bin" })).toEqual({ PATH: "/test/bin" });
+  });
+
   it("detects local D1 targets from localhost base URLs", () => {
     expect(usesLocalD1("http://localhost:5173")).toBe(true);
     expect(usesLocalD1("http://127.0.0.1:5173")).toBe(true);
@@ -236,17 +293,387 @@ describe("smoke-live helpers", () => {
       "mcp-oauth-canary-artifacts",
       "--keep-smoke-data",
       "--skip-legacy-db-probe",
+      "--worker-version-id",
+      CANDIDATE_VERSION,
     ])).toMatchObject({
       targetEnv: "production",
       baseUrl: "https://spoonjoy.app",
       outDir: "mcp-oauth-canary-artifacts",
       shouldCleanup: false,
       includeLegacyDbProbe: false,
+      workerVersionId: CANDIDATE_VERSION,
     });
     expect(parseMcpCanaryArgs(["--base-url", "http://localhost:5173"])).toMatchObject({
       targetEnv: "local",
       includeLegacyDbProbe: true,
+      workerVersionId: null,
     });
+  });
+
+  it("normalizes valid Worker version UUIDs and rejects ambiguous or malformed values", () => {
+    expect(parseMcpCanaryArgs([
+      "--base-url",
+      "http://localhost:5173",
+      "--worker-version-id",
+      CANDIDATE_VERSION.toUpperCase(),
+    ])).toMatchObject({ workerVersionId: CANDIDATE_VERSION });
+
+    for (const argv of [
+      ["--base-url", "http://localhost:5173", "--worker-version-id"],
+      ["--base-url", "http://localhost:5173", "--worker-version-id", "not-a-uuid"],
+      ["--base-url", "http://localhost:5173", "--worker-version-id", "22222222222242228222222222222222"],
+      ["--base-url", "http://localhost:5173", "--worker-version-id", "22222222-2222-0222-8222-222222222222"],
+      ["--base-url", "http://localhost:5173", "--worker-version-id", "22222222-2222-4222-7222-222222222222"],
+      [
+        "--base-url",
+        "http://localhost:5173",
+        "--worker-version-id",
+        CANDIDATE_VERSION,
+        "--worker-version-id",
+        "33333333-3333-4333-8333-333333333333",
+      ],
+    ]) {
+      expect(() => parseMcpCanaryArgs(argv)).toThrow(/--worker-version-id.*valid UUID/i);
+    }
+  });
+
+  it("builds an exact Cloudflare structured Worker-version override header", () => {
+    expect(buildWorkerVersionOverrideHeaders(null)).toEqual({});
+    expect(buildWorkerVersionOverrideHeaders(CANDIDATE_VERSION)).toEqual({
+      "Cloudflare-Workers-Version-Overrides": `spoonjoy-v2="${CANDIDATE_VERSION}"`,
+    });
+    expect(() => buildWorkerVersionOverrideHeaders("not-a-uuid")).toThrow(/valid UUID/i);
+  });
+
+  it("requires every labeled Spoonjoy response to prove the exact candidate Worker version", () => {
+    expect(() => assertWorkerVersionResponse({}, null)).not.toThrow();
+    expect(() => assertWorkerVersionResponse(
+      { "x-spoonjoy-worker-version": CANDIDATE_VERSION },
+      CANDIDATE_VERSION,
+    )).not.toThrow();
+    expect(() => assertWorkerVersionResponse(
+      { "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION },
+      CANDIDATE_VERSION,
+    )).not.toThrow();
+    expect(() => assertWorkerVersionResponse(
+      new Headers({ "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION }),
+      CANDIDATE_VERSION,
+    )).not.toThrow();
+    expect(() => assertWorkerVersionResponse({}, CANDIDATE_VERSION)).toThrow(/missing.*candidate Worker/i);
+    expect(() => assertWorkerVersionResponse(
+      { "x-spoonjoy-worker-version": "33333333-3333-4333-8333-333333333333" },
+      CANDIDATE_VERSION,
+      "OAuth token exchange",
+    )).toThrow(/OAuth token exchange.*expected.*22222222.*received.*33333333/i);
+    expect(() => assertWorkerVersionResponse(
+      { "x-spoonjoy-worker-version": CANDIDATE_VERSION.toUpperCase() },
+      CANDIDATE_VERSION,
+    )).not.toThrow();
+    expect(() => assertWorkerVersionResponse(null, CANDIDATE_VERSION)).toThrow(/missing/i);
+  });
+
+  it("adds the override only to same-origin requests and strips it everywhere else", () => {
+    const existingHeaders = {
+      Authorization: "Bearer token",
+      "cloudflare-workers-version-overrides": "stale-worker=\"stale-version\"",
+      Accept: "application/json",
+    };
+
+    expect(buildWorkerVersionRequestHeaders({
+      baseUrl: "https://spoonjoy.app",
+      requestUrl: "https://spoonjoy.app/oauth/token?flow=refresh",
+      headers: existingHeaders,
+      workerVersionId: CANDIDATE_VERSION,
+    })).toEqual({
+      Authorization: "Bearer token",
+      Accept: "application/json",
+      "Cloudflare-Workers-Version-Overrides": `spoonjoy-v2="${CANDIDATE_VERSION}"`,
+    });
+
+    for (const requestUrl of [
+      "https://claude.ai/api/mcp/auth_callback",
+      "https://assets.spoonjoy.app/image.jpg",
+      "http://spoonjoy.app/oauth/token",
+      "https://spoonjoy.app:444/oauth/token",
+      "not a URL",
+    ]) {
+      expect(buildWorkerVersionRequestHeaders({
+        baseUrl: "https://spoonjoy.app",
+        requestUrl,
+        headers: existingHeaders,
+        workerVersionId: CANDIDATE_VERSION,
+      })).toEqual({
+        Authorization: "Bearer token",
+        Accept: "application/json",
+      });
+    }
+
+    expect(buildWorkerVersionRequestHeaders({
+      baseUrl: "https://spoonjoy.app",
+      requestUrl: "https://spoonjoy.app/signup",
+      headers: new Headers({ "X-Test": "yes" }),
+      workerVersionId: null,
+    })).toEqual({ "X-Test": "yes" });
+    expect(() => buildWorkerVersionRequestHeaders({
+      baseUrl: "https://spoonjoy.app",
+      requestUrl: "https://spoonjoy.app/signup",
+      workerVersionId: "not-a-uuid",
+    })).toThrow(/valid UUID/i);
+  });
+
+  it("waits through Cloudflare override propagation before declaring the candidate ready", async () => {
+    const responses = [
+      {},
+      { "x-spoonjoy-worker-version": "33333333-3333-4333-8333-333333333333" },
+      { "x-spoonjoy-worker-version": CANDIDATE_VERSION },
+    ];
+    let now = 1_000;
+    const sleep = vi.fn(async (delayMs: number) => {
+      now += delayMs;
+    });
+    const probe = vi.fn(async () => responses.shift() ?? {});
+
+    await expect(waitForWorkerVersionReady({
+      workerVersionId: CANDIDATE_VERSION,
+      probe,
+      timeoutMs: 2_000,
+      intervalMs: 250,
+      now: () => now,
+      sleep,
+    })).resolves.toEqual({
+      attempts: 3,
+      elapsedMs: 500,
+      workerVersionId: CANDIDATE_VERSION,
+    });
+    expect(probe).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenNthCalledWith(1, 250);
+    expect(sleep).toHaveBeenNthCalledWith(2, 250);
+  });
+
+  it("uses the bounded real timer when no sleep dependency is supplied", async () => {
+    let attempts = 0;
+    await expect(waitForWorkerVersionReady({
+      workerVersionId: CANDIDATE_VERSION,
+      probe: async () => {
+        attempts += 1;
+        return attempts === 1 ? {} : { "x-spoonjoy-worker-version": CANDIDATE_VERSION };
+      },
+      timeoutMs: 100,
+      intervalMs: 1,
+    })).resolves.toMatchObject({ attempts: 2, workerVersionId: CANDIDATE_VERSION });
+  });
+
+  it("bounds Worker override readiness and reports the last observed version", async () => {
+    let now = 5_000;
+    const sleep = vi.fn(async (delayMs: number) => {
+      now += delayMs;
+    });
+
+    await expect(waitForWorkerVersionReady({
+      workerVersionId: CANDIDATE_VERSION,
+      probe: async () => ({
+        "x-spoonjoy-worker-version": "33333333-3333-4333-8333-333333333333",
+      }),
+      timeoutMs: 600,
+      intervalMs: 250,
+      now: () => now,
+      sleep,
+    })).rejects.toThrow(/not ready after 4 attempts and 600ms.*33333333/i);
+    expect(sleep.mock.calls).toEqual([[250], [250], [100]]);
+
+    await expect(waitForWorkerVersionReady({
+      workerVersionId: CANDIDATE_VERSION,
+      probe: async () => ({}),
+      timeoutMs: 1,
+      intervalMs: 1,
+      now: (() => {
+        let current = 0;
+        return () => current++;
+      })(),
+      sleep: async () => undefined,
+    })).rejects.toThrow(/last observed version: missing/i);
+  });
+
+  it("skips readiness without a candidate and rejects invalid polling configuration", async () => {
+    const probe = vi.fn(async () => ({}));
+    await expect(waitForWorkerVersionReady({
+      workerVersionId: null,
+      probe,
+    })).resolves.toEqual({
+      attempts: 0,
+      elapsedMs: 0,
+      workerVersionId: null,
+    });
+    expect(probe).not.toHaveBeenCalled();
+
+    for (const input of [
+      { probe: null, timeoutMs: 1, intervalMs: 1 },
+      { probe, timeoutMs: 0, intervalMs: 1 },
+      { probe, timeoutMs: 1, intervalMs: 0 },
+      { probe, timeoutMs: Number.POSITIVE_INFINITY, intervalMs: 1 },
+    ]) {
+      await expect(waitForWorkerVersionReady({
+        workerVersionId: CANDIDATE_VERSION,
+        ...input,
+      })).rejects.toThrow(/readiness/i);
+    }
+
+    const failure = new Error("probe failed");
+    await expect(waitForWorkerVersionReady({
+      workerVersionId: CANDIDATE_VERSION,
+      probe: async () => {
+        throw failure;
+      },
+    })).rejects.toBe(failure);
+  });
+
+  it("tracks every same-origin browser response between flow checkpoints", () => {
+    const tracker = createWorkerVersionResponseTracker({
+      baseUrl: "https://spoonjoy.app",
+      workerVersionId: CANDIDATE_VERSION,
+    });
+    const signupCheckpoint = tracker.checkpoint();
+
+    expect(tracker.record({
+      url: "https://claude.ai/api/mcp/auth_callback",
+      headers: {},
+      label: "Claude callback",
+    })).toBe(false);
+    expect(tracker.record({
+      url: "https://spoonjoy.app/signup",
+      headers: { "x-spoonjoy-worker-version": CANDIDATE_VERSION },
+      label: "GET /signup",
+    })).toBe(true);
+    expect(() => tracker.assertSince(signupCheckpoint, "signup page")).not.toThrow();
+
+    const submitCheckpoint = tracker.checkpoint();
+    tracker.record({
+      url: "https://spoonjoy.app/signup",
+      headers: {},
+      label: "POST /signup",
+    });
+    tracker.record({
+      url: "https://spoonjoy.app/my-recipes",
+      headers: { "x-spoonjoy-worker-version": "33333333-3333-4333-8333-333333333333" },
+      label: "GET /my-recipes",
+    });
+    expect(() => tracker.assertSince(submitCheckpoint, "signup submission")).toThrow(
+      /signup submission.*POST \/signup.*missing.*GET \/my-recipes.*expected/i,
+    );
+    expect(() => tracker.assertAll("browser flow")).toThrow(/browser flow.*POST \/signup/i);
+  });
+
+  it("requires Worker proof from application responses while ignoring static asset binding responses", () => {
+    const tracker = createWorkerVersionResponseTracker({
+      baseUrl: "https://spoonjoy.app",
+      workerVersionId: CANDIDATE_VERSION,
+    });
+    const checkpoint = tracker.checkpoint();
+
+    expect(tracker.record({
+      url: "https://spoonjoy.app/assets/entry.client-example.js",
+      headers: {},
+      label: "GET /assets/entry.client-example.js",
+    })).toBe(false);
+    expect(tracker.record({
+      url: "https://spoonjoy.app/signup",
+      headers: { "x-spoonjoy-worker-version": CANDIDATE_VERSION },
+      label: "GET /signup",
+    })).toBe(true);
+    expect(() => tracker.assertSince(checkpoint, "signup page")).not.toThrow();
+
+    const assetsOnlyCheckpoint = tracker.checkpoint();
+    expect(tracker.record({
+      url: "https://spoonjoy.app/assets/root-example.css",
+      headers: {},
+      label: "GET /assets/root-example.css",
+    })).toBe(false);
+    expect(() => tracker.assertSince(assetsOnlyCheckpoint, "assets-only phase")).toThrow(
+      /observed no Spoonjoy responses/i,
+    );
+  });
+
+  it("requires browser phases to observe responses and validates tracker checkpoints", () => {
+    const tracker = createWorkerVersionResponseTracker({
+      baseUrl: "https://spoonjoy.app",
+      workerVersionId: CANDIDATE_VERSION,
+    });
+    expect(() => tracker.assertSince(0, "authorize page")).toThrow(/observed no Spoonjoy responses/i);
+    expect(() => tracker.assertSince(-1, "invalid phase")).toThrow(/checkpoint/i);
+    expect(() => tracker.assertSince(1, "future phase")).toThrow(/checkpoint/i);
+
+    const disabled = createWorkerVersionResponseTracker({
+      baseUrl: "https://spoonjoy.app",
+      workerVersionId: null,
+    });
+    expect(disabled.record({ url: "https://spoonjoy.app/signup", headers: {} })).toBe(false);
+    expect(() => disabled.assertSince(0, "local signup")).not.toThrow();
+    expect(() => disabled.assertAll("local browser flow")).not.toThrow();
+
+    const hostileHeaders = new Proxy({}, {
+      ownKeys() {
+        throw "header enumeration failed";
+      },
+    });
+    tracker.record({
+      url: "https://spoonjoy.app/oauth/authorize",
+      headers: hostileHeaders,
+      label: "hostile response",
+    });
+    expect(() => tracker.assertAll("defensive response handling")).toThrow(/header enumeration failed/i);
+  });
+
+  it("keeps the candidate ID while redacting the persisted MCP canary report", () => {
+    const serialized = serializeSanitizedMcpCanaryReport({
+      workerVersionId: CANDIDATE_VERSION,
+      failure: { message: "Authorization: Bearer sj_abcdefghijklmnopqrstuvwxyz0123456789" },
+    });
+
+    expect(JSON.parse(serialized)).toEqual({
+      workerVersionId: CANDIDATE_VERSION,
+      failure: { message: "Authorization: Bearer [REDACTED]" },
+    });
+    expect(serialized).not.toContain("sj_abcdefghijklmnopqrstuvwxyz0123456789");
+  });
+
+  it("wires pre-mutation readiness, exhaustive response proof, scoped overrides, and sanitized reporting into the live canary", () => {
+    const source = readFileSync("scripts/smoke-mcp-oauth-live.mjs", "utf8");
+    const wrangler = JSON.parse(readFileSync("wrangler.json", "utf8"));
+
+    expect(source).not.toContain("extraHTTPHeaders");
+    expect(source).toContain("buildWorkerVersionRequestHeaders({");
+    expect(source).toContain('context.route("**/*"');
+    expect(source).toContain('context.on("response"');
+    expect(source).toContain("createWorkerVersionResponseTracker({");
+    expect(source).toContain("assertWorkerVersionResponse(response.headers(), workerVersionId, label)");
+    expect(source).toContain("return waitForWorkerVersionReady({");
+    expect(source.indexOf('check("candidate Worker override readiness"')).toBeLessThan(
+      source.indexOf('check("signup disposable user"'),
+    );
+    expect(source).toContain("responseTracker.assertAll(\"complete browser flow\")");
+    expect(source).toContain("maxRedirects: 0");
+    expect(source).toContain('serviceWorkers: "block"');
+    expect(source).toContain("env: buildBrowserEnvironment(process.env)");
+    expect(source).toContain("env: buildD1CommandEnvironment(process.env)");
+    expect(source.indexOf('check("candidate Worker override readiness"')).toBeLessThan(
+      source.indexOf("canaryMutationStarted = true"),
+    );
+    for (const functionName of [
+      "readProtectedResource",
+      "registerClaudeClient",
+      "exchangeCodeForTokens",
+      "refreshTokens",
+      "expectRefreshReplayRejected",
+      "mcpRpc",
+    ]) {
+      const functionSource = source.match(
+        new RegExp(`async function ${functionName}\\([\\s\\S]*?\\n}\\n`),
+      )?.[0] ?? "";
+      expect(functionSource, `${functionName} must use the verified request wrapper`).toContain("spoonjoyRequest(request");
+    }
+    expect(source).toContain("workerVersionId,");
+    expect(source).toContain("serializeSanitizedMcpCanaryReport(report)");
+    expect(wrangler.version_metadata).toEqual({ binding: "CF_VERSION_METADATA" });
   });
 
   it("uses process defaults for omitted MCP canary args", () => {
@@ -633,6 +1060,10 @@ describe("smoke-live helpers", () => {
   });
 
   it("reads git metadata with unknown fallbacks", () => {
+    expect(readGitMetadata()).toEqual({
+      branch: expect.stringMatching(/\S/),
+      commit: expect.stringMatching(/^[0-9a-f]{12}$/),
+    });
     expect(readGitMetadata(() => "")).toEqual({ branch: "unknown", commit: "unknown" });
 
     let calls = 0;

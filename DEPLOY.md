@@ -280,10 +280,14 @@ Use this path when you want to inspect migrations before applying them or when m
 ### `pnpm deploy:auto` — one-shot preflight + migrate + deploy
 
 ```bash
-pnpm deploy:auto
+SOURCE_SHA="$(git rev-parse HEAD)" pnpm deploy:auto
 ```
 
-This chains `SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run deploy:preflight && pnpm run build && pnpm exec wrangler d1 migrations apply DB --remote && pnpm run deploy:preflight && pnpm exec wrangler deploy`. The first preflight still checks local deploy readiness but skips the remote-migration check so pending migrations can be applied; the second preflight verifies remote D1 is up to date before deploying. Use this when migrations are routine and you want a single command to fully push a release. This is the recommended path for the common case.
+This runs the staged production release orchestrator with an exact 40-character lowercase source SHA. It proves the checked-out commit and clean Git tree, builds without Cloudflare credentials, inspects every pending D1 migration, refuses destructive or non-additive SQL, applies compatible migrations with a D1-only token, and reruns the full preflight. It then uses a separate Workers-only token to upload a source-tagged Worker version, stages the candidate at 0% traffic, smokes that exact candidate, promotes it, and verifies both Cloudflare deployment state and the public version header. Any failure after staging automatically restores and verifies the prior Worker version.
+
+The release result is written to `mcp-oauth-canary-artifacts/production-release.json` with sanitized Git provenance, reviewed migrations, D1 apply state, version IDs, phase, status, and redacted failure text. D1 is not Worker-versioned, so destructive migrations require a separately reviewed expand/migrate/contract rollout and are intentionally blocked from this command.
+
+Intentional rollbacks are dispatched in GitHub with a historical `source_sha` and its exact source-tagged Worker `rollback_version_id`. Current `main` tooling resolves and deploys that immutable version directly; historical scripts are never executed, and D1 is not rolled back.
 
 **Why this matters**: on 2026-05-10 a production deploy went out without applying remote D1 migrations, causing `/search` to 500 with `no such column: ...` errors. `pnpm deploy:auto` and the preflight remote-migration check exist to make that failure mode impossible going forward.
 

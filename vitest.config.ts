@@ -15,6 +15,7 @@ const coverageInclude = [
   "scripts/smoke-api-live.mjs",
   "scripts/qa-preflight.ts",
   "scripts/deployment-preflight.ts",
+  "scripts/deploy-production-canary.ts",
 ] as const;
 
 const hasCoverageFlag = process.argv.some((arg) =>
