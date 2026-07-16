@@ -166,6 +166,8 @@ wrangler secret put GITHUB_CLIENT_SECRET
 | `APPLE_TEAM_ID` | Apple Developer Team ID | Top right of Apple Developer Portal |
 | `APPLE_KEY_ID` | Apple Sign-in Key ID | Create in Keys section |
 | `APPLE_PRIVATE_KEY` | Apple private key (.p8 file contents) | Download when creating key |
+| `APPLE_OAUTH_CALLBACK_MODE` | Social callback selection: `legacy` or `clean` | Defaults to `legacy` when omitted |
+| `APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED` | Whether the clean social callback is registered with Apple | Defaults to `false` when omitted |
 
 ```bash
 wrangler secret put APPLE_CLIENT_ID
@@ -175,11 +177,33 @@ wrangler secret put APPLE_PRIVATE_KEY
 # For private key, paste the entire contents including BEGIN/END lines
 ```
 
+The two callback controls are non-sensitive runtime configuration. During this
+backward-compatible stage, leave them omitted or set them to:
+
+```bash
+APPLE_OAUTH_CALLBACK_MODE=legacy
+APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED=false
+```
+
+The current Apple Service ID return URL for new login starts is
+`https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple`.
+Account linking uses the same legacy path with `method=linkAppleAccount`. The
+clean handler at `https://spoonjoy.app/auth/apple/callback` is deployed in
+parallel, but starts must not select it until that exact URL is registered in
+the Apple Developer portal and both paths have passed canaries.
+
+After registration, set `APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED=true` first.
+Switch `APPLE_OAUTH_CALLBACK_MODE=clean` only in the separately reviewed start
+switch. To roll back new starts, set `APPLE_OAUTH_CALLBACK_MODE=legacy`; keep
+both portal return URLs and both handlers in place for in-flight sessions.
+
 **Apple OAuth Setup:**
 1. Go to [Apple Developer Portal](https://developer.apple.com/)
 2. Identifiers → Create App ID with "Sign in with Apple" capability
 3. Identifiers → Create Services ID, configure domains and redirect URLs.
-   The Services ID must include `https://your-domain.com/auth/apple/callback`.
+   Preserve the currently registered legacy return URL while adding
+   `https://your-domain.com/auth/apple/callback`; do not switch starts until
+   both callbacks have been canaried.
    Apple uses `response_mode=form_post`, so this callback is a cross-site POST
    from `appleid.apple.com`; keep that origin in `react-router.config.ts`.
 4. Keys → Create key with "Sign in with Apple", download .p8 file
@@ -332,6 +356,8 @@ The deploy output will show your Worker URL: `https://spoonjoy-v2.<account>.work
 | `APPLE_TEAM_ID` | If using Apple login | Apple OAuth |
 | `APPLE_KEY_ID` | If using Apple login | Apple OAuth |
 | `APPLE_PRIVATE_KEY` | If using Apple login | Apple OAuth |
+| `APPLE_OAUTH_CALLBACK_MODE` | Optional | Apple social callback mode; defaults to `legacy` |
+| `APPLE_OAUTH_CLEAN_CALLBACK_REGISTERED` | Optional | Clean-callback registration assertion; defaults to `false` |
 | `OPENAI_API_KEY` | Optional | AI features |
 | `VAPID_PUBLIC_KEY` | ✅ Yes | Web push public key |
 | `VAPID_PRIVATE_KEY` | ✅ Yes | Web push private key |

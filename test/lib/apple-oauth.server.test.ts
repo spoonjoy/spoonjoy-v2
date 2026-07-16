@@ -98,6 +98,7 @@ vi.mock("arctic", () => {
 
 import {
   createAppleAuthorizationURL,
+  createRegisteredAppleAuthorizationURL,
   generateOAuthState,
   verifyAppleCallback,
   type AppleCallbackData,
@@ -294,6 +295,38 @@ not-base64-@@@
 
       // Should properly encode the redirect_uri
       expect(url.searchParams.get("redirect_uri")).toBe(redirectWithQuery);
+    });
+  });
+
+  describe("createRegisteredAppleAuthorizationURL", () => {
+    const legacyRedirectUri =
+      "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple";
+    const cleanRedirectUri = "https://spoonjoy.app/auth/apple/callback";
+
+    it("allows either exact Apple return URL when it is registered", () => {
+      const registeredRedirectUris = [legacyRedirectUri, cleanRedirectUri];
+
+      expect(createRegisteredAppleAuthorizationURL(
+        mockConfig,
+        legacyRedirectUri,
+        "legacy-state",
+        registeredRedirectUris,
+      ).searchParams.get("redirect_uri")).toBe(legacyRedirectUri);
+      expect(createRegisteredAppleAuthorizationURL(
+        mockConfig,
+        cleanRedirectUri,
+        "clean-state",
+        registeredRedirectUris,
+      ).searchParams.get("redirect_uri")).toBe(cleanRedirectUri);
+    });
+
+    it("refuses to generate an Apple redirect_uri outside the registered allowlist", () => {
+      expect(() => createRegisteredAppleAuthorizationURL(
+        mockConfig,
+        cleanRedirectUri,
+        "state",
+        [legacyRedirectUri],
+      )).toThrow("Apple OAuth redirect URI is not registered: https://spoonjoy.app/auth/apple/callback");
     });
   });
 

@@ -32,6 +32,21 @@ describe("legacy Redwood dbAuth OAuth route", () => {
     expect(mocks.handleAppleCallback).toHaveBeenCalledWith(request, {});
   });
 
+  it.each(["signupWithApple", "linkAppleAccount"])(
+    "keeps the %s legacy Apple callback method working during rollout",
+    async (method) => {
+      const request = new Request(
+        `https://spoonjoy.app/.redwood/functions/auth/oauth?method=${method}`,
+        { method: "POST" },
+      );
+
+      const response = await action({ request, context: {}, params: {} } as any);
+
+      expect(response.headers.get("Location")).toBe("/apple");
+      expect(mocks.handleAppleCallback).toHaveBeenCalledWith(request, {});
+    },
+  );
+
   it("rejects unsupported legacy POST callbacks", async () => {
     const request = new Request("https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithGitHub", {
       method: "POST",
