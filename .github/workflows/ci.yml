@@ -30,9 +30,6 @@ jobs:
           corepack enable
           corepack prepare pnpm@10.28.1 --activate
 
-      - name: 📥 Install dependencies
-        run: pnpm install --frozen-lockfile
-
       - name: 🔒 Install pinned OSV-Scanner
         env:
           OSV_SCANNER_VERSION: v2.3.8
@@ -41,11 +38,16 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .cache/osv-scanner
+          actual_tag_sha="$(curl -fsSL --retry 3 --retry-delay 2 "https://api.github.com/repos/google/osv-scanner/git/ref/tags/${OSV_SCANNER_VERSION}" | jq -er '.object | select(.type == "commit") | .sha')"
+          test "$actual_tag_sha" = "$OSV_SCANNER_TAG_SHA"
           curl -fsSL --retry 3 --retry-delay 2 "https://github.com/google/osv-scanner/releases/download/${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64" -o .cache/osv-scanner/osv-scanner
           printf '%s  %s\n' "$OSV_SCANNER_LINUX_AMD64_SHA256" ".cache/osv-scanner/osv-scanner" | sha256sum -c -
           chmod +x .cache/osv-scanner/osv-scanner
-          printf 'OSV-Scanner %s tag %s\n' "$OSV_SCANNER_VERSION" "$OSV_SCANNER_TAG_SHA"
+          printf 'OSV-Scanner %s verified tag %s\n' "$OSV_SCANNER_VERSION" "$actual_tag_sha"
           .cache/osv-scanner/osv-scanner --version
+
+      - name: 📥 Install advisory dependencies without lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: 🔒 Run dependency advisory scan
         run: |
