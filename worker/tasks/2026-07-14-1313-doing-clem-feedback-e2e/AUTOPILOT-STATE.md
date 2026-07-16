@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; reviewed contract checkpoint `941c063910098f02985b694d64fdebf1a2151b3f` integrates `origin/main@dcf296bd`; latest completed reviewer input HEAD is `9f706dbb35c20dae1c83ab59c30e4da2d86ae4d9`. Quality converged there. Commits after that input may only record/synchronize its verdict and gate until Tinfoil receives the resulting exact HEAD.
+- Branch: `worker/clem-feedback-e2e`; reviewed contract checkpoint `941c063910098f02985b694d64fdebf1a2151b3f` integrates `origin/main@dcf296bd`; latest completed reviewer input HEAD is `5db285824ef33d396f7cd4e8ece83f62b061f31d`. Tinfoil converged there with no findings. Commits after that input may only record/synchronize its verdict and gate until Stranger receives the resulting exact HEAD.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is approved after five fresh hostile rounds.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation has not started.
-- Active gate: Quality is clean; Scrutiny is at zero consecutive clean passes. Commit/push/synchronize this state-only record, then run fresh Tinfoil followed immediately by Stranger when clean.
+- Active gate: Tinfoil is clean, giving one consecutive clean Scrutiny pass. Commit/push/synchronize this state-only record, then immediately run fresh Stranger With Candy on the resulting exact HEAD.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Commit/push this exact Quality record, synchronize/push the active Desk mirrors and task metadata while leaving Desk drafting/planning incomplete, then run fresh Tinfoil.
+Commit/push this exact clean-Tinfoil record, synchronize/push the active Desk mirrors and task metadata while leaving Desk drafting/planning incomplete, then run fresh Stranger with no intervening contract change.
 
 ## Operator-Locked Rules
 
@@ -41,7 +41,7 @@ Commit/push this exact Quality record, synchronize/push the active Desk mirrors 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
 | Planning reviewer gate | deferred by scope | Planning approved at `2c3b4759` after convergence | Closed |
-| Doing review chain | needs reviewer gate | Granularity, Validation, Ambiguity, and literal-command Quality converged; Scrutiny is reset | Commit/sync exact Quality record, then restart Tinfoil |
+| Doing review chain | needs reviewer gate | Granularity, Validation, Ambiguity, and Quality converged; Tinfoil Round 9 is clean, one consecutive Scrutiny pass | Commit/sync exact clean record, then run fresh Stranger immediately |
 | Work Doer Units 0-37 | ready | Full red/green/verify/visual/ship queue is defined | Start after doing review convergence |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
 
