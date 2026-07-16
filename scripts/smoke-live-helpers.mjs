@@ -130,6 +130,59 @@ export function buildWorkerVersionRequestHeaders({ baseUrl, requestUrl, headers 
   return scopedHeaders;
 }
 
+function cdpHeaders(headers) {
+  return Object.entries(headers).map(([name, value]) => ({ name, value: String(value) }));
+}
+
+export async function installWorkerVersionBrowserRouting(
+  page,
+  { baseUrl, workerVersionId, interceptRequest },
+) {
+  const session = await page.context().newCDPSession(page);
+  let failure = null;
+
+  await session.send("Fetch.enable", {
+    patterns: [{ requestStage: "Request", urlPattern: "*" }],
+  });
+  session.on("Fetch.requestPaused", async (event) => {
+    try {
+      const intercepted = await interceptRequest(event.request);
+      if (intercepted !== null) {
+        await session.send("Fetch.fulfillRequest", {
+          requestId: event.requestId,
+          responseCode: intercepted.status,
+          responseHeaders: cdpHeaders(intercepted.headers),
+          body: Buffer.from(intercepted.body).toString("base64"),
+        });
+        return;
+      }
+
+      const headers = buildWorkerVersionRequestHeaders({
+        baseUrl,
+        requestUrl: event.request.url,
+        headers: event.request.headers,
+        workerVersionId,
+      });
+      await session.send("Fetch.continueRequest", {
+        requestId: event.requestId,
+        headers: cdpHeaders(headers),
+      });
+    } catch (error) {
+      failure = new Error(`Chromium request interception failed: ${String(error)}`);
+      await session.send("Fetch.failRequest", {
+        requestId: event.requestId,
+        errorReason: "Aborted",
+      }).catch(() => undefined);
+    }
+  });
+
+  return {
+    assertHealthy() {
+      if (failure !== null) throw failure;
+    },
+  };
+}
+
 export function assertWorkerVersionResponse(headers, workerVersionId, label = "Spoonjoy response") {
   if (workerVersionId === null) return;
   const expected = normalizeWorkerVersionId(workerVersionId);
@@ -222,6 +275,8 @@ export async function waitForWorkerChannelsReady({
   intervalMs = WORKER_VERSION_READINESS_INTERVAL_MS,
   now = Date.now,
   sleep,
+  setTimer = setTimeout,
+  clearTimer = clearTimeout,
 }) {
   if (workerVersionId === null) {
     return { attempts: 0, elapsedMs: 0, workerVersionId: null };
@@ -240,10 +295,19 @@ export async function waitForWorkerChannelsReady({
     sleep,
     probe: async (attempt, remainingMs) => {
       const responses = await Promise.all(probes.map(async (probe) => {
+        let timer;
+        const deadline = new Promise((resolve) => {
+          timer = setTimer(() => resolve(null), remainingMs);
+        });
         try {
-          return await probe({ attempt, timeoutMs: remainingMs });
-        } catch {
-          return null;
+          return await Promise.race([
+            Promise.resolve()
+              .then(() => probe({ attempt, timeoutMs: remainingMs }))
+              .catch(() => null),
+            deadline,
+          ]);
+        } finally {
+          clearTimer(timer);
         }
       }));
       const allChannelsReady = responses.every((response) => (

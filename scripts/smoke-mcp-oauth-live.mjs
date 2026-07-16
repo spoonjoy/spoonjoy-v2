@@ -18,6 +18,7 @@ import {
   buildUserCountD1Args,
   buildWorkerVersionRequestHeaders,
   createWorkerVersionResponseTracker,
+  installWorkerVersionBrowserRouting,
   isRouteActionResponse,
   parseD1CountOutput,
   parseD1RowsOutput,
@@ -69,8 +70,10 @@ async function spoonjoyRequest(request, { baseUrl, workerVersionId, method, url,
   return response;
 }
 
-async function waitForCandidateWorker(page, request, { baseUrl, workerVersionId }) {
+async function waitForCandidateWorker(page, mutationPage, request, { baseUrl, workerVersionId }) {
   const url = new URL("/.well-known/oauth-protected-resource/mcp", baseUrl).toString();
+  const mutationPath = "/.well-known/spoonjoy-release-readiness";
+  const mutationUrl = new URL(mutationPath, baseUrl).toString();
   return waitForWorkerChannelsReady({
     workerVersionId,
     probes: [
@@ -89,6 +92,26 @@ async function waitForCandidateWorker(page, request, { baseUrl, workerVersionId 
             workerVersionId,
           }),
         });
+        return { status: response.status(), headers: response.headers() };
+      },
+      async ({ timeoutMs }) => {
+        const startedAt = Date.now();
+        const navigation = await mutationPage.goto(mutationUrl, { waitUntil: "load", timeout: timeoutMs });
+        if (navigation === null) return null;
+        if (navigation.status() !== 200) {
+          return { status: navigation.status(), headers: navigation.headers() };
+        }
+        const requestTimeoutMs = Math.max(1, timeoutMs - (Date.now() - startedAt));
+        const actionResponse = mutationPage.waitForResponse((response) => isRouteActionResponse({
+          baseUrl,
+          responseUrl: response.url(),
+          routePath: mutationPath,
+          requestMethod: response.request().method(),
+        }), { timeout: requestTimeoutMs });
+        const [response] = await Promise.all([
+          actionResponse,
+          mutationPage.getByRole("button", { name: "Probe Worker mutation channel" }).click({ timeout: requestTimeoutMs }),
+        ]);
         return { status: response.status(), headers: response.headers() };
       },
     ],
@@ -196,14 +219,6 @@ async function approveConsent(page, { baseUrl, clientId, codeChallenge, resource
     state: `mcp-canary-${Date.now().toString(36)}`,
     resource,
   }).toString();
-
-  await page.context().route("**/api/mcp/auth_callback**", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "text/html",
-      body: "<!doctype html><title>Claude callback intercepted by Spoonjoy canary</title>",
-    });
-  });
 
   await page.setViewportSize({ width: 1440, height: 900 });
   const pageCheckpoint = responseTracker.checkpoint();
@@ -455,6 +470,8 @@ async function main() {
   };
   let browser;
   let context;
+  let pageRouting;
+  let mutationPageRouting;
   let responseTracker;
   let clientId = null;
   let connectionKey = `mcp_canary_connection_${stamp}`;
@@ -477,23 +494,32 @@ async function main() {
       serviceWorkers: "block",
       viewport: { width: 1440, height: 900 },
     });
-    await context.route("**/*", async (route) => {
-      const request = route.request();
-      await route.continue({
-        headers: buildWorkerVersionRequestHeaders({
-          baseUrl,
-          requestUrl: request.url(),
-          headers: request.headers(),
-          workerVersionId,
-        }),
-      });
-    });
     const page = await context.newPage();
+    const mutationPage = await context.newPage();
+    const claudeCallback = new URL(CLAUDE_MCP_REDIRECT_URI);
+    pageRouting = await installWorkerVersionBrowserRouting(page, {
+      baseUrl,
+      workerVersionId,
+      interceptRequest: async (request) => {
+        const requestUrl = new URL(request.url);
+        if (requestUrl.origin !== claudeCallback.origin || requestUrl.pathname !== claudeCallback.pathname) return null;
+        return {
+          status: 200,
+          headers: { "Content-Type": "text/html" },
+          body: "<!doctype html><title>Claude callback intercepted by Spoonjoy canary</title>",
+        };
+      },
+    });
+    mutationPageRouting = await installWorkerVersionBrowserRouting(mutationPage, {
+      baseUrl,
+      workerVersionId,
+      interceptRequest: async () => null,
+    });
     const verifier = randomToken("");
     const challenge = sha256Base64Url(verifier);
 
     await check("candidate Worker override readiness", async () => {
-      report.workerVersionReadiness = await waitForCandidateWorker(page, page.request, { baseUrl, workerVersionId });
+      report.workerVersionReadiness = await waitForCandidateWorker(page, mutationPage, page.request, { baseUrl, workerVersionId });
     });
 
     responseTracker = createWorkerVersionResponseTracker({ baseUrl, workerVersionId });
@@ -586,6 +612,8 @@ async function main() {
       });
     }
     await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => null);
+    pageRouting.assertHealthy();
+    mutationPageRouting.assertHealthy();
     responseTracker.assertAll("complete browser flow");
   } catch (error) {
     failure = error;
