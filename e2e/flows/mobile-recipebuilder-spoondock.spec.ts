@@ -32,24 +32,6 @@ async function getFirstRecipeHref(page: Page) {
   return href!;
 }
 
-async function getFirstOwnedRecipeHref(page: Page) {
-  await page.goto('/');
-  await page.waitForLoadState('domcontentloaded');
-
-  const href = await page.locator('a[href^="/recipes/"]').evaluateAll((links) => {
-    return links
-      .map((link) => link.getAttribute('href'))
-      .find((candidate) => (
-        !!candidate &&
-        candidate !== '/recipes/new' &&
-        /^\/recipes\/[^/]+$/.test(candidate)
-      ));
-  });
-
-  expect(href, 'expected at least one owned seeded recipe link').toBeTruthy();
-  return href!;
-}
-
 async function expectTouchTarget(locator: Locator, label: string) {
   await expect(locator, `${label} should be visible`).toBeVisible();
 
@@ -103,21 +85,39 @@ test.describe('Mobile RecipeBuilder and SpoonDock audit', () => {
   });
 
   test('edit flow keeps save controls usable without the fixed dock', async ({ page }) => {
-    const recipeHref = await getFirstOwnedRecipeHref(page);
-    await page.goto(`${recipeHref}/edit`);
+    let recipeHref: string | null = null;
+    try {
+      await page.goto('/recipes/new');
+      const createTitle = `e2e mobile edit audit ${Date.now()}`;
+      const createAction = page.getByRole('button', { name: 'Create Recipe' });
+      const createTitleInput = page.getByLabel(/^Title$/).last();
+      await expect.poll(async () => {
+        await createTitleInput.fill(createTitle);
+        return createAction.getAttribute('aria-disabled');
+      }, { timeout: 10_000 }).not.toBe('true');
+      await createAction.click();
+      await expect(page).toHaveURL(/\/recipes\/(?!new$)[A-Za-z0-9_-]+$/, { timeout: 15_000 });
+      recipeHref = new URL(page.url()).pathname;
 
-    await expect(page.getByRole('heading', { name: 'Edit Recipe' })).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Spoonjoy navigation' })).toHaveCount(0);
+      await page.goto(`${recipeHref}/edit`);
+      await page.waitForLoadState('networkidle');
+      await expect(page.getByRole('heading', { name: 'Edit Recipe' })).toBeVisible();
+      await expect(page.getByRole('navigation', { name: 'Spoonjoy navigation' })).toHaveCount(0);
 
-    const updatedTitle = `Mobile Dock Save ${Date.now()}`;
-    await page.getByLabel(/^Title$/).last().fill(updatedTitle);
-    const saveAction = page.getByRole('button', { name: 'Save Recipe' });
-    await saveAction.scrollIntoViewIfNeeded();
-    await expectTouchTarget(saveAction, 'edit Save Recipe button');
-    await saveAction.click();
+      const updatedTitle = `Mobile Dock Save ${Date.now()}`;
+      await page.getByLabel(/^Title$/).last().fill(updatedTitle);
+      const saveAction = page.getByRole('button', { name: 'Save Recipe' });
+      await saveAction.scrollIntoViewIfNeeded();
+      await expectTouchTarget(saveAction, 'edit Save Recipe button');
+      await saveAction.click();
 
-    await expect(page).toHaveURL(new RegExp(`${recipeHref}$`));
-    await expect(page.getByRole('heading', { name: updatedTitle })).toBeVisible();
+      await expect(page).toHaveURL(new RegExp(`${recipeHref}$`));
+      await expect(page.getByRole('heading', { name: updatedTitle })).toBeVisible();
+    } finally {
+      if (recipeHref) {
+        await page.request.post(recipeHref, { form: { intent: 'delete' } });
+      }
+    }
   });
 
   test('recipe detail masthead actions fit with the fixed dock', async ({ page }) => {
