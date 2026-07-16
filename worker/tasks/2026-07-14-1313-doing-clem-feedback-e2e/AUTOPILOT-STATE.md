@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; current content checkpoint `07cfb483ac1efc7e9a62d7e9af2ae7faaa33163b` integrates `origin/main@e7b0e9ec`. Tinfoil Round 1's two findings are addressed there: Unit0 now implements/tests strict cleanup assertion before baseline use, and this state/Desk synchronization records the exact checkpoint.
+- Branch: `worker/clem-feedback-e2e`; synchronized reviewed content checkpoint `be4883f68186d9f90b316d37c0bfa565a104b4be` integrates `origin/main@7b06c496`. It addresses Tinfoil Round 2's three findings: exact state labels, current-main canary adoption/delta, and shared server-side same-origin rejection coverage.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is approved after five fresh hostile rounds.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation has not started.
-- Active gate: fresh Quality re-converged on the corrected 122-unit plan at checkpoint `c9011544`. Restart Scrutiny at zero clean passes with Tinfoil, followed immediately by Stranger when clean.
+- Active gate: the current-main/same-origin planning correction invalidated prior Quality. Re-run fresh Quality, then restart Scrutiny at zero clean passes with Tinfoil followed immediately by Stranger when clean.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Commit/push the Quality re-convergence record and synchronize its Desk copy, then run a fresh Tinfoil pass at zero clean passes.
+Commit/push this synchronized checkpoint state and Desk copy, re-run fresh Quality, then restart Tinfoil at zero clean passes.
 
 ## Operator-Locked Rules
 
@@ -41,7 +41,7 @@ Commit/push the Quality re-convergence record and synchronize its Desk copy, the
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
 | Planning reviewer gate | deferred by scope | Planning approved at `2c3b4759` after convergence | Closed |
-| Doing review chain | needs reviewer gate | Granularity, Validation, Ambiguity, and corrected-plan Quality converged; Tinfoil Round 1 findings are fixed | Commit/sync Quality record, then restart alternating Scrutiny at Tinfoil |
+| Doing review chain | needs reviewer gate | Granularity, Validation, and Ambiguity converged; prior Quality is invalidated by Tinfoil Round 2's now-fixed planning changes | Commit/sync exact checkpoint, re-run Quality, then restart alternating Scrutiny at Tinfoil |
 | Work Doer Units 0-37 | ready | Full red/green/verify/visual/ship queue is defined | Start after doing review convergence |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
 
