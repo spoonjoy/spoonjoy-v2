@@ -454,11 +454,14 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 **What**: Dispatch TestFlight for Unit 20's exact SHA, wait through processing, verify build number/source SHA/current notes/`Spoonjoy Internal` attachment/nonzero testers/notification/`IN_BETA_TESTING`, then dogfood installed signed-out auth and Photo Studio flows against production.
 **Output**: App Store Connect/build/group evidence and installed-build screenshots/smoke summary.
 **Acceptance**: Exact candidate is available to internal testers with current notes; installed app passes provider, HEIC, mutation-lock, queue replay, Photo Studio, and cleanup checks.
+**Exclusive owner**: Codex task `019f2e25-2fc3-75b2-8ba3-335f3777115a`. This execution task must not dispatch or publish TestFlight, notify testers, expire or remove a build, or delete native worktrees.
 
 ### ⬜ Unit 22: Human-Only Closure, Cleanup, And Durable Continuation Scan
 **What**: Complete or durably classify all five planning-table human actions, preserve every unresolved exact prerequisite/action, update planning/doing/Desk state, scan feedback/backlogs/PRs/CI/deploy/TestFlight/cleanup for ready work, remove only clean terminal remediation worktrees, prune only merged proven-stale branches, and notify Slugger.
 **Output**: Terminal docs/Desk state, worktree/branch inventory, human-action dispositions, continuation scan, and `ouro msg --to slugger` result.
 **Acceptance**: No ready in-scope work remains; independent work is shipped; audit task is `done` only if human-only closure is complete, otherwise remains `BLOCKED_HUMAN` with every unresolved exact required action and no hidden partial state.
+**Split ownership**: The native/TestFlight portion, including installed iOS/macOS dogfood, TestFlight/ASC verification, tester notification, build retention or retirement, feedback health, and final native branch/worktree cleanup, is delegated exclusively to Codex task `019f2e25-2fc3-75b2-8ba3-335f3777115a`.
+**Owner release gate**: This task retains the current serialized web merge/deploy train and native PR #52 through stable green merged state. It releases ownership only by sending that task the final web and native SHAs, merged PR list, exact CI/deploy evidence, and residual agent-owned work. After that handoff, this task must not start another web merge or deployment without coordinating with the exclusive owner.
 
 ## Execution
 - **TDD strictly enforced**: tests -> red -> implement -> green -> refactor
@@ -474,6 +477,7 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 - PR boundaries W1-W16 and N1-N10 are independently releasable. W2 provider hints must be live before N4. W4 dual Apple support must be live and Unit 3j registration/canary must pass before W5 switches starts. W6 web image-contract proof must merge before N2. TestFlight publishes only Unit 20's selected SHA.
 
 ## Progress Log
+- 2026-07-16 16:46 Ownership boundary made durable: Unit 21 and the native/TestFlight portion of Unit 22 are exclusively owned by Codex task `019f2e25-2fc3-75b2-8ba3-335f3777115a`; this task is prohibited from TestFlight publish/notify/build-retirement and native-worktree deletion, retains only the current web release train and native PR #52 through explicit evidence-backed owner release, and must coordinate before any later web merge/deploy.
 - 2026-07-16 15:41 Durable task state transitioned from `drafting` to `processing`; active web/native PR queue and exact-SHA release sequence are recorded in Desk, with the task remaining in execution until every ready unit, production verification, TestFlight candidate, and cleanup item is complete.
 - 2026-07-15 12:16 Created from approved planning doc
 - 2026-07-15 12:29 Split OAuth, cross-repo contracts, repository cleanup, extraction, and advisory work into independent TDD PRs; made coverage/warning and release trust-chain gates concrete.
