@@ -474,6 +474,7 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 - PR boundaries W1-W16 and N1-N10 are independently releasable. W2 provider hints must be live before N4. W4 dual Apple support must be live and Unit 3j registration/canary must pass before W5 switches starts. W6 web image-contract proof must merge before N2. TestFlight publishes only Unit 20's selected SHA.
 
 ## Progress Log
+- 2026-07-16 15:41 Durable task state transitioned from `drafting` to `processing`; active web/native PR queue and exact-SHA release sequence are recorded in Desk, with the task remaining in execution until every ready unit, production verification, TestFlight candidate, and cleanup item is complete.
 - 2026-07-15 12:16 Created from approved planning doc
 - 2026-07-15 12:29 Split OAuth, cross-repo contracts, repository cleanup, extraction, and advisory work into independent TDD PRs; made coverage/warning and release trust-chain gates concrete.
 - 2026-07-15 12:34 Fresh doing-doc re-review passed; execution is ready.
