@@ -50,15 +50,16 @@ export interface PostHogCspOrigins {
 function safeHttpsOrigin(raw: string | null | undefined): string | null {
   const value = (raw ?? "").trim();
   if (!value) return null;
-  try {
-    const url = new URL(value);
-    if (url.protocol !== "https:" || url.username || url.password || !url.hostname) {
-      return null;
-    }
-    return url.origin;
-  } catch {
+
+  if (/\s/.test(value) || !URL.canParse(value)) {
     return null;
   }
+
+  const url = new URL(value);
+  if (url.protocol !== "https:" || url.username || url.password || !url.hostname) {
+    return null;
+  }
+  return url.origin;
 }
 
 function postHogAssetsOriginFor(ingestOrigin: string): string {
