@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `e44d61822d5c661a20692ec2d99c4e47da067e6f` integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. All prior clean passes are historical because Quality Round 20 changed error/frame current-state cross-links, metric-to-PNG identity, and exact visual aggregate serialization.
+- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `5aaebd75bc0b7bab0fc86a1a022b0e23fd83ef73` integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. All prior clean passes are historical because Quality Round 21 corrected the visual route registry and moved exhaustive raw HTTP/frame projection ownership into Unit29.2.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is `NEEDS_REVIEW` after the mandatory main-drift audit.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation and dependency setup have not started.
-- Active gate: fresh Quality Round 21 on contract checkpoint `e44d6182`, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Quality Round 20's three findings are fixed and reset the sequence. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
+- Active gate: fresh Quality Round 22 on contract checkpoint `5aaebd75`, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Quality Round 21's two findings are fixed and reset the sequence. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Synchronize checkpoint `e44d6182` into Desk, run fresh Quality Round 21 plus consecutive Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
+Synchronize checkpoint `5aaebd75` into Desk, run fresh Quality Round 22 plus consecutive Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
 
 ## Operator-Locked Rules
 
@@ -40,8 +40,8 @@ Synchronize checkpoint `e44d6182` into Desk, run fresh Quality Round 21 plus con
 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
-| Planning reviewer gate | active | Quality Round 20 findings fixed at `e44d6182` | Run fresh Quality Round 21 and scrutiny convergence |
-| Doing review chain | active | Error/frame identity, metric PNG hashes, and visual aggregate bytes changed | Re-converge and restore final handoff |
+| Planning reviewer gate | active | Quality Round 21 findings fixed at `5aaebd75` | Run fresh Quality Round 22 and scrutiny convergence |
+| Doing review chain | active | Visual route ownership and raw transport projection ownership changed | Re-converge and restore final handoff |
 | Work Doer Units 0-37 | deferred by gate | Full red/green/verify/visual/ship queue is defined | Restart Unit0a only after fresh final handoff |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
 
@@ -56,4 +56,4 @@ Synchronize checkpoint `e44d6182` into Desk, run fresh Quality Round 21 plus con
 
 Not satisfied. The reopened reviewer gate and all delivery work remain.
 
-Last updated: 2026-07-16 13:10:23 PDT.
+Last updated: 2026-07-16 13:34:00 PDT.
