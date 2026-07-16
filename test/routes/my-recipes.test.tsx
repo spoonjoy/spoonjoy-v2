@@ -127,6 +127,52 @@ describe("My Recipes drawer route", () => {
     ]);
   });
 
+  it("returns one bounded page of owned recipes while preserving updated order", async () => {
+    const viewer = await createDrawerUser("my-recipes-page");
+
+    for (let index = 0; index < 51; index += 1) {
+      await createDrawerRecipe({
+        chefId: viewer.id,
+        title: `Paged Pantry Pasta ${index.toString().padStart(2, "0")}`,
+        updatedAt: new Date(Date.UTC(2026, 0, index + 1, 0, 0, 0)),
+      });
+    }
+
+    const firstPage = await loader({
+      request: new UndiciRequest("http://localhost:3000/my-recipes?page=1", {
+        headers: await sessionHeaders(viewer.id),
+      }),
+      context: { cloudflare: { env: null } },
+      params: {},
+    } as any);
+    const secondPage = await loader({
+      request: new UndiciRequest("http://localhost:3000/my-recipes?page=2", {
+        headers: await sessionHeaders(viewer.id),
+      }),
+      context: { cloudflare: { env: null } },
+      params: {},
+    } as any);
+
+    expect(firstPage.recipes).toHaveLength(50);
+    expect(firstPage.recipes[0].title).toBe("Paged Pantry Pasta 50");
+    expect(firstPage.recipes.at(-1)?.title).toBe("Paged Pantry Pasta 01");
+    expect(firstPage).toMatchObject({
+      page: 1,
+      pageSize: 50,
+      hasPreviousPage: false,
+      hasNextPage: true,
+    });
+    expect(secondPage.recipes.map((recipe: { title: string }) => recipe.title)).toEqual([
+      "Paged Pantry Pasta 00",
+    ]);
+    expect(secondPage).toMatchObject({
+      page: 2,
+      pageSize: 50,
+      hasPreviousPage: true,
+      hasNextPage: false,
+    });
+  });
+
   it("batches ingredient lookup so large kitchens stay under D1 variable limits", async () => {
     const recipeIds = Array.from(
       { length: INGREDIENT_LOOKUP_BATCH_SIZE * 2 + 3 },
@@ -173,6 +219,10 @@ describe("My Recipes drawer route", () => {
         Component: MyRecipes,
         loader: () => ({
           query: "",
+          page: 1,
+          pageSize: 50,
+          hasPreviousPage: false,
+          hasNextPage: false,
           recipes: [
             {
               id: "recipe-1",
@@ -212,6 +262,10 @@ describe("My Recipes drawer route", () => {
         Component: MyRecipes,
         loader: () => ({
           query: "",
+          page: 1,
+          pageSize: 50,
+          hasPreviousPage: false,
+          hasNextPage: false,
           recipes: [],
         }),
       },
@@ -220,6 +274,10 @@ describe("My Recipes drawer route", () => {
         Component: MyRecipes,
         loader: () => ({
           query: "turnip",
+          page: 1,
+          pageSize: 50,
+          hasPreviousPage: false,
+          hasNextPage: false,
           recipes: [],
         }),
       },
