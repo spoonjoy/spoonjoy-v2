@@ -88,7 +88,7 @@ For Ouroboros agent integration, see [`docs/ouroboros-mcp.md`](docs/ouroboros-mc
 | `pnpm test:e2e` | Run Playwright e2e tests |
 | `pnpm test:storybook` | Run Storybook interaction tests |
 | `pnpm prisma:generate` | Regenerate Prisma client |
-| `pnpm db:seed` | Seed local D1 via Wrangler platform proxy with `--target-env local` |
+| `pnpm db:seed` | Replace prior disposable local data, then seed D1 with an explicit local-only target |
 | `pnpm dev:sync` | Generate Prisma client, run the legacy option2 idempotent migration helper, then start dev |
 | `pnpm build` | Production build |
 | `pnpm typecheck` | TypeScript validation |

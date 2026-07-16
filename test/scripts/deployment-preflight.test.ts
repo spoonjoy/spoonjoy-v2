@@ -275,7 +275,7 @@ function validInputs(): DeploymentPreflightInputs {
           "node scripts/smoke-live.mjs --target-env qa --base-url https://spoonjoy-v2-qa.mendelow-studio.workers.dev --out qa-live-smoke-artifacts",
         "smoke:qa:image-cover":
           "node scripts/smoke-live.mjs --target-env qa --base-url https://spoonjoy-v2-qa.mendelow-studio.workers.dev --out qa-image-cover-smoke-artifacts --include-image-cover-smoke",
-        "db:seed": "pnpm exec tsx prisma/seed.ts --target-env local",
+        "db:seed": "node scripts/seed-local.mjs --target-env local",
       },
     },
     productionDeployWorkflow: secureProductionDeployWorkflow(),

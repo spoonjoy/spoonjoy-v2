@@ -9,7 +9,7 @@
  * - Shopping list items
  *
  * Run with: pnpm db:seed
- * Idempotent: safe to run multiple times
+ * The local-only wrapper removes prior disposable seed runs before starting.
  */
 
 import { PrismaD1 } from "@prisma/adapter-d1";
@@ -352,10 +352,10 @@ async function withoutKnownSeedWarnings<T>(callback: () => Promise<T>): Promise<
 export function parseLocalSeedArgs(argv = process.argv.slice(2)) {
   const targetEnvIndex = argv.indexOf("--target-env");
   const targetEnv = targetEnvIndex === -1 ? undefined : argv[targetEnvIndex + 1];
-  if (targetEnv !== "local") {
-    throw new Error("Local development seeding requires explicit `--target-env local`.");
+  if (targetEnv !== "local" || !argv.includes("--clean-start")) {
+    throw new Error("Local development seeding requires the clean-start `pnpm db:seed` wrapper.");
   }
-  return { targetEnv };
+  return { targetEnv, cleanStart: true };
 }
 
 function stampDate(date: Date) {

@@ -70,6 +70,8 @@ To populate the database with sample recipes and per-run disposable local users:
 pnpm db:seed
 ```
 
+The command removes prior disposable local seed data before creating the new run, so rerunning it does not accumulate duplicate recipes or accounts.
+
 This creates:
 - **Disposable local accounts** — Unique to the seed run; passwords are not printed
 - **3 sample recipes** — Including step dependencies (StepOutputUse)
