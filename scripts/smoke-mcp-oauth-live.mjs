@@ -24,7 +24,7 @@ import {
   parseMcpCanaryArgs,
   readGitMetadata,
   serializeSanitizedMcpCanaryReport,
-  waitForWorkerVersionReady,
+  waitForBrowserWorkerVersionReady,
 } from "./smoke-live-helpers.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -69,21 +69,14 @@ async function spoonjoyRequest(request, { baseUrl, workerVersionId, method, url,
   return response;
 }
 
-async function waitForCandidateWorker(request, { baseUrl, workerVersionId }) {
+async function waitForCandidateWorker(page, { baseUrl, workerVersionId }) {
   const url = new URL("/.well-known/oauth-protected-resource/mcp", baseUrl).toString();
-  return waitForWorkerVersionReady({
+  return waitForBrowserWorkerVersionReady({
     workerVersionId,
-    probe: async () => {
-      const response = await request.get(url, {
-        maxRedirects: 0,
-        headers: buildWorkerVersionRequestHeaders({
-          baseUrl,
-          requestUrl: url,
-          workerVersionId,
-        }),
-      });
-      assert.equal(response.status(), 200, `Worker readiness probe failed with ${response.status()}`);
-      return response.headers();
+    navigate: async ({ timeoutMs }) => {
+      const response = await page.goto(url, { waitUntil: "commit", timeout: timeoutMs });
+      if (response === null) return null;
+      return { status: response.status(), headers: response.headers() };
     },
   });
 }
@@ -470,7 +463,6 @@ async function main() {
       serviceWorkers: "block",
       viewport: { width: 1440, height: 900 },
     });
-    responseTracker = createWorkerVersionResponseTracker({ baseUrl, workerVersionId });
     await context.route("**/*", async (route) => {
       const request = route.request();
       await route.continue({
@@ -482,6 +474,15 @@ async function main() {
         }),
       });
     });
+    const page = await context.newPage();
+    const verifier = randomToken("");
+    const challenge = sha256Base64Url(verifier);
+
+    await check("candidate Worker override readiness", async () => {
+      report.workerVersionReadiness = await waitForCandidateWorker(page, { baseUrl, workerVersionId });
+    });
+
+    responseTracker = createWorkerVersionResponseTracker({ baseUrl, workerVersionId });
     context.on("response", (response) => {
       const request = response.request();
       const url = new URL(response.url());
@@ -490,13 +491,6 @@ async function main() {
         headers: response.headers(),
         label: `${request.method()} ${url.pathname}`,
       });
-    });
-    const page = await context.newPage();
-    const verifier = randomToken("");
-    const challenge = sha256Base64Url(verifier);
-
-    await check("candidate Worker override readiness", async () => {
-      report.workerVersionReadiness = await waitForCandidateWorker(page.request, { baseUrl, workerVersionId });
     });
 
     await check("signup disposable user", async () => {
