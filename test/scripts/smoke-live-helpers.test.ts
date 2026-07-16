@@ -24,6 +24,7 @@ import {
   createWorkerVersionResponseTracker,
   decideMcpCanaryIssueAction,
   findMcpCanarySecretLeaks,
+  isRouteActionResponse,
   isQaR2ObjectMissingError,
   mcpOAuthAuditHasFailures,
   normalizeMcpOAuthAuditRows,
@@ -43,6 +44,21 @@ import {
 const CANDIDATE_VERSION = "22222222-2222-4222-8222-222222222222";
 
 describe("smoke-live helpers", () => {
+  it("recognizes React Router action responses at canonical and data URLs", () => {
+    const input = {
+      baseUrl: "https://spoonjoy.app",
+      routePath: "/signup",
+      requestMethod: "POST",
+    };
+
+    expect(isRouteActionResponse({ ...input, responseUrl: "https://spoonjoy.app/signup" })).toBe(true);
+    expect(isRouteActionResponse({ ...input, responseUrl: "https://spoonjoy.app/signup.data?_routes=routes/signup" })).toBe(true);
+    expect(isRouteActionResponse({ ...input, responseUrl: "https://spoonjoy.app/signup", requestMethod: "GET" })).toBe(false);
+    expect(isRouteActionResponse({ ...input, responseUrl: "https://spoonjoy.app/login.data" })).toBe(false);
+    expect(isRouteActionResponse({ ...input, responseUrl: "https://example.com/signup.data" })).toBe(false);
+    expect(isRouteActionResponse({ ...input, responseUrl: "not a url" })).toBe(false);
+  });
+
   it("isolates the D1 token from Chromium and the Workers token from D1 commands", () => {
     const env = {
       PATH: "/test/bin",

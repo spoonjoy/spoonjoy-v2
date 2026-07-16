@@ -97,6 +97,17 @@ function isSameOrigin(requestUrl, baseUrl) {
   }
 }
 
+export function isRouteActionResponse({ baseUrl, responseUrl, routePath, requestMethod }) {
+  if (requestMethod.toUpperCase() !== "POST") return false;
+  try {
+    const response = new URL(responseUrl);
+    return response.origin === new URL(baseUrl).origin
+      && (response.pathname === routePath || response.pathname === `${routePath}.data`);
+  } catch {
+    return false;
+  }
+}
+
 function isStaticAssetBindingUrl(requestUrl) {
   const pathname = new URL(requestUrl).pathname;
   return pathname === "/assets" || pathname.startsWith("/assets/");
