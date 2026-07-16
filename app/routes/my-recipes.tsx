@@ -3,22 +3,16 @@ import { Form, useLoaderData } from "react-router";
 import { Plus, Search } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Link } from "~/components/ui/link";
+import { Pagination, PaginationNext, PaginationPrevious } from "~/components/ui/pagination";
 import { Text } from "~/components/ui/text";
 import { CookbookHeader, CookbookPage, ObjectRow, RuledEmptyState } from "~/components/cookbook/page";
+import {
+  normalizeMyRecipesPage,
+  normalizeMyRecipesQuery,
+  searchMyRecipes,
+} from "~/lib/my-recipes-search.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
-
-type DrawerRecipe = {
-  id: string;
-  title: string;
-  description: string | null;
-  servings: string | null;
-  chef: {
-    id: string;
-    username: string;
-  };
-  ingredientNames: string[];
-};
 
 type IngredientLookupDb = {
   ingredient: {
@@ -30,22 +24,6 @@ type IngredientLookupDb = {
 };
 
 export const INGREDIENT_LOOKUP_BATCH_SIZE = 200;
-
-function normalizedQuery(request: Request) {
-  return (new URL(request.url).searchParams.get("q") ?? "").trim();
-}
-
-function matchesRecipeQuery(recipe: DrawerRecipe, query: string) {
-  if (!query) return true;
-  const needle = query.toLowerCase();
-  return [
-    recipe.title,
-    recipe.description,
-    recipe.servings,
-    recipe.chef.username,
-    ...recipe.ingredientNames,
-  ].some((value) => value?.toLowerCase().includes(needle));
-}
 
 export async function loadIngredientNamesByRecipeId(
   database: IngredientLookupDb,
@@ -75,47 +53,25 @@ export async function loadIngredientNamesByRecipeId(
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
-  const query = normalizedQuery(request);
+  const url = new URL(request.url);
+  const query = normalizeMyRecipesQuery(url.searchParams.get("q"));
+  const page = normalizeMyRecipesPage(url.searchParams.get("page"));
   const database = await getRequestDb(context);
 
   const chef = await database.user.findUniqueOrThrow({
     where: { id: userId },
     select: { id: true, username: true },
   });
-  const recipes = await database.recipe.findMany({
-    where: {
-      chefId: userId,
-      deletedAt: null,
-    },
-    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-    select: {
-      id: true,
-      title: true,
-      description: true,
-      servings: true,
-    },
-  });
-  const ingredientNamesByRecipeId = query
-    ? await loadIngredientNamesByRecipeId(database, recipes.map((recipe) => recipe.id))
-    : new Map<string, string[]>();
-
-  const drawerRecipes: DrawerRecipe[] = recipes.map((recipe) => ({
-    id: recipe.id,
-    title: recipe.title,
-    description: recipe.description,
-    servings: recipe.servings,
-    chef,
-    ingredientNames: ingredientNamesByRecipeId.get(recipe.id) ?? [],
-  }));
-
-  return {
+  return searchMyRecipes(database, {
+    ownerId: chef.id,
+    ownerUsername: chef.username,
     query,
-    recipes: drawerRecipes.filter((recipe) => matchesRecipeQuery(recipe, query)),
-  };
+    page,
+  });
 }
 
 export default function MyRecipes() {
-  const { query, recipes } = useLoaderData<typeof loader>();
+  const { query, recipes, page, hasPreviousPage, hasNextPage } = useLoaderData<typeof loader>();
 
   return (
     <CookbookPage>
@@ -158,8 +114,23 @@ export default function MyRecipes() {
           </Text>
         </RuledEmptyState>
       )}
+
+      {(hasPreviousPage || hasNextPage) ? (
+        <Pagination className="mt-6" aria-label="My recipes pagination">
+          <PaginationPrevious href={hasPreviousPage ? myRecipesPageHref(query, page - 1) : null} />
+          <PaginationNext href={hasNextPage ? myRecipesPageHref(query, page + 1) : null} />
+        </Pagination>
+      ) : null}
     </CookbookPage>
   );
+}
+
+function myRecipesPageHref(query: string, page: number) {
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (page > 1) params.set("page", String(page));
+  const search = params.toString();
+  return search ? `?${search}` : ".";
 }
 
 export function DrawerSearch({
