@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; current pushed checkpoint `89b88ec2` integrates `origin/main@5c0fd3c2`. Local docs contain Ambiguity Round 17's fixes for the fresh reviewer's 1 blocker and 6 majors.
+- Branch: `worker/clem-feedback-e2e`; current pushed checkpoint `24d66806bbbb313f91055868ed8da69e5b197353` integrates `origin/main@e7b0e9ec`. Local docs contain Ambiguity Round 18's self-audit fixes after one fresh reviewer stalled without a verdict.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is approved after five fresh hostile rounds.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation has not started.
-- Active gate: commit/push and synchronize the Round 17 checkpoint, then run a different fresh context-independent Ambiguity reviewer. After Ambiguity is clean, complete Quality and alternating Scrutiny until one clean Tinfoil pass and one immediately consecutive clean Stranger pass.
+- Active gate: commit/push and synchronize the Round 18 checkpoint, then run a different fresh context-independent Ambiguity reviewer. After Ambiguity is clean, complete Quality and alternating Scrutiny until one clean Tinfoil pass and one immediately consecutive clean Stranger pass.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Commit/push this Ambiguity Round 17 checkpoint and its synchronized Desk copy, run a different fresh Ambiguity reviewer, fix and re-review until clean, then continue through Quality and alternating Scrutiny until two consecutive scrutiny passes converge.
+Commit/push this Ambiguity Round 18 checkpoint and its synchronized Desk copy, run a different fresh Ambiguity reviewer, fix and re-review until clean, then continue through Quality and alternating Scrutiny until two consecutive scrutiny passes converge.
 
 ## Operator-Locked Rules
 
@@ -41,7 +41,7 @@ Commit/push this Ambiguity Round 17 checkpoint and its synchronized Desk copy, r
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
 | Planning reviewer gate | deferred by scope | Planning approved at `2c3b4759` after convergence | Closed |
-| Doing review chain | needs reviewer gate | Granularity and Validation converged; Round 17 fixes all 7 findings from fresh Ambiguity review after integrating current main | Commit/sync, re-review Ambiguity with a different fresh agent, then Quality and alternating Scrutiny |
+| Doing review chain | needs reviewer gate | Granularity and Validation converged; Round 18 integrates latest main and self-fixes the stalled-review sweep, but has no fresh verdict yet | Commit/sync, re-review Ambiguity with a different fresh agent, then Quality and alternating Scrutiny |
 | Work Doer Units 0-37 | ready | Full red/green/verify/visual/ship queue is defined | Start after doing review convergence |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
 
