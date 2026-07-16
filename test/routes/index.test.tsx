@@ -375,6 +375,47 @@ describe("Kitchen Index Route", () => {
       expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     });
 
+    it("keeps the guest landing hero discoverable without regressing image, copy, or type tokens", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/",
+          Component: Index,
+          loader: () => ({
+            tab: "recipes",
+            isOwner: false,
+            viewer: null,
+            kitchenUser: null,
+            recipes: [],
+            cookbooks: [],
+          }),
+        },
+      ]);
+
+      const { container } = render(<Stub initialEntries={["/"]} />);
+
+      const heading = await screen.findByRole("heading", { name: /your food should look as good as it tastes/i });
+      const hero = heading.closest("section");
+      expect(hero).not.toBeNull();
+      expect(hero).toHaveClass("overflow-hidden");
+      expect(hero?.className).not.toMatch(/(?:^|\s)min-h-\[(?:9[0-9]|100)(?:s|d|l)?vh\](?:\s|$)/);
+
+      const heroContent = heading.closest("div");
+      expect(heroContent?.className).not.toMatch(/(?:^|\s)min-h-\[(?:9[0-9]|100)(?:s|d|l)?vh\](?:\s|$)/);
+
+      const heroImage = container.querySelector<HTMLImageElement>('img[src="https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=2400&q=90"]');
+      expect(heroImage).not.toBeNull();
+      expect(heroImage).toHaveAttribute("alt", "Dinner table with shared dishes");
+      expect(screen.getByText("The Recipe App")).toBeInTheDocument();
+      expect(screen.getByText(/Spoonjoy is a photo-first kitchen for the recipes you actually cook/i)).toBeInTheDocument();
+      expect(screen.getByText("Collect")).toBeInTheDocument();
+
+      const classTokens = Array.from(hero!.querySelectorAll<HTMLElement>("*"))
+        .flatMap((element) => Array.from(element.classList));
+      expect(classTokens).not.toEqual(expect.arrayContaining([
+        expect.stringMatching(/^text-\[[^\]]*(?:vw|vh|svw|svh|dvw|dvh|lvw|lvh)[^\]]*\]$/),
+      ]));
+    });
+
     it("renders owner kitchen as a cookbook spread with settings and admin controls", async () => {
       const Stub = createTestRoutesStub([
         {
