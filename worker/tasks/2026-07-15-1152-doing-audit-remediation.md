@@ -395,16 +395,16 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 **What**: Capture and inspect mobile, desktop, and wide-desktop public home screenshots with the next section visible.
 **Acceptance**: External screenshots show no overlap, awkward crop, unreadable copy, or hidden continuation; absurdity ledger closed; fresh visual reviewer PASS.
 
-### ⬜ Unit 16a: Web Advisory-Pipeline Contract Tests
+### ✅ Unit 16a: Web Advisory-Pipeline Contract Tests
 **What**: Add failing web workflow/script tests for a version/SHA-pinned supported scanner, `pnpm-lock.yaml` coverage, scanner/network failure, actionable vulnerability failure, and explicit expiring allowlists.
 **Acceptance**: Tests fail because web CI has no supported fail-closed advisory gate.
 
-### ⬜ Unit 16b: Web Advisory-Pipeline Implementation
+### ✅ Unit 16b: Web Advisory-Pipeline Implementation
 **What**: Add pinned OSV-compatible scanning for the web lockfile with documented severity/allowlist policy and fail-closed scanner errors.
 **Output**: Atomic web PR W16.
 **Acceptance**: Unit 16a reruns green; synthetic vulnerability/error fixtures fail; `pnpm test:coverage`, both typechecks, and build pass with 100% changed-code coverage and zero warnings before commit.
 
-### ⬜ Unit 16c: Web Advisory Verification And Remediation
+### ✅ Unit 16c: Web Advisory Verification And Remediation
 **What**: Run the real scanner plus `pnpm run typecheck`, `pnpm run typecheck:scripts`, `pnpm test:coverage`, and `pnpm build`; fix or time-bound-review every finding; obtain fresh security review.
 **Acceptance**: Reviewer PASS, W16 CI green and merged, no unreviewed actionable advisory or silent scanner failure.
 
@@ -478,3 +478,4 @@ Bring the shipped Recipe Photo Studio, OAuth, data hygiene, repository hygiene, 
 - 2026-07-15 12:29 Split OAuth, cross-repo contracts, repository cleanup, extraction, and advisory work into independent TDD PRs; made coverage/warning and release trust-chain gates concrete.
 - 2026-07-15 12:34 Fresh doing-doc re-review passed; execution is ready.
 - 2026-07-15 12:43 Unit 0 complete: remotes match audited heads, active concurrent work is excluded, redacted current-tree scans and removal manifests are recorded, rollback refs are instantiated, and all human-only actions have initial dispositions.
+- 2026-07-15 20:23 Units 16a-16c complete: opened web W16 PR https://github.com/spoonjoy/spoonjoy-v2/pull/272 from `worker/web-advisory-pipeline` at `ce8f1729` with atomic commits `4cf21993`, `7fbbe22c`, `22ab7fdc`, `3c4e6622`, `99d26308`, and `ce8f1729`; OSV-Scanner `v2.3.8` is pinned to tag `408fcd6f8707999a29e7ba45e15809764cf24f67` and Linux amd64 SHA-256 `bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc`, CI verifies the tag and binary before `pnpm install --frozen-lockfile --ignore-scripts`, and production deploy requires successful `advisory`; real `pnpm-lock.yaml` scan found 135 OSV findings across 30 npm packages, all exactly allowlisted with expiry `2026-07-30` and 0 actionable after review; local validations passed `pnpm run typecheck`, `pnpm run typecheck:scripts`, `pnpm test:coverage` (358 files, 7,129 tests, 100%), `pnpm build`, `actionlint .github/workflows/*.yml`, `git diff --check`, real OSV scan, and `pnpm cleanup:qa`; fresh harsh supply-chain/security reviewer returned `VERDICT: CONVERGED`; PR CI/Storybook checks `advisory`, `coverage`, `e2e`, and `build-storybook` are green. W16 is intentionally not merged per operator direction because parent sequencing owns exact-SHA release order.
