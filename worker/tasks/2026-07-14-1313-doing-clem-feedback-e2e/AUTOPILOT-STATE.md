@@ -16,12 +16,12 @@
 - Branch: `worker/clem-feedback-e2e`; synchronized reviewed content checkpoint `be4883f68186d9f90b316d37c0bfa565a104b4be` integrates `origin/main@7b06c496`. It addresses Tinfoil Round 2's three findings: exact state labels, current-main canary adoption/delta, and shared server-side same-origin rejection coverage.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is approved after five fresh hostile rounds.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation has not started.
-- Active gate: the current-main/same-origin planning correction invalidated prior Quality. Re-run fresh Quality, then restart Scrutiny at zero clean passes with Tinfoil followed immediately by Stranger when clean.
+- Active gate: fresh Quality re-converged on the current-main/same-origin revision at state HEAD `6c043d2f`. Restart Scrutiny at zero clean passes with Tinfoil followed immediately by Stranger when clean.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Commit/push this synchronized checkpoint state and Desk copy, re-run fresh Quality, then restart Tinfoil at zero clean passes.
+Commit/push the Quality convergence record and Desk copy, then run a fresh Tinfoil pass at zero clean passes.
 
 ## Operator-Locked Rules
 
@@ -41,7 +41,7 @@ Commit/push this synchronized checkpoint state and Desk copy, re-run fresh Quali
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
 | Planning reviewer gate | deferred by scope | Planning approved at `2c3b4759` after convergence | Closed |
-| Doing review chain | needs reviewer gate | Granularity, Validation, and Ambiguity converged; prior Quality is invalidated by Tinfoil Round 2's now-fixed planning changes | Commit/sync exact checkpoint, re-run Quality, then restart alternating Scrutiny at Tinfoil |
+| Doing review chain | needs reviewer gate | Granularity, Validation, Ambiguity, and current-main/same-origin Quality converged; Tinfoil Round 2 findings are fixed | Commit/sync Quality record, then restart alternating Scrutiny at Tinfoil |
 | Work Doer Units 0-37 | ready | Full red/green/verify/visual/ship queue is defined | Start after doing review convergence |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
 
