@@ -84,3 +84,21 @@ describe("production release provenance", () => {
     expect(deploy).toBeLessThan(record);
   });
 });
+
+describe("web dependency advisory gate", () => {
+  const ci = workflowSource("ci.yml");
+
+  it("runs a fail-closed OSV-compatible pnpm-lock advisory scan in canonical CI", () => {
+    expect(ci).toContain("advisory");
+    expect(ci).toContain("pnpm run advisory:scan");
+    expect(ci).toContain("pnpm-lock.yaml");
+    expect(ci).toContain("osv-scanner_linux_amd64");
+    expect(ci).toContain("bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc");
+  });
+
+  it("requires the advisory job before production deploy can release an exact SHA", () => {
+    const production = workflowSource("production-deploy.yml");
+
+    expect(production).toContain("required_job=advisory");
+  });
+});
