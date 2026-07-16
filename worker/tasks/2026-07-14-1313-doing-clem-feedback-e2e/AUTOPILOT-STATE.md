@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; reviewed contract checkpoint `941c063910098f02985b694d64fdebf1a2151b3f` integrates `origin/main@dcf296bd`; latest completed reviewer input HEAD is `e4dbbfb08defcd6023abb7db934a5bcadefe0223`. Consecutive clean Tinfoil and Stranger passes converged with no intervening contract change; the doing doc is `READY_FOR_EXECUTION`.
-- Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is approved after five fresh hostile rounds.
-- Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `READY_FOR_EXECUTION`; implementation has not started.
-- Active gate: final planner handoff is complete. Desk is `processing` with `planning_complete:true`; invoke Work Doer and begin Unit0a verification/red tests.
+- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `2e55c06c149081b083eda9a5b449ea3ed326363f` integrates `origin/main@2f392840`. The prior clean reviewer pair is historical because the main-overlap contract changed afterward.
+- Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is `NEEDS_REVIEW` after the mandatory main-drift audit.
+- Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `NEEDS_REVIEW`; implementation and dependency setup have not started.
+- Active gate: fresh Quality review, then consecutive clean Tinfoil and Stranger scrutiny on the synchronized current checkpoint. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Read the Work Doer skill, verify the committed/pushed final handoff and byte-equal Desk mirrors, then execute Unit0a under strict TDD.
+Synchronize the main-drift contract into Desk, run fresh Quality plus consecutive clean Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
 
 ## Operator-Locked Rules
 
@@ -40,9 +40,9 @@ Read the Work Doer skill, verify the committed/pushed final handoff and byte-equ
 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
-| Planning reviewer gate | deferred by scope | Planning approved at `2c3b4759` after convergence | Closed |
-| Doing review chain | ready | Granularity, Validation, Ambiguity, Quality, and consecutive clean Tinfoil+Stranger converged | Closed; final handoff committed/pushed |
-| Work Doer Units 0-37 | ready | Full red/green/verify/visual/ship queue is defined | Start Unit0a after verifying final handoff |
+| Planning reviewer gate | active | Main advanced to `2f392840`; overlap contract changed at `2e55c06c` | Run fresh Quality and scrutiny convergence |
+| Doing review chain | active | Prior pair predates latest-main overlap changes | Re-converge and restore final handoff |
+| Work Doer Units 0-37 | deferred by gate | Full red/green/verify/visual/ship queue is defined | Restart Unit0a only after fresh final handoff |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
 
 ## Recovery Instructions
@@ -54,4 +54,4 @@ Read the Work Doer skill, verify the committed/pushed final handoff and byte-equ
 
 ## Stop Condition
 
-Not satisfied. Ready work and reviewer gates remain.
+Not satisfied. The reopened reviewer gate and all delivery work remain.
