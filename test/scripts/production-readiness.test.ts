@@ -5,6 +5,7 @@ import {
   INTENTIONALLY_DISABLED_FEATURE_GROUPS,
   evaluateSecretReadiness,
   hasUserPhotoUrlColumn,
+  validateCspHeaderSet,
   validatePwaAssetSet,
   validateCutoverRunbook,
 } from "../../scripts/production-readiness";
@@ -111,6 +112,32 @@ describe("production readiness helpers", () => {
       "OAuth",
       "smoke test",
       "rollback",
+    ]);
+  });
+
+  it("validates production CSP enforcement headers without printing live evidence", () => {
+    const enforced = new Headers({
+      "Content-Security-Policy": "default-src 'self'; script-src 'self' 'nonce-live' https://us-assets.i.posthog.com; report-uri /csp-report; report-to csp-endpoint",
+      "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+      "X-Spoonjoy-Worker-Version": "version-abc",
+    });
+    expect(validateCspHeaderSet(enforced)).toEqual([]);
+
+    const reportOnly = new Headers({
+      "Content-Security-Policy-Report-Only": "default-src 'self'; report-uri /csp-report",
+      "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+    });
+    expect(validateCspHeaderSet(reportOnly)).toEqual([
+      "Content-Security-Policy",
+      "X-Spoonjoy-Worker-Version",
+    ]);
+
+    const missingTelemetry = new Headers({
+      "Content-Security-Policy": "default-src 'self'; script-src 'self'",
+      "X-Spoonjoy-Worker-Version": "version-abc",
+    });
+    expect(validateCspHeaderSet(missingTelemetry)).toEqual([
+      "CSP violation reporting",
     ]);
   });
 });

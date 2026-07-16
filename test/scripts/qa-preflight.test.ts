@@ -100,7 +100,11 @@ describe("parseWranglerSecretNames", () => {
 function qaGeneratedBuildConfig() {
   return {
     name: "spoonjoy-v2-qa",
-    vars: { NODE_ENV: "production", SPOONJOY_BASE_URL: QA_BASE_URL },
+    vars: {
+      NODE_ENV: "production",
+      SPOONJOY_BASE_URL: QA_BASE_URL,
+      SPOONJOY_CSP_MODE: "enforce",
+    },
     d1_databases: [{ binding: "DB", database_name: "spoonjoy-qa", database_id: QA_D1_DATABASE_ID }],
     r2_buckets: [{ binding: "PHOTOS", bucket_name: QA_R2_BUCKET }],
     ratelimits: [
@@ -274,6 +278,16 @@ describe("validateQaGeneratedBuildConfig", () => {
     });
 
     expect(check.ok).toBe(false);
+  });
+
+  it("fails closed when the generated QA Worker config is not CSP-enforcing", () => {
+    const config = qaGeneratedBuildConfig();
+    delete (config.vars as Record<string, string>).SPOONJOY_CSP_MODE;
+
+    const check = validateQaGeneratedBuildConfig(config);
+
+    expect(check.ok).toBe(false);
+    expect(check.message).toContain("SPOONJOY_CSP_MODE=enforce");
   });
 
   it("fails closed when generated config arrays do not contain the required bindings", () => {

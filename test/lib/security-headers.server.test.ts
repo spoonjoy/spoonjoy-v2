@@ -70,16 +70,15 @@ describe("withSecurityHeaders", () => {
     expect(permissions).toContain("camera=()");
   });
 
-  it("ships the CSP report-only (never the enforcing header)", () => {
+  it("defaults to CSP report-only for local/dev and rollback-safe responses", () => {
     const result = withSecurityHeaders(new Response("ok"));
     expect(result.headers.get("Content-Security-Policy-Report-Only")).toBe(
       buildContentSecurityPolicy(),
     );
-    // Report-only must NOT enforce — the enforcing header stays absent.
     expect(result.headers.get("Content-Security-Policy")).toBeNull();
   });
 
-  it("embeds the per-request nonce in the report-only CSP when provided", () => {
+  it("embeds the per-request nonce in the default report-only CSP when provided", () => {
     const result = withSecurityHeaders(new Response("ok"), "test-nonce-123");
     expect(result.headers.get("Content-Security-Policy-Report-Only")).toBe(
       buildContentSecurityPolicy("test-nonce-123"),
@@ -87,6 +86,33 @@ describe("withSecurityHeaders", () => {
     expect(result.headers.get("Content-Security-Policy-Report-Only")).toContain(
       "'nonce-test-nonce-123'",
     );
+  });
+
+  it("ships an enforcing CSP, not report-only, when the environment selects enforcement", () => {
+    const result = withSecurityHeaders(
+      new Response("ok"),
+      "enforced-nonce",
+      { SPOONJOY_CSP_MODE: "enforce" },
+    );
+
+    expect(result.headers.get("Content-Security-Policy")).toBe(
+      buildContentSecurityPolicy("enforced-nonce"),
+    );
+    expect(result.headers.get("Content-Security-Policy")).toContain("'nonce-enforced-nonce'");
+    expect(result.headers.get("Content-Security-Policy-Report-Only")).toBeNull();
+  });
+
+  it("keeps the one-commit rollback flag report-only and non-enforcing", () => {
+    const result = withSecurityHeaders(
+      new Response("ok"),
+      "rollback-nonce",
+      { SPOONJOY_CSP_MODE: "report-only" },
+    );
+
+    expect(result.headers.get("Content-Security-Policy-Report-Only")).toBe(
+      buildContentSecurityPolicy("rollback-nonce"),
+    );
+    expect(result.headers.get("Content-Security-Policy")).toBeNull();
   });
 });
 
