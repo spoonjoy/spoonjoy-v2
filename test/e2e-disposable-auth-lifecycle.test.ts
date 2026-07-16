@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -8,6 +8,7 @@ import {
   createDisposableE2EUser,
   recordDisposableE2EUser,
   runDisposableE2ETeardown,
+  secureDisposableE2EAuthFile,
 } from "../e2e/support/disposable-auth";
 
 const tempDirs: string[] = [];
@@ -49,6 +50,24 @@ describe("e2e disposable auth lifecycle", () => {
     expect(manifest).toEqual([user]);
   });
 
+  it("forces overwritten manifests and browser session artifacts to owner-only permissions", () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "spoonjoy-e2e-permissions-"));
+    tempDirs.push(tempDir);
+    const manifestPath = path.join(tempDir, "users.json");
+    const storageStatePath = path.join(tempDir, "user.json");
+    const user = createDisposableE2EUser({ random: () => "permissions" });
+    writeFileSync(manifestPath, "stale", { mode: 0o644 });
+    writeFileSync(storageStatePath, "session", { mode: 0o644 });
+    chmodSync(manifestPath, 0o644);
+    chmodSync(storageStatePath, 0o644);
+
+    recordDisposableE2EUser(user, manifestPath);
+    secureDisposableE2EAuthFile(storageStatePath);
+
+    expect(statSync(manifestPath).mode & 0o777).toBe(0o600);
+    expect(statSync(storageStatePath).mode & 0o777).toBe(0o600);
+  });
+
   it("tears down disposable auth residue with local-only cleanup", async () => {
     const tempDir = mkdtempSync(path.join(tmpdir(), "spoonjoy-e2e-teardown-"));
     tempDirs.push(tempDir);
@@ -84,6 +103,7 @@ describe("e2e disposable auth lifecycle", () => {
 
     expect(setupSource).toContain("createDisposableE2EUser");
     expect(setupSource).toContain("recordDisposableE2EUser");
+    expect(setupSource).toContain("secureDisposableE2EAuthFile(DISPOSABLE_E2E_AUTH_STATE)");
     expect(configSource).toContain("globalTeardown");
     expect(`${setupSource}\n${authSource}`).not.toContain("loginAsSeedUser");
     expect(`${setupSource}\n${authSource}`).not.toContain(legacyDemoEmail);

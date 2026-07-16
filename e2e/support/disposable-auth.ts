@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -62,6 +62,11 @@ export function readLatestDisposableE2EUser(manifestPath = DISPOSABLE_E2E_USERS_
 export function recordDisposableE2EUser(user: DisposableE2EUser, manifestPath = DISPOSABLE_E2E_USERS_MANIFEST) {
   mkdirSync(path.dirname(manifestPath), { recursive: true });
   writeFileSync(manifestPath, `${JSON.stringify([user], null, 2)}\n`, { mode: 0o600 });
+  secureDisposableE2EAuthFile(manifestPath);
+}
+
+export function secureDisposableE2EAuthFile(authPath: string) {
+  chmodSync(authPath, 0o600);
 }
 
 export async function runDisposableE2ETeardown({

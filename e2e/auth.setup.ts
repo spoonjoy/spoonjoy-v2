@@ -3,6 +3,7 @@ import {
   createDisposableE2EUser,
   DISPOSABLE_E2E_AUTH_STATE,
   recordDisposableE2EUser,
+  secureDisposableE2EAuthFile,
 } from './support/disposable-auth';
 
 setup('authenticate', async ({ page }) => {
@@ -23,4 +24,5 @@ setup('authenticate', async ({ page }) => {
 
   // Save storage state
   await page.context().storageState({ path: DISPOSABLE_E2E_AUTH_STATE });
+  secureDisposableE2EAuthFile(DISPOSABLE_E2E_AUTH_STATE);
 });
