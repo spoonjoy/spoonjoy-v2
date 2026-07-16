@@ -366,6 +366,7 @@ function validInputs(): DeploymentPreflightInputs {
       vars: { NODE_ENV: "production", SPOONJOY_CSP_MODE: "enforce" },
       env: {
         qa: {
+          version_metadata: { binding: "CF_VERSION_METADATA" },
           d1_databases: [
             {
               binding: "DB",
@@ -1276,6 +1277,15 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).toEqual(
       expect.arrayContaining(["QA environment", "QA resource isolation", "QA package scripts"]),
     );
+  });
+
+  it("requires QA Worker version metadata for exact-SHA canary readiness", () => {
+    const inputs = validInputs();
+    delete ((inputs.wrangler.env as Record<string, { version_metadata?: unknown }>).qa).version_metadata;
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("QA Worker version metadata");
   });
 
   it("requires the QA image-cover smoke package script", () => {
@@ -2915,6 +2925,7 @@ describe("wrangler QA environment", () => {
       r2_buckets: Array<{ binding: string; bucket_name: string }>;
       ratelimits: Array<{ name: string; namespace_id: string }>;
       env?: Record<string, {
+        version_metadata?: { binding: string };
         d1_databases?: Array<{ binding: string; database_name: string; database_id: string }>;
         r2_buckets?: Array<{ binding: string; bucket_name: string }>;
         ratelimits?: Array<{ name: string; namespace_id: string }>;
@@ -2924,6 +2935,7 @@ describe("wrangler QA environment", () => {
 
     const qa = wrangler.env?.qa;
     expect(qa).toBeDefined();
+    expect(qa?.version_metadata).toEqual({ binding: "CF_VERSION_METADATA" });
     expect(qa?.d1_databases).toEqual([
       {
         binding: "DB",

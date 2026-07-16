@@ -105,6 +105,7 @@ function qaGeneratedBuildConfig() {
       SPOONJOY_BASE_URL: QA_BASE_URL,
       SPOONJOY_CSP_MODE: "enforce",
     },
+    version_metadata: { binding: "CF_VERSION_METADATA" },
     d1_databases: [{ binding: "DB", database_name: "spoonjoy-qa", database_id: QA_D1_DATABASE_ID }],
     r2_buckets: [{ binding: "PHOTOS", bucket_name: QA_R2_BUCKET }],
     ratelimits: [
@@ -288,6 +289,16 @@ describe("validateQaGeneratedBuildConfig", () => {
 
     expect(check.ok).toBe(false);
     expect(check.message).toContain("SPOONJOY_CSP_MODE=enforce");
+  });
+
+  it("fails closed when the generated QA Worker config cannot report exact Worker versions", () => {
+    const config = qaGeneratedBuildConfig();
+    delete (config as Record<string, unknown>).version_metadata;
+
+    const check = validateQaGeneratedBuildConfig(config);
+
+    expect(check.ok).toBe(false);
+    expect(check.message).toContain("CF_VERSION_METADATA");
   });
 
   it("fails closed when generated config arrays do not contain the required bindings", () => {

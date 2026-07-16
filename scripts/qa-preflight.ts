@@ -236,6 +236,7 @@ export function validateQaGeneratedBuildConfig(config: Record<string, unknown>):
   const vars = objectRecord(config.vars);
   const db = bindingRecord(config.d1_databases, "DB");
   const photos = bindingRecord(config.r2_buckets, "PHOTOS");
+  const versionMetadata = objectRecord(config.version_metadata);
   const rateLimits = rateLimitNamesAndIds(config.ratelimits);
   const hasExpectedRateLimitBindings =
     rateLimits.names.length === REQUIRED_QA_RATE_LIMIT_BINDINGS.length &&
@@ -246,6 +247,7 @@ export function validateQaGeneratedBuildConfig(config: Record<string, unknown>):
 
   const ok =
     config.name === "spoonjoy-v2-qa" &&
+    versionMetadata.binding === "CF_VERSION_METADATA" &&
     vars.SPOONJOY_BASE_URL === QA_BASE_URL &&
     vars.SPOONJOY_CSP_MODE === "enforce" &&
     db?.database_name === "spoonjoy-qa" &&
@@ -259,7 +261,7 @@ export function validateQaGeneratedBuildConfig(config: Record<string, unknown>):
     ok,
     ok
       ? "Generated Worker config uses QA Worker name, base URL, D1, R2, and rate-limit bindings."
-      : "Generated Worker config is not isolated to QA or is missing SPOONJOY_CSP_MODE=enforce. Rebuild with `CLOUDFLARE_ENV=qa pnpm run build` before `wrangler deploy --env qa`.",
+      : "Generated Worker config is not isolated to QA, is missing SPOONJOY_CSP_MODE=enforce, or cannot expose CF_VERSION_METADATA. Rebuild with `CLOUDFLARE_ENV=qa pnpm run build` before `wrangler deploy --env qa`.",
   );
 }
 

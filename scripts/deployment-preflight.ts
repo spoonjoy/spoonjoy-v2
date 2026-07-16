@@ -1068,6 +1068,11 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
       "wrangler.json must bind Worker version metadata as CF_VERSION_METADATA for exact-version canary verification."
     ),
     check(
+      "QA Worker version metadata",
+      objectRecord(qaConfig.version_metadata).binding === "CF_VERSION_METADATA",
+      "wrangler.json env.qa must bind Worker version metadata as CF_VERSION_METADATA for exact-version QA canary verification."
+    ),
+    check(
       "QA environment",
       hasBinding(qaConfig.d1_databases, "DB", ["database_name", "database_id"]) &&
         hasBinding(qaConfig.r2_buckets, "PHOTOS", ["bucket_name"]) &&
