@@ -11,6 +11,7 @@
 4. Consider a tagging system for categories, with light AI assistance for categorization if useful.
 5. Do nothing Pebble-specific; Spoonjoy is only the API provider for that project.
 6. Recipe progress does not belong in D1. The reason to use a Durable Object is live cross-device synchronization.
+7. Keep neutral recipe metadata and read-time scaling useful to both REST clients and agents using Spoonjoy through MCP.
 
 ## Disposition
 
@@ -24,7 +25,8 @@
 | AI categorization | Reject for this release. Suggestions need a separate non-canonical proposal model, review UX, confidence/provenance, and normalization contract; adding inference before those exist would silently turn guesses into user data. | No AI suggestion table, endpoint, or UI; decision recorded in planning and API docs expose accepted tags only. |
 | Pebble-specific work | Reject. Deliver only neutral Spoonjoy product and API primitives. | Changed product/API/docs surfaces contain no Pebble-specific contract or copy. |
 | D1 for progress | Reject as canonical state. D1 is an owner-only index/history projection and may lag; the Durable Object remains authoritative. | Ownership boundaries and alarm-driven D1 projection tests. |
+| Recipe metadata/scaling | Accept for REST v1 and the existing MCP recipe-read tools. Both surfaces share neutral metadata and exact read-only scaling math; private `isSaved` remains REST-only and requires a kitchen-read entitlement. | Units 3, 4, and 27.2 prove REST/MCP parity, MCP tool-schema behavior, no writes, and the explicit private-field boundary. |
 
 ## Product Boundary
 
-This task ships Spoonjoy primitives, not partner customization: live cook continuity, correct shopping mutations, private saves, manual tags, and neutral recipe metadata. It does not create a first-party importer, an AI tagging workflow, or any Pebble-specific behavior.
+This task ships Spoonjoy primitives, not partner customization: live cook continuity, correct shopping mutations, private saves, manual tags, and neutral recipe metadata/read-time scaling across REST v1 and MCP reads. It does not create a first-party importer, an AI tagging workflow, or any Pebble-specific behavior.
