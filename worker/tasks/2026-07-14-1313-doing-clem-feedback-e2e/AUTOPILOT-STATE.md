@@ -16,12 +16,12 @@
 - Branch: `worker/clem-feedback-e2e`; current pushed content checkpoint `e27beb37b7881aef10456a823720dfa9cf3359cb` integrates `origin/main@e7b0e9ec`. Ambiguity converged there under a fresh, read-only context-independent reviewer after three earlier reviewer attempts stalled without a verdict.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is approved after five fresh hostile rounds.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation has not started.
-- Active gate: run a fresh context-independent Quality review. After Quality is clean, alternate fresh Scrutiny reviewers until one clean Tinfoil pass and one immediately consecutive clean Stranger pass.
+- Active gate: Quality converged under a fresh context-independent reviewer. Run fresh Scrutiny reviewers until one clean Tinfoil pass and one immediately consecutive clean Stranger pass, starting with Tinfoil.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Commit/push the Ambiguity convergence record and synchronize its Desk copy, then complete Quality and alternating Scrutiny until two consecutive scrutiny passes converge.
+Commit/push the Quality convergence record and synchronize its Desk copy, then run Tinfoil followed immediately by Stranger when clean; fix and restart the alternating sequence if either reports findings.
 
 ## Operator-Locked Rules
 
@@ -41,7 +41,7 @@ Commit/push the Ambiguity convergence record and synchronize its Desk copy, then
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
 | Planning reviewer gate | deferred by scope | Planning approved at `2c3b4759` after convergence | Closed |
-| Doing review chain | needs reviewer gate | Granularity, Validation, and Ambiguity converged; three stalled attempts produced no verdict and did not count | Commit/sync the convergence record, then Quality and alternating Scrutiny |
+| Doing review chain | needs reviewer gate | Granularity, Validation, Ambiguity, and Quality converged; three stalled attempts produced no verdict and did not count | Commit/sync the Quality record, then alternating Scrutiny |
 | Work Doer Units 0-37 | ready | Full red/green/verify/visual/ship queue is defined | Start after doing review convergence |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
 
