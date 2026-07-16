@@ -13,8 +13,10 @@
  *   intentionally does NOT touch `publickey-credentials-*`, so passkeys keep
  *   their default `self` allowance.
  *
- * `SPOONJOY_CSP_MODE=enforce` emits `Content-Security-Policy`; every other
- * value emits `Content-Security-Policy-Report-Only` as a rollback-safe default.
+ * `SPOONJOY_CSP_MODE=enforce` emits `Content-Security-Policy`; other runtime
+ * values emit `Content-Security-Policy-Report-Only`, which deployment
+ * preflight allows for production/QA only through the auditable break-glass
+ * rollback path.
  *
  * `script-src` is **nonce-based**: a per-request nonce ({@link generateNonce},
  * generated once in `workers/app.ts`) is threaded both into this header AND into
@@ -112,7 +114,7 @@ function cspDirectives(
 }
 
 /**
- * Serialize the report-only CSP for a response. Pass the per-request `nonce` for
+ * Serialize the CSP for a response. Pass the per-request `nonce` for
  * HTML renders (so the SSR inline scripts validate); omit it for non-HTML
  * responses (redirects, CORS preflight, resource routes) which carry no inline
  * script and therefore need no nonce in `script-src`.

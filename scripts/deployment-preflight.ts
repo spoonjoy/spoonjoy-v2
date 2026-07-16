@@ -182,6 +182,26 @@ function objectRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
+function normalizedHttpsOrigin(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || /\s/.test(trimmed) || !URL.canParse(trimmed)) return null;
+
+  const url = new URL(trimmed);
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    !url.hostname ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.hash
+  ) {
+    return null;
+  }
+  return url.origin;
+}
+
 function namespaceIds(ratelimits: unknown): string[] {
   if (!Array.isArray(ratelimits)) return [];
   return ratelimits
@@ -316,12 +336,25 @@ function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
   const rollbackVersion = dispatchInputs
     ? childBlock(lines, dispatchInputs[0], dispatchInputs[1], "rollback_version_id")
     : null;
-  if (!sourceSha || !rollbackVersion) return false;
+  const cspBreakGlass = dispatchInputs
+    ? childBlock(lines, dispatchInputs[0], dispatchInputs[1], "csp_report_only_break_glass")
+    : null;
+  if (!sourceSha || !rollbackVersion || !cspBreakGlass) return false;
 
   const permissionsIndex = lines.findIndex((line) => line.indent === 0 && line.text === "permissions:");
   if (permissionsIndex === -1) return false;
   const permissions = blockScalarChildMap(lines, permissionsIndex, blockEnd(lines, permissionsIndex));
   if (permissions.get("issues") === "write") return false;
+
+  const envIndex = lines.findIndex((line) => line.indent === 0 && line.text === "env:");
+  if (envIndex === -1) return false;
+  const env = blockScalarChildMap(lines, envIndex, blockEnd(lines, envIndex));
+  if (
+    env.get("SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS") !==
+    "${{ github.event_name == 'workflow_dispatch' && inputs.csp_report_only_break_glass || '' }}"
+  ) {
+    return false;
+  }
 
   const jobs = workflowJobBlocks(lines);
   const deploy = jobs.find(([start]) => lines[start].text === "deploy:");
@@ -397,6 +430,7 @@ function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
         'gh run list --workflow .github/workflows/storybook.yml --branch main --commit "$SOURCE_SHA" --event push --status success',
         'gh run view "$storybook_run_id" --json jobs',
         '.name == "build-storybook" and .conclusion == "success"',
+        'csp_report_only_break_glass must be ACK_REPORT_ONLY_CSP_ROLLBACK',
       ];
       if (
         stepPropertyValue(lines, stepStart, stepEnd, "if") === null &&
@@ -409,10 +443,13 @@ function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
     if (
       stepRunsDeployAuto(lines, stepStart, stepEnd) &&
       stepPropertyValue(lines, stepStart, stepEnd, "if") === null &&
+      stepEnvValue(lines, stepStart, stepEnd, "SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS") ===
+        "${{ env.SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS }}" &&
       stepHasEnvKeys(lines, stepStart, stepEnd, [
         "CLOUDFLARE_ACCOUNT_ID",
         "CLOUDFLARE_D1_API_TOKEN",
         "CLOUDFLARE_WORKERS_API_TOKEN",
+        "SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS",
       ]) &&
       run.includes('--rollback-version-id "$ROLLBACK_VERSION_ID"')
     ) {
@@ -496,6 +533,9 @@ function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
     blockScalarChildValue(lines, rollbackVersion[0], rollbackVersion[1], "required") === "false" &&
     blockScalarChildValue(lines, rollbackVersion[0], rollbackVersion[1], "default") === "" &&
     blockScalarChildValue(lines, rollbackVersion[0], rollbackVersion[1], "type") === "string" &&
+    blockScalarChildValue(lines, cspBreakGlass[0], cspBreakGlass[1], "required") === "false" &&
+    blockScalarChildValue(lines, cspBreakGlass[0], cspBreakGlass[1], "default") === "" &&
+    blockScalarChildValue(lines, cspBreakGlass[0], cspBreakGlass[1], "type") === "string" &&
     sourceCheckoutStep >= 0 &&
     rollbackCheckoutStep > sourceCheckoutStep &&
     validationStep > rollbackCheckoutStep &&
@@ -519,6 +559,38 @@ function workflowBuildsPushesAndPullRequestsToMain(workflow: string): boolean {
     workflowHasOnlyTriggers(lines, onIndex, onEnd, ["push", "pull_request"]) &&
     workflowTriggerTargetsMain(lines, onIndex, onEnd, "push") &&
     workflowTriggerTargetsMain(lines, onIndex, onEnd, "pull_request")
+  );
+}
+
+function workflowTopLevelEnvValue(workflow: string, key: string): string | null {
+  const lines = workflowLines(workflow);
+  const envIndex = lines.findIndex((line) => line.indent === 0 && line.text === "env:");
+  if (envIndex === -1) return null;
+  return blockScalarChildValue(lines, envIndex, blockEnd(lines, envIndex), key);
+}
+
+function workflowHasRunCommand(workflow: string, expected: string, minimumCount = 1): boolean {
+  const lines = workflowLines(workflow);
+  let count = 0;
+  for (const [jobStart, jobEnd] of workflowJobBlocks(lines)) {
+    const steps = childBlock(lines, jobStart, jobEnd, "steps");
+    if (!steps) continue;
+    for (const [stepStart, stepEnd] of stepBlocks(lines, steps[0], steps[1])) {
+      if (runCommandLines(stepRunText(lines, stepStart, stepEnd)).includes(expected)) {
+        count += 1;
+      }
+    }
+  }
+  return count >= minimumCount;
+}
+
+function workflowHasWarningCleanCiOutputPaths(workflow: string): boolean {
+  return (
+    workflowHasRunCommand(workflow, "pnpm exec tsx scripts/warning-gate.ts -- pnpm db:seed", 2) &&
+    workflowHasRunCommand(workflow, "pnpm exec tsx scripts/warning-gate.ts -- pnpm run typecheck") &&
+    workflowHasRunCommand(workflow, "pnpm test:coverage") &&
+    workflowHasRunCommand(workflow, "pnpm exec tsx scripts/warning-gate.ts -- pnpm build") &&
+    workflowHasRunCommand(workflow, "pnpm test:e2e")
   );
 }
 
@@ -679,6 +751,11 @@ function stepHasEnvKeys(lines: WorkflowLine[], stepStart: number, stepEnd: numbe
     if (key) found.add(key[1]);
   }
   return keys.every((key) => found.has(key));
+}
+
+function stepEnvValue(lines: WorkflowLine[], stepStart: number, stepEnd: number, key: string): string | null {
+  const env = childBlock(lines, stepStart, stepEnd, "env");
+  return env ? blockScalarChildValue(lines, env[0], env[1], key) : null;
 }
 
 function workflowHasGitDefaultBranchConfig(workflow: string): boolean {
@@ -1052,6 +1129,15 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     qaCspMode === "report-only"
   );
   const hasCspBreakGlass = inputs.cspReportOnlyBreakGlass === CSP_REPORT_ONLY_BREAK_GLASS_ACK;
+  const productionPostHogOrigin = normalizedHttpsOrigin(productionVars.VITE_POSTHOG_HOST);
+  const qaPostHogOrigin = normalizedHttpsOrigin(qaVars.VITE_POSTHOG_HOST);
+  const productionDeployPostHogOrigin = normalizedHttpsOrigin(
+    workflowTopLevelEnvValue(inputs.productionDeployWorkflow, "VITE_POSTHOG_HOST"),
+  );
+  const ciTargetsMain = workflowBuildsPushesAndPullRequestsToMain(inputs.ciWorkflow);
+  const ciHasGitConfig = workflowHasGitDefaultBranchConfig(inputs.ciWorkflow);
+  const ciHasWarningCleanOutputPaths = workflowHasWarningCleanCiOutputPaths(inputs.ciWorkflow);
+  const ciUsesCorepackPnpm = workflowUsesCorepackPnpmSetup(inputs.ciWorkflow);
 
   const checks: PreflightCheck[] = [
     check(
@@ -1105,6 +1191,17 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
       !cspIsReportOnlyRollback,
       `report-only CSP rollback is break-glass acknowledged with ${CSP_REPORT_ONLY_BREAK_GLASS_ACK}; restore SPOONJOY_CSP_MODE=enforce after the rollback.`,
       "warning",
+    ),
+    check(
+      "PostHog CSP host config",
+      Boolean(
+        productionPostHogOrigin &&
+          qaPostHogOrigin &&
+          productionDeployPostHogOrigin &&
+          productionPostHogOrigin === qaPostHogOrigin &&
+          productionPostHogOrigin === productionDeployPostHogOrigin,
+      ),
+      "wrangler.json production/QA vars and production-deploy.yml must set the same origin-only HTTPS VITE_POSTHOG_HOST used by the CSP PostHog ingest/assets policy."
     ),
     check(
       "QA resource isolation",
@@ -1183,10 +1280,11 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     ),
     check(
       "CI workflow",
-      workflowBuildsPushesAndPullRequestsToMain(inputs.ciWorkflow) &&
-        workflowHasGitDefaultBranchConfig(inputs.ciWorkflow) &&
-        workflowUsesCorepackPnpmSetup(inputs.ciWorkflow),
-      ".github/workflows/ci.yml must validate pushes and pull requests to main with checkout warning suppression and Corepack pnpm activation."
+      ciTargetsMain &&
+        ciHasGitConfig &&
+        ciHasWarningCleanOutputPaths &&
+        ciUsesCorepackPnpm,
+      ".github/workflows/ci.yml must validate pushes and pull requests to main with checkout warning suppression, Corepack pnpm activation, and warning-gated seed/typecheck/build/test output paths."
     ),
     check(
       "production deploy workflow",

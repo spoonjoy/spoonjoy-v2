@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildContentSecurityPolicy } from "../../app/lib/security-headers.server";
 import {
   assertAdditiveMigrationSql,
   buildWorkerVersionOverride,
@@ -25,6 +26,7 @@ const TREE_HASH = "b".repeat(40);
 const TOOLING_SHA = "c".repeat(40);
 const PREVIOUS_VERSION = "11111111-1111-4111-8111-111111111111";
 const CANDIDATE_VERSION = "22222222-2222-4222-8222-222222222222";
+const VALID_CANDIDATE_CSP = buildContentSecurityPolicy("live");
 
 afterEach(() => {
   vi.useRealTimers();
@@ -125,7 +127,7 @@ function releaseDeps(runCommand: ReleaseCommandRunner) {
     },
     readMigrationFile: vi.fn(async () => "CREATE TABLE ReleaseMarker (id TEXT PRIMARY KEY);"),
     readCandidateCspHeaders: vi.fn(async () => new Headers({
-      "Content-Security-Policy": "default-src 'self'; script-src 'self' 'nonce-live' https://us-assets.i.posthog.com; report-uri /csp-report; report-to csp-endpoint",
+      "Content-Security-Policy": VALID_CANDIDATE_CSP,
       "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
       "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
     })),
@@ -412,7 +414,7 @@ describe("production canary release orchestration", () => {
     const fetchImpl = vi.fn(async () => new Response("<!doctype html>", {
       status: 200,
       headers: {
-        "Content-Security-Policy": "default-src 'self'; script-src 'self' 'nonce-live' https://us-assets.i.posthog.com; report-uri /csp-report; report-to csp-endpoint",
+        "Content-Security-Policy": VALID_CANDIDATE_CSP,
         "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
         "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
       },
@@ -490,6 +492,34 @@ describe("production canary release orchestration", () => {
       phase: "candidate_csp",
       failure: expect.stringContaining("Content-Security-Policy"),
     }));
+  });
+
+  it("rejects an insecure candidate CSP before promotion even when canary smoke passes", async () => {
+    const runCommand = successfulRunner({
+      "pnpm exec wrangler deployments list --json": [
+        deploymentPayload(PREVIOUS_VERSION, "2026-07-15T00:00:00Z"),
+        deploymentPayload(PREVIOUS_VERSION),
+      ],
+    });
+    const deps = releaseDeps(runCommand);
+    deps.readCandidateCspHeaders.mockResolvedValue(new Headers({
+      "Content-Security-Policy": "default-src *; script-src * 'unsafe-inline' 'unsafe-eval' 'nonce-live'; object-src *; frame-ancestors *; base-uri *; form-action *; report-uri /csp-report; report-to csp-endpoint",
+      "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+      "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+    }));
+    deps.readPublicWorkerVersion.mockResolvedValue(PREVIOUS_VERSION);
+
+    await expect(runProductionCanaryRelease(deps)).rejects.toThrow(
+      /CSP default-src lockdown.*CSP script-src unsafe-inline/,
+    );
+
+    const calls = runCommand.mock.calls.map(([command, args]) => commandKey(command, args));
+    expect(calls).toContain(
+      `pnpm exec wrangler versions deploy ${PREVIOUS_VERSION}@100% -y --message Restore after failed ${RELEASE_SHA}`,
+    );
+    expect(calls).not.toContain(
+      `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@100% -y --message Promote ${RELEASE_SHA}`,
+    );
   });
 
   it("allows the default rollback verification window to outlast delayed Cloudflare convergence", async () => {
@@ -1446,7 +1476,7 @@ describe("release artifact and CLI boundary", () => {
     const result = await runProductionReleaseCli({
       execFileImpl,
       readCandidateCspHeaders: async () => new Headers({
-        "Content-Security-Policy": "default-src 'self'; script-src 'self' 'nonce-live'; report-uri /csp-report; report-to csp-endpoint",
+        "Content-Security-Policy": VALID_CANDIDATE_CSP,
         "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
         "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
       }),
@@ -1508,7 +1538,7 @@ describe("release artifact and CLI boundary", () => {
     const release = runProductionReleaseCli({
       env: { SOURCE_SHA: RELEASE_SHA, PATH: "/test/bin" },
       readCandidateCspHeaders: async () => new Headers({
-        "Content-Security-Policy": "default-src 'self'; script-src 'self' 'nonce-live'; report-uri /csp-report; report-to csp-endpoint",
+        "Content-Security-Policy": VALID_CANDIDATE_CSP,
         "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
         "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
       }),
@@ -1532,7 +1562,7 @@ describe("release artifact and CLI boundary", () => {
         argv: ["--artifact-dir", artifactDir],
         env: { SOURCE_SHA: RELEASE_SHA, PATH: "/test/bin" },
         readCandidateCspHeaders: async () => new Headers({
-          "Content-Security-Policy": "default-src 'self'; script-src 'self' 'nonce-live'; report-uri /csp-report; report-to csp-endpoint",
+          "Content-Security-Policy": VALID_CANDIDATE_CSP,
           "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
           "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
         }),

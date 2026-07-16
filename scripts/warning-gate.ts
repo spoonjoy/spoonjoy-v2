@@ -4,8 +4,9 @@ export const EXPECTED_PRISMA_D1_TRANSACTION_WARNING =
   "Cloudflare D1 does not support transactions yet. When using Prisma's D1 adapter, implicit & explicit transactions will be ignored and run as individual queries, which breaks the guarantees of the ACID properties of transactions. For more details see https://pris.ly/d/d1-transactions";
 
 const ANSI_PATTERN = /\u001b\[[0-9;]*m/g;
-const WARNING_LINE_PATTERN =
-  /^\s*(?:\([^)]*\)\s*)?(?:prisma:warn\b|warn(?:ing)?(?::|\s)|[A-Za-z]+Warning:)/i;
+const BRACKETED_WARNING_PATTERN = /(?:^|[\s([<{])\[warning\](?::|\s|$)/i;
+const WARNING_WORD_PATTERN = /(?:^|[\s([<{])(?:[a-z]+warning|warning|warn)(?::|\s|$)/i;
+const PRISMA_WARNING_PATTERN = /(?:^|[\s([<{])prisma:warn(?::|\s|$)/i;
 
 export interface WarningGateCommandResult {
   exitCode: number;
@@ -25,11 +26,11 @@ function stripAnsi(value: string): string {
   return value.replace(ANSI_PATTERN, "");
 }
 
-export function isExpectedWarningLine(line: string): boolean {
-  const normalized = stripAnsi(line).trim();
+function isWarningLine(line: string): boolean {
   return (
-    normalized.includes("prisma:warn") &&
-    normalized.includes(EXPECTED_PRISMA_D1_TRANSACTION_WARNING)
+    BRACKETED_WARNING_PATTERN.test(line) ||
+    WARNING_WORD_PATTERN.test(line) ||
+    PRISMA_WARNING_PATTERN.test(line)
   );
 }
 
@@ -38,8 +39,7 @@ export function findUnexpectedWarnings(output: string): string[] {
     .split(/\r?\n/)
     .map((line) => stripAnsi(line).trim())
     .filter((line) => line !== "")
-    .filter((line) => WARNING_LINE_PATTERN.test(line))
-    .filter((line) => !isExpectedWarningLine(line));
+    .filter((line) => isWarningLine(line));
 }
 
 export function parseWarningGateCommands(argv: readonly string[]): string[][] {

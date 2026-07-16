@@ -52,7 +52,7 @@ jobs:
       - name: 🔒 Run dependency advisory scan
         run: |
           test -f pnpm-lock.yaml
-          pnpm run advisory:scan -- --scanner .cache/osv-scanner/osv-scanner --output .advisory/osv-results.json
+          pnpm exec tsx scripts/warning-gate.ts -- pnpm run advisory:scan -- --scanner .cache/osv-scanner/osv-scanner --output .advisory/osv-results.json
 
   coverage:
     name: coverage
@@ -102,16 +102,16 @@ jobs:
           pnpm exec wrangler d1 execute DB --local --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
 
       - name: 🌱 Seed local D1 database
-        run: pnpm db:seed
+        run: pnpm exec tsx scripts/warning-gate.ts -- pnpm db:seed
 
       - name: 🔍 Typecheck
-        run: pnpm run typecheck
+        run: pnpm exec tsx scripts/warning-gate.ts -- pnpm run typecheck
 
       - name: 🧪 Test & Coverage
         run: pnpm test:coverage
 
       - name: 🏗️ Build
-        run: pnpm build
+        run: pnpm exec tsx scripts/warning-gate.ts -- pnpm build
 
   e2e:
     name: e2e
@@ -152,7 +152,7 @@ jobs:
         run: pnpm exec wrangler d1 migrations apply DB --local
 
       - name: 🌱 Seed local D1 database
-        run: pnpm db:seed
+        run: pnpm exec tsx scripts/warning-gate.ts -- pnpm db:seed
 
       - name: 🔐 Configure local Worker secrets
         run: |

@@ -102,6 +102,75 @@ export function validateCutoverRunbook(content: string): string[] {
   return CUTOVER_RUNBOOK_TERMS.filter((term) => !content.includes(term));
 }
 
+function parseCspDirectives(csp: string): Map<string, string[]> {
+  const directives = new Map<string, string[]>();
+  for (const segment of csp.split(";")) {
+    const tokens = segment.trim().split(/\s+/).filter(Boolean);
+    const [directive, ...sources] = tokens;
+    if (!directive) continue;
+    const name = directive.toLowerCase();
+    if (!directives.has(name)) {
+      directives.set(name, sources);
+    }
+  }
+  return directives;
+}
+
+function directiveEquals(
+  directives: Map<string, string[]>,
+  name: string,
+  expected: readonly string[],
+): boolean {
+  const sources = directives.get(name);
+  return Boolean(
+    sources &&
+      sources.length === expected.length &&
+      expected.every((source, index) => sources[index] === source),
+  );
+}
+
+function hasWildcardSource(sources: readonly string[] | undefined): boolean {
+  return Boolean(
+    sources?.some((source) => (
+      source === "*" ||
+      source.startsWith("*.") ||
+      source.includes("://*.") ||
+      source === "http:" ||
+      source === "https:"
+    )),
+  );
+}
+
+function validateCspDirectiveLockdown(csp: string): string[] {
+  const missing: string[] = [];
+  const directives = parseCspDirectives(csp);
+
+  for (const [name, expected, failure] of [
+    ["default-src", ["'self'"], "CSP default-src lockdown"],
+    ["base-uri", ["'self'"], "CSP base-uri lockdown"],
+    ["object-src", ["'none'"], "CSP object-src lockdown"],
+    ["frame-ancestors", ["'none'"], "CSP frame-ancestors lockdown"],
+    ["form-action", ["'self'"], "CSP form-action lockdown"],
+  ] as const) {
+    if (!directiveEquals(directives, name, expected)) {
+      missing.push(failure);
+    }
+  }
+
+  const scriptSources = directives.get("script-src");
+  if (hasWildcardSource(scriptSources)) {
+    missing.push("CSP script-src wildcard");
+  }
+  if (scriptSources?.includes("'unsafe-inline'")) {
+    missing.push("CSP script-src unsafe-inline");
+  }
+  if (scriptSources?.includes("'unsafe-eval'")) {
+    missing.push("CSP script-src unsafe-eval");
+  }
+
+  return missing;
+}
+
 export function validateCspHeaderSet(
   headers: Pick<Headers, "get">,
   options: ValidateCspHeaderOptions = {},
@@ -135,6 +204,9 @@ export function validateCspHeaderSet(
   }
   if (options.requireNonce && csp && !/script-src[^;]*'nonce-[^'\s;]+'/i.test(csp)) {
     missing.push("CSP nonce contract");
+  }
+  if (csp) {
+    missing.push(...validateCspDirectiveLockdown(csp));
   }
   return missing;
 }

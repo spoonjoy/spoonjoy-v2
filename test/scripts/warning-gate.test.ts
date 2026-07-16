@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   EXPECTED_PRISMA_D1_TRANSACTION_WARNING,
   findUnexpectedWarnings,
-  isExpectedWarningLine,
   main,
   parseWarningGateCommands,
   resolveSpawnedCommandClose,
@@ -40,24 +39,32 @@ describe("warning gate", () => {
     expect(() => parseWarningGateCommands(["--", "pnpm", "--then"])).toThrow(/empty command/);
   });
 
-  it("allows only the documented Prisma D1 transaction warning", () => {
-    const expected = `prisma:warn ${EXPECTED_PRISMA_D1_TRANSACTION_WARNING}`;
-    expect(isExpectedWarningLine(expected)).toBe(true);
-    expect(findUnexpectedWarnings(`ok\n${expected}\n`)).toEqual([]);
+  it("detects real warning tokens without self-matching coverage table filenames", () => {
+    const prismaWarning = `prisma:warn ${EXPECTED_PRISMA_D1_TRANSACTION_WARNING}`;
+    expect(findUnexpectedWarnings(`ok\n${prismaWarning}\n`)).toEqual([prismaWarning]);
     expect(findUnexpectedWarnings("\u001b[33mprisma:warn Something else happened\u001b[39m")).toEqual([
       "prisma:warn Something else happened",
     ]);
     expect(findUnexpectedWarnings("warning-gate.ts  |   59.09 |    62.06 |")).toEqual([]);
     expect(findUnexpectedWarnings("warnings-summary.log")).toEqual([]);
 
-    expect(findUnexpectedWarnings("prisma:warn Something else happened")).toEqual([
-      "prisma:warn Something else happened",
+    expect(findUnexpectedWarnings("▲ [WARNING] bundle contains dynamic import")).toEqual([
+      "▲ [WARNING] bundle contains dynamic import",
+    ]);
+    expect(findUnexpectedWarnings("⚠️ Warning: browser console noise")).toEqual([
+      "⚠️ Warning: browser console noise",
+    ]);
+    expect(findUnexpectedWarnings("[vite] warning: env replacement skipped")).toEqual([
+      "[vite] warning: env replacement skipped",
     ]);
     expect(findUnexpectedWarnings("(node:123) ExperimentalWarning: surprise")).toEqual([
       "(node:123) ExperimentalWarning: surprise",
     ]);
     expect(findUnexpectedWarnings("WARNING: browser console noise")).toEqual([
       "WARNING: browser console noise",
+    ]);
+    expect(findUnexpectedWarnings(`${prismaWarning} Warning: appended bypass`)).toEqual([
+      `${prismaWarning} Warning: appended bypass`,
     ]);
   });
 
@@ -133,7 +140,7 @@ describe("warning gate", () => {
   it("preserves a non-zero command exit after scanning warning output", async () => {
     const runCommand = vi.fn().mockResolvedValue({
       exitCode: 7,
-      output: `prisma:warn ${EXPECTED_PRISMA_D1_TRANSACTION_WARNING}\n`,
+      output: "ordinary failure details\n",
     });
 
     const result = await runWarningGate(["--", "pnpm", "exec", "playwright", "test"], {

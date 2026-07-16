@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildContentSecurityPolicy } from "../../app/lib/security-headers.server";
 import {
   collectProductionReadinessChecks,
   createProductionReadinessDeps,
@@ -180,7 +181,7 @@ describe("production readiness helpers", () => {
 
   it("validates production CSP enforcement headers without printing live evidence", () => {
     const enforced = new Headers({
-      "Content-Security-Policy": "default-src 'self'; script-src 'self' 'nonce-live' https://us-assets.i.posthog.com; report-uri /csp-report; report-to csp-endpoint",
+      "Content-Security-Policy": buildContentSecurityPolicy("live"),
       "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
       "X-Spoonjoy-Worker-Version": "22222222-2222-4222-8222-222222222222",
     });
@@ -190,7 +191,7 @@ describe("production readiness helpers", () => {
     })).toEqual([]);
 
     const reportOnly = new Headers({
-      "Content-Security-Policy": "default-src 'self'; script-src 'self' 'nonce-live'; report-uri /csp-report; report-to csp-endpoint",
+      "Content-Security-Policy": buildContentSecurityPolicy("live"),
       "Content-Security-Policy-Report-Only": "default-src 'self'; report-uri /csp-report",
       "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
     });
@@ -203,7 +204,7 @@ describe("production readiness helpers", () => {
     ]);
 
     const missingTelemetry = new Headers({
-      "Content-Security-Policy": "default-src 'self'; script-src 'self'",
+      "Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'",
       "X-Spoonjoy-Worker-Version": "22222222-2222-4222-8222-222222222222",
     });
     expect(validateCspHeaderSet(missingTelemetry)).toEqual([
@@ -218,7 +219,7 @@ describe("production readiness helpers", () => {
 
   it("validates candidate CSP version and nonce contract failure modes", () => {
     const missingNonce = new Headers({
-      "Content-Security-Policy": "default-src 'self'; script-src 'self'; report-uri /csp-report; report-to csp-endpoint",
+      "Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://us-assets.i.posthog.com; report-uri /csp-report; report-to csp-endpoint",
       "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
       "X-Spoonjoy-Worker-Version": "33333333-3333-4333-8333-333333333333",
     });
@@ -229,6 +230,48 @@ describe("production readiness helpers", () => {
     })).toEqual([
       "X-Spoonjoy-Worker-Version exact candidate",
       "CSP nonce contract",
+    ]);
+  });
+
+  it("ignores empty CSP segments and duplicate directives after the first locked directive", () => {
+    const csp = [
+      buildContentSecurityPolicy("live"),
+      "",
+      "default-src *",
+      "",
+      "object-src *",
+    ].join("; ");
+    const headers = new Headers({
+      "Content-Security-Policy": csp,
+      "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+      "X-Spoonjoy-Worker-Version": "22222222-2222-4222-8222-222222222222",
+    });
+
+    expect(validateCspHeaderSet(headers, {
+      expectedWorkerVersionId: "22222222-2222-4222-8222-222222222222",
+      requireNonce: true,
+    })).toEqual([]);
+  });
+
+  it("rejects wildcard and unsafe CSP directives before production promotion", () => {
+    const hostile = new Headers({
+      "Content-Security-Policy": "default-src *; script-src * 'unsafe-inline' 'unsafe-eval' 'nonce-x'; object-src *; frame-ancestors *; base-uri *; form-action *; report-uri /csp-report; report-to csp-endpoint",
+      "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+      "X-Spoonjoy-Worker-Version": "22222222-2222-4222-8222-222222222222",
+    });
+
+    expect(validateCspHeaderSet(hostile, {
+      expectedWorkerVersionId: "22222222-2222-4222-8222-222222222222",
+      requireNonce: true,
+    })).toEqual([
+      "CSP default-src lockdown",
+      "CSP base-uri lockdown",
+      "CSP object-src lockdown",
+      "CSP frame-ancestors lockdown",
+      "CSP form-action lockdown",
+      "CSP script-src wildcard",
+      "CSP script-src unsafe-inline",
+      "CSP script-src unsafe-eval",
     ]);
   });
 

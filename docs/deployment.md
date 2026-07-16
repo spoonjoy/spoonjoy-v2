@@ -163,7 +163,7 @@ Notes:
 
 After deployment, verify public pages, authenticated Photo Studio, OAuth provider starts/callbacks, MCP, and API surfaces return `Content-Security-Policy`, `Reporting-Endpoints: csp-endpoint="/csp-report"`, and `X-Spoonjoy-Worker-Version` for the expected exact SHA. They should not return `Content-Security-Policy-Report-Only` during an enforcing release.
 
-The one-commit rollback is to change `SPOONJOY_CSP_MODE` from `enforce` to `report-only` in the affected `wrangler.json` environment and deploy that exact rollback SHA only with an auditable break-glass preflight/deploy environment: `SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS=ACK_REPORT_ONLY_CSP_ROLLBACK`. That rollback restores `Content-Security-Policy-Report-Only` while preserving nonce behavior and violation telemetry. Remove the break-glass env var and restore `SPOONJOY_CSP_MODE=enforce` in the follow-up commit.
+The one-commit rollback is to change `SPOONJOY_CSP_MODE` from `enforce` to `report-only` in the affected `wrangler.json` environment and release that exact rollback SHA through the protected `production-deploy.yml` workflow dispatch. Set the workflow input `csp_report_only_break_glass` to `ACK_REPORT_ONLY_CSP_ROLLBACK`; local preflight/deploy commands that inspect the same rollback commit must also run with `SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS=ACK_REPORT_ONLY_CSP_ROLLBACK`. That auditable path restores `Content-Security-Policy-Report-Only` while preserving nonce behavior and violation telemetry. Remove the break-glass input/env and restore `SPOONJOY_CSP_MODE=enforce` in the follow-up commit.
 
 ### Optional PostHog Telemetry
 

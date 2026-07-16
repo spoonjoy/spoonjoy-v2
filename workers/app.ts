@@ -53,8 +53,8 @@ export default {
         return finalizeResponse(response, env);
       }
 
-      // One nonce per request: it must appear identically in the report-only
-      // CSP header (below) and in the SSR shell's inline <script> nonces,
+      // One nonce per request: it must appear identically in the selected CSP
+      // header (below) and in the SSR shell's inline <script> nonces,
       // threaded via loadContext → entry.server → NonceContext.
       const nonce = generateNonce();
       const response = await requestHandler(request, {

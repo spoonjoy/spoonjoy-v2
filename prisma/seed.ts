@@ -18,9 +18,51 @@ import { faker } from "@faker-js/faker";
 import bcrypt from "bcryptjs";
 import { getPlatformProxy } from "wrangler";
 import type { D1Database } from "@cloudflare/workers-types";
+import { EXPECTED_PRISMA_D1_TRANSACTION_WARNING } from "../scripts/warning-gate";
 
 let prisma: PrismaClient;
 let platformDispose: (() => Promise<void>) | undefined;
+const EXPECTED_PRISMA_D1_TRANSACTION_WARNING_LINE = `prisma:warn ${EXPECTED_PRISMA_D1_TRANSACTION_WARNING}`;
+
+function isExpectedPrismaD1TransactionWarning(value: string): boolean {
+  const normalized = value.replace(/\u001b\[[0-9;]*m/g, "").trim();
+  return (
+    normalized === EXPECTED_PRISMA_D1_TRANSACTION_WARNING ||
+    normalized === EXPECTED_PRISMA_D1_TRANSACTION_WARNING_LINE
+  );
+}
+
+function suppressExpectedPrismaD1TransactionWarningOutput(): () => void {
+  const originalWarn = console.warn;
+  const originalStdoutWrite = process.stdout.write.bind(process.stdout) as typeof process.stdout.write;
+  const originalStderrWrite = process.stderr.write.bind(process.stderr) as typeof process.stderr.write;
+  console.warn = (...args: unknown[]) => {
+    const message = args.map((arg) => String(arg)).join(" ");
+    if (isExpectedPrismaD1TransactionWarning(message)) {
+      return;
+    }
+    originalWarn(...args);
+  };
+  process.stdout.write = ((chunk: string | Uint8Array, ...args: unknown[]) => {
+    const text = typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+    if (isExpectedPrismaD1TransactionWarning(text)) {
+      return true;
+    }
+    return (originalStdoutWrite as (...writeArgs: unknown[]) => boolean)(chunk, ...args);
+  }) as typeof process.stdout.write;
+  process.stderr.write = ((chunk: string | Uint8Array, ...args: unknown[]) => {
+    const text = typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+    if (isExpectedPrismaD1TransactionWarning(text)) {
+      return true;
+    }
+    return (originalStderrWrite as (...writeArgs: unknown[]) => boolean)(chunk, ...args);
+  }) as typeof process.stderr.write;
+  return () => {
+    console.warn = originalWarn;
+    process.stdout.write = originalStdoutWrite;
+    process.stderr.write = originalStderrWrite;
+  };
+}
 
 async function initPrismaForLocalD1() {
   const platform = await getPlatformProxy<{ DB: D1Database }>();
@@ -1629,6 +1671,8 @@ async function seedShoppingLists(
 // ============================================================================
 
 async function main() {
+  const restorePrismaD1Warning = suppressExpectedPrismaD1TransactionWarningOutput();
+
   console.log("\n" + "=".repeat(60));
   console.log("🌱 Spoonjoy v2 Database Seeding");
   console.log("=".repeat(60) + "\n");
@@ -1655,6 +1699,8 @@ async function main() {
   } catch (error) {
     console.error("\n❌ Seeding failed:", error);
     throw error;
+  } finally {
+    restorePrismaD1Warning();
   }
 }
 
