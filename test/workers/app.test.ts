@@ -136,6 +136,27 @@ describe("Cloudflare worker app", () => {
     expect(response.headers.get("X-Frame-Options")).toBe("DENY");
   });
 
+  it("threads runtime PostHog host configuration into Worker CSP headers", async () => {
+    requestHandler.mockClear();
+
+    const response = await worker.fetch(
+      new Request("https://spoonjoy.app/health"),
+      versionedEnvironment({
+        SPOONJOY_CSP_MODE: "enforce",
+        VITE_POSTHOG_HOST: "https://eu.i.posthog.com/project/123",
+      } as Partial<CloudflareEnvironment>),
+      context(),
+    );
+
+    const csp = response.headers.get("Content-Security-Policy");
+    expect(csp).toContain("https://eu.i.posthog.com");
+    expect(csp).toContain("https://eu-assets.i.posthog.com");
+    expect(csp).not.toContain("https://us.i.posthog.com");
+    expect(csp).not.toContain("https://us-assets.i.posthog.com");
+    expect(response.headers.get("Content-Security-Policy-Report-Only")).toBeNull();
+    expect(response.headers.get("X-Spoonjoy-Worker-Version")).toBe(WORKER_VERSION_ID);
+  });
+
   it("omits the release-version header outside the versioned Workers runtime", async () => {
     const response = await worker.fetch(
       new Request("https://spoonjoy.app/health"),

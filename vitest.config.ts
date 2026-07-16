@@ -17,6 +17,9 @@ const coverageInclude = [
   "scripts/qa-preflight.ts",
   "scripts/deployment-preflight.ts",
   "scripts/deploy-production-canary.ts",
+  "scripts/production-readiness.ts",
+  "scripts/warning-gate.ts",
+  "workers/app.ts",
 ] as const;
 
 const hasCoverageFlag = process.argv.some((arg) =>

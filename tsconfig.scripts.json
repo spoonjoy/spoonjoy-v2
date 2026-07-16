@@ -16,6 +16,7 @@
     "scripts/native-dogfood-api-server.ts",
     "scripts/production-readiness.ts",
     "scripts/react-router-build.ts",
-    "scripts/qa-preflight.ts"
+    "scripts/qa-preflight.ts",
+    "scripts/warning-gate.ts"
   ]
 }

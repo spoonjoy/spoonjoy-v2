@@ -159,11 +159,11 @@ Notes:
 
 ### CSP Enforcement And Rollback
 
-`SPOONJOY_CSP_MODE=enforce` emits the blocking `Content-Security-Policy` header. QA and production source config intentionally set that value so release owners can prove the exact SHA in QA first, then release the same SHA to production. The policy keeps required runtime sources for fonts, PostHog ingestion/assets, legacy/imported HTTPS images, `data:`/`blob:` images, and the `/csp-report` violation sink.
+`SPOONJOY_CSP_MODE=enforce` emits the blocking `Content-Security-Policy` header. QA and production source config intentionally set that value so release owners can prove the exact SHA in QA first, then release the same SHA to production. The policy keeps required runtime sources for fonts, the configured HTTPS `VITE_POSTHOG_HOST` ingestion origin and matching PostHog assets origin, legacy/imported HTTPS images, `data:`/`blob:` images, and the `/csp-report` violation sink.
 
 After deployment, verify public pages, authenticated Photo Studio, OAuth provider starts/callbacks, MCP, and API surfaces return `Content-Security-Policy`, `Reporting-Endpoints: csp-endpoint="/csp-report"`, and `X-Spoonjoy-Worker-Version` for the expected exact SHA. They should not return `Content-Security-Policy-Report-Only` during an enforcing release.
 
-The one-commit rollback is to change `SPOONJOY_CSP_MODE` from `enforce` to `report-only` in the affected `wrangler.json` environment and deploy that exact rollback SHA. That rollback restores `Content-Security-Policy-Report-Only` while preserving nonce behavior and violation telemetry.
+The one-commit rollback is to change `SPOONJOY_CSP_MODE` from `enforce` to `report-only` in the affected `wrangler.json` environment and deploy that exact rollback SHA only with an auditable break-glass preflight/deploy environment: `SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS=ACK_REPORT_ONLY_CSP_ROLLBACK`. That rollback restores `Content-Security-Policy-Report-Only` while preserving nonce behavior and violation telemetry. Remove the break-glass env var and restore `SPOONJOY_CSP_MODE=enforce` in the follow-up commit.
 
 ### Optional PostHog Telemetry
 
@@ -243,7 +243,7 @@ The preflight verifies:
 - `app/cloudflare-env.d.ts` types the Cloudflare bindings and documented secrets.
 - README/deployment docs mention required bindings, secrets, and deploy commands.
 - README/deployment docs mention optional PostHog client setup, server lifecycle telemetry, `POSTHOG_KEY`, `POSTHOG_DISABLED`, `VITE_POSTHOG_KEY`, and `VITE_POSTHOG_DISABLED`.
-- README/deployment docs mention `SPOONJOY_CSP_MODE`, `Content-Security-Policy-Report-Only`, and the one-commit rollback.
+- README/deployment docs mention `SPOONJOY_CSP_MODE`, `Content-Security-Policy-Report-Only`, the one-commit rollback, `SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS`, and `ACK_REPORT_ONLY_CSP_ROLLBACK`.
 - Numbered SQL migrations exist in `migrations/`.
 - **Remote D1 migrations**: the preflight invokes `pnpm exec wrangler d1 migrations list DB --remote` and FAILS if any migrations are pending against the remote database. This guards against deploying application code that depends on a schema the remote database has not yet applied (the failure mode that caused the 2026-05-10 `/search` 500 incident).
 

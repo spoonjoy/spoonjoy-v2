@@ -401,8 +401,8 @@ function validInputs(): DeploymentPreflightInputs {
         "qa:seed": "node scripts/seed-qa.mjs --target-env qa",
         typecheck: "react-router typegen && tsc",
         "typecheck:scripts": "tsc -p tsconfig.scripts.json",
-        "test:coverage": "vitest run --coverage",
-        "test:e2e": "env -u FORCE_COLOR -u NO_COLOR playwright test",
+        "test:coverage": "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then pnpm exec vitest run --coverage --fileParallelism=false",
+        "test:e2e": "env -u FORCE_COLOR -u NO_COLOR tsx scripts/warning-gate.ts -- pnpm exec playwright test",
         "smoke:api": "node scripts/smoke-api-live.mjs --target-env production",
         "cleanup:qa": "node scripts/cleanup-local-qa-data.mjs --target-env local",
         "cleanup:local": "node scripts/cleanup-local-qa-data.mjs --target-env local",
@@ -424,12 +424,12 @@ function validInputs(): DeploymentPreflightInputs {
     gitignore: validGitignore(),
     pnpmWorkspace: validPnpmWorkspace(),
     cloudflareEnvDts: "DB?: D1Database; PHOTOS?: R2Bucket; CF_VERSION_METADATA?: WorkerVersionMetadata; SPOONJOY_CSP_MODE?: string; SESSION_SECRET?: string; OPENAI_API_KEY?: string; GOOGLE_API_KEY?: string; GEMINI_API_KEY?: string; GEMINI_IMAGE_MODEL?: string; GEMINI_IMAGE_TIMEOUT_MS?: string; IMAGE_PROVIDER_PRIMARY?: string; IMAGE_PROVIDER_FALLBACKS?: string; GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string; GITHUB_CLIENT_ID?: string; GITHUB_CLIENT_SECRET?: string; APPLE_CLIENT_ID?: string; APPLE_NATIVE_CLIENT_IDS?: string; APPLE_TEAM_ID?: string; APPLE_KEY_ID?: string; APPLE_PRIVATE_KEY?: string; VAPID_PUBLIC_KEY?: string; VAPID_PRIVATE_KEY?: string; VAPID_SUBJECT?: string; POSTHOG_KEY?: string; POSTHOG_HOST?: string; POSTHOG_DISABLED?: string;",
-    readme: "pnpm run deploy:preflight wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_NATIVE_CLIENT_IDS APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY GOOGLE_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT GEMINI_API_KEY GEMINI_IMAGE_MODEL GEMINI_IMAGE_TIMEOUT_MS gemini-3.1-flash-image IMAGE_PROVIDER_PRIMARY IMAGE_PROVIDER_FALLBACKS SPOONJOY_CSP_MODE Content-Security-Policy-Report-Only one-commit rollback VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry docs/analytics-privacy.md cleanup:local cleanup:local:apply cleanup:remote:qa cleanup:remote:qa:apply cleanup:production target-env local target-env qa target-env production broad production cleanup is read-only",
-    deploymentDoc: "pnpm run deploy:preflight smoke:api wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_NATIVE_CLIENT_IDS APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY GOOGLE_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT GEMINI_API_KEY GEMINI_IMAGE_MODEL GEMINI_IMAGE_TIMEOUT_MS gemini-3.1-flash-image IMAGE_PROVIDER_PRIMARY IMAGE_PROVIDER_FALLBACKS SPOONJOY_CSP_MODE Content-Security-Policy-Report-Only one-commit rollback wrangler secret put POSTHOG_KEY VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry cleanup:local cleanup:local:apply cleanup:remote:qa cleanup:remote:qa:apply cleanup:production target-env local target-env qa target-env production broad production cleanup is read-only",
+    readme: "pnpm run deploy:preflight wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_NATIVE_CLIENT_IDS APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY GOOGLE_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT GEMINI_API_KEY GEMINI_IMAGE_MODEL GEMINI_IMAGE_TIMEOUT_MS gemini-3.1-flash-image IMAGE_PROVIDER_PRIMARY IMAGE_PROVIDER_FALLBACKS SPOONJOY_CSP_MODE Content-Security-Policy-Report-Only one-commit rollback SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS ACK_REPORT_ONLY_CSP_ROLLBACK VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry docs/analytics-privacy.md cleanup:local cleanup:local:apply cleanup:remote:qa cleanup:remote:qa:apply cleanup:production target-env local target-env qa target-env production broad production cleanup is read-only warning-gate.ts",
+    deploymentDoc: "pnpm run deploy:preflight smoke:api wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_NATIVE_CLIENT_IDS APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY GOOGLE_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT GEMINI_API_KEY GEMINI_IMAGE_MODEL GEMINI_IMAGE_TIMEOUT_MS gemini-3.1-flash-image IMAGE_PROVIDER_PRIMARY IMAGE_PROVIDER_FALLBACKS SPOONJOY_CSP_MODE Content-Security-Policy-Report-Only one-commit rollback SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS ACK_REPORT_ONLY_CSP_ROLLBACK wrangler secret put POSTHOG_KEY VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry cleanup:local cleanup:local:apply cleanup:remote:qa cleanup:remote:qa:apply cleanup:production target-env local target-env qa target-env production broad production cleanup is read-only warning-gate.ts",
     migrationFiles: ["0000_init.sql"],
-    vitestConfig: "scripts/script-environment.mjs scripts/cleanup-local-qa-data.mjs scripts/smoke-api-live.mjs scripts/qa-preflight.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts",
+    vitestConfig: "workers/app.ts scripts/script-environment.mjs scripts/cleanup-local-qa-data.mjs scripts/smoke-api-live.mjs scripts/qa-preflight.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts scripts/production-readiness.ts scripts/warning-gate.ts",
     tsconfigScripts:
-      "scripts/build-output-hygiene.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts scripts/production-readiness.ts scripts/qa-preflight.ts scripts/react-router-build.ts",
+      "scripts/build-output-hygiene.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts scripts/production-readiness.ts scripts/qa-preflight.ts scripts/react-router-build.ts scripts/warning-gate.ts",
   };
 }
 
@@ -1200,11 +1200,11 @@ describe("deployment preflight", () => {
     };
     inputs.cloudflareEnvDts = inputs.cloudflareEnvDts.replace(" SPOONJOY_CSP_MODE?: string;", "");
     inputs.readme = inputs.readme.replace(
-      " SPOONJOY_CSP_MODE Content-Security-Policy-Report-Only one-commit rollback",
+      " SPOONJOY_CSP_MODE Content-Security-Policy-Report-Only one-commit rollback SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS ACK_REPORT_ONLY_CSP_ROLLBACK",
       "",
     );
     inputs.deploymentDoc = inputs.deploymentDoc.replace(
-      " SPOONJOY_CSP_MODE Content-Security-Policy-Report-Only one-commit rollback",
+      " SPOONJOY_CSP_MODE Content-Security-Policy-Report-Only one-commit rollback SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS ACK_REPORT_ONLY_CSP_ROLLBACK",
       "",
     );
 
@@ -1217,6 +1217,31 @@ describe("deployment preflight", () => {
         "CSP rollback documentation",
       ]),
     );
+  });
+
+  it("allows report-only CSP only with an explicit break-glass acknowledgement", () => {
+    const reportOnly = validInputs();
+    reportOnly.wrangler.vars = { NODE_ENV: "production", SPOONJOY_CSP_MODE: "report-only" };
+    const qa = (reportOnly.wrangler.env as Record<string, { vars?: Record<string, string> }>).qa;
+    qa.vars = {
+      NODE_ENV: "production",
+      SPOONJOY_BASE_URL: "https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
+      SPOONJOY_CSP_MODE: "report-only",
+    };
+
+    expect(validateDeploymentConfig(reportOnly).errors.map((item) => item.name)).toContain(
+      "CSP enforcement config",
+    );
+
+    reportOnly.cspReportOnlyBreakGlass = "wrong acknowledgement";
+    expect(validateDeploymentConfig(reportOnly).errors.map((item) => item.name)).toContain(
+      "CSP enforcement config",
+    );
+
+    reportOnly.cspReportOnlyBreakGlass = "ACK_REPORT_ONLY_CSP_ROLLBACK";
+    const result = validateDeploymentConfig(reportOnly);
+    expect(result.errors.map((item) => item.name)).not.toContain("CSP enforcement config");
+    expect(result.warnings.map((item) => item.name)).toContain("CSP report-only break-glass");
   });
 
   it("flags missing telemetry typing, documentation, and deployment commands", () => {
@@ -1341,6 +1366,14 @@ describe("deployment preflight", () => {
       "script coverage instrumentation",
     );
     expect(validateDeploymentConfig(missingScriptTypecheck).errors.map((item) => item.name)).toContain("script typecheck");
+  });
+
+  it("requires coverage and e2e package scripts to run through the warning gate", () => {
+    const inputs = validInputs();
+    (inputs.packageJson.scripts as Record<string, string>)["test:coverage"] = "vitest run --coverage";
+    (inputs.packageJson.scripts as Record<string, string>)["test:e2e"] = "playwright test";
+
+    expect(validateDeploymentConfig(inputs).errors.map((item) => item.name)).toContain("warning gate scripts");
   });
 
   it("requires a credential-gated scheduled QA image-cover smoke workflow in preflight", () => {

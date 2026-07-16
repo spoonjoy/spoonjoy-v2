@@ -1,0 +1,149 @@
+import { spawn } from "node:child_process";
+
+export const EXPECTED_PRISMA_D1_TRANSACTION_WARNING =
+  "Cloudflare D1 does not support transactions yet. When using Prisma's D1 adapter, implicit & explicit transactions will be ignored and run as individual queries, which breaks the guarantees of the ACID properties of transactions. For more details see https://pris.ly/d/d1-transactions";
+
+const ANSI_PATTERN = /\u001b\[[0-9;]*m/g;
+const WARNING_LINE_PATTERN =
+  /^\s*(?:\([^)]*\)\s*)?(?:prisma:warn\b|warn(?:ing)?\b:?|[A-Za-z]+Warning:)/i;
+
+export interface WarningGateCommandResult {
+  exitCode: number;
+  output: string;
+}
+
+export interface WarningGateResult {
+  exitCode: number;
+  unexpectedWarnings: string[];
+}
+
+export type WarningGateCommandRunner = (
+  command: readonly string[],
+) => Promise<WarningGateCommandResult>;
+
+function stripAnsi(value: string): string {
+  return value.replace(ANSI_PATTERN, "");
+}
+
+export function isExpectedWarningLine(line: string): boolean {
+  const normalized = stripAnsi(line).trim();
+  return (
+    normalized.includes("prisma:warn") &&
+    normalized.includes(EXPECTED_PRISMA_D1_TRANSACTION_WARNING)
+  );
+}
+
+export function findUnexpectedWarnings(output: string): string[] {
+  return output
+    .split(/\r?\n/)
+    .map((line) => stripAnsi(line).trim())
+    .filter((line) => line !== "")
+    .filter((line) => WARNING_LINE_PATTERN.test(line))
+    .filter((line) => !isExpectedWarningLine(line));
+}
+
+export function parseWarningGateCommands(argv: readonly string[]): string[][] {
+  const separatorIndex = argv.indexOf("--");
+  if (separatorIndex === -1) {
+    throw new Error("warning-gate requires a -- separator before the command.");
+  }
+  const tokens = argv.slice(separatorIndex + 1);
+  if (tokens.length === 0) {
+    throw new Error("warning-gate requires at least one command.");
+  }
+
+  const commands: string[][] = [[]];
+  for (const token of tokens) {
+    if (token === "--then") {
+      if (commands.at(-1)!.length === 0) {
+        throw new Error("warning-gate received an empty command segment.");
+      }
+      commands.push([]);
+      continue;
+    }
+    commands.at(-1)!.push(token);
+  }
+  if (commands.at(-1)!.length === 0) {
+    throw new Error("warning-gate received an empty command segment.");
+  }
+  return commands;
+}
+
+export function runSpawnedCommand(command: readonly string[]): Promise<WarningGateCommandResult> {
+  const [file, ...args] = command;
+  if (!file) throw new Error("warning-gate received an empty command.");
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(file, args, {
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let output = "";
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      const text = chunk.toString("utf8");
+      output += text;
+      process.stdout.write(text);
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      const text = chunk.toString("utf8");
+      output += text;
+      process.stderr.write(text);
+    });
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      if (signal) {
+        output += `warning-gate child terminated by ${signal}\n`;
+        resolve({ exitCode: 1, output });
+        return;
+      }
+      resolve({ exitCode: code ?? 1, output });
+    });
+  });
+}
+
+export async function runWarningGate(
+  argv: readonly string[],
+  deps: { runCommand?: WarningGateCommandRunner } = {},
+): Promise<WarningGateResult> {
+  const commands = parseWarningGateCommands(argv);
+  const runCommand = deps.runCommand ?? runSpawnedCommand;
+  let exitCode = 0;
+  let output = "";
+
+  for (const command of commands) {
+    const result = await runCommand(command);
+    output += result.output;
+    if (result.exitCode !== 0 && exitCode === 0) {
+      exitCode = result.exitCode;
+    }
+  }
+
+  const unexpectedWarnings = findUnexpectedWarnings(output);
+  return {
+    exitCode: unexpectedWarnings.length > 0 ? 1 : exitCode,
+    unexpectedWarnings,
+  };
+}
+
+async function main(): Promise<void> {
+  const result = await runWarningGate(process.argv.slice(2));
+  if (result.unexpectedWarnings.length > 0) {
+    process.stderr.write(
+      [
+        "warning-gate failed: unexpected warning output detected.",
+        ...result.unexpectedWarnings.map((line) => `- ${line}`),
+        "",
+      ].join("\n"),
+    );
+  }
+  process.exitCode = result.exitCode;
+}
+
+/* istanbul ignore if -- @preserve CLI boundary delegates to tested functions above. */
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((error) => {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  });
+}

@@ -1,6 +1,7 @@
 import { execFile as nodeExecFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { validateCspHeaderSet } from "./production-readiness";
 
 const RELEASE_SHA_PATTERN = /^[0-9a-f]{40}$/;
 const TREE_HASH_PATTERN = /^[0-9a-f]{40}$/;
@@ -38,6 +39,7 @@ type ReleasePhase =
   | "version_lookup"
   | "stage"
   | "canary"
+  | "candidate_csp"
   | "promote"
   | "verify_promotion"
   | "verify_rollback"
@@ -76,6 +78,7 @@ export interface ReleaseArtifact {
 interface RunProductionCanaryReleaseDeps {
   artifactDir: string;
   env?: NodeJS.ProcessEnv;
+  readCandidateCspHeaders?: (baseUrl: string, candidateVersionId: string) => Promise<Headers>;
   readMigrationFile: (filePath: string) => Promise<string>;
   readPublicWorkerVersion: (baseUrl: string) => Promise<string | null>;
   releaseSha: string;
@@ -164,6 +167,28 @@ export async function readPublicWorkerVersion(
   const headerName = "X-Spoonjoy-Worker-Version";
   if (!response.headers.has(headerName)) return null;
   return requireWorkerVersionId(response.headers.get(headerName), "Public release verification");
+}
+
+export async function readCandidateCspHeaders(
+  baseUrl: string,
+  candidateVersionId: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<Headers> {
+  requireWorkerVersionId(candidateVersionId, "Candidate CSP verification");
+  const verificationUrl = new URL("/", baseUrl);
+  verificationUrl.searchParams.set("candidate_csp_verification", "1");
+  const response = await fetchImpl(verificationUrl, {
+    cache: "no-store",
+    headers: {
+      Accept: "text/html",
+      "Cloudflare-Workers-Version-Overrides": buildWorkerVersionOverride("spoonjoy-v2", candidateVersionId),
+    },
+    redirect: "error",
+  });
+  if (!response.ok) {
+    throw new Error(`Candidate CSP verification failed with HTTP ${response.status}.`);
+  }
+  return response.headers;
 }
 
 function requireWorkerVersionId(value: unknown, context: string): string {
@@ -839,6 +864,20 @@ export async function runProductionCanaryRelease(
     await deps.runCommand("pnpm", [
       "run", "smoke:mcp:oauth", "--", "--out", deps.artifactDir, "--worker-version-id", candidateVersionId,
     ], { env: d1Env });
+
+    phase = "candidate_csp";
+    const baseUrl = deps.env?.SPOONJOY_MCP_CANARY_BASE_URL ?? "https://spoonjoy.app";
+    const candidateCspHeaders = await (
+      deps.readCandidateCspHeaders ?? readCandidateCspHeaders
+    )(baseUrl, candidateVersionId);
+    const cspFailures = validateCspHeaderSet(candidateCspHeaders, {
+      expectedWorkerVersionId: candidateVersionId,
+      requireNonce: true,
+    });
+    if (cspFailures.length > 0) {
+      throw new Error(`Candidate CSP validation failed: ${cspFailures.join(", ")}.`);
+    }
+
     phase = "promote";
     await deps.runCommand("pnpm", [
       "exec", "wrangler", "versions", "deploy", `${candidateVersionId}@100%`, "-y",
@@ -1009,6 +1048,7 @@ interface ReleaseCliDeps {
   argv?: readonly string[];
   env?: NodeJS.ProcessEnv;
   execFileImpl?: ExecFileLike;
+  readCandidateCspHeaders?: (baseUrl: string, candidateVersionId: string) => Promise<Headers>;
   readMigrationFile?: (filePath: string) => Promise<string>;
   readPublicWorkerVersion?: (baseUrl: string) => Promise<string | null>;
   runCommand?: ReleaseCommandRunner;
@@ -1023,6 +1063,7 @@ export async function runProductionReleaseCli(deps: ReleaseCliDeps): Promise<Rel
   const shared = {
     artifactDir: options.artifactDir,
     env,
+    readCandidateCspHeaders: deps.readCandidateCspHeaders ?? readCandidateCspHeaders,
     readPublicWorkerVersion: deps.readPublicWorkerVersion ?? readPublicWorkerVersion,
     releaseSha: options.releaseSha,
     runCommand: deps.runCommand ?? createReleaseCommandRunner(deps.execFileImpl),

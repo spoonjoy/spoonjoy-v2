@@ -29,13 +29,64 @@
 
 /**
  * CSP directives, keyed in serialization order. `script-src` varies with the
- * per-request `nonce`; every other directive is static. Each non-`self` origin
- * is justified against a real dependency: PostHog (`us-assets.i.posthog.com`
- * bundle, `us.i.posthog.com` ingest), Google Fonts (`fonts.googleapis.com`
+ * per-request `nonce`; every other directive is static except PostHog origins.
+ * Each non-`self` origin is justified against a real dependency: PostHog
+ * (configured ingestion + asset origins), Google Fonts (`fonts.googleapis.com`
  * stylesheet, `fonts.gstatic.com` files). `img-src` stays broad (`https:`)
  * because legacy/imported recipe and profile images can still be external.
  */
-function cspDirectives(nonce?: string): Record<string, readonly string[]> {
+const DEFAULT_POSTHOG_INGEST_ORIGIN = "https://us.i.posthog.com";
+const DEFAULT_POSTHOG_ASSETS_ORIGIN = "https://us-assets.i.posthog.com";
+
+interface PostHogCspEnv {
+  VITE_POSTHOG_HOST?: string | null;
+}
+
+export interface PostHogCspOrigins {
+  ingestOrigin: string;
+  assetsOrigin: string;
+}
+
+function safeHttpsOrigin(raw: string | null | undefined): string | null {
+  const value = (raw ?? "").trim();
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password || !url.hostname) {
+      return null;
+    }
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+function postHogAssetsOriginFor(ingestOrigin: string): string {
+  const url = new URL(ingestOrigin);
+  const postHogIngest = url.hostname.match(/^([a-z0-9-]+)\.i\.posthog\.com$/i);
+  if (postHogIngest) {
+    return `https://${postHogIngest[1].toLowerCase()}-assets.i.posthog.com`;
+  }
+  return ingestOrigin;
+}
+
+export function resolvePostHogCspOrigins(env?: PostHogCspEnv | null): PostHogCspOrigins {
+  const ingestOrigin = safeHttpsOrigin(env?.VITE_POSTHOG_HOST) ?? DEFAULT_POSTHOG_INGEST_ORIGIN;
+  return {
+    ingestOrigin,
+    assetsOrigin: postHogAssetsOriginFor(ingestOrigin),
+  };
+}
+
+function uniqueSources(sources: readonly string[]): readonly string[] {
+  return Array.from(new Set(sources));
+}
+
+function cspDirectives(
+  nonce?: string,
+  env?: PostHogCspEnv | null,
+): Record<string, readonly string[]> {
+  const postHog = resolvePostHogCspOrigins(env);
   return {
     "default-src": ["'self'"],
     "base-uri": ["'self'"],
@@ -43,12 +94,12 @@ function cspDirectives(nonce?: string): Record<string, readonly string[]> {
     "frame-ancestors": ["'none'"],
     "form-action": ["'self'"],
     "script-src": nonce
-      ? ["'self'", `'nonce-${nonce}'`, "https://us-assets.i.posthog.com"]
-      : ["'self'", "https://us-assets.i.posthog.com"],
+      ? uniqueSources(["'self'", `'nonce-${nonce}'`, postHog.assetsOrigin])
+      : uniqueSources(["'self'", postHog.assetsOrigin]),
     "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
     "font-src": ["'self'", "https://fonts.gstatic.com"],
     "img-src": ["'self'", "data:", "blob:", "https:"],
-    "connect-src": ["'self'", "https://us.i.posthog.com", "https://us-assets.i.posthog.com"],
+    "connect-src": uniqueSources(["'self'", postHog.ingestOrigin, postHog.assetsOrigin]),
     "report-uri": ["/csp-report"],
     // Modern Reporting API: `report-to` names a group defined by the
     // `Reporting-Endpoints` response header (see SECURITY_HEADERS). Kept
@@ -65,8 +116,11 @@ function cspDirectives(nonce?: string): Record<string, readonly string[]> {
  * responses (redirects, CORS preflight, resource routes) which carry no inline
  * script and therefore need no nonce in `script-src`.
  */
-export function buildContentSecurityPolicy(nonce?: string): string {
-  return Object.entries(cspDirectives(nonce))
+export function buildContentSecurityPolicy(
+  nonce?: string,
+  env?: PostHogCspEnv | null,
+): string {
+  return Object.entries(cspDirectives(nonce, env))
     .map(([directive, sources]) => [directive, ...sources].join(" "))
     .join("; ");
 }
@@ -75,6 +129,7 @@ export type ContentSecurityPolicyMode = "enforce" | "report-only";
 
 interface ContentSecurityPolicyEnv {
   SPOONJOY_CSP_MODE?: string | null;
+  VITE_POSTHOG_HOST?: string | null;
 }
 
 export function resolveContentSecurityPolicyMode(
@@ -146,7 +201,7 @@ export function withSecurityHeaders(
     : "Content-Security-Policy-Report-Only";
   headers.delete("Content-Security-Policy");
   headers.delete("Content-Security-Policy-Report-Only");
-  headers.set(cspHeaderName, buildContentSecurityPolicy(nonce));
+  headers.set(cspHeaderName, buildContentSecurityPolicy(nonce, env));
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,

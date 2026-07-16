@@ -8,6 +8,7 @@ import {
   createReleaseCommandRunner,
   parsePendingMigrationNames,
   parseReleaseCliOptions,
+  readCandidateCspHeaders,
   readPublicWorkerVersion,
   runProductionCanaryRelease,
   runProductionRollback,
@@ -123,6 +124,11 @@ function releaseDeps(runCommand: ReleaseCommandRunner) {
       SPOONJOY_MCP_CANARY_BASE_URL: "https://spoonjoy.app",
     },
     readMigrationFile: vi.fn(async () => "CREATE TABLE ReleaseMarker (id TEXT PRIMARY KEY);"),
+    readCandidateCspHeaders: vi.fn(async () => new Headers({
+      "Content-Security-Policy": "default-src 'self'; script-src 'self' 'nonce-live' https://us-assets.i.posthog.com; report-uri /csp-report; report-to csp-endpoint",
+      "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+      "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+    })),
     readPublicWorkerVersion: vi.fn(async () => CANDIDATE_VERSION),
     releaseSha: RELEASE_SHA,
     runCommand,
@@ -367,6 +373,7 @@ describe("production canary release orchestration", () => {
       "pnpm exec wrangler deployments list --json",
     ]);
     expect(deps.readMigrationFile).toHaveBeenCalledWith("migrations/0024_add_release_marker.sql");
+    expect(deps.readCandidateCspHeaders).toHaveBeenCalledWith("https://spoonjoy.app", CANDIDATE_VERSION);
     expect(runCommand.mock.calls[3]?.[2]?.env).toEqual({
       PATH: "/test/bin",
       SPOONJOY_MCP_CANARY_BASE_URL: "https://spoonjoy.app",
@@ -420,6 +427,36 @@ describe("production canary release orchestration", () => {
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
       failure: "canary failed",
+    }));
+  });
+
+  it("restores the previous version when candidate CSP validation fails before promotion", async () => {
+    const runCommand = successfulRunner({
+      "pnpm exec wrangler deployments list --json": [
+        deploymentPayload(PREVIOUS_VERSION, "2026-07-15T00:00:00Z"),
+        deploymentPayload(PREVIOUS_VERSION),
+      ],
+    });
+    const deps = releaseDeps(runCommand);
+    deps.readCandidateCspHeaders.mockResolvedValue(new Headers({
+      "Content-Security-Policy-Report-Only": "default-src 'self'; report-uri /csp-report",
+      "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+    }));
+    deps.readPublicWorkerVersion.mockResolvedValue(PREVIOUS_VERSION);
+
+    await expect(runProductionCanaryRelease(deps)).rejects.toThrow(/Candidate CSP validation failed/);
+
+    const calls = runCommand.mock.calls.map(([command, args]) => commandKey(command, args));
+    expect(calls).toContain(
+      `pnpm exec wrangler versions deploy ${PREVIOUS_VERSION}@100% -y --message Restore after failed ${RELEASE_SHA}`,
+    );
+    expect(calls).not.toContain(
+      `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@100% -y --message Promote ${RELEASE_SHA}`,
+    );
+    expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(expect.objectContaining({
+      status: "rolled_back",
+      phase: "candidate_csp",
+      failure: expect.stringContaining("Content-Security-Policy"),
     }));
   });
 
@@ -1224,6 +1261,35 @@ describe("release artifact and CLI boundary", () => {
     ))).rejects.toThrow("HTTP 503");
   });
 
+  it("reads candidate CSP headers through the exact Cloudflare Worker-version override", async () => {
+    const fetchImpl = vi.fn(async () => new Response("<!doctype html>", {
+      headers: {
+        "Content-Security-Policy": "default-src 'self'",
+        "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+      },
+      status: 200,
+    }));
+
+    await expect(readCandidateCspHeaders("https://spoonjoy.app/path", CANDIDATE_VERSION, fetchImpl)).resolves.toEqual(
+      expect.any(Headers),
+    );
+    const [url, options] = fetchImpl.mock.calls[0];
+    expect(url).toBeInstanceOf(URL);
+    expect(String(url)).toBe("https://spoonjoy.app/?candidate_csp_verification=1");
+    expect(options).toEqual({
+      cache: "no-store",
+      headers: {
+        Accept: "text/html",
+        "Cloudflare-Workers-Version-Overrides": `spoonjoy-v2="${CANDIDATE_VERSION}"`,
+      },
+      redirect: "error",
+    });
+
+    await expect(readCandidateCspHeaders("https://spoonjoy.app", CANDIDATE_VERSION, async () => (
+      new Response("nope", { status: 503 })
+    ))).rejects.toThrow("HTTP 503");
+  });
+
   it("writes only the sanitized artifact schema", async () => {
     const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-release-artifact-"));
     try {
@@ -1347,6 +1413,11 @@ describe("release artifact and CLI boundary", () => {
 
     const result = await runProductionReleaseCli({
       execFileImpl,
+      readCandidateCspHeaders: async () => new Headers({
+        "Content-Security-Policy": "default-src 'self'; script-src 'self' 'nonce-live'; report-uri /csp-report; report-to csp-endpoint",
+        "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+        "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+      }),
       readPublicWorkerVersion: async () => CANDIDATE_VERSION,
       readMigrationFile: async () => "CREATE TABLE Safe(id TEXT);",
       sleep: async () => undefined,
@@ -1404,6 +1475,11 @@ describe("release artifact and CLI boundary", () => {
 
     const release = runProductionReleaseCli({
       env: { SOURCE_SHA: RELEASE_SHA, PATH: "/test/bin" },
+      readCandidateCspHeaders: async () => new Headers({
+        "Content-Security-Policy": "default-src 'self'; script-src 'self' 'nonce-live'; report-uri /csp-report; report-to csp-endpoint",
+        "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+        "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+      }),
       runCommand,
       verificationAttempts: 2,
       writeReleaseArtifact: async () => undefined,
@@ -1423,6 +1499,11 @@ describe("release artifact and CLI boundary", () => {
       const result = await runProductionReleaseCli({
         argv: ["--artifact-dir", artifactDir],
         env: { SOURCE_SHA: RELEASE_SHA, PATH: "/test/bin" },
+        readCandidateCspHeaders: async () => new Headers({
+          "Content-Security-Policy": "default-src 'self'; script-src 'self' 'nonce-live'; report-uri /csp-report; report-to csp-endpoint",
+          "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+          "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+        }),
         readPublicWorkerVersion: async () => CANDIDATE_VERSION,
         runCommand,
         sleep: async () => undefined,

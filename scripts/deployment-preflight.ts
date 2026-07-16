@@ -28,6 +28,7 @@ export interface DeploymentPreflightInputs {
   vitestConfig: string;
   tsconfigScripts: string;
   migrationFiles: string[];
+  cspReportOnlyBreakGlass?: string;
 }
 
 export interface DeploymentPreflightResult {
@@ -105,12 +106,15 @@ const REQUIRED_CLEANUP_PACKAGE_SCRIPTS = {
 } as const;
 
 const REQUIRED_SCRIPT_COVERAGE_INCLUDES = [
+  "workers/app.ts",
   "scripts/script-environment.mjs",
   "scripts/cleanup-local-qa-data.mjs",
   "scripts/smoke-api-live.mjs",
   "scripts/qa-preflight.ts",
   "scripts/deployment-preflight.ts",
   "scripts/deploy-production-canary.ts",
+  "scripts/production-readiness.ts",
+  "scripts/warning-gate.ts",
 ] as const;
 
 const REQUIRED_SCRIPT_TYPECHECK_INCLUDES = [
@@ -120,7 +124,9 @@ const REQUIRED_SCRIPT_TYPECHECK_INCLUDES = [
   "scripts/production-readiness.ts",
   "scripts/qa-preflight.ts",
   "scripts/react-router-build.ts",
+  "scripts/warning-gate.ts",
 ] as const;
+const CSP_REPORT_ONLY_BREAK_GLASS_ACK = "ACK_REPORT_ONLY_CSP_ROLLBACK";
 
 const REQUIRED_RATE_LIMIT_BINDINGS = [
   "API_TOKEN_RATE_LIMITER",
@@ -1038,6 +1044,14 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
   const qaPhotos = bindingRecord(qaConfig.r2_buckets, "PHOTOS");
   const productionNamespaceIds = new Set(namespaceIds(inputs.wrangler.ratelimits));
   const qaNamespaceIds = namespaceIds(qaConfig.ratelimits);
+  const productionCspMode = productionVars.SPOONJOY_CSP_MODE;
+  const qaCspMode = qaVars.SPOONJOY_CSP_MODE;
+  const cspIsEnforcing = productionCspMode === "enforce" && qaCspMode === "enforce";
+  const cspIsReportOnlyRollback = (
+    productionCspMode === "report-only" ||
+    qaCspMode === "report-only"
+  );
+  const hasCspBreakGlass = inputs.cspReportOnlyBreakGlass === CSP_REPORT_ONLY_BREAK_GLASS_ACK;
 
   const checks: PreflightCheck[] = [
     check(
@@ -1083,9 +1097,14 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     ),
     check(
       "CSP enforcement config",
-      productionVars.SPOONJOY_CSP_MODE === "enforce" &&
-        qaVars.SPOONJOY_CSP_MODE === "enforce",
-      "wrangler.json must set SPOONJOY_CSP_MODE=enforce for production and QA; use report-only only as an explicit rollback."
+      cspIsEnforcing || (cspIsReportOnlyRollback && hasCspBreakGlass),
+      `wrangler.json must set SPOONJOY_CSP_MODE=enforce for production and QA; report-only requires SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS=${CSP_REPORT_ONLY_BREAK_GLASS_ACK}.`
+    ),
+    check(
+      "CSP report-only break-glass",
+      !cspIsReportOnlyRollback,
+      `report-only CSP rollback is break-glass acknowledged with ${CSP_REPORT_ONLY_BREAK_GLASS_ACK}; restore SPOONJOY_CSP_MODE=enforce after the rollback.`,
+      "warning",
     ),
     check(
       "QA resource isolation",
@@ -1150,6 +1169,12 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
       "deploy:auto script",
       scripts["deploy:auto"] === "tsx scripts/deploy-production-canary.ts",
       "package.json deploy:auto must run the staged production canary orchestrator."
+    ),
+    check(
+      "warning gate scripts",
+      scripts["test:coverage"] === "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then pnpm exec vitest run --coverage --fileParallelism=false" &&
+        scripts["test:e2e"] === "env -u FORCE_COLOR -u NO_COLOR tsx scripts/warning-gate.ts -- pnpm exec playwright test",
+      "package.json test:coverage and test:e2e must run through scripts/warning-gate.ts so unexpected warnings fail CI."
     ),
     check(
       "preflight script",
@@ -1243,8 +1268,10 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
         "SPOONJOY_CSP_MODE",
         "Content-Security-Policy-Report-Only",
         "one-commit rollback",
+        "SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS",
+        CSP_REPORT_ONLY_BREAK_GLASS_ACK,
       ].every((item) => readmeAndDeploymentDoc.includes(item)),
-      "README/deployment docs must document CSP enforcement and the report-only one-commit rollback."
+      "README/deployment docs must document CSP enforcement and the report-only break-glass rollback."
     ),
     check(
       "cleanup documentation",
@@ -1490,6 +1517,7 @@ export async function runDeploymentPreflight(
     vitestConfig,
     tsconfigScripts,
     migrationFiles,
+    cspReportOnlyBreakGlass: deps.env?.SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS ?? process.env.SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS,
   });
 
   const runWrangler = deps.runWrangler ?? createWranglerRunner();

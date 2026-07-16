@@ -3,6 +3,7 @@ import {
   SECURITY_HEADERS,
   buildContentSecurityPolicy,
   generateNonce,
+  resolvePostHogCspOrigins,
   withSecurityHeaders,
 } from "~/lib/security-headers.server";
 
@@ -163,6 +164,55 @@ describe("buildContentSecurityPolicy", () => {
       "https://us.i.posthog.com",
       "https://us-assets.i.posthog.com",
     ]);
+  });
+
+  it("uses the configured HTTPS PostHog host and matching assets origin", () => {
+    const csp = buildContentSecurityPolicy("abc", {
+      VITE_POSTHOG_HOST: " https://eu.i.posthog.com/project/123?ignored=1 ",
+    });
+
+    expect(directiveSources(csp, "script-src")).toEqual([
+      "'self'",
+      "'nonce-abc'",
+      "https://eu-assets.i.posthog.com",
+    ]);
+    expect(directiveSources(csp, "connect-src")).toEqual([
+      "'self'",
+      "https://eu.i.posthog.com",
+      "https://eu-assets.i.posthog.com",
+    ]);
+  });
+
+  it("allows a validated custom HTTPS PostHog origin without carrying URL path data", () => {
+    const csp = buildContentSecurityPolicy(undefined, {
+      VITE_POSTHOG_HOST: "https://analytics.example.com/posthog?secret=ignored",
+    });
+
+    expect(directiveSources(csp, "script-src")).toEqual([
+      "'self'",
+      "https://analytics.example.com",
+    ]);
+    expect(directiveSources(csp, "connect-src")).toEqual([
+      "'self'",
+      "https://analytics.example.com",
+    ]);
+    expect(csp).not.toContain("secret=ignored");
+    expect(csp).not.toContain("/posthog");
+  });
+
+  it("falls back to the conservative US PostHog origins for unsafe configured hosts", () => {
+    for (const VITE_POSTHOG_HOST of [
+      "http://eu.i.posthog.com",
+      "javascript:alert(1)",
+      "https://user:pass@eu.i.posthog.com",
+      "   ",
+      "not a url",
+    ]) {
+      expect(resolvePostHogCspOrigins({ VITE_POSTHOG_HOST })).toEqual({
+        ingestOrigin: "https://us.i.posthog.com",
+        assetsOrigin: "https://us-assets.i.posthog.com",
+      });
+    }
   });
 
   it("points violations at the sink route (legacy report-uri + modern report-to)", () => {
