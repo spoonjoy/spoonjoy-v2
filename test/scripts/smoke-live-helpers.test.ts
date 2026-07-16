@@ -39,6 +39,7 @@ import {
   shouldRunAppleOAuthCheck,
   usesLocalD1,
   waitForBrowserWorkerVersionReady,
+  waitForWorkerChannelsReady,
   waitForWorkerVersionReady,
 } from "../../scripts/smoke-live-helpers.mjs";
 
@@ -596,6 +597,51 @@ describe("smoke-live helpers", () => {
     expect(deadlineCandidate).toHaveBeenCalledOnce();
   });
 
+  it("requires stable candidate readiness across browser and API channels in the same cycles", async () => {
+    let now = 1_000;
+    const sleep = vi.fn(async (delayMs: number) => {
+      now += delayMs;
+    });
+    const candidate = { status: 200, headers: { "x-spoonjoy-worker-version": CANDIDATE_VERSION } };
+    const browserProbe = vi.fn()
+      .mockResolvedValueOnce(candidate)
+      .mockResolvedValueOnce(candidate)
+      .mockResolvedValueOnce({ status: 503, headers: candidate.headers })
+      .mockRejectedValueOnce(new Error("browser connection reset"))
+      .mockResolvedValueOnce(candidate)
+      .mockResolvedValueOnce(candidate);
+    const apiProbe = vi.fn()
+      .mockResolvedValueOnce({
+        status: 200,
+        headers: { "x-spoonjoy-worker-version": "33333333-3333-4333-8333-333333333333" },
+      })
+      .mockResolvedValue(candidate);
+
+    await expect(waitForWorkerChannelsReady({
+      workerVersionId: CANDIDATE_VERSION,
+      probes: [browserProbe, apiProbe],
+      timeoutMs: 2_000,
+      intervalMs: 250,
+      now: () => now,
+      sleep,
+    })).resolves.toEqual({ attempts: 6, elapsedMs: 1_250, workerVersionId: CANDIDATE_VERSION });
+    expect(browserProbe).toHaveBeenCalledTimes(6);
+    expect(apiProbe).toHaveBeenCalledTimes(6);
+    expect(browserProbe.mock.calls.map(([input]) => input.timeoutMs)).toEqual([2_000, 1_750, 1_500, 1_250, 1_000, 750]);
+    expect(apiProbe.mock.calls.map(([input]) => input.timeoutMs)).toEqual([2_000, 1_750, 1_500, 1_250, 1_000, 750]);
+
+    await expect(waitForWorkerChannelsReady({
+      workerVersionId: null,
+      probes: undefined,
+    })).resolves.toEqual({ attempts: 0, elapsedMs: 0, workerVersionId: null });
+    for (const probes of [undefined, [], [browserProbe], [browserProbe, undefined]]) {
+      await expect(waitForWorkerChannelsReady({
+        workerVersionId: CANDIDATE_VERSION,
+        probes,
+      })).rejects.toThrow(/at least two channel probe functions/i);
+    }
+  });
+
   it("skips readiness without a candidate and rejects invalid polling configuration", async () => {
     const probe = vi.fn(async () => ({}));
     await expect(waitForWorkerVersionReady({
@@ -748,11 +794,12 @@ describe("smoke-live helpers", () => {
     expect(source).toContain('context.on("response"');
     expect(source).toContain("createWorkerVersionResponseTracker({");
     expect(source).toContain("assertWorkerVersionResponse(response.headers(), workerVersionId, label)");
-    expect(source).toContain("return waitForBrowserWorkerVersionReady({");
+    expect(source).toContain("return waitForWorkerChannelsReady({");
     const readinessSource = source.match(/async function waitForCandidateWorker\([\s\S]*?\n}\n/)?.[0] ?? "";
     expect(readinessSource).toContain("page.goto(url");
+    expect(readinessSource).toContain("request.get(url");
     expect(readinessSource).toContain("timeout: timeoutMs");
-    expect(source).toContain("waitForCandidateWorker(page, { baseUrl, workerVersionId })");
+    expect(source).toContain("waitForCandidateWorker(page, page.request, { baseUrl, workerVersionId })");
     expect(source.indexOf('check("candidate Worker override readiness"')).toBeLessThan(
       source.indexOf('check("signup disposable user"'),
     );

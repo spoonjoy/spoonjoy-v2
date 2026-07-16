@@ -21,6 +21,7 @@
  */
 
 import type { AppLoadContext } from "react-router";
+import type { OAuthProviderFailureKind } from "~/lib/oauth-provider-call.server";
 import {
   captureEvent,
   captureException,
@@ -64,6 +65,10 @@ export interface AuthVerifyCapture {
   phase: AuthFailurePhase;
   /** Upstream HTTP status, when the failure came from a provider response. */
   httpStatus?: number;
+  /** Stable failure class for alerting and retry UX. */
+  failureKind?: OAuthProviderFailureKind;
+  /** Whether restarting the provider flow can reasonably succeed. */
+  retryable?: boolean;
 }
 
 export interface AuthTelemetry {

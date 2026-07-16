@@ -1,10 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterEach, describe, it, expect, vi, beforeEach } from "vitest";
 import { faker } from "@faker-js/faker";
+import {
+  ArcticFetchError,
+  UnexpectedErrorResponseBodyError,
+  UnexpectedResponseError,
+} from "arctic";
 import type { GoogleOAuthConfig } from "~/lib/env.server";
 
 // Use vi.hoisted to create mock state that's available at mock time
-const { mockGoogleState } = vi.hoisted(() => {
+const { googleMock, mockGoogleState } = vi.hoisted(() => {
   return {
+    googleMock: {
+      validateAuthorizationCode: vi.fn(),
+    },
     mockGoogleState: {
       googleUserId: "default-user-id",
       email: "default@example.com",
@@ -28,29 +36,7 @@ vi.mock("arctic", async (importOriginal) => {
       code: string,
       codeVerifier: string
     ): Promise<{ accessToken: () => string }> {
-      if (code === "invalid-code") {
-        throw new Error("Invalid authorization code");
-      }
-      if (code === "code-that-triggers-oauth-error") {
-        const error = new Error("OAuth error");
-        error.name = "OAuth2RequestError";
-        throw error;
-      }
-      if (code === "code-that-triggers-oauth-error-no-message") {
-        const error = new Error("");
-        error.name = "OAuth2RequestError";
-        throw error;
-      }
-      if (code === "code-that-triggers-network-error") {
-        const error = new TypeError("fetch failed");
-        throw error;
-      }
-      if (!codeVerifier) {
-        throw new Error("PKCE code verifier required");
-      }
-      return {
-        accessToken: () => "mock-access-token",
-      };
+      return googleMock.validateAuthorizationCode(code, codeVerifier);
     }
   }
 
@@ -393,6 +379,40 @@ describe("google-oauth.server", () => {
 
     beforeEach(() => {
       mockFetch.mockReset();
+      googleMock.validateAuthorizationCode.mockReset();
+      googleMock.validateAuthorizationCode.mockImplementation(async (code: string, codeVerifier: string) => {
+        if (code === "invalid-code") {
+          throw new Error("Invalid authorization code");
+        }
+        if (code === "code-that-triggers-oauth-error") {
+          const error = new Error("OAuth error");
+          error.name = "OAuth2RequestError";
+          throw error;
+        }
+        if (code === "code-that-triggers-oauth-error-no-message") {
+          const error = new Error("");
+          error.name = "OAuth2RequestError";
+          throw error;
+        }
+        if (code === "code-that-triggers-network-error") {
+          throw new TypeError("fetch failed");
+        }
+        if (code.startsWith("unexpected-response")) {
+          const error = new Error("Unexpected error response");
+          error.name = code.endsWith("body")
+            ? "UnexpectedErrorResponseBodyError"
+            : "UnexpectedResponseError";
+          if (code.endsWith("503")) Object.assign(error, { status: 503 });
+          if (code.endsWith("string-status")) Object.assign(error, { status: "503" });
+          throw error;
+        }
+        if (!codeVerifier) {
+          throw new Error("PKCE code verifier required");
+        }
+        return {
+          accessToken: () => "mock-access-token",
+        };
+      });
       // Reset mock state
       mockGoogleState.googleUserId = generateGoogleUserId();
       mockGoogleState.email = faker.internet.email().toLowerCase();
@@ -401,6 +421,10 @@ describe("google-oauth.server", () => {
       mockGoogleState.givenName = faker.person.firstName();
       mockGoogleState.familyName = faker.person.lastName();
       mockGoogleState.picture = `https://lh3.googleusercontent.com/a-/${faker.string.alphanumeric(28)}`;
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
     });
 
     describe("token verification with PKCE", () => {
@@ -526,6 +550,104 @@ describe("google-oauth.server", () => {
 
         expect(result.success).toBe(false);
         expect(result.error).toBe("network_error");
+        expect(result.retryable).toBe(true);
+        expect(result.failureKind).toBe("network");
+      });
+
+      it("classifies Arctic token transport failures as retryable network errors", async () => {
+        googleMock.validateAuthorizationCode.mockRejectedValueOnce(
+          new ArcticFetchError(new TypeError("fetch failed")),
+        );
+
+        const result = await verifyGoogleCallback(
+          mockConfig,
+          mockRedirectUri,
+          {
+            code: "valid-auth-code",
+            state: "valid-state",
+            codeVerifier: "valid-code-verifier-at-least-43-characters-long",
+          },
+        );
+
+        expect(result).toMatchObject({
+          success: false,
+          error: "network_error",
+          retryable: true,
+          failureKind: "network",
+        });
+      });
+
+      it("bounds a stalled token exchange and preserves the outgoing SDK arguments", async () => {
+        vi.useFakeTimers();
+        googleMock.validateAuthorizationCode.mockReturnValueOnce(new Promise(() => {}));
+        const callbackData: GoogleCallbackData = {
+          code: "stalled-code",
+          state: "valid-state",
+          codeVerifier: "valid-code-verifier-at-least-43-characters-long",
+        };
+
+        const resultPromise = verifyGoogleCallback(mockConfig, mockRedirectUri, callbackData);
+        await vi.advanceTimersByTimeAsync(8_000);
+        const unsettled = Symbol("unsettled");
+        const result = await Promise.race([resultPromise, Promise.resolve(unsettled)]);
+
+        expect(result).not.toBe(unsettled);
+        expect(result).toMatchObject({
+          success: false,
+          error: "provider_timeout",
+          retryable: true,
+          failureKind: "timeout",
+        });
+        expect(googleMock.validateAuthorizationCode).toHaveBeenCalledWith(
+          callbackData.code,
+          callbackData.codeVerifier,
+        );
+      });
+
+      it.each([
+        ["unexpected-response-503", true],
+        ["unexpected-response", true],
+        ["unexpected-response-string-status", true],
+        ["unexpected-response-body", true],
+      ])("classifies %s as a retryable token upstream failure", async (code, retryable) => {
+        const result = await verifyGoogleCallback(mockConfig, mockRedirectUri, {
+          code,
+          state: "valid-state",
+          codeVerifier: "valid-code-verifier-at-least-43-characters-long",
+        });
+
+        expect(result).toMatchObject({
+          success: false,
+          error: "upstream_error",
+          retryable,
+          failureKind: "upstream",
+        });
+      });
+
+      it("classifies Arctic token protocol errors as upstream failures", async () => {
+        for (const error of [
+          new UnexpectedResponseError(503),
+          new UnexpectedErrorResponseBodyError(502, { invalid: "body" }),
+        ]) {
+          googleMock.validateAuthorizationCode.mockRejectedValueOnce(error);
+
+          const result = await verifyGoogleCallback(
+            mockConfig,
+            mockRedirectUri,
+            {
+              code: "valid-auth-code",
+              state: "valid-state",
+              codeVerifier: "valid-code-verifier-at-least-43-characters-long",
+            },
+          );
+
+          expect(result).toMatchObject({
+            success: false,
+            error: "upstream_error",
+            retryable: true,
+            failureKind: "upstream",
+          });
+        }
       });
     });
 
@@ -734,8 +856,8 @@ describe("google-oauth.server", () => {
         expect(result.googleUser?.emailVerified).toBe(false);
       });
 
-      it("should return error when userinfo request fails", async () => {
-        setupMockUserinfoError(401, "Unauthorized");
+      it("classifies retryable and non-retryable userinfo responses as upstream failures", async () => {
+        setupMockUserinfoError(503, "Unavailable");
 
         const callbackData: GoogleCallbackData = {
           code: "valid-auth-code",
@@ -750,8 +872,42 @@ describe("google-oauth.server", () => {
         );
 
         expect(result.success).toBe(false);
-        expect(result.error).toBe("userinfo_error");
-        expect(result.message).toContain("user info");
+        expect(result).toMatchObject({
+          error: "upstream_error",
+          retryable: true,
+          failureKind: "upstream",
+        });
+
+        setupMockUserinfoError(401, "Unauthorized");
+        const nonRetryable = await verifyGoogleCallback(
+          mockConfig,
+          mockRedirectUri,
+          callbackData,
+        );
+        expect(nonRetryable).toMatchObject({
+          error: "upstream_error",
+          retryable: false,
+          failureKind: "upstream",
+        });
+      });
+
+      it("treats a statusless non-success userinfo response as retryable upstream failure", async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: false,
+          status: undefined,
+        });
+
+        const result = await verifyGoogleCallback(mockConfig, mockRedirectUri, {
+          code: "valid-auth-code",
+          state: "valid-state",
+          codeVerifier: "valid-code-verifier-at-least-43-characters-long",
+        });
+
+        expect(result).toMatchObject({
+          error: "upstream_error",
+          retryable: true,
+          failureKind: "upstream",
+        });
       });
 
       it("should handle network error during userinfo fetch", async () => {
@@ -771,13 +927,15 @@ describe("google-oauth.server", () => {
 
         expect(result.success).toBe(false);
         expect(result.error).toBe("network_error");
+        expect(result.retryable).toBe(true);
+        expect(result.failureKind).toBe("network");
       });
 
-      it("should handle unexpected errors during userinfo fetch as invalid_code", async () => {
-        // Throw an unexpected error (not a network/fetch error)
-        // The inner catch rethrows it, then outer catch converts to invalid_code
+      it("classifies unexpected fetch rejections as retryable network errors", async () => {
+        // Fetch transport failures are network errors regardless of the thrown
+        // error's message or name.
         const unexpectedError = new Error("Unexpected internal error");
-        unexpectedError.name = "InternalError"; // Not TypeError, doesn't contain "fetch" or "network"
+        unexpectedError.name = "InternalError";
         mockFetch.mockRejectedValueOnce(unexpectedError);
 
         const callbackData: GoogleCallbackData = {
@@ -792,10 +950,110 @@ describe("google-oauth.server", () => {
           callbackData
         );
 
-        // Unexpected errors during userinfo fetch are rethrown from inner catch,
-        // then caught by outer catch which returns invalid_code
         expect(result.success).toBe(false);
-        expect(result.error).toBe("invalid_code");
+        expect(result).toMatchObject({
+          error: "network_error",
+          retryable: true,
+          failureKind: "network",
+        });
+      });
+
+      it("classifies malformed successful userinfo responses as retryable upstream failures", async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.reject(new SyntaxError("invalid JSON")),
+        });
+
+        const result = await verifyGoogleCallback(mockConfig, mockRedirectUri, {
+          code: "valid-auth-code",
+          state: "valid-state",
+          codeVerifier: "valid-code-verifier-at-least-43-characters-long",
+        });
+
+        expect(result).toMatchObject({
+          success: false,
+          error: "upstream_error",
+          retryable: true,
+          failureKind: "upstream",
+        });
+      });
+
+      it("bounds a stalled userinfo request and sends the exact authenticated request", async () => {
+        vi.useFakeTimers();
+        mockFetch.mockReturnValueOnce(new Promise(() => {}));
+        const callbackData: GoogleCallbackData = {
+          code: "valid-auth-code",
+          state: "valid-state",
+          codeVerifier: "valid-code-verifier-at-least-43-characters-long",
+        };
+
+        const resultPromise = verifyGoogleCallback(mockConfig, mockRedirectUri, callbackData);
+        await vi.advanceTimersByTimeAsync(8_000);
+        const unsettled = Symbol("unsettled");
+        const result = await Promise.race([resultPromise, Promise.resolve(unsettled)]);
+
+        expect(result).not.toBe(unsettled);
+        expect(result).toMatchObject({
+          error: "provider_timeout",
+          retryable: true,
+          failureKind: "timeout",
+        });
+        expect(mockFetch).toHaveBeenCalledWith(
+          "https://openidconnect.googleapis.com/v1/userinfo",
+          {
+            headers: { Authorization: "Bearer mock-access-token" },
+            signal: expect.any(AbortSignal),
+          },
+        );
+      });
+
+      it("bounds and aborts a stalled userinfo response body", async () => {
+        vi.useFakeTimers();
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => new Promise(() => {}),
+        });
+
+        const resultPromise = verifyGoogleCallback(mockConfig, mockRedirectUri, {
+          code: "valid-auth-code",
+          state: "valid-state",
+          codeVerifier: "valid-code-verifier-at-least-43-characters-long",
+        });
+        await vi.advanceTimersByTimeAsync(8_000);
+        const unsettled = Symbol("unsettled");
+        const result = await Promise.race([resultPromise, Promise.resolve(unsettled)]);
+
+        expect(result).not.toBe(unsettled);
+        expect(result).toMatchObject({
+          error: "provider_timeout",
+          retryable: true,
+          failureKind: "timeout",
+        });
+        expect((mockFetch.mock.calls[0]?.[1] as RequestInit).signal?.aborted).toBe(true);
+      });
+
+      it("normalizes an abort rejection racing the timeout as provider_timeout", async () => {
+        vi.useFakeTimers();
+        mockFetch.mockImplementationOnce((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+          init.signal?.addEventListener("abort", () => {
+            reject(new DOMException("aborted", "AbortError"));
+          });
+        }));
+
+        const resultPromise = verifyGoogleCallback(mockConfig, mockRedirectUri, {
+          code: "valid-auth-code",
+          state: "valid-state",
+          codeVerifier: "valid-code-verifier-at-least-43-characters-long",
+        });
+        await vi.advanceTimersByTimeAsync(8_000);
+
+        await expect(resultPromise).resolves.toMatchObject({
+          error: "provider_timeout",
+          retryable: true,
+          failureKind: "timeout",
+        });
       });
     });
 
@@ -912,10 +1170,15 @@ describe("google-oauth.server", () => {
 
         const result = await verifyGoogleCallback(mockConfig, mockRedirectUri, validCallback, capture);
 
-        expect(result.error).toBe("userinfo_error");
+        expect(result.error).toBe("upstream_error");
         expect(capture).toHaveBeenCalledTimes(1);
         expect(capture).toHaveBeenCalledWith(
-          expect.objectContaining({ phase: "userinfo", httpStatus: 401 }),
+          expect.objectContaining({
+            phase: "userinfo",
+            httpStatus: 401,
+            retryable: false,
+            failureKind: "upstream",
+          }),
         );
         expect(capture.mock.calls[0][0].error).toBeInstanceOf(Error);
       });
@@ -928,7 +1191,7 @@ describe("google-oauth.server", () => {
 
         expect(result.error).toBe("network_error");
         expect(capture).toHaveBeenCalledWith(
-          expect.objectContaining({ phase: "userinfo" }),
+          expect.objectContaining({ phase: "userinfo", retryable: true, failureKind: "network" }),
         );
       });
 
