@@ -8,6 +8,7 @@ const coverageInclude = [
   "app/routes/**/*.tsx",
   "app/components/**/*.tsx",
   "app/hooks/**/*.ts",
+  "scripts/advisory-scan.ts",
   "scripts/script-environment.mjs",
   "scripts/cleanup-local-qa-data.mjs",
   "scripts/smoke-live-helpers.mjs",

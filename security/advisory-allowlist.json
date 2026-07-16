@@ -1,0 +1,4 @@
+{
+  "policy": "Every advisory allowlist entry must name the vulnerability ID, exact package, ecosystem, human review reason, and future expiresOn date. Expired, malformed, broad, or package-less entries fail before the scanner runs.",
+  "allowedVulnerabilities": []
+}

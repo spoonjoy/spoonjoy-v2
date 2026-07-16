@@ -7,6 +7,7 @@
   },
   "include": [
     "app/cloudflare-env.d.ts",
+    "scripts/advisory-scan.ts",
     "scripts/build-output-hygiene.ts",
     "scripts/script-environment.mjs",
     "scripts/deployment-preflight.ts",
