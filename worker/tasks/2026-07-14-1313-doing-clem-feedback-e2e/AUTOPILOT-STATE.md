@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `6c20a33c` integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. All prior clean passes are historical because Quality Rounds 27-44 changed release process/recovery semantics.
+- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `0298646c` integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. All prior clean passes are historical because Quality Rounds 27-45 changed release process/recovery semantics.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is `NEEDS_REVIEW` after the mandatory main-drift audit.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation and dependency setup have not started.
-- Active gate: fresh Quality Round 45 on immutable contract checkpoint `6c20a33c`, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Round 44's process/schema reviewers converged; terminal/archive found one stale predecessor-validator clause. Repaired predecessor now consistently builds from successorMergeSha and reserves original merge identity for ancestry/ref/worktree cleanup. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
+- Active gate: fresh Quality Round 46 on immutable contract checkpoint `0298646c`, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Round 45's process reviewer converged; schema/terminal found three stale validator-runtime phrases. Release entry, Unit29.2 tests, and full fixture now all separate branch-specific validatorMergeSha runtime ownership from original merge cleanup identity. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Synchronize checkpoint `6c20a33c` into Desk, run fresh Quality Round 45 plus consecutive Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
+Synchronize checkpoint `0298646c` into Desk, run fresh Quality Round 46 plus consecutive Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
 
 ## Operator-Locked Rules
 
@@ -40,7 +40,7 @@ Synchronize checkpoint `6c20a33c` into Desk, run fresh Quality Round 45 plus con
 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
-| Planning reviewer gate | active | Quality Round 44's stale validator clause is fixed at immutable contract `6c20a33c`; process/schema converged only at the superseded input | Run fresh Quality Round 45 and scrutiny convergence |
+| Planning reviewer gate | active | Quality Round 45's three validator parity gaps are fixed at immutable contract `0298646c`; process converged only at the superseded input | Run fresh Quality Round 46 and scrutiny convergence |
 | Doing review chain | active | Spawn generations, provenance ownership, successor/predecessor closure, track linearization, archive validation, and terminal receipts are executable and fully assigned | Re-converge and restore final handoff |
 | Work Doer Units 0-37 | deferred by gate | Full red/green/verify/visual/ship queue is defined | Restart Unit0a only after fresh final handoff |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
@@ -56,4 +56,4 @@ Synchronize checkpoint `6c20a33c` into Desk, run fresh Quality Round 45 plus con
 
 Not satisfied. The reopened reviewer gate and all delivery work remain.
 
-Last updated: 2026-07-17 11:10:00 PDT.
+Last updated: 2026-07-17 11:24:00 PDT.
