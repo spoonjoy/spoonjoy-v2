@@ -58,7 +58,7 @@ Ship every accepted part of Clem's feedback as coherent Spoonjoy primitives: rel
 
 ## Code Coverage Requirements
 **MANDATORY: 100% coverage on all new code.**
-- Use strict red-green-refactor delivery; failing-test evidence is retained without committing an intentionally failing tree.
+- Use strict red-green-refactor delivery; failing-test evidence is retained without committing or pushing an intentionally failing tree. For this task only, this product/repository rule governs over generic Work Planner/Work Doer phase-commit and per-unit-status instructions: each `a` red phase is executed and evidenced but remains uncommitted, the matching `a` tests and `b` implementation land together in one green atomic commit with both statuses, and the `c` verification phase receives its own evidence/status commit. This changes checkpoint timing only and does not waive test-first execution, reviewer gates, or any verification.
 - No coverage exclusion or threshold bypass applies to new code.
 - Cover success, error, boundary, retry, race, recovery, null, and empty branches.
 - Exercise Cloudflare-specific behavior in the real Workers runtime.
@@ -106,3 +106,4 @@ The task is deliberately broad because the feedback describes an end-to-end prod
 - 2026-07-16 through 2026-07-17 Quality Rounds 13-52 repeatedly reopened review as new execution, evidence, security, recovery, and terminal-delivery findings emerged.
 - 2026-07-17 Quality Round 53 returned 15 findings, 12 unique. Detailed implementation contracts moved out of planning into the doing-owned execution contract; Unit29.2 was split into independently executable red/green/verification groups; predecessor, locator, URL, capability, coverage, Git, cleanup, terminal-command, and Slugger contracts were repaired directly.
 - 2026-07-17 Quality restarts at Round 54 on a fresh synchronized checkpoint.
+- 2026-07-17 Quality Round 54 returned process/executor, schema/security, and terminal/archive findings. The task-specific red-first checkpoint override is now explicit; planning retains only product scope/acceptance while the doing-owned execution contract closes every technical finding. Quality restarts at Round 55.
