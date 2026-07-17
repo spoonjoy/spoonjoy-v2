@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `fc1d2498a3758018b93695de439c7f8adec886e3` integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. All prior clean passes are historical because Quality Round 27 changed process failure semantics, remote ensure retries, credential isolation, and terminal cleanup recovery.
+- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `92206291b82bca4b69b6b9a7bda69cf2ba91e4a4` integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. All prior clean passes are historical because Quality Rounds 27-28 changed process failure semantics, credential isolation, terminal cleanup recovery, and the cross-host remote-mutation fence.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is `NEEDS_REVIEW` after the mandatory main-drift audit.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation and dependency setup have not started.
-- Active gate: fresh Quality Round 28 on contract checkpoint `fc1d2498`, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Quality Round 27's five findings are fixed: every process result terminalizes under exact status-dependent output/failure semantics; remote lifecycle/visual cleanup has a least-privilege D1 policy; QA deploy, PR create, and squash use token-bound discover-first ensure intents with at-most-one child; terminal git cleanup is phase-checkpointed and cross-host resumable; and continuity is current. The local audit also proved generic Wrangler OAuth works in the stripped environment and removed its unnecessary token requirement. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
+- Active gate: fresh Quality Round 29 on immutable contract checkpoint `92206291`, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Quality Round 28's verdict is advisory because two self-audit repairs changed its input while it ran. Its substantive remaining finding is fixed: `start-command` owns the immutable intent, the executor must push that running Desk fence before spawn, and cross-host takeover must win a pushed handoff before a structurally read-only reconciliation attempt. Dirty terminal-cleanup recovery now survives unrelated Desk fast-forwards, and Unit33's output-root wording is consistent. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Synchronize checkpoint `fc1d2498` into Desk, run fresh Quality Round 28 plus consecutive Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
+Synchronize checkpoint `92206291` into Desk, run fresh Quality Round 29 plus consecutive Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
 
 ## Operator-Locked Rules
 
@@ -40,8 +40,8 @@ Synchronize checkpoint `fc1d2498` into Desk, run fresh Quality Round 28 plus con
 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
-| Planning reviewer gate | active | Quality Round 27 findings fixed at `fc1d2498` | Run fresh Quality Round 28 and scrutiny convergence |
-| Doing review chain | active | Process failure, ensure-intent, D1 policy, and terminal cleanup contracts changed | Re-converge and restore final handoff |
+| Planning reviewer gate | active | Quality Round 28 cross-host fence finding fixed at `92206291`; its moving-input verdict is not counted | Run fresh Quality Round 29 and scrutiny convergence |
+| Doing review chain | active | Start-owned intent, pushed running fence, handoff, and read-only takeover contracts changed | Re-converge and restore final handoff |
 | Work Doer Units 0-37 | deferred by gate | Full red/green/verify/visual/ship queue is defined | Restart Unit0a only after fresh final handoff |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
 
@@ -56,4 +56,4 @@ Synchronize checkpoint `fc1d2498` into Desk, run fresh Quality Round 28 plus con
 
 Not satisfied. The reopened reviewer gate and all delivery work remain.
 
-Last updated: 2026-07-16 16:40:31 PDT.
+Last updated: 2026-07-16 17:07:25 PDT.
