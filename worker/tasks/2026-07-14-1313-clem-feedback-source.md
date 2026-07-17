@@ -12,6 +12,8 @@
 5. Do nothing Pebble-specific; Spoonjoy is only the API provider for that project.
 6. Recipe progress does not belong in D1. The reason to use a Durable Object is live cross-device synchronization.
 7. Keep neutral recipe metadata and read-time scaling useful to both REST clients and agents using Spoonjoy through MCP.
+8. Restore checked shopping items correctly when they are re-added, with one behavior across web, REST, and agent surfaces.
+9. Provide a private saved-recipe state that is distinct from cookbook membership and social activity.
 
 ## Disposition
 
@@ -26,6 +28,8 @@
 | Pebble-specific work | Reject. Deliver only neutral Spoonjoy product and API primitives. | Changed product/API/docs surfaces contain no Pebble-specific contract or copy. |
 | D1 for progress | Reject as canonical state. D1 is an owner-only index/history projection and may lag; the Durable Object remains authoritative. | Ownership boundaries and alarm-driven D1 projection tests. |
 | Recipe metadata/scaling | Accept for REST v1 and the existing MCP recipe-read tools. Both surfaces share neutral metadata and exact read-only scaling math; private `isSaved` remains REST-only and requires a kitchen-read entitlement. | Units 3, 4, and 27.2 prove REST/MCP parity, MCP tool-schema behavior, no writes, and the explicit private-field boundary. |
+| Shopping restoration/mutation parity | Accept. Re-adding a checked item restores it as unchecked at a fresh end position, while all other add/update/delete/clear cases follow one transactional state matrix shared by web, REST v1, and MCP. | Units 1-2 centralize the service, migration, sync replay, concurrency, and three-surface compatibility tests. |
+| Private recipe saves | Accept. `SavedRecipe` is private canonical save state, separate from cookbook membership and RecipeSpoon/social activity, with compatibility bridges for existing cookbook writers. | Units 20-24 prove migration/backfill, viewer-scoped search, owner-only UI/REST, privacy/cache boundaries, and writer compatibility. |
 
 ## Product Boundary
 
