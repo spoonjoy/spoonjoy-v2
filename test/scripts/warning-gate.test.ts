@@ -77,6 +77,18 @@ describe("warning gate", () => {
     expect(findUnexpectedWarnings("foo-warning: generated chunk is oversized")).toEqual([
       "foo-warning: generated chunk is oversized",
     ]);
+    expect(findUnexpectedWarnings("[warn] hidden on stdout")).toEqual([
+      "[warn] hidden on stdout",
+    ]);
+    expect(findUnexpectedWarnings("[WARN] hidden on stdout")).toEqual([
+      "[WARN] hidden on stdout",
+    ]);
+    expect(findUnexpectedWarnings("[ warning ] hidden on stdout")).toEqual([
+      "[ warning ] hidden on stdout",
+    ]);
+    expect(findUnexpectedWarnings("[warn:build] hidden on stdout")).toEqual([
+      "[warn:build] hidden on stdout",
+    ]);
     expect(findUnexpectedWarnings("Warning! hidden failure")).toEqual([
       "Warning! hidden failure",
     ]);

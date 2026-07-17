@@ -313,6 +313,8 @@ The release result is written to `mcp-oauth-canary-artifacts/production-release.
 
 Intentional rollbacks are dispatched in GitHub with a historical `source_sha` and its exact source-tagged Worker `rollback_version_id`. Current `main` tooling resolves that immutable version, inspects the exact rollback candidate CSP through Cloudflare's version override, and only then promotes it; historical scripts are never executed, and D1 is not rolled back. A valid enforcing CSP needs no break-glass acknowledgement. A report-only, absent, or weakened CSP requires the exact `ACK_REPORT_ONLY_CSP_ROLLBACK` workflow acknowledgement, and candidate inspection that is unavailable or inconclusive fails closed before promotion.
 
+A source commit that intentionally changes Wrangler CSP mode to `report-only` uses the exact-SHA `CI` workflow dispatch before the protected production dispatch. Ordinary push and pull-request CI stay strict. Dispatch `ci.yml` on the exact branch head with `source_sha` and `csp_report_only_break_glass=ACK_REPORT_ONLY_CSP_ROLLBACK`; after merge, repeat that dispatch with `--ref main` and the exact `origin/main` SHA. The production validator accepts only that authenticated GitHub dispatch run with successful `coverage`, `e2e`, and `advisory` jobs. See `docs/deployment.md` for the executable commands.
+
 **Why this matters**: on 2026-05-10 a production deploy went out without applying remote D1 migrations, causing `/search` to 500 with `no such column: ...` errors. `pnpm deploy:auto` and the preflight remote-migration check exist to make that failure mode impossible going forward.
 
 ### Skipping the remote check in dev or unauthenticated CI

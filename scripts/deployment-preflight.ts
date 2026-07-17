@@ -115,7 +115,9 @@ const REQUIRED_SCRIPT_COVERAGE_INCLUDES = [
   "scripts/deployment-preflight.ts",
   "scripts/deploy-production-canary.ts",
   "scripts/production-readiness.ts",
+  "scripts/posthog-build-metadata.ts",
   "scripts/warning-gate.ts",
+  "scripts/workflow-security.mjs",
 ] as const;
 
 const REQUIRED_SCRIPT_TYPECHECK_INCLUDES = [
@@ -123,9 +125,11 @@ const REQUIRED_SCRIPT_TYPECHECK_INCLUDES = [
   "scripts/deployment-preflight.ts",
   "scripts/deploy-production-canary.ts",
   "scripts/production-readiness.ts",
+  "scripts/posthog-build-metadata.ts",
   "scripts/qa-preflight.ts",
   "scripts/react-router-build.ts",
   "scripts/warning-gate.ts",
+  "scripts/workflow-security.mjs",
 ] as const;
 const CSP_REPORT_ONLY_BREAK_GLASS_ACK = "ACK_REPORT_ONLY_CSP_ROLLBACK";
 
@@ -141,7 +145,9 @@ const STORYBOOK_PAGES_PROJECT_NAME = "spoonjoy-storybook";
 const STORYBOOK_PAGES_DEPLOY_COMMAND =
   "pages deploy --project-name=spoonjoy-storybook --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }} --commit-dirty=true";
 const REQUIRED_PNPM_PACKAGE_MANAGER = "pnpm@10.28.1";
+const PINNED_CHECKOUT_ACTION = "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10";
 const PINNED_SETUP_NODE_ACTION = "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38";
+const PINNED_UPLOAD_ARTIFACT_ACTION = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
 const PINNED_WRANGLER_ACTION = "cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0";
 const REQUIRED_IGNORED_BUILD_PACKAGES = [
   "@prisma/client",
@@ -397,9 +403,14 @@ function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
   let recordStep = -1;
   let ensureArtifactStep = -1;
   let uploadArtifactStep = -1;
+  let releaseValidatorCommandCount = 0;
+  const releaseValidatorCommand =
+    "node scripts/workflow-security.mjs validate-production-deploy-source";
 
   for (const [stepStart, stepEnd] of stepBlocks(lines, steps[0], steps[1])) {
     const run = stepRunText(lines, stepStart, stepEnd);
+    releaseValidatorCommandCount += runCommandLines(run)
+      .filter((command) => command === releaseValidatorCommand).length;
     if (
       stepUses(lines, stepStart, stepEnd, "actions/checkout@") &&
       stepWithValue(lines, stepStart, stepEnd, "ref") === "${{ env.SOURCE_SHA }}" &&
@@ -419,24 +430,17 @@ function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
       rollbackCheckoutStep = stepStart;
     }
     if (stepPropertyValue(lines, stepStart, stepEnd, "name") === "Validate release source") {
-      const requiredRunFragments = [
-        "grep -Eq '^[0-9a-f]{40}$'",
-        'git merge-base --is-ancestor "$SOURCE_SHA" origin/main',
-        `test "$WORKFLOW_RUN_PATH" = '.github/workflows/ci.yml' || test "$GITHUB_EVENT_NAME" = 'workflow_dispatch'`,
-        'test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"',
-        'gh run list --workflow .github/workflows/ci.yml --branch main --commit "$SOURCE_SHA" --event push --status success',
-        "--json databaseId,headSha",
-        'gh run view "$ci_run_id" --json jobs',
-        '.name == $required_job and .conclusion == "success"',
-        'gh run list --workflow .github/workflows/storybook.yml --branch main --commit "$SOURCE_SHA" --event push --status success',
-        'gh run view "$storybook_run_id" --json jobs',
-        '.name == "build-storybook" and .conclusion == "success"',
-      ];
       if (
         stepPropertyValue(lines, stepStart, stepEnd, "if") === null &&
-        stepHasEnvKeys(lines, stepStart, stepEnd, ["GH_TOKEN", "WORKFLOW_RUN_PATH"]) &&
-        requiredRunFragments.every((fragment) => run.includes(fragment)) &&
-        breakGlassValidationRunIsSafe(run)
+        stepHasEnvKeys(lines, stepStart, stepEnd, [
+          "GH_TOKEN",
+          "WORKFLOW_RUN_CONCLUSION",
+          "WORKFLOW_RUN_EVENT",
+          "WORKFLOW_RUN_HEAD_BRANCH",
+          "WORKFLOW_RUN_HEAD_SHA",
+          "WORKFLOW_RUN_PATH",
+        ]) &&
+        commandLinesEqual(run, [releaseValidatorCommand])
       ) {
         validationStep = stepStart;
       }
@@ -539,6 +543,7 @@ function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
     blockScalarChildValue(lines, cspBreakGlass[0], cspBreakGlass[1], "type") === "string" &&
     sourceCheckoutStep >= 0 &&
     rollbackCheckoutStep > sourceCheckoutStep &&
+    releaseValidatorCommandCount === 1 &&
     validationStep > rollbackCheckoutStep &&
     deployStep > validationStep &&
     recordStep > deployStep &&
@@ -556,8 +561,31 @@ function workflowBuildsPushesAndPullRequestsToMain(workflow: string): boolean {
   const onIndex = lines.findIndex((line) => line.indent === 0 && line.text === "on:");
   if (onIndex === -1) return false;
   const onEnd = blockEnd(lines, onIndex);
+  const workflowDispatch = childBlock(lines, onIndex, onEnd, "workflow_dispatch");
+  const dispatchInputs = workflowDispatch
+    ? childBlock(lines, workflowDispatch[0], workflowDispatch[1], "inputs")
+    : null;
+  const sourceSha = dispatchInputs
+    ? childBlock(lines, dispatchInputs[0], dispatchInputs[1], "source_sha")
+    : null;
+  const acknowledgement = dispatchInputs
+    ? childBlock(lines, dispatchInputs[0], dispatchInputs[1], "csp_report_only_break_glass")
+    : null;
+  const envIndex = lines.findIndex((line) => line.indent === 0 && line.text === "env:");
+  const env = envIndex >= 0
+    ? blockScalarChildMap(lines, envIndex, blockEnd(lines, envIndex))
+    : new Map<string, string>();
   return (
-    workflowHasOnlyTriggers(lines, onIndex, onEnd, ["push", "pull_request"]) &&
+    workflowHasOnlyTriggers(lines, onIndex, onEnd, ["push", "pull_request", "workflow_dispatch"]) &&
+    Boolean(sourceSha && acknowledgement) &&
+    blockScalarChildValue(lines, sourceSha![0], sourceSha![1], "required") === "true" &&
+    blockScalarChildValue(lines, sourceSha![0], sourceSha![1], "type") === "string" &&
+    blockScalarChildValue(lines, acknowledgement![0], acknowledgement![1], "required") === "true" &&
+    blockScalarChildValue(lines, acknowledgement![0], acknowledgement![1], "type") === "string" &&
+    env.get("CI_SOURCE_SHA") ===
+      "${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.sha }}" &&
+    env.get("SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS") ===
+      "${{ github.event_name == 'workflow_dispatch' && inputs.csp_report_only_break_glass || '' }}" &&
     workflowTriggerTargetsMain(lines, onIndex, onEnd, "push") &&
     workflowTriggerTargetsMain(lines, onIndex, onEnd, "pull_request")
   );
@@ -580,9 +608,12 @@ function workflowHasRunCommand(workflow: string, expected: string, minimumCount 
 
 const WARNING_GATE_COMMAND_PATTERN = /^(?:[A-Z_][A-Z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*node scripts\/warning-gate\.ts -- (.+)$/;
 const WARNING_GATE_COMMAND_PREFIX = "node scripts/warning-gate.ts -- ";
+const CI_INVOCATION_VALIDATION_COMMAND =
+  `${WARNING_GATE_COMMAND_PREFIX}node scripts/workflow-security.mjs validate-ci-invocation`;
 const PLAYWRIGHT_APT_INSTALL_COMMAND = "sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends xvfb fonts-noto-color-emoji fonts-unifont libfontconfig1 libfreetype6 xfonts-cyrillic xfonts-scalable fonts-liberation fonts-ipafont-gothic fonts-wqy-zenhei fonts-tlwg-loma-otf fonts-freefont-ttf libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 libcairo2 libcups2t64 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0t64 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2";
 const ALLOWED_CI_COMMANDS_BY_JOB = new Map<string, ReadonlySet<string>>([
   ["advisory", new Set([
+    CI_INVOCATION_VALIDATION_COMMAND,
     `${WARNING_GATE_COMMAND_PREFIX}corepack enable`,
     `${WARNING_GATE_COMMAND_PREFIX}corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`,
     `${WARNING_GATE_COMMAND_PREFIX}mkdir -p .cache/osv-scanner`,
@@ -598,6 +629,7 @@ const ALLOWED_CI_COMMANDS_BY_JOB = new Map<string, ReadonlySet<string>>([
     `${WARNING_GATE_COMMAND_PREFIX}pnpm run advisory:scan -- --scanner .cache/osv-scanner/osv-scanner --output .advisory/osv-results.json`,
   ])],
   ["coverage", new Set([
+    CI_INVOCATION_VALIDATION_COMMAND,
     `${WARNING_GATE_COMMAND_PREFIX}corepack enable`,
     `${WARNING_GATE_COMMAND_PREFIX}corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`,
     `${WARNING_GATE_COMMAND_PREFIX}pnpm install --frozen-lockfile`,
@@ -614,6 +646,7 @@ const ALLOWED_CI_COMMANDS_BY_JOB = new Map<string, ReadonlySet<string>>([
     `${WARNING_GATE_COMMAND_PREFIX}pnpm build`,
   ])],
   ["e2e", new Set([
+    CI_INVOCATION_VALIDATION_COMMAND,
     `${WARNING_GATE_COMMAND_PREFIX}corepack enable`,
     `${WARNING_GATE_COMMAND_PREFIX}corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`,
     `${WARNING_GATE_COMMAND_PREFIX}pnpm install --frozen-lockfile`,
@@ -659,14 +692,64 @@ function workflowHasNoUngatedCiCommands(workflow: string): boolean {
     const allowedCommands = ALLOWED_CI_COMMANDS_BY_JOB.get(jobName);
     if (!steps || !allowedCommands) return false;
     const seenCommands = new Set<string>();
+    const seenActions = new Set<string>();
     for (const [stepStart, stepEnd] of stepBlocks(lines, steps[0], steps[1])) {
+      const action = stepPropertyValue(lines, stepStart, stepEnd, "uses");
+      const run = stepRunText(lines, stepStart, stepEnd);
+      if (action && run) return false;
+      if (action) {
+        if (seenActions.has(action)) return false;
+        seenActions.add(action);
+        if (action === PINNED_CHECKOUT_ACTION) {
+          if (
+            stepWithValue(lines, stepStart, stepEnd, "ref") !== "${{ env.CI_SOURCE_SHA }}" ||
+            stepWithValue(lines, stepStart, stepEnd, "persist-credentials") !== "false"
+          ) return false;
+          continue;
+        }
+        if (action === PINNED_SETUP_NODE_ACTION) {
+          if (stepWithValue(lines, stepStart, stepEnd, "node-version") !== "22") return false;
+          continue;
+        }
+        if (action === PINNED_UPLOAD_ARTIFACT_ACTION && jobName === "e2e") continue;
+        return false;
+      }
       for (const command of runCommandLines(stepRunText(lines, stepStart, stepEnd))) {
         if (seenCommands.has(command) || !allowedCommands.has(command)) return false;
         seenCommands.add(command);
       }
     }
+    if (!seenActions.has(PINNED_CHECKOUT_ACTION) || !seenActions.has(PINNED_SETUP_NODE_ACTION)) {
+      return false;
+    }
+    if (!seenCommands.has(CI_INVOCATION_VALIDATION_COMMAND)) return false;
   }
   return true;
+}
+
+function workflowHasSafeCiShellAndEnv(workflow: string): boolean {
+  const lines = workflowLines(workflow);
+  if (lines.some((line) => ["BASH_ENV", "ENV", "SHELLOPTS"].includes(yamlMappingKey(line.text) ?? ""))) {
+    return false;
+  }
+
+  const defaults = lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => yamlMappingKey(line.text) === "defaults");
+  if (defaults.length !== 1 || defaults[0].line.indent !== 0) return false;
+  const defaultsEnd = blockEnd(lines, defaults[0].index);
+  const run = childBlock(lines, defaults[0].index, defaultsEnd, "run");
+  if (
+    !run ||
+    immediateChildKeys(lines, defaults[0].index, defaultsEnd).join(",") !== "run" ||
+    immediateChildKeys(lines, run[0], run[1]).join(",") !== "shell" ||
+    blockScalarChildValue(lines, run[0], run[1], "shell") !== "bash"
+  ) return false;
+
+  return lines.every((line, index) => {
+    if (yamlMappingKey(line.text) !== "shell") return true;
+    return index > run[0] && index < run[1];
+  });
 }
 
 function workflowHasWarningCleanCiOutputPaths(workflow: string): boolean {
@@ -681,8 +764,16 @@ function workflowHasWarningCleanCiOutputPaths(workflow: string): boolean {
     workflowHasWarningGatedPayload(workflow, PLAYWRIGHT_APT_INSTALL_COMMAND),
     workflowHasWarningGatedPayload(workflow, "pnpm exec playwright install chromium"),
     workflowHasRunCommand(workflow, "pnpm test:e2e"),
+    workflowHasWarningGatedPayload(
+      workflow,
+      "node scripts/workflow-security.mjs validate-ci-invocation",
+    ),
   ];
-  return workflowHasNoUngatedCiCommands(workflow) && requiredCommandChecks.every(Boolean);
+  return (
+    workflowHasNoUngatedCiCommands(workflow) &&
+    workflowHasSafeCiShellAndEnv(workflow) &&
+    requiredCommandChecks.every(Boolean)
+  );
 }
 
 function workflowHasOnlyTriggers(lines: WorkflowLine[], onIndex: number, onEnd: number, allowed: string[]): boolean {
@@ -961,30 +1052,6 @@ function runCommandLines(run: string): string[] {
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0 && !line.startsWith("#"));
-}
-
-function breakGlassValidationRunIsSafe(run: string): boolean {
-  const commands = runCommandLines(run);
-  const expected = [
-    'if [ -n "$SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS" ] && [ "$SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS" != "ACK_REPORT_ONLY_CSP_ROLLBACK" ]; then',
-    'echo "csp_report_only_break_glass must be ACK_REPORT_ONLY_CSP_ROLLBACK" >&2',
-    "exit 1",
-    "fi",
-  ];
-  let matches = 0;
-  for (let index = 0; index <= commands.length - expected.length; index += 1) {
-    if (expected.every((command, offset) => commands[index + offset] === command)) matches += 1;
-  }
-  return matches === 1;
-}
-
-function reactRouterBuildThreadsAuthoritativePostHogHost(source: string): boolean {
-  return [
-    "resolvePostHogBuildHost",
-    'readFileSync("wrangler.json", "utf8")',
-    "CLOUDFLARE_ENV",
-    "VITE_POSTHOG_HOST",
-  ].every((fragment) => source.includes(fragment));
 }
 
 function commandLinesEqual(run: string, expected: string[]): boolean {
@@ -1318,10 +1385,9 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
       Boolean(
         productionPostHogOrigin &&
           qaPostHogOrigin &&
-          productionPostHogOrigin === qaPostHogOrigin &&
-          reactRouterBuildThreadsAuthoritativePostHogHost(inputs.reactRouterBuild),
+          productionPostHogOrigin === qaPostHogOrigin,
       ),
-      "wrangler.json production/QA vars must set the same origin-only HTTPS VITE_POSTHOG_HOST, and the React Router build must inject that exact Wrangler value into the client bundle."
+      "wrangler.json production/QA vars must set the same origin-only HTTPS VITE_POSTHOG_HOST; QA preflight validates the generated Worker config and structured client build metadata after each build."
     ),
     check(
       "QA resource isolation",

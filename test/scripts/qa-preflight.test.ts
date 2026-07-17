@@ -104,6 +104,7 @@ function qaGeneratedBuildConfig() {
       NODE_ENV: "production",
       SPOONJOY_BASE_URL: QA_BASE_URL,
       SPOONJOY_CSP_MODE: "enforce",
+      VITE_POSTHOG_HOST: "https://us.i.posthog.com",
     },
     version_metadata: { binding: "CF_VERSION_METADATA" },
     d1_databases: [{ binding: "DB", database_name: "spoonjoy-qa", database_id: QA_D1_DATABASE_ID }],
@@ -113,6 +114,20 @@ function qaGeneratedBuildConfig() {
       { name: "API_IP_RATE_LIMITER", namespace_id: "2002" },
       { name: "AUTH_IP_RATE_LIMITER", namespace_id: "2003" },
     ],
+  };
+}
+
+function clientBuildMetadata(host = "https://us.i.posthog.com") {
+  const assetsOrigin = host === "https://us.i.posthog.com"
+    ? "https://us-assets.i.posthog.com"
+    : host === "https://eu.i.posthog.com"
+      ? "https://eu-assets.i.posthog.com"
+      : host;
+  return {
+    schemaVersion: 1,
+    environment: "qa",
+    publicEnv: { VITE_POSTHOG_HOST: host },
+    runtimeCsp: { ingestOrigin: host, assetsOrigin },
   };
 }
 
@@ -241,7 +256,7 @@ async function createStaticConfigRoot(overrides: {
 
 describe("validateQaGeneratedBuildConfig", () => {
   it("passes for a generated QA Worker config", () => {
-    const check = validateQaGeneratedBuildConfig(qaGeneratedBuildConfig());
+    const check = validateQaGeneratedBuildConfig(qaGeneratedBuildConfig(), clientBuildMetadata());
 
     expect(check.ok).toBe(true);
   });
@@ -269,7 +284,7 @@ describe("validateQaGeneratedBuildConfig", () => {
         { name: "API_IP_RATE_LIMITER", namespace_id: "2002" },
         { name: "AUTH_IP_RATE_LIMITER", namespace_id: "2003" },
       ],
-    });
+    }, clientBuildMetadata());
 
     expect(check.ok).toBe(true);
   });
@@ -331,6 +346,40 @@ describe("validateQaGeneratedBuildConfig", () => {
 
     expect(check.ok).toBe(false);
     expect(check.message).toContain("CLOUDFLARE_ENV=qa");
+  });
+
+  it.each([
+    ["US", "https://us.i.posthog.com"],
+    ["EU", "https://eu.i.posthog.com"],
+    ["custom", "https://analytics.example.com"],
+  ])("proves the %s PostHog host across Worker, client, and runtime CSP metadata", (_label, host) => {
+    const config = qaGeneratedBuildConfig();
+    (config.vars as Record<string, string>).VITE_POSTHOG_HOST = host;
+
+    expect(validateQaGeneratedBuildConfig(config, clientBuildMetadata(host)).ok).toBe(true);
+  });
+
+  it("fails when generated Worker or client artifacts omit or mismatch the PostHog host", () => {
+    const missingWorkerHost = qaGeneratedBuildConfig();
+    delete (missingWorkerHost.vars as Record<string, string>).VITE_POSTHOG_HOST;
+
+    expect(validateQaGeneratedBuildConfig(missingWorkerHost, clientBuildMetadata()).ok).toBe(false);
+    expect(validateQaGeneratedBuildConfig(qaGeneratedBuildConfig(), {}).ok).toBe(false);
+    expect(validateQaGeneratedBuildConfig(
+      qaGeneratedBuildConfig(),
+      clientBuildMetadata("https://eu.i.posthog.com"),
+    ).ok).toBe(false);
+  });
+
+  it("rejects dead PostHog text outside the structured Worker and client fields", () => {
+    const config = qaGeneratedBuildConfig() as Record<string, unknown>;
+    delete (config.vars as Record<string, string>).VITE_POSTHOG_HOST;
+    config.notes = "VITE_POSTHOG_HOST=https://us.i.posthog.com";
+    const metadata = {
+      notes: JSON.stringify(clientBuildMetadata()),
+    };
+
+    expect(validateQaGeneratedBuildConfig(config, metadata)).toMatchObject({ ok: false });
   });
 });
 
@@ -411,6 +460,7 @@ describe("runQaPreflight", () => {
       },
       runWrangler,
       readGeneratedBuildConfig: async () => qaGeneratedBuildConfig(),
+      readClientBuildMetadata: async () => clientBuildMetadata(),
       createProbeFile: async () => ({
         path: "/tmp/spoonjoy-qa-preflight.txt",
         body: "spoonjoy qa preflight",
@@ -426,7 +476,13 @@ describe("runQaPreflight", () => {
     const root = await createStaticConfigRoot();
     try {
       await mkdir(path.join(root, "build/server"), { recursive: true });
+      await mkdir(path.join(root, "build/client/.vite"), { recursive: true });
       await writeFile(path.join(root, "build/server/wrangler.json"), JSON.stringify(qaGeneratedBuildConfig()), "utf8");
+      await writeFile(
+        path.join(root, "build/client/.vite/spoonjoy-build-metadata.json"),
+        JSON.stringify(clientBuildMetadata()),
+        "utf8",
+      );
 
       const result = await runQaPreflight(root, {
         env: {

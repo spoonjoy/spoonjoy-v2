@@ -71,27 +71,12 @@ function secureProductionDeployWorkflow(): string {
     "      - name: Validate release source",
     "        env:",
     "          GH_TOKEN: ${{ github.token }}",
+    "          WORKFLOW_RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}",
+    "          WORKFLOW_RUN_EVENT: ${{ github.event.workflow_run.event }}",
+    "          WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}",
+    "          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}",
     "          WORKFLOW_RUN_PATH: ${{ github.event.workflow_run.path }}",
-    "        run: |",
-    "          grep -Eq '^[0-9a-f]{40}$' <<<\"$SOURCE_SHA\"",
-    "          if [ -n \"$SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS\" ] && [ \"$SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS\" != \"ACK_REPORT_ONLY_CSP_ROLLBACK\" ]; then",
-    "            echo \"csp_report_only_break_glass must be ACK_REPORT_ONLY_CSP_ROLLBACK\" >&2",
-    "            exit 1",
-    "          fi",
-    "          git fetch --no-tags origin main",
-    "          git merge-base --is-ancestor \"$SOURCE_SHA\" origin/main",
-    "          test \"$WORKFLOW_RUN_PATH\" = '.github/workflows/ci.yml' || test \"$GITHUB_EVENT_NAME\" = 'workflow_dispatch'",
-    "          test -z \"$ROLLBACK_VERSION_ID\" || test \"$(git rev-parse HEAD)\" = \"$(git rev-parse origin/main)\"",
-    "          ci_runs=\"$(gh run list --workflow .github/workflows/ci.yml --branch main --commit \"$SOURCE_SHA\" --event push --status success --limit 100 --json databaseId,headSha)\"",
-    "          ci_run_id=\"$(jq -er --arg source_sha \"$SOURCE_SHA\" '[.[] | select(.headSha == $source_sha)] | first | .databaseId' <<<\"$ci_runs\")\"",
-    "          ci_jobs=\"$(gh run view \"$ci_run_id\" --json jobs)\"",
-    "          required_job=coverage",
-    "          required_job=e2e",
-    "          jq -e --arg required_job \"$required_job\" '[.jobs[] | select(.name == $required_job and .conclusion == \"success\")] | length == 1' <<<\"$ci_jobs\"",
-    "          storybook_runs=\"$(gh run list --workflow .github/workflows/storybook.yml --branch main --commit \"$SOURCE_SHA\" --event push --status success --limit 100 --json databaseId,headSha)\"",
-    "          storybook_run_id=\"$(jq -er --arg source_sha \"$SOURCE_SHA\" '[.[] | select(.headSha == $source_sha)] | first | .databaseId' <<<\"$storybook_runs\")\"",
-    "          storybook_jobs=\"$(gh run view \"$storybook_run_id\" --json jobs)\"",
-    "          jq -e '[.jobs[] | select(.name == \"build-storybook\" and .conclusion == \"success\")] | length == 1' <<<\"$storybook_jobs\"",
+    "        run: node scripts/workflow-security.mjs validate-production-deploy-source",
     `      - uses: ${SETUP_NODE_ACTION} # v6`,
     "        with:",
     "          node-version: '22'",
@@ -294,16 +279,33 @@ function validCiWorkflow(): string {
     "    branches: [main]",
     "  pull_request:",
     "    branches: [main]",
+    "  workflow_dispatch:",
+    "    inputs:",
+    "      source_sha:",
+    "        required: true",
+    "        type: string",
+    "      csp_report_only_break_glass:",
+    "        required: true",
+    "        type: string",
+    "defaults:",
+    "  run:",
+    "    shell: bash",
     "env:",
     "  GIT_CONFIG_COUNT: '1'",
     "  GIT_CONFIG_KEY_0: init.defaultBranch",
     "  GIT_CONFIG_VALUE_0: main",
+    "  CI_SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.sha }}",
+    "  SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: ${{ github.event_name == 'workflow_dispatch' && inputs.csp_report_only_break_glass || '' }}",
     "jobs:",
     "  coverage:",
     "    runs-on: ubuntu-latest",
     "    steps:",
-    "      - uses: actions/checkout@v6",
-    "      - uses: actions/setup-node@v6",
+    `      - uses: ${CHECKOUT_ACTION}`,
+    "        with:",
+    "          ref: ${{ env.CI_SOURCE_SHA }}",
+    "          persist-credentials: false",
+    "      - run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation",
+    `      - uses: ${SETUP_NODE_ACTION}`,
     "        with:",
     "          node-version: '22'",
     "      - name: Activate pnpm",
@@ -318,8 +320,12 @@ function validCiWorkflow(): string {
     "  e2e:",
     "    runs-on: ubuntu-latest",
     "    steps:",
-    "      - uses: actions/checkout@v6",
-    "      - uses: actions/setup-node@v6",
+    `      - uses: ${CHECKOUT_ACTION}`,
+    "        with:",
+    "          ref: ${{ env.CI_SOURCE_SHA }}",
+    "          persist-credentials: false",
+    "      - run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation",
+    `      - uses: ${SETUP_NODE_ACTION}`,
     "        with:",
     "          node-version: '22'",
     "      - name: Activate pnpm",
@@ -454,9 +460,9 @@ function validInputs(): DeploymentPreflightInputs {
     readme: "pnpm run deploy:preflight wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_NATIVE_CLIENT_IDS APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY GOOGLE_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT GEMINI_API_KEY GEMINI_IMAGE_MODEL GEMINI_IMAGE_TIMEOUT_MS gemini-3.1-flash-image IMAGE_PROVIDER_PRIMARY IMAGE_PROVIDER_FALLBACKS SPOONJOY_CSP_MODE Content-Security-Policy-Report-Only one-commit rollback SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS ACK_REPORT_ONLY_CSP_ROLLBACK VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry docs/analytics-privacy.md cleanup:local cleanup:local:apply cleanup:remote:qa cleanup:remote:qa:apply cleanup:production target-env local target-env qa target-env production broad production cleanup is read-only warning-gate.ts",
     deploymentDoc: "pnpm run deploy:preflight smoke:api wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_NATIVE_CLIENT_IDS APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY GOOGLE_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT GEMINI_API_KEY GEMINI_IMAGE_MODEL GEMINI_IMAGE_TIMEOUT_MS gemini-3.1-flash-image IMAGE_PROVIDER_PRIMARY IMAGE_PROVIDER_FALLBACKS SPOONJOY_CSP_MODE Content-Security-Policy-Report-Only one-commit rollback SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS ACK_REPORT_ONLY_CSP_ROLLBACK wrangler secret put POSTHOG_KEY VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry cleanup:local cleanup:local:apply cleanup:remote:qa cleanup:remote:qa:apply cleanup:production target-env local target-env qa target-env production broad production cleanup is read-only warning-gate.ts",
     migrationFiles: ["0000_init.sql"],
-    vitestConfig: "workers/app.ts scripts/script-environment.mjs scripts/cleanup-local-qa-data.mjs scripts/smoke-api-live.mjs scripts/qa-preflight.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts scripts/production-readiness.ts scripts/warning-gate.ts",
+    vitestConfig: "workers/app.ts scripts/script-environment.mjs scripts/cleanup-local-qa-data.mjs scripts/smoke-api-live.mjs scripts/qa-preflight.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts scripts/production-readiness.ts scripts/posthog-build-metadata.ts scripts/warning-gate.ts scripts/workflow-security.mjs",
     tsconfigScripts:
-      "scripts/build-output-hygiene.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts scripts/production-readiness.ts scripts/qa-preflight.ts scripts/react-router-build.ts scripts/warning-gate.ts",
+      "scripts/build-output-hygiene.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts scripts/production-readiness.ts scripts/posthog-build-metadata.ts scripts/qa-preflight.ts scripts/react-router-build.ts scripts/warning-gate.ts scripts/workflow-security.mjs",
   };
 }
 
@@ -809,9 +815,9 @@ describe("deployment preflight", () => {
       "  SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: ''",
     ],
     [
-      "break-glass acknowledgement validation",
-      'csp_report_only_break_glass must be ACK_REPORT_ONLY_CSP_ROLLBACK',
-      "break glass validation disabled",
+      "the executable release validator",
+      "node scripts/workflow-security.mjs validate-production-deploy-source",
+      "node scripts/workflow-security.mjs validate-ci-invocation",
     ],
     [
       "deploy step break-glass env",
@@ -837,18 +843,6 @@ describe("deployment preflight", () => {
       "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'",
       "github.event_name == 'workflow_dispatch'",
     ],
-    [
-      "trusted current-main rollback tooling",
-      "test -z \"$ROLLBACK_VERSION_ID\" || test \"$(git rev-parse HEAD)\" = \"$(git rev-parse origin/main)\"",
-      "test -z \"$ROLLBACK_VERSION_ID\"",
-    ],
-    [
-      "a successful push-CI lookup for manual releases",
-      "gh run list --workflow .github/workflows/ci.yml --branch main --commit \"$SOURCE_SHA\" --event push --status success",
-      "gh run list --workflow .github/workflows/ci.yml --branch main",
-    ],
-    ["exact canonical CI jobs", "gh run view \"$ci_run_id\" --json jobs", "gh run view \"$ci_run_id\" --json conclusion"],
-    ["the exact canonical Storybook run", "gh run view \"$storybook_run_id\" --json jobs", "gh run view \"$storybook_run_id\" --json conclusion"],
     ["immutable action references", CHECKOUT_ACTION, "actions/checkout@v6"],
   ])("requires %s", (_name, expected, replacement) => {
     const inputs = validInputs();
@@ -871,11 +865,41 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
   });
 
-  it("rejects a break-glass validation message hidden behind a false condition", () => {
+  it.each([
+    [
+      "a false wrapper",
+      "        run: node scripts/workflow-security.mjs validate-production-deploy-source",
+      "        run: |\n          if false; then\n            node scripts/workflow-security.mjs validate-production-deploy-source\n          fi",
+    ],
+    [
+      "a true wrapper",
+      "        run: node scripts/workflow-security.mjs validate-production-deploy-source",
+      "        run: |\n          if true; then\n            node scripts/workflow-security.mjs validate-production-deploy-source\n          fi",
+    ],
+    [
+      "a command prefix",
+      "        run: node scripts/workflow-security.mjs validate-production-deploy-source",
+      "        run: echo bypass && node scripts/workflow-security.mjs validate-production-deploy-source",
+    ],
+    [
+      "a command suffix",
+      "        run: node scripts/workflow-security.mjs validate-production-deploy-source",
+      "        run: node scripts/workflow-security.mjs validate-production-deploy-source || true",
+    ],
+  ])("rejects release validation hidden behind %s", (_label, expected, replacement) => {
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(expected, replacement);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it("rejects a duplicated shadow release validator step", () => {
     const inputs = validInputs();
     inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
-      'if [ -n "$SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS" ] && [ "$SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS" != "ACK_REPORT_ONLY_CSP_ROLLBACK" ]; then',
-      "if false; then",
+      "      - name: Validate release source",
+      "      - run: node scripts/workflow-security.mjs validate-production-deploy-source\n      - name: Validate release source",
     );
 
     const result = validateDeploymentConfig(inputs);
@@ -1119,8 +1143,8 @@ describe("deployment preflight", () => {
     const missingSteps = validateDeploymentConfig({
       ...validInputs(),
       ciWorkflow: validCiWorkflow().replace(
-        "    steps:\n      - uses: actions/checkout@v6",
-        "    no_steps:\n      - uses: actions/checkout@v6",
+        `    steps:\n      - uses: ${CHECKOUT_ACTION}`,
+        `    no_steps:\n      - uses: ${CHECKOUT_ACTION}`,
       ),
     });
     const multilineBranches = validateDeploymentConfig({
@@ -1207,6 +1231,96 @@ describe("deployment preflight", () => {
     expect(ungatedNewCommand.errors.map((item) => item.name)).toContain("CI workflow");
   });
 
+  it.each([
+    [
+      "missing dispatch authorization",
+      "  workflow_dispatch:\n    inputs:\n      source_sha:\n        required: true\n        type: string\n      csp_report_only_break_glass:\n        required: true\n        type: string\n",
+      "",
+    ],
+    [
+      "optional acknowledgement",
+      "      csp_report_only_break_glass:\n        required: true",
+      "      csp_report_only_break_glass:\n        required: false",
+    ],
+    [
+      "unbound checkout",
+      "          ref: ${{ env.CI_SOURCE_SHA }}",
+      "          ref: main",
+    ],
+    [
+      "credential persistence",
+      "          persist-credentials: false",
+      "          persist-credentials: true",
+    ],
+    [
+      "missing checkout action",
+      `      - uses: ${CHECKOUT_ACTION}\n        with:\n          ref: \${{ env.CI_SOURCE_SHA }}\n          persist-credentials: false\n`,
+      "",
+    ],
+    [
+      "missing setup action",
+      `      - uses: ${SETUP_NODE_ACTION}\n        with:\n          node-version: '22'\n`,
+      "",
+    ],
+    [
+      "action with a shadow run command",
+      `      - uses: ${SETUP_NODE_ACTION}\n        with:\n          node-version: '22'`,
+      `      - uses: ${SETUP_NODE_ACTION}\n        run: echo shadow\n        with:\n          node-version: '22'`,
+    ],
+    [
+      "duplicate setup action",
+      `      - uses: ${SETUP_NODE_ACTION}`,
+      `      - uses: ${SETUP_NODE_ACTION}\n        with:\n          node-version: '22'\n      - uses: ${SETUP_NODE_ACTION}`,
+    ],
+    [
+      "wrong setup Node version",
+      "          node-version: '22'",
+      "          node-version: '20'",
+    ],
+    [
+      "missing invocation validator",
+      "      - run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation\n",
+      "",
+    ],
+    [
+      "workflow BASH_ENV",
+      "env:\n",
+      "env:\n  BASH_ENV: /tmp/bypass\n",
+    ],
+    [
+      "job ENV",
+      "  coverage:\n    runs-on:",
+      "  coverage:\n    env:\n      ENV: /tmp/bypass\n    runs-on:",
+    ],
+    [
+      "step SHELLOPTS",
+      "      - run: pnpm test:coverage",
+      "      - run: pnpm test:coverage\n        env:\n          SHELLOPTS: xtrace",
+    ],
+    [
+      "custom default shell",
+      "    shell: bash",
+      "    shell: bash -l {0}",
+    ],
+    [
+      "step shell override",
+      "      - run: pnpm test:coverage",
+      "      - run: pnpm test:coverage\n        shell: python",
+    ],
+    [
+      "unrecognized pinned action",
+      `      - uses: ${SETUP_NODE_ACTION}`,
+      "      - uses: attacker/action@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    ],
+  ])("rejects CI workflow %s", (_label, expected, replacement) => {
+    const inputs = validInputs();
+    inputs.ciWorkflow = validCiWorkflow().replace(expected, replacement);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("CI workflow");
+  });
+
   it("rejects a block-style production workflow run step that does not deploy", () => {
     const inputs = validInputs();
     inputs.productionDeployWorkflow = [
@@ -1225,6 +1339,18 @@ describe("deployment preflight", () => {
       "          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
       "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
     ].join("\n");
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it("rejects a non-deploy block run before a later step property", () => {
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
+      "          else\n            pnpm run deploy:auto\n          fi",
+      "          else\n            echo no-deploy-command\n          fi\n        continue-on-error: false",
+    );
 
     const result = validateDeploymentConfig(inputs);
 
@@ -1528,7 +1654,7 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
   });
 
-  it("requires one authoritative HTTPS PostHog host in production, QA, and the client build", () => {
+  it("requires one authoritative HTTPS PostHog host in production and QA config", () => {
     const missingProduction = validInputs();
     delete (missingProduction.wrangler.vars as Record<string, unknown>).VITE_POSTHOG_HOST;
 
@@ -1545,9 +1671,6 @@ describe("deployment preflight", () => {
     const mismatched = validInputs();
     const mismatchedQaVars = ((mismatched.wrangler.env as Record<string, { vars: Record<string, unknown> }>).qa).vars;
     mismatchedQaVars.VITE_POSTHOG_HOST = "https://eu.i.posthog.com";
-
-    const missingBuildWiring = validInputs();
-    missingBuildWiring.reactRouterBuild = "pnpm exec react-router build";
 
     const eu = validInputs();
     (eu.wrangler.vars as Record<string, unknown>).VITE_POSTHOG_HOST = "https://eu.i.posthog.com";
@@ -1567,9 +1690,6 @@ describe("deployment preflight", () => {
       "PostHog CSP host config",
     );
     expect(validateDeploymentConfig(mismatched).errors.map((item) => item.name)).toContain(
-      "PostHog CSP host config",
-    );
-    expect(validateDeploymentConfig(missingBuildWiring).errors.map((item) => item.name)).toContain(
       "PostHog CSP host config",
     );
     expect(validateDeploymentConfig(eu).errors.map((item) => item.name)).not.toContain(
@@ -2474,6 +2594,20 @@ describe("deployment docs", () => {
       expect(doc).toContain("fails closed");
       expect(doc).toContain("enforcing CSP needs no break-glass acknowledgement");
     }
+  });
+
+  it("documents the exact-SHA authorized CI path for a report-only source rollback", async () => {
+    const deploymentDoc = await readFile("docs/deployment.md", "utf8");
+
+    expect(deploymentDoc).toContain("gh workflow run ci.yml --ref main");
+    expect(deploymentDoc).toContain("-f source_sha=\"$ROLLBACK_SHA\"");
+    expect(deploymentDoc).toContain(
+      "-f csp_report_only_break_glass=ACK_REPORT_ONLY_CSP_ROLLBACK",
+    );
+    expect(deploymentDoc).toContain("gh workflow run production-deploy.yml --ref main");
+    expect(deploymentDoc.indexOf("gh workflow run ci.yml --ref main")).toBeLessThan(
+      deploymentDoc.indexOf("gh workflow run production-deploy.yml --ref main"),
+    );
   });
 
   it("documents the full PostHog client and server telemetry setup", async () => {

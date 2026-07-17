@@ -54,16 +54,21 @@ describe("production release provenance", () => {
   });
 
   it("checks out, validates, deploys, and records the same source SHA", () => {
+    const workflowSecurity = readFileSync("scripts/workflow-security.mjs", "utf8");
+
     expect(production).toContain(
       "SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.source_sha }}",
     );
     expect(production).toContain("ref: ${{ env.SOURCE_SHA }}");
     expect(production).toContain("persist-credentials: false");
-    expect(production).toContain("grep -Eq '^[0-9a-f]{40}$'");
-    expect(production).toContain('git merge-base --is-ancestor "$SOURCE_SHA" origin/main');
-    expect(production).toContain('gh run list --workflow .github/workflows/ci.yml --branch main --commit "$SOURCE_SHA"');
-    expect(production).toContain("--event push --status success");
-    expect(production).toContain('test "$(git rev-parse origin/main)" = "$SOURCE_SHA"');
+    expect(production).toContain(
+      "run: node scripts/workflow-security.mjs validate-production-deploy-source",
+    );
+    expect(workflowSecurity).toContain("const SHA_PATTERN = /^[0-9a-f]{40}$/");
+    expect(workflowSecurity).toContain('await run("git", ["merge-base", "--is-ancestor", release.sourceSha, "origin/main"])');
+    expect(workflowSecurity).toContain('"--workflow", ".github/workflows/ci.yml"');
+    expect(workflowSecurity).toContain('const ciEvent = requiresAuthorizedDispatch ? "workflow_dispatch" : "push"');
+    expect(workflowSecurity).toContain('const originMainSha = (await run("git", ["rev-parse", "origin/main"])).trim()');
     expect(production).toContain("ROLLBACK_VERSION_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.rollback_version_id || '' }}");
     expect(production).toContain('pnpm run deploy:auto -- --rollback-version-id "$ROLLBACK_VERSION_ID"');
     expect(production).not.toContain("ALLOW_ROLLBACK");
@@ -115,8 +120,10 @@ describe("web dependency advisory gate", () => {
 
   it("requires the advisory job before production deploy can release an exact SHA", () => {
     const production = workflowSource("production-deploy.yml");
+    const workflowSecurity = readFileSync("scripts/workflow-security.mjs", "utf8");
 
-    expect(production).toContain("required_job=advisory");
+    expect(production).toContain("validate-production-deploy-source");
+    expect(workflowSecurity).toContain('["coverage", "e2e", "advisory"]');
   });
 });
 

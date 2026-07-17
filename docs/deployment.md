@@ -163,7 +163,34 @@ Notes:
 
 After deployment, verify public pages, authenticated Photo Studio, OAuth provider starts/callbacks, MCP, and API surfaces return `Content-Security-Policy`, `Reporting-Endpoints: csp-endpoint="/csp-report"`, and `X-Spoonjoy-Worker-Version` for the expected exact SHA. They should not return `Content-Security-Policy-Report-Only` during an enforcing release.
 
-The one-commit rollback is to change `SPOONJOY_CSP_MODE` from `enforce` to `report-only` in the affected `wrangler.json` environment and release that exact rollback SHA through the protected `production-deploy.yml` workflow dispatch. Set the workflow input `csp_report_only_break_glass` to `ACK_REPORT_ONLY_CSP_ROLLBACK`; local preflight/deploy commands that inspect the same rollback commit must also run with `SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS=ACK_REPORT_ONLY_CSP_ROLLBACK`. That auditable path restores `Content-Security-Policy-Report-Only` while preserving nonce behavior and violation telemetry. Remove the break-glass input/env and restore `SPOONJOY_CSP_MODE=enforce` in the follow-up commit.
+The one-commit rollback changes `SPOONJOY_CSP_MODE` from `enforce` to `report-only` in the affected `wrangler.json` environment. Ordinary push and pull-request CI intentionally remain fail-closed and do not receive break-glass state. An authorized operator must dispatch the canonical CI workflow against the exact rollback branch head; GitHub records the actor, run ID, ref, SHA, and acknowledgement, and every CI job rejects a checkout that differs from that SHA:
+
+```bash
+ROLLBACK_REF=worker/report-only-csp
+ROLLBACK_SHA="$(git rev-parse "$ROLLBACK_REF")"
+gh workflow run ci.yml --ref "$ROLLBACK_REF" \
+  -f source_sha="$ROLLBACK_SHA" \
+  -f csp_report_only_break_glass=ACK_REPORT_ONLY_CSP_ROLLBACK
+```
+
+After the reviewed rollback commit reaches `main`, run the same exact-SHA authorization on `main`; this is the successful canonical CI run consumed by the production release validator:
+
+```bash
+ROLLBACK_SHA="$(git rev-parse origin/main)"
+gh workflow run ci.yml --ref main \
+  -f source_sha="$ROLLBACK_SHA" \
+  -f csp_report_only_break_glass=ACK_REPORT_ONLY_CSP_ROLLBACK
+```
+
+Only after that run's `coverage`, `e2e`, and `advisory` jobs and the exact-SHA Storybook run pass, dispatch the protected production workflow:
+
+```bash
+gh workflow run production-deploy.yml --ref main \
+  -f source_sha="$ROLLBACK_SHA" \
+  -f csp_report_only_break_glass=ACK_REPORT_ONLY_CSP_ROLLBACK
+```
+
+The production workflow independently checks the audited CI dispatch before release. Local preflight/deploy commands that inspect the same rollback commit must also run with `SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS=ACK_REPORT_ONLY_CSP_ROLLBACK`. This path restores `Content-Security-Policy-Report-Only` while preserving nonce behavior and violation telemetry. Remove the break-glass input/env and restore `SPOONJOY_CSP_MODE=enforce` in the follow-up commit.
 
 ### Optional PostHog Telemetry
 

@@ -22,7 +22,7 @@ import {
   validateCutoverRunbook,
 } from "../../scripts/production-readiness";
 
-const VALID_CSP_NONCE = "AbCdEfGhIjKlMnOpQrStUv==";
+const VALID_CSP_NONCE = "AbCdEfGhIjKlMnOpQrStUg==";
 
 describe("production readiness helpers", () => {
   afterEach(() => {
@@ -278,13 +278,47 @@ describe("production readiness helpers", () => {
     });
     expect(validateCspHeaderSet(generated, { requireNonce: true })).toEqual([]);
 
-    const base64UrlNonce = "AbCdEfGhIjKlMnOpQrStUv";
+    const base64UrlNonce = "AbCdEfGhIjKlMnOpQrStUg";
     const base64Url = new Headers({
       "Content-Security-Policy": buildContentSecurityPolicy(base64UrlNonce),
       "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
       "X-Spoonjoy-Worker-Version": "22222222-2222-4222-8222-222222222222",
     });
     expect(validateCspHeaderSet(base64Url, { requireNonce: true })).toEqual([]);
+  });
+
+  it.each([
+    ["invalid single padding", `${"A".repeat(22)}=`],
+    ["invalid triple padding", `${"A".repeat(22)}===`],
+    ["malformed one-character remainder", "A".repeat(25)],
+    ["mixed standard and URL-safe alphabets", `${"A".repeat(20)}+_`],
+    ["non-canonical standard pad bits", `${"A".repeat(21)}B==`],
+    ["non-canonical URL-safe pad bits", `${"A".repeat(21)}B`],
+  ])("rejects %s in a nonce source", (_label, nonce) => {
+    const headers = new Headers({
+      "Content-Security-Policy": buildContentSecurityPolicy(nonce),
+      "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+      "X-Spoonjoy-Worker-Version": "22222222-2222-4222-8222-222222222222",
+    });
+
+    expect(validateCspHeaderSet(headers, { requireNonce: true })).toContain(
+      "CSP nonce contract",
+    );
+  });
+
+  it.each([
+    ["standard padded 16-byte value", "AAECAwQFBgcICQoLDA0ODw=="],
+    ["standard unpadded 16-byte value", "AAECAwQFBgcICQoLDA0ODw"],
+    ["URL-safe unpadded 16-byte value", "_-7dzLuqmYh3ZlVEM0IrJg"],
+    ["URL-safe padded 16-byte value", "_-7dzLuqmYh3ZlVEM0IrJg=="],
+  ])("accepts a canonical %s", (_label, nonce) => {
+    const headers = new Headers({
+      "Content-Security-Policy": buildContentSecurityPolicy(nonce),
+      "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+      "X-Spoonjoy-Worker-Version": "22222222-2222-4222-8222-222222222222",
+    });
+
+    expect(validateCspHeaderSet(headers, { requireNonce: true })).toEqual([]);
   });
 
   it("rejects duplicate directives even when the first occurrence is secure", () => {

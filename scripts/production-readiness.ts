@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { Buffer } from "node:buffer";
 import { existsSync, readFileSync } from "node:fs";
 import { resolvePostHogCspOrigins } from "../app/lib/security-headers.server";
 
@@ -137,7 +138,7 @@ function directiveEquals(
   );
 }
 
-const NONCE_SOURCE_PATTERN = /^'nonce-([A-Za-z0-9+/_-]+={0,2})'$/;
+const NONCE_SOURCE_PATTERN = /^'nonce-([^']+)'$/;
 
 function isValidNonceSource(source: string): boolean {
   const match = source.match(NONCE_SOURCE_PATTERN);
@@ -145,7 +146,25 @@ function isValidNonceSource(source: string): boolean {
   const encoded = match[1];
   const payload = encoded.replace(/=+$/, "");
   if (payload.length < 22) return false;
-  return encoded.length % 4 !== 1;
+
+  const usesStandardAlphabet = /[+/]/.test(payload);
+  const usesUrlSafeAlphabet = /[-_]/.test(payload);
+  if (usesStandardAlphabet && usesUrlSafeAlphabet) return false;
+  const alphabet = usesUrlSafeAlphabet
+    ? /^[A-Za-z0-9_-]+={0,2}$/
+    : /^[A-Za-z0-9+/]+={0,2}$/;
+  if (!alphabet.test(encoded)) return false;
+
+  const remainder = payload.length % 4;
+  if (remainder === 1) return false;
+  const requiredPadding = (4 - remainder) % 4;
+  const suppliedPadding = encoded.length - payload.length;
+  if (suppliedPadding !== 0 && suppliedPadding !== requiredPadding) return false;
+
+  const normalizedPayload = payload.replace(/-/g, "+").replace(/_/g, "/");
+  const canonical = `${normalizedPayload}${"=".repeat(requiredPadding)}`;
+  const decoded = Buffer.from(canonical, "base64");
+  return decoded.length >= 16 && decoded.toString("base64") === canonical;
 }
 
 function expectedCspDirectives(postHogHost?: string | null): Map<string, readonly string[]> {

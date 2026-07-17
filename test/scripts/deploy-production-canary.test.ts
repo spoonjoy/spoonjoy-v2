@@ -26,7 +26,7 @@ const TREE_HASH = "b".repeat(40);
 const TOOLING_SHA = "c".repeat(40);
 const PREVIOUS_VERSION = "11111111-1111-4111-8111-111111111111";
 const CANDIDATE_VERSION = "22222222-2222-4222-8222-222222222222";
-const VALID_CSP_NONCE = "AbCdEfGhIjKlMnOpQrStUv==";
+const VALID_CSP_NONCE = "AbCdEfGhIjKlMnOpQrStUg==";
 const VALID_CANDIDATE_CSP = buildContentSecurityPolicy(VALID_CSP_NONCE);
 const CUSTOM_POSTHOG_HOST = "https://analytics.example.com";
 
