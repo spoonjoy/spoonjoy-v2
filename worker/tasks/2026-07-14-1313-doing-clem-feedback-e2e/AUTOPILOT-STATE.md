@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `ac37d4a9` integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. All prior clean passes are historical because Quality Rounds 27-46 changed release process/recovery semantics.
+- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `6de7fdf8` integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. The synchronized full-state reviewer input is always resolved at dispatch with `git rev-parse HEAD` after this continuity update is committed/pushed; it is not the contract-only SHA. All prior clean passes are historical because Quality Rounds 27-47 changed release process/recovery semantics.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is `NEEDS_REVIEW` after the mandatory main-drift audit.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation and dependency setup have not started.
-- Active gate: fresh Quality Round 47 on immutable contract checkpoint `ac37d4a9`, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Round 46's schema/terminal reviewers converged; process found one compressed Unit29.2 repair sequence. Successor normal archive validation plus repair index now explicitly precede repaired-predecessor entry with separate original/validator SHA ownership. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
+- Active gate: fresh Quality Round 48 on the synchronized full-state HEAD containing contract checkpoint `6de7fdf8` plus this committed continuity, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Round 47's schema reviewer converged; process/terminal found missing shopping/save source rows, a contract-only continuity pointer, and non-branch-specific normal archive sets. All three are now explicit. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Synchronize checkpoint `ac37d4a9` into Desk, run fresh Quality Round 47 plus consecutive Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
+After committing/pushing this continuity update, resolve the synchronized full-state reviewer input with `git rev-parse HEAD`; record that exact SHA in Desk task metadata and every reviewer prompt, synchronize all four mirrors byte-for-byte, run fresh Quality Round 48 plus consecutive Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
 
 ## Operator-Locked Rules
 
@@ -40,7 +40,7 @@ Synchronize checkpoint `ac37d4a9` into Desk, run fresh Quality Round 47 plus con
 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
-| Planning reviewer gate | active | Quality Round 46's repair-sequence gap is fixed at immutable contract `ac37d4a9`; schema/terminal converged only at the superseded input | Run fresh Quality Round 47 and scrutiny convergence |
+| Planning reviewer gate | active | Quality Round 47's traceability/closed-set/full-state gaps are fixed at contract `6de7fdf8`; schema converged only at the superseded input | Resolve synchronized full-state HEAD, then run fresh Quality Round 48 and scrutiny convergence |
 | Doing review chain | active | Spawn generations, provenance ownership, successor/predecessor closure, track linearization, archive validation, and terminal receipts are executable and fully assigned | Re-converge and restore final handoff |
 | Work Doer Units 0-37 | deferred by gate | Full red/green/verify/visual/ship queue is defined | Restart Unit0a only after fresh final handoff |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
@@ -56,4 +56,4 @@ Synchronize checkpoint `ac37d4a9` into Desk, run fresh Quality Round 47 plus con
 
 Not satisfied. The reopened reviewer gate and all delivery work remain.
 
-Last updated: 2026-07-17 11:38:00 PDT.
+Last updated: 2026-07-17 11:53:00 PDT.
