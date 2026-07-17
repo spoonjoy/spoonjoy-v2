@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `cd6576d4` integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. All prior clean passes are historical because Quality Rounds 27-37 changed release process/recovery semantics.
+- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `761db638` integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. All prior clean passes are historical because Quality Rounds 27-38 changed release process/recovery semantics.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is `NEEDS_REVIEW` after the mandatory main-drift audit.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation and dependency setup have not started.
-- Active gate: fresh Quality Round 38 on immutable contract checkpoint `cd6576d4`, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Round 37's process/executor reviewer converged and its schema/archive reviewers returned six findings; the repaired contract now has one exact AgentCommand schema, one complete Continuation shape, Health failure-sample retention, the exact fifteen-script set, release-terminal-only repaired closure, and distinct ordinary-normal, repair-successor-normal, and repaired-predecessor closed sets. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
+- Active gate: fresh Quality Round 39 on immutable contract checkpoint `761db638`, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Round 38 returned five unique findings; the repaired contract now creates, tests, implements, measures, and verifies release-terminal as the sole terminal effect owner in the fourteen-script pre-visual set, leaves the fifteenth visual runner to Unit31, defines an exact three-branch ReleaseTerminalResult, and suppresses Slugger for repair-successor-normal until repaired-predecessor closure. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Synchronize checkpoint `cd6576d4` into Desk, run fresh Quality Round 38 plus consecutive Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
+Synchronize checkpoint `761db638` into Desk, run fresh Quality Round 39 plus consecutive Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
 
 ## Operator-Locked Rules
 
@@ -40,7 +40,7 @@ Synchronize checkpoint `cd6576d4` into Desk, run fresh Quality Round 38 plus con
 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
-| Planning reviewer gate | active | Quality Round 37's six schema/archive gaps plus the parent stale-copy scan are fixed at immutable contract `cd6576d4`; process/executor already converged at the superseded input | Run fresh Quality Round 38 and scrutiny convergence |
+| Planning reviewer gate | active | Quality Round 38's five ownership/count/notification gaps plus the parent stale-wording scan are fixed at immutable contract `761db638` | Run fresh Quality Round 39 and scrutiny convergence |
 | Doing review chain | active | Spawn generations, provenance ownership, successor/predecessor closure, track linearization, archive validation, and terminal receipts are executable and fully assigned | Re-converge and restore final handoff |
 | Work Doer Units 0-37 | deferred by gate | Full red/green/verify/visual/ship queue is defined | Restart Unit0a only after fresh final handoff |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
@@ -56,4 +56,4 @@ Synchronize checkpoint `cd6576d4` into Desk, run fresh Quality Round 38 plus con
 
 Not satisfied. The reopened reviewer gate and all delivery work remain.
 
-Last updated: 2026-07-16 23:01:26 PDT.
+Last updated: 2026-07-16 23:24:30 PDT.
