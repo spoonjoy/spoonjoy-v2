@@ -86,6 +86,17 @@ describe("warning gate", () => {
     expect(findUnexpectedWarnings("[ warning ] hidden on stdout")).toEqual([
       "[ warning ] hidden on stdout",
     ]);
+    expect(findUnexpectedWarnings("✓ [warn] hidden behind a status prefix")).toEqual([
+      "✓ [warn] hidden behind a status prefix",
+    ]);
+    expect(findUnexpectedWarnings("\u001b[2K\u001b[1GWarning: hidden after cursor controls")).toEqual([
+      "Warning: hidden after cursor controls",
+    ]);
+    expect(findUnexpectedWarnings("\u001b]0;build title\u0007Warning: hidden after OSC title\n")).toEqual([
+      "Warning: hidden after OSC title",
+    ]);
+    expect(findUnexpectedWarnings("✓ ordinary passing test")).toEqual([]);
+    expect(findUnexpectedWarnings("\u001b[2K\u001b[1G✓ ordinary passing test")).toEqual([]);
     expect(findUnexpectedWarnings("[warn:build] hidden on stdout")).toEqual([
       "[warn:build] hidden on stdout",
     ]);

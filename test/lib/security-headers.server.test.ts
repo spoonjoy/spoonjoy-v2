@@ -261,6 +261,9 @@ describe("resolvePostHogBuildHost", () => {
     expect(() => resolvePostHogBuildHost(wrangler, "qa")).toThrow(/origin-only HTTPS/);
     expect(() => resolvePostHogBuildHost(wrangler, "missing")).toThrow(/missing/);
     expect(() => resolvePostHogBuildHost(null as never)).toThrow(/production.*missing/);
+    expect(() => resolvePostHogBuildHost({
+      vars: { VITE_POSTHOG_HOST: " https://us.i.posthog.com " },
+    })).toThrow(/origin-only HTTPS/);
   });
 });
 

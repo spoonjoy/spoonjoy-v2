@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { parseDocument } from "yaml";
 
 const WORKFLOW_DIRECTORY = ".github/workflows";
 
@@ -55,6 +56,10 @@ describe("production release provenance", () => {
 
   it("checks out, validates, deploys, and records the same source SHA", () => {
     const workflowSecurity = readFileSync("scripts/workflow-security.mjs", "utf8");
+    const parsed = parseDocument(production).toJS() as {
+      jobs: { deploy: { steps: Array<{ name?: string; run?: string }> } };
+    };
+    const deploySteps = parsed.jobs.deploy.steps;
 
     expect(production).toContain(
       "SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.source_sha }}",
@@ -70,24 +75,24 @@ describe("production release provenance", () => {
     expect(workflowSecurity).toContain('const ciEvent = requiresAuthorizedDispatch ? "workflow_dispatch" : "push"');
     expect(workflowSecurity).toContain('const originMainSha = (await run("git", ["rev-parse", "origin/main"])).trim()');
     expect(production).toContain("ROLLBACK_VERSION_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.rollback_version_id || '' }}");
-    expect(production).toContain('pnpm run deploy:auto -- --rollback-version-id "$ROLLBACK_VERSION_ID"');
+    expect(deploySteps.filter((step) => step.run === "node scripts/workflow-security.mjs run-production-deploy"))
+      .toHaveLength(1);
+    expect(workflowSecurity).toContain('const args = ["run", "deploy:auto"]');
+    expect(workflowSecurity).toContain('args.push("--", "--rollback-version-id", rollbackVersionId)');
+    expect(workflowSecurity).toContain('await run("pnpm", args)');
     expect(production).not.toContain("ALLOW_ROLLBACK");
-    expect(production).toContain('pnpm run deploy:auto');
     expect(production).not.toMatch(/^\s{2}VITE_POSTHOG_HOST:/m);
     expect(production).toContain('Source SHA: `%s`');
     expect(production).not.toMatch(/^\s{2}issues:\s+write$/m);
     expect(production).toMatch(/report-canary:[\s\S]*permissions:[\s\S]*issues: write/);
 
-    const checkout = production.indexOf("ref: ${{ env.SOURCE_SHA }}");
-    const validation = production.indexOf("name: Validate release source");
-    const setup = production.indexOf("name: Setup Node.js");
-    const deploy = production.indexOf("pnpm run deploy:auto");
-    const record = production.indexOf('Source SHA: `%s`');
-    expect(checkout).toBeGreaterThan(-1);
-    expect(checkout).toBeLessThan(validation);
-    expect(validation).toBeLessThan(setup);
-    expect(setup).toBeLessThan(deploy);
-    expect(deploy).toBeLessThan(record);
+    const stepNames = deploySteps.map((step) => step.name ?? "");
+    const checkout = stepNames.indexOf("Checkout approved source SHA");
+    const validation = stepNames.indexOf("Validate release source");
+    const setup = stepNames.indexOf("Setup Node.js");
+    const deploy = stepNames.indexOf("Deploy staged release to Cloudflare Workers");
+    const record = stepNames.indexOf("Record release source");
+    expect([checkout, validation, setup, deploy, record]).toEqual([0, 2, 3, 8, 9]);
   });
 });
 

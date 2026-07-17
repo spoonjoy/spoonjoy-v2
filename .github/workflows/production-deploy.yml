@@ -100,12 +100,7 @@ jobs:
           SPOONJOY_RELEASE_SHA: ${{ env.SOURCE_SHA }}
           SPOONJOY_MCP_CANARY_BASE_URL: https://spoonjoy.app
           SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: ${{ env.SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS }}
-        run: |
-          if [ -n "$ROLLBACK_VERSION_ID" ]; then
-            pnpm run deploy:auto -- --rollback-version-id "$ROLLBACK_VERSION_ID"
-          else
-            pnpm run deploy:auto
-          fi
+        run: node scripts/workflow-security.mjs run-production-deploy
 
       - name: Record release source
         if: always()

@@ -17,6 +17,7 @@
     "scripts/production-readiness.ts",
     "scripts/posthog-build-metadata.ts",
     "scripts/react-router-build.ts",
+    "scripts/react-router-build-runner.ts",
     "scripts/qa-preflight.ts",
     "scripts/warning-gate.ts",
     "scripts/workflow-security.mjs"

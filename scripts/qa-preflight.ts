@@ -17,7 +17,11 @@ import {
   QA_ENV_NAME as SHARED_QA_ENV_NAME,
   QA_R2_BUCKET as SHARED_QA_R2_BUCKET,
 } from "./script-environment.mjs";
-import { POSTHOG_CLIENT_BUILD_METADATA_PATH } from "./posthog-build-metadata";
+import {
+  POSTHOG_CLIENT_BUILD_METADATA_PATH,
+  bundledPostHogHostMatches,
+  readPostHogClientBundleSources,
+} from "./posthog-build-metadata";
 
 export const QA_ENV_NAME = SHARED_QA_ENV_NAME;
 export const QA_BASE_URL = SHARED_QA_BASE_URL;
@@ -51,6 +55,7 @@ export interface QaPreflightDeps {
   createProbeFile?: () => Promise<ProbeFile>;
   readGeneratedBuildConfig?: () => Promise<Record<string, unknown>>;
   readClientBuildMetadata?: () => Promise<Record<string, unknown>>;
+  readClientBundleSources?: () => Promise<readonly string[]>;
   env?: NodeJS.ProcessEnv;
 }
 
@@ -246,6 +251,7 @@ function hasExactKeys(value: Record<string, unknown>, expected: readonly string[
 export function validateQaGeneratedBuildConfig(
   config: Record<string, unknown>,
   clientMetadata: Record<string, unknown> = {},
+  clientBundleSources: readonly string[] = [],
 ): PreflightCheck {
   const vars = objectRecord(config.vars);
   const db = bindingRecord(config.d1_databases, "DB");
@@ -255,7 +261,7 @@ export function validateQaGeneratedBuildConfig(
   const publicEnv = objectRecord(clientMetadata.publicEnv);
   const runtimeCsp = objectRecord(clientMetadata.runtimeCsp);
   const workerPostHogHost = typeof vars.VITE_POSTHOG_HOST === "string"
-    ? vars.VITE_POSTHOG_HOST.trim()
+    ? vars.VITE_POSTHOG_HOST
     : "";
   const resolvedRuntimeCsp = resolvePostHogCspOrigins({
     VITE_POSTHOG_HOST: workerPostHogHost,
@@ -270,7 +276,8 @@ export function validateQaGeneratedBuildConfig(
     publicEnv.VITE_POSTHOG_HOST === workerPostHogHost &&
     hasExactKeys(runtimeCsp, ["assetsOrigin", "ingestOrigin"]) &&
     runtimeCsp.ingestOrigin === resolvedRuntimeCsp.ingestOrigin &&
-    runtimeCsp.assetsOrigin === resolvedRuntimeCsp.assetsOrigin;
+    runtimeCsp.assetsOrigin === resolvedRuntimeCsp.assetsOrigin &&
+    bundledPostHogHostMatches(clientBundleSources, workerPostHogHost);
   const hasExpectedRateLimitBindings =
     rateLimits.names.length === REQUIRED_QA_RATE_LIMIT_BINDINGS.length &&
     rateLimits.namespaceIds.length === REQUIRED_QA_RATE_LIMIT_BINDINGS.length &&
@@ -448,6 +455,7 @@ export async function runQaPreflight(rootDir = process.cwd(), deps: QaPreflightD
   const createProbeFile = deps.createProbeFile ?? createDefaultProbeFile;
   const readGeneratedBuildConfig = deps.readGeneratedBuildConfig ?? (() => readDefaultGeneratedBuildConfig(rootDir));
   const readClientBuildMetadata = deps.readClientBuildMetadata ?? (() => readDefaultClientBuildMetadata(rootDir));
+  const readClientBundleSources = deps.readClientBundleSources ?? (() => readPostHogClientBundleSources(rootDir));
 
   const checks = [
     await checkStaticConfig(rootDir),
@@ -455,6 +463,7 @@ export async function runQaPreflight(rootDir = process.cwd(), deps: QaPreflightD
       ? [validateQaGeneratedBuildConfig(
           await readGeneratedBuildConfig(),
           await readClientBuildMetadata(),
+          await readClientBundleSources(),
         )]
       : []),
     await checkQaMigrations(runWrangler, env),
@@ -491,6 +500,7 @@ export async function main(deps: QaMainDeps = {}): Promise<void> {
     createProbeFile: deps.createProbeFile,
     readGeneratedBuildConfig: deps.readGeneratedBuildConfig,
     readClientBuildMetadata: deps.readClientBuildMetadata,
+    readClientBundleSources: deps.readClientBundleSources,
     env: deps.env,
   });
   for (const item of result.checks) {

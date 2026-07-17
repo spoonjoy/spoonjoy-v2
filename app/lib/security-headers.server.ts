@@ -107,7 +107,7 @@ export function resolvePostHogBuildHost(
   }
 
   const configured = objectValue(environmentConfig.vars)?.VITE_POSTHOG_HOST;
-  const raw = typeof configured === "string" ? configured.trim() : "";
+  const raw = typeof configured === "string" ? configured : "";
   const origin = safeHttpsOrigin(raw);
   if (!origin || raw !== origin) {
     throw new Error(

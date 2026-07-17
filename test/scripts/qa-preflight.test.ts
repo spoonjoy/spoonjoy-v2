@@ -131,6 +131,18 @@ function clientBuildMetadata(host = "https://us.i.posthog.com") {
   };
 }
 
+function clientBundle(host = "https://us.i.posthog.com"): readonly string[] {
+  return [`const spoonjoyEnv={VITE_POSTHOG_HOST:${JSON.stringify(host)}};`];
+}
+
+function validateGeneratedBuild(
+  config: Record<string, unknown>,
+  metadata: Record<string, unknown>,
+  bundleSources: readonly string[],
+) {
+  return validateQaGeneratedBuildConfig(config, metadata, bundleSources);
+}
+
 function warningCleanStorybookWorkflow(): string {
   return [
     "name: Storybook",
@@ -256,7 +268,7 @@ async function createStaticConfigRoot(overrides: {
 
 describe("validateQaGeneratedBuildConfig", () => {
   it("passes for a generated QA Worker config", () => {
-    const check = validateQaGeneratedBuildConfig(qaGeneratedBuildConfig(), clientBuildMetadata());
+    const check = validateGeneratedBuild(qaGeneratedBuildConfig(), clientBuildMetadata(), clientBundle());
 
     expect(check.ok).toBe(true);
   });
@@ -284,7 +296,7 @@ describe("validateQaGeneratedBuildConfig", () => {
         { name: "API_IP_RATE_LIMITER", namespace_id: "2002" },
         { name: "AUTH_IP_RATE_LIMITER", namespace_id: "2003" },
       ],
-    }, clientBuildMetadata());
+    }, clientBuildMetadata(), clientBundle());
 
     expect(check.ok).toBe(true);
   });
@@ -356,7 +368,7 @@ describe("validateQaGeneratedBuildConfig", () => {
     const config = qaGeneratedBuildConfig();
     (config.vars as Record<string, string>).VITE_POSTHOG_HOST = host;
 
-    expect(validateQaGeneratedBuildConfig(config, clientBuildMetadata(host)).ok).toBe(true);
+    expect(validateGeneratedBuild(config, clientBuildMetadata(host), clientBundle(host)).ok).toBe(true);
   });
 
   it("fails when generated Worker or client artifacts omit or mismatch the PostHog host", () => {
@@ -380,6 +392,27 @@ describe("validateQaGeneratedBuildConfig", () => {
     };
 
     expect(validateQaGeneratedBuildConfig(config, metadata)).toMatchObject({ ok: false });
+  });
+
+  it("rejects whitespace in the generated Worker host instead of normalizing it", () => {
+    const config = qaGeneratedBuildConfig();
+    (config.vars as Record<string, string>).VITE_POSTHOG_HOST = " https://us.i.posthog.com ";
+
+    expect(validateGeneratedBuild(config, clientBuildMetadata(), clientBundle()).ok).toBe(false);
+  });
+
+  it("requires the actual client bundle host and rejects mismatch, evil, missing, and dead text", () => {
+    const config = qaGeneratedBuildConfig();
+    const metadata = clientBuildMetadata();
+
+    expect(validateGeneratedBuild(config, metadata, []).ok).toBe(false);
+    expect(validateGeneratedBuild(config, metadata, clientBundle("https://eu.i.posthog.com")).ok).toBe(false);
+    expect(validateGeneratedBuild(config, metadata, clientBundle("https://evil.example")).ok).toBe(false);
+    expect(validateGeneratedBuild(
+      config,
+      metadata,
+      ["const note='VITE_POSTHOG_HOST=https://us.i.posthog.com';"],
+    ).ok).toBe(false);
   });
 });
 
@@ -461,6 +494,7 @@ describe("runQaPreflight", () => {
       runWrangler,
       readGeneratedBuildConfig: async () => qaGeneratedBuildConfig(),
       readClientBuildMetadata: async () => clientBuildMetadata(),
+      readClientBundleSources: async () => clientBundle(),
       createProbeFile: async () => ({
         path: "/tmp/spoonjoy-qa-preflight.txt",
         body: "spoonjoy qa preflight",
@@ -477,12 +511,19 @@ describe("runQaPreflight", () => {
     try {
       await mkdir(path.join(root, "build/server"), { recursive: true });
       await mkdir(path.join(root, "build/client/.vite"), { recursive: true });
+      await mkdir(path.join(root, "build/client/assets"), { recursive: true });
       await writeFile(path.join(root, "build/server/wrangler.json"), JSON.stringify(qaGeneratedBuildConfig()), "utf8");
       await writeFile(
         path.join(root, "build/client/.vite/spoonjoy-build-metadata.json"),
         JSON.stringify(clientBuildMetadata()),
         "utf8",
       );
+      await writeFile(
+        path.join(root, "build/client/assets/entry.js"),
+        clientBundle()[0],
+        "utf8",
+      );
+      await writeFile(path.join(root, "build/client/assets/entry.css"), "body{}", "utf8");
 
       const result = await runQaPreflight(root, {
         env: {

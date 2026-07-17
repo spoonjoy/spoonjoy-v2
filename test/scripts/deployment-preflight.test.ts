@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
@@ -19,132 +20,24 @@ const SETUP_NODE_ACTION = "actions/setup-node@249970729cb0ef3589644e2896645e5dc5
 const UPLOAD_ARTIFACT_ACTION = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
 const DOWNLOAD_ARTIFACT_ACTION = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c";
 
-function secureProductionDeployWorkflow(): string {
+function replaceRequired(source: string, expected: string, replacement: string): string {
+  if (!source.includes(expected)) {
+    throw new Error(`Workflow fixture does not contain required mutation target: ${expected}`);
+  }
+  return source.replace(expected, replacement);
+}
+
+function canonicalReactRouterBuildEntrypoint(): string {
   return [
-    "name: Production Deploy",
-    "on:",
-    "  workflow_run:",
-    "    workflows: [CI]",
-    "    branches: [main]",
-    "    types: [completed]",
-    "  workflow_dispatch:",
-    "    inputs:",
-    "      source_sha:",
-    "        required: true",
-    "        type: string",
-    "      rollback_version_id:",
-    "        required: false",
-    "        default: ''",
-    "        type: string",
-    "      csp_report_only_break_glass:",
-    "        required: false",
-    "        default: ''",
-    "        type: string",
-    "permissions:",
-    "  actions: read",
-    "  contents: read",
-    "env:",
-    "  GIT_CONFIG_COUNT: '1'",
-    "  GIT_CONFIG_KEY_0: init.defaultBranch",
-    "  GIT_CONFIG_VALUE_0: main",
-    "  SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.source_sha }}",
-    "  ROLLBACK_VERSION_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.rollback_version_id || '' }}",
-    "  SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: ${{ github.event_name == 'workflow_dispatch' && inputs.csp_report_only_break_glass || '' }}",
-    "jobs:",
-    "  deploy:",
-    "    if: (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.path == '.github/workflows/ci.yml') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')",
-    "    runs-on: ubuntu-latest",
-    "    environment: production",
-    "    steps:",
-    `      - uses: ${CHECKOUT_ACTION} # v6`,
-    "        if: env.ROLLBACK_VERSION_ID == ''",
-    "        with:",
-    "          ref: ${{ env.SOURCE_SHA }}",
-    "          fetch-depth: 0",
-    "          persist-credentials: false",
-    `      - uses: ${CHECKOUT_ACTION} # v6`,
-    "        if: env.ROLLBACK_VERSION_ID != ''",
-    "        with:",
-    "          ref: ${{ github.workflow_sha }}",
-    "          fetch-depth: 0",
-    "          persist-credentials: false",
-    "      - name: Validate release source",
-    "        env:",
-    "          GH_TOKEN: ${{ github.token }}",
-    "          WORKFLOW_RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}",
-    "          WORKFLOW_RUN_EVENT: ${{ github.event.workflow_run.event }}",
-    "          WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}",
-    "          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}",
-    "          WORKFLOW_RUN_PATH: ${{ github.event.workflow_run.path }}",
-    "        run: node scripts/workflow-security.mjs validate-production-deploy-source",
-    `      - uses: ${SETUP_NODE_ACTION} # v6`,
-    "        with:",
-    "          node-version: '22'",
-    "      - name: Activate pnpm",
-    "        run: |",
-    "          corepack enable",
-    "          corepack prepare pnpm@10.28.1 --activate",
-    "      - name: Deploy to Cloudflare Workers",
-    "        env:",
-    "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
-    "          CLOUDFLARE_D1_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}",
-    "          CLOUDFLARE_WORKERS_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}",
-    "          SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: ${{ env.SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS }}",
-    "        run: |",
-    "          if [ -n \"$ROLLBACK_VERSION_ID\" ]; then",
-    "            pnpm run deploy:auto -- --rollback-version-id \"$ROLLBACK_VERSION_ID\"",
-    "          else",
-    "            pnpm run deploy:auto",
-    "          fi",
-    "      - name: Record release source",
-    "        if: always()",
-    "        run: printf 'Source SHA: `%s`\\n' \"$SOURCE_SHA\" >> \"$GITHUB_STEP_SUMMARY\"",
-    "      - name: Ensure release artifact exists",
-    "        if: always()",
-    "        run: |",
-    "          mkdir -p mcp-oauth-canary-artifacts",
-    "          test -f mcp-oauth-canary-artifacts/production-release.json || jq -n --arg source_sha \"$SOURCE_SHA\" '{status: \"failed_before_stage\", sourceSha: $source_sha, phase: \"validate\", reviewedMigrations: [], migrationApply: \"not_started\", databaseRollbackSupported: false, failure: \"Release workflow failed before the orchestrator wrote an artifact.\"}' > mcp-oauth-canary-artifacts/production-release.json",
-    "      - name: Upload MCP OAuth canary artifacts",
-    "        if: always()",
-    `        uses: ${UPLOAD_ARTIFACT_ACTION} # v7`,
-    "        with:",
-    "          name: mcp-oauth-canary-artifacts",
-    "          path: mcp-oauth-canary-artifacts/",
-    "          if-no-files-found: error",
-    "  report-canary:",
-    "    if: always() && needs.deploy.result != 'skipped'",
-    "    needs: deploy",
-    "    permissions:",
-    "      contents: read",
-    "      issues: write",
-    "    runs-on: ubuntu-latest",
-    "    steps:",
-    `      - uses: ${CHECKOUT_ACTION} # v6`,
-    "        with:",
-    "          ref: ${{ github.workflow_sha }}",
-    "          persist-credentials: false",
-    `      - uses: ${SETUP_NODE_ACTION} # v6`,
-    "        with:",
-    "          node-version: '22'",
-    "      - name: Activate pnpm",
-    "        run: |",
-    "          corepack enable",
-    "          corepack prepare pnpm@10.28.1 --activate",
-    "      - name: Download MCP OAuth canary artifacts",
-    `        uses: ${DOWNLOAD_ARTIFACT_ACTION} # v8`,
-    "        continue-on-error: true",
-    "        with:",
-    "          name: mcp-oauth-canary-artifacts",
-    "          path: mcp-oauth-canary-artifacts",
-    "      - name: Report MCP OAuth canary",
-    "        if: always()",
-    "        env:",
-    "          GITHUB_TOKEN: ${{ github.token }}",
-    "          MCP_CANARY_STATUS: ${{ needs.deploy.result }}",
-    "          MCP_CANARY_WORKFLOW_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-    "          MCP_CANARY_ARTIFACT_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts",
-    "        run: node scripts/report-mcp-oauth-canary.mjs --artifact-dir mcp-oauth-canary-artifacts --status \"$MCP_CANARY_STATUS\" --workflow-run-url \"$MCP_CANARY_WORKFLOW_RUN_URL\" --artifact-url \"$MCP_CANARY_ARTIFACT_URL\" --manage-issue",
+    'import { runReactRouterBuildCli } from "./react-router-build-runner";',
+    "",
+    "void runReactRouterBuildCli();",
+    "",
   ].join("\n");
+}
+
+function secureProductionDeployWorkflow(): string {
+  return readFileSync(".github/workflows/production-deploy.yml", "utf8");
 }
 
 function validQaImageCoverSmokeWorkflow(): string {
@@ -272,76 +165,7 @@ function validStorybookWorkflow(): string {
 }
 
 function validCiWorkflow(): string {
-  return [
-    "name: CI",
-    "on:",
-    "  push:",
-    "    branches: [main]",
-    "  pull_request:",
-    "    branches: [main]",
-    "  workflow_dispatch:",
-    "    inputs:",
-    "      source_sha:",
-    "        required: true",
-    "        type: string",
-    "      csp_report_only_break_glass:",
-    "        required: true",
-    "        type: string",
-    "defaults:",
-    "  run:",
-    "    shell: bash",
-    "env:",
-    "  GIT_CONFIG_COUNT: '1'",
-    "  GIT_CONFIG_KEY_0: init.defaultBranch",
-    "  GIT_CONFIG_VALUE_0: main",
-    "  CI_SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.sha }}",
-    "  SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: ${{ github.event_name == 'workflow_dispatch' && inputs.csp_report_only_break_glass || '' }}",
-    "jobs:",
-    "  coverage:",
-    "    runs-on: ubuntu-latest",
-    "    steps:",
-    `      - uses: ${CHECKOUT_ACTION}`,
-    "        with:",
-    "          ref: ${{ env.CI_SOURCE_SHA }}",
-    "          persist-credentials: false",
-    "      - run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation",
-    `      - uses: ${SETUP_NODE_ACTION}`,
-    "        with:",
-    "          node-version: '22'",
-    "      - name: Activate pnpm",
-    "        run: |",
-    "          node scripts/warning-gate.ts -- corepack enable",
-    "          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate",
-    "      - run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile",
-    "      - run: node scripts/warning-gate.ts -- pnpm db:seed",
-    "      - run: node scripts/warning-gate.ts -- pnpm run typecheck",
-    "      - run: pnpm test:coverage",
-    "      - run: node scripts/warning-gate.ts -- pnpm build",
-    "  e2e:",
-    "    runs-on: ubuntu-latest",
-    "    steps:",
-    `      - uses: ${CHECKOUT_ACTION}`,
-    "        with:",
-    "          ref: ${{ env.CI_SOURCE_SHA }}",
-    "          persist-credentials: false",
-    "      - run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation",
-    `      - uses: ${SETUP_NODE_ACTION}`,
-    "        with:",
-    "          node-version: '22'",
-    "      - name: Activate pnpm",
-    "        run: |",
-    "          node scripts/warning-gate.ts -- corepack enable",
-    "          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate",
-    "      - run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile",
-    "      - run: node scripts/warning-gate.ts -- pnpm db:seed",
-    "      - name: Install Playwright",
-    "        run: |",
-    "          node scripts/warning-gate.ts -- pnpm exec playwright install-deps --dry-run chromium",
-    "          node scripts/warning-gate.ts -- sudo apt-get update",
-    "          node scripts/warning-gate.ts -- sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends xvfb fonts-noto-color-emoji fonts-unifont libfontconfig1 libfreetype6 xfonts-cyrillic xfonts-scalable fonts-liberation fonts-ipafont-gothic fonts-wqy-zenhei fonts-tlwg-loma-otf fonts-freefont-ttf libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 libcairo2 libcups2t64 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0t64 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2",
-    "          node scripts/warning-gate.ts -- pnpm exec playwright install chromium",
-    "      - run: pnpm test:e2e",
-  ].join("\n");
+  return readFileSync(".github/workflows/ci.yml", "utf8");
 }
 
 function validGitignore(): string {
@@ -456,13 +280,13 @@ function validInputs(): DeploymentPreflightInputs {
     gitignore: validGitignore(),
     pnpmWorkspace: validPnpmWorkspace(),
     cloudflareEnvDts: "DB?: D1Database; PHOTOS?: R2Bucket; CF_VERSION_METADATA?: WorkerVersionMetadata; SPOONJOY_CSP_MODE?: string; VITE_POSTHOG_HOST?: string; SESSION_SECRET?: string; OPENAI_API_KEY?: string; GOOGLE_API_KEY?: string; GEMINI_API_KEY?: string; GEMINI_IMAGE_MODEL?: string; GEMINI_IMAGE_TIMEOUT_MS?: string; IMAGE_PROVIDER_PRIMARY?: string; IMAGE_PROVIDER_FALLBACKS?: string; GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string; GITHUB_CLIENT_ID?: string; GITHUB_CLIENT_SECRET?: string; APPLE_CLIENT_ID?: string; APPLE_NATIVE_CLIENT_IDS?: string; APPLE_TEAM_ID?: string; APPLE_KEY_ID?: string; APPLE_PRIVATE_KEY?: string; VAPID_PUBLIC_KEY?: string; VAPID_PRIVATE_KEY?: string; VAPID_SUBJECT?: string; POSTHOG_KEY?: string; POSTHOG_HOST?: string; POSTHOG_DISABLED?: string;",
-    reactRouterBuild: "resolvePostHogBuildHost readFileSync(\"wrangler.json\", \"utf8\") CLOUDFLARE_ENV VITE_POSTHOG_HOST",
+    reactRouterBuild: canonicalReactRouterBuildEntrypoint(),
     readme: "pnpm run deploy:preflight wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_NATIVE_CLIENT_IDS APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY GOOGLE_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT GEMINI_API_KEY GEMINI_IMAGE_MODEL GEMINI_IMAGE_TIMEOUT_MS gemini-3.1-flash-image IMAGE_PROVIDER_PRIMARY IMAGE_PROVIDER_FALLBACKS SPOONJOY_CSP_MODE Content-Security-Policy-Report-Only one-commit rollback SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS ACK_REPORT_ONLY_CSP_ROLLBACK VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry docs/analytics-privacy.md cleanup:local cleanup:local:apply cleanup:remote:qa cleanup:remote:qa:apply cleanup:production target-env local target-env qa target-env production broad production cleanup is read-only warning-gate.ts",
     deploymentDoc: "pnpm run deploy:preflight smoke:api wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_NATIVE_CLIENT_IDS APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY GOOGLE_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT GEMINI_API_KEY GEMINI_IMAGE_MODEL GEMINI_IMAGE_TIMEOUT_MS gemini-3.1-flash-image IMAGE_PROVIDER_PRIMARY IMAGE_PROVIDER_FALLBACKS SPOONJOY_CSP_MODE Content-Security-Policy-Report-Only one-commit rollback SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS ACK_REPORT_ONLY_CSP_ROLLBACK wrangler secret put POSTHOG_KEY VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry cleanup:local cleanup:local:apply cleanup:remote:qa cleanup:remote:qa:apply cleanup:production target-env local target-env qa target-env production broad production cleanup is read-only warning-gate.ts",
     migrationFiles: ["0000_init.sql"],
-    vitestConfig: "workers/app.ts scripts/script-environment.mjs scripts/cleanup-local-qa-data.mjs scripts/smoke-api-live.mjs scripts/qa-preflight.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts scripts/production-readiness.ts scripts/posthog-build-metadata.ts scripts/warning-gate.ts scripts/workflow-security.mjs",
+    vitestConfig: "workers/app.ts scripts/script-environment.mjs scripts/cleanup-local-qa-data.mjs scripts/smoke-api-live.mjs scripts/qa-preflight.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts scripts/production-readiness.ts scripts/posthog-build-metadata.ts scripts/react-router-build-runner.ts scripts/warning-gate.ts scripts/workflow-security.mjs",
     tsconfigScripts:
-      "scripts/build-output-hygiene.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts scripts/production-readiness.ts scripts/posthog-build-metadata.ts scripts/qa-preflight.ts scripts/react-router-build.ts scripts/warning-gate.ts scripts/workflow-security.mjs",
+      "scripts/build-output-hygiene.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts scripts/production-readiness.ts scripts/posthog-build-metadata.ts scripts/qa-preflight.ts scripts/react-router-build.ts scripts/react-router-build-runner.ts scripts/warning-gate.ts scripts/workflow-security.mjs",
   };
 }
 
@@ -909,9 +733,10 @@ describe("deployment preflight", () => {
 
   it("rejects a disabled production deploy step", () => {
     const inputs = validInputs();
-    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
-      "      - name: Deploy to Cloudflare Workers\n        env:",
-      "      - name: Deploy to Cloudflare Workers\n        if: ${{ false }}\n        env:",
+    inputs.productionDeployWorkflow = replaceRequired(
+      secureProductionDeployWorkflow(),
+      "      - name: Deploy staged release to Cloudflare Workers\n        env:",
+      "      - name: Deploy staged release to Cloudflare Workers\n        if: ${{ false }}\n        env:",
     );
 
     const result = validateDeploymentConfig(inputs);
@@ -921,9 +746,10 @@ describe("deployment preflight", () => {
 
   it("rejects a production deploy step without the break-glass env block", () => {
     const inputs = validInputs();
-    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
-      "      - name: Deploy to Cloudflare Workers\n        env:",
-      "      - name: Deploy to Cloudflare Workers\n        invalid_env:",
+    inputs.productionDeployWorkflow = replaceRequired(
+      secureProductionDeployWorkflow(),
+      "      - name: Deploy staged release to Cloudflare Workers\n        env:",
+      "      - name: Deploy staged release to Cloudflare Workers\n        invalid_env:",
     );
 
     const result = validateDeploymentConfig(inputs);
@@ -1008,8 +834,8 @@ describe("deployment preflight", () => {
     ["the report job", "  report-canary:", "  invalid-report-canary:"],
     [
       "the report steps block",
-      `    runs-on: ubuntu-latest\n    steps:\n      - uses: ${CHECKOUT_ACTION} # v6`,
-      `    runs-on: ubuntu-latest\n    invalid_steps:\n      - uses: ${CHECKOUT_ACTION} # v6`,
+      "    steps:\n      - name: Checkout released source SHA",
+      "    invalid_steps:\n      - name: Checkout released source SHA",
     ],
     [
       "the deploy condition",
@@ -1019,7 +845,7 @@ describe("deployment preflight", () => {
     ["the deploy steps block", "    steps:\n", "    invalid_steps:\n"],
   ])("rejects a secure-looking workflow without %s", (_name, expected, replacement) => {
     const inputs = validInputs();
-    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(expected, replacement);
+    inputs.productionDeployWorkflow = replaceRequired(secureProductionDeployWorkflow(), expected, replacement);
 
     const result = validateDeploymentConfig(inputs);
 
@@ -1038,8 +864,8 @@ describe("deployment preflight", () => {
   it("rejects a secure production workflow whose block deploy step never deploys", () => {
     const inputs = validInputs();
     inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
-      "          else\n            pnpm run deploy:auto",
-      "          else\n            echo no-deploy-command",
+      "        run: node scripts/workflow-security.mjs run-production-deploy",
+      "        run: echo no-deploy-command",
     );
 
     const result = validateDeploymentConfig(inputs);
@@ -1085,16 +911,18 @@ describe("deployment preflight", () => {
     const valid = validateDeploymentConfig(validInputs());
     const missingGitConfig = validateDeploymentConfig({
       ...validInputs(),
-      ciWorkflow: validCiWorkflow().replace(
-        "env:\n  GIT_CONFIG_COUNT: '1'\n  GIT_CONFIG_KEY_0: init.defaultBranch\n  GIT_CONFIG_VALUE_0: main\n",
+      ciWorkflow: replaceRequired(
+        validCiWorkflow(),
+        "  GIT_CONFIG_COUNT: \"1\"\n  GIT_CONFIG_KEY_0: init.defaultBranch\n  GIT_CONFIG_VALUE_0: main\n",
         "",
       ),
     });
     const pnpmActionSetup = validateDeploymentConfig({
       ...validInputs(),
-      ciWorkflow: validCiWorkflow().replace(
+      ciWorkflow: replaceRequired(
+        validCiWorkflow(),
         [
-          "      - name: Activate pnpm",
+          "      - name: 📦 Activate pnpm",
           "        run: |",
           "          node scripts/warning-gate.ts -- corepack enable",
           "          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate",
@@ -1104,9 +932,10 @@ describe("deployment preflight", () => {
     });
     const missingCorepack = validateDeploymentConfig({
       ...validInputs(),
-      ciWorkflow: validCiWorkflow().replace(
+      ciWorkflow: replaceRequired(
+        validCiWorkflow(),
         [
-          "      - name: Activate pnpm",
+          "      - name: 📦 Activate pnpm",
           "        run: |",
           "          node scripts/warning-gate.ts -- corepack enable",
           "          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate",
@@ -1165,49 +994,57 @@ describe("deployment preflight", () => {
     });
     const unwrappedSeed = validateDeploymentConfig({
       ...validInputs(),
-      ciWorkflow: validCiWorkflow().replace(
-        "      - run: node scripts/warning-gate.ts -- pnpm db:seed",
-        "      - run: pnpm db:seed",
+      ciWorkflow: replaceRequired(
+        validCiWorkflow(),
+        "        run: node scripts/warning-gate.ts -- pnpm db:seed",
+        "        run: pnpm db:seed",
       ),
     });
     const unwrappedTypecheck = validateDeploymentConfig({
       ...validInputs(),
-      ciWorkflow: validCiWorkflow().replace(
-        "      - run: node scripts/warning-gate.ts -- pnpm run typecheck",
-        "      - run: pnpm run typecheck",
+      ciWorkflow: replaceRequired(
+        validCiWorkflow(),
+        "        run: node scripts/warning-gate.ts -- pnpm run typecheck",
+        "        run: pnpm run typecheck",
       ),
     });
     const unwrappedBuild = validateDeploymentConfig({
       ...validInputs(),
-      ciWorkflow: validCiWorkflow().replace(
-        "      - run: node scripts/warning-gate.ts -- pnpm build",
-        "      - run: pnpm build",
+      ciWorkflow: replaceRequired(
+        validCiWorkflow(),
+        "        run: node scripts/warning-gate.ts -- pnpm build",
+        "        run: pnpm build",
       ),
     });
     const unwrappedInstall = validateDeploymentConfig({
       ...validInputs(),
-      ciWorkflow: validCiWorkflow().replace(
-        "      - run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile",
-        "      - run: pnpm install --frozen-lockfile",
+      ciWorkflow: replaceRequired(
+        validCiWorkflow(),
+        "        run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile",
+        "        run: pnpm install --frozen-lockfile",
       ),
     });
     const ungatedDuplicate = validateDeploymentConfig({
       ...validInputs(),
-      ciWorkflow: validCiWorkflow().replace(
-        "      - run: node scripts/warning-gate.ts -- pnpm build",
+      ciWorkflow: replaceRequired(
+        validCiWorkflow(),
+        "        run: node scripts/warning-gate.ts -- pnpm build",
         [
-          "      - run: node scripts/warning-gate.ts -- pnpm build",
-          "      - run: pnpm build",
+          "        run: node scripts/warning-gate.ts -- pnpm build",
+          "      - name: Ungated duplicate build",
+          "        run: pnpm build",
         ].join("\n"),
       ),
     });
     const ungatedNewCommand = validateDeploymentConfig({
       ...validInputs(),
-      ciWorkflow: validCiWorkflow().replace(
-        "      - run: pnpm test:e2e",
+      ciWorkflow: replaceRequired(
+        validCiWorkflow(),
+        "        run: pnpm test:e2e",
         [
-          "      - run: pnpm test:e2e",
-          "      - run: pnpm exec playwright install --with-deps chromium",
+          "        run: pnpm test:e2e",
+          "      - name: Ungated browser install",
+          "        run: pnpm exec playwright install --with-deps chromium",
         ].join("\n"),
       ),
     });
@@ -1232,15 +1069,56 @@ describe("deployment preflight", () => {
   });
 
   it.each([
+    ["GIT_CONFIG_COUNT", "  GIT_CONFIG_COUNT: \"1\"", "  GIT_CONFIG_COUNT: \"2\""],
+    ["GIT_CONFIG_KEY_0", "  GIT_CONFIG_KEY_0: init.defaultBranch", "  GIT_CONFIG_KEY_0: core.hooksPath"],
+    ["GIT_CONFIG_VALUE_0", "  GIT_CONFIG_VALUE_0: main", "  GIT_CONFIG_VALUE_0: trunk"],
+    [
+      "CI_SOURCE_SHA",
+      "  CI_SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.sha }}",
+      "  CI_SOURCE_SHA: ${{ github.sha }}",
+    ],
+    [
+      "SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS",
+      "  SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: ${{ github.event_name == 'workflow_dispatch' && inputs.csp_report_only_break_glass || '' }}",
+      "  SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: ''",
+    ],
+  ])("rejects a non-canonical CI workflow environment binding: %s", (_name, expected, replacement) => {
+    const inputs = validInputs();
+    inputs.ciWorkflow = replaceRequired(validCiWorkflow(), expected, replacement);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("CI workflow");
+  });
+
+  it.each([
+    [
+      "non-object workflow document",
+      validCiWorkflow(),
+      "[]",
+    ],
+    [
+      "non-object workflow environment",
+      [
+        "env:",
+        "  GIT_CONFIG_COUNT: \"1\"",
+        "  GIT_CONFIG_KEY_0: init.defaultBranch",
+        "  GIT_CONFIG_VALUE_0: main",
+        "  PRISMA_HIDE_UPDATE_MESSAGE: \"1\"",
+        "  CI_SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.sha }}",
+        "  SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: ${{ github.event_name == 'workflow_dispatch' && inputs.csp_report_only_break_glass || '' }}",
+      ].join("\n"),
+      "env: []",
+    ],
     [
       "missing dispatch authorization",
-      "  workflow_dispatch:\n    inputs:\n      source_sha:\n        required: true\n        type: string\n      csp_report_only_break_glass:\n        required: true\n        type: string\n",
-      "",
+      "  workflow_dispatch:\n    inputs:",
+      "  invalid_workflow_dispatch:\n    inputs:",
     ],
     [
       "optional acknowledgement",
-      "      csp_report_only_break_glass:\n        required: true",
-      "      csp_report_only_break_glass:\n        required: false",
+      "      csp_report_only_break_glass:\n        description: Type ACK_REPORT_ONLY_CSP_ROLLBACK to authorize report-only preflight for this exact SHA\n        required: true",
+      "      csp_report_only_break_glass:\n        description: Type ACK_REPORT_ONLY_CSP_ROLLBACK to authorize report-only preflight for this exact SHA\n        required: false",
     ],
     [
       "unbound checkout",
@@ -1254,23 +1132,23 @@ describe("deployment preflight", () => {
     ],
     [
       "missing checkout action",
-      `      - uses: ${CHECKOUT_ACTION}\n        with:\n          ref: \${{ env.CI_SOURCE_SHA }}\n          persist-credentials: false\n`,
+      `      - uses: ${CHECKOUT_ACTION} # v6\n        with:\n          ref: \${{ env.CI_SOURCE_SHA }}\n          persist-credentials: false\n`,
       "",
     ],
     [
       "missing setup action",
-      `      - uses: ${SETUP_NODE_ACTION}\n        with:\n          node-version: '22'\n`,
+      `      - name: 📦 Setup Node.js\n        uses: ${SETUP_NODE_ACTION} # v6\n        with:\n          node-version: '22'\n`,
       "",
     ],
     [
       "action with a shadow run command",
-      `      - uses: ${SETUP_NODE_ACTION}\n        with:\n          node-version: '22'`,
-      `      - uses: ${SETUP_NODE_ACTION}\n        run: echo shadow\n        with:\n          node-version: '22'`,
+      `      - name: 📦 Setup Node.js\n        uses: ${SETUP_NODE_ACTION} # v6\n        with:\n          node-version: '22'`,
+      `      - name: 📦 Setup Node.js\n        uses: ${SETUP_NODE_ACTION} # v6\n        run: echo shadow\n        with:\n          node-version: '22'`,
     ],
     [
       "duplicate setup action",
-      `      - uses: ${SETUP_NODE_ACTION}`,
-      `      - uses: ${SETUP_NODE_ACTION}\n        with:\n          node-version: '22'\n      - uses: ${SETUP_NODE_ACTION}`,
+      `      - name: 📦 Setup Node.js\n        uses: ${SETUP_NODE_ACTION} # v6`,
+      `      - name: Duplicate setup\n        uses: ${SETUP_NODE_ACTION} # v6\n        with:\n          node-version: '22'\n      - name: 📦 Setup Node.js\n        uses: ${SETUP_NODE_ACTION} # v6`,
     ],
     [
       "wrong setup Node version",
@@ -1279,7 +1157,7 @@ describe("deployment preflight", () => {
     ],
     [
       "missing invocation validator",
-      "      - run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation\n",
+      "      - name: 🔐 Validate CI invocation\n        run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation\n",
       "",
     ],
     [
@@ -1289,13 +1167,13 @@ describe("deployment preflight", () => {
     ],
     [
       "job ENV",
-      "  coverage:\n    runs-on:",
-      "  coverage:\n    env:\n      ENV: /tmp/bypass\n    runs-on:",
+      "  coverage:\n    name: coverage\n    runs-on:",
+      "  coverage:\n    name: coverage\n    env:\n      ENV: /tmp/bypass\n    runs-on:",
     ],
     [
       "step SHELLOPTS",
-      "      - run: pnpm test:coverage",
-      "      - run: pnpm test:coverage\n        env:\n          SHELLOPTS: xtrace",
+      "      - name: 🧪 Test & Coverage\n        run: pnpm test:coverage",
+      "      - name: 🧪 Test & Coverage\n        run: pnpm test:coverage\n        env:\n          SHELLOPTS: xtrace",
     ],
     [
       "custom default shell",
@@ -1304,21 +1182,386 @@ describe("deployment preflight", () => {
     ],
     [
       "step shell override",
-      "      - run: pnpm test:coverage",
-      "      - run: pnpm test:coverage\n        shell: python",
+      "      - name: 🧪 Test & Coverage\n        run: pnpm test:coverage",
+      "      - name: 🧪 Test & Coverage\n        run: pnpm test:coverage\n        shell: python",
     ],
     [
       "unrecognized pinned action",
-      `      - uses: ${SETUP_NODE_ACTION}`,
-      "      - uses: attacker/action@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      `        uses: ${SETUP_NODE_ACTION} # v6`,
+      "        uses: attacker/action@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    ],
+    [
+      "upload artifact action in the coverage job",
+      "  e2e:",
+      `      - uses: ${UPLOAD_ARTIFACT_ACTION}\n  e2e:`,
     ],
   ])("rejects CI workflow %s", (_label, expected, replacement) => {
     const inputs = validInputs();
-    inputs.ciWorkflow = validCiWorkflow().replace(expected, replacement);
+    inputs.ciWorkflow = replaceRequired(validCiWorkflow(), expected, replacement);
 
     const result = validateDeploymentConfig(inputs);
 
     expect(result.errors.map((item) => item.name)).toContain("CI workflow");
+  });
+
+  it.each([
+    ["a scalar", "nope"],
+    ["a non-object list entry", "[false]"],
+    ["an object missing a command", "[{}]"],
+  ])("rejects CI job steps represented by %s", (_label, stepsValue) => {
+    const workflow = validCiWorkflow();
+    const coverageStart = workflow.indexOf("  coverage:");
+    const stepsStart = workflow.indexOf("    steps:", coverageStart);
+    const e2eStart = workflow.indexOf("  e2e:");
+    const inputs = validInputs();
+    inputs.ciWorkflow = [
+      workflow.slice(0, stepsStart),
+      "    steps: " + stepsValue + "\n\n",
+      workflow.slice(e2eStart),
+    ].join("");
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("CI workflow");
+  });
+
+  it.each([
+    ["job if false", "  coverage:\n    name: coverage\n    runs-on:", "  coverage:\n    name: coverage\n    if: false\n    runs-on:"],
+    [
+      "required step if false",
+      "      - name: 🧪 Test & Coverage\n        run: pnpm test:coverage",
+      "      - name: 🧪 Test & Coverage\n        run: pnpm test:coverage\n        if: false",
+    ],
+    [
+      "required step soft failure",
+      "      - name: 🧪 Test & Coverage\n        run: pnpm test:coverage",
+      "      - name: 🧪 Test & Coverage\n        run: pnpm test:coverage\n        continue-on-error: true",
+    ],
+    [
+      "inline-map BASH_ENV",
+      "  coverage:\n    name: coverage\n    runs-on:",
+      "  coverage:\n    name: coverage\n    env: {BASH_ENV: /tmp/preload}\n    runs-on:",
+    ],
+    [
+      "NODE_OPTIONS preload",
+      "env:\n  GIT_CONFIG_COUNT:",
+      "env:\n  NODE_OPTIONS: --require=/tmp/preload.cjs\n  GIT_CONFIG_COUNT:",
+    ],
+    [
+      "case-folded dangerous env",
+      "  coverage:\n    name: coverage\n    runs-on:",
+      "  coverage:\n    name: coverage\n    env: {node_options: --require=/tmp/preload.cjs}\n    runs-on:",
+    ],
+    [
+      "extra trigger",
+      "  workflow_dispatch:\n    inputs:",
+      "  schedule:\n    - cron: '0 0 * * *'\n  workflow_dispatch:\n    inputs:",
+    ],
+  ])("rejects parsed CI mutation: %s", (_label, expected, replacement) => {
+    const inputs = validInputs();
+    inputs.ciWorkflow = replaceRequired(validCiWorkflow(), expected, replacement);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("CI workflow");
+  });
+
+  it.each([
+    [
+      "root PATH injection",
+      (workflow: string) => replaceRequired(workflow, "env:\n", "env:\n  PATH: /tmp/attacker\n"),
+    ],
+    [
+      "job PATH injection",
+      (workflow: string) => replaceRequired(
+        workflow,
+        "  coverage:\n    name: coverage\n",
+        "  coverage:\n    name: coverage\n    env:\n      PATH: /tmp/attacker\n",
+      ),
+    ],
+    [
+      "step PATH injection",
+      (workflow: string) => replaceRequired(
+        workflow,
+        "      - name: 🧪 Test & Coverage\n        run: pnpm test:coverage",
+        "      - name: 🧪 Test & Coverage\n        env:\n          PATH: /tmp/attacker\n        run: pnpm test:coverage",
+      ),
+    ],
+    [
+      "removed advisory job",
+      (workflow: string) => replaceRequired(
+        workflow,
+        workflow.slice(workflow.indexOf("  advisory:"), workflow.indexOf("  coverage:")),
+        "",
+      ),
+    ],
+    [
+      "extra checkout input",
+      (workflow: string) => replaceRequired(
+        workflow,
+        "          persist-credentials: false",
+        "          persist-credentials: false\n          token: ${{ secrets.ATTACKER_TOKEN }}",
+      ),
+    ],
+    [
+      "extra upload input",
+      (workflow: string) => replaceRequired(
+        workflow,
+        "          path: playwright-report/",
+        "          path: |\n            playwright-report/\n            /tmp/secrets",
+      ),
+    ],
+    [
+      "extra pinned action",
+      (workflow: string) => replaceRequired(
+        workflow,
+        "      - name: 🎭 Run Playwright tests",
+        "      - name: Attacker action\n        uses: attacker/action@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n      - name: 🎭 Run Playwright tests",
+      ),
+    ],
+    [
+      "extra run step",
+      (workflow: string) => replaceRequired(
+        workflow,
+        "      - name: 🎭 Run Playwright tests",
+        "      - name: Attacker command\n        run: echo bypass\n      - name: 🎭 Run Playwright tests",
+      ),
+    ],
+  ])("rejects exact CI contract mutation: %s", (_label, mutate) => {
+    const inputs = validInputs();
+    inputs.ciWorkflow = mutate(validCiWorkflow());
+
+    expect(validateDeploymentConfig(inputs).errors.map((item) => item.name)).toContain("CI workflow");
+  });
+
+  it.each([
+    [
+      "false prefix on deploy condition",
+      "    if: (github.event_name",
+      "    if: false && (github.event_name",
+    ],
+    [
+      "broadening suffix on deploy condition",
+      "github.ref == 'refs/heads/main')\n    runs-on:",
+      "github.ref == 'refs/heads/main') || true\n    runs-on:",
+    ],
+    [
+      "validator command prefix",
+      "        run: node scripts/workflow-security.mjs validate-production-deploy-source",
+      "        run: false && node scripts/workflow-security.mjs validate-production-deploy-source",
+    ],
+    [
+      "validator command suffix",
+      "        run: node scripts/workflow-security.mjs validate-production-deploy-source",
+      "        run: node scripts/workflow-security.mjs validate-production-deploy-source || true",
+    ],
+    [
+      "validator soft failure",
+      "        run: node scripts/workflow-security.mjs validate-production-deploy-source",
+      "        run: node scripts/workflow-security.mjs validate-production-deploy-source\n        continue-on-error: true",
+    ],
+    [
+      "deploy step if false",
+      "      - name: Deploy staged release to Cloudflare Workers\n        env:",
+      "      - name: Deploy staged release to Cloudflare Workers\n        if: false\n        env:",
+    ],
+    [
+      "deploy command wrapper",
+      "        run: node scripts/workflow-security.mjs run-production-deploy",
+      "        run: if false; then node scripts/workflow-security.mjs run-production-deploy; fi",
+    ],
+    [
+      "inline dangerous environment",
+      "  deploy:\n    name: deploy\n    if:",
+      "  deploy:\n    name: deploy\n    env: {NODE_OPTIONS: --require=/tmp/preload.cjs}\n    if:",
+    ],
+  ])("rejects parsed production mutation: %s", (_label, expected, replacement) => {
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = replaceRequired(secureProductionDeployWorkflow(), expected, replacement);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it.each([
+    [
+      "root PATH injection",
+      (workflow: string) => replaceRequired(workflow, "env:\n", "env:\n  PATH: /tmp/attacker\n"),
+    ],
+    [
+      "job PATH injection",
+      (workflow: string) => replaceRequired(
+        workflow,
+        "  deploy:\n    name: deploy\n",
+        "  deploy:\n    name: deploy\n    env:\n      PATH: /tmp/attacker\n",
+      ),
+    ],
+    [
+      "step PATH injection",
+      (workflow: string) => replaceRequired(
+        workflow,
+        "      - name: Install dependencies\n        run: pnpm install --frozen-lockfile",
+        "      - name: Install dependencies\n        env:\n          PATH: /tmp/attacker\n        run: pnpm install --frozen-lockfile",
+      ),
+    ],
+    [
+      "extra pinned action",
+      (workflow: string) => replaceRequired(
+        workflow,
+        "      - name: Install dependencies",
+        "      - name: Attacker action\n        uses: attacker/action@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n      - name: Install dependencies",
+      ),
+    ],
+    [
+      "extra run step",
+      (workflow: string) => replaceRequired(
+        workflow,
+        "      - name: Install dependencies",
+        "      - name: Attacker command\n        run: echo bypass\n      - name: Install dependencies",
+      ),
+    ],
+    [
+      "modified concurrency",
+      (workflow: string) => replaceRequired(
+        workflow,
+        "  cancel-in-progress: false",
+        "  cancel-in-progress: true",
+      ),
+    ],
+    [
+      "modified job name",
+      (workflow: string) => replaceRequired(workflow, "    name: deploy", "    name: attacker"),
+    ],
+    [
+      "modified timeout",
+      (workflow: string) => replaceRequired(workflow, "    timeout-minutes: 40", "    timeout-minutes: 400"),
+    ],
+    [
+      "extra checkout input",
+      (workflow: string) => replaceRequired(
+        workflow,
+        "          persist-credentials: false",
+        "          persist-credentials: false\n          token: ${{ secrets.ATTACKER_TOKEN }}",
+      ),
+    ],
+    [
+      "extra deploy environment",
+      (workflow: string) => replaceRequired(
+        workflow,
+        "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+        "          ATTACKER_SECRET: ${{ secrets.ATTACKER_SECRET }}\n          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+      ),
+    ],
+  ])("rejects exact production contract mutation: %s", (_label, mutate) => {
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = mutate(secureProductionDeployWorkflow());
+
+    expect(validateDeploymentConfig(inputs).errors.map((item) => item.name)).toContain(
+      "production deploy workflow",
+    );
+  });
+
+  it.each([
+    "if (false) { void runReactRouterBuildCli(); }",
+    "void runReactRouterBuildCli(); void runReactRouterBuildCli();",
+    "console.log('dead text'); void runReactRouterBuildCli();",
+  ])("rejects a non-canonical React Router build entrypoint: %s", (body) => {
+    const inputs = validInputs();
+    inputs.reactRouterBuild = [
+      'import { runReactRouterBuildCli } from "./react-router-build-runner";',
+      body,
+    ].join("\n");
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("React Router build contract");
+  });
+
+  it("rejects a React Router build entrypoint with a non-canonical import", () => {
+    const inputs = validInputs();
+    inputs.reactRouterBuild = [
+      'import runReactRouterBuildCli from "./react-router-build-runner";',
+      "void runReactRouterBuildCli();",
+    ].join("\n");
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("React Router build contract");
+  });
+
+  it("rejects a production workflow whose deploy steps are not an array", () => {
+    const workflow = secureProductionDeployWorkflow();
+    const deployStepsStart = workflow.indexOf("    steps:");
+    const reportJobStart = workflow.indexOf("  report-canary:");
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = [
+      workflow.slice(0, deployStepsStart),
+      "    steps: nope\n",
+      workflow.slice(reportJobStart),
+    ].join("");
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it("accepts nested QA gate metadata while reading direct credential keys", () => {
+    const inputs = validInputs();
+    inputs.qaImageCoverSmokeWorkflow = validQaImageCoverSmokeWorkflow().replace(
+      "        env:\n          CLOUDFLARE_API_TOKEN:",
+      "        env:\n          metadata:\n            ignored: true\n          \"ignored-key\": true\n          CLOUDFLARE_API_TOKEN:",
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).not.toContain("QA image-cover smoke workflow");
+  });
+
+  it("rejects a QA smoke workflow containing a job without steps", () => {
+    const inputs = validInputs();
+    inputs.qaImageCoverSmokeWorkflow = validQaImageCoverSmokeWorkflow().replace(
+      "jobs:\n  smoke:",
+      "jobs:\n  metadata:\n    runs-on: ubuntu-latest\n  smoke:",
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("QA image-cover smoke workflow");
+  });
+
+  it("rejects a Storybook workflow without jobs", () => {
+    const workflow = validStorybookWorkflow();
+    const inputs = validInputs();
+    inputs.storybookWorkflow = workflow.slice(0, workflow.indexOf("jobs:"));
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+  });
+
+  it("requires the Storybook push trigger to name its branch", () => {
+    const inputs = validInputs();
+    inputs.storybookWorkflow = validStorybookWorkflow().replace(
+      "  push:\n    branches: [main]",
+      "  push:",
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+  });
+
+  it("rejects a partially warning-gated Storybook Corepack setup", () => {
+    const inputs = validInputs();
+    inputs.storybookWorkflow = validStorybookWorkflow().replace(
+      "          corepack enable\n          corepack prepare pnpm@10.28.1 --activate",
+      "          node scripts/warning-gate.ts -- corepack enable\n          node scripts/warning-gate.ts -- corepack prepare pnpm@0.0.0 --activate",
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
   });
 
   it("rejects a block-style production workflow run step that does not deploy", () => {
@@ -1348,8 +1591,8 @@ describe("deployment preflight", () => {
   it("rejects a non-deploy block run before a later step property", () => {
     const inputs = validInputs();
     inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
-      "          else\n            pnpm run deploy:auto\n          fi",
-      "          else\n            echo no-deploy-command\n          fi\n        continue-on-error: false",
+      "        run: node scripts/workflow-security.mjs run-production-deploy",
+      "        run: |\n          echo no-deploy-command\n        continue-on-error: false",
     );
 
     const result = validateDeploymentConfig(inputs);
@@ -1359,9 +1602,10 @@ describe("deployment preflight", () => {
 
   it("rejects a command-free CI metadata job without warning-clean setup", () => {
     const inputs = validInputs();
-    inputs.ciWorkflow = validCiWorkflow().replace(
-      "jobs:\n  coverage:",
-      "jobs:\n  metadata:\n    runs-on: ubuntu-latest\n  coverage:",
+    inputs.ciWorkflow = replaceRequired(
+      validCiWorkflow(),
+      "jobs:\n  advisory:",
+      "jobs:\n  metadata:\n    runs-on: ubuntu-latest\n  advisory:",
     );
 
     const result = validateDeploymentConfig(inputs);
@@ -1386,9 +1630,10 @@ describe("deployment preflight", () => {
     "corepack enable",
   ])("rejects a newly added ungated CI command: %s", (command) => {
     const inputs = validInputs();
-    inputs.ciWorkflow = validCiWorkflow().replace(
-      "      - run: pnpm test:e2e",
-      ["      - run: pnpm test:e2e", `      - run: ${command}`].join("\n"),
+    inputs.ciWorkflow = replaceRequired(
+      validCiWorkflow(),
+      "        run: pnpm test:e2e",
+      ["        run: pnpm test:e2e", "      - name: Injected command", `        run: ${command}`].join("\n"),
     );
 
     const result = validateDeploymentConfig(inputs);
@@ -1398,11 +1643,13 @@ describe("deployment preflight", () => {
 
   it("rejects duplicate warning-gated commands within one CI job", () => {
     const inputs = validInputs();
-    inputs.ciWorkflow = validCiWorkflow().replace(
-      "      - run: node scripts/warning-gate.ts -- pnpm build",
+    inputs.ciWorkflow = replaceRequired(
+      validCiWorkflow(),
+      "        run: node scripts/warning-gate.ts -- pnpm build",
       [
-        "      - run: node scripts/warning-gate.ts -- pnpm build",
-        "      - run: node scripts/warning-gate.ts -- pnpm build",
+        "        run: node scripts/warning-gate.ts -- pnpm build",
+        "      - name: Duplicate build",
+        "        run: node scripts/warning-gate.ts -- pnpm build",
       ].join("\n"),
     );
 
@@ -1458,14 +1705,16 @@ describe("deployment preflight", () => {
   it("rejects production deploy workflow setup that can emit checkout or pnpm setup warnings", () => {
     const missingGitConfig = validateDeploymentConfig({
       ...validInputs(),
-      productionDeployWorkflow: validInputs().productionDeployWorkflow.replace(
-        "env:\n  GIT_CONFIG_COUNT: '1'\n  GIT_CONFIG_KEY_0: init.defaultBranch\n  GIT_CONFIG_VALUE_0: main\n",
+      productionDeployWorkflow: replaceRequired(
+        validInputs().productionDeployWorkflow,
+        "  GIT_CONFIG_COUNT: \"1\"\n  GIT_CONFIG_KEY_0: init.defaultBranch\n  GIT_CONFIG_VALUE_0: main\n",
         "",
       ),
     });
     const pnpmActionSetup = validateDeploymentConfig({
       ...validInputs(),
-      productionDeployWorkflow: validInputs().productionDeployWorkflow.replace(
+      productionDeployWorkflow: replaceRequired(
+        validInputs().productionDeployWorkflow,
         [
           "      - name: Activate pnpm",
           "        run: |",
@@ -1477,7 +1726,8 @@ describe("deployment preflight", () => {
     });
     const missingCorepack = validateDeploymentConfig({
       ...validInputs(),
-      productionDeployWorkflow: validInputs().productionDeployWorkflow.replace(
+      productionDeployWorkflow: replaceRequired(
+        validInputs().productionDeployWorkflow,
         [
           "      - name: Activate pnpm",
           "        run: |",
@@ -1634,19 +1884,10 @@ describe("deployment preflight", () => {
       VITE_POSTHOG_HOST: "https://us.i.posthog.com",
     };
     reportOnly.cspReportOnlyBreakGlass = "ACK_REPORT_ONLY_CSP_ROLLBACK";
-    reportOnly.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
-      [
-        "      csp_report_only_break_glass:",
-        "        required: false",
-        "        default: ''",
-        "        type: string",
-      ].join("\n"),
-      [
-        "      invalid_csp_report_only_break_glass:",
-        "        required: false",
-        "        default: ''",
-        "        type: string",
-      ].join("\n"),
+    reportOnly.productionDeployWorkflow = replaceRequired(
+      secureProductionDeployWorkflow(),
+      "      csp_report_only_break_glass:",
+      "      invalid_csp_report_only_break_glass:",
     );
 
     const result = validateDeploymentConfig(reportOnly);
@@ -3080,6 +3321,21 @@ describe("Storybook deploy warning cleanup", () => {
     expect(missingGitConfig.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
   });
 
+  it("accepts block-style Storybook main branches and rejects block lists without main", () => {
+    const blockMain = validStorybookWorkflow()
+      .replace("    branches: [main]", "    branches:\n      - main")
+      .replace("    branches: [main]", "    branches:\n      - main");
+    const blockWithoutMain = validStorybookWorkflow()
+      .replace("    branches: [main]", "    branches:\n      - feature/not-main")
+      .replace("    branches: [main]", "    branches:\n      - feature/not-main");
+
+    const valid = validateDeploymentConfig(inputsWithStorybookWorkflow(blockMain));
+    const invalid = validateDeploymentConfig(inputsWithStorybookWorkflow(blockWithoutMain));
+
+    expect(valid.errors.map((item) => item.name)).not.toContain("Storybook deploy workflow");
+    expect(invalid.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+  });
+
   it("rejects Storybook pnpm setup through pnpm/action-setup instead of Corepack", () => {
     const pnpmActionSetup = validateDeploymentConfig(
       inputsWithStorybookWorkflow(
@@ -3107,9 +3363,24 @@ describe("Storybook deploy warning cleanup", () => {
         ),
       ),
     );
+    const malformedWarningGate = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        validStorybookWorkflow().replace(
+          [
+            "          corepack enable",
+            "          corepack prepare pnpm@10.28.1 --activate",
+          ].join("\n"),
+          [
+            "          node scripts/warning-gate.ts --x corepack enable",
+            "          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate",
+          ].join("\n"),
+        ),
+      ),
+    );
 
     expect(pnpmActionSetup.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
     expect(missingCorepack.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
+    expect(malformedWarningGate.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
   });
 
   it("rejects missing Storybook build job, steps, or build command", () => {

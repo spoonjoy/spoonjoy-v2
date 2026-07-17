@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -17,6 +17,40 @@ export async function runWorkflowCommand(file, args) {
     maxBuffer: 10 * 1024 * 1024,
   });
   return result.stdout;
+}
+
+export function runInheritedWorkflowCommand(file, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(file, args, {
+      env: process.env,
+      stdio: "inherit",
+    });
+    child.once("error", reject);
+    child.once("close", (code, signal) => {
+      if (signal) {
+        reject(new Error(`${file} terminated by ${signal}.`));
+      } else if (code !== 0) {
+        reject(new Error(`${file} exited with code ${code}.`));
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
+export async function runProductionDeploy({
+  env = process.env,
+  run = runInheritedWorkflowCommand,
+} = {}) {
+  const rollbackVersionId = env.ROLLBACK_VERSION_ID ?? "";
+  if (rollbackVersionId && !WORKER_VERSION_PATTERN.test(rollbackVersionId)) {
+    throw new Error("ROLLBACK_VERSION_ID must be an exact Worker version UUID.");
+  }
+  const args = ["run", "deploy:auto"];
+  if (rollbackVersionId) {
+    args.push("--", "--rollback-version-id", rollbackVersionId);
+  }
+  await run("pnpm", args);
 }
 
 export function sleepMilliseconds(milliseconds) {
@@ -264,6 +298,10 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
   }
   if (argv[0] === "validate-production-deploy-source") {
     await validateProductionDeploySource(deps);
+    return;
+  }
+  if (argv[0] === "run-production-deploy") {
+    await runProductionDeploy(deps);
     return;
   }
   throw new Error(`Unknown workflow-security validation mode: ${argv[0]}.`);

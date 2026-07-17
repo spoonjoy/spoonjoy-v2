@@ -19,6 +19,7 @@ const coverageInclude = [
   "scripts/deploy-production-canary.ts",
   "scripts/production-readiness.ts",
   "scripts/posthog-build-metadata.ts",
+  "scripts/react-router-build-runner.ts",
   "scripts/warning-gate.ts",
   "scripts/workflow-security.mjs",
   "workers/app.ts",

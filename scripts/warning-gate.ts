@@ -1,9 +1,9 @@
 import { spawn } from "node:child_process";
+import stripAnsi from "strip-ansi";
 
 export const EXPECTED_PRISMA_D1_TRANSACTION_WARNING =
   "Cloudflare D1 does not support transactions yet. When using Prisma's D1 adapter, implicit & explicit transactions will be ignored and run as individual queries, which breaks the guarantees of the ACID properties of transactions. For more details see https://pris.ly/d/d1-transactions";
 
-const ANSI_PATTERN = /\u001b\[[0-9;]*m/g;
 const BRACKETED_WARNING_PATTERN = /(?:^|[\s([<{])\[\s*warn(?:ing)?(?:\s*:\s*[^\]\r\n]+)?\s*\](?::|\s|$)/i;
 const WARNING_WORD_PATTERN = /(?:^|[^A-Za-z0-9])(?:[A-Za-z]+warning|warning|warn)(?=[:!\s([<{=]|$|-(?!gate\.ts\b))/i;
 const PRISMA_WARNING_PATTERN = /(?:^|[\s([<{])prisma:warn(?::|\s|$)/i;
@@ -25,12 +25,15 @@ export type WarningGateCommandRunner = (
   command: readonly string[],
 ) => Promise<WarningGateCommandResult>;
 
-function stripAnsi(value: string): string {
-  return value.replace(ANSI_PATTERN, "");
-}
-
 function isWarningLine(line: string): boolean {
-  if (TEST_RESULT_LINE_PATTERN.test(line)) return false;
+  if (TEST_RESULT_LINE_PATTERN.test(line)) {
+    return (
+      BRACKETED_WARNING_PATTERN.test(line) ||
+      PRISMA_WARNING_PATTERN.test(line) ||
+      WARNING_SYMBOL_PATTERN.test(line) ||
+      /(?:^|[^A-Za-z0-9])(?:warning|warn)(?=[:!([<{=]|$)/i.test(line)
+    );
+  }
   return (
     BRACKETED_WARNING_PATTERN.test(line) ||
     WARNING_WORD_PATTERN.test(line) ||

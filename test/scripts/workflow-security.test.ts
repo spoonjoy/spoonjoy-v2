@@ -1,11 +1,15 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { describe, expect, it, vi } from "vitest";
 import {
   CSP_REPORT_ONLY_BREAK_GLASS_ACK,
   isCliEntry,
   main,
   runCliIfEntry,
+  runInheritedWorkflowCommand,
+  runProductionDeploy,
   runWorkflowCommand,
   sleepMilliseconds,
   validateCiInvocation,
@@ -431,6 +435,59 @@ describe("workflow-security CLI", () => {
       .resolves.toBe("ok");
   });
 
+  it("runs production deploys through one exact pnpm invocation", async () => {
+    const run = vi.fn(async () => undefined);
+    await runProductionDeploy({ env: {}, run });
+    expect(run).toHaveBeenCalledWith("pnpm", ["run", "deploy:auto"]);
+
+    run.mockClear();
+    await runProductionDeploy({ env: { ROLLBACK_VERSION_ID }, run });
+    expect(run).toHaveBeenCalledWith("pnpm", [
+      "run",
+      "deploy:auto",
+      "--",
+      "--rollback-version-id",
+      ROLLBACK_VERSION_ID,
+    ]);
+    await expect(runProductionDeploy({
+      env: { ROLLBACK_VERSION_ID: "not-a-version" },
+      run,
+    })).rejects.toThrow(/exact Worker version UUID/);
+  });
+
+  it("uses the inherited production deploy runner by default", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "spoonjoy-workflow-security-"));
+    const previousPath = process.env.PATH;
+    const previousRollback = process.env.ROLLBACK_VERSION_ID;
+    try {
+      const fakePnpm = path.join(root, "pnpm");
+      await writeFile(fakePnpm, "#!/bin/sh\nexit 0\n", "utf8");
+      await chmod(fakePnpm, 0o755);
+      process.env.PATH = `${root}:${previousPath ?? ""}`;
+      delete process.env.ROLLBACK_VERSION_ID;
+      await expect(runProductionDeploy()).resolves.toBeUndefined();
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+      if (previousRollback === undefined) delete process.env.ROLLBACK_VERSION_ID;
+      else process.env.ROLLBACK_VERSION_ID = previousRollback;
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("inherits output and fails for child errors, exit codes, and signals", async () => {
+    await expect(runInheritedWorkflowCommand(process.execPath, ["-e", "process.exit(0)"]))
+      .resolves.toBeUndefined();
+    await expect(runInheritedWorkflowCommand(process.execPath, ["-e", "process.exit(7)"]))
+      .rejects.toThrow(/code 7/);
+    await expect(runInheritedWorkflowCommand(process.execPath, [
+      "-e",
+      "process.kill(process.pid, 'SIGTERM')",
+    ])).rejects.toThrow(/SIGTERM/);
+    await expect(runInheritedWorkflowCommand("missing-spoonjoy-workflow-command", []))
+      .rejects.toThrow();
+  });
+
   it("waits through the default timer helper", async () => {
     vi.useFakeTimers();
     try {
@@ -452,6 +509,10 @@ describe("workflow-security CLI", () => {
       run: successfulRunner(),
       sleep: vi.fn(),
     })).resolves.toBeUndefined();
+    const deploy = vi.fn(async () => undefined);
+    await expect(main(["run-production-deploy"], { env: {}, run: deploy }))
+      .resolves.toBeUndefined();
+    expect(deploy).toHaveBeenCalledWith("pnpm", ["run", "deploy:auto"]);
     await expect(main([])).rejects.toThrow(/exactly one/);
     await expect(main(["unknown"])).rejects.toThrow(/unknown/i);
     await expect(main()).rejects.toThrow();
