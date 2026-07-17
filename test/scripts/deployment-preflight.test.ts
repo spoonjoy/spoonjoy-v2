@@ -2118,6 +2118,19 @@ describe("deployment preflight", () => {
     expect(validateDeploymentConfig(inputs).errors.map((item) => item.name)).toContain("output gate scripts");
   });
 
+  it("requires Playwright dependency installation to disable dpkg progress cursor rewriting", () => {
+    const inputs = validInputs();
+    inputs.ciWorkflow = replaceRequired(
+      inputs.ciWorkflow,
+      "sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 apt-get -o Dpkg::Use-Pty=0 install",
+      "sudo env NEEDRESTART_SUSPEND=1 apt-get install",
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((entry) => entry.name)).toContain("CI workflow");
+  });
+
   it("requires an explicit non-interactive Playwright reporter while preserving HTML artifacts", () => {
     const inputs = validInputs();
     (inputs.packageJson.scripts as Record<string, string>)["test:e2e"] =
