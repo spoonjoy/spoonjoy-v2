@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `0d64b7d521d4499e81033de711d61b2688604dbc` integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. All prior clean passes are historical because Quality Rounds 27-31 changed release process/recovery semantics.
+- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `acc07c5875a8e0e3a71dda16870d0a633193b5bc` integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. All prior clean passes are historical because Quality Rounds 27-32 changed release process/recovery semantics.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is `NEEDS_REVIEW` after the mandatory main-drift audit.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation and dependency setup have not started.
-- Active gate: fresh Quality Round 32 on immutable contract checkpoint `0d64b7d5`, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Round 31 returned 17 findings, 15 unique; the contract now has pre-mutation capability checks, manifest revision/time continuity, one production ProcessCommand executor, global operation-key dispatch, bounded provider reconciliation, exact PR bytes/child argv, real provenance integration, journaled validating lifecycle, host-bound cleanup, and exact terminal archive convergence. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
+- Active gate: fresh Quality Round 33 on immutable contract checkpoint `acc07c58`, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Round 32 returned 17 actionable findings; the contract now has relocatable StoredArgv, at-most-one spawn/no post-dispatch replay, a complete Git checkpoint matrix, public/secret preflight snapshots, collision-resistant host identity, process-group timeouts, same-stage post-merge reconciliation, exact wrapper/ContinuityTransfer schemas, validating cancellation, canonical-main/ref-CAS cleanup, exact iteration closure, seven ordinary files, and conditional whole-track archive. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Synchronize checkpoint `0d64b7d5` into Desk, run fresh Quality Round 32 plus consecutive Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
+Synchronize checkpoint `acc07c58` into Desk, run fresh Quality Round 33 plus consecutive Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
 
 ## Operator-Locked Rules
 
@@ -40,8 +40,8 @@ Synchronize checkpoint `0d64b7d5` into Desk, run fresh Quality Round 32 plus con
 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
-| Planning reviewer gate | active | Quality Round 31's 15 unique findings plus latest-model preservation/protocol repairs fixed at `0d64b7d5` | Run fresh Quality Round 32 and scrutiny convergence |
-| Doing review chain | active | Release fence, Git convergence, and terminal/archive journals are executable and fully assigned | Re-converge and restore final handoff |
+| Planning reviewer gate | active | Quality Round 32's 17 findings are fixed at immutable contract `acc07c58` | Run fresh Quality Round 33 and scrutiny convergence |
+| Doing review chain | active | Release fence, Git recovery, validating cancellation, and task/track terminal journals are executable and fully assigned | Re-converge and restore final handoff |
 | Work Doer Units 0-37 | deferred by gate | Full red/green/verify/visual/ship queue is defined | Restart Unit0a only after fresh final handoff |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
 
@@ -56,4 +56,4 @@ Synchronize checkpoint `0d64b7d5` into Desk, run fresh Quality Round 32 plus con
 
 Not satisfied. The reopened reviewer gate and all delivery work remain.
 
-Last updated: 2026-07-16 19:07:08 PDT.
+Last updated: 2026-07-16 19:44:18 PDT.
