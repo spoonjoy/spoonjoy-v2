@@ -40,13 +40,13 @@ jobs:
           ref: ${{ env.CI_SOURCE_SHA }}
           persist-credentials: false
 
-      - name: 🔐 Validate CI invocation
-        run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation
-
       - name: 📦 Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
+
+      - name: 🔐 Validate CI invocation
+        run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation
 
       - name: 📦 Activate pnpm
         run: |
@@ -86,13 +86,13 @@ jobs:
           ref: ${{ env.CI_SOURCE_SHA }}
           persist-credentials: false
 
-      - name: 🔐 Validate CI invocation
-        run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation
-
       - name: 📦 Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
+
+      - name: 🔐 Validate CI invocation
+        run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation
 
       - name: 📦 Activate pnpm
         run: |
@@ -147,13 +147,13 @@ jobs:
           ref: ${{ env.CI_SOURCE_SHA }}
           persist-credentials: false
 
-      - name: 🔐 Validate CI invocation
-        run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation
-
       - name: 📦 Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
+
+      - name: 🔐 Validate CI invocation
+        run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation
 
       - name: 📦 Activate pnpm
         run: |

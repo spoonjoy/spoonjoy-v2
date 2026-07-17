@@ -1,8 +1,13 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { EventEmitter } from "node:events";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildContentSecurityPolicy } from "../../app/lib/security-headers.server";
+import {
+  createPostHogBuildContract,
+  createPostHogBuildMetadata,
+} from "../../scripts/posthog-build-metadata";
 import {
   assertAdditiveMigrationSql,
   buildWorkerVersionOverride,
@@ -62,9 +67,39 @@ function deploymentPayload(versionId: string, createdOn = "2026-07-15T00:05:00Z"
   }]);
 }
 
+function productionGeneratedWorkerConfig(host = CUSTOM_POSTHOG_HOST): Record<string, unknown> {
+  return {
+    vars: {
+      NODE_ENV: "production",
+      VITE_POSTHOG_HOST: host,
+    },
+  };
+}
+
+function productionBuildMetadata(host = CUSTOM_POSTHOG_HOST) {
+  return createPostHogBuildMetadata(createPostHogBuildContract(
+    productionGeneratedWorkerConfig(host),
+  ));
+}
+
+function productionBundleSources(host = CUSTOM_POSTHOG_HOST): readonly string[] {
+  return [`const spoonjoyEnv={VITE_POSTHOG_HOST:${JSON.stringify(host)}};`];
+}
+
+function postHogArtifactReaderDeps(host = CUSTOM_POSTHOG_HOST) {
+  return {
+    readGeneratedWorkerConfig: async () => productionGeneratedWorkerConfig(host),
+    readClientBuildMetadata: async () => productionBuildMetadata(host),
+    readClientBundleSources: async () => productionBundleSources(host),
+  };
+}
+
 type CommandResponse = Error | string;
 
-function successfulRunner(overrides: Record<string, CommandResponse | readonly CommandResponse[]> = {}) {
+function successfulRunner(
+  overrides: Record<string, CommandResponse | readonly CommandResponse[]> = {},
+  events: string[] = [],
+) {
   const responses: Record<string, string | readonly string[]> = {
     "git rev-parse HEAD": RELEASE_SHA,
     "git status --porcelain --untracked-files=no": "",
@@ -105,6 +140,7 @@ function successfulRunner(overrides: Record<string, CommandResponse | readonly C
   const callCounts = new Map<string, number>();
   const runCommand = vi.fn<ReleaseCommandRunner>(async (command, args) => {
     const key = commandKey(command, args);
+    events.push(`command:${key}`);
     const callIndex = callCounts.get(key) ?? 0;
     callCounts.set(key, callIndex + 1);
     const configured = overrides[key] ?? responses[key] ?? "";
@@ -129,6 +165,9 @@ function releaseDeps(runCommand: ReleaseCommandRunner) {
     },
     postHogHost: "https://us.i.posthog.com",
     readMigrationFile: vi.fn(async () => "CREATE TABLE ReleaseMarker (id TEXT PRIMARY KEY);"),
+    readGeneratedWorkerConfig: vi.fn(async () => productionGeneratedWorkerConfig()),
+    readClientBuildMetadata: vi.fn(async () => productionBuildMetadata()),
+    readClientBundleSources: vi.fn(async () => productionBundleSources()),
     readCandidateCspHeaders: vi.fn(async () => new Headers({
       "Content-Security-Policy": VALID_CANDIDATE_CSP,
       "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
@@ -525,6 +564,201 @@ describe("production canary release orchestration", () => {
     });
     expect(deps.readPublicWorkerVersion).toHaveBeenCalledWith("https://spoonjoy.app");
     expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(result);
+  });
+
+  it("validates generated production PostHog artifacts after build before migration or deploy actions", async () => {
+    const events: string[] = [];
+    const runCommand = successfulRunner({}, events);
+    const deps = releaseDeps(runCommand);
+    deps.readGeneratedWorkerConfig.mockImplementation(async () => {
+      events.push("posthog:worker-config");
+      return productionGeneratedWorkerConfig(CUSTOM_POSTHOG_HOST);
+    });
+    deps.readClientBuildMetadata.mockImplementation(async () => {
+      events.push("posthog:metadata");
+      return productionBuildMetadata(CUSTOM_POSTHOG_HOST);
+    });
+    deps.readClientBundleSources.mockImplementation(async () => {
+      events.push("posthog:bundle");
+      return productionBundleSources(CUSTOM_POSTHOG_HOST);
+    });
+
+    await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({ status: "promoted" });
+
+    expect(deps.readGeneratedWorkerConfig).toHaveBeenCalledTimes(1);
+    expect(deps.readClientBuildMetadata).toHaveBeenCalledTimes(1);
+    expect(deps.readClientBundleSources).toHaveBeenCalledTimes(1);
+    expect(events.slice(3, 9)).toEqual([
+      "command:pnpm run deploy:preflight",
+      "command:pnpm run build",
+      "posthog:worker-config",
+      "posthog:metadata",
+      "posthog:bundle",
+      "command:git status --porcelain --untracked-files=no",
+    ]);
+    expect(events.indexOf("posthog:bundle")).toBeLessThan(
+      events.indexOf("command:pnpm exec wrangler d1 migrations list DB --remote"),
+    );
+    expect(events.indexOf("posthog:bundle")).toBeLessThan(
+      events.indexOf(`command:pnpm exec wrangler versions upload --tag ${RELEASE_SHA} --message Spoonjoy source ${RELEASE_SHA}`),
+    );
+  });
+
+  it("uses the default generated production PostHog artifact readers when deps do not override them", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-release-posthog-"));
+    const previousCwd = process.cwd();
+    try {
+      const host = CUSTOM_POSTHOG_HOST;
+      await Promise.all([
+        mkdir(path.join(root, "build/server"), { recursive: true }),
+        mkdir(path.join(root, "build/client/.vite"), { recursive: true }),
+        mkdir(path.join(root, "build/client/assets"), { recursive: true }),
+      ]);
+      await Promise.all([
+        writeFile(
+          path.join(root, "build/server/wrangler.json"),
+          JSON.stringify(productionGeneratedWorkerConfig(host)),
+          "utf8",
+        ),
+        writeFile(
+          path.join(root, "build/client/.vite/spoonjoy-build-metadata.json"),
+          JSON.stringify(productionBuildMetadata(host)),
+          "utf8",
+        ),
+        writeFile(path.join(root, "build/client/assets/app.js"), productionBundleSources(host)[0], "utf8"),
+      ]);
+      process.chdir(root);
+      const runCommand = successfulRunner();
+      const deps = releaseDeps(runCommand);
+      delete deps.readGeneratedWorkerConfig;
+      delete deps.readClientBuildMetadata;
+      delete deps.readClientBundleSources;
+
+      await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({ status: "promoted" });
+    } finally {
+      process.chdir(previousCwd);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    [
+      "invalid generated Worker config JSON",
+      async (root: string) => {
+        await mkdir(path.join(root, "build/server"), { recursive: true });
+        await writeFile(path.join(root, "build/server/wrangler.json"), "{", "utf8");
+      },
+      /Generated Worker config could not be read as JSON/,
+    ],
+    [
+      "non-object generated metadata JSON",
+      async (root: string) => {
+        await Promise.all([
+          mkdir(path.join(root, "build/server"), { recursive: true }),
+          mkdir(path.join(root, "build/client/.vite"), { recursive: true }),
+        ]);
+        await Promise.all([
+          writeFile(
+            path.join(root, "build/server/wrangler.json"),
+            JSON.stringify(productionGeneratedWorkerConfig()),
+            "utf8",
+          ),
+          writeFile(path.join(root, "build/client/.vite/spoonjoy-build-metadata.json"), "[]", "utf8"),
+        ]);
+      },
+      /Generated PostHog metadata was not a JSON object/,
+    ],
+  ])("rejects %s from default PostHog artifact readers before mutation", async (_label, writeArtifacts, message) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-release-posthog-"));
+    const previousCwd = process.cwd();
+    try {
+      await writeArtifacts(root);
+      process.chdir(root);
+      const runCommand = successfulRunner();
+      const deps = releaseDeps(runCommand);
+      delete deps.readGeneratedWorkerConfig;
+      delete deps.readClientBuildMetadata;
+      delete deps.readClientBundleSources;
+
+      await expect(runProductionCanaryRelease(deps)).rejects.toThrow(message);
+
+      expect(runCommand.mock.calls.map(([command, args]) => commandKey(command, args))).not.toContain(
+        "pnpm exec wrangler d1 migrations list DB --remote",
+      );
+      expect(deps.writeReleaseArtifact).toHaveBeenCalledWith(expect.objectContaining({
+        status: "failed_before_stage",
+        phase: "post_build_posthog",
+      }));
+    } finally {
+      process.chdir(previousCwd);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    [
+      "missing generated Worker config",
+      (deps: ReturnType<typeof releaseDeps>) => {
+        deps.readGeneratedWorkerConfig.mockRejectedValueOnce(new Error("missing generated Worker config"));
+      },
+      /missing generated Worker config/,
+    ],
+    [
+      "malformed generated Worker PostHog config",
+      (deps: ReturnType<typeof releaseDeps>) => {
+        deps.readGeneratedWorkerConfig.mockResolvedValueOnce({ vars: {} });
+      },
+      /origin-only HTTPS VITE_POSTHOG_HOST/,
+    ],
+    [
+      "mismatched metadata",
+      (deps: ReturnType<typeof releaseDeps>) => {
+        deps.readClientBuildMetadata.mockResolvedValueOnce(productionBuildMetadata("https://eu.i.posthog.com"));
+      },
+      /metadata/i,
+    ],
+    [
+      "malformed metadata",
+      (deps: ReturnType<typeof releaseDeps>) => {
+        deps.readClientBuildMetadata.mockResolvedValueOnce({
+          ...productionBuildMetadata(CUSTOM_POSTHOG_HOST),
+          extra: [undefined],
+        });
+      },
+      /metadata/i,
+    ],
+    [
+      "mismatched bundle",
+      (deps: ReturnType<typeof releaseDeps>) => {
+        deps.readClientBundleSources.mockResolvedValueOnce(productionBundleSources("https://eu.i.posthog.com"));
+      },
+      /bundle/i,
+    ],
+    [
+      "missing bundle host",
+      (deps: ReturnType<typeof releaseDeps>) => {
+        deps.readClientBundleSources.mockResolvedValueOnce([]);
+      },
+      /bundle/i,
+    ],
+  ])("rejects %s before any migration or deploy action", async (_label, mutateDeps, message) => {
+    const runCommand = successfulRunner();
+    const deps = releaseDeps(runCommand);
+    mutateDeps(deps);
+
+    await expect(runProductionCanaryRelease(deps)).rejects.toThrow(message);
+
+    const calls = runCommand.mock.calls.map(([command, args]) => commandKey(command, args));
+    expect(calls).not.toContain("pnpm exec wrangler d1 migrations list DB --remote");
+    expect(calls).not.toContain("pnpm exec wrangler d1 migrations apply DB --remote");
+    expect(calls).not.toContain(
+      `pnpm exec wrangler versions upload --tag ${RELEASE_SHA} --message Spoonjoy source ${RELEASE_SHA}`,
+    );
+    expect(deps.writeReleaseArtifact).toHaveBeenCalledWith(expect.objectContaining({
+      status: "failed_before_stage",
+      phase: "post_build_posthog",
+      migrationApply: "not_started",
+    }));
   });
 
   it("uses the built-in candidate CSP reader when release deps do not override it", async () => {
@@ -1378,20 +1612,79 @@ describe("release failure containment", () => {
 });
 
 describe("execFile command adapter", () => {
-  it("returns stdout and stderr without using a shell", async () => {
+  it("returns warning-clean stdout without using a shell", async () => {
     const execFile = vi.fn((command, args, options, callback) => {
       expect(command).toBe("pnpm");
       expect(args).toEqual(["run", "build"]);
       expect(options).toEqual({ encoding: "utf8", env: { PATH: "/bin" }, maxBuffer: 16 * 1024 * 1024 });
-      callback(null, "built", "notice");
+      callback(null, "built", "");
+      return { stdout: null, stderr: {} };
     });
     const runner = createReleaseCommandRunner(execFile);
 
     await expect(runner("pnpm", ["run", "build"], { env: { PATH: "/bin" } })).resolves.toEqual({
       stdout: "built",
-      stderr: "notice",
+      stderr: "",
     });
     expect(execFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("streams successful child stdout while retaining captured output", async () => {
+    const childStdout = new EventEmitter();
+    const childStderr = new EventEmitter();
+    const execFile = vi.fn((_command, _args, _options, callback) => {
+      queueMicrotask(() => {
+        childStdout.emit("data", "build complete\n");
+        callback(null, "captured stdout", "");
+      });
+      return { stdout: childStdout, stderr: childStderr };
+    });
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const runner = createReleaseCommandRunner(execFile);
+
+    await expect(runner("pnpm", ["run", "build"])).resolves.toEqual({
+      stdout: "captured stdout",
+      stderr: "",
+    });
+
+    expect(stdout).toHaveBeenCalledWith("build complete\n");
+    expect(stderr).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["warning token on stdout", "Warning: build fallback used\n", ""],
+    ["otherwise unmarked stderr", "build complete\n", "fallback used\n"],
+  ])("rejects successful commands with %s", async (_label, stdout, stderr) => {
+    const runner = createReleaseCommandRunner((_command, _args, _options, callback) => {
+      callback(null, stdout, stderr);
+    });
+
+    await expect(runner("pnpm", ["run", "build"])).rejects.toThrow(
+      "Command emitted unexpected warning output: pnpm",
+    );
+  });
+
+  it("redacts sensitive streamed child output without putting captured output in command errors", async () => {
+    const childStdout = new EventEmitter();
+    const childStderr = new EventEmitter();
+    const execFile = vi.fn((_command, _args, _options, callback) => {
+      queueMicrotask(() => {
+        childStdout.emit("data", "Bearer bearer-value\n");
+        childStderr.emit("data", "api_key=plain-secret\n");
+        callback(Object.assign(new Error("failed"), { code: 1 }), "secret=stdout-value", "token=stderr-value");
+      });
+      return { stdout: childStdout, stderr: childStderr };
+    });
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const runner = createReleaseCommandRunner(execFile);
+
+    await expect(runner("pnpm", ["run", "build"])).rejects.toThrow("exit code 1");
+    await expect(runner("pnpm", ["run", "build"])).rejects.not.toThrow(/stdout-value|stderr-value/);
+
+    expect(stdout).toHaveBeenCalledWith("Bearer [REDACTED]\n");
+    expect(stderr).toHaveBeenCalledWith("api_key=[REDACTED]\n");
   });
 
   it.each([
@@ -1594,6 +1887,7 @@ describe("release artifact and CLI boundary", () => {
     const writeReleaseArtifact = vi.fn(async () => undefined);
 
     const result = await runProductionReleaseCli({
+      ...postHogArtifactReaderDeps(CUSTOM_POSTHOG_HOST),
       execFileImpl,
       readCandidateCspHeaders: async () => new Headers({
         "Content-Security-Policy": buildContentSecurityPolicy(VALID_CSP_NONCE, {
@@ -1674,6 +1968,7 @@ describe("release artifact and CLI boundary", () => {
     vi.stubGlobal("fetch", fetchImpl);
 
     const release = runProductionReleaseCli({
+      ...postHogArtifactReaderDeps("https://us.i.posthog.com"),
       env: { SOURCE_SHA: RELEASE_SHA, PATH: "/test/bin" },
       readWranglerConfig: async () => ({
         vars: { VITE_POSTHOG_HOST: "https://us.i.posthog.com" },
@@ -1700,6 +1995,7 @@ describe("release artifact and CLI boundary", () => {
     });
     try {
       const result = await runProductionReleaseCli({
+        ...postHogArtifactReaderDeps("https://us.i.posthog.com"),
         argv: ["--artifact-dir", artifactDir],
         env: { SOURCE_SHA: RELEASE_SHA, PATH: "/test/bin" },
         readCandidateCspHeaders: async () => new Headers({

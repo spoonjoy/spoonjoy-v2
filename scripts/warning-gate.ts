@@ -8,11 +8,46 @@ const BRACKETED_WARNING_PATTERN = /(?:^|[\s([<{])\[\s*warn(?:ing)?(?:\s*:\s*[^\]
 const WARNING_WORD_PATTERN = /(?:^|[^A-Za-z0-9])(?:[A-Za-z]+warning|warning|warn)(?=[:!\s([<{=]|$|-(?!gate\.ts\b))/i;
 const PRISMA_WARNING_PATTERN = /(?:^|[\s([<{])prisma:warn(?::|\s|$)/i;
 const WARNING_SYMBOL_PATTERN = /⚠/;
-const TEST_RESULT_LINE_PATTERN = /^[✓↓×]\s/;
+const TEST_RESULT_LINE_PATTERN = /^[✓↓×]\s+(?:should|keeps?|rejects?|parses?|detects?|streams?|runs?|fails?|still|preserves?|prints?|uses?|handles?|renders?|displays?|shows?|allows?|supports?|returns?|loads?|creates?|updates?|deletes?|validates?|redirects?|reports?|records?)\b/i;
+const TEST_FILE_RESULT_LINE_PATTERN =
+  /^[✓↓×]\s+(?:test|app)\/\S+\.test\.[cm]?[jt]sx?(?:\s+\(\d+\s+tests?\))?(?:\s+\d+(?:\.\d+)?(?:ms|s))?$/i;
 const OSC_SEQUENCE_PATTERN = /(?:\u001B\]|\u009D)[\s\S]*?(?:\u0007|\u001B\\|\u009C)/g;
+const CSI_SEQUENCE_PATTERN = /(?:\u001B\[|\u009B)[0-?]*[ -/]*[@-~]/g;
+const SGR_SEQUENCE_PATTERN = /^(?:\u001B\[|\u009B)[0-?]*[ -/]*m$/;
+const REJECTED_TERMINAL_CONTROL_PATTERN = /[\u0008\r]/;
+const ESCAPE_CONTROL_PATTERN = /[\u001B\u009B]/;
+const REJECTED_CURSOR_CONTROL_MESSAGE =
+  "warning-gate rejected cursor-editing terminal control output";
 
 function stripTerminalControlSequences(value: string): string {
-  return stripVTControlCharacters(value.replace(OSC_SEQUENCE_PATTERN, ""));
+  return stripVTControlCharacters(value.replace(OSC_SEQUENCE_PATTERN, ""))
+    .replace(REJECTED_TERMINAL_CONTROL_PATTERN, "");
+}
+
+function hasRejectedTerminalControl(value: string): boolean {
+  const withoutOsc = value.replace(OSC_SEQUENCE_PATTERN, "");
+  const withoutAllowedCsi = withoutOsc.replace(CSI_SEQUENCE_PATTERN, (sequence) => {
+    if (!SGR_SEQUENCE_PATTERN.test(sequence)) {
+      return sequence;
+    }
+    return "";
+  });
+  return (
+    REJECTED_TERMINAL_CONTROL_PATTERN.test(withoutOsc) ||
+    withoutAllowedCsi !== withoutOsc.replace(CSI_SEQUENCE_PATTERN, "") ||
+    ESCAPE_CONTROL_PATTERN.test(withoutAllowedCsi)
+  );
+}
+
+function normalizeOutputLine(line: string): { rejectedTerminalControl: boolean; text: string } {
+  return {
+    rejectedTerminalControl: hasRejectedTerminalControl(line),
+    text: stripTerminalControlSequences(line).trim(),
+  };
+}
+
+function formatRejectedTerminalControlLine(text: string): string {
+  return [REJECTED_CURSOR_CONTROL_MESSAGE, text].filter(Boolean).join(": ");
 }
 
 export interface WarningGateCommandResult {
@@ -31,7 +66,7 @@ export type WarningGateCommandRunner = (
 ) => Promise<WarningGateCommandResult>;
 
 function isWarningLine(line: string): boolean {
-  if (TEST_RESULT_LINE_PATTERN.test(line)) {
+  if (TEST_RESULT_LINE_PATTERN.test(line) || TEST_FILE_RESULT_LINE_PATTERN.test(line)) {
     return (
       BRACKETED_WARNING_PATTERN.test(line) ||
       PRISMA_WARNING_PATTERN.test(line) ||
@@ -48,11 +83,18 @@ function isWarningLine(line: string): boolean {
 }
 
 export function findUnexpectedWarnings(output: string): string[] {
-  return output
-    .split(/\r?\n/)
-    .map((line) => stripTerminalControlSequences(line).trim())
-    .filter((line) => line !== "")
-    .filter((line) => isWarningLine(line));
+  const unexpectedWarnings: string[] = [];
+  for (const rawLine of output.split(/\r?\n/)) {
+    const line = normalizeOutputLine(rawLine);
+    if (line.rejectedTerminalControl) {
+      unexpectedWarnings.push(formatRejectedTerminalControlLine(line.text));
+      continue;
+    }
+    if (line.text !== "" && isWarningLine(line.text)) {
+      unexpectedWarnings.push(line.text);
+    }
+  }
+  return unexpectedWarnings;
 }
 
 export function parseWarningGateCommands(argv: readonly string[]): string[][] {
@@ -150,8 +192,11 @@ export async function runWarningGate(
 
   const warningChannelLines = warningOutput
     .split(/\r?\n/)
-    .map((line) => stripTerminalControlSequences(line).trim())
-    .filter(Boolean);
+    .map((line) => normalizeOutputLine(line))
+    .filter((line) => line.text !== "" || line.rejectedTerminalControl)
+    .map((line) =>
+      line.rejectedTerminalControl ? formatRejectedTerminalControlLine(line.text) : line.text
+    );
   const unexpectedWarnings = Array.from(new Set([
     ...findUnexpectedWarnings(output),
     ...warningChannelLines,

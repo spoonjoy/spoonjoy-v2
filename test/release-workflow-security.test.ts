@@ -99,6 +99,22 @@ describe("production release provenance", () => {
 describe("web dependency advisory gate", () => {
   const ci = workflowSource("ci.yml");
 
+  it("pins Node before executing repository TypeScript in every CI job", () => {
+    const parsed = parseDocument(ci).toJS() as {
+      jobs: Record<string, { steps: Array<{ uses?: string; run?: string }> }>;
+    };
+
+    for (const job of Object.values(parsed.jobs)) {
+      const setupIndex = job.steps.findIndex((step) => step.uses?.startsWith("actions/setup-node@"));
+      const validationIndex = job.steps.findIndex(
+        (step) => step.run === "node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation",
+      );
+
+      expect(setupIndex).toBe(1);
+      expect(validationIndex).toBe(2);
+    }
+  });
+
   it("runs a fail-closed OSV-compatible pnpm-lock advisory scan in canonical CI", () => {
     const advisoryScan = readFileSync("scripts/advisory-scan.ts", "utf8");
 

@@ -3,6 +3,14 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolvePostHogBuildHost } from "../app/lib/security-headers.server";
 import { validateCspHeaderSet } from "./production-readiness";
+import {
+  POSTHOG_CLIENT_BUILD_METADATA_PATH,
+  bundledPostHogHostMatches,
+  createPostHogBuildContract,
+  createPostHogBuildMetadata,
+  readPostHogClientBundleSources as readDefaultPostHogClientBundleSources,
+} from "./posthog-build-metadata";
+import { findUnexpectedWarnings } from "./warning-gate";
 
 const RELEASE_SHA_PATTERN = /^[0-9a-f]{40}$/;
 const TREE_HASH_PATTERN = /^[0-9a-f]{40}$/;
@@ -15,6 +23,7 @@ const RELEASE_ARTIFACT_NAME = "production-release.json";
 const CSP_REPORT_ONLY_BREAK_GLASS_ACK = "ACK_REPORT_ONLY_CSP_ROLLBACK";
 const DEFAULT_VERIFICATION_ATTEMPTS = 60;
 const VERIFICATION_DELAY_MS = 1_000;
+const GENERATED_WORKER_CONFIG_PATH = "build/server/wrangler.json";
 const CLOUDFLARE_SECRET_ENV_NAMES = [
   "CF_API_KEY",
   "CF_API_TOKEN",
@@ -30,6 +39,7 @@ type ReleasePhase =
   | "provenance"
   | "initial_preflight"
   | "build"
+  | "post_build_posthog"
   | "post_build_provenance"
   | "migration_list"
   | "migration_review"
@@ -82,6 +92,9 @@ interface RunProductionCanaryReleaseDeps {
   env?: NodeJS.ProcessEnv;
   postHogHost: string;
   readCandidateCspHeaders?: (baseUrl: string, candidateVersionId: string) => Promise<Headers>;
+  readClientBuildMetadata?: () => Promise<Record<string, unknown>>;
+  readClientBundleSources?: () => Promise<readonly string[]>;
+  readGeneratedWorkerConfig?: () => Promise<Record<string, unknown>>;
   readMigrationFile: (filePath: string) => Promise<string>;
   readPublicWorkerVersion: (baseUrl: string) => Promise<string | null>;
   releaseSha: string;
@@ -120,6 +133,10 @@ export type ExecFileLike = (
   options: { encoding: "utf8"; env?: NodeJS.ProcessEnv; maxBuffer: number },
   callback: (error: ExecFileError | null, stdout: string, stderr: string) => void,
 ) => unknown;
+
+interface OutputEmitter {
+  on(event: "data", listener: (chunk: unknown) => void): unknown;
+}
 
 function requireReleaseSha(value: string): string {
   if (!RELEASE_SHA_PATTERN.test(value)) {
@@ -221,6 +238,66 @@ function objectRecord(value: unknown, context: string): Record<string, unknown> 
     throw new Error(`${context} contained an invalid row.`);
   }
   return value as Record<string, unknown>;
+}
+
+function jsonObject(value: unknown, context: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${context} was not a JSON object.`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => canonicalJson(entry)).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right));
+    return `{${entries.map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "undefined";
+}
+
+async function readJsonObjectFile(filePath: string, context: string): Promise<Record<string, unknown>> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readFile(filePath, "utf8"));
+  } catch (error) {
+    throw new Error(`${context} could not be read as JSON: ${sanitizedFailure(error)}`);
+  }
+  return jsonObject(parsed, context);
+}
+
+async function readDefaultGeneratedWorkerConfig(): Promise<Record<string, unknown>> {
+  return readJsonObjectFile(GENERATED_WORKER_CONFIG_PATH, "Generated Worker config");
+}
+
+async function readDefaultClientBuildMetadata(): Promise<Record<string, unknown>> {
+  return readJsonObjectFile(POSTHOG_CLIENT_BUILD_METADATA_PATH, "Generated PostHog metadata");
+}
+
+async function validateProductionPostHogArtifacts(
+  readGeneratedWorkerConfig: () => Promise<Record<string, unknown>>,
+  readClientBuildMetadata: () => Promise<Record<string, unknown>>,
+  readClientBundleSources: () => Promise<readonly string[]>,
+): Promise<void> {
+  const generatedWorkerConfig = await readGeneratedWorkerConfig();
+  const clientMetadata = await readClientBuildMetadata();
+  const clientBundleSources = await readClientBundleSources();
+  const contract = createPostHogBuildContract(generatedWorkerConfig);
+  const expectedMetadata = createPostHogBuildMetadata(contract);
+
+  if (canonicalJson(clientMetadata) !== canonicalJson(expectedMetadata)) {
+    throw new Error(
+      `Generated PostHog metadata does not exactly match the production Worker config for ${contract.postHogHost}.`,
+    );
+  }
+  if (!bundledPostHogHostMatches(clientBundleSources, contract.postHogHost)) {
+    throw new Error(
+      `Generated client bundle does not contain exactly one PostHog host matching ${contract.postHogHost}.`,
+    );
+  }
 }
 
 export function parsePendingMigrationNames(payload: string): string[] {
@@ -531,16 +608,38 @@ export function buildWorkerVersionOverride(workerName: string, versionId: string
   return `${workerName}="${versionId}"`;
 }
 
-function sanitizedFailure(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
+function redactSensitiveText(message: string): string {
   return message
     .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]")
     .replace(/\b(token|secret|password|authorization|api[_-]?key)\s*[=:]\s*\S+/gi, "$1=[REDACTED]")
-    .replace(/\b[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b/g, "[REDACTED]")
+    .replace(/\b[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b/g, "[REDACTED]");
+}
+
+function sanitizedFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return redactSensitiveText(message)
     .replace(/[\u0000-\u001f\u007f]+/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 500);
+}
+
+function isOutputEmitter(value: unknown): value is OutputEmitter {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    typeof (value as { on?: unknown }).on === "function",
+  );
+}
+
+function streamCommandOutput(
+  stream: unknown,
+  write: (chunk: string) => boolean,
+): void {
+  if (!isOutputEmitter(stream)) return;
+  stream.on("data", (chunk) => {
+    write(redactSensitiveText(String(chunk)));
+  });
 }
 
 async function writeFailureArtifact(
@@ -809,6 +908,12 @@ export async function runProductionCanaryRelease(
     await deps.runCommand("pnpm", ["run", "deploy:preflight"], { env: initialEnv });
     phase = "build";
     await deps.runCommand("pnpm", ["run", "build"], { env: cleanEnv });
+    phase = "post_build_posthog";
+    await validateProductionPostHogArtifacts(
+      deps.readGeneratedWorkerConfig ?? readDefaultGeneratedWorkerConfig,
+      deps.readClientBuildMetadata ?? readDefaultClientBuildMetadata,
+      deps.readClientBundleSources ?? readDefaultPostHogClientBundleSources,
+    );
     phase = "post_build_provenance";
     const postBuildStatus = await deps.runCommand(
       "git",
@@ -1000,7 +1105,7 @@ export function createReleaseCommandRunner(
   execFileImpl: ExecFileLike = nodeExecFile as unknown as ExecFileLike,
 ): ReleaseCommandRunner {
   return (command, args, options) => new Promise((resolve, reject) => {
-    execFileImpl(command, args, {
+    const child = execFileImpl(command, args, {
       encoding: "utf8",
       env: options?.env,
       maxBuffer: 16 * 1024 * 1024,
@@ -1010,8 +1115,16 @@ export function createReleaseCommandRunner(
         reject(new Error(`Command failed with exit code ${exitCode}: ${command} ${args.join(" ")}`));
         return;
       }
+      if (stderr.trim() !== "" || findUnexpectedWarnings(stdout).length > 0) {
+        reject(new Error(`Command emitted unexpected warning output: ${command}`));
+        return;
+      }
       resolve({ stdout, stderr });
     });
+    if (child && typeof child === "object") {
+      streamCommandOutput((child as { stdout?: unknown }).stdout, (chunk) => process.stdout.write(chunk));
+      streamCommandOutput((child as { stderr?: unknown }).stderr, (chunk) => process.stderr.write(chunk));
+    }
   });
 }
 
@@ -1076,6 +1189,9 @@ interface ReleaseCliDeps {
   argv?: readonly string[];
   env?: NodeJS.ProcessEnv;
   execFileImpl?: ExecFileLike;
+  readClientBuildMetadata?: () => Promise<Record<string, unknown>>;
+  readClientBundleSources?: () => Promise<readonly string[]>;
+  readGeneratedWorkerConfig?: () => Promise<Record<string, unknown>>;
   readWranglerConfig?: () => Promise<Record<string, unknown>>;
   readCandidateCspHeaders?: (baseUrl: string, candidateVersionId: string) => Promise<Headers>;
   readMigrationFile?: (filePath: string) => Promise<string>;
@@ -1098,7 +1214,10 @@ export async function runProductionReleaseCli(deps: ReleaseCliDeps): Promise<Rel
     artifactDir: options.artifactDir,
     env,
     postHogHost: resolvePostHogBuildHost(wrangler),
+    readClientBuildMetadata: deps.readClientBuildMetadata,
+    readClientBundleSources: deps.readClientBundleSources,
     readCandidateCspHeaders: deps.readCandidateCspHeaders ?? readCandidateCspHeaders,
+    readGeneratedWorkerConfig: deps.readGeneratedWorkerConfig,
     readPublicWorkerVersion: deps.readPublicWorkerVersion ?? readPublicWorkerVersion,
     releaseSha: options.releaseSha,
     runCommand: deps.runCommand ?? createReleaseCommandRunner(deps.execFileImpl),

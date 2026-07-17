@@ -479,17 +479,28 @@ describe("cleanup-local-qa-data", () => {
       "blocker_recipe_in_cookbook_addedById",
       "blocker_cover_sourceSpoonId",
       "blocker_cover_createdById",
-      "blocker_agent_connection_approvedById",
-      "blocker_agent_connection_credentialId",
-      "blocker_api_idempotency_credentialId",
-      "blocker_api_credential_oauthClientId",
-      "blocker_oauth_code_userId",
-      "blocker_oauth_refresh_token_userId",
       "blocker_notification_payload",
       "blocker_ambiguous_oauth_client",
       "SELECT CASE WHEN EXISTS (SELECT 1 FROM cleanup_blockers)",
       "RAISE(ABORT, 'Refusing cleanup because non-disposable rows still reference disposable targets')",
     ]);
+    expect(sql).not.toMatch(
+      /blocker_(?:agent_connection|api_idempotency|api_credential_oauthClientId|oauth_code_userId|oauth_refresh_token_userId)/,
+    );
+  });
+
+  it("deletes every child row owned by an explicitly disposable E2E OAuth client", () => {
+    const sql = buildApplySql();
+
+    expect(sql).toContain(
+      "DELETE FROM OAuthAuthCode\nWHERE clientId IN (SELECT id FROM e2e_oauth_clients);",
+    );
+    expect(sql).toContain(
+      "DELETE FROM OAuthRefreshToken\nWHERE clientId IN (SELECT id FROM e2e_oauth_clients);",
+    );
+    expect(sql).not.toContain(
+      "clientId IN (SELECT id FROM e2e_oauth_clients)\n  AND userId IN (SELECT id FROM disposable_users)",
+    );
   });
 
   it("orders credential, OAuth, cookbook, cover, spoon, recipe, user, and cascade cleanup safely", () => {

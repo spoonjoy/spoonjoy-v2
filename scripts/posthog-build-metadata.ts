@@ -71,13 +71,13 @@ const BUNDLED_POSTHOG_HOST_PATTERN =
   /(?:^|[,{])\s*(?:"VITE_POSTHOG_HOST"|VITE_POSTHOG_HOST)\s*:\s*("(?:\\.|[^"\\])*")/g;
 
 export function extractBundledPostHogHosts(sources: readonly string[]): readonly string[] {
-  const hosts = new Set<string>();
+  const hosts: string[] = [];
   for (const source of sources) {
     for (const match of source.matchAll(BUNDLED_POSTHOG_HOST_PATTERN)) {
-      hosts.add(JSON.parse(match[1]) as string);
+      hosts.push(JSON.parse(match[1]) as string);
     }
   }
-  return [...hosts];
+  return hosts;
 }
 
 export function bundledPostHogHostMatches(
@@ -91,11 +91,25 @@ export function bundledPostHogHostMatches(
 export async function readPostHogClientBundleSources(
   rootDir = process.cwd(),
 ): Promise<readonly string[]> {
-  const assetsDir = path.join(rootDir, "build/client/assets");
-  const entries = await readdir(assetsDir, { withFileTypes: true });
-  const files = entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".js"))
-    .map((entry) => entry.name)
-    .sort();
-  return Promise.all(files.map((file) => readFile(path.join(assetsDir, file), "utf8")));
+  const clientOutputDir = path.join(rootDir, "build/client");
+  const files = await collectJavaScriptFiles(clientOutputDir);
+  files.sort((a, b) =>
+    path.relative(clientOutputDir, a).localeCompare(path.relative(clientOutputDir, b)),
+  );
+  return Promise.all(files.map((file) => readFile(file, "utf8")));
+}
+
+async function collectJavaScriptFiles(dir: string): Promise<string[]> {
+  const entries = await readdir(dir, { withFileTypes: true });
+  const files = await Promise.all(entries.map(async (entry) => {
+    const entryPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      return collectJavaScriptFiles(entryPath);
+    }
+    if (entry.isFile() && entry.name.endsWith(".js")) {
+      return [entryPath];
+    }
+    return [];
+  }));
+  return files.flat();
 }

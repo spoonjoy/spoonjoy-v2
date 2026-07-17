@@ -49,6 +49,12 @@ describe("warning gate", () => {
     expect(findUnexpectedWarnings("PASS scripts: scripts/warning-gate.ts, scripts/production-readiness.ts")).toEqual([]);
     expect(findUnexpectedWarnings("warnings-summary.log")).toEqual([]);
     expect(findUnexpectedWarnings("✓ should display appropriate UI warning for one auth method")).toEqual([]);
+    expect(findUnexpectedWarnings("✓ test/scripts/warning-gate.test.ts (14 tests) 194ms")).toEqual([]);
+    expect(findUnexpectedWarnings("✓ app/lib/warning-copy.test.tsx (1 test) 2.4s")).toEqual([]);
+    expect(findUnexpectedWarnings("✓ warning dependency fallback used")).toEqual([
+      "✓ warning dependency fallback used",
+    ]);
+    expect(findUnexpectedWarnings("✓ should keep warning copy in a passing test name")).toEqual([]);
 
     expect(findUnexpectedWarnings("▲ [WARNING] bundle contains dynamic import")).toEqual([
       "▲ [WARNING] bundle contains dynamic import",
@@ -89,8 +95,20 @@ describe("warning gate", () => {
     expect(findUnexpectedWarnings("✓ [warn] hidden behind a status prefix")).toEqual([
       "✓ [warn] hidden behind a status prefix",
     ]);
+    expect(findUnexpectedWarnings("\u001b[33mWarning: hidden behind color\u001b[39m")).toEqual([
+      "Warning: hidden behind color",
+    ]);
+    expect(findUnexpectedWarnings("warniX\u001b[1Dng")).toEqual([
+      "warning-gate rejected cursor-editing terminal control output: warniXng",
+    ]);
+    expect(findUnexpectedWarnings("warnin\bng")).toEqual([
+      "warning-gate rejected cursor-editing terminal control output: warninng",
+    ]);
     expect(findUnexpectedWarnings("\u001b[2K\u001b[1GWarning: hidden after cursor controls")).toEqual([
-      "Warning: hidden after cursor controls",
+      "warning-gate rejected cursor-editing terminal control output: Warning: hidden after cursor controls",
+    ]);
+    expect(findUnexpectedWarnings("\u001b(Bordinary charset switch")).toEqual([
+      "warning-gate rejected cursor-editing terminal control output: ordinary charset switch",
     ]);
     expect(findUnexpectedWarnings("\u001b]0;build title\u0007Warning: hidden after OSC title\n")).toEqual([
       "Warning: hidden after OSC title",
@@ -99,7 +117,9 @@ describe("warning gate", () => {
       "Warning: hidden after OSC ST",
     ]);
     expect(findUnexpectedWarnings("✓ ordinary passing test")).toEqual([]);
-    expect(findUnexpectedWarnings("\u001b[2K\u001b[1G✓ ordinary passing test")).toEqual([]);
+    expect(findUnexpectedWarnings("\u001b[2K\u001b[1G✓ ordinary passing test")).toEqual([
+      "warning-gate rejected cursor-editing terminal control output: ✓ ordinary passing test",
+    ]);
     expect(findUnexpectedWarnings("[warn:build] hidden on stdout")).toEqual([
       "[warn:build] hidden on stdout",
     ]);
@@ -218,6 +238,21 @@ describe("warning gate", () => {
     expect(result).toEqual({
       exitCode: 1,
       unexpectedWarnings: ["Update available 6.19.2 -> 7.8.0"],
+    });
+  });
+
+  it("fails cursor-editing terminal controls on the warning channel even without text", async () => {
+    const runCommand = vi.fn().mockResolvedValue({
+      exitCode: 0,
+      output: "ordinary stdout\n",
+      warningOutput: "\u001b[1D\n",
+    });
+
+    const result = await runWarningGate(["--", "pnpm", "run", "build"], { runCommand });
+
+    expect(result).toEqual({
+      exitCode: 1,
+      unexpectedWarnings: ["warning-gate rejected cursor-editing terminal control output"],
     });
   });
 

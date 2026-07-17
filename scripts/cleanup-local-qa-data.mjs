@@ -458,48 +458,6 @@ WHERE createdById IN (SELECT id FROM disposable_users)
   AND recipeId NOT IN (SELECT id FROM hard_delete_recipes)`,
     },
     {
-      blocker: "blocker_agent_connection_approvedById",
-      rowId: "id",
-      fromWhere: `FROM AgentConnectionRequest
-WHERE approvedById NOT IN (SELECT id FROM disposable_users)
-  AND credentialId IN (SELECT id FROM disposable_credentials)`,
-    },
-    {
-      blocker: "blocker_agent_connection_credentialId",
-      rowId: "id",
-      fromWhere: `FROM AgentConnectionRequest
-WHERE credentialId IN (SELECT id FROM disposable_credentials)
-  AND approvedById NOT IN (SELECT id FROM disposable_users)`,
-    },
-    {
-      blocker: "blocker_api_idempotency_credentialId",
-      rowId: "id",
-      fromWhere: `FROM ApiIdempotencyKey
-WHERE credentialId IN (SELECT id FROM disposable_credentials)
-  AND userId NOT IN (SELECT id FROM disposable_users)`,
-    },
-    {
-      blocker: "blocker_api_credential_oauthClientId",
-      rowId: "id",
-      fromWhere: `FROM ApiCredential
-WHERE oauthClientId IN (SELECT id FROM e2e_oauth_clients)
-  AND userId NOT IN (SELECT id FROM disposable_users)`,
-    },
-    {
-      blocker: "blocker_oauth_code_userId",
-      rowId: "id",
-      fromWhere: `FROM OAuthAuthCode
-WHERE clientId IN (SELECT id FROM e2e_oauth_clients)
-  AND userId NOT IN (SELECT id FROM disposable_users)`,
-    },
-    {
-      blocker: "blocker_oauth_refresh_token_userId",
-      rowId: "id",
-      fromWhere: `FROM OAuthRefreshToken
-WHERE clientId IN (SELECT id FROM e2e_oauth_clients)
-  AND userId NOT IN (SELECT id FROM disposable_users)`,
-    },
-    {
       blocker: "blocker_ambiguous_oauth_client",
       rowId: "id",
       fromWhere: `FROM OAuthClient
@@ -807,36 +765,6 @@ WHERE createdById IN (SELECT id FROM disposable_users)
   AND recipeId NOT IN (SELECT id FROM hard_delete_recipes);
 
 INSERT INTO cleanup_blockers (blocker, rowId)
-SELECT 'blocker_agent_connection_approvedById', id FROM AgentConnectionRequest
-WHERE approvedById NOT IN (SELECT id FROM disposable_users)
-  AND credentialId IN (SELECT id FROM disposable_credentials);
-
-INSERT INTO cleanup_blockers (blocker, rowId)
-SELECT 'blocker_agent_connection_credentialId', id FROM AgentConnectionRequest
-WHERE credentialId IN (SELECT id FROM disposable_credentials)
-  AND approvedById NOT IN (SELECT id FROM disposable_users);
-
-INSERT INTO cleanup_blockers (blocker, rowId)
-SELECT 'blocker_api_idempotency_credentialId', id FROM ApiIdempotencyKey
-WHERE credentialId IN (SELECT id FROM disposable_credentials)
-  AND userId NOT IN (SELECT id FROM disposable_users);
-
-INSERT INTO cleanup_blockers (blocker, rowId)
-SELECT 'blocker_api_credential_oauthClientId', id FROM ApiCredential
-WHERE oauthClientId IN (SELECT id FROM e2e_oauth_clients)
-  AND userId NOT IN (SELECT id FROM disposable_users);
-
-INSERT INTO cleanup_blockers (blocker, rowId)
-SELECT 'blocker_oauth_code_userId', id FROM OAuthAuthCode
-WHERE clientId IN (SELECT id FROM e2e_oauth_clients)
-  AND userId NOT IN (SELECT id FROM disposable_users);
-
-INSERT INTO cleanup_blockers (blocker, rowId)
-SELECT 'blocker_oauth_refresh_token_userId', id FROM OAuthRefreshToken
-WHERE clientId IN (SELECT id FROM e2e_oauth_clients)
-  AND userId NOT IN (SELECT id FROM disposable_users);
-
-INSERT INTO cleanup_blockers (blocker, rowId)
 SELECT 'blocker_ambiguous_oauth_client', id FROM OAuthClient
 WHERE clientName = 'E2E OAuth Client'
   AND id NOT IN (SELECT id FROM e2e_oauth_clients);
@@ -871,12 +799,10 @@ DELETE FROM ApiCredential
 WHERE id IN (SELECT id FROM disposable_credentials);
 
 DELETE FROM OAuthAuthCode
-WHERE clientId IN (SELECT id FROM e2e_oauth_clients)
-  AND userId IN (SELECT id FROM disposable_users);
+WHERE clientId IN (SELECT id FROM e2e_oauth_clients);
 
 DELETE FROM OAuthRefreshToken
-WHERE clientId IN (SELECT id FROM e2e_oauth_clients)
-  AND userId IN (SELECT id FROM disposable_users);
+WHERE clientId IN (SELECT id FROM e2e_oauth_clients);
 
 DELETE FROM OAuthClient
 WHERE id IN (SELECT id FROM e2e_oauth_clients);

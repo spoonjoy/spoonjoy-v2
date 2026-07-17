@@ -246,10 +246,10 @@ function validInputs(): DeploymentPreflightInputs {
     },
     packageJson: {
       scripts: {
-        build: "react-router build",
+        build: "pnpm run api:playground:generate && tsx scripts/react-router-build.ts",
         deploy: "pnpm run deploy:preflight && pnpm run build && pnpm exec wrangler deploy",
         "deploy:qa":
-          "SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run qa:preflight && CLOUDFLARE_ENV=qa pnpm run build && pnpm run qa:migrate && SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG=1 pnpm run qa:preflight && pnpm exec wrangler deploy --env qa",
+          "SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run qa:preflight && node scripts/warning-gate.ts -- env CLOUDFLARE_ENV=qa pnpm run build && pnpm run qa:migrate && SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG=1 pnpm run qa:preflight && pnpm exec wrangler deploy --env qa",
         "deploy:auto": "tsx scripts/deploy-production-canary.ts",
         "deploy:preflight": "tsx scripts/deployment-preflight.ts",
         "qa:preflight": "tsx scripts/qa-preflight.ts",
@@ -258,7 +258,7 @@ function validInputs(): DeploymentPreflightInputs {
         typecheck: "react-router typegen && tsc",
         "typecheck:scripts": "tsc -p tsconfig.scripts.json",
         "test:coverage": "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then pnpm exec vitest run --coverage --fileParallelism=false",
-        "test:e2e": "env -u FORCE_COLOR -u NO_COLOR tsx scripts/warning-gate.ts -- pnpm exec playwright test",
+        "test:e2e": "env -u FORCE_COLOR -u NO_COLOR PLAYWRIGHT_FORCE_TTY=0 tsx scripts/warning-gate.ts -- pnpm exec playwright test --reporter=list,html",
         "smoke:api": "node scripts/smoke-api-live.mjs --target-env production",
         "cleanup:qa": "node scripts/cleanup-local-qa-data.mjs --target-env local",
         "cleanup:local": "node scripts/cleanup-local-qa-data.mjs --target-env local",
@@ -1334,6 +1334,27 @@ describe("deployment preflight", () => {
     expect(validateDeploymentConfig(inputs).errors.map((item) => item.name)).toContain("CI workflow");
   });
 
+  it("rejects CI validation moved after dependency installation", () => {
+    const validationStep = [
+      "      - name: 🔐 Validate CI invocation",
+      "        run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation",
+      "",
+    ].join("\n");
+    const installStep = [
+      "      - name: 📥 Install advisory dependencies without lifecycle scripts",
+      "        run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile --ignore-scripts",
+    ].join("\n");
+    const withoutValidation = replaceRequired(validCiWorkflow(), validationStep, "");
+    const inputs = validInputs();
+    inputs.ciWorkflow = replaceRequired(
+      withoutValidation,
+      installStep,
+      `${installStep}\n${validationStep.trimEnd()}`,
+    );
+
+    expect(validateDeploymentConfig(inputs).errors.map((item) => item.name)).toContain("CI workflow");
+  });
+
   it.each([
     [
       "false prefix on deploy condition",
@@ -1488,6 +1509,25 @@ describe("deployment preflight", () => {
     const result = validateDeploymentConfig(inputs);
 
     expect(result.errors.map((item) => item.name)).toContain("React Router build contract");
+  });
+
+  it("requires the package build script to use the canonical checked build entrypoint", () => {
+    const inputs = validInputs();
+    inputs.packageJson.scripts!.build = "react-router build";
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("React Router build contract");
+  });
+
+  it("requires QA builds to run through the warning gate", () => {
+    const inputs = validInputs();
+    inputs.packageJson.scripts!["deploy:qa"] =
+      "SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run qa:preflight && CLOUDFLARE_ENV=qa pnpm run build && pnpm run qa:migrate && SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG=1 pnpm run qa:preflight && pnpm exec wrangler deploy --env qa";
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("QA package scripts");
   });
 
   it("rejects a production workflow whose deploy steps are not an array", () => {
@@ -2066,6 +2106,22 @@ describe("deployment preflight", () => {
     const inputs = validInputs();
     (inputs.packageJson.scripts as Record<string, string>)["test:coverage"] = "vitest run --coverage";
     (inputs.packageJson.scripts as Record<string, string>)["test:e2e"] = "playwright test";
+
+    expect(validateDeploymentConfig(inputs).errors.map((item) => item.name)).toContain("output gate scripts");
+  });
+
+  it("requires e2e output to disable Playwright cursor rewriting before warning scanning", () => {
+    const inputs = validInputs();
+    (inputs.packageJson.scripts as Record<string, string>)["test:e2e"] =
+      "env -u FORCE_COLOR -u NO_COLOR tsx scripts/warning-gate.ts -- pnpm exec playwright test";
+
+    expect(validateDeploymentConfig(inputs).errors.map((item) => item.name)).toContain("output gate scripts");
+  });
+
+  it("requires an explicit non-interactive Playwright reporter while preserving HTML artifacts", () => {
+    const inputs = validInputs();
+    (inputs.packageJson.scripts as Record<string, string>)["test:e2e"] =
+      "env -u FORCE_COLOR -u NO_COLOR PLAYWRIGHT_FORCE_TTY=0 tsx scripts/warning-gate.ts -- pnpm exec playwright test";
 
     expect(validateDeploymentConfig(inputs).errors.map((item) => item.name)).toContain("output gate scripts");
   });
@@ -3012,7 +3068,7 @@ describe("package.json deploy scripts", () => {
     expect(pkg.scripts["qa:migrate"]).toBe("pnpm exec wrangler d1 migrations apply DB --remote --env qa");
     expect(pkg.scripts["qa:seed"]).toBe("node scripts/seed-qa.mjs --target-env qa");
     expect(pkg.scripts["deploy:qa"]).toBe(
-      "SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run qa:preflight && CLOUDFLARE_ENV=qa pnpm run build && pnpm run qa:migrate && SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG=1 pnpm run qa:preflight && pnpm exec wrangler deploy --env qa",
+      "SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run qa:preflight && node scripts/warning-gate.ts -- env CLOUDFLARE_ENV=qa pnpm run build && pnpm run qa:migrate && SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG=1 pnpm run qa:preflight && pnpm exec wrangler deploy --env qa",
     );
     expect(pkg.scripts["smoke:qa"]).toBe(
       "node scripts/smoke-live.mjs --target-env qa --base-url https://spoonjoy-v2-qa.mendelow-studio.workers.dev --out qa-live-smoke-artifacts",

@@ -66,7 +66,7 @@ describe("PostHog client build contract", () => {
     );
   });
 
-  it("extracts only structured host literals from actual client code", () => {
+  it("extracts every structured host literal occurrence from actual client code", () => {
     expect(extractBundledPostHogHosts([
       'const a={VITE_POSTHOG_HOST:"https://us.i.posthog.com"};',
       'const b={"VITE_POSTHOG_HOST":"https://eu.i.posthog.com"};',
@@ -75,16 +75,20 @@ describe("PostHog client build contract", () => {
     ])).toEqual([
       "https://us.i.posthog.com",
       "https://eu.i.posthog.com",
+      "https://us.i.posthog.com",
     ]);
     expect(extractBundledPostHogHosts([])).toEqual([]);
   });
 
-  it("requires exactly one bundled host matching the immutable build contract", () => {
+  it("requires exactly one total bundled host occurrence matching the immutable build contract", () => {
     const expected = "https://us.i.posthog.com";
+    expect(bundledPostHogHostMatches([
+      `const env={VITE_POSTHOG_HOST:"${expected}"};`,
+    ], expected)).toBe(true);
     expect(bundledPostHogHostMatches([
       `const a={VITE_POSTHOG_HOST:"${expected}"};`,
       `const b={VITE_POSTHOG_HOST:"${expected}"};`,
-    ], expected)).toBe(true);
+    ], expected)).toBe(false);
     expect(bundledPostHogHostMatches([], expected)).toBe(false);
     expect(bundledPostHogHostMatches([
       `const a={VITE_POSTHOG_HOST:"${expected}"};`,
@@ -92,9 +96,10 @@ describe("PostHog client build contract", () => {
     ], expected)).toBe(false);
   });
 
-  it("reads sorted JavaScript bundle assets and ignores other generated files", async () => {
+  it("recursively reads sorted JavaScript client output and ignores other generated files", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "spoonjoy-posthog-bundle-"));
     try {
+      const client = path.join(root, "build/client");
       const assets = path.join(root, "build/client/assets");
       await Promise.all([
         mkdir(assets, { recursive: true }),
@@ -103,11 +108,54 @@ describe("PostHog client build contract", () => {
       await Promise.all([
         writeFile(path.join(assets, "b.js"), "second", "utf8"),
         writeFile(path.join(assets, "a.js"), "first", "utf8"),
+        writeFile(path.join(assets, "nested", "c.js"), "third", "utf8"),
+        writeFile(path.join(client, "entry.js"), "entry", "utf8"),
         writeFile(path.join(assets, "style.css"), "ignored", "utf8"),
       ]);
 
-      await expect(readPostHogClientBundleSources(root)).resolves.toEqual(["first", "second"]);
+      await expect(readPostHogClientBundleSources(root)).resolves.toEqual([
+        "first",
+        "second",
+        "third",
+        "entry",
+      ]);
     } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("exposes top-level decoy and nested actual hosts as duplicate bundle occurrences", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "spoonjoy-posthog-bundle-"));
+    const expected = "https://us.i.posthog.com";
+    try {
+      const client = path.join(root, "build/client");
+      const nested = path.join(client, "assets/chunks");
+      await mkdir(nested, { recursive: true });
+      await Promise.all([
+        writeFile(path.join(client, "decoy.js"), `const a={VITE_POSTHOG_HOST:"${expected}"};`, "utf8"),
+        writeFile(path.join(nested, "actual.js"), `const b={VITE_POSTHOG_HOST:"${expected}"};`, "utf8"),
+      ]);
+
+      const sources = await readPostHogClientBundleSources(root);
+      expect(extractBundledPostHogHosts(sources)).toEqual([expected, expected]);
+      expect(bundledPostHogHostMatches(sources, expected)).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("defaults client bundle reads to the current working directory", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "spoonjoy-posthog-bundle-"));
+    const previousCwd = process.cwd();
+    try {
+      const assets = path.join(root, "build/client/assets");
+      await mkdir(assets, { recursive: true });
+      await writeFile(path.join(assets, "app.js"), "default-root", "utf8");
+
+      process.chdir(root);
+      await expect(readPostHogClientBundleSources()).resolves.toEqual(["default-root"]);
+    } finally {
+      process.chdir(previousCwd);
       await rm(root, { recursive: true, force: true });
     }
   });
