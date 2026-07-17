@@ -46,6 +46,7 @@ describe("warning gate", () => {
       "prisma:warn Something else happened",
     ]);
     expect(findUnexpectedWarnings("warning-gate.ts  |   59.09 |    62.06 |")).toEqual([]);
+    expect(findUnexpectedWarnings("PASS scripts: scripts/warning-gate.ts, scripts/production-readiness.ts")).toEqual([]);
     expect(findUnexpectedWarnings("warnings-summary.log")).toEqual([]);
     expect(findUnexpectedWarnings("✓ should display appropriate UI warning for one auth method")).toEqual([]);
 
@@ -75,6 +76,18 @@ describe("warning gate", () => {
     ]);
     expect(findUnexpectedWarnings("foo-warning: generated chunk is oversized")).toEqual([
       "foo-warning: generated chunk is oversized",
+    ]);
+    expect(findUnexpectedWarnings("Warning! hidden failure")).toEqual([
+      "Warning! hidden failure",
+    ]);
+    expect(findUnexpectedWarnings("WARNING-hidden failure")).toEqual([
+      "WARNING-hidden failure",
+    ]);
+    expect(findUnexpectedWarnings("WARNING-gated bypass")).toEqual([
+      "WARNING-gated bypass",
+    ]);
+    expect(findUnexpectedWarnings("WARN=hidden failure")).toEqual([
+      "WARN=hidden failure",
     ]);
     expect(findUnexpectedWarnings(`${prismaWarning} Warning: appended bypass`)).toEqual([
       `${prismaWarning} Warning: appended bypass`,

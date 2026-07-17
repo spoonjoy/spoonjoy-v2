@@ -6,8 +6,8 @@ import { Request as UndiciRequest } from "undici";
  * StreamTransfer emits inline hydration scripts (`window.__reactRouterContext…`)
  * that are nonced ONLY via `<ServerRouter nonce>` — NOT via `NonceContext`. So
  * if `handleRequest` forgets to pass the nonce to `ServerRouter`, those scripts
- * render un-nonced and the CSP blocks them on every page the moment report-only
- * flips to enforce. This test fails if that prop is dropped.
+ * render un-nonced and an enforcing CSP blocks them on every page. This test
+ * fails if that prop is dropped.
  *
  * We mock `ServerRouter` to capture its props (rendering a real one needs a
  * full `EntryContext`/build, which would make the test brittle). `...actual`

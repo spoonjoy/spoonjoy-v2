@@ -90,16 +90,20 @@ describe("web dependency advisory gate", () => {
   const ci = workflowSource("ci.yml");
 
   it("runs a fail-closed OSV-compatible pnpm-lock advisory scan in canonical CI", () => {
+    const advisoryScan = readFileSync("scripts/advisory-scan.ts", "utf8");
+
     expect(ci).toContain("advisory");
     expect(ci).toContain("pnpm run advisory:scan");
-    expect(ci).toContain("pnpm-lock.yaml");
+    expect(advisoryScan).toContain('"--lockfile=pnpm-lock.yaml"');
     expect(ci).toContain("osv-scanner_linux_amd64");
     expect(ci).toContain("bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc");
     expect(ci).toContain("https://api.github.com/repos/google/osv-scanner/git/ref/tags/${OSV_SCANNER_VERSION}");
-    expect(ci).toContain('test "$actual_tag_sha" = "$OSV_SCANNER_TAG_SHA"');
+    expect(ci).toContain(
+      "node scripts/warning-gate.ts -- jq -e --arg expected \"$OSV_SCANNER_TAG_SHA\" '.object | select(.type == \"commit\" and .sha == $expected)' .cache/osv-scanner/tag.json",
+    );
     expect(ci).toContain("pnpm install --frozen-lockfile --ignore-scripts");
 
-    const tagVerification = ci.indexOf('test "$actual_tag_sha" = "$OSV_SCANNER_TAG_SHA"');
+    const tagVerification = ci.indexOf("jq -e --arg expected");
     const binaryDownload = ci.indexOf("osv-scanner_linux_amd64");
     const dependencyInstall = ci.indexOf("pnpm install --frozen-lockfile --ignore-scripts");
     const advisoryRun = ci.indexOf("pnpm run advisory:scan");
@@ -153,10 +157,18 @@ describe("CI warning suppression at source", () => {
     expect(ci).toContain([
       "      - name: 🎭 Install Playwright Browsers",
       "        run: |",
-      '          node scripts/warning-gate.ts -- sudo env NEEDRESTART_SUSPEND=1 "PATH=$PATH" node node_modules/@playwright/test/cli.js install-deps chromium',
+      "          node scripts/warning-gate.ts -- pnpm exec playwright install-deps --dry-run chromium",
+      "          node scripts/warning-gate.ts -- sudo apt-get update",
+      "          node scripts/warning-gate.ts -- sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends xvfb fonts-noto-color-emoji fonts-unifont libfontconfig1 libfreetype6 xfonts-cyrillic xfonts-scalable fonts-liberation fonts-ipafont-gothic fonts-wqy-zenhei fonts-tlwg-loma-otf fonts-freefont-ttf libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 libcairo2 libcups2t64 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0t64 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2",
       "          node scripts/warning-gate.ts -- pnpm exec playwright install chromium",
     ].join("\n"));
     expect(ci.match(/NEEDRESTART_SUSPEND=1/g)).toHaveLength(1);
     expect(ci).not.toMatch(/^\s*NEEDRESTART_SUSPEND:/m);
+    expect(ci).not.toMatch(/sudo[^\n]*(?:node|pnpm|corepack|node_modules|\.js)/);
+  });
+
+  it("warning-gates every Corepack command in canonical CI", () => {
+    expect(ci.match(/node scripts\/warning-gate\.ts -- corepack enable/g)).toHaveLength(3);
+    expect(ci).not.toMatch(/^\s*corepack\s/m);
   });
 });

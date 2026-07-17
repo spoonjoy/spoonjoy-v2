@@ -5,7 +5,7 @@ export const EXPECTED_PRISMA_D1_TRANSACTION_WARNING =
 
 const ANSI_PATTERN = /\u001b\[[0-9;]*m/g;
 const BRACKETED_WARNING_PATTERN = /(?:^|[\s([<{])\[warning\](?::|\s|$)/i;
-const WARNING_WORD_PATTERN = /(?:^|[^A-Za-z0-9])(?:[A-Za-z]+warning|warning|warn)(?=[:\s([<{]|$)/i;
+const WARNING_WORD_PATTERN = /(?:^|[^A-Za-z0-9])(?:[A-Za-z]+warning|warning|warn)(?=[:!\s([<{=]|$|-(?!gate\.ts\b))/i;
 const PRISMA_WARNING_PATTERN = /(?:^|[\s([<{])prisma:warn(?::|\s|$)/i;
 const WARNING_SYMBOL_PATTERN = /⚠/;
 const TEST_RESULT_LINE_PATTERN = /^[✓↓×]\s/;

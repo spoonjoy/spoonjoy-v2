@@ -26,7 +26,8 @@ const TREE_HASH = "b".repeat(40);
 const TOOLING_SHA = "c".repeat(40);
 const PREVIOUS_VERSION = "11111111-1111-4111-8111-111111111111";
 const CANDIDATE_VERSION = "22222222-2222-4222-8222-222222222222";
-const VALID_CANDIDATE_CSP = buildContentSecurityPolicy("live");
+const VALID_CSP_NONCE = "AbCdEfGhIjKlMnOpQrStUv==";
+const VALID_CANDIDATE_CSP = buildContentSecurityPolicy(VALID_CSP_NONCE);
 const CUSTOM_POSTHOG_HOST = "https://analytics.example.com";
 
 afterEach(() => {
@@ -231,7 +232,7 @@ describe("trusted production rollback orchestration", () => {
     });
     const deps = rollbackDeps(runCommand);
     deps.readCandidateCspHeaders.mockResolvedValue(new Headers({
-      "Content-Security-Policy-Report-Only": buildContentSecurityPolicy("live"),
+      "Content-Security-Policy-Report-Only": buildContentSecurityPolicy(VALID_CSP_NONCE),
       "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
       "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
     }));
@@ -268,7 +269,7 @@ describe("trusted production rollback orchestration", () => {
     const deps = rollbackDeps(runCommand);
     deps.env.SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS = "ACK_REPORT_ONLY_CSP_ROLLBACK";
     deps.readCandidateCspHeaders.mockResolvedValue(new Headers({
-      "Content-Security-Policy-Report-Only": buildContentSecurityPolicy("live"),
+      "Content-Security-Policy-Report-Only": buildContentSecurityPolicy(VALID_CSP_NONCE),
       "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
       "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
     }));
@@ -313,7 +314,7 @@ describe("trusted production rollback orchestration", () => {
     const deps = rollbackDeps(runCommand);
     deps.env.SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS = "ACK_REPORT_ONLY_CSP_ROLLBACK";
     deps.readCandidateCspHeaders.mockResolvedValue(new Headers({
-      "Content-Security-Policy-Report-Only": buildContentSecurityPolicy("live"),
+      "Content-Security-Policy-Report-Only": buildContentSecurityPolicy(VALID_CSP_NONCE),
       "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
       ...(observedVersion ? { "X-Spoonjoy-Worker-Version": observedVersion } : {}),
     }));
@@ -1595,7 +1596,7 @@ describe("release artifact and CLI boundary", () => {
     const result = await runProductionReleaseCli({
       execFileImpl,
       readCandidateCspHeaders: async () => new Headers({
-        "Content-Security-Policy": buildContentSecurityPolicy("live", {
+        "Content-Security-Policy": buildContentSecurityPolicy(VALID_CSP_NONCE, {
           VITE_POSTHOG_HOST: CUSTOM_POSTHOG_HOST,
         }),
         "Reporting-Endpoints": 'csp-endpoint="/csp-report"',

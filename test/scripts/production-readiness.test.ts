@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildContentSecurityPolicy } from "../../app/lib/security-headers.server";
+import {
+  buildContentSecurityPolicy,
+  generateNonce,
+} from "../../app/lib/security-headers.server";
 import {
   collectProductionReadinessChecks,
   createProductionReadinessDeps,
@@ -18,6 +21,8 @@ import {
   validatePwaAssetSet,
   validateCutoverRunbook,
 } from "../../scripts/production-readiness";
+
+const VALID_CSP_NONCE = "AbCdEfGhIjKlMnOpQrStUv==";
 
 describe("production readiness helpers", () => {
   afterEach(() => {
@@ -181,7 +186,7 @@ describe("production readiness helpers", () => {
 
   it("validates production CSP enforcement headers without printing live evidence", () => {
     const enforced = new Headers({
-      "Content-Security-Policy": buildContentSecurityPolicy("live"),
+      "Content-Security-Policy": buildContentSecurityPolicy(VALID_CSP_NONCE),
       "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
       "X-Spoonjoy-Worker-Version": "22222222-2222-4222-8222-222222222222",
     });
@@ -191,7 +196,7 @@ describe("production readiness helpers", () => {
     })).toEqual([]);
 
     const reportOnly = new Headers({
-      "Content-Security-Policy": buildContentSecurityPolicy("live"),
+      "Content-Security-Policy": buildContentSecurityPolicy(VALID_CSP_NONCE),
       "Content-Security-Policy-Report-Only": "default-src 'self'; report-uri /csp-report",
       "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
     });
@@ -233,7 +238,7 @@ describe("production readiness helpers", () => {
     ]);
 
     const missingScriptDirective = new Headers({
-      "Content-Security-Policy": buildContentSecurityPolicy("live").replace(/script-src[^;]+; /, ""),
+      "Content-Security-Policy": buildContentSecurityPolicy(VALID_CSP_NONCE).replace(/script-src[^;]+; /, ""),
       "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
       "X-Spoonjoy-Worker-Version": "22222222-2222-4222-8222-222222222222",
     });
@@ -243,9 +248,48 @@ describe("production readiness helpers", () => {
     ]);
   });
 
+  it("requires exactly one high-entropy base64 or base64url nonce source", () => {
+    const validNonce = generateNonce();
+    const validCsp = buildContentSecurityPolicy(validNonce);
+    const policies = [
+      validCsp.replace(`'nonce-${validNonce}'`, "'nonce-*'"),
+      validCsp.replace(`'nonce-${validNonce}'`, "'nonce-'"),
+      validCsp.replace(`'nonce-${validNonce}'`, "'nonce-!!!'"),
+      validCsp.replace(`'nonce-${validNonce}'`, "'nonce-short'"),
+      validCsp.replace(`'nonce-${validNonce}'`, `'nonce-${"A".repeat(25)}'`),
+      validCsp.replace(`'nonce-${validNonce}'`, `'nonce-${validNonce}' 'nonce-${validNonce}'`),
+    ];
+
+    for (const policy of policies) {
+      const headers = new Headers({
+        "Content-Security-Policy": policy,
+        "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+        "X-Spoonjoy-Worker-Version": "22222222-2222-4222-8222-222222222222",
+      });
+      expect(validateCspHeaderSet(headers, { requireNonce: true })).toContain(
+        "CSP nonce contract",
+      );
+    }
+
+    const generated = new Headers({
+      "Content-Security-Policy": validCsp,
+      "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+      "X-Spoonjoy-Worker-Version": "22222222-2222-4222-8222-222222222222",
+    });
+    expect(validateCspHeaderSet(generated, { requireNonce: true })).toEqual([]);
+
+    const base64UrlNonce = "AbCdEfGhIjKlMnOpQrStUv";
+    const base64Url = new Headers({
+      "Content-Security-Policy": buildContentSecurityPolicy(base64UrlNonce),
+      "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+      "X-Spoonjoy-Worker-Version": "22222222-2222-4222-8222-222222222222",
+    });
+    expect(validateCspHeaderSet(base64Url, { requireNonce: true })).toEqual([]);
+  });
+
   it("rejects duplicate directives even when the first occurrence is secure", () => {
     const csp = [
-      buildContentSecurityPolicy("live"),
+      buildContentSecurityPolicy(VALID_CSP_NONCE),
       "",
       "default-src *",
       "",
@@ -272,7 +316,7 @@ describe("production readiness helpers", () => {
     ["img-src", "img-src 'self' data: blob: https: https://evil.example"],
     ["connect-src", "connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://evil.example"],
   ])("rejects a weakened %s directive", (directive, replacement) => {
-    const csp = buildContentSecurityPolicy("live").replace(
+    const csp = buildContentSecurityPolicy(VALID_CSP_NONCE).replace(
       new RegExp(`${directive}[^;]+`),
       replacement,
     );
@@ -288,12 +332,12 @@ describe("production readiness helpers", () => {
   });
 
   it("rejects extra script origins, forged reporting tokens, and unknown directives", () => {
-    const base = buildContentSecurityPolicy("live");
+    const base = buildContentSecurityPolicy(VALID_CSP_NONCE);
     const hostilePolicies = [
       [
         base.replace(
-          "script-src 'self' 'nonce-live' https://us-assets.i.posthog.com",
-          "script-src 'self' 'nonce-live' https://us-assets.i.posthog.com https://evil.example",
+          `script-src 'self' 'nonce-${VALID_CSP_NONCE}' https://us-assets.i.posthog.com`,
+          `script-src 'self' 'nonce-${VALID_CSP_NONCE}' https://us-assets.i.posthog.com https://evil.example`,
         ),
         "CSP script-src exact sources",
       ],
@@ -321,7 +365,7 @@ describe("production readiness helpers", () => {
   it("validates PostHog script and connection origins against the configured host only", () => {
     const customHost = "https://analytics.example.com";
     const valid = new Headers({
-      "Content-Security-Policy": buildContentSecurityPolicy("live", {
+      "Content-Security-Policy": buildContentSecurityPolicy(VALID_CSP_NONCE, {
         VITE_POSTHOG_HOST: customHost,
       }),
       "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
@@ -357,6 +401,7 @@ describe("production readiness helpers", () => {
       "CSP object-src lockdown",
       "CSP frame-ancestors lockdown",
       "CSP form-action lockdown",
+      "CSP nonce contract",
       "CSP script-src exact sources",
       "CSP style-src exact sources",
       "CSP font-src exact sources",

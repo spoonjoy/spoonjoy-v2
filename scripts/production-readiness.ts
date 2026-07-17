@@ -137,7 +137,16 @@ function directiveEquals(
   );
 }
 
-const NONCE_SOURCE_PATTERN = /^'nonce-[^'\s;]+'$/;
+const NONCE_SOURCE_PATTERN = /^'nonce-([A-Za-z0-9+/_-]+={0,2})'$/;
+
+function isValidNonceSource(source: string): boolean {
+  const match = source.match(NONCE_SOURCE_PATTERN);
+  if (!match) return false;
+  const encoded = match[1];
+  const payload = encoded.replace(/=+$/, "");
+  if (payload.length < 22) return false;
+  return encoded.length % 4 !== 1;
+}
 
 function expectedCspDirectives(postHogHost?: string | null): Map<string, readonly string[]> {
   const postHog = resolvePostHogCspOrigins({ VITE_POSTHOG_HOST: postHogHost });
@@ -186,12 +195,17 @@ function validateCspDirectiveLockdown(
   }
 
   const scriptSources = directives.get("script-src") ?? [];
-  const nonceSources = scriptSources.filter((source) => NONCE_SOURCE_PATTERN.test(source));
-  if (options.requireNonce && nonceSources.length !== 1) {
+  const nonceSources = scriptSources.filter((source) => source.startsWith("'nonce-"));
+  const validNonceSources = nonceSources.filter(isValidNonceSource);
+  if (
+    nonceSources.length !== validNonceSources.length ||
+    nonceSources.length > 1 ||
+    (options.requireNonce && validNonceSources.length !== 1)
+  ) {
     missing.push("CSP nonce contract");
   }
   const scriptSourcesWithoutNonce = scriptSources.filter(
-    (source) => !NONCE_SOURCE_PATTERN.test(source),
+    (source) => !source.startsWith("'nonce-"),
   );
   if (
     !directiveEquals(

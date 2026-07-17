@@ -13,18 +13,17 @@
  *   intentionally does NOT touch `publickey-credentials-*`, so passkeys keep
  *   their default `self` allowance.
  *
- * `SPOONJOY_CSP_MODE=enforce` emits `Content-Security-Policy`; other runtime
- * values emit `Content-Security-Policy-Report-Only`, which deployment
- * preflight allows for production/QA only through the auditable break-glass
- * rollback path.
+ * `SPOONJOY_CSP_MODE=report-only` emits
+ * `Content-Security-Policy-Report-Only`; every other runtime value fails closed
+ * to `Content-Security-Policy`.
  *
  * `script-src` is **nonce-based**: a per-request nonce ({@link generateNonce},
  * generated once in `workers/app.ts`) is threaded both into this header AND into
  * the SSR shell's inline `<script>`s (theme-flash guard + React Router's
  * `<Scripts>`/`<ScrollRestoration>`, via `AppLoadContext` → `NonceContext`), and
- * `'unsafe-inline'` is dropped from `script-src`. Under report-only this surfaces
- * any inline script lacking the nonce (e.g. a third-party snippet) before
- * enforcing. `style-src` deliberately KEEPS `'unsafe-inline'`: a CSP nonce covers
+ * `'unsafe-inline'` is dropped from `script-src`, so any inline script lacking
+ * the nonce is rejected or reported according to the selected mode. `style-src`
+ * deliberately KEEPS `'unsafe-inline'`: a CSP nonce covers
  * `<style>` elements but NOT inline `style="…"` attributes, which React emits
  * everywhere — so a nonce cannot replace `'unsafe-inline'` for styles.
  */
@@ -145,7 +144,7 @@ function cspDirectives(
     // `Reporting-Endpoints` response header (see SECURITY_HEADERS). Kept
     // alongside the deprecated-but-still-supported `report-uri` so violations
     // are reported across both legacy and current browsers (Chrome has
-    // deprecated `report-uri`) during the report-only window.
+    // deprecated `report-uri`).
     "report-to": ["csp-endpoint"],
   };
 }
@@ -175,9 +174,7 @@ interface ContentSecurityPolicyEnv {
 export function resolveContentSecurityPolicyMode(
   env?: ContentSecurityPolicyEnv | null,
 ): ContentSecurityPolicyMode {
-  return env?.SPOONJOY_CSP_MODE?.trim().toLowerCase() === "enforce"
-    ? "enforce"
-    : "report-only";
+  return env?.SPOONJOY_CSP_MODE === "report-only" ? "report-only" : "enforce";
 }
 
 /**

@@ -3,6 +3,7 @@ import {
   SECURITY_HEADERS,
   buildContentSecurityPolicy,
   generateNonce,
+  resolveContentSecurityPolicyMode,
   resolvePostHogBuildHost,
   resolvePostHogCspOrigins,
   withSecurityHeaders,
@@ -72,23 +73,35 @@ describe("withSecurityHeaders", () => {
     expect(permissions).toContain("camera=()");
   });
 
-  it("defaults to CSP report-only for local/dev and rollback-safe responses", () => {
+  it("defaults absent or invalid CSP modes to enforcement", () => {
     const result = withSecurityHeaders(new Response("ok"));
-    expect(result.headers.get("Content-Security-Policy-Report-Only")).toBe(
+    expect(result.headers.get("Content-Security-Policy")).toBe(
       buildContentSecurityPolicy(),
     );
-    expect(result.headers.get("Content-Security-Policy")).toBeNull();
+    expect(result.headers.get("Content-Security-Policy-Report-Only")).toBeNull();
   });
 
-  it("embeds the per-request nonce in the default report-only CSP when provided", () => {
+  it("embeds the per-request nonce in the default enforcing CSP when provided", () => {
     const result = withSecurityHeaders(new Response("ok"), "test-nonce-123");
-    expect(result.headers.get("Content-Security-Policy-Report-Only")).toBe(
+    expect(result.headers.get("Content-Security-Policy")).toBe(
       buildContentSecurityPolicy("test-nonce-123"),
     );
-    expect(result.headers.get("Content-Security-Policy-Report-Only")).toContain(
+    expect(result.headers.get("Content-Security-Policy")).toContain(
       "'nonce-test-nonce-123'",
     );
   });
+
+  it.each([undefined, null, "", " ", "ENFORCE", "Report-Only", "invalid"])(
+    "fails closed for a non-exact CSP mode: %s",
+    (mode) => {
+      expect(resolveContentSecurityPolicyMode({ SPOONJOY_CSP_MODE: mode })).toBe("enforce");
+      const result = withSecurityHeaders(new Response("ok"), undefined, {
+        SPOONJOY_CSP_MODE: mode,
+      });
+      expect(result.headers.get("Content-Security-Policy")).toBeTruthy();
+      expect(result.headers.get("Content-Security-Policy-Report-Only")).toBeNull();
+    },
+  );
 
   it("ships an enforcing CSP, not report-only, when the environment selects enforcement", () => {
     const result = withSecurityHeaders(

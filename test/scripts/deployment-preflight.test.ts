@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
+import ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
 import {
   checkRemoteMigrations,
@@ -307,7 +308,7 @@ function validCiWorkflow(): string {
     "          node-version: '22'",
     "      - name: Activate pnpm",
     "        run: |",
-    "          corepack enable",
+    "          node scripts/warning-gate.ts -- corepack enable",
     "          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate",
     "      - run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile",
     "      - run: node scripts/warning-gate.ts -- pnpm db:seed",
@@ -323,10 +324,16 @@ function validCiWorkflow(): string {
     "          node-version: '22'",
     "      - name: Activate pnpm",
     "        run: |",
-    "          corepack enable",
+    "          node scripts/warning-gate.ts -- corepack enable",
     "          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate",
     "      - run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile",
     "      - run: node scripts/warning-gate.ts -- pnpm db:seed",
+    "      - name: Install Playwright",
+    "        run: |",
+    "          node scripts/warning-gate.ts -- pnpm exec playwright install-deps --dry-run chromium",
+    "          node scripts/warning-gate.ts -- sudo apt-get update",
+    "          node scripts/warning-gate.ts -- sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends xvfb fonts-noto-color-emoji fonts-unifont libfontconfig1 libfreetype6 xfonts-cyrillic xfonts-scalable fonts-liberation fonts-ipafont-gothic fonts-wqy-zenhei fonts-tlwg-loma-otf fonts-freefont-ttf libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 libcairo2 libcups2t64 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0t64 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2",
+    "          node scripts/warning-gate.ts -- pnpm exec playwright install chromium",
     "      - run: pnpm test:e2e",
   ].join("\n");
 }
@@ -464,19 +471,41 @@ describe("deployment preflight", () => {
     expect(result.checks.map((item) => item.name)).toContain("remote D1 migrations");
   });
 
-  it("keeps CSP runtime comments mode-neutral", async () => {
-    const [cloudflareEnvDts, workerApp, entryServer, cspReport] = await Promise.all([
-      readFile("app/cloudflare-env.d.ts", "utf8"),
-      readFile("workers/app.ts", "utf8"),
-      readFile("app/entry.server.tsx", "utf8"),
-      readFile("app/routes/csp-report.ts", "utf8"),
-    ]);
+  it("keeps CSP implementation and test comments mode-neutral", async () => {
+    const sourceRoots = ["app", "workers", "scripts", "test"];
+    const sourcePaths = (await Promise.all(sourceRoots.map(async (root) =>
+      (await readdir(root, { recursive: true }))
+        .filter((entry) => /\.(?:mjs|ts|tsx)$/.test(entry))
+        .map((entry) => `${root}/${entry}`)
+    ))).flat();
+    const stalePatterns = [
+      /\breport-only CSP\b/i,
+      /\b(?:under|during)\s+(?:the\s+)?report-only\b/i,
+      /\b(?:moment|once)\b[^\r\n]*\breport-only\b/i,
+      /\breport-only\b[^\r\n]*\b(?:flip(?:s|ped)?|rollout|switch(?:es|ed)?|window)\b/i,
+    ];
+    const staleComments: string[] = [];
 
-    expect(cloudflareEnvDts).toContain("VITE_POSTHOG_HOST?: string;");
-    expect(cloudflareEnvDts).not.toContain("report-only CSP `script-src`");
-    expect(workerApp).not.toContain("report-only CSP header");
-    expect(entryServer).not.toContain("once the CSP flips from report-only to enforce");
-    expect(cspReport).not.toContain("The report-only CSP");
+    for (const sourcePath of sourcePaths) {
+      const source = await readFile(sourcePath, "utf8");
+      if (!/(?:\bCSP\b|Content-Security-Policy|nonce)/.test(source)) continue;
+      const scanner = ts.createScanner(
+        ts.ScriptTarget.Latest,
+        false,
+        sourcePath.endsWith(".tsx") ? ts.LanguageVariant.JSX : ts.LanguageVariant.Standard,
+        source,
+      );
+      for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
+        if (token !== ts.SyntaxKind.SingleLineCommentTrivia && token !== ts.SyntaxKind.MultiLineCommentTrivia) continue;
+        const comment = scanner.getTokenText();
+        if (stalePatterns.some((pattern) => pattern.test(comment))) {
+          staleComments.push(`${sourcePath}: ${comment}`);
+        }
+      }
+    }
+
+    expect(await readFile("app/cloudflare-env.d.ts", "utf8")).toContain("VITE_POSTHOG_HOST?: string;");
+    expect(staleComments).toEqual([]);
   });
 
   it("surfaces remote-migration failures as errors", async () => {
@@ -1043,7 +1072,7 @@ describe("deployment preflight", () => {
         [
           "      - name: Activate pnpm",
           "        run: |",
-          "          corepack enable",
+          "          node scripts/warning-gate.ts -- corepack enable",
           "          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate",
         ].join("\n"),
         "      - uses: pnpm/action-setup@v6",
@@ -1055,7 +1084,7 @@ describe("deployment preflight", () => {
         [
           "      - name: Activate pnpm",
           "        run: |",
-          "          corepack enable",
+          "          node scripts/warning-gate.ts -- corepack enable",
           "          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate",
         ].join("\n") + "\n",
         "",
@@ -1223,11 +1252,32 @@ describe("deployment preflight", () => {
     "pnpm exec playwright install --with-deps chromium",
     "if pnpm run typecheck; then echo typed; fi",
     'resolution="$(pnpm why blake3-wasm)"',
+    "node -e \"console.log('ungated')\"",
+    "/opt/pnpm/bin/pnpm build",
+    "node scripts/warning-gate.ts -- bash -lc \"pnpm build\"",
+    "node scripts/warning-gate.ts -- sudo node node_modules/@playwright/test/cli.js install-deps chromium",
+    "node scripts/warning-gate.ts -- pnpm build",
+    "corepack enable",
   ])("rejects a newly added ungated CI command: %s", (command) => {
     const inputs = validInputs();
     inputs.ciWorkflow = validCiWorkflow().replace(
       "      - run: pnpm test:e2e",
       ["      - run: pnpm test:e2e", `      - run: ${command}`].join("\n"),
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("CI workflow");
+  });
+
+  it("rejects duplicate warning-gated commands within one CI job", () => {
+    const inputs = validInputs();
+    inputs.ciWorkflow = validCiWorkflow().replace(
+      "      - run: node scripts/warning-gate.ts -- pnpm build",
+      [
+        "      - run: node scripts/warning-gate.ts -- pnpm build",
+        "      - run: node scripts/warning-gate.ts -- pnpm build",
+      ].join("\n"),
     );
 
     const result = validateDeploymentConfig(inputs);
@@ -1413,6 +1463,34 @@ describe("deployment preflight", () => {
     const result = validateDeploymentConfig(reportOnly);
     expect(result.errors.map((item) => item.name)).not.toContain("CSP enforcement config");
     expect(result.warnings.map((item) => item.name)).toContain("CSP report-only break-glass");
+  });
+
+  it.each([
+    ["invalid", "report-only"],
+    ["", "report-only"],
+    ["ENFORCE", "report-only"],
+    ["enforce", "REPORT-ONLY"],
+    ["enforce ", "report-only"],
+    ["enforce", " report-only"],
+  ])("rejects non-exact CSP modes despite break-glass: production=%s QA=%s", (productionMode, qaMode) => {
+    const inputs = validInputs();
+    inputs.wrangler.vars = {
+      NODE_ENV: "production",
+      SPOONJOY_CSP_MODE: productionMode,
+      VITE_POSTHOG_HOST: "https://us.i.posthog.com",
+    };
+    const qa = (inputs.wrangler.env as Record<string, { vars?: Record<string, string> }>).qa;
+    qa.vars = {
+      NODE_ENV: "production",
+      SPOONJOY_BASE_URL: "https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
+      SPOONJOY_CSP_MODE: qaMode,
+      VITE_POSTHOG_HOST: "https://us.i.posthog.com",
+    };
+    inputs.cspReportOnlyBreakGlass = "ACK_REPORT_ONLY_CSP_ROLLBACK";
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("CSP enforcement config");
   });
 
   it("requires report-only CSP rollback to traverse the protected deploy workflow break-glass input", () => {
@@ -1628,7 +1706,7 @@ describe("deployment preflight", () => {
     (inputs.packageJson.scripts as Record<string, string>)["test:coverage"] = "vitest run --coverage";
     (inputs.packageJson.scripts as Record<string, string>)["test:e2e"] = "playwright test";
 
-    expect(validateDeploymentConfig(inputs).errors.map((item) => item.name)).toContain("warning gate scripts");
+    expect(validateDeploymentConfig(inputs).errors.map((item) => item.name)).toContain("output gate scripts");
   });
 
   it("requires a credential-gated scheduled QA image-cover smoke workflow in preflight", () => {

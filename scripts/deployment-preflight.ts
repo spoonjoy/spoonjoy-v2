@@ -579,7 +579,58 @@ function workflowHasRunCommand(workflow: string, expected: string, minimumCount 
 }
 
 const WARNING_GATE_COMMAND_PATTERN = /^(?:[A-Z_][A-Z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*node scripts\/warning-gate\.ts -- (.+)$/;
-const UNGATED_CI_COMMAND_PATTERN = /(?:^|[\s;&|($`])(?:pnpm|npm|npx|tsx|vitest|playwright|prisma|wrangler|react-router)(?=\s|$)/;
+const WARNING_GATE_COMMAND_PREFIX = "node scripts/warning-gate.ts -- ";
+const PLAYWRIGHT_APT_INSTALL_COMMAND = "sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends xvfb fonts-noto-color-emoji fonts-unifont libfontconfig1 libfreetype6 xfonts-cyrillic xfonts-scalable fonts-liberation fonts-ipafont-gothic fonts-wqy-zenhei fonts-tlwg-loma-otf fonts-freefont-ttf libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 libcairo2 libcups2t64 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0t64 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2";
+const ALLOWED_CI_COMMANDS_BY_JOB = new Map<string, ReadonlySet<string>>([
+  ["advisory", new Set([
+    `${WARNING_GATE_COMMAND_PREFIX}corepack enable`,
+    `${WARNING_GATE_COMMAND_PREFIX}corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`,
+    `${WARNING_GATE_COMMAND_PREFIX}mkdir -p .cache/osv-scanner`,
+    `${WARNING_GATE_COMMAND_PREFIX}curl -fsSL --retry 3 --retry-delay 2 "https://api.github.com/repos/google/osv-scanner/git/ref/tags/\${OSV_SCANNER_VERSION}" -o .cache/osv-scanner/tag.json`,
+    `${WARNING_GATE_COMMAND_PREFIX}jq -e --arg expected "$OSV_SCANNER_TAG_SHA" '.object | select(.type == "commit" and .sha == $expected)' .cache/osv-scanner/tag.json`,
+    `${WARNING_GATE_COMMAND_PREFIX}curl -fsSL --retry 3 --retry-delay 2 "https://github.com/google/osv-scanner/releases/download/\${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64" -o .cache/osv-scanner/osv-scanner`,
+    // This fixed shell builtin only writes a deterministic checksum file and produces no output.
+    'printf \'%s  %s\\n\' "$OSV_SCANNER_LINUX_AMD64_SHA256" ".cache/osv-scanner/osv-scanner" > .cache/osv-scanner/checksums.txt',
+    `${WARNING_GATE_COMMAND_PREFIX}sha256sum -c .cache/osv-scanner/checksums.txt`,
+    `${WARNING_GATE_COMMAND_PREFIX}chmod +x .cache/osv-scanner/osv-scanner`,
+    `${WARNING_GATE_COMMAND_PREFIX}.cache/osv-scanner/osv-scanner --version`,
+    `${WARNING_GATE_COMMAND_PREFIX}pnpm install --frozen-lockfile --ignore-scripts`,
+    `${WARNING_GATE_COMMAND_PREFIX}pnpm run advisory:scan -- --scanner .cache/osv-scanner/osv-scanner --output .advisory/osv-results.json`,
+  ])],
+  ["coverage", new Set([
+    `${WARNING_GATE_COMMAND_PREFIX}corepack enable`,
+    `${WARNING_GATE_COMMAND_PREFIX}corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`,
+    `${WARNING_GATE_COMMAND_PREFIX}pnpm install --frozen-lockfile`,
+    `${WARNING_GATE_COMMAND_PREFIX}pnpm prisma:generate`,
+    `${WARNING_GATE_COMMAND_PREFIX}pnpm why blake3-wasm`,
+    `${WARNING_GATE_COMMAND_PREFIX}pnpm why @c4312/blake3-internal`,
+    `${WARNING_GATE_COMMAND_PREFIX}pnpm exec wrangler d1 migrations apply DB --local`,
+    `DATABASE_URL="file:./test.db" ${WARNING_GATE_COMMAND_PREFIX}pnpm exec prisma db push --skip-generate`,
+    `${WARNING_GATE_COMMAND_PREFIX}pnpm exec wrangler d1 migrations list DB --local`,
+    `${WARNING_GATE_COMMAND_PREFIX}pnpm exec wrangler d1 execute DB --local --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"`,
+    `${WARNING_GATE_COMMAND_PREFIX}pnpm db:seed`,
+    `${WARNING_GATE_COMMAND_PREFIX}pnpm run typecheck`,
+    "pnpm test:coverage",
+    `${WARNING_GATE_COMMAND_PREFIX}pnpm build`,
+  ])],
+  ["e2e", new Set([
+    `${WARNING_GATE_COMMAND_PREFIX}corepack enable`,
+    `${WARNING_GATE_COMMAND_PREFIX}corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`,
+    `${WARNING_GATE_COMMAND_PREFIX}pnpm install --frozen-lockfile`,
+    `${WARNING_GATE_COMMAND_PREFIX}pnpm prisma:generate`,
+    `${WARNING_GATE_COMMAND_PREFIX}pnpm why blake3-wasm`,
+    `${WARNING_GATE_COMMAND_PREFIX}pnpm why @c4312/blake3-internal`,
+    `${WARNING_GATE_COMMAND_PREFIX}pnpm exec playwright install-deps --dry-run chromium`,
+    `${WARNING_GATE_COMMAND_PREFIX}sudo apt-get update`,
+    `${WARNING_GATE_COMMAND_PREFIX}${PLAYWRIGHT_APT_INSTALL_COMMAND}`,
+    `${WARNING_GATE_COMMAND_PREFIX}pnpm exec playwright install chromium`,
+    `${WARNING_GATE_COMMAND_PREFIX}pnpm exec wrangler d1 migrations apply DB --local`,
+    `${WARNING_GATE_COMMAND_PREFIX}pnpm db:seed`,
+    // This fixed shell builtin only writes deterministic local Worker secrets and produces no output.
+    'printf \'SESSION_SECRET=%s\\nNODE_ENV=development\\n\' "$SESSION_SECRET" > .dev.vars',
+    "pnpm test:e2e",
+  ])],
+]);
 
 function warningGatedPayload(command: string): string | null {
   return command.match(WARNING_GATE_COMMAND_PATTERN)?.[1] ?? null;
@@ -604,16 +655,14 @@ function workflowHasNoUngatedCiCommands(workflow: string): boolean {
   const lines = workflowLines(workflow);
   for (const [jobStart, jobEnd] of workflowJobBlocks(lines)) {
     const steps = childBlock(lines, jobStart, jobEnd, "steps");
-    if (!steps) continue;
+    const jobName = unquoteYamlScalar(lines[jobStart].text.slice(0, -1));
+    const allowedCommands = ALLOWED_CI_COMMANDS_BY_JOB.get(jobName);
+    if (!steps || !allowedCommands) return false;
+    const seenCommands = new Set<string>();
     for (const [stepStart, stepEnd] of stepBlocks(lines, steps[0], steps[1])) {
       for (const command of runCommandLines(stepRunText(lines, stepStart, stepEnd))) {
-        if (warningGatedPayload(command)) continue;
-        if (command === "pnpm test:coverage" || command === "pnpm test:e2e") continue;
-        if (command === "corepack enable") continue;
-        if (/^(?:echo|printf)(?:\s|$)/.test(command) && !command.includes("$(")) continue;
-        if (command.startsWith("corepack prepare ") || UNGATED_CI_COMMAND_PATTERN.test(command)) {
-          return false;
-        }
+        if (seenCommands.has(command) || !allowedCommands.has(command)) return false;
+        seenCommands.add(command);
       }
     }
   }
@@ -621,15 +670,19 @@ function workflowHasNoUngatedCiCommands(workflow: string): boolean {
 }
 
 function workflowHasWarningCleanCiOutputPaths(workflow: string): boolean {
-  return (
-    workflowHasNoUngatedCiCommands(workflow) &&
-    workflowHasWarningGatedPayload(workflow, "pnpm install --frozen-lockfile", 2) &&
-    workflowHasWarningGatedPayload(workflow, "pnpm db:seed", 2) &&
-    workflowHasWarningGatedPayload(workflow, "pnpm run typecheck") &&
-    workflowHasRunCommand(workflow, "pnpm test:coverage") &&
-    workflowHasWarningGatedPayload(workflow, "pnpm build") &&
-    workflowHasRunCommand(workflow, "pnpm test:e2e")
-  );
+  const requiredCommandChecks = [
+    workflowHasWarningGatedPayload(workflow, "pnpm install --frozen-lockfile", 2),
+    workflowHasWarningGatedPayload(workflow, "pnpm db:seed", 2),
+    workflowHasWarningGatedPayload(workflow, "pnpm run typecheck"),
+    workflowHasRunCommand(workflow, "pnpm test:coverage"),
+    workflowHasWarningGatedPayload(workflow, "pnpm build"),
+    workflowHasWarningGatedPayload(workflow, "pnpm exec playwright install-deps --dry-run chromium"),
+    workflowHasWarningGatedPayload(workflow, "sudo apt-get update"),
+    workflowHasWarningGatedPayload(workflow, PLAYWRIGHT_APT_INSTALL_COMMAND),
+    workflowHasWarningGatedPayload(workflow, "pnpm exec playwright install chromium"),
+    workflowHasRunCommand(workflow, "pnpm test:e2e"),
+  ];
+  return workflowHasNoUngatedCiCommands(workflow) && requiredCommandChecks.every(Boolean);
 }
 
 function workflowHasOnlyTriggers(lines: WorkflowLine[], onIndex: number, onEnd: number, allowed: string[]): boolean {
@@ -815,7 +868,7 @@ function corepackPnpmRunIsClean(run: string): boolean {
     `corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`,
   ]) || (
     commands.length === 2 &&
-    commands[0] === "corepack enable" &&
+    warningGatedPayload(commands[0]) === "corepack enable" &&
     warningGatedPayload(commands[1]) === `corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`
   );
 }
@@ -1190,10 +1243,14 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
   const qaNamespaceIds = namespaceIds(qaConfig.ratelimits);
   const productionCspMode = productionVars.SPOONJOY_CSP_MODE;
   const qaCspMode = qaVars.SPOONJOY_CSP_MODE;
+  const cspModesAreValid = (
+    (productionCspMode === "enforce" || productionCspMode === "report-only") &&
+    (qaCspMode === "enforce" || qaCspMode === "report-only")
+  );
   const cspIsEnforcing = productionCspMode === "enforce" && qaCspMode === "enforce";
   const cspIsReportOnlyRollback = (
-    productionCspMode === "report-only" ||
-    qaCspMode === "report-only"
+    cspModesAreValid &&
+    (productionCspMode === "report-only" || qaCspMode === "report-only")
   );
   const hasCspBreakGlass = inputs.cspReportOnlyBreakGlass === CSP_REPORT_ONLY_BREAK_GLASS_ACK;
   const productionPostHogOrigin = normalizedHttpsOrigin(productionVars.VITE_POSTHOG_HOST);
@@ -1247,7 +1304,7 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     ),
     check(
       "CSP enforcement config",
-      cspIsEnforcing || (cspIsReportOnlyRollback && hasCspBreakGlass),
+      cspModesAreValid && (cspIsEnforcing || (cspIsReportOnlyRollback && hasCspBreakGlass)),
       `wrangler.json must set SPOONJOY_CSP_MODE=enforce for production and QA; report-only requires SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS=${CSP_REPORT_ONLY_BREAK_GLASS_ACK}.`
     ),
     check(
@@ -1331,10 +1388,10 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
       "package.json deploy:auto must run the staged production canary orchestrator."
     ),
     check(
-      "warning gate scripts",
+      "output gate scripts",
       scripts["test:coverage"] === "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then pnpm exec vitest run --coverage --fileParallelism=false" &&
         scripts["test:e2e"] === "env -u FORCE_COLOR -u NO_COLOR tsx scripts/warning-gate.ts -- pnpm exec playwright test",
-      "package.json test:coverage and test:e2e must run through scripts/warning-gate.ts so unexpected warnings fail CI."
+      "package.json test:coverage and test:e2e must run through scripts/warning-gate.ts so unexpected output fails CI."
     ),
     check(
       "preflight script",
@@ -1347,7 +1404,7 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
         ciHasGitConfig &&
         ciHasWarningCleanOutputPaths &&
         ciUsesCorepackPnpm,
-      ".github/workflows/ci.yml must validate pushes and pull requests to main with checkout warning suppression, Corepack pnpm activation, and warning-gated seed/typecheck/build/test output paths."
+      ".github/workflows/ci.yml must validate pushes and pull requests to main with checkout output suppression, Corepack pnpm activation, and output-gated seed/typecheck/build/test paths."
     ),
     check(
       "production deploy workflow",
