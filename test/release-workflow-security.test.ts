@@ -187,10 +187,12 @@ describe("CI warning suppression at source", () => {
       "        run: |",
       "          node scripts/warning-gate.ts -- pnpm exec playwright install-deps --dry-run chromium",
       "          node scripts/warning-gate.ts -- sudo apt-get update",
+      "          node scripts/warning-gate.ts -- sudo sh -c 'printf \"%s\\n\" \"man-db man-db/auto-update boolean true\" | debconf-set-selections'",
       "          node scripts/warning-gate.ts -- sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 apt-get -o Dpkg::Use-Pty=0 install -y --no-install-recommends xvfb fonts-noto-color-emoji fonts-unifont libfontconfig1 libfreetype6 xfonts-cyrillic xfonts-scalable fonts-liberation fonts-ipafont-gothic fonts-wqy-zenhei fonts-tlwg-loma-otf fonts-freefont-ttf libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 libcairo2 libcups2t64 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0t64 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2",
       "          node scripts/warning-gate.ts -- pnpm exec playwright install chromium",
     ].join("\n"));
     expect(ci.match(/NEEDRESTART_SUSPEND=1/g)).toHaveLength(1);
+    expect(ci.match(/man-db\/auto-update boolean true/g)).toHaveLength(1);
     expect(ci).not.toMatch(/^\s*NEEDRESTART_SUSPEND:/m);
     expect(ci).not.toMatch(/sudo[^\n]*(?:node|pnpm|corepack|node_modules|\.js)/);
   });

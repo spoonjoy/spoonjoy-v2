@@ -2131,6 +2131,17 @@ describe("deployment preflight", () => {
     expect(result.errors.map((entry) => entry.name)).toContain("CI workflow");
   });
 
+  it("requires the exact warning-gated man-db preseed before Playwright dependency installation", () => {
+    const inputs = validInputs();
+    inputs.ciWorkflow = replaceRequired(
+      inputs.ciWorkflow,
+      "node scripts/warning-gate.ts -- sudo sh -c 'printf \"%s\\n\" \"man-db man-db/auto-update boolean true\" | debconf-set-selections'",
+      "sudo sh -c 'printf \"%s\\n\" \"man-db man-db/auto-update boolean true\" | debconf-set-selections'",
+    );
+
+    expect(validateDeploymentConfig(inputs).errors.map((entry) => entry.name)).toContain("CI workflow");
+  });
+
   it("requires an explicit non-interactive Playwright reporter while preserving HTML artifacts", () => {
     const inputs = validInputs();
     (inputs.packageJson.scripts as Record<string, string>)["test:e2e"] =
