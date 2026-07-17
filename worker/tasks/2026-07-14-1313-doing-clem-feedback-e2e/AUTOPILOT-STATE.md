@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `bf443ba5` integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. All prior clean passes are historical because Quality Rounds 27-42 changed release process/recovery semantics.
+- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `60b213b5` integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. All prior clean passes are historical because Quality Rounds 27-43 changed release process/recovery semantics.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is `NEEDS_REVIEW` after the mandatory main-drift audit.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation and dependency setup have not started.
-- Active gate: fresh Quality Round 43 on immutable contract checkpoint `bf443ba5`, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Synchronized Round 42's process reviewer converged; schema and terminal/archive found one TerminalCleanup crash pair plus three stale repeated literals/names. Terminal receipt/unlink is now atomic and every repeated exact domain matches planning. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
+- Active gate: fresh Quality Round 44 on immutable contract checkpoint `60b213b5`, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Round 43's process/schema reviewers converged; terminal/archive found that atomic TerminalCleanup wording incorrectly rejected recoverable local partial materialization. Local Git-matrix mixtures now restore to frozen C, while committed/fetched trees remain exact old/final only. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Synchronize checkpoint `bf443ba5` into Desk, run fresh Quality Round 43 plus consecutive Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
+Synchronize checkpoint `60b213b5` into Desk, run fresh Quality Round 44 plus consecutive Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
 
 ## Operator-Locked Rules
 
@@ -40,7 +40,7 @@ Synchronize checkpoint `bf443ba5` into Desk, run fresh Quality Round 43 plus con
 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
-| Planning reviewer gate | active | Synchronized Quality Round 42's four exactness/recovery gaps are fixed at immutable contract `bf443ba5`; process converged only at the superseded input | Run fresh Quality Round 43 and scrutiny convergence |
+| Planning reviewer gate | active | Quality Round 43's local recovery gap is fixed at immutable contract `60b213b5`; process/schema converged only at the superseded input | Run fresh Quality Round 44 and scrutiny convergence |
 | Doing review chain | active | Spawn generations, provenance ownership, successor/predecessor closure, track linearization, archive validation, and terminal receipts are executable and fully assigned | Re-converge and restore final handoff |
 | Work Doer Units 0-37 | deferred by gate | Full red/green/verify/visual/ship queue is defined | Restart Unit0a only after fresh final handoff |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
@@ -56,4 +56,4 @@ Synchronize checkpoint `bf443ba5` into Desk, run fresh Quality Round 43 plus con
 
 Not satisfied. The reopened reviewer gate and all delivery work remain.
 
-Last updated: 2026-07-17 10:44:00 PDT.
+Last updated: 2026-07-17 10:57:00 PDT.
