@@ -2142,6 +2142,17 @@ describe("deployment preflight", () => {
     expect(validateDeploymentConfig(inputs).errors.map((entry) => entry.name)).toContain("CI workflow");
   });
 
+  it("requires the man-db trigger cache to match the preseed before dependency installation", () => {
+    const inputs = validInputs();
+    inputs.ciWorkflow = replaceRequired(
+      inputs.ciWorkflow,
+      "node scripts/warning-gate.ts -- sudo touch /var/lib/man-db/auto-update",
+      "sudo touch /var/lib/man-db/auto-update",
+    );
+
+    expect(validateDeploymentConfig(inputs).errors.map((entry) => entry.name)).toContain("CI workflow");
+  });
+
   it("requires an explicit non-interactive Playwright reporter while preserving HTML artifacts", () => {
     const inputs = validInputs();
     (inputs.packageJson.scripts as Record<string, string>)["test:e2e"] =
