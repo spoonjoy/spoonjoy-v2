@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `1a592c1f` integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. All prior clean passes are historical because Quality Rounds 27-39 changed release process/recovery semantics.
+- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `d3d22efc` integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. All prior clean passes are historical because Quality Rounds 27-40 changed release process/recovery semantics.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is `NEEDS_REVIEW` after the mandatory main-drift audit.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation and dependency setup have not started.
-- Active gate: fresh Quality Round 40 on immutable contract checkpoint `1a592c1f`, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Round 39 returned three findings while terminal/archive converged; all Continuation copies now share canonical field/sort order, planning and doing share the exact three-branch ReleaseTerminalResult union, and Unit29.2 owns only additive release-terminal gate entries while Unit30 alone owns exact fourteen-member enforcement. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
+- Active gate: fresh Quality Round 41 on immutable contract checkpoint `d3d22efc`, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Round 40's process and schema reviewers converged; terminal/archive found the missing canonical Slugger journal path and missing pushed/readback repair-index checkpoint. Both are now exact, crash-recoverable Unit29.2/Unit37 contracts. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Synchronize checkpoint `1a592c1f` into Desk, run fresh Quality Round 40 plus consecutive Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
+Synchronize checkpoint `d3d22efc` into Desk, run fresh Quality Round 41 plus consecutive Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
 
 ## Operator-Locked Rules
 
@@ -40,7 +40,7 @@ Synchronize checkpoint `1a592c1f` into Desk, run fresh Quality Round 40 plus con
 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
-| Planning reviewer gate | active | Quality Round 39's three schema/gate parity gaps are fixed at immutable contract `1a592c1f`; terminal/archive already converged at the superseded input | Run fresh Quality Round 40 and scrutiny convergence |
+| Planning reviewer gate | active | Quality Round 40's two terminal durability gaps are fixed at immutable contract `d3d22efc`; process/schema converged only at the superseded input | Run fresh Quality Round 41 and scrutiny convergence |
 | Doing review chain | active | Spawn generations, provenance ownership, successor/predecessor closure, track linearization, archive validation, and terminal receipts are executable and fully assigned | Re-converge and restore final handoff |
 | Work Doer Units 0-37 | deferred by gate | Full red/green/verify/visual/ship queue is defined | Restart Unit0a only after fresh final handoff |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
@@ -56,4 +56,4 @@ Synchronize checkpoint `1a592c1f` into Desk, run fresh Quality Round 40 plus con
 
 Not satisfied. The reopened reviewer gate and all delivery work remain.
 
-Last updated: 2026-07-16 23:32:33 PDT.
+Last updated: 2026-07-17 10:21:36 PDT.
