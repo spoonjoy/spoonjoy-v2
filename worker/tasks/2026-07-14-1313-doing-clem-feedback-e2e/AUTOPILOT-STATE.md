@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `21a87f54` integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. All prior clean passes are historical because Quality Rounds 27-36 changed release process/recovery semantics.
+- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `cd6576d4` integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. All prior clean passes are historical because Quality Rounds 27-37 changed release process/recovery semantics.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is `NEEDS_REVIEW` after the mandatory main-drift audit.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation and dependency setup have not started.
-- Active gate: fresh Quality Round 37 on immutable contract checkpoint `21a87f54`, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Round 36 returned 25 unique findings; the repaired contract now has branch-specific materialization, role-tagged gate/child liveness and authority transport, zero-spawn terminal states, post-finish continuity creation, closed health/CLI/workflow-attempt/continuation/FINDINGS schemas, absence-aware Git recovery, a measured normal/repaired release-terminal owner, complete terminal/track/archive/repair-index receipts, and generation-owned Slugger CAS. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
+- Active gate: fresh Quality Round 38 on immutable contract checkpoint `cd6576d4`, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Round 37's process/executor reviewer converged and its schema/archive reviewers returned six findings; the repaired contract now has one exact AgentCommand schema, one complete Continuation shape, Health failure-sample retention, the exact fifteen-script set, release-terminal-only repaired closure, and distinct ordinary-normal, repair-successor-normal, and repaired-predecessor closed sets. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Synchronize checkpoint `21a87f54` into Desk, run fresh Quality Round 37 plus consecutive Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
+Synchronize checkpoint `cd6576d4` into Desk, run fresh Quality Round 38 plus consecutive Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
 
 ## Operator-Locked Rules
 
@@ -40,7 +40,7 @@ Synchronize checkpoint `21a87f54` into Desk, run fresh Quality Round 37 plus con
 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
-| Planning reviewer gate | active | Quality Round 36's 25 unique gaps plus parent continuity-cycle audit are fixed at immutable contract `21a87f54` | Run fresh Quality Round 37 and scrutiny convergence |
+| Planning reviewer gate | active | Quality Round 37's six schema/archive gaps plus the parent stale-copy scan are fixed at immutable contract `cd6576d4`; process/executor already converged at the superseded input | Run fresh Quality Round 38 and scrutiny convergence |
 | Doing review chain | active | Spawn generations, provenance ownership, successor/predecessor closure, track linearization, archive validation, and terminal receipts are executable and fully assigned | Re-converge and restore final handoff |
 | Work Doer Units 0-37 | deferred by gate | Full red/green/verify/visual/ship queue is defined | Restart Unit0a only after fresh final handoff |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
@@ -56,4 +56,4 @@ Synchronize checkpoint `21a87f54` into Desk, run fresh Quality Round 37 plus con
 
 Not satisfied. The reopened reviewer gate and all delivery work remain.
 
-Last updated: 2026-07-16 22:25:56 PDT.
+Last updated: 2026-07-16 23:01:26 PDT.
