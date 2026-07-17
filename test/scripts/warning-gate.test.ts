@@ -95,6 +95,9 @@ describe("warning gate", () => {
     expect(findUnexpectedWarnings("\u001b]0;build title\u0007Warning: hidden after OSC title\n")).toEqual([
       "Warning: hidden after OSC title",
     ]);
+    expect(findUnexpectedWarnings("\u001b]0;build title\u001b\\Warning: hidden after OSC ST\n")).toEqual([
+      "Warning: hidden after OSC ST",
+    ]);
     expect(findUnexpectedWarnings("✓ ordinary passing test")).toEqual([]);
     expect(findUnexpectedWarnings("\u001b[2K\u001b[1G✓ ordinary passing test")).toEqual([]);
     expect(findUnexpectedWarnings("[warn:build] hidden on stdout")).toEqual([

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import stripAnsi from "strip-ansi";
+import { stripVTControlCharacters } from "node:util";
 
 export const EXPECTED_PRISMA_D1_TRANSACTION_WARNING =
   "Cloudflare D1 does not support transactions yet. When using Prisma's D1 adapter, implicit & explicit transactions will be ignored and run as individual queries, which breaks the guarantees of the ACID properties of transactions. For more details see https://pris.ly/d/d1-transactions";
@@ -9,6 +9,11 @@ const WARNING_WORD_PATTERN = /(?:^|[^A-Za-z0-9])(?:[A-Za-z]+warning|warning|warn
 const PRISMA_WARNING_PATTERN = /(?:^|[\s([<{])prisma:warn(?::|\s|$)/i;
 const WARNING_SYMBOL_PATTERN = /⚠/;
 const TEST_RESULT_LINE_PATTERN = /^[✓↓×]\s/;
+const OSC_SEQUENCE_PATTERN = /(?:\u001B\]|\u009D)[\s\S]*?(?:\u0007|\u001B\\|\u009C)/g;
+
+function stripTerminalControlSequences(value: string): string {
+  return stripVTControlCharacters(value.replace(OSC_SEQUENCE_PATTERN, ""));
+}
 
 export interface WarningGateCommandResult {
   exitCode: number;
@@ -45,7 +50,7 @@ function isWarningLine(line: string): boolean {
 export function findUnexpectedWarnings(output: string): string[] {
   return output
     .split(/\r?\n/)
-    .map((line) => stripAnsi(line).trim())
+    .map((line) => stripTerminalControlSequences(line).trim())
     .filter((line) => line !== "")
     .filter((line) => isWarningLine(line));
 }
@@ -145,7 +150,7 @@ export async function runWarningGate(
 
   const warningChannelLines = warningOutput
     .split(/\r?\n/)
-    .map((line) => stripAnsi(line).trim())
+    .map((line) => stripTerminalControlSequences(line).trim())
     .filter(Boolean);
   const unexpectedWarnings = Array.from(new Set([
     ...findUnexpectedWarnings(output),

@@ -29,6 +29,19 @@ describe("generated artifact hygiene", () => {
   });
 });
 
+describe("pre-install workflow bootstrap", () => {
+  it("keeps the warning gate limited to Node built-ins before dependencies are installed", () => {
+    const warningGate = readFileSync("scripts/warning-gate.ts", "utf8");
+    const importSpecifiers = Array.from(
+      warningGate.matchAll(/^import(?:\s+type)?[\s\S]*?\sfrom\s+["']([^"']+)["'];?$/gm),
+      (match) => match[1],
+    );
+
+    expect(importSpecifiers).not.toEqual([]);
+    expect(importSpecifiers.every((specifier) => specifier.startsWith("node:"))).toBe(true);
+  });
+});
+
 describe("UI audit tooling", () => {
   it("keeps the UI audit inventory and crawl scripts in the repo", () => {
     expect(existsSync("scripts/inventory-ui.mjs")).toBe(true);
