@@ -407,7 +407,12 @@ describe("validateProductionDeploySource", () => {
       run: successfulRunner(),
     })).resolves.toBeUndefined();
     await expect(validateProductionDeploySource()).rejects.toThrow();
-    await expect(validateCiInvocation()).rejects.toThrow();
+    vi.stubEnv("GITHUB_EVENT_NAME", "");
+    try {
+      await expect(validateCiInvocation()).rejects.toThrow();
+    } finally {
+      vi.unstubAllEnvs();
+    }
 
     const omittedOptionalInputs = productionEnv();
     delete omittedOptionalInputs.ROLLBACK_VERSION_ID;
