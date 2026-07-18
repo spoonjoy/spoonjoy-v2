@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; Quality Round 81 reviewed the Round 80 checkpoint and failed with deduplicated product-route/fixture, cleanup-terminality/history, descriptor-authority/program, process-prefix/retry, lock-anchor, Ouro-wire, and final-proof roots. The Round 81 repair is present in the worktree with execution-contract SHA-256 `72aa22344fa0e9e429f4194a3568479c4d030cdf7bbed51472869b92265ebb33`; its containing commit is intentionally recorded only after this full checkpoint is committed. The branch integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. Every earlier clean pass is historical because Round 81 replaces the live feature fixture/routes, shopping restore capture, cleanup terminality/history, descriptor authority/program/control state, helper/cleaner/Slugger recovery, lock-anchor publication, daemon message/wake bytes, and terminal proof/completion names.
+- Branch: `worker/clem-feedback-e2e`; Quality Round 81 reviewed the Round 80 checkpoint and failed with deduplicated product-route/fixture, cleanup-terminality/history, descriptor-authority/program, process-prefix/retry, lock-anchor, Ouro-wire, and final-proof roots. The Round 81 repair is committed and pushed at `ffbb0aff15625dca49204b5a2df25ebdd92d04c2` with execution-contract SHA-256 `72aa22344fa0e9e429f4194a3568479c4d030cdf7bbed51472869b92265ebb33`; this continuity-only checkpoint intentionally does not predict its own containing commit. The branch integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. Every earlier clean pass is historical because Round 81 replaces the live feature fixture/routes, shopping restore capture, cleanup terminality/history, descriptor authority/program/control state, helper/cleaner/Slugger recovery, lock-anchor publication, daemon message/wake bytes, and terminal proof/completion names.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is `NEEDS_REVIEW` after the mandatory main-drift audit.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation and dependency setup have not started.
-- Active gate: validate, commit, and push the Round 81 repair checkpoint; synchronize Desk to its resulting HEAD; then run fresh three-lens Quality Round 82. Fresh Tinfoil and Stranger follow only after Quality converges without contract changes. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
+- Active gate: commit/push this continuity-only checkpoint, synchronize Desk to its resulting HEAD, then run fresh three-lens Quality Round 82 against `ffbb0aff15625dca49204b5a2df25ebdd92d04c2`. Fresh Tinfoil and Stranger follow only after Quality converges without contract changes. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Validate and commit/push the Round 81 repair, record its resulting full-state HEAD in Desk, and start fresh Quality Round 82 reviewers. After Quality plus consecutive Tinfoil and Stranger converge, commit/push the final handoff and restart Unit0a from its fetch/mirror verification.
+Commit/push this continuity-only checkpoint, record its resulting full-state HEAD in Desk, and start fresh Quality Round 82 reviewers against the immutable Round 81 repair. After Quality plus consecutive Tinfoil and Stranger converge, commit/push the final handoff and restart Unit0a from its fetch/mirror verification.
 
 ## Operator-Locked Rules
 
@@ -40,7 +40,7 @@ Validate and commit/push the Round 81 repair, record its resulting full-state HE
 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
-| Planning reviewer gate | active | Quality Round 81 failed against the Round 80 checkpoint; all deduplicated roots are repaired in the Round 81 worktree contract at SHA-256 `72aa22344fa0e9e429f4194a3568479c4d030cdf7bbed51472869b92265ebb33`, and no Round 81 reviewer result survives those contract changes | Validate/commit/push this checkpoint, synchronize Desk, then run Quality Round 82 and scrutiny convergence |
+| Planning reviewer gate | active | Quality Round 81 failed against the Round 80 checkpoint; all deduplicated roots are repaired/pushed at `ffbb0aff15625dca49204b5a2df25ebdd92d04c2` with contract SHA-256 `72aa22344fa0e9e429f4194a3568479c4d030cdf7bbed51472869b92265ebb33`, and no Round 81 reviewer result survives those contract changes | Push this continuity checkpoint, synchronize Desk, then run Quality Round 82 and scrutiny convergence |
 | Doing review chain | active | The implementation-free plan, sole execution contract, granular Unit29.2 groups, exact recovery/evidence contracts, recursive ancestor unwind, stable archive locators, and one-generation terminal receipt are executable and fully assigned | Re-converge and restore final handoff |
 | Work Doer Units 0-37 | deferred by gate | Full red/green/verify/visual/ship queue is defined | Restart Unit0a only after fresh final handoff |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
