@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; Quality Round 62 repairs are pushed at `6de033641bbae6bfddd85b5c63992d747fc869ea`, with execution-contract content SHA-256 `634442a43b7388e06c9a7f190e72ca207f9810712598bd4683bfdee9961079c2`, and integrate `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. The synchronized Round 63 full-state reviewer input is resolved with `git rev-parse HEAD` only after this continuity update is committed/pushed; it is not the contract-only commit or content SHA. Every earlier clean pass is historical because Round 62 changed successor cancellation, bootstrap publication, Work Doer state ownership, and migration timestamp semantics.
+- Branch: `worker/clem-feedback-e2e`; Quality Round 63 repairs are pushed at `994b51ce82af3633529e7cbd9531cc5654ee61b4`, with execution-contract content SHA-256 `21280dcf498bfb2ff7c0b6350d2f28c02cc180df727b91b179dd61cc8ed3b735`, and integrate `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. The synchronized Round 64 full-state reviewer input is resolved with `git rev-parse HEAD` only after this continuity update is committed/pushed; it is not the contract-only commit or content SHA. Every earlier clean pass is historical because Round 63 changed Work Doer dispatch/evidence identity, bootstrap/runtime-transition recovery, implementation-review paths, and migration/sync cursor semantics.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is `NEEDS_REVIEW` after the mandatory main-drift audit.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation and dependency setup have not started.
-- Active gate: fresh three-lens Quality Round 63 on the synchronized full-state HEAD containing the Round 62 repair plus this committed continuity, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Round 62 moved all successor producer TDD into Unit29.2.5a/b, added persisted owner-bound cancellation with finite waits, fenced ordinal bootstrap and product-runtime pushes, separated immutable promoted documents from mutable Work Doer state with exact Git/worktree/Desk recovery, and preserved all-tombstone survivor timestamps. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
+- Active gate: fresh three-lens Quality Round 64 on the synchronized full-state HEAD containing the Round 63 repair plus this committed continuity, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Round 63 now authenticates the mutable Work Doer target and receipt chain, separates pre-dispatch transition retries from doer attempts, adopts exact retained bootstrap state, qualifies every retryable producer/review path, preserves all-tombstone survivors byte-for-byte, and uses one UTF-8 BINARY sync comparator. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-After committing/pushing this continuity update, resolve the synchronized Round 63 full-state reviewer input with `git rev-parse HEAD`; record that exact SHA in Desk task metadata and every reviewer prompt, synchronize all four mirrors byte-for-byte, run fresh Quality Round 63 plus consecutive Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
+After committing/pushing this continuity update, resolve the synchronized Round 64 full-state reviewer input with `git rev-parse HEAD`; record that exact SHA in Desk task metadata and every reviewer prompt, synchronize all four mirrors byte-for-byte, run fresh Quality Round 64 plus consecutive Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
 
 ## Operator-Locked Rules
 
@@ -40,7 +40,7 @@ After committing/pushing this continuity update, resolve the synchronized Round 
 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
-| Planning reviewer gate | active | Quality Round 62 repairs are pushed at `6de033641bbae6bfddd85b5c63992d747fc869ea`; no reviewer result survives this continuity commit | Resolve synchronized full-state HEAD, then run fresh Quality Round 63 and scrutiny convergence |
+| Planning reviewer gate | active | Quality Round 63 repairs are pushed at `994b51ce82af3633529e7cbd9531cc5654ee61b4`; no reviewer result survives this continuity commit | Resolve synchronized full-state HEAD, then run fresh Quality Round 64 and scrutiny convergence |
 | Doing review chain | active | The implementation-free plan, sole execution contract, granular Unit29.2 groups, exact recovery/evidence contracts, recursive ancestor unwind, stable archive locators, and one-generation terminal receipt are executable and fully assigned | Re-converge and restore final handoff |
 | Work Doer Units 0-37 | deferred by gate | Full red/green/verify/visual/ship queue is defined | Restart Unit0a only after fresh final handoff |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
@@ -56,4 +56,4 @@ After committing/pushing this continuity update, resolve the synchronized Round 
 
 Not satisfied. The reopened reviewer gate and all delivery work remain.
 
-Last updated: 2026-07-18 01:03:27 PDT.
+Last updated: 2026-07-18 01:33:19 PDT.
