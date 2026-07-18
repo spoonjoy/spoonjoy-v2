@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `233ddc46` integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. The synchronized full-state reviewer input is always resolved at dispatch with `git rev-parse HEAD` after this continuity update is committed/pushed; it is not the contract-only SHA. All prior clean passes are historical because Quality Rounds 27-59 changed release process/recovery semantics, document ownership, visual scope, or feedback traceability.
+- Branch: `worker/clem-feedback-e2e`; current contract checkpoint `8a8b8d07` integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. The synchronized full-state reviewer input is always resolved at dispatch with `git rev-parse HEAD` after this continuity update is committed/pushed; it is not the contract-only SHA. All prior clean passes are historical because Quality Rounds 27-60 changed release process/recovery semantics, document ownership, visual scope, or feedback traceability.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is `NEEDS_REVIEW` after the mandatory main-drift audit.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation and dependency setup have not started.
-- Active gate: fresh Quality Round 60 on the synchronized full-state HEAD containing contract checkpoint `233ddc46` plus this committed continuity, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Round 59's process/executor, schema/security, terminal/archive, and parent-audit findings are closed directly: retry keys include their owners; pre-release and terminal manifest members are typed and phase-closed; successor bootstrap commits source before remote publication; planner/doer attempts bind prompt/skill/cwd/docs; terminal evidence, wait/blocker recovery, and progress nullability are total; archive state is disposition-frozen; leaf and relay receipts cannot collide; and repaired closed sets retain exactly the state-authorized DeskArchive/leaf/TrackDisposition bytes. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
+- Active gate: fresh Quality Round 61 on the synchronized full-state HEAD containing contract checkpoint `8a8b8d07` plus this committed continuity, followed by fresh Tinfoil and Stranger only after Quality converges without contract changes. Round 60's process/executor, schema/security, terminal/archive, and parent-audit findings are closed directly: terminal worktree cleanup is registered; terminal snapshots/evidence and sanitizer codes are total; wait/blocker recovery has exact ordered crash prefixes; archive state plus checkpoint travels through every lineage object; stage-kind is validating-only while terminal-kind carries archived states; consumed and created repair indexes are distinct; all eight successor phases have explicit null matrices; immutable task seed and mutable task projection are separated; and every source write/index/commit/ref/task boundary is journaled. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-After committing/pushing this continuity update, resolve the synchronized full-state reviewer input with `git rev-parse HEAD`; record that exact SHA in Desk task metadata and every reviewer prompt, synchronize all four mirrors byte-for-byte, run fresh Quality Round 60 plus consecutive Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
+After committing/pushing this continuity update, resolve the synchronized full-state reviewer input with `git rev-parse HEAD`; record that exact SHA in Desk task metadata and every reviewer prompt, synchronize all four mirrors byte-for-byte, run fresh Quality Round 61 plus consecutive Tinfoil and Stranger reviews, commit/push the final handoff, then restart Unit0a from its fetch/mirror verification.
 
 ## Operator-Locked Rules
 
@@ -40,7 +40,7 @@ After committing/pushing this continuity update, resolve the synchronized full-s
 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
-| Planning reviewer gate | active | Quality Round 59's complete finding set is fixed at contract `233ddc46`; no reviewer result survives a changed contract | Resolve synchronized full-state HEAD, then run fresh Quality Round 60 and scrutiny convergence |
+| Planning reviewer gate | active | Quality Round 60's complete finding set is fixed at contract `8a8b8d07`; no reviewer result survives a changed contract | Resolve synchronized full-state HEAD, then run fresh Quality Round 61 and scrutiny convergence |
 | Doing review chain | active | The implementation-free plan, sole execution contract, granular Unit29.2 groups, exact recovery/evidence contracts, recursive ancestor unwind, stable archive locators, and one-generation terminal receipt are executable and fully assigned | Re-converge and restore final handoff |
 | Work Doer Units 0-37 | deferred by gate | Full red/green/verify/visual/ship queue is defined | Restart Unit0a only after fresh final handoff |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
@@ -56,4 +56,4 @@ After committing/pushing this continuity update, resolve the synchronized full-s
 
 Not satisfied. The reopened reviewer gate and all delivery work remain.
 
-Last updated: 2026-07-17 18:27:00 PDT.
+Last updated: 2026-07-17 19:01:02 PDT.
