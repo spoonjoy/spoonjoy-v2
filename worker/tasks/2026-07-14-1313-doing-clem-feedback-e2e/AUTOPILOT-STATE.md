@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; Quality Round 85 reviewed synchronized full-state checkpoint `540760f0c9d7dbacef3fc7d6a977a5ce1a5dd77d` and failed with deduplicated legacy-choice/data-loss, terminal-row-completeness, metadata-deletion-retry, cleanup-journal-authority, QA-migration-order, production-migration-review, and overlapping-release roots. The Round85 repair is present in this worktree with execution-contract SHA-256 `bd1aa137924099a0dd7d1009012e3f5dc97fb2bd4f539026d738c7cc9ad17a06`; its containing repair commit is intentionally recorded only by the next continuity checkpoint. The branch integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. Every earlier clean pass is historical because Round85 replaces legacy arbitration/adoption, metadata retry, terminal projection proof, broad cleanup authority/order, reviewed migration safety, and CI/production overlap behavior.
+- Branch: `worker/clem-feedback-e2e`; Quality Round 85 reviewed synchronized full-state checkpoint `540760f0c9d7dbacef3fc7d6a977a5ce1a5dd77d` and failed with deduplicated legacy-choice/data-loss, terminal-row-completeness, metadata-deletion-retry, cleanup-journal-authority, QA-migration-order, production-migration-review, and overlapping-release roots. Commit `3e4682d571a33b61d264c9005fee53004ce7a584` repairs all seven roots with execution-contract SHA-256 `bd1aa137924099a0dd7d1009012e3f5dc97fb2bd4f539026d738c7cc9ad17a06`; this continuity-only checkpoint freezes the full reviewer input. The branch integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`. Every earlier clean pass is historical because Round85 replaces legacy arbitration/adoption, metadata retry, terminal projection proof, broad cleanup authority/order, reviewed migration safety, and CI/production overlap behavior.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is `NEEDS_REVIEW` after the mandatory main-drift audit.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation and dependency setup have not started.
-- Active gate: commit/push the Round85 repair, then commit/push its continuity-only checkpoint, synchronize Desk, and run fresh three-lens Quality Round86 against the immutable synchronized full-state checkpoint. Fresh Tinfoil and Stranger follow only after Quality converges without contract changes. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
+- Active gate: synchronize this continuity-only checkpoint to Desk, then run fresh three-lens Quality Round86 against its immutable synchronized full state. Fresh Tinfoil and Stranger follow only after Quality converges without contract changes. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Commit/push the Round85 repair, record its actual commit in a continuity-only checkpoint, synchronize Desk, and start fresh Quality Round86 reviewers against that immutable full state. After Quality plus consecutive Tinfoil and Stranger converge, commit/push the final handoff and restart Unit0a from its fetch/mirror verification.
+Commit/push this continuity-only checkpoint, synchronize Desk, and start fresh Quality Round86 reviewers against that immutable full state. After Quality plus consecutive Tinfoil and Stranger converge, commit/push the final handoff and restart Unit0a from its fetch/mirror verification.
 
 ## Operator-Locked Rules
 
@@ -40,7 +40,7 @@ Commit/push the Round85 repair, record its actual commit in a continuity-only ch
 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
-| Planning reviewer gate | active | Quality Round85 failed against `540760f0c9d7dbacef3fc7d6a977a5ce1a5dd77d`; all seven deduplicated roots are repaired in the worktree with contract SHA-256 `bd1aa137924099a0dd7d1009012e3f5dc97fb2bd4f539026d738c7cc9ad17a06`, and no Round85 reviewer result survives those changes | Commit/push repair and continuity checkpoints, synchronize Desk, then run Quality Round86 and scrutiny convergence |
+| Planning reviewer gate | active | Quality Round85 failed against `540760f0c9d7dbacef3fc7d6a977a5ce1a5dd77d`; commit `3e4682d571a33b61d264c9005fee53004ce7a584` repairs all seven deduplicated roots with contract SHA-256 `bd1aa137924099a0dd7d1009012e3f5dc97fb2bd4f539026d738c7cc9ad17a06`, and no Round85 reviewer result survives those changes | Commit/push this continuity checkpoint, synchronize Desk, then run Quality Round86 and scrutiny convergence |
 | Doing review chain | active | The implementation-free plan, sole execution contract, granular Unit29.2 groups, exact recovery/evidence contracts, recursive ancestor unwind, stable archive locators, and one-generation terminal receipt are executable and fully assigned | Re-converge and restore final handoff |
 | Work Doer Units 0-37 | deferred by gate | Full red/green/verify/visual/ship queue is defined | Restart Unit0a only after fresh final handoff |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
@@ -56,4 +56,4 @@ Commit/push the Round85 repair, record its actual commit in a continuity-only ch
 
 Not satisfied. The reopened reviewer gate and all delivery work remain.
 
-Last updated: 2026-07-18 14:40:14 PDT.
+Last updated: 2026-07-18 15:07:00 PDT.
