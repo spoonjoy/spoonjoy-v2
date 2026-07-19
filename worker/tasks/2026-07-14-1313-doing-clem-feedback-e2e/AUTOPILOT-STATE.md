@@ -40,7 +40,7 @@ Commit/push the Round100 repair checkpoint, synchronize Desk, and start fresh Qu
 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
-| Planning reviewer gate | active | Quality Round100 exposed coupled product/data/release gaps; Round101 repairs every deduplicated root at pushed checkpoint `7824ceb4794605815b8e25f4c9945bc9eeb47073` with contract SHA-256 `4c5ced8b184e6f3b95da8bb06359064fa370e040e4b493c3a846ea40337ac0bb` | Synchronize this repair, then run fresh three-lens Quality Round101 and scrutiny convergence |
+| Planning reviewer gate | active | Quality Round100 exposed coupled product/data/release gaps; Round101 plus the repo-verified default-production Wrangler correction are pushed at checkpoint `b2116b484cd9cdbf618bae3578e1dca98ef9bdc0` with contract SHA-256 `c2ce251ea5e2f81a7d82ef841bbdafda3a2db623a25b2ebcbf20292ef1d72c10` | Run fresh three-lens Quality Round101 and scrutiny convergence |
 | Doing review chain | active | The implementation-free plan, sole execution contract, granular Unit29.2 groups, exact recovery/evidence contracts, recursive ancestor unwind, stable archive locators, and one-generation terminal receipt are executable and fully assigned | Re-converge and restore final handoff |
 | Work Doer Units 0.0-37 | deferred by gate | Full red/green/verify/visual/ship queue is defined | Run mandatory preflight, then start Unit0.0a only after fresh final handoff |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
@@ -56,4 +56,4 @@ Commit/push the Round100 repair checkpoint, synchronize Desk, and start fresh Qu
 
 Not satisfied. The reopened reviewer gate and all delivery work remain.
 
-Last updated: 2026-07-18 23:17:22 PDT.
+Last updated: 2026-07-18 23:22:00 PDT.
