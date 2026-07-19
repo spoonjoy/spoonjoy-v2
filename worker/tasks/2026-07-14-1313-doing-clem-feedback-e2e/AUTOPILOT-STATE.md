@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; immutable Round106 substantive repair commit `70893d04f2fd253078fa8eda4be547cbbfccd4ad` is pushed and is a descendant of Round105 repair `4328cec229f9f1acdeb74e76fef1760a2969d5de`, reviewed Round104 checkpoint `37a9f55ddde416b3e7f4936e7cc36bc756cf1cf0`, and actual earlier Round104 repair `9c7e1e055a2c439ab28f64d30b2ffb02cb25c7d3`. Six cold Round105 reviews found stale continuity/Desk metadata, an active prior-round label, incomplete production workflow schemas, unconstructible qualification/intent evidence, missing R2/account cleanup authority, illegal post-dispatch replay, missing admission TDD ownership, an existing Pebble analytics branch, lossy shopping replay values, and a network-dependent logout escape. Round106 repairs those roots directly. The execution-contract SHA-256 is `3cf85f66e3e9dfd95e5bc6fd63fa2ae667dd5b24fc117de5644d69a9a2ed4aca`; the branch still integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`.
+- Branch: `worker/clem-feedback-e2e`; immutable Round107 substantive repair commit `b677d0ffb4df7c739412c847d1b59e842c0e793a` is pushed and descends from Round106 repair `70893d04f2fd253078fa8eda4be547cbbfccd4ad`. Round106's scope/product and test/evidence lenses converged; release/data lenses found five roots: no executable cross-attempt Actions handoff, unconditional Unit37 intent download, provider-incomplete cleanup manifest bytes, wall-clock-authorized shopping replay, and no cold-switch departure marker. Round107 repairs them with pinned attempt-unique artifacts and separate prepare/deploy, result-first optional intent observation, manifest version 2, monotonic two-dispatch fencing, and a crash-resumable opaque current-user marker. The execution-contract SHA-256 is `9da742136edbb8ec0c5547d476cc449bfbde773006ef9363c690051cbc0fadf5`; the branch still integrates current `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is `NEEDS_REVIEW` after the mandatory main-drift audit.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation and dependency setup have not started.
-- Active gate: Desk-synchronize the pushed Round106 checkpoint, then run fresh harsh scope/product, release/security/process, data/concurrency/storage, and test/evidence/constructibility reviews. Each reviewer must record its observed `git rev-parse HEAD`, prove it equals the branch upstream, prove it descends from substantive repair `70893d04f2fd253078fa8eda4be547cbbfccd4ad`, and rederive contract SHA-256 `3cf85f66e3e9dfd95e5bc6fd63fa2ae667dd5b24fc117de5644d69a9a2ed4aca`. Continuity never predicts its own commit SHA. Any accepted finding reopens the contract and repeats the gate; only clean lenses permit the final Work Planner handoff and Work Doer Unit0.0a. Desk remains `processing` with `planning_complete:true` during this post-start planner detour.
+- Active gate: Desk-synchronize the pushed Round107 checkpoint, then rerun fresh harsh scope/product, release/security/process, data/concurrency/storage, and test/evidence/constructibility reviews. Each reviewer records observed HEAD/upstream equality, proves descent from substantive repair `b677d0ffb4df7c739412c847d1b59e842c0e793a`, and rederives contract SHA-256 `9da742136edbb8ec0c5547d476cc449bfbde773006ef9363c690051cbc0fadf5`. Continuity never predicts its own commit SHA. Any accepted finding reopens the contract; only four clean lenses permit final Work Planner handoff and Work Doer Unit0.0a. Desk remains `processing` with `planning_complete:true`.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Synchronize Desk exact mirrors and task metadata, then start fresh Quality Round106 reviewers against the actual clean pushed review HEAD under the attestation rule above. After all cold lenses converge, commit/push the final planner handoff and run the mandatory execution preflight followed by Unit0.0a.
+Synchronize Desk exact mirrors and task metadata, then start fresh Quality Round107 reviewers against the actual clean pushed review HEAD under the attestation rule above. After all cold lenses converge, commit/push the final planner handoff and run the mandatory execution preflight followed by Unit0.0a.
 
 ## Operator-Locked Rules
 
@@ -40,7 +40,7 @@ Synchronize Desk exact mirrors and task metadata, then start fresh Quality Round
 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
-| Planning reviewer gate | active | Six Round105 cold reviews are dispositioned in pushed substantive repair `70893d04f2fd253078fa8eda4be547cbbfccd4ad`; contract hash is `3cf85f66e3e9dfd95e5bc6fd63fa2ae667dd5b24fc117de5644d69a9a2ed4aca` | Synchronize exact mirrors and run fresh four-lens Quality Round106 convergence against an attested pushed descendant |
+| Planning reviewer gate | active | Round106's two clean lenses plus five accepted release/data findings are dispositioned in pushed substantive repair `b677d0ffb4df7c739412c847d1b59e842c0e793a`; contract hash is `9da742136edbb8ec0c5547d476cc449bfbde773006ef9363c690051cbc0fadf5` | Synchronize exact mirrors and run fresh four-lens Quality Round107 convergence against an attested pushed descendant |
 | Doing review chain | active | The implementation-free plan, sole execution contract, granular Unit29.2 groups, exact recovery/evidence contracts, recursive ancestor unwind, stable archive locators, and one-generation terminal receipt are executable and fully assigned | Re-converge and restore final handoff |
 | Work Doer Units 0.0-37 | deferred by gate | Full red/green/verify/visual/ship queue is defined | Run mandatory preflight, then start Unit0.0a only after fresh final handoff |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
@@ -56,4 +56,4 @@ Synchronize Desk exact mirrors and task metadata, then start fresh Quality Round
 
 Not satisfied. The reopened reviewer gate and all delivery work remain.
 
-Last updated: 2026-07-19 02:53:05 PDT.
+Last updated: 2026-07-19 03:33:20 PDT.
