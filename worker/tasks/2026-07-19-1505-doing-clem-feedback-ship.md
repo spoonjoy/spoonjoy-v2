@@ -71,35 +71,35 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Output**: Baseline logs, fixture/hash manifest, and feedback-to-unit map in the artifacts directory plus the committed seed fixture.
 **Acceptance**: 7,226 existing tests pass at 100% app coverage; fixture atop migrations 0000-0023 yields the exact five memberships/three active duplicates; typecheck/build pass; `git status --porcelain` is empty after commit; every source row maps to a unit or explicit rejection test.
 
-### ⬜ Unit 1.1a: Namespace Bootstrap - Tests
-**What**: Add failing config/runtime tests for class `CookSession`, binding `COOK_SESSIONS`, top-level/QA `v1_cook_session` `new_sqlite_classes`, environment types, SQLite storage, and the frozen public/internal probe paths, header, body, object name, success body, two-run idempotence, and mismatch/bootstrap-disabled 404s.
-**Output**: Red `test/config/cook-session-binding.test.ts` and `test/workers/cook-session-bootstrap.test.ts` evidence.
-**Acceptance**: `pnpm exec vitest run test/config/cook-session-binding.test.ts test/workers/cook-session-bootstrap.test.ts` fails only on absent namespace code/config.
-
-### ⬜ Unit 1.1b: Namespace Bootstrap - Implementation
-**What**: Add the inert `workers/cook-session.ts` export and bootstrap route in `workers/app.ts` plus `wrangler.json` production/QA binding, `COOK_SESSION_BOOTSTRAP_MODE=1`, legacy migration, and `app/cloudflare-env.d.ts` types. The DO probe creates/reads/drops its private table and deletes all storage before returning the exact planning-contract body.
-**Output**: One deployable inert SQLite DO namespace.
-**Acceptance**: Unit 1.1a tests pass and `pnpm run typecheck` plus `pnpm run build` are green.
-
-### ⬜ Unit 1.1c: Namespace Bootstrap - Verification
-**What**: Cover every namespace/config branch and review storage/lifecycle correctness.
-**Output**: Focused coverage and reviewer report.
-**Acceptance**: Namespace code is 100% covered and a fresh Cloudflare review has no BLOCKER/MAJOR finding.
-
-### ⬜ Unit 1.2a: Workers Test Lane - Tests
+### ⬜ Unit 1.1a: Workers Test Lane - Tests
 **What**: Add failing tests for `vitest.workers.config.ts`, `wrangler.workers-test.json`, exact Vitest `4.1.10`/Workers pool `0.18.6`, Istanbul 100% thresholds, serialized shared storage, warning failure, package commands, and CI invocation.
 **Output**: Red `test/config/workers-vitest-lane.test.ts` and workflow-contract evidence.
 **Acceptance**: Focused tests fail only because the Workers lane/dependencies are absent.
 
-### ⬜ Unit 1.2b: Workers Test Lane - Implementation
+### ⬜ Unit 1.1b: Workers Test Lane - Implementation
 **What**: Upgrade all Vitest packages to `4.1.10`, add `@cloudflare/vitest-pool-workers@0.18.6`, `vitest.workers.config.ts`, `wrangler.workers-test.json`, `test:workers`/`test:workers:coverage`, and the mandatory CI job.
 **Output**: Executable official Workers-runtime test and coverage lane.
 **Acceptance**: `pnpm run test:workers` and app typecheck/build pass with no warnings.
 
-### ⬜ Unit 1.2c: Workers Test Lane - Verification
+### ⬜ Unit 1.1c: Workers Test Lane - Verification
 **What**: Run both app and Workers coverage and review config/CI isolation.
 **Output**: Dual 100% coverage reports and reviewer result.
-**Acceptance**: Worker bootstrap files and new config logic reach 100%; app remains 100%; fresh test-infrastructure review converges.
+**Acceptance**: New config logic reaches 100%; the empty Workers lane passes; app remains 100%; fresh test-infrastructure review converges.
+
+### ⬜ Unit 1.2a: Namespace Bootstrap - Tests
+**What**: Using the Unit 1.1 Workers lane, add failing config/runtime tests for class `CookSession`, binding `COOK_SESSIONS`, top-level/QA `v1_cook_session` `new_sqlite_classes`, environment types, SQLite storage, and the frozen public/internal probe paths, header, body, object name, success body, two-run idempotence, and mismatch/bootstrap-disabled 404s.
+**Output**: Red `test/config/cook-session-binding.test.ts` and Workers-lane `test/workers/cook-session-bootstrap.test.ts` evidence.
+**Acceptance**: Config test and `pnpm run test:workers -- test/workers/cook-session-bootstrap.test.ts` fail only on absent namespace code/config.
+
+### ⬜ Unit 1.2b: Namespace Bootstrap - Implementation
+**What**: Add the inert `workers/cook-session.ts` export and bootstrap route in `workers/app.ts` plus `wrangler.json` production/QA binding, `COOK_SESSION_BOOTSTRAP_MODE=1`, legacy migration, and `app/cloudflare-env.d.ts` types. The DO probe creates/reads/drops its private table and deletes all storage before returning the exact planning-contract body.
+**Output**: One deployable inert SQLite DO namespace.
+**Acceptance**: Unit 1.2a tests pass and `pnpm run typecheck` plus `pnpm run build` are green.
+
+### ⬜ Unit 1.2c: Namespace Bootstrap - Verification
+**What**: Cover every namespace/config branch and review storage/lifecycle correctness.
+**Output**: Focused coverage and reviewer report.
+**Acceptance**: Namespace code is 100% covered and a fresh Cloudflare review has no BLOCKER/MAJOR finding.
 
 ### ⬜ Unit 1.3a: Bootstrap Deployment Mode - Tests
 **What**: Add failing tests in `test/scripts/deploy-production-canary.test.ts`, `test/scripts/deployment-preflight.test.ts`, and `test/release-workflow-security.test.ts` for `.github/workflows/production-deploy.yml` atomic bootstrap mode, exact-SHA/version/probe verification, no pre-boundary rollback, sanitized artifact output, and restored canary mode.
@@ -132,12 +132,27 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Production has the SQLite namespace, canonical health identifies the bootstrap merge, zero residue remains, and failure recovery is forward-only across this boundary.
 
 ### ⬜ Unit 1.7: Product Branch Handoff
-**What**: Create `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback-product` on `worker/clem-feedback-product` from the verified merge, future base `main`; remove `COOK_SESSION_BOOTSTRAP_MODE` but retain its gated route code until Unit 7.1; rewrite `test/config/cook-session-binding.test.ts` to keep binding/migration and assert no bootstrap var, rewrite `test/workers/cook-session-bootstrap.test.ts` to assert the public probe is 404 while its internal inert probe remains covered, and switch deploy tests back to canary expectations; record all identities/paths in `bootstrap-handoff.md`.
-**Output**: `bootstrap-handoff.md` and clean pushed product branch.
-**Acceptance**: Merge-base succeeds; task docs remain reachable; updated binding/bootstrap/deploy tests, Workers/app coverage, typecheck, and build pass; no production config enables the public probe; Unit 2.1 starts only here.
+**What**: Create `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback-product` on `worker/clem-feedback-product` from the verified bootstrap merge with future base `main`, and record merge/deploy/version/ancestry/branch/worktree/task paths in `bootstrap-handoff.md` without changing runtime code.
+**Output**: Initial handoff manifest and clean pushed product branch at the bootstrap merge.
+**Acceptance**: Merge-base succeeds, task docs remain reachable, `git status --porcelain` is empty, and the initial product branch equals the verified bootstrap merge.
+
+### ⬜ Unit 1.8a: Product Deployment Mode - Tests
+**What**: On the product branch, change config/runtime/deploy contract tests to require no `COOK_SESSION_BOOTSTRAP_MODE`, public probe 404 with internal inert probe still covered, retained binding/migration, and restored versions-upload/canary behavior.
+**Output**: Red updated binding/bootstrap/deploy tests.
+**Acceptance**: Focused tests fail only because the checked-in config/workflow still enables bootstrap deployment mode.
+
+### ⬜ Unit 1.8b: Product Deployment Mode - Implementation
+**What**: Remove `COOK_SESSION_BOOTSTRAP_MODE`, retain gated probe code until Unit 7.1, and restore the existing version-upload/canary workflow/script path; do not change the Durable Object binding or migration.
+**Output**: Product-mode configuration with an unreachable public bootstrap probe and preserved namespace.
+**Acceptance**: Unit 1.8a tests, Workers/app coverage, typecheck, and build pass; no production/QA config enables the public probe.
+
+### ⬜ Unit 1.8c: Product Deployment Mode - Verification
+**What**: Run canary contract tests and fresh release/Cloudflare review, then finalize `bootstrap-handoff.md` with the product-mode commit and pushed head.
+**Output**: Verified handoff manifest and clean pushed product branch.
+**Acceptance**: Review converges, `git status --porcelain` is empty, branch is pushed, and Unit 2.1 starts only from this checkpoint.
 
 ### ⬜ Unit 2.1a: Product Models - Tests
-**What**: From the Unit 1.7 handoff, add failing Prisma/schema tests for every exact scalar type/default, named relation field, key/index, FK action, and raw check frozen in planning, including nullable/no-default `Recipe.course`, SavedRecipe's sole timestamp, RecipeTag timestamps, CookSessionIndex's no-default timestamps/no recipe relation/no progress columns, and shopping `@@unique` removal.
+**What**: From the Unit 1.8c handoff, add failing Prisma/schema tests for every exact scalar type/default, named relation field, key/index, FK action, and raw check frozen in planning, including nullable/no-default `Recipe.course`, SavedRecipe's sole timestamp, RecipeTag timestamps, CookSessionIndex's no-default timestamps/no recipe relation/no progress columns, and shopping `@@unique` removal.
 **Output**: Red `test/models/clem-feedback-schema.test.ts` evidence.
 **Acceptance**: Focused tests fail only because the models/columns are absent.
 
@@ -152,7 +167,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: New helper code is 100% covered and review converges.
 
 ### ⬜ Unit 2.2a: Product Schema And SavedRecipe Backfill Migration - Tests
-**What**: Add failing migration assertions for empty/fixture application, every frozen schema detail, exactly four saves, user-a/recipe-r1 Jan 3 savedAt, item-b quantity 3/sort 1/unchecked/checkedAt null/deletedAt null plus selected category/icon/advanced updatedAt, item-a/item-c preserved except tombstone/advanced updatedAt, FK integrity, and deletion behavior.
+**What**: Add failing migration assertions for empty/fixture application, every frozen SavedRecipe/RecipeTag/Recipe.course/CookSessionIndex schema detail, exactly four saves, user-a/recipe-r1 Jan 3 savedAt, FK integrity, and saved-row soft/hard recipe deletion behavior; do not assert shopping repair yet.
 **Output**: Red product-schema and saved-backfill sections of `test/scripts/migration-0024-clem-feedback-product.test.ts`.
 **Acceptance**: Focused migration tests fail only because migration 0024 and all of its required schema/backfill behavior are absent.
 
@@ -167,7 +182,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Both engines agree, no existing table contract breaks, and review converges.
 
 ### ⬜ Unit 2.3a: Shopping Repair Migration - Tests
-**What**: Add failing migration tests for dropping `ShoppingListItem_shoppingListId_unitId_ingredientRefId_key`, active unitless/unit identities, deterministic duplicate survivor/state/quantity/sort handling, tombstoned extras, partial unique index enforcement, retained-tombstone re-adds with non-null units, `updatedAt`, and no quantity loss.
+**What**: Add failing migration tests for dropping the legacy index; item-b quantity 3/sort 1/unchecked/checkedAt null/deletedAt null plus frozen category/icon/updatedAt selection; item-a/item-c preserved except tombstone/advanced updatedAt; active unit/non-unit identities; partial-index enforcement; retained-tombstone non-null-unit re-add; and no quantity loss.
 **Output**: Red shopping section of the migration 0024 test.
 **Acceptance**: Tests fail because repair/index SQL is absent.
 
@@ -602,9 +617,9 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Required reviews/checks are green, no unresolved comment remains, and merged tree equals the final reviewed product tree.
 
 ### ⬜ Unit 9.6: Production Canary Deployment
-**What**: Follow the automatic post-boundary version upload, 0% candidate smoke, 100% promotion, and exact merge-SHA/version/canonical-health verification; use only post-boundary rollback on a candidate failure.
-**Output**: Sanitized production release/version evidence.
-**Acceptance**: The product merge SHA is the sole 100% production version or the prior post-boundary version is restored with a recorded failure requiring repair.
+**What**: Follow automatic post-boundary version upload, 0% candidate smoke, 100% promotion, and exact merge-SHA/version/canonical-health verification. On candidate failure, restore only the prior post-boundary version, keep this unit incomplete, create/merge a reviewed repair, and repeat Unit 9.6 for the repair merge.
+**Output**: Sanitized successful production release/version evidence; failed attempts additionally retain rollback/repair evidence without satisfying the unit.
+**Acceptance**: The final product or repair merge SHA is the sole 100% production version and canonical health identifies it; rollback alone never completes this unit or permits Unit 9.7.
 
 ### ⬜ Unit 9.7: Production Smoke And Visual QA
 **What**: Run production Clem feature smoke, the two-client continuation flow, `visual-qa-dogfood`, and canonical-health verification against the promoted version; close the absurdity ledger from observed production behavior.
@@ -641,3 +656,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-19 17:00 Final ambiguity findings fixed SQL constraints, total reconnects, shopping metadata, bootstrap tests, fixture hashing, and canonical links.
 - 2026-07-19 17:06 Final ambiguity convergence fixes specified receipt/projection fields and same-attempt stale reconciliation.
 - 2026-07-19 17:10 Ambiguity Pass 4 converged with no executor-blocking findings.
+- 2026-07-19 17:17 Quality Round 1 fixed Workers-lane ordering, migration-test ownership, product-mode TDD, and rollback completion semantics.
