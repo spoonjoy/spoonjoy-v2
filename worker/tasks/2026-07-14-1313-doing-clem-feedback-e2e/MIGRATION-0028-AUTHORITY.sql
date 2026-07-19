@@ -80,6 +80,11 @@ CREATE TABLE IF NOT EXISTS "SearchChangeTarget" (
   FOREIGN KEY ("revision") REFERENCES "SearchSourceChange" ("revision") ON DELETE CASCADE
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS "SearchChangeTarget_target_revision_idx" ON "SearchChangeTarget" ("entityType" COLLATE BINARY, "entityId" COLLATE BINARY, "revision");
+CREATE TABLE IF NOT EXISTS "SearchBaseTarget" (
+  "entityType" TEXT NOT NULL CHECK ("entityType" IN ('recipe','cookbook','chef','shopping-list-item')),
+  "entityId" TEXT NOT NULL CHECK (length("entityId") > 0),
+  PRIMARY KEY ("entityType", "entityId")
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS "SearchDocumentKey" (
   "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
   "slot" TEXT NOT NULL CHECK ("slot" IN ('blue','green')),
@@ -98,7 +103,7 @@ CREATE TABLE IF NOT EXISTS "SearchIndexAuthority" (
   "activeRevision" INTEGER NOT NULL CHECK ("activeRevision" BETWEEN 0 AND 9007199254740991),
   "activeDocumentCount" INTEGER NOT NULL CHECK ("activeDocumentCount" BETWEEN 0 AND 9007199254740991),
   "buildSlot" TEXT NULL CHECK ("buildSlot" IS NULL OR "buildSlot" IN ('blue','green')),
-  "buildPhase" TEXT NULL CHECK ("buildPhase" IS NULL OR "buildPhase" IN ('clearing','base','delta')),
+  "buildPhase" TEXT NULL CHECK ("buildPhase" IS NULL OR "buildPhase" IN ('clearing','base_seed','base_apply','delta')),
   "cutoffRevision" INTEGER NULL CHECK ("cutoffRevision" IS NULL OR "cutoffRevision" BETWEEN 0 AND 9007199254740991),
   "appliedRevision" INTEGER NULL CHECK ("appliedRevision" IS NULL OR "appliedRevision" BETWEEN 0 AND 9007199254740991),
   "clearAfterKeyId" INTEGER NULL CHECK ("clearAfterKeyId" IS NULL OR "clearAfterKeyId" BETWEEN 0 AND 9007199254740991),
@@ -135,6 +140,7 @@ ON CONFLICT("id") DO NOTHING;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_User_insert" AFTER INSERT ON "User"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'User', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -153,6 +159,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_User_update" AFTER UPDATE ON "User"
 WHEN OLD."id" IS NOT NEW."id" OR OLD."username" IS NOT NEW."username" OR OLD."photoUrl" IS NOT NEW."photoUrl" OR OLD."updatedAt" IS NOT NEW."updatedAt"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'User', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -178,6 +185,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_User_delete" BEFORE DELETE ON "User"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'User', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -195,6 +203,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_Recipe_insert" AFTER INSERT ON "Recipe"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Recipe', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -211,6 +220,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_Recipe_update" AFTER UPDATE ON "Recipe"
 WHEN OLD."id" IS NOT NEW."id" OR OLD."chefId" IS NOT NEW."chefId" OR OLD."title" IS NOT NEW."title" OR OLD."description" IS NOT NEW."description" OR OLD."sourceUrl" IS NOT NEW."sourceUrl" OR OLD."servings" IS NOT NEW."servings" OR OLD."deletedAt" IS NOT NEW."deletedAt" OR OLD."updatedAt" IS NOT NEW."updatedAt" OR OLD."activeCoverId" IS NOT NEW."activeCoverId" OR OLD."activeCoverVariant" IS NOT NEW."activeCoverVariant" OR OLD."coverMode" IS NOT NEW."coverMode"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Recipe', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -232,6 +242,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_Recipe_delete" BEFORE DELETE ON "Recipe"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Recipe', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -247,6 +258,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_RecipeCover_insert" AFTER INSERT ON "RecipeCover"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeCover', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -259,6 +271,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_RecipeCover_update" AFTER UPDATE ON "RecipeCover"
 WHEN OLD."id" IS NOT NEW."id" OR OLD."recipeId" IS NOT NEW."recipeId" OR OLD."imageUrl" IS NOT NEW."imageUrl" OR OLD."stylizedImageUrl" IS NOT NEW."stylizedImageUrl" OR OLD."sourceType" IS NOT NEW."sourceType" OR OLD."status" IS NOT NEW."status" OR OLD."createdAt" IS NOT NEW."createdAt" OR OLD."archivedAt" IS NOT NEW."archivedAt"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeCover', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -272,6 +285,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_RecipeCover_delete" BEFORE DELETE ON "RecipeCover"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeCover', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -283,6 +297,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_RecipeStep_insert" AFTER INSERT ON "RecipeStep"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeStep', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -295,6 +310,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_RecipeStep_update" AFTER UPDATE ON "RecipeStep"
 WHEN OLD."id" IS NOT NEW."id" OR OLD."recipeId" IS NOT NEW."recipeId" OR OLD."stepNum" IS NOT NEW."stepNum" OR OLD."stepTitle" IS NOT NEW."stepTitle" OR OLD."description" IS NOT NEW."description" OR OLD."updatedAt" IS NOT NEW."updatedAt"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeStep', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -308,6 +324,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_RecipeStep_delete" BEFORE DELETE ON "RecipeStep"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeStep', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -319,6 +336,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_Ingredient_insert" AFTER INSERT ON "Ingredient"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Ingredient', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -331,6 +349,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_Ingredient_update" AFTER UPDATE ON "Ingredient"
 WHEN OLD."id" IS NOT NEW."id" OR OLD."recipeId" IS NOT NEW."recipeId" OR OLD."stepNum" IS NOT NEW."stepNum" OR OLD."quantity" IS NOT NEW."quantity" OR OLD."unitId" IS NOT NEW."unitId" OR OLD."ingredientRefId" IS NOT NEW."ingredientRefId" OR OLD."updatedAt" IS NOT NEW."updatedAt"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Ingredient', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -344,6 +363,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_Ingredient_delete" BEFORE DELETE ON "Ingredient"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Ingredient', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -355,6 +375,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_IngredientRef_insert" AFTER INSERT ON "IngredientRef"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'IngredientRef', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -369,6 +390,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_IngredientRef_update" AFTER UPDATE ON "IngredientRef"
 WHEN OLD."id" IS NOT NEW."id" OR OLD."name" IS NOT NEW."name" OR OLD."updatedAt" IS NOT NEW."updatedAt"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'IngredientRef', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -386,6 +408,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_IngredientRef_delete" BEFORE DELETE ON "IngredientRef"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'IngredientRef', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -399,6 +422,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_Unit_insert" AFTER INSERT ON "Unit"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Unit', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -413,6 +437,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_Unit_update" AFTER UPDATE ON "Unit"
 WHEN OLD."id" IS NOT NEW."id" OR OLD."name" IS NOT NEW."name" OR OLD."updatedAt" IS NOT NEW."updatedAt"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Unit', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -430,6 +455,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_Unit_delete" BEFORE DELETE ON "Unit"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Unit', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -443,6 +469,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_Cookbook_insert" AFTER INSERT ON "Cookbook"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Cookbook', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -459,6 +486,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_Cookbook_update" AFTER UPDATE ON "Cookbook"
 WHEN OLD."id" IS NOT NEW."id" OR OLD."authorId" IS NOT NEW."authorId" OR OLD."title" IS NOT NEW."title" OR OLD."updatedAt" IS NOT NEW."updatedAt"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Cookbook', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -480,6 +508,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_Cookbook_delete" BEFORE DELETE ON "Cookbook"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Cookbook', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -495,6 +524,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_RecipeInCookbook_insert" AFTER INSERT ON "RecipeInCookbook"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeInCookbook', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -509,6 +539,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_RecipeInCookbook_update" AFTER UPDATE ON "RecipeInCookbook"
 WHEN OLD."id" IS NOT NEW."id" OR OLD."recipeId" IS NOT NEW."recipeId" OR OLD."cookbookId" IS NOT NEW."cookbookId" OR OLD."updatedAt" IS NOT NEW."updatedAt"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeInCookbook', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -526,6 +557,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_RecipeInCookbook_delete" BEFORE DELETE ON "RecipeInCookbook"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeInCookbook', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -539,6 +571,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_ShoppingList_insert" AFTER INSERT ON "ShoppingList"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'ShoppingList', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -551,6 +584,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_ShoppingList_update" AFTER UPDATE ON "ShoppingList"
 WHEN OLD."id" IS NOT NEW."id" OR OLD."authorId" IS NOT NEW."authorId"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'ShoppingList', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -564,6 +598,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_ShoppingList_delete" BEFORE DELETE ON "ShoppingList"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'ShoppingList', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -575,6 +610,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_ShoppingListItem_insert" AFTER INSERT ON "ShoppingListItem"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'ShoppingListItem', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -587,6 +623,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_ShoppingListItem_update" AFTER UPDATE ON "ShoppingListItem"
 WHEN OLD."id" IS NOT NEW."id" OR OLD."shoppingListId" IS NOT NEW."shoppingListId" OR OLD."ingredientRefId" IS NOT NEW."ingredientRefId" OR OLD."quantity" IS NOT NEW."quantity" OR OLD."unitId" IS NOT NEW."unitId" OR OLD."checked" IS NOT NEW."checked" OR OLD."categoryKey" IS NOT NEW."categoryKey" OR OLD."iconKey" IS NOT NEW."iconKey" OR OLD."sortIndex" IS NOT NEW."sortIndex" OR OLD."deletedAt" IS NOT NEW."deletedAt" OR OLD."updatedAt" IS NOT NEW."updatedAt"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'ShoppingListItem', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -600,6 +637,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_ShoppingListItem_delete" BEFORE DELETE ON "ShoppingListItem"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'ShoppingListItem', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -611,6 +649,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_RecipeTag_insert" AFTER INSERT ON "RecipeTag"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeTag', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -623,6 +662,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_RecipeTag_update" AFTER UPDATE ON "RecipeTag"
 WHEN OLD."id" IS NOT NEW."id" OR OLD."recipeId" IS NOT NEW."recipeId" OR OLD."label" IS NOT NEW."label" OR OLD."normalizedLabel" IS NOT NEW."normalizedLabel" OR OLD."kind" IS NOT NEW."kind" OR OLD."source" IS NOT NEW."source"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeTag', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
@@ -636,6 +676,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS "SearchJournal_RecipeTag_delete" BEFORE DELETE ON "RecipeTag"
 BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM "SearchIndexAuthority" WHERE "id" = 'current') <> 1 THEN RAISE(ABORT, 'search_authority_missing') END;
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeTag', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
