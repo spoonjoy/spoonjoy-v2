@@ -137,13 +137,13 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: `git merge-base --is-ancestor <bootstrap-merge> HEAD` succeeds; task docs/artifacts remain reachable; canary contract tests pass; Unit 2.1 starts only from this checkpoint.
 
 ### ⬜ Unit 2.1a: Product Models - Tests
-**What**: From the Unit 1.7 product handoff, add failing Prisma/schema tests for `SavedRecipe`, `RecipeTag`, nullable controlled `Recipe.course`, metadata-only `CookSessionIndex`, relations, FK actions, and absence of progress columns.
+**What**: From the Unit 1.7 product handoff, add failing Prisma/schema tests for `SavedRecipe`, `RecipeTag`, nullable controlled `Recipe.course`, metadata-only `CookSessionIndex`, relations, FK actions, absence of progress columns, and removal of the full `ShoppingListItem` `@@unique([shoppingListId, unitId, ingredientRefId])` constraint that conflicts with retained tombstones.
 **Output**: Red `test/models/clem-feedback-schema.test.ts` evidence.
 **Acceptance**: Focused tests fail only because the models/columns are absent.
 
 ### ⬜ Unit 2.1b: Product Models - Implementation
-**What**: Add the four model changes and relations to `prisma/schema.prisma`, regenerate the client, and update typed test helpers/cleanup order.
-**Output**: Prisma-modeled product schema and generated types.
+**What**: Add the four model changes and relations to `prisma/schema.prisma`, remove the conflicting full `ShoppingListItem` compound uniqueness constraint, regenerate the client, and update typed test helpers/cleanup order.
+**Output**: Prisma-modeled product schema aligned with tombstone-preserving shopping identity and generated types.
 **Acceptance**: Model tests, Prisma generation/push, typecheck, and build pass.
 
 ### ⬜ Unit 2.1c: Product Models - Verification
@@ -167,12 +167,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Both engines agree, no existing table contract breaks, and review converges.
 
 ### ⬜ Unit 2.3a: Shopping Repair Migration - Tests
-**What**: Add failing migration tests for active unitless/unit identities, deterministic duplicate survivor/state/quantity/sort handling, tombstoned extras, partial unique index enforcement, `updatedAt`, and no quantity loss.
+**What**: Add failing migration tests for dropping `ShoppingListItem_shoppingListId_unitId_ingredientRefId_key`, active unitless/unit identities, deterministic duplicate survivor/state/quantity/sort handling, tombstoned extras, partial unique index enforcement, retained-tombstone re-adds with non-null units, `updatedAt`, and no quantity loss.
 **Output**: Red shopping section of the migration 0024 test.
 **Acceptance**: Tests fail because repair/index SQL is absent.
 
 ### ⬜ Unit 2.3b: Shopping Repair Migration - Implementation
-**What**: Add deterministic shopping duplicate reconciliation and the partial expression unique index to migration 0024.
+**What**: In migration 0024, deterministically reconcile shopping duplicates, drop the existing full `ShoppingListItem_shoppingListId_unitId_ingredientRefId_key`, and create the partial expression unique index for active rows only.
 **Output**: One database-enforced active shopping identity per list/ingredient/unit.
 **Acceptance**: All repair/index fixtures pass and the pre-feature Worker remains compatible with the migrated schema.
 
@@ -182,12 +182,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Migration is applied once, second apply is a no-op, no data is lost, and review converges.
 
 ### ⬜ Unit 2.4a: Reviewed Migration Gate - Tests
-**What**: Add failing deploy-script tests for D1 recovery bookmark, exact 0024 statement acceptance, unrelated DML/unique-index rejection, duplicate/backfill preflight, and post-apply verification.
+**What**: Add failing deploy-script tests for D1 recovery bookmark, acceptance of the exact reviewed `DROP INDEX ShoppingListItem_shoppingListId_unitId_ingredientRefId_key` and 0024 statements, rejection of every unrelated `DROP INDEX`/DML/unique-index form, duplicate/backfill preflight, and post-apply verification.
 **Output**: Red migration-gate tests.
 **Acceptance**: Tests fail because the existing additive gate rejects the reviewed 0024 forms and lacks recovery checks.
 
 ### ⬜ Unit 2.4b: Reviewed Migration Gate - Implementation
-**What**: Extend only the existing production migration gate for the deterministic 0024 forms, recovery bookmark, preflight, and verification.
+**What**: Extend only the existing production migration gate for the deterministic 0024 forms, including the one exact reviewed legacy-index drop, recovery bookmark, preflight, and verification.
 **Output**: Narrowly safe automatic product-migration path.
 **Acceptance**: Gate tests pass, unrelated destructive SQL remains rejected, and script typecheck/build are green.
 
@@ -302,7 +302,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every cursor/query/error/boundary branch is covered and review converges.
 
 ### ⬜ Unit 5.2a: Saved REST API - Tests
-**What**: Add failing REST/OpenAPI tests for `GET /saved-recipes`, idempotent PUT/DELETE, kitchen scopes, owner privacy, malformed cursor, no-store/vary headers, soft deletion, replay, and outgoing service inputs.
+**What**: Add failing REST/OpenAPI tests for `GET /api/v1/saved-recipes`, idempotent `PUT`/`DELETE /api/v1/saved-recipes/:recipeId`, kitchen scopes, owner privacy, malformed cursor, no-store/vary headers, soft deletion, replay, and outgoing service inputs.
 **Output**: Red REST/OpenAPI adapter tests.
 **Acceptance**: Tests fail because the saved routes/contracts are absent.
 
@@ -538,7 +538,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 
 ### ⬜ Unit 8.5a: Two-Context Cook Flow - Tests
 **What**: Add failing Playwright flow for initially empty second home, start on device A, discovery on B, bidirectional step/checklist/scale sync, reconnect, mismatch choice, terminal removal, and disposable cleanup.
-**Output**: Red `e2e/cook-session-cross-device.spec.ts` evidence.
+**Output**: Red `e2e/flows/cook-session-cross-device.spec.ts` evidence.
 **Acceptance**: The browser flow fails only on missing integrated behavior.
 
 ### ⬜ Unit 8.5b: Two-Context Cook Flow - Implementation
@@ -633,3 +633,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 ## Progress Log
 - 2026-07-19 15:34 Created from the approved focused planning doc.
 - 2026-07-19 16:12 Granularity Round 2 covered every migration schema addition and separated production cleanup from smoke/visual QA.
+- 2026-07-19 16:20 Validation Round 1 aligned shopping uniqueness, saved REST, and Playwright paths with the current repository.
