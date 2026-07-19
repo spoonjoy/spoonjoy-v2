@@ -13,15 +13,15 @@
 ## Current Item
 
 - Repository: `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback`
-- Branch: `worker/clem-feedback-e2e`; immutable Round107 substantive repair commit `b677d0ffb4df7c739412c847d1b59e842c0e793a` is pushed and descends from Round106 repair `70893d04f2fd253078fa8eda4be547cbbfccd4ad`. Round106's scope/product and test/evidence lenses converged; release/data lenses found five roots: no executable cross-attempt Actions handoff, unconditional Unit37 intent download, provider-incomplete cleanup manifest bytes, wall-clock-authorized shopping replay, and no cold-switch departure marker. Round107 repairs them with pinned attempt-unique artifacts and separate prepare/deploy, result-first optional intent observation, manifest version 2, monotonic two-dispatch fencing, and a crash-resumable opaque current-user marker. The execution-contract SHA-256 is `9da742136edbb8ec0c5547d476cc449bfbde773006ef9363c690051cbc0fadf5`; the branch still integrates current `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`.
+- Branch: `worker/clem-feedback-e2e`; immutable Round108 substantive repair commit `0a665b7e10b2931e8da4a55898cd441a8378047e` is pushed and descends from Round107 repair `b677d0ffb4df7c739412c847d1b59e842c0e793a`. Round107's four lenses found omitted observer registry/ownership, unstable rerun authority, incomplete Actions branching/failure/retention and preflight TDD, an early oversized shopping unit that lost free-text input, duplicate-capable browser replay, generation exhaustion, unconstructible malformed recovery, PostHog/logout/cross-tab privacy gaps, and nonliteral TDD evidence. Round108 splits server/REST, MCP, activation, and browser-intent checkpoints; makes browser mutation single-dispatch; uses activation UUID fencing; scopes session storage honestly; journals explicit device reset; gates PostHog; labels local stop truthfully; stabilizes Worker authority; and closes observer/preflight/workflow/archive ownership. The execution-contract SHA-256 is `8c30068435a74ce689624c573121a1a91137015b8e83e202bb53234000cd2bc7`; the branch still integrates `origin/main@1bea760ba0c8f10b997f0ca5352880050c30c683`.
 - Planning: `../2026-07-14-1313-planning-clem-feedback-e2e.md` is `NEEDS_REVIEW` after the mandatory main-drift audit.
 - Doing: `../2026-07-14-1313-doing-clem-feedback-e2e.md` is `drafting`; implementation and dependency setup have not started.
-- Active gate: Desk-synchronize the pushed Round107 checkpoint, then rerun fresh harsh scope/product, release/security/process, data/concurrency/storage, and test/evidence/constructibility reviews. Each reviewer records observed HEAD/upstream equality, proves descent from substantive repair `b677d0ffb4df7c739412c847d1b59e842c0e793a`, and rederives contract SHA-256 `9da742136edbb8ec0c5547d476cc449bfbde773006ef9363c690051cbc0fadf5`. Continuity never predicts its own commit SHA. Any accepted finding reopens the contract; only four clean lenses permit final Work Planner handoff and Work Doer Unit0.0a. Desk remains `processing` with `planning_complete:true`.
+- Active gate: Commit/push this non-self-referential continuity update, synchronize exact Desk mirrors, then run fresh harsh scope/product, release/security/process, data/concurrency/storage, and test/evidence/constructibility reviews. Each reviewer records observed HEAD/upstream equality, proves descent from substantive repair `0a665b7e10b2931e8da4a55898cd441a8378047e`, and rederives contract SHA-256 `8c30068435a74ce689624c573121a1a91137015b8e83e202bb53234000cd2bc7`. Continuity never predicts its own commit SHA. Any accepted finding reopens the contract; only four clean lenses permit final Work Planner handoff and Work Doer Unit0.0a. Desk remains `processing` with `planning_complete:true`.
 - No PR, QA deploy, merge, or production deploy exists yet.
 
 ## Next Action
 
-Synchronize Desk exact mirrors and task metadata, then start fresh Quality Round107 reviewers against the actual clean pushed review HEAD under the attestation rule above. After all cold lenses converge, commit/push the final planner handoff and run the mandatory execution preflight followed by Unit0.0a.
+Commit/push this continuity checkpoint, synchronize Desk exact mirrors and task metadata, then start fresh Quality Round108 reviewers against the actual clean pushed review HEAD under the attestation rule above. After all cold lenses converge, commit/push the final planner handoff and run the mandatory execution preflight followed by Unit0.0a.
 
 ## Operator-Locked Rules
 
@@ -40,7 +40,7 @@ Synchronize Desk exact mirrors and task metadata, then start fresh Quality Round
 
 | candidate | classification | evidence | disposition |
 | --- | --- | --- | --- |
-| Planning reviewer gate | active | Round106's two clean lenses plus five accepted release/data findings are dispositioned in pushed substantive repair `b677d0ffb4df7c739412c847d1b59e842c0e793a`; contract hash is `9da742136edbb8ec0c5547d476cc449bfbde773006ef9363c690051cbc0fadf5` | Synchronize exact mirrors and run fresh four-lens Quality Round107 convergence against an attested pushed descendant |
+| Planning reviewer gate | active | Every Round107 finding is dispositioned in pushed substantive repair `0a665b7e10b2931e8da4a55898cd441a8378047e`; contract hash is `8c30068435a74ce689624c573121a1a91137015b8e83e202bb53234000cd2bc7` | Commit continuity, synchronize exact mirrors, and run fresh four-lens Quality Round108 convergence against an attested pushed descendant |
 | Doing review chain | active | The implementation-free plan, sole execution contract, granular Unit29.2 groups, exact recovery/evidence contracts, recursive ancestor unwind, stable archive locators, and one-generation terminal receipt are executable and fully assigned | Re-converge and restore final handoff |
 | Work Doer Units 0.0-37 | deferred by gate | Full red/green/verify/visual/ship queue is defined | Run mandatory preflight, then start Unit0.0a only after fresh final handoff |
 | PR/QA/merge/production | ready | Units 32-37 define exact-SHA delivery path | Execute after implementation/local validation |
@@ -56,4 +56,4 @@ Synchronize Desk exact mirrors and task metadata, then start fresh Quality Round
 
 Not satisfied. The reopened reviewer gate and all delivery work remain.
 
-Last updated: 2026-07-19 03:33:20 PDT.
+Last updated: 2026-07-19 04:11:41 PDT.
