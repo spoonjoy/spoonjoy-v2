@@ -151,17 +151,17 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Output**: Coverage and data-review evidence.
 **Acceptance**: New helper code is 100% covered and review converges.
 
-### ⬜ Unit 2.2a: SavedRecipe Backfill Migration - Tests
-**What**: Add failing migration tests for empty/frozen-baseline application, `Cookbook.authorId` deduplication, `MAX(updatedAt)` saved time, exact counts, FK integrity, and soft/hard deletion behavior.
-**Output**: Red saved-backfill section of `test/scripts/migration-0024-clem-feedback-product.test.ts`.
-**Acceptance**: Focused migration tests fail because migration 0024 is absent.
+### ⬜ Unit 2.2a: Product Schema And SavedRecipe Backfill Migration - Tests
+**What**: Add failing migration-level assertions for empty/frozen-baseline application; every `SavedRecipe`, `RecipeTag`, nullable controlled `Recipe.course`, and metadata-only `CookSessionIndex` table/column/constraint/FK/index; the absence of cook-progress columns; `Cookbook.authorId` deduplication; `MAX(updatedAt)` saved time; exact counts; FK integrity; and soft/hard deletion behavior.
+**Output**: Red product-schema and saved-backfill sections of `test/scripts/migration-0024-clem-feedback-product.test.ts`.
+**Acceptance**: Focused migration tests fail only because migration 0024 and all of its required schema/backfill behavior are absent.
 
-### ⬜ Unit 2.2b: SavedRecipe Backfill Migration - Implementation
+### ⬜ Unit 2.2b: Product Schema And SavedRecipe Backfill Migration - Implementation
 **What**: Create the SavedRecipe/course/tag/cook-index schema and deterministic SavedRecipe backfill portion of `migrations/0024_clem_feedback_product.sql`.
 **Output**: Additive new tables/column and one-time saved-state backfill.
-**Acceptance**: Saved migration tests pass from both fixtures with exact counts and preserved FKs.
+**Acceptance**: Every schema, absence-of-progress-state, index, constraint, FK, and saved-backfill assertion passes from both fixtures with exact counts and preserved FKs.
 
-### ⬜ Unit 2.2c: SavedRecipe Backfill Migration - Verification
+### ⬜ Unit 2.2c: Product Schema And SavedRecipe Backfill Migration - Verification
 **What**: Rehearse the saved/schema migration under Node SQLite and local Wrangler D1 and review prior-Worker compatibility.
 **Output**: Rehearsal and reviewer evidence.
 **Acceptance**: Both engines agree, no existing table contract breaks, and review converges.
@@ -606,15 +606,20 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Output**: Sanitized production release/version evidence.
 **Acceptance**: The product merge SHA is the sole 100% production version or the prior post-boundary version is restored with a recorded failure requiring repair.
 
-### ⬜ Unit 9.7: Production Smoke, Visual QA, And Cleanup
-**What**: Run production Clem feature smoke, two-client flow, `visual-qa-dogfood`, canonical health, cleanup, and zero-residue assertions against the promoted version.
-**Output**: Production smoke/visual/cleanup evidence and closed absurdity ledger.
-**Acceptance**: All product and visual checks pass on `spoonjoy.app`; no disposable production data remains.
+### ⬜ Unit 9.7: Production Smoke And Visual QA
+**What**: Run production Clem feature smoke, the two-client continuation flow, `visual-qa-dogfood`, and canonical-health verification against the promoted version; close the absurdity ledger from observed production behavior.
+**Output**: Production smoke/visual evidence and closed absurdity ledger.
+**Acceptance**: Every product and visual scenario passes on `spoonjoy.app`, canonical health identifies the promoted merge/version, and all disposable resource identifiers are captured for cleanup.
 
-### ⬜ Unit 9.8: Task Closure
-**What**: Synchronize planning/doing checklists and status, run the durable continuation scan across task docs/feedback/PR/smoke/cleanup, archive Desk state, clean obsolete worktrees/branches when safe, and notify Slugger.
+### ⬜ Unit 9.8: Production Cleanup
+**What**: Close all production test sockets, purge every known disposable cook-session DO, remove its D1 projection rows and all disposable feature/user data, then run zero-residue assertions across D1, DO-accessible state, R2, and test users.
+**Output**: Sanitized production cleanup receipt and zero-residue evidence.
+**Acceptance**: Cleanup targets the exact Unit 9.7 identifiers, every deletion succeeds or proves absence, and all residue assertions return zero before task closure begins.
+
+### ⬜ Unit 9.9: Task Closure
+**What**: After Unit 9.8 succeeds, synchronize planning/doing checklists and status, run the durable continuation scan across task docs/feedback/PR/smoke/cleanup, archive Desk state, clean obsolete worktrees/branches when safe, and notify Slugger.
 **Output**: Done task docs, archived Desk record, cleanup receipt, and Slugger completion message.
-**Acceptance**: No ready required work or residue remains and every terminal artifact points to the shipped production merge.
+**Acceptance**: Unit 9.8 is accepted, no ready required work or residue remains, and every terminal artifact points to the shipped production merge.
 
 ## Execution
 - **TDD strictly enforced**: tests -> red -> implement -> green -> refactor.
@@ -627,3 +632,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 
 ## Progress Log
 - 2026-07-19 15:34 Created from the approved focused planning doc.
+- 2026-07-19 16:12 Granularity Round 2 covered every migration schema addition and separated production cleanup from smoke/visual QA.
