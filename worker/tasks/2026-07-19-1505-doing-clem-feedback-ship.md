@@ -152,7 +152,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Review converges, `git status --porcelain` is empty, branch is pushed, and Unit 2.1 starts only from this checkpoint.
 
 ### ⬜ Unit 2.1a: Product Models - Tests
-**What**: From the Unit 1.8c handoff, add failing Prisma/schema tests for every exact scalar type/default, named relation field, key/index, FK action, and raw check frozen in planning, including nullable/no-default `Recipe.course`, SavedRecipe's sole timestamp, RecipeTag timestamps, CookSessionIndex's no-default timestamps/no recipe relation/no progress columns, and shopping `@@unique` removal.
+**What**: From the Unit 1.8c handoff, add failing Prisma/schema tests for every Prisma-expressible scalar type/default, named relation field, key/index, and FK action frozen in planning, including nullable/no-default `Recipe.course`, SavedRecipe's sole timestamp, RecipeTag timestamps, CookSessionIndex's no-default timestamps/no recipe relation/no progress columns, and shopping `@@unique` removal; raw SQL checks belong only to Unit 2.2.
 **Output**: Red `test/models/clem-feedback-schema.test.ts` evidence.
 **Acceptance**: Focused tests fail only because the models/columns are absent.
 
@@ -177,7 +177,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every schema, absence-of-progress-state, index, constraint, FK, and saved-backfill assertion passes from both fixtures with exact counts and preserved FKs.
 
 ### ⬜ Unit 2.2c: Product Schema And SavedRecipe Backfill Migration - Verification
-**What**: Rehearse the saved/schema migration under Node SQLite and local Wrangler D1 and review prior-Worker compatibility.
+**What**: Rehearse the current schema/backfill-only 0024 under a newly created temporary Node SQLite database and a newly isolated local Wrangler D1 state directory, then delete both and review prior-Worker compatibility; do not reuse this migration state in Unit 2.3.
 **Output**: Rehearsal and reviewer evidence.
 **Acceptance**: Both engines agree, no existing table contract breaks, and review converges.
 
@@ -192,7 +192,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: All repair/index fixtures pass and the pre-feature Worker remains compatible with the migrated schema.
 
 ### ⬜ Unit 2.3c: Shopping Repair Migration - Verification
-**What**: Run duplicate-heavy migration/rollback-failure fixtures, local D1 apply/list twice, and data review.
+**What**: Create fresh temporary Node SQLite and isolated local Wrangler D1 state after Unit 2.3b, apply the complete final 0024 from migrations 0000-0023 plus fixture, run duplicate/rollback-failure checks, run apply/list twice in that fresh state, review data, then delete both states.
 **Output**: Shopping migration verification and review evidence.
 **Acceptance**: Migration is applied once, second apply is a no-op, no data is lost, and review converges.
 
@@ -657,3 +657,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-19 17:06 Final ambiguity convergence fixes specified receipt/projection fields and same-attempt stale reconciliation.
 - 2026-07-19 17:10 Ambiguity Pass 4 converged with no executor-blocking findings.
 - 2026-07-19 17:17 Quality Round 1 fixed Workers-lane ordering, migration-test ownership, product-mode TDD, and rollback completion semantics.
+- 2026-07-19 17:23 Quality Round 2 isolated Prisma checks and guaranteed fresh migration rehearsal state.
