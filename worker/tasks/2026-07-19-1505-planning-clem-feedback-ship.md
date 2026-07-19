@@ -1,6 +1,6 @@
 # Planning: Ship Clem Feedback
 
-**Status**: NEEDS_REVIEW
+**Status**: approved
 **Created**: 2026-07-19 15:05
 
 ## Goal
@@ -133,3 +133,4 @@ The historical plan was comprehensive but mis-scoped: it spent most of its surfa
 - 2026-07-19 16:43 Replaced the stale baseline claim and completed scalar, snapshot, SQLite, infrastructure, inventory, shopping, and query contracts.
 - 2026-07-19 16:52 Canonicalized mutation hashing/reconnect behavior and completed literal fixture plus saved/filter inventories.
 - 2026-07-19 17:06 Completed receipt/projection SQL and same-attempt stale-socket reconciliation.
+- 2026-07-19 17:10 Re-approved after the fresh final ambiguity reviewer returned `CONVERGED`.
