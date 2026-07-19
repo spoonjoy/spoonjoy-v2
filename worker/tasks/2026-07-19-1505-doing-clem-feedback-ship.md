@@ -72,12 +72,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: 7,226 existing tests pass at 100% app coverage; typecheck/build pass; worktree is clean; every source row maps to a unit or explicit rejection test.
 
 ### ⬜ Unit 1.1a: Namespace Bootstrap - Tests
-**What**: Add failing config/runtime tests for an inert exported `CookSession`, explicit top-level/QA bindings, retained `v1_cook_session` `new_sqlite_classes` migration, environment types, and SQLite storage.
+**What**: Add failing config/runtime tests for an inert exported `CookSession`, explicit top-level/QA bindings, retained `v1_cook_session` `new_sqlite_classes` migration, environment types, SQLite storage, and the frozen bootstrap probe: `POST /.well-known/spoonjoy-cook-session-bootstrap`, server-derived `bootstrap:<workerVersionId>` object, fixed internal request, exact success body, two-run idempotence, and 404 outside bootstrap mode.
 **Output**: Red `test/config/cook-session-binding.test.ts` and `test/workers/cook-session-bootstrap.test.ts` evidence.
 **Acceptance**: `pnpm exec vitest run test/config/cook-session-binding.test.ts test/workers/cook-session-bootstrap.test.ts` fails only on absent namespace code/config.
 
 ### ⬜ Unit 1.1b: Namespace Bootstrap - Implementation
-**What**: Add the inert `workers/cook-session.ts` export plus `wrangler.json` production/QA binding, legacy migration, and `app/cloudflare-env.d.ts` types.
+**What**: Add the inert `workers/cook-session.ts` export and bootstrap route in `workers/app.ts` plus `wrangler.json` production/QA binding, `COOK_SESSION_BOOTSTRAP_MODE=1`, legacy migration, and `app/cloudflare-env.d.ts` types. The DO probe creates/reads/drops its private table and deletes all storage before returning the exact planning-contract body.
 **Output**: One deployable inert SQLite DO namespace.
 **Acceptance**: Unit 1.1a tests pass and `pnpm run typecheck` plus `pnpm run build` are green.
 
@@ -117,32 +117,32 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: No secret reaches logs/artifacts; no invalid rollback is possible; review converges.
 
 ### ⬜ Unit 1.4: Bootstrap QA
-**What**: Deploy the inert namespace to QA, verify exact version/migration/storage behavior, smoke it, purge its test object, and prove zero QA residue.
+**What**: Deploy the inert namespace to QA; call `POST /.well-known/spoonjoy-cook-session-bootstrap` twice; assert `{ok:true,storage:'sqlite',workerVersionId:<deployed version>,residue:0}` and matching version header; then confirm no `CookSessionIndex` row or probe storage remains.
 **Output**: Sanitized QA deployment, smoke, and cleanup logs.
 **Acceptance**: QA has `v1_cook_session`, the inert DO responds, and no disposable D1/DO row remains.
 
 ### ⬜ Unit 1.5: Bootstrap PR And Merge
-**What**: Run final bootstrap gates, open the bootstrap PR, resolve review/CI, and merge without product behavior.
+**What**: On `worker/clem-feedback-e2e`, run final gates and open a PR to `main`. Enforce the planning-contract allowlist: focused task docs/artifacts, package/lockfile, Wrangler/env types, Worker app/new inert class, Workers-test config/tests, CI/production workflow, and existing deploy script/tests/docs only; resolve review/CI and merge.
 **Output**: Bootstrap PR URL and exact merge SHA.
 **Acceptance**: Required reviews/CI are green and the merge SHA contains only docs plus lifecycle/test/deploy bootstrap scope.
 
 ### ⬜ Unit 1.6: Production Lifecycle Boundary
-**What**: Follow the automatic atomic production deploy, verify exact merge SHA/version and namespace behavior, clean its test object, and record the no-pre-boundary-rollback rule.
+**What**: Follow the automatic atomic production deploy, verify exact merge SHA/version, call the same frozen bootstrap probe twice, assert matching version/body and zero residue, and record the no-pre-boundary-rollback rule.
 **Output**: Sanitized production deployment/version/health/cleanup evidence.
 **Acceptance**: Production has the SQLite namespace, canonical health identifies the bootstrap merge, zero residue remains, and failure recovery is forward-only across this boundary.
 
 ### ⬜ Unit 1.7: Product Branch Handoff
-**What**: Create a clean product branch/worktree from the verified bootstrap merge, restore the source-controlled canary path, and record PR/merge/deploy SHAs plus task/artifact paths in a handoff manifest.
+**What**: Create `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback-product` on `worker/clem-feedback-product` from the exact verified bootstrap merge, with future PR base `main`; remove bootstrap mode/public probe routing, restore the source-controlled canary path, and record PR/merge/deploy/version IDs, ancestry, branch/worktree, and retained task/artifact paths in `bootstrap-handoff.md`.
 **Output**: `bootstrap-handoff.md` and clean pushed product branch.
 **Acceptance**: `git merge-base --is-ancestor <bootstrap-merge> HEAD` succeeds; task docs/artifacts remain reachable; canary contract tests pass; Unit 2.1 starts only from this checkpoint.
 
 ### ⬜ Unit 2.1a: Product Models - Tests
-**What**: From the Unit 1.7 product handoff, add failing Prisma/schema tests for `SavedRecipe`, `RecipeTag`, nullable controlled `Recipe.course`, metadata-only `CookSessionIndex`, relations, FK actions, absence of progress columns, and removal of the full `ShoppingListItem` `@@unique([shoppingListId, unitId, ingredientRefId])` constraint that conflicts with retained tombstones.
+**What**: From the Unit 1.7 product handoff, add failing Prisma/schema tests for every field/default/key/index/relation/FK action in the exact product schema frozen under planning Decisions Made, including the intentional absence of a `CookSessionIndex.recipe` relation/progress columns and removal of the full shopping `@@unique`.
 **Output**: Red `test/models/clem-feedback-schema.test.ts` evidence.
 **Acceptance**: Focused tests fail only because the models/columns are absent.
 
 ### ⬜ Unit 2.1b: Product Models - Implementation
-**What**: Add the four model changes and relations to `prisma/schema.prisma`, remove the conflicting full `ShoppingListItem` compound uniqueness constraint, regenerate the client, and update typed test helpers/cleanup order.
+**What**: Implement the exact frozen `Recipe.course`, `SavedRecipe`, `RecipeTag`, and `CookSessionIndex` Prisma shapes, relation fields, modeled indexes, and shopping-constraint removal in `prisma/schema.prisma`; regenerate the client and update `test/utils.ts` plus cleanup order.
 **Output**: Prisma-modeled product schema aligned with tombstone-preserving shopping identity and generated types.
 **Acceptance**: Model tests, Prisma generation/push, typecheck, and build pass.
 
@@ -152,12 +152,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: New helper code is 100% covered and review converges.
 
 ### ⬜ Unit 2.2a: Product Schema And SavedRecipe Backfill Migration - Tests
-**What**: Add failing migration-level assertions for empty/frozen-baseline application; every `SavedRecipe`, `RecipeTag`, nullable controlled `Recipe.course`, and metadata-only `CookSessionIndex` table/column/constraint/FK/index; the absence of cook-progress columns; `Cookbook.authorId` deduplication; `MAX(updatedAt)` saved time; exact counts; FK integrity; and soft/hard deletion behavior.
+**What**: Add failing migration-level assertions for empty/frozen-baseline application and every exact frozen product table/column/default/check/key/index/FK action; assert the intentional missing recipe FK/progress columns; then cover `Cookbook.authorId` deduplication, `MAX(updatedAt)` saved time, exact counts, FK integrity, and soft/hard deletion behavior.
 **Output**: Red product-schema and saved-backfill sections of `test/scripts/migration-0024-clem-feedback-product.test.ts`.
 **Acceptance**: Focused migration tests fail only because migration 0024 and all of its required schema/backfill behavior are absent.
 
 ### ⬜ Unit 2.2b: Product Schema And SavedRecipe Backfill Migration - Implementation
-**What**: Create the SavedRecipe/course/tag/cook-index schema and deterministic SavedRecipe backfill portion of `migrations/0024_clem_feedback_product.sql`.
+**What**: Create the exact frozen SavedRecipe/course/tag/cook-index schema, raw checks/indexes, and deterministic SavedRecipe backfill portion of `migrations/0024_clem_feedback_product.sql`.
 **Output**: Additive new tables/column and one-time saved-state backfill.
 **Acceptance**: Every schema, absence-of-progress-state, index, constraint, FK, and saved-backfill assertion passes from both fixtures with exact counts and preserved FKs.
 
@@ -212,12 +212,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every quantity/state/conflict/error branch is covered and review converges.
 
 ### ⬜ Unit 3.2a: Web And REST Shopping Adapters - Tests
-**What**: Add failing route/API tests for manual and recipe adds/restores, REST idempotency and outgoing service inputs, fresh ordering, rollback, and unchanged check/delete/clear responses.
+**What**: Add failing tests around `handleShoppingListAction` in `app/lib/shopping-list.server.ts` and `handleShoppingItemCreate` plus the recipe-add branch in `app/lib/api-v1.server.ts` for manual/recipe adds/restores, REST idempotency and outgoing service inputs, fresh ordering, rollback, and byte-shape-compatible check/delete/clear responses.
 **Output**: Red web/REST adapter tests.
 **Acceptance**: Tests fail on current separate read-then-write writers.
 
 ### ⬜ Unit 3.2b: Web And REST Shopping Adapters - Implementation
-**What**: Route web shopping and REST manual/recipe additions through the shared service while preserving existing response/idempotency contracts.
+**What**: Route exactly those web/REST add symbols through the shared service while leaving their check/delete/clear branches untouched and preserving existing response/idempotency contracts.
 **Output**: Thin web and REST add adapters.
 **Acceptance**: Focused route/API tests and OpenAPI compatibility tests pass.
 
@@ -227,12 +227,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Outgoing inputs, auth, rollback, and error branches are covered and review converges.
 
 ### ⬜ Unit 3.3a: MCP, Legacy, And Native Sync Shopping - Tests
-**What**: Add failing MCP/legacy/native-sync tests for shared manual/recipe additions, restored ordering, monotonic timestamps, readback/tombstones, and explicit absence of web/MCP exactly-once claims.
+**What**: Add failing tests around `addShoppingListItemTool` and `addRecipeToShoppingListTool` in `app/lib/spoonjoy-api.server.ts`, plus existing native-sync shopping readback, for shared additions, restored ordering, monotonic timestamps, tombstones, and explicit absence of web/MCP exactly-once claims.
 **Output**: Red MCP/legacy/native-sync adapter tests.
 **Acceptance**: Tests fail on the independent MCP/legacy writers and MCP sort defect.
 
 ### ⬜ Unit 3.3b: MCP, Legacy, And Native Sync Shopping - Implementation
-**What**: Route MCP and remaining legacy add callers through the shared service and preserve native-sync serialization.
+**What**: Route exactly `addShoppingListItemTool` and `addRecipeToShoppingListTool` through the shared service and preserve native-sync serialization; do not change MCP check/remove operations.
 **Output**: One add/restore behavior across all existing writers.
 **Acceptance**: Focused MCP/legacy/native tests pass with unchanged non-add contracts.
 
@@ -242,14 +242,14 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: All surfaces pass one state matrix and review converges.
 
 ### ⬜ Unit 4.1a: Neutral Recipe Metadata - Tests
-**What**: Add failing serializer/API/MCP/OpenAPI tests for nullable course and deterministic tags on bounded recipe reads, with no personalized save state.
+**What**: Add failing tests for top-level `course`/`tags` on `recipeDetail` in `app/lib/api-v1.server.ts`, `formatRecipe`/`formatRecipeSummary` and MCP `get_recipe`/`list_recipes`/`search_spoonjoy` in `app/lib/spoonjoy-api.server.ts`, their REST list/detail/search routes, OpenAPI, and generated playground, with no personalized save state.
 **Output**: Red metadata contract tests.
 **Acceptance**: Tests fail because course/tags are absent from shared serializers and schemas.
 
 ### ⬜ Unit 4.1b: Neutral Recipe Metadata - Implementation
-**What**: Add shared metadata serialization and wire REST recipe reads, MCP recipe reads, OpenAPI, generated playground, and developer docs.
+**What**: Add shared metadata serialization and wire exactly the Unit 4.1a symbols/routes plus `app/lib/api-v1-openapi.server.ts`, `app/lib/generated/api-v1-playground.ts`, and existing developer API docs.
 **Output**: Neutral course/tag read parity.
-**Acceptance**: Focused metadata/API/MCP/OpenAPI tests pass and generated output is stable.
+**Acceptance**: Focused metadata/API/MCP/OpenAPI tests pass and two consecutive playground generations leave no git diff.
 
 ### ⬜ Unit 4.1c: Neutral Recipe Metadata - Verification
 **What**: Reach 100% serializer/adapter coverage and obtain API compatibility review.
@@ -257,7 +257,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every empty/order/privacy branch is covered and review converges.
 
 ### ⬜ Unit 4.2a: Read-Time Scaling - Tests
-**What**: Add failing pure/REST/MCP tests for optional finite `scale` `0.1..100`, six-decimal quantity rounding, unchanged servings/storage/default payload, scale metadata, and adapter-native invalid-input errors.
+**What**: Add failing pure/REST/MCP tests for the exact frozen `GET /api/v1/recipes/:id?scale=` and MCP `get_recipe({scale})` contract: finite `0.1..100`, top-level scale metadata, six-decimal ingredient quantity rounding, unchanged servings/storage, absent-argument payload compatibility, REST `validation_error` field `scale`, and MCP invalid-argument mapping.
 **Output**: Red scaling-helper and adapter tests.
 **Acceptance**: Tests fail because the shared validator/scaler and arguments are absent.
 
@@ -272,12 +272,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Null/NaN/infinite/bounds/precision/default branches are covered and review converges.
 
 ### ⬜ Unit 4.3a: Neutral Boundary - Tests
-**What**: Add failing source/runtime tests for no Pebble categorization/fixtures, no first-party import UI, no AI tagging surface, stable navigation, and no personalized save metadata in MCP/public reads.
+**What**: Add failing source/runtime tests targeting `app/lib/analytics-server.ts` and the current Pebble fixtures in `test/lib/analytics-server.test.ts`, `test/routes/agent-connect.test.tsx`, and `test/routes/api-v1-telemetry.test.ts`; also assert no first-party import UI, AI tagging surface, navigation change, or personalized save metadata in MCP/public reads.
 **Output**: Red `test/config/clem-feedback-boundaries.test.ts` evidence.
 **Acceptance**: Tests fail on the existing Pebble-specific analytics branch/fixtures only.
 
 ### ⬜ Unit 4.3b: Neutral Boundary - Implementation
-**What**: Remove Pebble-specific runtime categorization and replace fixtures with neutral clients; add the focused boundary oracle without modifying import/navigation behavior.
+**What**: Remove only the Pebble branch in `app/lib/analytics-server.ts`, replace only those named fixtures with neutral client strings, and add the focused boundary oracle without modifying import/navigation behavior.
 **Output**: Partner-neutral runtime and executable rejection guard.
 **Acceptance**: Boundary tests and existing navigation/import tests pass.
 
@@ -287,7 +287,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: No prohibited runtime behavior remains and review converges.
 
 ### ⬜ Unit 5.1a: Saved Service And Cursor - Tests
-**What**: Add failing service/query tests for explicit save/unsave, cookbook independence, owner scoping, soft/hard deletion, SQL search, versioned cursor validation, descending ties, 24-row bounds, and no full materialization.
+**What**: Add failing service/query tests for the frozen search fields/normalization, exact unpadded cursor JSON, explicit save/unsave, cookbook independence, owner scoping, soft/hard deletion, strict descending tie predicate, 24-row bound, and SQL `LIMIT 25` next-page detection without full materialization.
 **Output**: Red `test/lib/saved-recipes.server.test.ts` query/service tests.
 **Acceptance**: Focused tests fail because the canonical service/cursor is absent.
 
@@ -302,7 +302,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every cursor/query/error/boundary branch is covered and review converges.
 
 ### ⬜ Unit 5.2a: Saved REST API - Tests
-**What**: Add failing REST/OpenAPI tests for `GET /api/v1/saved-recipes`, idempotent `PUT`/`DELETE /api/v1/saved-recipes/:recipeId`, kitchen scopes, owner privacy, malformed cursor, no-store/vary headers, soft deletion, replay, and outgoing service inputs.
+**What**: Add failing REST/OpenAPI tests for the exact `{ok,requestId,data}` saved-list and mutation envelopes/statuses/bodies frozen in planning, plus kitchen scopes, owner privacy, malformed query/cursor/body semantic errors, no-store/vary headers, soft deletion, replay, and outgoing service inputs.
 **Output**: Red REST/OpenAPI adapter tests.
 **Acceptance**: Tests fail because the saved routes/contracts are absent.
 
@@ -332,9 +332,9 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every UI/action/empty/error branch is covered and review converges.
 
 ### ⬜ Unit 5.4: Saved Web Visual QA
-**What**: Run `visual-qa-dogfood` on recipe save/cookbook controls and saved empty/populated/search/pagination states at mobile and desktop sizes.
+**What**: Run `visual-qa-dogfood` on recipe save/cookbook controls and saved empty/populated/search/pagination states at 390x844 and 1440x900.
 **Output**: Screenshots, metrics, and closed absurdity ledger.
-**Acceptance**: Controls are distinct, keyboard reachable, non-overlapping, and visually coherent.
+**Acceptance**: Save and cookbook controls have distinct accessible names, keyboard focus, and at least 44px targets; screenshots show no horizontal overflow, overlap, or truncation; the absurdity ledger has no open item.
 
 ### ⬜ Unit 6.1a: Tag Normalization And Storage - Tests
 **What**: Add failing tests for course enum/null, NFKC/whitespace/lowercase comparison, control rejection, 40-code-point and ten-tag limits, first-spelling duplicates, deterministic order, owner checks, and atomic replacement/concurrency.
@@ -367,12 +367,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every payload/validation/rollback/keyboard branch is covered and review converges.
 
 ### ⬜ Unit 6.3a: Tag Filters And Search - Tests
-**What**: Add failing My Recipes/search tests for course, repeated-tag AND semantics, pre-limit SQL predicates, safe page parsing, URL preservation, reset behavior, and search-freshness changes.
+**What**: Add failing tests for `app/routes/my-recipes.tsx`, `app/lib/my-recipes-search.server.ts`, `app/routes/search.tsx`, and `app/lib/search.server.ts`: course, repeated-tag AND semantics, pre-limit SQL predicates, integer page `>=1` with invalid input normalized to 1, URL preservation, reset behavior, and search-freshness changes.
 **Output**: Red query/route/filter tests.
 **Acceptance**: Tests fail because tag predicates and freshness inputs are absent.
 
 ### ⬜ Unit 6.3b: Tag Filters And Search - Implementation
-**What**: Add bounded query/filter helpers and accessible My Recipes/search controls with safe pagination/link preservation and freshness integration.
+**What**: Update exactly the Unit 6.3a files with bounded query/filter helpers and accessible controls, safe pagination/link preservation, and freshness integration; do not change `_index.tsx` or `users.$identifier.tsx`.
 **Output**: Course/tag discovery on existing bounded surfaces.
 **Acceptance**: Focused query/route tests and build pass; no home/profile expansion occurs.
 
@@ -382,12 +382,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Empty/malformed/multi-filter/pagination/freshness branches are covered and review converges.
 
 ### ⬜ Unit 6.4a: Tag Read Parity - Tests
-**What**: Add failing detail/card/REST/MCP parity tests against persisted tags/course, deterministic order, public visibility, and no write/AI/save metadata.
+**What**: Add failing persisted-data parity tests for recipe detail, My Recipes cards, global-search cards, REST recipe list/detail/search, and MCP `get_recipe`/`list_recipes`/`search_spoonjoy`; assert deterministic tags, public course/tags, and no write/AI/save metadata.
 **Output**: Red read-surface integration tests.
-**Acceptance**: Tests fail until persisted tag data reaches every planned read surface.
+**Acceptance**: Tests fail until persisted tag data reaches recipe detail, My Recipes cards, global-search cards, REST recipe list/detail/search, and MCP `get_recipe`/`list_recipes`/`search_spoonjoy`.
 
 ### ⬜ Unit 6.4b: Tag Read Parity - Implementation
-**What**: Complete recipe query includes and displays/serializers so persisted tags/course reach detail, bounded cards, REST, and MCP.
+**What**: Complete includes/displays/serializers in `app/lib/recipe-detail.server.ts`, `app/routes/recipes.$id.tsx`, `app/routes/my-recipes.tsx`, `app/routes/search.tsx`, `app/lib/search.server.ts`, `app/lib/api-v1.server.ts`, and `app/lib/spoonjoy-api.server.ts` for exactly the Unit 6.4a surfaces.
 **Output**: End-to-end manual metadata read parity.
 **Acceptance**: Focused parity tests and generated contracts pass.
 
@@ -397,17 +397,17 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: All empty/order/privacy branches are covered and review converges.
 
 ### ⬜ Unit 6.5: Tag Visual QA
-**What**: Run `visual-qa-dogfood` on authoring, recipe metadata, My Recipes, and search at mobile and desktop sizes.
+**What**: Run `visual-qa-dogfood` on authoring, recipe metadata, My Recipes, and search at 390x844 and 1440x900, including ten 40-code-point tags and empty filters.
 **Output**: Screenshots, metrics, and closed absurdity ledger.
-**Acceptance**: Long tags fit, controls are keyboard accessible, filter state is legible, and no layout defect remains.
+**Acceptance**: No horizontal overflow, overlap, or truncation occurs; all controls have reachable focus and at least 44px targets; active filters have programmatic selected state and visible labels; the absurdity ledger has no open item.
 
 ### ⬜ Unit 7.1a: Cook Contracts And Auth - Tests
-**What**: Add failing pure/Worker tests for v1 snapshot/state/command schemas, server-built snapshots, route grammar, auth, same-origin validation, server-derived DO identity, private no-store responses, malformed bodies, and WebSocket 101 non-cloning.
+**What**: Add failing tests for every exact cook HTTP route, status, success/error envelope, body field, semantic error mapping, state/snapshot/progress shape, server-built snapshot, same-origin/auth/cache rule, `idFromName(JSON.stringify([userId,recipeId]))` identity, and WebSocket 101 non-cloning frozen in planning.
 **Output**: Red cook-contract and Worker-router tests.
 **Acceptance**: Focused tests fail against the inert bootstrap/runtime router.
 
 ### ⬜ Unit 7.1b: Cook Contracts And Auth - Implementation
-**What**: Add shared cook contract validators/serializers and authenticated Worker routing with canonical D1 snapshot construction.
+**What**: Add `app/lib/cook-session-contract.ts` validators/serializers and `workers/cook-session-api.ts`; dispatch the exact routes from `workers/app.ts` before React Router, authenticate with existing session helpers, derive the DO identity server-side, and build the pinned snapshot from D1.
 **Output**: Secure typed HTTP/WebSocket transport boundary.
 **Acceptance**: Focused pure/Worker tests, typecheck, and build pass.
 
@@ -417,12 +417,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every auth/origin/cache/validation/upgrade branch is covered and review converges.
 
 ### ⬜ Unit 7.2a: Cook State Machine - Tests
-**What**: Add failing Workers-runtime tests for SQLite initialization, concurrent start convergence, server-minted attempts, revision/stale-attempt conflicts, mutation replay, snapshot persistence/eviction, update validation, idempotent terminal commands, and atomic edit restart.
+**What**: Add failing Workers-runtime tests for the frozen `session`, `mutation_receipt`, and `pending_projection` SQLite tables; concurrent start convergence; server-minted attempts; exact request-hash replay; stale attempt/revision and recipe-change 409s; four-field progress validation; snapshot eviction recovery; terminal idempotence; and restart that atomically abandons the old attempt.
 **Output**: Red real-DO state-machine tests.
 **Acceptance**: Tests fail because the inert class has no state machine.
 
 ### ⬜ Unit 7.2b: Cook State Machine - Implementation
-**What**: Implement the SQLite-backed `CookSession` attempt/snapshot/progress/mutation-receipt state machine.
+**What**: Implement the exact frozen SQLite-backed tables and transition/error contract in `workers/cook-session.ts`; retain receipts for the attempt plus terminal window and reject a reused mutation ID whose request hash differs.
 **Output**: Durable canonical cook state independent of D1 projection.
 **Acceptance**: Focused Workers tests pass under serialized shared storage.
 
@@ -432,12 +432,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every transition/conflict/replay/eviction/error branch is covered and review converges.
 
 ### ⬜ Unit 7.3a: Projection And Alarm - Tests
-**What**: Add failing Workers tests for metadata allowlist/bounds, synchronous initial projection/503 retry, conditional highest-revision upsert, delayed failure retry, terminal non-resurrection, persisted backoff, one-alarm collision scheduling, and bounded privacy-safe telemetry.
+**What**: Add failing Workers tests for the exact CookSessionIndex allowlist/schema, 200-code-point title bound, synchronous initial projection/503 error, revision-fenced upsert, retry delays `1/5/30/120/600` seconds, terminal non-resurrection, one alarm choosing the earlier deadline with due purge first, and the frozen telemetry allowlist/clamps.
 **Output**: Red projection/scheduler tests using real D1/DO storage.
 **Acceptance**: Tests fail because projection and scheduler behavior is absent.
 
 ### ⬜ Unit 7.3b: Projection And Alarm - Implementation
-**What**: Implement metadata-only D1 projection plus persisted monotonic retry/alarm scheduler and observability.
+**What**: Implement metadata-only D1 projection, exact persisted retry schedule/alarm precedence, and only the frozen privacy-safe telemetry fields in `workers/cook-session.ts`.
 **Output**: Durable private registry/discovery projection.
 **Acceptance**: Focused Workers projection/alarm tests pass and D1 contains no progress field.
 
@@ -447,12 +447,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every retry/fencing/collision/telemetry branch is covered and review converges.
 
 ### ⬜ Unit 7.4a: Cook WebSockets - Tests
-**What**: Add failing real-runtime tests for authenticated upgrade, canonical initial snapshot, hibernatable fan-out, reconnect after eviction, stale socket/attempt rejection, close behavior, and HTTP-response security separation.
+**What**: Add failing real-runtime tests for authenticated upgrade, exact `{type:'snapshot',state}` initial/mutation envelopes, `{type:'error',error}`, hibernatable fan-out, reconnect after eviction, old-attempt close `4009/stale-attempt`, terminal/purge closes `1000/session-terminal|session-purged`, and HTTP-response security separation.
 **Output**: Red WebSocket tests under `--max-workers=1 --no-isolate`.
 **Acceptance**: Tests fail because socket handling is absent.
 
 ### ⬜ Unit 7.4b: Cook WebSockets - Implementation
-**What**: Implement hibernatable WebSocket attachment/fan-out/reconnect/close behavior on the DO and Worker route.
+**What**: Implement server-to-client-only hibernatable WebSocket attachment/fan-out/reconnect and exact envelope/close-code behavior on `CookSession` and `workers/cook-session-api.ts`; reject client data messages with the frozen protocol error.
 **Output**: Live canonical cross-device snapshot channel.
 **Acceptance**: Focused real-runtime WebSocket tests pass without response cloning or warnings.
 
@@ -462,12 +462,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every upgrade/message/reconnect/stale/close branch is covered and review converges.
 
 ### ⬜ Unit 7.5a: Retention And Purge - Tests
-**What**: Add failing Workers tests for 24-hour terminal retention, replay during retention, active-list exclusion, projection-before-purge ordering, socket closure, `deleteAlarm`, storage deletion, owner-only purge, partial failure retry, and known-object cleanup.
+**What**: Add failing Workers tests for 24-hour terminal/receipt retention, replay during retention, active-list exclusion, due-purge alarm precedence, close -> D1 delete -> alarm/storage delete ordering, exact 503 `purge_incomplete`, 60-second retry with storage preserved, owner-only purge, and D1-row-enumerated cleanup.
 **Output**: Red retention/purge/cleanup tests.
 **Acceptance**: Tests fail because terminal lifecycle and purge are absent.
 
 ### ⬜ Unit 7.5b: Retention And Purge - Implementation
-**What**: Implement terminal retention, ordered purge, owner cleanup helper, and active registry list/detail/purge endpoints.
+**What**: Implement the exact frozen retention/purge sequence and errors in `workers/cook-session.ts`/`workers/cook-session-api.ts`, plus owner cleanup that enumerates `CookSessionIndex` rows before calling each server-derived DO; list returns only `status='active'` ordered by `updatedAt DESC, recipeId DESC`.
 **Output**: Recoverable lifecycle cleanup with complete D1 registry until purge.
 **Acceptance**: Focused Workers/API cleanup tests pass and zero-residue assertions succeed.
 
@@ -477,7 +477,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every retention/deletion/failure/retry branch is covered and review converges.
 
 ### ⬜ Unit 8.1a: Cook Client Transport - Tests
-**What**: Add failing hook/client tests for authenticated start/get/update/terminal/restart/purge requests, outgoing URL/body/headers, revision/mutation IDs, socket snapshots, reconnect/backoff, 409 reconciliation, and error states.
+**What**: Add failing hook/client tests that capture every outgoing frozen cook URL, method, same-origin headers, exact mutation body, and WebSocket URL; cover 200/201/204 responses, all frozen error codes, snapshot envelopes, reconnect delays `1/2/5/10` seconds capped at 10, stale-attempt teardown, and 409 canonical-state reconciliation.
 **Output**: Red `test/hooks/useCookSession.test.tsx` transport tests.
 **Acceptance**: Tests fail because the authenticated client transport is absent.
 
@@ -544,25 +544,25 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 ### ⬜ Unit 8.5b: Two-Context Cook Flow - Implementation
 **What**: Fix integration-only gaps and add deterministic e2e setup/cleanup hooks without changing the approved contracts.
 **Output**: Passing real two-context flow.
-**Acceptance**: Focused Playwright test passes repeatedly with zero residue.
+**Acceptance**: The focused Playwright test passes three consecutive times and each run's cleanup assertions report zero residue.
 
 ### ⬜ Unit 8.5c: Two-Context Cook Flow - Verification
-**What**: Run repeated focused Playwright plus app/Workers/full gates and obtain end-to-end review.
+**What**: Run the focused Playwright test three consecutive times plus app/Workers/full gates and obtain end-to-end review.
 **Output**: Browser stability and reviewer evidence.
-**Acceptance**: Repeated runs pass without flake/warning and review converges.
+**Acceptance**: All three runs pass without retry, flake, or warning and review converges.
 
 ### ⬜ Unit 8.6: Cook Experience Visual QA
-**What**: Run `visual-qa-dogfood` on anonymous/authenticated cook mode, continue-cooking, mismatch, reconnect, terminal, and long-content states at mobile and desktop sizes.
+**What**: Run `visual-qa-dogfood` on anonymous/authenticated cook mode, continue-cooking, mismatch, reconnect, terminal, and long-content states at 390x844 and 1440x900.
 **Output**: Screenshots, pixel/interaction metrics, and closed absurdity ledger.
-**Acceptance**: No overlap/truncation/unreachable control exists; the workflow remains calm and usable.
+**Acceptance**: Screenshots show no horizontal overflow, overlap, or truncation; all actions are keyboard reachable with at least 44px targets; focus order follows the workflow; the absurdity ledger has no open item.
 
 ### ⬜ Unit 9.1a: Feature Smoke Runner - Tests
-**What**: Add failing runner tests for two-client cook, shopping restore, save independence, tags/filters, REST/MCP scaling/metadata, exact target/version checks, sanitized artifacts, and failure propagation.
-**Output**: Red existing-smoke-runner extension tests.
+**What**: Add failing tests for a `--include-clem-feedback-smoke` mode in `scripts/smoke-live.mjs`/`scripts/smoke-live-helpers.mjs` and matching scenarios in `scripts/smoke-api-live.mjs`: two-client cook, shopping restore, save independence, tags/filters, REST/MCP scaling/metadata, exact target/version checks, sanitized artifacts, and failure propagation.
+**Output**: Red `test/scripts/smoke-live-helpers.test.ts` and `test/scripts/smoke-api-live.test.ts` evidence.
 **Acceptance**: Focused tests fail because Clem feature smoke coverage is absent.
 
 ### ⬜ Unit 9.1b: Feature Smoke Runner - Implementation
-**What**: Extend the existing live smoke/API smoke helpers with the focused feature scenarios and no new orchestration layer.
+**What**: Implement that exact feature flag/scenario set in `scripts/smoke-live.mjs`, `scripts/smoke-live-helpers.mjs`, and `scripts/smoke-api-live.mjs`, reusing their existing target/version/artifact model and adding no new orchestrator.
 **Output**: One reusable QA/production Clem feature smoke mode.
 **Acceptance**: Focused runner tests, script typecheck, and build pass.
 
@@ -572,12 +572,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every target/version/failure/sanitization branch is covered and review converges.
 
 ### ⬜ Unit 9.2a: Feature Cleanup - Tests
-**What**: Add failing cleanup tests for socket closure, known DO purge, CookSessionIndex/SavedRecipe/RecipeTag/shopping/user deletion order, partial failure retry, local/QA/production target isolation, and zero-residue assertions.
-**Output**: Red cleanup-helper/script tests.
+**What**: Extend `test/scripts/cleanup-local-qa-data.test.ts` and `test/scripts/smoke-live-helpers.test.ts` with failing cases for socket closure; D1-enumerated DO purge; CookSessionIndex -> SavedRecipe/RecipeTag/shopping -> user deletion order; partial retry; local/QA/production target isolation; and zero-residue assertions.
+**Output**: Red named cleanup-helper/script tests.
 **Acceptance**: Tests fail because new feature residue is not yet enumerated/purged.
 
 ### ⬜ Unit 9.2b: Feature Cleanup - Implementation
-**What**: Extend existing cleanup helpers/scripts for the new D1/DO/data graph with dry-run and explicit apply behavior.
+**What**: Extend only `scripts/cleanup-local-qa-data.mjs` and the cleanup exports in `scripts/smoke-live-helpers.mjs` for the new D1/DO/data graph, preserving dry-run and requiring explicit apply for mutation.
 **Output**: Idempotent target-scoped feature cleanup.
 **Acceptance**: Focused cleanup tests and script typecheck pass; no remote mutation occurs in tests.
 
@@ -617,7 +617,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Cleanup targets the exact Unit 9.7 identifiers, every deletion succeeds or proves absence, and all residue assertions return zero before task closure begins.
 
 ### ⬜ Unit 9.9: Task Closure
-**What**: After Unit 9.8 succeeds, synchronize planning/doing checklists and status, run the durable continuation scan across task docs/feedback/PR/smoke/cleanup, archive Desk state, clean obsolete worktrees/branches when safe, and notify Slugger.
+**What**: After Unit 9.8 succeeds, synchronize planning/doing checklists and status, scan task docs/feedback/PR/smoke/cleanup for ready work, archive Desk state, remove a worktree only when its status is empty and its merge is an ancestor of `origin/main`, delete only the corresponding merged local branch, and notify Slugger.
 **Output**: Done task docs, archived Desk record, cleanup receipt, and Slugger completion message.
 **Acceptance**: Unit 9.8 is accepted, no ready required work or residue remains, and every terminal artifact points to the shipped production merge.
 
@@ -627,11 +627,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - Run the full app suite before closing every implementation/refactor unit; run the Workers suite for every Worker/DO change.
 - Run `visual-qa-dogfood` before closing every UI unit.
 - Save logs, screenshots, reviews, and QA outputs under `./2026-07-19-1505-doing-clem-feedback-ship/`.
-- Update this doing doc, the planning checklist, Desk continuity, and branch/PR/deploy state after each material phase.
-- Use fresh sub-agent review for non-trivial units and fixes; surface only true credential/capability or unsafe destructive-production blockers.
+- Update this doing doc, the planning checklist, Desk continuity, and branch/PR/deploy state after every completed unit and remote deploy/merge operation.
+- Use a fresh sub-agent review for every code, SQL, workflow, API, security/privacy, or UI unit and every substantive fix; surface only true credential/capability or unsafe destructive-production blockers.
 
 ## Progress Log
 - 2026-07-19 15:34 Created from the approved focused planning doc.
 - 2026-07-19 16:12 Granularity Round 2 covered every migration schema addition and separated production cleanup from smoke/visual QA.
 - 2026-07-19 16:20 Validation Round 1 aligned shopping uniqueness, saved REST, and Playwright paths with the current repository.
 - 2026-07-19 16:24 Validation Round 2 converged against repository paths, names, and conventions.
+- 2026-07-19 16:31 Ambiguity Round 1 froze bootstrap, schema, protocol, inventory, branch, and measurable verification contracts.
