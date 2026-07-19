@@ -144,14 +144,14 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'User', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", NEW."id" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "id" AS "entityId" FROM "Recipe" WHERE "chefId" = NEW."id") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", "id" AS "entityId" FROM "Cookbook" WHERE "authorId" = NEW."id") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", i."id" AS "entityId" FROM "ShoppingListItem" i JOIN "ShoppingList" l ON l."id" = i."shoppingListId" WHERE l."authorId" = NEW."id") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", NEW."id" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "id" AS "entityId" FROM "Recipe" WHERE "chefId" = NEW."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", "id" AS "entityId" FROM "Cookbook" WHERE "authorId" = NEW."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", i."id" AS "entityId" FROM "ShoppingListItem" i JOIN "ShoppingList" l ON l."id" = i."shoppingListId" WHERE l."authorId" = NEW."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -163,22 +163,22 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'User', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", OLD."id" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "id" AS "entityId" FROM "Recipe" WHERE "chefId" = OLD."id") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", "id" AS "entityId" FROM "Cookbook" WHERE "authorId" = OLD."id") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", i."id" AS "entityId" FROM "ShoppingListItem" i JOIN "ShoppingList" l ON l."id" = i."shoppingListId" WHERE l."authorId" = OLD."id") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", NEW."id" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "id" AS "entityId" FROM "Recipe" WHERE "chefId" = NEW."id") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", "id" AS "entityId" FROM "Cookbook" WHERE "authorId" = NEW."id") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", i."id" AS "entityId" FROM "ShoppingListItem" i JOIN "ShoppingList" l ON l."id" = i."shoppingListId" WHERE l."authorId" = NEW."id") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", OLD."id" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "id" AS "entityId" FROM "Recipe" WHERE "chefId" = OLD."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", "id" AS "entityId" FROM "Cookbook" WHERE "authorId" = OLD."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", i."id" AS "entityId" FROM "ShoppingListItem" i JOIN "ShoppingList" l ON l."id" = i."shoppingListId" WHERE l."authorId" = OLD."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", NEW."id" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "id" AS "entityId" FROM "Recipe" WHERE "chefId" = NEW."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", "id" AS "entityId" FROM "Cookbook" WHERE "authorId" = NEW."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", i."id" AS "entityId" FROM "ShoppingListItem" i JOIN "ShoppingList" l ON l."id" = i."shoppingListId" WHERE l."authorId" = NEW."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -189,14 +189,14 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'User', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", OLD."id" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "id" AS "entityId" FROM "Recipe" WHERE "chefId" = OLD."id") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", "id" AS "entityId" FROM "Cookbook" WHERE "authorId" = OLD."id") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", i."id" AS "entityId" FROM "ShoppingListItem" i JOIN "ShoppingList" l ON l."id" = i."shoppingListId" WHERE l."authorId" = OLD."id") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", OLD."id" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "id" AS "entityId" FROM "Recipe" WHERE "chefId" = OLD."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", "id" AS "entityId" FROM "Cookbook" WHERE "authorId" = OLD."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", i."id" AS "entityId" FROM "ShoppingListItem" i JOIN "ShoppingList" l ON l."id" = i."shoppingListId" WHERE l."authorId" = OLD."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -207,12 +207,12 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Recipe', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."id" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", NEW."chefId" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", "cookbookId" AS "entityId" FROM "RecipeInCookbook" WHERE "recipeId" = NEW."id") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."id" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", NEW."chefId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", "cookbookId" AS "entityId" FROM "RecipeInCookbook" WHERE "recipeId" = NEW."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -224,18 +224,18 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Recipe', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."id" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", OLD."chefId" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", "cookbookId" AS "entityId" FROM "RecipeInCookbook" WHERE "recipeId" = OLD."id") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."id" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", NEW."chefId" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", "cookbookId" AS "entityId" FROM "RecipeInCookbook" WHERE "recipeId" = NEW."id") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."id" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", OLD."chefId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", "cookbookId" AS "entityId" FROM "RecipeInCookbook" WHERE "recipeId" = OLD."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."id" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", NEW."chefId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", "cookbookId" AS "entityId" FROM "RecipeInCookbook" WHERE "recipeId" = NEW."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -246,12 +246,12 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Recipe', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."id" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", OLD."chefId" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", "cookbookId" AS "entityId" FROM "RecipeInCookbook" WHERE "recipeId" = OLD."id") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."id" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", OLD."chefId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", "cookbookId" AS "entityId" FROM "RecipeInCookbook" WHERE "recipeId" = OLD."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -262,8 +262,8 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeCover', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."recipeId" AS "entityId") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."recipeId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -275,10 +275,10 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeCover', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."recipeId" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."recipeId" AS "entityId") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."recipeId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."recipeId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -289,8 +289,8 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeCover', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."recipeId" AS "entityId") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."recipeId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -301,8 +301,8 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeStep', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."recipeId" AS "entityId") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."recipeId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -314,10 +314,10 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeStep', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."recipeId" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."recipeId" AS "entityId") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."recipeId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."recipeId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -328,8 +328,8 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeStep', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."recipeId" AS "entityId") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."recipeId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -340,8 +340,8 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Ingredient', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."recipeId" AS "entityId") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."recipeId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -353,10 +353,10 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Ingredient', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."recipeId" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."recipeId" AS "entityId") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."recipeId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."recipeId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -367,8 +367,8 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Ingredient', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."recipeId" AS "entityId") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."recipeId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -379,10 +379,10 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'IngredientRef', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "Ingredient" WHERE "ingredientRefId" = NEW."id") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "ingredientRefId" = NEW."id") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "Ingredient" WHERE "ingredientRefId" = NEW."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "ingredientRefId" = NEW."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -394,14 +394,14 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'IngredientRef', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "Ingredient" WHERE "ingredientRefId" = OLD."id") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "ingredientRefId" = OLD."id") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "Ingredient" WHERE "ingredientRefId" = NEW."id") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "ingredientRefId" = NEW."id") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "Ingredient" WHERE "ingredientRefId" = OLD."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "ingredientRefId" = OLD."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "Ingredient" WHERE "ingredientRefId" = NEW."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "ingredientRefId" = NEW."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -412,10 +412,10 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'IngredientRef', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "Ingredient" WHERE "ingredientRefId" = OLD."id") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "ingredientRefId" = OLD."id") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "Ingredient" WHERE "ingredientRefId" = OLD."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "ingredientRefId" = OLD."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -426,10 +426,10 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Unit', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "Ingredient" WHERE "unitId" = NEW."id") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "unitId" = NEW."id") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "Ingredient" WHERE "unitId" = NEW."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "unitId" = NEW."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -441,14 +441,14 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Unit', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "Ingredient" WHERE "unitId" = OLD."id") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "unitId" = OLD."id") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "Ingredient" WHERE "unitId" = NEW."id") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "unitId" = NEW."id") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "Ingredient" WHERE "unitId" = OLD."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "unitId" = OLD."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "Ingredient" WHERE "unitId" = NEW."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "unitId" = NEW."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -459,10 +459,10 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Unit', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "Ingredient" WHERE "unitId" = OLD."id") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "unitId" = OLD."id") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "Ingredient" WHERE "unitId" = OLD."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "unitId" = OLD."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -473,12 +473,12 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Cookbook', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", NEW."id" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", NEW."authorId" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "RecipeInCookbook" WHERE "cookbookId" = NEW."id") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", NEW."id" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", NEW."authorId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "RecipeInCookbook" WHERE "cookbookId" = NEW."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -490,18 +490,18 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Cookbook', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", OLD."id" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", OLD."authorId" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "RecipeInCookbook" WHERE "cookbookId" = OLD."id") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", NEW."id" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", NEW."authorId" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "RecipeInCookbook" WHERE "cookbookId" = NEW."id") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", OLD."id" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", OLD."authorId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "RecipeInCookbook" WHERE "cookbookId" = OLD."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", NEW."id" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", NEW."authorId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "RecipeInCookbook" WHERE "cookbookId" = NEW."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -512,12 +512,12 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'Cookbook', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", OLD."id" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", OLD."authorId" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "RecipeInCookbook" WHERE "cookbookId" = OLD."id") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", OLD."id" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'chef' AS "entityType", OLD."authorId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", "recipeId" AS "entityId" FROM "RecipeInCookbook" WHERE "cookbookId" = OLD."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -528,10 +528,10 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeInCookbook', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."recipeId" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", NEW."cookbookId" AS "entityId") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."recipeId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", NEW."cookbookId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -543,14 +543,14 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeInCookbook', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."recipeId" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", OLD."cookbookId" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."recipeId" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", NEW."cookbookId" AS "entityId") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."recipeId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", OLD."cookbookId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."recipeId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", NEW."cookbookId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -561,10 +561,10 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeInCookbook', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."recipeId" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", OLD."cookbookId" AS "entityId") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."recipeId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'cookbook' AS "entityType", OLD."cookbookId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -575,8 +575,8 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'ShoppingList', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "shoppingListId" = NEW."id") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "shoppingListId" = NEW."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -588,10 +588,10 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'ShoppingList', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "shoppingListId" = OLD."id") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "shoppingListId" = NEW."id") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "shoppingListId" = OLD."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "shoppingListId" = NEW."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -602,8 +602,8 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'ShoppingList', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "shoppingListId" = OLD."id") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", "id" AS "entityId" FROM "ShoppingListItem" WHERE "shoppingListId" = OLD."id") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -614,8 +614,8 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'ShoppingListItem', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", NEW."id" AS "entityId") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", NEW."id" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -627,10 +627,10 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'ShoppingListItem', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", OLD."id" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", NEW."id" AS "entityId") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", OLD."id" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", NEW."id" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -641,8 +641,8 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'ShoppingListItem', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", OLD."id" AS "entityId") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'shopping-list-item' AS "entityType", OLD."id" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -653,8 +653,8 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeTag', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."recipeId" AS "entityId") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."recipeId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -666,10 +666,10 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeTag', NEW."id", 'UPSERT', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."recipeId" AS "entityId") t WHERE length(t."entityId") > 0;
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."recipeId" AS "entityId") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."recipeId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", NEW."recipeId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
@@ -680,8 +680,8 @@ BEGIN
   SELECT CASE WHEN (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1) >= 9007199254740991 THEN RAISE(ABORT, 'search_revision_overflow') END;
   UPDATE "SearchSourceClock" SET "currentRevision" = "currentRevision" + 1 WHERE "id" = 1;
   INSERT INTO "SearchSourceChange" ("revision", "sourceKind", "sourceId", "operation", "createdAtMs") VALUES ((SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), 'RecipeTag', OLD."id", 'DELETE', CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-  INSERT OR IGNORE INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
-  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."recipeId" AS "entityId") t WHERE length(t."entityId") > 0;
+  INSERT INTO "SearchChangeTarget" ("revision", "entityType", "entityId")
+  SELECT (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1), t."entityType", t."entityId" FROM (SELECT 'recipe' AS "entityType", OLD."recipeId" AS "entityId") t WHERE length(t."entityId") > 0 ON CONFLICT ("revision", "entityType", "entityId") DO NOTHING;
   SELECT CASE WHEN (SELECT "pendingTargetUpperBound" FROM "SearchIndexAuthority" WHERE "id" = 'current') > 9007199254740991 - (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)) THEN RAISE(ABORT, 'search_pending_overflow') END;
   UPDATE "SearchIndexAuthority" SET "pendingTargetUpperBound" = "pendingTargetUpperBound" + (SELECT COUNT(*) FROM "SearchChangeTarget" WHERE "revision" = (SELECT "currentRevision" FROM "SearchSourceClock" WHERE "id" = 1)), "updatedAtMs" = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE "id" = 'current';
 END;
