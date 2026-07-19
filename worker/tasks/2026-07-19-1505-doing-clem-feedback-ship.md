@@ -67,7 +67,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 ⬜ Not started · 🔄 In progress · ✅ Done · ❌ Blocked
 
 ### ⬜ Unit 0: Baseline And Source Freeze
-**What**: Record clean branch/upstream state, plan/source hashes, Node/pnpm/Cloudflare versions, and baseline typecheck/coverage/build. Create `test/fixtures/clem-feedback-pre-feature.sql` with the exact A/B, R1-R3, A1/A2/B1, five-membership, and item-a/b/c seed rows frozen in planning; record SHA-256 for it and concatenated unchanged migrations 0000-0023; map every feedback row to a later unit.
+**What**: Record clean branch/upstream state, plan/source hashes, Node/pnpm/Cloudflare versions, and baseline typecheck/coverage/build. Create `test/fixtures/clem-feedback-pre-feature.sql` with the literal IDs/emails/usernames/titles/deletedAt, five ISO membership times, shopping rows/values, null/default policy, and required timestamps frozen in planning; record SHA-256 for it and concatenated unchanged migrations 0000-0023; map every feedback row to a later unit.
 **Output**: Baseline logs, fixture/hash manifest, and feedback-to-unit map in the artifacts directory plus the committed seed fixture.
 **Acceptance**: 7,226 existing tests pass at 100% app coverage; fixture atop migrations 0000-0023 yields the exact five memberships/three active duplicates; typecheck/build pass; `git status --porcelain` is empty after commit; every source row maps to a unit or explicit rejection test.
 
@@ -302,12 +302,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every cursor/query/error/boundary branch is covered and review converges.
 
 ### ⬜ Unit 5.2a: Saved REST API - Tests
-**What**: Add failing REST/OpenAPI tests for the exact `{ok,requestId,data}` saved-list and mutation envelopes/statuses/bodies frozen in planning, plus kitchen scopes, owner privacy, malformed query/cursor/body semantic errors, no-store/vary headers, soft deletion, replay, and outgoing service inputs.
-**Output**: Red REST/OpenAPI adapter tests.
+**What**: Add failing `test/routes/api-v1-saved-recipes.test.ts` plus existing API v1 OpenAPI/route-coverage/developer-doc tests for the exact envelopes/statuses/bodies, scopes, privacy, malformed semantic errors, cache headers, soft deletion, replay, and outgoing service inputs.
+**Output**: Red saved REST/OpenAPI/contract/docs adapter tests.
 **Acceptance**: Tests fail because the saved routes/contracts are absent.
 
 ### ⬜ Unit 5.2b: Saved REST API - Implementation
-**What**: Add API v1 list/PUT/DELETE handlers, operation mapping, scopes/idempotency, OpenAPI, generated playground, and docs using the saved service.
+**What**: Add handlers in `app/lib/api-v1.server.ts`, operation/scope mapping in `app/lib/api-v1-contract.server.ts`, schemas/routes in `app/lib/api-v1-openapi.server.ts`, regenerated `app/lib/generated/api-v1-playground.ts`, and documentation in `docs/api.md` plus `app/routes/developers.tsx`, all using the saved service.
 **Output**: Private documented SavedRecipe REST contract.
 **Acceptance**: Focused API/OpenAPI tests and generated diff pass.
 
@@ -367,12 +367,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every payload/validation/rollback/keyboard branch is covered and review converges.
 
 ### ⬜ Unit 6.3a: Tag Filters And Search - Tests
-**What**: Add failing tests for the named My Recipes/search files: one `course` plus repeated `tag` parameters (for example `?course=main&tag=weeknight&tag=one%20pot`), URL-order preservation, normalized SQL dedupe/AND semantics, maximum ten tags, invalid-filter 400, pre-limit predicates, page normalization, reset, and freshness.
+**What**: Add failing tests in `test/routes/my-recipes.test.tsx`, `test/lib/my-recipes-search.server.test.ts`, and the existing global search route/service tests for one `course` plus repeated `tag` parameters (for example `?course=main&tag=weeknight&tag=one%20pot`), URL-order preservation, normalized SQL dedupe/AND semantics, maximum ten tags, invalid-filter 400, pre-limit predicates, page normalization, reset, and freshness.
 **Output**: Red query/route/filter tests.
 **Acceptance**: Tests fail because tag predicates and freshness inputs are absent.
 
 ### ⬜ Unit 6.3b: Tag Filters And Search - Implementation
-**What**: Update exactly the Unit 6.3a files with bounded query/filter helpers and accessible controls, safe pagination/link preservation, and freshness integration; do not change `_index.tsx` or `users.$identifier.tsx`.
+**What**: Update exactly `app/routes/my-recipes.tsx`, `app/lib/my-recipes-search.server.ts`, `app/routes/search.tsx`, and `app/lib/search.server.ts` with query/filter helpers, accessible controls, safe pagination/link preservation, and freshness integration; do not change `_index.tsx` or `users.$identifier.tsx`.
 **Output**: Course/tag discovery on existing bounded surfaces.
 **Acceptance**: Focused query/route tests and build pass; no home/profile expansion occurs.
 
@@ -417,7 +417,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every auth/origin/cache/validation/upgrade branch is covered and review converges.
 
 ### ⬜ Unit 7.2a: Cook State Machine - Tests
-**What**: Add failing Workers-runtime tests for the frozen `session`, `mutation_receipt`, and `pending_projection` SQLite tables; concurrent start convergence; server-minted attempts; exact request-hash replay; stale attempt/revision and recipe-change 409s; four-field progress validation; snapshot eviction recovery; terminal idempotence; and restart that atomically abandons the old attempt.
+**What**: Add failing Workers-runtime tests for the three frozen SQLite tables; concurrent start; server-minted attempts; normalized operation/body key order plus deduplicated code-unit-sorted checked-ID arrays before SHA-256 replay hashing; stale conflicts; progress validation; eviction; terminal idempotence; and atomic restart.
 **Output**: Red real-DO state-machine tests.
 **Acceptance**: Tests fail because the inert class has no state machine.
 
@@ -477,7 +477,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every retention/deletion/failure/retry branch is covered and review converges.
 
 ### ⬜ Unit 8.1a: Cook Client Transport - Tests
-**What**: Add failing `test/lib/cook-session-client.test.ts` and `test/hooks/useCookSession.test.tsx` cases that capture every outgoing URL/method/header/body and WebSocket URL; cover 200/201/204, all frozen errors, snapshots, reconnect `1/2/5/10` seconds, stale teardown, and 409 reconciliation.
+**What**: Add failing client/hook tests that capture outgoing HTTP/socket shapes and cover success/errors/snapshots; 1000 terminal/purge/other-clean permanent stop plus list revalidation; 4009 one-detail-GET adoption or stop; 1003/1008/auth/origin permanent error; 1006/1011/1012/1013 detail reconciliation and `1/2/5/10` reconnect; offline pause/online immediate retry; and 409 reconciliation.
 **Output**: Red `test/hooks/useCookSession.test.tsx` transport tests.
 **Acceptance**: Tests fail because the authenticated client transport is absent.
 
@@ -637,3 +637,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-19 16:24 Validation Round 2 converged against repository paths, names, and conventions.
 - 2026-07-19 16:31 Ambiguity Round 1 froze bootstrap, schema, protocol, inventory, branch, and measurable verification contracts.
 - 2026-07-19 16:43 Ambiguity redesign replaced the stale baseline and completed scalar, hash, infrastructure, inventory, quantity, and repeated-query contracts.
+- 2026-07-19 16:52 Ambiguity harsh review completed canonical hash/socket behavior, literal fixture values, and saved/filter file inventories.
