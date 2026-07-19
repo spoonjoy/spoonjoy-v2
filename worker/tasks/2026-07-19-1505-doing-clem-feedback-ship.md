@@ -396,18 +396,18 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Output**: Coverage and reviewer evidence.
 **Acceptance**: Empty/malformed/multi-filter/pagination/freshness branches are covered and review converges.
 
-### ⬜ Unit 6.4a: Tag Read Parity - Tests
-**What**: Add failing persisted-data parity tests for recipe detail, My Recipes cards, global-search cards, REST recipe list/detail/search, and MCP `get_recipe`/`list_recipes`/`search_spoonjoy`; assert deterministic tags, public course/tags, and no write/AI/save metadata.
-**Output**: Red read-surface integration tests.
-**Acceptance**: Tests fail until persisted tag data reaches recipe detail, My Recipes cards, global-search cards, REST recipe list/detail/search, and MCP `get_recipe`/`list_recipes`/`search_spoonjoy`.
+### ⬜ Unit 6.4a: Web Tag Read Parity - Tests
+**What**: Add failing persisted-data tests only for recipe-detail metadata, My Recipes cards, and global-search cards; assert deterministic public course/tags and no AI/save metadata. REST/MCP serializers are already complete in Unit 4.1 and remain regression tests, not red targets.
+**Output**: Red web read-surface integration tests.
+**Acceptance**: Tests fail only because persisted tag data does not yet reach the three named web surfaces.
 
-### ⬜ Unit 6.4b: Tag Read Parity - Implementation
-**What**: Complete includes/displays/serializers in `app/lib/recipe-detail.server.ts`, `app/routes/recipes.$id.tsx`, `app/routes/my-recipes.tsx`, `app/routes/search.tsx`, `app/lib/search.server.ts`, `app/lib/api-v1.server.ts`, and `app/lib/spoonjoy-api.server.ts` for exactly the Unit 6.4a surfaces.
-**Output**: End-to-end manual metadata read parity.
-**Acceptance**: Focused parity tests and generated contracts pass.
+### ⬜ Unit 6.4b: Web Tag Read Parity - Implementation
+**What**: Complete includes/displays in `app/lib/recipe-detail.server.ts`, `app/routes/recipes.$id.tsx`, `app/routes/my-recipes.tsx`, `app/routes/search.tsx`, and `app/lib/search.server.ts` for the three Unit 6.4a web surfaces; do not change REST/MCP serializers.
+**Output**: End-to-end manual metadata web read parity.
+**Acceptance**: Focused web parity tests pass and Unit 4.1 REST/MCP regressions remain green without generated diffs.
 
-### ⬜ Unit 6.4c: Tag Read Parity - Verification
-**What**: Reach 100% integration coverage, run full gates, and obtain API/product review.
+### ⬜ Unit 6.4c: Web Tag Read Parity - Verification
+**What**: Reach 100% web integration coverage, run full gates, and obtain product/accessibility review.
 **Output**: Coverage and reviewer evidence.
 **Acceptance**: All empty/order/privacy branches are covered and review converges.
 
@@ -622,9 +622,9 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: The final product or repair merge SHA is the sole 100% production version and canonical health identifies it; rollback alone never completes this unit or permits Unit 9.7.
 
 ### ⬜ Unit 9.7: Production Smoke And Visual QA
-**What**: Run production Clem feature smoke, the two-client continuation flow, `visual-qa-dogfood`, and canonical-health verification against the promoted version; close the absurdity ledger from observed production behavior.
-**Output**: Production smoke/visual evidence and closed absurdity ledger.
-**Acceptance**: Every product and visual scenario passes on `spoonjoy.app`, canonical health identifies the promoted merge/version, and all disposable resource identifiers are captured for cleanup.
+**What**: Run production Clem feature smoke, two-client continuation, `visual-qa-dogfood`, and canonical health against the promoted version. On any failure, capture identifiers/evidence, clean all created residue, restore only the prior post-boundary version, keep Unit 9.7 incomplete, create/merge a reviewed repair, and repeat Units 9.6-9.7.
+**Output**: Successful production smoke/visual evidence and closed absurdity ledger; failed attempts retain cleanup/rollback/repair evidence without satisfying the unit.
+**Acceptance**: Every product/visual scenario passes on `spoonjoy.app`, canonical health identifies the final promoted product/repair merge, all disposable IDs are captured for Unit 9.8, and rollback alone never permits Unit 9.8.
 
 ### ⬜ Unit 9.8: Production Cleanup
 **What**: Close all production test sockets, purge every known disposable cook-session DO, remove its D1 projection rows and all disposable feature/user data, then run zero-residue assertions across D1, DO-accessible state, R2, and test users.
@@ -658,3 +658,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-19 17:10 Ambiguity Pass 4 converged with no executor-blocking findings.
 - 2026-07-19 17:17 Quality Round 1 fixed Workers-lane ordering, migration-test ownership, product-mode TDD, and rollback completion semantics.
 - 2026-07-19 17:23 Quality Round 2 isolated Prisma checks and guaranteed fresh migration rehearsal state.
+- 2026-07-19 17:29 Quality redesign separated REST/MCP from web tag parity and added post-promotion recovery.
