@@ -417,7 +417,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every auth/origin/cache/validation/upgrade branch is covered and review converges.
 
 ### ⬜ Unit 7.2a: Cook State Machine - Tests
-**What**: Add failing Workers-runtime tests for every frozen SQLite NOT NULL/check/no-default rule; concurrent start; server-minted attempts; normalized operation/body keys plus `(a<b?-1:a>b?1:0)` checked-ID ordering before SHA-256; stale conflicts; progress validation; eviction; terminal idempotence; and atomic restart.
+**What**: Add failing Workers-runtime tests for every frozen session/receipt/projection column type, NOT NULL/check/no-default rule, exact response_status/response_json replay; concurrent start; normalized hash ordering; stale conflicts including differing receipt hash; progress validation; eviction; terminal idempotence; and atomic restart.
 **Output**: Red real-DO state-machine tests.
 **Acceptance**: Tests fail because the inert class has no state machine.
 
@@ -477,7 +477,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every retention/deletion/failure/retry branch is covered and review converges.
 
 ### ⬜ Unit 8.1a: Cook Client Transport - Tests
-**What**: Add failing client/hook tests for outgoing shapes and the total frozen close/detail response table: active adoption, terminal/404 stop/list refresh, 401/403/other 4xx stop, 409 canonical active-or-terminal, 5xx/network backoff, unlisted close protocol-stop, offline/online, successful-open reset, and every named close/reconnect delay.
+**What**: Add failing client/hook tests for outgoing shapes and the total frozen close/detail table: different-active adoption, same-active-after-4009 `stale_attempt_reconciliation_failed`, terminal/404 stop/list refresh, 401/403/other 4xx stop, 409 canonical active-or-terminal, 5xx/network backoff, unlisted close protocol-stop, offline/online, successful-open reset, and every named delay.
 **Output**: Red `test/hooks/useCookSession.test.tsx` transport tests.
 **Acceptance**: Tests fail because the authenticated client transport is absent.
 
@@ -639,3 +639,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-19 16:43 Ambiguity redesign replaced the stale baseline and completed scalar, hash, infrastructure, inventory, quantity, and repeated-query contracts.
 - 2026-07-19 16:52 Ambiguity harsh review completed canonical hash/socket behavior, literal fixture values, and saved/filter file inventories.
 - 2026-07-19 17:00 Final ambiguity findings fixed SQL constraints, total reconnects, shopping metadata, bootstrap tests, fixture hashing, and canonical links.
+- 2026-07-19 17:06 Final ambiguity convergence fixes specified receipt/projection fields and same-attempt stale reconciliation.
