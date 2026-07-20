@@ -152,12 +152,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Review converges, `git status --porcelain` is empty, branch is pushed, and Unit 2.1 starts only from this checkpoint.
 
 ### ⬜ Unit 2.1a: Product Models - Tests
-**What**: From the Unit 1.8c handoff, add failing Prisma/schema tests for every Prisma-expressible scalar type/default, named relation field, key/index, and FK action frozen in planning, including nullable/no-default `Recipe.course`, SavedRecipe's sole timestamp, RecipeTag timestamps, CookSessionIndex's no-default timestamps/no recipe relation/no progress columns, and shopping `@@unique` removal; raw SQL checks belong only to Unit 2.2.
+**What**: From Unit 1.8c, add failing Prisma/schema tests for every Prisma-expressible product shape, shopping `@@unique` removal, and a seed-source/behavior test proving `prisma/seed.ts` no longer uses `shoppingListId_unitId_ingredientRefId` and remains idempotent; raw SQL checks belong to Unit 2.2.
 **Output**: Red `test/models/clem-feedback-schema.test.ts` evidence.
 **Acceptance**: Focused tests fail only because the models/columns are absent.
 
 ### ⬜ Unit 2.1b: Product Models - Implementation
-**What**: Implement the exact frozen `Recipe.course`, `SavedRecipe`, `RecipeTag`, and `CookSessionIndex` Prisma shapes, relation fields, modeled indexes, and shopping-constraint removal in `prisma/schema.prisma`; regenerate the client and update `test/utils.ts` plus cleanup order.
+**What**: Implement the exact frozen models/relations/indexes and shopping-constraint removal in `prisma/schema.prisma`; replace the removed compound-selector upsert in `prisma/seed.ts` with idempotent active-row lookup/update-or-create; regenerate client and update `test/utils.ts` plus cleanup order.
 **Output**: Prisma-modeled product schema aligned with tombstone-preserving shopping identity and generated types.
 **Acceptance**: Model tests, Prisma generation/push, typecheck, and build pass.
 
@@ -182,12 +182,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Both engines agree, no existing table contract breaks, and review converges.
 
 ### ⬜ Unit 2.3a: Shopping Repair Migration - Tests
-**What**: Add failing migration tests for dropping the legacy index; item-b quantity 3/sort 1/unchecked/checkedAt null/deletedAt null plus frozen category/icon/updatedAt selection; item-a/item-c preserved except tombstone/advanced updatedAt; active unit/non-unit identities; partial-index enforcement; retained-tombstone non-null-unit re-add; and no quantity loss.
+**What**: Add failing migration tests for the frozen shopping repair and raw index, plus a config/setup test requiring `test/setup.ts` to create the exact same `ShoppingListItem_active_identity_key` after cleanup so Prisma-pushed `test.db` supports the service upsert.
 **Output**: Red shopping section of the migration 0024 test.
 **Acceptance**: Tests fail because repair/index SQL is absent.
 
 ### ⬜ Unit 2.3b: Shopping Repair Migration - Implementation
-**What**: In migration 0024, deterministically reconcile shopping duplicates, drop the existing full `ShoppingListItem_shoppingListId_unitId_ingredientRefId_key`, and create the partial expression unique index for active rows only.
+**What**: Add the frozen repair/drop/partial index to migration 0024 and add exact `CREATE UNIQUE INDEX IF NOT EXISTS ShoppingListItem_active_identity_key ... WHERE deletedAt IS NULL` setup via Prisma raw execution in `test/setup.ts` immediately after shopping-row cleanup.
 **Output**: One database-enforced active shopping identity per list/ingredient/unit.
 **Acceptance**: All repair/index fixtures pass and the pre-feature Worker remains compatible with the migrated schema.
 
@@ -257,7 +257,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: All surfaces pass one state matrix and review converges.
 
 ### ⬜ Unit 4.1a: Neutral Recipe Metadata - Tests
-**What**: Add failing tests for top-level `course`/`tags` on `recipeDetail` in `app/lib/api-v1.server.ts`, `formatRecipe`/`formatRecipeSummary` and MCP `get_recipe`/`list_recipes`/`search_spoonjoy` in `app/lib/spoonjoy-api.server.ts`, their REST list/detail/search routes, OpenAPI, and generated playground, with no personalized save state.
+**What**: Add failing tests for top-level `course`/`tags` on `recipeDetail`, `formatRecipe`/`formatRecipeSummary`, and actual MCP `get_recipe`/`search_recipes`/`search_spoonjoy`, plus REST list/detail/search, OpenAPI, and playground, with no personalized save state.
 **Output**: Red metadata contract tests.
 **Acceptance**: Tests fail because course/tags are absent from shared serializers and schemas.
 
@@ -417,12 +417,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: No horizontal overflow, overlap, or truncation occurs; all controls have reachable focus and at least 44px targets; active filters have programmatic selected state and visible labels; the absurdity ledger has no open item.
 
 ### ⬜ Unit 7.1a: Cook Contracts And Auth - Tests
-**What**: Add failing tests for every exact cook HTTP route/status/envelope/body/error, exact nested snapshot/list item/SQLite scalar contract, SHA-256 snapshot/request hashing and sort order, 200-code-point projection truncation, same-origin/auth/cache rule, `idFromName(JSON.stringify([userId,recipeId]))`, and WebSocket 101 non-cloning frozen in planning.
+**What**: Add failing tests for every exact cook route/contract/security/hash and for removal of `/.well-known/spoonjoy-cook-session-bootstrap`, the internal probe path/header/table branch, and probe-specific success expectations while retaining binding/migration lifecycle assertions.
 **Output**: Red cook-contract and Worker-router tests.
 **Acceptance**: Focused tests fail against the inert bootstrap/runtime router.
 
 ### ⬜ Unit 7.1b: Cook Contracts And Auth - Implementation
-**What**: Add `app/lib/cook-session-contract.ts` validators/serializers and `workers/cook-session-api.ts`; dispatch the exact routes from `workers/app.ts` before React Router, authenticate with existing session helpers, derive the DO identity server-side, and build the pinned snapshot from D1.
+**What**: Remove public/internal bootstrap probe code and obsolete probe test expectations; replace inert behavior with `app/lib/cook-session-contract.ts`, `workers/cook-session-api.ts`, and exact authenticated routing from `workers/app.ts`, while retaining class/binding/migration.
 **Output**: Secure typed HTTP/WebSocket transport boundary.
 **Acceptance**: Focused pure/Worker tests, typecheck, and build pass.
 
@@ -660,3 +660,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-19 17:23 Quality Round 2 isolated Prisma checks and guaranteed fresh migration rehearsal state.
 - 2026-07-19 17:29 Quality redesign separated REST/MCP from web tag parity and added post-promotion recovery.
 - 2026-07-19 17:33 Quality Pass 5 converged across all 114 units.
+- 2026-07-19 17:38 Scrutiny Pass 6 fixed seed/raw-index integration, actual MCP naming, and bootstrap cleanup ownership.
