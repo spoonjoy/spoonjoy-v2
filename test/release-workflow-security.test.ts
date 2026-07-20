@@ -98,6 +98,7 @@ describe("production release provenance", () => {
 
 describe("web dependency advisory gate", () => {
   const ci = workflowSource("ci.yml");
+  const storybook = workflowSource("storybook.yml");
 
   it("uses disjoint report-only job names that cannot satisfy canonical required checks", () => {
     expect(ci).toContain(
@@ -108,6 +109,9 @@ describe("web dependency advisory gate", () => {
     );
     expect(ci).toContain(
       "name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-e2e' || 'e2e' }}",
+    );
+    expect(storybook).toContain(
+      "name: ${{ github.event_name == 'workflow_dispatch' && 'manual-build-storybook' || 'build-storybook' }}",
     );
   });
 

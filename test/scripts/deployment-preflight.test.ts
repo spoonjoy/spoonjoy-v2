@@ -21,6 +21,8 @@ const UPLOAD_ARTIFACT_ACTION = "actions/upload-artifact@043fb46d1a93c77aae656e7c
 const DOWNLOAD_ARTIFACT_ACTION = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c";
 const COVERAGE_JOB_NAME_LINE =
   "    name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-coverage' || 'coverage' }}";
+const STORYBOOK_JOB_NAME_LINE =
+  "    name: ${{ github.event_name == 'workflow_dispatch' && 'manual-build-storybook' || 'build-storybook' }}";
 
 function replaceRequired(source: string, expected: string, replacement: string): string {
   if (!source.includes(expected)) {
@@ -129,7 +131,7 @@ function validStorybookWorkflow(): string {
     "  GIT_CONFIG_VALUE_0: main",
     "jobs:",
     "  build-storybook:",
-    "    name: build-storybook",
+    STORYBOOK_JOB_NAME_LINE,
     "    runs-on: ubuntu-latest",
     "    permissions:",
     "      contents: read",
@@ -3544,6 +3546,22 @@ describe("Storybook deploy warning cleanup", () => {
     for (const result of [missingJob, missingSteps, missingBuildCommand]) {
       expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
     }
+  });
+
+  it.each([
+    ["static required context", "    name: build-storybook"],
+    [
+      "dispatch required-context collision",
+      "    name: ${{ github.event_name == 'workflow_dispatch' && 'build-storybook' || 'manual-build-storybook' }}",
+    ],
+  ])("rejects a Storybook job name that can collide with required checks: %s", (_label, replacement) => {
+    const result = validateDeploymentConfig(
+      inputsWithStorybookWorkflow(
+        replaceRequired(validStorybookWorkflow(), STORYBOOK_JOB_NAME_LINE, replacement),
+      ),
+    );
+
+    expect(result.errors.map((item) => item.name)).toContain("Storybook deploy workflow");
   });
 
   it("requires clean deploy directory preparation and generated Pages wrangler config", () => {

@@ -123,6 +123,16 @@ type ProductionVerificationDeps = Pick<
   "env" | "readPublicWorkerVersion" | "runCommand" | "sleep" | "verificationAttempts"
 >;
 
+function productionVerificationAttempts(
+  deps: { verificationAttempts?: number },
+): number {
+  const attempts = deps.verificationAttempts ?? DEFAULT_VERIFICATION_ATTEMPTS;
+  if (!Number.isInteger(attempts) || attempts < 1) {
+    throw new Error("Production verification attempts must be a positive integer.");
+  }
+  return attempts;
+}
+
 interface ExecFileError extends Error {
   code?: number | string;
 }
@@ -612,7 +622,8 @@ export function buildWorkerVersionOverride(workerName: string, versionId: string
 function redactSensitiveText(message: string): string {
   return message
     .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]")
-    .replace(/\b(token|secret|password|authorization|api[_-]?key)\s*[=:]\s*\S+/gi, "$1=[REDACTED]")
+    .replace(/\b(authorization)\s*[=:]\s*[^\r\n]+/gi, "$1=[REDACTED]")
+    .replace(/\b(token|secret|password|api[_-]?key)\s*[=:]\s*\S+/gi, "$1=[REDACTED]")
     .replace(/\b[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b/g, "[REDACTED]");
 }
 
@@ -689,10 +700,7 @@ async function waitForProductionVersion(
   options: { allowLegacyMissingPublicVersion?: boolean } = {},
 ): Promise<void> {
   requireWorkerVersionId(expectedVersionId, "Production verification");
-  const attempts = deps.verificationAttempts ?? DEFAULT_VERIFICATION_ATTEMPTS;
-  if (!Number.isInteger(attempts) || attempts < 1) {
-    throw new Error("Production verification attempts must be a positive integer.");
-  }
+  const attempts = productionVerificationAttempts(deps);
   const baseUrl = deps.env?.SPOONJOY_MCP_CANARY_BASE_URL ?? "https://spoonjoy.app";
   let consecutiveLegacyControlPlaneMatches = 0;
 
@@ -734,6 +742,33 @@ async function waitForProductionVersion(
   throw new Error(`Production version did not converge to ${expectedVersionId}.`);
 }
 
+async function waitForCandidateCspHeaders(
+  deps: RunProductionRollbackDeps,
+  baseUrl: string,
+  candidateVersionId: string,
+): Promise<Headers> {
+  const attempts = productionVerificationAttempts(deps);
+
+  let lastError: unknown = new Error(
+    "Rollback candidate identity could not be verified from the exact-version probe.",
+  );
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const headers = await deps.readCandidateCspHeaders(baseUrl, candidateVersionId);
+      const observedVersion = headers.get("X-Spoonjoy-Worker-Version");
+      if (observedVersion?.toLowerCase() === candidateVersionId.toLowerCase()) return headers;
+      lastError = new Error(
+        "Rollback candidate identity could not be verified from the exact-version probe.",
+      );
+    } catch (error) {
+      lastError = error;
+    }
+    if (attempt < attempts) await deps.sleep(VERIFICATION_DELAY_MS);
+  }
+
+  throw lastError;
+}
+
 export async function runProductionRollback(
   deps: RunProductionRollbackDeps,
 ): Promise<ReleaseArtifact> {
@@ -750,6 +785,7 @@ export async function runProductionRollback(
   try {
     const sourceSha = requireReleaseSha(deps.releaseSha);
     const rollbackVersionId = requireWorkerVersionId(deps.rollbackVersionId, "Rollback version");
+    productionVerificationAttempts(deps);
 
     phase = "provenance";
     const toolingHead = requireReleaseSha(
@@ -802,11 +838,11 @@ export async function runProductionRollback(
 
     phase = "candidate_csp";
     const baseUrl = deps.env?.SPOONJOY_MCP_CANARY_BASE_URL ?? "https://spoonjoy.app";
-    const candidateCspHeaders = await deps.readCandidateCspHeaders(baseUrl, candidateVersionId);
-    const observedCandidateVersion = candidateCspHeaders.get("X-Spoonjoy-Worker-Version");
-    if (observedCandidateVersion?.toLowerCase() !== candidateVersionId.toLowerCase()) {
-      throw new Error("Rollback candidate identity could not be verified from the exact-version probe.");
-    }
+    const candidateCspHeaders = await waitForCandidateCspHeaders(
+      deps,
+      baseUrl,
+      candidateVersionId,
+    );
     const cspFailures = validateCspHeaderSet(candidateCspHeaders, {
       expectedWorkerVersionId: candidateVersionId,
       postHogHost: deps.postHogHost,

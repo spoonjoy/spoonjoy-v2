@@ -50,6 +50,12 @@ describe("warning gate", () => {
     expect(findUnexpectedWarnings("warnings-summary.log")).toEqual([]);
     expect(findUnexpectedWarnings("2 warnings")).toEqual(["2 warnings"]);
     expect(findUnexpectedWarnings("Found 2 warnings")).toEqual(["Found 2 warnings"]);
+    expect(findUnexpectedWarnings("Found 2 warnings.")).toEqual(["Found 2 warnings."]);
+    expect(findUnexpectedWarnings("2 warnings, 0 errors")).toEqual(["2 warnings, 0 errors"]);
+    expect(findUnexpectedWarnings("Warnings.")).toEqual(["Warnings."]);
+    expect(findUnexpectedWarnings("warnings; build continued")).toEqual([
+      "warnings; build continued",
+    ]);
     expect(findUnexpectedWarnings("WARNINGS: 2")).toEqual(["WARNINGS: 2"]);
     expect(findUnexpectedWarnings("ExperimentalWarnings: surprise")).toEqual([
       "ExperimentalWarnings: surprise",

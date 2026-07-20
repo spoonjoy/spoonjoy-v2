@@ -273,6 +273,44 @@ describe("trusted production rollback orchestration", () => {
     ));
   });
 
+  it("retries the exact-version rollback probe while the staged override propagates", async () => {
+    const runCommand = successfulRunner({
+      "git rev-parse HEAD": TOOLING_SHA,
+      "git rev-parse origin/main": TOOLING_SHA,
+      "pnpm exec wrangler versions list --json": JSON.stringify([
+        workerVersion(CANDIDATE_VERSION, RELEASE_SHA),
+      ]),
+      "pnpm exec wrangler deployments list --json": [
+        deploymentPayload(PREVIOUS_VERSION),
+        deploymentPayload(CANDIDATE_VERSION),
+      ],
+    });
+    const deps = rollbackDeps(runCommand);
+    deps.verificationAttempts = 3;
+    deps.readCandidateCspHeaders
+      .mockRejectedValueOnce(new Error("override not propagated"))
+      .mockResolvedValueOnce(new Headers({
+        "Content-Security-Policy": VALID_CANDIDATE_CSP,
+        "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+        "X-Spoonjoy-Worker-Version": PREVIOUS_VERSION,
+      }))
+      .mockResolvedValueOnce(new Headers({
+        "Content-Security-Policy": VALID_CANDIDATE_CSP,
+        "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+        "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+      }));
+
+    await expect(runProductionRollback(deps)).resolves.toMatchObject({
+      status: "rollback_promoted",
+      candidateVersionId: CANDIDATE_VERSION,
+    });
+
+    expect(deps.readCandidateCspHeaders).toHaveBeenCalledTimes(3);
+    expect(deps.sleep).toHaveBeenNthCalledWith(1, 1_000);
+    expect(deps.sleep).toHaveBeenNthCalledWith(2, 1_000);
+    expect(deps.sleep).toHaveBeenCalledTimes(2);
+  });
+
   it.each([
     ["a blank acknowledgement", undefined],
     ["a wrong acknowledgement", "ACK_SOMETHING_ELSE"],
@@ -447,6 +485,20 @@ describe("trusted production rollback orchestration", () => {
       "pnpm exec wrangler deployments list --json": deploymentPayload(CANDIDATE_VERSION),
     });
     await expect(runProductionRollback(rollbackDeps(activeRunner))).rejects.toThrow("already active");
+  });
+
+  it("rejects an invalid rollback retry window before any deployment command", async () => {
+    const runCommand = successfulRunner();
+    const deps = rollbackDeps(runCommand);
+    deps.verificationAttempts = 0;
+
+    await expect(runProductionRollback(deps)).rejects.toThrow("positive integer");
+
+    expect(runCommand).not.toHaveBeenCalled();
+    expect(deps.writeReleaseArtifact).toHaveBeenCalledWith(expect.objectContaining({
+      status: "failed_before_stage",
+      phase: "validate",
+    }));
   });
 
   it("restores the prior version when rollback promotion cannot be verified", async () => {
@@ -1576,6 +1628,7 @@ describe("release failure containment", () => {
   it("redacts sensitive failure text and bounds artifacts", async () => {
     const failure = new Error(
       `Bearer bearer-value token=token-value password:password-value api_key=api-value ` +
+      `Authorization: Basic dXNlcjpwYXNz ` +
       `aaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbb.cccccccccccccccc ${"x".repeat(600)}\nnext`,
     );
     const runCommand = successfulRunner({ "pnpm run deploy:preflight": failure });
@@ -1583,7 +1636,9 @@ describe("release failure containment", () => {
 
     await expect(runProductionCanaryRelease(deps)).rejects.toBe(failure);
     const artifact = deps.writeReleaseArtifact.mock.calls[0]?.[0];
-    expect(artifact.failure).not.toMatch(/bearer-value|token-value|password-value|api-value|aaaaaa/);
+    expect(artifact.failure).not.toMatch(
+      /bearer-value|token-value|password-value|api-value|dXNlcjpwYXNz|aaaaaa/,
+    );
     expect(artifact.failure?.length).toBeLessThanOrEqual(500);
     expect(artifact.failure).not.toContain("\n");
   });
@@ -1828,6 +1883,11 @@ describe("execFile command adapter", () => {
       "authorization assignment",
       "authorization: authorization-value\n",
       "authorization=[REDACTED]\n",
+    ],
+    [
+      "Basic authorization header",
+      "Authorization: Basic dXNlcjpwYXNz\n",
+      "Authorization=[REDACTED]\n",
     ],
     ["underscore API key", "api_key=api-value\n", "api_key=[REDACTED]\n"],
     ["hyphenated API key", "api-key: api-value\n", "api-key=[REDACTED]\n"],

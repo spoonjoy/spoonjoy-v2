@@ -158,7 +158,7 @@ function warningCleanStorybookWorkflow(): string {
     "  GIT_CONFIG_VALUE_0: main",
     "jobs:",
     "  build-storybook:",
-    "    name: build-storybook",
+    "    name: ${{ github.event_name == 'workflow_dispatch' && 'manual-build-storybook' || 'build-storybook' }}",
     "    runs-on: ubuntu-latest",
     "    permissions:",
     "      contents: read",

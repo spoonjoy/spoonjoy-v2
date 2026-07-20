@@ -154,6 +154,8 @@ const STORYBOOK_PAGES_OUTPUT_DIR = "storybook-static";
 const STORYBOOK_PAGES_PROJECT_NAME = "spoonjoy-storybook";
 const STORYBOOK_PAGES_DEPLOY_COMMAND =
   "pages deploy --project-name=spoonjoy-storybook --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }} --commit-dirty=true";
+const STORYBOOK_REQUIRED_JOB_NAME =
+  "${{ github.event_name == 'workflow_dispatch' && 'manual-build-storybook' || 'build-storybook' }}";
 const REQUIRED_PNPM_PACKAGE_MANAGER = "pnpm@10.28.1";
 const PINNED_CHECKOUT_ACTION = "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10";
 const PINNED_SETUP_NODE_ACTION = "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38";
@@ -1325,6 +1327,9 @@ function workflowHasStorybookDeployContract(workflow: string): boolean {
 
   for (const [jobStart, jobEnd] of jobs) {
     if (lines[jobStart].text !== "build-storybook:") continue;
+    if (blockScalarChildValue(lines, jobStart, jobEnd, "name") !== STORYBOOK_REQUIRED_JOB_NAME) {
+      return false;
+    }
     const permissions = childBlock(lines, jobStart, jobEnd, "permissions");
     if (!permissions || blockScalarChildValue(lines, permissions[0], permissions[1], "deployments") !== "write") {
       return false;
