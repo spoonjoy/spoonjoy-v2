@@ -20,6 +20,8 @@ Rounds 4-5 restricted CI evidence to actual `jobs.*.steps[]`, behaviorally invok
 
 Round 6 proves the auto-fixture arrow receives `{context}` and `use`, rejects direct/namespace/dynamic/re-export acquisition of official `test`/`expect` while allowing unrelated runtime helpers, covers Vite/Rollup's `(!)` warning form, requires the generated-contract clean command, and rejects literal-disabled CI jobs/steps with an enabled-decoy self-test.
 
+Round 7 pins the local/QA migration and generated-contract package scripts exactly so a wrapper-name decoy cannot satisfy the contract while running the real command outside the diagnostic gate.
+
 Current rerun: expected exit status 1; `workers-vitest-lane.test.ts` collects five tests, its parser self-test passes, and the remaining four fail on the absent package/config/CI lane; `warning-policy.test.ts` fails during transform on the intentionally absent `test/warning-policy.ts` module and collects no bodies. This is the current implementation-only red boundary.
 
 The failures are confined to the intentionally absent Unit 1.1 infrastructure:

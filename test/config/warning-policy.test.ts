@@ -380,11 +380,14 @@ describe("in-process warning policy", () => {
     expect(packageJson.scripts?.["verify:clean:build"]).toBe(
       "node scripts/run-with-warning-policy.mjs -- pnpm run build",
     );
-    expect(packageJson.scripts?.["verify:clean:migrations"]).toContain(
-      "run-with-warning-policy.mjs",
+    expect(packageJson.scripts?.["verify:clean:migrations"]).toBe(
+      "node scripts/run-with-warning-policy.mjs -- pnpm exec wrangler d1 migrations apply DB --local",
     );
-    expect(packageJson.scripts?.["verify:clean:generated-contract"]).toContain(
-      "run-with-warning-policy.mjs",
+    expect(packageJson.scripts?.["verify:clean:migrations:qa"]).toBe(
+      "node scripts/run-with-warning-policy.mjs -- pnpm exec wrangler d1 migrations list DB --remote --env qa",
+    );
+    expect(packageJson.scripts?.["verify:clean:generated-contract"]).toBe(
+      "node scripts/run-with-warning-policy.mjs -- sh -c 'pnpm run api:playground:generate && git diff --exit-code -- app/lib/generated/api-v1-playground.ts'",
     );
     expect(commands).toContain("pnpm run verify:clean:typecheck");
     expect(commands).toContain("pnpm run verify:clean:build");
