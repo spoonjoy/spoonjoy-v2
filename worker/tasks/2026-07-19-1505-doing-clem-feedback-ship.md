@@ -81,7 +81,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Output**: Executable official Workers-runtime lane and repo-wide zero-warning enforcement.
 **Acceptance**: Injected sentinel warnings fail in every runner, benign text does not; `pnpm run test:workers`, app coverage, Playwright, typecheck, build, and migration rehearsals pass with no warning emitted or suppressed.
 
-### ⬜ Unit 1.1c: Workers Test Lane - Verification
+### ✅ Unit 1.1c: Workers Test Lane - Verification
 **What**: Run both app and Workers coverage, the complete Playwright suite, wrapped typecheck/build/generated-contract/migration commands, and warning-sentinel self-tests; review config/CI isolation and prove no blanket suppression remains.
 **Output**: Dual 100% coverage reports, zero-warning gate logs, and reviewer result.
 **Acceptance**: New config/warning logic reaches 100%; the empty Workers lane passes; app remains 100%; every intentional sentinel fails for the expected diagnostic, every clean command passes, and fresh test-infrastructure review converges.
@@ -694,3 +694,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-19 19:07 Unit 1.1a red boundary: the Workers file's four tests fail on the absent package/config/CI lane, and the warning-policy suite fails transform on its absent shared gate module; no product assertion fails.
 - 2026-07-19 20:12 Unit 1.1a cold review converged after the red suite was expanded to 31 independently collected contracts (28 expected infrastructure failures, three parser/baseline passes) and every BLOCKER/MAJOR false-positive path was closed.
 - 2026-07-20 00:48 Unit 1.1b complete: shipped the official Workers lane, repo-wide diagnostic enforcement, exact Node SQLite exception, isolated browser runtime/cleanup, and CI gates; 7,292 app tests and 63 CI-equivalent browser tests passed, and five harsh review rounds converged with zero runtime residue.
+- 2026-07-20 01:05 Unit 1.1c complete: replayed 7,298 app tests and 10 Workers tests at 100%, 63 browser tests, all wrapped compiler/build/generated/migration gates, warning sentinels, and labeled zero-residue checks; fresh infrastructure review converged after three evidence-audit rounds.

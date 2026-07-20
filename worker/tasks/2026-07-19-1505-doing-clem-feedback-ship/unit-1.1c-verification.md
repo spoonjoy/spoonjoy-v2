@@ -20,3 +20,7 @@ Execution gates were verified from committed runtime head `bced3aac`; this verif
 ## Carried Finding
 
 The external OAuth callback `form-action 'self'` report-only CSP finding remains explicitly deferred to the later OAuth/security boundary and must be resolved before product shipment.
+
+## Review
+
+Fresh infrastructure review converged after three rounds. The reviewer independently accepted the app/Workers/browser and wrapped-command evidence, then required exact labeled D1 and literal clean-tree receipts before returning `CONVERGED`.
