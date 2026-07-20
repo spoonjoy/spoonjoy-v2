@@ -423,6 +423,8 @@ const WARNING_GATE_COMMAND_PATTERN = /^(?:[A-Z_][A-Z0-9_]*=(?:"[^"]*"|'[^']*'|\S
 const WARNING_GATE_COMMAND_PREFIX = "node scripts/warning-gate.ts -- ";
 const CI_INVOCATION_VALIDATION_COMMAND =
   `${WARNING_GATE_COMMAND_PREFIX}node scripts/workflow-security.mjs validate-ci-invocation`;
+const CI_DISPOSABLE_CLEANUP_COMMAND =
+  `${WARNING_GATE_COMMAND_PREFIX}pnpm run cleanup:local:apply`;
 const PLAYWRIGHT_MAN_DB_PRESEED_COMMAND =
   `sudo sh -c 'printf "%s\\n" "man-db man-db/auto-update boolean true" | debconf-set-selections'`;
 const PLAYWRIGHT_APT_INSTALL_COMMAND = "sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 apt-get -o Dpkg::Use-Pty=0 install -y --no-install-recommends xvfb fonts-noto-color-emoji fonts-unifont libfontconfig1 libfreetype6 xfonts-cyrillic xfonts-scalable fonts-liberation fonts-ipafont-gothic fonts-wqy-zenhei fonts-tlwg-loma-otf fonts-freefont-ttf libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 libcairo2 libcups2t64 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0t64 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2";
@@ -484,6 +486,7 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
     commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm run typecheck`),
     commandStepSignature("pnpm test:coverage"),
     commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm build`),
+    commandStepSignature(CI_DISPOSABLE_CLEANUP_COMMAND),
   ]],
   ["e2e", [
     actionStepSignature(PINNED_CHECKOUT_ACTION),
@@ -511,6 +514,7 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
     commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm db:seed`),
     commandStepSignature('printf \'SESSION_SECRET=%s\\nNODE_ENV=development\\n\' "$SESSION_SECRET" > .dev.vars'),
     commandStepSignature("pnpm test:e2e"),
+    commandStepSignature(CI_DISPOSABLE_CLEANUP_COMMAND),
     actionStepSignature(PINNED_UPLOAD_ARTIFACT_ACTION),
   ]],
 ]);
@@ -653,9 +657,21 @@ function parsedCiWorkflowIsCanonical(workflow: string): boolean {
       const commands = runCommandLines(step.run as string);
       const isOsvInstallStep = jobName === "advisory" &&
         commands.includes(`${WARNING_GATE_COMMAND_PREFIX}mkdir -p .cache/osv-scanner`);
+      const isDisposableCleanupStep =
+        commands.length === 1 && commands[0] === CI_DISPOSABLE_CLEANUP_COMMAND;
       if (
-        !exactObjectKeys(step, isOsvInstallStep ? ["name", "env", "run"] : ["name", "run"]) ||
+        !exactObjectKeys(
+          step,
+          isOsvInstallStep
+            ? ["name", "env", "run"]
+            : isDisposableCleanupStep
+              ? ["name", "if", "run"]
+              : ["name", "run"],
+        ) ||
         (isOsvInstallStep && !exactWorkflowRecord(step.env, CI_OSV_SCANNER_ENV)) ||
+        (isDisposableCleanupStep && (
+          step.name !== "🧹 Cleanup local disposable data" || step.if !== "always()"
+        )) ||
         commands.length === 0
       ) return false;
     }
