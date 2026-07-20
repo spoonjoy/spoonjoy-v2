@@ -4,6 +4,23 @@
   "main": "workers/app.ts",
   "compatibility_date": "2024-12-01",
   "compatibility_flags": ["nodejs_compat"],
+  "version_metadata": {
+    "binding": "CF_VERSION_METADATA"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "COOK_SESSIONS",
+        "class_name": "CookSession"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1_cook_session",
+      "new_sqlite_classes": ["CookSession"]
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
@@ -13,6 +30,8 @@
   ],
   "vars": {
     "NODE_ENV": "test",
-    "SPOONJOY_BASE_URL": "https://spoonjoy.test"
+    "SPOONJOY_BASE_URL": "https://spoonjoy.test",
+    "COOK_SESSION_BOOTSTRAP_MODE": "1",
+    "SESSION_SECRET": "spoonjoy-workers-cook-session-test-secret"
   }
 }

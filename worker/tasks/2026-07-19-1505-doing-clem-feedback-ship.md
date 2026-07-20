@@ -91,7 +91,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Output**: Red `test/config/cook-session-binding.test.ts` and Workers-lane `test/workers/cook-session-bootstrap.test.ts` evidence.
 **Acceptance**: Config test and `pnpm run test:workers -- test/workers/cook-session-bootstrap.test.ts` fail only on absent namespace code/config.
 
-### ⬜ Unit 1.2b: Namespace Bootstrap - Implementation
+### ✅ Unit 1.2b: Namespace Bootstrap - Implementation
 **What**: Add the inert `workers/cook-session.ts` export and bootstrap/protocol-stub routing in `workers/app.ts` plus `wrangler.json` production/QA binding, `COOK_SESSION_BOOTSTRAP_MODE=1`, legacy migration, and `app/cloudflare-env.d.ts` types. The DO probe creates/reads/drops its private table and deletes all storage before returning the exact planning-contract body; recognized future protocol-v1 requests return only the frozen retryable response and never touch storage.
 **Output**: One deployable, forward-compatible inert SQLite DO namespace.
 **Acceptance**: Unit 1.2a tests pass and `pnpm run typecheck` plus `pnpm run build` are green.
@@ -696,3 +696,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-20 00:48 Unit 1.1b complete: shipped the official Workers lane, repo-wide diagnostic enforcement, exact Node SQLite exception, isolated browser runtime/cleanup, and CI gates; 7,292 app tests and 63 CI-equivalent browser tests passed, and five harsh review rounds converged with zero runtime residue.
 - 2026-07-20 01:05 Unit 1.1c complete: replayed 7,298 app tests and 10 Workers tests at 100%, 63 browser tests, all wrapped compiler/build/generated/migration gates, warning sentinels, and labeled zero-residue checks; fresh infrastructure review converged after three evidence-audit rounds.
 - 2026-07-20 01:54 Unit 1.2a complete: froze 12 real-Workers CookSession lifecycle contracts plus three config contracts; exact red commands fail only on the absent namespace/class, warning sentinels and Node Worker tests stay isolated and green, and three harsh review rounds closed route, auth-ordering, adapter, storage-bookmark, probe, and lane-collision false positives.
+- 2026-07-20 11:41 Unit 1.2b complete: added the inert SQLite CookSession export, exact public/private bootstrap adapter, authenticated retry-only protocol stubs, production/QA binding and legacy migration, and environment types; real Workers coverage, typecheck, production/QA build dry-runs, and harsh Cloudflare/security review converged.

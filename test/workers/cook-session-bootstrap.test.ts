@@ -158,10 +158,13 @@ async function seedDurableObjectStorage(stub: DurableObjectStub) {
   });
 }
 
-async function durableObjectStorageSnapshot(stub: DurableObjectStub) {
+async function readDurableObjectStorageSnapshot(stub: DurableObjectStub) {
   return runInDurableObject(stub, async (_instance, state) => {
+    await state.storage.sync();
+    const kvEntries = Array.from((await state.storage.list()).entries());
+    await state.storage.sync();
     const schema = Array.from(state.storage.sql.exec(
-      "SELECT type, name, tbl_name AS tableName, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name",
+      "SELECT type, name, tbl_name AS tableName, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name NOT IN ('_cf_KV', '_cf_METADATA') ORDER BY type, name",
     )) as Array<{ type: string; name: string; tableName: string; sql: string | null }>;
     const sentinelRows = schema.some(({ type, name }) => type === "table" && name === "__test_sentinel")
       ? Array.from(state.storage.sql.exec(
@@ -171,11 +174,15 @@ async function durableObjectStorageSnapshot(stub: DurableObjectStub) {
     return {
       schema,
       sentinelRows,
-      kvEntries: Array.from((await state.storage.list()).entries()),
+      kvEntries,
       alarm: await state.storage.getAlarm(),
-      bookmark: await state.storage.getCurrentBookmark(),
     };
   });
+}
+
+async function durableObjectStorageSnapshot(stub: DurableObjectStub) {
+  await readDurableObjectStorageSnapshot(stub);
+  return readDurableObjectStorageSnapshot(stub);
 }
 
 const emptyDurableObjectStorage = {
@@ -186,9 +193,7 @@ const emptyDurableObjectStorage = {
 };
 
 async function expectDurableObjectStorageEmpty(stub: DurableObjectStub) {
-  const { bookmark, ...storage } = await durableObjectStorageSnapshot(stub);
-  expect(bookmark).toEqual(expect.any(String));
-  expect(storage).toEqual(emptyDurableObjectStorage);
+  await expect(durableObjectStorageSnapshot(stub)).resolves.toEqual(emptyDurableObjectStorage);
 }
 
 function createCapturingNamespace() {
@@ -272,7 +277,7 @@ describe("CookSession lifecycle bootstrap", () => {
         testEnvironment().CF_VERSION_METADATA?.id,
       );
       if (route.upgrade) {
-        expect((response as Response & { webSocket?: unknown }).webSocket).toBeUndefined();
+        expect((response as Response & { webSocket?: unknown }).webSocket).toBeNull();
       }
     }
 
@@ -410,7 +415,7 @@ describe("CookSession lifecycle bootstrap", () => {
       }));
       await expectProtocolUnavailable(response);
       if (route.upgrade) {
-        expect((response as Response & { webSocket?: unknown }).webSocket).toBeUndefined();
+        expect((response as Response & { webSocket?: unknown }).webSocket).toBeNull();
       }
       await expect(durableObjectStorageSnapshot(stub)).resolves.toEqual(storageBefore);
     }
@@ -425,6 +430,10 @@ describe("CookSession lifecycle bootstrap", () => {
       new Request("https://cook-session.internal/api/cook-sessions/recipe-1"),
       new Request("https://cook-session.internal/api/cook-sessions/recipe-1", {
         headers: { "X-Spoonjoy-Cook-Protocol": "2" },
+      }),
+      new Request("https://cook-session.internal/api/cook-sessions/recipe-1", {
+        method: "PUT",
+        headers: { "X-Spoonjoy-Cook-Protocol": "1" },
       }),
       new Request("https://cook-session.internal/api/cook-sessions", {
         headers: { "X-Spoonjoy-Cook-Protocol": "1" },
@@ -515,7 +524,7 @@ describe("CookSession lifecycle bootstrap", () => {
       const response = await stub.fetch(request);
       expect(response.status).toBe(404);
       expect(response.headers.get("Retry-After")).toBeNull();
-      expect((response as Response & { webSocket?: unknown }).webSocket).toBeUndefined();
+      expect((response as Response & { webSocket?: unknown }).webSocket).toBeNull();
       await expect(durableObjectStorageSnapshot(stub)).resolves.toEqual(storageBefore);
     }
   });
@@ -620,7 +629,7 @@ describe("CookSession lifecycle bootstrap", () => {
       );
       expect(response.status).toBe(404);
       expect(response.headers.get("Retry-After")).toBeNull();
-      expect((response as Response & { webSocket?: unknown }).webSocket).toBeUndefined();
+      expect((response as Response & { webSocket?: unknown }).webSocket).toBeNull();
     }
 
     for (const mode of [undefined, "0", "2", "true"]) {

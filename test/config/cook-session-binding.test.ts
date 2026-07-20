@@ -105,7 +105,7 @@ describe("CookSession namespace configuration", () => {
       "INSERT INTO __bootstrap_probe (id, value) VALUES (1, 'sqlite')",
       "SELECT value FROM __bootstrap_probe WHERE id = 1",
       "DROP TABLE __bootstrap_probe",
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('_cf_KV', '_cf_METADATA') ORDER BY name",
     ]);
     expect(storageMethodCalls(classSource, "deleteAll")).toHaveLength(1);
     expect(appSource).toMatch(/export\s*\{\s*CookSession\s*\}/);
