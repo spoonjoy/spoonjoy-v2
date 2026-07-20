@@ -22,8 +22,10 @@ function workflowJob(source: string, name: string) {
 }
 
 function runCommands(job: string) {
-  if (/^    if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*$/mi.test(job) ||
-    /^    continue-on-error:\s*true\s*$/mi.test(job)) return [];
+  if (/^    if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*(?:#.*)?$/mi.test(job) ||
+    /^    continue-on-error:\s*(?:true|\$\{\{\s*true\s*\}\})\s*(?:#.*)?$/mi.test(job)) {
+    return [];
+  }
   const stepsStart = job.search(/^    steps:\s*$/m);
   if (stepsStart === -1) return [];
   const stepsRemainder = job.slice(stepsStart).split("\n").slice(1).join("\n");
@@ -32,8 +34,10 @@ function runCommands(job: string) {
     ? stepsRemainder
     : stepsRemainder.slice(0, nextJobProperty);
   return steps.split(/(?=^      - )/m).flatMap((step) => {
-    if (/^        if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*$/mi.test(step) ||
-      /^        continue-on-error:\s*true\s*$/mi.test(step)) return [];
+    if (/^        if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*(?:#.*)?$/mi.test(step) ||
+      /^        continue-on-error:\s*(?:true|\$\{\{\s*true\s*\}\})\s*(?:#.*)?$/mi.test(step)) {
+      return [];
+    }
     const firstLine = step.match(/^      - run:\s+([^#]+?)\s*$/m);
     const nested = step.match(/^        run:\s+([^#]+?)\s*$/m);
     const command = firstLine?.[1] ?? nested?.[1];
@@ -150,20 +154,20 @@ coverage:
     - run: pnpm run test:coverage
 jobs:
   disabled-job:
-    if: false
+    if: \${{ false }} # disabled
     steps:
       - run: pnpm run test:workers:coverage
   tolerated-job:
-    continue-on-error: true
+    continue-on-error: \${{ true }} # tolerated
     steps:
       - run: pnpm run test:workers:coverage
   enabled-job:
     steps:
       - name: disabled step
-        if: \${{ false }}
+        if: false # disabled
         run: pnpm run test:workers:coverage
       - name: tolerated failure
-        continue-on-error: true
+        continue-on-error: true # tolerated
         run: pnpm run test:workers:coverage
       - name: real step
         run: pnpm run test:coverage
