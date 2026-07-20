@@ -18,7 +18,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 
 ## Completion Criteria
 - [ ] Every feedback-source row has either shipped behavior or a regression test for its explicit rejection.
-- [ ] Real Workers-runtime tests prove authenticated cook ownership, SQLite DO persistence, concurrent start convergence on one attempt, stale-attempt/revision conflicts, mutation replay, hibernatable WebSocket fan-out, eviction recovery, idempotent terminal transitions, projection retry fencing, scheduler collisions, and purge.
+- [ ] Real Workers-runtime tests prove authenticated cook ownership, SQLite DO persistence, concurrent start convergence on one attempt, stale-attempt/revision conflicts, mutation replay, hibernatable WebSocket fan-out and frame ordering, upgrade/purge races in both lock orders, eviction recovery, idempotent terminal transitions, projection retry fencing, scheduler collisions, and purge.
 - [ ] Private `GET /api/cook-sessions` returns active registry rows newest-first; an authenticated home revalidates immediately on mount/focus/visibility/online and every five seconds only while visible, online, and initially empty.
 - [ ] Two authenticated browser contexts can begin from an initially empty second-device home, discover the same active session within five seconds without a manual reload or recipe identifier, and synchronize step, checklist, and scale changes.
 - [ ] Anonymous progress remains usable across local reloads but never reaches the authenticated DO/D1 path; an anonymous -> user A -> logout -> user B browser sequence, including a stale socket and legacy local key, cannot cross principals.
@@ -34,11 +34,11 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - [ ] REST v1 contracts, OpenAPI, generated playground, and MCP recipe reads expose the same neutral course/tags metadata and optional `scale` contract without persisting scaled values; absent scale preserves current payloads and invalid scale errors match across adapters.
 - [ ] Existing import remains agent/API-only, current navigation remains reachable, and application/docs/tests contain no Pebble-specific runtime behavior.
 - [ ] The numeric migration applies from empty and from `test/fixtures/clem-feedback-pre-feature.sql` atop migrations 0000-0023, preserves foreign keys, reconciles its specified three unitless duplicates without quantity loss, produces exactly four saved rows, and matches Prisma-modeled tables/columns plus documented raw indexes.
-- [ ] QA and the bootstrap PR create migration `v1_cook_session` through atomic `wrangler deploy`; no rollback crosses that boundary, while the subsequent product PR proves version upload, 0% candidate smoke, 100% promotion, and post-boundary rollback remain operational.
+- [ ] QA and the bootstrap PR create migration `v1_cook_session` through atomic `wrangler deploy`; bootstrap Worker/DO protocol-v1 stubs and cross-version tests make eventual-consistency overlap retryable. The product PR activates protocol v1 atomically with forward repair only; a workflow-only follow-up restores 0% candidate smoke, 100% promotion, and rollback between protocol-v1-capable versions.
 - [ ] All changed code has 100% statement, branch, function, and line coverage; unit, Workers, Playwright, typecheck, build, and migration commands fail on warnings and pass cleanly in CI.
 - [ ] Changed UI passes keyboard/accessibility checks and `visual-qa-dogfood` at mobile and desktop viewports with no overlap, truncation, unreachable controls, or open absurdity findings.
 - [ ] QA migration/deploy, two-client smoke, REST/MCP shopping/save/tag/scaling smoke, and cleanup pass before merge; cleanup closes sockets, purges the known DO, removes its D1 projection and disposable save/tag/shopping rows, then proves zero residue.
-- [ ] The reviewed bootstrap/product PR chain merges in order with green CI; each automatic production workflow deploys its exact merge SHA, canonical health identifies it, production smoke passes, and disposable data is removed.
+- [ ] The reviewed bootstrap/product/canary-restoration PR chain merges in order with green CI; each automatic production workflow deploys its exact merge SHA, canonical health identifies it, production smoke passes, and disposable data is removed.
 - [ ] 100% test coverage on all new code.
 - [ ] All tests pass.
 - [ ] No warnings.
@@ -50,7 +50,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - All branches covered, including auth, malformed input, conflict, reconnect, retry, rollback, empty, boundary, and cleanup paths.
 - Cloudflare-specific DO/D1/WebSocket behavior runs in the official Workers Vitest integration with Istanbul and `--max-workers=1 --no-isolate`.
 - App services/routes/components run under the existing full 100% Istanbul gate; browser behavior runs in Playwright.
-- Unit, Workers, Playwright, typecheck, build, and migration runners fail on warnings.
+- Unit and Workers setups fail unexpected console/process warnings; every Playwright spec uses the shared browser warning/page-error fixture; a tested diagnostic-aware command wrapper fails actual typecheck, build, generated-contract, and Prisma/Wrangler migration warnings without false-positive matching ordinary output.
 
 ## TDD Requirements
 **Strict TDD - no exceptions:**
@@ -72,28 +72,28 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: 7,226 existing tests pass at 100% app coverage; fixture atop migrations 0000-0023 clears seeded application rows and yields exactly five total memberships/three active duplicates; foreign-key check is empty; typecheck/build pass; `git status --porcelain` is empty after commit; every source row maps to a unit or explicit rejection test.
 
 ### ⬜ Unit 1.1a: Workers Test Lane - Tests
-**What**: Add failing tests for `vitest.workers.config.ts`, `wrangler.workers-test.json`, exact Vitest `4.1.10`/Workers pool `0.18.6`, Istanbul 100% thresholds, serialized shared storage, warning failure, package commands, and CI invocation.
-**Output**: Red `test/config/workers-vitest-lane.test.ts` and workflow-contract evidence.
-**Acceptance**: Focused tests fail only because the Workers lane/dependencies are absent.
+**What**: Add failing tests for `vitest.workers.config.ts`, `wrangler.workers-test.json`, exact Vitest `4.1.10`/Workers pool `0.18.6`, Istanbul 100% thresholds, serialized shared storage, package commands, and CI invocation. In `test/config/warning-policy.test.ts`, test a new diagnostic-aware `scripts/run-with-warning-policy.mjs` against representative Node/Vite/Wrangler warning forms plus benign output containing the word "warning"; require app/Workers Vitest hooks to fail unexpected `console.warn`, unowned `console.error`, and process warnings; require a new `e2e/fixtures.ts` to fail browser `warning`/`error` console events and `pageerror`; and require every Playwright spec/setup file that imports `test` or `expect` to use that fixture while type-only support imports remain from `@playwright/test`.
+**Output**: Red Workers-lane, warning-policy, fixture-inventory, and workflow-contract evidence.
+**Acceptance**: Focused tests fail only because the Workers lane and warning-enforcement infrastructure are absent.
 
 ### ⬜ Unit 1.1b: Workers Test Lane - Implementation
-**What**: Upgrade all Vitest packages to `4.1.10`, add `@cloudflare/vitest-pool-workers@0.18.6`, `vitest.workers.config.ts`, `wrangler.workers-test.json`, `test:workers`/`test:workers:coverage`, and the mandatory CI job.
-**Output**: Executable official Workers-runtime test and coverage lane.
-**Acceptance**: `pnpm run test:workers` and app typecheck/build pass with no warnings.
+**What**: Upgrade all Vitest packages to `4.1.10`; add `@cloudflare/vitest-pool-workers@0.18.6`, `vitest.workers.config.ts`, `vitest.workers.setup.ts`, `wrangler.workers-test.json`, `test:workers`/`test:workers:coverage`, and the mandatory CI job. Add the tested warning wrapper and route typecheck, build, generated-contract checks, and local/QA migration rehearsals through it in verification/CI. Replace `test/setup.ts`'s blanket act/SQLite suppression with fail-after-test warning capture: tests that intentionally exercise logging must own an exact spy, React tests repair their act boundary, and Node SQLite processes use the runtime's warning-disable flag so no warning is emitted. Add the shared Playwright fixture and mechanically switch every test-bearing existing spec/setup import to it.
+**Output**: Executable official Workers-runtime lane and repo-wide zero-warning enforcement.
+**Acceptance**: Injected sentinel warnings fail in every runner, benign text does not; `pnpm run test:workers`, app coverage, Playwright, typecheck, build, and migration rehearsals pass with no warning emitted or suppressed.
 
 ### ⬜ Unit 1.1c: Workers Test Lane - Verification
-**What**: Run both app and Workers coverage and review config/CI isolation.
-**Output**: Dual 100% coverage reports and reviewer result.
-**Acceptance**: New config logic reaches 100%; the empty Workers lane passes; app remains 100%; fresh test-infrastructure review converges.
+**What**: Run both app and Workers coverage, the complete Playwright suite, wrapped typecheck/build/generated-contract/migration commands, and warning-sentinel self-tests; review config/CI isolation and prove no blanket suppression remains.
+**Output**: Dual 100% coverage reports, zero-warning gate logs, and reviewer result.
+**Acceptance**: New config/warning logic reaches 100%; the empty Workers lane passes; app remains 100%; every intentional sentinel fails for the expected diagnostic, every clean command passes, and fresh test-infrastructure review converges.
 
 ### ⬜ Unit 1.2a: Namespace Bootstrap - Tests
-**What**: Using the Unit 1.1 Workers lane, add failing config/runtime tests for class `CookSession`, binding `COOK_SESSIONS`, top-level/QA `v1_cook_session` `new_sqlite_classes`, environment types, SQLite storage, and the frozen public/internal probe paths, header, body, object name, success body, two-run idempotence, and mismatch/bootstrap-disabled 404s.
+**What**: Using the Unit 1.1 Workers lane, add failing config/runtime tests for class `CookSession`, binding `COOK_SESSIONS`, top-level/QA `v1_cook_session` `new_sqlite_classes`, environment types, SQLite storage, and the frozen public/internal probe paths, header, body, object name, success body, and two-run idempotence. Also cover every syntactically valid future public `/api/cook-sessions` method/path, including an upgrade request, and every recognized future internal request with `X-Spoonjoy-Cook-Protocol: 1`: after the frozen session/bearer scope and mutation/upgrade origin checks, each returns the exact HTTP 503 `cook_session_protocol_unavailable` envelope, `Retry-After: 1`, and `Cache-Control: private, no-store` without upgrade or storage mutation; malformed/unrecognized/bootstrap-disabled probe requests return 404.
 **Output**: Red `test/config/cook-session-binding.test.ts` and Workers-lane `test/workers/cook-session-bootstrap.test.ts` evidence.
 **Acceptance**: Config test and `pnpm run test:workers -- test/workers/cook-session-bootstrap.test.ts` fail only on absent namespace code/config.
 
 ### ⬜ Unit 1.2b: Namespace Bootstrap - Implementation
-**What**: Add the inert `workers/cook-session.ts` export and bootstrap route in `workers/app.ts` plus `wrangler.json` production/QA binding, `COOK_SESSION_BOOTSTRAP_MODE=1`, legacy migration, and `app/cloudflare-env.d.ts` types. The DO probe creates/reads/drops its private table and deletes all storage before returning the exact planning-contract body.
-**Output**: One deployable inert SQLite DO namespace.
+**What**: Add the inert `workers/cook-session.ts` export and bootstrap/protocol-stub routing in `workers/app.ts` plus `wrangler.json` production/QA binding, `COOK_SESSION_BOOTSTRAP_MODE=1`, legacy migration, and `app/cloudflare-env.d.ts` types. The DO probe creates/reads/drops its private table and deletes all storage before returning the exact planning-contract body; recognized future protocol-v1 requests return only the frozen retryable response and never touch storage.
+**Output**: One deployable, forward-compatible inert SQLite DO namespace.
 **Acceptance**: Unit 1.2a tests pass and `pnpm run typecheck` plus `pnpm run build` are green.
 
 ### ⬜ Unit 1.2c: Namespace Bootstrap - Verification
@@ -102,13 +102,13 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Namespace code is 100% covered and a fresh Cloudflare review has no BLOCKER/MAJOR finding.
 
 ### ⬜ Unit 1.3a: Bootstrap Deployment Mode - Tests
-**What**: Add failing tests in `test/scripts/deploy-production-canary.test.ts`, `test/scripts/deployment-preflight.test.ts`, and `test/release-workflow-security.test.ts` for `.github/workflows/production-deploy.yml` atomic bootstrap mode, exact-SHA/version/probe verification, no pre-boundary rollback, sanitized artifact output, and restored canary mode.
+**What**: Add failing tests in `test/scripts/deploy-production-canary.test.ts`, `test/scripts/deployment-preflight.test.ts`, and `test/release-workflow-security.test.ts` for `.github/workflows/production-deploy.yml`'s three source-controlled phases: atomic bootstrap, atomic first-product activation, and protocol-v1-only gradual canary. Freeze exact-SHA/version/probe verification, no rollback to a pre-boundary/inert version, sanitized artifact output, and 0%/100% canary behavior only in the final phase.
 **Output**: Red named deploy/workflow contract tests.
 **Acceptance**: Focused tests fail only because lifecycle-aware deployment behavior is absent.
 
 ### ⬜ Unit 1.3b: Bootstrap Deployment Mode - Implementation
-**What**: Extend `scripts/deploy-production-canary.ts`, `.github/workflows/production-deploy.yml`, and `docs/deployment.md` with the one-time atomic `wrangler deploy` branch and post-boundary canary branch, without a new orchestrator.
-**Output**: One reviewed lifecycle-aware production deployment mode.
+**What**: Extend `scripts/deploy-production-canary.ts`, `.github/workflows/production-deploy.yml`, and `docs/deployment.md` with explicit source-controlled atomic-bootstrap, atomic-product-activation, and protocol-v1-canary branches, without a new orchestrator; commit the bootstrap branch as active in this PR.
+**Output**: One reviewed lifecycle- and protocol-aware production deployment mode.
 **Acceptance**: Focused deploy/workflow tests, typecheck, build, and full app coverage pass.
 
 ### ⬜ Unit 1.3c: Bootstrap Deployment Mode - Verification
@@ -137,29 +137,29 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Merge-base succeeds, task docs and the frozen fixture remain reachable, `git status --porcelain` is empty, and the initial product branch equals the verified bootstrap merge.
 
 ### ⬜ Unit 1.8a: Product Deployment Mode - Tests
-**What**: On the product branch, change config/runtime/deploy contract tests to require no `COOK_SESSION_BOOTSTRAP_MODE`, public probe 404 with internal inert probe still covered, retained binding/migration, and restored versions-upload/canary behavior.
+**What**: On the product branch, change config/runtime/deploy contract tests to require no `COOK_SESSION_BOOTSTRAP_MODE`, public probe 404 with the private inert probe still covered, retained binding/migration, the source-controlled atomic-product-activation workflow branch, and explicit rejection of versions-upload/canary before the product smoke boundary.
 **Output**: Red updated binding/bootstrap/deploy tests.
 **Acceptance**: Focused tests fail only because the checked-in config/workflow still enables bootstrap deployment mode.
 
 ### ⬜ Unit 1.8b: Product Deployment Mode - Implementation
-**What**: Remove `COOK_SESSION_BOOTSTRAP_MODE`, retain gated probe code until Unit 7.1, and restore the existing version-upload/canary workflow/script path; do not change the Durable Object binding or migration.
-**Output**: Product-mode configuration with an unreachable public bootstrap probe and preserved namespace.
+**What**: Remove `COOK_SESSION_BOOTSTRAP_MODE`, retain private probe compatibility through Unit 7.1, and select the workflow/script's atomic-product-activation branch; do not change the Durable Object binding or migration and do not restore canaries yet.
+**Output**: Atomic product-activation configuration with an unreachable public bootstrap probe and preserved namespace.
 **Acceptance**: Unit 1.8a tests, Workers/app coverage, typecheck, and build pass; no production/QA config enables the public probe.
 
 ### ⬜ Unit 1.8c: Product Deployment Mode - Verification
-**What**: Run canary contract tests and fresh release/Cloudflare review, then finalize `bootstrap-handoff.md` with the product-mode commit and pushed head.
+**What**: Run all three deployment-phase contract tests and a fresh release/Cloudflare review, then finalize `bootstrap-handoff.md` with the product-activation-mode commit and pushed head.
 **Output**: Verified handoff manifest and clean pushed product branch.
 **Acceptance**: Review converges, `git status --porcelain` is empty, branch is pushed, and Unit 2.1 starts only from this checkpoint.
 
 ### ⬜ Unit 2.1a: Product Models - Tests
-**What**: From Unit 1.8c, add failing Prisma/schema tests for every Prisma-expressible product shape, shopping `@@unique` removal, and a seed-source/behavior test proving `prisma/seed.ts` no longer uses `shoppingListId_unitId_ingredientRefId` and remains idempotent; raw SQL checks belong to Unit 2.2. Before generating the new client, add a byte-shape test around MCP `import_recipe_from_url` proving a full imported Prisma row is projected to the pre-feature mutation contract and cannot leak `course` or future schema fields.
+**What**: From Unit 1.8c, add failing Prisma/schema tests for every Prisma-expressible product shape and shopping `@@unique` removal; add seed-source/behavior coverage proving `prisma/seed.ts` no longer uses `shoppingListId_unitId_ingredientRefId` and remains idempotent; and add focused shopping service tests proving its current recipe-add callsite no longer requires that generated selector while preserving pre-feature lookup/update-or-create behavior. Raw SQL checks belong to Unit 2.2 and final atomic shopping behavior to Unit 3.2. Before generating the new client, add a byte-shape test around MCP `import_recipe_from_url` proving a full imported Prisma row is projected to the pre-feature mutation contract and cannot leak `course` or future schema fields.
 **Output**: Red `test/models/clem-feedback-schema.test.ts` evidence.
 **Acceptance**: Focused tests fail only because the models/columns and explicit MCP import mutation projection are absent.
 
 ### ⬜ Unit 2.1b: Product Models - Implementation
-**What**: First replace `import_recipe_from_url`'s raw imported-recipe response in `app/lib/spoonjoy-api.server.ts` with an explicit pre-feature mutation projection, then implement the exact frozen models/relations/indexes and shopping-constraint removal in `prisma/schema.prisma`; replace the removed compound-selector upsert in `prisma/seed.ts` with idempotent active-row lookup/update-or-create; regenerate client and update `test/utils.ts` plus cleanup order.
+**What**: First replace `import_recipe_from_url`'s raw imported-recipe response in `app/lib/spoonjoy-api.server.ts` with an explicit pre-feature mutation projection. Then, in the same atomic implementation, replace generated compound-selector use in both `prisma/seed.ts` and `app/lib/shopping-list.server.ts` with tested interim active-row `findFirst` plus update-or-create behavior before removing the shopping constraint in `prisma/schema.prisma`; implement the remaining frozen models/relations/indexes, regenerate client, and update `test/utils.ts` plus cleanup order. Unit 3.2 replaces the interim service path with final raw-SQL atomicity.
 **Output**: Prisma-modeled product schema aligned with tombstone-preserving shopping identity and generated types.
-**Acceptance**: Model tests, MCP import byte-shape regression, Prisma generation/push, typecheck, and build pass; adding `Recipe.course` does not alter import output.
+**Acceptance**: Model/seed/interim-shopping tests, MCP import byte-shape regression, Prisma generation/push, typecheck, and build pass in this unit; no source references the removed generated selector and adding `Recipe.course` does not alter import output.
 
 ### ⬜ Unit 2.1c: Product Models - Verification
 **What**: Cover model helpers/cleanup branches and review ownership/FK/privacy boundaries.
@@ -417,19 +417,19 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: No horizontal overflow, overlap, or truncation occurs; all controls have reachable focus and at least 44px targets; active filters have programmatic selected state and visible labels; the absurdity ledger has no open item.
 
 ### ⬜ Unit 7.1a: Cook Contracts And Auth - Tests
-**What**: Add failing tests for every exact cook route/contract/security/hash and for removal of `/.well-known/spoonjoy-cook-session-bootstrap`, the internal probe path/header/table branch, and probe-specific success expectations while retaining binding/migration lifecycle assertions. Cover session access; bearer `kitchen:read` on list/detail/WebSocket; bearer `kitchen:write` on start/PATCH/complete/abandon/restart/purge; wrong/missing bearer scopes; and distinct 403 `insufficient_scope` versus `origin_forbidden` envelopes.
+**What**: Add failing tests for every exact cook route/contract/security/hash and for removal of the public `/.well-known/spoonjoy-cook-session-bootstrap` route while retaining the private probe, binding, and migration lifecycle assertions. Cover session access; bearer `kitchen:read` on list/detail/WebSocket; bearer `kitchen:write` on start/PATCH/complete/abandon/restart/purge; wrong/missing bearer scopes; and distinct 403 `insufficient_scope` versus `origin_forbidden` envelopes. Add frozen cross-version harnesses: old bootstrap Worker -> new product DO still completes the private probe, and new product Worker -> old bootstrap DO sends `X-Spoonjoy-Cook-Protocol: 1` and propagates exact 503 `cook_session_protocol_unavailable`, `Retry-After: 1`, and private/no-store without response cloning, upgrade, or storage mutation.
 **Output**: Red cook-contract and Worker-router tests.
 **Acceptance**: Focused tests fail against the inert bootstrap/runtime router.
 
 ### ⬜ Unit 7.1b: Cook Contracts And Auth - Implementation
-**What**: Remove public/internal bootstrap probe code and obsolete probe test expectations; replace inert behavior with `app/lib/cook-session-contract.ts`, `workers/cook-session-api.ts`, and exact authenticated routing from `workers/app.ts`, while retaining class/binding/migration. After `authenticateApiRequest`, enforce expanded `kitchen:read` or `kitchen:write` per the frozen route matrix before deriving/calling the DO, including WebSocket upgrades.
+**What**: Remove only the public bootstrap route/obsolete public expectations; replace inert public behavior with `app/lib/cook-session-contract.ts`, `workers/cook-session-api.ts`, and exact authenticated routing from `workers/app.ts`, while retaining the private probe plus class/binding/migration. Add `X-Spoonjoy-Cook-Protocol: 1` to every Worker -> DO request and propagate the frozen old-DO retry response. After `authenticateApiRequest`, enforce expanded `kitchen:read` or `kitchen:write` per the frozen route matrix before deriving/calling the DO, including WebSocket upgrades.
 **Output**: Secure typed HTTP/WebSocket transport boundary.
 **Acceptance**: Focused pure/Worker tests, typecheck, and build pass.
 
 ### ⬜ Unit 7.1c: Cook Contracts And Auth - Verification
 **What**: Reach 100% contract/router coverage and obtain security/API review.
 **Output**: Coverage and reviewer evidence.
-**Acceptance**: Every auth/origin/cache/validation/upgrade branch is covered and review converges.
+**Acceptance**: Every auth/origin/cache/validation/upgrade/protocol-skew branch is covered in both old/new directions and review converges.
 
 ### ⬜ Unit 7.2a: Cook State Machine - Tests
 **What**: Add failing Workers-runtime tests for every frozen session/receipt/projection column type, NOT NULL/check/no-default rule, exact response_status/response_json replay; concurrent start; normalized hash ordering; stale conflicts including differing receipt hash; progress validation; eviction; terminal idempotence; and atomic restart.
@@ -447,12 +447,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every transition/conflict/replay/eviction/error branch is covered and review converges.
 
 ### ⬜ Unit 7.3a: Projection And Alarm - Tests
-**What**: Add failing real D1/DO integration tests for the exact CookSessionIndex allowlist/schema and 200-code-point title bound; one per-object promise mutex serializes every state-changing request and alarm across external D1 I/O; brand-new start writes a conditional revision-0 D1 row before SQLite state; D1 failure returns 503 with no DO state; SQLite failure after D1 returns 503 and conditionally deletes the exact attempt/revision; failed compensation leaves an enumerable D1 row whose detail is 404; cleanup racing the handshake waits and rechecks; crash/restart plus no local state conditionally removes the exact orphan before retrying start. Also test later DO-first revision-fenced projection, retry delays `1/5/30/120/600` seconds, terminal non-resurrection, one alarm choosing the earlier deadline with due purge first, and the frozen telemetry allowlist/clamps.
+**What**: Add failing real D1/DO integration tests for the exact CookSessionIndex allowlist/schema and 200-code-point title bound; one per-object promise mutex serializes every state-changing request, WebSocket upgrade, and alarm across external D1 I/O; brand-new start writes a conditional revision-0 D1 row before SQLite state; D1 failure returns 503 with no DO state; SQLite failure after D1 returns 503 and conditionally deletes the exact attempt/revision; failed compensation leaves an enumerable D1 row whose detail is 404; cleanup racing the handshake waits and rechecks; crash/restart plus no local state conditionally removes the exact orphan before retrying start. Also test later DO-first revision-fenced projection, retry delays `1/5/30/120/600` seconds, terminal non-resurrection, one alarm choosing the earlier deadline with due purge first, and the frozen telemetry allowlist/clamps.
 **Output**: Red projection/scheduler tests using real D1/DO storage.
 **Acceptance**: Tests fail because the initial registry handshake, compensated failure paths, later projection, and scheduler behavior are absent.
 
 ### ⬜ Unit 7.3b: Projection And Alarm - Implementation
-**What**: Implement one per-instance promise mutex used by start, PATCH, complete, abandon, restart, purge/cleanup, and alarm entrypoints. Every operation re-reads SQLite after acquisition; hold the mutex across the D1-first initial registry handshake, SQLite commit, and exact-attempt/revision compensation. Cleanup acquires it and re-reads state, a new start repairs an exact no-state orphan before retrying, and alarms never act on pre-lock state. Preserve failed compensation as an enumerable orphan registry row with no fabricated detail. After initial success, implement metadata-only DO-first revision projection, the exact persisted retry schedule/alarm precedence, and only the frozen privacy-safe telemetry fields in `workers/cook-session.ts`.
+**What**: Implement one per-instance promise mutex used by start, PATCH, complete, abandon, restart, purge/cleanup, WebSocket upgrade, and alarm entrypoints. Every operation re-reads SQLite after acquisition; hold the mutex across the D1-first initial registry handshake, SQLite commit, and exact-attempt/revision compensation. Cleanup acquires it and re-reads state, a new start repairs an exact no-state orphan before retrying, and alarms/upgrades never act on pre-lock state. Preserve failed compensation as an enumerable orphan registry row with no fabricated detail. After initial success, implement metadata-only DO-first revision projection, the exact persisted retry schedule/alarm precedence, and only the frozen privacy-safe telemetry fields in `workers/cook-session.ts`.
 **Output**: Durable private registry/discovery projection.
 **Acceptance**: Focused Workers projection/alarm tests pass, no failure can leave an unindexed DO, orphan registry rows remain discoverable for cleanup, and D1 contains no progress field.
 
@@ -462,27 +462,27 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every initial D1 failure, SQLite failure, compensation success/failure, orphan-detail 404, retry/fencing/collision/telemetry branch is covered and review converges.
 
 ### ⬜ Unit 7.4a: Cook WebSockets - Tests
-**What**: Add failing real-runtime tests for authenticated upgrade, exact snapshot/error envelopes, receive-only behavior, client-message error `client_messages_unsupported` then close `1003/client-messages-unsupported`, hibernatable fan-out/reconnect, old-attempt `4009/stale-attempt`, terminal/purge `1000/session-terminal|session-purged`, and HTTP security separation.
+**What**: Add failing real-runtime tests for authenticated upgrade and the exact frame union `{type:'snapshot',state:<CookState>} | {type:'error',error:{code,message,retryable}}`; require exactly one current snapshot before a successful upgrade response returns. Prove every committed mutation emits exactly one snapshot per attached live socket with strictly increasing revisions and no duplicate same-revision fan-out; receive-only client data gets error `client_messages_unsupported` then close `1003/client-messages-unsupported`; hibernatable reconnect works; old attempts close `4009/stale-attempt`; terminal/purge close `1000/session-terminal|session-purged`; and no frame is sent after close or purge begins. Cover HTTP security separation and upgrade-versus-purge in both mutex acquisition orders: upgrade-first accepts/snapshots then purge closes it, while purge-first yields HTTP 404 without upgrade.
 **Output**: Red WebSocket tests under `--max-workers=1 --no-isolate`.
 **Acceptance**: Tests fail because socket handling is absent.
 
 ### ⬜ Unit 7.4b: Cook WebSockets - Implementation
-**What**: Implement server-to-client-only hibernatable WebSocket attachment/fan-out/reconnect and exact envelope/close-code behavior on `CookSession` and `workers/cook-session-api.ts`; reject client data messages with the frozen protocol error.
+**What**: Implement server-to-client-only hibernatable WebSocket attachment/fan-out/reconnect and exact frame/ordering/close-code behavior on `CookSession` and `workers/cook-session-api.ts`; admit upgrades inside the shared mutex after a fresh SQLite read, send the initial snapshot inside that lock, dedupe fan-out by socket revision, and reject client data with the frozen error frame then close.
 **Output**: Live canonical cross-device snapshot channel.
 **Acceptance**: Focused real-runtime WebSocket tests pass without response cloning or warnings.
 
 ### ⬜ Unit 7.4c: Cook WebSockets - Verification
 **What**: Reach 100% socket coverage and obtain Cloudflare/security review.
 **Output**: Workers coverage and reviewer evidence.
-**Acceptance**: Every upgrade/message/reconnect/stale/close branch is covered and review converges.
+**Acceptance**: Every upgrade/message/reconnect/stale/ordering/deduplication/close/race branch is covered and review converges.
 
 ### ⬜ Unit 7.5a: Retention And Purge - Tests
-**What**: Add failing Workers tests for 24-hour terminal/receipt retention, replay during retention, active-list exclusion, due-purge alarm precedence, close -> D1 delete -> alarm/storage delete ordering, exact 503 `purge_incomplete`, 60-second retry with storage preserved, owner-only purge, and D1-row-enumerated cleanup including a failed-initial-compensation orphan whose DO detail is 404. Assert all cleanup goes through the addressed DO mutex, an enumerated attempt/revision fences orphan deletion, and no direct caller-side index delete exists. Race restart against a due purge in both acquisition orders: restart-first preserves the new active attempt after alarm re-read; purge-first removes state and the later restart returns 404.
+**What**: Add failing Workers tests for 24-hour terminal/receipt retention, replay during retention, active-list exclusion, due-purge alarm precedence, close -> D1 delete -> alarm/storage delete ordering, exact 503 `purge_incomplete`, 60-second retry with storage preserved, owner-only purge, and D1-row-enumerated cleanup including a failed-initial-compensation orphan whose DO detail is 404. Assert all cleanup goes through the addressed DO mutex, an enumerated attempt/revision fences orphan deletion, and no direct caller-side index delete exists. Race restart and WebSocket upgrade independently against a due purge in both acquisition orders: restart-first preserves the new active attempt after alarm re-read; upgrade-first accepts/snapshots and is then closed; purge-first removes state so later restart/upgrade return 404 with no surviving socket.
 **Output**: Red retention/purge/cleanup tests.
 **Acceptance**: Tests fail because terminal lifecycle and purge are absent.
 
 ### ⬜ Unit 7.5b: Retention And Purge - Implementation
-**What**: Implement the exact frozen retention/purge sequence and errors in `workers/cook-session.ts`/`workers/cook-session-api.ts`, plus owner cleanup that enumerates `CookSessionIndex` rows before calling each server-derived DO through the shared mutex; after acquiring the mutex, cleanup conditionally removes only the enumerated attempt/revision when local state is absent. Alarm purge re-reads state after mutex acquisition and exits when restart cleared the due terminal state. List returns only `status='active'` ordered by `updatedAt DESC, recipeId DESC`; no route/script deletes an index row directly.
+**What**: Implement the exact frozen retention/purge sequence and errors in `workers/cook-session.ts`/`workers/cook-session-api.ts`, plus owner cleanup that enumerates `CookSessionIndex` rows before calling each server-derived DO through the shared mutex; after acquiring the mutex, cleanup conditionally removes only the enumerated attempt/revision when local state is absent. Alarm purge re-reads state after mutex acquisition and exits when restart cleared the due terminal state; while still holding the mutex, purge marks closing, closes every attached socket, and prevents later frames before D1/alarm/storage deletion. List returns only `status='active'` ordered by `updatedAt DESC, recipeId DESC`; no route/script deletes an index row directly.
 **Output**: Recoverable lifecycle cleanup with complete D1 registry until purge.
 **Acceptance**: Focused Workers/API cleanup tests pass and zero-residue assertions succeed.
 
@@ -492,7 +492,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every retention/deletion/failure/retry branch is covered and review converges.
 
 ### ⬜ Unit 8.1a: Cook Client Transport - Tests
-**What**: Add failing client/hook tests for outgoing shapes and the total frozen close/detail table: different-active adoption, same-active-after-4009 `stale_attempt_reconciliation_failed`, terminal/404 stop/list refresh, 401/403/other 4xx stop, 409 canonical active-or-terminal, 5xx/network backoff, unlisted close protocol-stop, offline/online, successful-open reset, and every named delay.
+**What**: Add failing client/hook tests for outgoing shapes and the total frozen close/detail table: different-active adoption, same-active-after-4009 `stale_attempt_reconciliation_failed`, terminal/404 stop/list refresh, 401/403/other 4xx stop, 409 canonical active-or-terminal, 503 `cook_session_protocol_unavailable` honoring `Retry-After: 1`, other 5xx/network backoff, unlisted close protocol-stop, offline/online, successful-open reset, and every named delay.
 **Output**: Red `test/hooks/useCookSession.test.tsx` transport tests.
 **Acceptance**: Tests fail because the authenticated client transport is absent.
 
@@ -602,7 +602,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every ordering/retry/target/error branch is covered and review converges.
 
 ### ⬜ Unit 9.3: Final Local Verification And Cold Reviews
-**What**: Run cleanup, Prisma generation/push, numeric migrations twice, generated-contract diff, script/app typechecks, full app/Workers coverage, Playwright, build, boundary oracle, and clean-tree checks; run fresh implementation, test, security/privacy, migration/release, API, and design reviews.
+**What**: Run cleanup, Prisma generation/push, numeric migrations twice, generated-contract diff, script/app typechecks, full app/Workers coverage, Playwright, build, boundary oracle, and clean-tree checks; execute every relevant command through its Unit 1.1 warning hook/wrapper and save the clean output. Run fresh implementation, test, security/privacy, migration/release, API, and design reviews.
 **Output**: Final local logs and converged reviewer reports.
 **Acceptance**: Every command passes with 100% new-code coverage and zero warnings; no review has an open BLOCKER/MAJOR; branch is clean and pushed.
 
@@ -616,25 +616,45 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Output**: Product PR URL, review disposition, and exact merge SHA.
 **Acceptance**: Required reviews/checks are green, no unresolved comment remains, and merged tree equals the final reviewed product tree.
 
-### ⬜ Unit 9.6: Production Canary Deployment
-**What**: Follow automatic post-boundary version upload, 0% candidate smoke, 100% promotion, and exact merge-SHA/version/canonical-health verification. On candidate failure, restore only the prior post-boundary version, keep this unit incomplete, create/merge a reviewed repair, and repeat Unit 9.6 for the repair merge.
-**Output**: Sanitized successful production release/version evidence; failed attempts additionally retain rollback/repair evidence without satisfying the unit.
-**Acceptance**: The final product or repair merge SHA is the sole 100% production version and canonical health identifies it; rollback alone never completes this unit or permits Unit 9.7.
+### ⬜ Unit 9.6: Atomic Product Activation
+**What**: Follow the source-controlled atomic-product-activation workflow, verify exact product merge SHA/version/canonical health, and prove the deployment never invokes versions-upload or a traffic split. Because protocol/state can now exist, any failure is repaired forward: keep this unit incomplete, create/merge a reviewed repair from the failed product head, and repeat the atomic activation; never restore the inert bootstrap Worker.
+**Output**: Sanitized successful atomic production release/version evidence; failed attempts retain forward-repair evidence without satisfying the unit.
+**Acceptance**: The final product or repair merge SHA is the sole 100% production version and canonical health identifies it; no rollback to the inert bootstrap version occurs and failure alone never permits Unit 9.7.
 
 ### ⬜ Unit 9.7: Production Smoke And Visual QA
-**What**: Run production Clem feature smoke, two-client continuation, `visual-qa-dogfood`, and canonical health against the promoted version. On any failure, capture identifiers/evidence, clean all created residue, restore only the prior post-boundary version, keep Unit 9.7 incomplete, create/merge a reviewed repair, and repeat Units 9.6-9.7.
-**Output**: Successful production smoke/visual evidence and closed absurdity ledger; failed attempts retain cleanup/rollback/repair evidence without satisfying the unit.
-**Acceptance**: Every product/visual scenario passes on `spoonjoy.app`, canonical health identifies the final promoted product/repair merge, all disposable IDs are captured for Unit 9.8, and rollback alone never permits Unit 9.8.
+**What**: Run production Clem feature smoke, two-client continuation, `visual-qa-dogfood`, and canonical health against the atomically activated version. On any failure, capture identifiers/evidence, clean all created residue, keep Unit 9.7 incomplete, create/merge a reviewed forward repair, and repeat Units 9.6-9.7 without restoring the inert bootstrap Worker.
+**Output**: Successful production smoke/visual evidence and closed absurdity ledger; failed attempts retain cleanup/forward-repair evidence without satisfying the unit.
+**Acceptance**: Every product/visual scenario passes on `spoonjoy.app`, canonical health identifies the atomically activated product/repair merge, all disposable IDs are captured for Unit 9.8, and only successful forward repair permits Unit 9.8.
 
 ### ⬜ Unit 9.8: Production Cleanup
 **What**: Close all production test sockets, purge every known disposable cook-session DO, remove its D1 projection rows and all disposable feature/user data, then run zero-residue assertions across D1, DO-accessible state, R2, and test users.
 **Output**: Sanitized production cleanup receipt and zero-residue evidence.
-**Acceptance**: Cleanup targets the exact Unit 9.7 identifiers, every deletion succeeds or proves absence, and all residue assertions return zero before task closure begins.
+**Acceptance**: Cleanup targets the exact Unit 9.7 identifiers, every deletion succeeds or proves absence, and all residue assertions return zero before canary restoration begins.
 
-### ⬜ Unit 9.9: Task Closure
-**What**: After Unit 9.8 succeeds, synchronize planning/doing checklists and status, scan task docs/feedback/PR/smoke/cleanup for ready work, archive Desk state, remove a worktree only when its status is empty and its merge is an ancestor of `origin/main`, delete only the corresponding merged local branch, and notify Slugger.
+### ⬜ Unit 9.9a: Canary Restoration - Tests
+**What**: From the shipped product merge, create a fresh `worker/clem-feedback-canary-restoration` branch/worktree and add failing workflow/deploy contract tests requiring protocol-v1-canary mode, 0% candidate override smoke, 100% promotion, exact SHA/version checks, rollback targets restricted to protocol-v1-capable versions, and no runtime/product/schema changes in the PR.
+**Output**: Red workflow-only restoration tests and exact changed-file allowlist.
+**Acceptance**: Tests fail only because the product merge intentionally remains in atomic-product-activation mode.
+
+### ⬜ Unit 9.9b: Canary Restoration - Implementation
+**What**: Change only `.github/workflows/production-deploy.yml`, its existing deployment script/tests, and `docs/deployment.md` as required to select the already-tested protocol-v1-canary branch; do not alter Worker, DO, app, schema, migration, or feature code.
+**Output**: Minimal workflow-only restoration patch.
+**Acceptance**: Focused release tests, full app coverage, typecheck, and build pass through zero-warning gates; changed-file allowlist contains only the named delivery files/tests/docs.
+
+### ⬜ Unit 9.9c: Canary Restoration - Verification
+**What**: Run the release/security test suite and obtain fresh Cloudflare/release/security review of the workflow-only diff and rollback floor.
+**Output**: Converged restoration review and clean pushed branch.
+**Acceptance**: Every deployment-phase branch remains covered, reviewers find no BLOCKER/MAJOR, and branch status is clean/pushed.
+
+### ⬜ Unit 9.10: Canary Restoration PR And Deployment
+**What**: Open and merge the workflow-only PR after green CI, then follow its automatic version upload, 0% candidate override smoke, 100% promotion, and exact merge-SHA/version/canonical-health verification. The previous product version is the rollback floor; on failure restore only that protocol-v1 version, create/merge a reviewed workflow repair, and repeat this unit. Clean any candidate-smoke residue and prove zero rows/objects/users remain.
+**Output**: Restoration PR URL/merge SHA plus sanitized candidate, promotion, rollback-floor, and cleanup evidence.
+**Acceptance**: The restoration merge SHA is 100% in production, canonical health identifies it, the 0%/100% path passed between protocol-v1-compatible versions, and all candidate-smoke residue is zero.
+
+### ⬜ Unit 9.11: Task Closure
+**What**: After Unit 9.10 succeeds, synchronize planning/doing checklists and status, scan task docs/feedback/PR/smoke/cleanup for ready work, archive Desk state, remove a worktree only when its status is empty and its merge is an ancestor of `origin/main`, delete only the corresponding merged local branch, and notify Slugger.
 **Output**: Done task docs, archived Desk record, cleanup receipt, and Slugger completion message.
-**Acceptance**: Unit 9.8 is accepted, no ready required work or residue remains, and every terminal artifact points to the shipped production merge.
+**Acceptance**: Unit 9.10 is accepted, no ready required work or residue remains, and every terminal artifact points to the shipped production restoration merge.
 
 ## Execution
 - **TDD strictly enforced**: tests -> red -> implement -> green -> refactor.
@@ -665,3 +685,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-19 18:18 Scrutiny Pass 8 addressed six findings: handshake cleanup mutex, authenticated remote purge, schema-time import shielding, read-only OpenAPI schemas, search projection ownership, and fixture reset.
 - 2026-07-19 18:37 Scrutiny Pass 8 Round 2 addressed five findings: scale contract ownership, tag content hashing, cleanup origin, atomic authoring, and self-reference reset.
 - 2026-07-19 18:57 Scrutiny redesign addressed cook scope enforcement, fixture survival across bootstrap, and restart/purge serialization.
+- 2026-07-19 19:20 Scrutiny redesign added cross-version atomic activation, exact socket admission/frame ordering, compile-safe Prisma sequencing, and owned zero-warning enforcement.
