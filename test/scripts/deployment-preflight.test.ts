@@ -14,6 +14,7 @@ import {
   type CliIO,
   type DeploymentPreflightInputs,
 } from "../../scripts/deployment-preflight";
+import { findUnexpectedWarnings } from "../../scripts/warning-gate";
 
 const CHECKOUT_ACTION = "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10";
 const SETUP_NODE_ACTION = "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38";
@@ -4036,6 +4037,7 @@ describe("formatCheck", () => {
       formatCheck({ name: "x", ok: false, severity: "error", message: "bad" }),
     ).toBe("FAIL x: bad");
   });
+
 });
 
 function makeIO(): { io: CliIO; logs: string[]; errors: string[]; exits: number[] } {
@@ -4057,6 +4059,28 @@ function makeIO(): { io: CliIO; logs: string[]; errors: string[]; exits: number[
 }
 
 describe("main (CLI entrypoint)", () => {
+  it.each([
+    ["a skipped remote check", "1", "this command must not run"],
+    ["an up-to-date remote database", "0", "[]"],
+  ])("keeps the complete successful CLI output warning-clean with %s", async (_label, skipRemote, stdout) => {
+    const { io, logs, errors, exits } = makeIO();
+
+    await main({
+      io,
+      runWrangler: async () => {
+        if (skipRemote === "1") throw new Error(stdout);
+        return { stdout, stderr: "", exitCode: 0 };
+      },
+      env: { SPOONJOY_PREFLIGHT_SKIP_REMOTE: skipRemote },
+    });
+
+    expect(errors).toEqual([]);
+    expect(exits).toEqual([]);
+    expect(logs.at(-2)).toMatch(/^PASS remote D1 migrations:/);
+    expect(logs.at(-1)).toBe("Deployment preflight passed.");
+    expect(findUnexpectedWarnings(logs.join("\n"))).toEqual([]);
+  });
+
   it("prints WARN line and a passed-with-warnings summary when wrangler reports an auth-keyed soft failure", async () => {
     const { io, logs, errors, exits } = makeIO();
 
