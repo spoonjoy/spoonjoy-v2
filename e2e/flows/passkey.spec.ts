@@ -59,11 +59,42 @@ test.describe('Passkey lifecycle', () => {
     await page.getByRole('button', { name: /log\s*out/i }).first().click();
     await page.waitForURL((url) => !url.pathname.startsWith('/account'));
 
-    // --- sign in with the passkey (username-first) ---
-    await page.goto('/login');
-    await page.getByLabel('Email').first().fill(email);
+    // --- sign in with the passkey through an OAuth continuation. This must
+    // replace the login document so the consent page receives its callback CSP.
+    const redirectUri = 'https://client.example/oauth/passkey-e2e-callback';
+    const registration = await page.request.post('/oauth/register', {
+      data: { client_name: 'Passkey E2E OAuth Client', redirect_uris: [redirectUri] },
+    });
+    expect(registration.status()).toBe(201);
+    const { client_id: clientId } = await registration.json() as { client_id: string };
+    const authorizeParams = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      code_challenge: 'A'.repeat(43),
+      code_challenge_method: 'S256',
+      scope: 'kitchen:read',
+      state: 'passkey-oauth-e2e-state',
+      resource: 'https://spoonjoy.app/mcp',
+    });
+    await page.goto(`/oauth/authorize?${authorizeParams}`);
+    await expect(page).toHaveURL(/\/login\?redirectTo=/);
+    const loginEmail = page.getByLabel('Email').first();
+    await expect(page.getByRole('button', { name: /sign in with a passkey/i }).first()).toBeVisible();
+    await loginEmail.fill(email);
+    await expect(loginEmail).toHaveValue(email);
+    const consentDocument = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === '/oauth/authorize'
+        && response.request().method() === 'GET'
+        && response.headers()['content-type']?.includes('text/html') === true;
+    });
     await page.getByRole('button', { name: /sign in with a passkey/i }).first().click();
-    await page.waitForURL((url) => !url.pathname.startsWith('/login'));
+    await expect(page.getByRole('heading', { name: /connect passkey e2e oauth client to spoonjoy/i })).toBeVisible();
+    const consentResponse = await consentDocument;
+    expect(consentResponse.headers()['content-security-policy']).toContain(
+      "form-action 'self' https://client.example",
+    );
 
     // settings is auth-gated; reaching it confirms the passkey signed us in.
     await page.goto('/account/settings');

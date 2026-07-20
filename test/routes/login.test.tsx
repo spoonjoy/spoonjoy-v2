@@ -261,6 +261,34 @@ describe("Login Route", () => {
       expect(response).toBeInstanceOf(Response);
       expect(response.status).toBe(302);
       expect(response.headers.get("Location")).toBe("/cookbooks");
+      expect(response.headers.get("X-Remix-Reload-Document")).toBeNull();
+    });
+
+    it("forces a full document load when password login continues OAuth consent", async () => {
+      const email = faker.internet.email();
+      const username = faker.internet.username() + "_" + faker.string.alphanumeric(8);
+      const password = "testPassword123";
+      await createUser(db, email, username, password);
+
+      const formData = new FormData();
+      formData.set("email", email);
+      formData.set("password", password);
+      const redirectTo = "/oauth/authorize?client_id=client&redirect_uri=https%3A%2F%2Fclient.example%2Fcallback";
+      const request = new Request(
+        `http://localhost:3000/login?redirectTo=${encodeURIComponent(redirectTo)}`,
+        { method: "POST", body: formData },
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      expect(response).toBeInstanceOf(Response);
+      expect(response.headers.get("Location")).toBe(redirectTo);
+      expect(response.headers.get("X-Remix-Reload-Document")).toBe("true");
+      expect(response.headers.get("Set-Cookie")).toBeDefined();
     });
 
     it.each(["https://evil.example/phish", "//evil.example/phish"])(

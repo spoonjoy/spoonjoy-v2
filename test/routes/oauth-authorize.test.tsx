@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { render, screen } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
-import OAuthAuthorize, { loader, action } from "~/routes/oauth.authorize";
+import OAuthAuthorize, { action, headers as authorizeHeaders, loader } from "~/routes/oauth.authorize";
 import type { AuthorizeView } from "~/lib/oauth-routes.server";
 import { registerOAuthClient } from "~/lib/oauth-server.server";
 import { db } from "~/lib/db.server";
@@ -207,6 +207,23 @@ describe("oauth.authorize route", () => {
         },
       },
     });
+  });
+
+  it("forwards the validated consent origin into the document response headers", () => {
+    const loaderHeaders = new Headers({
+      [OAUTH_FORM_ACTION_ORIGIN_HEADER]: "https://claude.ai",
+    });
+    const parentHeaders = new Headers({ "X-Parent": "kept" });
+
+    const result = new Headers(authorizeHeaders({
+      loaderHeaders,
+      parentHeaders,
+      actionHeaders: new Headers(),
+      errorHeaders: undefined,
+    }));
+
+    expect(result.get(OAUTH_FORM_ACTION_ORIGIN_HEADER)).toBe("https://claude.ai");
+    expect(result.get("X-Parent")).toBe("kept");
   });
 
   it("loader returns 429 when the IP rate limiter denies the request", async () => {

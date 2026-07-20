@@ -122,6 +122,20 @@ function observeOAuthAuthorizeView(
   return input.view;
 }
 
+export function headers({
+  parentHeaders,
+  loaderHeaders,
+  actionHeaders,
+  errorHeaders,
+}: Route.HeadersArgs) {
+  const result = new Headers(parentHeaders);
+  for (const source of [loaderHeaders, actionHeaders, errorHeaders]) {
+    if (!source) continue;
+    for (const [name, value] of source) result.set(name, value);
+  }
+  return result;
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const startedAt = Date.now();
   const limited = await checkAuthorizeRateLimit(request, context.cloudflare?.env);
