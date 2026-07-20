@@ -257,22 +257,22 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: All surfaces pass one state matrix and review converges.
 
 ### ⬜ Unit 4.1a: Neutral Recipe Metadata - Tests
-**What**: Add failing tests for top-level `course`/`tags` on `recipeDetail`, `formatRecipe`/`formatRecipeSummary`, and actual MCP `get_recipe`/`search_recipes`/`search_spoonjoy`, plus REST list/detail/search, OpenAPI, and playground, with no personalized save state.
+**What**: Add failing tests for top-level `course`/`tags` on read-specific wrappers around `recipeDetail`, `formatRecipe`, and `formatRecipeSummary`, and actual MCP `get_recipe`/`search_recipes`/`search_spoonjoy`, plus REST list/detail/search, OpenAPI, and playground, with no personalized save state. Add byte-shape regression fixtures proving the base serializers remain unchanged for native sync; REST recipe create/update/fork, step create/update/delete, ingredient create/delete, step reorder/output-use replace, and import/recovery responses; MCP create/update/import; and cookbook summaries.
 **Output**: Red metadata contract tests.
-**Acceptance**: Tests fail because course/tags are absent from shared serializers and schemas.
+**Acceptance**: Read-surface tests fail because course/tags are absent, while every named non-read consumer retains its pre-feature byte shape.
 
 ### ⬜ Unit 4.1b: Neutral Recipe Metadata - Implementation
-**What**: Add shared metadata serialization and wire exactly the Unit 4.1a symbols/routes plus `app/lib/api-v1-openapi.server.ts`, `app/lib/generated/api-v1-playground.ts`, and existing developer API docs.
+**What**: Add read-specific metadata wrappers without changing the base serializer output, and wire only REST list/detail/search plus MCP `get_recipe`/`search_recipes`/`search_spoonjoy`, `app/lib/api-v1-openapi.server.ts`, `app/lib/generated/api-v1-playground.ts`, and existing developer API docs. Keep native sync, every named REST/MCP mutation or recovery response, and cookbook summaries on the unchanged base serializers.
 **Output**: Neutral course/tag read parity.
-**Acceptance**: Focused metadata/API/MCP/OpenAPI tests pass and two consecutive playground generations leave no git diff.
+**Acceptance**: Focused metadata/API/MCP/OpenAPI tests and every non-read byte-shape regression pass; two consecutive playground generations leave no git diff.
 
 ### ⬜ Unit 4.1c: Neutral Recipe Metadata - Verification
-**What**: Reach 100% serializer/adapter coverage and obtain API compatibility review.
+**What**: Reach 100% read-wrapper/adapter coverage, rerun the named base-serializer consumer matrix, and obtain API compatibility review.
 **Output**: Coverage, generated diff, and reviewer evidence.
-**Acceptance**: Every empty/order/privacy branch is covered and review converges.
+**Acceptance**: Every empty/order/privacy branch is covered, all enumerated mutation/native/cookbook contracts remain byte-identical, and review converges.
 
 ### ⬜ Unit 4.2a: Read-Time Scaling - Tests
-**What**: Add failing pure/REST/MCP tests for the exact frozen `GET /api/v1/recipes/:id?scale=` and MCP `get_recipe({scale})` contract: finite `0.1..100`, top-level scale metadata, six-decimal ingredient quantity rounding, unchanged servings/storage, absent-argument payload compatibility, REST `validation_error` field `scale`, and MCP invalid-argument mapping.
+**What**: Add failing pure/REST/MCP tests for the exact frozen `GET /api/v1/recipes/:id?scale=` and MCP `get_recipe({scale})` contract: finite `0.1..100`, top-level scale metadata, six-decimal ingredient quantity rounding, unchanged servings/storage, absent-argument byte compatibility with Unit 4.1's new post-metadata unscaled read payload, REST `validation_error` field `scale`, and MCP invalid-argument mapping.
 **Output**: Red scaling-helper and adapter tests.
 **Acceptance**: Tests fail because the shared validator/scaler and arguments are absent.
 
@@ -447,19 +447,19 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every transition/conflict/replay/eviction/error branch is covered and review converges.
 
 ### ⬜ Unit 7.3a: Projection And Alarm - Tests
-**What**: Add failing Workers tests for the exact CookSessionIndex allowlist/schema, 200-code-point title bound, synchronous initial projection/503 error, revision-fenced upsert, retry delays `1/5/30/120/600` seconds, terminal non-resurrection, one alarm choosing the earlier deadline with due purge first, and the frozen telemetry allowlist/clamps.
+**What**: Add failing real D1/DO integration tests for the exact CookSessionIndex allowlist/schema and 200-code-point title bound; brand-new start writes a conditional revision-0 D1 row before SQLite state; D1 failure returns 503 with no DO state; SQLite failure after D1 returns 503 and conditionally deletes the exact attempt/revision; failed compensation leaves an enumerable D1 row whose detail is 404 and cleanup can retry. Also test later DO-first revision-fenced projection, retry delays `1/5/30/120/600` seconds, terminal non-resurrection, one alarm choosing the earlier deadline with due purge first, and the frozen telemetry allowlist/clamps.
 **Output**: Red projection/scheduler tests using real D1/DO storage.
-**Acceptance**: Tests fail because projection and scheduler behavior is absent.
+**Acceptance**: Tests fail because the initial registry handshake, compensated failure paths, later projection, and scheduler behavior are absent.
 
 ### ⬜ Unit 7.3b: Projection And Alarm - Implementation
-**What**: Implement metadata-only D1 projection, exact persisted retry schedule/alarm precedence, and only the frozen privacy-safe telemetry fields in `workers/cook-session.ts`.
+**What**: Implement the D1-first initial registry handshake and exact-attempt/revision compensation before committing initial SQLite state; preserve failed compensation as an enumerable orphan registry row with no fabricated detail. After initial success, implement metadata-only DO-first revision projection, the exact persisted retry schedule/alarm precedence, and only the frozen privacy-safe telemetry fields in `workers/cook-session.ts`.
 **Output**: Durable private registry/discovery projection.
-**Acceptance**: Focused Workers projection/alarm tests pass and D1 contains no progress field.
+**Acceptance**: Focused Workers projection/alarm tests pass, no failure can leave an unindexed DO, orphan registry rows remain discoverable for cleanup, and D1 contains no progress field.
 
 ### ⬜ Unit 7.3c: Projection And Alarm - Verification
-**What**: Reach 100% projection/scheduler coverage and obtain Cloudflare/data/privacy review.
+**What**: Reach 100% initial-handshake/compensation/projection/scheduler coverage and obtain Cloudflare/data/privacy review.
 **Output**: Coverage and reviewer evidence.
-**Acceptance**: Every retry/fencing/collision/telemetry branch is covered and review converges.
+**Acceptance**: Every initial D1 failure, SQLite failure, compensation success/failure, orphan-detail 404, retry/fencing/collision/telemetry branch is covered and review converges.
 
 ### ⬜ Unit 7.4a: Cook WebSockets - Tests
 **What**: Add failing real-runtime tests for authenticated upgrade, exact snapshot/error envelopes, receive-only behavior, client-message error `client_messages_unsupported` then close `1003/client-messages-unsupported`, hibernatable fan-out/reconnect, old-attempt `4009/stale-attempt`, terminal/purge `1000/session-terminal|session-purged`, and HTTP security separation.
@@ -477,12 +477,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every upgrade/message/reconnect/stale/close branch is covered and review converges.
 
 ### ⬜ Unit 7.5a: Retention And Purge - Tests
-**What**: Add failing Workers tests for 24-hour terminal/receipt retention, replay during retention, active-list exclusion, due-purge alarm precedence, close -> D1 delete -> alarm/storage delete ordering, exact 503 `purge_incomplete`, 60-second retry with storage preserved, owner-only purge, and D1-row-enumerated cleanup.
+**What**: Add failing Workers tests for 24-hour terminal/receipt retention, replay during retention, active-list exclusion, due-purge alarm precedence, close -> D1 delete -> alarm/storage delete ordering, exact 503 `purge_incomplete`, 60-second retry with storage preserved, owner-only purge, and D1-row-enumerated cleanup including a failed-initial-compensation orphan whose DO detail is 404.
 **Output**: Red retention/purge/cleanup tests.
 **Acceptance**: Tests fail because terminal lifecycle and purge are absent.
 
 ### ⬜ Unit 7.5b: Retention And Purge - Implementation
-**What**: Implement the exact frozen retention/purge sequence and errors in `workers/cook-session.ts`/`workers/cook-session-api.ts`, plus owner cleanup that enumerates `CookSessionIndex` rows before calling each server-derived DO; list returns only `status='active'` ordered by `updatedAt DESC, recipeId DESC`.
+**What**: Implement the exact frozen retention/purge sequence and errors in `workers/cook-session.ts`/`workers/cook-session-api.ts`, plus owner cleanup that enumerates `CookSessionIndex` rows before calling each server-derived DO; cleanup conditionally removes an orphan registry row when the addressed DO proves no state, and list returns only `status='active'` ordered by `updatedAt DESC, recipeId DESC`.
 **Output**: Recoverable lifecycle cleanup with complete D1 registry until purge.
 **Acceptance**: Focused Workers/API cleanup tests pass and zero-residue assertions succeed.
 
@@ -661,3 +661,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-19 17:29 Quality redesign separated REST/MCP from web tag parity and added post-promotion recovery.
 - 2026-07-19 17:33 Quality Pass 5 converged across all 114 units.
 - 2026-07-19 17:38 Scrutiny Pass 6 fixed seed/raw-index integration, actual MCP naming, and bootstrap cleanup ownership.
+- 2026-07-19 17:45 Scrutiny Pass 7 fixed initial registry atomicity and isolated metadata read serializers from mutation/native contracts.
