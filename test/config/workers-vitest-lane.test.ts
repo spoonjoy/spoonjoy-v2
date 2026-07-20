@@ -22,7 +22,8 @@ function workflowJob(source: string, name: string) {
 }
 
 function runCommands(job: string) {
-  if (/^    if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*$/mi.test(job)) return [];
+  if (/^    if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*$/mi.test(job) ||
+    /^    continue-on-error:\s*true\s*$/mi.test(job)) return [];
   const stepsStart = job.search(/^    steps:\s*$/m);
   if (stepsStart === -1) return [];
   const stepsRemainder = job.slice(stepsStart).split("\n").slice(1).join("\n");
@@ -152,6 +153,10 @@ jobs:
     if: false
     steps:
       - run: pnpm run test:workers:coverage
+  tolerated-job:
+    continue-on-error: true
+    steps:
+      - run: pnpm run test:workers:coverage
   enabled-job:
     steps:
       - name: disabled step
@@ -165,6 +170,7 @@ jobs:
 `;
 
     expect(runCommands(workflowJob(workflow, "disabled-job"))).toEqual([]);
+    expect(runCommands(workflowJob(workflow, "tolerated-job"))).toEqual([]);
     expect(runCommands(workflowJob(workflow, "enabled-job"))).toEqual([
       "pnpm run test:coverage",
     ]);

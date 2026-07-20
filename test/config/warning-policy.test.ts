@@ -119,7 +119,8 @@ function workflowRunCommands(source: string) {
     ? jobsRemainder
     : jobsRemainder.slice(0, nextTopLevel);
   return jobs.split(/(?=^  [a-z][a-z0-9-]*:\s*$)/m).flatMap((job) => {
-    if (/^    if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*$/mi.test(job)) return [];
+    if (/^    if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*$/mi.test(job) ||
+      /^    continue-on-error:\s*true\s*$/mi.test(job)) return [];
     const stepsStart = job.search(/^    steps:\s*$/m);
     if (stepsStart === -1) return [];
     const stepsRemainder = job.slice(stepsStart).split("\n").slice(1).join("\n");
