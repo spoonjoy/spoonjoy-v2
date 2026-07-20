@@ -22,7 +22,7 @@ function finalizeResponse(
   env: CloudflareEnvironment,
   nonce?: string,
 ): Response {
-  const finalized = withSecurityHeaders(response, nonce);
+  const finalized = withSecurityHeaders(response, nonce, env);
   const workerVersionId = env.CF_VERSION_METADATA?.id;
   if (workerVersionId) {
     finalized.headers.set("X-Spoonjoy-Worker-Version", workerVersionId);
@@ -53,8 +53,8 @@ export default {
         return finalizeResponse(response, env);
       }
 
-      // One nonce per request: it must appear identically in the report-only
-      // CSP header (below) and in the SSR shell's inline <script> nonces,
+      // One nonce per request: it must appear identically in the selected CSP
+      // header (below) and in the SSR shell's inline <script> nonces,
       // threaded via loadContext → entry.server → NonceContext.
       const nonce = generateNonce();
       const response = await requestHandler(request, {

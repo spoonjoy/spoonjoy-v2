@@ -16,6 +16,11 @@ on:
         required: false
         default: ""
         type: string
+      csp_report_only_break_glass:
+        description: Type ACK_REPORT_ONLY_CSP_ROLLBACK only for an intentional rollback to report-only, absent, or weakened CSP
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   group: production-deploy
@@ -31,6 +36,7 @@ env:
   GIT_CONFIG_VALUE_0: main
   SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.source_sha }}
   ROLLBACK_VERSION_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.rollback_version_id || '' }}
+  SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: ${{ github.event_name == 'workflow_dispatch' && inputs.csp_report_only_break_glass || '' }}
 
 jobs:
   deploy:
@@ -65,77 +71,7 @@ jobs:
           WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           WORKFLOW_RUN_PATH: ${{ github.event.workflow_run.path }}
-        run: |
-          set -euo pipefail
-
-          if ! printf '%s' "$SOURCE_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
-            echo "source_sha must be an exact 40-character lowercase Git SHA" >&2
-            exit 1
-          fi
-          if [ -n "$ROLLBACK_VERSION_ID" ] && ! printf '%s' "$ROLLBACK_VERSION_ID" | grep -Eiq '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'; then
-            echo "rollback_version_id must be an exact Worker version UUID" >&2
-            exit 1
-          fi
-
-          git fetch --no-tags origin main:refs/remotes/origin/main
-          if ! git merge-base --is-ancestor "$SOURCE_SHA" origin/main; then
-            echo "Source SHA is not on origin/main" >&2
-            exit 1
-          fi
-
-          test "$WORKFLOW_RUN_PATH" = '.github/workflows/ci.yml' || test "$GITHUB_EVENT_NAME" = 'workflow_dispatch'
-          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
-            test -z "$ROLLBACK_VERSION_ID"
-            test "$WORKFLOW_RUN_CONCLUSION" = "success"
-            test "$WORKFLOW_RUN_EVENT" = "push"
-            test "$WORKFLOW_RUN_HEAD_BRANCH" = "main"
-            test "$WORKFLOW_RUN_HEAD_SHA" = "$SOURCE_SHA"
-            test "$(git rev-parse origin/main)" = "$SOURCE_SHA"
-            test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
-          else
-            if [ -z "$ROLLBACK_VERSION_ID" ]; then
-              test "$(git rev-parse origin/main)" = "$SOURCE_SHA"
-              test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
-            else
-              test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
-            fi
-          fi
-
-          ci_runs="$(gh run list --workflow .github/workflows/ci.yml --branch main --commit "$SOURCE_SHA" --event push --status success --limit 100 --json databaseId,headSha)"
-          if ! ci_run_id="$(jq -er --arg source_sha "$SOURCE_SHA" '[.[] | select(.headSha == $source_sha)] | first | .databaseId' <<<"$ci_runs")"; then
-            echo "Source SHA has no successful canonical main-branch CI run" >&2
-            exit 1
-          fi
-          ci_jobs="$(gh run view "$ci_run_id" --json jobs)"
-          for required_job in coverage e2e; do
-            if ! jq -e --arg required_job "$required_job" '[.jobs[] | select(.name == $required_job and .conclusion == "success")] | length == 1' <<<"$ci_jobs" >/dev/null; then
-              echo "Canonical CI run $ci_run_id is missing successful job: $required_job" >&2
-              exit 1
-            fi
-          done
-          required_job=advisory
-          if ! jq -e --arg required_job "$required_job" '[.jobs[] | select(.name == $required_job and .conclusion == "success")] | length == 1' <<<"$ci_jobs" >/dev/null; then
-            echo "Canonical CI run $ci_run_id is missing successful job: $required_job" >&2
-            exit 1
-          fi
-
-          for attempt in $(seq 1 30); do
-            storybook_runs="$(gh run list --workflow .github/workflows/storybook.yml --branch main --commit "$SOURCE_SHA" --event push --status success --limit 100 --json databaseId,headSha)"
-            storybook_run_id="$(jq -er --arg source_sha "$SOURCE_SHA" '[.[] | select(.headSha == $source_sha)] | first | .databaseId' <<<"$storybook_runs" 2>/dev/null || true)"
-            if [ -n "$storybook_run_id" ]; then
-              break
-            fi
-            if [ "$attempt" -eq 30 ]; then
-              echo "Source SHA has no successful canonical Storybook run" >&2
-              exit 1
-            fi
-            sleep 10
-          done
-          storybook_jobs="$(gh run view "$storybook_run_id" --json jobs)"
-          if ! jq -e '[.jobs[] | select(.name == "build-storybook" and .conclusion == "success")] | length == 1' <<<"$storybook_jobs" >/dev/null; then
-            echo "Canonical Storybook run $storybook_run_id is missing successful build-storybook" >&2
-            exit 1
-          fi
+        run: node scripts/workflow-security.mjs validate-production-deploy-source
 
       - name: Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -163,12 +99,8 @@ jobs:
           CLOUDFLARE_WORKERS_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
           SPOONJOY_RELEASE_SHA: ${{ env.SOURCE_SHA }}
           SPOONJOY_MCP_CANARY_BASE_URL: https://spoonjoy.app
-        run: |
-          if [ -n "$ROLLBACK_VERSION_ID" ]; then
-            pnpm run deploy:auto -- --rollback-version-id "$ROLLBACK_VERSION_ID"
-          else
-            pnpm run deploy:auto
-          fi
+          SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: ${{ env.SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS }}
+        run: node scripts/workflow-security.mjs run-production-deploy
 
       - name: Record release source
         if: always()

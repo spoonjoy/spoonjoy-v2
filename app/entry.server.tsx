@@ -34,7 +34,7 @@ export default async function handleRequest(
     // Router's internal StreamTransfer emits its own inline hydration scripts
     // (window.__reactRouterContext…) that are nonced ONLY via this prop, not
     // via context. Omitting it leaves those scripts un-nonced → they'd be
-    // blocked on every page once the CSP flips from report-only to enforce.
+    // blocked on every page by the enforcing CSP.
     <NonceContext.Provider value={nonce}>
       <ServerRouter context={routerContext} url={request.url} nonce={nonce} />
     </NonceContext.Provider>,

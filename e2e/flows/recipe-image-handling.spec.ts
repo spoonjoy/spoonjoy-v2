@@ -51,10 +51,14 @@ test.describe('Recipe image handling', () => {
       await page.goto('/recipes/new');
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
 
-      await page.getByRole('textbox', { name: 'Title' }).first().fill(title);
+      const titleInput = page.getByRole('textbox', { name: 'Title' }).first();
+      const createButton = page.getByRole('button', { name: /create recipe/i });
+      await expect.poll(async () => {
+        await titleInput.fill(title);
+        return createButton.getAttribute('aria-disabled');
+      }, { timeout: 10_000 }).not.toBe('true');
       await page.getByLabel('Upload recipe image').setInputFiles(ORIENTATION_FIXTURE);
       await expect(page.getByRole('img', { name: /recipe image preview/i })).toBeVisible();
-      const createButton = page.getByRole('button', { name: /create recipe/i });
       await expect(createButton).not.toHaveAttribute('aria-disabled', 'true', { timeout: 15_000 });
       await createButton.click();
 

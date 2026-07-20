@@ -1,6 +1,16 @@
 import { execFile as nodeExecFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { resolvePostHogBuildHost } from "../app/lib/security-headers.server";
+import { validateCspHeaderSet } from "./production-readiness";
+import {
+  POSTHOG_CLIENT_BUILD_METADATA_PATH,
+  bundledPostHogHostMatches,
+  createPostHogBuildContract,
+  createPostHogBuildMetadata,
+  readPostHogClientBundleSources as readDefaultPostHogClientBundleSources,
+} from "./posthog-build-metadata";
+import { findUnexpectedWarnings } from "./warning-gate";
 
 const RELEASE_SHA_PATTERN = /^[0-9a-f]{40}$/;
 const TREE_HASH_PATTERN = /^[0-9a-f]{40}$/;
@@ -10,8 +20,10 @@ const MIGRATION_NAME_PATTERN = /^\d{4}_[A-Za-z0-9][A-Za-z0-9_.-]*\.sql$/;
 const MIGRATION_FILE_PATTERN = /\b\d{4}_[A-Za-z0-9][A-Za-z0-9_.-]*\.sql\b/g;
 const NO_PENDING_MIGRATIONS_PATTERN = /no migrations to apply/i;
 const RELEASE_ARTIFACT_NAME = "production-release.json";
+const CSP_REPORT_ONLY_BREAK_GLASS_ACK = "ACK_REPORT_ONLY_CSP_ROLLBACK";
 const DEFAULT_VERIFICATION_ATTEMPTS = 60;
 const VERIFICATION_DELAY_MS = 1_000;
+const GENERATED_WORKER_CONFIG_PATH = "build/server/wrangler.json";
 const CLOUDFLARE_SECRET_ENV_NAMES = [
   "CF_API_KEY",
   "CF_API_TOKEN",
@@ -27,6 +39,7 @@ type ReleasePhase =
   | "provenance"
   | "initial_preflight"
   | "build"
+  | "post_build_posthog"
   | "post_build_provenance"
   | "migration_list"
   | "migration_review"
@@ -38,6 +51,7 @@ type ReleasePhase =
   | "version_lookup"
   | "stage"
   | "canary"
+  | "candidate_csp"
   | "promote"
   | "verify_promotion"
   | "verify_rollback"
@@ -76,6 +90,11 @@ export interface ReleaseArtifact {
 interface RunProductionCanaryReleaseDeps {
   artifactDir: string;
   env?: NodeJS.ProcessEnv;
+  postHogHost: string;
+  readCandidateCspHeaders?: (baseUrl: string, candidateVersionId: string) => Promise<Headers>;
+  readClientBuildMetadata?: () => Promise<Record<string, unknown>>;
+  readClientBundleSources?: () => Promise<readonly string[]>;
+  readGeneratedWorkerConfig?: () => Promise<Record<string, unknown>>;
   readMigrationFile: (filePath: string) => Promise<string>;
   readPublicWorkerVersion: (baseUrl: string) => Promise<string | null>;
   releaseSha: string;
@@ -88,6 +107,8 @@ interface RunProductionCanaryReleaseDeps {
 interface RunProductionRollbackDeps {
   artifactDir: string;
   env?: NodeJS.ProcessEnv;
+  postHogHost: string;
+  readCandidateCspHeaders: (baseUrl: string, candidateVersionId: string) => Promise<Headers>;
   readPublicWorkerVersion: (baseUrl: string) => Promise<string | null>;
   releaseSha: string;
   rollbackVersionId: string;
@@ -102,6 +123,16 @@ type ProductionVerificationDeps = Pick<
   "env" | "readPublicWorkerVersion" | "runCommand" | "sleep" | "verificationAttempts"
 >;
 
+function productionVerificationAttempts(
+  deps: { verificationAttempts?: number },
+): number {
+  const attempts = deps.verificationAttempts ?? DEFAULT_VERIFICATION_ATTEMPTS;
+  if (!Number.isInteger(attempts) || attempts < 1) {
+    throw new Error("Production verification attempts must be a positive integer.");
+  }
+  return attempts;
+}
+
 interface ExecFileError extends Error {
   code?: number | string;
 }
@@ -112,6 +143,11 @@ export type ExecFileLike = (
   options: { encoding: "utf8"; env?: NodeJS.ProcessEnv; maxBuffer: number },
   callback: (error: ExecFileError | null, stdout: string, stderr: string) => void,
 ) => unknown;
+
+interface OutputEmitter {
+  on(event: "data", listener: (chunk: unknown) => void): unknown;
+  on(event: "end" | "close", listener: () => void): unknown;
+}
 
 function requireReleaseSha(value: string): string {
   if (!RELEASE_SHA_PATTERN.test(value)) {
@@ -166,6 +202,28 @@ export async function readPublicWorkerVersion(
   return requireWorkerVersionId(response.headers.get(headerName), "Public release verification");
 }
 
+export async function readCandidateCspHeaders(
+  baseUrl: string,
+  candidateVersionId: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<Headers> {
+  requireWorkerVersionId(candidateVersionId, "Candidate CSP verification");
+  const verificationUrl = new URL("/", baseUrl);
+  verificationUrl.searchParams.set("candidate_csp_verification", "1");
+  const response = await fetchImpl(verificationUrl, {
+    cache: "no-store",
+    headers: {
+      Accept: "text/html",
+      "Cloudflare-Workers-Version-Overrides": buildWorkerVersionOverride("spoonjoy-v2", candidateVersionId),
+    },
+    redirect: "error",
+  });
+  if (!response.ok) {
+    throw new Error(`Candidate CSP verification failed with HTTP ${response.status}.`);
+  }
+  return response.headers;
+}
+
 function requireWorkerVersionId(value: unknown, context: string): string {
   if (typeof value !== "string" || !WORKER_VERSION_PATTERN.test(value)) {
     throw new Error(`${context} did not contain a valid Worker version ID.`);
@@ -191,6 +249,66 @@ function objectRecord(value: unknown, context: string): Record<string, unknown> 
     throw new Error(`${context} contained an invalid row.`);
   }
   return value as Record<string, unknown>;
+}
+
+function jsonObject(value: unknown, context: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${context} was not a JSON object.`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => canonicalJson(entry)).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right));
+    return `{${entries.map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "undefined";
+}
+
+async function readJsonObjectFile(filePath: string, context: string): Promise<Record<string, unknown>> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readFile(filePath, "utf8"));
+  } catch (error) {
+    throw new Error(`${context} could not be read as JSON: ${sanitizedFailure(error)}`);
+  }
+  return jsonObject(parsed, context);
+}
+
+async function readDefaultGeneratedWorkerConfig(): Promise<Record<string, unknown>> {
+  return readJsonObjectFile(GENERATED_WORKER_CONFIG_PATH, "Generated Worker config");
+}
+
+async function readDefaultClientBuildMetadata(): Promise<Record<string, unknown>> {
+  return readJsonObjectFile(POSTHOG_CLIENT_BUILD_METADATA_PATH, "Generated PostHog metadata");
+}
+
+async function validateProductionPostHogArtifacts(
+  readGeneratedWorkerConfig: () => Promise<Record<string, unknown>>,
+  readClientBuildMetadata: () => Promise<Record<string, unknown>>,
+  readClientBundleSources: () => Promise<readonly string[]>,
+): Promise<void> {
+  const generatedWorkerConfig = await readGeneratedWorkerConfig();
+  const clientMetadata = await readClientBuildMetadata();
+  const clientBundleSources = await readClientBundleSources();
+  const contract = createPostHogBuildContract(generatedWorkerConfig);
+  const expectedMetadata = createPostHogBuildMetadata(contract);
+
+  if (canonicalJson(clientMetadata) !== canonicalJson(expectedMetadata)) {
+    throw new Error(
+      `Generated PostHog metadata does not exactly match the production Worker config for ${contract.postHogHost}.`,
+    );
+  }
+  if (!bundledPostHogHostMatches(clientBundleSources, contract.postHogHost)) {
+    throw new Error(
+      `Generated client bundle does not contain exactly one PostHog host matching ${contract.postHogHost}.`,
+    );
+  }
 }
 
 export function parsePendingMigrationNames(payload: string): string[] {
@@ -501,16 +619,63 @@ export function buildWorkerVersionOverride(workerName: string, versionId: string
   return `${workerName}="${versionId}"`;
 }
 
-function sanitizedFailure(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
+function redactSensitiveText(message: string): string {
   return message
     .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]")
-    .replace(/\b(token|secret|password|authorization|api[_-]?key)\s*[=:]\s*\S+/gi, "$1=[REDACTED]")
-    .replace(/\b[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b/g, "[REDACTED]")
+    .replace(/\b(authorization)\s*[=:]\s*[^\r\n]+/gi, "$1=[REDACTED]")
+    .replace(/\b(token|secret|password|api[_-]?key)\s*[=:]\s*\S+/gi, "$1=[REDACTED]")
+    .replace(/\b[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b/g, "[REDACTED]");
+}
+
+function sanitizedFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return redactSensitiveText(message)
     .replace(/[\u0000-\u001f\u007f]+/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 500);
+}
+
+function isOutputEmitter(value: unknown): value is OutputEmitter {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    typeof (value as { on?: unknown }).on === "function",
+  );
+}
+
+function streamCommandOutput(
+  stream: unknown,
+  write: (chunk: string) => boolean,
+): () => void {
+  if (!isOutputEmitter(stream)) return () => undefined;
+  let pending = "";
+
+  const flush = () => {
+    if (pending === "") return;
+    write(redactSensitiveText(pending));
+    pending = "";
+  };
+
+  stream.on("data", (chunk) => {
+    pending += String(chunk);
+    const finalNewline = pending.lastIndexOf("\n");
+    if (finalNewline === -1) return;
+
+    let complete = pending.slice(0, finalNewline + 1);
+    pending = pending.slice(finalNewline + 1);
+    const danglingCredentialPrefix = complete.match(
+      /\b(?:Bearer\s+|(?:token|secret|password|authorization|api[_-]?key)\s*[=:]\s*)$/i,
+    );
+    if (danglingCredentialPrefix?.index !== undefined) {
+      pending = complete.slice(danglingCredentialPrefix.index) + pending;
+      complete = complete.slice(0, danglingCredentialPrefix.index);
+    }
+    if (complete !== "") write(redactSensitiveText(complete));
+  });
+  stream.on("end", flush);
+  stream.on("close", flush);
+  return flush;
 }
 
 async function writeFailureArtifact(
@@ -535,10 +700,7 @@ async function waitForProductionVersion(
   options: { allowLegacyMissingPublicVersion?: boolean } = {},
 ): Promise<void> {
   requireWorkerVersionId(expectedVersionId, "Production verification");
-  const attempts = deps.verificationAttempts ?? DEFAULT_VERIFICATION_ATTEMPTS;
-  if (!Number.isInteger(attempts) || attempts < 1) {
-    throw new Error("Production verification attempts must be a positive integer.");
-  }
+  const attempts = productionVerificationAttempts(deps);
   const baseUrl = deps.env?.SPOONJOY_MCP_CANARY_BASE_URL ?? "https://spoonjoy.app";
   let consecutiveLegacyControlPlaneMatches = 0;
 
@@ -580,6 +742,33 @@ async function waitForProductionVersion(
   throw new Error(`Production version did not converge to ${expectedVersionId}.`);
 }
 
+async function waitForCandidateCspHeaders(
+  deps: RunProductionRollbackDeps,
+  baseUrl: string,
+  candidateVersionId: string,
+): Promise<Headers> {
+  const attempts = productionVerificationAttempts(deps);
+
+  let lastError: unknown = new Error(
+    "Rollback candidate identity could not be verified from the exact-version probe.",
+  );
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const headers = await deps.readCandidateCspHeaders(baseUrl, candidateVersionId);
+      const observedVersion = headers.get("X-Spoonjoy-Worker-Version");
+      if (observedVersion?.toLowerCase() === candidateVersionId.toLowerCase()) return headers;
+      lastError = new Error(
+        "Rollback candidate identity could not be verified from the exact-version probe.",
+      );
+    } catch (error) {
+      lastError = error;
+    }
+    if (attempt < attempts) await deps.sleep(VERIFICATION_DELAY_MS);
+  }
+
+  throw lastError;
+}
+
 export async function runProductionRollback(
   deps: RunProductionRollbackDeps,
 ): Promise<ReleaseArtifact> {
@@ -587,7 +776,7 @@ export async function runProductionRollback(
   let treeHash: string | undefined;
   let previousVersionId: string | undefined;
   let candidateVersionId: string | undefined;
-  let deployed = false;
+  let deploymentMutationAttempted = false;
   const baseEnv = { ...(deps.env ?? process.env) };
   const cleanEnv = withoutCloudflareSecrets(baseEnv);
   delete cleanEnv.CLOUDFLARE_ACCOUNT_ID;
@@ -596,6 +785,7 @@ export async function runProductionRollback(
   try {
     const sourceSha = requireReleaseSha(deps.releaseSha);
     const rollbackVersionId = requireWorkerVersionId(deps.rollbackVersionId, "Rollback version");
+    productionVerificationAttempts(deps);
 
     phase = "provenance";
     const toolingHead = requireReleaseSha(
@@ -638,8 +828,37 @@ export async function runProductionRollback(
       throw new Error("The requested rollback version is already active in production.");
     }
 
+    phase = "stage";
+    deploymentMutationAttempted = true;
+    await deps.runCommand("pnpm", [
+      "exec", "wrangler", "versions", "deploy",
+      `${candidateVersionId}@0%`, `${previousVersionId}@100%`, "-y",
+      "--message", `Stage rollback ${sourceSha} for inspection`,
+    ], { env: workersEnv });
+
+    phase = "candidate_csp";
+    const baseUrl = deps.env?.SPOONJOY_MCP_CANARY_BASE_URL ?? "https://spoonjoy.app";
+    const candidateCspHeaders = await waitForCandidateCspHeaders(
+      deps,
+      baseUrl,
+      candidateVersionId,
+    );
+    const cspFailures = validateCspHeaderSet(candidateCspHeaders, {
+      expectedWorkerVersionId: candidateVersionId,
+      postHogHost: deps.postHogHost,
+      requireNonce: true,
+    });
+    if (
+      cspFailures.length > 0 &&
+      baseEnv.SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS !== CSP_REPORT_ONLY_BREAK_GLASS_ACK
+    ) {
+      throw new Error(
+        `Rollback candidate CSP validation failed: ${cspFailures.join(", ")}. ` +
+        `Set SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS=${CSP_REPORT_ONLY_BREAK_GLASS_ACK} only for an intentional insecure-CSP rollback.`,
+      );
+    }
+
     phase = "promote";
-    deployed = true;
     await deps.runCommand("pnpm", [
       "exec", "wrangler", "versions", "deploy", `${candidateVersionId}@100%`, "-y",
       "--message", `Roll back to ${sourceSha}`,
@@ -677,7 +896,7 @@ export async function runProductionRollback(
       failure,
     };
 
-    if (deployed && previousVersionId) {
+    if (deploymentMutationAttempted && previousVersionId) {
       try {
         await deps.runCommand("pnpm", [
           "exec", "wrangler", "versions", "deploy", `${previousVersionId}@100%`, "-y",
@@ -725,7 +944,7 @@ export async function runProductionCanaryRelease(
   let migrationApply: ReleaseArtifact["migrationApply"] = "not_started";
   let previousVersionId: string | undefined;
   let candidateVersionId: string | undefined;
-  let staged = false;
+  let deploymentMutationAttempted = false;
   const baseEnv = { ...(deps.env ?? process.env) };
   const cleanEnv = withoutCloudflareSecrets(baseEnv);
   delete cleanEnv.CLOUDFLARE_ACCOUNT_ID;
@@ -757,6 +976,12 @@ export async function runProductionCanaryRelease(
     await deps.runCommand("pnpm", ["run", "deploy:preflight"], { env: initialEnv });
     phase = "build";
     await deps.runCommand("pnpm", ["run", "build"], { env: cleanEnv });
+    phase = "post_build_posthog";
+    await validateProductionPostHogArtifacts(
+      deps.readGeneratedWorkerConfig ?? readDefaultGeneratedWorkerConfig,
+      deps.readClientBuildMetadata ?? readDefaultClientBuildMetadata,
+      deps.readClientBundleSources ?? readDefaultPostHogClientBundleSources,
+    );
     phase = "post_build_provenance";
     const postBuildStatus = await deps.runCommand(
       "git",
@@ -829,16 +1054,30 @@ export async function runProductionCanaryRelease(
     }
 
     phase = "stage";
+    deploymentMutationAttempted = true;
     await deps.runCommand("pnpm", [
       "exec", "wrangler", "versions", "deploy", `${candidateVersionId}@0%`, `${previousVersionId}@100%`, "-y",
       "--message", `Stage ${sourceSha} for canary`,
     ], { env: workersEnv });
-    staged = true;
-
     phase = "canary";
     await deps.runCommand("pnpm", [
       "run", "smoke:mcp:oauth", "--", "--out", deps.artifactDir, "--worker-version-id", candidateVersionId,
     ], { env: d1Env });
+
+    phase = "candidate_csp";
+    const baseUrl = deps.env?.SPOONJOY_MCP_CANARY_BASE_URL ?? "https://spoonjoy.app";
+    const candidateCspHeaders = await (
+      deps.readCandidateCspHeaders ?? readCandidateCspHeaders
+    )(baseUrl, candidateVersionId);
+    const cspFailures = validateCspHeaderSet(candidateCspHeaders, {
+      expectedWorkerVersionId: candidateVersionId,
+      postHogHost: deps.postHogHost,
+      requireNonce: true,
+    });
+    if (cspFailures.length > 0) {
+      throw new Error(`Candidate CSP validation failed: ${cspFailures.join(", ")}.`);
+    }
+
     phase = "promote";
     await deps.runCommand("pnpm", [
       "exec", "wrangler", "versions", "deploy", `${candidateVersionId}@100%`, "-y",
@@ -866,7 +1105,7 @@ export async function runProductionCanaryRelease(
     const failurePhase = phase;
     const failure = sanitizedFailure(error);
 
-    if (staged && previousVersionId) {
+    if (deploymentMutationAttempted && previousVersionId) {
       try {
         await deps.runCommand("pnpm", [
           "exec", "wrangler", "versions", "deploy", `${previousVersionId}@100%`, "-y",
@@ -933,18 +1172,36 @@ export function createReleaseCommandRunner(
   execFileImpl: ExecFileLike = nodeExecFile as unknown as ExecFileLike,
 ): ReleaseCommandRunner {
   return (command, args, options) => new Promise((resolve, reject) => {
-    execFileImpl(command, args, {
+    let flushStdout: () => void = () => undefined;
+    let flushStderr: () => void = () => undefined;
+    const child = execFileImpl(command, args, {
       encoding: "utf8",
       env: options?.env,
       maxBuffer: 16 * 1024 * 1024,
     }, (error, stdout, stderr) => {
+      flushStdout();
+      flushStderr();
       if (error) {
         const exitCode = error.code === undefined ? "unknown" : String(error.code);
         reject(new Error(`Command failed with exit code ${exitCode}: ${command} ${args.join(" ")}`));
         return;
       }
+      if (stderr.trim() !== "" || findUnexpectedWarnings(stdout).length > 0) {
+        reject(new Error(`Command emitted unexpected warning output: ${command}`));
+        return;
+      }
       resolve({ stdout, stderr });
     });
+    if (child && typeof child === "object") {
+      flushStdout = streamCommandOutput(
+        (child as { stdout?: unknown }).stdout,
+        (chunk) => process.stdout.write(chunk),
+      );
+      flushStderr = streamCommandOutput(
+        (child as { stderr?: unknown }).stderr,
+        (chunk) => process.stderr.write(chunk),
+      );
+    }
   });
 }
 
@@ -1009,6 +1266,11 @@ interface ReleaseCliDeps {
   argv?: readonly string[];
   env?: NodeJS.ProcessEnv;
   execFileImpl?: ExecFileLike;
+  readClientBuildMetadata?: () => Promise<Record<string, unknown>>;
+  readClientBundleSources?: () => Promise<readonly string[]>;
+  readGeneratedWorkerConfig?: () => Promise<Record<string, unknown>>;
+  readWranglerConfig?: () => Promise<Record<string, unknown>>;
+  readCandidateCspHeaders?: (baseUrl: string, candidateVersionId: string) => Promise<Headers>;
   readMigrationFile?: (filePath: string) => Promise<string>;
   readPublicWorkerVersion?: (baseUrl: string) => Promise<string | null>;
   runCommand?: ReleaseCommandRunner;
@@ -1020,9 +1282,19 @@ interface ReleaseCliDeps {
 export async function runProductionReleaseCli(deps: ReleaseCliDeps): Promise<ReleaseArtifact> {
   const env = deps.env ?? process.env;
   const options = parseReleaseCliOptions(deps.argv ?? [], env);
+  const wrangler = await (
+    deps.readWranglerConfig ?? (async () => JSON.parse(
+      await readFile("wrangler.json", "utf8"),
+    ) as Record<string, unknown>)
+  )();
   const shared = {
     artifactDir: options.artifactDir,
     env,
+    postHogHost: resolvePostHogBuildHost(wrangler),
+    readClientBuildMetadata: deps.readClientBuildMetadata,
+    readClientBundleSources: deps.readClientBundleSources,
+    readCandidateCspHeaders: deps.readCandidateCspHeaders ?? readCandidateCspHeaders,
+    readGeneratedWorkerConfig: deps.readGeneratedWorkerConfig,
     readPublicWorkerVersion: deps.readPublicWorkerVersion ?? readPublicWorkerVersion,
     releaseSha: options.releaseSha,
     runCommand: deps.runCommand ?? createReleaseCommandRunner(deps.execFileImpl),

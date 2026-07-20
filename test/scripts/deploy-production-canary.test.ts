@@ -1,13 +1,20 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { EventEmitter } from "node:events";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildContentSecurityPolicy } from "../../app/lib/security-headers.server";
+import {
+  createPostHogBuildContract,
+  createPostHogBuildMetadata,
+} from "../../scripts/posthog-build-metadata";
 import {
   assertAdditiveMigrationSql,
   buildWorkerVersionOverride,
   createReleaseCommandRunner,
   parsePendingMigrationNames,
   parseReleaseCliOptions,
+  readCandidateCspHeaders,
   readPublicWorkerVersion,
   runProductionCanaryRelease,
   runProductionRollback,
@@ -24,6 +31,9 @@ const TREE_HASH = "b".repeat(40);
 const TOOLING_SHA = "c".repeat(40);
 const PREVIOUS_VERSION = "11111111-1111-4111-8111-111111111111";
 const CANDIDATE_VERSION = "22222222-2222-4222-8222-222222222222";
+const VALID_CSP_NONCE = "AbCdEfGhIjKlMnOpQrStUg==";
+const VALID_CANDIDATE_CSP = buildContentSecurityPolicy(VALID_CSP_NONCE);
+const CUSTOM_POSTHOG_HOST = "https://analytics.example.com";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -57,9 +67,39 @@ function deploymentPayload(versionId: string, createdOn = "2026-07-15T00:05:00Z"
   }]);
 }
 
+function productionGeneratedWorkerConfig(host = CUSTOM_POSTHOG_HOST): Record<string, unknown> {
+  return {
+    vars: {
+      NODE_ENV: "production",
+      VITE_POSTHOG_HOST: host,
+    },
+  };
+}
+
+function productionBuildMetadata(host = CUSTOM_POSTHOG_HOST) {
+  return createPostHogBuildMetadata(createPostHogBuildContract(
+    productionGeneratedWorkerConfig(host),
+  ));
+}
+
+function productionBundleSources(host = CUSTOM_POSTHOG_HOST): readonly string[] {
+  return [`const spoonjoyEnv={VITE_POSTHOG_HOST:${JSON.stringify(host)}};`];
+}
+
+function postHogArtifactReaderDeps(host = CUSTOM_POSTHOG_HOST) {
+  return {
+    readGeneratedWorkerConfig: async () => productionGeneratedWorkerConfig(host),
+    readClientBuildMetadata: async () => productionBuildMetadata(host),
+    readClientBundleSources: async () => productionBundleSources(host),
+  };
+}
+
 type CommandResponse = Error | string;
 
-function successfulRunner(overrides: Record<string, CommandResponse | readonly CommandResponse[]> = {}) {
+function successfulRunner(
+  overrides: Record<string, CommandResponse | readonly CommandResponse[]> = {},
+  events: string[] = [],
+) {
   const responses: Record<string, string | readonly string[]> = {
     "git rev-parse HEAD": RELEASE_SHA,
     "git status --porcelain --untracked-files=no": "",
@@ -100,6 +140,7 @@ function successfulRunner(overrides: Record<string, CommandResponse | readonly C
   const callCounts = new Map<string, number>();
   const runCommand = vi.fn<ReleaseCommandRunner>(async (command, args) => {
     const key = commandKey(command, args);
+    events.push(`command:${key}`);
     const callIndex = callCounts.get(key) ?? 0;
     callCounts.set(key, callIndex + 1);
     const configured = overrides[key] ?? responses[key] ?? "";
@@ -122,7 +163,16 @@ function releaseDeps(runCommand: ReleaseCommandRunner) {
       CLOUDFLARE_WORKERS_API_TOKEN: "workers-secret",
       SPOONJOY_MCP_CANARY_BASE_URL: "https://spoonjoy.app",
     },
+    postHogHost: "https://us.i.posthog.com",
     readMigrationFile: vi.fn(async () => "CREATE TABLE ReleaseMarker (id TEXT PRIMARY KEY);"),
+    readGeneratedWorkerConfig: vi.fn(async () => productionGeneratedWorkerConfig()),
+    readClientBuildMetadata: vi.fn(async () => productionBuildMetadata()),
+    readClientBundleSources: vi.fn(async () => productionBundleSources()),
+    readCandidateCspHeaders: vi.fn(async () => new Headers({
+      "Content-Security-Policy": VALID_CANDIDATE_CSP,
+      "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+      "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+    })),
     readPublicWorkerVersion: vi.fn(async () => CANDIDATE_VERSION),
     releaseSha: RELEASE_SHA,
     runCommand,
@@ -141,6 +191,12 @@ function rollbackDeps(runCommand: ReleaseCommandRunner) {
       CLOUDFLARE_WORKERS_API_TOKEN: "workers-secret",
       SPOONJOY_MCP_CANARY_BASE_URL: "https://spoonjoy.app",
     },
+    postHogHost: "https://us.i.posthog.com",
+    readCandidateCspHeaders: vi.fn(async () => new Headers({
+      "Content-Security-Policy": VALID_CANDIDATE_CSP,
+      "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+      "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+    })),
     readPublicWorkerVersion: vi.fn(async () => CANDIDATE_VERSION),
     releaseSha: RELEASE_SHA,
     rollbackVersionId: CANDIDATE_VERSION,
@@ -153,6 +209,7 @@ function rollbackDeps(runCommand: ReleaseCommandRunner) {
 
 describe("trusted production rollback orchestration", () => {
   it("uses current-main tooling to deploy an exact known source-tagged version", async () => {
+    const events: string[] = [];
     const runCommand = successfulRunner({
       "git rev-parse HEAD": TOOLING_SHA,
       "git rev-parse origin/main": TOOLING_SHA,
@@ -163,8 +220,16 @@ describe("trusted production rollback orchestration", () => {
         deploymentPayload(PREVIOUS_VERSION),
         deploymentPayload(CANDIDATE_VERSION),
       ],
-    });
+    }, events);
     const deps = rollbackDeps(runCommand);
+    deps.readCandidateCspHeaders.mockImplementation(async () => {
+      events.push("probe:candidate-csp");
+      return new Headers({
+        "Content-Security-Policy": VALID_CANDIDATE_CSP,
+        "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+        "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+      });
+    });
 
     const result = await runProductionRollback(deps);
 
@@ -186,6 +251,7 @@ describe("trusted production rollback orchestration", () => {
       "git rev-parse HEAD^{tree}",
       "pnpm exec wrangler versions list --json",
       "pnpm exec wrangler deployments list --json",
+      `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@0% ${PREVIOUS_VERSION}@100% -y --message Stage rollback ${RELEASE_SHA} for inspection`,
       `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@100% -y --message Roll back to ${RELEASE_SHA}`,
       "pnpm exec wrangler deployments list --json",
     ]);
@@ -195,6 +261,186 @@ describe("trusted production rollback orchestration", () => {
       CLOUDFLARE_API_TOKEN: "workers-secret",
       SPOONJOY_MCP_CANARY_BASE_URL: "https://spoonjoy.app",
     });
+    expect(deps.readCandidateCspHeaders).toHaveBeenCalledWith(
+      "https://spoonjoy.app",
+      CANDIDATE_VERSION,
+    );
+    expect(events.indexOf(
+      `command:pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@0% ${PREVIOUS_VERSION}@100% -y --message Stage rollback ${RELEASE_SHA} for inspection`,
+    )).toBeLessThan(events.indexOf("probe:candidate-csp"));
+    expect(events.indexOf("probe:candidate-csp")).toBeLessThan(events.indexOf(
+      `command:pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@100% -y --message Roll back to ${RELEASE_SHA}`,
+    ));
+  });
+
+  it("retries the exact-version rollback probe while the staged override propagates", async () => {
+    const runCommand = successfulRunner({
+      "git rev-parse HEAD": TOOLING_SHA,
+      "git rev-parse origin/main": TOOLING_SHA,
+      "pnpm exec wrangler versions list --json": JSON.stringify([
+        workerVersion(CANDIDATE_VERSION, RELEASE_SHA),
+      ]),
+      "pnpm exec wrangler deployments list --json": [
+        deploymentPayload(PREVIOUS_VERSION),
+        deploymentPayload(CANDIDATE_VERSION),
+      ],
+    });
+    const deps = rollbackDeps(runCommand);
+    deps.verificationAttempts = 3;
+    deps.readCandidateCspHeaders
+      .mockRejectedValueOnce(new Error("override not propagated"))
+      .mockResolvedValueOnce(new Headers({
+        "Content-Security-Policy": VALID_CANDIDATE_CSP,
+        "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+        "X-Spoonjoy-Worker-Version": PREVIOUS_VERSION,
+      }))
+      .mockResolvedValueOnce(new Headers({
+        "Content-Security-Policy": VALID_CANDIDATE_CSP,
+        "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+        "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+      }));
+
+    await expect(runProductionRollback(deps)).resolves.toMatchObject({
+      status: "rollback_promoted",
+      candidateVersionId: CANDIDATE_VERSION,
+    });
+
+    expect(deps.readCandidateCspHeaders).toHaveBeenCalledTimes(3);
+    expect(deps.sleep).toHaveBeenNthCalledWith(1, 1_000);
+    expect(deps.sleep).toHaveBeenNthCalledWith(2, 1_000);
+    expect(deps.sleep).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ["a blank acknowledgement", undefined],
+    ["a wrong acknowledgement", "ACK_SOMETHING_ELSE"],
+  ])("rejects an old report-only rollback with %s", async (_label, acknowledgement) => {
+    const runCommand = successfulRunner({
+      "git rev-parse HEAD": TOOLING_SHA,
+      "git rev-parse origin/main": TOOLING_SHA,
+      "pnpm exec wrangler versions list --json": JSON.stringify([
+        workerVersion(CANDIDATE_VERSION, RELEASE_SHA),
+      ]),
+      "pnpm exec wrangler deployments list --json": deploymentPayload(PREVIOUS_VERSION),
+    });
+    const deps = rollbackDeps(runCommand);
+    deps.readCandidateCspHeaders.mockResolvedValue(new Headers({
+      "Content-Security-Policy-Report-Only": buildContentSecurityPolicy(VALID_CSP_NONCE),
+      "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+      "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+    }));
+    if (acknowledgement) {
+      deps.env.SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS = acknowledgement;
+    }
+    deps.readPublicWorkerVersion.mockResolvedValue(PREVIOUS_VERSION);
+
+    await expect(runProductionRollback(deps)).rejects.toThrow(
+      /ACK_REPORT_ONLY_CSP_ROLLBACK/,
+    );
+
+    const calls = runCommand.mock.calls.map(([command, args]) => commandKey(command, args));
+    expect(calls).not.toContain(
+      `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@100% -y --message Roll back to ${RELEASE_SHA}`,
+    );
+    expect(calls).toContain(
+      `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@0% ${PREVIOUS_VERSION}@100% -y --message Stage rollback ${RELEASE_SHA} for inspection`,
+    );
+    expect(calls).toContain(
+      `pnpm exec wrangler versions deploy ${PREVIOUS_VERSION}@100% -y --message Restore after failed rollback ${RELEASE_SHA}`,
+    );
+    expect(deps.writeReleaseArtifact).toHaveBeenCalledWith(expect.objectContaining({
+      status: "rolled_back",
+      phase: "candidate_csp",
+    }));
+  });
+
+  it("allows an old report-only rollback only with the exact break-glass acknowledgement", async () => {
+    const runCommand = successfulRunner({
+      "git rev-parse HEAD": TOOLING_SHA,
+      "git rev-parse origin/main": TOOLING_SHA,
+      "pnpm exec wrangler versions list --json": JSON.stringify([
+        workerVersion(CANDIDATE_VERSION, RELEASE_SHA),
+      ]),
+      "pnpm exec wrangler deployments list --json": [
+        deploymentPayload(PREVIOUS_VERSION),
+        deploymentPayload(CANDIDATE_VERSION),
+      ],
+    });
+    const deps = rollbackDeps(runCommand);
+    deps.env.SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS = "ACK_REPORT_ONLY_CSP_ROLLBACK";
+    deps.readCandidateCspHeaders.mockResolvedValue(new Headers({
+      "Content-Security-Policy-Report-Only": buildContentSecurityPolicy(VALID_CSP_NONCE),
+      "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+      "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+    }));
+
+    await expect(runProductionRollback(deps)).resolves.toMatchObject({
+      status: "rollback_promoted",
+      candidateVersionId: CANDIDATE_VERSION,
+    });
+  });
+
+  it("fails closed when historical rollback CSP inspection is unavailable", async () => {
+    const runCommand = successfulRunner({
+      "git rev-parse HEAD": TOOLING_SHA,
+      "git rev-parse origin/main": TOOLING_SHA,
+      "pnpm exec wrangler versions list --json": JSON.stringify([
+        workerVersion(CANDIDATE_VERSION, RELEASE_SHA),
+      ]),
+      "pnpm exec wrangler deployments list --json": deploymentPayload(PREVIOUS_VERSION),
+    });
+    const deps = rollbackDeps(runCommand);
+    deps.env.SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS = "ACK_REPORT_ONLY_CSP_ROLLBACK";
+    deps.readCandidateCspHeaders.mockRejectedValue(new Error("edge inspection unavailable"));
+    deps.readPublicWorkerVersion.mockResolvedValue(PREVIOUS_VERSION);
+
+    await expect(runProductionRollback(deps)).rejects.toThrow("edge inspection unavailable");
+    const calls = runCommand.mock.calls.map(([command, args]) => commandKey(command, args));
+    expect(calls).not.toContain(
+      `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@100% -y --message Roll back to ${RELEASE_SHA}`,
+    );
+    expect(calls).toContain(
+      `pnpm exec wrangler versions deploy ${PREVIOUS_VERSION}@100% -y --message Restore after failed rollback ${RELEASE_SHA}`,
+    );
+    expect(deps.writeReleaseArtifact).toHaveBeenCalledWith(expect.objectContaining({
+      status: "rolled_back",
+      phase: "candidate_csp",
+    }));
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["mismatched", PREVIOUS_VERSION],
+  ])("fails closed when rollback candidate identity is %s even with break-glass", async (_label, observedVersion) => {
+    const runCommand = successfulRunner({
+      "git rev-parse HEAD": TOOLING_SHA,
+      "git rev-parse origin/main": TOOLING_SHA,
+      "pnpm exec wrangler versions list --json": JSON.stringify([
+        workerVersion(CANDIDATE_VERSION, RELEASE_SHA),
+      ]),
+      "pnpm exec wrangler deployments list --json": deploymentPayload(PREVIOUS_VERSION),
+    });
+    const deps = rollbackDeps(runCommand);
+    deps.env.SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS = "ACK_REPORT_ONLY_CSP_ROLLBACK";
+    deps.readCandidateCspHeaders.mockResolvedValue(new Headers({
+      "Content-Security-Policy-Report-Only": buildContentSecurityPolicy(VALID_CSP_NONCE),
+      "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+      ...(observedVersion ? { "X-Spoonjoy-Worker-Version": observedVersion } : {}),
+    }));
+    deps.readPublicWorkerVersion.mockResolvedValue(PREVIOUS_VERSION);
+
+    await expect(runProductionRollback(deps)).rejects.toThrow(/candidate identity/i);
+    const calls = runCommand.mock.calls.map(([command, args]) => commandKey(command, args));
+    expect(calls).not.toContain(
+      `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@100% -y --message Roll back to ${RELEASE_SHA}`,
+    );
+    expect(calls).toContain(
+      `pnpm exec wrangler versions deploy ${PREVIOUS_VERSION}@100% -y --message Restore after failed rollback ${RELEASE_SHA}`,
+    );
+    expect(deps.writeReleaseArtifact).toHaveBeenCalledWith(expect.objectContaining({
+      status: "rolled_back",
+      phase: "candidate_csp",
+    }));
   });
 
   it("rejects stale tooling and mismatched version tags before deployment", async () => {
@@ -239,6 +485,20 @@ describe("trusted production rollback orchestration", () => {
       "pnpm exec wrangler deployments list --json": deploymentPayload(CANDIDATE_VERSION),
     });
     await expect(runProductionRollback(rollbackDeps(activeRunner))).rejects.toThrow("already active");
+  });
+
+  it("rejects an invalid rollback retry window before any deployment command", async () => {
+    const runCommand = successfulRunner();
+    const deps = rollbackDeps(runCommand);
+    deps.verificationAttempts = 0;
+
+    await expect(runProductionRollback(deps)).rejects.toThrow("positive integer");
+
+    expect(runCommand).not.toHaveBeenCalled();
+    expect(deps.writeReleaseArtifact).toHaveBeenCalledWith(expect.objectContaining({
+      status: "failed_before_stage",
+      phase: "validate",
+    }));
   });
 
   it("restores the prior version when rollback promotion cannot be verified", async () => {
@@ -328,6 +588,33 @@ describe("trusted production rollback orchestration", () => {
       phase: "promote",
     }));
   });
+
+  it("reasserts the prior version after an ambiguous rollback staging failure", async () => {
+    const stage = `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@0% ${PREVIOUS_VERSION}@100% -y --message Stage rollback ${RELEASE_SHA} for inspection`;
+    const restore = `pnpm exec wrangler versions deploy ${PREVIOUS_VERSION}@100% -y --message Restore after failed rollback ${RELEASE_SHA}`;
+    const runCommand = successfulRunner({
+      "git rev-parse HEAD": TOOLING_SHA,
+      "git rev-parse origin/main": TOOLING_SHA,
+      "pnpm exec wrangler versions list --json": JSON.stringify([
+        workerVersion(CANDIDATE_VERSION, RELEASE_SHA),
+      ]),
+      "pnpm exec wrangler deployments list --json": deploymentPayload(PREVIOUS_VERSION),
+      [stage]: new Error("rollback stage result unknown"),
+    });
+    const deps = rollbackDeps(runCommand);
+    deps.readPublicWorkerVersion.mockResolvedValue(PREVIOUS_VERSION);
+
+    await expect(runProductionRollback(deps)).rejects.toThrow("rollback stage result unknown");
+
+    const calls = runCommand.mock.calls.map(([command, args]) => commandKey(command, args));
+    expect(calls).toContain(stage);
+    expect(calls).toContain(restore);
+    expect(deps.readCandidateCspHeaders).not.toHaveBeenCalled();
+    expect(deps.writeReleaseArtifact).toHaveBeenCalledWith(expect.objectContaining({
+      status: "rolled_back",
+      phase: "stage",
+    }));
+  });
 });
 
 describe("production canary release orchestration", () => {
@@ -367,6 +654,7 @@ describe("production canary release orchestration", () => {
       "pnpm exec wrangler deployments list --json",
     ]);
     expect(deps.readMigrationFile).toHaveBeenCalledWith("migrations/0024_add_release_marker.sql");
+    expect(deps.readCandidateCspHeaders).toHaveBeenCalledWith("https://spoonjoy.app", CANDIDATE_VERSION);
     expect(runCommand.mock.calls[3]?.[2]?.env).toEqual({
       PATH: "/test/bin",
       SPOONJOY_MCP_CANARY_BASE_URL: "https://spoonjoy.app",
@@ -398,6 +686,233 @@ describe("production canary release orchestration", () => {
     expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(result);
   });
 
+  it("validates generated production PostHog artifacts after build before migration or deploy actions", async () => {
+    const events: string[] = [];
+    const runCommand = successfulRunner({}, events);
+    const deps = releaseDeps(runCommand);
+    deps.readGeneratedWorkerConfig.mockImplementation(async () => {
+      events.push("posthog:worker-config");
+      return productionGeneratedWorkerConfig(CUSTOM_POSTHOG_HOST);
+    });
+    deps.readClientBuildMetadata.mockImplementation(async () => {
+      events.push("posthog:metadata");
+      return productionBuildMetadata(CUSTOM_POSTHOG_HOST);
+    });
+    deps.readClientBundleSources.mockImplementation(async () => {
+      events.push("posthog:bundle");
+      return productionBundleSources(CUSTOM_POSTHOG_HOST);
+    });
+
+    await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({ status: "promoted" });
+
+    expect(deps.readGeneratedWorkerConfig).toHaveBeenCalledTimes(1);
+    expect(deps.readClientBuildMetadata).toHaveBeenCalledTimes(1);
+    expect(deps.readClientBundleSources).toHaveBeenCalledTimes(1);
+    expect(events.slice(3, 9)).toEqual([
+      "command:pnpm run deploy:preflight",
+      "command:pnpm run build",
+      "posthog:worker-config",
+      "posthog:metadata",
+      "posthog:bundle",
+      "command:git status --porcelain --untracked-files=no",
+    ]);
+    expect(events.indexOf("posthog:bundle")).toBeLessThan(
+      events.indexOf("command:pnpm exec wrangler d1 migrations list DB --remote"),
+    );
+    expect(events.indexOf("posthog:bundle")).toBeLessThan(
+      events.indexOf(`command:pnpm exec wrangler versions upload --tag ${RELEASE_SHA} --message Spoonjoy source ${RELEASE_SHA}`),
+    );
+  });
+
+  it("uses the default generated production PostHog artifact readers when deps do not override them", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-release-posthog-"));
+    const previousCwd = process.cwd();
+    try {
+      const host = CUSTOM_POSTHOG_HOST;
+      await Promise.all([
+        mkdir(path.join(root, "build/server"), { recursive: true }),
+        mkdir(path.join(root, "build/client/.vite"), { recursive: true }),
+        mkdir(path.join(root, "build/client/assets"), { recursive: true }),
+      ]);
+      await Promise.all([
+        writeFile(
+          path.join(root, "build/server/wrangler.json"),
+          JSON.stringify(productionGeneratedWorkerConfig(host)),
+          "utf8",
+        ),
+        writeFile(
+          path.join(root, "build/client/.vite/spoonjoy-build-metadata.json"),
+          JSON.stringify(productionBuildMetadata(host)),
+          "utf8",
+        ),
+        writeFile(path.join(root, "build/client/assets/app.js"), productionBundleSources(host)[0], "utf8"),
+      ]);
+      process.chdir(root);
+      const runCommand = successfulRunner();
+      const deps = releaseDeps(runCommand);
+      delete deps.readGeneratedWorkerConfig;
+      delete deps.readClientBuildMetadata;
+      delete deps.readClientBundleSources;
+
+      await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({ status: "promoted" });
+    } finally {
+      process.chdir(previousCwd);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    [
+      "invalid generated Worker config JSON",
+      async (root: string) => {
+        await mkdir(path.join(root, "build/server"), { recursive: true });
+        await writeFile(path.join(root, "build/server/wrangler.json"), "{", "utf8");
+      },
+      /Generated Worker config could not be read as JSON/,
+    ],
+    [
+      "non-object generated metadata JSON",
+      async (root: string) => {
+        await Promise.all([
+          mkdir(path.join(root, "build/server"), { recursive: true }),
+          mkdir(path.join(root, "build/client/.vite"), { recursive: true }),
+        ]);
+        await Promise.all([
+          writeFile(
+            path.join(root, "build/server/wrangler.json"),
+            JSON.stringify(productionGeneratedWorkerConfig()),
+            "utf8",
+          ),
+          writeFile(path.join(root, "build/client/.vite/spoonjoy-build-metadata.json"), "[]", "utf8"),
+        ]);
+      },
+      /Generated PostHog metadata was not a JSON object/,
+    ],
+  ])("rejects %s from default PostHog artifact readers before mutation", async (_label, writeArtifacts, message) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-release-posthog-"));
+    const previousCwd = process.cwd();
+    try {
+      await writeArtifacts(root);
+      process.chdir(root);
+      const runCommand = successfulRunner();
+      const deps = releaseDeps(runCommand);
+      delete deps.readGeneratedWorkerConfig;
+      delete deps.readClientBuildMetadata;
+      delete deps.readClientBundleSources;
+
+      await expect(runProductionCanaryRelease(deps)).rejects.toThrow(message);
+
+      expect(runCommand.mock.calls.map(([command, args]) => commandKey(command, args))).not.toContain(
+        "pnpm exec wrangler d1 migrations list DB --remote",
+      );
+      expect(deps.writeReleaseArtifact).toHaveBeenCalledWith(expect.objectContaining({
+        status: "failed_before_stage",
+        phase: "post_build_posthog",
+      }));
+    } finally {
+      process.chdir(previousCwd);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    [
+      "missing generated Worker config",
+      (deps: ReturnType<typeof releaseDeps>) => {
+        deps.readGeneratedWorkerConfig.mockRejectedValueOnce(new Error("missing generated Worker config"));
+      },
+      /missing generated Worker config/,
+    ],
+    [
+      "malformed generated Worker PostHog config",
+      (deps: ReturnType<typeof releaseDeps>) => {
+        deps.readGeneratedWorkerConfig.mockResolvedValueOnce({ vars: {} });
+      },
+      /origin-only HTTPS VITE_POSTHOG_HOST/,
+    ],
+    [
+      "mismatched metadata",
+      (deps: ReturnType<typeof releaseDeps>) => {
+        deps.readClientBuildMetadata.mockResolvedValueOnce(productionBuildMetadata("https://eu.i.posthog.com"));
+      },
+      /metadata/i,
+    ],
+    [
+      "malformed metadata",
+      (deps: ReturnType<typeof releaseDeps>) => {
+        deps.readClientBuildMetadata.mockResolvedValueOnce({
+          ...productionBuildMetadata(CUSTOM_POSTHOG_HOST),
+          extra: [undefined],
+        });
+      },
+      /metadata/i,
+    ],
+    [
+      "mismatched bundle",
+      (deps: ReturnType<typeof releaseDeps>) => {
+        deps.readClientBundleSources.mockResolvedValueOnce(productionBundleSources("https://eu.i.posthog.com"));
+      },
+      /bundle/i,
+    ],
+    [
+      "missing bundle host",
+      (deps: ReturnType<typeof releaseDeps>) => {
+        deps.readClientBundleSources.mockResolvedValueOnce([]);
+      },
+      /bundle/i,
+    ],
+  ])("rejects %s before any migration or deploy action", async (_label, mutateDeps, message) => {
+    const runCommand = successfulRunner();
+    const deps = releaseDeps(runCommand);
+    mutateDeps(deps);
+
+    await expect(runProductionCanaryRelease(deps)).rejects.toThrow(message);
+
+    const calls = runCommand.mock.calls.map(([command, args]) => commandKey(command, args));
+    expect(calls).not.toContain("pnpm exec wrangler d1 migrations list DB --remote");
+    expect(calls).not.toContain("pnpm exec wrangler d1 migrations apply DB --remote");
+    expect(calls).not.toContain(
+      `pnpm exec wrangler versions upload --tag ${RELEASE_SHA} --message Spoonjoy source ${RELEASE_SHA}`,
+    );
+    expect(deps.writeReleaseArtifact).toHaveBeenCalledWith(expect.objectContaining({
+      status: "failed_before_stage",
+      phase: "post_build_posthog",
+      migrationApply: "not_started",
+    }));
+  });
+
+  it("uses the built-in candidate CSP reader when release deps do not override it", async () => {
+    const runCommand = successfulRunner();
+    const deps = releaseDeps(runCommand);
+    delete (deps as { readCandidateCspHeaders?: unknown }).readCandidateCspHeaders;
+    const fetchImpl = vi.fn(async () => new Response("<!doctype html>", {
+      status: 200,
+      headers: {
+        "Content-Security-Policy": VALID_CANDIDATE_CSP,
+        "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+        "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+      },
+    }));
+    vi.stubGlobal("fetch", fetchImpl);
+
+    await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({
+      status: "promoted",
+      candidateVersionId: CANDIDATE_VERSION,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(String(url)).toBe("https://spoonjoy.app/?candidate_csp_verification=1");
+    expect(init).toMatchObject({
+      cache: "no-store",
+      redirect: "error",
+      headers: {
+        Accept: "text/html",
+        "Cloudflare-Workers-Version-Overrides": `spoonjoy-v2=\"${CANDIDATE_VERSION}\"`,
+      },
+    });
+  });
+
   it("restores the previous version when the candidate smoke fails", async () => {
     const smokeCommand = `pnpm run smoke:mcp:oauth -- --out mcp-oauth-canary-artifacts --worker-version-id ${CANDIDATE_VERSION}`;
     const runCommand = successfulRunner({
@@ -421,6 +936,64 @@ describe("production canary release orchestration", () => {
       candidateVersionId: CANDIDATE_VERSION,
       failure: "canary failed",
     }));
+  });
+
+  it("restores the previous version when candidate CSP validation fails before promotion", async () => {
+    const runCommand = successfulRunner({
+      "pnpm exec wrangler deployments list --json": [
+        deploymentPayload(PREVIOUS_VERSION, "2026-07-15T00:00:00Z"),
+        deploymentPayload(PREVIOUS_VERSION),
+      ],
+    });
+    const deps = releaseDeps(runCommand);
+    deps.readCandidateCspHeaders.mockResolvedValue(new Headers({
+      "Content-Security-Policy-Report-Only": "default-src 'self'; report-uri /csp-report",
+      "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+    }));
+    deps.readPublicWorkerVersion.mockResolvedValue(PREVIOUS_VERSION);
+
+    await expect(runProductionCanaryRelease(deps)).rejects.toThrow(/Candidate CSP validation failed/);
+
+    const calls = runCommand.mock.calls.map(([command, args]) => commandKey(command, args));
+    expect(calls).toContain(
+      `pnpm exec wrangler versions deploy ${PREVIOUS_VERSION}@100% -y --message Restore after failed ${RELEASE_SHA}`,
+    );
+    expect(calls).not.toContain(
+      `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@100% -y --message Promote ${RELEASE_SHA}`,
+    );
+    expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(expect.objectContaining({
+      status: "rolled_back",
+      phase: "candidate_csp",
+      failure: expect.stringContaining("Content-Security-Policy"),
+    }));
+  });
+
+  it("rejects an insecure candidate CSP before promotion even when canary smoke passes", async () => {
+    const runCommand = successfulRunner({
+      "pnpm exec wrangler deployments list --json": [
+        deploymentPayload(PREVIOUS_VERSION, "2026-07-15T00:00:00Z"),
+        deploymentPayload(PREVIOUS_VERSION),
+      ],
+    });
+    const deps = releaseDeps(runCommand);
+    deps.readCandidateCspHeaders.mockResolvedValue(new Headers({
+      "Content-Security-Policy": "default-src *; script-src * 'unsafe-inline' 'unsafe-eval' 'nonce-live'; object-src *; frame-ancestors *; base-uri *; form-action *; report-uri /csp-report; report-to csp-endpoint",
+      "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+      "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+    }));
+    deps.readPublicWorkerVersion.mockResolvedValue(PREVIOUS_VERSION);
+
+    await expect(runProductionCanaryRelease(deps)).rejects.toThrow(
+      /CSP default-src lockdown.*CSP script-src exact sources/,
+    );
+
+    const calls = runCommand.mock.calls.map(([command, args]) => commandKey(command, args));
+    expect(calls).toContain(
+      `pnpm exec wrangler versions deploy ${PREVIOUS_VERSION}@100% -y --message Restore after failed ${RELEASE_SHA}`,
+    );
+    expect(calls).not.toContain(
+      `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@100% -y --message Promote ${RELEASE_SHA}`,
+    );
   });
 
   it("allows the default rollback verification window to outlast delayed Cloudflare convergence", async () => {
@@ -502,18 +1075,26 @@ describe("production canary release orchestration", () => {
     }));
   });
 
-  it("does not create a rollback deployment when staging itself fails", async () => {
+  it("reasserts the prior deployment when staging may have failed after mutation", async () => {
     const stageCommand = `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@0% ${PREVIOUS_VERSION}@100% -y --message Stage ${RELEASE_SHA} for canary`;
-    const runCommand = successfulRunner({ [stageCommand]: new Error("stage failed") });
+    const runCommand = successfulRunner({
+      [stageCommand]: new Error("stage failed"),
+      "pnpm exec wrangler deployments list --json": [
+        deploymentPayload(PREVIOUS_VERSION),
+        deploymentPayload(PREVIOUS_VERSION),
+      ],
+    });
     const deps = releaseDeps(runCommand);
+    deps.readPublicWorkerVersion.mockResolvedValue(PREVIOUS_VERSION);
 
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("stage failed");
 
-    expect(runCommand.mock.calls.map(([command, args]) => commandKey(command, args))).not.toContain(
+    expect(runCommand.mock.calls.map(([command, args]) => commandKey(command, args))).toContain(
       `pnpm exec wrangler versions deploy ${PREVIOUS_VERSION}@100% -y --message Restore after failed ${RELEASE_SHA}`,
     );
     expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(expect.objectContaining({
-      status: "failed_before_stage",
+      status: "rolled_back",
+      phase: "stage",
       failure: "stage failed",
     }));
   });
@@ -1047,6 +1628,7 @@ describe("release failure containment", () => {
   it("redacts sensitive failure text and bounds artifacts", async () => {
     const failure = new Error(
       `Bearer bearer-value token=token-value password:password-value api_key=api-value ` +
+      `Authorization: Basic dXNlcjpwYXNz ` +
       `aaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbb.cccccccccccccccc ${"x".repeat(600)}\nnext`,
     );
     const runCommand = successfulRunner({ "pnpm run deploy:preflight": failure });
@@ -1054,7 +1636,9 @@ describe("release failure containment", () => {
 
     await expect(runProductionCanaryRelease(deps)).rejects.toBe(failure);
     const artifact = deps.writeReleaseArtifact.mock.calls[0]?.[0];
-    expect(artifact.failure).not.toMatch(/bearer-value|token-value|password-value|api-value|aaaaaa/);
+    expect(artifact.failure).not.toMatch(
+      /bearer-value|token-value|password-value|api-value|dXNlcjpwYXNz|aaaaaa/,
+    );
     expect(artifact.failure?.length).toBeLessThanOrEqual(500);
     expect(artifact.failure).not.toContain("\n");
   });
@@ -1159,20 +1743,219 @@ describe("release failure containment", () => {
 });
 
 describe("execFile command adapter", () => {
-  it("returns stdout and stderr without using a shell", async () => {
+  it("returns warning-clean stdout without using a shell", async () => {
     const execFile = vi.fn((command, args, options, callback) => {
       expect(command).toBe("pnpm");
       expect(args).toEqual(["run", "build"]);
       expect(options).toEqual({ encoding: "utf8", env: { PATH: "/bin" }, maxBuffer: 16 * 1024 * 1024 });
-      callback(null, "built", "notice");
+      callback(null, "built", "");
+      return { stdout: null, stderr: {} };
     });
     const runner = createReleaseCommandRunner(execFile);
 
     await expect(runner("pnpm", ["run", "build"], { env: { PATH: "/bin" } })).resolves.toEqual({
       stdout: "built",
-      stderr: "notice",
+      stderr: "",
     });
     expect(execFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores non-emitter child streams when the callback completes asynchronously", async () => {
+    const execFile = vi.fn((_command, _args, _options, callback) => {
+      queueMicrotask(() => callback(null, "built", ""));
+      return { stdout: null, stderr: {} };
+    });
+    const runner = createReleaseCommandRunner(execFile);
+
+    await expect(runner("pnpm", ["run", "build"])).resolves.toEqual({
+      stdout: "built",
+      stderr: "",
+    });
+  });
+
+  it("streams successful child stdout while retaining captured output", async () => {
+    const childStdout = new EventEmitter();
+    const childStderr = new EventEmitter();
+    const execFile = vi.fn((_command, _args, _options, callback) => {
+      queueMicrotask(() => {
+        childStdout.emit("data", "build complete\n");
+        callback(null, "captured stdout", "");
+      });
+      return { stdout: childStdout, stderr: childStderr };
+    });
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    stdout.mockClear();
+    stderr.mockClear();
+    const runner = createReleaseCommandRunner(execFile);
+
+    await expect(runner("pnpm", ["run", "build"])).resolves.toEqual({
+      stdout: "captured stdout",
+      stderr: "",
+    });
+
+    expect(stdout).toHaveBeenCalledWith("build complete\n");
+    expect(stderr).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["warning token on stdout", "Warning: build fallback used\n", ""],
+    ["plural warning summary on stdout", "Found 2 warnings\n", ""],
+    ["otherwise unmarked stderr", "build complete\n", "fallback used\n"],
+  ])("rejects successful commands with %s", async (_label, stdout, stderr) => {
+    const runner = createReleaseCommandRunner((_command, _args, _options, callback) => {
+      callback(null, stdout, stderr);
+    });
+
+    await expect(runner("pnpm", ["run", "build"])).rejects.toThrow(
+      "Command emitted unexpected warning output: pnpm",
+    );
+  });
+
+  it("redacts sensitive streamed child output without putting captured output in command errors", async () => {
+    const childStdout = new EventEmitter();
+    const childStderr = new EventEmitter();
+    const execFile = vi.fn((_command, _args, _options, callback) => {
+      queueMicrotask(() => {
+        childStdout.emit("data", "Bearer bearer-value\n");
+        childStderr.emit("data", "api_key=plain-secret\n");
+        callback(Object.assign(new Error("failed"), { code: 1 }), "secret=stdout-value", "token=stderr-value");
+      });
+      return { stdout: childStdout, stderr: childStderr };
+    });
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    stdout.mockClear();
+    stderr.mockClear();
+    const runner = createReleaseCommandRunner(execFile);
+
+    await expect(runner("pnpm", ["run", "build"])).rejects.toThrow("exit code 1");
+    await expect(runner("pnpm", ["run", "build"])).rejects.not.toThrow(/stdout-value|stderr-value/);
+
+    expect(stdout).toHaveBeenCalledWith("Bearer [REDACTED]\n");
+    expect(stderr).toHaveBeenCalledWith("api_key=[REDACTED]\n");
+  });
+
+  it("redacts credentials split across arbitrary stream chunks and flushes trailing output", async () => {
+    const childStdout = new EventEmitter();
+    const childStderr = new EventEmitter();
+    const jwt = `${"a".repeat(16)}.${"b".repeat(16)}.${"c".repeat(16)}`;
+    const execFile = vi.fn((_command, _args, _options, callback) => {
+      queueMicrotask(() => {
+        childStdout.emit("data", "Bea");
+        childStdout.emit("data", `rer bearer-value\n${jwt.slice(0, 25)}`);
+        childStdout.emit("data", `${jwt.slice(25)}\npass`);
+        childStdout.emit("data", "word:trailing-secret");
+        childStderr.emit("data", "api_");
+        childStderr.emit("data", "key=split-secret\n");
+        callback(null, "captured stdout", "");
+      });
+      return { stdout: childStdout, stderr: childStderr };
+    });
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    stdout.mockClear();
+    stderr.mockClear();
+    const runner = createReleaseCommandRunner(execFile);
+
+    await expect(runner("pnpm", ["run", "build"])).resolves.toEqual({
+      stdout: "captured stdout",
+      stderr: "",
+    });
+
+    const streamedStdout = stdout.mock.calls.map(([chunk]) => String(chunk)).join("");
+    const streamedStderr = stderr.mock.calls.map(([chunk]) => String(chunk)).join("");
+    expect(streamedStdout).toBe(
+      "Bearer [REDACTED]\n[REDACTED]\npassword=[REDACTED]",
+    );
+    expect(streamedStderr).toBe("api_key=[REDACTED]\n");
+    expect(`${streamedStdout}${streamedStderr}`).not.toMatch(
+      /bearer-value|split-secret|trailing-secret|aaaaaaaaaaaaaaaa/,
+    );
+  });
+
+  it.each([
+    ["Bearer token", "Bearer bearer-value\n", "Bearer [REDACTED]\n"],
+    ["token assignment", "token=token-value\n", "token=[REDACTED]\n"],
+    ["secret assignment", "secret: secret-value\n", "secret=[REDACTED]\n"],
+    ["password assignment", "password = password-value\n", "password=[REDACTED]\n"],
+    [
+      "authorization assignment",
+      "authorization: authorization-value\n",
+      "authorization=[REDACTED]\n",
+    ],
+    [
+      "Basic authorization header",
+      "Authorization: Basic dXNlcjpwYXNz\n",
+      "Authorization=[REDACTED]\n",
+    ],
+    ["underscore API key", "api_key=api-value\n", "api_key=[REDACTED]\n"],
+    ["hyphenated API key", "api-key: api-value\n", "api-key=[REDACTED]\n"],
+    [
+      "JWT",
+      `${"a".repeat(16)}.${"b".repeat(16)}.${"c".repeat(16)}\n`,
+      "[REDACTED]\n",
+    ],
+    ["newline-spanning Bearer token", "Bearer \nsecret-value\n", "Bearer [REDACTED]\n"],
+    ["newline-spanning assignment", "token =\nsecret-value\n", "token=[REDACTED]\n"],
+  ])("redacts a %s at every possible stream split", async (_label, sensitiveLine, expected) => {
+    let writes: string[] = [];
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
+      writes.push(String(chunk));
+      return true;
+    });
+    stdout.mockClear();
+
+    for (let split = 1; split < sensitiveLine.length; split += 1) {
+      writes = [];
+      const childStdout = new EventEmitter();
+      const childStderr = new EventEmitter();
+      const runner = createReleaseCommandRunner((_command, _args, _options, callback) => {
+        queueMicrotask(() => {
+          childStdout.emit("data", sensitiveLine.slice(0, split));
+          childStdout.emit("data", sensitiveLine.slice(split));
+          callback(null, "captured stdout", "");
+        });
+        return { stdout: childStdout, stderr: childStderr };
+      });
+
+      await expect(runner("pnpm", ["run", "build"])).resolves.toEqual({
+        stdout: "captured stdout",
+        stderr: "",
+      });
+      expect(writes.join("")).toBe(expected);
+    }
+  });
+
+  it("flushes trailing stream output once across end, close, and callback", async () => {
+    const childStdout = new EventEmitter();
+    const childStderr = new EventEmitter();
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    stdout.mockClear();
+    let callsBeforeEnd = -1;
+    let callsAfterEnd = -1;
+    const runner = createReleaseCommandRunner((_command, _args, _options, callback) => {
+      queueMicrotask(() => {
+        childStdout.emit("data", "ordinary trailing output");
+        callsBeforeEnd = stdout.mock.calls.length;
+        childStdout.emit("end");
+        callsAfterEnd = stdout.mock.calls.length;
+        childStdout.emit("close");
+        callback(null, "captured stdout", "");
+      });
+      return { stdout: childStdout, stderr: childStderr };
+    });
+
+    await expect(runner("pnpm", ["run", "build"])).resolves.toEqual({
+      stdout: "captured stdout",
+      stderr: "",
+    });
+
+    expect(callsBeforeEnd).toBe(0);
+    expect(callsAfterEnd).toBe(1);
+    expect(stdout.mock.calls.map(([chunk]) => String(chunk)).join("")).toBe(
+      "ordinary trailing output",
+    );
   });
 
   it.each([
@@ -1220,6 +2003,35 @@ describe("release artifact and CLI boundary", () => {
       new Response("{}", { status: 200 })
     ))).resolves.toBeNull();
     await expect(readPublicWorkerVersion("https://spoonjoy.app", async () => (
+      new Response("nope", { status: 503 })
+    ))).rejects.toThrow("HTTP 503");
+  });
+
+  it("reads candidate CSP headers through the exact Cloudflare Worker-version override", async () => {
+    const fetchImpl = vi.fn(async () => new Response("<!doctype html>", {
+      headers: {
+        "Content-Security-Policy": "default-src 'self'",
+        "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+      },
+      status: 200,
+    }));
+
+    await expect(readCandidateCspHeaders("https://spoonjoy.app/path", CANDIDATE_VERSION, fetchImpl)).resolves.toEqual(
+      expect.any(Headers),
+    );
+    const [url, options] = fetchImpl.mock.calls[0];
+    expect(url).toBeInstanceOf(URL);
+    expect(String(url)).toBe("https://spoonjoy.app/?candidate_csp_verification=1");
+    expect(options).toEqual({
+      cache: "no-store",
+      headers: {
+        Accept: "text/html",
+        "Cloudflare-Workers-Version-Overrides": `spoonjoy-v2="${CANDIDATE_VERSION}"`,
+      },
+      redirect: "error",
+    });
+
+    await expect(readCandidateCspHeaders("https://spoonjoy.app", CANDIDATE_VERSION, async () => (
       new Response("nope", { status: 503 })
     ))).rejects.toThrow("HTTP 503");
   });
@@ -1317,7 +2129,7 @@ describe("release artifact and CLI boundary", () => {
     expect(() => parseReleaseCliOptions(argv, env)).toThrow();
   });
 
-  it("runs the CLI with an injected execFile implementation", async () => {
+  it("runs the CLI with injected commands and the authoritative Wrangler PostHog host", async () => {
     vi.stubEnv("SOURCE_SHA", RELEASE_SHA);
     const responses: Record<string, string> = {
       "git rev-parse HEAD": RELEASE_SHA,
@@ -1346,7 +2158,18 @@ describe("release artifact and CLI boundary", () => {
     const writeReleaseArtifact = vi.fn(async () => undefined);
 
     const result = await runProductionReleaseCli({
+      ...postHogArtifactReaderDeps(CUSTOM_POSTHOG_HOST),
       execFileImpl,
+      readCandidateCspHeaders: async () => new Headers({
+        "Content-Security-Policy": buildContentSecurityPolicy(VALID_CSP_NONCE, {
+          VITE_POSTHOG_HOST: CUSTOM_POSTHOG_HOST,
+        }),
+        "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+        "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+      }),
+      readWranglerConfig: async () => ({
+        vars: { VITE_POSTHOG_HOST: CUSTOM_POSTHOG_HOST },
+      }),
       readPublicWorkerVersion: async () => CANDIDATE_VERSION,
       readMigrationFile: async () => "CREATE TABLE Safe(id TEXT);",
       sleep: async () => undefined,
@@ -1374,6 +2197,11 @@ describe("release artifact and CLI boundary", () => {
     await expect(runProductionReleaseCli({
       argv: ["--source-sha", RELEASE_SHA, "--rollback-version-id", CANDIDATE_VERSION],
       env: { PATH: "/test/bin" },
+      readCandidateCspHeaders: async () => new Headers({
+        "Content-Security-Policy": VALID_CANDIDATE_CSP,
+        "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+        "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+      }),
       readPublicWorkerVersion: async () => CANDIDATE_VERSION,
       runCommand,
       sleep: async () => undefined,
@@ -1381,7 +2209,7 @@ describe("release artifact and CLI boundary", () => {
     })).resolves.toMatchObject({ status: "rollback_promoted" });
   });
 
-  it("uses the default public-version reader and delay in CLI verification", async () => {
+  it("uses the default candidate/public readers and delay in CLI verification", async () => {
     vi.useFakeTimers();
     const runCommand = successfulRunner({
       "pnpm exec wrangler d1 migrations list DB --remote": "No migrations to apply!",
@@ -1392,6 +2220,14 @@ describe("release artifact and CLI boundary", () => {
       ],
     });
     const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response("<html></html>", {
+        headers: {
+          "Content-Security-Policy": VALID_CANDIDATE_CSP,
+          "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+          "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+        },
+        status: 200,
+      }))
       .mockResolvedValueOnce(new Response("{}", {
         headers: { "X-Spoonjoy-Worker-Version": PREVIOUS_VERSION },
         status: 200,
@@ -1403,7 +2239,11 @@ describe("release artifact and CLI boundary", () => {
     vi.stubGlobal("fetch", fetchImpl);
 
     const release = runProductionReleaseCli({
+      ...postHogArtifactReaderDeps("https://us.i.posthog.com"),
       env: { SOURCE_SHA: RELEASE_SHA, PATH: "/test/bin" },
+      readWranglerConfig: async () => ({
+        vars: { VITE_POSTHOG_HOST: "https://us.i.posthog.com" },
+      }),
       runCommand,
       verificationAttempts: 2,
       writeReleaseArtifact: async () => undefined,
@@ -1411,7 +2251,12 @@ describe("release artifact and CLI boundary", () => {
     await vi.runAllTimersAsync();
 
     await expect(release).resolves.toMatchObject({ status: "promoted" });
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({
+      headers: {
+        "Cloudflare-Workers-Version-Overrides": buildWorkerVersionOverride("spoonjoy-v2", CANDIDATE_VERSION),
+      },
+    });
   });
 
   it("uses the default migration reader and artifact writer", async () => {
@@ -1421,8 +2266,14 @@ describe("release artifact and CLI boundary", () => {
     });
     try {
       const result = await runProductionReleaseCli({
+        ...postHogArtifactReaderDeps("https://us.i.posthog.com"),
         argv: ["--artifact-dir", artifactDir],
         env: { SOURCE_SHA: RELEASE_SHA, PATH: "/test/bin" },
+        readCandidateCspHeaders: async () => new Headers({
+          "Content-Security-Policy": VALID_CANDIDATE_CSP,
+          "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+          "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+        }),
         readPublicWorkerVersion: async () => CANDIDATE_VERSION,
         runCommand,
         sleep: async () => undefined,

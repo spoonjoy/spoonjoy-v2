@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { parseDocument } from "yaml";
 
 const GENERATED_ARTIFACT_PATHS = [
   "coverage/",
@@ -28,6 +29,19 @@ describe("generated artifact hygiene", () => {
   });
 });
 
+describe("pre-install workflow bootstrap", () => {
+  it("keeps the warning gate limited to Node built-ins before dependencies are installed", () => {
+    const warningGate = readFileSync("scripts/warning-gate.ts", "utf8");
+    const importSpecifiers = Array.from(
+      warningGate.matchAll(/^import(?:\s+type)?[\s\S]*?\sfrom\s+["']([^"']+)["'];?$/gm),
+      (match) => match[1],
+    );
+
+    expect(importSpecifiers).not.toEqual([]);
+    expect(importSpecifiers.every((specifier) => specifier.startsWith("node:"))).toBe(true);
+  });
+});
+
 describe("UI audit tooling", () => {
   it("keeps the UI audit inventory and crawl scripts in the repo", () => {
     expect(existsSync("scripts/inventory-ui.mjs")).toBe(true);
@@ -47,6 +61,9 @@ describe("UI audit tooling", () => {
     const productionRelease = readFileSync("scripts/deploy-production-canary.ts", "utf8");
     const canaryWorkflow = readFileSync(".github/workflows/mcp-oauth-canary.yml", "utf8");
     const auditWorkflow = readFileSync(".github/workflows/mcp-oauth-d1-audit.yml", "utf8");
+    const parsedProductionDeploy = parseDocument(productionDeploy).toJS() as {
+      jobs: { deploy: { steps: Array<{ run?: string }> } };
+    };
 
     expect(packageJson.scripts?.["smoke:mcp:oauth"]).toBe(
       "node scripts/smoke-mcp-oauth-live.mjs --target-env production --base-url https://spoonjoy.app",
@@ -54,7 +71,9 @@ describe("UI audit tooling", () => {
     expect(packageJson.scripts?.["audit:mcp:oauth"]).toBe(
       "node scripts/audit-mcp-oauth-d1.mjs --target-env production --base-url https://spoonjoy.app",
     );
-    expect(productionDeploy).toContain("pnpm run deploy:auto");
+    expect(parsedProductionDeploy.jobs.deploy.steps).toContainEqual(
+      expect.objectContaining({ run: "node scripts/workflow-security.mjs run-production-deploy" }),
+    );
     expect(productionRelease).toContain('"run", "smoke:mcp:oauth"');
     expect(productionDeploy).toContain("node scripts/report-mcp-oauth-canary.mjs");
     expect(productionDeploy).toContain("issues: write");

@@ -46,11 +46,16 @@
 
   "vars": {
     "NODE_ENV": "production",
-    "SPOONJOY_BASE_URL": "https://spoonjoy.app"
+    "SPOONJOY_BASE_URL": "https://spoonjoy.app",
+    "SPOONJOY_CSP_MODE": "enforce",
+    "VITE_POSTHOG_HOST": "https://us.i.posthog.com"
   },
 
   "env": {
     "qa": {
+      "version_metadata": {
+        "binding": "CF_VERSION_METADATA"
+      },
       "d1_databases": [
         {
           "binding": "DB",
@@ -83,7 +88,9 @@
       ],
       "vars": {
         "NODE_ENV": "production",
-        "SPOONJOY_BASE_URL": "https://spoonjoy-v2-qa.mendelow-studio.workers.dev"
+        "SPOONJOY_BASE_URL": "https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
+        "SPOONJOY_CSP_MODE": "enforce",
+        "VITE_POSTHOG_HOST": "https://us.i.posthog.com"
       }
     }
   }

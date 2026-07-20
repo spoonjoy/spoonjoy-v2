@@ -3,6 +3,9 @@ import {
   SECURITY_HEADERS,
   buildContentSecurityPolicy,
   generateNonce,
+  resolveContentSecurityPolicyMode,
+  resolvePostHogBuildHost,
+  resolvePostHogCspOrigins,
   withSecurityHeaders,
 } from "~/lib/security-headers.server";
 
@@ -70,23 +73,61 @@ describe("withSecurityHeaders", () => {
     expect(permissions).toContain("camera=()");
   });
 
-  it("ships the CSP report-only (never the enforcing header)", () => {
+  it("defaults absent or invalid CSP modes to enforcement", () => {
     const result = withSecurityHeaders(new Response("ok"));
-    expect(result.headers.get("Content-Security-Policy-Report-Only")).toBe(
+    expect(result.headers.get("Content-Security-Policy")).toBe(
       buildContentSecurityPolicy(),
     );
-    // Report-only must NOT enforce — the enforcing header stays absent.
-    expect(result.headers.get("Content-Security-Policy")).toBeNull();
+    expect(result.headers.get("Content-Security-Policy-Report-Only")).toBeNull();
   });
 
-  it("embeds the per-request nonce in the report-only CSP when provided", () => {
+  it("embeds the per-request nonce in the default enforcing CSP when provided", () => {
     const result = withSecurityHeaders(new Response("ok"), "test-nonce-123");
-    expect(result.headers.get("Content-Security-Policy-Report-Only")).toBe(
+    expect(result.headers.get("Content-Security-Policy")).toBe(
       buildContentSecurityPolicy("test-nonce-123"),
     );
-    expect(result.headers.get("Content-Security-Policy-Report-Only")).toContain(
+    expect(result.headers.get("Content-Security-Policy")).toContain(
       "'nonce-test-nonce-123'",
     );
+  });
+
+  it.each([undefined, null, "", " ", "ENFORCE", "Report-Only", "invalid"])(
+    "fails closed for a non-exact CSP mode: %s",
+    (mode) => {
+      expect(resolveContentSecurityPolicyMode({ SPOONJOY_CSP_MODE: mode })).toBe("enforce");
+      const result = withSecurityHeaders(new Response("ok"), undefined, {
+        SPOONJOY_CSP_MODE: mode,
+      });
+      expect(result.headers.get("Content-Security-Policy")).toBeTruthy();
+      expect(result.headers.get("Content-Security-Policy-Report-Only")).toBeNull();
+    },
+  );
+
+  it("ships an enforcing CSP, not report-only, when the environment selects enforcement", () => {
+    const result = withSecurityHeaders(
+      new Response("ok"),
+      "enforced-nonce",
+      { SPOONJOY_CSP_MODE: "enforce" },
+    );
+
+    expect(result.headers.get("Content-Security-Policy")).toBe(
+      buildContentSecurityPolicy("enforced-nonce"),
+    );
+    expect(result.headers.get("Content-Security-Policy")).toContain("'nonce-enforced-nonce'");
+    expect(result.headers.get("Content-Security-Policy-Report-Only")).toBeNull();
+  });
+
+  it("keeps the one-commit rollback flag report-only and non-enforcing", () => {
+    const result = withSecurityHeaders(
+      new Response("ok"),
+      "rollback-nonce",
+      { SPOONJOY_CSP_MODE: "report-only" },
+    );
+
+    expect(result.headers.get("Content-Security-Policy-Report-Only")).toBe(
+      buildContentSecurityPolicy("rollback-nonce"),
+    );
+    expect(result.headers.get("Content-Security-Policy")).toBeNull();
   });
 });
 
@@ -139,10 +180,90 @@ describe("buildContentSecurityPolicy", () => {
     ]);
   });
 
+  it("uses the configured HTTPS PostHog host and matching assets origin", () => {
+    const csp = buildContentSecurityPolicy("abc", {
+      VITE_POSTHOG_HOST: " https://eu.i.posthog.com/project/123?ignored=1 ",
+    });
+
+    expect(directiveSources(csp, "script-src")).toEqual([
+      "'self'",
+      "'nonce-abc'",
+      "https://eu-assets.i.posthog.com",
+    ]);
+    expect(directiveSources(csp, "connect-src")).toEqual([
+      "'self'",
+      "https://eu.i.posthog.com",
+      "https://eu-assets.i.posthog.com",
+    ]);
+  });
+
+  it("allows a validated custom HTTPS PostHog origin without carrying URL path data", () => {
+    const csp = buildContentSecurityPolicy(undefined, {
+      VITE_POSTHOG_HOST: "https://analytics.example.com/posthog?secret=ignored",
+    });
+
+    expect(directiveSources(csp, "script-src")).toEqual([
+      "'self'",
+      "https://analytics.example.com",
+    ]);
+    expect(directiveSources(csp, "connect-src")).toEqual([
+      "'self'",
+      "https://analytics.example.com",
+    ]);
+    expect(csp).not.toContain("secret=ignored");
+    expect(csp).not.toContain("/posthog");
+  });
+
+  it("falls back to the conservative US PostHog origins for unsafe configured hosts", () => {
+    for (const VITE_POSTHOG_HOST of [
+      "http://eu.i.posthog.com",
+      "javascript:alert(1)",
+      "https://user:pass@eu.i.posthog.com",
+      "   ",
+      "not a url",
+    ]) {
+      expect(resolvePostHogCspOrigins({ VITE_POSTHOG_HOST })).toEqual({
+        ingestOrigin: "https://us.i.posthog.com",
+        assetsOrigin: "https://us-assets.i.posthog.com",
+      });
+    }
+  });
+
   it("points violations at the sink route (legacy report-uri + modern report-to)", () => {
     const csp = buildContentSecurityPolicy();
     expect(directiveSources(csp, "report-uri")).toEqual(["/csp-report"]);
     expect(directiveSources(csp, "report-to")).toEqual(["csp-endpoint"]);
+  });
+});
+
+describe("resolvePostHogBuildHost", () => {
+  it.each([
+    ["US", "https://us.i.posthog.com"],
+    ["EU", "https://eu.i.posthog.com"],
+    ["custom", "https://analytics.example.com"],
+  ])("uses the authoritative Wrangler host for %s production and QA builds", (_label, host) => {
+    const wrangler = {
+      vars: { VITE_POSTHOG_HOST: host },
+      env: { qa: { vars: { VITE_POSTHOG_HOST: host } } },
+    };
+
+    expect(resolvePostHogBuildHost(wrangler)).toBe(host);
+    expect(resolvePostHogBuildHost(wrangler, "qa")).toBe(host);
+  });
+
+  it("fails closed for a missing environment or an invalid deployment host", () => {
+    const wrangler = {
+      vars: { VITE_POSTHOG_HOST: "http://us.i.posthog.com" },
+      env: { qa: { vars: {} } },
+    };
+
+    expect(() => resolvePostHogBuildHost(wrangler)).toThrow(/origin-only HTTPS/);
+    expect(() => resolvePostHogBuildHost(wrangler, "qa")).toThrow(/origin-only HTTPS/);
+    expect(() => resolvePostHogBuildHost(wrangler, "missing")).toThrow(/missing/);
+    expect(() => resolvePostHogBuildHost(null as never)).toThrow(/production.*missing/);
+    expect(() => resolvePostHogBuildHost({
+      vars: { VITE_POSTHOG_HOST: " https://us.i.posthog.com " },
+    })).toThrow(/origin-only HTTPS/);
   });
 });
 

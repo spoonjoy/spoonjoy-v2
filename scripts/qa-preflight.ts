@@ -2,6 +2,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolvePostHogCspOrigins } from "../app/lib/security-headers.server";
 import {
   createWranglerRunner,
   formatCheck,
@@ -16,6 +17,11 @@ import {
   QA_ENV_NAME as SHARED_QA_ENV_NAME,
   QA_R2_BUCKET as SHARED_QA_R2_BUCKET,
 } from "./script-environment.mjs";
+import {
+  POSTHOG_CLIENT_BUILD_METADATA_PATH,
+  bundledPostHogHostMatches,
+  readPostHogClientBundleSources,
+} from "./posthog-build-metadata";
 
 export const QA_ENV_NAME = SHARED_QA_ENV_NAME;
 export const QA_BASE_URL = SHARED_QA_BASE_URL;
@@ -48,6 +54,8 @@ export interface QaPreflightDeps {
   runWrangler?: RunWrangler;
   createProbeFile?: () => Promise<ProbeFile>;
   readGeneratedBuildConfig?: () => Promise<Record<string, unknown>>;
+  readClientBuildMetadata?: () => Promise<Record<string, unknown>>;
+  readClientBundleSources?: () => Promise<readonly string[]>;
   env?: NodeJS.ProcessEnv;
 }
 
@@ -182,6 +190,7 @@ async function checkStaticConfig(rootDir: string): Promise<PreflightCheck> {
     gitignore,
     pnpmWorkspace,
     cloudflareEnvDts,
+    reactRouterBuild,
     readme,
     deploymentDoc,
     vitestConfig,
@@ -197,6 +206,7 @@ async function checkStaticConfig(rootDir: string): Promise<PreflightCheck> {
     readFile(path.join(rootDir, ".gitignore"), "utf8"),
     readFile(path.join(rootDir, "pnpm-workspace.yaml"), "utf8"),
     readFile(path.join(rootDir, "app/cloudflare-env.d.ts"), "utf8"),
+    readFile(path.join(rootDir, "scripts/react-router-build.ts"), "utf8"),
     readFile(path.join(rootDir, "README.md"), "utf8"),
     readFile(path.join(rootDir, "docs/deployment.md"), "utf8"),
     readFile(path.join(rootDir, "vitest.config.ts"), "utf8"),
@@ -214,6 +224,7 @@ async function checkStaticConfig(rootDir: string): Promise<PreflightCheck> {
     gitignore,
     pnpmWorkspace,
     cloudflareEnvDts,
+    reactRouterBuild,
     readme,
     deploymentDoc,
     vitestConfig,
@@ -232,11 +243,41 @@ async function checkStaticConfig(rootDir: string): Promise<PreflightCheck> {
   return check("QA static config", true, `QA static config targets ${QA_BASE_URL}.`);
 }
 
-export function validateQaGeneratedBuildConfig(config: Record<string, unknown>): PreflightCheck {
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const keys = Object.keys(value).sort();
+  return keys.length === expected.length && expected.every((key, index) => keys[index] === key);
+}
+
+export function validateQaGeneratedBuildConfig(
+  config: Record<string, unknown>,
+  clientMetadata: Record<string, unknown> = {},
+  clientBundleSources: readonly string[] = [],
+): PreflightCheck {
   const vars = objectRecord(config.vars);
   const db = bindingRecord(config.d1_databases, "DB");
   const photos = bindingRecord(config.r2_buckets, "PHOTOS");
+  const versionMetadata = objectRecord(config.version_metadata);
   const rateLimits = rateLimitNamesAndIds(config.ratelimits);
+  const publicEnv = objectRecord(clientMetadata.publicEnv);
+  const runtimeCsp = objectRecord(clientMetadata.runtimeCsp);
+  const workerPostHogHost = typeof vars.VITE_POSTHOG_HOST === "string"
+    ? vars.VITE_POSTHOG_HOST
+    : "";
+  const resolvedRuntimeCsp = resolvePostHogCspOrigins({
+    VITE_POSTHOG_HOST: workerPostHogHost,
+  });
+  const postHogArtifactsMatch =
+    workerPostHogHost !== "" &&
+    workerPostHogHost === resolvedRuntimeCsp.ingestOrigin &&
+    hasExactKeys(clientMetadata, ["environment", "publicEnv", "runtimeCsp", "schemaVersion"]) &&
+    clientMetadata.schemaVersion === 1 &&
+    clientMetadata.environment === "qa" &&
+    hasExactKeys(publicEnv, ["VITE_POSTHOG_HOST"]) &&
+    publicEnv.VITE_POSTHOG_HOST === workerPostHogHost &&
+    hasExactKeys(runtimeCsp, ["assetsOrigin", "ingestOrigin"]) &&
+    runtimeCsp.ingestOrigin === resolvedRuntimeCsp.ingestOrigin &&
+    runtimeCsp.assetsOrigin === resolvedRuntimeCsp.assetsOrigin &&
+    bundledPostHogHostMatches(clientBundleSources, workerPostHogHost);
   const hasExpectedRateLimitBindings =
     rateLimits.names.length === REQUIRED_QA_RATE_LIMIT_BINDINGS.length &&
     rateLimits.namespaceIds.length === REQUIRED_QA_RATE_LIMIT_BINDINGS.length &&
@@ -246,7 +287,10 @@ export function validateQaGeneratedBuildConfig(config: Record<string, unknown>):
 
   const ok =
     config.name === "spoonjoy-v2-qa" &&
+    versionMetadata.binding === "CF_VERSION_METADATA" &&
     vars.SPOONJOY_BASE_URL === QA_BASE_URL &&
+    vars.SPOONJOY_CSP_MODE === "enforce" &&
+    postHogArtifactsMatch &&
     db?.database_name === "spoonjoy-qa" &&
     db.database_id === QA_D1_DATABASE_ID &&
     photos?.bucket_name === QA_R2_BUCKET &&
@@ -257,13 +301,17 @@ export function validateQaGeneratedBuildConfig(config: Record<string, unknown>):
     "QA generated build config",
     ok,
     ok
-      ? "Generated Worker config uses QA Worker name, base URL, D1, R2, and rate-limit bindings."
-      : "Generated Worker config is not isolated to QA. Rebuild with `CLOUDFLARE_ENV=qa pnpm run build` before `wrangler deploy --env qa`.",
+      ? "Generated Worker and client artifacts use the same QA PostHog host, runtime CSP origins, Worker name, base URL, D1, R2, and rate-limit bindings."
+      : "Generated Worker/client artifacts are not isolated to QA, do not share one normalized VITE_POSTHOG_HOST/runtime CSP contract, are missing SPOONJOY_CSP_MODE=enforce, or cannot expose CF_VERSION_METADATA. Rebuild with `CLOUDFLARE_ENV=qa pnpm run build` before `wrangler deploy --env qa`.",
   );
 }
 
 async function readDefaultGeneratedBuildConfig(rootDir: string): Promise<Record<string, unknown>> {
   return readJsonFile(path.join(rootDir, "build/server/wrangler.json"));
+}
+
+async function readDefaultClientBuildMetadata(rootDir: string): Promise<Record<string, unknown>> {
+  return readJsonFile(path.join(rootDir, POSTHOG_CLIENT_BUILD_METADATA_PATH));
 }
 
 async function checkQaMigrations(runWrangler: RunWrangler, env: NodeJS.ProcessEnv): Promise<PreflightCheck> {
@@ -406,11 +454,17 @@ export async function runQaPreflight(rootDir = process.cwd(), deps: QaPreflightD
   const env = deps.env ?? process.env;
   const createProbeFile = deps.createProbeFile ?? createDefaultProbeFile;
   const readGeneratedBuildConfig = deps.readGeneratedBuildConfig ?? (() => readDefaultGeneratedBuildConfig(rootDir));
+  const readClientBuildMetadata = deps.readClientBuildMetadata ?? (() => readDefaultClientBuildMetadata(rootDir));
+  const readClientBundleSources = deps.readClientBundleSources ?? (() => readPostHogClientBundleSources(rootDir));
 
   const checks = [
     await checkStaticConfig(rootDir),
     ...(env.SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG === "1"
-      ? [validateQaGeneratedBuildConfig(await readGeneratedBuildConfig())]
+      ? [validateQaGeneratedBuildConfig(
+          await readGeneratedBuildConfig(),
+          await readClientBuildMetadata(),
+          await readClientBundleSources(),
+        )]
       : []),
     await checkQaMigrations(runWrangler, env),
     await checkQaSecrets(runWrangler, env),
@@ -445,6 +499,8 @@ export async function main(deps: QaMainDeps = {}): Promise<void> {
     runWrangler: deps.runWrangler,
     createProbeFile: deps.createProbeFile,
     readGeneratedBuildConfig: deps.readGeneratedBuildConfig,
+    readClientBuildMetadata: deps.readClientBuildMetadata,
+    readClientBundleSources: deps.readClientBundleSources,
     env: deps.env,
   });
   for (const item of result.checks) {

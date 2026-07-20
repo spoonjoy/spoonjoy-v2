@@ -14,7 +14,12 @@
     "scripts/deploy-production-canary.ts",
     "scripts/migrate-cloudinary-covers-to-r2.ts",
     "scripts/native-dogfood-api-server.ts",
+    "scripts/production-readiness.ts",
+    "scripts/posthog-build-metadata.ts",
     "scripts/react-router-build.ts",
-    "scripts/qa-preflight.ts"
+    "scripts/react-router-build-runner.ts",
+    "scripts/qa-preflight.ts",
+    "scripts/warning-gate.ts",
+    "scripts/workflow-security.mjs"
   ]
 }

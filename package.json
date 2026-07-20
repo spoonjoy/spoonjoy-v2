@@ -8,15 +8,20 @@
     "node": ">=22 <23",
     "pnpm": "10.28.1"
   },
+  "pnpm": {
+    "overrides": {
+      "axios": "1.18.0"
+    }
+  },
   "scripts": {
-    "postinstall": "prisma generate",
+    "postinstall": "PRISMA_HIDE_UPDATE_MESSAGE=1 prisma generate",
     "dev": "react-router dev",
     "api:playground:generate": "tsx scripts/generate-api-playground.ts",
     "build": "pnpm run api:playground:generate && tsx scripts/react-router-build.ts",
     "preview": "wrangler pages dev",
     "deploy": "pnpm run deploy:preflight && pnpm run build && pnpm exec wrangler deploy",
     "deploy:auto": "tsx scripts/deploy-production-canary.ts",
-    "deploy:qa": "SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run qa:preflight && CLOUDFLARE_ENV=qa pnpm run build && pnpm run qa:migrate && SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG=1 pnpm run qa:preflight && pnpm exec wrangler deploy --env qa",
+    "deploy:qa": "SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run qa:preflight && node scripts/warning-gate.ts -- env CLOUDFLARE_ENV=qa pnpm run build && pnpm run qa:migrate && SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG=1 pnpm run qa:preflight && pnpm exec wrangler deploy --env qa",
     "deploy:preflight": "tsx scripts/deployment-preflight.ts",
     "qa:preflight": "tsx scripts/qa-preflight.ts",
     "qa:migrate": "pnpm exec wrangler d1 migrations apply DB --remote --env qa",
@@ -34,8 +39,8 @@
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "test": "pnpm run api:playground:generate && vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "pnpm run api:playground:generate && vitest run --coverage --fileParallelism=false",
-    "prisma:generate": "prisma generate",
+    "test:coverage": "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then pnpm exec vitest run --coverage --fileParallelism=false",
+    "prisma:generate": "PRISMA_HIDE_UPDATE_MESSAGE=1 prisma generate",
     "prisma:push": "prisma db push",
     "prisma:studio": "prisma studio",
     "db:seed": "pnpm exec tsx prisma/seed.ts",
@@ -52,7 +57,7 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "chromatic": "chromatic --exit-zero-on-changes",
-    "test:e2e": "env -u FORCE_COLOR -u NO_COLOR playwright test",
+    "test:e2e": "env -u FORCE_COLOR -u NO_COLOR PLAYWRIGHT_FORCE_TTY=0 tsx scripts/warning-gate.ts -- pnpm exec playwright test --reporter=list,html",
     "test:e2e:ui": "env -u FORCE_COLOR -u NO_COLOR playwright test --ui",
     "test:storybook": "test-storybook",
     "db:migrate:local:option2": "wrangler d1 execute spoonjoy --local --file=./migrations/0003_shopping_list_item_option2.sql",
@@ -138,6 +143,7 @@
     "undici": "^7.20.0",
     "vite": "^7.3.1",
     "vitest": "^4.0.18",
-    "wrangler": "^4.90.0"
+    "wrangler": "^4.90.0",
+    "yaml": "2.9.0"
   }
 }

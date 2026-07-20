@@ -2,7 +2,10 @@ import { execFile as nodeExecFile } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
+import { parseDocument } from "yaml";
 import { z } from "zod";
+import { createReactRouterBuildPlan } from "./react-router-build-runner";
 
 export type PreflightSeverity = "error" | "warning";
 
@@ -23,11 +26,13 @@ export interface DeploymentPreflightInputs {
   gitignore: string;
   pnpmWorkspace: string;
   cloudflareEnvDts: string;
+  reactRouterBuild: string;
   readme: string;
   deploymentDoc: string;
   vitestConfig: string;
   tsconfigScripts: string;
   migrationFiles: string[];
+  cspReportOnlyBreakGlass?: string;
 }
 
 export interface DeploymentPreflightResult {
@@ -95,6 +100,11 @@ const REQUIRED_QA_PACKAGE_SCRIPTS = [
   "smoke:qa:image-cover",
 ] as const;
 
+const REQUIRED_BUILD_PACKAGE_SCRIPT =
+  "pnpm run api:playground:generate && tsx scripts/react-router-build.ts";
+const REQUIRED_QA_DEPLOY_PACKAGE_SCRIPT =
+  "SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run qa:preflight && node scripts/warning-gate.ts -- env CLOUDFLARE_ENV=qa pnpm run build && pnpm run qa:migrate && SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG=1 pnpm run qa:preflight && pnpm exec wrangler deploy --env qa";
+
 const REQUIRED_CLEANUP_PACKAGE_SCRIPTS = {
   "cleanup:qa": "node scripts/cleanup-local-qa-data.mjs --target-env local",
   "cleanup:local": "node scripts/cleanup-local-qa-data.mjs --target-env local",
@@ -105,21 +115,33 @@ const REQUIRED_CLEANUP_PACKAGE_SCRIPTS = {
 } as const;
 
 const REQUIRED_SCRIPT_COVERAGE_INCLUDES = [
+  "workers/app.ts",
   "scripts/script-environment.mjs",
   "scripts/cleanup-local-qa-data.mjs",
   "scripts/smoke-api-live.mjs",
   "scripts/qa-preflight.ts",
   "scripts/deployment-preflight.ts",
   "scripts/deploy-production-canary.ts",
+  "scripts/production-readiness.ts",
+  "scripts/posthog-build-metadata.ts",
+  "scripts/react-router-build-runner.ts",
+  "scripts/warning-gate.ts",
+  "scripts/workflow-security.mjs",
 ] as const;
 
 const REQUIRED_SCRIPT_TYPECHECK_INCLUDES = [
   "scripts/build-output-hygiene.ts",
   "scripts/deployment-preflight.ts",
   "scripts/deploy-production-canary.ts",
+  "scripts/production-readiness.ts",
+  "scripts/posthog-build-metadata.ts",
   "scripts/qa-preflight.ts",
   "scripts/react-router-build.ts",
+  "scripts/react-router-build-runner.ts",
+  "scripts/warning-gate.ts",
+  "scripts/workflow-security.mjs",
 ] as const;
+const CSP_REPORT_ONLY_BREAK_GLASS_ACK = "ACK_REPORT_ONLY_CSP_ROLLBACK";
 
 const REQUIRED_RATE_LIMIT_BINDINGS = [
   "API_TOKEN_RATE_LIMITER",
@@ -132,8 +154,13 @@ const STORYBOOK_PAGES_OUTPUT_DIR = "storybook-static";
 const STORYBOOK_PAGES_PROJECT_NAME = "spoonjoy-storybook";
 const STORYBOOK_PAGES_DEPLOY_COMMAND =
   "pages deploy --project-name=spoonjoy-storybook --branch=${{ github.ref_name }} --commit-hash=${{ github.sha }} --commit-dirty=true";
+const STORYBOOK_REQUIRED_JOB_NAME =
+  "${{ github.event_name == 'workflow_dispatch' && 'manual-build-storybook' || 'build-storybook' }}";
 const REQUIRED_PNPM_PACKAGE_MANAGER = "pnpm@10.28.1";
+const PINNED_CHECKOUT_ACTION = "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10";
 const PINNED_SETUP_NODE_ACTION = "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38";
+const PINNED_UPLOAD_ARTIFACT_ACTION = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
+const PINNED_DOWNLOAD_ARTIFACT_ACTION = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c";
 const PINNED_WRANGLER_ACTION = "cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0";
 const REQUIRED_IGNORED_BUILD_PACKAGES = [
   "@prisma/client",
@@ -173,6 +200,110 @@ function bindingRecord(bindings: unknown, bindingName: string): Record<string, u
 
 function objectRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function parsedWorkflow(workflow: string): Record<string, unknown> | null {
+  const document = parseDocument(workflow, { uniqueKeys: true });
+  if (document.errors.length > 0) return null;
+  const value = document.toJS({ maxAliasCount: 0 }) as unknown;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function exactObjectKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const actual = Object.keys(value).sort();
+  const sortedExpected = [...expected].sort();
+  return actual.length === sortedExpected.length && actual.every((key, index) => key === sortedExpected[index]);
+}
+
+function exactWorkflowRecord(
+  value: unknown,
+  expected: Readonly<Record<string, unknown>>,
+): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return exactObjectKeys(record, Object.keys(expected)) &&
+    Object.entries(expected).every(([key, expectedValue]) => record[key] === expectedValue);
+}
+
+function allowedObjectKeys(
+  value: Record<string, unknown>,
+  required: readonly string[],
+  optional: readonly string[],
+): boolean {
+  const keys = Object.keys(value);
+  const allowed = new Set([...required, ...optional]);
+  return required.every((key) => key in value) && keys.every((key) => allowed.has(key));
+}
+
+function exactStringArray(value: unknown, expected: readonly string[]): boolean {
+  return Array.isArray(value) &&
+    value.length === expected.length &&
+    value.every((entry, index) => entry === expected[index]);
+}
+
+function workflowStepRecords(value: unknown): Array<Record<string, unknown>> | null {
+  if (!Array.isArray(value)) return null;
+  const steps = value.filter(
+    (step): step is Record<string, unknown> => Boolean(step) && typeof step === "object" && !Array.isArray(step),
+  );
+  return steps.length === value.length ? steps : null;
+}
+
+function normalizedHttpsOrigin(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  if (!value || value !== value.trim() || /\s/.test(value) || !URL.canParse(value)) return null;
+
+  const url = new URL(value);
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    !url.hostname ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.hash
+  ) {
+    return null;
+  }
+  return url.origin;
+}
+
+function reactRouterBuildEntrypointIsCanonical(source: string): boolean {
+  const file = ts.createSourceFile(
+    "react-router-build.ts",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  if (file.statements.length !== 2) return false;
+  const [importStatement, invocationStatement] = file.statements;
+  if (
+    !ts.isImportDeclaration(importStatement) ||
+    !ts.isStringLiteral(importStatement.moduleSpecifier) ||
+    importStatement.moduleSpecifier.text !== "./react-router-build-runner" ||
+    !importStatement.importClause ||
+    importStatement.importClause.isTypeOnly ||
+    importStatement.importClause.name ||
+    !importStatement.importClause.namedBindings ||
+    !ts.isNamedImports(importStatement.importClause.namedBindings) ||
+    importStatement.importClause.namedBindings.elements.length !== 1
+  ) return false;
+  const [imported] = importStatement.importClause.namedBindings.elements;
+  if (
+    imported.isTypeOnly ||
+    imported.propertyName ||
+    imported.name.text !== "runReactRouterBuildCli" ||
+    !ts.isExpressionStatement(invocationStatement) ||
+    !ts.isVoidExpression(invocationStatement.expression) ||
+    !ts.isCallExpression(invocationStatement.expression.expression)
+  ) return false;
+  const call = invocationStatement.expression.expression;
+  return call.arguments.length === 0 &&
+    ts.isIdentifier(call.expression) &&
+    call.expression.text === "runReactRouterBuildCli";
 }
 
 function namespaceIds(ratelimits: unknown): string[] {
@@ -288,231 +419,468 @@ function workflowTriggerTargetsMain(lines: WorkflowLine[], onIndex: number, onEn
   return branches ? blockHasMainBranch(lines, branches[0], branches[1]) : false;
 }
 
-function workflowActionReferencesArePinned(workflow: string): boolean {
-  const actionReferences = workflowLines(workflow)
-    .map((line) => line.text.match(/^(?:-\s+)?uses:\s*(\S+)$/)?.[1] ?? null)
-    .filter((reference): reference is string => reference !== null);
-  return actionReferences.length > 0 && actionReferences.every((reference) => /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+@[0-9a-f]{40}$/.test(reference));
+const WARNING_GATE_COMMAND_PATTERN = /^(?:[A-Z_][A-Z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*node scripts\/warning-gate\.ts -- (.+)$/;
+const WARNING_GATE_COMMAND_PREFIX = "node scripts/warning-gate.ts -- ";
+const CI_INVOCATION_VALIDATION_COMMAND =
+  `${WARNING_GATE_COMMAND_PREFIX}node scripts/workflow-security.mjs validate-ci-invocation`;
+const PLAYWRIGHT_MAN_DB_PRESEED_COMMAND =
+  `sudo sh -c 'printf "%s\\n" "man-db man-db/auto-update boolean true" | debconf-set-selections'`;
+const PLAYWRIGHT_APT_INSTALL_COMMAND = "sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 apt-get -o Dpkg::Use-Pty=0 install -y --no-install-recommends xvfb fonts-noto-color-emoji fonts-unifont libfontconfig1 libfreetype6 xfonts-cyrillic xfonts-scalable fonts-liberation fonts-ipafont-gothic fonts-wqy-zenhei fonts-tlwg-loma-otf fonts-freefont-ttf libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 libcairo2 libcups2t64 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0t64 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2";
+function actionStepSignature(action: string): string {
+  return `action:${action}`;
 }
 
-function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
-  const lines = workflowLines(workflow);
-  const onIndex = lines.findIndex((line) => line.indent === 0 && line.text === "on:");
-  if (onIndex === -1) return false;
-  const onEnd = blockEnd(lines, onIndex);
-  const workflowRun = childBlock(lines, onIndex, onEnd, "workflow_run");
-  const workflowDispatch = childBlock(lines, onIndex, onEnd, "workflow_dispatch");
-  if (!workflowRun || !workflowDispatch) return false;
+function commandStepSignature(...commands: string[]): string {
+  return `run:${commands.join("\u0000")}`;
+}
 
-  const dispatchInputs = childBlock(lines, workflowDispatch[0], workflowDispatch[1], "inputs");
-  const sourceSha = dispatchInputs ? childBlock(lines, dispatchInputs[0], dispatchInputs[1], "source_sha") : null;
-  const rollbackVersion = dispatchInputs
-    ? childBlock(lines, dispatchInputs[0], dispatchInputs[1], "rollback_version_id")
-    : null;
-  if (!sourceSha || !rollbackVersion) return false;
+const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
+  ["advisory", [
+    actionStepSignature(PINNED_CHECKOUT_ACTION),
+    actionStepSignature(PINNED_SETUP_NODE_ACTION),
+    commandStepSignature(CI_INVOCATION_VALIDATION_COMMAND),
+    commandStepSignature(
+      `${WARNING_GATE_COMMAND_PREFIX}corepack enable`,
+      `${WARNING_GATE_COMMAND_PREFIX}corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`,
+    ),
+    commandStepSignature(
+      `${WARNING_GATE_COMMAND_PREFIX}mkdir -p .cache/osv-scanner`,
+      `${WARNING_GATE_COMMAND_PREFIX}curl -fsSL --retry 3 --retry-delay 2 "https://api.github.com/repos/google/osv-scanner/git/ref/tags/\${OSV_SCANNER_VERSION}" -o .cache/osv-scanner/tag.json`,
+      `${WARNING_GATE_COMMAND_PREFIX}jq -e --arg expected "$OSV_SCANNER_TAG_SHA" '.object | select(.type == "commit" and .sha == $expected)' .cache/osv-scanner/tag.json`,
+      `${WARNING_GATE_COMMAND_PREFIX}curl -fsSL --retry 3 --retry-delay 2 "https://github.com/google/osv-scanner/releases/download/\${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64" -o .cache/osv-scanner/osv-scanner`,
+      'printf \'%s  %s\\n\' "$OSV_SCANNER_LINUX_AMD64_SHA256" ".cache/osv-scanner/osv-scanner" > .cache/osv-scanner/checksums.txt',
+      `${WARNING_GATE_COMMAND_PREFIX}sha256sum -c .cache/osv-scanner/checksums.txt`,
+      `${WARNING_GATE_COMMAND_PREFIX}chmod +x .cache/osv-scanner/osv-scanner`,
+      `${WARNING_GATE_COMMAND_PREFIX}.cache/osv-scanner/osv-scanner --version`,
+    ),
+    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm install --frozen-lockfile --ignore-scripts`),
+    commandStepSignature(
+      `${WARNING_GATE_COMMAND_PREFIX}pnpm run advisory:scan -- --scanner .cache/osv-scanner/osv-scanner --output .advisory/osv-results.json`,
+    ),
+  ]],
+  ["coverage", [
+    actionStepSignature(PINNED_CHECKOUT_ACTION),
+    actionStepSignature(PINNED_SETUP_NODE_ACTION),
+    commandStepSignature(CI_INVOCATION_VALIDATION_COMMAND),
+    commandStepSignature(
+      `${WARNING_GATE_COMMAND_PREFIX}corepack enable`,
+      `${WARNING_GATE_COMMAND_PREFIX}corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`,
+    ),
+    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm install --frozen-lockfile`),
+    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm prisma:generate`),
+    commandStepSignature(
+      `${WARNING_GATE_COMMAND_PREFIX}pnpm why blake3-wasm`,
+      `${WARNING_GATE_COMMAND_PREFIX}pnpm why @c4312/blake3-internal`,
+    ),
+    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm exec wrangler d1 migrations apply DB --local`),
+    commandStepSignature(
+      `DATABASE_URL="file:./test.db" ${WARNING_GATE_COMMAND_PREFIX}pnpm exec prisma db push --skip-generate`,
+    ),
+    commandStepSignature(
+      `${WARNING_GATE_COMMAND_PREFIX}pnpm exec wrangler d1 migrations list DB --local`,
+      `${WARNING_GATE_COMMAND_PREFIX}pnpm exec wrangler d1 execute DB --local --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"`,
+    ),
+    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm db:seed`),
+    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm run typecheck`),
+    commandStepSignature("pnpm test:coverage"),
+    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm build`),
+  ]],
+  ["e2e", [
+    actionStepSignature(PINNED_CHECKOUT_ACTION),
+    actionStepSignature(PINNED_SETUP_NODE_ACTION),
+    commandStepSignature(CI_INVOCATION_VALIDATION_COMMAND),
+    commandStepSignature(
+      `${WARNING_GATE_COMMAND_PREFIX}corepack enable`,
+      `${WARNING_GATE_COMMAND_PREFIX}corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`,
+    ),
+    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm install --frozen-lockfile`),
+    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm prisma:generate`),
+    commandStepSignature(
+      `${WARNING_GATE_COMMAND_PREFIX}pnpm why blake3-wasm`,
+      `${WARNING_GATE_COMMAND_PREFIX}pnpm why @c4312/blake3-internal`,
+    ),
+    commandStepSignature(
+      `${WARNING_GATE_COMMAND_PREFIX}pnpm exec playwright install-deps --dry-run chromium`,
+      `${WARNING_GATE_COMMAND_PREFIX}sudo apt-get update`,
+      `${WARNING_GATE_COMMAND_PREFIX}${PLAYWRIGHT_MAN_DB_PRESEED_COMMAND}`,
+      `${WARNING_GATE_COMMAND_PREFIX}sudo touch /var/lib/man-db/auto-update`,
+      `${WARNING_GATE_COMMAND_PREFIX}${PLAYWRIGHT_APT_INSTALL_COMMAND}`,
+      `${WARNING_GATE_COMMAND_PREFIX}pnpm exec playwright install chromium`,
+    ),
+    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm exec wrangler d1 migrations apply DB --local`),
+    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm db:seed`),
+    commandStepSignature('printf \'SESSION_SECRET=%s\\nNODE_ENV=development\\n\' "$SESSION_SECRET" > .dev.vars'),
+    commandStepSignature("pnpm test:e2e"),
+    actionStepSignature(PINNED_UPLOAD_ARTIFACT_ACTION),
+  ]],
+]);
 
-  const permissionsIndex = lines.findIndex((line) => line.indent === 0 && line.text === "permissions:");
-  if (permissionsIndex === -1) return false;
-  const permissions = blockScalarChildMap(lines, permissionsIndex, blockEnd(lines, permissionsIndex));
-  if (permissions.get("issues") === "write") return false;
+function workflowStepSignature(step: Record<string, unknown>): string | null {
+  if (typeof step.uses === "string") return actionStepSignature(step.uses);
+  if (typeof step.run === "string") return commandStepSignature(...runCommandLines(step.run));
+  return null;
+}
 
-  const jobs = workflowJobBlocks(lines);
-  const deploy = jobs.find(([start]) => lines[start].text === "deploy:");
-  const report = jobs.find(([start]) => lines[start].text === "report-canary:");
-  if (!deploy || !report) return false;
+const CI_WORKFLOW_ENV = Object.freeze({
+  GIT_CONFIG_COUNT: "1",
+  GIT_CONFIG_KEY_0: "init.defaultBranch",
+  GIT_CONFIG_VALUE_0: "main",
+  PRISMA_HIDE_UPDATE_MESSAGE: "1",
+  CI_SOURCE_SHA: "${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.sha }}",
+  SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS:
+    "${{ github.event_name == 'workflow_dispatch' && inputs.csp_report_only_break_glass || '' }}",
+});
 
-  const deployCondition = blockScalarChildValue(lines, deploy[0], deploy[1], "if") ?? "";
-  const deployConditionFragments = [
-    "github.event.workflow_run.conclusion == 'success'",
-    "github.event.workflow_run.event == 'push'",
-    "github.event.workflow_run.head_branch == 'main'",
-    "github.event.workflow_run.path == '.github/workflows/ci.yml'",
-    "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'",
-  ];
+const CI_JOB_CONTRACTS = Object.freeze({
+  advisory: Object.freeze({
+    name: "${{ github.event_name == 'workflow_dispatch' && 'report-only-advisory' || 'advisory' }}",
+    timeoutMinutes: 15,
+    env: undefined,
+  }),
+  coverage: Object.freeze({
+    name: "${{ github.event_name == 'workflow_dispatch' && 'report-only-coverage' || 'coverage' }}",
+    timeoutMinutes: 90,
+    env: undefined,
+  }),
+  e2e: Object.freeze({
+    name: "${{ github.event_name == 'workflow_dispatch' && 'report-only-e2e' || 'e2e' }}",
+    timeoutMinutes: 10,
+    env: Object.freeze({
+      NODE_ENV: "development",
+      SESSION_SECRET: "ci-e2e-session-secret",
+    }),
+  }),
+});
+
+const CI_OSV_SCANNER_ENV = Object.freeze({
+  OSV_SCANNER_VERSION: "v2.3.8",
+  OSV_SCANNER_TAG_SHA: "408fcd6f8707999a29e7ba45e15809764cf24f67",
+  OSV_SCANNER_LINUX_AMD64_SHA256: "bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc",
+});
+
+function requiredDispatchStringInput(value: unknown): boolean {
+  const input = objectRecord(value);
+  return input.required === true &&
+    input.type === "string" &&
+    allowedObjectKeys(input, ["required", "type"], ["description"]);
+}
+
+function parsedCiWorkflowIsCanonical(workflow: string): boolean {
+  const root = parsedWorkflow(workflow);
+  if (!root || !exactObjectKeys(root, ["name", "on", "defaults", "env", "jobs"])) return false;
+  if (root.name !== "CI" || !exactWorkflowRecord(root.env, CI_WORKFLOW_ENV)) return false;
+
+  const triggers = objectRecord(root.on);
+  const push = objectRecord(triggers.push);
+  const pullRequest = objectRecord(triggers.pull_request);
+  const dispatch = objectRecord(triggers.workflow_dispatch);
+  const inputs = objectRecord(dispatch.inputs);
   if (
-    blockScalarChildValue(lines, deploy[0], deploy[1], "environment") !== "production" ||
-    !deployConditionFragments.every((fragment) => deployCondition.includes(fragment))
-  ) {
+    !exactObjectKeys(triggers, ["push", "pull_request", "workflow_dispatch"]) ||
+    !exactObjectKeys(push, ["branches"]) ||
+    !exactObjectKeys(pullRequest, ["branches"]) ||
+    !exactStringArray(push.branches, ["main"]) ||
+    !exactStringArray(pullRequest.branches, ["main"]) ||
+    !exactObjectKeys(dispatch, ["inputs"]) ||
+    !exactObjectKeys(inputs, ["source_sha", "csp_report_only_break_glass"]) ||
+    !requiredDispatchStringInput(inputs.source_sha) ||
+    !requiredDispatchStringInput(inputs.csp_report_only_break_glass)
+  ) return false;
+
+  const defaults = objectRecord(root.defaults);
+  const runDefaults = objectRecord(defaults.run);
+  if (!exactObjectKeys(defaults, ["run"]) || !exactObjectKeys(runDefaults, ["shell"]) || runDefaults.shell !== "bash") {
     return false;
   }
 
-  const reportPermissions = childBlock(lines, report[0], report[1], "permissions");
-  if (
-    blockScalarChildValue(lines, report[0], report[1], "if") !== "always() && needs.deploy.result != 'skipped'" ||
-    blockScalarChildValue(lines, report[0], report[1], "needs") !== "deploy" ||
-    !reportPermissions ||
-    blockScalarChildValue(lines, reportPermissions[0], reportPermissions[1], "contents") !== "read" ||
-    blockScalarChildValue(lines, reportPermissions[0], reportPermissions[1], "issues") !== "write"
-  ) {
-    return false;
-  }
+  const jobs = objectRecord(root.jobs);
+  if (!exactObjectKeys(jobs, Object.keys(CI_JOB_CONTRACTS))) return false;
 
-  const steps = childBlock(lines, deploy[0], deploy[1], "steps");
-  if (!steps) return false;
-  let sourceCheckoutStep = -1;
-  let rollbackCheckoutStep = -1;
-  let validationStep = -1;
-  let deployStep = -1;
-  let recordStep = -1;
-  let ensureArtifactStep = -1;
-  let uploadArtifactStep = -1;
+  for (const [jobName, rawJob] of Object.entries(jobs)) {
+    const job = objectRecord(rawJob);
+    const contract = CI_JOB_CONTRACTS[jobName as keyof typeof CI_JOB_CONTRACTS];
+    const expectedJobKeys = contract.env
+      ? ["name", "runs-on", "timeout-minutes", "env", "steps"]
+      : ["name", "runs-on", "timeout-minutes", "steps"];
+    if (
+      !exactObjectKeys(job, expectedJobKeys) ||
+      job.name !== contract.name ||
+      job["runs-on"] !== "ubuntu-latest" ||
+      job["timeout-minutes"] !== contract.timeoutMinutes ||
+      (contract.env ? !exactWorkflowRecord(job.env, contract.env) : job.env !== undefined)
+    ) return false;
 
-  for (const [stepStart, stepEnd] of stepBlocks(lines, steps[0], steps[1])) {
-    const run = stepRunText(lines, stepStart, stepEnd);
+    const steps = workflowStepRecords(job.steps);
+    if (!steps) return false;
+    const expectedStepSignatures = CI_STEP_SIGNATURES_BY_JOB.get(jobName)!;
+    const stepSignatures = steps.map(workflowStepSignature);
     if (
-      stepUses(lines, stepStart, stepEnd, "actions/checkout@") &&
-      stepWithValue(lines, stepStart, stepEnd, "ref") === "${{ env.SOURCE_SHA }}" &&
-      stepWithValue(lines, stepStart, stepEnd, "fetch-depth") === "0" &&
-      stepWithValue(lines, stepStart, stepEnd, "persist-credentials") === "false" &&
-      stepIfEquals(lines, stepStart, stepEnd, "env.ROLLBACK_VERSION_ID == ''")
-    ) {
-      sourceCheckoutStep = stepStart;
-    }
-    if (
-      stepUses(lines, stepStart, stepEnd, "actions/checkout@") &&
-      stepWithValue(lines, stepStart, stepEnd, "ref") === "${{ github.workflow_sha }}" &&
-      stepWithValue(lines, stepStart, stepEnd, "fetch-depth") === "0" &&
-      stepWithValue(lines, stepStart, stepEnd, "persist-credentials") === "false" &&
-      stepIfEquals(lines, stepStart, stepEnd, "env.ROLLBACK_VERSION_ID != ''")
-    ) {
-      rollbackCheckoutStep = stepStart;
-    }
-    if (stepPropertyValue(lines, stepStart, stepEnd, "name") === "Validate release source") {
-      const requiredRunFragments = [
-        "grep -Eq '^[0-9a-f]{40}$'",
-        'git merge-base --is-ancestor "$SOURCE_SHA" origin/main',
-        `test "$WORKFLOW_RUN_PATH" = '.github/workflows/ci.yml' || test "$GITHUB_EVENT_NAME" = 'workflow_dispatch'`,
-        'test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"',
-        'gh run list --workflow .github/workflows/ci.yml --branch main --commit "$SOURCE_SHA" --event push --status success',
-        "--json databaseId,headSha",
-        'gh run view "$ci_run_id" --json jobs',
-        '.name == $required_job and .conclusion == "success"',
-        'gh run list --workflow .github/workflows/storybook.yml --branch main --commit "$SOURCE_SHA" --event push --status success',
-        'gh run view "$storybook_run_id" --json jobs',
-        '.name == "build-storybook" and .conclusion == "success"',
-      ];
-      if (
-        stepPropertyValue(lines, stepStart, stepEnd, "if") === null &&
-        stepHasEnvKeys(lines, stepStart, stepEnd, ["GH_TOKEN", "WORKFLOW_RUN_PATH"]) &&
-        requiredRunFragments.every((fragment) => run.includes(fragment))
-      ) {
-        validationStep = stepStart;
+      stepSignatures.length !== expectedStepSignatures.length ||
+      !stepSignatures.every((signature, index) => signature === expectedStepSignatures[index])
+    ) return false;
+    for (const step of steps) {
+      if (typeof step.uses === "string") {
+        const withValues = objectRecord(step.with);
+        if (step.uses === PINNED_CHECKOUT_ACTION) {
+          if (
+            !exactObjectKeys(step, ["uses", "with"]) ||
+            !exactWorkflowRecord(withValues, {
+              ref: "${{ env.CI_SOURCE_SHA }}",
+              "persist-credentials": false,
+            })
+          ) return false;
+        } else if (step.uses === PINNED_SETUP_NODE_ACTION) {
+          if (
+            !exactObjectKeys(step, ["name", "uses", "with"]) ||
+            typeof step.name !== "string" ||
+            !exactWorkflowRecord(withValues, { "node-version": "22" })
+          ) return false;
+        } else {
+          if (
+            !exactObjectKeys(step, ["name", "uses", "if", "with"]) ||
+            typeof step.name !== "string" ||
+            step.if !== "${{ !cancelled() }}" ||
+            !exactWorkflowRecord(withValues, {
+              name: "playwright-report",
+              path: "playwright-report/",
+              "retention-days": 30,
+            })
+          ) return false;
+        }
+        continue;
       }
-    }
-    if (
-      stepRunsDeployAuto(lines, stepStart, stepEnd) &&
-      stepPropertyValue(lines, stepStart, stepEnd, "if") === null &&
-      stepHasEnvKeys(lines, stepStart, stepEnd, [
-        "CLOUDFLARE_ACCOUNT_ID",
-        "CLOUDFLARE_D1_API_TOKEN",
-        "CLOUDFLARE_WORKERS_API_TOKEN",
-      ]) &&
-      run.includes('--rollback-version-id "$ROLLBACK_VERSION_ID"')
-    ) {
-      deployStep = stepStart;
-    }
-    if (
-      stepPropertyValue(lines, stepStart, stepEnd, "name") === "Record release source" &&
-      stepIfEquals(lines, stepStart, stepEnd, "always()") &&
-      run.includes("Source SHA: `%s`")
-    ) {
-      recordStep = stepStart;
-    }
-    if (
-      stepPropertyValue(lines, stepStart, stepEnd, "name") === "Ensure release artifact exists" &&
-      stepIfEquals(lines, stepStart, stepEnd, "always()") &&
-      run.includes("mkdir -p mcp-oauth-canary-artifacts") &&
-      run.includes("mcp-oauth-canary-artifacts/production-release.json") &&
-      run.includes("jq -n --arg source_sha") &&
-      run.includes('reviewedMigrations: []') &&
-      run.includes('migrationApply: "not_started"') &&
-      run.includes("databaseRollbackSupported: false")
-    ) {
-      ensureArtifactStep = stepStart;
-    }
-    if (
-      stepUses(lines, stepStart, stepEnd, "actions/upload-artifact@") &&
-      stepIfEquals(lines, stepStart, stepEnd, "always()") &&
-      stepWithValue(lines, stepStart, stepEnd, "name") === "mcp-oauth-canary-artifacts" &&
-      stepWithValue(lines, stepStart, stepEnd, "path") === "mcp-oauth-canary-artifacts/" &&
-      stepWithValue(lines, stepStart, stepEnd, "if-no-files-found") === "error"
-    ) {
-      uploadArtifactStep = stepStart;
+
+      const commands = runCommandLines(step.run as string);
+      const isOsvInstallStep = jobName === "advisory" &&
+        commands.includes(`${WARNING_GATE_COMMAND_PREFIX}mkdir -p .cache/osv-scanner`);
+      if (
+        !exactObjectKeys(step, isOsvInstallStep ? ["name", "env", "run"] : ["name", "run"]) ||
+        (isOsvInstallStep && !exactWorkflowRecord(step.env, CI_OSV_SCANNER_ENV)) ||
+        commands.length === 0
+      ) return false;
     }
   }
 
-  const reportSteps = childBlock(lines, report[0], report[1], "steps");
-  if (!reportSteps) return false;
-  let reportCheckoutStep = -1;
-  let downloadArtifactStep = -1;
-  let reportCanaryStep = -1;
-  for (const [stepStart, stepEnd] of stepBlocks(lines, reportSteps[0], reportSteps[1])) {
-    const run = stepRunText(lines, stepStart, stepEnd);
-    if (
-      stepUses(lines, stepStart, stepEnd, "actions/checkout@") &&
-      stepWithValue(lines, stepStart, stepEnd, "ref") === "${{ github.workflow_sha }}" &&
-      stepWithValue(lines, stepStart, stepEnd, "persist-credentials") === "false"
-    ) {
-      reportCheckoutStep = stepStart;
-    }
-    if (
-      stepUses(lines, stepStart, stepEnd, "actions/download-artifact@") &&
-      stepPropertyValue(lines, stepStart, stepEnd, "continue-on-error") === "true" &&
-      stepWithValue(lines, stepStart, stepEnd, "name") === "mcp-oauth-canary-artifacts" &&
-      stepWithValue(lines, stepStart, stepEnd, "path") === "mcp-oauth-canary-artifacts"
-    ) {
-      downloadArtifactStep = stepStart;
-    }
-    if (
-      stepPropertyValue(lines, stepStart, stepEnd, "name") === "Report MCP OAuth canary" &&
-      stepIfEquals(lines, stepStart, stepEnd, "always()") &&
-      stepHasEnvKeys(lines, stepStart, stepEnd, [
-        "GITHUB_TOKEN",
-        "MCP_CANARY_STATUS",
-        "MCP_CANARY_WORKFLOW_RUN_URL",
-        "MCP_CANARY_ARTIFACT_URL",
-      ]) &&
-      run.includes("node scripts/report-mcp-oauth-canary.mjs") &&
-      run.includes("--manage-issue")
-    ) {
-      reportCanaryStep = stepStart;
-    }
-  }
-
-  return (
-    workflowHasOnlyTriggers(lines, onIndex, onEnd, ["workflow_run", "workflow_dispatch"]) &&
-    blockScalarChildValue(lines, workflowRun[0], workflowRun[1], "workflows") === "[CI]" &&
-    blockScalarChildValue(lines, workflowRun[0], workflowRun[1], "branches") === "[main]" &&
-    blockScalarChildValue(lines, workflowRun[0], workflowRun[1], "types") === "[completed]" &&
-    blockScalarChildValue(lines, sourceSha[0], sourceSha[1], "required") === "true" &&
-    blockScalarChildValue(lines, sourceSha[0], sourceSha[1], "type") === "string" &&
-    blockScalarChildValue(lines, rollbackVersion[0], rollbackVersion[1], "required") === "false" &&
-    blockScalarChildValue(lines, rollbackVersion[0], rollbackVersion[1], "default") === "" &&
-    blockScalarChildValue(lines, rollbackVersion[0], rollbackVersion[1], "type") === "string" &&
-    sourceCheckoutStep >= 0 &&
-    rollbackCheckoutStep > sourceCheckoutStep &&
-    validationStep > rollbackCheckoutStep &&
-    deployStep > validationStep &&
-    recordStep > deployStep &&
-    ensureArtifactStep > recordStep &&
-    uploadArtifactStep > ensureArtifactStep &&
-    reportCheckoutStep >= 0 &&
-    downloadArtifactStep > reportCheckoutStep &&
-    reportCanaryStep > downloadArtifactStep &&
-    workflowActionReferencesArePinned(workflow)
-  );
+  return true;
 }
 
-function workflowBuildsPushesAndPullRequestsToMain(workflow: string): boolean {
-  const lines = workflowLines(workflow);
-  const onIndex = lines.findIndex((line) => line.indent === 0 && line.text === "on:");
-  if (onIndex === -1) return false;
-  const onEnd = blockEnd(lines, onIndex);
-  return (
-    workflowHasOnlyTriggers(lines, onIndex, onEnd, ["push", "pull_request"]) &&
-    workflowTriggerTargetsMain(lines, onIndex, onEnd, "push") &&
-    workflowTriggerTargetsMain(lines, onIndex, onEnd, "pull_request")
-  );
+const PRODUCTION_DEPLOY_JOB_CONDITION =
+  "(github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.path == '.github/workflows/ci.yml') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')";
+const PRODUCTION_VALIDATION_COMMAND =
+  "node scripts/workflow-security.mjs validate-production-deploy-source";
+const PRODUCTION_DEPLOY_COMMAND = "node scripts/workflow-security.mjs run-production-deploy";
+const PRODUCTION_WORKFLOW_ENV = Object.freeze({
+  GIT_CONFIG_COUNT: "1",
+  GIT_CONFIG_KEY_0: "init.defaultBranch",
+  GIT_CONFIG_VALUE_0: "main",
+  SOURCE_SHA: "${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.source_sha }}",
+  ROLLBACK_VERSION_ID: "${{ github.event_name == 'workflow_dispatch' && inputs.rollback_version_id || '' }}",
+  SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS:
+    "${{ github.event_name == 'workflow_dispatch' && inputs.csp_report_only_break_glass || '' }}",
+});
+
+const PRODUCTION_DEPLOY_STEPS: readonly Record<string, unknown>[] = [
+  {
+    name: "Checkout approved source SHA",
+    if: "env.ROLLBACK_VERSION_ID == ''",
+    uses: PINNED_CHECKOUT_ACTION,
+    with: {
+      ref: "${{ env.SOURCE_SHA }}",
+      "fetch-depth": 0,
+      "persist-credentials": false,
+    },
+  },
+  {
+    name: "Checkout trusted rollback tooling",
+    if: "env.ROLLBACK_VERSION_ID != ''",
+    uses: PINNED_CHECKOUT_ACTION,
+    with: {
+      ref: "${{ github.workflow_sha }}",
+      "fetch-depth": 0,
+      "persist-credentials": false,
+    },
+  },
+  {
+    name: "Validate release source",
+    env: {
+      GH_TOKEN: "${{ github.token }}",
+      WORKFLOW_RUN_CONCLUSION: "${{ github.event.workflow_run.conclusion }}",
+      WORKFLOW_RUN_EVENT: "${{ github.event.workflow_run.event }}",
+      WORKFLOW_RUN_HEAD_BRANCH: "${{ github.event.workflow_run.head_branch }}",
+      WORKFLOW_RUN_HEAD_SHA: "${{ github.event.workflow_run.head_sha }}",
+      WORKFLOW_RUN_PATH: "${{ github.event.workflow_run.path }}",
+    },
+    run: PRODUCTION_VALIDATION_COMMAND,
+  },
+  {
+    name: "Setup Node.js",
+    uses: PINNED_SETUP_NODE_ACTION,
+    with: { "node-version": "22" },
+  },
+  {
+    name: "Activate pnpm",
+    run: `corepack enable\ncorepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate\n`,
+  },
+  { name: "Install dependencies", run: "pnpm install --frozen-lockfile" },
+  { name: "Generate Prisma client", run: "pnpm prisma:generate" },
+  { name: "Install Playwright Chromium", run: "pnpm exec playwright install --with-deps chromium" },
+  {
+    name: "Deploy staged release to Cloudflare Workers",
+    env: {
+      CLOUDFLARE_ACCOUNT_ID: "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+      CLOUDFLARE_D1_API_TOKEN: "${{ secrets.CLOUDFLARE_D1_API_TOKEN }}",
+      CLOUDFLARE_WORKERS_API_TOKEN: "${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}",
+      SPOONJOY_RELEASE_SHA: "${{ env.SOURCE_SHA }}",
+      SPOONJOY_MCP_CANARY_BASE_URL: "https://spoonjoy.app",
+      SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: "${{ env.SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS }}",
+    },
+    run: PRODUCTION_DEPLOY_COMMAND,
+  },
+  {
+    name: "Record release source",
+    if: "always()",
+    run: "# Markdown backticks are intentional literals in the step summary.\n# shellcheck disable=SC2016\nprintf 'Source SHA: `%s`\\n' \"$SOURCE_SHA\" >> \"$GITHUB_STEP_SUMMARY\"\n",
+  },
+  {
+    name: "Ensure release artifact exists",
+    if: "always()",
+    run: "set -euo pipefail\numask 077\nmkdir -p mcp-oauth-canary-artifacts\nif [ ! -f mcp-oauth-canary-artifacts/production-release.json ]; then\n  jq -n --arg source_sha \"$SOURCE_SHA\" \\\n    '{status: \"failed_before_stage\", sourceSha: $source_sha, phase: \"validate\", reviewedMigrations: [], migrationApply: \"not_started\", databaseRollbackSupported: false, failure: \"Release workflow failed before the orchestrator wrote an artifact.\"}' \\\n    > mcp-oauth-canary-artifacts/production-release.json\nfi\n",
+  },
+  {
+    name: "Upload MCP OAuth canary artifacts",
+    if: "always()",
+    uses: PINNED_UPLOAD_ARTIFACT_ACTION,
+    with: {
+      name: "mcp-oauth-canary-artifacts",
+      path: "mcp-oauth-canary-artifacts/",
+      "if-no-files-found": "error",
+      "retention-days": 14,
+    },
+  },
+];
+
+const PRODUCTION_REPORT_STEPS: readonly Record<string, unknown>[] = [
+  {
+    name: "Checkout released source SHA",
+    uses: PINNED_CHECKOUT_ACTION,
+    with: {
+      ref: "${{ github.workflow_sha }}",
+      "persist-credentials": false,
+    },
+  },
+  {
+    name: "Setup Node.js",
+    uses: PINNED_SETUP_NODE_ACTION,
+    with: { "node-version": "22" },
+  },
+  {
+    name: "Activate pnpm",
+    run: `corepack enable\ncorepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate\n`,
+  },
+  {
+    name: "Download MCP OAuth canary artifacts",
+    uses: PINNED_DOWNLOAD_ARTIFACT_ACTION,
+    "continue-on-error": true,
+    with: {
+      name: "mcp-oauth-canary-artifacts",
+      path: "mcp-oauth-canary-artifacts",
+    },
+  },
+  {
+    name: "Report MCP OAuth canary",
+    if: "always()",
+    env: {
+      GITHUB_TOKEN: "${{ github.token }}",
+      MCP_CANARY_STATUS: "${{ needs.deploy.result }}",
+      MCP_CANARY_WORKFLOW_RUN_URL:
+        "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+      MCP_CANARY_ARTIFACT_URL:
+        "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts",
+    },
+    run: "node scripts/report-mcp-oauth-canary.mjs --artifact-dir mcp-oauth-canary-artifacts --status \"$MCP_CANARY_STATUS\" --workflow-run-url \"$MCP_CANARY_WORKFLOW_RUN_URL\" --artifact-url \"$MCP_CANARY_ARTIFACT_URL\" --manage-issue",
+  },
+];
+
+function optionalDispatchStringInput(value: unknown): boolean {
+  const input = objectRecord(value);
+  return input.required === false &&
+    input.default === "" &&
+    input.type === "string" &&
+    allowedObjectKeys(input, ["required", "default", "type"], ["description"]);
+}
+
+export function parsedProductionWorkflowIsCanonical(workflow: string): boolean {
+  const root = parsedWorkflow(workflow);
+  if (
+    !root ||
+    !allowedObjectKeys(root, ["name", "on", "permissions", "env", "jobs"], ["concurrency"]) ||
+    root.name !== "Production Deploy" ||
+    !exactWorkflowRecord(root.env, PRODUCTION_WORKFLOW_ENV)
+  ) return false;
+
+  const triggers = objectRecord(root.on);
+  const workflowRun = objectRecord(triggers.workflow_run);
+  const dispatch = objectRecord(triggers.workflow_dispatch);
+  const inputs = objectRecord(dispatch.inputs);
+  if (
+    !exactObjectKeys(triggers, ["workflow_run", "workflow_dispatch"]) ||
+    !exactObjectKeys(workflowRun, ["workflows", "branches", "types"]) ||
+    !exactStringArray(workflowRun.workflows, ["CI"]) ||
+    !exactStringArray(workflowRun.branches, ["main"]) ||
+    !exactStringArray(workflowRun.types, ["completed"]) ||
+    !exactObjectKeys(dispatch, ["inputs"]) ||
+    !exactObjectKeys(inputs, ["source_sha", "rollback_version_id", "csp_report_only_break_glass"]) ||
+    !requiredDispatchStringInput(inputs.source_sha) ||
+    !optionalDispatchStringInput(inputs.rollback_version_id) ||
+    !optionalDispatchStringInput(inputs.csp_report_only_break_glass)
+  ) return false;
+
+  const permissions = objectRecord(root.permissions);
+  const concurrency = objectRecord(root.concurrency);
+  if (
+    !exactObjectKeys(permissions, ["actions", "contents"]) ||
+    permissions.actions !== "read" ||
+    permissions.contents !== "read" ||
+    !exactWorkflowRecord(concurrency, {
+      group: "production-deploy",
+      "cancel-in-progress": false,
+    })
+  ) return false;
+
+  const jobs = objectRecord(root.jobs);
+  if (!exactObjectKeys(jobs, ["deploy", "report-canary"])) return false;
+  const deploy = objectRecord(jobs.deploy);
+  const report = objectRecord(jobs["report-canary"]);
+  if (
+    !exactObjectKeys(deploy, ["name", "if", "runs-on", "timeout-minutes", "environment", "steps"]) ||
+    deploy.name !== "deploy" ||
+    deploy.if !== PRODUCTION_DEPLOY_JOB_CONDITION ||
+    deploy["runs-on"] !== "ubuntu-latest" ||
+    deploy["timeout-minutes"] !== 40 ||
+    deploy.environment !== "production" ||
+    !exactObjectKeys(report, ["name", "if", "needs", "runs-on", "timeout-minutes", "permissions", "steps"]) ||
+    report.name !== "report-canary" ||
+    report.if !== "always() && needs.deploy.result != 'skipped'" ||
+    report.needs !== "deploy" ||
+    report["runs-on"] !== "ubuntu-latest" ||
+    report["timeout-minutes"] !== 10
+  ) return false;
+  const reportPermissions = objectRecord(report.permissions);
+  if (
+    !exactObjectKeys(reportPermissions, ["contents", "issues"]) ||
+    reportPermissions.contents !== "read" ||
+    reportPermissions.issues !== "write"
+  ) return false;
+
+  const deploySteps = workflowStepRecords(deploy.steps);
+  const reportSteps = workflowStepRecords(report.steps);
+  if (!deploySteps || !reportSteps) return false;
+  return JSON.stringify(deploySteps) === JSON.stringify(PRODUCTION_DEPLOY_STEPS) &&
+    JSON.stringify(reportSteps) === JSON.stringify(PRODUCTION_REPORT_STEPS);
+}
+
+function warningGatedPayload(command: string): string | null {
+  return command.match(WARNING_GATE_COMMAND_PATTERN)?.[1] ?? null;
 }
 
 function workflowHasOnlyTriggers(lines: WorkflowLine[], onIndex: number, onEnd: number, allowed: string[]): boolean {
@@ -563,24 +931,6 @@ function workflowJobBlocks(lines: WorkflowLine[]): Array<[number, number]> {
     }
   }
   return blocks;
-}
-
-function stepRunsDeployAuto(lines: WorkflowLine[], stepStart: number, stepEnd: number): boolean {
-  const runIndent = lines[stepStart].indent + 2;
-  for (let index = stepStart + 1; index < stepEnd; index += 1) {
-    if (lines[index].indent !== runIndent) continue;
-    const run = lines[index].text.match(/^run:\s*(.*)$/);
-    if (!run) continue;
-
-    const value = run[1].trim();
-    if (value !== "|" && value !== ">") continue;
-
-    for (let commandIndex = index + 1; commandIndex < stepEnd; commandIndex += 1) {
-      if (lines[commandIndex].indent <= lines[index].indent) break;
-      if (lines[commandIndex].text === "pnpm run deploy:auto") return true;
-    }
-  }
-  return false;
 }
 
 function stepPropertyValue(lines: WorkflowLine[], stepStart: number, stepEnd: number, key: string): string | null {
@@ -687,10 +1037,15 @@ function workflowHasGitDefaultBranchConfig(workflow: string): boolean {
 }
 
 function corepackPnpmRunIsClean(run: string): boolean {
+  const commands = runCommandLines(run);
   return commandLinesEqual(run, [
     "corepack enable",
     `corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`,
-  ]);
+  ]) || (
+    commands.length === 2 &&
+    warningGatedPayload(commands[0]) === "corepack enable" &&
+    warningGatedPayload(commands[1]) === `corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`
+  );
 }
 
 function workflowUsesCorepackPnpmSetup(workflow: string): boolean {
@@ -699,9 +1054,7 @@ function workflowUsesCorepackPnpmSetup(workflow: string): boolean {
   if (activeText.includes("pnpm/action-setup@")) return false;
 
   const jobs = workflowJobBlocks(lines);
-  if (jobs.length === 0) return false;
-
-  for (const [jobStart, jobEnd] of workflowJobBlocks(lines)) {
+  for (const [jobStart, jobEnd] of jobs) {
     const steps = childBlock(lines, jobStart, jobEnd, "steps");
     if (!steps) return false;
 
@@ -725,7 +1078,7 @@ function workflowUsesCorepackPnpmSetup(workflow: string): boolean {
     if (nodeSetupStep < 0 || corepackStep <= nodeSetupStep) return false;
   }
 
-  return true;
+  return jobs.length > 0;
 }
 
 function workflowTriggersOnlyDispatchAndSchedule(workflow: string): boolean {
@@ -974,6 +1327,9 @@ function workflowHasStorybookDeployContract(workflow: string): boolean {
 
   for (const [jobStart, jobEnd] of jobs) {
     if (lines[jobStart].text !== "build-storybook:") continue;
+    if (blockScalarChildValue(lines, jobStart, jobEnd, "name") !== STORYBOOK_REQUIRED_JOB_NAME) {
+      return false;
+    }
     const permissions = childBlock(lines, jobStart, jobEnd, "permissions");
     if (!permissions || blockScalarChildValue(lines, permissions[0], permissions[1], "deployments") !== "write") {
       return false;
@@ -1027,6 +1383,7 @@ function workflowHasStorybookDeployContract(workflow: string): boolean {
 export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): DeploymentPreflightResult {
   const scripts = packageScripts(inputs.packageJson);
   const readmeAndDeploymentDoc = `${inputs.readme}\n${inputs.deploymentDoc}`;
+  const productionVars = objectRecord(inputs.wrangler.vars);
   const envConfig = objectRecord(inputs.wrangler.env);
   const qaConfig = objectRecord(envConfig.qa);
   const qaVars = objectRecord(qaConfig.vars);
@@ -1036,6 +1393,32 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
   const qaPhotos = bindingRecord(qaConfig.r2_buckets, "PHOTOS");
   const productionNamespaceIds = new Set(namespaceIds(inputs.wrangler.ratelimits));
   const qaNamespaceIds = namespaceIds(qaConfig.ratelimits);
+  const productionCspMode = productionVars.SPOONJOY_CSP_MODE;
+  const qaCspMode = qaVars.SPOONJOY_CSP_MODE;
+  const cspModesAreValid = (
+    (productionCspMode === "enforce" || productionCspMode === "report-only") &&
+    (qaCspMode === "enforce" || qaCspMode === "report-only")
+  );
+  const cspIsEnforcing = productionCspMode === "enforce" && qaCspMode === "enforce";
+  const cspIsReportOnlyRollback = (
+    cspModesAreValid &&
+    (productionCspMode === "report-only" || qaCspMode === "report-only")
+  );
+  const hasCspBreakGlass = inputs.cspReportOnlyBreakGlass === CSP_REPORT_ONLY_BREAK_GLASS_ACK;
+  const productionPostHogOrigin = normalizedHttpsOrigin(productionVars.VITE_POSTHOG_HOST);
+  const qaPostHogOrigin = normalizedHttpsOrigin(qaVars.VITE_POSTHOG_HOST);
+  const postHogOriginsMatch = Boolean(
+    productionPostHogOrigin &&
+    qaPostHogOrigin &&
+    productionPostHogOrigin === qaPostHogOrigin,
+  );
+  const productionBuildPlan = postHogOriginsMatch
+    ? createReactRouterBuildPlan(inputs.wrangler, {})
+    : null;
+  const qaBuildPlan = postHogOriginsMatch
+    ? createReactRouterBuildPlan(inputs.wrangler, { CLOUDFLARE_ENV: "qa" })
+    : null;
+  const ciWorkflowIsCanonical = parsedCiWorkflowIsCanonical(inputs.ciWorkflow);
 
   const checks: PreflightCheck[] = [
     check(
@@ -1066,6 +1449,11 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
       "wrangler.json must bind Worker version metadata as CF_VERSION_METADATA for exact-version canary verification."
     ),
     check(
+      "QA Worker version metadata",
+      objectRecord(qaConfig.version_metadata).binding === "CF_VERSION_METADATA",
+      "wrangler.json env.qa must bind Worker version metadata as CF_VERSION_METADATA for exact-version QA canary verification."
+    ),
+    check(
       "QA environment",
       hasBinding(qaConfig.d1_databases, "DB", ["database_name", "database_id"]) &&
         hasBinding(qaConfig.r2_buckets, "PHOTOS", ["bucket_name"]) &&
@@ -1073,6 +1461,42 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
         qaVars.NODE_ENV === "production" &&
         qaVars.SPOONJOY_BASE_URL === "https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
       "wrangler.json must define env.qa with DB, PHOTOS, rate limits, NODE_ENV=production, and the QA Worker base URL."
+    ),
+    check(
+      "CSP enforcement config",
+      cspModesAreValid && (cspIsEnforcing || (cspIsReportOnlyRollback && hasCspBreakGlass)),
+      `wrangler.json must set SPOONJOY_CSP_MODE=enforce for production and QA; report-only requires SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS=${CSP_REPORT_ONLY_BREAK_GLASS_ACK}.`
+    ),
+    check(
+      "CSP report-only break-glass",
+      !cspIsReportOnlyRollback,
+      `report-only CSP rollback is break-glass acknowledged with ${CSP_REPORT_ONLY_BREAK_GLASS_ACK}; restore SPOONJOY_CSP_MODE=enforce after the rollback.`,
+      "warning",
+    ),
+    check(
+      "PostHog CSP host config",
+      postHogOriginsMatch,
+      "wrangler.json production/QA vars must set the same origin-only HTTPS VITE_POSTHOG_HOST; QA preflight validates the generated Worker config and structured client build metadata after each build."
+    ),
+    check(
+      "React Router build contract",
+      scripts.build === REQUIRED_BUILD_PACKAGE_SCRIPT &&
+        reactRouterBuildEntrypointIsCanonical(inputs.reactRouterBuild) &&
+        Boolean(
+          productionBuildPlan &&
+          qaBuildPlan &&
+          Object.isFrozen(productionBuildPlan) &&
+          Object.isFrozen(qaBuildPlan) &&
+          Object.isFrozen(productionBuildPlan.contract) &&
+          Object.isFrozen(qaBuildPlan.contract) &&
+          productionBuildPlan.env.VITE_POSTHOG_HOST === productionPostHogOrigin &&
+          productionBuildPlan.contract.postHogHost === productionPostHogOrigin &&
+          productionBuildPlan.contract.metadata.publicEnv.VITE_POSTHOG_HOST === productionPostHogOrigin &&
+          qaBuildPlan.env.VITE_POSTHOG_HOST === qaPostHogOrigin &&
+          qaBuildPlan.contract.postHogHost === qaPostHogOrigin &&
+          qaBuildPlan.contract.metadata.publicEnv.VITE_POSTHOG_HOST === qaPostHogOrigin,
+        ),
+      "scripts/react-router-build.ts must invoke only the checked runner, which must derive one immutable PostHog host contract for the child build environment and metadata.",
     ),
     check(
       "QA resource isolation",
@@ -1087,7 +1511,7 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     ),
     check(
       "production node env",
-      (inputs.wrangler.vars as Record<string, unknown> | undefined)?.NODE_ENV === "production",
+      productionVars.NODE_ENV === "production",
       "wrangler.json vars should set NODE_ENV=production for deploy builds.",
       "warning"
     ),
@@ -1102,12 +1526,7 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
         scripts["qa:preflight"] === "tsx scripts/qa-preflight.ts" &&
         scripts["qa:migrate"] === "pnpm exec wrangler d1 migrations apply DB --remote --env qa" &&
         scripts["qa:seed"] === "node scripts/seed-qa.mjs --target-env qa" &&
-        typeof scripts["deploy:qa"] === "string" &&
-        scripts["deploy:qa"].includes("pnpm run qa:preflight") &&
-        scripts["deploy:qa"].includes("CLOUDFLARE_ENV=qa pnpm run build") &&
-        scripts["deploy:qa"].includes("pnpm run qa:migrate") &&
-        scripts["deploy:qa"].includes("SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG=1 pnpm run qa:preflight") &&
-        scripts["deploy:qa"].includes("wrangler deploy --env qa") &&
+        scripts["deploy:qa"] === REQUIRED_QA_DEPLOY_PACKAGE_SCRIPT &&
         typeof scripts["smoke:qa"] === "string" &&
         scripts["smoke:qa"].includes("--target-env qa") &&
         scripts["smoke:qa"].includes("spoonjoy-v2-qa.mendelow-studio.workers.dev") &&
@@ -1139,22 +1558,24 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
       "package.json deploy:auto must run the staged production canary orchestrator."
     ),
     check(
+      "output gate scripts",
+      scripts["test:coverage"] === "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then pnpm exec vitest run --coverage --fileParallelism=false" &&
+        scripts["test:e2e"] === "env -u FORCE_COLOR -u NO_COLOR PLAYWRIGHT_FORCE_TTY=0 tsx scripts/warning-gate.ts -- pnpm exec playwright test --reporter=list,html",
+      "package.json test:coverage and test:e2e must run through scripts/warning-gate.ts so unexpected output fails CI."
+    ),
+    check(
       "preflight script",
       typeof scripts["deploy:preflight"] === "string" && scripts["deploy:preflight"].includes("deployment-preflight"),
       "package.json must expose deploy:preflight for local and CI production-readiness checks."
     ),
     check(
       "CI workflow",
-      workflowBuildsPushesAndPullRequestsToMain(inputs.ciWorkflow) &&
-        workflowHasGitDefaultBranchConfig(inputs.ciWorkflow) &&
-        workflowUsesCorepackPnpmSetup(inputs.ciWorkflow),
-      ".github/workflows/ci.yml must validate pushes and pull requests to main with checkout warning suppression and Corepack pnpm activation."
+      ciWorkflowIsCanonical,
+      ".github/workflows/ci.yml must validate pushes and pull requests to main with checkout output suppression, Corepack pnpm activation, and output-gated seed/typecheck/build/test paths."
     ),
     check(
       "production deploy workflow",
-      workflowDeploysSuccessfulCiSha(inputs.productionDeployWorkflow) &&
-        workflowHasGitDefaultBranchConfig(inputs.productionDeployWorkflow) &&
-        workflowUsesCorepackPnpmSetup(inputs.productionDeployWorkflow),
+      parsedProductionWorkflowIsCanonical(inputs.productionDeployWorkflow),
       ".github/workflows/production-deploy.yml must deploy only an exact successful main-branch CI SHA, validate exact-SHA manual dispatches, pin every action, run deploy:auto with Cloudflare credentials, and record the released SHA."
     ),
     check(
@@ -1182,7 +1603,7 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     ),
     check(
       "Cloudflare Env typing",
-      ["DB", "PHOTOS", "CF_VERSION_METADATA", ...REQUIRED_SECRET_NAMES, ...IMAGE_PROVIDER_ENV_NAMES].every((name) => inputs.cloudflareEnvDts.includes(`${name}?`)),
+      ["DB", "PHOTOS", "CF_VERSION_METADATA", "SPOONJOY_CSP_MODE", ...REQUIRED_SECRET_NAMES, ...IMAGE_PROVIDER_ENV_NAMES].every((name) => inputs.cloudflareEnvDts.includes(`${name}?`)),
       "app/cloudflare-env.d.ts must type all Cloudflare bindings and documented secrets."
     ),
     check(
@@ -1223,6 +1644,17 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
         "POSTHOG_DISABLED",
       ].every((item) => readmeAndDeploymentDoc.includes(item)),
       "Deployment docs must show how to enable or intentionally disable PostHog without printing secret values."
+    ),
+    check(
+      "CSP rollback documentation",
+      [
+        "SPOONJOY_CSP_MODE",
+        "Content-Security-Policy-Report-Only",
+        "one-commit rollback",
+        "SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS",
+        CSP_REPORT_ONLY_BREAK_GLASS_ACK,
+      ].every((item) => readmeAndDeploymentDoc.includes(item)),
+      "README/deployment docs must document CSP enforcement and the report-only break-glass rollback."
     ),
     check(
       "cleanup documentation",
@@ -1431,6 +1863,7 @@ export async function runDeploymentPreflight(
     gitignore,
     pnpmWorkspace,
     cloudflareEnvDts,
+    reactRouterBuild,
     readme,
     deploymentDoc,
     vitestConfig,
@@ -1446,6 +1879,7 @@ export async function runDeploymentPreflight(
     readFile(path.join(rootDir, ".gitignore"), "utf8"),
     readFile(path.join(rootDir, "pnpm-workspace.yaml"), "utf8"),
     readFile(path.join(rootDir, "app/cloudflare-env.d.ts"), "utf8"),
+    readFile(path.join(rootDir, "scripts/react-router-build.ts"), "utf8"),
     readFile(path.join(rootDir, "README.md"), "utf8"),
     readFile(path.join(rootDir, "docs/deployment.md"), "utf8"),
     readFile(path.join(rootDir, "vitest.config.ts"), "utf8"),
@@ -1463,11 +1897,13 @@ export async function runDeploymentPreflight(
     gitignore,
     pnpmWorkspace,
     cloudflareEnvDts,
+    reactRouterBuild,
     readme,
     deploymentDoc,
     vitestConfig,
     tsconfigScripts,
     migrationFiles,
+    cspReportOnlyBreakGlass: deps.env?.SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS ?? process.env.SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS,
   });
 
   const runWrangler = deps.runWrangler ?? createWranglerRunner();

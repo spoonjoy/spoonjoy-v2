@@ -570,7 +570,7 @@ describe("API v1 shopping-list read and sync", () => {
   it("updates existing shopping rows when adding ingredients from a recipe", async () => {
     const fixture = await createShoppingFixture(db);
     const pantryUnit = await getOrCreateUnit(db, `pantry unit ${faker.string.alphanumeric(6)}`);
-    const pantryRef = await getOrCreateIngredientRef(db, `pantry item ${faker.string.alphanumeric(6)}`);
+    const pantryRef = await getOrCreateIngredientRef(db, `pantry item ${faker.string.numeric(12)}`);
     const pantryItem = await db.shoppingListItem.create({
       data: {
         shoppingListId: fixture.list.id,
@@ -584,7 +584,7 @@ describe("API v1 shopping-list read and sync", () => {
       },
     });
     const nullableUnit = await getOrCreateUnit(db, `nullable unit ${faker.string.alphanumeric(6)}`);
-    const nullableRef = await getOrCreateIngredientRef(db, `nullable item ${faker.string.alphanumeric(6)}`);
+    const nullableRef = await getOrCreateIngredientRef(db, `nullable item ${faker.string.numeric(12)}`);
     const nullableQuantityItem = await db.shoppingListItem.create({
       data: {
         shoppingListId: fixture.list.id,

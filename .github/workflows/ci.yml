@@ -5,30 +5,53 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact branch-head SHA for an authorized report-only rollback CI run
+        required: true
+        type: string
+      csp_report_only_break_glass:
+        description: Type ACK_REPORT_ONLY_CSP_ROLLBACK to authorize report-only preflight for this exact SHA
+        required: true
+        type: string
+
+defaults:
+  run:
+    shell: bash
 
 env:
   GIT_CONFIG_COUNT: "1"
   GIT_CONFIG_KEY_0: init.defaultBranch
   GIT_CONFIG_VALUE_0: main
+  PRISMA_HIDE_UPDATE_MESSAGE: "1"
+  CI_SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.sha }}
+  SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: ${{ github.event_name == 'workflow_dispatch' && inputs.csp_report_only_break_glass || '' }}
 
 jobs:
   advisory:
-    name: advisory
+    name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-advisory' || 'advisory' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ env.CI_SOURCE_SHA }}
+          persist-credentials: false
 
       - name: 📦 Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
 
+      - name: 🔐 Validate CI invocation
+        run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation
+
       - name: 📦 Activate pnpm
         run: |
-          corepack enable
-          corepack prepare pnpm@10.28.1 --activate
+          node scripts/warning-gate.ts -- corepack enable
+          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate
 
       - name: 🔒 Install pinned OSV-Scanner
         env:
@@ -36,85 +59,82 @@ jobs:
           OSV_SCANNER_TAG_SHA: 408fcd6f8707999a29e7ba45e15809764cf24f67
           OSV_SCANNER_LINUX_AMD64_SHA256: bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc
         run: |
-          set -euo pipefail
-          mkdir -p .cache/osv-scanner
-          actual_tag_sha="$(curl -fsSL --retry 3 --retry-delay 2 "https://api.github.com/repos/google/osv-scanner/git/ref/tags/${OSV_SCANNER_VERSION}" | jq -er '.object | select(.type == "commit") | .sha')"
-          test "$actual_tag_sha" = "$OSV_SCANNER_TAG_SHA"
-          curl -fsSL --retry 3 --retry-delay 2 "https://github.com/google/osv-scanner/releases/download/${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64" -o .cache/osv-scanner/osv-scanner
-          printf '%s  %s\n' "$OSV_SCANNER_LINUX_AMD64_SHA256" ".cache/osv-scanner/osv-scanner" | sha256sum -c -
-          chmod +x .cache/osv-scanner/osv-scanner
-          printf 'OSV-Scanner %s verified tag %s\n' "$OSV_SCANNER_VERSION" "$actual_tag_sha"
-          .cache/osv-scanner/osv-scanner --version
+          node scripts/warning-gate.ts -- mkdir -p .cache/osv-scanner
+          node scripts/warning-gate.ts -- curl -fsSL --retry 3 --retry-delay 2 "https://api.github.com/repos/google/osv-scanner/git/ref/tags/${OSV_SCANNER_VERSION}" -o .cache/osv-scanner/tag.json
+          node scripts/warning-gate.ts -- jq -e --arg expected "$OSV_SCANNER_TAG_SHA" '.object | select(.type == "commit" and .sha == $expected)' .cache/osv-scanner/tag.json
+          node scripts/warning-gate.ts -- curl -fsSL --retry 3 --retry-delay 2 "https://github.com/google/osv-scanner/releases/download/${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64" -o .cache/osv-scanner/osv-scanner
+          printf '%s  %s\n' "$OSV_SCANNER_LINUX_AMD64_SHA256" ".cache/osv-scanner/osv-scanner" > .cache/osv-scanner/checksums.txt
+          node scripts/warning-gate.ts -- sha256sum -c .cache/osv-scanner/checksums.txt
+          node scripts/warning-gate.ts -- chmod +x .cache/osv-scanner/osv-scanner
+          node scripts/warning-gate.ts -- .cache/osv-scanner/osv-scanner --version
 
       - name: 📥 Install advisory dependencies without lifecycle scripts
-        run: pnpm install --frozen-lockfile --ignore-scripts
+        run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile --ignore-scripts
 
       - name: 🔒 Run dependency advisory scan
         run: |
-          test -f pnpm-lock.yaml
-          pnpm run advisory:scan -- --scanner .cache/osv-scanner/osv-scanner --output .advisory/osv-results.json
+          node scripts/warning-gate.ts -- pnpm run advisory:scan -- --scanner .cache/osv-scanner/osv-scanner --output .advisory/osv-results.json
 
   coverage:
-    name: coverage
+    name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-coverage' || 'coverage' }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ env.CI_SOURCE_SHA }}
+          persist-credentials: false
 
       - name: 📦 Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
 
+      - name: 🔐 Validate CI invocation
+        run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation
+
       - name: 📦 Activate pnpm
         run: |
-          corepack enable
-          corepack prepare pnpm@10.28.1 --activate
+          node scripts/warning-gate.ts -- corepack enable
+          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate
 
       - name: 📥 Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile
 
       - name: 🔧 Generate Prisma client
-        run: pnpm prisma:generate
+        run: node scripts/warning-gate.ts -- pnpm prisma:generate
 
       - name: 🔒 Verify blake3 override resolution
         run: |
-          pnpm why blake3-wasm
-          pnpm why @c4312/blake3-internal
+          node scripts/warning-gate.ts -- pnpm why blake3-wasm
+          node scripts/warning-gate.ts -- pnpm why @c4312/blake3-internal
 
       - name: 🗄️ Apply D1 migrations (local)
-        run: pnpm exec wrangler d1 migrations apply DB --local
+        run: node scripts/warning-gate.ts -- pnpm exec wrangler d1 migrations apply DB --local
 
       - name: 🗄️ Apply Prisma schema to test database
-        run: DATABASE_URL="file:./test.db" pnpm exec prisma db push --skip-generate
+        run: DATABASE_URL="file:./test.db" node scripts/warning-gate.ts -- pnpm exec prisma db push --skip-generate
 
       - name: 🔎 CI preflight - seed backend + migration status
         run: |
-          echo "Seed script backend: Cloudflare D1 via wrangler getPlatformProxy()"
-          DATABASE_URL=${DATABASE_URL:-'<unset>'}
-          echo "DATABASE_URL=$DATABASE_URL"
-          echo ""
-          echo "Migrations status (wrangler):"
-          pnpm exec wrangler d1 migrations list DB --local
-          echo ""
-          echo "Tables before seed:"
-          pnpm exec wrangler d1 execute DB --local --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
+          node scripts/warning-gate.ts -- pnpm exec wrangler d1 migrations list DB --local
+          node scripts/warning-gate.ts -- pnpm exec wrangler d1 execute DB --local --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
 
       - name: 🌱 Seed local D1 database
-        run: pnpm db:seed
+        run: node scripts/warning-gate.ts -- pnpm db:seed
 
       - name: 🔍 Typecheck
-        run: pnpm run typecheck
+        run: node scripts/warning-gate.ts -- pnpm run typecheck
 
       - name: 🧪 Test & Coverage
         run: pnpm test:coverage
 
       - name: 🏗️ Build
-        run: pnpm build
+        run: node scripts/warning-gate.ts -- pnpm build
 
   e2e:
-    name: e2e
+    name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-e2e' || 'e2e' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -123,36 +143,48 @@ jobs:
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ env.CI_SOURCE_SHA }}
+          persist-credentials: false
 
       - name: 📦 Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
 
+      - name: 🔐 Validate CI invocation
+        run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation
+
       - name: 📦 Activate pnpm
         run: |
-          corepack enable
-          corepack prepare pnpm@10.28.1 --activate
+          node scripts/warning-gate.ts -- corepack enable
+          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate
 
       - name: 📥 Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile
 
       - name: 🔧 Generate Prisma client
-        run: pnpm prisma:generate
+        run: node scripts/warning-gate.ts -- pnpm prisma:generate
 
       - name: 🔒 Verify blake3 override resolution
         run: |
-          pnpm why blake3-wasm
-          pnpm why @c4312/blake3-internal
+          node scripts/warning-gate.ts -- pnpm why blake3-wasm
+          node scripts/warning-gate.ts -- pnpm why @c4312/blake3-internal
 
       - name: 🎭 Install Playwright Browsers
-        run: pnpm exec playwright install --with-deps chromium
+        run: |
+          node scripts/warning-gate.ts -- pnpm exec playwright install-deps --dry-run chromium
+          node scripts/warning-gate.ts -- sudo apt-get update
+          node scripts/warning-gate.ts -- sudo sh -c 'printf "%s\n" "man-db man-db/auto-update boolean true" | debconf-set-selections'
+          node scripts/warning-gate.ts -- sudo touch /var/lib/man-db/auto-update
+          node scripts/warning-gate.ts -- sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 apt-get -o Dpkg::Use-Pty=0 install -y --no-install-recommends xvfb fonts-noto-color-emoji fonts-unifont libfontconfig1 libfreetype6 xfonts-cyrillic xfonts-scalable fonts-liberation fonts-ipafont-gothic fonts-wqy-zenhei fonts-tlwg-loma-otf fonts-freefont-ttf libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 libcairo2 libcups2t64 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0t64 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2
+          node scripts/warning-gate.ts -- pnpm exec playwright install chromium
 
       - name: 🗄️ Apply D1 migrations
-        run: pnpm exec wrangler d1 migrations apply DB --local
+        run: node scripts/warning-gate.ts -- pnpm exec wrangler d1 migrations apply DB --local
 
       - name: 🌱 Seed local D1 database
-        run: pnpm db:seed
+        run: node scripts/warning-gate.ts -- pnpm db:seed
 
       - name: 🔐 Configure local Worker secrets
         run: |
