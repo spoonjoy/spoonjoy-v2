@@ -81,6 +81,88 @@ function runtimeImportNames(source: string, moduleName: string) {
   });
 }
 
+function workflowRunCommands(source: string) {
+  const jobsStart = source.search(/^jobs:\s*$/m);
+  if (jobsStart === -1) return [];
+  const jobsRemainder = source.slice(jobsStart).split("\n").slice(1).join("\n");
+  const nextTopLevel = jobsRemainder.search(/^[^\s#][^:]*:/m);
+  const jobs = nextTopLevel === -1
+    ? jobsRemainder
+    : jobsRemainder.slice(0, nextTopLevel);
+  return jobs.split(/(?=^  [a-z][a-z0-9-]*:\s*$)/m).flatMap((job) => {
+    const stepsStart = job.search(/^    steps:\s*$/m);
+    if (stepsStart === -1) return [];
+    const stepsRemainder = job.slice(stepsStart).split("\n").slice(1).join("\n");
+    const nextJobProperty = stepsRemainder.search(/^    [a-z][a-z0-9-]*:/m);
+    const steps = nextJobProperty === -1
+      ? stepsRemainder
+      : stepsRemainder.slice(0, nextJobProperty);
+    return steps.split(/(?=^      - )/m).flatMap((step) => {
+      const firstLine = step.match(/^      - run:\s+([^#]+?)\s*$/m);
+      const nested = step.match(/^        run:\s+([^#]+?)\s*$/m);
+      const command = firstLine?.[1] ?? nested?.[1];
+      return command ? [command] : [];
+    });
+  });
+}
+
+function hasAutomaticDiagnosticFixture(source: string) {
+  const sourceFile = ts.createSourceFile(
+    "fixtures.ts",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const testDeclaration = sourceFile.statements
+    .filter(ts.isVariableStatement)
+    .find((statement) =>
+      statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) &&
+      statement.declarationList.declarations.some((declaration) =>
+        ts.isIdentifier(declaration.name) && declaration.name.text === "test"));
+  const declaration = testDeclaration?.declarationList.declarations.find((candidate) =>
+    ts.isIdentifier(candidate.name) && candidate.name.text === "test");
+  const initializer = declaration?.initializer;
+  if (!initializer ||
+    !ts.isCallExpression(initializer) ||
+    !ts.isPropertyAccessExpression(initializer.expression) ||
+    !ts.isIdentifier(initializer.expression.expression) ||
+    initializer.expression.expression.text !== "base" ||
+    initializer.expression.name.text !== "extend" ||
+    !ts.isObjectLiteralExpression(initializer.arguments[0])) {
+    return false;
+  }
+
+  return initializer.arguments[0].properties.some((fixtureProperty) => {
+    if (!ts.isPropertyAssignment(fixtureProperty) ||
+      !ts.isArrayLiteralExpression(fixtureProperty.initializer) ||
+      fixtureProperty.initializer.elements.length !== 2) {
+      return false;
+    }
+    const [fixtureFunction, options] = fixtureProperty.initializer.elements;
+    if ((!ts.isArrowFunction(fixtureFunction) && !ts.isFunctionExpression(fixtureFunction)) ||
+      !ts.isObjectLiteralExpression(options) ||
+      !options.properties.some((candidate) =>
+        ts.isPropertyAssignment(candidate) &&
+        ts.isIdentifier(candidate.name) &&
+        candidate.name.text === "auto" &&
+        candidate.initializer.kind === ts.SyntaxKind.TrueKeyword)) {
+      return false;
+    }
+
+    const calls = new Set<string>();
+    const visit = (node: ts.Node) => {
+      if (ts.isCallExpression(node)) {
+        if (ts.isIdentifier(node.expression)) calls.add(node.expression.text);
+        if (ts.isPropertyAccessExpression(node.expression)) calls.add(node.expression.name.text);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(fixtureFunction);
+    return calls.has("runBrowserDiagnosticFixture");
+  });
+}
+
 describe("warning command policy", () => {
   it.each([
     "console.error('Warning: node diagnostic')",
@@ -237,6 +319,7 @@ describe("in-process warning policy", () => {
       scripts?: Record<string, string>;
     };
     const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
+    const commands = workflowRunCommands(workflow);
 
     expect(packageJson.scripts?.["verify:clean:typecheck"]).toBe(
       "node scripts/run-with-warning-policy.mjs -- pnpm run typecheck",
@@ -247,9 +330,9 @@ describe("in-process warning policy", () => {
     expect(packageJson.scripts?.["verify:clean:migrations"]).toContain(
       "run-with-warning-policy.mjs",
     );
-    expect(workflow).toContain("pnpm run verify:clean:typecheck");
-    expect(workflow).toContain("pnpm run verify:clean:build");
-    expect(workflow).toContain("pnpm run verify:clean:migrations");
+    expect(commands).toContain("pnpm run verify:clean:typecheck");
+    expect(commands).toContain("pnpm run verify:clean:build");
+    expect(commands).toContain("pnpm run verify:clean:migrations");
   });
 });
 
@@ -285,7 +368,10 @@ describe("Playwright warning policy", () => {
     const laterPage = new FakeEmitter();
     context.emit("page", laterPage);
     laterPage.emit("console", { type: () => "error", text: () => "later error" });
-    expect(() => collector.assertClean()).toThrowError(/console\.error: later error/);
+    laterPage.emit("pageerror", new Error("later page error"));
+    expect(() => collector.assertClean()).toThrowError(
+      /console\.error: later error[\s\S]*pageerror: Error: later page error/,
+    );
   });
 
   it("rejects browser warning/error/page-error diagnostics", async () => {
@@ -301,13 +387,37 @@ describe("Playwright warning policy", () => {
     );
   });
 
-  it("provides an automatic context-wide console and page-error fixture", () => {
+  it("provides an executable automatic context-wide diagnostic fixture", async () => {
     const fixture = readFileSync("e2e/fixtures.ts", "utf8");
+    const exported = await import("../../e2e/fixtures");
 
-    expect(fixture).toContain("base.extend");
-    expect(fixture).toContain("auto: true");
-    expect(fixture).toContain("observeBrowserContext");
-    expect(fixture).toContain("Browser emitted warning/error diagnostics");
+    class FakeEmitter {
+      listeners = new Map<string, Array<(...args: unknown[]) => void>>();
+      on(event: string, listener: (...args: unknown[]) => void) {
+        this.listeners.set(event, [...(this.listeners.get(event) ?? []), listener]);
+      }
+      emit(event: string, ...args: unknown[]) {
+        for (const listener of this.listeners.get(event) ?? []) listener(...args);
+      }
+    }
+
+    const page = new FakeEmitter();
+    const fakeContext = new FakeEmitter() as FakeEmitter & { pages(): FakeEmitter[] };
+    fakeContext.pages = () => [page];
+    const runFixture = exported.runBrowserDiagnosticFixture as (
+      context: typeof fakeContext,
+      use: () => Promise<void>,
+    ) => Promise<void>;
+
+    expect(hasAutomaticDiagnosticFixture(fixture)).toBe(true);
+    expect(typeof exported.test).toBe("function");
+    expect(typeof exported.expect).toBe("function");
+    await expect(runFixture(fakeContext, async () => {})).resolves.toBeUndefined();
+    await expect(runFixture(fakeContext, async () => {
+      page.emit("console", { type: () => "warning", text: () => "fixture warning" });
+    })).rejects.toThrowError(
+      /Browser emitted warning\/error diagnostics[\s\S]*console\.warning: fixture warning/,
+    );
   });
 
   it("makes every Playwright spec and setup use the local fixture", () => {

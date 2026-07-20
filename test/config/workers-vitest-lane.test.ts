@@ -7,18 +7,33 @@ function readJson(path: string) {
 }
 
 function workflowJob(source: string, name: string) {
-  const marker = `\n  ${name}:\n`;
-  const start = source.indexOf(marker);
+  const jobsMarker = "\njobs:\n";
+  const jobsStart = source.indexOf(jobsMarker);
+  if (jobsStart === -1) return "";
+  const jobsRemainder = source.slice(jobsStart + jobsMarker.length);
+  const nextTopLevel = jobsRemainder.search(/\n[^\s#][^:]*:/);
+  const jobs = nextTopLevel === -1 ? jobsRemainder : jobsRemainder.slice(0, nextTopLevel);
+  const marker = `  ${name}:\n`;
+  const start = jobs.indexOf(marker);
   if (start === -1) return "";
-  const remainder = source.slice(start + marker.length);
+  const remainder = jobs.slice(start + marker.length);
   const nextJob = remainder.search(/\n  [a-z][a-z0-9-]*:\n/);
   return nextJob === -1 ? remainder : remainder.slice(0, nextJob);
 }
 
 function runCommands(job: string) {
-  return job.split("\n").flatMap((line) => {
-    const match = line.match(/^\s+run:\s+([^#]+?)\s*$/);
-    return match ? [match[1]] : [];
+  const stepsStart = job.search(/^    steps:\s*$/m);
+  if (stepsStart === -1) return [];
+  const stepsRemainder = job.slice(stepsStart).split("\n").slice(1).join("\n");
+  const nextJobProperty = stepsRemainder.search(/^    [a-z][a-z0-9-]*:/m);
+  const steps = nextJobProperty === -1
+    ? stepsRemainder
+    : stepsRemainder.slice(0, nextJobProperty);
+  return steps.split(/(?=^      - )/m).flatMap((step) => {
+    const firstLine = step.match(/^      - run:\s+([^#]+?)\s*$/m);
+    const nested = step.match(/^        run:\s+([^#]+?)\s*$/m);
+    const command = firstLine?.[1] ?? nested?.[1];
+    return command ? [command] : [];
   });
 }
 
@@ -112,7 +127,8 @@ function cloudflareConfigPath(config: ts.ObjectLiteralExpression) {
 
 function literalValue(expression: ts.Expression | undefined) {
   if (!expression) return undefined;
-  if (ts.isStringLiteral(expression) || ts.isNumericLiteral(expression)) return expression.text;
+  if (ts.isStringLiteral(expression)) return expression.text;
+  if (ts.isNumericLiteral(expression)) return Number(expression.text);
   if (expression.kind === ts.SyntaxKind.TrueKeyword) return true;
   if (expression.kind === ts.SyntaxKind.FalseKeyword) return false;
   if (ts.isArrayLiteralExpression(expression)) {
@@ -168,20 +184,24 @@ describe("Workers Vitest lane", () => {
     expect(literalValue(property(testConfig, "setupFiles"))).toEqual(["./vitest.workers.setup.ts"]);
     expect(literalValue(property(testConfig, "passWithNoTests"))).toBe(true);
     expect(literalValue(property(testConfig, "fileParallelism"))).toBe(false);
-    expect(literalValue(property(testConfig, "maxWorkers"))).toBe("1");
+    expect(literalValue(property(testConfig, "maxWorkers"))).toBe(1);
     expect(literalValue(property(coverage, "provider"))).toBe("istanbul");
     for (const threshold of ["statements", "branches", "functions", "lines"]) {
-      expect(literalValue(property(thresholds, threshold))).toBe("100");
+      expect(literalValue(property(thresholds, threshold))).toBe(100);
     }
   });
 
   it("keeps Workers tests out of the app pool and invokes both lanes in CI", () => {
-    const appConfig = readFileSync("vitest.config.ts", "utf8");
+    const appSource = readFileSync("vitest.config.ts", "utf8");
+    const appConfig = workersConfigObject(appSource);
+    const appTestConfig = appConfig && property(appConfig, "test");
     const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
     const appCoverageJob = workflowJob(workflow, "coverage");
     const workersCoverageJob = workflowJob(workflow, "workers-coverage");
 
-    expect(appConfig).toContain('"test/workers/**"');
+    expect(appTestConfig && ts.isObjectLiteralExpression(appTestConfig)).toBe(true);
+    if (!appTestConfig || !ts.isObjectLiteralExpression(appTestConfig)) return;
+    expect(literalValue(property(appTestConfig, "exclude"))).toContain("test/workers/**");
     expect(runCommands(appCoverageJob)).toContain("pnpm run test:coverage");
     expect(runCommands(appCoverageJob)).not.toContain("pnpm run test:workers:coverage");
     expect(runCommands(workersCoverageJob)).toContain("pnpm run test:workers:coverage");
