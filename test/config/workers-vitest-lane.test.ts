@@ -238,6 +238,7 @@ jobs:
     expect(source).not.toContain("defineWorkersConfig");
     expect(config && cloudflareConfigPath(config)).toBe("./wrangler.workers-test.json");
     expect(literalValue(property(testConfig, "include"))).toEqual(["test/workers/**/*.test.ts"]);
+    expect(literalValue(property(testConfig, "exclude"))).toEqual(["test/workers/app.test.ts"]);
     expect(literalValue(property(testConfig, "setupFiles"))).toEqual(["./vitest.workers.setup.ts"]);
     expect(literalValue(property(testConfig, "passWithNoTests"))).toBe(true);
     expect(literalValue(property(testConfig, "fileParallelism"))).toBe(false);
@@ -248,7 +249,7 @@ jobs:
     }
   });
 
-  it("keeps Workers tests out of the app pool and invokes both lanes in CI", () => {
+  it("keeps Cloudflare integration and Node-mocked Worker tests in separate pools", () => {
     const appSource = readFileSync("vitest.config.ts", "utf8");
     const appConfig = workersConfigObject(appSource);
     const appTestConfig = appConfig && property(appConfig, "test");
@@ -258,7 +259,11 @@ jobs:
 
     expect(appTestConfig && ts.isObjectLiteralExpression(appTestConfig)).toBe(true);
     if (!appTestConfig || !ts.isObjectLiteralExpression(appTestConfig)) return;
-    expect(literalValue(property(appTestConfig, "exclude"))).toContain("test/workers/**");
+    expect(literalValue(property(appTestConfig, "exclude"))).toContain(
+      "test/workers/cook-session-bootstrap.test.ts",
+    );
+    expect(literalValue(property(appTestConfig, "exclude"))).not.toContain("test/workers/**");
+    expect(appSource).toContain('"workers/app.ts"');
     expect(runCommands(appCoverageJob)).toContain("pnpm run verify:clean:test:coverage");
     expect(runCommands(appCoverageJob)).not.toContain("pnpm run test:coverage");
     expect(runCommands(appCoverageJob)).not.toContain("pnpm run test:workers:coverage");

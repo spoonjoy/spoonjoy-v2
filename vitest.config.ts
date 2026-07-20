@@ -24,6 +24,7 @@ const coverageInclude = [
   "e2e/fixtures.ts",
   "e2e/support/global-teardown.ts",
   "e2e/support/start-ephemeral-wrangler.mjs",
+  "workers/app.ts",
 ] as const;
 
 const hasCoverageFlag = process.argv.some((arg) =>
@@ -54,7 +55,12 @@ export default defineConfig({
     sequence: {
       shuffle: false,
     },
-    exclude: ["**/node_modules/**", "**/e2e/**", "**/.claude/**", "test/workers/**"],
+    exclude: [
+      "**/node_modules/**",
+      "**/e2e/**",
+      "**/.claude/**",
+      "test/workers/cook-session-bootstrap.test.ts",
+    ],
     coverage: {
       provider: "istanbul",
       reporter: ["text", "json", "html"],
