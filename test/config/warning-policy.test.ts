@@ -150,16 +150,25 @@ function hasAutomaticDiagnosticFixture(source: string) {
       return false;
     }
 
-    const calls = new Set<string>();
-    const visit = (node: ts.Node) => {
-      if (ts.isCallExpression(node)) {
-        if (ts.isIdentifier(node.expression)) calls.add(node.expression.text);
-        if (ts.isPropertyAccessExpression(node.expression)) calls.add(node.expression.name.text);
-      }
-      ts.forEachChild(node, visit);
-    };
-    visit(fixtureFunction);
-    return calls.has("runBrowserDiagnosticFixture");
+    if (!ts.isArrowFunction(fixtureFunction)) return false;
+    const delegatedCall = ts.isCallExpression(fixtureFunction.body)
+      ? fixtureFunction.body
+      : ts.isBlock(fixtureFunction.body) && fixtureFunction.body.statements.length === 1 &&
+          ts.isReturnStatement(fixtureFunction.body.statements[0]) &&
+          fixtureFunction.body.statements[0].expression &&
+          ts.isCallExpression(fixtureFunction.body.statements[0].expression)
+        ? fixtureFunction.body.statements[0].expression
+        : undefined;
+    return Boolean(
+      delegatedCall &&
+      ts.isIdentifier(delegatedCall.expression) &&
+      delegatedCall.expression.text === "runBrowserDiagnosticFixture" &&
+      delegatedCall.arguments.length === 2 &&
+      ts.isIdentifier(delegatedCall.arguments[0]) &&
+      delegatedCall.arguments[0].text === "context" &&
+      ts.isIdentifier(delegatedCall.arguments[1]) &&
+      delegatedCall.arguments[1].text === "use",
+    );
   });
 }
 
@@ -431,8 +440,11 @@ describe("Playwright warning policy", () => {
           : `./${fixtureRelativePath}`;
         const fixtureRuntimeNames = runtimeImportNames(source, fixtureImport);
         const officialRuntimeNames = runtimeImportNames(source, "@playwright/test");
-        return !fixtureRuntimeNames.some((name) => name === "test" || name === "expect") ||
-          officialRuntimeNames.length > 0;
+        const importsTestApi = [...fixtureRuntimeNames, ...officialRuntimeNames]
+          .some((name) => name === "test" || name === "expect");
+        const importsFixtureTestApi = fixtureRuntimeNames
+          .some((name) => name === "test" || name === "expect");
+        return officialRuntimeNames.length > 0 || (importsTestApi && !importsFixtureTestApi);
       })
       .map((path) => relative(process.cwd(), path))
       .sort();

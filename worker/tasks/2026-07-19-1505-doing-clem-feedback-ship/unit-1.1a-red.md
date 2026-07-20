@@ -16,6 +16,8 @@ Round 2 then required end-to-end hook evidence rather than collector-only calls,
 
 Round 3 completed the matrix for both Vitest lanes, requires each unique sentinel in the captured diagnostic, parses the exported `defineConfig` AST to prove `cloudflareTest()` is imported/called and every lane option is executable structure, recognizes side-effect official imports as runtime imports, and parses exact executable CI `run:` commands rather than accepting commented text.
 
+Rounds 4-5 restricted CI evidence to actual `jobs.*.steps[]`, behaviorally invoked the exported browser fixture helper, required the automatic fixture arrow to delegate exactly `runBrowserDiagnosticFixture(context, use)`, covered later-page errors, preserved numeric config types, and scoped fixture inventory to files that actually import the test API while still rejecting every official runtime/side-effect import.
+
 Current rerun: expected exit status 1; `workers-vitest-lane.test.ts` collects four tests and all four fail on the absent package/config/CI lane, while `warning-policy.test.ts` fails during transform on the intentionally absent `test/warning-policy.ts` module and collects no bodies. This is the current implementation-only red boundary.
 
 The failures are confined to the intentionally absent Unit 1.1 infrastructure:
