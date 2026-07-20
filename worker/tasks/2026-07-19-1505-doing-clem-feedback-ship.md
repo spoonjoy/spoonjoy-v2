@@ -76,7 +76,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Output**: Red Workers-lane, warning-policy, fixture-inventory, and workflow-contract evidence.
 **Acceptance**: Focused tests fail only because the Workers lane and warning-enforcement infrastructure are absent.
 
-### ⬜ Unit 1.1b: Workers Test Lane - Implementation
+### ✅ Unit 1.1b: Workers Test Lane - Implementation
 **What**: Upgrade all Vitest packages to `4.1.10`; add `@cloudflare/vitest-pool-workers@0.18.6`, `vitest.workers.config.ts`, `vitest.workers.setup.ts`, `wrangler.workers-test.json`, `test:workers`/`test:workers:coverage`, and the mandatory CI job. Add the tested warning wrapper and route typecheck, build, generated-contract checks, and local/QA migration rehearsals through it in verification/CI. Replace `test/setup.ts`'s blanket act/SQLite suppression with fail-after-test warning capture: tests that intentionally exercise logging must own an exact spy, React tests repair their act boundary, and Node SQLite processes use the runtime's warning-disable flag so no warning is emitted. Add the shared Playwright fixture and mechanically switch every test-bearing existing spec/setup import to it.
 **Output**: Executable official Workers-runtime lane and repo-wide zero-warning enforcement.
 **Acceptance**: Injected sentinel warnings fail in every runner, benign text does not; `pnpm run test:workers`, app coverage, Playwright, typecheck, build, and migration rehearsals pass with no warning emitted or suppressed.
@@ -693,3 +693,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-19 19:01 Unit 0 cold review converged; the reviewer independently replayed the fixture and reproduced its counts, FK result, and hashes.
 - 2026-07-19 19:07 Unit 1.1a red boundary: the Workers file's four tests fail on the absent package/config/CI lane, and the warning-policy suite fails transform on its absent shared gate module; no product assertion fails.
 - 2026-07-19 20:12 Unit 1.1a cold review converged after the red suite was expanded to 31 independently collected contracts (28 expected infrastructure failures, three parser/baseline passes) and every BLOCKER/MAJOR false-positive path was closed.
+- 2026-07-20 00:48 Unit 1.1b complete: shipped the official Workers lane, repo-wide diagnostic enforcement, exact Node SQLite exception, isolated browser runtime/cleanup, and CI gates; 7,292 app tests and 63 CI-equivalent browser tests passed, and five harsh review rounds converged with zero runtime residue.
