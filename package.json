@@ -10,7 +10,9 @@
   },
   "pnpm": {
     "overrides": {
-      "axios": "1.18.0"
+      "axios": "1.18.0",
+      "brace-expansion@1": "1.1.16",
+      "brace-expansion@2": "2.1.2"
     }
   },
   "scripts": {
