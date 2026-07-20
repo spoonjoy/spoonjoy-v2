@@ -122,7 +122,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: QA has `v1_cook_session`, the inert DO responds, and no disposable D1/DO row remains.
 
 ### ⬜ Unit 1.5: Bootstrap PR And Merge
-**What**: On `worker/clem-feedback-e2e`, run final gates and open a PR to `main`. Enforce the planning-contract allowlist: focused task docs/artifacts, package/lockfile, Wrangler/env types, Worker app/new inert class, Workers-test config/tests, CI/production workflow, and existing deploy script/tests/docs only; resolve review/CI and merge.
+**What**: On `worker/clem-feedback-e2e`, run final gates and open a PR to `main`. Enforce the planning-contract allowlist: focused task docs/artifacts, frozen `test/fixtures/clem-feedback-pre-feature.sql`, package/lockfile, Wrangler/env types, Worker app/new inert class, Workers-test config/tests, CI/production workflow, and existing deploy script/tests/docs only; resolve review/CI and merge.
 **Output**: Bootstrap PR URL and exact merge SHA.
 **Acceptance**: Required reviews/CI are green and the merge SHA contains only docs plus lifecycle/test/deploy bootstrap scope.
 
@@ -134,7 +134,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 ### ⬜ Unit 1.7: Product Branch Handoff
 **What**: Create `/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback-product` on `worker/clem-feedback-product` from the verified bootstrap merge with future base `main`, and record merge/deploy/version/ancestry/branch/worktree/task paths in `bootstrap-handoff.md` without changing runtime code.
 **Output**: Initial handoff manifest and clean pushed product branch at the bootstrap merge.
-**Acceptance**: Merge-base succeeds, task docs remain reachable, `git status --porcelain` is empty, and the initial product branch equals the verified bootstrap merge.
+**Acceptance**: Merge-base succeeds, task docs and the frozen fixture remain reachable, `git status --porcelain` is empty, and the initial product branch equals the verified bootstrap merge.
 
 ### ⬜ Unit 1.8a: Product Deployment Mode - Tests
 **What**: On the product branch, change config/runtime/deploy contract tests to require no `COOK_SESSION_BOOTSTRAP_MODE`, public probe 404 with internal inert probe still covered, retained binding/migration, and restored versions-upload/canary behavior.
@@ -417,12 +417,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: No horizontal overflow, overlap, or truncation occurs; all controls have reachable focus and at least 44px targets; active filters have programmatic selected state and visible labels; the absurdity ledger has no open item.
 
 ### ⬜ Unit 7.1a: Cook Contracts And Auth - Tests
-**What**: Add failing tests for every exact cook route/contract/security/hash and for removal of `/.well-known/spoonjoy-cook-session-bootstrap`, the internal probe path/header/table branch, and probe-specific success expectations while retaining binding/migration lifecycle assertions.
+**What**: Add failing tests for every exact cook route/contract/security/hash and for removal of `/.well-known/spoonjoy-cook-session-bootstrap`, the internal probe path/header/table branch, and probe-specific success expectations while retaining binding/migration lifecycle assertions. Cover session access; bearer `kitchen:read` on list/detail/WebSocket; bearer `kitchen:write` on start/PATCH/complete/abandon/restart/purge; wrong/missing bearer scopes; and distinct 403 `insufficient_scope` versus `origin_forbidden` envelopes.
 **Output**: Red cook-contract and Worker-router tests.
 **Acceptance**: Focused tests fail against the inert bootstrap/runtime router.
 
 ### ⬜ Unit 7.1b: Cook Contracts And Auth - Implementation
-**What**: Remove public/internal bootstrap probe code and obsolete probe test expectations; replace inert behavior with `app/lib/cook-session-contract.ts`, `workers/cook-session-api.ts`, and exact authenticated routing from `workers/app.ts`, while retaining class/binding/migration.
+**What**: Remove public/internal bootstrap probe code and obsolete probe test expectations; replace inert behavior with `app/lib/cook-session-contract.ts`, `workers/cook-session-api.ts`, and exact authenticated routing from `workers/app.ts`, while retaining class/binding/migration. After `authenticateApiRequest`, enforce expanded `kitchen:read` or `kitchen:write` per the frozen route matrix before deriving/calling the DO, including WebSocket upgrades.
 **Output**: Secure typed HTTP/WebSocket transport boundary.
 **Acceptance**: Focused pure/Worker tests, typecheck, and build pass.
 
@@ -447,12 +447,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every transition/conflict/replay/eviction/error branch is covered and review converges.
 
 ### ⬜ Unit 7.3a: Projection And Alarm - Tests
-**What**: Add failing real D1/DO integration tests for the exact CookSessionIndex allowlist/schema and 200-code-point title bound; one per-object promise mutex serializes start with purge/cleanup across external D1 I/O; brand-new start writes a conditional revision-0 D1 row before SQLite state; D1 failure returns 503 with no DO state; SQLite failure after D1 returns 503 and conditionally deletes the exact attempt/revision; failed compensation leaves an enumerable D1 row whose detail is 404; cleanup racing the handshake waits and rechecks; crash/restart plus no local state conditionally removes the exact orphan before retrying start. Also test later DO-first revision-fenced projection, retry delays `1/5/30/120/600` seconds, terminal non-resurrection, one alarm choosing the earlier deadline with due purge first, and the frozen telemetry allowlist/clamps.
+**What**: Add failing real D1/DO integration tests for the exact CookSessionIndex allowlist/schema and 200-code-point title bound; one per-object promise mutex serializes every state-changing request and alarm across external D1 I/O; brand-new start writes a conditional revision-0 D1 row before SQLite state; D1 failure returns 503 with no DO state; SQLite failure after D1 returns 503 and conditionally deletes the exact attempt/revision; failed compensation leaves an enumerable D1 row whose detail is 404; cleanup racing the handshake waits and rechecks; crash/restart plus no local state conditionally removes the exact orphan before retrying start. Also test later DO-first revision-fenced projection, retry delays `1/5/30/120/600` seconds, terminal non-resurrection, one alarm choosing the earlier deadline with due purge first, and the frozen telemetry allowlist/clamps.
 **Output**: Red projection/scheduler tests using real D1/DO storage.
 **Acceptance**: Tests fail because the initial registry handshake, compensated failure paths, later projection, and scheduler behavior are absent.
 
 ### ⬜ Unit 7.3b: Projection And Alarm - Implementation
-**What**: Implement one per-instance promise mutex used by every start and purge/cleanup entrypoint, held across the D1-first initial registry handshake, SQLite commit, and exact-attempt/revision compensation; cleanup acquires it and re-reads state, and a new start repairs an exact no-state orphan before retrying. Preserve failed compensation as an enumerable orphan registry row with no fabricated detail. After initial success, implement metadata-only DO-first revision projection, the exact persisted retry schedule/alarm precedence, and only the frozen privacy-safe telemetry fields in `workers/cook-session.ts`.
+**What**: Implement one per-instance promise mutex used by start, PATCH, complete, abandon, restart, purge/cleanup, and alarm entrypoints. Every operation re-reads SQLite after acquisition; hold the mutex across the D1-first initial registry handshake, SQLite commit, and exact-attempt/revision compensation. Cleanup acquires it and re-reads state, a new start repairs an exact no-state orphan before retrying, and alarms never act on pre-lock state. Preserve failed compensation as an enumerable orphan registry row with no fabricated detail. After initial success, implement metadata-only DO-first revision projection, the exact persisted retry schedule/alarm precedence, and only the frozen privacy-safe telemetry fields in `workers/cook-session.ts`.
 **Output**: Durable private registry/discovery projection.
 **Acceptance**: Focused Workers projection/alarm tests pass, no failure can leave an unindexed DO, orphan registry rows remain discoverable for cleanup, and D1 contains no progress field.
 
@@ -477,12 +477,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every upgrade/message/reconnect/stale/close branch is covered and review converges.
 
 ### ⬜ Unit 7.5a: Retention And Purge - Tests
-**What**: Add failing Workers tests for 24-hour terminal/receipt retention, replay during retention, active-list exclusion, due-purge alarm precedence, close -> D1 delete -> alarm/storage delete ordering, exact 503 `purge_incomplete`, 60-second retry with storage preserved, owner-only purge, and D1-row-enumerated cleanup including a failed-initial-compensation orphan whose DO detail is 404. Assert all cleanup goes through the addressed DO mutex, an enumerated attempt/revision fences orphan deletion, and no direct caller-side index delete exists.
+**What**: Add failing Workers tests for 24-hour terminal/receipt retention, replay during retention, active-list exclusion, due-purge alarm precedence, close -> D1 delete -> alarm/storage delete ordering, exact 503 `purge_incomplete`, 60-second retry with storage preserved, owner-only purge, and D1-row-enumerated cleanup including a failed-initial-compensation orphan whose DO detail is 404. Assert all cleanup goes through the addressed DO mutex, an enumerated attempt/revision fences orphan deletion, and no direct caller-side index delete exists. Race restart against a due purge in both acquisition orders: restart-first preserves the new active attempt after alarm re-read; purge-first removes state and the later restart returns 404.
 **Output**: Red retention/purge/cleanup tests.
 **Acceptance**: Tests fail because terminal lifecycle and purge are absent.
 
 ### ⬜ Unit 7.5b: Retention And Purge - Implementation
-**What**: Implement the exact frozen retention/purge sequence and errors in `workers/cook-session.ts`/`workers/cook-session-api.ts`, plus owner cleanup that enumerates `CookSessionIndex` rows before calling each server-derived DO through the shared mutex; after acquiring the mutex, cleanup conditionally removes only the enumerated attempt/revision when local state is absent. List returns only `status='active'` ordered by `updatedAt DESC, recipeId DESC`; no route/script deletes an index row directly.
+**What**: Implement the exact frozen retention/purge sequence and errors in `workers/cook-session.ts`/`workers/cook-session-api.ts`, plus owner cleanup that enumerates `CookSessionIndex` rows before calling each server-derived DO through the shared mutex; after acquiring the mutex, cleanup conditionally removes only the enumerated attempt/revision when local state is absent. Alarm purge re-reads state after mutex acquisition and exits when restart cleared the due terminal state. List returns only `status='active'` ordered by `updatedAt DESC, recipeId DESC`; no route/script deletes an index row directly.
 **Output**: Recoverable lifecycle cleanup with complete D1 registry until purge.
 **Acceptance**: Focused Workers/API cleanup tests pass and zero-residue assertions succeed.
 
@@ -664,3 +664,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-19 17:45 Scrutiny Pass 7 fixed initial registry atomicity and isolated metadata read serializers from mutation/native contracts.
 - 2026-07-19 18:18 Scrutiny Pass 8 addressed six findings: handshake cleanup mutex, authenticated remote purge, schema-time import shielding, read-only OpenAPI schemas, search projection ownership, and fixture reset.
 - 2026-07-19 18:37 Scrutiny Pass 8 Round 2 addressed five findings: scale contract ownership, tag content hashing, cleanup origin, atomic authoring, and self-reference reset.
+- 2026-07-19 18:57 Scrutiny redesign addressed cook scope enforcement, fixture survival across bootstrap, and restart/purge serialization.
