@@ -8,8 +8,7 @@ const BRACKETED_WARNING_PATTERN = /(?:^|[\s([<{])\[\s*warn(?:ings?)?(?:\s*:\s*[^
 const WARNING_WORD_PATTERN = /(?:^|[^A-Za-z0-9])(?:[A-Za-z]+warnings?|warnings?|warn)(?!-gate\.ts\b|-summary\.log\b)(?=[:!.,;\s([<{=]|$|-)/i;
 const PRISMA_WARNING_PATTERN = /(?:^|[\s([<{])prisma:warn(?::|\s|$)/i;
 const WARNING_SYMBOL_PATTERN = /⚠/;
-const TEST_RESULT_LINE_PATTERN = /^[✓↓×]\s+(?:should|keeps?|rejects?|parses?|detects?|streams?|runs?|fails?|still|preserves?|prints?|uses?|handles?|renders?|displays?|shows?|allows?|supports?|returns?|loads?|creates?|updates?|deletes?|validates?|redirects?|reports?|records?)\b/i;
-const TIMED_TEST_RESULT_LINE_PATTERN = /^[✓↓×]\s+.+\s+\d+(?:\.\d+)?(?:ms|s)$/i;
+const TEST_RESULT_LINE_PATTERN = /^[✓↓×]\s+(?:should|keeps?|rejects?|parses?|detects?|streams?|runs?|fails?|still|preserves?|prints?|uses?|handles?|renders?|displays?|shows?|allows?|supports?|returns?|loads?|creates?|updates?|deletes?|validates?|redirects?|reports?|records?|omits?)\b/i;
 const TEST_FILE_RESULT_LINE_PATTERN =
   /^[✓↓×]\s+(?:test|app)\/\S+\.test\.[cm]?[jt]sx?(?:\s+\(\d+\s+tests?\))?(?:\s+\d+(?:\.\d+)?(?:ms|s))?$/i;
 const OSC_SEQUENCE_PATTERN = /(?:\u001B\]|\u009D)[\s\S]*?(?:\u0007|\u001B\\|\u009C)/g;
@@ -69,7 +68,6 @@ export type WarningGateCommandRunner = (
 function isWarningLine(line: string): boolean {
   if (
     TEST_RESULT_LINE_PATTERN.test(line) ||
-    TIMED_TEST_RESULT_LINE_PATTERN.test(line) ||
     TEST_FILE_RESULT_LINE_PATTERN.test(line)
   ) {
     return (
