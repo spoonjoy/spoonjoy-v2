@@ -101,12 +101,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Output**: Focused coverage and reviewer report.
 **Acceptance**: Namespace code is 100% covered and a fresh Cloudflare review has no BLOCKER/MAJOR finding.
 
-### ⬜ Unit 1.3a: Bootstrap Deployment Mode - Tests
+### ✅ Unit 1.3a: Bootstrap Deployment Mode - Tests
 **What**: Add failing tests in `test/scripts/deploy-production-canary.test.ts`, `test/scripts/deployment-preflight.test.ts`, and `test/release-workflow-security.test.ts` for `.github/workflows/production-deploy.yml`'s three source-controlled phases: atomic bootstrap, atomic first-product activation, and protocol-v1-only gradual canary. Freeze exact-SHA/version/probe verification, no rollback to a pre-boundary/inert version, sanitized artifact output, and 0%/100% canary behavior only in the final phase.
 **Output**: Red named deploy/workflow contract tests.
 **Acceptance**: Focused tests fail only because lifecycle-aware deployment behavior is absent.
 
-### ⬜ Unit 1.3b: Bootstrap Deployment Mode - Implementation
+### 🔄 Unit 1.3b: Bootstrap Deployment Mode - Implementation
 **What**: Extend `scripts/deploy-production-canary.ts`, `.github/workflows/production-deploy.yml`, and `docs/deployment.md` with explicit source-controlled atomic-bootstrap, atomic-product-activation, and protocol-v1-canary branches, without a new orchestrator; commit the bootstrap branch as active in this PR.
 **Output**: One reviewed lifecycle- and protocol-aware production deployment mode.
 **Acceptance**: Focused deploy/workflow tests, typecheck, build, and full app coverage pass.
@@ -698,3 +698,5 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-20 01:54 Unit 1.2a complete: froze 12 real-Workers CookSession lifecycle contracts plus three config contracts; exact red commands fail only on the absent namespace/class, warning sentinels and Node Worker tests stay isolated and green, and three harsh review rounds closed route, auth-ordering, adapter, storage-bookmark, probe, and lane-collision false positives.
 - 2026-07-20 11:41 Unit 1.2b complete: added the inert SQLite CookSession export, exact public/private bootstrap adapter, authenticated retry-only protocol stubs, production/QA binding and legacy migration, and environment types; real Workers coverage, typecheck, production/QA build dry-runs, and harsh Cloudflare/security review converged.
 - 2026-07-20 11:55 Unit 1.2c complete: expanded the Worker adapter matrix to 36 auth, routing, bootstrap, forwarding, propagation, and analytics cases; focused app and real Workers coverage are exactly 100%, the full 7,337-test app gate is 100%, and fresh test review converged.
+- 2026-07-20 16:02 Unit 1.3a complete: froze 564 lifecycle-aware deploy, workflow, serializer, rollback, zero-migration, and artifact-validation contracts; 381 pre-existing paths pass, 183 implementation contracts remain intentionally red, and 22 harsh release/security review rounds converged.
+- 2026-07-20 16:02 Unit 1.3b started: implementing the approved release-mode contracts without changing Unit 1.3a tests.
