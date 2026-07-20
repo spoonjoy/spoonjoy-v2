@@ -1,6 +1,6 @@
 # Doing: Ship Clem Feedback
 
-**Status**: drafting
+**Status**: READY_FOR_EXECUTION
 **Execution Mode**: direct
 **Created**: 2026-07-19 15:34
 **Planning**: ./2026-07-19-1505-planning-clem-feedback-ship.md
@@ -688,3 +688,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-19 19:20 Scrutiny redesign added cross-version atomic activation, exact socket admission/frame ordering, compile-safe Prisma sequencing, and owned zero-warning enforcement.
 - 2026-07-19 19:33 Scrutiny Pass 8 Tinfoil converged with no BLOCKER or MAJOR findings.
 - 2026-07-19 19:35 Scrutiny Pass 9 Stranger converged with no BLOCKER or MAJOR findings.
+- 2026-07-19 19:35 Marked READY_FOR_EXECUTION; Work Doer starts at Unit 0 on the clean pushed `worker/clem-feedback-e2e` branch.
