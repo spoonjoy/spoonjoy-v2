@@ -42,14 +42,14 @@ describe("Workers Vitest lane", () => {
   it("uses the official pool with serialized shared storage and Istanbul thresholds", () => {
     const config = readFileSync("vitest.workers.config.ts", "utf8");
 
-    expect(config).toContain("defineWorkersConfig");
+    expect(config).toContain("cloudflareTest");
+    expect(config).toContain("plugins:");
+    expect(config).not.toContain("defineWorkersConfig");
     expect(config).toContain('include: ["test/workers/**/*.test.ts"]');
     expect(config).toContain('setupFiles: ["./vitest.workers.setup.ts"]');
     expect(config).toContain("passWithNoTests: true");
     expect(config).toContain("fileParallelism: false");
     expect(config).toContain("maxWorkers: 1");
-    expect(config).toContain("singleWorker: true");
-    expect(config).toContain("isolatedStorage: false");
     expect(config).toContain('configPath: "./wrangler.workers-test.json"');
     expect(config).toContain('provider: "istanbul"');
     for (const threshold of ["statements", "branches", "functions", "lines"]) {

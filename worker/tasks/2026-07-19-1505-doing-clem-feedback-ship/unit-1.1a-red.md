@@ -10,6 +10,8 @@ Initial result: expected exit status 1; 2 files failed and all 16 initial contra
 
 Review-fix rerun result: expected exit status 1; the Workers file collected 4 tests and all 4 failed, while the warning-policy file failed during transform because the intentionally absent `test/warning-policy.ts` module could not be resolved. The captured Vitest output named only missing Unit 1.1 infrastructure and exact source/config assertions; it contained no unrelated product failure. The behavior cases will collect once Unit 1.1b supplies the modules they exercise.
 
+A subsequent compatibility audit checked Cloudflare's current primary documentation and the published `@cloudflare/vitest-pool-workers@0.18.6` declaration file. That package exports `cloudflareTest`/`cloudflarePool`, not the removed `defineWorkersConfig` helper; shared WebSocket storage is selected with the already-tested `--maxWorkers=1 --no-isolate` command flags. The config assertion now requires the supported `cloudflareTest()` plugin shape and rejects the stale helper.
+
 The failures are confined to the intentionally absent Unit 1.1 infrastructure:
 
 - Vitest packages are still `4.0.18` and the Workers pool is absent.
