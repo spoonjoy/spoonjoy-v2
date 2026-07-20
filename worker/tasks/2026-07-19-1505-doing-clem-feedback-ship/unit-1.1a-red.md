@@ -28,7 +28,9 @@ Round 9 extends the same enforcement to job-level `continue-on-error: true` and 
 
 Round 10 covers Actions expression literals and inline-comment forms for both disabled and tolerated jobs/steps.
 
-Current rerun: expected exit status 1; all 30 tests collect. The Workers file has one parser self-test pass and four absent-infrastructure failures. The warning-policy file has one owned-app baseline pass and 24 failures that identify the absent wrapper, hooks, Workers config, browser modules/fixture, clean scripts/CI steps, and 17 unconverted Playwright imports. Totals are 28 failed and 2 passed, with no product assertion involved.
+Round 11 self-tests the complete bare/expression/comment matrix at job and step scope in both independent workflow parsers.
+
+Current rerun: expected exit status 1; all 31 tests collect. The Workers file has one parser self-test pass and four absent-infrastructure failures. The warning-policy file has its parser self-test and owned-app baseline pass plus 24 failures that identify the absent wrapper, hooks, Workers config, browser modules/fixture, clean scripts/CI steps, and 17 unconverted Playwright imports. Totals are 28 failed and 3 passed, with no product assertion involved.
 
 The failures are confined to the intentionally absent Unit 1.1 infrastructure:
 

@@ -131,8 +131,8 @@ function workflowRunCommands(source: string) {
       ? stepsRemainder
       : stepsRemainder.slice(0, nextJobProperty);
     return steps.split(/(?=^      - )/m).flatMap((step) => {
-      if (/^        if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*(?:#.*)?$/mi.test(step) ||
-        /^        continue-on-error:\s*(?:true|\$\{\{\s*true\s*\}\})\s*(?:#.*)?$/mi.test(step)) {
+      if (/^(?:      - |        )if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*(?:#.*)?$/mi.test(step) ||
+        /^(?:      - |        )continue-on-error:\s*(?:true|\$\{\{\s*true\s*\}\})\s*(?:#.*)?$/mi.test(step)) {
         return [];
       }
       const firstLine = step.match(/^      - run:\s+([^#]+?)\s*$/m);
@@ -266,6 +266,43 @@ describe("warning command policy", () => {
 });
 
 describe("in-process warning policy", () => {
+  it("ignores disabled and tolerated clean-command workflow decoys", () => {
+    const workflow = `
+jobs:
+  disabled-expression:
+    if: \${{ false }} # disabled
+    steps:
+      - run: pnpm run verify:clean:typecheck
+  disabled-bare:
+    if: false
+    steps:
+      - run: pnpm run verify:clean:typecheck
+  tolerated-expression:
+    continue-on-error: \${{ true }} # tolerated
+    steps:
+      - run: pnpm run verify:clean:build
+  tolerated-bare:
+    continue-on-error: true
+    steps:
+      - run: pnpm run verify:clean:build
+  enabled:
+    steps:
+      - if: false # disabled
+        run: pnpm run verify:clean:migrations
+      - if: \${{ false }}
+        run: pnpm run verify:clean:migrations
+      - continue-on-error: true # tolerated
+        run: pnpm run verify:clean:generated-contract
+      - continue-on-error: \${{ true }}
+        run: pnpm run verify:clean:generated-contract
+      - run: pnpm run verify:clean:typecheck
+`;
+
+    expect(workflowRunCommands(workflow)).toEqual([
+      "pnpm run verify:clean:typecheck",
+    ]);
+  });
+
   it.each([
     [
       "app console.warn",

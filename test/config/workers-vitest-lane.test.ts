@@ -34,8 +34,8 @@ function runCommands(job: string) {
     ? stepsRemainder
     : stepsRemainder.slice(0, nextJobProperty);
   return steps.split(/(?=^      - )/m).flatMap((step) => {
-    if (/^        if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*(?:#.*)?$/mi.test(step) ||
-      /^        continue-on-error:\s*(?:true|\$\{\{\s*true\s*\}\})\s*(?:#.*)?$/mi.test(step)) {
+    if (/^(?:      - |        )if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*(?:#.*)?$/mi.test(step) ||
+      /^(?:      - |        )continue-on-error:\s*(?:true|\$\{\{\s*true\s*\}\})\s*(?:#.*)?$/mi.test(step)) {
       return [];
     }
     const firstLine = step.match(/^      - run:\s+([^#]+?)\s*$/m);
@@ -153,28 +153,44 @@ coverage:
   steps:
     - run: pnpm run test:coverage
 jobs:
-  disabled-job:
+  disabled-job-expression:
     if: \${{ false }} # disabled
     steps:
       - run: pnpm run test:workers:coverage
-  tolerated-job:
+  disabled-job-bare:
+    if: false
+    steps:
+      - run: pnpm run test:workers:coverage
+  tolerated-job-expression:
     continue-on-error: \${{ true }} # tolerated
+    steps:
+      - run: pnpm run test:workers:coverage
+  tolerated-job-bare:
+    continue-on-error: true
     steps:
       - run: pnpm run test:workers:coverage
   enabled-job:
     steps:
-      - name: disabled step
+      - name: disabled bare step
         if: false # disabled
         run: pnpm run test:workers:coverage
-      - name: tolerated failure
+      - name: disabled expression step
+        if: \${{ false }}
+        run: pnpm run test:workers:coverage
+      - name: tolerated bare failure
         continue-on-error: true # tolerated
+        run: pnpm run test:workers:coverage
+      - name: tolerated expression failure
+        continue-on-error: \${{ true }}
         run: pnpm run test:workers:coverage
       - name: real step
         run: pnpm run test:coverage
 `;
 
-    expect(runCommands(workflowJob(workflow, "disabled-job"))).toEqual([]);
-    expect(runCommands(workflowJob(workflow, "tolerated-job"))).toEqual([]);
+    expect(runCommands(workflowJob(workflow, "disabled-job-expression"))).toEqual([]);
+    expect(runCommands(workflowJob(workflow, "disabled-job-bare"))).toEqual([]);
+    expect(runCommands(workflowJob(workflow, "tolerated-job-expression"))).toEqual([]);
+    expect(runCommands(workflowJob(workflow, "tolerated-job-bare"))).toEqual([]);
     expect(runCommands(workflowJob(workflow, "enabled-job"))).toEqual([
       "pnpm run test:coverage",
     ]);
