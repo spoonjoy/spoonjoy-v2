@@ -4,8 +4,8 @@ import { stripVTControlCharacters } from "node:util";
 export const EXPECTED_PRISMA_D1_TRANSACTION_WARNING =
   "Cloudflare D1 does not support transactions yet. When using Prisma's D1 adapter, implicit & explicit transactions will be ignored and run as individual queries, which breaks the guarantees of the ACID properties of transactions. For more details see https://pris.ly/d/d1-transactions";
 
-const BRACKETED_WARNING_PATTERN = /(?:^|[\s([<{])\[\s*warn(?:ing)?(?:\s*:\s*[^\]\r\n]+)?\s*\](?::|\s|$)/i;
-const WARNING_WORD_PATTERN = /(?:^|[^A-Za-z0-9])(?:[A-Za-z]+warning|warning|warn)(?=[:!\s([<{=]|$|-(?!gate\.ts\b))/i;
+const BRACKETED_WARNING_PATTERN = /(?:^|[\s([<{])\[\s*warn(?:ings?)?(?:\s*:\s*[^\]\r\n]+)?\s*\](?::|\s|$)/i;
+const WARNING_WORD_PATTERN = /(?:^|[^A-Za-z0-9])(?:[A-Za-z]+warnings?|warnings?|warn)(?=[:!\s([<{=]|$|-(?!gate\.ts\b|summary\.log\b))/i;
 const PRISMA_WARNING_PATTERN = /(?:^|[\s([<{])prisma:warn(?::|\s|$)/i;
 const WARNING_SYMBOL_PATTERN = /⚠/;
 const TEST_RESULT_LINE_PATTERN = /^[✓↓×]\s+(?:should|keeps?|rejects?|parses?|detects?|streams?|runs?|fails?|still|preserves?|prints?|uses?|handles?|renders?|displays?|shows?|allows?|supports?|returns?|loads?|creates?|updates?|deletes?|validates?|redirects?|reports?|records?)\b/i;
@@ -71,7 +71,7 @@ function isWarningLine(line: string): boolean {
       BRACKETED_WARNING_PATTERN.test(line) ||
       PRISMA_WARNING_PATTERN.test(line) ||
       WARNING_SYMBOL_PATTERN.test(line) ||
-      /(?:^|[^A-Za-z0-9])(?:warning|warn)(?=[:!([<{=]|$)/i.test(line)
+      /(?:^|[^A-Za-z0-9])(?:warnings?|warn)(?=[:!([<{=]|$)/i.test(line)
     );
   }
   return (

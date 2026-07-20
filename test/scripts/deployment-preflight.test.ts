@@ -19,6 +19,8 @@ const CHECKOUT_ACTION = "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e
 const SETUP_NODE_ACTION = "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38";
 const UPLOAD_ARTIFACT_ACTION = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
 const DOWNLOAD_ARTIFACT_ACTION = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c";
+const COVERAGE_JOB_NAME_LINE =
+  "    name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-coverage' || 'coverage' }}";
 
 function replaceRequired(source: string, expected: string, replacement: string): string {
   if (!source.includes(expected)) {
@@ -1093,6 +1095,46 @@ describe("deployment preflight", () => {
 
   it.each([
     [
+      "static advisory context",
+      "    name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-advisory' || 'advisory' }}",
+      "    name: advisory",
+    ],
+    [
+      "dispatch advisory collision",
+      "    name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-advisory' || 'advisory' }}",
+      "    name: ${{ github.event_name == 'workflow_dispatch' && 'advisory' || 'report-only-advisory' }}",
+    ],
+    [
+      "static coverage context",
+      "    name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-coverage' || 'coverage' }}",
+      "    name: coverage",
+    ],
+    [
+      "dispatch coverage collision",
+      "    name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-coverage' || 'coverage' }}",
+      "    name: ${{ github.event_name == 'workflow_dispatch' && 'coverage' || 'report-only-coverage' }}",
+    ],
+    [
+      "static e2e context",
+      "    name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-e2e' || 'e2e' }}",
+      "    name: e2e",
+    ],
+    [
+      "dispatch e2e collision",
+      "    name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-e2e' || 'e2e' }}",
+      "    name: ${{ github.event_name == 'workflow_dispatch' && 'e2e' || 'report-only-e2e' }}",
+    ],
+  ])("rejects a CI job name that can collide with required checks: %s", (_name, expected, replacement) => {
+    const inputs = validInputs();
+    inputs.ciWorkflow = replaceRequired(validCiWorkflow(), expected, replacement);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("CI workflow");
+  });
+
+  it.each([
+    [
       "non-object workflow document",
       validCiWorkflow(),
       "[]",
@@ -1167,8 +1209,8 @@ describe("deployment preflight", () => {
     ],
     [
       "job ENV",
-      "  coverage:\n    name: coverage\n    runs-on:",
-      "  coverage:\n    name: coverage\n    env:\n      ENV: /tmp/bypass\n    runs-on:",
+      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    runs-on:`,
+      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    env:\n      ENV: /tmp/bypass\n    runs-on:`,
     ],
     [
       "step SHELLOPTS",
@@ -1226,7 +1268,11 @@ describe("deployment preflight", () => {
   });
 
   it.each([
-    ["job if false", "  coverage:\n    name: coverage\n    runs-on:", "  coverage:\n    name: coverage\n    if: false\n    runs-on:"],
+    [
+      "job if false",
+      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    runs-on:`,
+      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    if: false\n    runs-on:`,
+    ],
     [
       "required step if false",
       "      - name: 🧪 Test & Coverage\n        run: pnpm test:coverage",
@@ -1239,8 +1285,8 @@ describe("deployment preflight", () => {
     ],
     [
       "inline-map BASH_ENV",
-      "  coverage:\n    name: coverage\n    runs-on:",
-      "  coverage:\n    name: coverage\n    env: {BASH_ENV: /tmp/preload}\n    runs-on:",
+      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    runs-on:`,
+      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    env: {BASH_ENV: /tmp/preload}\n    runs-on:`,
     ],
     [
       "NODE_OPTIONS preload",
@@ -1249,8 +1295,8 @@ describe("deployment preflight", () => {
     ],
     [
       "case-folded dangerous env",
-      "  coverage:\n    name: coverage\n    runs-on:",
-      "  coverage:\n    name: coverage\n    env: {node_options: --require=/tmp/preload.cjs}\n    runs-on:",
+      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    runs-on:`,
+      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    env: {node_options: --require=/tmp/preload.cjs}\n    runs-on:`,
     ],
     [
       "extra trigger",
@@ -1275,8 +1321,8 @@ describe("deployment preflight", () => {
       "job PATH injection",
       (workflow: string) => replaceRequired(
         workflow,
-        "  coverage:\n    name: coverage\n",
-        "  coverage:\n    name: coverage\n    env:\n      PATH: /tmp/attacker\n",
+        `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n`,
+        `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    env:\n      PATH: /tmp/attacker\n`,
       ),
     ],
     [
@@ -2922,6 +2968,8 @@ describe("deployment docs", () => {
 
     for (const doc of docs) {
       expect(doc).toContain("exact rollback candidate CSP");
+      expect(doc).toContain("stages it at 0%");
+      expect(doc).toContain("prior 100% deployment");
       expect(doc).toContain("ACK_REPORT_ONLY_CSP_ROLLBACK");
       expect(doc).toContain("fails closed");
       expect(doc).toContain("enforcing CSP needs no break-glass acknowledgement");
@@ -2936,6 +2984,9 @@ describe("deployment docs", () => {
     expect(deploymentDoc).toContain(
       "-f csp_report_only_break_glass=ACK_REPORT_ONLY_CSP_ROLLBACK",
     );
+    expect(deploymentDoc).toContain("report-only-coverage");
+    expect(deploymentDoc).toContain("report-only-e2e");
+    expect(deploymentDoc).toContain("report-only-advisory");
     expect(deploymentDoc).toContain("gh workflow run production-deploy.yml --ref main");
     expect(deploymentDoc.indexOf("gh workflow run ci.yml --ref main")).toBeLessThan(
       deploymentDoc.indexOf("gh workflow run production-deploy.yml --ref main"),

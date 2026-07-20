@@ -99,6 +99,18 @@ describe("production release provenance", () => {
 describe("web dependency advisory gate", () => {
   const ci = workflowSource("ci.yml");
 
+  it("uses disjoint report-only job names that cannot satisfy canonical required checks", () => {
+    expect(ci).toContain(
+      "name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-advisory' || 'advisory' }}",
+    );
+    expect(ci).toContain(
+      "name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-coverage' || 'coverage' }}",
+    );
+    expect(ci).toContain(
+      "name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-e2e' || 'e2e' }}",
+    );
+  });
+
   it("pins Node before executing repository TypeScript in every CI job", () => {
     const parsed = parseDocument(ci).toJS() as {
       jobs: Record<string, { steps: Array<{ uses?: string; run?: string }> }>;

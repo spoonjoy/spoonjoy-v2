@@ -9,6 +9,12 @@ const execFileAsync = promisify(execFile);
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 const WORKER_VERSION_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ORDINARY_CI_EVENTS = new Set(["push", "pull_request"]);
+const CANONICAL_CI_JOB_NAMES = ["coverage", "e2e", "advisory"];
+const REPORT_ONLY_CI_JOB_NAMES = [
+  "report-only-coverage",
+  "report-only-e2e",
+  "report-only-advisory",
+];
 
 export async function runWorkflowCommand(file, args) {
   const result = await execFileAsync(file, args, {
@@ -273,8 +279,8 @@ export async function validateProductionDeploySource({
   }
   requireSuccessfulJobs(
     await run("gh", ["run", "view", String(ciRunId), "--json", "jobs"]),
-    ["coverage", "e2e", "advisory"],
-    `Canonical CI run ${ciRunId}`,
+    requiresAuthorizedDispatch ? REPORT_ONLY_CI_JOB_NAMES : CANONICAL_CI_JOB_NAMES,
+    `${requiresAuthorizedDispatch ? "Report-only" : "Canonical"} CI run ${ciRunId}`,
   );
 
   const storybookRunId = await findStorybookRun({

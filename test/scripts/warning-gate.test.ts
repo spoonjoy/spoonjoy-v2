@@ -48,6 +48,22 @@ describe("warning gate", () => {
     expect(findUnexpectedWarnings("warning-gate.ts  |   59.09 |    62.06 |")).toEqual([]);
     expect(findUnexpectedWarnings("PASS scripts: scripts/warning-gate.ts, scripts/production-readiness.ts")).toEqual([]);
     expect(findUnexpectedWarnings("warnings-summary.log")).toEqual([]);
+    expect(findUnexpectedWarnings("2 warnings")).toEqual(["2 warnings"]);
+    expect(findUnexpectedWarnings("Found 2 warnings")).toEqual(["Found 2 warnings"]);
+    expect(findUnexpectedWarnings("WARNINGS: 2")).toEqual(["WARNINGS: 2"]);
+    expect(findUnexpectedWarnings("ExperimentalWarnings: surprise")).toEqual([
+      "ExperimentalWarnings: surprise",
+    ]);
+    expect(findUnexpectedWarnings("[warnings] generated fallback output")).toEqual([
+      "[warnings] generated fallback output",
+    ]);
+    expect(findUnexpectedWarnings("✓ [warnings] hidden behind a status prefix")).toEqual([
+      "✓ [warnings] hidden behind a status prefix",
+    ]);
+    expect(findUnexpectedWarnings("✓ should preserve warnings copy")).toEqual([]);
+    expect(findUnexpectedWarnings("warnings-summary.log: Warnings: build failed")).toEqual([
+      "warnings-summary.log: Warnings: build failed",
+    ]);
     expect(findUnexpectedWarnings("✓ should display appropriate UI warning for one auth method")).toEqual([]);
     expect(findUnexpectedWarnings("✓ test/scripts/warning-gate.test.ts (14 tests) 194ms")).toEqual([]);
     expect(findUnexpectedWarnings("✓ app/lib/warning-copy.test.tsx (1 test) 2.4s")).toEqual([]);

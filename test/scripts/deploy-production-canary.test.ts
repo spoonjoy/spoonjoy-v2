@@ -209,6 +209,7 @@ function rollbackDeps(runCommand: ReleaseCommandRunner) {
 
 describe("trusted production rollback orchestration", () => {
   it("uses current-main tooling to deploy an exact known source-tagged version", async () => {
+    const events: string[] = [];
     const runCommand = successfulRunner({
       "git rev-parse HEAD": TOOLING_SHA,
       "git rev-parse origin/main": TOOLING_SHA,
@@ -219,8 +220,16 @@ describe("trusted production rollback orchestration", () => {
         deploymentPayload(PREVIOUS_VERSION),
         deploymentPayload(CANDIDATE_VERSION),
       ],
-    });
+    }, events);
     const deps = rollbackDeps(runCommand);
+    deps.readCandidateCspHeaders.mockImplementation(async () => {
+      events.push("probe:candidate-csp");
+      return new Headers({
+        "Content-Security-Policy": VALID_CANDIDATE_CSP,
+        "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
+        "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+      });
+    });
 
     const result = await runProductionRollback(deps);
 
@@ -242,6 +251,7 @@ describe("trusted production rollback orchestration", () => {
       "git rev-parse HEAD^{tree}",
       "pnpm exec wrangler versions list --json",
       "pnpm exec wrangler deployments list --json",
+      `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@0% ${PREVIOUS_VERSION}@100% -y --message Stage rollback ${RELEASE_SHA} for inspection`,
       `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@100% -y --message Roll back to ${RELEASE_SHA}`,
       "pnpm exec wrangler deployments list --json",
     ]);
@@ -255,6 +265,12 @@ describe("trusted production rollback orchestration", () => {
       "https://spoonjoy.app",
       CANDIDATE_VERSION,
     );
+    expect(events.indexOf(
+      `command:pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@0% ${PREVIOUS_VERSION}@100% -y --message Stage rollback ${RELEASE_SHA} for inspection`,
+    )).toBeLessThan(events.indexOf("probe:candidate-csp"));
+    expect(events.indexOf("probe:candidate-csp")).toBeLessThan(events.indexOf(
+      `command:pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@100% -y --message Roll back to ${RELEASE_SHA}`,
+    ));
   });
 
   it.each([
@@ -278,6 +294,7 @@ describe("trusted production rollback orchestration", () => {
     if (acknowledgement) {
       deps.env.SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS = acknowledgement;
     }
+    deps.readPublicWorkerVersion.mockResolvedValue(PREVIOUS_VERSION);
 
     await expect(runProductionRollback(deps)).rejects.toThrow(
       /ACK_REPORT_ONLY_CSP_ROLLBACK/,
@@ -287,8 +304,14 @@ describe("trusted production rollback orchestration", () => {
     expect(calls).not.toContain(
       `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@100% -y --message Roll back to ${RELEASE_SHA}`,
     );
+    expect(calls).toContain(
+      `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@0% ${PREVIOUS_VERSION}@100% -y --message Stage rollback ${RELEASE_SHA} for inspection`,
+    );
+    expect(calls).toContain(
+      `pnpm exec wrangler versions deploy ${PREVIOUS_VERSION}@100% -y --message Restore after failed rollback ${RELEASE_SHA}`,
+    );
     expect(deps.writeReleaseArtifact).toHaveBeenCalledWith(expect.objectContaining({
-      status: "failed_before_stage",
+      status: "rolled_back",
       phase: "candidate_csp",
     }));
   });
@@ -331,11 +354,20 @@ describe("trusted production rollback orchestration", () => {
     const deps = rollbackDeps(runCommand);
     deps.env.SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS = "ACK_REPORT_ONLY_CSP_ROLLBACK";
     deps.readCandidateCspHeaders.mockRejectedValue(new Error("edge inspection unavailable"));
+    deps.readPublicWorkerVersion.mockResolvedValue(PREVIOUS_VERSION);
 
     await expect(runProductionRollback(deps)).rejects.toThrow("edge inspection unavailable");
-    expect(runCommand.mock.calls.map(([command, args]) => commandKey(command, args))).not.toContain(
+    const calls = runCommand.mock.calls.map(([command, args]) => commandKey(command, args));
+    expect(calls).not.toContain(
       `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@100% -y --message Roll back to ${RELEASE_SHA}`,
     );
+    expect(calls).toContain(
+      `pnpm exec wrangler versions deploy ${PREVIOUS_VERSION}@100% -y --message Restore after failed rollback ${RELEASE_SHA}`,
+    );
+    expect(deps.writeReleaseArtifact).toHaveBeenCalledWith(expect.objectContaining({
+      status: "rolled_back",
+      phase: "candidate_csp",
+    }));
   });
 
   it.each([
@@ -357,11 +389,20 @@ describe("trusted production rollback orchestration", () => {
       "Reporting-Endpoints": 'csp-endpoint="/csp-report"',
       ...(observedVersion ? { "X-Spoonjoy-Worker-Version": observedVersion } : {}),
     }));
+    deps.readPublicWorkerVersion.mockResolvedValue(PREVIOUS_VERSION);
 
     await expect(runProductionRollback(deps)).rejects.toThrow(/candidate identity/i);
-    expect(runCommand.mock.calls.map(([command, args]) => commandKey(command, args))).not.toContain(
+    const calls = runCommand.mock.calls.map(([command, args]) => commandKey(command, args));
+    expect(calls).not.toContain(
       `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@100% -y --message Roll back to ${RELEASE_SHA}`,
     );
+    expect(calls).toContain(
+      `pnpm exec wrangler versions deploy ${PREVIOUS_VERSION}@100% -y --message Restore after failed rollback ${RELEASE_SHA}`,
+    );
+    expect(deps.writeReleaseArtifact).toHaveBeenCalledWith(expect.objectContaining({
+      status: "rolled_back",
+      phase: "candidate_csp",
+    }));
   });
 
   it("rejects stale tooling and mismatched version tags before deployment", async () => {
@@ -493,6 +534,33 @@ describe("trusted production rollback orchestration", () => {
     expect(deps.writeReleaseArtifact).toHaveBeenCalledWith(expect.objectContaining({
       status: "rolled_back",
       phase: "promote",
+    }));
+  });
+
+  it("reasserts the prior version after an ambiguous rollback staging failure", async () => {
+    const stage = `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@0% ${PREVIOUS_VERSION}@100% -y --message Stage rollback ${RELEASE_SHA} for inspection`;
+    const restore = `pnpm exec wrangler versions deploy ${PREVIOUS_VERSION}@100% -y --message Restore after failed rollback ${RELEASE_SHA}`;
+    const runCommand = successfulRunner({
+      "git rev-parse HEAD": TOOLING_SHA,
+      "git rev-parse origin/main": TOOLING_SHA,
+      "pnpm exec wrangler versions list --json": JSON.stringify([
+        workerVersion(CANDIDATE_VERSION, RELEASE_SHA),
+      ]),
+      "pnpm exec wrangler deployments list --json": deploymentPayload(PREVIOUS_VERSION),
+      [stage]: new Error("rollback stage result unknown"),
+    });
+    const deps = rollbackDeps(runCommand);
+    deps.readPublicWorkerVersion.mockResolvedValue(PREVIOUS_VERSION);
+
+    await expect(runProductionRollback(deps)).rejects.toThrow("rollback stage result unknown");
+
+    const calls = runCommand.mock.calls.map(([command, args]) => commandKey(command, args));
+    expect(calls).toContain(stage);
+    expect(calls).toContain(restore);
+    expect(deps.readCandidateCspHeaders).not.toHaveBeenCalled();
+    expect(deps.writeReleaseArtifact).toHaveBeenCalledWith(expect.objectContaining({
+      status: "rolled_back",
+      phase: "stage",
     }));
   });
 });
@@ -955,18 +1023,26 @@ describe("production canary release orchestration", () => {
     }));
   });
 
-  it("does not create a rollback deployment when staging itself fails", async () => {
+  it("reasserts the prior deployment when staging may have failed after mutation", async () => {
     const stageCommand = `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@0% ${PREVIOUS_VERSION}@100% -y --message Stage ${RELEASE_SHA} for canary`;
-    const runCommand = successfulRunner({ [stageCommand]: new Error("stage failed") });
+    const runCommand = successfulRunner({
+      [stageCommand]: new Error("stage failed"),
+      "pnpm exec wrangler deployments list --json": [
+        deploymentPayload(PREVIOUS_VERSION),
+        deploymentPayload(PREVIOUS_VERSION),
+      ],
+    });
     const deps = releaseDeps(runCommand);
+    deps.readPublicWorkerVersion.mockResolvedValue(PREVIOUS_VERSION);
 
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("stage failed");
 
-    expect(runCommand.mock.calls.map(([command, args]) => commandKey(command, args))).not.toContain(
+    expect(runCommand.mock.calls.map(([command, args]) => commandKey(command, args))).toContain(
       `pnpm exec wrangler versions deploy ${PREVIOUS_VERSION}@100% -y --message Restore after failed ${RELEASE_SHA}`,
     );
     expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(expect.objectContaining({
-      status: "failed_before_stage",
+      status: "rolled_back",
+      phase: "stage",
       failure: "stage failed",
     }));
   });
@@ -1629,6 +1705,19 @@ describe("execFile command adapter", () => {
     expect(execFile).toHaveBeenCalledTimes(1);
   });
 
+  it("ignores non-emitter child streams when the callback completes asynchronously", async () => {
+    const execFile = vi.fn((_command, _args, _options, callback) => {
+      queueMicrotask(() => callback(null, "built", ""));
+      return { stdout: null, stderr: {} };
+    });
+    const runner = createReleaseCommandRunner(execFile);
+
+    await expect(runner("pnpm", ["run", "build"])).resolves.toEqual({
+      stdout: "built",
+      stderr: "",
+    });
+  });
+
   it("streams successful child stdout while retaining captured output", async () => {
     const childStdout = new EventEmitter();
     const childStderr = new EventEmitter();
@@ -1641,6 +1730,8 @@ describe("execFile command adapter", () => {
     });
     const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    stdout.mockClear();
+    stderr.mockClear();
     const runner = createReleaseCommandRunner(execFile);
 
     await expect(runner("pnpm", ["run", "build"])).resolves.toEqual({
@@ -1654,6 +1745,7 @@ describe("execFile command adapter", () => {
 
   it.each([
     ["warning token on stdout", "Warning: build fallback used\n", ""],
+    ["plural warning summary on stdout", "Found 2 warnings\n", ""],
     ["otherwise unmarked stderr", "build complete\n", "fallback used\n"],
   ])("rejects successful commands with %s", async (_label, stdout, stderr) => {
     const runner = createReleaseCommandRunner((_command, _args, _options, callback) => {
@@ -1678,6 +1770,8 @@ describe("execFile command adapter", () => {
     });
     const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    stdout.mockClear();
+    stderr.mockClear();
     const runner = createReleaseCommandRunner(execFile);
 
     await expect(runner("pnpm", ["run", "build"])).rejects.toThrow("exit code 1");
@@ -1685,6 +1779,123 @@ describe("execFile command adapter", () => {
 
     expect(stdout).toHaveBeenCalledWith("Bearer [REDACTED]\n");
     expect(stderr).toHaveBeenCalledWith("api_key=[REDACTED]\n");
+  });
+
+  it("redacts credentials split across arbitrary stream chunks and flushes trailing output", async () => {
+    const childStdout = new EventEmitter();
+    const childStderr = new EventEmitter();
+    const jwt = `${"a".repeat(16)}.${"b".repeat(16)}.${"c".repeat(16)}`;
+    const execFile = vi.fn((_command, _args, _options, callback) => {
+      queueMicrotask(() => {
+        childStdout.emit("data", "Bea");
+        childStdout.emit("data", `rer bearer-value\n${jwt.slice(0, 25)}`);
+        childStdout.emit("data", `${jwt.slice(25)}\npass`);
+        childStdout.emit("data", "word:trailing-secret");
+        childStderr.emit("data", "api_");
+        childStderr.emit("data", "key=split-secret\n");
+        callback(null, "captured stdout", "");
+      });
+      return { stdout: childStdout, stderr: childStderr };
+    });
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    stdout.mockClear();
+    stderr.mockClear();
+    const runner = createReleaseCommandRunner(execFile);
+
+    await expect(runner("pnpm", ["run", "build"])).resolves.toEqual({
+      stdout: "captured stdout",
+      stderr: "",
+    });
+
+    const streamedStdout = stdout.mock.calls.map(([chunk]) => String(chunk)).join("");
+    const streamedStderr = stderr.mock.calls.map(([chunk]) => String(chunk)).join("");
+    expect(streamedStdout).toBe(
+      "Bearer [REDACTED]\n[REDACTED]\npassword=[REDACTED]",
+    );
+    expect(streamedStderr).toBe("api_key=[REDACTED]\n");
+    expect(`${streamedStdout}${streamedStderr}`).not.toMatch(
+      /bearer-value|split-secret|trailing-secret|aaaaaaaaaaaaaaaa/,
+    );
+  });
+
+  it.each([
+    ["Bearer token", "Bearer bearer-value\n", "Bearer [REDACTED]\n"],
+    ["token assignment", "token=token-value\n", "token=[REDACTED]\n"],
+    ["secret assignment", "secret: secret-value\n", "secret=[REDACTED]\n"],
+    ["password assignment", "password = password-value\n", "password=[REDACTED]\n"],
+    [
+      "authorization assignment",
+      "authorization: authorization-value\n",
+      "authorization=[REDACTED]\n",
+    ],
+    ["underscore API key", "api_key=api-value\n", "api_key=[REDACTED]\n"],
+    ["hyphenated API key", "api-key: api-value\n", "api-key=[REDACTED]\n"],
+    [
+      "JWT",
+      `${"a".repeat(16)}.${"b".repeat(16)}.${"c".repeat(16)}\n`,
+      "[REDACTED]\n",
+    ],
+    ["newline-spanning Bearer token", "Bearer \nsecret-value\n", "Bearer [REDACTED]\n"],
+    ["newline-spanning assignment", "token =\nsecret-value\n", "token=[REDACTED]\n"],
+  ])("redacts a %s at every possible stream split", async (_label, sensitiveLine, expected) => {
+    let writes: string[] = [];
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
+      writes.push(String(chunk));
+      return true;
+    });
+    stdout.mockClear();
+
+    for (let split = 1; split < sensitiveLine.length; split += 1) {
+      writes = [];
+      const childStdout = new EventEmitter();
+      const childStderr = new EventEmitter();
+      const runner = createReleaseCommandRunner((_command, _args, _options, callback) => {
+        queueMicrotask(() => {
+          childStdout.emit("data", sensitiveLine.slice(0, split));
+          childStdout.emit("data", sensitiveLine.slice(split));
+          callback(null, "captured stdout", "");
+        });
+        return { stdout: childStdout, stderr: childStderr };
+      });
+
+      await expect(runner("pnpm", ["run", "build"])).resolves.toEqual({
+        stdout: "captured stdout",
+        stderr: "",
+      });
+      expect(writes.join("")).toBe(expected);
+    }
+  });
+
+  it("flushes trailing stream output once across end, close, and callback", async () => {
+    const childStdout = new EventEmitter();
+    const childStderr = new EventEmitter();
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    stdout.mockClear();
+    let callsBeforeEnd = -1;
+    let callsAfterEnd = -1;
+    const runner = createReleaseCommandRunner((_command, _args, _options, callback) => {
+      queueMicrotask(() => {
+        childStdout.emit("data", "ordinary trailing output");
+        callsBeforeEnd = stdout.mock.calls.length;
+        childStdout.emit("end");
+        callsAfterEnd = stdout.mock.calls.length;
+        childStdout.emit("close");
+        callback(null, "captured stdout", "");
+      });
+      return { stdout: childStdout, stderr: childStderr };
+    });
+
+    await expect(runner("pnpm", ["run", "build"])).resolves.toEqual({
+      stdout: "captured stdout",
+      stderr: "",
+    });
+
+    expect(callsBeforeEnd).toBe(0);
+    expect(callsAfterEnd).toBe(1);
+    expect(stdout.mock.calls.map(([chunk]) => String(chunk)).join("")).toBe(
+      "ordinary trailing output",
+    );
   });
 
   it.each([

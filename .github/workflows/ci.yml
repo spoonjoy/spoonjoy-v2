@@ -30,7 +30,7 @@ env:
 
 jobs:
   advisory:
-    name: advisory
+    name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-advisory' || 'advisory' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -76,7 +76,7 @@ jobs:
           node scripts/warning-gate.ts -- pnpm run advisory:scan -- --scanner .cache/osv-scanner/osv-scanner --output .advisory/osv-results.json
 
   coverage:
-    name: coverage
+    name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-coverage' || 'coverage' }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
@@ -134,7 +134,7 @@ jobs:
         run: node scripts/warning-gate.ts -- pnpm build
 
   e2e:
-    name: e2e
+    name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-e2e' || 'e2e' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:

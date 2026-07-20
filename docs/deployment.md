@@ -163,7 +163,7 @@ Notes:
 
 After deployment, verify public pages, authenticated Photo Studio, OAuth provider starts/callbacks, MCP, and API surfaces return `Content-Security-Policy`, `Reporting-Endpoints: csp-endpoint="/csp-report"`, and `X-Spoonjoy-Worker-Version` for the expected exact SHA. They should not return `Content-Security-Policy-Report-Only` during an enforcing release.
 
-The one-commit rollback changes `SPOONJOY_CSP_MODE` from `enforce` to `report-only` in the affected `wrangler.json` environment. Ordinary push and pull-request CI intentionally remain fail-closed and do not receive break-glass state. An authorized operator must dispatch the canonical CI workflow against the exact rollback branch head; GitHub records the actor, run ID, ref, SHA, and acknowledgement, and every CI job rejects a checkout that differs from that SHA:
+The one-commit rollback changes `SPOONJOY_CSP_MODE` from `enforce` to `report-only` in the affected `wrangler.json` environment. Ordinary push and pull-request CI intentionally remain fail-closed and do not receive break-glass state. An authorized operator must dispatch the CI workflow against the exact rollback branch head; GitHub records the actor, run ID, ref, SHA, and acknowledgement, and every CI job rejects a checkout that differs from that SHA. Dispatch jobs are named `report-only-coverage`, `report-only-e2e`, and `report-only-advisory`, so they cannot satisfy canonical required checks:
 
 ```bash
 ROLLBACK_REF=worker/report-only-csp
@@ -173,7 +173,7 @@ gh workflow run ci.yml --ref "$ROLLBACK_REF" \
   -f csp_report_only_break_glass=ACK_REPORT_ONLY_CSP_ROLLBACK
 ```
 
-After the reviewed rollback commit reaches `main`, run the same exact-SHA authorization on `main`; this is the successful canonical CI run consumed by the production release validator:
+After the reviewed rollback commit reaches `main`, run the same exact-SHA authorization on `main`; this is the successful report-only CI run consumed by the production release validator:
 
 ```bash
 ROLLBACK_SHA="$(git rev-parse origin/main)"
@@ -326,7 +326,7 @@ SOURCE_SHA="$(git rev-parse HEAD)" pnpm deploy:auto
 
 The command writes a sanitized `production-release.json` under `mcp-oauth-canary-artifacts/` on success or failure. It records the Git tree, reviewed migration names, migration-apply state, and the fact that database rollback is unsupported; it never contains environment values, command output, access tokens, or stack traces.
 
-For an intentional Worker rollback, manually dispatch the production workflow with the historical `source_sha` and its exact source-tagged `rollback_version_id`. The workflow checks out current `main` tooling, confirms that the version ID is tagged with that SHA, and inspects the exact rollback candidate CSP through Cloudflare's version override before promotion. A valid enforcing CSP needs no break-glass acknowledgement. A report-only, absent, or weakened CSP requires the exact `ACK_REPORT_ONLY_CSP_ROLLBACK` workflow acknowledgement; unavailable or inconclusive candidate inspection fails closed. The workflow then deploys the known version and verifies public convergence. It never executes scripts from the historical commit and does not attempt to roll D1 back.
+For an intentional Worker rollback, manually dispatch the production workflow with the historical `source_sha` and its exact source-tagged `rollback_version_id`. The workflow checks out current `main` tooling, confirms that the version ID is tagged with that SHA, stages it at 0% beside the current version at 100%, and inspects the exact rollback candidate CSP through Cloudflare's version override before promotion. A valid enforcing CSP needs no break-glass acknowledgement. A report-only, absent, or weakened CSP requires the exact `ACK_REPORT_ONLY_CSP_ROLLBACK` workflow acknowledgement; unavailable or inconclusive candidate inspection fails closed, restores the prior 100% deployment, and verifies convergence. The workflow then promotes the known version and verifies public convergence. It never executes scripts from the historical commit and does not attempt to roll D1 back.
 
 D1 migrations are not Worker-versioned and cannot be rolled back by a Worker traffic change. Automatic releases therefore accept only additive SQL that remains compatible with the prior Worker version. Destructive schema/data migrations require a separately reviewed maintenance plan and must not be sent through `deploy:auto`.
 

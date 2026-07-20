@@ -136,6 +136,7 @@ export type ExecFileLike = (
 
 interface OutputEmitter {
   on(event: "data", listener: (chunk: unknown) => void): unknown;
+  on(event: "end" | "close", listener: () => void): unknown;
 }
 
 function requireReleaseSha(value: string): string {
@@ -635,11 +636,35 @@ function isOutputEmitter(value: unknown): value is OutputEmitter {
 function streamCommandOutput(
   stream: unknown,
   write: (chunk: string) => boolean,
-): void {
-  if (!isOutputEmitter(stream)) return;
+): () => void {
+  if (!isOutputEmitter(stream)) return () => undefined;
+  let pending = "";
+
+  const flush = () => {
+    if (pending === "") return;
+    write(redactSensitiveText(pending));
+    pending = "";
+  };
+
   stream.on("data", (chunk) => {
-    write(redactSensitiveText(String(chunk)));
+    pending += String(chunk);
+    const finalNewline = pending.lastIndexOf("\n");
+    if (finalNewline === -1) return;
+
+    let complete = pending.slice(0, finalNewline + 1);
+    pending = pending.slice(finalNewline + 1);
+    const danglingCredentialPrefix = complete.match(
+      /\b(?:Bearer\s+|(?:token|secret|password|authorization|api[_-]?key)\s*[=:]\s*)$/i,
+    );
+    if (danglingCredentialPrefix?.index !== undefined) {
+      pending = complete.slice(danglingCredentialPrefix.index) + pending;
+      complete = complete.slice(0, danglingCredentialPrefix.index);
+    }
+    if (complete !== "") write(redactSensitiveText(complete));
   });
+  stream.on("end", flush);
+  stream.on("close", flush);
+  return flush;
 }
 
 async function writeFailureArtifact(
@@ -716,7 +741,7 @@ export async function runProductionRollback(
   let treeHash: string | undefined;
   let previousVersionId: string | undefined;
   let candidateVersionId: string | undefined;
-  let deployed = false;
+  let deploymentMutationAttempted = false;
   const baseEnv = { ...(deps.env ?? process.env) };
   const cleanEnv = withoutCloudflareSecrets(baseEnv);
   delete cleanEnv.CLOUDFLARE_ACCOUNT_ID;
@@ -767,6 +792,14 @@ export async function runProductionRollback(
       throw new Error("The requested rollback version is already active in production.");
     }
 
+    phase = "stage";
+    deploymentMutationAttempted = true;
+    await deps.runCommand("pnpm", [
+      "exec", "wrangler", "versions", "deploy",
+      `${candidateVersionId}@0%`, `${previousVersionId}@100%`, "-y",
+      "--message", `Stage rollback ${sourceSha} for inspection`,
+    ], { env: workersEnv });
+
     phase = "candidate_csp";
     const baseUrl = deps.env?.SPOONJOY_MCP_CANARY_BASE_URL ?? "https://spoonjoy.app";
     const candidateCspHeaders = await deps.readCandidateCspHeaders(baseUrl, candidateVersionId);
@@ -790,7 +823,6 @@ export async function runProductionRollback(
     }
 
     phase = "promote";
-    deployed = true;
     await deps.runCommand("pnpm", [
       "exec", "wrangler", "versions", "deploy", `${candidateVersionId}@100%`, "-y",
       "--message", `Roll back to ${sourceSha}`,
@@ -828,7 +860,7 @@ export async function runProductionRollback(
       failure,
     };
 
-    if (deployed && previousVersionId) {
+    if (deploymentMutationAttempted && previousVersionId) {
       try {
         await deps.runCommand("pnpm", [
           "exec", "wrangler", "versions", "deploy", `${previousVersionId}@100%`, "-y",
@@ -876,7 +908,7 @@ export async function runProductionCanaryRelease(
   let migrationApply: ReleaseArtifact["migrationApply"] = "not_started";
   let previousVersionId: string | undefined;
   let candidateVersionId: string | undefined;
-  let staged = false;
+  let deploymentMutationAttempted = false;
   const baseEnv = { ...(deps.env ?? process.env) };
   const cleanEnv = withoutCloudflareSecrets(baseEnv);
   delete cleanEnv.CLOUDFLARE_ACCOUNT_ID;
@@ -986,12 +1018,11 @@ export async function runProductionCanaryRelease(
     }
 
     phase = "stage";
+    deploymentMutationAttempted = true;
     await deps.runCommand("pnpm", [
       "exec", "wrangler", "versions", "deploy", `${candidateVersionId}@0%`, `${previousVersionId}@100%`, "-y",
       "--message", `Stage ${sourceSha} for canary`,
     ], { env: workersEnv });
-    staged = true;
-
     phase = "canary";
     await deps.runCommand("pnpm", [
       "run", "smoke:mcp:oauth", "--", "--out", deps.artifactDir, "--worker-version-id", candidateVersionId,
@@ -1038,7 +1069,7 @@ export async function runProductionCanaryRelease(
     const failurePhase = phase;
     const failure = sanitizedFailure(error);
 
-    if (staged && previousVersionId) {
+    if (deploymentMutationAttempted && previousVersionId) {
       try {
         await deps.runCommand("pnpm", [
           "exec", "wrangler", "versions", "deploy", `${previousVersionId}@100%`, "-y",
@@ -1105,11 +1136,15 @@ export function createReleaseCommandRunner(
   execFileImpl: ExecFileLike = nodeExecFile as unknown as ExecFileLike,
 ): ReleaseCommandRunner {
   return (command, args, options) => new Promise((resolve, reject) => {
+    let flushStdout: () => void = () => undefined;
+    let flushStderr: () => void = () => undefined;
     const child = execFileImpl(command, args, {
       encoding: "utf8",
       env: options?.env,
       maxBuffer: 16 * 1024 * 1024,
     }, (error, stdout, stderr) => {
+      flushStdout();
+      flushStderr();
       if (error) {
         const exitCode = error.code === undefined ? "unknown" : String(error.code);
         reject(new Error(`Command failed with exit code ${exitCode}: ${command} ${args.join(" ")}`));
@@ -1122,8 +1157,14 @@ export function createReleaseCommandRunner(
       resolve({ stdout, stderr });
     });
     if (child && typeof child === "object") {
-      streamCommandOutput((child as { stdout?: unknown }).stdout, (chunk) => process.stdout.write(chunk));
-      streamCommandOutput((child as { stderr?: unknown }).stderr, (chunk) => process.stderr.write(chunk));
+      flushStdout = streamCommandOutput(
+        (child as { stdout?: unknown }).stdout,
+        (chunk) => process.stdout.write(chunk),
+      );
+      flushStderr = streamCommandOutput(
+        (child as { stderr?: unknown }).stderr,
+        (chunk) => process.stderr.write(chunk),
+      );
     }
   });
 }

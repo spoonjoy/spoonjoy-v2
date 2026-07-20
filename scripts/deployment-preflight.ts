@@ -530,9 +530,18 @@ const CI_WORKFLOW_ENV = Object.freeze({
 });
 
 const CI_JOB_CONTRACTS = Object.freeze({
-  advisory: Object.freeze({ timeoutMinutes: 15, env: undefined }),
-  coverage: Object.freeze({ timeoutMinutes: 90, env: undefined }),
+  advisory: Object.freeze({
+    name: "${{ github.event_name == 'workflow_dispatch' && 'report-only-advisory' || 'advisory' }}",
+    timeoutMinutes: 15,
+    env: undefined,
+  }),
+  coverage: Object.freeze({
+    name: "${{ github.event_name == 'workflow_dispatch' && 'report-only-coverage' || 'coverage' }}",
+    timeoutMinutes: 90,
+    env: undefined,
+  }),
   e2e: Object.freeze({
+    name: "${{ github.event_name == 'workflow_dispatch' && 'report-only-e2e' || 'e2e' }}",
     timeoutMinutes: 10,
     env: Object.freeze({
       NODE_ENV: "development",
@@ -593,7 +602,7 @@ function parsedCiWorkflowIsCanonical(workflow: string): boolean {
       : ["name", "runs-on", "timeout-minutes", "steps"];
     if (
       !exactObjectKeys(job, expectedJobKeys) ||
-      job.name !== jobName ||
+      job.name !== contract.name ||
       job["runs-on"] !== "ubuntu-latest" ||
       job["timeout-minutes"] !== contract.timeoutMinutes ||
       (contract.env ? !exactWorkflowRecord(job.env, contract.env) : job.env !== undefined)

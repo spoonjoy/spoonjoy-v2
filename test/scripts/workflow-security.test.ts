@@ -18,6 +18,12 @@ import {
 
 const SOURCE_SHA = "a".repeat(40);
 const ROLLBACK_VERSION_ID = "22222222-2222-4222-8222-222222222222";
+const CANONICAL_CI_JOB_NAMES = ["coverage", "e2e", "advisory"] as const;
+const REPORT_ONLY_CI_JOB_NAMES = [
+  "report-only-coverage",
+  "report-only-e2e",
+  "report-only-advisory",
+] as const;
 
 function ciEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
   return {
@@ -54,7 +60,9 @@ function productionEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEn
 
 type WorkflowCommandRunner = (file: string, args: readonly string[]) => Promise<string>;
 
-function successfulRunner(): WorkflowCommandRunner & ReturnType<typeof vi.fn> {
+function successfulRunner(
+  ciJobNames: readonly string[] = CANONICAL_CI_JOB_NAMES,
+): WorkflowCommandRunner & ReturnType<typeof vi.fn> {
   return vi.fn(async (file: string, args: readonly string[]) => {
     const command = [file, ...args].join(" ");
     if (command === "git rev-parse HEAD" || command === "git rev-parse origin/main") {
@@ -78,11 +86,7 @@ function successfulRunner(): WorkflowCommandRunner & ReturnType<typeof vi.fn> {
     }
     if (command === "gh run view 11 --json jobs") {
       return JSON.stringify({
-        jobs: [
-          { name: "coverage", conclusion: "success" },
-          { name: "e2e", conclusion: "success" },
-          { name: "advisory", conclusion: "success" },
-        ],
+        jobs: ciJobNames.map((name) => ({ name, conclusion: "success" })),
       });
     }
     if (command.includes("gh run list --workflow .github/workflows/storybook.yml")) {
@@ -191,7 +195,7 @@ describe("validateProductionDeploySource", () => {
   });
 
   it("requires the audited workflow-dispatch CI run for a report-only source release", async () => {
-    const run = successfulRunner();
+    const run = successfulRunner(REPORT_ONLY_CI_JOB_NAMES);
     await validateProductionDeploySource({
       env: productionEnv({
         SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: CSP_REPORT_ONLY_BREAK_GLASS_ACK,
@@ -207,6 +211,22 @@ describe("validateProductionDeploySource", () => {
       "api",
       "repos/spoonjoy/spoonjoy-v2/actions/runs/11",
     ]);
+  });
+
+  it("keeps canonical and report-only CI evidence in disjoint job contexts", async () => {
+    await expect(validateProductionDeploySource({
+      env: productionEnv({
+        SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: CSP_REPORT_ONLY_BREAK_GLASS_ACK,
+      }),
+      run: successfulRunner(CANONICAL_CI_JOB_NAMES),
+      sleep: vi.fn(),
+    })).rejects.toThrow(/report-only-coverage/);
+
+    await expect(validateProductionDeploySource({
+      env: productionEnv(),
+      run: successfulRunner(REPORT_ONLY_CI_JOB_NAMES),
+      sleep: vi.fn(),
+    })).rejects.toThrow(/coverage/);
   });
 
   it("rejects malformed release inputs before querying GitHub", async () => {
