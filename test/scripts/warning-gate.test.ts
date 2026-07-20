@@ -71,6 +71,13 @@ describe("warning gate", () => {
       "warnings-summary.log: Warnings: build failed",
     ]);
     expect(findUnexpectedWarnings("✓ should display appropriate UI warning for one auth method")).toEqual([]);
+    expect(findUnexpectedWarnings("✓ omits the broad-scope warning for narrow scopes  1111ms")).toEqual([]);
+    expect(findUnexpectedWarnings("✓ Warning: emitted by the test process  1111ms")).toEqual([
+      "✓ Warning: emitted by the test process  1111ms",
+    ]);
+    expect(findUnexpectedWarnings("✓ warning dependency fallback used  1111ms")).toEqual([
+      "✓ warning dependency fallback used  1111ms",
+    ]);
     expect(findUnexpectedWarnings("✓ test/scripts/warning-gate.test.ts (14 tests) 194ms")).toEqual([]);
     expect(findUnexpectedWarnings("✓ app/lib/warning-copy.test.tsx (1 test) 2.4s")).toEqual([]);
     expect(findUnexpectedWarnings("✓ warning dependency fallback used")).toEqual([

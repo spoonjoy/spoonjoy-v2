@@ -30,6 +30,10 @@ interface LoaderData {
   oauthProviders: OAuthProvider[];
 }
 
+function requiresPostLoginDocumentReload(redirectTo: string): boolean {
+  return new URL(redirectTo, "https://spoonjoy.app").pathname === "/oauth/authorize";
+}
+
 // Loader - redirect if already logged in, handle OAuth errors
 export async function loader({ request, context }: Route.LoaderArgs) {
   const userId = await getUserId(request, context.cloudflare?.env);
@@ -96,7 +100,11 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   // Create session and redirect
-  return createUserSession(user.id, redirectTo, context.cloudflare?.env, request);
+  const response = await createUserSession(user.id, redirectTo, context.cloudflare?.env, request);
+  if (requiresPostLoginDocumentReload(redirectTo)) {
+    response.headers.set("X-Remix-Reload-Document", "true");
+  }
+  return response;
 }
 
 export default function Login() {

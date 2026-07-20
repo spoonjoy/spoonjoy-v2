@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  OAUTH_FORM_ACTION_ORIGIN_HEADER,
   SECURITY_HEADERS,
   buildContentSecurityPolicy,
   generateNonce,
@@ -90,6 +91,44 @@ describe("withSecurityHeaders", () => {
       "'nonce-test-nonce-123'",
     );
   });
+
+  it("allows only a validated OAuth callback origin for consent form redirects", () => {
+    const result = withSecurityHeaders(new Response("ok", {
+      headers: { [OAUTH_FORM_ACTION_ORIGIN_HEADER]: "https://claude.ai" },
+    }));
+    const csp = result.headers.get("Content-Security-Policy") ?? "";
+
+    expect(directiveSources(csp, "form-action")).toEqual(["'self'", "https://claude.ai"]);
+    expect(result.headers.get(OAUTH_FORM_ACTION_ORIGIN_HEADER)).toBeNull();
+  });
+
+  it.each([
+    "http://evil.example",
+    "https://claude.ai/callback",
+    "https://user:password@claude.ai",
+    "not an origin",
+  ])("ignores and strips an unsafe OAuth form-action origin: %s", (origin) => {
+    const result = withSecurityHeaders(new Response("ok", {
+      headers: { [OAUTH_FORM_ACTION_ORIGIN_HEADER]: origin },
+    }));
+    const csp = result.headers.get("Content-Security-Policy") ?? "";
+
+    expect(directiveSources(csp, "form-action")).toEqual(["'self'"]);
+    expect(result.headers.get(OAUTH_FORM_ACTION_ORIGIN_HEADER)).toBeNull();
+  });
+
+  it.each(["http://localhost:5173", "http://127.0.0.1:8788"])(
+    "allows a registered loopback OAuth callback origin: %s",
+    (origin) => {
+      const result = withSecurityHeaders(new Response("ok", {
+        headers: { [OAUTH_FORM_ACTION_ORIGIN_HEADER]: origin },
+      }));
+      const csp = result.headers.get("Content-Security-Policy") ?? "";
+
+      expect(directiveSources(csp, "form-action")).toEqual(["'self'", origin]);
+      expect(result.headers.get(OAUTH_FORM_ACTION_ORIGIN_HEADER)).toBeNull();
+    },
+  );
 
   it.each([undefined, null, "", " ", "ENFORCE", "Report-Only", "invalid"])(
     "fails closed for a non-exact CSP mode: %s",

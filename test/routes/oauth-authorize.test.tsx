@@ -2,13 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { render, screen } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
-import OAuthAuthorize, { loader, action } from "~/routes/oauth.authorize";
+import OAuthAuthorize, { action, headers as authorizeHeaders, loader } from "~/routes/oauth.authorize";
 import type { AuthorizeView } from "~/lib/oauth-routes.server";
 import { registerOAuthClient } from "~/lib/oauth-server.server";
 import { db } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestUser } from "../utils";
+import { OAUTH_FORM_ACTION_ORIGIN_HEADER } from "~/lib/security-headers.server";
 
 const getOAuthClientCalls = vi.hoisted(() => vi.fn());
 
@@ -182,23 +183,47 @@ describe("oauth.authorize route", () => {
     expect(location.searchParams.get("state")).toBe(query.get("state"));
   });
 
-  it("loader returns the consent view when authenticated", async () => {
-    const { userId, query } = await setup({ clientName: "Spoonjoy Apple", redirectUri: nativeRedirectUri });
+  it("loader returns consent with the exact validated callback origin for CSP", async () => {
+    const { userId, query } = await setup({ clientName: "Claude", redirectUri });
     query.set("provider", "google");
     const headers = new Headers();
     headers.set("Cookie", await authedCookie(userId));
     const request = new Request(`https://spoonjoy.app/oauth/authorize?${query}`, { headers });
     const result = await loader({ request, context: { cloudflare: { env: null } }, params: {} } as any);
     expect(result).toMatchObject({
-      kind: "consent",
-      scope: "kitchen:read",
-      params: {
-        clientId: query.get("client_id"),
-        redirectUri: nativeRedirectUri,
-        state: query.get("state"),
-        codeChallenge: query.get("code_challenge"),
+      data: {
+        kind: "consent",
+        scope: "kitchen:read",
+        params: {
+          clientId: query.get("client_id"),
+          redirectUri,
+          state: query.get("state"),
+          codeChallenge: query.get("code_challenge"),
+        },
+      },
+      init: {
+        headers: {
+          [OAUTH_FORM_ACTION_ORIGIN_HEADER]: "https://claude.ai",
+        },
       },
     });
+  });
+
+  it("forwards the validated consent origin into the document response headers", () => {
+    const loaderHeaders = new Headers({
+      [OAUTH_FORM_ACTION_ORIGIN_HEADER]: "https://claude.ai",
+    });
+    const parentHeaders = new Headers({ "X-Parent": "kept" });
+
+    const result = new Headers(authorizeHeaders({
+      loaderHeaders,
+      parentHeaders,
+      actionHeaders: new Headers(),
+      errorHeaders: undefined,
+    }));
+
+    expect(result.get(OAUTH_FORM_ACTION_ORIGIN_HEADER)).toBe("https://claude.ai");
+    expect(result.get("X-Parent")).toBe("kept");
   });
 
   it("loader returns 429 when the IP rate limiter denies the request", async () => {
