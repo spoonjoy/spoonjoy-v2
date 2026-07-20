@@ -1,4 +1,8 @@
-import { readFile } from "node:fs/promises";
+import { execFile as nodeExecFile } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
 import { describe, expect, it, vi } from "vitest";
 import {
   checkRemoteMigrations,
@@ -18,8 +22,23 @@ const CHECKOUT_ACTION = "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e
 const SETUP_NODE_ACTION = "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38";
 const UPLOAD_ARTIFACT_ACTION = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
 const DOWNLOAD_ARTIFACT_ACTION = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c";
+const execFile = promisify(nodeExecFile);
 
-function secureProductionDeployWorkflow(): string {
+function workflowRunScript(workflow: string, stepName: string, nextStepName: string): string {
+  const section = workflow.slice(
+    workflow.indexOf(`      - name: ${stepName}`),
+    workflow.indexOf(`      - name: ${nextStepName}`),
+  );
+  const lines = section.split("\n");
+  const runIndex = lines.indexOf("        run: |");
+  if (runIndex < 0) throw new Error(`Missing run block for ${stepName}.`);
+  return lines.slice(runIndex + 1).map((line) => line.slice(10)).join("\n");
+}
+
+function secureProductionDeployWorkflow(
+  releaseMode = "atomic-bootstrap",
+  protocolV1BoundarySha = "",
+): string {
   return [
     "name: Production Deploy",
     "on:",
@@ -39,12 +58,17 @@ function secureProductionDeployWorkflow(): string {
     "permissions:",
     "  actions: read",
     "  contents: read",
+    "concurrency:",
+    "  group: production-deploy",
+    "  cancel-in-progress: false",
     "env:",
     "  GIT_CONFIG_COUNT: '1'",
     "  GIT_CONFIG_KEY_0: init.defaultBranch",
     "  GIT_CONFIG_VALUE_0: main",
     "  SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.source_sha }}",
     "  ROLLBACK_VERSION_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.rollback_version_id || '' }}",
+    `  SPOONJOY_RELEASE_MODE: ${releaseMode}`,
+    `  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: "${protocolV1BoundarySha}"`,
     "jobs:",
     "  deploy:",
     "    if: (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.path == '.github/workflows/ci.yml') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')",
@@ -69,10 +93,29 @@ function secureProductionDeployWorkflow(): string {
     "          WORKFLOW_RUN_PATH: ${{ github.event.workflow_run.path }}",
     "        run: |",
     "          grep -Eq '^[0-9a-f]{40}$' <<<\"$SOURCE_SHA\"",
+    "          case \"$SPOONJOY_RELEASE_MODE\" in",
+    "            atomic-bootstrap|atomic-product-activation|protocol-v1-canary) ;;",
+    "            *) exit 1 ;;",
+    "          esac",
+    "          if [ \"$SPOONJOY_RELEASE_MODE\" = \"protocol-v1-canary\" ]; then",
+    "            test -n \"$SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA\"",
+    "            grep -Eq '^[0-9a-f]{40}$' <<<\"$SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA\"",
+    "            git merge-base --is-ancestor \"$SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA\" \"$SOURCE_SHA\"",
+    "          else",
+    "            test -z \"$SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA\"",
+    "          fi",
+    "          if [ -n \"$ROLLBACK_VERSION_ID\" ] && [ \"$SPOONJOY_RELEASE_MODE\" != \"protocol-v1-canary\" ]; then",
+    "            exit 1",
+    "          fi",
     "          git fetch --no-tags origin main",
     "          git merge-base --is-ancestor \"$SOURCE_SHA\" origin/main",
     "          test \"$WORKFLOW_RUN_PATH\" = '.github/workflows/ci.yml' || test \"$GITHUB_EVENT_NAME\" = 'workflow_dispatch'",
-    "          test -z \"$ROLLBACK_VERSION_ID\" || test \"$(git rev-parse HEAD)\" = \"$(git rev-parse origin/main)\"",
+    "          if [ -z \"$ROLLBACK_VERSION_ID\" ]; then",
+    "            test \"$(git rev-parse origin/main)\" = \"$SOURCE_SHA\"",
+    "            test \"$(git rev-parse HEAD)\" = \"$SOURCE_SHA\"",
+    "          else",
+    "            test \"$(git rev-parse HEAD)\" = \"$(git rev-parse origin/main)\"",
+    "          fi",
     "          ci_runs=\"$(gh run list --workflow .github/workflows/ci.yml --branch main --commit \"$SOURCE_SHA\" --event push --status success --limit 100 --json databaseId,headSha)\"",
     "          ci_run_id=\"$(jq -er --arg source_sha \"$SOURCE_SHA\" '[.[] | select(.headSha == $source_sha)] | first | .databaseId' <<<\"$ci_runs\")\"",
     "          ci_jobs=\"$(gh run view \"$ci_run_id\" --json jobs)\"",
@@ -97,9 +140,9 @@ function secureProductionDeployWorkflow(): string {
     "          CLOUDFLARE_WORKERS_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}",
     "        run: |",
     "          if [ -n \"$ROLLBACK_VERSION_ID\" ]; then",
-    "            pnpm run deploy:auto -- --rollback-version-id \"$ROLLBACK_VERSION_ID\"",
+    "            pnpm run deploy:auto -- --release-mode \"$SPOONJOY_RELEASE_MODE\" --rollback-version-id \"$ROLLBACK_VERSION_ID\"",
     "          else",
-    "            pnpm run deploy:auto",
+    "            pnpm run deploy:auto -- --release-mode \"$SPOONJOY_RELEASE_MODE\"",
     "          fi",
     "      - name: Record release source",
     "        if: always()",
@@ -107,8 +150,23 @@ function secureProductionDeployWorkflow(): string {
     "      - name: Ensure release artifact exists",
     "        if: always()",
     "        run: |",
+    "          set -euo pipefail",
     "          mkdir -p mcp-oauth-canary-artifacts",
-    "          test -f mcp-oauth-canary-artifacts/production-release.json || jq -n --arg source_sha \"$SOURCE_SHA\" '{status: \"failed_before_stage\", sourceSha: $source_sha, phase: \"validate\", reviewedMigrations: [], migrationApply: \"not_started\", databaseRollbackSupported: false, failure: \"Release workflow failed before the orchestrator wrote an artifact.\"}' > mcp-oauth-canary-artifacts/production-release.json",
+    "          artifact_path=mcp-oauth-canary-artifacts/production-release.json",
+    "          artifact_valid=0",
+    "          if [ -f \"$artifact_path\" ] && jq -e --arg source_sha \"$SOURCE_SHA\" --arg release_mode \"$SPOONJOY_RELEASE_MODE\" --arg protocol_boundary_sha \"$SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA\" 'type == \"object\" and ((keys - [\"candidateVersionId\", \"databaseRollbackSupported\", \"deploymentStrategy\", \"failure\", \"migrationApply\", \"phase\", \"previousVersionId\", \"protocolV1BoundarySha\", \"releaseMode\", \"reviewedMigrations\", \"rollbackFailure\", \"sourceSha\", \"status\", \"treeHash\"]) | length == 0) and (([\"databaseRollbackSupported\", \"deploymentStrategy\", \"migrationApply\", \"phase\", \"releaseMode\", \"reviewedMigrations\", \"sourceSha\", \"status\"] - keys) | length == 0) and (.sourceSha == $source_sha) and (.releaseMode == $release_mode) and (.deploymentStrategy == (if $release_mode == \"protocol-v1-canary\" then \"gradual\" else \"atomic\" end)) and (.databaseRollbackSupported == false) and (if $protocol_boundary_sha == \"\" then has(\"protocolV1BoundarySha\") | not else .protocolV1BoundarySha == $protocol_boundary_sha end)' \"$artifact_path\" >/dev/null; then",
+    "            if jq -e '(.status | IN(\"promoted\", \"rollback_promoted\", \"failed_before_stage\", \"rolled_back\", \"rollback_failed\", \"forward_repair_required\")) and (.phase | IN(\"validate\", \"provenance\", \"initial_preflight\", \"build\", \"post_build_provenance\", \"migration_list\", \"migration_review\", \"migration_apply\", \"full_preflight\", \"current_deployment\", \"version_snapshot\", \"version_upload\", \"version_lookup\", \"rollback_version_lookup\", \"protocol_ancestry\", \"rollback_protocol_ancestry\", \"active_version_mapping\", \"rollback_active_version_mapping\", \"stage\", \"canary\", \"promote\", \"atomic_deploy\", \"verify_promotion\", \"verify_rollback\", \"bootstrap_probe\", \"artifact\", \"complete\")) and (.sourceSha | type == \"string\" and test(\"^[0-9a-f]{40}$\")) and (if has(\"treeHash\") then (.treeHash | type == \"string\" and test(\"^[0-9a-f]{40}$\")) else true end) and (if has(\"previousVersionId\") then (.previousVersionId | type == \"string\" and test(\"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$\")) else true end) and (if has(\"candidateVersionId\") then (.candidateVersionId | type == \"string\" and test(\"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$\")) else true end) and (.migrationApply | IN(\"not_started\", \"not_needed\", \"attempted\", \"succeeded\", \"failed\")) and (.reviewedMigrations | type == \"array\") and (all(.reviewedMigrations[]; type == \"string\")) and (if has(\"failure\") then (.failure | type == \"string\" and length > 0) else true end) and (if has(\"rollbackFailure\") then (.rollbackFailure | type == \"string\" and length > 0) else true end)' \"$artifact_path\" >/dev/null; then",
+    "              if jq -e '(all(.reviewedMigrations[]; (test(\"^[0-9]{4}_[A-Za-z0-9][A-Za-z0-9_.-]*[.]sql$\") and (contains(\"..\") | not)))) and ((.reviewedMigrations | unique | length) == (.reviewedMigrations | length)) and (if (has(\"previousVersionId\") and has(\"candidateVersionId\")) then .previousVersionId != .candidateVersionId else true end) and (if .migrationApply == \"not_needed\" then (.reviewedMigrations | length) == 0 elif (.migrationApply | IN(\"attempted\", \"succeeded\", \"failed\")) then (.reviewedMigrations | length) > 0 else true end)' \"$artifact_path\" >/dev/null; then",
+    "              if jq -e --arg release_mode \"$SPOONJOY_RELEASE_MODE\" '(if $release_mode == \"protocol-v1-canary\" then .status != \"forward_repair_required\" else ((.status | IN(\"rollback_promoted\", \"rolled_back\", \"rollback_failed\") | not) and (if .status == \"failed_before_stage\" then ((.phase | IN(\"validate\", \"provenance\", \"initial_preflight\", \"build\", \"post_build_provenance\", \"migration_list\", \"migration_review\", \"current_deployment\", \"version_snapshot\")) or (.phase == \"full_preflight\" and .migrationApply == \"not_needed\")) else true end) and (if .phase == \"bootstrap_probe\" then $release_mode == \"atomic-bootstrap\" else true end)) end) and (if .status == \"promoted\" then (.phase == \"complete\" and has(\"treeHash\") and has(\"previousVersionId\") and has(\"candidateVersionId\") and (has(\"failure\") | not) and (has(\"rollbackFailure\") | not) and (.migrationApply | IN(\"not_needed\", \"succeeded\"))) elif .status == \"rollback_promoted\" then (.phase == \"complete\" and has(\"treeHash\") and has(\"previousVersionId\") and has(\"candidateVersionId\") and (has(\"failure\") | not) and (has(\"rollbackFailure\") | not) and .migrationApply == \"not_needed\" and (.reviewedMigrations | length) == 0) elif .status == \"failed_before_stage\" then ((.phase | IN(\"validate\", \"provenance\", \"initial_preflight\", \"build\", \"post_build_provenance\", \"migration_list\", \"migration_review\", \"migration_apply\", \"full_preflight\", \"current_deployment\", \"version_snapshot\", \"version_upload\", \"version_lookup\", \"rollback_version_lookup\", \"protocol_ancestry\", \"rollback_protocol_ancestry\", \"active_version_mapping\", \"rollback_active_version_mapping\")) and has(\"failure\") and (has(\"rollbackFailure\") | not) and (if (.phase | IN(\"protocol_ancestry\", \"active_version_mapping\")) then .migrationApply == \"not_started\" elif (.phase | IN(\"rollback_version_lookup\", \"rollback_protocol_ancestry\", \"rollback_active_version_mapping\")) then .migrationApply == \"not_needed\" elif (.phase | IN(\"validate\", \"provenance\", \"initial_preflight\", \"build\", \"post_build_provenance\", \"migration_list\", \"migration_review\", \"current_deployment\", \"version_snapshot\")) then .migrationApply == \"not_started\" elif .phase == \"migration_apply\" then .migrationApply == \"failed\" else (.migrationApply | IN(\"not_needed\", \"succeeded\")) end) and (if (.phase | IN(\"initial_preflight\", \"build\", \"post_build_provenance\", \"migration_list\", \"migration_review\", \"migration_apply\", \"full_preflight\", \"current_deployment\", \"version_snapshot\", \"version_upload\", \"version_lookup\", \"rollback_version_lookup\", \"protocol_ancestry\", \"rollback_protocol_ancestry\", \"active_version_mapping\", \"rollback_active_version_mapping\")) then has(\"treeHash\") else (has(\"treeHash\") | not) end) and (if (.phase | IN(\"version_snapshot\", \"migration_apply\", \"full_preflight\", \"version_upload\", \"version_lookup\", \"protocol_ancestry\", \"rollback_protocol_ancestry\", \"active_version_mapping\", \"rollback_active_version_mapping\")) then has(\"previousVersionId\") else (has(\"previousVersionId\") | not) end) and (if (.phase == \"version_lookup\" or .phase == \"protocol_ancestry\") then true elif (.phase | IN(\"rollback_protocol_ancestry\", \"rollback_active_version_mapping\")) then has(\"candidateVersionId\") else (has(\"candidateVersionId\") | not) end)) elif .status == \"rolled_back\" then ((.phase | IN(\"stage\", \"canary\", \"promote\", \"verify_promotion\", \"artifact\")) and has(\"treeHash\") and has(\"previousVersionId\") and has(\"candidateVersionId\") and has(\"failure\") and (has(\"rollbackFailure\") | not) and (.migrationApply | IN(\"not_needed\", \"succeeded\"))) elif .status == \"rollback_failed\" then ((.phase | IN(\"stage\", \"canary\", \"promote\", \"verify_promotion\", \"artifact\")) and has(\"treeHash\") and has(\"previousVersionId\") and has(\"candidateVersionId\") and has(\"failure\") and has(\"rollbackFailure\") and (.migrationApply | IN(\"not_needed\", \"succeeded\"))) else ((.phase | IN(\"migration_apply\", \"full_preflight\", \"atomic_deploy\", \"version_lookup\", \"verify_promotion\", \"bootstrap_probe\", \"artifact\")) and has(\"treeHash\") and has(\"previousVersionId\") and has(\"failure\") and (has(\"rollbackFailure\") | not) and (if (.phase | IN(\"verify_promotion\", \"bootstrap_probe\", \"artifact\")) then has(\"candidateVersionId\") else (has(\"candidateVersionId\") | not) end) and (if .phase == \"migration_apply\" then .migrationApply == \"failed\" elif .phase == \"full_preflight\" then .migrationApply == \"succeeded\" else (.migrationApply | IN(\"not_needed\", \"succeeded\")) end)) end) and (if (.phase == \"migration_apply\") then ((.treeHash | type == \"string\") and (.previousVersionId | type == \"string\") and ((.reviewedMigrations | length) > 0)) else true end)' \"$artifact_path\" >/dev/null; then",
+    "                artifact_valid=1",
+    "              fi",
+    "              fi",
+    "            fi",
+    "          fi",
+    "          if [ \"$artifact_valid\" -ne 1 ]; then",
+    "            jq -n --arg source_sha \"$SOURCE_SHA\" --arg release_mode \"$SPOONJOY_RELEASE_MODE\" --arg protocol_boundary_sha \"$SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA\" '({status: (if $release_mode == \"protocol-v1-canary\" then \"release_state_unknown\" else \"forward_repair_required\" end), sourceSha: (if ($source_sha | test(\"^[0-9a-f]{40}$\")) then $source_sha else null end), releaseMode: $release_mode, deploymentStrategy: (if $release_mode == \"protocol-v1-canary\" then \"gradual\" else \"atomic\" end), phase: \"unknown\", reviewedMigrations: null, migrationApply: \"unknown\", databaseRollbackSupported: false, failure: \"Release workflow failed without a trustworthy orchestrator artifact.\"} + (if $protocol_boundary_sha == \"\" then {} else {protocolV1BoundarySha: $protocol_boundary_sha} end))' > \"\${artifact_path}.tmp\"",
+    "            mv \"\${artifact_path}.tmp\" \"$artifact_path\"",
+    "          fi",
     "      - name: Upload MCP OAuth canary artifacts",
     "        if: always()",
     `        uses: ${UPLOAD_ARTIFACT_ACTION} # v7`,
@@ -149,7 +207,35 @@ function secureProductionDeployWorkflow(): string {
     "          MCP_CANARY_WORKFLOW_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
     "          MCP_CANARY_ARTIFACT_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts",
     "        run: node scripts/report-mcp-oauth-canary.mjs --artifact-dir mcp-oauth-canary-artifacts --status \"$MCP_CANARY_STATUS\" --workflow-run-url \"$MCP_CANARY_WORKFLOW_RUN_URL\" --artifact-url \"$MCP_CANARY_ARTIFACT_URL\" --manage-issue",
-  ].join("\n");
+  ].join("\n")
+    .replaceAll(
+      '"rollback_version_lookup", "protocol_ancestry"',
+      '"rollback_version_lookup", "rollback_current_deployment", "rollback_already_active", "protocol_ancestry"',
+    )
+    .replaceAll(
+      '"rollback_version_lookup", "rollback_protocol_ancestry"',
+      '"rollback_version_lookup", "rollback_current_deployment", "rollback_already_active", "rollback_protocol_ancestry"',
+    )
+    .replace(
+      '"version_lookup", "protocol_ancestry", "rollback_protocol_ancestry"',
+      '"version_lookup", "rollback_already_active", "protocol_ancestry", "rollback_protocol_ancestry"',
+    )
+    .replaceAll(
+      '(.phase | IN("rollback_protocol_ancestry", "rollback_active_version_mapping"))',
+      '(.phase | IN("rollback_current_deployment", "rollback_already_active", "rollback_protocol_ancestry", "rollback_active_version_mapping"))',
+    )
+    .replace(
+      '(if (.phase == "version_lookup" or .phase == "protocol_ancestry") then true elif (.phase | IN("rollback_current_deployment", "rollback_already_active", "rollback_protocol_ancestry", "rollback_active_version_mapping")) then has("candidateVersionId") else (has("candidateVersionId") | not) end)',
+      '(if (.phase | IN("rollback_current_deployment", "rollback_already_active", "rollback_protocol_ancestry", "rollback_active_version_mapping")) then has("candidateVersionId") else (has("candidateVersionId") | not) end)',
+    )
+    .replace(
+      'then .previousVersionId != .candidateVersionId else true end',
+      'then (if .phase == "rollback_already_active" then .previousVersionId == .candidateVersionId else .previousVersionId != .candidateVersionId end) else true end',
+    )
+    .replace(
+      'and (if (.phase == "migration_apply") then ((.treeHash | type == "string")',
+      'and (if (.phase | IN("validate", "provenance", "initial_preflight", "build", "post_build_provenance", "migration_list")) then (.reviewedMigrations | length) == 0 elif .phase == "migration_review" then (.reviewedMigrations | length) > 0 else true end) and (if (.phase == "migration_apply") then ((.treeHash | type == "string")',
+    );
 }
 
 function validQaImageCoverSmokeWorkflow(): string {
@@ -733,6 +819,872 @@ describe("deployment preflight", () => {
   });
 
   it.each([
+    "atomic-bootstrap",
+    "atomic-product-activation",
+    "protocol-v1-canary",
+  ])("accepts the source-controlled production release mode %s", (releaseMode) => {
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow(
+      releaseMode,
+      releaseMode === "protocol-v1-canary" ? "d".repeat(40) : "",
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).not.toContain("production deploy workflow");
+  });
+
+  it("rejects an ancestry-only normal release policy that permits a stale source SHA", () => {
+    const inputs = validInputs();
+    const exactPolicy = [
+      '          if [ -z "$ROLLBACK_VERSION_ID" ]; then',
+      '            test "$(git rev-parse origin/main)" = "$SOURCE_SHA"',
+      '            test "$(git rev-parse HEAD)" = "$SOURCE_SHA"',
+      "          else",
+      '            test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"',
+      "          fi",
+    ].join("\n");
+    const stalePolicy = [
+      '          if [ -z "$ROLLBACK_VERSION_ID" ]; then',
+      '            git merge-base --is-ancestor "$SOURCE_SHA" origin/main',
+      "          else",
+      '            test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"',
+      "          fi",
+    ].join("\n");
+    const workflow = secureProductionDeployWorkflow();
+    inputs.productionDeployWorkflow = workflow.replace(exactPolicy, stalePolicy);
+    expect(inputs.productionDeployWorkflow).not.toBe(workflow);
+    expect(inputs.productionDeployWorkflow).toContain(stalePolicy);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it.each([
+    ["a different release concurrency group", "  group: production-deploy", "  group: production-deploy-per-sha"],
+    ["cancellable in-flight releases", "  cancel-in-progress: false", "  cancel-in-progress: true"],
+    [
+      "a duplicate top-level concurrency block",
+      "concurrency:\n  group: production-deploy\n  cancel-in-progress: false",
+      "concurrency:\n  group: production-deploy\n  cancel-in-progress: false\nconcurrency:\n  group: production-deploy\n  cancel-in-progress: false",
+    ],
+    [
+      "a duplicate concurrency group",
+      "  group: production-deploy\n  cancel-in-progress: false",
+      "  group: production-deploy\n  group: production-deploy-shadow\n  cancel-in-progress: false",
+    ],
+    [
+      "a duplicate cancel policy",
+      "  cancel-in-progress: false",
+      "  cancel-in-progress: false\n  cancel-in-progress: true",
+    ],
+  ])("rejects %s", (_label, expected, replacement) => {
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(expected, replacement);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it.each([
+    [
+      "a shell-exported release mode",
+      '          grep -Eq \'^[0-9a-f]{40}$\' <<<"$SOURCE_SHA"',
+      '          export SPOONJOY_RELEASE_MODE=protocol-v1-canary\n          grep -Eq \'^[0-9a-f]{40}$\' <<<"$SOURCE_SHA"',
+    ],
+    [
+      "a shell-reassigned protocol boundary",
+      '          grep -Eq \'^[0-9a-f]{40}$\' <<<"$SOURCE_SHA"',
+      `          SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA=${"d".repeat(40)}\n          grep -Eq '^[0-9a-f]{40}$' <<<"$SOURCE_SHA"`,
+    ],
+    [
+      "a release mode written to GITHUB_ENV",
+      '          grep -Eq \'^[0-9a-f]{40}$\' <<<"$SOURCE_SHA"',
+      '          echo "SPOONJOY_RELEASE_MODE=protocol-v1-canary" >> "$GITHUB_ENV"\n          grep -Eq \'^[0-9a-f]{40}$\' <<<"$SOURCE_SHA"',
+    ],
+    [
+      "a protocol boundary written to GITHUB_ENV",
+      '          grep -Eq \'^[0-9a-f]{40}$\' <<<"$SOURCE_SHA"',
+      `          echo "SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA=${"d".repeat(40)}" >> "$GITHUB_ENV"\n          grep -Eq '^[0-9a-f]{40}$' <<<"$SOURCE_SHA"`,
+    ],
+    [
+      "a release-mode assignment before the rollback deploy command",
+      '            pnpm run deploy:auto -- --release-mode "$SPOONJOY_RELEASE_MODE" --rollback-version-id "$ROLLBACK_VERSION_ID"',
+      '            SPOONJOY_RELEASE_MODE=atomic-product-activation\n            pnpm run deploy:auto -- --release-mode "$SPOONJOY_RELEASE_MODE" --rollback-version-id "$ROLLBACK_VERSION_ID"',
+    ],
+    [
+      "a boundary assignment before the rollback deploy command",
+      '            pnpm run deploy:auto -- --release-mode "$SPOONJOY_RELEASE_MODE" --rollback-version-id "$ROLLBACK_VERSION_ID"',
+      `            SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA=${"d".repeat(40)}\n            pnpm run deploy:auto -- --release-mode "$SPOONJOY_RELEASE_MODE" --rollback-version-id "$ROLLBACK_VERSION_ID"`,
+    ],
+    [
+      "a release-mode assignment before the normal deploy command",
+      '            pnpm run deploy:auto -- --release-mode "$SPOONJOY_RELEASE_MODE"',
+      '            SPOONJOY_RELEASE_MODE=atomic-product-activation\n            pnpm run deploy:auto -- --release-mode "$SPOONJOY_RELEASE_MODE"',
+    ],
+    [
+      "a boundary assignment before the normal deploy command",
+      '            pnpm run deploy:auto -- --release-mode "$SPOONJOY_RELEASE_MODE"',
+      `            SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA=${"d".repeat(40)}\n            pnpm run deploy:auto -- --release-mode "$SPOONJOY_RELEASE_MODE"`,
+    ],
+    [
+      "an artifact-validity override",
+      "          artifact_valid=0",
+      "          artifact_valid=0\n          artifact_valid=1",
+    ],
+    [
+      "rollback guard text preserved only in comments",
+      [
+        '          if [ -n "$ROLLBACK_VERSION_ID" ] && [ "$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" ]; then',
+        "            exit 1",
+        "          fi",
+      ].join("\n"),
+      [
+        '          # if [ -n "$ROLLBACK_VERSION_ID" ] && [ "$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" ]; then',
+        "          #   exit 1",
+        "          # fi",
+      ].join("\n"),
+    ],
+    [
+      "rollback guard text hidden in a dead branch",
+      [
+        '          if [ -n "$ROLLBACK_VERSION_ID" ] && [ "$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" ]; then',
+        "            exit 1",
+        "          fi",
+      ].join("\n"),
+      [
+        "          if false; then",
+        '            if [ -n "$ROLLBACK_VERSION_ID" ] && [ "$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" ]; then',
+        "              exit 1",
+        "            fi",
+        "          fi",
+      ].join("\n"),
+    ],
+  ])("rejects %s", (_label, expected, replacement) => {
+    const inputs = validInputs();
+    const workflow = secureProductionDeployWorkflow();
+    inputs.productionDeployWorkflow = workflow.replace(expected, replacement);
+    expect(inputs.productionDeployWorkflow).not.toBe(workflow);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it.each([
+    ["a missing mode", "  SPOONJOY_RELEASE_MODE: atomic-bootstrap\n", ""],
+    [
+      "a dispatch-controlled mode",
+      "  SPOONJOY_RELEASE_MODE: atomic-bootstrap",
+      "  SPOONJOY_RELEASE_MODE: ${{ inputs.release_mode }}",
+    ],
+    [
+      "an unknown mode",
+      "  SPOONJOY_RELEASE_MODE: atomic-bootstrap",
+      "  SPOONJOY_RELEASE_MODE: gradual",
+    ],
+    [
+      "an atomic boundary SHA",
+      '  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: ""',
+      `  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: "${"d".repeat(40)}"`,
+    ],
+    [
+      "a job-level mode override",
+      "  deploy:\n",
+      "  deploy:\n    env:\n      SPOONJOY_RELEASE_MODE: protocol-v1-canary\n",
+    ],
+    [
+      "a job-level boundary override",
+      "  deploy:\n",
+      `  deploy:\n    env:\n      SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: ${"d".repeat(40)}\n`,
+    ],
+    [
+      "a validation-step mode override",
+      "          GH_TOKEN: ${{ github.token }}\n",
+      "          GH_TOKEN: ${{ github.token }}\n          SPOONJOY_RELEASE_MODE: protocol-v1-canary\n",
+    ],
+    [
+      "a validation-step boundary override",
+      "          GH_TOKEN: ${{ github.token }}\n",
+      "          GH_TOKEN: ${{ github.token }}\n          SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: " +
+        `${"d".repeat(40)}\n`,
+    ],
+    [
+      "a deploy-step mode override",
+      "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}\n",
+      "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}\n          SPOONJOY_RELEASE_MODE: protocol-v1-canary\n",
+    ],
+    [
+      "a deploy-step boundary override",
+      "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}\n",
+      "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}\n          SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: " +
+        `${"d".repeat(40)}\n`,
+    ],
+    [
+      "a duplicate top-level mode",
+      "  SPOONJOY_RELEASE_MODE: atomic-bootstrap\n",
+      "  SPOONJOY_RELEASE_MODE: atomic-bootstrap\n  SPOONJOY_RELEASE_MODE: ${{ inputs.release_mode }}\n",
+    ],
+    [
+      "a duplicate top-level boundary",
+      '  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: ""\n',
+      '  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: ""\n  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: "${{ inputs.protocol_v1_boundary_sha }}"\n',
+    ],
+  ])("rejects %s", (_label, expected, replacement) => {
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(expected, replacement);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it.each([
+    [
+      "a duplicate mode on the normal deploy command",
+      '          else\n            pnpm run deploy:auto -- --release-mode "$SPOONJOY_RELEASE_MODE"',
+      '          else\n            pnpm run deploy:auto -- --release-mode "$SPOONJOY_RELEASE_MODE" --release-mode atomic-product-activation',
+    ],
+    [
+      "a duplicate mode on the rollback command",
+      '            pnpm run deploy:auto -- --release-mode "$SPOONJOY_RELEASE_MODE" --rollback-version-id "$ROLLBACK_VERSION_ID"',
+      '            pnpm run deploy:auto -- --release-mode "$SPOONJOY_RELEASE_MODE" --rollback-version-id "$ROLLBACK_VERSION_ID" --release-mode atomic-bootstrap',
+    ],
+    [
+      "a protocol boundary CLI override",
+      '          else\n            pnpm run deploy:auto -- --release-mode "$SPOONJOY_RELEASE_MODE"',
+      '          else\n            pnpm run deploy:auto -- --release-mode "$SPOONJOY_RELEASE_MODE" --protocol-v1-boundary-sha dddddddddddddddddddddddddddddddddddddddd',
+    ],
+  ])("rejects %s", (_label, expected, replacement) => {
+    const inputs = validInputs();
+    const workflow = secureProductionDeployWorkflow();
+    inputs.productionDeployWorkflow = workflow.replace(expected, replacement);
+    expect(inputs.productionDeployWorkflow).not.toBe(workflow);
+    expect(inputs.productionDeployWorkflow).toContain(replacement);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it("rejects lifecycle validation moved after the deployment command", () => {
+    const inputs = validInputs();
+    const guard = [
+      '          if [ -n "$ROLLBACK_VERSION_ID" ] && [ "$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" ]; then',
+      "            exit 1",
+      "          fi",
+    ].join("\n");
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow()
+      .replace(`${guard}\n`, "")
+      .replace(
+        '          else\n            pnpm run deploy:auto -- --release-mode "$SPOONJOY_RELEASE_MODE"\n          fi',
+        `          else\n            pnpm run deploy:auto -- --release-mode "$SPOONJOY_RELEASE_MODE"\n${guard}\n          fi`,
+      );
+    expect(inputs.productionDeployWorkflow).toContain(
+      `pnpm run deploy:auto -- --release-mode "$SPOONJOY_RELEASE_MODE"\n${guard}`,
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it.each([
+    [
+      "failure status",
+      'status: (if $release_mode == "protocol-v1-canary" then "release_state_unknown" else "forward_repair_required" end)',
+      'status: "failed_before_stage"',
+    ],
+    ["unknown phase", 'phase: "unknown"', 'phase: "validate"'],
+    ["unknown migration state", 'migrationApply: "unknown"', 'migrationApply: "not_started"'],
+    ["unknown reviewed migrations", "reviewedMigrations: null", "reviewedMigrations: []"],
+    [
+      "validated-or-null source SHA",
+      'sourceSha: (if ($source_sha | test("^[0-9a-f]{40}$")) then $source_sha else null end)',
+      "sourceSha: $source_sha",
+    ],
+    ["release mode", "releaseMode: $release_mode", "legacyReleaseMode: $release_mode"],
+    [
+      "deployment strategy",
+      'deploymentStrategy: (if $release_mode == "protocol-v1-canary" then "gradual" else "atomic" end)',
+      'deploymentStrategy: "gradual"',
+    ],
+    [
+      "protocol boundary",
+      "protocolV1BoundarySha: $protocol_boundary_sha",
+      "legacyProtocolBoundary: $protocol_boundary_sha",
+    ],
+    [
+      "database rollback support",
+      "databaseRollbackSupported: false",
+      "databaseRollbackSupported: true",
+    ],
+    [
+      "sanitized constant failure",
+      'failure: "Release workflow failed without a trustworthy orchestrator artifact."',
+      'failure: "dynamic"',
+    ],
+    [
+      "invented version provenance",
+      'failure: "Release workflow failed without a trustworthy orchestrator artifact."',
+      'previousVersionId: "unknown", candidateVersionId: "unknown", failure: "Release workflow failed without a trustworthy orchestrator artifact."',
+    ],
+    [
+      "an arbitrary extra field",
+      'failure: "Release workflow failed without a trustworthy orchestrator artifact."',
+      'unexpected: true, failure: "Release workflow failed without a trustworthy orchestrator artifact."',
+    ],
+    [
+      "a conditional protocol boundary",
+      'if $protocol_boundary_sha == "" then {} else {protocolV1BoundarySha: $protocol_boundary_sha} end',
+      "{protocolV1BoundarySha: $protocol_boundary_sha}",
+    ],
+  ])("rejects a fallback artifact without lifecycle %s", (_label, expected, replacement) => {
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(expected, replacement);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it.each([
+    ["existing artifact JSON validation", 'if [ -f "$artifact_path" ] && jq -e', 'if [ -f "$artifact_path" ] && test -f'],
+    ["existing artifact allowlist", '((keys - ["candidateVersionId",', "((keys - ["],
+    ["existing artifact type validation", '(.status | IN("promoted",', "true or (.status | IN("],
+    ["existing artifact phase enum", '(.phase | IN("validate",', '(.phase | type == "string") or (false and IN("validate",'],
+    ["release provenance artifact phases", '"version_lookup", "rollback_version_lookup", "rollback_current_deployment", "rollback_already_active", "protocol_ancestry", "rollback_protocol_ancestry", "active_version_mapping", "rollback_active_version_mapping", "stage"', '"version_lookup", "stage"'],
+    ["existing artifact source SHA format", '(.sourceSha | type == "string" and test("^[0-9a-f]{40}$"))', "true"],
+    ["existing artifact tree SHA format", '(.treeHash | type == "string" and test("^[0-9a-f]{40}$"))', "true"],
+    ["existing artifact Worker UUID format", '(.previousVersionId | type == "string" and test("^[0-9a-f]{8}-', '(.previousVersionId | type == "string") or (false and test("^[0-9a-f]{8}-'],
+    ["existing artifact candidate UUID format", '(.candidateVersionId | type == "string" and test("^[0-9a-f]{8}-', '(.candidateVersionId | type == "string") or (false and test("^[0-9a-f]{8}-'],
+    ["existing artifact migration filename format", 'all(.reviewedMigrations[]; (test("^[0-9]{4}_[A-Za-z0-9][A-Za-z0-9_.-]*[.]sql$") and (contains("..") | not)))', "all(.reviewedMigrations[]; true)"],
+    ["existing artifact migration uniqueness", '((.reviewedMigrations | unique | length) == (.reviewedMigrations | length))', "true"],
+    [
+      "existing artifact phase-specific version identity",
+      'if .phase == "rollback_already_active" then .previousVersionId == .candidateVersionId else .previousVersionId != .candidateVersionId end',
+      "true",
+    ],
+    ["existing artifact migration-list state", 'if .migrationApply == "not_needed" then (.reviewedMigrations | length) == 0', "if true then true"],
+    [
+      "existing artifact lifecycle compatibility",
+      'if $release_mode == "protocol-v1-canary" then .status != "forward_repair_required"',
+      "if true then true",
+    ],
+    [
+      "bootstrap-probe mode compatibility",
+      'if .phase == "bootstrap_probe" then $release_mode == "atomic-bootstrap" else true end',
+      "if true then true end",
+    ],
+    [
+      "atomic zero-migration preflight failure classification",
+      'or (.phase == "full_preflight" and .migrationApply == "not_needed")',
+      "or false",
+    ],
+    [
+      "protocol ancestry migration-state classification",
+      'if (.phase | IN("protocol_ancestry", "active_version_mapping")) then .migrationApply == "not_started"',
+      'if (.phase | IN("protocol_ancestry", "active_version_mapping")) then true',
+    ],
+    [
+      "manual rollback phase discrimination",
+      'elif (.phase | IN("rollback_version_lookup", "rollback_current_deployment", "rollback_already_active", "rollback_protocol_ancestry", "rollback_active_version_mapping")) then .migrationApply == "not_needed"',
+      "elif true then true",
+    ],
+    [
+      "phase-specific candidate provenance",
+      'if (.phase | IN("rollback_current_deployment", "rollback_already_active", "rollback_protocol_ancestry", "rollback_active_version_mapping")) then has("candidateVersionId") else (has("candidateVersionId") | not) end',
+      "if true then true end",
+    ],
+    [
+      "phase-specific migration provenance",
+      'if (.phase | IN("validate", "provenance", "initial_preflight", "build", "post_build_provenance", "migration_list")) then (.reviewedMigrations | length) == 0 elif .phase == "migration_review" then (.reviewedMigrations | length) > 0 else true end',
+      "if true then true end",
+    ],
+    [
+      "existing artifact phase provenance",
+      'if (.phase == "migration_apply") then ((.treeHash | type == "string") and (.previousVersionId | type == "string") and ((.reviewedMigrations | length) > 0))',
+      "if true then true",
+    ],
+    [
+      "existing artifact success field contract",
+      'then (.phase == "complete" and has("treeHash") and has("previousVersionId") and has("candidateVersionId") and (has("failure") | not) and (has("rollbackFailure") | not)',
+      "then true or (false and",
+    ],
+    [
+      "existing artifact rollback field contract",
+      'elif .status == "rollback_failed" then ((.phase | IN("stage", "canary", "promote", "verify_promotion", "artifact")) and has("treeHash") and has("previousVersionId") and has("candidateVersionId") and has("failure") and has("rollbackFailure")',
+      'elif .status == "rollback_failed" then true',
+    ],
+    [
+      "existing artifact forward-repair field contract",
+      'and (if (.phase | IN("verify_promotion", "bootstrap_probe", "artifact")) then has("candidateVersionId") else (has("candidateVersionId") | not) end)',
+      "and true",
+    ],
+    [
+      "existing artifact migration-state contract",
+      'elif .phase == "migration_apply" then .migrationApply == "failed" else (.migrationApply | IN("not_needed", "succeeded")) end',
+      "else true end",
+    ],
+    [
+      "forward-repair post-mutation preflight state",
+      'elif .phase == "full_preflight" then .migrationApply == "succeeded"',
+      'elif .phase == "full_preflight" then true',
+    ],
+    ["fallback atomic replacement", 'if [ "$artifact_valid" -ne 1 ]; then', "if false; then"],
+    ["structured fallback serialization", "jq -n --arg source_sha", "printf '%s' \"$SOURCE_SHA\" #"],
+  ])("rejects missing %s", (_label, expected, replacement) => {
+    const inputs = validInputs();
+    const workflow = secureProductionDeployWorkflow();
+    inputs.productionDeployWorkflow = workflow.replace(expected, replacement);
+    expect(inputs.productionDeployWorkflow).not.toBe(workflow);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it("preserves only executable-lifecycle-valid release artifacts", async () => {
+    const workflow = await readFile(".github/workflows/production-deploy.yml", "utf8");
+    const script = workflowRunScript(
+      workflow,
+      "Ensure release artifact exists",
+      "Upload MCP OAuth canary artifacts",
+    );
+    const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-workflow-artifact-"));
+    const relativeArtifactPath = "mcp-oauth-canary-artifacts/production-release.json";
+    const artifactPath = path.join(artifactDir, relativeArtifactPath);
+    const valid = {
+      status: "promoted",
+      sourceSha: "a".repeat(40),
+      releaseMode: "atomic-bootstrap",
+      deploymentStrategy: "atomic",
+      phase: "complete",
+      treeHash: "b".repeat(40),
+      reviewedMigrations: ["0024_add_release_marker.sql"],
+      migrationApply: "succeeded",
+      databaseRollbackSupported: false,
+      previousVersionId: "11111111-1111-4111-8111-111111111111",
+      candidateVersionId: "22222222-2222-4222-8222-222222222222",
+    };
+    const invalidArtifacts = [
+      { ...valid, candidateVersionId: valid.previousVersionId },
+      {
+        ...valid,
+        previousVersionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        candidateVersionId: "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",
+      },
+      { ...valid, reviewedMigrations: ["not-a-migration.txt"] },
+      { ...valid, reviewedMigrations: [
+        "0024_add_release_marker.sql",
+        "0024_add_release_marker.sql",
+      ] },
+      { ...valid, reviewedMigrations: [], migrationApply: "succeeded" },
+      { ...valid, migrationApply: "not_needed" },
+      {
+        ...valid,
+        status: "forward_repair_required",
+        phase: "artifact",
+        failure: "",
+      },
+    ];
+
+    try {
+      await mkdir(path.dirname(artifactPath), { recursive: true });
+      await writeFile(artifactPath, JSON.stringify(valid));
+      await execFile("bash", ["-c", script], {
+        cwd: artifactDir,
+        env: {
+          ...process.env,
+          SOURCE_SHA: "a".repeat(40),
+          SPOONJOY_RELEASE_MODE: "atomic-bootstrap",
+          SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: "",
+        },
+      });
+      expect(JSON.parse(await readFile(artifactPath, "utf8"))).toEqual(valid);
+
+      for (const artifact of invalidArtifacts) {
+        await writeFile(artifactPath, JSON.stringify(artifact));
+        await execFile("bash", ["-c", script], {
+          cwd: artifactDir,
+          env: {
+            ...process.env,
+            SOURCE_SHA: "a".repeat(40),
+            SPOONJOY_RELEASE_MODE: "atomic-bootstrap",
+            SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: "",
+          },
+        });
+        expect(JSON.parse(await readFile(artifactPath, "utf8"))).toMatchObject({
+          status: "forward_repair_required",
+          phase: "unknown",
+        });
+      }
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true });
+    }
+  });
+
+  it("executes every synthetic lifecycle tuple and representative poison mutation", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-synthetic-artifact-"));
+    const artifactPath = path.join(root, "mcp-oauth-canary-artifacts/production-release.json");
+    const sourceSha = "a".repeat(40);
+    const treeHash = "b".repeat(40);
+    const boundary = "d".repeat(40);
+    const previousVersionId = "11111111-1111-4111-8111-111111111111";
+    const candidateVersionId = "22222222-2222-4222-8222-222222222222";
+    const migration = "0024_add_release_marker.sql";
+    const canaryBase = {
+      sourceSha,
+      releaseMode: "protocol-v1-canary",
+      deploymentStrategy: "gradual",
+      protocolV1BoundarySha: boundary,
+      reviewedMigrations: [] as string[],
+      migrationApply: "not_started",
+      databaseRollbackSupported: false,
+    };
+    const complete = {
+      ...canaryBase,
+      status: "promoted",
+      phase: "complete",
+      treeHash,
+      reviewedMigrations: [migration],
+      migrationApply: "succeeded",
+      previousVersionId,
+      candidateVersionId,
+    };
+    const validArtifacts: Array<Record<string, unknown>> = [
+      complete,
+      { ...complete, reviewedMigrations: [], migrationApply: "not_needed" },
+      {
+        ...complete,
+        status: "rollback_promoted",
+        reviewedMigrations: [],
+        migrationApply: "not_needed",
+      },
+      ...(["stage", "canary", "promote", "verify_promotion", "artifact"] as const)
+        .flatMap((phase) => [
+          complete,
+          { ...complete, reviewedMigrations: [], migrationApply: "not_needed" },
+        ].flatMap((migrationBase) => [
+          { ...migrationBase, status: "rolled_back", phase, failure: `${phase} failed` },
+          {
+            ...migrationBase,
+            status: "rollback_failed",
+            phase,
+            failure: `${phase} failed`,
+            rollbackFailure: "restore failed",
+          },
+        ])),
+      ...(["validate", "provenance"] as const).map((phase) => ({
+        ...canaryBase,
+        status: "failed_before_stage",
+        phase,
+        failure: `${phase} failed`,
+      })),
+      ...(["initial_preflight", "build", "post_build_provenance", "migration_list", "current_deployment"] as const)
+        .map((phase) => ({
+          ...canaryBase,
+          status: "failed_before_stage",
+          phase,
+          treeHash,
+          failure: `${phase} failed`,
+        })),
+      {
+        ...canaryBase,
+        status: "failed_before_stage",
+        phase: "migration_review",
+        treeHash,
+        reviewedMigrations: [migration],
+        failure: "migration review failed",
+      },
+      {
+        ...canaryBase,
+        status: "failed_before_stage",
+        phase: "version_snapshot",
+        treeHash,
+        previousVersionId,
+        failure: "snapshot failed",
+      },
+      {
+        ...canaryBase,
+        status: "failed_before_stage",
+        phase: "migration_apply",
+        treeHash,
+        reviewedMigrations: [migration],
+        migrationApply: "failed",
+        previousVersionId,
+        failure: "migration failed",
+      },
+      ...(["full_preflight", "version_upload", "version_lookup"] as const).flatMap((phase) => [
+        {
+          ...canaryBase,
+          status: "failed_before_stage",
+          phase,
+          treeHash,
+          reviewedMigrations: [migration],
+          migrationApply: "succeeded",
+          previousVersionId,
+          failure: `${phase} failed`,
+        },
+        ...(["full_preflight", "version_upload", "version_lookup"].includes(phase) ? [{
+          ...canaryBase,
+          status: "failed_before_stage",
+          phase,
+          treeHash,
+          migrationApply: "not_needed",
+          previousVersionId,
+          failure: `${phase} failed`,
+        }] : []),
+      ]),
+      {
+        ...canaryBase,
+        status: "failed_before_stage",
+        phase: "rollback_version_lookup",
+        treeHash,
+        migrationApply: "not_needed",
+        failure: "target lookup failed",
+      },
+      {
+        ...canaryBase,
+        status: "failed_before_stage",
+        phase: "rollback_current_deployment",
+        treeHash,
+        migrationApply: "not_needed",
+        candidateVersionId,
+        failure: "current deployment failed",
+      },
+      {
+        ...canaryBase,
+        status: "failed_before_stage",
+        phase: "rollback_already_active",
+        treeHash,
+        migrationApply: "not_needed",
+        previousVersionId: candidateVersionId,
+        candidateVersionId,
+        failure: "target already active",
+      },
+      {
+        ...canaryBase,
+        status: "failed_before_stage",
+        phase: "protocol_ancestry",
+        treeHash,
+        reviewedMigrations: [migration],
+        previousVersionId,
+        failure: "ancestry failed",
+      },
+      ...(["rollback_protocol_ancestry", "rollback_active_version_mapping"] as const)
+        .map((phase) => ({
+          ...canaryBase,
+          status: "failed_before_stage",
+          phase,
+          treeHash,
+          migrationApply: "not_needed",
+          previousVersionId,
+          candidateVersionId,
+          failure: `${phase} failed`,
+        })),
+      {
+        ...canaryBase,
+        status: "failed_before_stage",
+        phase: "active_version_mapping",
+        treeHash,
+        reviewedMigrations: [migration],
+        previousVersionId,
+        failure: "mapping failed",
+      },
+      ...(["atomic-bootstrap", "atomic-product-activation"] as const).flatMap((releaseMode) => {
+        const atomicBase = {
+          sourceSha,
+          releaseMode,
+          deploymentStrategy: "atomic",
+          reviewedMigrations: [] as string[],
+          migrationApply: "not_started",
+          databaseRollbackSupported: false,
+        };
+        const early = [
+          "validate", "provenance", "initial_preflight", "build", "post_build_provenance",
+          "migration_list", "migration_review", "current_deployment", "version_snapshot",
+        ] as const;
+        const forwardPhases = [
+          "atomic_deploy", "version_lookup", "verify_promotion", "artifact",
+          ...(releaseMode === "atomic-bootstrap" ? ["bootstrap_probe" as const] : []),
+        ];
+        return [
+          {
+            ...atomicBase,
+            status: "promoted",
+            phase: "complete",
+            treeHash,
+            reviewedMigrations: [migration],
+            migrationApply: "succeeded",
+            previousVersionId,
+            candidateVersionId,
+          },
+          {
+            ...atomicBase,
+            status: "promoted",
+            phase: "complete",
+            treeHash,
+            migrationApply: "not_needed",
+            previousVersionId,
+            candidateVersionId,
+          },
+          ...early.map((phase) => ({
+            ...atomicBase,
+            status: "failed_before_stage",
+            phase,
+            ...(!["validate", "provenance"].includes(phase) ? { treeHash } : {}),
+            ...(phase === "version_snapshot" ? { previousVersionId } : {}),
+            ...(phase === "migration_review" ? { reviewedMigrations: [migration] } : {}),
+            failure: `${phase} failed`,
+          })),
+          {
+            ...atomicBase,
+            status: "failed_before_stage",
+            phase: "full_preflight",
+            treeHash,
+            migrationApply: "not_needed",
+            previousVersionId,
+            failure: "preflight failed",
+          },
+          {
+            ...atomicBase,
+            status: "forward_repair_required",
+            phase: "migration_apply",
+            treeHash,
+            reviewedMigrations: [migration],
+            migrationApply: "failed",
+            previousVersionId,
+            failure: "migration failed",
+          },
+          {
+            ...atomicBase,
+            status: "forward_repair_required",
+            phase: "full_preflight",
+            treeHash,
+            reviewedMigrations: [migration],
+            migrationApply: "succeeded",
+            previousVersionId,
+            failure: "preflight failed",
+          },
+          ...forwardPhases.flatMap((phase) => ["succeeded", "not_needed"].map((migrationApply) => ({
+            ...atomicBase,
+            status: "forward_repair_required",
+            phase,
+            treeHash,
+            reviewedMigrations: migrationApply === "succeeded" ? [migration] : [],
+            migrationApply,
+            previousVersionId,
+            ...(["verify_promotion", "bootstrap_probe", "artifact"].includes(phase)
+              ? { candidateVersionId }
+              : {}),
+            failure: `${phase} failed`,
+          }))),
+        ];
+      }),
+    ];
+
+    try {
+      await mkdir(path.dirname(artifactPath), { recursive: true });
+      for (const artifact of validArtifacts) {
+        const releaseMode = String(artifact.releaseMode);
+        const protocolBoundary = releaseMode === "protocol-v1-canary" ? boundary : "";
+        const script = workflowRunScript(
+          secureProductionDeployWorkflow(releaseMode, protocolBoundary),
+          "Ensure release artifact exists",
+          "Upload MCP OAuth canary artifacts",
+        );
+        const env = {
+          ...process.env,
+          SOURCE_SHA: sourceSha,
+          SPOONJOY_RELEASE_MODE: releaseMode,
+          SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: protocolBoundary,
+        };
+        await writeFile(artifactPath, JSON.stringify(artifact));
+        await execFile("bash", ["-c", script], { cwd: root, env });
+        expect(JSON.parse(await readFile(artifactPath, "utf8"))).toEqual(artifact);
+
+        const invalidMutations = [
+          { ...artifact, phase: "banana" },
+          { ...artifact, sourceSha: "main" },
+          { ...artifact, deploymentStrategy: releaseMode === "protocol-v1-canary" ? "atomic" : "gradual" },
+          { ...artifact, failure: "" },
+          { ...artifact, reviewedMigrations: ["0024_bad..name.sql"] },
+          { ...artifact, reviewedMigrations: [migration, migration] },
+          ...(["validate", "provenance", "initial_preflight", "build", "post_build_provenance", "migration_list"]
+              .includes(String(artifact.phase))
+            ? [{ ...artifact, reviewedMigrations: [migration] }]
+            : []),
+          ...(artifact.phase === "migration_review"
+            ? [{ ...artifact, reviewedMigrations: [] }]
+            : []),
+          ...(["version_lookup", "protocol_ancestry"].includes(String(artifact.phase))
+            ? [{ ...artifact, candidateVersionId }]
+            : []),
+          ...(artifact.phase === "rollback_already_active"
+            ? [{ ...artifact, previousVersionId, candidateVersionId }]
+            : [{ ...artifact, previousVersionId, candidateVersionId: previousVersionId }]),
+          {
+            ...artifact,
+            previousVersionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            candidateVersionId: "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",
+          },
+          ...(releaseMode === "protocol-v1-canary"
+            ? [{ ...artifact, protocolV1BoundarySha: undefined }]
+            : [{ ...artifact, protocolV1BoundarySha: boundary }]),
+        ];
+        for (const invalid of invalidMutations) {
+          await writeFile(artifactPath, JSON.stringify(invalid));
+          await execFile("bash", ["-c", script], { cwd: root, env });
+          expect(JSON.parse(await readFile(artifactPath, "utf8"))).toEqual({
+            status: releaseMode === "protocol-v1-canary"
+              ? "release_state_unknown"
+              : "forward_repair_required",
+            sourceSha,
+            releaseMode,
+            deploymentStrategy: releaseMode === "protocol-v1-canary" ? "gradual" : "atomic",
+            phase: "unknown",
+            reviewedMigrations: null,
+            migrationApply: "unknown",
+            databaseRollbackSupported: false,
+            failure: "Release workflow failed without a trustworthy orchestrator artifact.",
+            ...(protocolBoundary ? { protocolV1BoundarySha: protocolBoundary } : {}),
+          });
+        }
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  it.each([
+    ["a missing canary boundary", `  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: "${"d".repeat(40)}"`, '  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: ""'],
+    ["a malformed canary boundary", `  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: "${"d".repeat(40)}"`, '  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: "main"'],
+    [
+      "a missing rollback-mode guard",
+      '          if [ -n "$ROLLBACK_VERSION_ID" ] && [ "$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" ]; then',
+      '          if [ -n "$ROLLBACK_VERSION_ID" ]; then',
+    ],
+    [
+      "a missing protocol ancestry check",
+      '            git merge-base --is-ancestor "$SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA" "$SOURCE_SHA"',
+      "            true",
+    ],
+  ])("rejects protocol-v1-canary with %s", (_label, expected, replacement) => {
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow(
+      "protocol-v1-canary",
+      "d".repeat(40),
+    ).replace(expected, replacement);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it.each([
     ["a required manual source SHA", "        required: true", "        required: false"],
     ["manual dispatch inputs", "    inputs:", "    invalid_inputs:"],
     ["the source_sha input", "      source_sha:", "      invalid_source_sha:"],
@@ -758,8 +1710,8 @@ describe("deployment preflight", () => {
     ],
     [
       "trusted current-main rollback tooling",
-      "test -z \"$ROLLBACK_VERSION_ID\" || test \"$(git rev-parse HEAD)\" = \"$(git rev-parse origin/main)\"",
-      "test -z \"$ROLLBACK_VERSION_ID\"",
+      '            test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"',
+      "            true",
     ],
     [
       "a successful push-CI lookup for manual releases",
@@ -771,7 +1723,9 @@ describe("deployment preflight", () => {
     ["immutable action references", CHECKOUT_ACTION, "actions/checkout@v6"],
   ])("requires %s", (_name, expected, replacement) => {
     const inputs = validInputs();
-    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(expected, replacement);
+    const workflow = secureProductionDeployWorkflow();
+    inputs.productionDeployWorkflow = workflow.replace(expected, replacement);
+    expect(inputs.productionDeployWorkflow).not.toBe(workflow);
 
     const result = validateDeploymentConfig(inputs);
 
@@ -842,6 +1796,16 @@ describe("deployment preflight", () => {
       "      - name: Ignore missing release artifact",
     ],
     [
+      "an always-running fallback release artifact",
+      "      - name: Ensure release artifact exists\n        if: always()",
+      "      - name: Ensure release artifact exists\n        if: success()",
+    ],
+    [
+      "an always-running release artifact upload",
+      "      - name: Upload MCP OAuth canary artifacts\n        if: always()",
+      "      - name: Upload MCP OAuth canary artifacts\n        if: success()",
+    ],
+    [
       "a non-skipped report gate",
       "    if: always() && needs.deploy.result != 'skipped'",
       "    if: always()",
@@ -909,7 +1873,7 @@ describe("deployment preflight", () => {
   it("rejects a secure production workflow whose block deploy step never deploys", () => {
     const inputs = validInputs();
     inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
-      "          else\n            pnpm run deploy:auto",
+      "          else\n            pnpm run deploy:auto -- --release-mode \"$SPOONJOY_RELEASE_MODE\"",
       "          else\n            echo no-deploy-command",
     );
 
