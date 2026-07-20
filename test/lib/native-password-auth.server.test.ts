@@ -5,6 +5,7 @@ import { db, getLocalDb } from "~/lib/db.server";
 import { createUser } from "~/lib/auth.server";
 import { NativePasswordAuthError } from "~/lib/native-password-auth.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { expectConsoleError } from "../warning-policy";
 
 function routeArgs(request: Request, splat = "auth/password/native") {
   return {
@@ -113,8 +114,18 @@ describe("native username/password sign-in API", () => {
     await createUser(db, "token-failure@example.com", "native_token_failure", "correctHorseBatteryStaple");
     const localDb = await getLocalDb();
     const originalUpsert = localDb.oAuthClient.upsert;
-    localDb.oAuthClient.upsert = vi.fn().mockRejectedValueOnce(new Error("token store unavailable")) as typeof localDb.oAuthClient.upsert;
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const tokenStoreError = new Error("token store unavailable");
+    localDb.oAuthClient.upsert = vi.fn().mockRejectedValueOnce(tokenStoreError) as typeof localDb.oAuthClient.upsert;
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_native_password_unexpected",
+      method: "POST",
+      path: "/api/v1/auth/password/native",
+      error: {
+        name: tokenStoreError.name,
+        message: tokenStoreError.message,
+        stack: tokenStoreError.stack,
+      },
+    });
     try {
       const response = await action(routeArgs(jsonRequest({
         emailOrUsername: "native_token_failure",
@@ -127,7 +138,6 @@ describe("native username/password sign-in API", () => {
         code: "internal_error",
         status: 500,
       });
-      expect(consoleErrorSpy).toHaveBeenCalledWith("[api-v1] internal_error", expect.any(Object));
     } finally {
       localDb.oAuthClient.upsert = originalUpsert;
     }

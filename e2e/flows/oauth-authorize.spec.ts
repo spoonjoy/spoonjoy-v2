@@ -1,5 +1,9 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from "../fixtures";
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
+import {
+  e2eOauthClientName,
+  recordE2eOauthClient,
+} from '../../scripts/e2e-run-cleanup.mjs';
 import { loginAsSeedUser } from '../support/auth';
 
 /**
@@ -11,14 +15,15 @@ import { loginAsSeedUser } from '../support/auth';
  * scope-aware consent screen after login, and redirect back to the registered
  * redirect_uri with either a `code` (approve) or `error=access_denied` (deny).
  *
- * The redirect_uri is intercepted so the assertion reads the exact callback URL
- * the server emits, independent of whatever that in-app route would do next.
+ * The redirect_uri uses a stable same-origin page so the assertion can read the
+ * exact callback URL without an intentional failed resource load.
  *
  * Runs in the `oauth` project (no stored auth state) and uses the shared seed
- * user — it only reads, so it never mutates the seed account.
+ * user. Its OAuth graph is registered with the unique Playwright run marker,
+ * captured by exact client ID, and removed by global teardown.
  */
 
-const REDIRECT_URI = 'http://localhost:5173/oauth/e2e-callback';
+const REDIRECT_URI = 'http://localhost:5197/privacy';
 const MCP_RESOURCE = 'https://spoonjoy.app/mcp';
 const APPROVE_STATE = 'oauth-e2e-approve-state';
 const DENY_STATE = 'oauth-e2e-deny-state';
@@ -41,12 +46,19 @@ async function pkceChallenge(verifier: string): Promise<string> {
 }
 
 async function registerClient(request: APIRequestContext): Promise<string> {
+  const runId = process.env.SPOONJOY_E2E_RUN_ID;
+  expect(runId, 'Playwright must provide an isolated E2E run ID').toBeTruthy();
   const res = await request.post('/oauth/register', {
-    data: { client_name: 'E2E OAuth Client', redirect_uris: [REDIRECT_URI] },
+    data: { client_name: e2eOauthClientName(runId!), redirect_uris: [REDIRECT_URI] },
   });
   expect(res.status()).toBe(201);
   const body = (await res.json()) as { client_id: string };
   expect(body.client_id).toBeTruthy();
+  await recordE2eOauthClient({
+    projectRoot: process.cwd(),
+    runId: runId!,
+    clientId: body.client_id,
+  });
   return body.client_id;
 }
 
@@ -163,8 +175,8 @@ async function expectConsentFitsDesktop(page: Page): Promise<void> {
 
 /**
  * Resolves with the exact callback URL once the native form POST redirects the
- * browser to the registered redirect_uri. The callback path can render a local
- * 404; the URL is the OAuth contract under test.
+ * browser to the registered redirect_uri. The URL is the OAuth contract under
+ * test; the page body is otherwise irrelevant.
  */
 async function waitForCallbackNavigation(page: Page): Promise<URL> {
   await page.waitForURL((url) => url.href.startsWith(REDIRECT_URI), { timeout: 15_000 });
@@ -195,7 +207,7 @@ test.describe('OAuth authorize + consent flow', () => {
     // Log in as the seed user; the preserved redirectTo lands us on consent.
     await loginAsSeedUser(page, /\/oauth\/authorize\?/);
 
-    await expect(page.getByRole('heading', { name: /connect e2e oauth client to spoonjoy/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /connect e2e oauth client .+ to spoonjoy/i })).toBeVisible();
     expect(new URL(page.url()).pathname).toBe('/oauth/authorize');
     await expect(page.getByText(/read recipes, cookbooks, and your shopping list/i)).toBeVisible();
     await expect(page.getByText(/this connection stays active until you disconnect it/i)).toBeVisible();

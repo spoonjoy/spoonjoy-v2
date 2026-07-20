@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { vi } from "vitest";
 
 import * as cleanup from "../../scripts/cleanup-local-qa-data.mjs";
+import { expectConsoleError } from "../warning-policy";
 
 const { buildApplySql, buildDryRunSql, wranglerLocalD1Args } = cleanup;
 
@@ -50,7 +51,7 @@ describe("cleanup-local-qa-data", () => {
     expect(sql).toContain("lower(title) LIKE 'codex %'");
     expect(sql).toContain("email LIKE 'codex-%'");
     expect(sql).toContain("email LIKE 'e2e-passkey-%'");
-    expect(sql).toContain("clientName = 'E2E OAuth Client'");
+    expect(sql).not.toContain("E2E OAuth Client");
   });
 
   it("soft-deletes recipes and deletes only disposable local support rows on apply", () => {
@@ -58,11 +59,10 @@ describe("cleanup-local-qa-data", () => {
 
     expect(sql).toContain("UPDATE Recipe");
     expect(sql).toContain("SET deletedAt = CURRENT_TIMESTAMP");
-    expect(sql).toContain("DELETE FROM OAuthAuthCode");
-    expect(sql).toContain("DELETE FROM OAuthClient");
+    expect(sql).not.toContain("DELETE FROM OAuthClient");
     expect(sql).toContain("DELETE FROM UserCredential");
     expect(sql).toContain("DELETE FROM User");
-    expect(sql).not.toContain("DROP TABLE");
+    expect(sql).toContain("DROP TABLE IF EXISTS main.disposable_users");
   });
 
   it("builds local-only Wrangler D1 args", () => {
@@ -185,9 +185,14 @@ describe("cleanup-local-qa-data", () => {
     });
 
     expect(stdout.text()).toContain("Applied local QA cleanup.");
-    expect(runCommand).toHaveBeenLastCalledWith(
+    expect(runCommand).toHaveBeenCalledWith(
       "pnpm",
       ["exec", "wrangler", "d1", "execute", "DB", "--local", "--command", buildApplySql()],
+      expect.objectContaining({ encoding: "utf8" }),
+    );
+    expect(runCommand).toHaveBeenLastCalledWith(
+      "pnpm",
+      ["exec", "wrangler", "d1", "execute", "DB", "--local", "--command", cleanup.buildScratchCleanupSql()],
       expect.objectContaining({ encoding: "utf8" }),
     );
   });
@@ -320,14 +325,15 @@ describe("cleanup-local-qa-data", () => {
 
     const calls = runCommand.mock.calls.map((call) => call[1] as string[]);
     const joinedCalls = calls.map((args) => args.join(" "));
-    expect(joinedCalls[1]).toContain("sqlite_master");
-    expect(joinedCalls[1]).toContain("SearchDocument");
-    expect(joinedCalls[1]).toContain("SearchIndexMetadata");
-    expect(joinedCalls[2]).toContain("candidate_r2_keys");
-    expect(joinedCalls[3]).toContain(cleanup.buildBlockerReportSql());
-    expect(joinedCalls[4]).toContain(buildApplySql());
-    expect(joinedCalls.slice(1, 4)).not.toEqual(expect.arrayContaining([expect.stringContaining("FROM SearchDocument")]));
-    expect(calls.slice(5)).toEqual([
+    expect(joinedCalls[1]).toContain(cleanup.buildScratchCleanupSql());
+    expect(joinedCalls[2]).toContain("sqlite_master");
+    expect(joinedCalls[2]).toContain("SearchDocument");
+    expect(joinedCalls[2]).toContain("SearchIndexMetadata");
+    expect(joinedCalls[3]).toContain("candidate_r2_keys");
+    expect(joinedCalls[4]).toContain(cleanup.buildBlockerReportSql());
+    expect(joinedCalls[5]).toContain(buildApplySql());
+    expect(joinedCalls.slice(2, 5)).not.toEqual(expect.arrayContaining([expect.stringContaining("FROM SearchDocument")]));
+    expect(calls.slice(6, -1)).toEqual([
       cleanup.buildQaR2DeleteArgs("profiles/codex-user/avatar.jpg"),
       cleanup.buildQaR2GetArgs("profiles/codex-user/avatar.jpg"),
       cleanup.buildQaR2DeleteArgs("recipes/codex-user/recipe-1/source.jpg"),
@@ -335,6 +341,7 @@ describe("cleanup-local-qa-data", () => {
       cleanup.buildQaR2DeleteArgs("spoons/codex-user/recipe-1/spoon.jpg"),
       cleanup.buildQaR2GetArgs("spoons/codex-user/recipe-1/spoon.jpg"),
     ]);
+    expect(joinedCalls.at(-1)).toContain(cleanup.buildScratchCleanupSql());
     expect(stdout.text()).toContain("Retained QA R2 keys: recipes/not-disposable/recipe-1/source.jpg");
     expect(stdout.text()).toContain("Skipped SearchDocument cleanup: table absent.");
     expect(stdout.text()).toContain("Applied QA D1 cleanup.");
@@ -405,18 +412,16 @@ describe("cleanup-local-qa-data", () => {
   });
 
   it("prints default CLI error output for Error and non-Error failures", () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-
+    expectConsoleError("cleanup failed");
     cleanup.defaultCliErrorHandler(new Error("cleanup failed"));
-    expect(errorSpy).toHaveBeenLastCalledWith("cleanup failed");
     expect(process.exitCode).toBe(1);
 
+    expectConsoleError("string failure");
     cleanup.defaultCliErrorHandler("string failure");
-    expect(errorSpy).toHaveBeenLastCalledWith("string failure");
     expect(process.exitCode).toBe(1);
   });
 
-  it("dry-runs the full D1 disposable target surface with hard/soft split and OAuth redirect signature", () => {
+  it("dry-runs the full D1 disposable target surface without inferring OAuth ownership", () => {
     const sql = buildDryRunSql();
 
     expectAll(sql, [
@@ -424,16 +429,11 @@ describe("cleanup-local-qa-data", () => {
       "'soft-delete suspicious recipes owned by non-disposable users'",
       "'disposable users'",
       "'disposable spoons by chef or note'",
-      "'e2e oauth clients with test redirect signature'",
       "'cross-boundary cleanup blockers'",
-      "clientName = 'E2E OAuth Client'",
-      "redirectUris LIKE '%codex%'",
-      "redirectUris LIKE '%e2e%'",
-      "redirectUris LIKE '%localhost%'",
-      "redirectUris LIKE '%127.0.0.1%'",
       "chefId IN (SELECT id FROM disposable_users)",
       "chefId NOT IN (SELECT id FROM disposable_users)",
     ]);
+    expect(sql).not.toContain("OAuthClient");
   });
 
   it("dry-run blocker count is computed from real cross-boundary blocker queries", () => {
@@ -451,21 +451,22 @@ describe("cleanup-local-qa-data", () => {
     const sql = buildApplySql();
 
     expectInOrder(sql, [
-      "CREATE TEMP TABLE disposable_users",
-      "CREATE TEMP TABLE hard_delete_recipes",
-      "CREATE TEMP TABLE soft_delete_recipes",
-      "CREATE TEMP TABLE disposable_spoons",
-      "CREATE TEMP TABLE e2e_oauth_clients",
-      "CREATE TEMP TABLE disposable_credentials",
-      "CREATE TEMP TABLE cleanup_blockers",
+      "CREATE TABLE disposable_users",
+      "CREATE TABLE hard_delete_recipes",
+      "CREATE TABLE soft_delete_recipes",
+      "CREATE TABLE disposable_spoons",
+      "CREATE TABLE disposable_credentials",
+      "CREATE TABLE cleanup_blockers",
     ]);
     expectAll(sql, [
       "INSERT INTO disposable_credentials",
       "ApiCredential",
-      "oauthClientId IN (SELECT id FROM e2e_oauth_clients)",
-      "clientName = 'E2E OAuth Client'",
-      "(redirectUris LIKE '%codex%' OR redirectUris LIKE '%e2e%' OR redirectUris LIKE '%localhost%' OR redirectUris LIKE '%127.0.0.1%')",
+      "CREATE TABLE disposable_users",
+      "DROP TABLE IF EXISTS main.disposable_users",
     ]);
+    expect(sql).not.toContain("SELECT id FROM OAuthClient");
+    expect(sql).not.toContain("DELETE FROM OAuthClient");
+    expect(sql).not.toContain("clientName = 'E2E OAuth Client'");
   });
 
   it("blocker-reports every non-disposable cross-boundary D1 reference before mutation", () => {
@@ -482,14 +483,35 @@ describe("cleanup-local-qa-data", () => {
       "blocker_agent_connection_approvedById",
       "blocker_agent_connection_credentialId",
       "blocker_api_idempotency_credentialId",
-      "blocker_api_credential_oauthClientId",
-      "blocker_oauth_code_userId",
-      "blocker_oauth_refresh_token_userId",
       "blocker_notification_payload",
-      "blocker_ambiguous_oauth_client",
       "SELECT CASE WHEN EXISTS (SELECT 1 FROM cleanup_blockers)",
       "RAISE(ABORT, 'Refusing cleanup because non-disposable rows still reference disposable targets')",
     ]);
+  });
+
+  it("builds exact-ID OAuth cleanup without weakening broad disposable-user blockers", () => {
+    const applySql = buildApplySql();
+    const blockerSql = cleanup.buildBlockerReportSql();
+    const exactSql = cleanup.buildExactOauthClientCleanupSql(["client-exact", "client-'quoted"]);
+
+    expectAll(exactSql, [
+      "oauthClientId IN ('client-exact', 'client-''quoted')",
+      "DELETE FROM ApiMutationTombstone",
+      "DELETE FROM AgentConnectionRequest",
+      "DELETE FROM ApiIdempotencyKey",
+      "DELETE FROM ApiCredential",
+      "DELETE FROM OAuthAuthCode",
+      "DELETE FROM OAuthRefreshToken",
+      "DELETE FROM OAuthClient",
+      "WHERE id IN ('client-exact', 'client-''quoted')",
+    ]);
+    expect(exactSql).not.toContain("clientName");
+    expect(exactSql).not.toContain("redirectUris");
+    expect(applySql).not.toContain("OAuthClient");
+    expect(blockerSql).not.toContain("OAuthClient");
+    expect(() => cleanup.buildExactOauthClientCleanupSql([])).toThrow(/exact OAuth client ID/);
+    expect(() => cleanup.buildExactOauthClientCleanupSql([""])).toThrow(/non-empty string/);
+    expect(() => cleanup.buildExactOauthClientCleanupSql([123])).toThrow(/non-empty string/);
   });
 
   it("orders credential, OAuth, cookbook, cover, spoon, recipe, user, and cascade cleanup safely", () => {
@@ -500,9 +522,6 @@ describe("cleanup-local-qa-data", () => {
       "DELETE FROM AgentConnectionRequest",
       "DELETE FROM ApiIdempotencyKey",
       "DELETE FROM ApiCredential",
-      "DELETE FROM OAuthAuthCode",
-      "DELETE FROM OAuthRefreshToken",
-      "DELETE FROM OAuthClient",
       "DELETE FROM NativePushDevice",
       "DELETE FROM RecipeCover",
       "DELETE FROM RecipeSpoon",
@@ -902,6 +921,40 @@ describe("cleanup-local-qa-data", () => {
     expect(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "))).not.toEqual(
       expect.arrayContaining([expect.stringContaining(buildApplySql())]),
     );
+    expect(runCommand.mock.calls.map((call) => (call[1] as string[]).at(-1))).toEqual([
+      expect.stringContaining(cleanup.buildScratchCleanupSql()),
+      expect.any(String),
+      expect.stringContaining(cleanup.buildBlockerReportSql()),
+      expect.stringContaining(cleanup.buildScratchCleanupSql()),
+    ]);
+  });
+
+  it("drops scratch schema in finally when the D1 apply command fails", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      const sql = args.at(-1);
+      if (sql === buildApplySql()) throw new Error("D1 apply failed");
+      return { stdout: "[]", stderr: "" };
+    });
+
+    await expect(cleanup.runCleanupCli({
+      argv: ["--target-env", "local", "--apply"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    })).rejects.toThrow("D1 apply failed");
+
+    expect(runCommand.mock.calls.at(-1)?.[1]).toEqual([
+      "exec",
+      "wrangler",
+      "d1",
+      "execute",
+      "DB",
+      "--local",
+      "--command",
+      cleanup.buildScratchCleanupSql(),
+    ]);
   });
 
   it("runs QA apply with no R2 candidates and no R2 delete/get commands", async () => {

@@ -14,6 +14,18 @@ const execFileAsync = promisify(execFile);
 const DEFAULT_LOCAL_BASE_URL = "http://localhost:5173";
 const DEFAULT_PRODUCTION_CLEANUP_BASE_URL = "https://spoonjoy.app";
 const MAX_WRANGLER_BUFFER = 1024 * 1024 * 8;
+const CLEANUP_SCRATCH_TABLES = [
+  "cleanup_blockers",
+  "disposable_credentials",
+  "e2e_oauth_credentials",
+  "disposable_cover_image_urls",
+  "disposable_covers",
+  "e2e_oauth_clients",
+  "disposable_spoons",
+  "soft_delete_recipes",
+  "hard_delete_recipes",
+  "disposable_users",
+];
 
 export const SUSPICIOUS_RECIPE_WHERE = [
   "lower(title) LIKE 'e2e %'",
@@ -35,11 +47,6 @@ export const DISPOSABLE_SPOON_WHERE = [
   "lower(coalesce(note,'')) LIKE 'codex %'",
   "lower(coalesce(note,'')) LIKE 'playwright%'",
 ].join("\n    OR ");
-
-export const E2E_OAUTH_CLIENT_WHERE = [
-  "clientName = 'E2E OAuth Client'",
-  "(redirectUris LIKE '%codex%' OR redirectUris LIKE '%e2e%' OR redirectUris LIKE '%localhost%' OR redirectUris LIKE '%127.0.0.1%')",
-].join("\n    AND ");
 
 export function photoKeyFromImageUrl(imageUrl) {
   if (typeof imageUrl !== "string" || !imageUrl.startsWith("/photos/")) return null;
@@ -388,10 +395,6 @@ WITH
     WHERE chefId IN (SELECT id FROM disposable_users)
        OR ${DISPOSABLE_SPOON_WHERE}
   ),
-  e2e_oauth_clients AS (
-    SELECT id FROM OAuthClient
-    WHERE ${E2E_OAUTH_CLIENT_WHERE}
-  ),
   disposable_covers AS (
     SELECT id FROM RecipeCover
     WHERE recipeId IN (SELECT id FROM hard_delete_recipes)
@@ -399,7 +402,6 @@ WITH
   disposable_credentials AS (
     SELECT id FROM ApiCredential
     WHERE userId IN (SELECT id FROM disposable_users)
-       OR oauthClientId IN (SELECT id FROM e2e_oauth_clients)
   )
 `.trim();
 }
@@ -477,34 +479,6 @@ WHERE credentialId IN (SELECT id FROM disposable_credentials)
       fromWhere: `FROM ApiIdempotencyKey
 WHERE credentialId IN (SELECT id FROM disposable_credentials)
   AND userId NOT IN (SELECT id FROM disposable_users)`,
-    },
-    {
-      blocker: "blocker_api_credential_oauthClientId",
-      rowId: "id",
-      fromWhere: `FROM ApiCredential
-WHERE oauthClientId IN (SELECT id FROM e2e_oauth_clients)
-  AND userId NOT IN (SELECT id FROM disposable_users)`,
-    },
-    {
-      blocker: "blocker_oauth_code_userId",
-      rowId: "id",
-      fromWhere: `FROM OAuthAuthCode
-WHERE clientId IN (SELECT id FROM e2e_oauth_clients)
-  AND userId NOT IN (SELECT id FROM disposable_users)`,
-    },
-    {
-      blocker: "blocker_oauth_refresh_token_userId",
-      rowId: "id",
-      fromWhere: `FROM OAuthRefreshToken
-WHERE clientId IN (SELECT id FROM e2e_oauth_clients)
-  AND userId NOT IN (SELECT id FROM disposable_users)`,
-    },
-    {
-      blocker: "blocker_ambiguous_oauth_client",
-      rowId: "id",
-      fromWhere: `FROM OAuthClient
-WHERE clientName = 'E2E OAuth Client'
-  AND id NOT IN (SELECT id FROM e2e_oauth_clients)`,
     },
     {
       blocker: "blocker_notification_payload",
@@ -646,10 +620,6 @@ FROM RecipeSpoon
 WHERE chefId IN (SELECT id FROM disposable_users)
    OR ${DISPOSABLE_SPOON_WHERE};
 
-SELECT 'e2e oauth clients with test redirect signature' AS item, COUNT(*) AS count
-FROM OAuthClient
-WHERE ${E2E_OAUTH_CLIENT_WHERE};
-
 ${cleanupTargetCtesSql()}
 SELECT 'cross-boundary cleanup blockers' AS item,
   ${cleanupBlockerQueries().map((query) => `/* ${query.blocker} */ (SELECT COUNT(*) ${query.fromWhere})`).join("\n  + ")} AS count;
@@ -689,56 +659,48 @@ WHERE ownerId IN (SELECT id FROM disposable_users)
   return statements.join("\n\n");
 }
 
+export function buildScratchCleanupSql() {
+  return CLEANUP_SCRATCH_TABLES
+    .map((table) => `DROP TABLE IF EXISTS main.${table};`)
+    .join("\n");
+}
+
 export function buildApplySql({ existingSearchTables = [] } = {}) {
   const searchCleanupSql = buildSearchCleanupSql(existingSearchTables);
   return `
 PRAGMA foreign_keys=ON;
 
--- CREATE TEMP TABLE disposable_users
-CREATE TABLE IF NOT EXISTS disposable_users (id TEXT PRIMARY KEY);
-DELETE FROM disposable_users;
+-- Remove scratch schema left by cleanup versions that accidentally used main tables.
+${buildScratchCleanupSql()}
+
+CREATE TABLE disposable_users (id TEXT PRIMARY KEY);
 INSERT INTO disposable_users
 SELECT id FROM User
 WHERE ${DISPOSABLE_USER_WHERE};
 
--- CREATE TEMP TABLE hard_delete_recipes
-CREATE TABLE IF NOT EXISTS hard_delete_recipes (id TEXT PRIMARY KEY);
-DELETE FROM hard_delete_recipes;
+CREATE TABLE hard_delete_recipes (id TEXT PRIMARY KEY);
 INSERT INTO hard_delete_recipes
 SELECT id FROM Recipe
 WHERE chefId IN (SELECT id FROM disposable_users);
 
--- CREATE TEMP TABLE soft_delete_recipes
-CREATE TABLE IF NOT EXISTS soft_delete_recipes (id TEXT PRIMARY KEY);
-DELETE FROM soft_delete_recipes;
+CREATE TABLE soft_delete_recipes (id TEXT PRIMARY KEY);
 INSERT INTO soft_delete_recipes
 SELECT id FROM Recipe
 WHERE (${SUSPICIOUS_RECIPE_WHERE})
   AND chefId NOT IN (SELECT id FROM disposable_users);
 
--- CREATE TEMP TABLE disposable_spoons
-CREATE TABLE IF NOT EXISTS disposable_spoons (id TEXT PRIMARY KEY);
-DELETE FROM disposable_spoons;
+CREATE TABLE disposable_spoons (id TEXT PRIMARY KEY);
 INSERT INTO disposable_spoons
 SELECT id FROM RecipeSpoon
 WHERE chefId IN (SELECT id FROM disposable_users)
    OR ${DISPOSABLE_SPOON_WHERE};
 
--- CREATE TEMP TABLE e2e_oauth_clients
-CREATE TABLE IF NOT EXISTS e2e_oauth_clients (id TEXT PRIMARY KEY);
-DELETE FROM e2e_oauth_clients;
-INSERT INTO e2e_oauth_clients
-SELECT id FROM OAuthClient
-WHERE ${E2E_OAUTH_CLIENT_WHERE};
-
-CREATE TABLE IF NOT EXISTS disposable_covers (id TEXT PRIMARY KEY);
-DELETE FROM disposable_covers;
+CREATE TABLE disposable_covers (id TEXT PRIMARY KEY);
 INSERT INTO disposable_covers
 SELECT id FROM RecipeCover
 WHERE recipeId IN (SELECT id FROM hard_delete_recipes);
 
-CREATE TABLE IF NOT EXISTS disposable_cover_image_urls (imageUrl TEXT PRIMARY KEY);
-DELETE FROM disposable_cover_image_urls;
+CREATE TABLE disposable_cover_image_urls (imageUrl TEXT PRIMARY KEY);
 INSERT OR IGNORE INTO disposable_cover_image_urls
 SELECT imageUrl FROM RecipeCover
 WHERE id IN (SELECT id FROM disposable_covers)
@@ -752,20 +714,15 @@ SELECT sourceImageUrl FROM RecipeCover
 WHERE id IN (SELECT id FROM disposable_covers)
   AND sourceImageUrl LIKE '/photos/%';
 
--- CREATE TEMP TABLE disposable_credentials
-CREATE TABLE IF NOT EXISTS disposable_credentials (id TEXT PRIMARY KEY);
-DELETE FROM disposable_credentials;
+CREATE TABLE disposable_credentials (id TEXT PRIMARY KEY);
 INSERT INTO disposable_credentials
 SELECT id FROM ApiCredential
-WHERE userId IN (SELECT id FROM disposable_users)
-   OR oauthClientId IN (SELECT id FROM e2e_oauth_clients);
+WHERE userId IN (SELECT id FROM disposable_users);
 
--- CREATE TEMP TABLE cleanup_blockers
-CREATE TABLE IF NOT EXISTS cleanup_blockers (
+CREATE TABLE cleanup_blockers (
   blocker TEXT NOT NULL,
   rowId TEXT NOT NULL
 );
-DELETE FROM cleanup_blockers;
 
 INSERT INTO cleanup_blockers (blocker, rowId)
 SELECT 'blocker_recipe_sourceRecipeId', id FROM Recipe
@@ -822,26 +779,6 @@ WHERE credentialId IN (SELECT id FROM disposable_credentials)
   AND userId NOT IN (SELECT id FROM disposable_users);
 
 INSERT INTO cleanup_blockers (blocker, rowId)
-SELECT 'blocker_api_credential_oauthClientId', id FROM ApiCredential
-WHERE oauthClientId IN (SELECT id FROM e2e_oauth_clients)
-  AND userId NOT IN (SELECT id FROM disposable_users);
-
-INSERT INTO cleanup_blockers (blocker, rowId)
-SELECT 'blocker_oauth_code_userId', id FROM OAuthAuthCode
-WHERE clientId IN (SELECT id FROM e2e_oauth_clients)
-  AND userId NOT IN (SELECT id FROM disposable_users);
-
-INSERT INTO cleanup_blockers (blocker, rowId)
-SELECT 'blocker_oauth_refresh_token_userId', id FROM OAuthRefreshToken
-WHERE clientId IN (SELECT id FROM e2e_oauth_clients)
-  AND userId NOT IN (SELECT id FROM disposable_users);
-
-INSERT INTO cleanup_blockers (blocker, rowId)
-SELECT 'blocker_ambiguous_oauth_client', id FROM OAuthClient
-WHERE clientName = 'E2E OAuth Client'
-  AND id NOT IN (SELECT id FROM e2e_oauth_clients);
-
-INSERT INTO cleanup_blockers (blocker, rowId)
 SELECT 'blocker_notification_payload', id FROM NotificationEvent
 WHERE recipientId NOT IN (SELECT id FROM disposable_users)
   AND (
@@ -869,17 +806,6 @@ WHERE userId IN (SELECT id FROM disposable_users)
 
 DELETE FROM ApiCredential
 WHERE id IN (SELECT id FROM disposable_credentials);
-
-DELETE FROM OAuthAuthCode
-WHERE clientId IN (SELECT id FROM e2e_oauth_clients)
-  AND userId IN (SELECT id FROM disposable_users);
-
-DELETE FROM OAuthRefreshToken
-WHERE clientId IN (SELECT id FROM e2e_oauth_clients)
-  AND userId IN (SELECT id FROM disposable_users);
-
-DELETE FROM OAuthClient
-WHERE id IN (SELECT id FROM e2e_oauth_clients);
 
 DELETE FROM OAuth
 WHERE userId IN (SELECT id FROM disposable_users);
@@ -932,15 +858,60 @@ ${searchCleanupSql ? `${searchCleanupSql}\n` : ""}
 DELETE FROM User
 WHERE id IN (SELECT id FROM disposable_users);
 
-DELETE FROM cleanup_blockers;
-DELETE FROM disposable_credentials;
-DELETE FROM disposable_cover_image_urls;
-DELETE FROM disposable_covers;
-DELETE FROM e2e_oauth_clients;
-DELETE FROM disposable_spoons;
-DELETE FROM soft_delete_recipes;
-DELETE FROM hard_delete_recipes;
-DELETE FROM disposable_users;
+${buildScratchCleanupSql()}
+`.trim();
+}
+
+export function buildExactOauthClientCleanupSql(clientIds) {
+  if (!Array.isArray(clientIds) || clientIds.length === 0) {
+    throw new Error("At least one exact OAuth client ID is required.");
+  }
+  if (clientIds.some((clientId) => typeof clientId !== "string" || clientId.length === 0)) {
+    throw new Error("Every exact OAuth client ID must be a non-empty string.");
+  }
+
+  const exactIds = unique(clientIds).map(sqlString).join(", ");
+  const exactCredentialIds = `
+    SELECT id FROM ApiCredential
+    WHERE oauthClientId IN (${exactIds})
+  `.trim();
+  const exactIdempotencyIds = `
+    SELECT id FROM ApiIdempotencyKey
+    WHERE credentialId IN (${exactCredentialIds})
+  `.trim();
+
+  return `
+PRAGMA foreign_keys=ON;
+
+DELETE FROM ApiMutationTombstone
+WHERE idempotencyKeyId IN (${exactIdempotencyIds});
+
+DELETE FROM AgentConnectionRequest
+WHERE credentialId IN (${exactCredentialIds});
+
+DELETE FROM ApiIdempotencyKey
+WHERE credentialId IN (${exactCredentialIds});
+
+DELETE FROM ApiCredential
+WHERE oauthClientId IN (${exactIds});
+
+DELETE FROM OAuthAuthCode
+WHERE clientId IN (${exactIds});
+
+DELETE FROM OAuthRefreshToken
+WHERE clientId IN (${exactIds});
+
+DELETE FROM OAuthClient
+WHERE id IN (${exactIds});
+
+SELECT
+  (SELECT COUNT(*) FROM OAuthClient WHERE id IN (${exactIds}))
+  + (SELECT COUNT(*) FROM OAuthAuthCode WHERE clientId IN (${exactIds}))
+  + (SELECT COUNT(*) FROM OAuthRefreshToken WHERE clientId IN (${exactIds}))
+  + (SELECT COUNT(*) FROM ApiCredential WHERE oauthClientId IN (${exactIds}))
+  AS remainingCount;
+
+PRAGMA foreign_key_check;
 `.trim();
 }
 
@@ -954,8 +925,18 @@ ${query.fromWhere};
     .join("\n\n");
 }
 
-export function wranglerLocalD1Args(dbName, sql) {
-  return ["exec", "wrangler", "d1", "execute", dbName, "--local", "--command", sql];
+export function wranglerLocalD1Args(dbName, sql, persistTo) {
+  return [
+    "exec",
+    "wrangler",
+    "d1",
+    "execute",
+    dbName,
+    "--local",
+    ...(persistTo ? ["--persist-to", persistTo] : []),
+    "--command",
+    sql,
+  ];
 }
 
 export function wranglerD1Args(dbName, sql, target) {
@@ -1060,59 +1041,70 @@ export async function runCleanupCli({
     stdout.write("Production cleanup is read-only for broad disposable sweeps.\n");
   }
 
-  const existingSearchTables = options.apply
-    ? await collectExistingSearchTables({
-      dbName: options.dbName,
-      target: options.target,
-      runCommand,
-    })
-    : new Set();
-  if (options.apply && !existingSearchTables.has("SearchDocument")) {
-    stdout.write("Skipped SearchDocument cleanup: table absent.\n");
-  }
-  if (options.apply && !existingSearchTables.has("SearchIndexMetadata")) {
-    stdout.write("Skipped SearchIndexMetadata cleanup: table absent.\n");
-  }
+  const removeScratchSchema = () => runCommand(
+    "pnpm",
+    wranglerD1Args(options.dbName, buildScratchCleanupSql(), options.target),
+    { encoding: "utf8", maxBuffer: MAX_WRANGLER_BUFFER },
+  );
+  if (options.apply) await removeScratchSchema();
 
-  let qaR2Candidates = { deleteKeys: [], retainedKeys: [] };
-  if (options.apply && options.target.targetEnv === "qa") {
-    qaR2Candidates = await collectQaR2Candidates({
-      dbName: options.dbName,
-      target: options.target,
-      runCommand,
-      existingSearchTables,
-    });
-    if (qaR2Candidates.retainedKeys.length > 0) {
-      stdout.write(`Retained QA R2 keys: ${qaR2Candidates.retainedKeys.join(", ")}\n`);
+  try {
+    const existingSearchTables = options.apply
+      ? await collectExistingSearchTables({
+        dbName: options.dbName,
+        target: options.target,
+        runCommand,
+      })
+      : new Set();
+    if (options.apply && !existingSearchTables.has("SearchDocument")) {
+      stdout.write("Skipped SearchDocument cleanup: table absent.\n");
     }
-  }
+    if (options.apply && !existingSearchTables.has("SearchIndexMetadata")) {
+      stdout.write("Skipped SearchIndexMetadata cleanup: table absent.\n");
+    }
 
-  if (options.apply) {
-    await assertNoCleanupBlockers({
-      dbName: options.dbName,
-      target: options.target,
-      runCommand,
+    let qaR2Candidates = { deleteKeys: [], retainedKeys: [] };
+    if (options.apply && options.target.targetEnv === "qa") {
+      qaR2Candidates = await collectQaR2Candidates({
+        dbName: options.dbName,
+        target: options.target,
+        runCommand,
+        existingSearchTables,
+      });
+      if (qaR2Candidates.retainedKeys.length > 0) {
+        stdout.write(`Retained QA R2 keys: ${qaR2Candidates.retainedKeys.join(", ")}\n`);
+      }
+    }
+
+    if (options.apply) {
+      await assertNoCleanupBlockers({
+        dbName: options.dbName,
+        target: options.target,
+        runCommand,
+      });
+    }
+
+    const sql = options.apply ? buildApplySql({ existingSearchTables }) : buildDryRunSql();
+    const args = wranglerD1Args(options.dbName, sql, options.target);
+
+    const result = await runCommand("pnpm", args, {
+      encoding: "utf8",
+      maxBuffer: MAX_WRANGLER_BUFFER,
     });
-  }
 
-  const sql = options.apply ? buildApplySql({ existingSearchTables }) : buildDryRunSql();
-  const args = wranglerD1Args(options.dbName, sql, options.target);
+    stdout.write(cleanupResultMessage(options));
+    if (result.stdout) stdout.write(result.stdout);
+    if (result.stderr) stderr.write(result.stderr);
 
-  const result = await runCommand("pnpm", args, {
-    encoding: "utf8",
-    maxBuffer: MAX_WRANGLER_BUFFER,
-  });
-
-  stdout.write(cleanupResultMessage(options));
-  if (result.stdout) stdout.write(result.stdout);
-  if (result.stderr) stderr.write(result.stderr);
-
-  if (options.apply && options.target.targetEnv === "qa") {
-    await deleteAndVerifyQaR2Keys({
-      deleteKeys: qaR2Candidates.deleteKeys,
-      runCommand,
-      stdout,
-    });
+    if (options.apply && options.target.targetEnv === "qa") {
+      await deleteAndVerifyQaR2Keys({
+        deleteKeys: qaR2Candidates.deleteKeys,
+        runCommand,
+        stdout,
+      });
+    }
+  } finally {
+    if (options.apply) await removeScratchSchema();
   }
 }
 

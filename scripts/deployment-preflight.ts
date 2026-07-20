@@ -687,10 +687,14 @@ function workflowHasGitDefaultBranchConfig(workflow: string): boolean {
 }
 
 function corepackPnpmRunIsClean(run: string): boolean {
-  return commandLinesEqual(run, [
+  const commands = [
     "corepack enable",
     `corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`,
-  ]);
+  ];
+  const warningWrappedCommands = commands.map(
+    (command) => `node scripts/run-with-warning-policy.mjs -- ${command}`,
+  );
+  return commandLinesEqual(run, commands) || commandLinesEqual(run, warningWrappedCommands);
 }
 
 function workflowUsesCorepackPnpmSetup(workflow: string): boolean {

@@ -12,6 +12,7 @@ import { resolveApiV1ScopeRequirement } from "~/lib/api-v1.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
+import { expectConsoleError } from "../warning-policy";
 
 type LocalDb = Awaited<ReturnType<typeof getLocalDb>>;
 type MutationMethod = "POST" | "PATCH" | "PUT" | "DELETE";
@@ -1847,24 +1848,29 @@ describe("API v1 recipe step and dependency mutations", () => {
       };
     });
 
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const originalStackTraceLimit = Error.stackTraceLimit;
+    const internalErrorMessage = "Recipe step missing-after-delete was not readable after ingredient delete";
+    Error.stackTraceLimit = 0;
     try {
       const { action: mockedAction } = await import("~/routes/api.v1.$");
+      expectConsoleError("[api-v1] internal_error", {
+        requestId: "req_ingredient_delete_unreadable_step",
+        method: "DELETE",
+        path: `/api/v1/${path}`,
+        error: {
+          name: "Error",
+          message: internalErrorMessage,
+          stack: `Error: ${internalErrorMessage}`,
+        },
+      });
       const response = await mockedAction(routeArgs(
         mutationRequest("DELETE", path, fixture.writer.token, "req_ingredient_delete_unreadable_step", body),
         path,
       ));
       expect(response.status).toBe(500);
       expectErrorEnvelope(await readJson(response), "req_ingredient_delete_unreadable_step", "internal_error", 500);
-      expect(errorSpy).toHaveBeenCalledWith("[api-v1] internal_error", expect.objectContaining({
-        requestId: "req_ingredient_delete_unreadable_step",
-        method: "DELETE",
-        error: expect.objectContaining({
-          message: "Recipe step missing-after-delete was not readable after ingredient delete",
-        }),
-      }));
     } finally {
-      errorSpy.mockRestore();
+      Error.stackTraceLimit = originalStackTraceLimit;
       vi.doUnmock("~/lib/api-v1-recipe-steps.server");
       vi.resetModules();
     }

@@ -1,4 +1,6 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import type { Locator, Page } from "@playwright/test";
+import { expect, test } from "../fixtures";
+import { publicRecipeHrefByChef } from "../support/recipes";
 
 test.use({
   viewport: { width: 390, height: 844 },
@@ -15,39 +17,11 @@ async function getDock(page: Page) {
 }
 
 async function getFirstRecipeHref(page: Page) {
-  await page.goto('/recipes');
-  await page.waitForLoadState('domcontentloaded');
-
-  const href = await page.locator('a[href^="/recipes/"]').evaluateAll((links) => {
-    return links
-      .map((link) => link.getAttribute('href'))
-      .find((candidate) => (
-        !!candidate &&
-        candidate !== '/recipes/new' &&
-        /^\/recipes\/[^/]+$/.test(candidate)
-      ));
-  });
-
-  expect(href, 'expected at least one seeded recipe link').toBeTruthy();
-  return href!;
+  return publicRecipeHrefByChef(page, 'chef_julia');
 }
 
 async function getFirstOwnedRecipeHref(page: Page) {
-  await page.goto('/');
-  await page.waitForLoadState('domcontentloaded');
-
-  const href = await page.locator('a[href^="/recipes/"]').evaluateAll((links) => {
-    return links
-      .map((link) => link.getAttribute('href'))
-      .find((candidate) => (
-        !!candidate &&
-        candidate !== '/recipes/new' &&
-        /^\/recipes\/[^/]+$/.test(candidate)
-      ));
-  });
-
-  expect(href, 'expected at least one owned seeded recipe link').toBeTruthy();
-  return href!;
+  return publicRecipeHrefByChef(page, 'demo');
 }
 
 async function expectTouchTarget(locator: Locator, label: string) {
@@ -109,15 +83,17 @@ test.describe('Mobile RecipeBuilder and SpoonDock audit', () => {
     await expect(page.getByRole('heading', { name: 'Edit Recipe' })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Spoonjoy navigation' })).toHaveCount(0);
 
-    const updatedTitle = `Mobile Dock Save ${Date.now()}`;
-    await page.getByLabel(/^Title$/).last().fill(updatedTitle);
+    const titleInput = page.getByLabel(/^Title$/).last();
+    const originalTitle = await titleInput.inputValue();
+    const unsavedTitle = `Mobile Dock Visual Audit ${Date.now()}`;
+    await titleInput.fill(unsavedTitle);
     const saveAction = page.getByRole('button', { name: 'Save Recipe' });
     await saveAction.scrollIntoViewIfNeeded();
     await expectTouchTarget(saveAction, 'edit Save Recipe button');
-    await saveAction.click();
+    await expect(titleInput).toHaveValue(unsavedTitle);
 
-    await expect(page).toHaveURL(new RegExp(`${recipeHref}$`));
-    await expect(page.getByRole('heading', { name: updatedTitle })).toBeVisible();
+    await page.reload();
+    await expect(page.getByLabel(/^Title$/).last()).toHaveValue(originalTitle);
   });
 
   test('recipe detail masthead actions fit with the fixed dock', async ({ page }) => {

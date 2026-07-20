@@ -1199,7 +1199,9 @@ describe("/developers/playground", () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy path" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
     expect(await screen.findByText("Could not copy Copy path")).toBeInTheDocument();
-    await new Promise((resolve) => window.setTimeout(resolve, 1700));
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 1700));
+    });
     expect(screen.queryByText("Could not copy Copy path")).not.toBeInTheDocument();
   });
 

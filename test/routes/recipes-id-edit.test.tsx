@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
@@ -2580,7 +2580,14 @@ describe("Recipes $id Edit Route", () => {
       expect(screen.getByRole("status")).toHaveTextContent(/uploading image/i);
       expect(submitButton).toBeDisabled();
 
-      resolveAction();
+      await act(async () => {
+        resolveAction();
+        await actionPromise;
+      });
+      await waitFor(() => {
+        expect(screen.queryByRole("status")).not.toBeInTheDocument();
+        expect(submitButton).not.toBeDisabled();
+      });
     });
 
     it("should navigate to recipe page when Cancel is clicked", async () => {

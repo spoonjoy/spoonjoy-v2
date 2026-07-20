@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 /**
  * E2E happy path for push subscribe.
@@ -14,7 +14,7 @@ import { test, expect } from "@playwright/test";
 test.describe("Push subscribe flow", () => {
   test.beforeEach(async ({ context }) => {
     // Pre-grant notification permission so the in-page Notification API works.
-    await context.grantPermissions(["notifications"], { origin: "http://localhost:5173" });
+    await context.grantPermissions(["notifications"], { origin: "http://localhost:5197" });
   });
 
   test("account settings renders the Notifications section", async ({ page }) => {

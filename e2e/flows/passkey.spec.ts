@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from "../fixtures";
 
 /**
  * Full passkey lifecycle against a real (virtual) authenticator:

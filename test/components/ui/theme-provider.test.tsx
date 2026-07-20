@@ -183,13 +183,9 @@ describe('ThemeProvider', () => {
   })
 
   it('throws error when useTheme is used outside provider', () => {
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
-
     expect(() => {
       render(<TestConsumer />)
     }).toThrow('useTheme must be used within a ThemeProvider')
-
-    consoleError.mockRestore()
   })
 
   it('responds to system theme changes when theme is system', async () => {

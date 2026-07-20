@@ -259,9 +259,13 @@ jobs:
     expect(appTestConfig && ts.isObjectLiteralExpression(appTestConfig)).toBe(true);
     if (!appTestConfig || !ts.isObjectLiteralExpression(appTestConfig)) return;
     expect(literalValue(property(appTestConfig, "exclude"))).toContain("test/workers/**");
-    expect(runCommands(appCoverageJob)).toContain("pnpm run test:coverage");
+    expect(runCommands(appCoverageJob)).toContain("pnpm run verify:clean:test:coverage");
+    expect(runCommands(appCoverageJob)).not.toContain("pnpm run test:coverage");
     expect(runCommands(appCoverageJob)).not.toContain("pnpm run test:workers:coverage");
-    expect(runCommands(workersCoverageJob)).toContain("pnpm run test:workers:coverage");
+    expect(runCommands(workersCoverageJob)).toContain(
+      "pnpm run verify:clean:test:workers:coverage",
+    );
+    expect(runCommands(workersCoverageJob)).not.toContain("pnpm run test:workers:coverage");
     expect(runCommands(workersCoverageJob)).not.toContain("pnpm run test:coverage");
   });
 

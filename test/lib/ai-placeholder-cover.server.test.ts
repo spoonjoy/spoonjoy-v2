@@ -8,6 +8,7 @@ import {
 } from "~/lib/image-gen-ledger.server";
 import { createTestUser, createTestRecipe } from "../utils";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { expectConsoleError } from "../warning-policy";
 
 const GENERATED_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
 
@@ -365,30 +366,22 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
     expect(cover.failureReason).toBe("Placeholder image generation failed");
   });
 
-  it("defaults logger to console when none provided and the runner fails", async () => {
-    const original = console.error;
-    const spy = vi.fn();
-    console.error = spy;
-    try {
-      const runner: ImageGenRunner = {
-        textToImage: vi.fn(async () => {
-          throw new Error("boom");
-        }),
-        imageToImage: vi.fn(),
-      };
-      await scheduleAiPlaceholderCover({
-        db,
-        userId,
-        recipeId,
-        coverId,
-        title: "Pasta",
-        description: null,
-        runner,
-      });
-      expect(spy).toHaveBeenCalledTimes(1);
-    } finally {
-      console.error = original;
-    }
+  it("defaults logger to console when none provided and generation fails", async () => {
+    const bucketError = new Error("boom");
+    const bucket = mockR2();
+    vi.mocked(bucket.put).mockRejectedValueOnce(bucketError);
+    expectConsoleError("ai-placeholder cover generation failed", bucketError);
+
+    await scheduleAiPlaceholderCover({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      title: "Pasta",
+      description: null,
+      runner: makeRunner(),
+      bucket,
+    });
   });
 
   it("logs when a failed placeholder row can no longer be updated", async () => {

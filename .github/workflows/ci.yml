@@ -27,8 +27,8 @@ jobs:
 
       - name: 📦 Activate pnpm
         run: |
-          corepack enable
-          corepack prepare pnpm@10.28.1 --activate
+          node scripts/run-with-warning-policy.mjs -- corepack enable
+          node scripts/run-with-warning-policy.mjs -- corepack prepare pnpm@10.28.1 --activate
 
       - name: 🔒 Install pinned OSV-Scanner
         env:
@@ -47,12 +47,12 @@ jobs:
           .cache/osv-scanner/osv-scanner --version
 
       - name: 📥 Install advisory dependencies without lifecycle scripts
-        run: pnpm install --frozen-lockfile --ignore-scripts
+        run: node scripts/run-with-warning-policy.mjs -- pnpm install --frozen-lockfile --ignore-scripts
 
       - name: 🔒 Run dependency advisory scan
         run: |
           test -f pnpm-lock.yaml
-          pnpm run advisory:scan -- --scanner .cache/osv-scanner/osv-scanner --output .advisory/osv-results.json
+          node scripts/run-with-warning-policy.mjs -- pnpm run advisory:scan -- --scanner .cache/osv-scanner/osv-scanner --output .advisory/osv-results.json
 
   coverage:
     name: coverage
@@ -69,25 +69,28 @@ jobs:
 
       - name: 📦 Activate pnpm
         run: |
-          corepack enable
-          corepack prepare pnpm@10.28.1 --activate
+          node scripts/run-with-warning-policy.mjs -- corepack enable
+          node scripts/run-with-warning-policy.mjs -- corepack prepare pnpm@10.28.1 --activate
 
       - name: 📥 Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: node scripts/run-with-warning-policy.mjs -- pnpm install --frozen-lockfile
 
       - name: 🔧 Generate Prisma client
-        run: pnpm prisma:generate
+        run: node scripts/run-with-warning-policy.mjs -- pnpm prisma:generate
 
       - name: 🔒 Verify blake3 override resolution
         run: |
-          pnpm why blake3-wasm
-          pnpm why @c4312/blake3-internal
+          node scripts/run-with-warning-policy.mjs -- pnpm why blake3-wasm
+          node scripts/run-with-warning-policy.mjs -- pnpm why @c4312/blake3-internal
 
       - name: 🗄️ Apply D1 migrations (local)
-        run: pnpm exec wrangler d1 migrations apply DB --local
+        run: pnpm run verify:clean:migrations
+
+      - name: 🗄️ Rehearse D1 migrations with QA bindings
+        run: pnpm run verify:clean:migrations:qa
 
       - name: 🗄️ Apply Prisma schema to test database
-        run: DATABASE_URL="file:./test.db" pnpm exec prisma db push --skip-generate
+        run: node scripts/run-with-warning-policy.mjs -- sh -c 'DATABASE_URL="file:./test.db" pnpm exec prisma db push --skip-generate'
 
       - name: 🔎 CI preflight - seed backend + migration status
         run: |
@@ -96,30 +99,30 @@ jobs:
           echo "DATABASE_URL=$DATABASE_URL"
           echo ""
           echo "Migrations status (wrangler):"
-          pnpm exec wrangler d1 migrations list DB --local
+          node scripts/run-with-warning-policy.mjs -- pnpm exec wrangler d1 migrations list DB --local
           echo ""
           echo "Tables before seed:"
-          pnpm exec wrangler d1 execute DB --local --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
+          node scripts/run-with-warning-policy.mjs -- pnpm exec wrangler d1 execute DB --local --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
 
       - name: 🌱 Seed local D1 database
-        run: pnpm db:seed
+        run: node scripts/run-with-warning-policy.mjs -- pnpm db:seed
 
       - name: 🔍 Typecheck
-        run: pnpm run typecheck
+        run: pnpm run verify:clean:typecheck
+
+      - name: 🔐 Verify generated API contract
+        run: pnpm run verify:clean:generated-contract
 
       - name: 🧪 Test & Coverage
-        run: pnpm test:coverage
+        run: pnpm run verify:clean:test:coverage
 
       - name: 🏗️ Build
-        run: pnpm build
+        run: pnpm run verify:clean:build
 
-  e2e:
-    name: e2e
+  workers-coverage:
+    name: workers-coverage
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      NODE_ENV: development
-      SESSION_SECRET: ci-e2e-session-secret
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -131,35 +134,54 @@ jobs:
 
       - name: 📦 Activate pnpm
         run: |
-          corepack enable
-          corepack prepare pnpm@10.28.1 --activate
+          node scripts/run-with-warning-policy.mjs -- corepack enable
+          node scripts/run-with-warning-policy.mjs -- corepack prepare pnpm@10.28.1 --activate
 
       - name: 📥 Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: node scripts/run-with-warning-policy.mjs -- pnpm install --frozen-lockfile
+
+      - name: 🧪 Workers test coverage
+        run: pnpm run verify:clean:test:workers:coverage
+
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+
+      - name: 📦 Activate pnpm
+        run: |
+          node scripts/run-with-warning-policy.mjs -- corepack enable
+          node scripts/run-with-warning-policy.mjs -- corepack prepare pnpm@10.28.1 --activate
+
+      - name: 📥 Install dependencies
+        run: node scripts/run-with-warning-policy.mjs -- pnpm install --frozen-lockfile
 
       - name: 🔧 Generate Prisma client
-        run: pnpm prisma:generate
+        run: node scripts/run-with-warning-policy.mjs -- pnpm prisma:generate
 
       - name: 🔒 Verify blake3 override resolution
         run: |
-          pnpm why blake3-wasm
-          pnpm why @c4312/blake3-internal
+          node scripts/run-with-warning-policy.mjs -- pnpm why blake3-wasm
+          node scripts/run-with-warning-policy.mjs -- pnpm why @c4312/blake3-internal
 
       - name: 🎭 Install Playwright Browsers
-        run: pnpm exec playwright install --with-deps chromium
+        run: node scripts/run-with-warning-policy.mjs -- pnpm exec playwright install --with-deps chromium
 
       - name: 🗄️ Apply D1 migrations
-        run: pnpm exec wrangler d1 migrations apply DB --local
+        run: pnpm run verify:clean:migrations
 
       - name: 🌱 Seed local D1 database
-        run: pnpm db:seed
-
-      - name: 🔐 Configure local Worker secrets
-        run: |
-          printf 'SESSION_SECRET=%s\nNODE_ENV=development\n' "$SESSION_SECRET" > .dev.vars
+        run: node scripts/run-with-warning-policy.mjs -- pnpm db:seed
 
       - name: 🎭 Run Playwright tests
-        run: pnpm test:e2e
+        run: pnpm run verify:clean:test:e2e
 
       - name: 📤 Upload Playwright Report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

@@ -12,6 +12,7 @@ import {
   type CliIO,
   type DeploymentPreflightInputs,
 } from "../../scripts/deployment-preflight";
+import { expectConsoleError } from "../warning-policy";
 
 const CHECKOUT_ACTION = "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10";
 const SETUP_NODE_ACTION = "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38";
@@ -3124,10 +3125,10 @@ describe("main (CLI entrypoint)", () => {
 
   it("uses real console.log/console.error/process.exit when io is not injected", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
       throw new Error(`__exit__:${code ?? 0}`);
     }) as never);
+    expectConsoleError("Deployment preflight failed with 1 error(s).");
 
     try {
       // Trigger a failure path so we hit error + exit defaults.
@@ -3143,11 +3144,9 @@ describe("main (CLI entrypoint)", () => {
       ).rejects.toThrow("__exit__:1");
 
       expect(logSpy).toHaveBeenCalled();
-      expect(errSpy).toHaveBeenCalled();
       expect(exitSpy).toHaveBeenCalledWith(1);
     } finally {
       logSpy.mockRestore();
-      errSpy.mockRestore();
       exitSpy.mockRestore();
     }
   });
@@ -3237,11 +3236,11 @@ describe("runCliIfEntry", () => {
   it("uses default onError that prints and calls process.exit(1) when runMain rejects with an Error", async () => {
     const resolved = "/tmp/fake-preflight-cli-entry.ts";
     const url = `file://${resolved}`;
-    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const exitSpy = vi.spyOn(process, "exit").mockImplementation(((_code?: number) => {
       // swallow; test asserts on call below
       return undefined as never;
     }) as never);
+    expectConsoleError("Deployment preflight failed: crash");
 
     try {
       const runMain = async () => {
@@ -3252,10 +3251,8 @@ describe("runCliIfEntry", () => {
       await Promise.resolve();
       await Promise.resolve();
       expect(result).toBe(true);
-      expect(errSpy).toHaveBeenCalledWith(expect.stringContaining("crash"));
       expect(exitSpy).toHaveBeenCalledWith(1);
     } finally {
-      errSpy.mockRestore();
       exitSpy.mockRestore();
     }
   });
@@ -3263,10 +3260,10 @@ describe("runCliIfEntry", () => {
   it("uses default onError that stringifies non-Error rejections", async () => {
     const resolved = "/tmp/fake-preflight-cli-entry.ts";
     const url = `file://${resolved}`;
-    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const exitSpy = vi.spyOn(process, "exit").mockImplementation(((_code?: number) => {
       return undefined as never;
     }) as never);
+    expectConsoleError("Deployment preflight failed: string-failure");
 
     try {
       const runMain = async () => {
@@ -3275,10 +3272,8 @@ describe("runCliIfEntry", () => {
       runCliIfEntry({ argv1: resolved, moduleUrl: url, runMain });
       await Promise.resolve();
       await Promise.resolve();
-      expect(errSpy).toHaveBeenCalledWith(expect.stringContaining("string-failure"));
       expect(exitSpy).toHaveBeenCalledWith(1);
     } finally {
-      errSpy.mockRestore();
       exitSpy.mockRestore();
     }
   });
@@ -3288,7 +3283,6 @@ describe("runCliIfEntry", () => {
     const originalSkip = process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE;
     process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE = "1";
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const exitSpy = vi.spyOn(process, "exit").mockImplementation(((_code?: number) => {
       return undefined as never;
     }) as never);
@@ -3302,11 +3296,9 @@ describe("runCliIfEntry", () => {
       expect(result).toBe(true);
       expect(logSpy).toHaveBeenCalled();
       // Should NOT have exited (skip flag → all PASS/WARN, no failure).
-      expect(errSpy).not.toHaveBeenCalled();
       expect(exitSpy).not.toHaveBeenCalled();
     } finally {
       logSpy.mockRestore();
-      errSpy.mockRestore();
       exitSpy.mockRestore();
       if (originalSkip === undefined) {
         delete process.env.SPOONJOY_PREFLIGHT_SKIP_REMOTE;

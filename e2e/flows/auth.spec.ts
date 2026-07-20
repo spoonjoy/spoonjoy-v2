@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from "../fixtures";
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { installWorkerVersionBrowserRouting } from '../../scripts/smoke-live-helpers.mjs';
@@ -42,7 +42,10 @@ test.describe('Auth Flow', () => {
     expect(new URL(page.url()).pathname).toBe('/recipes');
   });
 
-  test('login with invalid credentials shows error', async ({ page }) => {
+  test('login with invalid credentials shows error', async ({ page, warningDiagnostics }) => {
+    warningDiagnostics.expect(
+      /console\.error: Failed to load resource: the server responded with a status of 401 \(Unauthorized\) \(http:\/\/localhost:5197\/login\.data:0:0\)/,
+    );
     await page.goto('/login');
     
     await submitPasswordLogin(page, 'wrong@example.com', 'wrongpassword');

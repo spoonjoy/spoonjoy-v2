@@ -13,6 +13,7 @@ import { getLocalDb } from "~/lib/db.server";
 import { SpoonAuthError, SpoonNotFoundError, SpoonValidationError } from "~/lib/recipe-spoon.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser } from "../utils";
+import { expectConsoleError } from "../warning-policy";
 
 function routeArgs(request: Request, splat: string, context = { cloudflare: { env: null } }) {
   return { request, params: { "*": splat }, context } as any;
@@ -641,23 +642,28 @@ describe("API v1 recipe spoons", () => {
       },
     });
 
+    const storageError = new Error("R2 is unavailable");
     const throwingBucket = {
       get: vi.fn(async () => {
-        throw new Error("R2 is unavailable");
+        throw storageError;
       }),
       put: vi.fn(),
       delete: vi.fn(),
     } as unknown as R2Bucket;
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    let storageFailure: Response;
-    try {
-      storageFailure = await action(routeArgs(jsonRequest(createUrl, "POST", fixture.ownerKitchenWrite.token, "req_spoon_photo_storage_error", {
-        clientMutationId: "spoon-photo-storage-error",
-        photoUrl: `/photos/${validCreateKey}`,
-      }), createSplat, backgroundContext({ PHOTOS: throwingBucket })));
-    } finally {
-      errorSpy.mockRestore();
-    }
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_spoon_photo_storage_error",
+      method: "POST",
+      path: `/api/v1/recipes/${fixture.recipe.id}/spoons`,
+      error: {
+        name: storageError.name,
+        message: storageError.message,
+        stack: storageError.stack,
+      },
+    });
+    const storageFailure = await action(routeArgs(jsonRequest(createUrl, "POST", fixture.ownerKitchenWrite.token, "req_spoon_photo_storage_error", {
+      clientMutationId: "spoon-photo-storage-error",
+      photoUrl: `/photos/${validCreateKey}`,
+    }), createSplat, backgroundContext({ PHOTOS: throwingBucket })));
     expect(storageFailure.status).toBe(500);
     await expect(storageFailure.json()).resolves.toMatchObject({
       ok: false,

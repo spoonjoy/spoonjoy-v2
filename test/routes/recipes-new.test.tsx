@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { redirect } from "react-router";
 import { createTestRoutesStub } from "../utils";
@@ -1483,7 +1483,11 @@ describe("Recipes New Route", () => {
       expect(screen.getByRole("status")).toHaveTextContent(/uploading image/i);
       expect(submitButton).toBeDisabled();
 
-      resolveAction();
+      await act(async () => {
+        resolveAction();
+        await actionPromise;
+      });
+      expect(await screen.findByText("Recipe Detail")).toBeInTheDocument();
     });
 
     it("should display general error message when present", async () => {

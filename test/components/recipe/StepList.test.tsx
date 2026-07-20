@@ -576,7 +576,7 @@ describe('StepList', () => {
       // Get all drag handles (one per step) and focus on the second one
       const dragHandles = screen.getAllByRole('button', { name: /drag to reorder/i })
       expect(dragHandles).toHaveLength(2)
-      dragHandles[1].focus() // Second step's drag handle
+      act(() => dragHandles[1].focus()) // Second step's drag handle
 
       // Use Ctrl+ArrowUp to move step up
       await userEvent.keyboard('{Control>}{ArrowUp}{/Control}')
@@ -599,7 +599,7 @@ describe('StepList', () => {
       // Get all drag handles and focus on the first one
       const dragHandles = screen.getAllByRole('button', { name: /drag to reorder/i })
       expect(dragHandles).toHaveLength(2)
-      dragHandles[0].focus() // First step's drag handle
+      act(() => dragHandles[0].focus()) // First step's drag handle
 
       // Use Ctrl+ArrowDown to move step down
       await userEvent.keyboard('{Control>}{ArrowDown}{/Control}')
@@ -654,7 +654,7 @@ describe('StepList', () => {
 
       // Get all drag handles and focus on the first one
       const dragHandles = screen.getAllByRole('button', { name: /drag to reorder/i })
-      dragHandles[0].focus()
+      act(() => dragHandles[0].focus())
 
       // Use Ctrl+ArrowUp - should not reorder since it's already first
       await userEvent.keyboard('{Control>}{ArrowUp}{/Control}')
@@ -674,7 +674,7 @@ describe('StepList', () => {
 
       // Get all drag handles and focus on the last one
       const dragHandles = screen.getAllByRole('button', { name: /drag to reorder/i })
-      dragHandles[1].focus()
+      act(() => dragHandles[1].focus())
 
       // Use Ctrl+ArrowDown - should not reorder since it's already last
       await userEvent.keyboard('{Control>}{ArrowDown}{/Control}')
@@ -694,7 +694,7 @@ describe('StepList', () => {
 
       // Get all drag handles and focus on the second one
       const dragHandles = screen.getAllByRole('button', { name: /drag to reorder/i })
-      dragHandles[1].focus()
+      act(() => dragHandles[1].focus())
 
       // Press ArrowUp without modifier - should not reorder
       await userEvent.keyboard('{ArrowUp}')

@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
+import type { Page } from "@playwright/test";
+import { test, expect } from "../fixtures";
 import { publicRecipeHrefByChef, publicRecipeLinks } from '../support/recipes';
 
 function recipeDetailLinks(page: Page) {
@@ -19,18 +20,17 @@ test.describe('Recipe Flow', () => {
   });
 
   test('clicking recipe card navigates to recipe detail', async ({ page }) => {
-    await page.goto('/recipes');
+    const href = await publicRecipeHrefByChef(page, 'chef_julia');
     
     // Find a recipe card - should be a clickable link
     // Exclude /recipes/new (create button) - match any recipe UUID links
-    const recipeLinks = recipeDetailLinks(page);
-    const firstRecipeCard = recipeLinks.first();
+    const recipeCard = page.locator(`main a[href="${href}"]`).first();
     
     // CRITICAL: This will FAIL if recipe cards are not clickable
-    await expect(firstRecipeCard).toBeVisible({ timeout: 5000 });
+    await expect(recipeCard).toBeVisible({ timeout: 5000 });
     
     // Click the recipe card
-    await firstRecipeCard.click();
+    await recipeCard.click();
     
     // Should navigate to recipe detail page
     await expect(page).toHaveURL(/\/recipes\/(?!new$)[^/]+$/);

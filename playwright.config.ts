@@ -1,17 +1,25 @@
 import { defineConfig, devices } from '@playwright/test';
+import { createE2eRunId } from './scripts/e2e-run-cleanup.mjs';
 
 // ESM-compatible path handling
+delete process.env.NO_COLOR;
 const authFile = './e2e/.auth/user.json';
+const e2eRunId = process.env.SPOONJOY_E2E_RUN_ID ?? createE2eRunId();
+process.env.SPOONJOY_E2E_RUN_ID = e2eRunId;
+const webServerEnv = Object.fromEntries(
+  Object.entries(process.env).filter(([name, value]) => name !== 'NO_COLOR' && value !== undefined),
+) as Record<string, string>;
 
 export default defineConfig({
   testDir: './e2e',
+  globalTeardown: './e2e/support/global-teardown.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
-  reporter: 'html',
+  reporter: [['html', { open: 'never' }]],
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: 'http://localhost:5197',
     trace: 'on-first-retry',
   },
   projects: [
@@ -53,9 +61,10 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: process.env.CI ? 'pnpm dev --host 0.0.0.0' : 'pnpm dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: true,
-    timeout: process.env.CI ? 180_000 : 60_000,
+    command: `pnpm run verify:clean:build && node e2e/support/start-ephemeral-wrangler.mjs --run-id ${e2eRunId}`,
+    url: 'http://localhost:5197',
+    reuseExistingServer: false,
+    timeout: 180_000,
+    env: webServerEnv,
   },
 });

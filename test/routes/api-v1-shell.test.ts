@@ -19,6 +19,7 @@ import { API_V1_DISCOVERY_DATA, API_V1_ERROR_STATUS } from "~/lib/api-v1-contrac
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestUser } from "../utils";
+import { expectConsoleError } from "../warning-policy";
 
 function routeArgs(request: Request, splat: string) {
   return { request, params: { "*": splat }, context: { cloudflare: { env: null } } } as any;
@@ -263,8 +264,18 @@ describe("/api/v1 shell", () => {
   });
 
   it("normalizes unexpected optional-auth failures to internal_error", async () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    vi.spyOn(apiAuth, "authenticateApiRequest").mockRejectedValueOnce(new Error("auth storage unavailable"));
+    const authError = new Error("auth storage unavailable");
+    vi.spyOn(apiAuth, "authenticateApiRequest").mockRejectedValueOnce(authError);
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_auth_storage_failure",
+      method: "GET",
+      path: "/api/v1/health",
+      error: {
+        name: authError.name,
+        message: authError.message,
+        stack: authError.stack,
+      },
+    });
 
     const response = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/health", {
       headers: {
@@ -284,15 +295,6 @@ describe("/api/v1 shell", () => {
         status: 500,
       },
     });
-    expect(errorSpy).toHaveBeenCalledWith("[api-v1] internal_error", expect.objectContaining({
-      requestId: "req_auth_storage_failure",
-      method: "GET",
-      path: "/api/v1/health",
-      error: expect.objectContaining({
-        name: "Error",
-        message: "auth storage unavailable",
-      }),
-    }));
   });
 
   it("serves the OpenAPI shell document", async () => {
@@ -561,17 +563,27 @@ describe("/api/v1 shell", () => {
   });
 
   it("normalizes unexpected optional-auth failures into internal errors", async () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const platformError = new Error("Platform env unavailable");
     let cloudflareReads = 0;
     const context = {
       get cloudflare() {
         cloudflareReads += 1;
         if (cloudflareReads > 1) {
-          throw new Error("Platform env unavailable");
+          throw platformError;
         }
         return { env: null };
       },
     };
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_platform_error",
+      method: "GET",
+      path: "/api/v1/health",
+      error: {
+        name: platformError.name,
+        message: platformError.message,
+        stack: platformError.stack,
+      },
+    });
 
     const response = await handleApiV1Request({
       request: new UndiciRequest("http://localhost/api/v1/health", {
@@ -592,10 +604,5 @@ describe("/api/v1 shell", () => {
         status: 500,
       },
     });
-    expect(errorSpy).toHaveBeenCalledWith("[api-v1] internal_error", expect.objectContaining({
-      requestId: "req_platform_error",
-      method: "GET",
-      path: "/api/v1/health",
-    }));
   });
 });

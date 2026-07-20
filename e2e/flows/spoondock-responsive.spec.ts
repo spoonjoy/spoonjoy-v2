@@ -1,4 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from "@playwright/test";
+import { expect, test } from "../fixtures";
+import { publicRecipeHrefByChef } from "../support/recipes";
 
 /**
  * SpoonDock responsive audit: every dock variant must fit — without
@@ -79,15 +81,8 @@ for (const width of NARROW_WIDTHS) {
     }
 
     test('recipe detail dock fits (worst case: place + primary + 3 tools)', async ({ page }) => {
-      await page.goto('/recipes');
-      await page.waitForLoadState('domcontentloaded');
-      const href = await page.locator('a[href^="/recipes/"]').evaluateAll((links) =>
-        links
-          .map((link) => link.getAttribute('href'))
-          .find((c) => !!c && c !== '/recipes/new' && /^\/recipes\/[^/]+$/.test(c)),
-      );
-      expect(href, 'expected a seeded recipe').toBeTruthy();
-      await page.goto(href!);
+      const href = await publicRecipeHrefByChef(page, 'chef_julia');
+      await page.goto(href);
       await page.waitForLoadState('domcontentloaded');
       await assertDockFits(page, `recipe detail @ ${width}px`, width);
     });

@@ -7,6 +7,7 @@ import {
   verifyNativeAppleIdentityToken,
 } from "~/lib/apple-native-auth.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { expectConsoleError } from "../warning-policy";
 
 const APPLE_NATIVE_IOS_CLIENT_ID = "app.spoonjoy";
 const APPLE_NATIVE_MACOS_CLIENT_ID = "app.spoonjoy.mac";
@@ -334,12 +335,25 @@ describe("native Sign in with Apple API", () => {
 
   it("lets unexpected native Apple exchange errors bubble to the API error boundary", async () => {
     const fixture = await nativeAppleTokenFixture();
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network unavailable"));
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const networkError = new Error("network unavailable");
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(networkError);
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_native_apple_unexpected",
+      method: "POST",
+      path: "/api/v1/auth/apple/native",
+      error: {
+        name: networkError.name,
+        message: networkError.message,
+        stack: networkError.stack,
+      },
+    });
 
     const response = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/auth/apple/native", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Request-Id": "req_native_apple_unexpected",
+      },
       body: JSON.stringify({ identityToken: fixture.identityToken, rawNonce: fixture.rawNonce }),
     }) as unknown as Request));
     const json = await response.json() as any;
@@ -347,7 +361,6 @@ describe("native Sign in with Apple API", () => {
     expect(response.status).toBe(500);
     expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
     expect(json.error.code).toBe("internal_error");
-    expect(consoleErrorSpy).toHaveBeenCalledWith("[api-v1] internal_error", expect.any(Object));
   });
 
   it("rejects malformed and unsupported native Apple identity tokens", async () => {

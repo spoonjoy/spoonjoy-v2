@@ -1,4 +1,4 @@
-import { test as setup } from '@playwright/test';
+import { test as setup } from "./fixtures";
 import { loginAsSeedUser } from './support/auth';
 
 const authFile = './e2e/.auth/user.json';

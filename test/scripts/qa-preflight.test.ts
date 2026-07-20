@@ -20,6 +20,7 @@ import {
   runQaPreflight,
   validateQaGeneratedBuildConfig,
 } from "../../scripts/qa-preflight";
+import { expectConsoleError } from "../warning-policy";
 
 function secretListStdout(names = REQUIRED_QA_SECRETS): string {
   return JSON.stringify(names.map((name) => ({ name, type: "secret_text" })));
@@ -951,10 +952,10 @@ describe("qa-preflight CLI", () => {
 
   it("uses default console IO and exit for failed main runs", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
       throw new Error("exit 1");
     }) as never);
+    expectConsoleError("QA preflight failed with 1 error(s).");
     try {
       await expect(
         main({
@@ -978,27 +979,23 @@ describe("qa-preflight CLI", () => {
         }),
       ).rejects.toThrow("exit 1");
 
-      expect(errorSpy).toHaveBeenCalledWith("QA preflight failed with 1 error(s).");
       expect(exitSpy).toHaveBeenCalledWith(1);
     } finally {
       logSpy.mockRestore();
-      errorSpy.mockRestore();
       exitSpy.mockRestore();
     }
   });
 
   it("uses the default CLI error handler", async () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
     const runMain = vi.fn(async () => {
       throw "string failure";
     });
+    expectConsoleError("QA preflight failed: string failure");
 
     expect(runCliIfEntry({ argv1: resolved, moduleUrl: url, runMain })).toBe(true);
-    await vi.waitFor(() => expect(errorSpy).toHaveBeenCalledWith("QA preflight failed: string failure"));
-    expect(exitSpy).toHaveBeenCalledWith(1);
+    await vi.waitFor(() => expect(exitSpy).toHaveBeenCalledWith(1));
 
-    errorSpy.mockRestore();
     exitSpy.mockRestore();
   });
 

@@ -10,6 +10,7 @@ import { getLocalDb } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createCookbookTitle, createTestRecipe, createTestUser } from "../utils";
+import { expectConsoleError } from "../warning-policy";
 
 vi.mock("~/lib/analytics-server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("~/lib/analytics-server")>()),
@@ -1892,11 +1893,20 @@ describe("API v1 rate-limit and error telemetry", () => {
   });
 
   it("captures internal errors without stack traces or exception messages in lifecycle telemetry", async () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.mocked(captureException).mockClear();
     const thrownError = new Error("auth storage unavailable");
     vi.spyOn(apiAuth, "authenticateApiRequest").mockRejectedValueOnce(thrownError);
     const token = "sj_storage_failure_secret";
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_error_internal",
+      method: "GET",
+      path: "/api/v1/health",
+      error: {
+        name: thrownError.name,
+        message: thrownError.message,
+        stack: thrownError.stack,
+      },
+    });
     const response = await loader(routeArgs(apiRequest("http://localhost/api/v1/health", "req_error_internal", {
       Authorization: `Bearer ${token}`,
     }), "health").args);
@@ -1912,11 +1922,6 @@ describe("API v1 rate-limit and error telemetry", () => {
       privacyClass: "public",
       forbidden: [token, "auth storage unavailable", "Error"],
     });
-    expect(errorSpy).toHaveBeenCalledWith("[api-v1] internal_error", expect.objectContaining({
-      requestId: "req_error_internal",
-      method: "GET",
-      path: "/api/v1/health",
-    }));
     // The lifecycle event omits the stack; captureException is what preserves it.
     expect(captureException).toHaveBeenCalledWith(
       expect.objectContaining({ enabled: true }),
@@ -1930,6 +1935,12 @@ describe("API v1 rate-limit and error telemetry", () => {
 
     vi.mocked(captureEvent).mockClear();
     vi.spyOn(apiAuth, "authenticateApiRequest").mockRejectedValueOnce("auth string unavailable" as never);
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_error_internal_string",
+      method: "GET",
+      path: "/api/v1/health",
+      error: "auth string unavailable",
+    });
     const stringThrowResponse = await loader(routeArgs(apiRequest("http://localhost/api/v1/health", "req_error_internal_string", {
       Authorization: `Bearer ${token}`,
     }), "health").args);
@@ -1944,18 +1955,24 @@ describe("API v1 rate-limit and error telemetry", () => {
       privacyClass: "public",
       forbidden: [token, "auth string unavailable"],
     });
-    expect(errorSpy).toHaveBeenCalledWith("[api-v1] internal_error", expect.objectContaining({
-      requestId: "req_error_internal_string",
-      error: "auth string unavailable",
-    }));
   });
 
   it("does not capture internal errors when PostHog is unconfigured", async () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.mocked(captureException).mockClear();
-    vi.spyOn(apiAuth, "authenticateApiRequest").mockRejectedValueOnce(new Error("auth storage unavailable"));
+    const authError = new Error("auth storage unavailable");
+    vi.spyOn(apiAuth, "authenticateApiRequest").mockRejectedValueOnce(authError);
 
     const waitUntil = vi.fn((promise: Promise<unknown>) => promise);
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_error_internal_no_ph",
+      method: "GET",
+      path: "/api/v1/health",
+      error: {
+        name: authError.name,
+        message: authError.message,
+        stack: authError.stack,
+      },
+    });
     const response = await loader({
       request: apiRequest("http://localhost/api/v1/health", "req_error_internal_no_ph", {
         Authorization: "Bearer sj_no_posthog_secret",
@@ -1966,9 +1983,6 @@ describe("API v1 rate-limit and error telemetry", () => {
     } as never);
 
     expect(response.status).toBe(500);
-    expect(errorSpy).toHaveBeenCalledWith("[api-v1] internal_error", expect.objectContaining({
-      requestId: "req_error_internal_no_ph",
-    }));
     expect(captureException).not.toHaveBeenCalled();
   });
 });
