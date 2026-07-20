@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, relative } from "node:path";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 const wrapper = "scripts/run-with-warning-policy.mjs";
@@ -16,6 +17,66 @@ function runWrapped(code: string) {
   return spawnSync(process.execPath, [wrapper, "--", process.execPath, "-e", code], {
     cwd: process.cwd(),
     encoding: "utf8",
+  });
+}
+
+function runVitestSentinel(
+  lane: "app" | "workers",
+  body: string,
+) {
+  const path = lane === "app"
+    ? "test/__warning-sentinel-generated.test.ts"
+    : "test/workers/__warning-sentinel-generated.test.ts";
+  const args = ["node_modules/vitest/vitest.mjs", "run", path];
+  if (lane === "workers") {
+    args.push(
+      "--config",
+      "vitest.workers.config.ts",
+      "--maxWorkers=1",
+      "--no-isolate",
+    );
+  }
+
+  writeFileSync(path, `import { test, vi } from "vitest";\n${body}\n`);
+  try {
+    return spawnSync(process.execPath, args, {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      timeout: 60_000,
+    });
+  } finally {
+    unlinkSync(path);
+  }
+}
+
+function runtimeImportNames(source: string, moduleName: string) {
+  const sourceFile = ts.createSourceFile(
+    "inventory.ts",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+
+  return sourceFile.statements.flatMap((statement) => {
+    if (!ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      statement.moduleSpecifier.text !== moduleName ||
+      !statement.importClause ||
+      statement.importClause.isTypeOnly) {
+      return [];
+    }
+
+    const names: string[] = [];
+    if (statement.importClause.name) names.push("default");
+    const bindings = statement.importClause.namedBindings;
+    if (bindings && ts.isNamespaceImport(bindings)) names.push("*");
+    if (bindings && ts.isNamedImports(bindings)) {
+      for (const element of bindings.elements) {
+        if (!element.isTypeOnly) names.push((element.propertyName ?? element.name).text);
+      }
+    }
+    return names;
   });
 }
 
@@ -63,6 +124,36 @@ describe("warning command policy", () => {
 });
 
 describe("in-process warning policy", () => {
+  it.each([
+    ["app console.warn", "app", 'test("sentinel", () => console.warn("app warning sentinel"));'],
+    ["app console.error", "app", 'test("sentinel", () => console.error("app error sentinel"));'],
+    [
+      "app process warning",
+      "app",
+      'test("sentinel", async () => { process.emitWarning("process warning sentinel"); await new Promise((resolve) => setTimeout(resolve, 0)); });',
+    ],
+    [
+      "Workers console.warn",
+      "workers",
+      'test("sentinel", () => console.warn("Workers warning sentinel"));',
+    ],
+  ] as const)("rejects an actual %s through its installed hook", (_label, lane, body) => {
+    const result = runVitestSentinel(lane, body);
+
+    expect(result.status).toBe(1);
+    expect(`${result.stdout}${result.stderr}`).toContain("Unexpected warning/error output");
+  });
+
+  it("permits an exactly owned console.error through the installed app hook", () => {
+    const result = runVitestSentinel(
+      "app",
+      'test("sentinel", () => { const owned = vi.spyOn(console, "error").mockImplementation(() => {}); console.error("owned"); owned.mockRestore(); });',
+    );
+
+    expect(result.status).toBe(0);
+    expect(`${result.stdout}${result.stderr}`).not.toContain("Unexpected warning/error output");
+  });
+
   it("rejects unowned console warnings/errors and process warnings but permits owned output", async () => {
     const { createWarningCollector } = await import("../warning-policy");
 
@@ -128,6 +219,40 @@ describe("in-process warning policy", () => {
 });
 
 describe("Playwright warning policy", () => {
+  it("wires context/page events into browser diagnostic enforcement", async () => {
+    const {
+      createBrowserDiagnosticCollector,
+      observeBrowserContext,
+    } = await import("../../e2e/warning-policy");
+
+    class FakeEmitter {
+      listeners = new Map<string, Array<(...args: unknown[]) => void>>();
+      on(event: string, listener: (...args: unknown[]) => void) {
+        this.listeners.set(event, [...(this.listeners.get(event) ?? []), listener]);
+      }
+      emit(event: string, ...args: unknown[]) {
+        for (const listener of this.listeners.get(event) ?? []) listener(...args);
+      }
+    }
+
+    const page = new FakeEmitter();
+    const context = new FakeEmitter() as FakeEmitter & { pages(): FakeEmitter[] };
+    context.pages = () => [page];
+    const collector = createBrowserDiagnosticCollector();
+    observeBrowserContext(context, collector);
+
+    page.emit("console", { type: () => "warning", text: () => "wired warning" });
+    page.emit("pageerror", new Error("wired page error"));
+    expect(() => collector.assertClean()).toThrowError(
+      /console\.warning: wired warning[\s\S]*pageerror: Error: wired page error/,
+    );
+
+    const laterPage = new FakeEmitter();
+    context.emit("page", laterPage);
+    laterPage.emit("console", { type: () => "error", text: () => "later error" });
+    expect(() => collector.assertClean()).toThrowError(/console\.error: later error/);
+  });
+
   it("rejects browser warning/error/page-error diagnostics", async () => {
     const { createBrowserDiagnosticCollector } = await import("../../e2e/warning-policy");
     const collector = createBrowserDiagnosticCollector();
@@ -146,11 +271,7 @@ describe("Playwright warning policy", () => {
 
     expect(fixture).toContain("base.extend");
     expect(fixture).toContain("auto: true");
-    expect(fixture).toContain('context.on("page"');
-    expect(fixture).toContain('page.on("console"');
-    expect(fixture).toContain('page.on("pageerror"');
-    expect(fixture).toContain('message.type() === "warning"');
-    expect(fixture).toContain('message.type() === "error"');
+    expect(fixture).toContain("observeBrowserContext");
     expect(fixture).toContain("Browser emitted warning/error diagnostics");
   });
 
@@ -163,11 +284,10 @@ describe("Playwright warning policy", () => {
         const fixtureImport = fixtureRelativePath.startsWith(".")
           ? fixtureRelativePath
           : `./${fixtureRelativePath}`;
-        const importsFixture = source.split("\n").some((line) =>
-          line.includes(`from "${fixtureImport}"`) || line.includes(`from '${fixtureImport}'`));
-        const hasDirectRuntimeImport = source.split("\n").some((line) =>
-          line.includes("@playwright/test") && !line.trimStart().startsWith("import type "));
-        return !importsFixture || hasDirectRuntimeImport;
+        const fixtureRuntimeNames = runtimeImportNames(source, fixtureImport);
+        const officialRuntimeNames = runtimeImportNames(source, "@playwright/test");
+        return !fixtureRuntimeNames.some((name) => name === "test" || name === "expect") ||
+          officialRuntimeNames.length > 0;
       })
       .map((path) => relative(process.cwd(), path))
       .sort();

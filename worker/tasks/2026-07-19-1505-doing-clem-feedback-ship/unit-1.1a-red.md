@@ -12,6 +12,8 @@ Review-fix rerun result: expected exit status 1; the Workers file collected 4 te
 
 A subsequent compatibility audit checked Cloudflare's current primary documentation and the published `@cloudflare/vitest-pool-workers@0.18.6` declaration file. That package exports `cloudflareTest`/`cloudflarePool`, not the removed `defineWorkersConfig` helper; shared WebSocket storage is selected with the already-tested `--maxWorkers=1 --no-isolate` command flags. The config assertion now requires the supported `cloudflareTest()` plugin shape and rejects the stale helper.
 
+Round 2 then required end-to-end hook evidence rather than collector-only calls, plus syntax-aware fixture inventory. The repaired contract now spawns sentinel app/Workers Vitest runs that emit real console/process diagnostics, proves an exact owned `console.error` remains clean, exercises the browser context/page observer wiring with emitted events, and parses TypeScript imports so comments or type-only fixture imports cannot masquerade as runtime coverage while inline official type specifiers remain allowed.
+
 The failures are confined to the intentionally absent Unit 1.1 infrastructure:
 
 - Vitest packages are still `4.0.18` and the Workers pool is absent.
