@@ -71,7 +71,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Output**: Baseline logs, fixture/hash manifest, and feedback-to-unit map in the artifacts directory plus the committed seed fixture.
 **Acceptance**: 7,226 existing tests pass at 100% app coverage; fixture atop migrations 0000-0023 clears seeded application rows and yields exactly five total memberships/three active duplicates; foreign-key check is empty; typecheck/build pass; `git status --porcelain` is empty after commit; every source row maps to a unit or explicit rejection test.
 
-### ⬜ Unit 1.1a: Workers Test Lane - Tests
+### ✅ Unit 1.1a: Workers Test Lane - Tests
 **What**: Add failing tests for `vitest.workers.config.ts`, `wrangler.workers-test.json`, exact Vitest `4.1.10`/Workers pool `0.18.6`, Istanbul 100% thresholds, serialized shared storage, package commands, and CI invocation. In `test/config/warning-policy.test.ts`, test a new diagnostic-aware `scripts/run-with-warning-policy.mjs` against representative Node/Vite/Wrangler warning forms plus benign output containing the word "warning"; require app/Workers Vitest hooks to fail unexpected `console.warn`, unowned `console.error`, and process warnings; require a new `e2e/fixtures.ts` to fail browser `warning`/`error` console events and `pageerror`; and require every Playwright spec/setup file that imports `test` or `expect` to use that fixture while type-only support imports remain from `@playwright/test`.
 **Output**: Red Workers-lane, warning-policy, fixture-inventory, and workflow-contract evidence.
 **Acceptance**: Focused tests fail only because the Workers lane and warning-enforcement infrastructure are absent.
@@ -691,3 +691,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-19 19:35 Marked READY_FOR_EXECUTION; Work Doer starts at Unit 0 on the clean pushed `worker/clem-feedback-e2e` branch.
 - 2026-07-19 19:00 Unit 0 complete: froze and validated the pre-feature fixture, source/migration hashes, feedback map, clean runtime/auth state, 7,226-test 100% baseline, typecheck, build, and zero local QA residue.
 - 2026-07-19 19:01 Unit 0 cold review converged; the reviewer independently replayed the fixture and reproduced its counts, FK result, and hashes.
+- 2026-07-19 19:07 Unit 1.1a complete: 16 focused tests fail only on absent Workers-lane, warning-runner, in-process warning gate, CI, and Playwright fixture contracts.
