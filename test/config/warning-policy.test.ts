@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
-import { relative } from "node:path";
+import { dirname, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const wrapper = "scripts/run-with-warning-policy.mjs";
@@ -63,6 +63,32 @@ describe("warning command policy", () => {
 });
 
 describe("in-process warning policy", () => {
+  it("rejects unowned console warnings/errors and process warnings but permits owned output", async () => {
+    const { createWarningCollector } = await import("../warning-policy");
+
+    const unowned = createWarningCollector();
+    unowned.captureConsole("warn", ["warning one"], false);
+    unowned.captureConsole("error", ["error two"], false);
+    unowned.captureProcessWarning(new Error("process three"));
+    expect(() => unowned.assertClean()).toThrowError(
+      /console\.warn: warning one[\s\S]*console\.error: error two[\s\S]*process warning: Error: process three/,
+    );
+
+    const owned = createWarningCollector();
+    owned.captureConsole("error", ["expected owned output"], true);
+    expect(() => owned.assertClean()).not.toThrow();
+  });
+
+  it("clears captured diagnostics between tests", async () => {
+    const { createWarningCollector } = await import("../warning-policy");
+    const collector = createWarningCollector();
+
+    collector.captureConsole("warn", ["first test"], false);
+    expect(() => collector.assertClean()).toThrowError("Unexpected warning/error output");
+    collector.reset();
+    expect(() => collector.assertClean()).not.toThrow();
+  });
+
   it("installs the same fail-after-test gate in app and Workers Vitest", () => {
     const appSetup = readFileSync("test/setup.ts", "utf8");
     const workersSetup = readFileSync("vitest.workers.setup.ts", "utf8");
@@ -102,6 +128,19 @@ describe("in-process warning policy", () => {
 });
 
 describe("Playwright warning policy", () => {
+  it("rejects browser warning/error/page-error diagnostics", async () => {
+    const { createBrowserDiagnosticCollector } = await import("../../e2e/warning-policy");
+    const collector = createBrowserDiagnosticCollector();
+
+    collector.captureConsole("log", "ordinary log");
+    collector.captureConsole("warning", "browser warning");
+    collector.captureConsole("error", "browser error");
+    collector.capturePageError(new Error("page exploded"));
+    expect(() => collector.assertClean()).toThrowError(
+      /console\.warning: browser warning[\s\S]*console\.error: browser error[\s\S]*pageerror: Error: page exploded/,
+    );
+  });
+
   it("provides an automatic context-wide console and page-error fixture", () => {
     const fixture = readFileSync("e2e/fixtures.ts", "utf8");
 
@@ -118,9 +157,18 @@ describe("Playwright warning policy", () => {
   it("makes every Playwright spec and setup use the local fixture", () => {
     const testFiles = filesBelow("e2e").filter((path) => /\.(spec|setup)\.ts$/.test(path));
     const offenders = testFiles
-      .filter((path) => /\b(test|expect)\b/.test(readFileSync(path, "utf8")))
-      .filter((path) => readFileSync(path, "utf8").split("\n").some((line) =>
-        line.includes("@playwright/test") && !line.trimStart().startsWith("import type ")))
+      .filter((path) => {
+        const source = readFileSync(path, "utf8");
+        const fixtureRelativePath = relative(dirname(path), "e2e/fixtures");
+        const fixtureImport = fixtureRelativePath.startsWith(".")
+          ? fixtureRelativePath
+          : `./${fixtureRelativePath}`;
+        const importsFixture = source.split("\n").some((line) =>
+          line.includes(`from "${fixtureImport}"`) || line.includes(`from '${fixtureImport}'`));
+        const hasDirectRuntimeImport = source.split("\n").some((line) =>
+          line.includes("@playwright/test") && !line.trimStart().startsWith("import type "));
+        return !importsFixture || hasDirectRuntimeImport;
+      })
       .map((path) => relative(process.cwd(), path))
       .sort();
 

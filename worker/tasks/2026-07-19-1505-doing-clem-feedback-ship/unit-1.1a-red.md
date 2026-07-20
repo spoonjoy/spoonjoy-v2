@@ -6,7 +6,9 @@ Command:
 pnpm exec vitest run test/config/workers-vitest-lane.test.ts test/config/warning-policy.test.ts
 ```
 
-Result: expected failure, 2 files failed and all 16 new contract tests failed.
+Initial result: expected exit status 1; 2 files failed and all 16 initial contract tests failed. Review then strengthened the suite with behavioral warning/browser collectors, exact fixture imports, and distinct CI job parsing.
+
+Review-fix rerun result: expected exit status 1; the Workers file collected 4 tests and all 4 failed, while the warning-policy file failed during transform because the intentionally absent `test/warning-policy.ts` module could not be resolved. The captured Vitest output named only missing Unit 1.1 infrastructure and exact source/config assertions; it contained no unrelated product failure. The behavior cases will collect once Unit 1.1b supplies the modules they exercise.
 
 The failures are confined to the intentionally absent Unit 1.1 infrastructure:
 

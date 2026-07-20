@@ -5,6 +5,15 @@ function readJson(path: string) {
   return JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
 }
 
+function workflowJob(source: string, name: string) {
+  const marker = `\n  ${name}:\n`;
+  const start = source.indexOf(marker);
+  if (start === -1) return "";
+  const remainder = source.slice(start + marker.length);
+  const nextJob = remainder.search(/\n  [a-z][a-z0-9-]*:\n/);
+  return nextJob === -1 ? remainder : remainder.slice(0, nextJob);
+}
+
 describe("Workers Vitest lane", () => {
   it("pins one compatible Vitest and Workers pool toolchain", () => {
     const packageJson = readJson("package.json") as {
@@ -51,11 +60,14 @@ describe("Workers Vitest lane", () => {
   it("keeps Workers tests out of the app pool and invokes both lanes in CI", () => {
     const appConfig = readFileSync("vitest.config.ts", "utf8");
     const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
+    const appCoverageJob = workflowJob(workflow, "coverage");
+    const workersCoverageJob = workflowJob(workflow, "workers-coverage");
 
     expect(appConfig).toContain('"test/workers/**"');
-    expect(workflow).toContain("workers-coverage:");
-    expect(workflow).toContain("pnpm run test:workers:coverage");
-    expect(workflow).toContain("pnpm run test:coverage");
+    expect(appCoverageJob).toContain("pnpm run test:coverage");
+    expect(appCoverageJob).not.toContain("test:workers");
+    expect(workersCoverageJob).toContain("pnpm run test:workers:coverage");
+    expect(workersCoverageJob).not.toContain("pnpm run test:coverage");
   });
 
   it("provides a dedicated Worker test configuration file", () => {
