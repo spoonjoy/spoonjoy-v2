@@ -38,6 +38,7 @@
  */
 const DEFAULT_POSTHOG_INGEST_ORIGIN = "https://us.i.posthog.com";
 const DEFAULT_POSTHOG_ASSETS_ORIGIN = "https://us-assets.i.posthog.com";
+export const OAUTH_FORM_ACTION_ORIGIN_HEADER = "X-Spoonjoy-OAuth-Form-Action-Origin";
 
 interface PostHogCspEnv {
   VITE_POSTHOG_HOST?: string | null;
@@ -121,17 +122,38 @@ function uniqueSources(sources: readonly string[]): readonly string[] {
   return Array.from(new Set(sources));
 }
 
+function safeOAuthFormActionOrigin(raw: string | null): string | null {
+  const value = (raw ?? "").trim();
+  if (!value || /\s/.test(value) || !URL.canParse(value)) return null;
+
+  const url = new URL(value);
+  if (value !== url.origin || url.username || url.password || !url.hostname) return null;
+  if (url.protocol === "https:") return url.origin;
+  if (
+    url.protocol === "http:" &&
+    (url.hostname === "localhost" || url.hostname === "127.0.0.1")
+  ) {
+    return url.origin;
+  }
+  return null;
+}
+
 function cspDirectives(
   nonce?: string,
   env?: PostHogCspEnv | null,
+  formActionOrigin?: string | null,
 ): Record<string, readonly string[]> {
   const postHog = resolvePostHogCspOrigins(env);
+  const oauthFormActionOrigin = safeOAuthFormActionOrigin(formActionOrigin ?? null);
   return {
     "default-src": ["'self'"],
     "base-uri": ["'self'"],
     "object-src": ["'none'"],
     "frame-ancestors": ["'none'"],
-    "form-action": ["'self'"],
+    "form-action": uniqueSources([
+      "'self'",
+      ...(oauthFormActionOrigin ? [oauthFormActionOrigin] : []),
+    ]),
     "script-src": nonce
       ? uniqueSources(["'self'", `'nonce-${nonce}'`, postHog.assetsOrigin])
       : uniqueSources(["'self'", postHog.assetsOrigin]),
@@ -158,8 +180,9 @@ function cspDirectives(
 export function buildContentSecurityPolicy(
   nonce?: string,
   env?: PostHogCspEnv | null,
+  formActionOrigin?: string | null,
 ): string {
-  return Object.entries(cspDirectives(nonce, env))
+  return Object.entries(cspDirectives(nonce, env, formActionOrigin))
     .map(([directive, sources]) => [directive, ...sources].join(" "))
     .join("; ");
 }
@@ -227,6 +250,8 @@ export function withSecurityHeaders(
   env?: ContentSecurityPolicyEnv | null,
 ): Response {
   const headers = new Headers(response.headers);
+  const oauthFormActionOrigin = headers.get(OAUTH_FORM_ACTION_ORIGIN_HEADER);
+  headers.delete(OAUTH_FORM_ACTION_ORIGIN_HEADER);
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
     if (name === "Referrer-Policy" && headers.get(name)?.trim().toLowerCase() === "no-referrer") {
       continue;
@@ -238,7 +263,7 @@ export function withSecurityHeaders(
     : "Content-Security-Policy-Report-Only";
   headers.delete("Content-Security-Policy");
   headers.delete("Content-Security-Policy-Report-Only");
-  headers.set(cspHeaderName, buildContentSecurityPolicy(nonce, env));
+  headers.set(cspHeaderName, buildContentSecurityPolicy(nonce, env, oauthFormActionOrigin));
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,

@@ -1,6 +1,6 @@
 import type { Route } from "./+types/oauth.authorize";
 import type { ReactNode } from "react";
-import { useLoaderData } from "react-router";
+import { data, useLoaderData } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import {
   handleOAuthAuthorizeAction,
@@ -30,6 +30,7 @@ import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { Heading } from "~/components/ui/heading";
 import { Button } from "~/components/ui/button";
 import { Text } from "~/components/ui/text";
+import { OAUTH_FORM_ACTION_ORIGIN_HEADER } from "~/lib/security-headers.server";
 
 // Per-IP throttle on the OAuth 2.1 authorize endpoint — applied to both the
 // loader (consent screen / login-gate redirect) and the action (Allow/Deny).
@@ -162,7 +163,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       startedAt,
     });
   }
-  return observeOAuthAuthorizeView({ request, context }, { view: result, startedAt });
+  const view = observeOAuthAuthorizeView({ request, context }, { view: result, startedAt });
+  if (view.kind !== "consent") return view;
+  return data(view, {
+    headers: {
+      [OAUTH_FORM_ACTION_ORIGIN_HEADER]: new URL(view.params.redirectUri).origin,
+    },
+  });
 }
 
 export async function action({ request, context }: Route.ActionArgs) {

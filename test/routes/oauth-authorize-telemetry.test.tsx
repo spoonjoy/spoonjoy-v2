@@ -186,7 +186,14 @@ describe("OAuth authorize telemetry", () => {
     const headers = new Headers({ Cookie: await authedCookie(user.id) });
     const consentArgs = routeArgs(new Request(`https://spoonjoy.app/oauth/authorize?${query}`, { headers }));
     const consent = await loader(consentArgs);
-    expect(consent).toMatchObject({ kind: "consent", scope: "kitchen:read" });
+    expect(consent).toMatchObject({
+      data: { kind: "consent", scope: "kitchen:read" },
+      init: {
+        headers: {
+          "X-Spoonjoy-OAuth-Form-Action-Origin": "https://client.example",
+        },
+      },
+    });
     expectOAuthAuthorizeEvent({
       phase: "loader",
       status: 200,
