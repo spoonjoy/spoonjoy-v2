@@ -1584,7 +1584,7 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
         workflowHasQaImageCoverSmokeGuards(inputs.qaImageCoverSmokeWorkflow) &&
         workflowHasGitDefaultBranchConfig(inputs.qaImageCoverSmokeWorkflow) &&
         workflowUsesCorepackPnpmSetup(inputs.qaImageCoverSmokeWorkflow),
-      ".github/workflows/qa-image-cover-smoke.yml must run only on schedule/manual dispatch, guard Cloudflare and QA image-provider credentials, suppress checkout warnings, use Corepack pnpm activation, and run the QA-only image-cover smoke without deploy commands."
+      ".github/workflows/qa-image-cover-smoke.yml must run only on schedule/manual dispatch, guard Cloudflare and QA image-provider credentials, suppress checkout setup diagnostics, use Corepack pnpm activation, and run the QA-only image-cover smoke without deploy commands."
     ),
     check(
       "Storybook deploy workflow",
