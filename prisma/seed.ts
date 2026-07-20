@@ -19,51 +19,9 @@ import bcrypt from "bcryptjs";
 import { getPlatformProxy } from "wrangler";
 import { randomUUID } from "node:crypto";
 import type { D1Database } from "@cloudflare/workers-types";
-import { EXPECTED_PRISMA_D1_TRANSACTION_WARNING } from "../scripts/warning-gate";
 
 let prisma: PrismaClient;
 let platformDispose: (() => Promise<void>) | undefined;
-const EXPECTED_PRISMA_D1_TRANSACTION_WARNING_LINE = `prisma:warn ${EXPECTED_PRISMA_D1_TRANSACTION_WARNING}`;
-
-function isExpectedPrismaD1TransactionWarning(value: string): boolean {
-  const normalized = value.replace(/\u001b\[[0-9;]*m/g, "").trim();
-  return (
-    normalized === EXPECTED_PRISMA_D1_TRANSACTION_WARNING ||
-    normalized === EXPECTED_PRISMA_D1_TRANSACTION_WARNING_LINE
-  );
-}
-
-function suppressExpectedPrismaD1TransactionWarningOutput(): () => void {
-  const originalWarn = console.warn;
-  const originalStdoutWrite = process.stdout.write.bind(process.stdout) as typeof process.stdout.write;
-  const originalStderrWrite = process.stderr.write.bind(process.stderr) as typeof process.stderr.write;
-  console.warn = (...args: unknown[]) => {
-    const message = args.map((arg) => String(arg)).join(" ");
-    if (isExpectedPrismaD1TransactionWarning(message)) {
-      return;
-    }
-    originalWarn(...args);
-  };
-  process.stdout.write = ((chunk: string | Uint8Array, ...args: unknown[]) => {
-    const text = typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
-    if (isExpectedPrismaD1TransactionWarning(text)) {
-      return true;
-    }
-    return (originalStdoutWrite as (...writeArgs: unknown[]) => boolean)(chunk, ...args);
-  }) as typeof process.stdout.write;
-  process.stderr.write = ((chunk: string | Uint8Array, ...args: unknown[]) => {
-    const text = typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
-    if (isExpectedPrismaD1TransactionWarning(text)) {
-      return true;
-    }
-    return (originalStderrWrite as (...writeArgs: unknown[]) => boolean)(chunk, ...args);
-  }) as typeof process.stderr.write;
-  return () => {
-    console.warn = originalWarn;
-    process.stdout.write = originalStdoutWrite;
-    process.stderr.write = originalStderrWrite;
-  };
-}
 
 async function initPrismaForLocalD1() {
   const platform = await getPlatformProxy<{ DB: D1Database }>();
@@ -309,44 +267,9 @@ interface SeededUser {
 }
 
 const CHEF_RJ_AVATAR_URL = "/images/chef-rj.png";
-const D1_TRANSACTION_WARNING = "Cloudflare D1 does not support transactions yet";
 
 function isGeneratedSeedAvatarUrl(photoUrl: string | null | undefined): boolean {
   return Boolean(photoUrl?.includes("api.dicebear.com"));
-}
-
-async function withoutKnownSeedWarnings<T>(callback: () => Promise<T>): Promise<T> {
-  const originalWarn = console.warn;
-  const originalError = console.error;
-  const originalInfo = console.info;
-  const shouldSuppress = (args: unknown[]) => args.map(String).join(" ").includes(D1_TRANSACTION_WARNING);
-
-  console.warn = (...args: unknown[]) => {
-    if (shouldSuppress(args)) {
-      return;
-    }
-    originalWarn(...args);
-  };
-  console.error = (...args: unknown[]) => {
-    if (shouldSuppress(args)) {
-      return;
-    }
-    originalError(...args);
-  };
-  console.info = (...args: unknown[]) => {
-    if (shouldSuppress(args)) {
-      return;
-    }
-    originalInfo(...args);
-  };
-
-  try {
-    return await callback();
-  } finally {
-    console.warn = originalWarn;
-    console.error = originalError;
-    console.info = originalInfo;
-  }
 }
 
 export function parseLocalSeedArgs(argv = process.argv.slice(2)) {
@@ -1786,7 +1709,7 @@ async function main(argv = process.argv.slice(2)) {
   }
 }
 
-withoutKnownSeedWarnings(() => main(process.argv.slice(2)))
+main(process.argv.slice(2))
   .catch((e) => {
     console.error(e);
     process.exit(1);

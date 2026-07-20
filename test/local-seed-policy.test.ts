@@ -2,10 +2,15 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  filterExpectedPrismaD1WarningLines,
   isCliEntry,
   parseLocalSeedLifecycleArgs,
   runLocalSeedLifecycle,
 } from "../scripts/seed-local.mjs";
+import {
+  EXPECTED_PRISMA_D1_TRANSACTION_WARNING,
+  runWarningGate,
+} from "../scripts/warning-gate";
 
 describe("local development seed policy", () => {
   const legacyDemoEmail = "demo@" + "spoonjoy.com";
@@ -33,6 +38,75 @@ describe("local development seed policy", () => {
     expect(seedSource).not.toContain(legacyDemoEmail);
     expect(seedSource).not.toContain(legacyDemoPassword);
     expect(seedSource).not.toContain(reusableExamplePassword);
+    expect(seedSource).not.toMatch(/console\.(?:warn|error|info)\s*=/);
+    expect(seedSource).not.toMatch(/process\.(?:stdout|stderr)\.write\s*=/);
+    expect(seedSource).not.toContain("suppressExpectedPrismaD1TransactionWarningOutput");
+    expect(seedSource).not.toContain("withoutKnownSeedWarnings");
+  });
+
+  it("filters only exact whole-line Prisma D1 transaction warnings", () => {
+    const expected = EXPECTED_PRISMA_D1_TRANSACTION_WARNING;
+    const output = [
+      "cleanup remains visible",
+      expected,
+      `\u001b[33mprisma:warn ${expected}\u001b[39m`,
+      `prisma:warn ${expected} appended diagnostic`,
+      "prisma:warn unrelated warning",
+      "seed complete",
+      "",
+    ].join("\n");
+
+    expect(filterExpectedPrismaD1WarningLines(output)).toBe([
+      "cleanup remains visible",
+      `prisma:warn ${expected} appended diagnostic`,
+      "prisma:warn unrelated warning",
+      "seed complete",
+      "",
+    ].join("\n"));
+  });
+
+  it("filters seed output without suppressing cleanup or altered diagnostics", async () => {
+    const expected = EXPECTED_PRISMA_D1_TRANSACTION_WARNING;
+    const stdout = { write: vi.fn() };
+    const stderr = { write: vi.fn() };
+    const runCommand = vi
+      .fn()
+      .mockResolvedValueOnce({
+        stdout: `cleanup out\n${expected}\n`,
+        stderr: `cleanup err\nprisma:warn ${expected}\n`,
+      })
+      .mockResolvedValueOnce({
+        stdout: `seed out\n${expected}\nseed done\n`,
+        stderr: `prisma:warn ${expected}\nprisma:warn ${expected} appended diagnostic\n`,
+      });
+
+    await runLocalSeedLifecycle({
+      argv: ["--target-env", "local"],
+      runCommand,
+      stdout,
+      stderr,
+    });
+
+    expect(stdout.write).toHaveBeenNthCalledWith(1, `cleanup out\n${expected}\n`);
+    expect(stdout.write).toHaveBeenNthCalledWith(2, "seed out\nseed done\n");
+    expect(stderr.write).toHaveBeenNthCalledWith(1, `cleanup err\nprisma:warn ${expected}\n`);
+    expect(stderr.write).toHaveBeenNthCalledWith(
+      2,
+      `prisma:warn ${expected} appended diagnostic\n`,
+    );
+
+    const preservedSeedDiagnostic = stderr.write.mock.calls[1]?.[0] as string;
+    const gate = await runWarningGate(["--", "seed"], {
+      runCommand: async () => ({
+        exitCode: 0,
+        output: preservedSeedDiagnostic,
+        warningOutput: preservedSeedDiagnostic,
+      }),
+    });
+    expect(gate.exitCode).toBe(1);
+    expect(gate.unexpectedWarnings).toContain(
+      `prisma:warn ${expected} appended diagnostic`,
+    );
   });
 
   it("cleans prior disposable data before invoking the local seed", async () => {
