@@ -81,6 +81,35 @@ function runtimeImportNames(source: string, moduleName: string) {
   });
 }
 
+function hasRuntimeModuleAcquisition(source: string, moduleName: string) {
+  const sourceFile = ts.createSourceFile(
+    "inventory.ts",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  let found = false;
+  const visit = (node: ts.Node) => {
+    if (ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      ts.isStringLiteral(node.arguments[0]) &&
+      node.arguments[0].text === moduleName) {
+      found = true;
+    }
+    if (ts.isExportDeclaration(node) &&
+      node.moduleSpecifier &&
+      ts.isStringLiteral(node.moduleSpecifier) &&
+      node.moduleSpecifier.text === moduleName &&
+      !node.isTypeOnly) {
+      found = true;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return found;
+}
+
 function workflowRunCommands(source: string) {
   const jobsStart = source.search(/^jobs:\s*$/m);
   if (jobsStart === -1) return [];
@@ -90,6 +119,7 @@ function workflowRunCommands(source: string) {
     ? jobsRemainder
     : jobsRemainder.slice(0, nextTopLevel);
   return jobs.split(/(?=^  [a-z][a-z0-9-]*:\s*$)/m).flatMap((job) => {
+    if (/^    if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*$/mi.test(job)) return [];
     const stepsStart = job.search(/^    steps:\s*$/m);
     if (stepsStart === -1) return [];
     const stepsRemainder = job.slice(stepsStart).split("\n").slice(1).join("\n");
@@ -98,6 +128,7 @@ function workflowRunCommands(source: string) {
       ? stepsRemainder
       : stepsRemainder.slice(0, nextJobProperty);
     return steps.split(/(?=^      - )/m).flatMap((step) => {
+      if (/^        if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*$/mi.test(step)) return [];
       const firstLine = step.match(/^      - run:\s+([^#]+?)\s*$/m);
       const nested = step.match(/^        run:\s+([^#]+?)\s*$/m);
       const command = firstLine?.[1] ?? nested?.[1];
@@ -150,7 +181,19 @@ function hasAutomaticDiagnosticFixture(source: string) {
       return false;
     }
 
-    if (!ts.isArrowFunction(fixtureFunction)) return false;
+    if (!ts.isArrowFunction(fixtureFunction) || fixtureFunction.parameters.length !== 2) {
+      return false;
+    }
+    const [contextParameter, useParameter] = fixtureFunction.parameters;
+    const receivesContext = ts.isObjectBindingPattern(contextParameter.name) &&
+      contextParameter.name.elements.some((element) =>
+        ts.isIdentifier(element.name) &&
+        element.name.text === "context" &&
+        (!element.propertyName ||
+          (ts.isIdentifier(element.propertyName) && element.propertyName.text === "context")));
+    if (!receivesContext || !ts.isIdentifier(useParameter.name) || useParameter.name.text !== "use") {
+      return false;
+    }
     const delegatedCall = ts.isCallExpression(fixtureFunction.body)
       ? fixtureFunction.body
       : ts.isBlock(fixtureFunction.body) && fixtureFunction.body.statements.length === 1 &&
@@ -178,6 +221,7 @@ describe("warning command policy", () => {
     "console.error('(node:123) ExperimentalWarning: sqlite diagnostic')",
     "console.error('WARN command diagnostic')",
     "console.error('▲ [WARNING] build diagnostic')",
+    "console.error('(!) circular dependency')",
     "console.log('warning: stdout diagnostic')",
   ])("fails a successful child for an actual diagnostic: %s", (code) => {
     const result = runWrapped(code);
@@ -339,9 +383,13 @@ describe("in-process warning policy", () => {
     expect(packageJson.scripts?.["verify:clean:migrations"]).toContain(
       "run-with-warning-policy.mjs",
     );
+    expect(packageJson.scripts?.["verify:clean:generated-contract"]).toContain(
+      "run-with-warning-policy.mjs",
+    );
     expect(commands).toContain("pnpm run verify:clean:typecheck");
     expect(commands).toContain("pnpm run verify:clean:build");
     expect(commands).toContain("pnpm run verify:clean:migrations");
+    expect(commands).toContain("pnpm run verify:clean:generated-contract");
   });
 });
 
@@ -444,7 +492,10 @@ describe("Playwright warning policy", () => {
           .some((name) => name === "test" || name === "expect");
         const importsFixtureTestApi = fixtureRuntimeNames
           .some((name) => name === "test" || name === "expect");
-        return officialRuntimeNames.length > 0 || (importsTestApi && !importsFixtureTestApi);
+        const unsafeOfficialImport = officialRuntimeNames
+          .some((name) => ["test", "expect", "default", "*"].includes(name)) ||
+          hasRuntimeModuleAcquisition(source, "@playwright/test");
+        return unsafeOfficialImport || (importsTestApi && !importsFixtureTestApi);
       })
       .map((path) => relative(process.cwd(), path))
       .sort();

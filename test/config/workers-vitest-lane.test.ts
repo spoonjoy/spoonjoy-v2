@@ -22,6 +22,7 @@ function workflowJob(source: string, name: string) {
 }
 
 function runCommands(job: string) {
+  if (/^    if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*$/mi.test(job)) return [];
   const stepsStart = job.search(/^    steps:\s*$/m);
   if (stepsStart === -1) return [];
   const stepsRemainder = job.slice(stepsStart).split("\n").slice(1).join("\n");
@@ -30,6 +31,7 @@ function runCommands(job: string) {
     ? stepsRemainder
     : stepsRemainder.slice(0, nextJobProperty);
   return steps.split(/(?=^      - )/m).flatMap((step) => {
+    if (/^        if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*$/mi.test(step)) return [];
     const firstLine = step.match(/^      - run:\s+([^#]+?)\s*$/m);
     const nested = step.match(/^        run:\s+([^#]+?)\s*$/m);
     const command = firstLine?.[1] ?? nested?.[1];
@@ -139,6 +141,31 @@ function literalValue(expression: ts.Expression | undefined) {
 }
 
 describe("Workers Vitest lane", () => {
+  it("ignores command decoys outside enabled job steps", () => {
+    const workflow = `
+coverage:
+  steps:
+    - run: pnpm run test:coverage
+jobs:
+  disabled-job:
+    if: false
+    steps:
+      - run: pnpm run test:workers:coverage
+  enabled-job:
+    steps:
+      - name: disabled step
+        if: \${{ false }}
+        run: pnpm run test:workers:coverage
+      - name: real step
+        run: pnpm run test:coverage
+`;
+
+    expect(runCommands(workflowJob(workflow, "disabled-job"))).toEqual([]);
+    expect(runCommands(workflowJob(workflow, "enabled-job"))).toEqual([
+      "pnpm run test:coverage",
+    ]);
+  });
+
   it("pins one compatible Vitest and Workers pool toolchain", () => {
     const packageJson = readJson("package.json") as {
       devDependencies?: Record<string, string>;

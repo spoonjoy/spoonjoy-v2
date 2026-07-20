@@ -14,11 +14,13 @@ A subsequent compatibility audit checked Cloudflare's current primary documentat
 
 Round 2 then required end-to-end hook evidence rather than collector-only calls, plus syntax-aware fixture inventory. The repaired contract now spawns sentinel app/Workers Vitest runs that emit real console/process diagnostics, proves an exact owned `console.error` remains clean, exercises the browser context/page observer wiring with emitted events, and parses TypeScript imports so comments or type-only fixture imports cannot masquerade as runtime coverage while inline official type specifiers remain allowed.
 
-Round 3 completed the matrix for both Vitest lanes, requires each unique sentinel in the captured diagnostic, parses the exported `defineConfig` AST to prove `cloudflareTest()` is imported/called and every lane option is executable structure, recognizes side-effect official imports as runtime imports, and parses exact executable CI `run:` commands rather than accepting commented text.
+Round 3 completed the matrix for both Vitest lanes, requires each unique sentinel in the captured diagnostic, parses the exported `defineConfig` AST to prove `cloudflareTest()` is imported/called and every lane option is executable structure, and parses exact executable CI `run:` commands rather than accepting commented text.
 
-Rounds 4-5 restricted CI evidence to actual `jobs.*.steps[]`, behaviorally invoked the exported browser fixture helper, required the automatic fixture arrow to delegate exactly `runBrowserDiagnosticFixture(context, use)`, covered later-page errors, preserved numeric config types, and scoped fixture inventory to files that actually import the test API while still rejecting every official runtime/side-effect import.
+Rounds 4-5 restricted CI evidence to actual `jobs.*.steps[]`, behaviorally invoked the exported browser fixture helper, required the automatic fixture arrow to delegate exactly `runBrowserDiagnosticFixture(context, use)`, covered later-page errors, preserved numeric config types, and scoped fixture inventory to files that actually import the test API.
 
-Current rerun: expected exit status 1; `workers-vitest-lane.test.ts` collects four tests and all four fail on the absent package/config/CI lane, while `warning-policy.test.ts` fails during transform on the intentionally absent `test/warning-policy.ts` module and collects no bodies. This is the current implementation-only red boundary.
+Round 6 proves the auto-fixture arrow receives `{context}` and `use`, rejects direct/namespace/dynamic/re-export acquisition of official `test`/`expect` while allowing unrelated runtime helpers, covers Vite/Rollup's `(!)` warning form, requires the generated-contract clean command, and rejects literal-disabled CI jobs/steps with an enabled-decoy self-test.
+
+Current rerun: expected exit status 1; `workers-vitest-lane.test.ts` collects five tests, its parser self-test passes, and the remaining four fail on the absent package/config/CI lane; `warning-policy.test.ts` fails during transform on the intentionally absent `test/warning-policy.ts` module and collects no bodies. This is the current implementation-only red boundary.
 
 The failures are confined to the intentionally absent Unit 1.1 infrastructure:
 
