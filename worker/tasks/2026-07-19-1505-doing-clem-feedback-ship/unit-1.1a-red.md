@@ -22,7 +22,9 @@ Round 6 proves the auto-fixture arrow receives `{context}` and `use`, rejects di
 
 Round 7 pins the local/QA migration and generated-contract package scripts exactly so a wrapper-name decoy cannot satisfy the contract while running the real command outside the diagnostic gate.
 
-Current rerun: expected exit status 1; `workers-vitest-lane.test.ts` collects five tests, its parser self-test passes, and the remaining four fail on the absent package/config/CI lane; `warning-policy.test.ts` fails during transform on the intentionally absent `test/warning-policy.ts` module and collects no bodies. This is the current implementation-only red boundary.
+Round 8 replaces transform-time literal imports with runtime `vi.importActual` so every warning/browser/script contract collects and fails independently, makes QA migration rehearsal a real local apply under the QA Wrangler environment and mandatory CI step, and rejects `continue-on-error` command decoys.
+
+Current rerun: expected exit status 1; all 30 tests collect. The Workers file has one parser self-test pass and four absent-infrastructure failures. The warning-policy file has one owned-app baseline pass and 24 failures that identify the absent wrapper, hooks, Workers config, browser modules/fixture, clean scripts/CI steps, and 17 unconverted Playwright imports. Totals are 28 failed and 2 passed, with no product assertion involved.
 
 The failures are confined to the intentionally absent Unit 1.1 infrastructure:
 

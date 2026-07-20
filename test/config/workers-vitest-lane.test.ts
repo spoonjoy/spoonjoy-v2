@@ -31,7 +31,8 @@ function runCommands(job: string) {
     ? stepsRemainder
     : stepsRemainder.slice(0, nextJobProperty);
   return steps.split(/(?=^      - )/m).flatMap((step) => {
-    if (/^        if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*$/mi.test(step)) return [];
+    if (/^        if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*$/mi.test(step) ||
+      /^        continue-on-error:\s*true\s*$/mi.test(step)) return [];
     const firstLine = step.match(/^      - run:\s+([^#]+?)\s*$/m);
     const nested = step.match(/^        run:\s+([^#]+?)\s*$/m);
     const command = firstLine?.[1] ?? nested?.[1];
@@ -155,6 +156,9 @@ jobs:
     steps:
       - name: disabled step
         if: \${{ false }}
+        run: pnpm run test:workers:coverage
+      - name: tolerated failure
+        continue-on-error: true
         run: pnpm run test:workers:coverage
       - name: real step
         run: pnpm run test:coverage

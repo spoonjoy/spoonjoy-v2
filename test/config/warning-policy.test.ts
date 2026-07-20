@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, relative } from "node:path";
 import ts from "typescript";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const wrapper = "scripts/run-with-warning-policy.mjs";
 
@@ -128,7 +128,8 @@ function workflowRunCommands(source: string) {
       ? stepsRemainder
       : stepsRemainder.slice(0, nextJobProperty);
     return steps.split(/(?=^      - )/m).flatMap((step) => {
-      if (/^        if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*$/mi.test(step)) return [];
+      if (/^        if:\s*(?:false|\$\{\{\s*false\s*\}\})\s*$/mi.test(step) ||
+        /^        continue-on-error:\s*true\s*$/mi.test(step)) return [];
       const firstLine = step.match(/^      - run:\s+([^#]+?)\s*$/m);
       const nested = step.match(/^        run:\s+([^#]+?)\s*$/m);
       const command = firstLine?.[1] ?? nested?.[1];
@@ -325,7 +326,9 @@ describe("in-process warning policy", () => {
   );
 
   it("rejects unowned console warnings/errors and process warnings but permits owned output", async () => {
-    const { createWarningCollector } = await import("../warning-policy");
+    const { createWarningCollector } = await vi.importActual<
+      typeof import("../warning-policy")
+    >("../warning-policy");
 
     const unowned = createWarningCollector();
     unowned.captureConsole("warn", ["warning one"], false);
@@ -341,7 +344,9 @@ describe("in-process warning policy", () => {
   });
 
   it("clears captured diagnostics between tests", async () => {
-    const { createWarningCollector } = await import("../warning-policy");
+    const { createWarningCollector } = await vi.importActual<
+      typeof import("../warning-policy")
+    >("../warning-policy");
     const collector = createWarningCollector();
 
     collector.captureConsole("warn", ["first test"], false);
@@ -384,7 +389,7 @@ describe("in-process warning policy", () => {
       "node scripts/run-with-warning-policy.mjs -- pnpm exec wrangler d1 migrations apply DB --local",
     );
     expect(packageJson.scripts?.["verify:clean:migrations:qa"]).toBe(
-      "node scripts/run-with-warning-policy.mjs -- pnpm exec wrangler d1 migrations list DB --remote --env qa",
+      "node scripts/run-with-warning-policy.mjs -- pnpm exec wrangler d1 migrations apply DB --local --env qa",
     );
     expect(packageJson.scripts?.["verify:clean:generated-contract"]).toBe(
       "node scripts/run-with-warning-policy.mjs -- sh -c 'pnpm run api:playground:generate && git diff --exit-code -- app/lib/generated/api-v1-playground.ts'",
@@ -392,6 +397,7 @@ describe("in-process warning policy", () => {
     expect(commands).toContain("pnpm run verify:clean:typecheck");
     expect(commands).toContain("pnpm run verify:clean:build");
     expect(commands).toContain("pnpm run verify:clean:migrations");
+    expect(commands).toContain("pnpm run verify:clean:migrations:qa");
     expect(commands).toContain("pnpm run verify:clean:generated-contract");
   });
 });
@@ -401,7 +407,9 @@ describe("Playwright warning policy", () => {
     const {
       createBrowserDiagnosticCollector,
       observeBrowserContext,
-    } = await import("../../e2e/warning-policy");
+    } = await vi.importActual<typeof import("../../e2e/warning-policy")>(
+      "../../e2e/warning-policy",
+    );
 
     class FakeEmitter {
       listeners = new Map<string, Array<(...args: unknown[]) => void>>();
@@ -435,7 +443,9 @@ describe("Playwright warning policy", () => {
   });
 
   it("rejects browser warning/error/page-error diagnostics", async () => {
-    const { createBrowserDiagnosticCollector } = await import("../../e2e/warning-policy");
+    const { createBrowserDiagnosticCollector } = await vi.importActual<
+      typeof import("../../e2e/warning-policy")
+    >("../../e2e/warning-policy");
     const collector = createBrowserDiagnosticCollector();
 
     collector.captureConsole("log", "ordinary log");
@@ -449,7 +459,9 @@ describe("Playwright warning policy", () => {
 
   it("provides an executable automatic context-wide diagnostic fixture", async () => {
     const fixture = readFileSync("e2e/fixtures.ts", "utf8");
-    const exported = await import("../../e2e/fixtures");
+    const exported = await vi.importActual<typeof import("../../e2e/fixtures")>(
+      "../../e2e/fixtures",
+    );
 
     class FakeEmitter {
       listeners = new Map<string, Array<(...args: unknown[]) => void>>();
