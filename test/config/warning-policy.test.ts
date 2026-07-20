@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, relative } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
@@ -37,6 +37,7 @@ function runVitestSentinel(
     );
   }
 
+  mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `import { test, vi } from "vitest";\n${body}\n`);
   try {
     return spawnSync(process.execPath, args, {
