@@ -96,7 +96,7 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Output**: One deployable, forward-compatible inert SQLite DO namespace.
 **Acceptance**: Unit 1.2a tests pass and `pnpm run typecheck` plus `pnpm run build` are green.
 
-### ⬜ Unit 1.2c: Namespace Bootstrap - Verification
+### ✅ Unit 1.2c: Namespace Bootstrap - Verification
 **What**: Cover every namespace/config branch and review storage/lifecycle correctness.
 **Output**: Focused coverage and reviewer report.
 **Acceptance**: Namespace code is 100% covered and a fresh Cloudflare review has no BLOCKER/MAJOR finding.
@@ -697,3 +697,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-20 01:05 Unit 1.1c complete: replayed 7,298 app tests and 10 Workers tests at 100%, 63 browser tests, all wrapped compiler/build/generated/migration gates, warning sentinels, and labeled zero-residue checks; fresh infrastructure review converged after three evidence-audit rounds.
 - 2026-07-20 01:54 Unit 1.2a complete: froze 12 real-Workers CookSession lifecycle contracts plus three config contracts; exact red commands fail only on the absent namespace/class, warning sentinels and Node Worker tests stay isolated and green, and three harsh review rounds closed route, auth-ordering, adapter, storage-bookmark, probe, and lane-collision false positives.
 - 2026-07-20 11:41 Unit 1.2b complete: added the inert SQLite CookSession export, exact public/private bootstrap adapter, authenticated retry-only protocol stubs, production/QA binding and legacy migration, and environment types; real Workers coverage, typecheck, production/QA build dry-runs, and harsh Cloudflare/security review converged.
+- 2026-07-20 11:55 Unit 1.2c complete: expanded the Worker adapter matrix to 36 auth, routing, bootstrap, forwarding, propagation, and analytics cases; focused app and real Workers coverage are exactly 100%, the full 7,337-test app gate is 100%, and fresh test review converged.
