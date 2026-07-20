@@ -14,6 +14,10 @@ A subsequent compatibility audit checked Cloudflare's current primary documentat
 
 Round 2 then required end-to-end hook evidence rather than collector-only calls, plus syntax-aware fixture inventory. The repaired contract now spawns sentinel app/Workers Vitest runs that emit real console/process diagnostics, proves an exact owned `console.error` remains clean, exercises the browser context/page observer wiring with emitted events, and parses TypeScript imports so comments or type-only fixture imports cannot masquerade as runtime coverage while inline official type specifiers remain allowed.
 
+Round 3 completed the matrix for both Vitest lanes, requires each unique sentinel in the captured diagnostic, parses the exported `defineConfig` AST to prove `cloudflareTest()` is imported/called and every lane option is executable structure, recognizes side-effect official imports as runtime imports, and parses exact executable CI `run:` commands rather than accepting commented text.
+
+Current rerun: expected exit status 1; both files fail during transform on their intentionally absent implementation modules (`vitest.workers.config.ts` and `test/warning-policy.ts`), so no test bodies collect. This supersedes the earlier 4/4 Workers count while preserving the same implementation-only red boundary.
+
 The failures are confined to the intentionally absent Unit 1.1 infrastructure:
 
 - Vitest packages are still `4.0.18` and the Workers pool is absent.

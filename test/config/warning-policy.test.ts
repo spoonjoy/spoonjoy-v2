@@ -62,11 +62,11 @@ function runtimeImportNames(source: string, moduleName: string) {
   return sourceFile.statements.flatMap((statement) => {
     if (!ts.isImportDeclaration(statement) ||
       !ts.isStringLiteral(statement.moduleSpecifier) ||
-      statement.moduleSpecifier.text !== moduleName ||
-      !statement.importClause ||
-      statement.importClause.isTypeOnly) {
+      statement.moduleSpecifier.text !== moduleName) {
       return [];
     }
+    if (!statement.importClause) return ["side-effect"];
+    if (statement.importClause.isTypeOnly) return [];
 
     const names: string[] = [];
     if (statement.importClause.name) names.push("default");
@@ -126,34 +126,68 @@ describe("warning command policy", () => {
 
 describe("in-process warning policy", () => {
   it.each([
-    ["app console.warn", "app", 'test("sentinel", () => console.warn("app warning sentinel"));'],
-    ["app console.error", "app", 'test("sentinel", () => console.error("app error sentinel"));'],
+    [
+      "app console.warn",
+      "app",
+      "console.warn: app warning sentinel",
+      'test("sentinel", () => console.warn("app warning sentinel"));',
+    ],
+    [
+      "app console.error",
+      "app",
+      "console.error: app error sentinel",
+      'test("sentinel", () => console.error("app error sentinel"));',
+    ],
     [
       "app process warning",
       "app",
+      "process warning: Warning: process warning sentinel",
       'test("sentinel", async () => { process.emitWarning("process warning sentinel"); await new Promise((resolve) => setTimeout(resolve, 0)); });',
     ],
     [
       "Workers console.warn",
       "workers",
+      "console.warn: Workers warning sentinel",
       'test("sentinel", () => console.warn("Workers warning sentinel"));',
     ],
-  ] as const)("rejects an actual %s through its installed hook", (_label, lane, body) => {
+    [
+      "Workers console.error",
+      "workers",
+      "console.error: Workers error sentinel",
+      'test("sentinel", () => console.error("Workers error sentinel"));',
+    ],
+    [
+      "Workers process warning",
+      "workers",
+      "process warning: Warning: Workers process warning sentinel",
+      'test("sentinel", async () => { process.emitWarning("Workers process warning sentinel"); await new Promise((resolve) => setTimeout(resolve, 0)); });',
+    ],
+  ] as const)("rejects an actual %s through its installed hook", (
+    _label,
+    lane,
+    expectedDiagnostic,
+    body,
+  ) => {
     const result = runVitestSentinel(lane, body);
 
     expect(result.status).toBe(1);
-    expect(`${result.stdout}${result.stderr}`).toContain("Unexpected warning/error output");
+    const output = `${result.stdout}${result.stderr}`;
+    expect(output).toContain("Unexpected warning/error output");
+    expect(output).toContain(expectedDiagnostic);
   });
 
-  it("permits an exactly owned console.error through the installed app hook", () => {
-    const result = runVitestSentinel(
-      "app",
-      'test("sentinel", () => { const owned = vi.spyOn(console, "error").mockImplementation(() => {}); console.error("owned"); owned.mockRestore(); });',
-    );
+  it.each(["app", "workers"] as const)(
+    "permits an exactly owned console.error through the installed %s hook",
+    (lane) => {
+      const result = runVitestSentinel(
+        lane,
+        'test("sentinel", () => { const owned = vi.spyOn(console, "error").mockImplementation(() => {}); console.error("owned"); owned.mockRestore(); });',
+      );
 
-    expect(result.status).toBe(0);
-    expect(`${result.stdout}${result.stderr}`).not.toContain("Unexpected warning/error output");
-  });
+      expect(result.status).toBe(0);
+      expect(`${result.stdout}${result.stderr}`).not.toContain("Unexpected warning/error output");
+    },
+  );
 
   it("rejects unowned console warnings/errors and process warnings but permits owned output", async () => {
     const { createWarningCollector } = await import("../warning-policy");
