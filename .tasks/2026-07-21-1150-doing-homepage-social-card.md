@@ -57,7 +57,7 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 **Output**: Baseline headers and HTML evidence in the artifacts directory.
 **Acceptance**: Evidence shows the real homepage and PNG assets are crawler-accessible while the homepage lacks the complete social contract.
 
-### 🔄 Unit 1a: Homepage social metadata and raster card — Tests
+### ✅ Unit 1a: Homepage social metadata and raster card — Tests
 **What**: Update `test/routes/index.test.tsx` to require the complete metadata contract and add a test that first asserts `public/og/spoonjoy-home.png` exists, then reads its bytes and asserts PNG signature plus 1200×630 IHDR dimensions.
 **Output**: Tests that fail because metadata fields and the PNG asset do not yet exist.
 **Acceptance**: The targeted test command fails through clean metadata and file-existence assertions rather than an unhandled `ENOENT`, setup, or mock error.
@@ -95,3 +95,4 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 ## Progress Log
 - 2026-07-21 11:59 Created from planning doc after cold-review convergence.
 - 2026-07-21 12:05 Unit 0 complete: LinkedInBot received the real homepage and a valid PNG asset without Cloudflare challenge markers; the homepage exposed only its basic description and no canonical, Open Graph, or Twitter metadata. Unit review skipped because this was a read-only evidence capture.
+- 2026-07-21 12:11 Unit 1a complete: targeted tests failed cleanly on the fourteen missing social metadata entries and the missing raster asset.
