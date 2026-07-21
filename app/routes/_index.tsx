@@ -33,6 +33,10 @@ const LANDING_FOOD_PHOTOS = [
 
 type KitchenTab = "recipes" | "cookbooks";
 type KitchenUserWhere = { id: string } | { username: string };
+const HOMEPAGE_TITLE = "Spoonjoy — The Recipe App";
+const HOMEPAGE_DESCRIPTION = "The recipe app for the meals you actually cook. Collect recipes, shape them into cookbooks, and keep a personal kitchen.";
+const HOMEPAGE_URL = "https://spoonjoy.app/";
+const HOMEPAGE_SOCIAL_IMAGE_URL = "https://spoonjoy.app/og/spoonjoy-home.png";
 
 function normalizeTab(value: string | null): KitchenTab {
   return value === "cookbooks" ? "cookbooks" : "recipes";
@@ -48,8 +52,22 @@ export function absoluteKitchenUrl(path: string) {
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Spoonjoy — The Recipe App" },
-    { name: "description", content: "The recipe app for the meals you actually cook. Collect recipes, shape them into cookbooks, and keep a personal kitchen." },
+    { title: HOMEPAGE_TITLE },
+    { name: "description", content: HOMEPAGE_DESCRIPTION },
+    { property: "og:site_name", content: "Spoonjoy" },
+    { property: "og:type", content: "website" },
+    { property: "og:title", content: HOMEPAGE_TITLE },
+    { property: "og:description", content: HOMEPAGE_DESCRIPTION },
+    { property: "og:url", content: HOMEPAGE_URL },
+    { property: "og:image", content: HOMEPAGE_SOCIAL_IMAGE_URL },
+    { property: "og:image:width", content: "1200" },
+    { property: "og:image:height", content: "630" },
+    { property: "og:image:type", content: "image/png" },
+    { name: "twitter:card", content: "summary_large_image" },
+    { name: "twitter:title", content: HOMEPAGE_TITLE },
+    { name: "twitter:description", content: HOMEPAGE_DESCRIPTION },
+    { name: "twitter:image", content: HOMEPAGE_SOCIAL_IMAGE_URL },
+    { tagName: "link", rel: "canonical", href: HOMEPAGE_URL },
   ];
 }
 
