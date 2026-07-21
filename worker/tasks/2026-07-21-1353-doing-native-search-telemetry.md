@@ -40,7 +40,7 @@ Extend the existing closed-schema native telemetry endpoint with privacy-safe se
 
 ⬜ Not started · 🔄 In progress · ✅ Done · ❌ Blocked
 
-### ⬜ Unit 0: Baseline And Contract Freeze
+### ✅ Unit 0: Baseline And Contract Freeze
 **What**: Record exact base/branch state and run the current focused native telemetry and OpenAPI tests before changing code.
 **Output**: `unit-0-baseline.md` and baseline test log in the artifacts directory.
 **Acceptance**: Worktree provenance is exact, no non-task dirty state exists, and focused baseline tests pass.
@@ -68,3 +68,4 @@ Extend the existing closed-schema native telemetry endpoint with privacy-safe se
 ## Progress Log
 
 - 2026-07-21 14:01 Doing doc created after planning review convergence.
+- 2026-07-21 14:06 Unit 0 complete: exact provenance recorded and 23 focused baseline tests passed after local test database initialization.
