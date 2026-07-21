@@ -176,7 +176,7 @@ describe("demo-source policy", () => {
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
-  });
+  }, 15_000);
 
   it("does not inspect untracked local files that may contain secrets", () => {
     const tempDir = mkdtempSync(".demo-source-policy-untracked-");

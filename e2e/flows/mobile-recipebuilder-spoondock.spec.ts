@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
+import { expect, test } from '../fixtures';
 import { publicRecipeHrefByTitle } from '../support/recipes';
 
 test.use({
@@ -30,6 +31,7 @@ async function addFirstRecipeStep(page: Page) {
   }).toPass({ timeout: 15_000 });
   return stepCards.first().getByLabel(/instructions/i);
 }
+
 async function expectTouchTarget(locator: Locator, label: string) {
   await expect(locator, `${label} should be visible`).toBeVisible();
 
@@ -104,9 +106,16 @@ test.describe('Mobile RecipeBuilder and SpoonDock audit', () => {
 
       await expect(page).toHaveURL(new RegExp(`${recipeHref}$`));
       await expect(page.getByRole('heading', { name: updatedTitle })).toBeVisible();
+      await page.reload();
+      await expect(page).toHaveURL(new RegExp(`${recipeHref}$`));
+      await expect(page.getByRole('heading', { name: updatedTitle })).toBeVisible();
     } finally {
       if (recipeHref) {
-        await page.request.post(recipeHref, { form: { intent: 'delete' } });
+        const cleanupResponse = await page.request.post(recipeHref, {
+          form: { intent: 'delete' },
+        });
+        expect(cleanupResponse.ok(), 'mobile edit recipe cleanup should succeed').toBe(true);
+        expect((await page.request.get(recipeHref)).status()).toBe(404);
       }
     }
   });

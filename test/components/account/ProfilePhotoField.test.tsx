@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createTestRoutesStub } from "../../utils";
@@ -135,11 +135,14 @@ describe("ProfilePhotoField", () => {
     await screen.findByTestId("mock-cropper");
 
     // Directly invoke onConfirm with a typeless blob to hit the fallback branch.
-    cropperProps!.onConfirm(new Blob(["x"]));
+    act(() => {
+      cropperProps!.onConfirm(new Blob(["x"]));
+    });
 
     await waitFor(() => expect(mockSubmit).toHaveBeenCalledTimes(1));
     const photo = (mockSubmit.mock.calls[0][0] as FormData).get("photo") as File;
     expect(photo.type).toBe("image/jpeg");
+    expect(screen.queryByTestId("mock-cropper")).not.toBeInTheDocument();
   });
 
   it("closes the cropper and resets the input on cancel", async () => {

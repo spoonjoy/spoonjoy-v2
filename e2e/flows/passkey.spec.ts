@@ -1,5 +1,9 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from "../fixtures";
 import { createDisposableE2EUser } from '../support/disposable-auth';
+import {
+  e2eOauthClientName,
+  recordE2eOauthClient,
+} from '../../scripts/e2e-run-cleanup.mjs';
 
 /**
  * Full passkey lifecycle against a real (virtual) authenticator:
@@ -62,11 +66,19 @@ test.describe('Passkey lifecycle', () => {
     // --- sign in with the passkey through an OAuth continuation. This must
     // replace the login document so the consent page receives its callback CSP.
     const redirectUri = 'https://client.example/oauth/passkey-e2e-callback';
+    const runId = process.env.SPOONJOY_E2E_RUN_ID;
+    expect(runId, 'Playwright must provide an isolated E2E run ID').toBeTruthy();
+    const clientName = e2eOauthClientName(runId!);
     const registration = await page.request.post('/oauth/register', {
-      data: { client_name: 'E2E OAuth Client', redirect_uris: [redirectUri] },
+      data: { client_name: clientName, redirect_uris: [redirectUri] },
     });
     expect(registration.status()).toBe(201);
     const { client_id: clientId } = await registration.json() as { client_id: string };
+    await recordE2eOauthClient({
+      projectRoot: process.cwd(),
+      runId: runId!,
+      clientId,
+    });
     const authorizeParams = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirectUri,
@@ -90,7 +102,7 @@ test.describe('Passkey lifecycle', () => {
         && response.headers()['content-type']?.includes('text/html') === true;
     });
     await page.getByRole('button', { name: /sign in with a passkey/i }).first().click();
-    await expect(page.getByRole('heading', { name: /connect e2e oauth client to spoonjoy/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: `Connect ${clientName} to Spoonjoy` })).toBeVisible();
     const consentResponse = await consentDocument;
     expect(consentResponse.headers()['content-security-policy']).toContain(
       "form-action 'self' https://client.example",

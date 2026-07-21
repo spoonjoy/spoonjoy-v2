@@ -1,11 +1,9 @@
 import { readdirSync, readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { DatabaseSync as DatabaseSyncType } from "node:sqlite";
+import DatabaseSync from "better-sqlite3";
+type DatabaseSyncType = InstanceType<typeof DatabaseSync>;
 
-const nodeRequire = createRequire(import.meta.url);
-const { DatabaseSync } = nodeRequire("node:sqlite") as typeof import("node:sqlite");
 
 const MIGRATIONS_DIR = resolve(__dirname, "..", "..", "migrations");
 const MIGRATION_FILE = "0024_remove_legacy_demo_identities.sql";

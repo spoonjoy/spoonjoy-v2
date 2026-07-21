@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
@@ -1972,6 +1972,9 @@ describe("Account Settings Route", () => {
           // The cropper opens for the user to confirm; nothing is submitted yet.
           expect(await screen.findByRole("button", { name: /save photo/i })).toBeInTheDocument();
           expect(actionCalled).toBe(false);
+          await act(async () => {
+            await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+          });
         } finally {
           URL.createObjectURL = originalCreateObjectURL;
           URL.revokeObjectURL = originalRevokeObjectURL;

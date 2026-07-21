@@ -1,9 +1,8 @@
-import { test as setup } from '@playwright/test';
+import { test as setup } from "./fixtures";
 import {
   createDisposableE2EUser,
-  DISPOSABLE_E2E_AUTH_STATE,
   recordDisposableE2EUser,
-  secureDisposableE2EAuthFile,
+  writeDisposableE2EAuthState,
 } from './support/disposable-auth';
 
 setup('authenticate', async ({ page }) => {
@@ -22,7 +21,7 @@ setup('authenticate', async ({ page }) => {
 
   recordDisposableE2EUser(user);
 
-  // Save storage state
-  await page.context().storageState({ path: DISPOSABLE_E2E_AUTH_STATE });
-  secureDisposableE2EAuthFile(DISPOSABLE_E2E_AUTH_STATE);
+  // Authenticated projects need only the session cookie. Keep setup-project
+  // local and session storage from leaking into every dependent test context.
+  writeDisposableE2EAuthState(await page.context().storageState());
 });

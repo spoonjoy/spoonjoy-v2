@@ -1,5 +1,9 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from "../fixtures";
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
+import {
+  e2eOauthClientName,
+  recordE2eOauthClient,
+} from '../../scripts/e2e-run-cleanup.mjs';
 import { loginAsDisposableUser } from '../support/auth';
 
 /**
@@ -11,11 +15,13 @@ import { loginAsDisposableUser } from '../support/auth';
  * scope-aware consent screen after login, and redirect back to the registered
  * redirect_uri with either a `code` (approve) or `error=access_denied` (deny).
  *
- * The redirect_uri is intercepted so the assertion reads the exact callback URL
- * the server emits, independent of whatever that in-app route would do next.
+ * The redirect_uri uses an intercepted external callback so the assertion can
+ * inspect the exact outbound URL and the consent page's form-action CSP.
  *
  * Runs in the `oauth` project (no stored auth state) and logs in with the
- * per-run disposable e2e user created by the setup project.
+ * per-run disposable e2e user created by the setup project. Its OAuth graph is
+ * registered with the unique Playwright run marker, captured by exact client
+ * ID, and removed by global teardown.
  */
 
 const REDIRECT_URI = 'https://client.example/oauth/e2e-callback';
@@ -40,12 +46,19 @@ async function pkceChallenge(verifier: string): Promise<string> {
 }
 
 async function registerClient(request: APIRequestContext): Promise<string> {
+  const runId = process.env.SPOONJOY_E2E_RUN_ID;
+  expect(runId, 'Playwright must provide an isolated E2E run ID').toBeTruthy();
   const res = await request.post('/oauth/register', {
-    data: { client_name: 'E2E OAuth Client', redirect_uris: [REDIRECT_URI] },
+    data: { client_name: e2eOauthClientName(runId!), redirect_uris: [REDIRECT_URI] },
   });
   expect(res.status()).toBe(201);
   const body = (await res.json()) as { client_id: string };
   expect(body.client_id).toBeTruthy();
+  await recordE2eOauthClient({
+    projectRoot: process.cwd(),
+    runId: runId!,
+    clientId: body.client_id,
+  });
   return body.client_id;
 }
 
@@ -170,7 +183,7 @@ async function expectConsentFitsDesktop(page: Page): Promise<void> {
 
 /**
  * Resolves with the exact outbound callback request. The host is deliberately
- * external and non-resolving: observing the request proves the consent
+ * external and intercepted: observing the request proves the consent
  * document's form-action CSP allowed it without making CI depend on DNS.
  */
 async function submitAndReadCallback(page: Page, button: Locator): Promise<URL> {
@@ -228,7 +241,7 @@ test.describe('OAuth authorize + consent flow', () => {
       "form-action 'self' https://client.example",
     );
 
-    await expect(page.getByRole('heading', { name: /connect e2e oauth client to spoonjoy/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /connect e2e oauth client .+ to spoonjoy/i })).toBeVisible();
     expect(new URL(page.url()).pathname).toBe('/oauth/authorize');
     await expect(page.getByText(/read recipes, cookbooks, and your shopping list/i)).toBeVisible();
     await expect(page.getByText(/this connection stays active until you disconnect it/i)).toBeVisible();

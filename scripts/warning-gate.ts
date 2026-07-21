@@ -100,6 +100,23 @@ export function findUnexpectedWarnings(output: string): string[] {
   return unexpectedWarnings;
 }
 
+export function findUnexpectedDiagnosticOutput(
+  output: string,
+  warningOutput: string,
+): string[] {
+  const warningChannelLines = warningOutput
+    .split(/\r?\n/)
+    .map((line) => normalizeOutputLine(line))
+    .filter((line) => line.text !== "" || line.rejectedTerminalControl)
+    .map((line) =>
+      line.rejectedTerminalControl ? formatRejectedTerminalControlLine(line.text) : line.text
+    );
+  return Array.from(new Set([
+    ...findUnexpectedWarnings(output),
+    ...warningChannelLines,
+  ]));
+}
+
 export function parseWarningGateCommands(argv: readonly string[]): string[][] {
   const separatorIndex = argv.indexOf("--");
   if (separatorIndex === -1) {
@@ -193,17 +210,7 @@ export async function runWarningGate(
     }
   }
 
-  const warningChannelLines = warningOutput
-    .split(/\r?\n/)
-    .map((line) => normalizeOutputLine(line))
-    .filter((line) => line.text !== "" || line.rejectedTerminalControl)
-    .map((line) =>
-      line.rejectedTerminalControl ? formatRejectedTerminalControlLine(line.text) : line.text
-    );
-  const unexpectedWarnings = Array.from(new Set([
-    ...findUnexpectedWarnings(output),
-    ...warningChannelLines,
-  ]));
+  const unexpectedWarnings = findUnexpectedDiagnosticOutput(output, warningOutput);
   return {
     exitCode: unexpectedWarnings.length > 0 ? 1 : exitCode,
     unexpectedWarnings,

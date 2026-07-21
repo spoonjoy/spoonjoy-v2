@@ -271,51 +271,29 @@ For local dev, copy the printed block into `.dev.vars` (gitignored).
 
 ## Step 5: Run Database Migrations
 
-```bash
-# Apply all migrations to production D1
-wrangler d1 migrations apply spoonjoy --remote
-```
-
-If you need to seed initial data:
-```bash
-wrangler d1 execute spoonjoy --remote --file=./migrations/0002_seed.sql
-```
+Production migrations are applied only by the exact-SHA GitHub production workflow after its additive-SQL review and ownership checks. Direct production D1 writes are unsupported.
 
 ## Step 6: Build and Deploy
 
-There are two supported deploy paths:
-
-### `pnpm run deploy` — safe, manual migrations
-
-`pnpm run deploy` runs the full preflight (including a remote D1 migration check) before building and deploying. It does **not** apply remote D1 migrations for you. If the preflight detects pending migrations, it fails and tells you which migrations are pending.
-
-Use `pnpm run deploy`; bare `pnpm deploy` is pnpm's workspace deploy command and will not run this package script.
+Production has one supported release path:
 
 ```bash
-# Apply any pending migrations first
-pnpm exec wrangler d1 migrations apply DB --remote
-
-# Then deploy (preflight → build → wrangler deploy)
-pnpm run deploy
+gh workflow run production-deploy.yml --ref main -f source_sha="$(git rev-parse HEAD)"
 ```
 
-Use this path when you want to inspect migrations before applying them or when migrations require a manual review.
-
-### `pnpm deploy:auto` — one-shot preflight + migrate + deploy
-
-```bash
-SOURCE_SHA="$(git rev-parse HEAD)" pnpm deploy:auto
-```
-
-This runs the staged production release orchestrator with an exact 40-character lowercase source SHA. It proves the checked-out commit and clean Git tree, builds without Cloudflare credentials, inspects every pending D1 migration, refuses destructive or non-additive SQL, applies compatible migrations with a D1-only token, and reruns the full preflight. It then uses a separate Workers-only token to upload a source-tagged Worker version, stages the candidate at 0% traffic, smokes that exact candidate, promotes it, and verifies both Cloudflare deployment state and the public version header. Any failure after staging automatically restores and verifies the prior Worker version.
+The workflow runs the source-controlled release orchestrator with an exact 40-character lowercase source SHA. It proves the checked-out commit and clean Git tree, builds without Cloudflare credentials, reviews pending D1 bytes from the immutable Git tree, revalidates their hashes and exact remote pending set, and submits those reviewed in-memory bytes plus their migration-ledger inserts as one ordered D1 batch transaction through the Cloudflare query API. Wrangler never reopens a worktree migration file for the mutation. A statement failure rolls back the whole batch; an indeterminate network response still requires forward repair. The workflow then reruns the full preflight. Depending on the checked-in lifecycle phase, it either deploys atomically or stages a protocol-v1 candidate at 0%, smokes that exact candidate, promotes it, and verifies both the owned Cloudflare deployment UUID and the public version header. Canary restoration requires ownership of the failed deployment plus two consecutive control-plane and public-version matches.
 
 The release result is written to `mcp-oauth-canary-artifacts/production-release.json` with sanitized Git provenance, reviewed migrations, D1 apply state, version IDs, phase, status, and redacted failure text. D1 is not Worker-versioned, so destructive migrations require a separately reviewed expand/migrate/contract rollout and are intentionally blocked from this command.
 
 Intentional rollbacks are dispatched in GitHub with a historical `source_sha` and its exact source-tagged Worker `rollback_version_id`. Current `main` tooling resolves that immutable version, stages it at 0% beside the current version at 100%, inspects the exact rollback candidate CSP through Cloudflare's version override, and only then promotes it; a failed or inconclusive inspection restores and verifies the prior 100% deployment. Historical scripts are never executed, and D1 is not rolled back. A valid enforcing CSP needs no break-glass acknowledgement. A report-only, absent, or weakened CSP requires the exact `ACK_REPORT_ONLY_CSP_ROLLBACK` workflow acknowledgement, and candidate inspection that is unavailable or inconclusive fails closed before promotion.
 
-A source commit that intentionally changes Wrangler CSP mode to `report-only` uses the exact-SHA `CI` workflow dispatch before the protected production dispatch. Ordinary push and pull-request CI stay strict. Dispatch `ci.yml` on the exact branch head with `source_sha` and `csp_report_only_break_glass=ACK_REPORT_ONLY_CSP_ROLLBACK`; after merge, repeat that dispatch with `--ref main` and the exact `origin/main` SHA. Dispatch jobs are named `report-only-coverage`, `report-only-e2e`, and `report-only-advisory`, so they cannot satisfy canonical required checks. The production validator accepts only that authenticated GitHub dispatch run with all three report-only jobs successful. See `docs/deployment.md` for the executable commands.
+Rollback dispatches are available only in `protocol-v1-canary`, and both the active and rollback sources must descend from the protocol boundary. That boundary is the unique commit that first introduces the product-activation marker, never the inert bootstrap release. Cloudflare gradual deployment is limited to its most recent 100 uploaded versions, so the rollback target must also remain within that platform window.
 
-**Why this matters**: on 2026-05-10 a production deploy went out without applying remote D1 migrations, causing `/search` to 500 with `no such column: ...` errors. `pnpm deploy:auto` and the preflight remote-migration check exist to make that failure mode impossible going forward.
+A source commit that intentionally changes Wrangler CSP mode to `report-only` uses the exact-SHA `CI` workflow dispatch before the protected production dispatch. Ordinary push and pull-request CI stay strict. Dispatch `ci.yml` on the exact branch head with `source_sha` and `csp_report_only_break_glass=ACK_REPORT_ONLY_CSP_ROLLBACK`; after merge, repeat that dispatch with `--ref main` and the exact `origin/main` SHA. Dispatch jobs are named `report-only-coverage`, `report-only-workers-coverage`, `report-only-e2e`, and `report-only-advisory`, so they cannot satisfy canonical required checks. The production validator accepts only that authenticated GitHub dispatch run with all four report-only jobs successful. See `docs/deployment.md` for the executable commands.
+
+Direct production `pnpm run deploy`, `deploy:auto`, Wrangler deploy/migration commands, and dashboard traffic changes bypass the workflow lock and are unsupported. Cloudflare has no expected-current deployment CAS, so preventing those out-of-band writers is required; detected deployment-UUID replacement fails closed. `pnpm run deploy:qa` remains the supported direct QA path.
+
+**Why this matters**: on 2026-05-10 a production deploy went out without applying remote D1 migrations, causing `/search` to 500 with `no such column: ...` errors. The exact-SHA workflow and remote-migration preflight exist to make that failure mode impossible going forward.
 
 ### Skipping the remote check in dev or unauthenticated CI
 
@@ -423,8 +401,8 @@ git add .
 git commit -m "your changes"
 git push
 
-# Deploy
-pnpm run deploy
+# Release the exact reviewed main SHA
+gh workflow run production-deploy.yml --ref main -f source_sha="$(git rev-parse HEAD)"
 ```
 
-Or set up automatic deployments via GitHub integration in Cloudflare Pages dashboard.
+Use the canonical production workflow rather than a separate dashboard integration so releases share the same non-cancellable lock and lifecycle checks.

@@ -9,9 +9,10 @@ const execFileAsync = promisify(execFile);
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 const WORKER_VERSION_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ORDINARY_CI_EVENTS = new Set(["push", "pull_request"]);
-const CANONICAL_CI_JOB_NAMES = ["coverage", "e2e", "advisory"];
+const CANONICAL_CI_JOB_NAMES = ["coverage", "workers-coverage", "e2e", "advisory"];
 const REPORT_ONLY_CI_JOB_NAMES = [
   "report-only-coverage",
+  "report-only-workers-coverage",
   "report-only-e2e",
   "report-only-advisory",
 ];

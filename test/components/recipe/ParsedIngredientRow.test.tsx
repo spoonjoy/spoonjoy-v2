@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { ParsedIngredientRow } from '../../../app/components/recipe/ParsedIngredientRow'
@@ -672,7 +672,9 @@ describe('ParsedIngredientRow', () => {
         value: 'abc',
       })
       // Trigger input event to update internal state
-      quantityInput.dispatchEvent(new Event('input', { bubbles: true }))
+      act(() => {
+        quantityInput.dispatchEvent(new Event('input', { bubbles: true }))
+      })
 
       await userEvent.click(screen.getByRole('button', { name: /save/i }))
 

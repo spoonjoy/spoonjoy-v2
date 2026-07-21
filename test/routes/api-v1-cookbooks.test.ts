@@ -6,6 +6,7 @@ import { createApiCredential } from "~/lib/api-auth.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser } from "../utils";
+import { expectConsoleError } from "../warning-policy";
 
 function routeArgs(request: Request, splat: string) {
   return { request, params: { "*": splat }, context: { cloudflare: { env: null } } } as any;
@@ -622,11 +623,21 @@ describe("API v1 public cookbook reads", () => {
     const updateToken = await createApiCredential(db, fixture.chef.id, "Cookbook update fault writer", { scopes: ["kitchen:write"] });
     const originalCreate = db.cookbook.create;
     const originalUpdate = db.cookbook.update;
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     try {
-      const createSpy = vi.fn().mockRejectedValueOnce(new Error("cookbook create storage unavailable"));
+      const createError = new Error("cookbook create storage unavailable");
+      const createSpy = vi.fn().mockRejectedValueOnce(createError);
       db.cookbook.create = createSpy as unknown as typeof db.cookbook.create;
+      expectConsoleError("[api-v1] internal_error", {
+        requestId: "req_cookbook_create_fault",
+        method: "POST",
+        path: "/api/v1/cookbooks",
+        error: {
+          name: createError.name,
+          message: createError.message,
+          stack: createError.stack,
+        },
+      });
       const createFailure = await action(routeArgs(jsonRequest("http://localhost/api/v1/cookbooks", "POST", createToken.token, "req_cookbook_create_fault", {
         clientMutationId: "cm_cookbook_create_fault",
         title: `Api V1 Fault Create ${faker.string.alphanumeric(8)}`,
@@ -639,8 +650,19 @@ describe("API v1 public cookbook reads", () => {
       });
       expect(createSpy).toHaveBeenCalledOnce();
 
-      const updateSpy = vi.fn().mockRejectedValueOnce(new Error("cookbook update storage unavailable"));
+      const updateError = new Error("cookbook update storage unavailable");
+      const updateSpy = vi.fn().mockRejectedValueOnce(updateError);
       db.cookbook.update = updateSpy as unknown as typeof db.cookbook.update;
+      expectConsoleError("[api-v1] internal_error", {
+        requestId: "req_cookbook_update_fault",
+        method: "PATCH",
+        path: `/api/v1/cookbooks/${fixture.cookbook.id}`,
+        error: {
+          name: updateError.name,
+          message: updateError.message,
+          stack: updateError.stack,
+        },
+      });
       const updateFailure = await action(routeArgs(jsonRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}`, "PATCH", updateToken.token, "req_cookbook_update_fault", {
         clientMutationId: "cm_cookbook_update_fault",
         title: `Api V1 Fault Update ${faker.string.alphanumeric(8)}`,
@@ -655,7 +677,6 @@ describe("API v1 public cookbook reads", () => {
     } finally {
       db.cookbook.create = originalCreate;
       db.cookbook.update = originalUpdate;
-      errorSpy.mockRestore();
     }
   });
 
@@ -794,12 +815,22 @@ describe("API v1 public cookbook reads", () => {
         title: `Api V1 Membership Fault Recipe ${faker.string.alphanumeric(8)}`,
       },
     });
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const originalTransaction = db.$transaction;
 
     try {
-      const transactionSpy = vi.fn().mockRejectedValueOnce(new Error("membership storage unavailable"));
+      const transactionError = new Error("membership storage unavailable");
+      const transactionSpy = vi.fn().mockRejectedValueOnce(transactionError);
       db.$transaction = transactionSpy as unknown as typeof db.$transaction;
+      expectConsoleError("[api-v1] internal_error", {
+        requestId: "req_cookbook_recipe_add_fault",
+        method: "POST",
+        path: `/api/v1/cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`,
+        error: {
+          name: transactionError.name,
+          message: transactionError.message,
+          stack: transactionError.stack,
+        },
+      });
       const response = await action(routeArgs(jsonRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`, "POST", token.token, "req_cookbook_recipe_add_fault", {
         clientMutationId: "cm_cookbook_recipe_add_fault",
       }), `cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`));
@@ -812,7 +843,6 @@ describe("API v1 public cookbook reads", () => {
       expect(transactionSpy).toHaveBeenCalledOnce();
     } finally {
       db.$transaction = originalTransaction;
-      errorSpy.mockRestore();
     }
   });
 });

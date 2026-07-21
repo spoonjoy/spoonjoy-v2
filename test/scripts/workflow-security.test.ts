@@ -18,9 +18,10 @@ import {
 
 const SOURCE_SHA = "a".repeat(40);
 const ROLLBACK_VERSION_ID = "22222222-2222-4222-8222-222222222222";
-const CANONICAL_CI_JOB_NAMES = ["coverage", "e2e", "advisory"] as const;
+const CANONICAL_CI_JOB_NAMES = ["coverage", "workers-coverage", "e2e", "advisory"] as const;
 const REPORT_ONLY_CI_JOB_NAMES = [
   "report-only-coverage",
+  "report-only-workers-coverage",
   "report-only-e2e",
   "report-only-advisory",
 ] as const;

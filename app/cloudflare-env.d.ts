@@ -63,6 +63,8 @@ declare global {
     /** Tighter per-IP throttle for anonymous auth attempts (login/signup/passkey). */
     AUTH_IP_RATE_LIMITER?: RateLimitBinding;
     CF_VERSION_METADATA?: WorkerVersionMetadata;
+    COOK_SESSIONS?: DurableObjectNamespace;
+    COOK_SESSION_BOOTSTRAP_MODE?: string;
     SPOONJOY_CSP_MODE?: string;
     VITE_POSTHOG_HOST?: string;
     SESSION_SECRET?: string;

@@ -49,6 +49,7 @@ All configuration lives in `wrangler.json`:
 | Setting | Purpose |
 |---------|---------|
 | `d1_databases` | D1 database bindings |
+| `durable_objects` / `migrations` | Cook-session Durable Object binding and SQLite class lifecycle |
 | `r2_buckets` | R2 image storage binding for profile and recipe photos |
 | `vars` | Environment variables (NODE_ENV, OAuth credentials, etc.) |
 
@@ -134,7 +135,7 @@ pnpm test:e2e --headed
 - `e2e/flows/cookbooks.spec.ts` — Cookbook CRUD
 - `e2e/flows/shopping-list.spec.ts` — Shopping list operations
 
-**Note:** Tests run against `http://localhost:5173`. Start the dev server first with `pnpm dev`.
+**Note:** Tests build the app and start an automatically managed ephemeral Wrangler server at `http://localhost:5197`. The run copies local Wrangler state into an isolated directory and removes that state, its server, and disposable auth artifacts during global teardown; do not start `pnpm dev` first.
 
 Before reporting manual/e2e work complete, inspect disposable local QA residue:
 
@@ -183,10 +184,7 @@ pnpm exec prisma migrate diff --from-empty --to-schema-datamodel=./prisma/schema
    # wrangler.json binds this bucket as PHOTOS
    ```
 
-4. Apply migrations to production D1:
-   ```bash
-   wrangler d1 migrations apply DB --remote
-   ```
+4. Keep production D1 mutations inside the exact-SHA production workflow. The release orchestrator reviews immutable Git bytes and submits those exact additive migrations, together with their ledger inserts, as one ordered D1 batch transaction; direct production migration commands are unsupported.
 
 5. Set secrets:
    ```bash
@@ -221,10 +219,10 @@ pnpm exec prisma migrate diff --from-empty --to-schema-datamodel=./prisma/schema
 
 7. Deploy:
    ```bash
-   pnpm run deploy
+   gh workflow run production-deploy.yml --ref main -f source_sha="$(git rev-parse HEAD)"
    ```
 
-   Use `pnpm run deploy`; bare `pnpm deploy` is pnpm's workspace deploy command and will not run this package script.
+   Production release modes come from the checked-in workflow, and canary rollback cannot cross the Git-derived product-activation boundary. Direct `pnpm run deploy`, Wrangler deploy, dashboard traffic changes, and production D1 writes bypass the workflow's deployment-UUID ownership and migration-hash checks and are unsupported. Use `pnpm run deploy:qa` for direct QA deployment.
 
 See [docs/deployment.md](./docs/deployment.md) for the full production checklist, local `.dev.vars` guidance, and common failure modes.
 

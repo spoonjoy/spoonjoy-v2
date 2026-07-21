@@ -539,6 +539,9 @@ describe("RecipeBuilder Route Integration", () => {
         await waitFor(() => {
           expect(submittedData).not.toBeNull();
         });
+        await waitFor(() => {
+          expect(screen.getByRole("button", { name: "Save Recipe" })).toBeEnabled();
+        });
 
         expect(submittedData.hasImage).toBe(true);
         expect(submittedData.imageFileName).toBe("new-image.jpg");

@@ -101,6 +101,7 @@ describe("build output hygiene", () => {
     expect(filterViteBuildErrorOutput("✘ [ERROR] Could not resolve ./missing\n")).toBe(
       "✘ [ERROR] Could not resolve ./missing\n"
     );
+    expect(filterViteBuildErrorOutput("\n  \r\n\u001b[0m\n")).toBe("");
   });
 
   it("keeps inert client directives out of local app source", async () => {

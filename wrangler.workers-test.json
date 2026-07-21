@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json.schemastore.org/wrangler",
+  "name": "spoonjoy-workers-test",
+  "main": "workers/app.ts",
+  "compatibility_date": "2024-12-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "version_metadata": {
+    "binding": "CF_VERSION_METADATA"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "COOK_SESSIONS",
+        "class_name": "CookSession"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1_cook_session",
+      "new_sqlite_classes": ["CookSession"]
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "spoonjoy-workers-test",
+      "database_id": "00000000-0000-0000-0000-000000000000"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "AUTH_IP_RATE_LIMITER",
+      "namespace_id": "3001",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ],
+  "vars": {
+    "NODE_ENV": "test",
+    "SPOONJOY_BASE_URL": "https://spoonjoy.test",
+    "COOK_SESSION_BOOTSTRAP_MODE": "1",
+    "SESSION_SECRET": "spoonjoy-workers-cook-session-test-secret"
+  }
+}

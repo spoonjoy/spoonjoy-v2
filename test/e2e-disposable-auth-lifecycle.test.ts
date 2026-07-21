@@ -6,9 +6,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createDisposableE2EUser,
+  removeDisposableE2EAuthArtifacts,
   recordDisposableE2EUser,
-  runDisposableE2ETeardown,
   secureDisposableE2EAuthFile,
+  writeDisposableE2EAuthState,
 } from "../e2e/support/disposable-auth";
 
 const tempDirs: string[] = [];
@@ -68,31 +69,41 @@ describe("e2e disposable auth lifecycle", () => {
     expect(statSync(storageStatePath).mode & 0o777).toBe(0o600);
   });
 
-  it("tears down disposable auth residue with local-only cleanup", async () => {
+  it("persists only auth cookies so setup storage cannot leak across dependent projects", () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "spoonjoy-e2e-storage-state-"));
+    tempDirs.push(tempDir);
+    const storageStatePath = path.join(tempDir, "user.json");
+    const cookies = [{ name: "__session", value: "signed", domain: "localhost", path: "/" }];
+
+    writeDisposableE2EAuthState({
+      cookies,
+      origins: [{
+        origin: "http://localhost:5197",
+        localStorage: [{ name: "spoonjoy-storage-schema-version", value: "current" }],
+      }],
+    }, storageStatePath);
+
+    expect(JSON.parse(readFileSync(storageStatePath, "utf8"))).toEqual({ cookies, origins: [] });
+    expect(statSync(storageStatePath).mode & 0o777).toBe(0o600);
+  });
+
+  it("removes disposable auth residue without mutating baseline local D1", () => {
     const tempDir = mkdtempSync(path.join(tmpdir(), "spoonjoy-e2e-teardown-"));
     tempDirs.push(tempDir);
     const authPaths = [path.join(tempDir, "user.json"), path.join(tempDir, "users.json")];
     for (const authPath of authPaths) writeFileSync(authPath, "secret");
-    const runCommand = vi.fn(async () => ({ stdout: "[]", stderr: "" }));
 
-    await runDisposableE2ETeardown({ runCommand, authPaths });
+    removeDisposableE2EAuthArtifacts(authPaths);
 
-    expect(runCommand).toHaveBeenCalledWith(
-      "pnpm",
-      ["run", "cleanup:local:apply"],
-      expect.objectContaining({ encoding: "utf8" }),
-    );
     expect(authPaths.every((authPath) => !existsSync(authPath))).toBe(true);
   });
 
-  it("removes local auth files when database cleanup fails", async () => {
+  it("is idempotent when disposable auth artifacts are already absent", () => {
     const tempDir = mkdtempSync(path.join(tmpdir(), "spoonjoy-e2e-teardown-failure-"));
     tempDirs.push(tempDir);
     const authPaths = [path.join(tempDir, "user.json"), path.join(tempDir, "users.json")];
-    for (const authPath of authPaths) writeFileSync(authPath, "secret");
-    const runCommand = vi.fn().mockRejectedValueOnce(new Error("cleanup failed"));
 
-    await expect(runDisposableE2ETeardown({ runCommand, authPaths })).rejects.toThrow("cleanup failed");
+    expect(() => removeDisposableE2EAuthArtifacts(authPaths)).not.toThrow();
     expect(authPaths.every((authPath) => !existsSync(authPath))).toBe(true);
   });
 
@@ -103,19 +114,23 @@ describe("e2e disposable auth lifecycle", () => {
 
     expect(setupSource).toContain("createDisposableE2EUser");
     expect(setupSource).toContain("recordDisposableE2EUser");
-    expect(setupSource).toContain("secureDisposableE2EAuthFile(DISPOSABLE_E2E_AUTH_STATE)");
+    expect(setupSource).toContain("writeDisposableE2EAuthState");
     expect(configSource).toContain("globalTeardown");
+    expect(configSource).not.toContain("'./e2e/global-teardown.ts'");
+    expect(configSource).toContain("storageState: authFile");
+    expect(configSource).toContain("failOnFlakyTests: !!process.env.CI");
     expect(`${setupSource}\n${authSource}`).not.toContain("loginAsSeedUser");
     expect(`${setupSource}\n${authSource}`).not.toContain(legacyDemoEmail);
     expect(`${setupSource}\n${authSource}`).not.toContain(legacyDemoPassword);
   });
 
-  it("registers only the OAuth client identity covered by disposable cleanup", () => {
+  it("records every passkey OAuth client for exact per-run cleanup", () => {
     const passkeySource = readFileSync("e2e/flows/passkey.spec.ts", "utf8");
     const cleanupSource = readFileSync("scripts/cleanup-local-qa-data.mjs", "utf8");
 
-    expect(passkeySource).toContain("client_name: 'E2E OAuth Client'");
-    expect(passkeySource).not.toContain("Passkey E2E OAuth Client");
-    expect(cleanupSource).toContain("clientName = 'E2E OAuth Client'");
+    expect(passkeySource).toContain("e2eOauthClientName");
+    expect(passkeySource).toContain("recordE2eOauthClient");
+    expect(cleanupSource).not.toContain("clientName = 'E2E OAuth Client'");
+    expect(cleanupSource).not.toContain("E2E_OAUTH_CLIENT_WHERE");
   });
 });

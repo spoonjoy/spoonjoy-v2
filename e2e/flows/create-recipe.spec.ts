@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { test, expect } from "../fixtures";
 
 /**
  * D-013 regression: `/recipes/new` failed at runtime on Cloudflare D1 because

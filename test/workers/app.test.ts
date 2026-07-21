@@ -1,5 +1,23 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const apiMocks = vi.hoisted(() => {
+  class MockApiAuthError extends Error {
+    status: number;
+
+    constructor(message: string, status: number) {
+      super(message);
+      this.status = status;
+    }
+  }
+
+  return {
+    ApiAuthError: MockApiAuthError,
+    authenticateApiRequest: vi.fn(),
+    db: { marker: "db" },
+    getDb: vi.fn(),
+  };
+});
 
 const requestHandler = vi.fn(async () => new Response("handled"));
 const mcpPostRoute = vi.fn(async () => Response.json({ ok: true }));
@@ -27,16 +45,29 @@ vi.mock("../../app/lib/analytics-server", () => ({
   resolvePostHogServerConfig,
 }));
 
+vi.mock("../../app/lib/api-auth.server", () => ({
+  ApiAuthError: apiMocks.ApiAuthError,
+  authenticateApiRequest: apiMocks.authenticateApiRequest,
+}));
+
+vi.mock("../../app/lib/db.server", () => ({
+  getDb: apiMocks.getDb,
+}));
+
 const worker = (await import("../../workers/app")).default;
 const WORKER_VERSION_ID = "22222222-2222-4222-8222-222222222222";
 
 function versionedEnvironment(overrides: Partial<CloudflareEnvironment> = {}): CloudflareEnvironment {
   return {
+    AUTH_IP_RATE_LIMITER: {
+      limit: vi.fn(async () => ({ success: true })),
+    },
     CF_VERSION_METADATA: {
       id: WORKER_VERSION_ID,
       tag: "release",
       timestamp: "2026-07-15T00:00:00Z",
     },
+    SPOONJOY_BASE_URL: "https://spoonjoy.app",
     ...overrides,
   } as CloudflareEnvironment;
 }
@@ -45,7 +76,51 @@ function context() {
   return { waitUntil: vi.fn() } as unknown as ExecutionContext;
 }
 
+function principal(
+  source: "session" | "bearer" = "session",
+  scopes: string[] = ["kitchen:read", "kitchen:write"],
+) {
+  return {
+    id: "user-1",
+    email: "cook@example.com",
+    username: "cook",
+    source,
+    scopes,
+  };
+}
+
+function cookSessionNamespace(response = Response.json({
+  ok: true,
+  storage: "sqlite",
+  residue: 0,
+}, {
+  status: 202,
+  statusText: "Accepted",
+  headers: {
+    "Content-Length": "999",
+    "X-Probe-Result": "ready",
+  },
+})) {
+  const fetch = vi.fn(async () => response);
+  const get = vi.fn(() => ({ fetch }));
+  const idFromName = vi.fn(() => ({ toString: () => "bootstrap-object-id" }));
+
+  return {
+    namespace: { get, idFromName } as unknown as DurableObjectNamespace,
+    fetch,
+    get,
+    idFromName,
+  };
+}
+
 describe("Cloudflare worker app", () => {
+  beforeEach(() => {
+    apiMocks.authenticateApiRequest.mockReset();
+    apiMocks.authenticateApiRequest.mockResolvedValue(principal());
+    apiMocks.getDb.mockReset();
+    apiMocks.getDb.mockResolvedValue(apiMocks.db);
+  });
+
   it("configures React Router with a lazy server-build loader", async () => {
     expect(loadServerBuild).toBeTypeOf("function");
     await loadServerBuild?.().catch(() => undefined);
@@ -229,5 +304,439 @@ describe("Cloudflare worker app", () => {
       },
     );
     expect(ctx.waitUntil).toHaveBeenCalledWith(expect.any(Promise));
+  });
+
+  it.each([
+    ["GET", "/api/cook-sessions"],
+    ["GET", "/api/cook-sessions/recipe-1"],
+    ["GET", "/api/cook-sessions/recipe-1/socket"],
+    ["PATCH", "/api/cook-sessions/recipe-1"],
+    ["DELETE", "/api/cook-sessions/recipe-1"],
+    ["POST", "/api/cook-sessions/recipe-1/start"],
+  ])("returns the inert protocol response for %s %s", async (method, path) => {
+    const request = new Request(`https://spoonjoy.app${path}`, {
+      method,
+      headers: { Origin: "https://spoonjoy.app" },
+    });
+    const env = versionedEnvironment({ DB: { marker: "binding" } as unknown as D1Database });
+
+    const response = await worker.fetch(request, env, context());
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(response.headers.get("Retry-After")).toBe("1");
+    expect(response.headers.get("X-Spoonjoy-Worker-Version")).toBe(WORKER_VERSION_ID);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "cook_session_protocol_unavailable",
+        message: "Cook session protocol is temporarily unavailable.",
+        retryable: true,
+      },
+    });
+    expect(apiMocks.getDb).toHaveBeenCalledWith({ DB: env.DB });
+    expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(apiMocks.db, request, env);
+  });
+
+  it.each([
+    ["PUT", "/api/cook-sessions/recipe-1"],
+    ["GET", "/api/cook-sessions/recipe-1?mode=bad"],
+    ["GET", "/api/cook-sessions/recipe-1/extra"],
+    ["POST", "/api/cook-sessions/recipe-1/pause"],
+    ["GET", "/api/cook-sessions-bad"],
+  ])("returns 404 before authentication for malformed cook route %s %s", async (method, path) => {
+    const response = await worker.fetch(
+      new Request(`https://spoonjoy.app${path}`, { method }),
+      versionedEnvironment(),
+      context(),
+    );
+
+    expect(response.status).toBe(404);
+    expect(apiMocks.getDb).not.toHaveBeenCalled();
+    expect(apiMocks.authenticateApiRequest).not.toHaveBeenCalled();
+  });
+
+  it("requires an authenticated cook-session principal", async () => {
+    apiMocks.authenticateApiRequest.mockResolvedValueOnce(null);
+
+    const response = await worker.fetch(
+      new Request("https://spoonjoy.app/api/cook-sessions"),
+      versionedEnvironment({ DB: {} as D1Database }),
+      context(),
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "authentication_required",
+        message: "Authentication required.",
+        retryable: false,
+      },
+    });
+  });
+
+  it.each([
+    ["GET", "/api/cook-sessions", ["kitchen:write"]],
+    ["PATCH", "/api/cook-sessions/recipe-1", ["kitchen:read"]],
+  ])("checks bearer scope before origin for %s %s", async (method, path, scopes) => {
+    apiMocks.authenticateApiRequest.mockResolvedValueOnce(principal("bearer", scopes));
+
+    const response = await worker.fetch(
+      new Request(`https://spoonjoy.app${path}`, {
+        method,
+        headers: { Origin: "https://attacker.example" },
+      }),
+      versionedEnvironment({ DB: {} as D1Database }),
+      context(),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "insufficient_scope",
+        message: "This credential does not include the required cook-session scope.",
+        retryable: false,
+      },
+    });
+  });
+
+  it("checks mutation origin after bearer scope", async () => {
+    apiMocks.authenticateApiRequest.mockResolvedValueOnce(principal("bearer", ["kitchen:write"]));
+
+    const response = await worker.fetch(
+      new Request("https://spoonjoy.app/api/cook-sessions/recipe-1", {
+        method: "PATCH",
+        headers: { Origin: "https://attacker.example" },
+      }),
+      versionedEnvironment({ DB: {} as D1Database }),
+      context(),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "origin_forbidden",
+        message: "Request origin is not allowed.",
+        retryable: false,
+      },
+    });
+  });
+
+  it("checks mutations against the configured public origin when the transport URL is internal", async () => {
+    const request = new Request("https://spoonjoy-internal.workers.dev/api/cook-sessions/recipe-1", {
+      method: "PATCH",
+      headers: {
+        Origin: "https://spoonjoy.app",
+        "X-Forwarded-Host": "spoonjoy.app",
+      },
+    });
+    const env = versionedEnvironment({ DB: {} as D1Database });
+
+    const response = await worker.fetch(request, env, context());
+
+    expect(response.status).toBe(503);
+    expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(apiMocks.db, request, env);
+  });
+
+  it.each([undefined, "not a url", "ftp://spoonjoy.app"])(
+    "fails mutation origin closed when SPOONJOY_BASE_URL is %s",
+    async (baseUrl) => {
+      const response = await worker.fetch(
+        new Request("https://spoonjoy.app/api/cook-sessions/recipe-1", {
+          method: "PATCH",
+          headers: { Origin: "https://spoonjoy.app" },
+        }),
+        versionedEnvironment({ DB: {} as D1Database, SPOONJOY_BASE_URL: baseUrl }),
+        context(),
+      );
+
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toMatchObject({ error: { code: "origin_forbidden" } });
+    },
+  );
+
+  it.each([
+    [400, 400, "invalid_request", "Authentication request is invalid."],
+    [403, 401, "authentication_required", "Authentication required."],
+  ])("normalizes API auth errors with source status %i", async (
+    sourceStatus,
+    expectedStatus,
+    code,
+    message,
+  ) => {
+    apiMocks.authenticateApiRequest.mockRejectedValueOnce(
+      new apiMocks.ApiAuthError("auth failed", sourceStatus),
+    );
+
+    const response = await worker.fetch(
+      new Request("https://spoonjoy.app/api/cook-sessions"),
+      versionedEnvironment({ DB: {} as D1Database }),
+      context(),
+    );
+
+    expect(response.status).toBe(expectedStatus);
+    await expect(response.json()).resolves.toEqual({
+      error: { code, message, retryable: false },
+    });
+  });
+
+  it("rethrows non-authentication cook-session failures through server analytics", async () => {
+    const error = new Error("database unavailable");
+    const env = versionedEnvironment({ DB: {} as D1Database, POSTHOG_KEY: "test-key" });
+    const ctx = context();
+    apiMocks.authenticateApiRequest.mockRejectedValueOnce(error);
+    captureException.mockClear();
+    resolvePostHogServerConfig.mockReturnValueOnce({ enabled: true });
+
+    await expect(worker.fetch(
+      new Request("https://spoonjoy.app/api/cook-sessions"),
+      env,
+      ctx,
+    )).rejects.toBe(error);
+
+    expect(captureException).toHaveBeenCalledWith(
+      { enabled: true },
+      {
+        error,
+        distinctId: "server",
+        route: "/api/cook-sessions",
+        method: "GET",
+      },
+    );
+  });
+
+  it.each([
+    ["path", "/.well-known/spoonjoy-cook-session-bootstrap/extra", "POST", "1", true, ""],
+    ["query", "/.well-known/spoonjoy-cook-session-bootstrap?bad=1", "POST", "1", true, ""],
+    ["method", "/.well-known/spoonjoy-cook-session-bootstrap", "GET", "1", true, undefined],
+    ["mode", "/.well-known/spoonjoy-cook-session-bootstrap", "POST", "0", true, ""],
+    ["version", "/.well-known/spoonjoy-cook-session-bootstrap", "POST", "1", false, ""],
+    ["binding", "/.well-known/spoonjoy-cook-session-bootstrap", "POST", "1", true, ""],
+    ["body", "/.well-known/spoonjoy-cook-session-bootstrap", "POST", "1", true, "not-empty"],
+  ])("keeps invalid bootstrap %s requests inert", async (
+    _case,
+    path,
+    method,
+    mode,
+    includeVersion,
+    body,
+  ) => {
+    const namespace = cookSessionNamespace();
+    const env = {
+      COOK_SESSION_BOOTSTRAP_MODE: mode,
+      COOK_SESSIONS: _case === "binding" ? undefined : namespace.namespace,
+      CF_VERSION_METADATA: includeVersion
+        ? versionedEnvironment().CF_VERSION_METADATA
+        : undefined,
+    } as CloudflareEnvironment;
+    const response = await worker.fetch(
+      new Request(`https://spoonjoy.app${path}`, { method, body }),
+      env,
+      context(),
+    );
+
+    expect(response.status).toBe(404);
+    expect(namespace.idFromName).not.toHaveBeenCalled();
+    expect(namespace.get).not.toHaveBeenCalled();
+    expect(namespace.fetch).not.toHaveBeenCalled();
+  });
+
+  it("forwards the exact bootstrap probe and propagates its response", async () => {
+    const namespace = cookSessionNamespace();
+    const env = versionedEnvironment({
+      COOK_SESSION_BOOTSTRAP_MODE: "1",
+      COOK_SESSIONS: namespace.namespace,
+    });
+
+    const response = await worker.fetch(
+      new Request("https://spoonjoy.app/.well-known/spoonjoy-cook-session-bootstrap", {
+        method: "POST",
+        headers: { "CF-Connecting-IP": "203.0.113.40" },
+      }),
+      env,
+      context(),
+    );
+
+    expect(namespace.idFromName).toHaveBeenCalledWith(`bootstrap:${WORKER_VERSION_ID}`);
+    expect(namespace.get).toHaveBeenCalledWith(expect.objectContaining({
+      toString: expect.any(Function),
+    }));
+    expect(namespace.fetch).toHaveBeenCalledTimes(1);
+    const forwarded = namespace.fetch.mock.calls[0]?.[0] as Request;
+    expect(forwarded.url).toBe("https://cook-session.internal/__bootstrap/probe");
+    expect(forwarded.method).toBe("POST");
+    expect(forwarded.headers.get("X-Spoonjoy-Internal-Probe")).toBe("1");
+    expect(forwarded.headers.get("Content-Type")).toBeNull();
+    await expect(forwarded.text()).resolves.toBe('{"version":1}');
+    expect(response.status).toBe(202);
+    expect(response.statusText).toBe("Accepted");
+    expect(response.headers.get("Content-Length")).toBeNull();
+    expect(response.headers.get("X-Probe-Result")).toBe("ready");
+    expect(response.headers.get("X-Spoonjoy-Worker-Version")).toBe(WORKER_VERSION_ID);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      storage: "sqlite",
+      residue: 0,
+      workerVersionId: WORKER_VERSION_ID,
+    });
+  });
+
+  it("accepts Cloudflare's empty incoming POST stream without treating it as a request body", async () => {
+    const namespace = cookSessionNamespace();
+    const request = new Request(
+      "https://spoonjoy.app/.well-known/spoonjoy-cook-session-bootstrap",
+      {
+        method: "POST",
+        headers: {
+          "CF-Connecting-IP": "203.0.113.44",
+          "Content-Length": "0",
+        },
+      },
+    );
+    Object.defineProperty(request, "body", {
+      value: new ReadableStream({ start(controller) { controller.close(); } }),
+    });
+
+    const response = await worker.fetch(
+      request,
+      versionedEnvironment({
+        COOK_SESSION_BOOTSTRAP_MODE: "1",
+        COOK_SESSIONS: namespace.namespace,
+      }),
+      context(),
+    );
+
+    expect(response.status).toBe(202);
+    expect(namespace.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["content type", { "Content-Type": "application/octet-stream" }],
+    ["transfer encoding", { "Transfer-Encoding": "chunked" }],
+    ["nonzero content length", { "Content-Length": "1" }],
+  ])("rejects a bootstrap request with a declared %s", async (_case, bodyHeaders) => {
+    const namespace = cookSessionNamespace();
+    const response = await worker.fetch(
+      new Request("https://spoonjoy.app/.well-known/spoonjoy-cook-session-bootstrap", {
+        method: "POST",
+        headers: {
+          "CF-Connecting-IP": "203.0.113.45",
+          ...bodyHeaders,
+        },
+      }),
+      versionedEnvironment({
+        COOK_SESSION_BOOTSTRAP_MODE: "1",
+        COOK_SESSIONS: namespace.namespace,
+      }),
+      context(),
+    );
+
+    expect(response.status).toBe(404);
+    expect(namespace.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a headerless non-empty bootstrap stream without reading it", async () => {
+    const namespace = cookSessionNamespace();
+    const limiter = { limit: vi.fn(async () => ({ success: true })) };
+    const request = new Request(
+      "https://spoonjoy.app/.well-known/spoonjoy-cook-session-bootstrap",
+      {
+        method: "POST",
+        headers: { "CF-Connecting-IP": "203.0.113.46" },
+      },
+    );
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1]));
+        controller.close();
+      },
+    });
+    const getReader = vi.spyOn(body, "getReader");
+    Object.defineProperty(request, "body", {
+      value: body,
+    });
+
+    const response = await worker.fetch(
+      request,
+      versionedEnvironment({
+        AUTH_IP_RATE_LIMITER: limiter,
+        COOK_SESSION_BOOTSTRAP_MODE: "1",
+        COOK_SESSIONS: namespace.namespace,
+      }),
+      context(),
+    );
+
+    expect(response.status).toBe(404);
+    expect(getReader).not.toHaveBeenCalled();
+    expect(limiter.limit).not.toHaveBeenCalled();
+    expect(namespace.idFromName).not.toHaveBeenCalled();
+    expect(namespace.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rate-limits the public bootstrap probe before Durable Object work", async () => {
+    const namespace = cookSessionNamespace();
+    const limiter = { limit: vi.fn(async () => ({ success: false })) };
+    const response = await worker.fetch(
+      new Request("https://spoonjoy.app/.well-known/spoonjoy-cook-session-bootstrap", {
+        method: "POST",
+        headers: { "CF-Connecting-IP": "203.0.113.41" },
+      }),
+      versionedEnvironment({
+        AUTH_IP_RATE_LIMITER: limiter,
+        COOK_SESSION_BOOTSTRAP_MODE: "1",
+        COOK_SESSIONS: namespace.namespace,
+      }),
+      context(),
+    );
+
+    expect(response.status).toBe(404);
+    expect(limiter.limit).toHaveBeenCalledWith({ key: "cook-session-bootstrap:203.0.113.41" });
+    expect(namespace.fetch).not.toHaveBeenCalled();
+  });
+
+  it.each(["client IP", "rate limiter"])("fails the public bootstrap probe closed without its %s", async (missing) => {
+    const namespace = cookSessionNamespace();
+    const response = await worker.fetch(
+      new Request("https://spoonjoy.app/.well-known/spoonjoy-cook-session-bootstrap", {
+        method: "POST",
+        headers: missing === "client IP" ? undefined : { "CF-Connecting-IP": "203.0.113.43" },
+      }),
+      versionedEnvironment({
+        AUTH_IP_RATE_LIMITER: missing === "rate limiter" ? undefined : {
+          limit: vi.fn(async () => ({ success: true })),
+        },
+        COOK_SESSION_BOOTSTRAP_MODE: "1",
+        COOK_SESSIONS: namespace.namespace,
+      }),
+      context(),
+    );
+
+    expect(response.status).toBe(404);
+    expect(namespace.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a declared public bootstrap request body without reading its stream", async () => {
+    const namespace = cookSessionNamespace();
+    const request = new Request("https://spoonjoy.app/.well-known/spoonjoy-cook-session-bootstrap", {
+      method: "POST",
+      headers: {
+        "CF-Connecting-IP": "203.0.113.42",
+        "Content-Length": "1",
+      },
+    });
+    const readBody = vi.spyOn(request, "text").mockRejectedValue(new Error("body must not be read"));
+    Object.defineProperty(request, "body", { value: {} as ReadableStream });
+
+    const response = await worker.fetch(
+      request,
+      versionedEnvironment({
+        COOK_SESSION_BOOTSTRAP_MODE: "1",
+        COOK_SESSIONS: namespace.namespace,
+      }),
+      context(),
+    );
+
+    expect(response.status).toBe(404);
+    expect(readBody).not.toHaveBeenCalled();
+    expect(namespace.fetch).not.toHaveBeenCalled();
   });
 });

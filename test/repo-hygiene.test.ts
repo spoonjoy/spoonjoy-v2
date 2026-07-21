@@ -18,6 +18,10 @@ function gitLines(args: string[]) {
 }
 
 describe("generated artifact hygiene", () => {
+  it("tracks the dedicated local seed binding config required by prisma/seed.ts", () => {
+    expect(gitLines(["ls-files", "wrangler.seed.json"])).toEqual(["wrangler.seed.json"]);
+  });
+
   it("does not track generated local artifact directories", () => {
     expect(gitLines(["ls-files", ...GENERATED_ARTIFACT_PATHS])).toEqual([]);
   });

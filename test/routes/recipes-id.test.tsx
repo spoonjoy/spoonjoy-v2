@@ -2179,12 +2179,37 @@ describe("Recipes $id Route", () => {
   });
 
   describe("component", () => {
-    const openSaveModalFromDock = () => {
-      const dockActionRegistration = vi.mocked(useRecipeDetailActions).mock.calls.at(-1)?.[0];
-      dockActionRegistration?.onSave?.();
+    const settleBrowserTasks = async () => {
+      await act(async () => {
+        await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+        await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
+    };
+
+    const exitCookMode = async (cookMode: HTMLElement) => {
+      await act(async () => {
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Exit cook mode" }));
+      });
+    };
+
+    const openSaveModalFromDock = async () => {
+      await act(async () => {
+        const dockActionRegistration = vi.mocked(useRecipeDetailActions).mock.calls.at(-1)?.[0];
+        dockActionRegistration?.onSave?.();
+      });
+    };
+
+    const closeSaveModal = async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.keyboard("{Escape}");
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog", { name: "Save to Cookbook" })).not.toBeInTheDocument();
+      });
+      await settleBrowserTasks();
     };
 
     it("uses shared dialog/input components for save modal, keeps modal above dock z-index, and preserves scroll on open", async () => {
+      const user = userEvent.setup();
       const mockData = {
         recipe: {
           id: "recipe-1",
@@ -2218,9 +2243,10 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Save Modal Recipe" });
 
-      openSaveModalFromDock();
+      await openSaveModalFromDock();
 
       expect(await screen.findByRole("dialog", { name: "Save to Cookbook" })).toBeInTheDocument();
+      await settleBrowserTasks();
       expect(screen.getByLabelText("Create new cookbook")).toBeInTheDocument();
 
       const backdrop = document.querySelector('[data-slot="dialog-backdrop"]');
@@ -2248,6 +2274,7 @@ describe("Recipes $id Route", () => {
       expect(document.activeElement).toHaveTextContent("Save to Cookbook");
       expect(scrollToSpy).not.toHaveBeenCalled();
 
+      await closeSaveModal(user);
       scrollToSpy.mockRestore();
     });
 
@@ -2280,7 +2307,7 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Save Modal Recipe" });
 
-      openSaveModalFromDock();
+      await openSaveModalFromDock();
       await screen.findByRole("dialog", { name: "Save to Cookbook" });
 
       await user.type(screen.getByLabelText("Create new cookbook"), "Fresh Saves");
@@ -2293,6 +2320,7 @@ describe("Recipes $id Route", () => {
       expect(createdCookbook).toBeInTheDocument();
       expect(createdCookbook).toHaveTextContent("✓");
       expect(createdCookbook).toHaveAttribute("aria-pressed", "true");
+      await closeSaveModal(user);
     });
 
     it("optimistically toggles cookbook saves from the save modal", async () => {
@@ -2335,7 +2363,7 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Toggle Cookbook Recipe" });
 
-      openSaveModalFromDock();
+      await openSaveModalFromDock();
       await screen.findByRole("dialog", { name: "Save to Cookbook" });
 
       await user.click(screen.getByTestId("cookbook-item-cb-unsaved"));
@@ -2352,9 +2380,11 @@ describe("Recipes $id Route", () => {
           { intent: "removeFromCookbook", cookbookId: "cb-saved" },
         ]);
       });
+      await closeSaveModal(user);
     });
 
     it("prevents blank cookbook creation submissions in the save modal", async () => {
+      const user = userEvent.setup();
       const submittedIntents: string[] = [];
       const mockData = {
         recipe: {
@@ -2387,7 +2417,7 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Blank Cookbook Recipe" });
 
-      openSaveModalFromDock();
+      await openSaveModalFromDock();
       await screen.findByRole("dialog", { name: "Save to Cookbook" });
 
       const form = screen.getByTestId("create-cookbook-button").closest("form");
@@ -2395,6 +2425,7 @@ describe("Recipes $id Route", () => {
       fireEvent.submit(form!);
 
       expect(submittedIntents).toEqual([]);
+      await closeSaveModal(user);
     });
 
     it("shares from the registered dock action", async () => {
@@ -2738,6 +2769,8 @@ describe("Recipes $id Route", () => {
       expect(within(restoredCookMode).getByRole("heading", { name: "Cook" })).toBeInTheDocument();
       expect(within(restoredCookMode).getByText("1 of 2 checked")).toBeInTheDocument();
       expect(within(restoredCookMode).getByTestId("scale-display")).toHaveTextContent("1.25×");
+      await exitCookMode(restoredCookMode);
+      await settleBrowserTasks();
     });
 
     it("shows a step timer in focused cook mode when a step has duration", async () => {
@@ -2791,6 +2824,8 @@ describe("Recipes $id Route", () => {
       await user.click(within(cookMode).getByRole("button", { name: "Reset timer" }));
       expect(within(cookMode).getByRole("button", { name: "Start timer" })).toBeInTheDocument();
       expect(within(cookMode).getByText("05:00")).toBeInTheDocument();
+      await exitCookMode(cookMode);
+      await settleBrowserTasks();
     });
 
     it("does not show a focused cook-mode timer for a non-positive duration", async () => {
@@ -2834,6 +2869,8 @@ describe("Recipes $id Route", () => {
 
       const cookMode = await screen.findByTestId("cook-mode-panel");
       expect(within(cookMode).queryByTestId("cook-mode-timer")).not.toBeInTheDocument();
+      await exitCookMode(cookMode);
+      await settleBrowserTasks();
     });
 
     it("lets a focused cook-mode timer finish and restart", async () => {
@@ -2878,6 +2915,7 @@ describe("Recipes $id Route", () => {
 
         const cookMode = await screen.findByTestId("cook-mode-panel");
         expect(within(cookMode).getByText("1 min timer")).toBeInTheDocument();
+        await settleBrowserTasks();
         vi.useFakeTimers();
         fireEvent.click(within(cookMode).getByRole("button", { name: "Start timer" }));
         await act(async () => {
@@ -2890,6 +2928,10 @@ describe("Recipes $id Route", () => {
         fireEvent.click(within(cookMode).getByRole("button", { name: "Restart timer" }));
         expect(within(cookMode).getByText("01:00")).toBeInTheDocument();
         expect(within(cookMode).getByRole("button", { name: "Pause timer" })).toBeInTheDocument();
+        await act(async () => {
+          fireEvent.click(within(cookMode).getByRole("button", { name: "Pause timer" }));
+        });
+        await exitCookMode(cookMode);
       } finally {
         vi.useRealTimers();
       }
@@ -2934,8 +2976,10 @@ describe("Recipes $id Route", () => {
       expect(await screen.findByTestId("cook-mode-panel")).toBeInTheDocument();
       expect(window.location.hash).toBe("#cook");
 
-      window.history.replaceState(null, "", "/recipes/recipe-1");
-      window.dispatchEvent(new PopStateEvent("popstate"));
+      await act(async () => {
+        window.history.replaceState(null, "", "/recipes/recipe-1");
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      });
 
       await waitFor(() => {
         expect(screen.queryByTestId("cook-mode-panel")).not.toBeInTheDocument();
@@ -2977,11 +3021,15 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Dock Cook Recipe" });
 
-      const dockActionRegistration = vi.mocked(useRecipeDetailActions).mock.calls.at(-1)?.[0];
-      dockActionRegistration?.onCook?.();
+      await act(async () => {
+        const dockActionRegistration = vi.mocked(useRecipeDetailActions).mock.calls.at(-1)?.[0];
+        dockActionRegistration?.onCook?.();
+      });
 
       expect(await screen.findByTestId("cook-mode-panel")).toBeInTheDocument();
       expect(screen.getByRole("heading", { name: "Step 1" })).toBeInTheDocument();
+      await exitCookMode(screen.getByTestId("cook-mode-panel"));
+      await settleBrowserTasks();
     });
 
     it("should render recipe with no steps (empty state) as owner", async () => {
@@ -3007,6 +3055,7 @@ describe("Recipes $id Route", () => {
         },
       ]);
 
+      const user = userEvent.setup();
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
 
       expect(await screen.findByRole("heading", { name: "Test Recipe" })).toBeInTheDocument();
@@ -3027,9 +3076,9 @@ describe("Recipes $id Route", () => {
       expect(screen.getByTestId("recipe-header-share-action")).toHaveAccessibleName("Share");
       expect(screen.getByRole("button", { name: "Add to list" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Log cook" })).toBeInTheDocument();
-      await userEvent.click(screen.getByRole("button", { name: "Log the first cook" }));
+      await user.click(screen.getByRole("button", { name: "Log the first cook" }));
       expect(await screen.findByRole("dialog", { name: "Log a cook" })).toBeInTheDocument();
-      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
 
       const scrollIntoView = vi.fn();
       const originalScrollIntoView = Element.prototype.scrollIntoView;
@@ -3038,7 +3087,7 @@ describe("Recipes $id Route", () => {
         value: scrollIntoView,
       });
       try {
-        await userEvent.click(screen.getByRole("link", { name: "Cook mode" }));
+        await user.click(screen.getByRole("link", { name: "Cook mode" }));
 
         expect(window.location.hash).toBe("#cook");
         expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
@@ -3053,6 +3102,7 @@ describe("Recipes $id Route", () => {
         }
         window.history.replaceState(null, "", "/");
       }
+      await settleBrowserTasks();
     });
 
     it("should render recipe with no steps (empty state) as non-owner", async () => {
@@ -3965,6 +4015,10 @@ describe("Recipes $id Route", () => {
       await user.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
       await user.click(screen.getByRole("button", { name: "Delete" }));
       await user.click(await screen.findByRole("button", { name: "Cancel" }));
+      await waitFor(() => {
+        expect(screen.queryByRole("alertdialog", { name: "Delete this recipe?" })).not.toBeInTheDocument();
+      });
+      await settleBrowserTasks();
       expect(submittedIntents).toEqual([]);
     });
 
@@ -4008,6 +4062,10 @@ describe("Recipes $id Route", () => {
       await waitFor(() => {
         expect(submittedIntents).toEqual(["delete"]);
       });
+      await waitFor(() => {
+        expect(screen.queryByRole("alertdialog", { name: "Delete this recipe?" })).not.toBeInTheDocument();
+      });
+      await settleBrowserTasks();
     });
 
     it("should render a visible share button on the recipe page", async () => {

@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from "@playwright/test";
+import { expect, test } from "../fixtures";
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -22,7 +23,7 @@ async function decodedImageSamples(page: Page, title: string) {
     const canvas = document.createElement('canvas');
     canvas.width = imageElement.naturalWidth;
     canvas.height = imageElement.naturalHeight;
-    const context = canvas.getContext('2d');
+    const context = canvas.getContext('2d', { willReadFrequently: true });
     if (!context) throw new Error('Could not create canvas context');
     context.drawImage(imageElement, 0, 0);
 

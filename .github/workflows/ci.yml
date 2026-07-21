@@ -111,7 +111,10 @@ jobs:
           node scripts/warning-gate.ts -- pnpm why @c4312/blake3-internal
 
       - name: 🗄️ Apply D1 migrations (local)
-        run: node scripts/warning-gate.ts -- pnpm exec wrangler d1 migrations apply DB --local
+        run: pnpm run verify:clean:migrations
+
+      - name: 🗄️ Rehearse D1 migrations with QA bindings
+        run: pnpm run verify:clean:migrations:qa
 
       - name: 🗄️ Apply Prisma schema to test database
         run: DATABASE_URL="file:./test.db" node scripts/warning-gate.ts -- pnpm exec prisma db push --skip-generate
@@ -125,17 +128,50 @@ jobs:
         run: node scripts/warning-gate.ts -- pnpm db:seed
 
       - name: 🔍 Typecheck
-        run: node scripts/warning-gate.ts -- pnpm run typecheck
+        run: pnpm run verify:clean:typecheck
+
+      - name: 🔐 Verify generated API contract
+        run: pnpm run verify:clean:generated-contract
 
       - name: 🧪 Test & Coverage
-        run: pnpm test:coverage
+        run: pnpm run verify:clean:test:coverage
 
       - name: 🏗️ Build
-        run: node scripts/warning-gate.ts -- pnpm build
+        run: pnpm run verify:clean:build
 
       - name: 🧹 Cleanup local disposable data
         if: always()
         run: node scripts/warning-gate.ts -- pnpm run cleanup:local:apply
+
+  workers-coverage:
+    name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-workers-coverage' || 'workers-coverage' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ env.CI_SOURCE_SHA }}
+          persist-credentials: false
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+
+      - name: 🔐 Validate CI invocation
+        run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation
+
+      - name: 📦 Activate pnpm
+        run: |
+          node scripts/warning-gate.ts -- corepack enable
+          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate
+
+      - name: 📥 Install dependencies
+        run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile
+
+      - name: 🧪 Workers test coverage
+        run: pnpm run verify:clean:test:workers:coverage
 
   e2e:
     name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-e2e' || 'e2e' }}
@@ -185,7 +221,7 @@ jobs:
           node scripts/warning-gate.ts -- pnpm exec playwright install chromium
 
       - name: 🗄️ Apply D1 migrations
-        run: node scripts/warning-gate.ts -- pnpm exec wrangler d1 migrations apply DB --local
+        run: pnpm run verify:clean:migrations
 
       - name: 🌱 Seed local D1 database
         run: node scripts/warning-gate.ts -- pnpm db:seed
@@ -195,7 +231,7 @@ jobs:
           printf 'SESSION_SECRET=%s\nNODE_ENV=development\n' "$SESSION_SECRET" > .dev.vars
 
       - name: 🎭 Run Playwright tests
-        run: pnpm test:e2e
+        run: pnpm run verify:clean:test:e2e
 
       - name: 🧹 Cleanup local disposable data
         if: always()

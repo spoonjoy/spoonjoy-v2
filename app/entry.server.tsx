@@ -39,6 +39,9 @@ export default async function handleRequest(
       <ServerRouter context={routerContext} url={request.url} nonce={nonce} />
     </NonceContext.Provider>,
     {
+      // React 19 injects streaming/resume bootstrap scripts outside React
+      // Router's tree, so it needs the same nonce independently.
+      nonce,
       onError(error: unknown) {
         responseStatusCode = 500;
         if (shellRendered) {

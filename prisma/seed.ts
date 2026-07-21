@@ -24,7 +24,7 @@ let prisma: PrismaClient;
 let platformDispose: (() => Promise<void>) | undefined;
 
 async function initPrismaForLocalD1() {
-  const platform = await getPlatformProxy<{ DB: D1Database }>();
+  const platform = await getPlatformProxy<{ DB: D1Database }>({ configPath: "wrangler.seed.json" });
 
   if (!platform.env?.DB) {
     throw new Error("Cloudflare D1 binding `DB` not found. Check wrangler.json d1_databases configuration.");

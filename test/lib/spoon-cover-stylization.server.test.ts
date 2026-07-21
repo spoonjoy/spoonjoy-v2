@@ -10,6 +10,7 @@ import { captureImageGenerationException } from "~/lib/image-gen-telemetry.serve
 import type { ImageGenRunner } from "~/lib/image-gen.server";
 import type { SpoonCoverCreationDecision } from "~/lib/spoon-cover-decision.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { expectConsoleError } from "../warning-policy";
 
 type Database = Awaited<ReturnType<typeof getLocalDb>>;
 
@@ -1608,27 +1609,44 @@ describe("scheduleSpoonCoverStylization", () => {
   });
 
   it("falls back to the default console logger when none is supplied", async () => {
-    const original = console.error;
-    const spy = vi.fn();
-    console.error = spy;
-    try {
-      const runner: ImageGenRunner = {
-        textToImage: vi.fn().mockRejectedValue(new Error("text fail")),
-        imageToImage: vi.fn().mockRejectedValue(new Error("img fail")),
-      };
-      await scheduleSpoonCoverStylization({
-        db,
-        userId,
-        recipeId,
-        coverId,
-        rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
-        recipeTitle: "Stylize Me",
-        runner,
-      });
-      expect(spy).toHaveBeenCalled();
-    } finally {
-      console.error = original;
-    }
+    const imageError = new Error("img fail");
+    const runner: ImageGenRunner = {
+      textToImage: vi.fn().mockRejectedValue(new Error("text fail")),
+      imageToImage: vi.fn().mockRejectedValue(imageError),
+    };
+    expectConsoleError("spoon cover stylization failed", {
+      name: "ImageGenError",
+      message: "Stylization failed",
+      code: null,
+      status: null,
+      type: null,
+      requestID: null,
+      cause: {
+        name: "ImageProviderAttemptError",
+        message: "openai:gpt-image-2 image edit failed",
+        code: null,
+        status: null,
+        type: null,
+        requestID: null,
+        provider: "openai",
+        model: "gpt-image-2",
+        retryable: false,
+        cause: {
+          name: imageError.name,
+          message: imageError.message,
+        },
+      },
+    });
+
+    await scheduleSpoonCoverStylization({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
+      recipeTitle: "Stylize Me",
+      runner,
+    });
   });
 
   it("uses the OpenAI runner factory when OPENAI_API_KEY is provided", async () => {

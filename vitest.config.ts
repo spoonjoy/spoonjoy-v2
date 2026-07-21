@@ -3,6 +3,7 @@ import { defineConfig } from "vitest/config";
 const appDirectory = new URL("./app", import.meta.url).pathname;
 const componentsDirectory = new URL("./app/components", import.meta.url).pathname;
 const coverageInclude = [
+  "app/entry.server.tsx",
   "app/lib/**/*.ts",
   "app/routes/**/*.ts",
   "app/routes/**/*.tsx",
@@ -17,6 +18,13 @@ const coverageInclude = [
   "scripts/qa-preflight.ts",
   "scripts/deployment-preflight.ts",
   "scripts/deploy-production-canary.ts",
+  "scripts/run-with-warning-policy.mjs",
+  "scripts/e2e-run-cleanup.mjs",
+  "test/warning-policy.ts",
+  "e2e/warning-policy.ts",
+  "e2e/fixtures.ts",
+  "e2e/support/global-teardown.ts",
+  "e2e/support/start-ephemeral-wrangler.mjs",
   "scripts/production-readiness.ts",
   "scripts/posthog-build-metadata.ts",
   "scripts/react-router-build-runner.ts",
@@ -53,12 +61,24 @@ export default defineConfig({
     sequence: {
       shuffle: false,
     },
-    exclude: ["**/node_modules/**", "**/e2e/**", "**/.claude/**"],
+    exclude: [
+      "**/node_modules/**",
+      "**/e2e/**",
+      "**/.claude/**",
+      "test/workers/cook-session-bootstrap.test.ts",
+    ],
     coverage: {
       provider: "istanbul",
       reporter: ["text", "json", "html"],
       include: isFocusedCoverageRun ? undefined : [...coverageInclude],
-      exclude: ["node_modules/**", "test/**", "**/*.config.ts", "**/*.d.ts", "**/types/**"],
+      exclude: [
+        "node_modules/**",
+        "test/**/*.{test,spec}.{ts,tsx}",
+        "test/setup.ts",
+        "**/*.config.ts",
+        "**/*.d.ts",
+        "**/types/**",
+      ],
       thresholds: isFocusedCoverageRun ? undefined : {
         statements: 100,
         branches: 100,

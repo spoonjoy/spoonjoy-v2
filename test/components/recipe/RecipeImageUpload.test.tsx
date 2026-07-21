@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { act, render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { RecipeImageUpload } from '../../../app/components/recipe/RecipeImageUpload'
@@ -683,7 +683,7 @@ describe('RecipeImageUpload', () => {
       const clickSpy = vi.spyOn(fileInput, 'click')
 
       const uploadButton = screen.getByRole('button', { name: /upload/i })
-      uploadButton.focus()
+      act(() => uploadButton.focus())
       await user.keyboard('{Enter}')
 
       expect(clickSpy).toHaveBeenCalled()
@@ -694,7 +694,7 @@ describe('RecipeImageUpload', () => {
 
       const uploadButton = screen.getByRole('button', { name: /upload/i })
       // Focus the button directly and verify it can receive focus
-      uploadButton.focus()
+      act(() => uploadButton.focus())
 
       expect(uploadButton).toHaveFocus()
     })

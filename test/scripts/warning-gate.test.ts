@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   EXPECTED_PRISMA_D1_TRANSACTION_WARNING,
+  findUnexpectedDiagnosticOutput,
   findUnexpectedWarnings,
   main,
   parseWarningGateCommands,
@@ -167,6 +168,14 @@ describe("warning gate", () => {
     expect(findUnexpectedWarnings(`${prismaWarning} Warning: appended bypass`)).toEqual([
       `${prismaWarning} Warning: appended bypass`,
     ]);
+  });
+
+  it("uses one channel-aware classifier for stdout warnings and every stderr diagnostic", () => {
+    expect(findUnexpectedDiagnosticOutput(
+      "ordinary stdout\nWarning: stdout diagnostic\n",
+      "ordinary stderr diagnostic\n",
+    )).toEqual(["Warning: stdout diagnostic", "ordinary stderr diagnostic"]);
+    expect(findUnexpectedDiagnosticOutput("ordinary stdout\n", "\n\r\n")).toEqual([]);
   });
 
   it("streams spawned command output and reports child exit states", async () => {

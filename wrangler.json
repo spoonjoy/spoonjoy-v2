@@ -10,7 +10,21 @@
   "version_metadata": {
     "binding": "CF_VERSION_METADATA"
   },
-  
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "COOK_SESSIONS",
+        "class_name": "CookSession"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1_cook_session",
+      "new_sqlite_classes": ["CookSession"]
+    }
+  ],
+
   "d1_databases": [
     {
       "binding": "DB",
@@ -47,12 +61,27 @@
   "vars": {
     "NODE_ENV": "production",
     "SPOONJOY_BASE_URL": "https://spoonjoy.app",
+    "COOK_SESSION_BOOTSTRAP_MODE": "1",
     "SPOONJOY_CSP_MODE": "enforce",
     "VITE_POSTHOG_HOST": "https://us.i.posthog.com"
   },
 
   "env": {
     "qa": {
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "COOK_SESSIONS",
+            "class_name": "CookSession"
+          }
+        ]
+      },
+      "migrations": [
+        {
+          "tag": "v1_cook_session",
+          "new_sqlite_classes": ["CookSession"]
+        }
+      ],
       "version_metadata": {
         "binding": "CF_VERSION_METADATA"
       },
@@ -89,6 +118,7 @@
       "vars": {
         "NODE_ENV": "production",
         "SPOONJOY_BASE_URL": "https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
+        "COOK_SESSION_BOOTSTRAP_MODE": "1",
         "SPOONJOY_CSP_MODE": "enforce",
         "VITE_POSTHOG_HOST": "https://us.i.posthog.com"
       }

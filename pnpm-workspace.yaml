@@ -2,6 +2,7 @@ allowBuilds:
   "@prisma/client": false
   "@prisma/engines": false
   "@swc/core": false
+  better-sqlite3: true
   core-js: false
   esbuild: false
   prisma: false

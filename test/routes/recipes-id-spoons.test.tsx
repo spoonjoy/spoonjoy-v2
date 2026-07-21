@@ -513,6 +513,7 @@ describe("Recipes $id route — spoons + provenance", () => {
     });
     expect(waitUntil).toHaveBeenCalledTimes(1);
     expect(captured).toHaveLength(1);
+    await expect(captured[0]).resolves.toBeUndefined();
   });
 
   it("action with intent=createSpoon as the origin cook does not seed a cover when a real active cover exists", async () => {

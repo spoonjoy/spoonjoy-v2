@@ -41,6 +41,7 @@ const extensions = [".ts", ".tsx", ".js", ".jsx", ".json"];
 };
 
 import "@testing-library/jest-dom";
+import "./warning-policy";
 import { vi, beforeAll, expect } from "vitest";
 import React from "react";
 
@@ -58,30 +59,6 @@ vi.mock('framer-motion', async () => {
         React.createElement('div', null, children),
     },
   };
-});
-
-// Suppress React act() warnings that come from library internals (Headless UI, Framer Motion)
-// These warnings occur because some libraries use internal state management that triggers
-// during test execution but don't affect test results
-const originalError = console.error;
-console.error = (...args: unknown[]) => {
-  const message = args[0];
-  if (typeof message === 'string' && message.includes('not wrapped in act(')) {
-    return; // Suppress act() warnings from library internals
-  }
-  originalError.apply(console, args);
-};
-
-// Suppress the Node.js ExperimentalWarning emitted when migration tests load
-// node:sqlite to validate raw SQL. The feature is stable in Node 22 LTS for our use
-// and the warning would otherwise count against the zero-warnings test policy.
-process.removeAllListeners('warning');
-process.on('warning', (warning) => {
-  if (warning.name === 'ExperimentalWarning' && /SQLite/.test(warning.message)) {
-    return;
-  }
-  // eslint-disable-next-line no-console
-  console.warn(warning.stack ?? warning.message);
 });
 
 // Extend toBeDisabled to also check aria-disabled for better accessibility testing

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ProfilePhotoCropper } from "~/components/account/ProfilePhotoCropper";
@@ -57,17 +57,25 @@ function fireImageLoad(img: HTMLImageElement, width: number, height: number) {
   fireEvent.load(img);
 }
 
+async function settleDialogTransition() {
+  await act(async () => {
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+  });
+}
+
 describe("ProfilePhotoCropper", () => {
-  it("creates an object URL from the file and uses it as the preview src", () => {
+  it("creates an object URL from the file and uses it as the preview src", async () => {
     render(<ProfilePhotoCropper file={makeFile()} onConfirm={vi.fn()} onCancel={vi.fn()} />);
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
     expect(getPreviewImage()).toHaveAttribute("src", "blob:http://localhost/mock-0");
+    await settleDialogTransition();
   });
 
-  it("disables Save and shows a loading state before the image loads", () => {
+  it("disables Save and shows a loading state before the image loads", async () => {
     render(<ProfilePhotoCropper file={makeFile()} onConfirm={vi.fn()} onCancel={vi.fn()} />);
     expect(screen.getByRole("button", { name: /save photo/i })).toBeDisabled();
     expect(screen.getByRole("status")).toBeInTheDocument();
+    await settleDialogTransition();
   });
 
   it("enables Save and sizes the image once it loads", async () => {
@@ -116,12 +124,13 @@ describe("ProfilePhotoCropper", () => {
     expect(img.style.height).toBe("512px");
   });
 
-  it("accepts a zoom change before the image loads without clamping", () => {
+  it("accepts a zoom change before the image loads without clamping", async () => {
     render(<ProfilePhotoCropper file={makeFile()} onConfirm={vi.fn()} onCancel={vi.fn()} />);
     const zoom = screen.getByLabelText("Zoom") as HTMLInputElement;
     // natural is still null here, so the clamp branch is skipped.
     fireEvent.change(zoom, { target: { value: "2.5" } });
     expect(zoom.value).toBe("2.5");
+    await settleDialogTransition();
   });
 
   it("updates the transform offset while dragging the preview", async () => {
@@ -149,13 +158,14 @@ describe("ProfilePhotoCropper", () => {
     expect(img.style.transform).toBe("translate(calc(-50% + 40px), calc(-50% + 0px))");
   });
 
-  it("ignores pointer moves that begin before the image has loaded", () => {
+  it("ignores pointer moves that begin before the image has loaded", async () => {
     render(<ProfilePhotoCropper file={makeFile()} onConfirm={vi.fn()} onCancel={vi.fn()} />);
     const preview = getPreviewImage().parentElement as HTMLElement;
     fireEvent.pointerDown(preview, { clientX: 0, clientY: 0 });
     fireEvent.pointerMove(preview, { clientX: 50, clientY: 0 });
     // natural is still null, so no offset is applied.
     expect(getPreviewImage().style.transform).toBe("translate(calc(-50% + 0px), calc(-50% + 0px))");
+    await settleDialogTransition();
   });
 
   it("stops dragging when the pointer leaves the preview", async () => {

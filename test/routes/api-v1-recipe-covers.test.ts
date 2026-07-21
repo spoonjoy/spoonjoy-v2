@@ -12,6 +12,7 @@ import {
 import { SpoonValidationError } from "~/lib/recipe-spoon.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser } from "../utils";
+import { expectConsoleError } from "../warning-policy";
 
 function routeArgs(request: Request, splat: string, context = { cloudflare: { env: null } }) {
   return { request, params: { "*": splat }, context } as any;
@@ -874,11 +875,21 @@ describe("API v1 recipe cover management", () => {
     const fixture = await createFirstPhotoFixture(db);
     const photoBucket = mockPhotoBucket();
     const originalCreate = db.recipeCover.create;
-    const createSpy = vi.fn().mockRejectedValueOnce(new Error("cover write failed after upload"));
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const createError = new Error("cover write failed after upload");
+    const createSpy = vi.fn().mockRejectedValueOnce(createError);
     db.recipeCover.create = createSpy as unknown as typeof db.recipeCover.create;
 
     try {
+      expectConsoleError("[api-v1] internal_error", {
+        requestId: "req_recipe_image_orphan_cleanup",
+        method: "POST",
+        path: `/api/v1/recipes/${fixture.recipe.id}/image`,
+        error: {
+          name: createError.name,
+          message: createError.message,
+          stack: createError.stack,
+        },
+      });
       const response = await action(routeArgs(
         recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_recipe_image_orphan_cleanup", recipeImageForm({
           clientMutationId: "first-photo-orphan-cleanup",
@@ -909,7 +920,6 @@ describe("API v1 recipe cover management", () => {
       })).resolves.toBeNull();
     } finally {
       db.recipeCover.create = originalCreate;
-      errorSpy.mockRestore();
     }
   });
 
@@ -917,11 +927,21 @@ describe("API v1 recipe cover management", () => {
     const fixture = await createFirstPhotoFixture(db);
     const photoBucket = mockPhotoBucket();
     const originalUpdate = db.recipeCover.update;
-    const updateSpy = vi.fn().mockRejectedValueOnce(new Error("cover link failed after spoon write"));
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const updateError = new Error("cover link failed after spoon write");
+    const updateSpy = vi.fn().mockRejectedValueOnce(updateError);
     db.recipeCover.update = updateSpy as unknown as typeof db.recipeCover.update;
 
     try {
+      expectConsoleError("[api-v1] internal_error", {
+        requestId: "req_recipe_image_link_cleanup",
+        method: "POST",
+        path: `/api/v1/recipes/${fixture.recipe.id}/image`,
+        error: {
+          name: updateError.name,
+          message: updateError.message,
+          stack: updateError.stack,
+        },
+      });
       const response = await action(routeArgs(
         recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_recipe_image_link_cleanup", recipeImageForm({
           clientMutationId: "first-photo-link-cleanup",
@@ -952,7 +972,6 @@ describe("API v1 recipe cover management", () => {
       })).resolves.toBeNull();
     } finally {
       db.recipeCover.update = originalUpdate;
-      errorSpy.mockRestore();
     }
   });
 
@@ -1099,48 +1118,64 @@ describe("API v1 recipe cover management", () => {
   it("does not attempt orphan cleanup when storage fails before an object URL exists", async () => {
     const fixture = await createFirstPhotoFixture(db);
     const photoBucket = mockPhotoBucket();
-    vi.mocked(photoBucket.bucket.put).mockRejectedValueOnce(new Error("R2 unavailable before URL"));
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const storageError = new Error("R2 unavailable before URL");
+    vi.mocked(photoBucket.bucket.put).mockRejectedValueOnce(storageError);
 
-    try {
-      const response = await action(routeArgs(
-        recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_recipe_image_storage_failure", recipeImageForm({
-          clientMutationId: "first-photo-storage-failure",
-          photo: photoFile("storage-failure.png"),
-          activate: true,
-        })),
-        `recipes/${fixture.recipe.id}/image`,
-        backgroundContext({ PHOTOS: photoBucket.bucket }),
-      ));
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_recipe_image_storage_failure",
+      method: "POST",
+      path: `/api/v1/recipes/${fixture.recipe.id}/image`,
+      error: {
+        name: storageError.name,
+        message: storageError.message,
+        stack: storageError.stack,
+      },
+    });
+    const response = await action(routeArgs(
+      recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_recipe_image_storage_failure", recipeImageForm({
+        clientMutationId: "first-photo-storage-failure",
+        photo: photoFile("storage-failure.png"),
+        activate: true,
+      })),
+      `recipes/${fixture.recipe.id}/image`,
+      backgroundContext({ PHOTOS: photoBucket.bucket }),
+    ));
 
-      expect(response.status).toBe(500);
-      await expect(response.json()).resolves.toMatchObject({
-        ok: false,
-        requestId: "req_recipe_image_storage_failure",
-        error: { code: "internal_error", status: 500 },
-      });
-      expect(photoBucket.bucket.delete).not.toHaveBeenCalled();
-      await expect(db.recipeCover.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
-      await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
-      await expect(db.apiIdempotencyKey.findFirst({
-        where: {
-          userId: fixture.owner.id,
-          key: "first-photo-storage-failure",
-        },
-      })).resolves.toBeNull();
-    } finally {
-      errorSpy.mockRestore();
-    }
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_recipe_image_storage_failure",
+      error: { code: "internal_error", status: 500 },
+    });
+    expect(photoBucket.bucket.delete).not.toHaveBeenCalled();
+    await expect(db.recipeCover.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+    await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+    await expect(db.apiIdempotencyKey.findFirst({
+      where: {
+        userId: fixture.owner.id,
+        key: "first-photo-storage-failure",
+      },
+    })).resolves.toBeNull();
   });
 
   it("rolls back rows after a data-URL upload write failure without a Cloudflare environment", async () => {
     const fixture = await createFirstPhotoFixture(db);
     const originalCreate = db.recipeCover.create;
-    const createSpy = vi.fn().mockRejectedValueOnce(new Error("cover write failed after data URL upload"));
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const createError = new Error("cover write failed after data URL upload");
+    const createSpy = vi.fn().mockRejectedValueOnce(createError);
     db.recipeCover.create = createSpy as unknown as typeof db.recipeCover.create;
 
     try {
+      expectConsoleError("[api-v1] internal_error", {
+        requestId: "req_recipe_image_data_url_cleanup",
+        method: "POST",
+        path: `/api/v1/recipes/${fixture.recipe.id}/image`,
+        error: {
+          name: createError.name,
+          message: createError.message,
+          stack: createError.stack,
+        },
+      });
       const response = await action(routeArgs(
         recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_recipe_image_data_url_cleanup", recipeImageForm({
           clientMutationId: "first-photo-data-url-cleanup",
@@ -1167,7 +1202,6 @@ describe("API v1 recipe cover management", () => {
       })).resolves.toBeNull();
     } finally {
       db.recipeCover.create = originalCreate;
-      errorSpy.mockRestore();
     }
   });
 
@@ -1624,12 +1658,22 @@ describe("API v1 recipe cover management", () => {
     });
 
     const storageFailureKey = `recipes/${fixture.owner.id}/${fixture.recipe.id}/storage-failure-cover.jpg`;
+    const storageError = new Error("R2 read failed");
     const throwingBucket = {
       get: vi.fn(async () => {
-        throw new Error("R2 read failed");
+        throw storageError;
       }),
     } as unknown as R2Bucket;
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_cover_create_storage_failure",
+      method: "POST",
+      path: `/api/v1/recipes/${fixture.recipe.id}/covers`,
+      error: {
+        name: storageError.name,
+        message: storageError.message,
+        stack: storageError.stack,
+      },
+    });
     const storageFailureResponse = await action(routeArgs(jsonRequest(
       createUrl,
       "POST",
@@ -2020,11 +2064,21 @@ describe("API v1 recipe cover management", () => {
   it("surfaces idempotency completion failures for cover mutations without recovery", async () => {
     const fixture = await createCoverFixture(db);
     const originalUpdate = db.apiIdempotencyKey.update;
-    const updateSpy = vi.fn().mockRejectedValueOnce(new Error("idempotency completion unavailable"));
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const updateError = new Error("idempotency completion unavailable");
+    const updateSpy = vi.fn().mockRejectedValueOnce(updateError);
     db.apiIdempotencyKey.update = updateSpy as unknown as typeof db.apiIdempotencyKey.update;
 
     try {
+      expectConsoleError("[api-v1] internal_error", {
+        requestId: "req_cover_completion_failure_no_recovery",
+        method: "PATCH",
+        path: `/api/v1/recipes/${fixture.recipe.id}/covers`,
+        error: {
+          name: updateError.name,
+          message: updateError.message,
+          stack: updateError.stack,
+        },
+      });
       const response = await action(routeArgs(jsonRequest(
         `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers`,
         "PATCH",
@@ -2041,7 +2095,6 @@ describe("API v1 recipe cover management", () => {
       });
     } finally {
       db.apiIdempotencyKey.update = originalUpdate;
-      errorSpy.mockRestore();
     }
   });
 

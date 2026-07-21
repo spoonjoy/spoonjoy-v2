@@ -1,4 +1,5 @@
 import { execFile as nodeExecFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -162,6 +163,23 @@ const PINNED_SETUP_NODE_ACTION = "actions/setup-node@249970729cb0ef3589644e28966
 const PINNED_UPLOAD_ARTIFACT_ACTION = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
 const PINNED_DOWNLOAD_ARTIFACT_ACTION = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c";
 const PINNED_WRANGLER_ACTION = "cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0";
+const PROTOCOL_V1_BOUNDARY_MARKER = "workers/cook-session-protocol-v1-boundary";
+const EXPECTED_PRODUCTION_DEPLOY_STEP_NAMES = [
+  "Checkout approved source SHA",
+  "Checkout trusted rollback tooling",
+  "Validate release source",
+  "Setup Node.js",
+  "Activate pnpm",
+  "Install dependencies",
+  "Generate Prisma client",
+  "Install Playwright Chromium",
+  "Deploy staged release to Cloudflare Workers",
+  "Record release source",
+  "Ensure release artifact exists",
+  "Upload MCP OAuth canary artifacts",
+] as const;
+const EXPECTED_RELEASE_SOURCE_RUN_SHA256 = "b73376c1b0ebc718ca769836147b43c33b0f39ec514fb795947a17ba201955fd";
+const EXPECTED_RELEASE_ARTIFACT_RUN_SHA256 = "326e6083c0e31a4d14c941569f5ecf22632a31c146c00ee5e02f0c949b6fb4b5";
 const REQUIRED_IGNORED_BUILD_PACKAGES = [
   "@prisma/client",
   "@prisma/engines",
@@ -474,7 +492,8 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
       `${WARNING_GATE_COMMAND_PREFIX}pnpm why blake3-wasm`,
       `${WARNING_GATE_COMMAND_PREFIX}pnpm why @c4312/blake3-internal`,
     ),
-    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm exec wrangler d1 migrations apply DB --local`),
+    commandStepSignature("pnpm run verify:clean:migrations"),
+    commandStepSignature("pnpm run verify:clean:migrations:qa"),
     commandStepSignature(
       `DATABASE_URL="file:./test.db" ${WARNING_GATE_COMMAND_PREFIX}pnpm exec prisma db push --skip-generate`,
     ),
@@ -483,10 +502,22 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
       `${WARNING_GATE_COMMAND_PREFIX}pnpm exec wrangler d1 execute DB --local --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"`,
     ),
     commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm db:seed`),
-    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm run typecheck`),
-    commandStepSignature("pnpm test:coverage"),
-    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm build`),
+    commandStepSignature("pnpm run verify:clean:typecheck"),
+    commandStepSignature("pnpm run verify:clean:generated-contract"),
+    commandStepSignature("pnpm run verify:clean:test:coverage"),
+    commandStepSignature("pnpm run verify:clean:build"),
     commandStepSignature(CI_DISPOSABLE_CLEANUP_COMMAND),
+  ]],
+  ["workers-coverage", [
+    actionStepSignature(PINNED_CHECKOUT_ACTION),
+    actionStepSignature(PINNED_SETUP_NODE_ACTION),
+    commandStepSignature(CI_INVOCATION_VALIDATION_COMMAND),
+    commandStepSignature(
+      `${WARNING_GATE_COMMAND_PREFIX}corepack enable`,
+      `${WARNING_GATE_COMMAND_PREFIX}corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`,
+    ),
+    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm install --frozen-lockfile`),
+    commandStepSignature("pnpm run verify:clean:test:workers:coverage"),
   ]],
   ["e2e", [
     actionStepSignature(PINNED_CHECKOUT_ACTION),
@@ -510,10 +541,10 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
       `${WARNING_GATE_COMMAND_PREFIX}${PLAYWRIGHT_APT_INSTALL_COMMAND}`,
       `${WARNING_GATE_COMMAND_PREFIX}pnpm exec playwright install chromium`,
     ),
-    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm exec wrangler d1 migrations apply DB --local`),
+    commandStepSignature("pnpm run verify:clean:migrations"),
     commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm db:seed`),
     commandStepSignature('printf \'SESSION_SECRET=%s\\nNODE_ENV=development\\n\' "$SESSION_SECRET" > .dev.vars'),
-    commandStepSignature("pnpm test:e2e"),
+    commandStepSignature("pnpm run verify:clean:test:e2e"),
     commandStepSignature(CI_DISPOSABLE_CLEANUP_COMMAND),
     actionStepSignature(PINNED_UPLOAD_ARTIFACT_ACTION),
   ]],
@@ -544,6 +575,11 @@ const CI_JOB_CONTRACTS = Object.freeze({
   coverage: Object.freeze({
     name: "${{ github.event_name == 'workflow_dispatch' && 'report-only-coverage' || 'coverage' }}",
     timeoutMinutes: 90,
+    env: undefined,
+  }),
+  "workers-coverage": Object.freeze({
+    name: "${{ github.event_name == 'workflow_dispatch' && 'report-only-workers-coverage' || 'workers-coverage' }}",
+    timeoutMinutes: 30,
     env: undefined,
   }),
   e2e: Object.freeze({
@@ -691,9 +727,33 @@ const PRODUCTION_WORKFLOW_ENV = Object.freeze({
   GIT_CONFIG_VALUE_0: "main",
   SOURCE_SHA: "${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.source_sha }}",
   ROLLBACK_VERSION_ID: "${{ github.event_name == 'workflow_dispatch' && inputs.rollback_version_id || '' }}",
+  SPOONJOY_RELEASE_MODE: "atomic-bootstrap",
+  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: "",
   SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS:
     "${{ github.event_name == 'workflow_dispatch' && inputs.csp_report_only_break_glass || '' }}",
 });
+
+function productionWorkflowEnvIsCanonical(value: unknown): boolean {
+  const env = objectRecord(value);
+  const releaseMode = env.SPOONJOY_RELEASE_MODE;
+  const protocolBoundary = env.SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA;
+  const releaseModeIsValid = releaseMode === "atomic-bootstrap" ||
+    releaseMode === "atomic-product-activation" ||
+    releaseMode === "protocol-v1-canary";
+
+  return exactObjectKeys(env, Object.keys(PRODUCTION_WORKFLOW_ENV)) &&
+    env.GIT_CONFIG_COUNT === PRODUCTION_WORKFLOW_ENV.GIT_CONFIG_COUNT &&
+    env.GIT_CONFIG_KEY_0 === PRODUCTION_WORKFLOW_ENV.GIT_CONFIG_KEY_0 &&
+    env.GIT_CONFIG_VALUE_0 === PRODUCTION_WORKFLOW_ENV.GIT_CONFIG_VALUE_0 &&
+    env.SOURCE_SHA === PRODUCTION_WORKFLOW_ENV.SOURCE_SHA &&
+    env.ROLLBACK_VERSION_ID === PRODUCTION_WORKFLOW_ENV.ROLLBACK_VERSION_ID &&
+    env.SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS ===
+      PRODUCTION_WORKFLOW_ENV.SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS &&
+    releaseModeIsValid &&
+    (releaseMode === "protocol-v1-canary"
+      ? typeof protocolBoundary === "string" && /^[0-9a-f]{40}$/.test(protocolBoundary)
+      : protocolBoundary === "");
+}
 
 const PRODUCTION_DEPLOY_STEPS: readonly Record<string, unknown>[] = [
   {
@@ -817,6 +877,54 @@ const PRODUCTION_REPORT_STEPS: readonly Record<string, unknown>[] = [
   },
 ];
 
+function productionDeployStepsAreCanonical(
+  steps: readonly Record<string, unknown>[],
+): boolean {
+  if (
+    steps.length !== PRODUCTION_DEPLOY_STEPS.length ||
+    steps.some((step, index) => step.name !== EXPECTED_PRODUCTION_DEPLOY_STEP_NAMES[index])
+  ) return false;
+
+  const validation = steps[2];
+  const validationEnv = objectRecord(validation.env);
+  if (
+    !exactObjectKeys(validation, ["name", "env", "run"]) ||
+    !exactWorkflowRecord(validationEnv, {
+      GH_TOKEN: "${{ github.token }}",
+      WORKFLOW_RUN_CONCLUSION: "${{ github.event.workflow_run.conclusion }}",
+      WORKFLOW_RUN_EVENT: "${{ github.event.workflow_run.event }}",
+      WORKFLOW_RUN_HEAD_BRANCH: "${{ github.event.workflow_run.head_branch }}",
+      WORKFLOW_RUN_HEAD_SHA: "${{ github.event.workflow_run.head_sha }}",
+      WORKFLOW_RUN_PATH: "${{ github.event.workflow_run.path }}",
+    }) ||
+    typeof validation.run !== "string" ||
+    runHasStaticallyDeadGuard(validation.run) ||
+    runBodySha256(validation.run) !== EXPECTED_RELEASE_SOURCE_RUN_SHA256 ||
+    !runHasExecutableFragment(validation.run, PRODUCTION_VALIDATION_COMMAND)
+  ) return false;
+
+  const artifact = steps[10];
+  if (
+    !exactObjectKeys(artifact, ["name", "if", "env", "run"]) ||
+    artifact.if !== "always()" ||
+    !exactWorkflowRecord(artifact.env, {
+      CLOUDFLARE_D1_API_TOKEN: "${{ secrets.CLOUDFLARE_D1_API_TOKEN }}",
+      CLOUDFLARE_WORKERS_API_TOKEN: "${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}",
+    }) ||
+    typeof artifact.run !== "string" ||
+    runHasStaticallyDeadGuard(artifact.run) ||
+    runBodySha256(artifact.run) !== EXPECTED_RELEASE_ARTIFACT_RUN_SHA256 ||
+    !runHasExecutableFragment(artifact.run, "artifact_valid=0") ||
+    !runHasExecutableFragment(artifact.run, "artifact_valid=1")
+  ) return false;
+
+  return steps.every((step, index) => (
+    index === 2 ||
+    index === 10 ||
+    JSON.stringify(step) === JSON.stringify(PRODUCTION_DEPLOY_STEPS[index])
+  ));
+}
+
 function optionalDispatchStringInput(value: unknown): boolean {
   const input = objectRecord(value);
   return input.required === false &&
@@ -831,7 +939,7 @@ export function parsedProductionWorkflowIsCanonical(workflow: string): boolean {
     !root ||
     !allowedObjectKeys(root, ["name", "on", "permissions", "env", "jobs"], ["concurrency"]) ||
     root.name !== "Production Deploy" ||
-    !exactWorkflowRecord(root.env, PRODUCTION_WORKFLOW_ENV)
+    !productionWorkflowEnvIsCanonical(root.env)
   ) return false;
 
   const triggers = objectRecord(root.on);
@@ -891,7 +999,7 @@ export function parsedProductionWorkflowIsCanonical(workflow: string): boolean {
   const deploySteps = workflowStepRecords(deploy.steps);
   const reportSteps = workflowStepRecords(report.steps);
   if (!deploySteps || !reportSteps) return false;
-  return JSON.stringify(deploySteps) === JSON.stringify(PRODUCTION_DEPLOY_STEPS) &&
+  return productionDeployStepsAreCanonical(deploySteps) &&
     JSON.stringify(reportSteps) === JSON.stringify(PRODUCTION_REPORT_STEPS);
 }
 
@@ -1029,14 +1137,7 @@ function stepRunText(lines: WorkflowLine[], stepStart: number, stepEnd: number):
 function stepHasEnvKeys(lines: WorkflowLine[], stepStart: number, stepEnd: number, keys: string[]): boolean {
   const env = childBlock(lines, stepStart, stepEnd, "env");
   if (!env) return false;
-
-  const envIndent = lines[env[0]].indent + 2;
-  const found = new Set<string>();
-  for (let index = env[0] + 1; index < env[1]; index += 1) {
-    if (lines[index].indent !== envIndent) continue;
-    const key = lines[index].text.match(/^([A-Za-z0-9_]+):/);
-    if (key) found.add(key[1]);
-  }
+  const found = new Set(immediateChildKeys(lines, env[0], env[1]));
   return keys.every((key) => found.has(key));
 }
 
@@ -1155,6 +1256,44 @@ function runCommandLines(run: string): string[] {
 function commandLinesEqual(run: string, expected: string[]): boolean {
   const commands = runCommandLines(run);
   return commands.length === expected.length && commands.every((command, index) => command === expected[index]);
+}
+
+function runBodySha256(run: string): string {
+  return createHash("sha256").update(run.trim()).digest("hex");
+}
+
+function runHasExecutableFragment(run: string, fragment: string): boolean {
+  return runCommandLines(run).some((line) => {
+    const fragmentIndex = line.indexOf(fragment);
+    if (/^(?:echo|printf|:|true)\b/.test(line) || fragmentIndex === -1) return false;
+    const prefix = line.slice(0, fragmentIndex).trimEnd();
+    const suffix = line.slice(fragmentIndex + fragment.length).trim();
+    return !/(?:\|\||&&)$/.test(prefix) && !/^(?:\|\||&&)/.test(suffix);
+  });
+}
+
+function runHasStaticallyDeadGuard(run: string): boolean {
+  return runCommandLines(run).some((line) => {
+    if (
+      /^if\s+(?:false|!\s+true)\s*;?\s*then$/.test(line) ||
+      /^(?:false\s*&&|true\s*\|\|)/.test(line)
+    ) return true;
+    const comparison = line.match(
+      /^if\s+\[\s*(-?\d+)\s+-(eq|ne|lt|le|gt|ge)\s+(-?\d+)\s*\]\s*;?\s*then$/,
+    );
+    if (!comparison) return false;
+    const left = Number(comparison[1]);
+    const right = Number(comparison[3]);
+    const operator = comparison[2];
+    return !(
+      (operator === "eq" && left === right) ||
+      (operator === "ne" && left !== right) ||
+      (operator === "lt" && left < right) ||
+      (operator === "le" && left <= right) ||
+      (operator === "gt" && left > right) ||
+      (operator === "ge" && left >= right)
+    );
+  });
 }
 
 function cloudflareGateRunIsSafe(run: string): boolean {
@@ -1631,11 +1770,11 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
       "deployment commands",
       [
         "pnpm run deploy:preflight",
-        "wrangler d1 migrations apply DB --remote",
+        'gh workflow run production-deploy.yml --ref main -f source_sha="$(git rev-parse HEAD)"',
         "wrangler r2 bucket create spoonjoy-photos",
         "wrangler secret put SESSION_SECRET",
       ].every((command) => readmeAndDeploymentDoc.includes(command)),
-      "Deployment docs must include preflight, D1 migration, R2 bucket, and secret commands."
+      "Deployment docs must include preflight, exact-SHA production workflow, R2 bucket, and secret commands."
     ),
     check(
       "telemetry env typing",
@@ -1852,7 +1991,7 @@ export async function checkRemoteMigrations(deps: RemoteMigrationCheckDeps): Pro
   return check(
     "remote D1 migrations",
     false,
-    `Remote D1 has ${pending.length} pending migration(s): ${names}. Run \`pnpm exec wrangler d1 migrations apply DB --remote\` (or use \`pnpm deploy:auto\`).`,
+    `Remote D1 has ${pending.length} pending migration(s): ${names}. Dispatch the exact-SHA production workflow for additive migrations.`,
   );
 }
 

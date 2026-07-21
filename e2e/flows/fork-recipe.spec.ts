@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from "../fixtures";
 import { readLatestDisposableE2EUser } from '../support/disposable-auth';
 import { currentRecipeOwnerUsername, openPublicRecipeByTitle } from '../support/recipes';
 

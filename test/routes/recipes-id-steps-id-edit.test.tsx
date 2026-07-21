@@ -3417,14 +3417,18 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         // Click remove button
         const removeButton = await screen.findByRole("button", { name: "Remove" });
         fireEvent.click(removeButton);
+        expect(await screen.findByRole("alertdialog", { name: "Remove this ingredient?" })).toBeInTheDocument();
 
         // Click cancel
         const cancelButton = screen.getByRole("button", { name: "Keep it" });
         fireEvent.click(cancelButton);
 
-        // Dialog should close (may need to wait for animation)
+        // Wait for the actual dialog to leave, including focus restoration.
         await waitFor(() => {
-          expect(screen.queryByText("Remove this ingredient? 🥕")).not.toBeInTheDocument();
+          expect(screen.queryByRole("alertdialog", { name: "Remove this ingredient?" })).not.toBeInTheDocument();
+        });
+        await act(async () => {
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
         });
       });
     });

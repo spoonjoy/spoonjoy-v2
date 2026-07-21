@@ -44,6 +44,19 @@ describe("local development seed policy", () => {
     expect(seedSource).not.toContain("withoutKnownSeedWarnings");
   });
 
+  it("uses a D1-only Wrangler proxy config so seeding does not instantiate app Durable Objects", () => {
+    const seedSource = readFileSync("prisma/seed.ts", "utf8");
+    const appConfig = JSON.parse(readFileSync("wrangler.json", "utf8")) as Record<string, unknown>;
+    const seedConfig = JSON.parse(readFileSync("wrangler.seed.json", "utf8")) as Record<string, unknown>;
+
+    expect(seedSource).toContain('getPlatformProxy<{ DB: D1Database }>({ configPath: "wrangler.seed.json" })');
+    expect(seedConfig.d1_databases).toEqual(appConfig.d1_databases);
+    expect(seedConfig).not.toHaveProperty("durable_objects");
+    expect(seedConfig).not.toHaveProperty("migrations");
+    expect(seedConfig).not.toHaveProperty("r2_buckets");
+    expect(seedConfig).not.toHaveProperty("ratelimits");
+  });
+
   it("filters only exact whole-line Prisma D1 transaction warnings", () => {
     const expected = EXPECTED_PRISMA_D1_TRANSACTION_WARNING;
     const output = [

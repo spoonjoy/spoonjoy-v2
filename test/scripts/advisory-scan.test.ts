@@ -15,6 +15,7 @@ import {
   runCliIfEntry,
   type CommandRunner,
 } from "../../scripts/advisory-scan";
+import { expectConsoleError } from "../warning-policy";
 
 async function withTempDir<T>(callback: (directory: string) => Promise<T>): Promise<T> {
   const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-advisory-test-"));
@@ -736,15 +737,14 @@ describe("advisory scan entrypoint", () => {
     const modulePath = path.join(process.cwd(), "scripts/advisory-scan.ts");
     const originalArgv = process.argv;
     const originalExitCode = process.exitCode;
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     process.argv = [originalArgv[0] ?? "node", modulePath, "--scanner"];
     process.exitCode = undefined;
+    expectConsoleError("Error: Missing value for --scanner");
     try {
       expect(runCliIfEntry({ argv1: modulePath, moduleUrl: pathToFileURL(modulePath).href })).toBe(true);
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(process.exitCode).toBe(1);
     } finally {
-      consoleError.mockRestore();
       process.argv = originalArgv;
       process.exitCode = originalExitCode;
     }

@@ -1,8 +1,6 @@
-import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { promisify } from "node:util";
 
 export type DisposableE2EUser = {
   email: string;
@@ -15,11 +13,21 @@ type UserFactoryOptions = {
   random?: () => string;
 };
 
-type RunCommand = (
-  file: string,
-  args: string[],
-  options: { encoding: BufferEncoding; maxBuffer: number },
-) => Promise<{ stdout?: string; stderr?: string }>;
+type BrowserStorageCookie = {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  expires?: number;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: "Strict" | "Lax" | "None";
+};
+
+export type BrowserStorageState = {
+  cookies: BrowserStorageCookie[];
+  origins?: unknown[];
+};
 
 export const DISPOSABLE_E2E_USERS_MANIFEST = "e2e/.auth/disposable-users.json";
 export const DISPOSABLE_E2E_AUTH_STATE = "e2e/.auth/user.json";
@@ -65,25 +73,25 @@ export function recordDisposableE2EUser(user: DisposableE2EUser, manifestPath = 
   secureDisposableE2EAuthFile(manifestPath);
 }
 
+export function writeDisposableE2EAuthState(
+  state: BrowserStorageState,
+  authPath = DISPOSABLE_E2E_AUTH_STATE,
+) {
+  mkdirSync(path.dirname(authPath), { recursive: true });
+  writeFileSync(authPath, `${JSON.stringify({ cookies: state.cookies, origins: [] }, null, 2)}\n`, {
+    mode: 0o600,
+  });
+  secureDisposableE2EAuthFile(authPath);
+}
+
 export function secureDisposableE2EAuthFile(authPath: string) {
   chmodSync(authPath, 0o600);
 }
 
-export async function runDisposableE2ETeardown({
-  runCommand = promisify(execFile) as RunCommand,
+export function removeDisposableE2EAuthArtifacts(
   authPaths = [DISPOSABLE_E2E_AUTH_STATE, DISPOSABLE_E2E_USERS_MANIFEST],
-}: {
-  runCommand?: RunCommand;
-  authPaths?: string[];
-} = {}) {
-  try {
-    await runCommand("pnpm", ["run", "cleanup:local:apply"], {
-      encoding: "utf8",
-      maxBuffer: 1024 * 1024 * 8,
-    });
-  } finally {
-    for (const authPath of authPaths) {
-      rmSync(authPath, { force: true });
-    }
+) {
+  for (const authPath of authPaths) {
+    rmSync(authPath, { force: true });
   }
 }

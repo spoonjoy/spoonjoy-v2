@@ -5,6 +5,7 @@ import path from "node:path";
 import { db } from "~/lib/db.server";
 import { createUser } from "~/lib/auth.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { expectConsoleError } from "../warning-policy";
 
 const GENERATED_IMAGE_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
 import {
@@ -1517,34 +1518,32 @@ describe("importRecipeFromUrl — extraction paths", () => {
     it("default logger is console when deps.logger is undefined", async () => {
       const fixture = await loadFixture("nyt-style-jsonld.html");
       const chef = await makeChef();
+      const r2Error = new Error("simulated R2 outage");
       const bucket = {
         put: vi.fn(async () => {
-          throw new Error("simulated R2 outage");
+          throw r2Error;
         }),
       } as unknown as R2Bucket;
       void localMockBucket;
-      const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-      try {
-        let call = 0;
-        const fetchImpl = vi.fn(async () => {
-          call++;
-          if (call === 1) return streamingResponse(fixture, { url: "https://example.com/r" });
-          return {
-            ok: true,
-            status: 200,
-            headers: new Headers([["content-type", "image/jpeg"]]),
-            arrayBuffer: async () => validJpegBytes().buffer,
-          } as unknown as Response;
-        }) as unknown as typeof fetch;
-        const result = await importRecipeFromUrl(
-          { url: "https://example.com/r", chefId: chef.id },
-          baseDeps({ fetchImpl, bucket, logger: undefined }),
-        );
-        expect(result.recipeId).toBeTruthy();
-        expect(errSpy).toHaveBeenCalled();
-      } finally {
-        errSpy.mockRestore();
-      }
+      let call = 0;
+      const fetchImpl = vi.fn(async () => {
+        call++;
+        if (call === 1) return streamingResponse(fixture, { url: "https://example.com/r" });
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers([["content-type", "image/jpeg"]]),
+          arrayBuffer: async () => validJpegBytes().buffer,
+        } as unknown as Response;
+      }) as unknown as typeof fetch;
+      expectConsoleError("recipe-import cover upload failed", r2Error);
+
+      const result = await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id },
+        baseDeps({ fetchImpl, bucket, logger: undefined }),
+      );
+
+      expect(result.recipeId).toBeTruthy();
     });
 
     it("default now is wall-clock when deps.now is undefined", async () => {

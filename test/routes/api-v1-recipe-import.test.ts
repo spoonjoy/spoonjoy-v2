@@ -10,6 +10,7 @@ import { ImportRecipeError } from "~/lib/recipe-import.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
+import { expectConsoleError } from "../warning-policy";
 
 function routeArgs(request: Request, splat: string, context = { cloudflare: { env: { OPENAI_API_KEY: "test-key" } } }) {
   return { request, params: { "*": splat }, context } as any;
@@ -582,9 +583,19 @@ describe("API v1 recipe import", () => {
 
   it("lets unexpected import failures become internal errors", async () => {
     const fixture = await createImportFixture(db);
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    const importError = new TypeError("unexpected native importer failure");
     vi.spyOn(recipeImport, "importRecipeFromSource")
-      .mockRejectedValueOnce(new TypeError("unexpected native importer failure"));
+      .mockRejectedValueOnce(importError);
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_native_import_internal_error",
+      method: "POST",
+      path: "/api/v1/recipes/import",
+      error: {
+        name: importError.name,
+        message: importError.message,
+        stack: importError.stack,
+      },
+    });
 
     const response = await action(mutationRequest(fixture.writer.token, "req_native_import_internal_error", {
       clientMutationId: "cm_native_internal_error",
