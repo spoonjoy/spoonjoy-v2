@@ -116,12 +116,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Output**: 100% deploy-script coverage and reviewer report.
 **Acceptance**: No secret reaches logs/artifacts; no invalid rollback is possible; review converges.
 
-### 🔄 Unit 1.4: Bootstrap QA
+### ✅ Unit 1.4: Bootstrap QA
 **What**: Deploy the inert namespace to QA; call `POST /.well-known/spoonjoy-cook-session-bootstrap` twice; assert `{ok:true,storage:'sqlite',workerVersionId:<deployed version>,residue:0}` and matching version header; then confirm no `CookSessionIndex` row or probe storage remains.
 **Output**: Sanitized QA deployment, smoke, and cleanup logs.
 **Acceptance**: QA has `v1_cook_session`, the inert DO responds, and no disposable D1/DO row remains.
 
-### ⬜ Unit 1.5: Bootstrap PR And Merge
+### 🔄 Unit 1.5: Bootstrap PR And Merge
 **What**: On `worker/clem-feedback-e2e`, run final gates and open a PR to `main`. Enforce the planning-contract allowlist: focused task docs/artifacts, frozen `test/fixtures/clem-feedback-pre-feature.sql`, package/lockfile, Wrangler/env types, Worker app/new inert class, Workers-test config/tests, CI/production workflow, and existing deploy script/tests/docs only; resolve review/CI and merge.
 **Output**: Bootstrap PR URL and exact merge SHA.
 **Acceptance**: Required reviews/CI are green and the merge SHA contains only docs plus lifecycle/test/deploy bootstrap scope.
@@ -703,3 +703,5 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-20 21:16 Unit 1.3b complete: added immutable exact-revision migration application, lifecycle-aware atomic/bootstrap/product/canary modes, strict release artifacts, forward-only boundary repair, operator documentation, and zero-warning route-test settling; 7,734 app tests, typechecks, build, and deployment preflight passed.
 - 2026-07-20 21:16 Unit 1.3c complete: both modified deploy scripts reached 100% branch coverage, the 721-test release matrix passed, and a fresh release/security review converged after all artifact, provenance, migration-atomicity, and recovery findings were closed.
 - 2026-07-20 21:16 Unit 1.4 started: deploying the inert namespace to QA and proving two-run bootstrap idempotence with zero D1 and Durable Object residue.
+- 2026-07-20 21:22 Unit 1.4 complete: QA deployed `v1_cook_session` at Worker version `80dc3064-4b3f-4ff9-9a04-3a03660cfa55`; two strict post-propagation probes returned the exact version-bound SQLite payload and zero residue, and direct D1 inspection found no product registry table or row.
+- 2026-07-20 21:22 Unit 1.5 started: running the bootstrap allowlist and final gates, then opening, reviewing, and merging the bootstrap PR.
