@@ -537,7 +537,7 @@ function isR2ObjectMissingError(error) {
     typeof error?.stdout === "string" ? error.stdout : "",
     typeof error?.stderr === "string" ? error.stderr : "",
   ].join("\n");
-  return /(?:the specified key does not exist|nosuchkey|not found)/i.test(text);
+  return /(?:the specified key does not exist|nosuchkey)/i.test(text);
 }
 
 function r2BlockerError(blockers, targetLabel) {

@@ -1335,7 +1335,7 @@ describe("cleanup-local-qa-data", () => {
       if (command.includes("r2 object get")) {
         getCalls += 1;
         if (getCalls === 1) throw "NoSuchKey";
-        throw { stdout: "not found" };
+        throw { stdout: "The specified key does not exist." };
       }
       return { stdout: wranglerJson(), stderr: "" };
     });
@@ -1348,6 +1348,31 @@ describe("cleanup-local-qa-data", () => {
     });
 
     expect(stdout.text()).toContain("Verified deleted QA R2 keys: profiles/codex-user/avatar.jpg, spoons/codex-user/uploads/spoon.jpg");
+  });
+
+  it.each(["delete", "get"])("does not treat a missing R2 bucket during %s as proof that an object is absent", async (failurePhase) => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      const command = args.join(" ");
+      if (command.includes("candidate_r2_keys")) {
+        return { stdout: wranglerJson([{ action: "delete", key: "profiles/codex-user/avatar.jpg" }]), stderr: "" };
+      }
+      if (command.includes(`r2 object ${failurePhase}`)) {
+        throw new Error("404 Not Found: R2 bucket not found");
+      }
+      return { stdout: wranglerJson(), stderr: "" };
+    });
+
+    await expect(cleanup.runCleanupCli({
+      argv: ["--target-env", "qa", "--apply"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    })).rejects.toThrow(/R2 bucket not found/);
+    expect(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "))).not.toEqual(
+      expect.arrayContaining([expect.stringContaining(buildApplySql())]),
+    );
   });
 
   it("fails QA apply when R2 verification still fetches a deleted key", async () => {

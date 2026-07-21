@@ -59,7 +59,7 @@
       "legacy-sarah-user-id"
     ],
     "reason": "Environment-gated cleanup must name each legacy identity exactly; the pinned digest makes any expansion or unrelated source use review-visible.",
-    "sha256": "180515ac4d45567c1afc15e85ff1711e710b5b7b68fb2d402c5cc093ba7e0963"
+    "sha256": "b15d797b11d8fce3c4900bc9e62ba917620f8a2c5d22ec3eaaf6efdc84c0e1a2"
   },
   {
     "path": "test/scripts/migration-0024-remove-legacy-demo-identities.test.ts",
