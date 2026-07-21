@@ -11,3 +11,4 @@
 > tsx scripts/generate-api-playground.ts
 
 Generated app/lib/generated/api-v1-playground.ts
+TYPECHECK_PASS
