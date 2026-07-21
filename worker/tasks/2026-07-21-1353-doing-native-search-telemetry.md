@@ -45,7 +45,7 @@ Extend the existing closed-schema native telemetry endpoint with privacy-safe se
 **Output**: `unit-0-baseline.md` and baseline test log in the artifacts directory.
 **Acceptance**: Worktree provenance is exact, no non-task dirty state exists, and focused baseline tests pass.
 
-### ⬜ Unit 1a: Privacy-Safe Search Telemetry Tests
+### ✅ Unit 1a: Privacy-Safe Search Telemetry Tests
 **What**: Add failing route and OpenAPI tests for the three event names, canonical scope enum, four analytics mappings, numeric boundaries, omitted/null values, unsupported scopes, malformed numbers, raw-query spellings, unknown fields, and no-capture-on-rejection.
 **Output**: Red tests in `test/routes/api-v1-native-telemetry.test.ts` and `test/lib/api-v1-openapi.server.test.ts`, plus the red log.
 **Acceptance**: The focused command fails because search events/fields are absent while existing tests remain healthy; tests capture analytics output and prove forbidden text is absent.
@@ -69,3 +69,4 @@ Extend the existing closed-schema native telemetry endpoint with privacy-safe se
 
 - 2026-07-21 14:01 Doing doc created after planning review convergence.
 - 2026-07-21 14:06 Unit 0 complete: exact provenance recorded and 23 focused baseline tests passed after local test database initialization.
+- 2026-07-21 14:08 Unit 1a complete: 26 focused tests produced three expected failures for the absent search event, field mapping, and OpenAPI contract; existing privacy rejection remained green.
