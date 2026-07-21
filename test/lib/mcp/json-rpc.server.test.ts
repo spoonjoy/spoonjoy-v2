@@ -130,6 +130,55 @@ describe("json-rpc MCP server", () => {
     expect(onError).toHaveBeenCalledExactlyOnceWith(boom);
     expect(response).toMatchObject({ error: { code: -32602, message: "kaboom" } });
   });
+
+  it("preserves a typed transient tool error code and data", async () => {
+    const jsonRpcModule = await import("~/lib/mcp/json-rpc.server");
+    const JsonRpcError = (jsonRpcModule as unknown as {
+      JsonRpcError?: new (code: number, message: string, data?: unknown) => Error;
+    }).JsonRpcError;
+    expect(JsonRpcError).toBeTypeOf("function");
+    if (!JsonRpcError) return;
+
+    const transientData = {
+      code: "product_activation_pending",
+      retryable: true,
+      retryAfterSeconds: 1,
+    };
+    const transient = await handleJsonRpcMessage(
+      { jsonrpc: "2.0", id: "cutover", method: "tools/call", params: { name: "add_recipe_to_cookbook" } },
+      router({
+        callTool: async () => {
+          throw new JsonRpcError(
+            -32001,
+            "Spoonjoy product activation is still completing. Retry shortly.",
+            transientData,
+          );
+        },
+      }),
+    );
+
+    expect(transient).toEqual({
+      jsonrpc: "2.0",
+      id: "cutover",
+      error: {
+        code: -32001,
+        message: "Spoonjoy product activation is still completing. Retry shortly.",
+        data: transientData,
+      },
+    });
+  });
+
+  it("keeps ordinary thrown tool validation errors at exact -32602 without data", async () => {
+    const ordinary = await handleJsonRpcMessage(
+      { jsonrpc: "2.0", id: "ordinary", method: "tools/call", params: { name: "invalid" } },
+      router({ callTool: async () => { throw new Error("recipeId is required"); } }),
+    );
+    expect(ordinary).toEqual({
+      jsonrpc: "2.0",
+      id: "ordinary",
+      error: { code: -32602, message: "recipeId is required" },
+    });
+  });
 });
 
 describe("handleJsonRpcMessage (transport-agnostic core)", () => {

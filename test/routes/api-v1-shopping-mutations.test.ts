@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { Request as UndiciRequest } from "undici";
 import { action } from "~/routes/api.v1.$";
@@ -131,6 +131,32 @@ async function createExistingItem(db: Awaited<ReturnType<typeof getLocalDb>>, us
   });
 }
 
+const LEGACY_SHOPPING_IDENTITY_INDEX = "ShoppingListItem_shoppingListId_unitId_ingredientRefId_key";
+const ACTIVE_SHOPPING_IDENTITY_INDEX = "ShoppingListItem_active_identity_key";
+
+async function withPost0025ShoppingIdentityIndex<T>(
+  db: Awaited<ReturnType<typeof getLocalDb>>,
+  run: () => Promise<T>,
+): Promise<T> {
+  try {
+    await db.$executeRawUnsafe(`DROP INDEX IF EXISTS "${ACTIVE_SHOPPING_IDENTITY_INDEX}"`);
+    await db.$executeRawUnsafe(`DROP INDEX IF EXISTS "${LEGACY_SHOPPING_IDENTITY_INDEX}"`);
+    await db.$executeRawUnsafe(`
+      CREATE UNIQUE INDEX "${ACTIVE_SHOPPING_IDENTITY_INDEX}"
+      ON "ShoppingListItem" ("shoppingListId", "ingredientRefId", COALESCE('u:' || "unitId", 'n:'))
+      WHERE "deletedAt" IS NULL
+    `);
+    return await run();
+  } finally {
+    await db.shoppingListItem.deleteMany({});
+    await db.$executeRawUnsafe(`DROP INDEX IF EXISTS "${ACTIVE_SHOPPING_IDENTITY_INDEX}"`);
+    await db.$executeRawUnsafe(`
+      CREATE UNIQUE INDEX IF NOT EXISTS "${LEGACY_SHOPPING_IDENTITY_INDEX}"
+      ON "ShoppingListItem" ("shoppingListId", "unitId", "ingredientRefId")
+    `);
+  }
+}
+
 describe("API v1 shopping-list mutations", () => {
   let db: Awaited<ReturnType<typeof getLocalDb>>;
 
@@ -140,6 +166,7 @@ describe("API v1 shopping-list mutations", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await cleanupDatabase();
   });
 
@@ -426,6 +453,240 @@ describe("API v1 shopping-list mutations", () => {
       expectEnvelopeHeaders(response, testCase.requestId);
       expectErrorEnvelope(await readJson(response), testCase.requestId, "validation_error", 400);
     }
+  });
+
+  it("uses the active null-unit identity and leaves its tombstone under the post-0025 index", async () => {
+    const fixture = await createShoppingMutationFixture(db);
+    const ingredientRef = await getOrCreateIngredientRef(db, `active first ${faker.string.alphanumeric(6)}`.toLowerCase());
+    await withPost0025ShoppingIdentityIndex(db, async () => {
+      const tombstone = await db.shoppingListItem.create({
+        data: {
+          id: "compat-rest-manual-identity-A",
+          shoppingListId: fixture.list.id,
+          ingredientRefId: ingredientRef.id,
+          unitId: null,
+          quantity: 100,
+          checked: true,
+          checkedAt: new Date(),
+          deletedAt: new Date(),
+          sortIndex: -10,
+        },
+      });
+      const active = await db.shoppingListItem.create({
+        data: {
+          id: "compat-rest-manual-identity-a",
+          shoppingListId: fixture.list.id,
+          ingredientRefId: ingredientRef.id,
+          unitId: null,
+          quantity: 2,
+          sortIndex: 1,
+          categoryKey: "existing-category",
+          iconKey: "existing-icon",
+        },
+      });
+      vi.spyOn(console, "error").mockImplementation(() => {});
+
+      const response = await action(routeArgs(
+        mutationRequest("POST", "shopping-list/items", fixture.credential.token, "req_compat_active_first", {
+          clientMutationId: "compat-active-first",
+          name: ingredientRef.name,
+          quantity: 3,
+          categoryKey: "incoming-category",
+        }),
+        "shopping-list/items",
+      ));
+      const payload = await readJson(response);
+
+      expect(response.status).toBe(200);
+      expectEnvelopeHeaders(response, "req_compat_active_first");
+      expectSuccessEnvelope(payload, "req_compat_active_first");
+      expectExactKeys(payload.data, ["created", "updated", "item", "mutation"]);
+      expect(payload.data).toMatchObject({
+        created: false,
+        updated: true,
+        item: {
+          id: active.id,
+          quantity: 5,
+          checked: false,
+          checkedAt: null,
+          deletedAt: null,
+          sortIndex: 1,
+          categoryKey: "incoming-category",
+          iconKey: "existing-icon",
+        },
+      });
+      expectShoppingItemShape(payload.data.item);
+      expectMutationShape(payload.data.mutation, "compat-active-first", false);
+      await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: tombstone.id } })).resolves.toMatchObject({
+        quantity: 100,
+        checked: true,
+        deletedAt: expect.any(Date),
+      });
+    });
+  });
+
+  it("restores the earliest sortIndex then BINARY id tombstone under the post-0025 index", async () => {
+    const fixture = await createShoppingMutationFixture(db);
+    const ingredientRef = await getOrCreateIngredientRef(db, `tombstone first ${faker.string.alphanumeric(6)}`.toLowerCase());
+    await withPost0025ShoppingIdentityIndex(db, async () => {
+      const tiedBinaryLater = await db.shoppingListItem.create({
+        data: {
+          id: "compat-rest-manual-tombstone-a",
+          shoppingListId: fixture.list.id,
+          ingredientRefId: ingredientRef.id,
+          unitId: null,
+          quantity: 20,
+          checked: true,
+          checkedAt: new Date(),
+          deletedAt: new Date(),
+          sortIndex: 2,
+        },
+      });
+      const laterSortIndex = await db.shoppingListItem.create({
+        data: {
+          id: "compat-rest-manual-tombstone-0",
+          shoppingListId: fixture.list.id,
+          ingredientRefId: ingredientRef.id,
+          unitId: null,
+          quantity: 200,
+          checked: true,
+          checkedAt: new Date(),
+          deletedAt: new Date(),
+          sortIndex: 3,
+        },
+      });
+      const expectedTombstone = await db.shoppingListItem.create({
+        data: {
+          id: "compat-rest-manual-tombstone-A",
+          shoppingListId: fixture.list.id,
+          ingredientRefId: ingredientRef.id,
+          unitId: null,
+          quantity: 2,
+          checked: true,
+          checkedAt: new Date(),
+          deletedAt: new Date(),
+          sortIndex: 2,
+          categoryKey: "existing-category",
+        },
+      });
+
+      const response = await action(routeArgs(
+        mutationRequest("POST", "shopping-list/items", fixture.credential.token, "req_compat_tombstone_first", {
+          clientMutationId: "compat-tombstone-first",
+          name: ingredientRef.name,
+          quantity: 3,
+          iconKey: "incoming-icon",
+        }),
+        "shopping-list/items",
+      ));
+      const payload = await readJson(response);
+
+      expect(response.status).toBe(200);
+      expectEnvelopeHeaders(response, "req_compat_tombstone_first");
+      expectSuccessEnvelope(payload, "req_compat_tombstone_first");
+      expectExactKeys(payload.data, ["created", "updated", "item", "mutation"]);
+      expect(payload.data).toMatchObject({
+        created: false,
+        updated: true,
+        item: {
+          id: expectedTombstone.id,
+          quantity: 5,
+          checked: false,
+          checkedAt: null,
+          deletedAt: null,
+          sortIndex: 0,
+          categoryKey: "existing-category",
+          iconKey: "incoming-icon",
+        },
+      });
+      expectShoppingItemShape(payload.data.item);
+      expectMutationShape(payload.data.mutation, "compat-tombstone-first", false);
+      await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: tiedBinaryLater.id } })).resolves.toMatchObject({
+        quantity: 20,
+        checked: true,
+        deletedAt: expect.any(Date),
+      });
+      await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: laterSortIndex.id } })).resolves.toMatchObject({
+        quantity: 200,
+        checked: true,
+        deletedAt: expect.any(Date),
+      });
+    });
+  });
+
+  it("rereads and updates the active identity once after a create uniqueness conflict", async () => {
+    const fixture = await createShoppingMutationFixture(db);
+    const ingredientRef = await getOrCreateIngredientRef(db, `conflict reread ${faker.string.alphanumeric(6)}`.toLowerCase());
+    const delegate = db.shoppingListItem as any;
+    const originalCreate = delegate.create.bind(delegate);
+    const createSpy = vi.spyOn(delegate, "create").mockImplementationOnce(async () => {
+      await originalCreate({
+        data: {
+          id: "compat-rest-manual-conflict-winner",
+          shoppingListId: fixture.list.id,
+          ingredientRefId: ingredientRef.id,
+          unitId: null,
+          quantity: 2,
+          sortIndex: 0,
+          categoryKey: "winner-category",
+        },
+      });
+      throw Object.assign(new Error("Unique constraint failed on the fields"), {
+        code: "P2002",
+        meta: { modelName: "ShoppingListItem" },
+      });
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const request = (requestId: string) => mutationRequest(
+      "POST",
+      "shopping-list/items",
+      fixture.credential.token,
+      requestId,
+      {
+        clientMutationId: "compat-conflict-reread",
+        name: ingredientRef.name,
+        quantity: 3,
+        iconKey: "incoming-icon",
+      },
+    );
+    const response = await action(routeArgs(request("req_compat_conflict_reread"), "shopping-list/items"));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expectEnvelopeHeaders(response, "req_compat_conflict_reread");
+    expectSuccessEnvelope(payload, "req_compat_conflict_reread");
+    expectExactKeys(payload.data, ["created", "updated", "item", "mutation"]);
+    expect(payload.data).toMatchObject({
+      created: false,
+      updated: true,
+      item: {
+        id: "compat-rest-manual-conflict-winner",
+        quantity: 5,
+        categoryKey: "winner-category",
+        iconKey: "incoming-icon",
+      },
+      mutation: { clientMutationId: "compat-conflict-reread", replayed: false },
+    });
+    expectShoppingItemShape(payload.data.item);
+    expect(createSpy).toHaveBeenCalledTimes(1);
+    expect(await db.shoppingListItem.count({
+      where: { shoppingListId: fixture.list.id, ingredientRefId: ingredientRef.id, unitId: null },
+    })).toBe(1);
+
+    const replay = await action(routeArgs(request("req_compat_conflict_replay"), "shopping-list/items"));
+    const replayPayload = await readJson(replay);
+    expect(replay.status).toBe(200);
+    expectEnvelopeHeaders(replay, "req_compat_conflict_replay");
+    expect(replayPayload).toEqual({
+      ...payload,
+      requestId: "req_compat_conflict_replay",
+      data: {
+        ...payload.data,
+        mutation: { clientMutationId: "compat-conflict-reread", replayed: true },
+      },
+    });
+    expect(createSpy).toHaveBeenCalledTimes(1);
   });
 
   it("covers mutation validation, duplicate text, false checks, and missing item boundaries", async () => {

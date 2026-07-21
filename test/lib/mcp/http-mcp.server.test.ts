@@ -14,6 +14,12 @@ import { createApiCredential } from "~/lib/api-auth.server";
 import { CLAUDE_MCP_REDIRECT_URI } from "~/lib/oauth-server.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../../helpers/cleanup";
+import { createTestRecipe } from "../../utils";
+
+const CUTOVER_INSERT_TRIGGER = "SavedRecipe_cutover_block_membership_insert";
+const CUTOVER_DELETE_TRIGGER = "SavedRecipe_cutover_block_membership_delete";
+const PRODUCT_ACTIVATION_PENDING_MESSAGE =
+  "Spoonjoy product activation is still completing. Retry shortly.";
 
 function uniqueEmail(prefix = "mcp") {
   return `${prefix}-${faker.string.alphanumeric(8).toLowerCase()}@example.com`;
@@ -60,6 +66,48 @@ function failingStreamRequest(headers: Record<string, string> = {}) {
     body: stream,
     duplex: "half",
   } as RequestInit & { duplex: "half" });
+}
+
+async function dropMembershipCutoverTriggers(db: Awaited<ReturnType<typeof getLocalDb>>) {
+  await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS ${CUTOVER_INSERT_TRIGGER}`);
+  await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS ${CUTOVER_DELETE_TRIGGER}`);
+}
+
+async function installMembershipCutoverTrigger(
+  db: Awaited<ReturnType<typeof getLocalDb>>,
+  event: "INSERT" | "DELETE",
+) {
+  await dropMembershipCutoverTriggers(db);
+  const triggerName = event === "INSERT" ? CUTOVER_INSERT_TRIGGER : CUTOVER_DELETE_TRIGGER;
+  // Native Prisma erases RAISE text as P2003; this keeps the token and the
+  // same BEFORE-trigger rollback semantics. The Workers suite uses real RAISE.
+  await db.$executeRawUnsafe(`
+    CREATE TRIGGER ${triggerName}
+    BEFORE ${event} ON RecipeInCookbook
+    BEGIN
+      SELECT * FROM saved_recipe_cutover_pending;
+    END
+  `);
+}
+
+async function expectProductActivationPendingMcpResponse(response: Response, id: number) {
+  expect(response.status).toBe(200);
+  const payload = await response.json();
+  expect(payload).toEqual({
+    jsonrpc: "2.0",
+    id,
+    error: {
+      code: -32001,
+      message: PRODUCT_ACTIVATION_PENDING_MESSAGE,
+      data: {
+        code: "product_activation_pending",
+        retryable: true,
+        retryAfterSeconds: 1,
+      },
+    },
+  });
+  expect(response.headers.get("Retry-After")).toBe("1");
+  expect(response.headers.get("Cache-Control")).toBe("private, no-store");
 }
 
 const init = (id: number, method: string, params?: unknown) => ({
@@ -139,10 +187,12 @@ describe("handleMcpHttpRequest", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    await cleanupDatabase();
     db = await getLocalDb();
+    await dropMembershipCutoverTriggers(db);
+    await cleanupDatabase();
   });
   afterEach(async () => {
+    await dropMembershipCutoverTriggers(db);
     await cleanupDatabase();
   });
 
@@ -178,6 +228,24 @@ describe("handleMcpHttpRequest", () => {
 
   function bearer(token: string): Record<string, string> {
     return { Authorization: `Bearer ${token}` };
+  }
+
+  async function createCookbookMembershipFixture(ownerId: string, includeMembership = false) {
+    const cookbook = await db.cookbook.create({
+      data: { title: `MCP Cutover Cookbook ${faker.string.alphanumeric(8)}`, authorId: ownerId },
+    });
+    const recipe = await db.recipe.create({
+      data: {
+        ...createTestRecipe(ownerId),
+        title: `MCP Cutover Recipe ${faker.string.alphanumeric(8)}`,
+      },
+    });
+    if (includeMembership) {
+      await db.recipeInCookbook.create({
+        data: { cookbookId: cookbook.id, recipeId: recipe.id, addedById: ownerId },
+      });
+    }
+    return { cookbook, recipe };
   }
 
   it("challenges an unauthenticated initialize with 401 + WWW-Authenticate", async () => {
@@ -268,6 +336,64 @@ describe("handleMcpHttpRequest", () => {
     const body = await response.json() as { result: { content: { text: string }[] } };
     const payload = JSON.parse(body.result.content[0].text);
     expect(payload).toHaveProperty("shoppingList");
+  });
+
+  it("returns typed -32001 and retry headers when a real add-membership trigger closes the cutover fence", async () => {
+    const principal = await mintCredential({ scopes: ["kitchen:read", "kitchen:write"] });
+    const fixture = await createCookbookMembershipFixture(principal.user.id);
+    await installMembershipCutoverTrigger(db, "INSERT");
+
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(init(70, "tools/call", {
+        name: "add_recipe_to_cookbook",
+        arguments: { cookbookId: fixture.cookbook.id, recipeId: fixture.recipe.id },
+      }), bearer(principal.token)),
+      db,
+    });
+
+    await expect(db.recipeInCookbook.count({
+      where: { cookbookId: fixture.cookbook.id, recipeId: fixture.recipe.id },
+    })).resolves.toBe(0);
+    await expectProductActivationPendingMcpResponse(response, 70);
+  });
+
+  it("returns typed -32001 and retry headers when a real remove-membership trigger closes the cutover fence", async () => {
+    const principal = await mintCredential({ scopes: ["kitchen:read", "kitchen:write"] });
+    const fixture = await createCookbookMembershipFixture(principal.user.id, true);
+    await installMembershipCutoverTrigger(db, "DELETE");
+
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(init(71, "tools/call", {
+        name: "remove_recipe_from_cookbook",
+        arguments: { cookbookId: fixture.cookbook.id, recipeId: fixture.recipe.id },
+      }), bearer(principal.token)),
+      db,
+    });
+
+    await expect(db.recipeInCookbook.count({
+      where: { cookbookId: fixture.cookbook.id, recipeId: fixture.recipe.id },
+    })).resolves.toBe(1);
+    await expectProductActivationPendingMcpResponse(response, 71);
+  });
+
+  it("keeps ordinary MCP validation failures at -32602 without cutover retry headers", async () => {
+    const principal = await mintCredential({ scopes: ["kitchen:read", "kitchen:write"] });
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(init(72, "tools/call", {
+        name: "add_recipe_to_cookbook",
+        arguments: { cookbookId: "missing-recipe-id" },
+      }), bearer(principal.token)),
+      db,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Retry-After")).toBeNull();
+    expect(response.headers.get("Cache-Control")).toBeNull();
+    await expect(response.json()).resolves.toEqual({
+      jsonrpc: "2.0",
+      id: 72,
+      error: { code: -32602, message: "recipeId is required" },
+    });
   });
 
   it("rejects OAuth tokens that are not audience-bound to the MCP resource", async () => {
