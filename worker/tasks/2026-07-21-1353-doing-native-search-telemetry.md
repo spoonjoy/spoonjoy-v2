@@ -55,7 +55,7 @@ Extend the existing closed-schema native telemetry endpoint with privacy-safe se
 **Output**: Passing focused tests and current generated artifact.
 **Acceptance**: Focused tests pass unchanged; raw query remains unrecognized; generated-contract verification, typechecks, and build pass with zero warnings.
 
-### ⬜ Unit 1c: Full Verification And Hostile Review
+### 🔄 Unit 1c: Full Verification And Hostile Review
 **What**: Run app coverage, Worker coverage, both typechecks, build, generated-contract verification, diff/privacy scans, and an independent hostile review of the exact pushed head. Repair and rerun on substantive findings.
 **Output**: Validation logs and reviewer verdict in the artifacts directory.
 **Acceptance**: All local gates pass, coverage remains 100%, warnings are zero, no raw-query field/logging path exists, and review converges.
@@ -71,3 +71,4 @@ Extend the existing closed-schema native telemetry endpoint with privacy-safe se
 - 2026-07-21 14:06 Unit 0 complete: exact provenance recorded and 23 focused baseline tests passed after local test database initialization.
 - 2026-07-21 14:08 Unit 1a complete: 26 focused tests produced three expected failures for the absent search event, field mapping, and OpenAPI contract; existing privacy rejection remained green.
 - 2026-07-21 14:10 Unit 1b complete at `039595494c6291fd283f906691262a0b40cafa1d`: 26 focused tests, generated-contract verification, both typechecks, and production build passed with zero warnings.
+- 2026-07-21 14:26 Unit 1c verification: 8,114 app tests and 13 Worker tests passed with 100% statements/branches/functions/lines; exact pushed-head hostile review converged with no findings. Final committed-head diff scan remains.
