@@ -52,7 +52,7 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 
 **CRITICAL: Every unit header MUST start with status emoji (⬜ for new units).**
 
-### 🔄 Unit 0: Setup/Research
+### ✅ Unit 0: Setup/Research
 **What**: Capture baseline production responses with LinkedIn's crawler user agent, verify the current homepage metadata gap, and confirm Cloudflare's static-asset/deploy path.
 **Output**: Baseline headers and HTML evidence in the artifacts directory.
 **Acceptance**: Evidence shows the real homepage and PNG assets are crawler-accessible while the homepage lacks the complete social contract.
@@ -94,3 +94,4 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 
 ## Progress Log
 - 2026-07-21 11:59 Created from planning doc after cold-review convergence.
+- 2026-07-21 12:05 Unit 0 complete: LinkedInBot received the real homepage and a valid PNG asset without Cloudflare challenge markers; the homepage exposed only its basic description and no canonical, Open Graph, or Twitter metadata. Unit review skipped because this was a read-only evidence capture.
