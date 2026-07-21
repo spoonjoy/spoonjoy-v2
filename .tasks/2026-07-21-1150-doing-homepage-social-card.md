@@ -101,3 +101,4 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 - 2026-07-21 12:40 Unit 1c complete: typecheck and production build passed cleanly; 8,112 application tests plus 13 worker tests passed with 100% statement, branch, function, and line coverage.
 - 2026-07-21 12:50 Unit 1c cold-review findings closed: added explicit typecheck proof, applied all local D1 migrations, seeded the disposable e2e baseline, and passed all 63 Playwright tests.
 - 2026-07-21 14:22 Unit 1d complete: captured native and LinkedIn-scale renders, closed the absurdity ledger, reran all 20 targeted tests, and passed a cold visual reviewer gate.
+- 2026-07-21 15:08 PR #288 CI repair: a newly published DOMPurify advisory made the dependency gate red; pinned the first patched release, confirmed the old version reproduced the advisory and the fixed version was clean, reran every local gate with exact test-count parity, and passed a cold dependency review.
