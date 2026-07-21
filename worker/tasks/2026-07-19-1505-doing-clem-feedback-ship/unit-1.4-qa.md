@@ -28,3 +28,7 @@ Both calls asserted status 200, the exact four-field response, a matching `X-Spo
 - The probe's own post-drop storage count returned `residue: 0` on every successful call, including the two acceptance calls against the same deterministic object.
 - `pnpm cleanup:qa` ran before and after QA work. Both local disposable-data scans returned zero recipes, users, spoons, and cross-boundary blockers.
 - No disposable QA user, recipe, D1 row, or R2 object was created by this namespace probe.
+
+## Cold Review
+
+A fresh reviewer independently inspected Cloudflare's deployment/version metadata, confirmed `migration_tag: v1_cook_session`, replayed two exact bootstrap probes, queried remote D1, and checked the worktree. It returned `CONVERGED` with no finding at any severity. The reviewer classified the immediate post-deploy 405 as edge propagation before convergence, not an acceptance failure, because the required version-bound calls were replayed successfully after the deployment reached 100%.
