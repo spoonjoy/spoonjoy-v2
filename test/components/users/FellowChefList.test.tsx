@@ -4,18 +4,21 @@ import { MemoryRouter } from "react-router";
 import { FellowChefList } from "~/components/users/FellowChefList";
 import type { FellowChefRow } from "~/lib/fellow-chefs.server";
 
-function row(overrides: Partial<FellowChefRow>): FellowChefRow {
+type FellowChefDisplayRow = FellowChefRow & { latestInteractionLabel: string };
+
+function row(overrides: Partial<FellowChefDisplayRow>): FellowChefDisplayRow {
   return {
     chefId: "u1",
     username: "rowan",
     photoUrl: null,
     interactionCounts: { spoons: 0, forks: 0, cookbookSaves: 0 },
     latestInteractionAt: new Date("2026-05-01T00:00:00Z"),
+    latestInteractionLabel: "2 months ago",
     ...overrides,
   };
 }
 
-function renderList(rows: FellowChefRow[], emptyStateText = "no rows yet") {
+function renderList(rows: FellowChefDisplayRow[], emptyStateText = "no rows yet") {
   return render(
     <MemoryRouter>
       <FellowChefList rows={rows} emptyStateText={emptyStateText} />
@@ -92,31 +95,17 @@ describe("FellowChefList", () => {
     expect(img).toHaveAttribute("src", "/images/chef-rj.png");
   });
 
-  it("renders a relative-time suffix for latestInteractionAt", () => {
-    const now = new Date();
+  it("renders the server-frozen relative-time label", () => {
     renderList([
       row({
         chefId: "u-e",
         username: "everly",
-        latestInteractionAt: new Date(now.getTime() - 5 * 1000),
+        latestInteractionAt: new Date("2026-05-01T00:00:00Z"),
+        latestInteractionLabel: "frozen activity label",
         interactionCounts: { spoons: 1, forks: 0, cookbookSaves: 0 },
       }),
     ]);
-    expect(screen.getByText(/just now|seconds ago|ago/i)).toBeInTheDocument();
-  });
-
-  it("accepts ISO string for latestInteractionAt", () => {
-    renderList([
-      row({
-        chefId: "u-f",
-        username: "frankie",
-        latestInteractionAt: new Date(
-          Date.now() - 2 * 60 * 60 * 1000,
-        ).toISOString() as unknown as Date,
-        interactionCounts: { spoons: 2, forks: 0, cookbookSaves: 0 },
-      }),
-    ]);
-    expect(screen.getByText(/hours? ago/i)).toBeInTheDocument();
+    expect(screen.getByText("frozen activity label")).toBeInTheDocument();
   });
 
   it("renders multiple rows in order", () => {

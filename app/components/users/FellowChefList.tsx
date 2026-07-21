@@ -1,12 +1,15 @@
 import { Avatar } from "~/components/ui/avatar";
 import { Link } from "~/components/ui/link";
 import { Text } from "~/components/ui/text";
-import { formatRelativeTime } from "~/lib/time";
 import type { FellowChefRow } from "~/lib/fellow-chefs.server";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 
+export interface FellowChefListRow extends FellowChefRow {
+  latestInteractionLabel: string;
+}
+
 export interface FellowChefListProps {
-  rows: FellowChefRow[];
+  rows: FellowChefListRow[];
   emptyStateText: string;
 }
 
@@ -63,7 +66,7 @@ export function FellowChefList({ rows, emptyStateText }: FellowChefListProps) {
               ) : null}
               </div>
               <Text className="font-sj-ui text-xs uppercase tracking-[0.12em] text-[var(--sj-ink-soft)]">
-                {formatRelativeTime(row.latestInteractionAt)}
+                {row.latestInteractionLabel}
               </Text>
             </Link>
           </li>
