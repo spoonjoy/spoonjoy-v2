@@ -2423,6 +2423,9 @@ describe("Recipes $id Edit Route", () => {
       await waitFor(() => {
         expect(submittedData).not.toBeNull();
       });
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Save Recipe" })).not.toBeDisabled();
+      });
 
       expect(submittedData.title).toBe("Updated Title");
       expect(submittedData.description).toBe("Updated description");
