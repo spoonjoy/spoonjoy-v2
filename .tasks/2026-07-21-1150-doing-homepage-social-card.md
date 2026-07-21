@@ -1,6 +1,6 @@
 # Doing: Homepage social card
 
-**Status**: READY_FOR_EXECUTION
+**Status**: in-progress
 **Execution Mode**: direct
 **Created**: 2026-07-21 11:59
 **Planning**: ./2026-07-21-1150-planning-homepage-social-card.md
@@ -52,7 +52,7 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 
 **CRITICAL: Every unit header MUST start with status emoji (⬜ for new units).**
 
-### ⬜ Unit 0: Setup/Research
+### 🔄 Unit 0: Setup/Research
 **What**: Capture baseline production responses with LinkedIn's crawler user agent, verify the current homepage metadata gap, and confirm Cloudflare's static-asset/deploy path.
 **Output**: Baseline headers and HTML evidence in the artifacts directory.
 **Acceptance**: Evidence shows the real homepage and PNG assets are crawler-accessible while the homepage lacks the complete social contract.
