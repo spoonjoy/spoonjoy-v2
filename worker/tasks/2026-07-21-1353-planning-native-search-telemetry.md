@@ -16,7 +16,7 @@ Extend the existing native telemetry endpoint with privacy-safe search lifecycle
 - Map accepted metadata to privacy-safe analytics properties without recording raw search text.
 - Update the OpenAPI schema, example, and generated API playground artifact.
 - Add comprehensive route and OpenAPI tests for accepted values, boundaries, malformed values, unsupported scopes, raw-query rejection, unknown-field rejection, and analytics redaction.
-- Run focused tests, generated-contract verification, full coverage, both typechecks, build, and an independent hostile review.
+- Run focused tests, generated-contract verification, full coverage, worker coverage, both typechecks, build, and an independent hostile review.
 - Push an atomic implementation and open a ready PR after all local gates and review converge.
 
 ### Out of Scope
@@ -34,7 +34,8 @@ Extend the existing native telemetry endpoint with privacy-safe search lifecycle
 - The endpoint rejects raw-query spellings and every unrecognized body field before `captureEvent` runs.
 - Scope and numeric field validation covers valid, null/omitted, type, lower-bound, and upper-bound behavior.
 - OpenAPI advertises the exact event/scope enums, numeric bounds, and closed-schema privacy contract; the committed generated playground artifact is current.
-- Focused tests, 100% repository coverage, worker coverage where required, TypeScript checks, build, generated-contract check, and warning gates pass.
+- `pnpm exec vitest run test/routes/api-v1-native-telemetry.test.ts test/lib/api-v1-openapi.server.test.ts --fileParallelism=false` passes.
+- `pnpm run verify:clean:generated-contract`, `pnpm run verify:clean:test:coverage`, `pnpm run verify:clean:test:workers:coverage`, `pnpm run verify:clean:typecheck`, `pnpm run typecheck:scripts`, and `pnpm run verify:clean:build` pass with zero warnings.
 - A fresh hostile reviewer reports no BLOCKER or MAJOR findings.
 - The branch is pushed and a ready, unmerged PR is open.
 
@@ -70,7 +71,9 @@ Extend the existing native telemetry endpoint with privacy-safe search lifecycle
 
 - The endpoint calls `assertKnownFields` before building or scheduling the PostHog payload, so rejection tests can prove forbidden fields never reach `captureEvent`.
 - The generated playground file is produced by `pnpm run api:playground:generate` and verified by `pnpm run verify:clean:generated-contract`.
+- Source fidelity was checked at branch commit `4442b2513df18fccfdac0f251b6c2c14c24a8e53`, whose only delta from base is this planning document. The cited generated path exists at that commit.
 
 ## Progress Log
 
 - Planning doc created from exact `origin/main` commit `d50b8ff5730c68597f6b80077df799927a56e3bf`.
+- 2026-07-21 13:55 Initial hostile review found no document defect but could not certify source fidelity after exhausting its read quota; exact validation commands and branch provenance added for the second pass.
