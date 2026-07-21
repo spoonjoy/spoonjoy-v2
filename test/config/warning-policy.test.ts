@@ -262,7 +262,7 @@ describe("warning command policy", () => {
       "--",
       process.execPath,
       "-e",
-      "process.stdout.write('direct clean child')",
+      "process.stdout.write('direct clean child\\n')",
     ])).resolves.toBe(0);
   });
 
