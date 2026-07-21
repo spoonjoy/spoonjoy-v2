@@ -304,8 +304,8 @@ Do not set this in production deploy workflows — the whole point of the check 
 
 The release strategy is source controlled through exactly one top-level `SPOONJOY_RELEASE_MODE` value:
 
-- `atomic-bootstrap` is the checked-in initial mode. It deploys the inert CookSession namespace atomically, verifies public convergence, and probes the bootstrap contract. It never creates a 0%/100% split and does not permit manual Worker rollback.
-- `atomic-product-activation` is the one-way product activation step. It atomically deploys the product-enabled Worker and verifies convergence without the bootstrap probe. It also does not permit manual Worker rollback.
+- `atomic-bootstrap` is the completed historical namespace-bootstrap mode. It deployed the inert CookSession namespace atomically, verified public convergence, and probed the bootstrap contract. It never created a 0%/100% split and did not permit manual Worker rollback.
+- `atomic-product-activation` is the checked-in one-way product activation mode. It atomically deploys the product-enabled Worker and verifies convergence without the public bootstrap probe. It also does not permit manual Worker rollback.
 - `protocol-v1-canary` is available only after product activation introduces `workers/cook-session-protocol-v1-boundary` and a reviewed follow-up changes the mode. `SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA` must equal the first Git commit that introduced that marker, so the inert bootstrap Worker can never become a rollback target. This mode alone may stage a candidate at 0%, smoke the exact candidate, promote it to 100%, or restore another source-tagged protocol-v1 version.
 
 Changing phase is a code review event, not a workflow input or shell override. Atomic modes require an empty protocol boundary. Canary mode derives the marker's unique introduction commit from Git history, requires the configured lowercase 40-character SHA to match it exactly, and verifies that both the release and active Worker descend from it before any deploy command runs.

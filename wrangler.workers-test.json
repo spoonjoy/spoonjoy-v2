@@ -38,7 +38,6 @@
   "vars": {
     "NODE_ENV": "test",
     "SPOONJOY_BASE_URL": "https://spoonjoy.test",
-    "COOK_SESSION_BOOTSTRAP_MODE": "1",
     "SESSION_SECRET": "spoonjoy-workers-cook-session-test-secret"
   }
 }

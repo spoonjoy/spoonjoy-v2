@@ -155,8 +155,8 @@ describe("production release provenance", () => {
     ))).toBe("e647c68063dedcd49146a31cc4a18ef3a5062c5600a086bf15d9b7a8004125ce");
   });
 
-  it("pins the bootstrap lifecycle phase in source and refuses cross-boundary rollback", () => {
-    const modeLine = "  SPOONJOY_RELEASE_MODE: atomic-bootstrap";
+  it("pins atomic product activation in source and refuses cross-boundary rollback", () => {
+    const modeLine = "  SPOONJOY_RELEASE_MODE: atomic-product-activation";
     const boundaryLine = '  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: ""';
     const rollbackGuard =
       'if [ -n "$ROLLBACK_VERSION_ID" ] && [ "$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" ]; then';

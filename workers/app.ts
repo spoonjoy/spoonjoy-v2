@@ -130,54 +130,6 @@ async function handleCookSessionRequest(
   }
 }
 
-async function handleCookSessionBootstrapRequest(
-  request: Request,
-  env: CloudflareEnvironment,
-): Promise<Response> {
-  const url = new URL(request.url);
-  const workerVersionId = env.CF_VERSION_METADATA?.id;
-  const connectingIp = request.headers.get("CF-Connecting-IP");
-  const contentLength = request.headers.get("Content-Length");
-  if (
-    url.pathname !== COOK_SESSION_BOOTSTRAP_PATH ||
-    url.search ||
-    request.method !== "POST" ||
-    env.COOK_SESSION_BOOTSTRAP_MODE !== "1" ||
-    !workerVersionId ||
-    !env.COOK_SESSIONS ||
-    (request.body !== null && contentLength !== "0") ||
-    request.headers.has("Content-Type") ||
-    request.headers.has("Transfer-Encoding") ||
-    ![null, "0"].includes(contentLength) ||
-    !connectingIp ||
-    !env.AUTH_IP_RATE_LIMITER
-  ) {
-    return new Response(null, { status: 404 });
-  }
-  const rateLimit = await env.AUTH_IP_RATE_LIMITER.limit({
-    key: `cook-session-bootstrap:${connectingIp}`,
-  });
-  if (!rateLimit.success) return new Response(null, { status: 404 });
-
-  const objectId = env.COOK_SESSIONS.idFromName(`bootstrap:${workerVersionId}`);
-  const response = await env.COOK_SESSIONS.get(objectId).fetch(new Request(
-    "https://cook-session.internal/__bootstrap/probe",
-    {
-      method: "POST",
-      headers: { "X-Spoonjoy-Internal-Probe": "1" },
-      body: new TextEncoder().encode('{"version":1}'),
-    },
-  ));
-  const payload = await response.json() as Record<string, unknown>;
-  const headers = new Headers(response.headers);
-  headers.delete("Content-Length");
-  return Response.json({ ...payload, workerVersionId }, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
-}
-
 function finalizeResponse(
   response: Response,
   env: CloudflareEnvironment,
@@ -209,7 +161,7 @@ export default {
     try {
       const url = new URL(request.url);
       if (url.pathname.startsWith(COOK_SESSION_BOOTSTRAP_PATH)) {
-        return finalizeResponse(await handleCookSessionBootstrapRequest(request, env), env);
+        return finalizeResponse(new Response(null, { status: 404 }), env);
       }
       if (url.pathname.startsWith(COOK_SESSION_PREFIX)) {
         return finalizeResponse(await handleCookSessionRequest(request, env), env);

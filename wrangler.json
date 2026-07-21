@@ -61,7 +61,6 @@
   "vars": {
     "NODE_ENV": "production",
     "SPOONJOY_BASE_URL": "https://spoonjoy.app",
-    "COOK_SESSION_BOOTSTRAP_MODE": "1",
     "SPOONJOY_CSP_MODE": "enforce",
     "VITE_POSTHOG_HOST": "https://us.i.posthog.com"
   },
@@ -118,7 +117,6 @@
       "vars": {
         "NODE_ENV": "production",
         "SPOONJOY_BASE_URL": "https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
-        "COOK_SESSION_BOOTSTRAP_MODE": "1",
         "SPOONJOY_CSP_MODE": "enforce",
         "VITE_POSTHOG_HOST": "https://us.i.posthog.com"
       }
