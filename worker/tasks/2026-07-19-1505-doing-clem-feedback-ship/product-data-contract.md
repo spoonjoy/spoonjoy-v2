@@ -1,0 +1,209 @@
+# Product Data Contract
+
+**Status**: frozen for the 2026-07-21 audited revision
+**Migration**: `migrations/0025_clem_feedback_product.sql`
+**Baseline**: numeric migrations 0000-0024
+
+## D1 Schema
+
+No D1/Prisma model, table, column, receipt, or projection may store cook state or cook discovery metadata.
+
+### Recipe
+
+- Add nullable `course String?` with no default.
+- Raw check: `course IS NULL OR course IN ('main','side','appetizer','dessert')`.
+- Modeled index: `@@index([course, deletedAt, updatedAt])`, named `Recipe_course_deletedAt_updatedAt_idx`.
+- Add relations `savedBy SavedRecipe[]` and `tags RecipeTag[]`.
+
+### User
+
+- Add relation `savedRecipes SavedRecipe[]` only. Do not add a cook relation.
+
+### SavedRecipe
+
+```prisma
+model SavedRecipe {
+  userId   String
+  recipeId String
+  savedAt  String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe   Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@id([userId, recipeId])
+  @@index([userId, savedAt, recipeId])
+  @@index([recipeId])
+}
+```
+
+Exact index names are `SavedRecipe_userId_savedAt_recipeId_idx` and `SavedRecipe_recipeId_idx`.
+
+`savedAt` is exact canonical UTC text `YYYY-MM-DDTHH:mm:ss.sssZ` (24 ASCII bytes). New writes bind `new Date(nowMs).toISOString()` explicitly; they never rely on adapter DateTime serialization. The sole backfill authority is `RecipeInCookbook.createdAt`; `updatedAt` is ignored. Numeric membership times are milliseconds: require finite `integer|real`, round real values with SQLite `round` (half away from zero), and require the rounded integer in `[-62167219200000,253402300799999]` before formatting with `strftime('%Y-%m-%dT%H:%M:%fZ', normalizedMs/1000.0, 'unixepoch')`. Text is accepted only in one of five ASCII digit grammars: `YYYY-MM-DD HH:mm:ss`, `YYYY-MM-DDTHH:mm:ssZ`, the same with exactly `.sss`, or either `T` form with `+HH:MM|-HH:MM`. After the shape and digit guards, `date(substr(value,1,10))` must equal that exact ten-byte date prefix so SQLite cannot normalize impossible calendar dates. The clock must be `00..23:00..59:00..59`, expressly rejecting `24:00:00` and leap seconds. A present offset must have minutes `00..59` and magnitude no greater than `14:00`; both `+14:01` and `-14:01` are invalid. `julianday` must parse the complete value and the normalized result must remain in four-digit years 0000..9999. Exact SQL uses length/`substr`/digit-`GLOB`, date-round-trip, clock, and offset guards before `strftime`; arbitrary SQLite modifiers such as `now`, extra fractional digits, malformed or over-range offsets, non-finite numbers, and out-of-range/impossible dates yield null and abort through the destination NOT NULL/CHECK. The migration then selects distinct `(Cookbook.authorId, RecipeInCookbook.recipeId)` pairs and keeps the lexically maximum normalized `createdAt` instant.
+
+The exact raw constraint is `CHECK (typeof(savedAt) = 'text' AND length(savedAt) = 24 AND length(CAST(savedAt AS BLOB)) = 24 AND substr(savedAt,5,1) = '-' AND substr(savedAt,8,1) = '-' AND substr(savedAt,11,1) = 'T' AND substr(savedAt,14,1) = ':' AND substr(savedAt,17,1) = ':' AND substr(savedAt,20,1) = '.' AND substr(savedAt,24,1) = 'Z' AND substr(savedAt,1,4) NOT GLOB '*[^0-9]*' AND substr(savedAt,6,2) NOT GLOB '*[^0-9]*' AND substr(savedAt,9,2) NOT GLOB '*[^0-9]*' AND substr(savedAt,12,2) NOT GLOB '*[^0-9]*' AND substr(savedAt,15,2) NOT GLOB '*[^0-9]*' AND substr(savedAt,18,2) NOT GLOB '*[^0-9]*' AND substr(savedAt,21,3) NOT GLOB '*[^0-9]*' AND date(substr(savedAt,1,10)) = substr(savedAt,1,10) AND substr(savedAt,12,2) BETWEEN '00' AND '23' AND substr(savedAt,15,2) BETWEEN '00' AND '59' AND substr(savedAt,18,2) BETWEEN '00' AND '59' AND strftime('%Y-%m-%dT%H:%M:%fZ', savedAt) IS NOT NULL AND strftime('%Y-%m-%dT%H:%M:%fZ', savedAt) = savedAt)`. This explicit clock guard is required because SQLite echoes canonical-looking `24:00:00.000Z` unchanged. The table includes soft-deleted recipes so the historical fixture produces four rows; owner-facing reads exclude soft-deleted recipes. After product activation, cookbook membership never mutates SavedRecipe. Raw-insert tests prove malformed 24-byte values, impossible dates, `24:00`, and leap seconds fail instead of passing through SQLite's nullable CHECK semantics.
+
+Migration 0025 closes the migration-before-Worker gap in the same transaction as the backfill by creating exact `BEFORE INSERT` and `BEFORE DELETE` triggers `SavedRecipe_cutover_block_membership_insert` and `SavedRecipe_cutover_block_membership_delete` on `RecipeInCookbook`; each raises `saved_recipe_cutover_pending`. Delete cascades from Cookbook/User are therefore blocked too. The exact runtime inventory is cookbook delete/add/remove intents in `app/routes/cookbooks.$id.tsx`; `createCookbookAndSave`, `addToCookbook`, and `removeFromCookbook` in `app/lib/recipe-detail.server.ts`; REST cookbook delete/add-recipe/remove-recipe in `app/lib/api-v1.server.ts`; and shared legacy-agent/MCP add-recipe/remove-recipe in `app/lib/spoonjoy-api.server.ts`. No frozen runtime writer updates membership key columns, and the cutover guarantee is scoped to this executable insert/delete/cascade inventory; direct out-of-contract key-changing SQL is not claimed. Failure-injection tests cover every operation and prove each enclosing transaction rolls back, including rollback of a just-created cookbook. Seed is not a production request adapter and remains blocked on a missing membership during the fenced interval. A failed activation leaves the fence closed until forward repair succeeds.
+
+The shared cutover recognizer is cycle-safe and inspects at most eight levels of the known wrapper fields `message`, `cause`, `error`, `meta`, and `driverAdapterError`. It recognizes only string text containing ASCII-identifier-bounded token `saved_recipe_cutover_pending`, using `(?<![A-Za-z0-9_])saved_recipe_cutover_pending(?![A-Za-z0-9_])`; longer identifiers and unrelated constraint failures do not map. Real Prisma local-SQLite and Wrangler D1 trigger executions, not mocks alone, drive every named adapter mapping test.
+
+Only exact database error `saved_recipe_cutover_pending` maps to temporary activation failure. The message is always `Spoonjoy product activation is still completing. Retry shortly.` and affected HTTP responses carry `Retry-After: 1` plus `Cache-Control: private, no-store`, but each surface retains its existing envelope:
+
+- First-party web action: HTTP 503 JSON `{error:{code:"product_activation_pending",message:"Spoonjoy product activation is still completing. Retry shortly.",retryable:true}}`.
+- REST v1: HTTP 503 existing envelope `{ok:false,requestId,error:{code:"product_activation_pending",message:"Spoonjoy product activation is still completing. Retry shortly.",status:503,details:{retryAfterSeconds:1}}}`. The affected OpenAPI operations document this response; no `retryable` key is added to the REST error body.
+- Legacy `/api`: HTTP 503 `{ok:false,error:{message:"Spoonjoy product activation is still completing. Retry shortly.",status:503}}`; structured telemetry records internal code `product_activation_pending` without changing the legacy body.
+- MCP: HTTP 200 JSON-RPC server error `{code:-32001,message:"Spoonjoy product activation is still completing. Retry shortly.",data:{code:"product_activation_pending",retryable:true,retryAfterSeconds:1}}`, plus `Retry-After: 1` and private/no-store headers. The compatibility release adds this typed transient-error path without changing ordinary invalid-parameter `-32602` behavior.
+
+```sql
+CREATE TRIGGER SavedRecipe_cutover_block_membership_insert
+BEFORE INSERT ON RecipeInCookbook
+BEGIN
+  SELECT RAISE(ABORT, 'saved_recipe_cutover_pending');
+END;
+
+CREATE TRIGGER SavedRecipe_cutover_block_membership_delete
+BEFORE DELETE ON RecipeInCookbook
+BEGIN
+  SELECT RAISE(ABORT, 'saved_recipe_cutover_pending');
+END;
+```
+
+The same tested migration-gate helper owns QA and production cutover. It has four machine-distinguished pre-deploy paths: initial activation, same-target reconciliation, ordinary forward repair, and post-restoration product repair. Initial activation requires the exact reviewed compatibility source/version to be active and requires `sqlite_master` to contain exactly both named triggers after migration 0025. Ordinary forward repair requires the environment's active source/version to satisfy the frozen predecessor binding below, requires both the canonical active source and target source to have checked-in mode `atomic-product-activation` and descend from the protocol-v1 boundary, and requires the target release's base/first parent to be that canonical active source; it accepts only zero, one, or both named triggers because an earlier exact product activation may already have fully or partially unlocked.
+
+Every attempt freezes an environment-specific predecessor binding. `activeBefore.sourceSha` is always the exact observed environment source. Production requires `predecessor.relationship=exact`, so `activeBefore.sourceSha` equals `predecessor.canonicalSourceSha`. QA may instead use `same-build-alias` only when its observed source differs from the canonical production predecessor but its complete tree SHA, Worker bundle SHA-256, and Durable Object bundle SHA-256 each equal the checked-in canonical predecessor manifest byte-for-byte. Initial activation sets the lineage parent to the compatibility source and requires the target to descend from it, but does not require the pre-merge QA candidate's literal first parent to equal it. Same-target reconciliation records the target's historical base without imposing a new ancestry edge. Ordinary repair sets the lineage parent to the canonical active production source and requires `target.baseSourceSha` to equal it. After every successful production activation, the helper records a fresh QA binding from its still-active reviewed candidate source to the production merge source; any tree or bundle mismatch requires an exact-source QA deployment before another repair can be tested. Production never accepts an alias.
+
+Post-restoration product repair is the sole active-runtime/direct-parent exception. It is legal only after a merged `protocol-v1-canary` restoration failed candidate smoke and production runtime was proven restored to the exact recorded accepted-product rollback floor. The attempt freezes the original failed restoration head, the unchanged runtime floor, and a lineage parent. The first repair uses the failed restoration head as lineage parent. If a merged repair fails before production runtime mutation, the next repair uses that latest failed repair head as its base/first parent and lineage parent; this repeatable chain continues without pretending the still-active production floor is the direct parent. Every target must have checked-in `atomic-product-activation` mode, descend from the runtime floor, the original failed restoration head, and the latest lineage parent, remove the canary workflow-mode delta, leave a full tree diff from the floor containing only reviewed product-repair/tests evidence, and pass exact predecessor/candidate bidirectional Worker/DO skew. Production's canonical active predecessor remains the runtime floor until a repair actually activates. QA may bind its exact active source as a same-build alias to either that floor or the latest lineage parent, according to the last candidate it activated, subject to the byte-equality proof above. Trigger inventory must be zero. If a repair becomes active in production but later verification, smoke, or cleanup fails, every later repair switches to ordinary forward repair from that exact active source. Arbitrary descendants, retained canary mode, or a nonzero/unexpected trigger inventory fail closed. After a repair is 100% healthy and smoke and cleanup rerun, it becomes the new accepted product source/rollback floor, QA is rebound to that merge source, and restoration restarts from it.
+
+No path otherwise accepts an arbitrary product descendant or moves backward. After canonical health proves the exact target product source/version is 100% active, or on a retry where that exact target is already active, the helper accepts the path's permitted trigger inventory, executes only `DROP TRIGGER IF EXISTS SavedRecipe_cutover_block_membership_insert` and `DROP TRIGGER IF EXISTS SavedRecipe_cutover_block_membership_delete`, and requires a zero-row readback. This makes a lost response or partial prior unlock idempotently repairable. Any initial pre-activation inventory other than exactly two, any unexpected trigger name, or any post-unlock residue fails closed. No unlock runs against a different active source/version.
+
+The helper writes schema-version-1 sanitized cutover evidence under `cutover` in production's existing workflow artifact `production-release.json` and QA's external `qa-product-release.json`; neither file is committed into the candidate tree. The exact top-level keys are `schemaVersion`, `environment`, `transition`, `phase`, `status`, `activeBefore`, `target`, `predecessor`, `protocolBoundarySha`, `compatibilitySourceSha`, `migration`, `deployment`, `unlock`, and `failure`. `schemaVersion` is exactly `1`; `environment` is `qa|production`; `transition` is `initial|same-target-reconcile|forward-repair|post-restoration-product-repair`; `phase` is `precheck|migration|deployment|unlock|verified`; and `status` is `pending|succeeded|failed|ambiguous_reconciled`.
+
+Source records contain only `{sourceSha,treeSha,workerBundleSha256,durableObjectBundleSha256,versionId,releaseMode,baseSourceSha}`. SHA/tree/bundle/base/mode are non-null strings; source/base are lowercase 40-hex Git SHAs and bundle digests are lowercase 64-hex values. `activeBefore.versionId` is non-null, while `target.versionId` is null only until a concrete target version is observed. `predecessor` always contains `{relationship,canonicalSourceSha,canonicalTreeSha,canonicalWorkerBundleSha256,canonicalDurableObjectBundleSha256,lineageParentSourceSha,runtimeFloorSourceSha,originalFailedRestorationSourceSha}`. Relationship is `exact|same-build-alias`; all SHA/digest fields are non-null except the two restoration-only source fields, which are both null outside post-restoration repair and both non-null within it. Exact requires active and canonical source/tree/bundle identity; same-build alias is QA-only, requires different source SHAs but equal active/canonical tree and both bundle digests, and is rejected in production. Initial targets need only descend from the lineage parent; ordinary and post-restoration targets require `target.baseSourceSha` to equal it; same-target reconciliation preserves the target's recorded historical base. Post-restoration targets additionally descend from both non-null restoration fields and the lineage parent. `migration` always contains `{name,sha256,recoveryBookmarkId,applyState,triggerInventory}` where name is exactly `0025_clem_feedback_product.sql`, SHA-256 is non-null, `recoveryBookmarkId` is `string|null`, `applyState` is `not_started|applied|already_applied|ambiguous_reconciled|failed`, and `triggerInventory` is `null` before readback or an ASCII-bytewise-sorted array containing only the two named fence triggers. `deployment` always contains `{deploymentId,versionId,sourceSha,trafficPercent}`; source is the expected target source, the two IDs are `string|null`, and traffic is `null` or an observed integer `0..100`. `unlock` always contains `{inventoryBefore,statementsSha256,applyState,inventoryAfter}`; inventories are null before their respective reads or sorted named-trigger arrays, `statementsSha256` is the non-null lowercase digest of the two fixed `IF EXISTS` statements, and `applyState` is `not_started|applied|already_absent|ambiguous_reconciled|failed`. `failure` is null unless status is failed; otherwise it is exactly `{phase,classification}` with matching phase and classification from `precondition_mismatch|predecessor_binding_mismatch|recovery_bookmark_failed|migration_rejected|migration_apply_failed|migration_state_ambiguous|deployment_failed|deployment_state_ambiguous|target_identity_mismatch|canonical_health_failed|trigger_inventory_mismatch|unlock_apply_failed|unlock_state_ambiguous|artifact_invalid`.
+
+Nested nullability is also stateful. `migration:not_started` has null bookmark/inventory; `applied|ambiguous_reconciled` requires a non-null bookmark and exact post-apply inventory; `already_applied` requires exact inventory and may reuse a prior non-null bookmark or use null when no new bookmark was created; `failed` permits only the fields reached before failure. Before any target version observation, deployment IDs/traffic and `target.versionId` are null. Once a target version is observed, deployment ID/version, `target.versionId`, and traffic are all non-null and the version IDs agree; deployment `succeeded|ambiguous_reconciled` additionally requires exact target source/version at 100%. A `deployment:failed` artifact with `canonical_health_failed` also requires the exact target source/version observed at 100%, preserving the active failed base needed by forward repair. `deployment_failed|deployment_state_ambiguous` may retain all-null observation fields only when no concrete target version was observed; if any observation exists, the complete observed tuple is required even when traffic is not 100. `unlock:not_started` has null inventories; once unlock begins, `inventoryBefore` is non-null; `applied|already_absent|ambiguous_reconciled` requires non-null `inventoryAfter` equal to `[]`, while `failed` may leave it null. Every field not expressly nullable is required and non-null.
+
+The only legal `(phase,status)` pairs are precheck with `pending|succeeded|failed`; migration, deployment, or unlock with `pending|succeeded|failed|ambiguous_reconciled`; and verified with `succeeded`. Within one attempt the only legal edges are same-phase `pending -> succeeded|failed|ambiguous_reconciled`, then `precheck:succeeded -> migration:pending`, `migration:succeeded|ambiguous_reconciled -> deployment:pending`, `deployment:succeeded|ambiguous_reconciled -> unlock:pending`, and `unlock:succeeded|ambiguous_reconciled -> verified:succeeded`; failed is terminal and no phase may be skipped or reversed. `ambiguous_reconciled` is legal only when a fresh state read proves the phase's exact successful postcondition. Same-target reconciliation, ordinary forward repair, and post-restoration product repair still traverse every phase, using `already_applied`/existing exact deployment identity/`already_absent` rather than skipping. A failed post-restoration attempt may seed only the next attempt's immutable lineage-parent input; it never mutates the failed artifact or satisfies a phase. The strict validator rejects missing/extra keys, all other enum/pair/edge/nullability combinations, inconsistent identities or predecessor bindings, unsorted/unrecognized trigger names, secrets, raw command output, stack traces, or unlock success before exact target identity.
+
+### RecipeTag
+
+```prisma
+model RecipeTag {
+  id              String   @id @default(cuid())
+  recipeId        String
+  label           String
+  normalizedLabel String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+  recipe          Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@unique([recipeId, normalizedLabel])
+  @@index([normalizedLabel, recipeId])
+}
+```
+
+Exact index names are `RecipeTag_recipeId_normalizedLabel_key` and `RecipeTag_normalizedLabel_recipeId_idx`.
+
+## Tag Contract
+
+- Course is exactly `main|side|appetizer|dessert|null`.
+- Each recipe has at most ten tags.
+- Input first undergoes ECMAScript `String.prototype.normalize("NFKC")`. On that result, reject any Unicode General Category `C` code point (`/\p{C}/u`) before whitespace handling, so tabs/newlines/format controls/lone surrogates are rejected rather than collapsed. Trim code points with Unicode binary property `White_Space`, collapse each remaining `White_Space` run to one ASCII U+0020, reject empty, then count with `Array.from(displayLabel)` and reject more than 40 code points.
+- `normalizedLabel` is exactly `displayLabel.toLowerCase()` using ECMAScript's locale-independent Unicode default conversion, with no locale argument and no second normalization pass.
+- Duplicates compare by `normalizedLabel`; first input spelling wins.
+- Service/read output sorts by `normalizedLabel`, then ID, using JavaScript UTF-16 code-unit comparison `(a < b ? -1 : a > b ? 1 : 0)`, never locale collation.
+- Recipe create nests tag creation with the recipe create. Recipe edit updates course, replaces tags, and invalidates search in one Prisma array transaction. Failure rolls back the whole metadata change.
+- Repeated `tag` filters are AND predicates. Reject more than ten raw `tag` parameters before normalization; normalize/dedupe preserving first occurrence for predicate construction.
+- My Recipes query serialization order is `q`, `course`, repeated `tag`, then `page`; reset removes course/tags and preserves `q`.
+- Global search query serialization order is `scope`, `q`, `course`, then repeated `tag`. Course/tag controls render only for `scope=all|recipes`. With either filter present, `scope=all` returns matching recipes only before the 30-result limit; `scope=recipes` filters recipes normally; `scope=cookbooks|chefs|shopping-list` plus course/tag returns HTTP 400. Switching to a non-recipe scope clears course/tags; switching between all/recipes preserves them. Filter SQL joins the canonical Recipe row for course and uses one `EXISTS` against `RecipeTag.normalizedLabel` per normalized tag; display-label arrays in `SearchDocument.metadata` are never the predicate authority.
+- Invalid scope/course/tag/page returns HTTP 400 and no unsafe SQLite offset is issued.
+- Search freshness includes two lowercase SHA-256 content fingerprints over the same active-recipe population used to build recipe search documents: fixed-key Recipe rows `{recipeId,course}` ordered by recipe ID, and fixed-key RecipeTag rows `{id,recipeId,label,normalizedLabel,createdAt,updatedAt}` ordered by recipe ID, normalized label, and ID. Timestamp values are canonical ISO strings before `JSON.stringify`. Same-count/same-max-time course replacement or tag-label replacement must invalidate freshness even when the existing baseline timestamp/count fingerprint collides.
+
+## SavedRecipe API
+
+- Web route: `/saved-recipes`.
+- REST list: `GET /api/v1/saved-recipes?q=&limit=&cursor=` with `kitchen:read`.
+- REST mutations: idempotent `PUT|DELETE /api/v1/saved-recipes/:recipeId` with `kitchen:write` and the existing API idempotency layer.
+- Every response uses `Cache-Control: private, no-store` and the existing credential-varying headers.
+- Optional `q` has two explicit forms. The display form first trims/collapses Unicode `White_Space` runs to ASCII U+0020, then rejects any remaining Unicode General Category `C` code point and counts with `Array.from`; reject more than 200 code points. Empty display form adds no search predicate. That form is used unchanged for title, description, chef username, and course, preserving literal compatibility characters rather than silently normalizing stored prose. Those branches use SQLite `LIKE ... ESCAPE '\'` with its ASCII-only case insensitivity and exact non-ASCII comparison. The bound pattern escapes `\`, `%`, and `_` before adding surrounding `%`, so those characters are literal. The tag form applies the Tag Contract once to the display form: NFKC, category-C guard, Unicode-whitespace trim/collapse, then locale-independent `toLowerCase()` with no second normalization. It uses the same escaped substring match against `RecipeTag.normalizedLabel`. The five branches are one OR, and no unsupported SQLite Unicode-folding claim is made.
+- Ordering is canonical `savedAt COLLATE BINARY DESC, recipeId COLLATE BINARY DESC`; SQL fetches at most `limit+1`, with `limit` integer 1..24 and default 24. Canonical UTC text makes byte order chronological; `COLLATE BINARY` is the sole cursor comparator and no adapter/JavaScript timestamp ordering is used.
+- Cursor is 1..1443 ASCII characters of unpadded base64url and decodes to at most 1082 UTF-8 bytes of exact no-whitespace fixed-key JSON `JSON.stringify({v:1,savedAt,recipeId})`. These bounds exactly admit the worst valid ID: 256 four-byte Unicode code points produce 1082 decoded bytes and 1443 unpadded characters. `recipeId` is 1..256 Unicode code points and contains no General Category `C` code point. The timestamp must match the 24-byte grammar and satisfy `new Date(savedAt).toISOString() === savedAt`. Decoded objects with extra/missing/reordered keys, invalid version/date/ID, padding, noncanonical UTF-8/JSON, or base64url re-encoding mismatch return existing REST `validation_error` with `field: "cursor"`.
+- Cursor predicate is `savedAt COLLATE BINARY < cursor.savedAt COLLATE BINARY OR (savedAt COLLATE BINARY = cursor.savedAt COLLATE BINARY AND recipeId COLLATE BINARY < cursor.recipeId COLLATE BINARY)` and the query's ORDER BY uses the same collation.
+- List response uses existing `{ok,requestId,data}` envelope with `data:{recipes:Array<RecipeReadSummary & {savedAt:string}>,nextCursor:string|null}`.
+- `PUT` body is exactly `{clientMutationId}` and always returns 200, whether it creates or observes the saved row. Data is `{saved:true,recipeId,savedAt,mutation:{clientMutationId,replayed}}`. The stable 200 contract is recoverable from row existence after a domain-write/receipt-completion crash.
+- `DELETE` body is exactly `{clientMutationId}` and always returns 200 with `{saved:false,recipeId,mutation:{clientMutationId,replayed}}`; it removes the row if present and does not require the recipe to remain active or present.
+- Both mutations retain the existing API idempotency semantics: the first response and a recovery proven during that same request use `replayed:false`; replay of a completed key or recovery by a later request from an in-flight key uses `replayed:true` and the later request ID. PUT recovery returns the row's persisted canonical `savedAt`; DELETE recovery proves absence. Same key with different method/path/body remains `idempotency_conflict`, and an in-flight key with no provable domain outcome remains `idempotency_in_progress`.
+- PUT of a missing or soft-deleted recipe returns existing `not_found`. Malformed query/body returns existing `validation_error` with a `field` detail.
+
+## Neutral Recipe Reads
+
+- Add top-level `course:string|null` and `tags:string[]` to REST recipe list/detail wrappers and MCP `get_recipe`/`search_recipes` recipe objects.
+- Generic REST `/api/v1/search` and MCP `search_spoonjoy` retain their existing `SearchResult` wire shape. Recipe results add exact `metadata.course:string|null` and `metadata.tags:string[]`; non-recipe results do not gain either key.
+- Do not add personalized `isSaved` to public/MCP recipe reads.
+- Preserve base serializer byte shape for native sync; recipe/step/ingredient mutations and recovery; cookbook summaries; MCP create/update; and legacy agent/API import.
+- OpenAPI keeps existing mutation/native `RecipeSummary`/`RecipeDetail` schemas and adds read-only `RecipeReadSummary`/`RecipeReadDetail` for REST GET operations.
+
+## Read-Time Scaling
+
+- REST: `GET /api/v1/recipes/:id?scale=<number>`.
+- MCP: optional `scale` argument on `get_recipe` only.
+- Scale is finite and inclusive `0.1..100`; reject null, NaN, infinity, empty, repeated REST values, and out-of-range values. REST accepts only an untrimmed string matching JSON-number grammar `^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$`, so exponent form is allowed while leading plus, hexadecimal, surrounding whitespace, leading-zero integers, `.5`, and `1.` are rejected. MCP accepts only a JSON number, never a numeric string.
+- Multiply ingredient quantities only. For every ingredient, require both `quantity * factor` and `Number((quantity * factor).toFixed(6))` to remain finite; any overflow fails the whole read as REST `validation_error` with `field:"scale"` or the existing MCP invalid-argument mapping. Otherwise use that exact ECMAScript rounded value, normalize negative zero to zero, and do not alter servings, units, IDs, or stored values. REST and MCP call the same helper.
+- When requested, add exact top-level metadata `scale:{factor:number,appliedTo:"ingredient_quantities",decimalPlaces:6}`. With no scale, omit that key and preserve the Unit 4.1 unscaled read shape.
+- REST errors use existing `validation_error` with `field:"scale"`; MCP uses its existing invalid-argument error mapping.
+
+## Legacy Import Boundary
+
+- `import_recipe_from_url` is a legacy shared agent/API operation and is explicitly excluded from the MCP tool registry.
+- Persisted and dry-run import outputs each receive an explicit allowlisted projection matching their pre-feature shape; raw Prisma rows are never returned.
+- Adding `Recipe.course`, tags, or any future schema field cannot alter either output.
+- `docs/api.md`, `app/routes/developers.tsx`, and `docs/claude-connector.md` must distinguish legacy agent/API import from MCP tools and preserve the supported legacy contract without adding a first-party import UI.
+
+## Shopping Identity And Compatibility
+
+### Compatibility Release
+
+Before migration 0025 can run in any environment, a separate reviewed compatibility Worker must be 100% active. It changes all six existing runtime shopping add writers in exact source `d50b8ff5730c68597f6b80077df799927a56e3bf`: the `addItem` and `addFromRecipe` intents in `app/lib/shopping-list.server.ts`; `handleShoppingItemCreate` and `handleShoppingAddFromRecipe` in `app/lib/api-v1.server.ts`; and `addShoppingListItemTool` and `addRecipeToShoppingListTool` in `app/lib/spoonjoy-api.server.ts` (shared by legacy agent/MCP dispatch). It separately makes the shopping-list provisioner in `prisma/seed.ts` old/new-schema safe without changing seed semantics.
+
+Each compatibility runtime writer performs the same deterministic old/new-schema lookup: first select the active identity ordered by `sortIndex ASC, id COLLATE BINARY ASC`; only when none exists select the earliest tombstoned identity by the same order. It updates that row with the existing pre-feature restore behavior or creates when no identity exists. A uniqueness failure during create/restore rereads the active identity once and applies the update; otherwise it propagates. Before any lookup, each recipe bulk path traverses steps by `stepNum ASC` and ingredients by `id COLLATE BINARY ASC`, coalesces repeated `(ingredientRefId,unitId|null)` identities in first-occurrence order, sums scaled quantities, rejects any non-finite product or sum atomically, and takes category/icon from the first non-null resolved value in that order. It submits exactly one mutation per coalesced identity. The web `addFromRecipe`, REST `handleShoppingAddFromRecipe`, and shared agent/MCP `addRecipeToShoppingListTool` paths each execute the complete coalesced recipe add in one all-or-nothing array transaction: they preselect all identities, execute the complete operation set once, and on a recognized uniqueness conflict rebuild and retry the complete transaction once. Failure injection proves zero partial writes on all three surfaces. This preserves old full-index tombstone restoration, always chooses the migrated active survivor after 0025, and avoids selecting a migrated tombstone while an active row exists. It does not claim final concurrency semantics or the final new-ID-after-delete rule; Unit 3 replaces it with the partial-index atomic statement while retaining all three bulk adapter transaction boundaries.
+
+Seed provisioning is intentionally not an additive user mutation. Its compatibility selector is active-first then deterministic tombstone, but every run sets the configured quantity, checked fields, metadata, and position exactly and remains idempotent; it never aggregates quantity or applies user re-add unchecking. Unit 3 routes only the six runtime writers to final atomic add/restore and leaves this seed-specific provisioner intact.
+
+The same compatibility release also makes public owner DELETE a recognized authenticated retryable protocol route before product activation, without mutating DO state. It otherwise makes no schema/migration change. A post-0025 compatibility harness executes every exact deployed writer against active-plus-tombstone and tombstone-only fixture identities before product activation.
+
+### Migration
+
+Static migration SQL captures its one clock without parameters. It creates ordinary helper table `_Migration0025Clock(singleton INTEGER PRIMARY KEY CHECK(singleton=1), boundNowMs INTEGER NOT NULL, boundNowText TEXT NOT NULL)`, inserts one row using `CAST(round((julianday('now')-2440587.5)*86400000) AS INTEGER)` plus its required non-null 24-byte UTC `strftime`, references only that row for every migration `deletedAt`/`updatedAt`, and drops the helper before the migration ledger commits. Exact create/insert/drop forms are allowlisted by Unit 2.4; name collision, invalid clock, statement failure, or ambiguous apply rolls back/reconciles the whole batch. This behaves identically under raw local SQLite, Wrangler D1, QA, and production and leaves no helper schema.
+
+- Reconcile active rows grouped by `(shoppingListId,ingredientRefId,COALESCE('u:' || unitId,'n:'))`; the `u:`/`n:` discriminator is collision-free for null, empty, and arbitrary string unit IDs.
+- Survivor is lowest `(sortIndex,id COLLATE BINARY)` under SQLite byte ordering.
+- Logical checked state is exactly `checked = 1 OR checkedAt IS NOT NULL`. Survivor quantity is the sum of non-null quantities, or null when all are null. Before mutation, every non-null source quantity and every non-null aggregate must be a finite SQLite integer/real within `[-1.7976931348623157e308,1.7976931348623157e308]`; invalid/NaN/Inf/overflow makes the atomic migration fail by selecting null into the existing NOT NULL `updatedAt` assignment. It is normalized to `checked=0,checkedAt=NULL` if any row is logically unchecked; otherwise it is normalized to `checked=1` and the minimum non-null `checkedAt`, or null when all checked rows have null timestamps. `deletedAt` remains null.
+- Survivor `categoryKey`/`iconKey` use survivor value, else the first non-null value in survivor order. `updatedAt` advances by the exact timestamp rule below.
+- Extras preserve all data except `deletedAt` becomes the bound migration time and `updatedAt` advances by the same exact timestamp rule.
+- Drop only `ShoppingListItem_shoppingListId_unitId_ingredientRefId_key`.
+- Create exact index:
+
+```sql
+CREATE UNIQUE INDEX ShoppingListItem_active_identity_key
+ON ShoppingListItem (shoppingListId, ingredientRefId, COALESCE('u:' || unitId, 'n:'))
+WHERE deletedAt IS NULL;
+```
+
+`test/setup.ts` creates the same name, columns, expression, and predicate after shopping cleanup because Prisma cannot model it; setup alone prefixes `CREATE UNIQUE INDEX IF NOT EXISTS` for idempotence, while migration uses the normative non-`IF NOT EXISTS` statement above.
+
+### Atomic Add/Restore
+
+Use one SQLite statement with the exact conflict target:
+
+```sql
+ON CONFLICT (shoppingListId, ingredientRefId, COALESCE('u:' || unitId, 'n:'))
+WHERE deletedAt IS NULL
+DO UPDATE ... RETURNING ...
+```
+
+- Quantity merge: `(null,null)->null`, `(null,n)->n`, `(n,null)->n`, `(n,m)->n+m`. Every non-null input/result must satisfy the same finite SQLite numeric bound as migration; otherwise the statement atomically aborts via a null `updatedAt` assignment and the adapter returns its existing mutation failure.
+- Incoming non-null category/icon replaces; incoming null preserves.
+- Active unchecked retains ID and position.
+- Active logically checked (`checked = 1 OR checkedAt IS NOT NULL`) retains ID, clears checked/checkedAt/deletedAt, and moves to `COALESCE(MAX(active sortIndex),-1)+1`.
+- Deleted rows do not conflict; re-add creates a new active ID at the fresh end using incoming values only.
+- Migration and runtime first compute each timestamp millisecond exactly as `CASE WHEN typeof(value) IN ('integer','real') THEN CAST(value AS INTEGER) ELSE CAST(round((julianday(value)-2440587.5)*86400000) AS INTEGER) END`. Null, non-finite, out-of-range, or unparseable results abort rather than silently resetting time. Migration uses `_Migration0025Clock.boundNowMs`; runtime binds non-negative integer `boundNowMs`. For the list owner, both paths compute one account-global native-sync high-water across `User.updatedAt`, every owned active Recipe `updatedAt`, every owned Cookbook `updatedAt`, every `NativeSyncTombstone.updatedAt`, every owned `ShoppingList.updatedAt`, and every active or deleted item `updatedAt` joined through those lists. They set `newMs=max(boundNowMs,accountSyncHighWaterMs+1)`, with migration reusing its one captured clock while computing the owner-specific high-water. This covers every resource family consumed by the single account-native-sync cursor, so a newer profile/recipe/cookbook/tombstone cursor or clock rollback cannot hide a shopping repair/add. Within a multi-item transaction, each later statement observes earlier writes and advances again. Conflict updates therefore advance past their prior row and every previously emitted native-sync cursor; inserts after delete also advance past the deleted row even when their new ID sorts lower. Overflow aborts. Stored value is canonical UTC text from `strftime('%Y-%m-%dT%H:%M:%fZ', newMs/1000.0, 'unixepoch')`, required non-null and 24 bytes.
+- Every success advances `updatedAt` by that rule; failure is atomic and surfaces the existing adapter error.
+- Web, REST, MCP shopping tools, legacy agent API, and native-sync-visible recipe add all call this service. Existing check/update/delete/clear contracts do not change.
+- The web, REST, and shared agent/MCP recipe bulk-add adapters retain the one-array-transaction boundary introduced by the compatibility release when they switch to this final statement.

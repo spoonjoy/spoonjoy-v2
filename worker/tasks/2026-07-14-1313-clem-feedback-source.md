@@ -1,6 +1,7 @@
 # Clem Feedback Source And Disposition
 
 **Captured**: 2026-07-15
+**Revised**: 2026-07-21 after exhaustive architecture audit
 **Source**: Ari's transcription of Clem's WhatsApp feedback in this Codex task
 
 ## Feedback
@@ -13,24 +14,24 @@
 6. Recipe progress does not belong in D1. The reason to use a Durable Object is live cross-device synchronization.
 7. Keep neutral recipe metadata and read-time scaling useful to both REST clients and agents using Spoonjoy through MCP.
 8. Restore checked shopping items correctly when they are re-added, with one behavior across web, REST, and agent surfaces.
-9. Provide a private saved-recipe state that is distinct from cookbook membership and social activity.
+9. Provide a private saved-recipe state distinct from cookbook membership and social activity.
 
 ## Disposition
 
 | Feedback | Decision | Delivery proof |
 | --- | --- | --- |
-| Navigation | Accept as a regression constraint, not a redesign. Keep the current signed-in dock and pantry drawer unless implementation uncovers a concrete accessibility defect. | Existing nav tests remain green; changed My Kitchen surfaces receive mobile visual QA. |
-| Cook progress ownership | Accept the server-canonical option for authenticated users. A SQLite-backed Durable Object owns live state and WebSocket fanout; D1 contains only private query/history metadata. Anonymous state remains local-only. | Real Workers-runtime DO tests, two-client QA smoke, owner-only My Kitchen resume cards, and production smoke. |
-| Cross-device continuation | Accept. Starting cook mode atomically creates or resumes one active attempt per user and recipe. A second client discovers the same session and receives live snapshots. | Start/resume API tests, WebSocket runtime tests, and two-context smoke. |
-| Import flow | Reject first-party UI for this release. Existing agent/API import remains the supported path. | Regression tests assert no new import entry point; developer-facing import docs remain agent/API-oriented. |
-| Categories/tags | Accept a small canonical tagging system: one controlled course plus owner-authored custom tags. | Data/service, authoring, filter/search, API, and visual tests. |
-| AI categorization | Reject for this release. Suggestions need a separate non-canonical proposal model, review UX, confidence/provenance, and normalization contract; adding inference before those exist would silently turn guesses into user data. | No AI suggestion table, endpoint, or UI; decision recorded in planning and API docs expose accepted tags only. |
-| Pebble-specific work | Reject. Deliver only neutral Spoonjoy product and API primitives. | Changed product/API/docs surfaces contain no Pebble-specific contract or copy. |
-| D1 for progress | Reject as canonical state. D1 is an owner-only index/history projection and may lag; the Durable Object remains authoritative. | Ownership boundaries and alarm-driven D1 projection tests. |
-| Recipe metadata/scaling | Accept for REST v1 and the existing MCP recipe-read tools. Both surfaces share neutral metadata and exact read-only scaling math; personalized save state is not added to recipe-read responses. | REST/OpenAPI/MCP contract tests prove metadata and scaling parity, default-response compatibility, and no writes. |
-| Shopping restoration/mutation parity | Accept for every existing add path. Re-adding a checked or deleted item restores it as unchecked at a fresh end position; re-adding an active unchecked item preserves its position and accumulates quantity. Existing check/update/delete/clear contracts remain unchanged. | One shared add/restore service and a web/REST/MCP/legacy compatibility matrix prove restoration, concurrency, native-sync visibility, and ordering. |
-| Private recipe saves | Accept. `SavedRecipe` is private canonical save state, separate from cookbook membership and RecipeSpoon/social activity. Existing cookbook-derived expectations are backfilled once; thereafter cookbook membership and explicit save state are independent. | Migration/backfill tests, dedicated web controls, private paginated search, REST list/mutation tests, and independence regressions. |
+| Navigation | Preserve the current broad shape; change only concrete accessibility defects found on touched surfaces. | Existing nav tests plus Units 4.3, 5.4, 6.5, and 8.6 visual/accessibility QA. |
+| Cook progress ownership | Authenticated state is canonical in one SQLite-backed Durable Object per owner. The object owns active discovery, snapshots, progress, receipts, sockets, alarms, retention, and deletion. Anonymous state remains local-only. | Units 7.1-7.5 and 8.1-8.5; direct owner-list tests; two-client QA/production smoke. |
+| Cross-device continuation | Accept. One owner object supports recipe-ID-free active discovery and recipe-tagged live sockets across devices. | Units 7.4, 8.1-8.3, and 8.5 plus live smoke. |
+| Import flow | Reject first-party UI. Preserve the existing legacy agent/API `import_recipe_from_url` contract and docs; it is not an MCP tool. | Unit 2.1 persisted/dry-run shape shields; Unit 4.3 no-entry-point and docs regression. |
+| Categories/tags | Accept one controlled course plus owner-authored recipe tags. | Units 2.1-2.4, 4.1, and 6.1-6.5. |
+| AI categorization | Reject for this release. A later implementation may propose non-canonical suggestions, but only with explicit review, confidence/provenance, and normalization boundaries. | Unit 4.3 asserts no AI table, endpoint, source field, or UI while preserving a neutral suggestion boundary. |
+| Pebble-specific work | Reject new scope and preserve existing behavior untouched; this task neither adds nor removes Pebble-specific classification, fixtures, docs, or runtime code. | Unit 4.3 exact-baseline regression and task-diff allowlist. |
+| D1 for progress | Reject completely. D1 supplies the authorized recipe snapshot on receipt-miss start/restart only; it contains no cook state, metadata index, receipt, registry, or projection. | Unit 2 no-cook-schema tests; Units 7.1-7.5 direct owner-SQLite tests; D1 smoke query. |
+| Neutral metadata/scaling | Accept for REST v1 and existing MCP recipe-read tools without persistence or personalized save enrichment. | Units 4.1-4.2 and Unit 9 REST/MCP smoke. |
+| Shopping restoration/parity | Accept one atomic add/restore service for every existing add path. | Units 2.3 and 3.1-3.3 plus live smoke. |
+| Private recipe saves | Accept canonical private SavedRecipe state independent of cookbooks/social activity. | Units 2.2 and 5.1-5.4 plus live smoke. |
 
 ## Product Boundary
 
-This task ships Spoonjoy primitives, not partner customization: live cook continuity, correct shopping mutations, private saves, manual tags, and neutral recipe metadata/read-time scaling across REST v1 and MCP reads. It does not create a first-party importer, an AI tagging workflow, or any Pebble-specific behavior.
+This task ships Spoonjoy primitives: owner-scoped live cook continuity, correct shopping mutations, private saves, manual tags, and neutral metadata/read-time scaling. It does not create a first-party importer, an AI tagging workflow, a D1 cook registry, end-user account deletion UI, or any new/removed Pebble-specific behavior.
