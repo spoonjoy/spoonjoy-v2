@@ -576,6 +576,13 @@ describe('Step Edit Ingredient Integration', () => {
         },
         { timeout: 3000 }
       )
+
+      await waitFor(
+        () => {
+          expect(screen.getByRole('heading', { name: /Ingredients \(2\)/i })).toBeInTheDocument()
+        },
+        { timeout: 3000 }
+      )
     })
 
     it('calls onParsed callback when parsing succeeds', async () => {
