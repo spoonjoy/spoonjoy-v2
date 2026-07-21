@@ -106,17 +106,17 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Output**: Red named deploy/workflow contract tests.
 **Acceptance**: Focused tests fail only because lifecycle-aware deployment behavior is absent.
 
-### 🔄 Unit 1.3b: Bootstrap Deployment Mode - Implementation
+### ✅ Unit 1.3b: Bootstrap Deployment Mode - Implementation
 **What**: Extend `scripts/deploy-production-canary.ts`, `.github/workflows/production-deploy.yml`, and `docs/deployment.md` with explicit source-controlled atomic-bootstrap, atomic-product-activation, and protocol-v1-canary branches, without a new orchestrator; commit the bootstrap branch as active in this PR.
 **Output**: One reviewed lifecycle- and protocol-aware production deployment mode.
 **Acceptance**: Focused deploy/workflow tests, typecheck, build, and full app coverage pass.
 
-### ⬜ Unit 1.3c: Bootstrap Deployment Mode - Verification
+### ✅ Unit 1.3c: Bootstrap Deployment Mode - Verification
 **What**: Cover every deployment decision/failure/artifact branch and obtain release/security review.
 **Output**: 100% deploy-script coverage and reviewer report.
 **Acceptance**: No secret reaches logs/artifacts; no invalid rollback is possible; review converges.
 
-### ⬜ Unit 1.4: Bootstrap QA
+### 🔄 Unit 1.4: Bootstrap QA
 **What**: Deploy the inert namespace to QA; call `POST /.well-known/spoonjoy-cook-session-bootstrap` twice; assert `{ok:true,storage:'sqlite',workerVersionId:<deployed version>,residue:0}` and matching version header; then confirm no `CookSessionIndex` row or probe storage remains.
 **Output**: Sanitized QA deployment, smoke, and cleanup logs.
 **Acceptance**: QA has `v1_cook_session`, the inert DO responds, and no disposable D1/DO row remains.
@@ -700,3 +700,6 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-20 11:55 Unit 1.2c complete: expanded the Worker adapter matrix to 36 auth, routing, bootstrap, forwarding, propagation, and analytics cases; focused app and real Workers coverage are exactly 100%, the full 7,337-test app gate is 100%, and fresh test review converged.
 - 2026-07-20 16:02 Unit 1.3a complete: froze 564 lifecycle-aware deploy, workflow, serializer, rollback, zero-migration, and artifact-validation contracts; 381 pre-existing paths pass, 183 implementation contracts remain intentionally red, and 22 harsh release/security review rounds converged.
 - 2026-07-20 16:02 Unit 1.3b started: implementing the approved release-mode contracts without changing Unit 1.3a tests.
+- 2026-07-20 21:16 Unit 1.3b complete: added immutable exact-revision migration application, lifecycle-aware atomic/bootstrap/product/canary modes, strict release artifacts, forward-only boundary repair, operator documentation, and zero-warning route-test settling; 7,734 app tests, typechecks, build, and deployment preflight passed.
+- 2026-07-20 21:16 Unit 1.3c complete: both modified deploy scripts reached 100% branch coverage, the 721-test release matrix passed, and a fresh release/security review converged after all artifact, provenance, migration-atomicity, and recovery findings were closed.
+- 2026-07-20 21:16 Unit 1.4 started: deploying the inert namespace to QA and proving two-run bootstrap idempotence with zero D1 and Durable Object residue.
