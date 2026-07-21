@@ -4012,6 +4012,10 @@ describe("Recipes $id Route", () => {
       await user.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
       await user.click(screen.getByRole("button", { name: "Delete" }));
       await user.click(await screen.findByRole("button", { name: "Cancel" }));
+      await waitFor(() => {
+        expect(screen.queryByRole("alertdialog", { name: "Delete this recipe?" })).not.toBeInTheDocument();
+      });
+      await settleBrowserTasks();
       expect(submittedIntents).toEqual([]);
     });
 
