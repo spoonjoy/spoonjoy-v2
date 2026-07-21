@@ -1,0 +1,635 @@
+
+> spoonjoy-v2@1.0.0 db:seed /Users/microsoft/code/worktrees/spoonjoy-v2-homepage-social-card
+> node scripts/seed-local.mjs --target-env local
+
+Target environment: local
+Base URL: http://localhost:5173
+D1 target: local D1 (--local)
+R2 target: local R2 spoonjoy-photos (--local)
+Destructive scope: local disposable test data only
+Applied local QA cleanup.
+
+ ⛅️ wrangler 4.90.0 (update available 4.110.0)
+──────────────────────────────────────────────
+Resource location: local 
+
+Use --remote if you want to access the remote instance.
+
+🌀 Executing on local database DB (32cb0e04-c45b-4cd2-a798-556556ae288d) from .wrangler/state/v3/d1:
+🌀 To execute on your remote database, add a --remote flag to your wrangler command.
+🚣 79 commands executed successfully.
+[
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 1
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [
+      {
+        "CASE WHEN EXISTS (SELECT 1 FROM cleanup_blockers)\n  THEN json_extract('Refusing cleanup because non-disposable rows still reference disposable targets', '$')\n  ELSE 0\nEND": 0
+      }
+    ],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  }
+]
+
+============================================================
+🌱 Spoonjoy v2 Database Seeding
+============================================================
+
+📏  Seeding units...
+✅  Seeded 20 units
+🥕  Seeding ingredient references...
+✅  Seeded 117 ingredient references
+👤  Seeding users...
+✅  Seeded 6 users
+🔐  Generated disposable local seed credentials for this run; passwords are not printed.
+🧹  Hiding local QA recipe artifacts...
+✅  Hid 0 local QA recipes
+🧹  Removing local QA cookbook artifacts...
+✅  Removed 0 local QA cookbooks
+🍳  Seeding recipes...
+  📝  Created: Classic Margherita Pizza by codex_seed_local_20260721t194942z_5b394035d2ad4917_primary
+  📝  Created: Chicken Stir-Fry with Vegetables by codex_seed_local_20260721t194942z_5b394035d2ad4917_julia
+  📝  Created: Creamy Mushroom Risotto by codex_seed_local_20260721t194942z_5b394035d2ad4917_marco
+  📝  Created: Fresh Guacamole by codex_seed_local_20260721t194942z_5b394035d2ad4917_sarah
+  📝  Created: Pan-Seared Salmon with Lemon Butter by codex_seed_local_20260721t194942z_5b394035d2ad4917_google
+  📝  Created: Chocolate Chip Cookies by codex_seed_local_20260721t194942z_5b394035d2ad4917_apple
+  📝  Created: Thai Green Curry by codex_seed_local_20260721t194942z_5b394035d2ad4917_primary
+  📝  Created: Eggs Benedict by codex_seed_local_20260721t194942z_5b394035d2ad4917_julia
+  📝  Created: Parmesan Crisp Grilled Cheese by codex_seed_local_20260721t194942z_5b394035d2ad4917_primary
+  📝  Created: Lemon Chickpea Dinner Salad by codex_seed_local_20260721t194942z_5b394035d2ad4917_primary
+  📝  Created: Tomato Brown Butter Beans by codex_seed_local_20260721t194942z_5b394035d2ad4917_primary
+  📝  Created: Charred Broccoli Caesar by codex_seed_local_20260721t194942z_5b394035d2ad4917_primary
+  📝  Created: Miso Mushroom Udon by codex_seed_local_20260721t194942z_5b394035d2ad4917_primary
+  📝  Created: Citrus Olive Oil Cake by codex_seed_local_20260721t194942z_5b394035d2ad4917_primary
+  📝  Created: Herby Turkey Meatballs by codex_seed_local_20260721t194942z_5b394035d2ad4917_primary
+  📝  Created: Red Lentil Coconut Soup by codex_seed_local_20260721t194942z_5b394035d2ad4917_primary
+  📝  Created: Ricotta Toast with Hot Honey by codex_seed_local_20260721t194942z_5b394035d2ad4917_primary
+✅  Seeded 17 recipes
+📚  Seeding cookbooks...
+  📖  Created: Italian Favorites by codex_seed_local_20260721t194942z_5b394035d2ad4917_primary
+  📖  Created: Quick Weeknight Dinners by codex_seed_local_20260721t194942z_5b394035d2ad4917_julia
+  📖  Created: Party Appetizers by codex_seed_local_20260721t194942z_5b394035d2ad4917_marco
+  📖  Created: Asian Cuisine by codex_seed_local_20260721t194942z_5b394035d2ad4917_sarah
+  📖  Created: Brunch Classics by codex_seed_local_20260721t194942z_5b394035d2ad4917_google
+  📖  Created: Sweet Treats by codex_seed_local_20260721t194942z_5b394035d2ad4917_apple
+  📖  Created: Weeknight Winners by codex_seed_local_20260721t194942z_5b394035d2ad4917_primary
+  📖  Created: Pantry Dinners by codex_seed_local_20260721t194942z_5b394035d2ad4917_primary
+✅  Seeded 8 cookbooks
+🛒  Seeding shopping lists...
+  📋  Seeded shopping list for codex_seed_local_20260721t194942z_5b394035d2ad4917_primary
+  📋  Seeded shopping list for codex_seed_local_20260721t194942z_5b394035d2ad4917_julia
+  📋  Seeded shopping list for codex_seed_local_20260721t194942z_5b394035d2ad4917_marco
+✅  Seeded 3 shopping lists
+
+============================================================
+✨ Seeding complete in 4.19s
+============================================================
+
+SEED_PASS

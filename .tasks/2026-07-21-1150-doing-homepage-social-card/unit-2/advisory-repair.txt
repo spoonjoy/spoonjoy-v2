@@ -1,0 +1,19 @@
+PR: https://github.com/spoonjoy/spoonjoy-v2/pull/288
+Failed job: https://github.com/spoonjoy/spoonjoy-v2/actions/runs/29870681877/job/88769772826
+Advisory: GHSA-c2j3-45gr-mqc4
+Published: 2026-07-21T19:41:07Z
+Affected: dompurify <= 3.4.11
+First patched: dompurify 3.4.12
+
+The dependency graph resolved posthog-js 1.336.4 -> dompurify 3.3.1 before the repair.
+OSV reproduced GHSA-c2j3-45gr-mqc4 for dompurify 3.3.1.
+OSV returned no vulnerabilities for dompurify 3.4.12.
+A frozen pnpm install resolved posthog-js 1.336.4 -> dompurify 3.4.12.
+
+Post-repair local gates:
+- typecheck: passed
+- production build: passed
+- application coverage: 8,112 tests passed at 100%
+- Workers coverage: 13 tests passed at 100%
+- Playwright: 63 tests passed
+- cold dependency review: approved

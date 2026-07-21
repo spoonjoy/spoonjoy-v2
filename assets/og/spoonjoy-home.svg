@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
+  <title id="title">Spoonjoy — The Recipe App</title>
+  <desc id="description">The recipe app for the meals you actually cook.</desc>
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fffdf8"/>
+      <stop offset="1" stop-color="#eee7da"/>
+    </linearGradient>
+    <linearGradient id="photo-shade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#211d18" stop-opacity="0.68"/>
+      <stop offset="0.48" stop-color="#211d18" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#211d18" stop-opacity="0.04"/>
+    </linearGradient>
+    <clipPath id="photo-frame">
+      <rect x="748" width="452" height="630"/>
+    </clipPath>
+  </defs>
+  <rect width="1200" height="630" fill="url(#paper)"/>
+  <circle cx="1120" cy="50" r="180" fill="#a66b2e" opacity="0.08"/>
+  <circle cx="90" cy="610" r="210" fill="#b66134" opacity="0.06"/>
+  <g font-family="Arial, Helvetica, sans-serif">
+    <text x="70" y="86" fill="#a66b2e" font-size="25" font-weight="700" letter-spacing="7">SPOONJOY</text>
+    <rect x="70" y="109" width="114" height="5" rx="2.5" fill="#b66134"/>
+    <text x="70" y="194" fill="#28231d" font-family="Georgia, 'Times New Roman', serif" font-size="67" font-weight="700">
+      <tspan x="70" dy="0">The recipe app</tspan>
+      <tspan x="70" dy="77">for the meals</tspan>
+      <tspan x="70" dy="77">you actually cook.</tspan>
+    </text>
+    <text x="73" y="458" fill="#655f55" font-family="Georgia, 'Times New Roman', serif" font-size="25">
+      <tspan x="73" dy="0">Collect recipes. Shape cookbooks.</tspan>
+      <tspan x="73" dy="36">Keep a kitchen that feels like yours.</tspan>
+    </text>
+    <g transform="translate(70 543)" fill="#655f55" font-size="18" font-weight="700" letter-spacing="2">
+      <text x="0" y="0">COLLECT</text>
+      <circle cx="116" cy="-6" r="3" fill="#b66134"/>
+      <text x="137" y="0">COOKBOOKS</text>
+      <circle cx="288" cy="-6" r="3" fill="#b66134"/>
+      <text x="309" y="0">YOUR KITCHEN</text>
+    </g>
+    <text x="70" y="596" fill="#a66b2e" font-size="20" font-weight="700" letter-spacing="3">SPOONJOY.APP</text>
+  </g>
+  <g clip-path="url(#photo-frame)">
+    <image href="spoonjoy-home-dinner.jpg" x="748" y="0" width="452" height="630" preserveAspectRatio="xMidYMid slice"/>
+    <rect x="748" width="452" height="630" fill="url(#photo-shade)"/>
+    <rect x="748" width="7" height="630" fill="#b66134"/>
+    <text x="794" y="86" fill="#fffdf8" font-family="Georgia, 'Times New Roman', serif" font-size="48" font-weight="700">sj</text>
+    <g transform="translate(788 506)">
+      <rect width="366" height="78" fill="#211d18" fill-opacity="0.78"/>
+      <text x="28" y="34" fill="#fffdf8" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="3">REAL MEALS</text>
+      <text x="28" y="60" fill="#d9b38a" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="3">REAL RECIPES</text>
+    </g>
+  </g>
+</svg>

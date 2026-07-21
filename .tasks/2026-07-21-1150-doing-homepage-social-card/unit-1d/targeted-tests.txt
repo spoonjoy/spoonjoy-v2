@@ -1,0 +1,11 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.10 [39m[90m/Users/microsoft/code/worktrees/spoonjoy-v2-homepage-social-card[39m
+
+ [32m✓[39m test/routes/index.test.tsx [2m([22m[2m20 tests[22m[2m)[22m[33m 926[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m20 passed[39m[22m[90m (20)[39m
+[2m   Start at [22m 12:53:18
+[2m   Duration [22m 2.07s[2m (transform 206ms, setup 144ms, import 595ms, tests 926ms, environment 288ms)[22m
+
+TARGETED_TESTS_PASS
