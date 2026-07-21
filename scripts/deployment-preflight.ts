@@ -1,4 +1,5 @@
 import { execFile as nodeExecFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -135,6 +136,23 @@ const STORYBOOK_PAGES_DEPLOY_COMMAND =
 const REQUIRED_PNPM_PACKAGE_MANAGER = "pnpm@10.28.1";
 const PINNED_SETUP_NODE_ACTION = "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38";
 const PINNED_WRANGLER_ACTION = "cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0";
+const PROTOCOL_V1_BOUNDARY_MARKER = "workers/cook-session-protocol-v1-boundary";
+const EXPECTED_PRODUCTION_DEPLOY_STEP_NAMES = [
+  "Checkout approved source SHA",
+  "Checkout trusted rollback tooling",
+  "Validate release source",
+  "Setup Node.js",
+  "Activate pnpm",
+  "Install dependencies",
+  "Generate Prisma client",
+  "Install Playwright Chromium",
+  "Deploy staged release to Cloudflare Workers",
+  "Record release source",
+  "Ensure release artifact exists",
+  "Upload MCP OAuth canary artifacts",
+] as const;
+const EXPECTED_RELEASE_SOURCE_RUN_SHA256 = "c90305002010a0f0cf4bcdb11ccca916061596c4ebcd5c591ac7aa53074de066";
+const EXPECTED_RELEASE_ARTIFACT_RUN_SHA256 = "51bcfa6be41c09ab9ea08b72bb8f87d144d0cc9ba58b3e0978bc7246704ee846";
 const REQUIRED_IGNORED_BUILD_PACKAGES = [
   "@prisma/client",
   "@prisma/engines",
@@ -311,12 +329,68 @@ function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
     : null;
   if (!sourceSha || !rollbackVersion) return false;
 
+  const topLevelEnvIndexes = lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => line.indent === 0 && line.text === "env:")
+    .map(({ index }) => index);
+  const concurrencyIndexes = lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => line.indent === 0 && line.text === "concurrency:")
+    .map(({ index }) => index);
+  if (topLevelEnvIndexes.length !== 1 || concurrencyIndexes.length !== 1) return false;
+
+  const topLevelEnv = topLevelEnvIndexes[0];
+  const topLevelEnvEnd = blockEnd(lines, topLevelEnv);
+  const releaseMode = blockScalarChildValue(lines, topLevelEnv, topLevelEnvEnd, "SPOONJOY_RELEASE_MODE");
+  const protocolBoundary = blockScalarChildValue(
+    lines,
+    topLevelEnv,
+    topLevelEnvEnd,
+    "SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA"
+  );
+  const lifecycleKeys = ["SPOONJOY_RELEASE_MODE", "SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA"];
+  const lifecycleKeyCountsAreExact = lifecycleKeys.every(
+    (key) => lines.filter((line) => yamlMappingKey(line.text) === key).length === 1
+  );
+  const hasRuntimeLifecycleOverride = lines.some((line) =>
+    /\bSPOONJOY_(?:RELEASE_MODE|PROTOCOL_V1_BOUNDARY_SHA)=/.test(line.text)
+  );
+  const releaseModeIsValid =
+    releaseMode === "atomic-bootstrap" ||
+    releaseMode === "atomic-product-activation" ||
+    releaseMode === "protocol-v1-canary";
+  const boundaryMatchesMode =
+    releaseMode === "protocol-v1-canary"
+      ? typeof protocolBoundary === "string" && /^[0-9a-f]{40}$/.test(protocolBoundary)
+      : protocolBoundary === "";
+  if (
+    !lifecycleKeyCountsAreExact ||
+    hasRuntimeLifecycleOverride ||
+    !releaseModeIsValid ||
+    !boundaryMatchesMode
+  ) {
+    return false;
+  }
+
+  const concurrency = concurrencyIndexes[0];
+  const concurrencyEnd = blockEnd(lines, concurrency);
+  if (
+    immediateChildKeys(lines, concurrency, concurrencyEnd).join(",") !== "group,cancel-in-progress" ||
+    blockScalarChildValue(lines, concurrency, concurrencyEnd, "group") !== "production-deploy" ||
+    blockScalarChildValue(lines, concurrency, concurrencyEnd, "cancel-in-progress") !== "false"
+  ) {
+    return false;
+  }
+
   const permissionsIndex = lines.findIndex((line) => line.indent === 0 && line.text === "permissions:");
   if (permissionsIndex === -1) return false;
   const permissions = blockScalarChildMap(lines, permissionsIndex, blockEnd(lines, permissionsIndex));
-  if (permissions.get("issues") === "write") return false;
+  if (permissions.get("actions") !== "read" || permissions.get("contents") !== "read" || permissions.has("issues")) {
+    return false;
+  }
 
   const jobs = workflowJobBlocks(lines);
+  if (jobs.length !== 2) return false;
   const deploy = jobs.find(([start]) => lines[start].text === "deploy:");
   const report = jobs.find(([start]) => lines[start].text === "report-canary:");
   if (!deploy || !report) return false;
@@ -349,6 +423,17 @@ function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
 
   const steps = childBlock(lines, deploy[0], deploy[1], "steps");
   if (!steps) return false;
+  const deployStepBlocks = stepBlocks(lines, steps[0], steps[1]);
+  const deployStepNames = deployStepBlocks.map(([stepStart, stepEnd]) =>
+    stepPropertyValue(lines, stepStart, stepEnd, "name")
+  );
+  if (
+    deployStepNames.length !== EXPECTED_PRODUCTION_DEPLOY_STEP_NAMES.length ||
+    !deployStepNames.every((name, index) => name === EXPECTED_PRODUCTION_DEPLOY_STEP_NAMES[index])
+  ) {
+    return false;
+  }
+
   let sourceCheckoutStep = -1;
   let rollbackCheckoutStep = -1;
   let validationStep = -1;
@@ -357,8 +442,20 @@ function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
   let ensureArtifactStep = -1;
   let uploadArtifactStep = -1;
 
-  for (const [stepStart, stepEnd] of stepBlocks(lines, steps[0], steps[1])) {
+  for (const [stepStart, stepEnd] of deployStepBlocks) {
     const run = stepRunText(lines, stepStart, stepEnd);
+    const stepName = stepPropertyValue(lines, stepStart, stepEnd, "name");
+    const generatedFallbackStart = run.indexOf("jq -n --arg source_sha");
+    const generatedFallback = generatedFallbackStart < 0 ? "" : run.slice(generatedFallbackStart);
+    const exactRunCommands = new Map<string, string[]>([
+      ["Activate pnpm", ["corepack enable", `corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`]],
+      ["Install dependencies", ["pnpm install --frozen-lockfile"]],
+      ["Generate Prisma client", ["pnpm prisma:generate"]],
+      ["Install Playwright Chromium", ["pnpm exec playwright install --with-deps chromium"]],
+      ["Record release source", [`printf 'Source SHA: \`%s\`\\n' "$SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"`]],
+    ]);
+    const expectedRunCommands = exactRunCommands.get(stepName!);
+    if (expectedRunCommands && !commandLinesEqual(run, expectedRunCommands)) return false;
     if (
       stepUses(lines, stepStart, stepEnd, "actions/checkout@") &&
       stepWithValue(lines, stepStart, stepEnd, "ref") === "${{ env.SOURCE_SHA }}" &&
@@ -380,8 +477,22 @@ function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
     if (stepPropertyValue(lines, stepStart, stepEnd, "name") === "Validate release source") {
       const requiredRunFragments = [
         "grep -Eq '^[0-9a-f]{40}$'",
+        'case "$SPOONJOY_RELEASE_MODE" in',
+        "atomic-bootstrap|atomic-product-activation|protocol-v1-canary) ;;",
+        'if [ "$SPOONJOY_RELEASE_MODE" = "protocol-v1-canary" ]; then',
+        `protocol_boundary_marker=${PROTOCOL_V1_BOUNDARY_MARKER}`,
+        'marker_boundary_history="$(git log --format=\'%H\' --diff-filter=A --reverse -- "$protocol_boundary_marker")"',
+        'test "$(printf \'%s\\n\' "$marker_boundary_history" | sed \'/^$/d\' | wc -l | tr -d \' \')" -eq 1',
+        'marker_boundary_sha="$marker_boundary_history"',
+        'test -n "$SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA"',
+        'test "$SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA" = "$marker_boundary_sha"',
+        'git merge-base --is-ancestor "$SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA" "$SOURCE_SHA"',
+        'test -z "$SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA"',
+        'if [ -n "$ROLLBACK_VERSION_ID" ] && [ "$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" ]; then',
         'git merge-base --is-ancestor "$SOURCE_SHA" origin/main',
         `test "$WORKFLOW_RUN_PATH" = '.github/workflows/ci.yml' || test "$GITHUB_EVENT_NAME" = 'workflow_dispatch'`,
+        'test "$(git rev-parse origin/main)" = "$SOURCE_SHA"',
+        'test "$(git rev-parse HEAD)" = "$SOURCE_SHA"',
         'test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"',
         'gh run list --workflow .github/workflows/ci.yml --branch main --commit "$SOURCE_SHA" --event push --status success',
         "--json databaseId,headSha",
@@ -393,21 +504,39 @@ function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
       ];
       if (
         stepPropertyValue(lines, stepStart, stepEnd, "if") === null &&
-        stepHasEnvKeys(lines, stepStart, stepEnd, ["GH_TOKEN", "WORKFLOW_RUN_PATH"]) &&
-        requiredRunFragments.every((fragment) => run.includes(fragment))
+        stepEnvEquals(lines, stepStart, stepEnd, {
+          GH_TOKEN: "${{ github.token }}",
+          WORKFLOW_RUN_CONCLUSION: "${{ github.event.workflow_run.conclusion }}",
+          WORKFLOW_RUN_EVENT: "${{ github.event.workflow_run.event }}",
+          WORKFLOW_RUN_HEAD_BRANCH: "${{ github.event.workflow_run.head_branch }}",
+          WORKFLOW_RUN_HEAD_SHA: "${{ github.event.workflow_run.head_sha }}",
+          WORKFLOW_RUN_PATH: "${{ github.event.workflow_run.path }}",
+        }) &&
+        requiredRunFragments.every((fragment) => runHasExecutableFragment(run, fragment)) &&
+        !runHasStaticallyDeadGuard(run) &&
+        runBodySha256(run) === EXPECTED_RELEASE_SOURCE_RUN_SHA256
       ) {
         validationStep = stepStart;
       }
     }
+    const deployCommands = [
+      'if [ -n "$ROLLBACK_VERSION_ID" ]; then',
+      'pnpm run deploy:auto -- --rollback-version-id "$ROLLBACK_VERSION_ID"',
+      "else",
+      "pnpm run deploy:auto",
+      "fi",
+    ];
     if (
       stepRunsDeployAuto(lines, stepStart, stepEnd) &&
       stepPropertyValue(lines, stepStart, stepEnd, "if") === null &&
-      stepHasEnvKeys(lines, stepStart, stepEnd, [
-        "CLOUDFLARE_ACCOUNT_ID",
-        "CLOUDFLARE_D1_API_TOKEN",
-        "CLOUDFLARE_WORKERS_API_TOKEN",
-      ]) &&
-      run.includes('--rollback-version-id "$ROLLBACK_VERSION_ID"')
+      stepEnvEquals(lines, stepStart, stepEnd, {
+        CLOUDFLARE_ACCOUNT_ID: "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+        CLOUDFLARE_D1_API_TOKEN: "${{ secrets.CLOUDFLARE_D1_API_TOKEN }}",
+        CLOUDFLARE_WORKERS_API_TOKEN: "${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}",
+        SPOONJOY_MCP_CANARY_BASE_URL: "https://spoonjoy.app",
+        SPOONJOY_RELEASE_SHA: "${{ env.SOURCE_SHA }}",
+      }) &&
+      commandLinesEqual(run, deployCommands)
     ) {
       deployStep = stepStart;
     }
@@ -421,12 +550,87 @@ function workflowDeploysSuccessfulCiSha(workflow: string): boolean {
     if (
       stepPropertyValue(lines, stepStart, stepEnd, "name") === "Ensure release artifact exists" &&
       stepIfEquals(lines, stepStart, stepEnd, "always()") &&
+      stepEnvEquals(lines, stepStart, stepEnd, {
+        CLOUDFLARE_D1_API_TOKEN: "${{ secrets.CLOUDFLARE_D1_API_TOKEN }}",
+        CLOUDFLARE_WORKERS_API_TOKEN: "${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}",
+      }) &&
       run.includes("mkdir -p mcp-oauth-canary-artifacts") &&
       run.includes("mcp-oauth-canary-artifacts/production-release.json") &&
-      run.includes("jq -n --arg source_sha") &&
-      run.includes('reviewedMigrations: []') &&
-      run.includes('migrationApply: "not_started"') &&
-      run.includes("databaseRollbackSupported: false")
+      [
+        'if [ -f "$artifact_path" ] && jq -e',
+        '((keys - ["candidateVersionId",',
+        '(.status | IN("promoted",',
+        '(.phase | IN("validate",',
+        '(.phase | IN("validate", "provenance", "initial_preflight", "build", "post_build_provenance", "migration_list", "migration_review", "migration_apply", "full_preflight", "current_deployment", "deployment_revalidation", "version_snapshot", "version_upload", "version_lookup", "stage_revalidation", "promotion_revalidation", "rollback_version_lookup", "rollback_current_deployment", "rollback_already_active", "protocol_ancestry", "rollback_protocol_ancestry", "active_version_mapping", "rollback_active_version_mapping", "stage"',
+        'if jq -e \'def sanitized_failure:',
+        '"version_lookup", "stage_revalidation", "promotion_revalidation", "rollback_version_lookup", "rollback_current_deployment", "rollback_already_active", "protocol_ancestry", "rollback_protocol_ancestry", "active_version_mapping", "rollback_active_version_mapping", "stage"',
+        '(.sourceSha | type == "string" and test("^[0-9a-f]{40}$"))',
+        '(.treeHash | type == "string" and test("^[0-9a-f]{40}$"))',
+        '(.previousVersionId | type == "string" and test("^[0-9a-f]{8}-',
+        '(.candidateVersionId | type == "string" and test("^[0-9a-f]{8}-',
+        'def sanitized_failure:',
+        'length > 0 and length <= 500',
+        'test("^\\\\S(?:.*\\\\S)?$")',
+        'test("\\\\s{2,}") | not',
+        'test("[\\u0000-\\u001f\\u007f]") | not',
+        'test("Bearer\\\\s+\\\\S+"; "i") | not',
+        'test("\\\\b(token|secret|password|authorization|api[_-]?key)\\\\s*[=:]\\\\s*\\\\S+"; "i") | not',
+        'test("\\\\b[A-Za-z0-9_-]{16,}\\\\.[A-Za-z0-9_-]{16,}\\\\.[A-Za-z0-9_-]{16,}\\\\b") | not',
+        '$ENV.CLOUDFLARE_D1_API_TOKEN',
+        '$ENV.CLOUDFLARE_WORKERS_API_TOKEN',
+        '. as $credential',
+        'contains($credential) | not',
+        'if has("failure") then (.failure | sanitized_failure) else true end',
+        'if has("rollbackFailure") then (.rollbackFailure | sanitized_failure) else true end',
+        'all(.reviewedMigrations[]; (test("^[0-9]{4}_[A-Za-z0-9][A-Za-z0-9_.-]*[.]sql$") and (contains("..") | not)))',
+        '((.reviewedMigrations | unique | length) == (.reviewedMigrations | length))',
+        'if .phase == "rollback_already_active" then .previousVersionId == .candidateVersionId else .previousVersionId != .candidateVersionId end',
+        'if .migrationApply == "not_needed" then (.reviewedMigrations | length) == 0',
+        'if $release_mode == "protocol-v1-canary" then',
+        'if .status == "forward_repair_required" then',
+        '(.phase == "migration_apply" and .migrationApply == "failed")',
+        '((.phase | IN("full_preflight", "deployment_revalidation", "version_upload", "version_lookup", "stage_revalidation")) and .migrationApply == "succeeded"))',
+        'if .phase == "bootstrap_probe" then $release_mode == "atomic-bootstrap" else true end',
+        '(.phase == "full_preflight" and .migrationApply == "not_needed") or',
+        '(.phase == "deployment_revalidation" and (.migrationApply | IN("not_started", "not_needed"))))',
+        'if (.phase | IN("protocol_ancestry", "active_version_mapping")) then .migrationApply == "not_started"',
+        'elif (.phase | IN("rollback_version_lookup", "rollback_current_deployment", "rollback_already_active", "rollback_protocol_ancestry", "rollback_active_version_mapping")) then .migrationApply == "not_needed"',
+        'elif (.phase | IN("validate", "provenance")) then',
+        'if (.phase | IN("initial_preflight", "build", "post_build_provenance", "migration_list", "migration_review", "migration_apply", "full_preflight", "current_deployment", "deployment_revalidation", "version_snapshot", "version_upload", "version_lookup", "stage_revalidation", "rollback_version_lookup", "rollback_current_deployment", "rollback_already_active", "protocol_ancestry", "rollback_protocol_ancestry", "active_version_mapping", "rollback_active_version_mapping")) then has("treeHash") else (has("treeHash") | not) end',
+        'if (.phase | IN("rollback_current_deployment", "migration_review")) then true',
+        'elif (.phase | IN("version_snapshot", "migration_apply", "full_preflight", "deployment_revalidation", "version_upload", "version_lookup", "stage_revalidation", "rollback_already_active", "protocol_ancestry", "rollback_protocol_ancestry", "active_version_mapping", "rollback_active_version_mapping")) then has("previousVersionId")',
+        'if (.phase | IN("stage_revalidation", "rollback_current_deployment", "rollback_already_active", "rollback_protocol_ancestry", "rollback_active_version_mapping")) then has("candidateVersionId") else (has("candidateVersionId") | not) end',
+        'if (.phase | IN("validate", "provenance", "initial_preflight", "build", "post_build_provenance", "migration_list")) then',
+        'elif .phase == "migration_review" then',
+        'if .phase == "migration_apply" then',
+        'if .status == "promoted" then',
+        '(.phase == "complete" and has("treeHash") and has("previousVersionId") and has("candidateVersionId") and',
+        'elif .status == "rollback_failed" then',
+        'if $release_mode == "protocol-v1-canary" and .phase == "stage_revalidation" then has("candidateVersionId")',
+        'elif $release_mode != "protocol-v1-canary" and (.phase | IN("verify_promotion", "bootstrap_probe", "artifact")) then has("candidateVersionId")',
+        'elif .phase == "deployment_revalidation" then (.migrationApply | IN("not_started", "not_needed", "succeeded"))',
+        'elif (.phase | IN("full_preflight", "deployment_revalidation")) then .migrationApply == "succeeded"',
+        'if [ "$artifact_valid" -ne 1 ]; then',
+        "jq -n --arg source_sha",
+        'status: (if $release_mode == "protocol-v1-canary" then "release_state_unknown" else "forward_repair_required" end)',
+        'sourceSha: (if ($source_sha | test("^[0-9a-f]{40}$")) then $source_sha else null end)',
+        "releaseMode: $release_mode",
+        'deploymentStrategy: (if $release_mode == "protocol-v1-canary" then "gradual" else "atomic" end)',
+        'phase: "unknown"',
+        "reviewedMigrations: null",
+        'migrationApply: "unknown"',
+        "databaseRollbackSupported: false",
+        'failure: "Release workflow failed without a trustworthy orchestrator artifact."',
+        'if $protocol_boundary_sha == "" then {} else {protocolV1BoundarySha: $protocol_boundary_sha} end',
+      ].every((fragment) => runHasExecutableFragment(run, fragment)) &&
+      run.split("artifact_valid=0").length === 2 &&
+      run.split("artifact_valid=1").length === 2 &&
+      !generatedFallback.includes("previousVersionId") &&
+      !generatedFallback.includes("candidateVersionId") &&
+      !generatedFallback.includes("rollbackFailure") &&
+      !generatedFallback.includes("unexpected:") &&
+      !runHasStaticallyDeadGuard(run) &&
+      runBodySha256(run) === EXPECTED_RELEASE_ARTIFACT_RUN_SHA256
     ) {
       ensureArtifactStep = stepStart;
     }
@@ -566,21 +770,9 @@ function workflowJobBlocks(lines: WorkflowLine[]): Array<[number, number]> {
 }
 
 function stepRunsDeployAuto(lines: WorkflowLine[], stepStart: number, stepEnd: number): boolean {
-  const runIndent = lines[stepStart].indent + 2;
-  for (let index = stepStart + 1; index < stepEnd; index += 1) {
-    if (lines[index].indent !== runIndent) continue;
-    const run = lines[index].text.match(/^run:\s*(.*)$/);
-    if (!run) continue;
-
-    const value = run[1].trim();
-    if (value !== "|" && value !== ">") continue;
-
-    for (let commandIndex = index + 1; commandIndex < stepEnd; commandIndex += 1) {
-      if (lines[commandIndex].indent <= lines[index].indent) break;
-      if (lines[commandIndex].text === "pnpm run deploy:auto") return true;
-    }
-  }
-  return false;
+  return runCommandLines(stepRunText(lines, stepStart, stepEnd)).some((command) =>
+    command.startsWith("pnpm run deploy:auto")
+  );
 }
 
 function stepPropertyValue(lines: WorkflowLine[], stepStart: number, stepEnd: number, key: string): string | null {
@@ -663,15 +855,21 @@ function stepRunText(lines: WorkflowLine[], stepStart: number, stepEnd: number):
 function stepHasEnvKeys(lines: WorkflowLine[], stepStart: number, stepEnd: number, keys: string[]): boolean {
   const env = childBlock(lines, stepStart, stepEnd, "env");
   if (!env) return false;
-
-  const envIndent = lines[env[0]].indent + 2;
-  const found = new Set<string>();
-  for (let index = env[0] + 1; index < env[1]; index += 1) {
-    if (lines[index].indent !== envIndent) continue;
-    const key = lines[index].text.match(/^([A-Za-z0-9_]+):/);
-    if (key) found.add(key[1]);
-  }
+  const found = new Set(immediateChildKeys(lines, env[0], env[1]));
   return keys.every((key) => found.has(key));
+}
+
+function stepEnvEquals(
+  lines: WorkflowLine[],
+  stepStart: number,
+  stepEnd: number,
+  expected: Record<string, string>,
+): boolean {
+  const env = childBlock(lines, stepStart, stepEnd, "env");
+  if (!env) return false;
+  const actual = blockScalarChildMap(lines, env[0], env[1]);
+  const entries = Object.entries(expected);
+  return actual.size === entries.length && entries.every(([key, value]) => actual.get(key) === value);
 }
 
 function workflowHasGitDefaultBranchConfig(workflow: string): boolean {
@@ -790,6 +988,44 @@ function runCommandLines(run: string): string[] {
 function commandLinesEqual(run: string, expected: string[]): boolean {
   const commands = runCommandLines(run);
   return commands.length === expected.length && commands.every((command, index) => command === expected[index]);
+}
+
+function runBodySha256(run: string): string {
+  return createHash("sha256").update(run.trim()).digest("hex");
+}
+
+function runHasExecutableFragment(run: string, fragment: string): boolean {
+  return runCommandLines(run).some((line) => {
+    const fragmentIndex = line.indexOf(fragment);
+    if (/^(?:echo|printf|:|true)\b/.test(line) || fragmentIndex === -1) return false;
+    const prefix = line.slice(0, fragmentIndex).trimEnd();
+    const suffix = line.slice(fragmentIndex + fragment.length).trim();
+    return !/(?:\|\||&&)$/.test(prefix) && !/^(?:\|\||&&)/.test(suffix);
+  });
+}
+
+function runHasStaticallyDeadGuard(run: string): boolean {
+  return runCommandLines(run).some((line) => {
+    if (
+      /^if\s+(?:false|!\s+true)\s*;?\s*then$/.test(line) ||
+      /^(?:false\s*&&|true\s*\|\|)/.test(line)
+    ) return true;
+    const comparison = line.match(
+      /^if\s+\[\s*(-?\d+)\s+-(eq|ne|lt|le|gt|ge)\s+(-?\d+)\s*\]\s*;?\s*then$/,
+    );
+    if (!comparison) return false;
+    const left = Number(comparison[1]);
+    const right = Number(comparison[3]);
+    const operator = comparison[2];
+    return !(
+      (operator === "eq" && left === right) ||
+      (operator === "ne" && left !== right) ||
+      (operator === "lt" && left < right) ||
+      (operator === "le" && left <= right) ||
+      (operator === "gt" && left > right) ||
+      (operator === "ge" && left >= right)
+    );
+  });
 }
 
 function cloudflareGateRunIsSafe(run: string): boolean {
@@ -1198,11 +1434,11 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
       "deployment commands",
       [
         "pnpm run deploy:preflight",
-        "wrangler d1 migrations apply DB --remote",
+        'gh workflow run production-deploy.yml --ref main -f source_sha="$(git rev-parse HEAD)"',
         "wrangler r2 bucket create spoonjoy-photos",
         "wrangler secret put SESSION_SECRET",
       ].every((command) => readmeAndDeploymentDoc.includes(command)),
-      "Deployment docs must include preflight, D1 migration, R2 bucket, and secret commands."
+      "Deployment docs must include preflight, exact-SHA production workflow, R2 bucket, and secret commands."
     ),
     check(
       "telemetry env typing",
@@ -1408,7 +1644,7 @@ export async function checkRemoteMigrations(deps: RemoteMigrationCheckDeps): Pro
   return check(
     "remote D1 migrations",
     false,
-    `Remote D1 has ${pending.length} pending migration(s): ${names}. Run \`pnpm exec wrangler d1 migrations apply DB --remote\` (or use \`pnpm deploy:auto\`).`,
+    `Remote D1 has ${pending.length} pending migration(s): ${names}. Dispatch the exact-SHA production workflow for additive migrations.`,
   );
 }
 
