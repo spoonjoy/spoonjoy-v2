@@ -17,7 +17,7 @@ Let Claude use a user's real Spoonjoy kitchen (recipes, cookbooks, shopping list
 - Rate limiting on `/mcp` reusing `app/lib/rate-limit.server.ts` (token + IP), returning JSON-RPC-shaped 429 semantics.
 - Delegated auth: reuse the existing device-code flow in `app/lib/agent-connection.server.ts` as-is. No new auth backend.
 - Docs: a new `docs/claude-connector.md` covering the remote connector + token-acquisition (delegated device-code) path; cross-link from `docs/ouroboros-mcp.md` and README.
-- Autonomous confirmation: deploy; mint an `sj_` token for the demo user (`demo@spoonjoy.com`); `claude mcp add --transport http spoonjoy https://spoonjoy.app/mcp --header "Authorization: Bearer sj_…"`; confirm `tools/list` and at least one real `tools/call`.
+- Autonomous confirmation: deploy; mint an `sj_` token for an explicitly created disposable reviewer account; `claude mcp add --transport http spoonjoy https://spoonjoy.app/mcp --header "Authorization: Bearer sj_…"`; confirm `tools/list` and at least one real `tools/call`.
 - BACKLOG.md: add `SJ-039` (this connector, done) and `SJ-040` (OAuth 2.1 for claude.ai one-click, proposed/follow-up).
 
 ### Out of Scope (tonight)
@@ -68,7 +68,7 @@ Let Claude use a user's real Spoonjoy kitchen (recipes, cookbooks, shopping list
 ## Notes
 - The HTTP route must assemble the same `SpoonjoyApiContext` as `api.$.ts` (db, principal, env subset, bucket, waitUntil, `allowOwnerEmailFallback: false`).
 - `tools/list` should reflect the same tool set as `/api/tools`.
-- Confirmation token: prefer minting directly via `createApiCredential` for `demo@spoonjoy.com`; optionally exercise the full device-code path (`startAgentConnection` → `approveAgentConnectionRequest` → `pollAgentConnection`) to prove delegated auth end-to-end.
+- Confirmation token: prefer minting directly via `createApiCredential` for the disposable reviewer account; optionally exercise the full device-code path (`startAgentConnection` → `approveAgentConnectionRequest` → `pollAgentConnection`) to prove delegated auth end-to-end.
 - Coverage gotcha: route `.ts` files under `app/routes/` are NOT in the coverage include (`app/routes/**/*.tsx` only), but `app/lib/**/*.ts` IS — so the JSON-RPC core + any new lib helper need 100%; the route file mirrors `api.$.ts` (also a `.ts`, not coverage-measured) but should still be tested for correctness.
 
 ## Progress Log

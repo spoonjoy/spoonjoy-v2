@@ -3,6 +3,7 @@ import { defineConfig } from "vitest/config";
 const appDirectory = new URL("./app", import.meta.url).pathname;
 const componentsDirectory = new URL("./app/components", import.meta.url).pathname;
 const coverageInclude = [
+  "app/entry.server.tsx",
   "app/lib/**/*.ts",
   "app/routes/**/*.ts",
   "app/routes/**/*.tsx",
@@ -24,6 +25,11 @@ const coverageInclude = [
   "e2e/fixtures.ts",
   "e2e/support/global-teardown.ts",
   "e2e/support/start-ephemeral-wrangler.mjs",
+  "scripts/production-readiness.ts",
+  "scripts/posthog-build-metadata.ts",
+  "scripts/react-router-build-runner.ts",
+  "scripts/warning-gate.ts",
+  "scripts/workflow-security.mjs",
   "workers/app.ts",
 ] as const;
 

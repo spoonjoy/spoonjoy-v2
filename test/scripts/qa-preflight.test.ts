@@ -101,7 +101,13 @@ describe("parseWranglerSecretNames", () => {
 function qaGeneratedBuildConfig() {
   return {
     name: "spoonjoy-v2-qa",
-    vars: { NODE_ENV: "production", SPOONJOY_BASE_URL: QA_BASE_URL },
+    vars: {
+      NODE_ENV: "production",
+      SPOONJOY_BASE_URL: QA_BASE_URL,
+      SPOONJOY_CSP_MODE: "enforce",
+      VITE_POSTHOG_HOST: "https://us.i.posthog.com",
+    },
+    version_metadata: { binding: "CF_VERSION_METADATA" },
     d1_databases: [{ binding: "DB", database_name: "spoonjoy-qa", database_id: QA_D1_DATABASE_ID }],
     r2_buckets: [{ binding: "PHOTOS", bucket_name: QA_R2_BUCKET }],
     ratelimits: [
@@ -110,6 +116,32 @@ function qaGeneratedBuildConfig() {
       { name: "AUTH_IP_RATE_LIMITER", namespace_id: "2003" },
     ],
   };
+}
+
+function clientBuildMetadata(host = "https://us.i.posthog.com") {
+  const assetsOrigin = host === "https://us.i.posthog.com"
+    ? "https://us-assets.i.posthog.com"
+    : host === "https://eu.i.posthog.com"
+      ? "https://eu-assets.i.posthog.com"
+      : host;
+  return {
+    schemaVersion: 1,
+    environment: "qa",
+    publicEnv: { VITE_POSTHOG_HOST: host },
+    runtimeCsp: { ingestOrigin: host, assetsOrigin },
+  };
+}
+
+function clientBundle(host = "https://us.i.posthog.com"): readonly string[] {
+  return [`const spoonjoyEnv={VITE_POSTHOG_HOST:${JSON.stringify(host)}};`];
+}
+
+function validateGeneratedBuild(
+  config: Record<string, unknown>,
+  metadata: Record<string, unknown>,
+  bundleSources: readonly string[],
+) {
+  return validateQaGeneratedBuildConfig(config, metadata, bundleSources);
 }
 
 function warningCleanStorybookWorkflow(): string {
@@ -127,7 +159,7 @@ function warningCleanStorybookWorkflow(): string {
     "  GIT_CONFIG_VALUE_0: main",
     "jobs:",
     "  build-storybook:",
-    "    name: build-storybook",
+    "    name: ${{ github.event_name == 'workflow_dispatch' && 'manual-build-storybook' || 'build-storybook' }}",
     "    runs-on: ubuntu-latest",
     "    permissions:",
     "      contents: read",
@@ -175,6 +207,7 @@ async function createStaticConfigRoot(overrides: {
     mkdir(path.join(root, "app"), { recursive: true }),
     mkdir(path.join(root, "docs"), { recursive: true }),
     mkdir(path.join(root, "migrations"), { recursive: true }),
+    mkdir(path.join(root, "scripts"), { recursive: true }),
   ]);
   await Promise.all([
     copyFile(path.join(process.cwd(), "wrangler.json"), path.join(root, "wrangler.json")),
@@ -192,6 +225,10 @@ async function createStaticConfigRoot(overrides: {
       path.join(root, ".github/workflows/qa-image-cover-smoke.yml"),
     ),
     copyFile(path.join(process.cwd(), "app/cloudflare-env.d.ts"), path.join(root, "app/cloudflare-env.d.ts")),
+    copyFile(
+      path.join(process.cwd(), "scripts/react-router-build.ts"),
+      path.join(root, "scripts/react-router-build.ts"),
+    ),
     copyFile(path.join(process.cwd(), "README.md"), path.join(root, "README.md")),
     copyFile(path.join(process.cwd(), "docs/deployment.md"), path.join(root, "docs/deployment.md")),
     copyFile(path.join(process.cwd(), "vitest.config.ts"), path.join(root, "vitest.config.ts")),
@@ -232,7 +269,7 @@ async function createStaticConfigRoot(overrides: {
 
 describe("validateQaGeneratedBuildConfig", () => {
   it("passes for a generated QA Worker config", () => {
-    const check = validateQaGeneratedBuildConfig(qaGeneratedBuildConfig());
+    const check = validateGeneratedBuild(qaGeneratedBuildConfig(), clientBuildMetadata(), clientBundle());
 
     expect(check.ok).toBe(true);
   });
@@ -260,7 +297,7 @@ describe("validateQaGeneratedBuildConfig", () => {
         { name: "API_IP_RATE_LIMITER", namespace_id: "2002" },
         { name: "AUTH_IP_RATE_LIMITER", namespace_id: "2003" },
       ],
-    });
+    }, clientBuildMetadata(), clientBundle());
 
     expect(check.ok).toBe(true);
   });
@@ -275,6 +312,26 @@ describe("validateQaGeneratedBuildConfig", () => {
     });
 
     expect(check.ok).toBe(false);
+  });
+
+  it("fails closed when the generated QA Worker config is not CSP-enforcing", () => {
+    const config = qaGeneratedBuildConfig();
+    delete (config.vars as Record<string, string>).SPOONJOY_CSP_MODE;
+
+    const check = validateQaGeneratedBuildConfig(config);
+
+    expect(check.ok).toBe(false);
+    expect(check.message).toContain("SPOONJOY_CSP_MODE=enforce");
+  });
+
+  it("fails closed when the generated QA Worker config cannot report exact Worker versions", () => {
+    const config = qaGeneratedBuildConfig();
+    delete (config as Record<string, unknown>).version_metadata;
+
+    const check = validateQaGeneratedBuildConfig(config);
+
+    expect(check.ok).toBe(false);
+    expect(check.message).toContain("CF_VERSION_METADATA");
   });
 
   it("fails closed when generated config arrays do not contain the required bindings", () => {
@@ -302,6 +359,61 @@ describe("validateQaGeneratedBuildConfig", () => {
 
     expect(check.ok).toBe(false);
     expect(check.message).toContain("CLOUDFLARE_ENV=qa");
+  });
+
+  it.each([
+    ["US", "https://us.i.posthog.com"],
+    ["EU", "https://eu.i.posthog.com"],
+    ["custom", "https://analytics.example.com"],
+  ])("proves the %s PostHog host across Worker, client, and runtime CSP metadata", (_label, host) => {
+    const config = qaGeneratedBuildConfig();
+    (config.vars as Record<string, string>).VITE_POSTHOG_HOST = host;
+
+    expect(validateGeneratedBuild(config, clientBuildMetadata(host), clientBundle(host)).ok).toBe(true);
+  });
+
+  it("fails when generated Worker or client artifacts omit or mismatch the PostHog host", () => {
+    const missingWorkerHost = qaGeneratedBuildConfig();
+    delete (missingWorkerHost.vars as Record<string, string>).VITE_POSTHOG_HOST;
+
+    expect(validateQaGeneratedBuildConfig(missingWorkerHost, clientBuildMetadata()).ok).toBe(false);
+    expect(validateQaGeneratedBuildConfig(qaGeneratedBuildConfig(), {}).ok).toBe(false);
+    expect(validateQaGeneratedBuildConfig(
+      qaGeneratedBuildConfig(),
+      clientBuildMetadata("https://eu.i.posthog.com"),
+    ).ok).toBe(false);
+  });
+
+  it("rejects dead PostHog text outside the structured Worker and client fields", () => {
+    const config = qaGeneratedBuildConfig() as Record<string, unknown>;
+    delete (config.vars as Record<string, string>).VITE_POSTHOG_HOST;
+    config.notes = "VITE_POSTHOG_HOST=https://us.i.posthog.com";
+    const metadata = {
+      notes: JSON.stringify(clientBuildMetadata()),
+    };
+
+    expect(validateQaGeneratedBuildConfig(config, metadata)).toMatchObject({ ok: false });
+  });
+
+  it("rejects whitespace in the generated Worker host instead of normalizing it", () => {
+    const config = qaGeneratedBuildConfig();
+    (config.vars as Record<string, string>).VITE_POSTHOG_HOST = " https://us.i.posthog.com ";
+
+    expect(validateGeneratedBuild(config, clientBuildMetadata(), clientBundle()).ok).toBe(false);
+  });
+
+  it("requires the actual client bundle host and rejects mismatch, evil, missing, and dead text", () => {
+    const config = qaGeneratedBuildConfig();
+    const metadata = clientBuildMetadata();
+
+    expect(validateGeneratedBuild(config, metadata, []).ok).toBe(false);
+    expect(validateGeneratedBuild(config, metadata, clientBundle("https://eu.i.posthog.com")).ok).toBe(false);
+    expect(validateGeneratedBuild(config, metadata, clientBundle("https://evil.example")).ok).toBe(false);
+    expect(validateGeneratedBuild(
+      config,
+      metadata,
+      ["const note='VITE_POSTHOG_HOST=https://us.i.posthog.com';"],
+    ).ok).toBe(false);
   });
 });
 
@@ -382,6 +494,8 @@ describe("runQaPreflight", () => {
       },
       runWrangler,
       readGeneratedBuildConfig: async () => qaGeneratedBuildConfig(),
+      readClientBuildMetadata: async () => clientBuildMetadata(),
+      readClientBundleSources: async () => clientBundle(),
       createProbeFile: async () => ({
         path: "/tmp/spoonjoy-qa-preflight.txt",
         body: "spoonjoy qa preflight",
@@ -397,7 +511,20 @@ describe("runQaPreflight", () => {
     const root = await createStaticConfigRoot();
     try {
       await mkdir(path.join(root, "build/server"), { recursive: true });
+      await mkdir(path.join(root, "build/client/.vite"), { recursive: true });
+      await mkdir(path.join(root, "build/client/assets"), { recursive: true });
       await writeFile(path.join(root, "build/server/wrangler.json"), JSON.stringify(qaGeneratedBuildConfig()), "utf8");
+      await writeFile(
+        path.join(root, "build/client/.vite/spoonjoy-build-metadata.json"),
+        JSON.stringify(clientBuildMetadata()),
+        "utf8",
+      );
+      await writeFile(
+        path.join(root, "build/client/assets/entry.js"),
+        clientBundle()[0],
+        "utf8",
+      );
+      await writeFile(path.join(root, "build/client/assets/entry.css"), "body{}", "utf8");
 
       const result = await runQaPreflight(root, {
         env: {

@@ -16,6 +16,11 @@ on:
         required: false
         default: ""
         type: string
+      csp_report_only_break_glass:
+        description: Type ACK_REPORT_ONLY_CSP_ROLLBACK only for an intentional rollback to report-only, absent, or weakened CSP
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   group: production-deploy
@@ -33,6 +38,7 @@ env:
   ROLLBACK_VERSION_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.rollback_version_id || '' }}
   SPOONJOY_RELEASE_MODE: atomic-bootstrap
   SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: ""
+  SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: ${{ github.event_name == 'workflow_dispatch' && inputs.csp_report_only_break_glass || '' }}
 
 jobs:
   deploy:
@@ -123,41 +129,7 @@ jobs:
             fi
           fi
 
-          ci_runs="$(gh run list --workflow .github/workflows/ci.yml --branch main --commit "$SOURCE_SHA" --event push --status success --limit 100 --json databaseId,headSha)"
-          if ! ci_run_id="$(jq -er --arg source_sha "$SOURCE_SHA" '[.[] | select(.headSha == $source_sha)] | first | .databaseId' <<<"$ci_runs")"; then
-            echo "Source SHA has no successful canonical main-branch CI run" >&2
-            exit 1
-          fi
-          ci_jobs="$(gh run view "$ci_run_id" --json jobs)"
-          for required_job in coverage e2e; do
-            if ! jq -e --arg required_job "$required_job" '[.jobs[] | select(.name == $required_job and .conclusion == "success")] | length == 1' <<<"$ci_jobs" >/dev/null; then
-              echo "Canonical CI run $ci_run_id is missing successful job: $required_job" >&2
-              exit 1
-            fi
-          done
-          required_job=advisory
-          if ! jq -e --arg required_job "$required_job" '[.jobs[] | select(.name == $required_job and .conclusion == "success")] | length == 1' <<<"$ci_jobs" >/dev/null; then
-            echo "Canonical CI run $ci_run_id is missing successful job: $required_job" >&2
-            exit 1
-          fi
-
-          for attempt in $(seq 1 30); do
-            storybook_runs="$(gh run list --workflow .github/workflows/storybook.yml --branch main --commit "$SOURCE_SHA" --event push --status success --limit 100 --json databaseId,headSha)"
-            storybook_run_id="$(jq -er --arg source_sha "$SOURCE_SHA" '[.[] | select(.headSha == $source_sha)] | first | .databaseId' <<<"$storybook_runs" 2>/dev/null || true)"
-            if [ -n "$storybook_run_id" ]; then
-              break
-            fi
-            if [ "$attempt" -eq 30 ]; then
-              echo "Source SHA has no successful canonical Storybook run" >&2
-              exit 1
-            fi
-            sleep 10
-          done
-          storybook_jobs="$(gh run view "$storybook_run_id" --json jobs)"
-          if ! jq -e '[.jobs[] | select(.name == "build-storybook" and .conclusion == "success")] | length == 1' <<<"$storybook_jobs" >/dev/null; then
-            echo "Canonical Storybook run $storybook_run_id is missing successful build-storybook" >&2
-            exit 1
-          fi
+          node scripts/workflow-security.mjs validate-production-deploy-source
 
       - name: Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -185,12 +157,8 @@ jobs:
           CLOUDFLARE_WORKERS_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
           SPOONJOY_RELEASE_SHA: ${{ env.SOURCE_SHA }}
           SPOONJOY_MCP_CANARY_BASE_URL: https://spoonjoy.app
-        run: |
-          if [ -n "$ROLLBACK_VERSION_ID" ]; then
-            pnpm run deploy:auto -- --rollback-version-id "$ROLLBACK_VERSION_ID"
-          else
-            pnpm run deploy:auto
-          fi
+          SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: ${{ env.SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS }}
+        run: node scripts/workflow-security.mjs run-production-deploy
 
       - name: Record release source
         if: always()
@@ -211,7 +179,7 @@ jobs:
           artifact_path=mcp-oauth-canary-artifacts/production-release.json
           artifact_valid=0
           if [ -f "$artifact_path" ] && jq -e --arg source_sha "$SOURCE_SHA" --arg release_mode "$SPOONJOY_RELEASE_MODE" --arg protocol_boundary_sha "$SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA" 'type == "object" and ((keys - ["candidateVersionId", "databaseRollbackSupported", "deploymentStrategy", "failure", "migrationApply", "phase", "previousVersionId", "protocolV1BoundarySha", "releaseMode", "reviewedMigrations", "rollbackFailure", "sourceSha", "status", "treeHash"]) | length == 0) and ((["databaseRollbackSupported", "deploymentStrategy", "migrationApply", "phase", "releaseMode", "reviewedMigrations", "sourceSha", "status"] - keys) | length == 0) and (.sourceSha == $source_sha) and (.releaseMode == $release_mode) and (.deploymentStrategy == (if $release_mode == "protocol-v1-canary" then "gradual" else "atomic" end)) and (.databaseRollbackSupported == false) and (if $protocol_boundary_sha == "" then has("protocolV1BoundarySha") | not else .protocolV1BoundarySha == $protocol_boundary_sha end)' "$artifact_path" >/dev/null; then
-            if jq -e 'def sanitized_failure: . as $failure | type == "string" and (length > 0 and length <= 500) and test("^\\S(?:.*\\S)?$") and (test("\\s{2,}") | not) and (test("[\u0000-\u001f\u007f]") | not) and (test("Bearer\\s+\\S+"; "i") | not) and (test("\\b(token|secret|password|authorization|api[_-]?key)\\s*[=:]\\s*\\S+"; "i") | not) and (test("\\b[A-Za-z0-9_-]{16,}\\.[A-Za-z0-9_-]{16,}\\.[A-Za-z0-9_-]{16,}\\b") | not) and all([($ENV.CLOUDFLARE_D1_API_TOKEN // ""), ($ENV.CLOUDFLARE_WORKERS_API_TOKEN // "")][]; . as $credential | length == 0 or ($failure | contains($credential) | not)); (.status | IN("promoted", "rollback_promoted", "failed_before_stage", "rolled_back", "rollback_failed", "forward_repair_required")) and (.phase | IN("validate", "provenance", "initial_preflight", "build", "post_build_provenance", "migration_list", "migration_review", "migration_apply", "full_preflight", "current_deployment", "deployment_revalidation", "version_snapshot", "version_upload", "version_lookup", "stage_revalidation", "promotion_revalidation", "rollback_version_lookup", "rollback_current_deployment", "rollback_already_active", "protocol_ancestry", "rollback_protocol_ancestry", "active_version_mapping", "rollback_active_version_mapping", "stage", "canary", "promote", "atomic_deploy", "verify_promotion", "verify_rollback", "bootstrap_probe", "artifact", "complete")) and (.sourceSha | type == "string" and test("^[0-9a-f]{40}$")) and (if has("treeHash") then (.treeHash | type == "string" and test("^[0-9a-f]{40}$")) else true end) and (if has("previousVersionId") then (.previousVersionId | type == "string" and test("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")) else true end) and (if has("candidateVersionId") then (.candidateVersionId | type == "string" and test("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")) else true end) and (.migrationApply | IN("not_started", "not_needed", "attempted", "succeeded", "failed")) and (.reviewedMigrations | type == "array") and (all(.reviewedMigrations[]; type == "string")) and (if has("failure") then (.failure | sanitized_failure) else true end) and (if has("rollbackFailure") then (.rollbackFailure | sanitized_failure) else true end)' "$artifact_path" >/dev/null; then
+            if jq -e 'def sanitized_failure: . as $failure | type == "string" and (length > 0 and length <= 500) and test("^\\S(?:.*\\S)?$") and (test("\\s{2,}") | not) and (test("[\u0000-\u001f\u007f]") | not) and (test("Bearer\\s+\\S+"; "i") | not) and (test("\\b(token|secret|password|authorization|api[_-]?key)\\s*[=:]\\s*\\S+"; "i") | not) and (test("\\b[A-Za-z0-9_-]{16,}\\.[A-Za-z0-9_-]{16,}\\.[A-Za-z0-9_-]{16,}\\b") | not) and all([($ENV.CLOUDFLARE_D1_API_TOKEN // ""), ($ENV.CLOUDFLARE_WORKERS_API_TOKEN // "")][]; . as $credential | length == 0 or ($failure | contains($credential) | not)); (.status | IN("promoted", "rollback_promoted", "failed_before_stage", "rolled_back", "rollback_failed", "forward_repair_required")) and (.phase | IN("validate", "provenance", "initial_preflight", "build", "post_build_posthog", "post_build_provenance", "migration_list", "migration_review", "migration_apply", "full_preflight", "current_deployment", "deployment_revalidation", "version_snapshot", "version_upload", "version_lookup", "stage_revalidation", "promotion_revalidation", "rollback_version_lookup", "rollback_current_deployment", "rollback_already_active", "protocol_ancestry", "rollback_protocol_ancestry", "active_version_mapping", "rollback_active_version_mapping", "stage", "canary", "candidate_csp", "promote", "atomic_deploy", "verify_promotion", "verify_rollback", "bootstrap_probe", "artifact", "complete")) and (.sourceSha | type == "string" and test("^[0-9a-f]{40}$")) and (if has("treeHash") then (.treeHash | type == "string" and test("^[0-9a-f]{40}$")) else true end) and (if has("previousVersionId") then (.previousVersionId | type == "string" and test("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")) else true end) and (if has("candidateVersionId") then (.candidateVersionId | type == "string" and test("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")) else true end) and (.migrationApply | IN("not_started", "not_needed", "attempted", "succeeded", "failed")) and (.reviewedMigrations | type == "array") and (all(.reviewedMigrations[]; type == "string")) and (if has("failure") then (.failure | sanitized_failure) else true end) and (if has("rollbackFailure") then (.rollbackFailure | sanitized_failure) else true end)' "$artifact_path" >/dev/null; then
               if jq -e '(all(.reviewedMigrations[]; (test("^[0-9]{4}_[A-Za-z0-9][A-Za-z0-9_.-]*[.]sql$") and (contains("..") | not)))) and ((.reviewedMigrations | unique | length) == (.reviewedMigrations | length)) and (if (has("previousVersionId") and has("candidateVersionId")) then (if .phase == "rollback_already_active" then .previousVersionId == .candidateVersionId else .previousVersionId != .candidateVersionId end) else true end) and (if .migrationApply == "not_needed" then (.reviewedMigrations | length) == 0 elif (.migrationApply | IN("attempted", "succeeded", "failed")) then (.reviewedMigrations | length) > 0 else true end)' "$artifact_path" >/dev/null; then
                 if jq -e --arg release_mode "$SPOONJOY_RELEASE_MODE" '
                   (
@@ -226,7 +194,7 @@ jobs:
                     else
                       (.status | IN("rollback_promoted", "rolled_back", "rollback_failed") | not) and
                       (if .status == "failed_before_stage" then
-                        ((.phase | IN("validate", "provenance", "initial_preflight", "build", "post_build_provenance", "migration_list", "migration_review", "current_deployment", "version_snapshot")) or
+                        ((.phase | IN("validate", "provenance", "initial_preflight", "build", "post_build_posthog", "post_build_provenance", "migration_list", "migration_review", "current_deployment", "version_snapshot")) or
                           (.phase == "full_preflight" and .migrationApply == "not_needed") or
                           (.phase == "deployment_revalidation" and (.migrationApply | IN("not_started", "not_needed"))))
                       else true end) and
@@ -243,29 +211,29 @@ jobs:
                         (has("failure") | not) and (has("rollbackFailure") | not) and
                         .migrationApply == "not_needed" and (.reviewedMigrations | length) == 0)
                     elif .status == "failed_before_stage" then
-                      ((.phase | IN("validate", "provenance", "initial_preflight", "build", "post_build_provenance", "migration_list", "migration_review", "full_preflight", "current_deployment", "deployment_revalidation", "version_snapshot", "version_upload", "version_lookup", "stage_revalidation", "rollback_version_lookup", "rollback_current_deployment", "rollback_already_active", "protocol_ancestry", "rollback_protocol_ancestry", "active_version_mapping", "rollback_active_version_mapping")) and
+                      ((.phase | IN("validate", "provenance", "initial_preflight", "build", "post_build_posthog", "post_build_provenance", "migration_list", "migration_review", "full_preflight", "current_deployment", "deployment_revalidation", "version_snapshot", "version_upload", "version_lookup", "stage_revalidation", "rollback_version_lookup", "rollback_current_deployment", "rollback_already_active", "protocol_ancestry", "rollback_protocol_ancestry", "active_version_mapping", "rollback_active_version_mapping")) and
                         has("failure") and (has("rollbackFailure") | not) and
                         (if (.phase | IN("protocol_ancestry", "active_version_mapping")) then .migrationApply == "not_started"
                         elif (.phase | IN("rollback_version_lookup", "rollback_current_deployment", "rollback_already_active", "rollback_protocol_ancestry", "rollback_active_version_mapping")) then .migrationApply == "not_needed"
                         elif (.phase | IN("validate", "provenance")) then
                           (if $release_mode == "protocol-v1-canary" then (.migrationApply | IN("not_started", "not_needed")) else .migrationApply == "not_started" end)
-                        elif (.phase | IN("initial_preflight", "build", "post_build_provenance", "migration_list", "migration_review", "current_deployment", "version_snapshot")) then .migrationApply == "not_started"
+                        elif (.phase | IN("initial_preflight", "build", "post_build_posthog", "post_build_provenance", "migration_list", "migration_review", "current_deployment", "version_snapshot")) then .migrationApply == "not_started"
                         elif .phase == "deployment_revalidation" then (.migrationApply | IN("not_started", "not_needed", "succeeded"))
                         else (.migrationApply | IN("not_needed", "succeeded"))
                         end) and
-                        (if (.phase | IN("initial_preflight", "build", "post_build_provenance", "migration_list", "migration_review", "migration_apply", "full_preflight", "current_deployment", "deployment_revalidation", "version_snapshot", "version_upload", "version_lookup", "stage_revalidation", "rollback_version_lookup", "rollback_current_deployment", "rollback_already_active", "protocol_ancestry", "rollback_protocol_ancestry", "active_version_mapping", "rollback_active_version_mapping")) then has("treeHash") else (has("treeHash") | not) end) and
+                        (if (.phase | IN("initial_preflight", "build", "post_build_posthog", "post_build_provenance", "migration_list", "migration_review", "migration_apply", "full_preflight", "current_deployment", "deployment_revalidation", "version_snapshot", "version_upload", "version_lookup", "stage_revalidation", "rollback_version_lookup", "rollback_current_deployment", "rollback_already_active", "protocol_ancestry", "rollback_protocol_ancestry", "active_version_mapping", "rollback_active_version_mapping")) then has("treeHash") else (has("treeHash") | not) end) and
                         (if (.phase | IN("rollback_current_deployment", "migration_review")) then true
                         elif (.phase | IN("version_snapshot", "migration_apply", "full_preflight", "deployment_revalidation", "version_upload", "version_lookup", "stage_revalidation", "rollback_already_active", "protocol_ancestry", "rollback_protocol_ancestry", "active_version_mapping", "rollback_active_version_mapping")) then has("previousVersionId")
                         else (has("previousVersionId") | not)
                         end) and
                         (if (.phase | IN("stage_revalidation", "rollback_current_deployment", "rollback_already_active", "rollback_protocol_ancestry", "rollback_active_version_mapping")) then has("candidateVersionId") else (has("candidateVersionId") | not) end))
                     elif .status == "rolled_back" then
-                      ((.phase | IN("stage", "canary", "promotion_revalidation", "promote", "verify_promotion", "artifact")) and
+                      ((.phase | IN("stage", "canary", "candidate_csp", "promotion_revalidation", "promote", "verify_promotion", "artifact")) and
                         has("treeHash") and has("previousVersionId") and has("candidateVersionId") and
                         has("failure") and (has("rollbackFailure") | not) and
                         (.migrationApply | IN("not_needed", "succeeded")))
                     elif .status == "rollback_failed" then
-                      ((.phase | IN("stage", "canary", "promotion_revalidation", "promote", "verify_promotion", "artifact")) and
+                      ((.phase | IN("stage", "canary", "candidate_csp", "promotion_revalidation", "promote", "verify_promotion", "artifact")) and
                         has("treeHash") and has("previousVersionId") and has("candidateVersionId") and
                         has("failure") and has("rollbackFailure") and
                         (.migrationApply | IN("not_needed", "succeeded")))
@@ -284,7 +252,7 @@ jobs:
                         end))
                     end
                   ) and
-                  (if (.phase | IN("validate", "provenance", "initial_preflight", "build", "post_build_provenance", "migration_list")) then
+                  (if (.phase | IN("validate", "provenance", "initial_preflight", "build", "post_build_posthog", "post_build_provenance", "migration_list")) then
                     (.reviewedMigrations | length) == 0
                   elif .phase == "migration_review" then
                     (.reviewedMigrations | length) > 0

@@ -24,7 +24,6 @@ export default defineConfig({
     include: ["test/workers/**/*.test.ts"],
     exclude: ["test/workers/app.test.ts"],
     setupFiles: ["./vitest.workers.setup.ts"],
-    passWithNoTests: true,
     fileParallelism: false,
     maxWorkers: 1,
     coverage: {

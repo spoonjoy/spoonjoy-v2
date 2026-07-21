@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import { test, expect } from "../fixtures";
 
 /**
@@ -11,26 +12,35 @@ import { test, expect } from "../fixtures";
  * Cloudflare D1 binding via `getPlatformProxy`), so it surfaces the runtime
  * failure that unit tests missed.
  */
+async function addRecipeStep(page: Page, index: number) {
+  const stepCards = page.locator('article[aria-label^="Step"]');
+  const addStepButton = page.getByRole('button', { name: /add step/i }).first();
+  await expect(async () => {
+    if (await stepCards.count() <= index) {
+      await addStepButton.click();
+    }
+    await expect(stepCards).toHaveCount(index + 1, { timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
+  return stepCards.nth(index);
+}
+
 test.describe('Create recipe flow', () => {
-  test('demo user can create a minimal recipe from the new-recipe form', async ({ page }) => {
+  test('disposable user can create a minimal recipe from the new-recipe form', async ({ page }) => {
     // Visit the create-recipe page (auth comes from storageState).
     await page.goto('/recipes/new');
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
 
-    // Fill in the title — keep it unique so reruns don't trip the
-    // active-recipe-title uniqueness validator.
+    const stepCard = await addRecipeStep(page, 0);
+
+    // Fill the controlled title after the client-only step interaction proves
+    // hydration is complete, and keep it unique for the title validator.
     const uniqueTitle = `e2e create recipe ${Date.now()}`;
     const titleInput = page.getByRole('textbox', { name: 'Title' }).first();
-    await expect(titleInput).toBeVisible();
     await titleInput.fill(uniqueTitle);
-
-    // Add a step.
-    const addStepButton = page.getByRole('button', { name: /add step/i }).first();
-    await expect(addStepButton).toBeVisible();
-    await addStepButton.click();
+    await expect(titleInput).toHaveValue(uniqueTitle);
 
     // Fill in the step instructions.
-    const instructions = page.getByLabel('Instructions').first();
+    const instructions = stepCard.getByLabel('Instructions');
     await expect(instructions).toBeVisible();
     await instructions.fill('Mix everything together and cook until done.');
 
@@ -61,19 +71,21 @@ test.describe('Create recipe flow', () => {
     await expect(page.getByRole('heading', { name: uniqueTitle })).toBeVisible({ timeout: 10_000 });
   });
 
-  test('demo user can reorder draft recipe steps by dragging the step handle', async ({ page }) => {
+  test('disposable user can reorder draft recipe steps by dragging the step handle', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 2400 });
     await page.goto('/recipes/new');
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
 
-    await page.getByRole('textbox', { name: 'Title' }).first().fill(`e2e drag recipe ${Date.now()}`);
-
-    const addStepButton = page.getByRole('button', { name: /add step/i }).first();
     const stepCopies = ['First drag step', 'Second drag step'];
 
     for (const [index, copy] of stepCopies.entries()) {
-      await addStepButton.click();
-      const stepCard = page.locator('article[aria-label^="Step"]').nth(index);
+      const stepCard = await addRecipeStep(page, index);
+      if (index === 0) {
+        const title = page.getByRole('textbox', { name: 'Title' }).first();
+        const uniqueTitle = `e2e drag recipe ${Date.now()}`;
+        await title.fill(uniqueTitle);
+        await expect(title).toHaveValue(uniqueTitle);
+      }
       await stepCard.getByLabel(/instructions/i).fill(copy);
       await stepCard.getByRole('button', { name: /^save$/i }).click();
     }

@@ -9,7 +9,10 @@ Spoonjoy v2 deploys to Cloudflare Workers with D1 for data and R2 for uploaded p
 | Binding | Type | Purpose |
 | --- | --- | --- |
 | `DB` | D1 database | Prisma-backed application data |
+| `COOK_SESSIONS` | Durable Object namespace | SQLite-backed cook-session lifecycle; bootstrap releases expose only the bounded verification probe |
 | `PHOTOS` | R2 bucket | Profile and recipe image uploads served through `/photos/*` |
+
+The top-level and QA `migrations` arrays must retain the `v1_cook_session` tag with `new_sqlite_classes: ["CookSession"]`. The bootstrap release enables its public probe only long enough to verify the new namespace; the immediately following product-activation release removes that public route while preserving the binding and migration. Bootstrap requests require an empty body, a Cloudflare client IP, and the configured auth IP rate limiter.
 
 Create first-time production resources with the commands below. R2 must first be enabled in Cloudflare Dashboard > R2 Object Storage; if it is not enabled, Wrangler returns `10042: Please enable R2 through the Cloudflare Dashboard`.
 
@@ -31,7 +34,7 @@ QA resources:
 - D1 database: `spoonjoy-qa`
 - R2 bucket: `spoonjoy-photos-qa`
 - Rate-limit namespaces: `2001`, `2002`, `2003`
-- Disposable seed namespace: `sj-qa-demo`
+- Disposable seed namespace: `codex-qa-seed-`
 - Disposable smoke users: `codex-smoke-...@example.com`
 
 First-time QA resource creation:
@@ -55,6 +58,7 @@ Optional QA secrets and vars:
 
 - Set `POSTHOG_DISABLED=true` in QA unless you are intentionally testing server telemetry and PostHog alerts.
 - Use `IMAGE_PROVIDER_PRIMARY=gemini`, `IMAGE_PROVIDER_FALLBACKS=openai`, and `GEMINI_IMAGE_MODEL=gemini-3.1-flash-image` when QA should exercise the same image-provider policy as production.
+- Keep `SPOONJOY_CSP_MODE=enforce` in QA. QA is the proof environment for the blocking `Content-Security-Policy` header before the same exact source SHA is released to production.
 - OAuth callback URLs must include the QA origin for Google/GitHub providers when those providers are enabled in QA. Apple OAuth callback verification remains production-only because the Apple Service ID is registered to the production return URL.
 - WebAuthn uses the request origin as RP origin, so QA passkey testing must happen on `https://spoonjoy-v2-qa.mendelow-studio.workers.dev`.
 
@@ -70,7 +74,7 @@ pnpm run deploy:qa
 pnpm run smoke:qa
 ```
 
-`pnpm run smoke:qa` passes `--target-env qa`, creates a `codex-smoke-` user, cleans it from QA D1 with `--env qa`, and verifies the user count returns to zero. Do not run broad production cleanup. Production smoke cleanup must stay narrow to the one disposable `codex-smoke-` account created by that smoke run.
+`pnpm run qa:seed` creates a per-run `codex-qa-seed-` user and tears it down by default. `pnpm run smoke:qa` passes `--target-env qa`, creates a `codex-smoke-` user, cleans it from QA D1 with `--env qa`, and verifies the user count returns to zero. Do not run broad production cleanup. Production smoke cleanup must stay narrow to the one disposable `codex-smoke-` account created by that smoke run.
 
 ## Cleanup Target Contract
 
@@ -156,6 +160,41 @@ Notes:
 - Optional ingredient parsing runtime knobs are `INGREDIENT_PARSE_PROVIDER`, `INGREDIENT_PARSE_MODEL`, `INGREDIENT_PARSE_TIMEOUT_MS`, and `INGREDIENT_PARSE_MAX_RETRIES`. The safe default is OpenAI with `gpt-4o-mini`, an 8000ms timeout, and 1 retry.
 - Optional recipe-image provider runtime knobs are `IMAGE_PROVIDER_PRIMARY`, `IMAGE_PROVIDER_FALLBACKS`, `GEMINI_IMAGE_MODEL`, and `GEMINI_IMAGE_TIMEOUT_MS`. The safe default is configured providers in `openai,gemini` order with a 30000ms Gemini request timeout; set `IMAGE_PROVIDER_PRIMARY=gemini`, `IMAGE_PROVIDER_FALLBACKS=openai`, and `GEMINI_IMAGE_MODEL=gemini-3.1-flash-image` to route image stylization through Gemini first.
 
+### CSP Enforcement And Rollback
+
+`SPOONJOY_CSP_MODE=enforce` emits the blocking `Content-Security-Policy` header. QA and production source config intentionally set that value so release owners can prove the exact SHA in QA first, then release the same SHA to production. The policy keeps required runtime sources for fonts, the configured HTTPS `VITE_POSTHOG_HOST` ingestion origin and matching PostHog assets origin, legacy/imported HTTPS images, `data:`/`blob:` images, and the `/csp-report` violation sink.
+
+After deployment, verify public pages, authenticated Photo Studio, OAuth provider starts/callbacks, MCP, and API surfaces return `Content-Security-Policy`, `Reporting-Endpoints: csp-endpoint="/csp-report"`, and `X-Spoonjoy-Worker-Version` for the expected exact SHA. They should not return `Content-Security-Policy-Report-Only` during an enforcing release.
+
+The one-commit rollback changes `SPOONJOY_CSP_MODE` from `enforce` to `report-only` in the affected `wrangler.json` environment. Ordinary push and pull-request CI intentionally remain fail-closed and do not receive break-glass state. An authorized operator must dispatch the CI workflow against the exact rollback branch head; GitHub records the actor, run ID, ref, SHA, and acknowledgement, and every CI job rejects a checkout that differs from that SHA. Dispatch jobs are named `report-only-coverage`, `report-only-workers-coverage`, `report-only-e2e`, and `report-only-advisory`, so they cannot satisfy canonical required checks:
+
+```bash
+ROLLBACK_REF=worker/report-only-csp
+ROLLBACK_SHA="$(git rev-parse "$ROLLBACK_REF")"
+gh workflow run ci.yml --ref "$ROLLBACK_REF" \
+  -f source_sha="$ROLLBACK_SHA" \
+  -f csp_report_only_break_glass=ACK_REPORT_ONLY_CSP_ROLLBACK
+```
+
+After the reviewed rollback commit reaches `main`, run the same exact-SHA authorization on `main`; this is the successful report-only CI run consumed by the production release validator:
+
+```bash
+ROLLBACK_SHA="$(git rev-parse origin/main)"
+gh workflow run ci.yml --ref main \
+  -f source_sha="$ROLLBACK_SHA" \
+  -f csp_report_only_break_glass=ACK_REPORT_ONLY_CSP_ROLLBACK
+```
+
+Only after that run's `report-only-coverage`, `report-only-workers-coverage`, `report-only-e2e`, and `report-only-advisory` jobs and the exact-SHA Storybook run pass, dispatch the protected production workflow:
+
+```bash
+gh workflow run production-deploy.yml --ref main \
+  -f source_sha="$ROLLBACK_SHA" \
+  -f csp_report_only_break_glass=ACK_REPORT_ONLY_CSP_ROLLBACK
+```
+
+The production workflow independently checks the audited CI dispatch before release. Local preflight/deploy commands that inspect the same rollback commit must also run with `SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS=ACK_REPORT_ONLY_CSP_ROLLBACK`. This path restores `Content-Security-Policy-Report-Only` while preserving nonce behavior and violation telemetry. Remove the break-glass input/env and restore `SPOONJOY_CSP_MODE=enforce` in the follow-up commit.
+
 ### Optional PostHog Telemetry
 
 To enable server lifecycle telemetry and error capture:
@@ -234,6 +273,7 @@ The preflight verifies:
 - `app/cloudflare-env.d.ts` types the Cloudflare bindings and documented secrets.
 - README/deployment docs mention required bindings, secrets, and deploy commands.
 - README/deployment docs mention optional PostHog client setup, server lifecycle telemetry, `POSTHOG_KEY`, `POSTHOG_DISABLED`, `VITE_POSTHOG_KEY`, and `VITE_POSTHOG_DISABLED`.
+- README/deployment docs mention `SPOONJOY_CSP_MODE`, `Content-Security-Policy-Report-Only`, the one-commit rollback, `SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS`, and `ACK_REPORT_ONLY_CSP_ROLLBACK`.
 - Numbered SQL migrations exist in `migrations/`.
 - **Remote D1 migrations**: the preflight invokes `pnpm exec wrangler d1 migrations list DB --remote` and FAILS if any migrations are pending against the remote database. This guards against deploying application code that depends on a schema the remote database has not yet applied (the failure mode that caused the 2026-05-10 `/search` 500 incident).
 
@@ -297,7 +337,7 @@ The workflow runs `scripts/deploy-production-canary.ts` using its checked-in lif
 
 The command writes a sanitized `production-release.json` under `mcp-oauth-canary-artifacts/` on success or failure. It records the release mode and strategy, Git tree, exact known Worker identities, reviewed migration names, migration-apply state, and the fact that database rollback is unsupported; it never contains environment values, command output, access tokens, or stack traces. The workflow validates the complete phase/status/provenance tuple before preserving the artifact. A missing, malformed, contradictory, or unexpected artifact is atomically replaced with a sanitized unknown-state artifact rather than being uploaded as evidence.
 
-For an intentional Worker rollback in `protocol-v1-canary`, manually dispatch the production workflow with the historical `source_sha` and its exact source-tagged `rollback_version_id`. The workflow checks out current `main` tooling, resolves both known IDs with exact version lookups, confirms that both sources are protocol-v1 descendants, deploys the known version directly, and verifies public convergence. It never executes scripts from the historical commit, never crosses the protocol boundary, and does not attempt to roll D1 back. Rollback dispatches are rejected while either atomic mode is active. Cloudflare permits gradual deployment only among its most recent 100 uploaded versions, so select a target within that platform limit.
+For an intentional Worker rollback in `protocol-v1-canary`, manually dispatch the production workflow with the historical `source_sha` and its exact source-tagged `rollback_version_id`. Current `main` tooling resolves both known IDs with exact version lookups, confirms that both sources descend from the protocol-v1 boundary, stages it at 0% beside the current version at 100%, and inspects the exact rollback candidate CSP through Cloudflare's version override before promotion. A valid enforcing CSP needs no break-glass acknowledgement. A report-only, absent, or weakened CSP requires the exact `ACK_REPORT_ONLY_CSP_ROLLBACK` workflow acknowledgement; unavailable or inconclusive inspection fails closed, restores the prior 100% deployment, and verifies convergence. The workflow never executes scripts from the historical commit, never crosses the protocol boundary, and does not attempt to roll D1 back. Rollback dispatches are rejected while either atomic mode is active, and the target must remain within Cloudflare's most recent 100 uploaded versions.
 
 D1 migrations are not Worker-versioned and cannot be rolled back by a Worker traffic change. Automatic releases therefore accept only additive SQL that remains compatible with the prior Worker version. Destructive schema/data migrations require a separately reviewed maintenance plan and must not be sent through `deploy:auto`.
 

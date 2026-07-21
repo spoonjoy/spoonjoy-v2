@@ -1,11 +1,9 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createRequire } from "node:module";
-import type { DatabaseSync as DatabaseSyncType } from "node:sqlite";
+import DatabaseSync from "better-sqlite3";
+type DatabaseSyncType = InstanceType<typeof DatabaseSync>;
 
-const nodeRequire = createRequire(import.meta.url);
-const { DatabaseSync } = nodeRequire("node:sqlite") as typeof import("node:sqlite");
 
 const MIGRATION_PATH = resolve(
   __dirname,

@@ -240,7 +240,7 @@ jobs:
     expect(literalValue(property(testConfig, "include"))).toEqual(["test/workers/**/*.test.ts"]);
     expect(literalValue(property(testConfig, "exclude"))).toEqual(["test/workers/app.test.ts"]);
     expect(literalValue(property(testConfig, "setupFiles"))).toEqual(["./vitest.workers.setup.ts"]);
-    expect(literalValue(property(testConfig, "passWithNoTests"))).toBe(true);
+    expect(property(testConfig, "passWithNoTests")).toBeUndefined();
     expect(literalValue(property(testConfig, "fileParallelism"))).toBe(false);
     expect(literalValue(property(testConfig, "maxWorkers"))).toBe(1);
     expect(literalValue(property(coverage, "provider"))).toBe("istanbul");

@@ -473,6 +473,31 @@ describe("CookSession lifecycle bootstrap", () => {
     }
   });
 
+  itWithCookSessionNamespace("recovers a partial probe left by an interrupted cleanup", async (namespace) => {
+    const stub = namespace.get(namespace.idFromName("private-probe-recovery"));
+    await runInDurableObject(stub, async (_instance, state) => {
+      state.storage.sql.exec(
+        "CREATE TABLE __bootstrap_probe (id INTEGER PRIMARY KEY NOT NULL, value TEXT NOT NULL)",
+      );
+      state.storage.sql.exec("INSERT INTO __bootstrap_probe (id, value) VALUES (1, 'partial')");
+      await state.storage.put("__bootstrap_probe_partial", true);
+      await state.storage.setAlarm(Date.now() + 60_000);
+    });
+
+    const response = await stub.fetch(new Request(
+      "https://cook-session.internal/__bootstrap/probe",
+      {
+        method: "POST",
+        headers: { "X-Spoonjoy-Internal-Probe": "1" },
+        body: JSON.stringify({ version: 1 }),
+      },
+    ));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ ok: true, storage: "sqlite", residue: 0 });
+    await expectDurableObjectStorageEmpty(stub);
+  });
+
   itWithCookSessionNamespace("returns 404 for malformed private probe requests without storage residue", async (namespace) => {
     const stub = namespace.get(namespace.idFromName("private-probe-rejections"));
     await seedDurableObjectStorage(stub);
@@ -536,6 +561,7 @@ describe("CookSession lifecycle bootstrap", () => {
     const response = await worker.fetch(
       new Request(`${TEST_ORIGIN}/.well-known/spoonjoy-cook-session-bootstrap`, {
         method: "POST",
+        headers: { "CF-Connecting-IP": "203.0.113.50" },
       }),
       {
         ...testEnvironment(),
@@ -579,7 +605,10 @@ describe("CookSession lifecycle bootstrap", () => {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const response = await SELF.fetch(new Request(
         `${TEST_ORIGIN}/.well-known/spoonjoy-cook-session-bootstrap`,
-        { method: "POST" },
+        {
+          method: "POST",
+          headers: { "CF-Connecting-IP": "203.0.113.51" },
+        },
       ));
       expect(response.status).toBe(200);
       expect(response.headers.get("X-Spoonjoy-Worker-Version")).toBe(versionId);

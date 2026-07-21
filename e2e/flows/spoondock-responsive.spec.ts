@@ -1,6 +1,6 @@
-import type { Page } from "@playwright/test";
-import { expect, test } from "../fixtures";
-import { publicRecipeHrefByChef } from "../support/recipes";
+import type { Page } from '@playwright/test';
+import { expect, test } from '../fixtures';
+import { publicRecipeHrefByTitle } from '../support/recipes';
 
 /**
  * SpoonDock responsive audit: every dock variant must fit — without
@@ -21,7 +21,7 @@ const STATIC_ROUTES: { path: string; label: string }[] = [
   { path: '/shopping-list', label: 'shopping list' },
   { path: '/account/settings', label: 'account' },
   { path: '/cookbooks', label: 'cookbooks' },
-  { path: '/users/demo_chef', label: 'users/profile' },
+  { path: '/account/settings', label: 'users/profile' },
 ];
 
 async function getDock(page: Page) {
@@ -81,7 +81,7 @@ for (const width of NARROW_WIDTHS) {
     }
 
     test('recipe detail dock fits (worst case: place + primary + 3 tools)', async ({ page }) => {
-      const href = await publicRecipeHrefByChef(page, 'chef_julia');
+      const href = await publicRecipeHrefByTitle(page, 'Pan-Seared Salmon with Lemon Butter');
       await page.goto(href);
       await page.waitForLoadState('domcontentloaded');
       await assertDockFits(page, `recipe detail @ ${width}px`, width);

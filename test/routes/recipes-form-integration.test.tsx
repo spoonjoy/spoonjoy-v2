@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
@@ -172,15 +172,21 @@ describe("RecipeBuilder Route Integration", () => {
         await screen.findByRole("button", { name: "Create Recipe" });
 
         // Fill out form
-        await user.type(screen.getByLabelText(/^Title$/i), "My New Recipe");
-        await user.type(screen.getByLabelText(/Description/), "A delicious dish");
-        await user.type(screen.getByLabelText(/Servings/), "4");
+        fireEvent.change(screen.getByLabelText(/^Title$/i), {
+          target: { value: "My New Recipe" },
+        });
+        fireEvent.change(screen.getByLabelText(/Description/), {
+          target: { value: "A delicious dish" },
+        });
+        fireEvent.change(screen.getByLabelText(/Servings/), {
+          target: { value: "4" },
+        });
 
         // Upload an image via RecipeImageUpload's file input
         const file = new File(["test image content"], "test.jpg", { type: "image/jpeg" });
         // Find the file input from RecipeImageUpload (aria-label="Upload recipe image")
         const uploadInput = screen.getByLabelText(/Upload recipe image/i);
-        await user.upload(uploadInput, file);
+        fireEvent.change(uploadInput, { target: { files: [file] } });
 
         // Submit form
         await user.click(screen.getByRole("button", { name: "Create Recipe" }));

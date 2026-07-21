@@ -75,6 +75,10 @@ describe("ephemeral Playwright run ownership", () => {
     ]));
     const sql = args.at(-1)!;
     expect(sql).toContain("'client-a', 'client-b'");
+    expect(sql).toContain("__e2e_exact_credentials");
+    expect(sql).toContain("__e2e_exact_connections");
+    expect(sql).toContain("__e2e_exact_idempotency_keys");
+    expect(sql).toContain("__e2e_exact_mutation_tombstones");
     expect(sql).not.toContain("clientName");
     expect(sql).not.toContain("redirectUris");
     expect(existsSync(paths.manifestPath)).toBe(false);
@@ -653,6 +657,26 @@ describe("ephemeral Playwright run ownership", () => {
     await expect(runWithStdout(
       `\u001b[32m4.112.0\u001b[0m)\n${JSON.stringify([{ results: [{ remainingCount: 0 }] }, { results: [] }])}\n`,
     )).resolves.toBeUndefined();
+
+    await prepareClient("client-stderr");
+    await expect(cleanupE2eRunAfterServer({
+      projectRoot: tempProject,
+      runId,
+      runCommand: vi.fn(async () => ({
+        stdout: JSON.stringify([{ results: [{ remainingCount: 0 }] }, { results: [] }]),
+        stderr: "wrangler teardown diagnostic\n",
+      })),
+    })).rejects.toThrow(/stderr/i);
+
+    await prepareClient("client-undefined-stderr");
+    await expect(cleanupE2eRunAfterServer({
+      projectRoot: tempProject,
+      runId,
+      runCommand: vi.fn(async () => ({
+        stdout: JSON.stringify([{ results: [{ remainingCount: 0 }] }, { results: [] }]),
+        stderr: undefined,
+      })),
+    })).resolves.toBeUndefined();
   });
 
   it("preserves server and cleanup failures independently and together", async () => {
@@ -763,15 +787,35 @@ describe("ephemeral Playwright run ownership", () => {
     const starter = await import("../../e2e/support/start-ephemeral-wrangler.mjs");
 
     expect(typeof teardown.runGlobalTeardown).toBe("function");
-    await expect(teardown.runGlobalTeardown({ env: {}, projectRoot, runTeardown: vi.fn() }))
+    const removeMissingRunAuth = vi.fn();
+    await expect(teardown.runGlobalTeardown({
+      env: {},
+      projectRoot,
+      runTeardown: vi.fn(),
+      removeAuthArtifacts: removeMissingRunAuth,
+    }))
       .rejects.toThrow(/SPOONJOY_E2E_RUN_ID/);
+    expect(removeMissingRunAuth).toHaveBeenCalledOnce();
     const runTeardown = vi.fn(async () => undefined);
+    const removeAuthArtifacts = vi.fn();
     await teardown.runGlobalTeardown({
       env: { SPOONJOY_E2E_RUN_ID: "e2e-run-eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" },
       projectRoot,
       runTeardown,
+      removeAuthArtifacts,
     });
     expect(runTeardown).toHaveBeenCalledOnce();
+    expect(removeAuthArtifacts).toHaveBeenCalledOnce();
+
+    const teardownFailure = new Error("ephemeral teardown failed");
+    const removeFailedRunAuth = vi.fn();
+    await expect(teardown.runGlobalTeardown({
+      env: { SPOONJOY_E2E_RUN_ID: "e2e-run-dddddddd-dddd-4ddd-8ddd-dddddddddddd" },
+      projectRoot,
+      runTeardown: vi.fn(async () => { throw teardownFailure; }),
+      removeAuthArtifacts: removeFailedRunAuth,
+    })).rejects.toBe(teardownFailure);
+    expect(removeFailedRunAuth).toHaveBeenCalledOnce();
 
     expect(typeof starter.requiredArg).toBe("function");
     expect(() => starter.requiredArg([], "--run-id")).toThrow(/Missing --run-id/);
@@ -790,7 +834,8 @@ describe("ephemeral Playwright run ownership", () => {
     const processLike = new FakeProcess();
     const child = Object.assign(new EventEmitter(), { pid: 321, kill: vi.fn() });
     const spawnChild = vi.fn(() => child);
-    const runPolicy = vi.fn(async (_argv: string[], runtime: { spawn: Function; env: Record<string, string> }) => {
+    const runPolicy = vi.fn(async (argv: string[], runtime: { spawn: Function; env: Record<string, string> }) => {
+      expect(argv).toEqual(expect.arrayContaining(["--log-level", "error"]));
       runtime.spawn("pnpm", [], {});
       expect(runtime.env.NO_COLOR).toBeUndefined();
       expect(runtime.env.KEEP).toBe("yes");
@@ -885,11 +930,16 @@ describe("ephemeral Playwright run ownership", () => {
 });
 
 describe("Playwright data-ownership wiring", () => {
-  it("does not persist the mobile seed-recipe visual edit", () => {
+  it("persists the mobile edit only on a disposable recipe and removes it afterward", () => {
     const source = readFileSync(join(projectRoot, "e2e/flows/mobile-recipebuilder-spoondock.spec.ts"), "utf8");
 
-    expect(source).not.toContain("await saveAction.click()");
+    expect(source).toContain("await page.goto('/recipes/new')");
+    expect(source).toContain("const createTitle = `e2e mobile edit audit ${Date.now()}`");
+    expect(source).toContain("await saveAction.click()");
     expect(source).toContain("await page.reload()");
+    expect(source).toContain("const cleanupResponse = await page.request.post(recipeHref");
+    expect(source).toContain("expect(cleanupResponse.ok()");
+    expect(source).toContain("expect((await page.request.get(recipeHref)).status()).toBe(404)");
   });
 
   it("wires unique OAuth markers, exact ID recording, global teardown, and ephemeral Wrangler state", () => {
@@ -898,9 +948,10 @@ describe("Playwright data-ownership wiring", () => {
 
     expect(oauth).toContain("e2eOauthClientName");
     expect(oauth).toContain("recordE2eOauthClient");
-    expect(oauth).toContain("REDIRECT_URI = 'http://localhost:5197/privacy'");
+    expect(oauth).toContain("REDIRECT_URI = 'https://client.example/oauth/e2e-callback'");
     expect(config).toContain("SPOONJOY_E2E_RUN_ID");
-    expect(config).toContain("globalTeardown");
+    expect(config).toContain("'./e2e/support/global-teardown.ts'");
+    expect(config).not.toContain("'./e2e/global-teardown.ts'");
     expect(config).toContain("start-ephemeral-wrangler");
     expect(config).not.toContain(".dev.vars");
   });

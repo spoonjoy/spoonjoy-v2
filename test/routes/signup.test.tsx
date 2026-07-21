@@ -97,8 +97,8 @@ describe("Signup Route", () => {
       const formData = new FormData();
       formData.set("email", "new@example.com");
       formData.set("username", "newuser");
-      formData.set("password", "password123");
-      formData.set("confirmPassword", "password123");
+      formData.set("password", "Valid-Test-Password-42!");
+      formData.set("confirmPassword", "Valid-Test-Password-42!");
 
       const request = new Request("http://localhost:3000/signup", {
         method: "POST",
@@ -125,8 +125,8 @@ describe("Signup Route", () => {
       const formData = new FormData();
       formData.set("email", "invalid-email");
       formData.set("username", "testuser");
-      formData.set("password", "password123");
-      formData.set("confirmPassword", "password123");
+      formData.set("password", "Valid-Test-Password-42!");
+      formData.set("confirmPassword", "Valid-Test-Password-42!");
 
       const request = new Request("http://localhost:3000/signup", {
         method: "POST",
@@ -148,8 +148,8 @@ describe("Signup Route", () => {
       const formData = new FormData();
       formData.set("email", "test@example.com");
       formData.set("username", "ab");
-      formData.set("password", "password123");
-      formData.set("confirmPassword", "password123");
+      formData.set("password", "Valid-Test-Password-42!");
+      formData.set("confirmPassword", "Valid-Test-Password-42!");
 
       const request = new Request("http://localhost:3000/signup", {
         method: "POST",
@@ -194,7 +194,7 @@ describe("Signup Route", () => {
       const formData = new FormData();
       formData.set("email", "test@example.com");
       formData.set("username", "testuser");
-      formData.set("password", "password123");
+      formData.set("password", "Valid-Test-Password-42!");
       formData.set("confirmPassword", "different123");
 
       const request = new Request("http://localhost:3000/signup", {
@@ -216,13 +216,13 @@ describe("Signup Route", () => {
     it("should return error if email already exists", async () => {
       const existingEmail = faker.internet.email();
       const username = faker.internet.username() + "_" + faker.string.alphanumeric(8);
-      await createUser(db, existingEmail, username, "password123");
+      await createUser(db, existingEmail, username, "Valid-Test-Password-42!");
 
       const formData = new FormData();
       formData.set("email", existingEmail);
       formData.set("username", "newuser_" + faker.string.alphanumeric(8));
-      formData.set("password", "password123");
-      formData.set("confirmPassword", "password123");
+      formData.set("password", "Valid-Test-Password-42!");
+      formData.set("confirmPassword", "Valid-Test-Password-42!");
 
       const request = new Request("http://localhost:3000/signup", {
         method: "POST",
@@ -242,13 +242,13 @@ describe("Signup Route", () => {
 
     it("should return error if username already exists", async () => {
       const existingUsername = "existinguser_" + faker.string.alphanumeric(8);
-      await createUser(db, faker.internet.email(), existingUsername, "password123");
+      await createUser(db, faker.internet.email(), existingUsername, "Valid-Test-Password-42!");
 
       const formData = new FormData();
       formData.set("email", faker.internet.email());
       formData.set("username", existingUsername);
-      formData.set("password", "password123");
-      formData.set("confirmPassword", "password123");
+      formData.set("password", "Valid-Test-Password-42!");
+      formData.set("confirmPassword", "Valid-Test-Password-42!");
 
       const request = new Request("http://localhost:3000/signup", {
         method: "POST",
@@ -273,8 +273,8 @@ describe("Signup Route", () => {
       const formData = new FormData();
       formData.set("email", email);
       formData.set("username", username);
-      formData.set("password", "password123");
-      formData.set("confirmPassword", "password123");
+      formData.set("password", "Valid-Test-Password-42!");
+      formData.set("confirmPassword", "Valid-Test-Password-42!");
 
       const request = new Request("http://localhost:3000/signup", {
         method: "POST",
@@ -331,8 +331,8 @@ describe("Signup Route", () => {
       const formData = new FormData();
       formData.set("email", "not-an-email");
       formData.set("username", "validuser");
-      formData.set("password", "password123");
-      formData.set("confirmPassword", "password123");
+      formData.set("password", "Valid-Test-Password-42!");
+      formData.set("confirmPassword", "Valid-Test-Password-42!");
 
       const request = new Request("http://localhost:3000/signup", {
         method: "POST",
@@ -357,8 +357,8 @@ describe("Signup Route", () => {
       const formData = new FormData();
       formData.set("email", "test@example.com");
       formData.set("username", "ab");
-      formData.set("password", "password123");
-      formData.set("confirmPassword", "password123");
+      formData.set("password", "Valid-Test-Password-42!");
+      formData.set("confirmPassword", "Valid-Test-Password-42!");
 
       const request = new Request("http://localhost:3000/signup", {
         method: "POST",
@@ -382,8 +382,8 @@ describe("Signup Route", () => {
       const formData = new FormData();
       formData.set("email", "");
       formData.set("username", "testuser");
-      formData.set("password", "password123");
-      formData.set("confirmPassword", "password123");
+      formData.set("password", "Valid-Test-Password-42!");
+      formData.set("confirmPassword", "Valid-Test-Password-42!");
 
       const request = new Request("http://localhost:3000/signup", {
         method: "POST",
@@ -405,8 +405,8 @@ describe("Signup Route", () => {
       const formData = new FormData();
       formData.set("email", "test@example.com");
       formData.set("username", "");
-      formData.set("password", "password123");
-      formData.set("confirmPassword", "password123");
+      formData.set("password", "Valid-Test-Password-42!");
+      formData.set("confirmPassword", "Valid-Test-Password-42!");
 
       const request = new Request("http://localhost:3000/signup", {
         method: "POST",

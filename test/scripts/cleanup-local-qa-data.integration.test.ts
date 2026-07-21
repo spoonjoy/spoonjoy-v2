@@ -1,8 +1,8 @@
-import { createRequire } from "node:module";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { DatabaseSync as DatabaseSyncType } from "node:sqlite";
+import DatabaseSync from "better-sqlite3";
+type DatabaseSyncType = InstanceType<typeof DatabaseSync>;
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -12,8 +12,6 @@ import {
   buildScratchCleanupSql,
 } from "../../scripts/cleanup-local-qa-data.mjs";
 
-const nodeRequire = createRequire(import.meta.url);
-const { DatabaseSync } = nodeRequire("node:sqlite") as typeof import("node:sqlite");
 
 const SCRATCH_TABLES = [
   "cleanup_blockers",

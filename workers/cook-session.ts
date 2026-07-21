@@ -60,6 +60,18 @@ function isRecognizedInternalCookRoute(request: Request, url: URL) {
   return false;
 }
 
+async function clearBootstrapProbeStorage(storage: CookSessionStorage) {
+  try {
+    storage.sql.exec("DROP TABLE IF EXISTS __bootstrap_probe");
+  } finally {
+    try {
+      await storage.deleteAll();
+    } finally {
+      await storage.deleteAlarm();
+    }
+  }
+}
+
 export class CookSession {
   constructor(
     private readonly state: CookSessionState,
@@ -84,16 +96,19 @@ export class CookSession {
     }
 
     const { storage } = this.state;
-    storage.sql.exec(
-      "CREATE TABLE __bootstrap_probe (id INTEGER PRIMARY KEY NOT NULL, value TEXT NOT NULL)",
-    );
-    storage.sql.exec("INSERT INTO __bootstrap_probe (id, value) VALUES (1, 'sqlite')");
-    const { value: storageKind } = storage.sql.exec<{ value: string }>(
-      "SELECT value FROM __bootstrap_probe WHERE id = 1",
-    ).one();
-    storage.sql.exec("DROP TABLE __bootstrap_probe");
-    await storage.deleteAll();
-    await storage.deleteAlarm();
+    await clearBootstrapProbeStorage(storage);
+    let storageKind: string;
+    try {
+      storage.sql.exec(
+        "CREATE TABLE __bootstrap_probe (id INTEGER PRIMARY KEY NOT NULL, value TEXT NOT NULL)",
+      );
+      storage.sql.exec("INSERT INTO __bootstrap_probe (id, value) VALUES (1, 'sqlite')");
+      ({ value: storageKind } = storage.sql.exec<{ value: string }>(
+        "SELECT value FROM __bootstrap_probe WHERE id = 1",
+      ).one());
+    } finally {
+      await clearBootstrapProbeStorage(storage);
+    }
     const residue = Array.from(storage.sql.exec(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('_cf_KV', '_cf_METADATA') ORDER BY name",
     )).length;

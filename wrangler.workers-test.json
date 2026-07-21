@@ -28,6 +28,13 @@
       "database_id": "00000000-0000-0000-0000-000000000000"
     }
   ],
+  "ratelimits": [
+    {
+      "name": "AUTH_IP_RATE_LIMITER",
+      "namespace_id": "3001",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ],
   "vars": {
     "NODE_ENV": "test",
     "SPOONJOY_BASE_URL": "https://spoonjoy.test",

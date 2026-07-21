@@ -4,7 +4,7 @@ import {
   e2eOauthClientName,
   recordE2eOauthClient,
 } from '../../scripts/e2e-run-cleanup.mjs';
-import { loginAsSeedUser } from '../support/auth';
+import { loginAsDisposableUser } from '../support/auth';
 
 /**
  * OAuth 2.1 authorize + consent flow against a real browser.
@@ -15,16 +15,16 @@ import { loginAsSeedUser } from '../support/auth';
  * scope-aware consent screen after login, and redirect back to the registered
  * redirect_uri with either a `code` (approve) or `error=access_denied` (deny).
  *
- * The redirect_uri uses a stable same-origin page so the assertion can read the
- * exact callback URL without an intentional failed resource load.
+ * The redirect_uri uses an intercepted external callback so the assertion can
+ * inspect the exact outbound URL and the consent page's form-action CSP.
  *
- * Runs in the `oauth` project (no stored auth state) and uses the shared seed
- * user. Its OAuth graph is registered with the unique Playwright run marker,
- * captured by exact client ID, and removed by global teardown.
+ * Runs in the `oauth` project (no stored auth state) and logs in with the
+ * per-run disposable e2e user created by the setup project. Its OAuth graph is
+ * registered with the unique Playwright run marker, captured by exact client
+ * ID, and removed by global teardown.
  */
 
-const REDIRECT_URI = 'http://localhost:5197/privacy';
-const MCP_RESOURCE = 'https://spoonjoy.app/mcp';
+const REDIRECT_URI = 'https://client.example/oauth/e2e-callback';
 const APPROVE_STATE = 'oauth-e2e-approve-state';
 const DENY_STATE = 'oauth-e2e-deny-state';
 
@@ -62,7 +62,15 @@ async function registerClient(request: APIRequestContext): Promise<string> {
   return body.client_id;
 }
 
-function authorizeUrl(opts: { clientId: string; codeChallenge: string; state: string }): string {
+async function advertisedMcpResource(request: APIRequestContext): Promise<string> {
+  const response = await request.get('/.well-known/oauth-protected-resource/mcp');
+  expect(response.status()).toBe(200);
+  const body = (await response.json()) as { resource?: unknown };
+  expect(body.resource).toMatch(/^https?:\/\/.+\/mcp$/);
+  return body.resource as string;
+}
+
+function authorizeUrl(opts: { clientId: string; codeChallenge: string; state: string; resource: string }): string {
   const params = new URLSearchParams({
     client_id: opts.clientId,
     redirect_uri: REDIRECT_URI,
@@ -71,7 +79,7 @@ function authorizeUrl(opts: { clientId: string; codeChallenge: string; state: st
     code_challenge_method: 'S256',
     scope: 'kitchen:read',
     state: opts.state,
-    resource: MCP_RESOURCE,
+    resource: opts.resource,
   });
   return `/oauth/authorize?${params}`;
 }
@@ -174,13 +182,18 @@ async function expectConsentFitsDesktop(page: Page): Promise<void> {
 }
 
 /**
- * Resolves with the exact callback URL once the native form POST redirects the
- * browser to the registered redirect_uri. The URL is the OAuth contract under
- * test; the page body is otherwise irrelevant.
+ * Resolves with the exact outbound callback request. The host is deliberately
+ * external and intercepted: observing the request proves the consent
+ * document's form-action CSP allowed it without making CI depend on DNS.
  */
-async function waitForCallbackNavigation(page: Page): Promise<URL> {
-  await page.waitForURL((url) => url.href.startsWith(REDIRECT_URI), { timeout: 15_000 });
-  return new URL(page.url());
+async function submitAndReadCallback(page: Page, button: Locator): Promise<URL> {
+  const callbackRequest = page.waitForRequest((request) => request.url().startsWith(REDIRECT_URI));
+  const click = button.click().catch((error: unknown) => {
+    if (!(error instanceof Error) || !error.message.includes('ERR_NAME_NOT_RESOLVED')) throw error;
+  });
+  const request = await callbackRequest;
+  await click;
+  return new URL(request.url());
 }
 
 async function expectNativeSubmitForm(button: Locator): Promise<void> {
@@ -191,12 +204,23 @@ async function expectNativeSubmitForm(button: Locator): Promise<void> {
 }
 
 test.describe('OAuth authorize + consent flow', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route('https://client.example/**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: '<!doctype html><title>OAuth callback intercepted</title>',
+      });
+    });
+  });
+
   test('unauthenticated authorize gates to login, then consent grants a code', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const clientId = await registerClient(page.request);
+    const resource = await advertisedMcpResource(page.request);
     const verifier = randomVerifier();
     const challenge = await pkceChallenge(verifier);
-    const authorize = authorizeUrl({ clientId, codeChallenge: challenge, state: APPROVE_STATE });
+    const authorize = authorizeUrl({ clientId, codeChallenge: challenge, state: APPROVE_STATE, resource });
 
     // Unauthenticated: the authorize endpoint must redirect to /login, carrying
     // the authorize URL forward in redirectTo so we return after signing in.
@@ -204,8 +228,18 @@ test.describe('OAuth authorize + consent flow', () => {
     await expect(page).toHaveURL(/\/login\?redirectTo=/);
     expect(decodeURIComponent(page.url())).toContain('/oauth/authorize');
 
-    // Log in as the seed user; the preserved redirectTo lands us on consent.
-    await loginAsSeedUser(page, /\/oauth\/authorize\?/);
+    // Log in as the disposable e2e user; the preserved redirectTo lands us on consent.
+    const consentDocument = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === '/oauth/authorize'
+        && response.request().method() === 'GET'
+        && response.headers()['content-type']?.includes('text/html') === true;
+    });
+    await loginAsDisposableUser(page, /\/oauth\/authorize\?/);
+    const consentResponse = await consentDocument;
+    expect(consentResponse.headers()['content-security-policy']).toContain(
+      "form-action 'self' https://client.example",
+    );
 
     await expect(page.getByRole('heading', { name: /connect e2e oauth client .+ to spoonjoy/i })).toBeVisible();
     expect(new URL(page.url()).pathname).toBe('/oauth/authorize');
@@ -217,9 +251,7 @@ test.describe('OAuth authorize + consent flow', () => {
     await expectConsentFitsDesktop(page);
 
     // Approve → redirected back to the registered redirect_uri with code + state.
-    const callback = waitForCallbackNavigation(page);
-    await allow.click();
-    const result = await callback;
+    const result = await submitAndReadCallback(page, allow);
     const code = result.searchParams.get('code');
     expect(code).toBeTruthy();
     expect(result.searchParams.get('state')).toBe(APPROVE_STATE);
@@ -236,23 +268,22 @@ test.describe('OAuth authorize + consent flow', () => {
 
   test('denying consent redirects back with access_denied', async ({ page }) => {
     const clientId = await registerClient(page.request);
+    const resource = await advertisedMcpResource(page.request);
     const verifier = randomVerifier();
     const challenge = await pkceChallenge(verifier);
-    const authorize = authorizeUrl({ clientId, codeChallenge: challenge, state: DENY_STATE });
+    const authorize = authorizeUrl({ clientId, codeChallenge: challenge, state: DENY_STATE, resource });
 
     await page.goto(authorize);
     await expect(page).toHaveURL(/\/login\?redirectTo=/);
 
-    await loginAsSeedUser(page, /\/oauth\/authorize\?/);
+    await loginAsDisposableUser(page, /\/oauth\/authorize\?/);
 
     const deny = page.getByRole('button', { name: /^deny$/i });
     await expect(deny).toBeVisible();
     expect(new URL(page.url()).pathname).toBe('/oauth/authorize');
     await expectNativeSubmitForm(deny);
 
-    const callback = waitForCallbackNavigation(page);
-    await deny.click();
-    const result = await callback;
+    const result = await submitAndReadCallback(page, deny);
     expect(result.searchParams.get('error')).toBe('access_denied');
     expect(result.searchParams.get('state')).toBe(DENY_STATE);
   });

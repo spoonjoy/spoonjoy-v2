@@ -64,7 +64,7 @@ pnpm run deploy:qa
 pnpm run smoke:qa
 ```
 
-`pnpm run qa:seed` writes only `sj-qa-demo` data. `pnpm run smoke:qa` uses `--target-env qa`, creates `codex-smoke-` data, cleans it from QA D1, and verifies the cleanup. Do not run broad production cleanup.
+`pnpm run qa:seed` creates a per-run `codex-qa-seed-` user and tears it down unless `--skip-teardown` is passed for a reviewed QA debugging session. `pnpm run smoke:qa` uses `--target-env qa`, creates `codex-smoke-` data, cleans it from QA D1, and verifies the cleanup. Do not run broad production cleanup.
 
 ### R2 Bucket (required for recipe images)
 
@@ -285,7 +285,11 @@ The workflow runs the source-controlled release orchestrator with an exact 40-ch
 
 The release result is written to `mcp-oauth-canary-artifacts/production-release.json` with sanitized Git provenance, reviewed migrations, D1 apply state, version IDs, phase, status, and redacted failure text. D1 is not Worker-versioned, so destructive migrations require a separately reviewed expand/migrate/contract rollout and are intentionally blocked from this command.
 
-Intentional rollbacks are dispatched in GitHub with a historical `source_sha` and its exact source-tagged Worker `rollback_version_id`. Current `main` tooling resolves the ID with an exact version lookup and deploys that immutable version directly; historical scripts are never executed, and D1 is not rolled back. The protocol boundary is the unique commit that first introduces the product-activation marker, never the inert bootstrap release.
+Intentional rollbacks are dispatched in GitHub with a historical `source_sha` and its exact source-tagged Worker `rollback_version_id`. Current `main` tooling resolves that immutable version, stages it at 0% beside the current version at 100%, inspects the exact rollback candidate CSP through Cloudflare's version override, and only then promotes it; a failed or inconclusive inspection restores and verifies the prior 100% deployment. Historical scripts are never executed, and D1 is not rolled back. A valid enforcing CSP needs no break-glass acknowledgement. A report-only, absent, or weakened CSP requires the exact `ACK_REPORT_ONLY_CSP_ROLLBACK` workflow acknowledgement, and candidate inspection that is unavailable or inconclusive fails closed before promotion.
+
+Rollback dispatches are available only in `protocol-v1-canary`, and both the active and rollback sources must descend from the protocol boundary. That boundary is the unique commit that first introduces the product-activation marker, never the inert bootstrap release. Cloudflare gradual deployment is limited to its most recent 100 uploaded versions, so the rollback target must also remain within that platform window.
+
+A source commit that intentionally changes Wrangler CSP mode to `report-only` uses the exact-SHA `CI` workflow dispatch before the protected production dispatch. Ordinary push and pull-request CI stay strict. Dispatch `ci.yml` on the exact branch head with `source_sha` and `csp_report_only_break_glass=ACK_REPORT_ONLY_CSP_ROLLBACK`; after merge, repeat that dispatch with `--ref main` and the exact `origin/main` SHA. Dispatch jobs are named `report-only-coverage`, `report-only-workers-coverage`, `report-only-e2e`, and `report-only-advisory`, so they cannot satisfy canonical required checks. The production validator accepts only that authenticated GitHub dispatch run with all four report-only jobs successful. See `docs/deployment.md` for the executable commands.
 
 Direct production `pnpm run deploy`, `deploy:auto`, Wrangler deploy/migration commands, and dashboard traffic changes bypass the workflow lock and are unsupported. Cloudflare has no expected-current deployment CAS, so preventing those out-of-band writers is required; detected deployment-UUID replacement fails closed. `pnpm run deploy:qa` remains the supported direct QA path.
 

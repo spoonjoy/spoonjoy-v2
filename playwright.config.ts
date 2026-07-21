@@ -15,6 +15,7 @@ export default defineConfig({
   globalTeardown: './e2e/support/global-teardown.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
+  failOnFlakyTests: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: [['html', { open: 'never' }]],
@@ -31,7 +32,7 @@ export default defineConfig({
     // Tests that need authentication (excludes auth tests and example)
     {
       name: 'chromium',
-      use: { 
+      use: {
         ...devices['Desktop Chrome'],
         storageState: authFile,
       },
@@ -43,6 +44,7 @@ export default defineConfig({
       name: 'chromium-no-auth',
       use: { ...devices['Desktop Chrome'] },
       testMatch: [/auth\.spec\.ts/, /example\.spec\.ts/],
+      dependencies: ['setup'],
     },
     // WebAuthn passkey lifecycle — needs a fresh, unauthenticated context and a
     // CDP virtual authenticator (Chromium-only), so it manages its own user.
@@ -58,6 +60,7 @@ export default defineConfig({
       name: 'oauth',
       use: { ...devices['Desktop Chrome'] },
       testMatch: [/oauth-authorize\.spec\.ts/],
+      dependencies: ['setup'],
     },
   ],
   webServer: {

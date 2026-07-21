@@ -4,7 +4,7 @@ import { captureEvent, resolvePostHogServerConfig } from "~/lib/analytics-server
 /**
  * Content-Security-Policy violation sink.
  *
- * The report-only CSP (see `app/lib/security-headers.server.ts`) points both its
+ * The active CSP (see `app/lib/security-headers.server.ts`) points both its
  * legacy `report-uri` AND its modern `report-to` (Reporting API) directive here,
  * so this route accepts BOTH body shapes:
  *

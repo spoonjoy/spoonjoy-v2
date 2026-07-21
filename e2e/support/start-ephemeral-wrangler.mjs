@@ -52,6 +52,8 @@ export function createWranglerLauncher({
         "build/server/wrangler.json",
         "--port",
         "5197",
+        "--log-level",
+        "error",
         "--persist-to",
         paths.persistPath,
         "--var",

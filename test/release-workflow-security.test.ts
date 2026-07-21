@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { parseDocument } from "yaml";
 
 const WORKFLOW_DIRECTORY = ".github/workflows";
 
@@ -84,36 +85,44 @@ describe("production release provenance", () => {
   });
 
   it("checks out, validates, deploys, and records the same source SHA", () => {
+    const workflowSecurity = readFileSync("scripts/workflow-security.mjs", "utf8");
+    const parsed = parseDocument(production).toJS() as {
+      jobs: { deploy: { steps: Array<{ name?: string; run?: string }> } };
+    };
+    const deploySteps = parsed.jobs.deploy.steps;
+
     expect(production).toContain(
       "SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.source_sha }}",
     );
     expect(production).toContain("ref: ${{ env.SOURCE_SHA }}");
     expect(production).toContain("persist-credentials: false");
-    expect(production).toContain("grep -Eq '^[0-9a-f]{40}$'");
-    expect(production).toContain('git merge-base --is-ancestor "$SOURCE_SHA" origin/main');
-    expect(production).toContain('gh run list --workflow .github/workflows/ci.yml --branch main --commit "$SOURCE_SHA"');
-    expect(production).toContain("--event push --status success");
-    expect(production).toContain('test "$(git rev-parse origin/main)" = "$SOURCE_SHA"');
-    expect(production).toContain("ROLLBACK_VERSION_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.rollback_version_id || '' }}");
     expect(production).toContain(
-      'pnpm run deploy:auto -- --rollback-version-id "$ROLLBACK_VERSION_ID"',
+      "node scripts/workflow-security.mjs validate-production-deploy-source",
     );
+    expect(workflowSecurity).toContain("const SHA_PATTERN = /^[0-9a-f]{40}$/");
+    expect(workflowSecurity).toContain('await run("git", ["merge-base", "--is-ancestor", release.sourceSha, "origin/main"])');
+    expect(workflowSecurity).toContain('"--workflow", ".github/workflows/ci.yml"');
+    expect(workflowSecurity).toContain('const ciEvent = requiresAuthorizedDispatch ? "workflow_dispatch" : "push"');
+    expect(workflowSecurity).toContain('const originMainSha = (await run("git", ["rev-parse", "origin/main"])).trim()');
+    expect(production).toContain("ROLLBACK_VERSION_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.rollback_version_id || '' }}");
+    expect(deploySteps.filter((step) => step.run === "node scripts/workflow-security.mjs run-production-deploy"))
+      .toHaveLength(1);
+    expect(workflowSecurity).toContain('const args = ["run", "deploy:auto"]');
+    expect(workflowSecurity).toContain('args.push("--", "--rollback-version-id", rollbackVersionId)');
+    expect(workflowSecurity).toContain('await run("pnpm", args)');
     expect(production).not.toContain("ALLOW_ROLLBACK");
-    expect(production).toContain('pnpm run deploy:auto');
+    expect(production).not.toMatch(/^\s{2}VITE_POSTHOG_HOST:/m);
     expect(production).toContain('Source SHA: `%s`');
     expect(production).not.toMatch(/^\s{2}issues:\s+write$/m);
     expect(production).toMatch(/report-canary:[\s\S]*permissions:[\s\S]*issues: write/);
 
-    const checkout = production.indexOf("ref: ${{ env.SOURCE_SHA }}");
-    const validation = production.indexOf("name: Validate release source");
-    const setup = production.indexOf("name: Setup Node.js");
-    const deploy = production.indexOf("pnpm run deploy:auto");
-    const record = production.indexOf('Source SHA: `%s`');
-    expect(checkout).toBeGreaterThan(-1);
-    expect(checkout).toBeLessThan(validation);
-    expect(validation).toBeLessThan(setup);
-    expect(setup).toBeLessThan(deploy);
-    expect(deploy).toBeLessThan(record);
+    const stepNames = deploySteps.map((step) => step.name ?? "");
+    const checkout = stepNames.indexOf("Checkout approved source SHA");
+    const validation = stepNames.indexOf("Validate release source");
+    const setup = stepNames.indexOf("Setup Node.js");
+    const deploy = stepNames.indexOf("Deploy staged release to Cloudflare Workers");
+    const record = stepNames.indexOf("Record release source");
+    expect([checkout, validation, setup, deploy, record]).toEqual([0, 2, 3, 8, 9]);
   });
 
   it("freezes the deploy step inventory and security-sensitive shell bodies", () => {
@@ -138,12 +147,12 @@ describe("production release provenance", () => {
       "Upload MCP OAuth canary artifacts",
     ]);
     expect(sha256(normalizedStepRun(production, "Validate release source", "Setup Node.js")))
-      .toBe("c90305002010a0f0cf4bcdb11ccca916061596c4ebcd5c591ac7aa53074de066");
+      .toBe("7ff584e5c41d0b6b53ad5c0b9b5aefadf05401629951332634ada34c1a843343");
     expect(sha256(normalizedStepRun(
       production,
       "Ensure release artifact exists",
       "Upload MCP OAuth canary artifacts",
-    ))).toBe("51bcfa6be41c09ab9ea08b72bb8f87d144d0cc9ba58b3e0978bc7246704ee846");
+    ))).toBe("e647c68063dedcd49146a31cc4a18ef3a5062c5600a086bf15d9b7a8004125ce");
   });
 
   it("pins the bootstrap lifecycle phase in source and refuses cross-boundary rollback", () => {
@@ -257,7 +266,7 @@ describe("production release provenance", () => {
       'if (.phase | IN("stage_revalidation", "rollback_current_deployment", "rollback_already_active", "rollback_protocol_ancestry", "rollback_active_version_mapping")) then has("candidateVersionId") else (has("candidateVersionId") | not) end',
     );
     expect(fallback).toContain(
-      'if (.phase | IN("validate", "provenance", "initial_preflight", "build", "post_build_provenance", "migration_list")) then',
+      'if (.phase | IN("validate", "provenance", "initial_preflight", "build", "post_build_posthog", "post_build_provenance", "migration_list")) then',
     );
     expect(fallback).toContain(
       'if .phase == "migration_apply" then',
@@ -287,10 +296,8 @@ describe("production release provenance", () => {
     expect(generatedFallback).not.toContain("previousVersionId");
     expect(generatedFallback).not.toContain("candidateVersionId");
     expect(generatedFallback).not.toContain("rollbackFailure");
-    expect(production.match(/^\s+pnpm run deploy:auto.*$/gm)).toEqual([
-      '            pnpm run deploy:auto -- --rollback-version-id "$ROLLBACK_VERSION_ID"',
-      "            pnpm run deploy:auto",
-    ]);
+    expect(production.match(/^\s+run: node scripts\/workflow-security\.mjs run-production-deploy$/gm))
+      .toHaveLength(1);
     expect(production).toContain(
       'deploymentStrategy: (if $release_mode == "protocol-v1-canary" then "gradual" else "atomic" end)',
     );
@@ -300,18 +307,57 @@ describe("production release provenance", () => {
 
 describe("web dependency advisory gate", () => {
   const ci = workflowSource("ci.yml");
+  const storybook = workflowSource("storybook.yml");
+
+  it("uses disjoint report-only job names that cannot satisfy canonical required checks", () => {
+    expect(ci).toContain(
+      "name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-advisory' || 'advisory' }}",
+    );
+    expect(ci).toContain(
+      "name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-coverage' || 'coverage' }}",
+    );
+    expect(ci).toContain(
+      "name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-workers-coverage' || 'workers-coverage' }}",
+    );
+    expect(ci).toContain(
+      "name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-e2e' || 'e2e' }}",
+    );
+    expect(storybook).toContain(
+      "name: ${{ github.event_name == 'workflow_dispatch' && 'manual-build-storybook' || 'build-storybook' }}",
+    );
+  });
+
+  it("pins Node before executing repository TypeScript in every CI job", () => {
+    const parsed = parseDocument(ci).toJS() as {
+      jobs: Record<string, { steps: Array<{ uses?: string; run?: string }> }>;
+    };
+
+    for (const job of Object.values(parsed.jobs)) {
+      const setupIndex = job.steps.findIndex((step) => step.uses?.startsWith("actions/setup-node@"));
+      const validationIndex = job.steps.findIndex(
+        (step) => step.run === "node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation",
+      );
+
+      expect(setupIndex).toBe(1);
+      expect(validationIndex).toBe(2);
+    }
+  });
 
   it("runs a fail-closed OSV-compatible pnpm-lock advisory scan in canonical CI", () => {
+    const advisoryScan = readFileSync("scripts/advisory-scan.ts", "utf8");
+
     expect(ci).toContain("advisory");
     expect(ci).toContain("pnpm run advisory:scan");
-    expect(ci).toContain("pnpm-lock.yaml");
+    expect(advisoryScan).toContain('"--lockfile=pnpm-lock.yaml"');
     expect(ci).toContain("osv-scanner_linux_amd64");
     expect(ci).toContain("bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc");
     expect(ci).toContain("https://api.github.com/repos/google/osv-scanner/git/ref/tags/${OSV_SCANNER_VERSION}");
-    expect(ci).toContain('test "$actual_tag_sha" = "$OSV_SCANNER_TAG_SHA"');
+    expect(ci).toContain(
+      "node scripts/warning-gate.ts -- jq -e --arg expected \"$OSV_SCANNER_TAG_SHA\" '.object | select(.type == \"commit\" and .sha == $expected)' .cache/osv-scanner/tag.json",
+    );
     expect(ci).toContain("pnpm install --frozen-lockfile --ignore-scripts");
 
-    const tagVerification = ci.indexOf('test "$actual_tag_sha" = "$OSV_SCANNER_TAG_SHA"');
+    const tagVerification = ci.indexOf("jq -e --arg expected");
     const binaryDownload = ci.indexOf("osv-scanner_linux_amd64");
     const dependencyInstall = ci.indexOf("pnpm install --frozen-lockfile --ignore-scripts");
     const advisoryRun = ci.indexOf("pnpm run advisory:scan");
@@ -321,9 +367,70 @@ describe("web dependency advisory gate", () => {
     expect(advisoryRun).toBeGreaterThan(dependencyInstall);
   });
 
-  it("requires the advisory job before production deploy can release an exact SHA", () => {
+  it("requires every canonical coverage and advisory job before production can release an exact SHA", () => {
     const production = workflowSource("production-deploy.yml");
+    const workflowSecurity = readFileSync("scripts/workflow-security.mjs", "utf8");
 
-    expect(production).toContain("required_job=advisory");
+    expect(production).toContain("validate-production-deploy-source");
+    expect(workflowSecurity).toContain('["coverage", "workers-coverage", "e2e", "advisory"]');
+    expect(production).not.toContain("gh run list --workflow .github/workflows/ci.yml");
+    expect(production).not.toContain("gh run list --workflow .github/workflows/storybook.yml");
+  });
+});
+
+describe("CI warning suppression at source", () => {
+  const ci = workflowSource("ci.yml");
+  const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
+    scripts: Record<string, string>;
+  };
+
+  it("hides only Prisma's supported update message before every gated client generation", () => {
+    const envIndex = ci.indexOf('  PRISMA_HIDE_UPDATE_MESSAGE: "1"');
+    const jobsIndex = ci.indexOf("\njobs:");
+    const generateCommands = Array.from(
+      ci.matchAll(/node scripts\/warning-gate\.ts -- pnpm prisma:generate/g),
+      (match) => match.index,
+    );
+
+    expect(envIndex).toBeGreaterThan(-1);
+    expect(envIndex).toBeLessThan(jobsIndex);
+    expect(generateCommands).toHaveLength(2);
+    expect(generateCommands.every((index) => index > envIndex)).toBe(true);
+    expect(packageJson.scripts.postinstall).toBe(
+      "PRISMA_HIDE_UPDATE_MESSAGE=1 prisma generate",
+    );
+    expect(packageJson.scripts["prisma:generate"]).toBe(
+      "PRISMA_HIDE_UPDATE_MESSAGE=1 prisma generate",
+    );
+  });
+
+  it("does not add a Prisma update-banner allowance to the warning gate", () => {
+    const warningGate = readFileSync("scripts/warning-gate.ts", "utf8");
+
+    expect(warningGate).not.toContain("PRISMA_HIDE_UPDATE_MESSAGE");
+    expect(warningGate).not.toContain("Update available 6.19.2 -> 7.8.0");
+  });
+
+  it("disables only the ephemeral runner's needrestart hook during gated Playwright setup", () => {
+    expect(ci).toContain([
+      "      - name: 🎭 Install Playwright Browsers",
+      "        run: |",
+      "          node scripts/warning-gate.ts -- pnpm exec playwright install-deps --dry-run chromium",
+      "          node scripts/warning-gate.ts -- sudo apt-get update",
+      "          node scripts/warning-gate.ts -- sudo sh -c 'printf \"%s\\n\" \"man-db man-db/auto-update boolean true\" | debconf-set-selections'",
+      "          node scripts/warning-gate.ts -- sudo touch /var/lib/man-db/auto-update",
+      "          node scripts/warning-gate.ts -- sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 apt-get -o Dpkg::Use-Pty=0 install -y --no-install-recommends xvfb fonts-noto-color-emoji fonts-unifont libfontconfig1 libfreetype6 xfonts-cyrillic xfonts-scalable fonts-liberation fonts-ipafont-gothic fonts-wqy-zenhei fonts-tlwg-loma-otf fonts-freefont-ttf libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 libcairo2 libcups2t64 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0t64 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2",
+      "          node scripts/warning-gate.ts -- pnpm exec playwright install chromium",
+    ].join("\n"));
+    expect(ci.match(/NEEDRESTART_SUSPEND=1/g)).toHaveLength(1);
+    expect(ci.match(/man-db\/auto-update boolean true/g)).toHaveLength(1);
+    expect(ci.match(/sudo touch \/var\/lib\/man-db\/auto-update/g)).toHaveLength(1);
+    expect(ci).not.toMatch(/^\s*NEEDRESTART_SUSPEND:/m);
+    expect(ci).not.toMatch(/sudo[^\n]*(?:node|pnpm|corepack|node_modules|\.js)/);
+  });
+
+  it("warning-gates every Corepack command in canonical CI", () => {
+    expect(ci.match(/node scripts\/warning-gate\.ts -- corepack enable/g)).toHaveLength(4);
+    expect(ci).not.toMatch(/^\s*corepack\s/m);
   });
 });

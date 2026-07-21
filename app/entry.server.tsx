@@ -34,11 +34,14 @@ export default async function handleRequest(
     // Router's internal StreamTransfer emits its own inline hydration scripts
     // (window.__reactRouterContext…) that are nonced ONLY via this prop, not
     // via context. Omitting it leaves those scripts un-nonced → they'd be
-    // blocked on every page once the CSP flips from report-only to enforce.
+    // blocked on every page by the enforcing CSP.
     <NonceContext.Provider value={nonce}>
       <ServerRouter context={routerContext} url={request.url} nonce={nonce} />
     </NonceContext.Provider>,
     {
+      // React 19 injects streaming/resume bootstrap scripts outside React
+      // Router's tree, so it needs the same nonce independently.
+      nonce,
       onError(error: unknown) {
         responseStatusCode = 500;
         if (shellRendered) {

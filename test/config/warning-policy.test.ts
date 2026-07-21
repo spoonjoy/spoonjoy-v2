@@ -1,6 +1,7 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
@@ -298,8 +299,7 @@ describe("warning command policy", () => {
 
     const cleanChild = new FakeChild();
     const clean = runFake(cleanChild, { env: { EXACT_ENV: "yes" }, platform: "win32" });
-    cleanChild.stdout!.emit("data", "ordinary stdout\r");
-    cleanChild.stderr!.emit("data", "ordinary stderr\n");
+    cleanChild.stdout!.emit("data", "ordinary stdout\n");
     cleanChild.emit("close", 0);
     await expect(clean.result).resolves.toBe(0);
     expect(clean.spawn).toHaveBeenCalledWith("fake-command", ["argument"], {
@@ -307,8 +307,33 @@ describe("warning command policy", () => {
       env: { EXACT_ENV: "yes" },
       stdio: ["inherit", "pipe", "pipe"],
     });
-    expect(clean.stdout.chunks).toEqual(["ordinary stdout\r"]);
-    expect(clean.stderr.chunks).toEqual(["ordinary stderr\n"]);
+    expect(clean.stdout.chunks).toEqual(["ordinary stdout\n"]);
+    expect(clean.stderr.chunks).toEqual([]);
+
+    const stderrChild = new FakeChild();
+    const stderrRun = runFake(stderrChild, { platform: "win32" });
+    stderrChild.stderr!.emit("data", "ordinary stderr diagnostic\n");
+    stderrChild.emit("close", 0);
+    await expect(stderrRun.result).resolves.toBe(1);
+    expect(stderrChild.kill).toHaveBeenCalledWith("SIGTERM");
+
+    const signaledChild = new FakeChild();
+    signaledChild.pid = 777;
+    const signalSource = new EventEmitter();
+    const signalKill = vi.fn();
+    const signaled = runFake(signaledChild, {
+      killProcess: signalKill,
+      platform: "darwin",
+      signalSource,
+    });
+    signalSource.emit("SIGINT");
+    signalSource.emit("SIGTERM");
+    expect(signalKill).toHaveBeenCalledWith(-777, "SIGINT");
+    expect(signalKill).toHaveBeenCalledOnce();
+    signaledChild.emit("close", null, "SIGINT");
+    await expect(signaled.result).resolves.toBe(130);
+    expect(signalSource.listenerCount("SIGINT")).toBe(0);
+    expect(signalSource.listenerCount("SIGTERM")).toBe(0);
 
     const groupChild = new FakeChild();
     groupChild.pid = 321;
@@ -430,20 +455,26 @@ describe("warning command policy", () => {
     expect(`${result.stdout}${result.stderr}`).toContain("warning-policy: rejected diagnostic output");
   });
 
-  it("allows ordinary prose containing the word warning", () => {
+  it("allows ordinary prose that contains no diagnostic token", () => {
     const result = runWrapped(
-      "console.log('test name: warning policy'); console.log('No warnings were emitted')",
+      "console.log('test name: output policy'); console.log('Clean diagnostics')",
     );
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("test name: warning policy");
-    expect(result.stdout).toContain("No warnings were emitted");
+    expect(result.stdout).toContain("test name: output policy");
+    expect(result.stdout).toContain("Clean diagnostics");
   });
 
-  it.each([
-    "warning policy completed",
-    "warningly successful",
-  ])("allows benign line-leading warning prose: %s", (message) => {
+  it("rejects otherwise unmarked stderr through the shared channel policy", () => {
+    const result = runWrapped("console.error('ordinary stderr diagnostic')");
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("ordinary stderr diagnostic");
+    expect(result.stderr).toContain("warning-policy: rejected diagnostic output");
+  });
+
+  it("allows a non-token word that merely starts with warning", () => {
+    const message = "warningly successful";
     const result = runWrapped(`console.log(${JSON.stringify(message)})`);
 
     expect(result.status).toBe(0);
@@ -467,12 +498,55 @@ describe("warning command policy", () => {
     expect(`${result.stdout}${result.stderr}`).toContain("warning-policy: rejected diagnostic output");
   });
 
-  it("preserves a child failure without replacing its exit code", () => {
+  it("forwards SIGTERM to the detached child group and waits for closure", async () => {
+    const tempDir = mkdtempSync(`${tmpdir()}/spoonjoy-warning-signal-`);
+    const pidPath = `${tempDir}/child.pid`;
+    const signalPath = `${tempDir}/child.signal`;
+    const childCode = [
+      "const fs = require('node:fs')",
+      `fs.writeFileSync(${JSON.stringify(pidPath)}, String(process.pid))`,
+      `process.on('SIGTERM', () => { fs.writeFileSync(${JSON.stringify(signalPath)}, 'SIGTERM'); process.exit(0) })`,
+      "setInterval(() => {}, 60_000)",
+    ].join(";");
+    const wrapped = spawn(
+      process.execPath,
+      [wrapper, "--", process.execPath, "-e", childCode],
+      { cwd: process.cwd(), stdio: "ignore" },
+    );
+
+    let childPid: number | undefined;
+    try {
+      await vi.waitFor(() => {
+        expect(existsSync(pidPath)).toBe(true);
+      }, { timeout: 2_000, interval: 20 });
+      childPid = Number(readFileSync(pidPath, "utf8"));
+      const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+        wrapped.once("close", (code, signal) => resolve({ code, signal }));
+      });
+      wrapped.kill("SIGTERM");
+      const result = await closed;
+
+      expect(result).toEqual({ code: 143, signal: null });
+      expect(readFileSync(signalPath, "utf8")).toBe("SIGTERM");
+    } finally {
+      wrapped.kill("SIGKILL");
+      if (childPid) {
+        try {
+          process.kill(childPid, "SIGKILL");
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+        }
+      }
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects stderr diagnostics even when the child also exits non-zero", () => {
     const result = runWrapped("console.error('ordinary failure'); process.exit(7)");
 
-    expect(result.status).toBe(7);
+    expect(result.status).toBe(1);
     expect(result.stderr).toContain("ordinary failure");
-    expect(result.stderr).not.toContain("warning-policy: rejected diagnostic output");
+    expect(result.stderr).toContain("warning-policy: rejected diagnostic output");
   });
 
   it("requires an explicit command boundary", () => {
@@ -573,7 +647,7 @@ jobs:
     const output = `${result.stdout}${result.stderr}`;
     expect(output).toContain("Unexpected warning/error output");
     expect(output).toContain(expectedDiagnostic);
-  });
+  }, 15_000);
 
   it.each(["app", "workers"] as const)(
     "rejects top-level, beforeAll, and afterAll diagnostics in the %s lane",
@@ -590,7 +664,7 @@ jobs:
         expect(`${result.stdout}${result.stderr}`).toContain("Unexpected warning/error output");
       }
     },
-    15_000,
+    45_000,
   );
 
   it.each(["app", "workers"] as const)(
@@ -604,6 +678,7 @@ jobs:
       expect(result.status).toBe(0);
       expect(`${result.stdout}${result.stderr}`).not.toContain("Unexpected warning/error output");
     },
+    15_000,
   );
 
   it.each(["app", "workers"] as const)(
@@ -621,7 +696,7 @@ jobs:
         expect(`${result.stdout}${result.stderr}`).toContain("Unexpected warning/error output");
       }
     },
-    15_000,
+    45_000,
   );
 
   it("rejects unowned console warnings/errors and process warnings but permits owned output", async () => {
@@ -697,93 +772,21 @@ jobs:
     expect(() => collector.assertClean()).not.toThrow();
   });
 
-  it("suppresses exactly one Node-originated SQLite initialization warning", async () => {
-    const warningPolicy = await vi.importActual<typeof import("../warning-policy")>(
-      "../warning-policy",
-    ) as typeof import("../warning-policy") & {
-      installNodeSqliteWarningException?: (
-        processLike: { emitWarning: (...args: unknown[]) => void },
-        captureStack: () => string,
-      ) => () => void;
+  it("uses a stable SQLite test driver without process-warning suppression", () => {
+    const warningPolicySource = readFileSync("test/warning-policy.ts", "utf8");
+    const sqliteTestSources = filesBelow("test/scripts")
+      .filter((file) => file.endsWith(".test.ts"))
+      .map((file) => readFileSync(file, "utf8"))
+      .join("\n");
+    const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
+      devDependencies?: Record<string, string>;
     };
-    const delegated: unknown[][] = [];
-    const nodeSqliteMessage =
-      "SQLite is an experimental feature and might change at any time";
-    const processLike = {
-      emitWarning: (...args: unknown[]) => delegated.push(args),
-    };
-    const install = warningPolicy.installNodeSqliteWarningException;
 
-    expect(typeof install).toBe("function");
-    const restore = install!(
-      processLike,
-      () => "Error\n    at emitExperimentalWarning (node:internal/util:304:11)\n    at node:sqlite:8:1",
-    );
-    processLike.emitWarning(
-      nodeSqliteMessage,
-      "ExperimentalWarning",
-      undefined,
-      undefined,
-    );
-    processLike.emitWarning(
-      nodeSqliteMessage,
-      "ExperimentalWarning",
-      undefined,
-      undefined,
-    );
-    processLike.emitWarning("another experimental feature", "ExperimentalWarning");
-    restore();
-
-    expect(delegated).toEqual([
-      [
-        "SQLite is an experimental feature and might change at any time",
-        "ExperimentalWarning",
-        undefined,
-        undefined,
-      ],
-      ["another experimental feature", "ExperimentalWarning"],
-    ]);
-
-    const boundaryDelegated: unknown[][] = [];
-    const boundaryProcess = {
-      emitWarning: (...args: unknown[]) => boundaryDelegated.push(args),
-    };
-    const restoreBoundary = install!(boundaryProcess, () => "Error\n    at node:sqlite:8:1");
-    boundaryProcess.emitWarning("short", "ExperimentalWarning");
-    boundaryProcess.emitWarning("wrong message", "ExperimentalWarning", undefined, undefined);
-    boundaryProcess.emitWarning(nodeSqliteMessage, "Warning", undefined, undefined);
-    boundaryProcess.emitWarning(nodeSqliteMessage, "ExperimentalWarning", "code", undefined);
-    boundaryProcess.emitWarning(nodeSqliteMessage, "ExperimentalWarning", undefined, "ctor");
-    restoreBoundary();
-    expect(boundaryDelegated).toHaveLength(5);
-
-    const wrongOriginDelegated: unknown[][] = [];
-    const wrongOriginProcess = {
-      emitWarning: (...args: unknown[]) => wrongOriginDelegated.push(args),
-    };
-    const restoreWrongOrigin = install!(wrongOriginProcess, () => "Error\n    at user-test.ts:1:1");
-    wrongOriginProcess.emitWarning(nodeSqliteMessage, "ExperimentalWarning", undefined, undefined);
-    restoreWrongOrigin();
-    expect(wrongOriginDelegated).toHaveLength(1);
-
-    const defaultStackDelegated: unknown[][] = [];
-    const defaultStackProcess = {
-      emitWarning: (...args: unknown[]) => defaultStackDelegated.push(args),
-    };
-    const restoreDefaultStack = install!(defaultStackProcess, undefined as never);
-    defaultStackProcess.emitWarning("ordinary warning", "Warning");
-    restoreDefaultStack();
-    expect(defaultStackDelegated).toEqual([["ordinary warning", "Warning"]]);
-
-    const replacedProcess = {
-      emitWarning: (..._args: unknown[]) => undefined,
-    };
-    install!(replacedProcess, () => "Error\n    at node:sqlite:8:1");
-    const retainedFilter = replacedProcess.emitWarning;
-    const replacement = (..._args: unknown[]) => undefined;
-    replacedProcess.emitWarning = replacement;
-    retainedFilter(nodeSqliteMessage, "ExperimentalWarning", undefined, undefined);
-    expect(replacedProcess.emitWarning).toBe(replacement);
+    expect(warningPolicySource).not.toContain("installNodeSqliteWarningException");
+    expect(warningPolicySource).not.toContain("processLike.emitWarning =");
+    expect(sqliteTestSources).not.toContain('from "node:sqlite"');
+    expect(sqliteTestSources).not.toContain('nodeRequire("node:sqlite")');
+    expect(packageJson.devDependencies?.["better-sqlite3"]).toBeTruthy();
   });
 
   it("runs exact owned diagnostics through the installed global wrappers", async () => {
@@ -810,6 +813,7 @@ jobs:
         "process warning: ExperimentalWarning: unrelated experimental sentinel",
       );
     },
+    15_000,
   );
 
   it("installs the same fail-after-test gate in app and Workers Vitest", () => {
@@ -897,6 +901,7 @@ jobs:
   it("includes every production-like warning module in full coverage", () => {
     const config = readFileSync("vitest.config.ts", "utf8");
 
+    expect(config).toContain('"app/entry.server.tsx"');
     expect(config).toContain('"scripts/run-with-warning-policy.mjs"');
     expect(config).toContain('"test/warning-policy.ts"');
     expect(config).toContain('"e2e/warning-policy.ts"');

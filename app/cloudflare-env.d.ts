@@ -65,6 +65,8 @@ declare global {
     CF_VERSION_METADATA?: WorkerVersionMetadata;
     COOK_SESSIONS?: DurableObjectNamespace;
     COOK_SESSION_BOOTSTRAP_MODE?: string;
+    SPOONJOY_CSP_MODE?: string;
+    VITE_POSTHOG_HOST?: string;
     SESSION_SECRET?: string;
     SPOONJOY_BASE_URL?: string;
     SPOONJOY_ALLOW_INSECURE_LOCAL_SESSIONS?: string;
@@ -112,7 +114,7 @@ declare module "react-router" {
     };
     /**
      * Per-request CSP nonce, generated in `workers/app.ts`. Used for the
-     * report-only CSP `script-src` AND the SSR inline `<script>` nonces (read in
+     * selected CSP `script-src` AND the SSR inline `<script>` nonces (read in
      * `entry.server.tsx`, provided via `NonceContext`).
      */
     nonce?: string;

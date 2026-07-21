@@ -1,6 +1,6 @@
-import type { Page } from "@playwright/test";
-import { test, expect } from "../fixtures";
-import { publicRecipeHrefByChef, publicRecipeLinks } from '../support/recipes';
+import type { Page } from '@playwright/test';
+import { test, expect } from '../fixtures';
+import { publicRecipeHrefByTitle, publicRecipeLinks } from '../support/recipes';
 
 function recipeDetailLinks(page: Page) {
   return publicRecipeLinks(page);
@@ -20,11 +20,11 @@ test.describe('Recipe Flow', () => {
   });
 
   test('clicking recipe card navigates to recipe detail', async ({ page }) => {
-    const href = await publicRecipeHrefByChef(page, 'chef_julia');
+    await page.goto('/recipes');
     
     // Find a recipe card - should be a clickable link
     // Exclude /recipes/new (create button) - match any recipe UUID links
-    const recipeCard = page.locator(`main a[href="${href}"]`).first();
+    const recipeCard = recipeDetailLinks(page).first();
     
     // CRITICAL: This will FAIL if recipe cards are not clickable
     await expect(recipeCard).toBeVisible({ timeout: 5000 });
@@ -43,9 +43,7 @@ test.describe('Recipe Flow', () => {
   });
 
   test('recipe detail shows steps and ingredients', async ({ page }) => {
-    // Use a seeded chef_julia recipe so this flow is not affected by parallel
-    // e2e-created recipes appearing at the top of the global recipe index.
-    const href = await publicRecipeHrefByChef(page, 'chef_julia');
+    const href = await publicRecipeHrefByTitle(page, 'Classic Margherita Pizza');
     
     // Navigate to the recipe detail page
     await page.goto(href);

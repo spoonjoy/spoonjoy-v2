@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json.schemastore.org/wrangler",
+  "name": "spoonjoy-local-seed",
+  "compatibility_date": "2024-12-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "spoonjoy",
+      "database_id": "32cb0e04-c45b-4cd2-a798-556556ae288d"
+    }
+  ]
+}

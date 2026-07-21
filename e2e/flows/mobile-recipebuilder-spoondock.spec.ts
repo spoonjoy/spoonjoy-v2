@@ -1,6 +1,6 @@
-import type { Locator, Page } from "@playwright/test";
-import { expect, test } from "../fixtures";
-import { publicRecipeHrefByChef } from "../support/recipes";
+import type { Locator, Page } from '@playwright/test';
+import { expect, test } from '../fixtures';
+import { publicRecipeHrefByTitle } from '../support/recipes';
 
 test.use({
   viewport: { width: 390, height: 844 },
@@ -17,11 +17,19 @@ async function getDock(page: Page) {
 }
 
 async function getFirstRecipeHref(page: Page) {
-  return publicRecipeHrefByChef(page, 'chef_julia');
+  return publicRecipeHrefByTitle(page, 'Thai Green Curry');
 }
 
-async function getFirstOwnedRecipeHref(page: Page) {
-  return publicRecipeHrefByChef(page, 'demo');
+async function addFirstRecipeStep(page: Page) {
+  const stepCards = page.locator('article[aria-label^="Step"]');
+  const addStepButton = page.getByRole('button', { name: /add step/i }).first();
+  await expect(async () => {
+    if (await stepCards.count() === 0) {
+      await addStepButton.click();
+    }
+    await expect(stepCards).toHaveCount(1, { timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
+  return stepCards.first().getByLabel(/instructions/i);
 }
 
 async function expectTouchTarget(locator: Locator, label: string) {
@@ -57,17 +65,11 @@ test.describe('Mobile RecipeBuilder and SpoonDock audit', () => {
     await expect(page.getByRole('heading', { name: 'Write the version future-you can actually cook.' })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Spoonjoy navigation' })).toHaveCount(0);
 
-    await page.getByLabel(/^Title$/).last().fill(`Mobile Audit ${Date.now()}`);
-    const addStepButton = page.getByRole('button', { name: 'Add Step' });
-    const instructions = page.getByRole('textbox', { name: 'Instructions' });
-    await expect(addStepButton).toBeVisible();
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      await addStepButton.click();
-      if (await instructions.isVisible({ timeout: 1_000 }).catch(() => false)) {
-        break;
-      }
-    }
-    await expect(instructions).toBeVisible();
+    const instructions = await addFirstRecipeStep(page);
+    const title = page.getByLabel(/^Title$/).last();
+    const uniqueTitle = `Mobile Audit ${Date.now()}`;
+    await title.fill(uniqueTitle);
+    await expect(title).toHaveValue(uniqueTitle);
     await instructions.fill('Stir until glossy.');
 
     await expectTouchTarget(page.getByRole('button', { name: 'Save' }).first(), 'step Save button');
@@ -77,23 +79,45 @@ test.describe('Mobile RecipeBuilder and SpoonDock audit', () => {
   });
 
   test('edit flow keeps save controls usable without the fixed dock', async ({ page }) => {
-    const recipeHref = await getFirstOwnedRecipeHref(page);
-    await page.goto(`${recipeHref}/edit`);
+    let recipeHref: string | null = null;
+    try {
+      await page.goto('/recipes/new');
+      const createTitle = `e2e mobile edit audit ${Date.now()}`;
+      const createAction = page.getByRole('button', { name: 'Create Recipe' });
+      const createTitleInput = page.getByLabel(/^Title$/).last();
+      await expect.poll(async () => {
+        await createTitleInput.fill(createTitle);
+        return createAction.getAttribute('aria-disabled');
+      }, { timeout: 10_000 }).not.toBe('true');
+      await createAction.click();
+      await expect(page).toHaveURL(/\/recipes\/(?!new$)[A-Za-z0-9_-]+$/, { timeout: 15_000 });
+      recipeHref = new URL(page.url()).pathname;
+      await page.goto(`${recipeHref}/edit`);
+      await page.waitForLoadState('networkidle');
+      await expect(page.getByRole('heading', { name: 'Edit Recipe' })).toBeVisible();
+      await expect(page.getByRole('navigation', { name: 'Spoonjoy navigation' })).toHaveCount(0);
 
-    await expect(page.getByRole('heading', { name: 'Edit Recipe' })).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Spoonjoy navigation' })).toHaveCount(0);
+      const updatedTitle = `Mobile Dock Save ${Date.now()}`;
+      await page.getByLabel(/^Title$/).last().fill(updatedTitle);
+      const saveAction = page.getByRole('button', { name: 'Save Recipe' });
+      await saveAction.scrollIntoViewIfNeeded();
+      await expectTouchTarget(saveAction, 'edit Save Recipe button');
+      await saveAction.click();
 
-    const titleInput = page.getByLabel(/^Title$/).last();
-    const originalTitle = await titleInput.inputValue();
-    const unsavedTitle = `Mobile Dock Visual Audit ${Date.now()}`;
-    await titleInput.fill(unsavedTitle);
-    const saveAction = page.getByRole('button', { name: 'Save Recipe' });
-    await saveAction.scrollIntoViewIfNeeded();
-    await expectTouchTarget(saveAction, 'edit Save Recipe button');
-    await expect(titleInput).toHaveValue(unsavedTitle);
-
-    await page.reload();
-    await expect(page.getByLabel(/^Title$/).last()).toHaveValue(originalTitle);
+      await expect(page).toHaveURL(new RegExp(`${recipeHref}$`));
+      await expect(page.getByRole('heading', { name: updatedTitle })).toBeVisible();
+      await page.reload();
+      await expect(page).toHaveURL(new RegExp(`${recipeHref}$`));
+      await expect(page.getByRole('heading', { name: updatedTitle })).toBeVisible();
+    } finally {
+      if (recipeHref) {
+        const cleanupResponse = await page.request.post(recipeHref, {
+          form: { intent: 'delete' },
+        });
+        expect(cleanupResponse.ok(), 'mobile edit recipe cleanup should succeed').toBe(true);
+        expect((await page.request.get(recipeHref)).status()).toBe(404);
+      }
+    }
   });
 
   test('recipe detail masthead actions fit with the fixed dock', async ({ page }) => {
@@ -135,7 +159,7 @@ test.describe('Mobile RecipeBuilder and SpoonDock audit', () => {
   test('shopping-list mobile controls have touch targets and dock clearance', async ({ page }) => {
     await page.goto('/shopping-list');
 
-    await expect(page.getByRole('heading', { name: 'Shopping List' })).toBeVisible();
+    await expect(page.getByTestId('shopping-list-page-header').getByRole('heading', { name: 'Shopping list' })).toBeVisible();
     const dock = await getDock(page);
 
     await expectTouchTarget(dock.getByRole('link', { name: /Shopping List/i }), 'shopping dock Shopping List link');

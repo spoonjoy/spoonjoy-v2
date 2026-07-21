@@ -67,7 +67,7 @@ export function filterViteBuildErrorOutput(output: string) {
     .filter((line) => {
       if (line === "") return false;
       const message = line.replace(/\r?\n$/, "");
-      return message === "" || shouldLogViteBuildErrorMessage(message);
+      return stripAnsi(message).trim() !== "" && shouldLogViteBuildErrorMessage(message);
     })
     .join("");
 }

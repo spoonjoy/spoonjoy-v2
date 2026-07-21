@@ -14,7 +14,6 @@
  */
 
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
 import { Button } from "~/components/ui/button";
 import { Text } from "~/components/ui/text";
 import {
@@ -38,7 +37,6 @@ export function PasskeySignInButton({
   supportsPasskeys,
   onNavigate,
 }: PasskeySignInButtonProps) {
-  const navigate = useNavigate();
   const [supported, setSupported] = useState(false);
   const [status, setStatus] = useState<"idle" | "pending">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +47,9 @@ export function PasskeySignInButton({
 
   if (!supported) return null;
 
-  const go = (to: string) => (onNavigate ? onNavigate(to) : navigate(to));
+  const go = (to: string) => (
+    onNavigate ? onNavigate(to) : window.location.assign(to)
+  );
 
   async function handleClick() {
     setError(null);

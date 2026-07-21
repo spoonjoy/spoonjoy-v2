@@ -122,6 +122,8 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: QA has `v1_cook_session`, the inert DO responds, and no disposable D1/DO row remains.
 
 ### 🔄 Unit 1.5: Bootstrap PR And Merge
+
+**Integration scope expansion (2026-07-20):** Merging current `main` introduced React 19 streaming bootstrap scripts under enforced CSP. The bootstrap PR therefore also carries the focused `renderToReadableStream` nonce repair, its entry-server regression coverage, cookie-only Playwright state isolation, and bounded bootstrap-probe abuse controls required to make the exact merged candidate pass CSP-clean E2E and QA. This is reviewed integration/release scope only; it does not activate cook-session product behavior.
 **What**: On `worker/clem-feedback-e2e`, run final gates and open a PR to `main`. Enforce the planning-contract allowlist: focused task docs/artifacts, frozen `test/fixtures/clem-feedback-pre-feature.sql`, package/lockfile, Wrangler/env types, Worker app/new inert class, Workers-test config/tests, CI/production workflow, and existing deploy script/tests/docs only; resolve review/CI and merge.
 **Output**: Bootstrap PR URL and exact merge SHA.
 **Acceptance**: Required reviews/CI are green and the merge SHA contains only docs plus lifecycle/test/deploy bootstrap scope.

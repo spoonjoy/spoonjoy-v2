@@ -31,7 +31,7 @@ pnpm prisma:generate
 # Set up local D1 database
 pnpm exec wrangler d1 migrations apply DB --local
 
-# Optional: seed demo data into local D1
+# Optional: seed disposable local data into local D1
 pnpm db:seed
 
 # Start dev server
@@ -49,6 +49,7 @@ All configuration lives in `wrangler.json`:
 | Setting | Purpose |
 |---------|---------|
 | `d1_databases` | D1 database bindings |
+| `durable_objects` / `migrations` | Cook-session Durable Object binding and SQLite class lifecycle |
 | `r2_buckets` | R2 image storage binding for profile and recipe photos |
 | `vars` | Environment variables (NODE_ENV, OAuth credentials, etc.) |
 
@@ -88,7 +89,7 @@ For Ouroboros agent integration, see [`docs/ouroboros-mcp.md`](docs/ouroboros-mc
 | `pnpm test:e2e` | Run Playwright e2e tests |
 | `pnpm test:storybook` | Run Storybook interaction tests |
 | `pnpm prisma:generate` | Regenerate Prisma client |
-| `pnpm db:seed` | Seed local D1 via Wrangler platform proxy |
+| `pnpm db:seed` | Replace prior disposable local data, then seed D1 with an explicit local-only target |
 | `pnpm dev:sync` | Generate Prisma client, run the legacy option2 idempotent migration helper, then start dev |
 | `pnpm build` | Production build |
 | `pnpm typecheck` | TypeScript validation |
@@ -128,13 +129,13 @@ pnpm test:e2e --headed
 ```
 
 **Test structure:**
-- `e2e/auth.setup.ts` — Authentication fixture (logs in as demo user)
+- `e2e/auth.setup.ts` — Authentication fixture (creates a disposable user and records it for local teardown)
 - `e2e/flows/auth.spec.ts` — Login, logout, protected routes
 - `e2e/flows/recipes.spec.ts` — Recipe list, detail, navigation
 - `e2e/flows/cookbooks.spec.ts` — Cookbook CRUD
 - `e2e/flows/shopping-list.spec.ts` — Shopping list operations
 
-**Note:** Tests run against `http://localhost:5173`. Start the dev server first with `pnpm dev`.
+**Note:** Tests build the app and start an automatically managed ephemeral Wrangler server at `http://localhost:5197`. The run copies local Wrangler state into an isolated directory and removes that state, its server, and disposable auth artifacts during global teardown; do not start `pnpm dev` first.
 
 Before reporting manual/e2e work complete, inspect disposable local QA residue:
 
@@ -157,7 +158,7 @@ Local development uses D1 via the Cloudflare Vite plugin (stored in `.wrangler/`
 # Apply schema to local D1
 pnpm exec wrangler d1 migrations apply DB --local
 
-# Seed demo data
+# Seed disposable local data
 pnpm db:seed
 
 # Regenerate migration from Prisma schema (if schema changes)
@@ -209,6 +210,8 @@ pnpm exec prisma migrate diff --from-empty --to-schema-datamodel=./prisma/schema
 
    Optional telemetry: set `POSTHOG_KEY` with `wrangler secret put POSTHOG_KEY` only when you want server lifecycle telemetry/error capture. Build-time client analytics also needs `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST`, and optionally `VITE_POSTHOG_DISABLED` in the deploy build environment; do not set those with secret values in source files.
 
+   CSP enforcement is controlled by the non-secret `SPOONJOY_CSP_MODE` Worker var. Production and QA source config use `SPOONJOY_CSP_MODE=enforce`, which emits the blocking `Content-Security-Policy` header while continuing to report violations to `/csp-report`. A report-only one-commit rollback is break-glass only: set `SPOONJOY_CSP_MODE=report-only` in `wrangler.json`, release that exact rollback SHA through the protected `production-deploy.yml` workflow dispatch with `csp_report_only_break_glass=ACK_REPORT_ONLY_CSP_ROLLBACK`, and run any local preflight/deploy inspection with `SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS=ACK_REPORT_ONLY_CSP_ROLLBACK`. Browsers then receive `Content-Security-Policy-Report-Only` instead of the enforcing header until the follow-up restores `enforce`.
+
 6. Run the deployment preflight:
    ```bash
    pnpm run deploy:preflight
@@ -223,7 +226,7 @@ pnpm exec prisma migrate diff --from-empty --to-schema-datamodel=./prisma/schema
 
 See [docs/deployment.md](./docs/deployment.md) for the full production checklist, local `.dev.vars` guidance, and common failure modes.
 
-The dedicated QA environment uses D1 `spoonjoy-qa`, R2 `spoonjoy-photos-qa`, seed namespace `sj-qa-demo`, and disposable `codex-smoke-` users. Configure QA secrets with commands such as `wrangler secret put SESSION_SECRET --env qa` and verify them with `wrangler secret list --env qa`. QA docs also cover `POSTHOG_DISABLED=true`, `IMAGE_PROVIDER_PRIMARY=gemini`, OAuth callback setup, WebAuthn origins, and the rule: Do not run broad production cleanup.
+The dedicated QA environment uses D1 `spoonjoy-qa`, R2 `spoonjoy-photos-qa`, per-run `codex-qa-seed-` seed users, disposable `codex-smoke-` users, and `SPOONJOY_CSP_MODE=enforce`. Configure QA secrets with commands such as `wrangler secret put SESSION_SECRET --env qa` and verify them with `wrangler secret list --env qa`. QA docs also cover `POSTHOG_DISABLED=true`, `IMAGE_PROVIDER_PRIMARY=gemini`, OAuth callback setup, WebAuthn origins, and the rule: Do not run broad production cleanup.
 
 ## Project Structure
 

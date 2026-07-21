@@ -9,45 +9,6 @@ type ExpectedConsoleDiagnostic = {
   observed: boolean;
 };
 
-export interface WarningEmitter {
-  emitWarning: (...args: unknown[]) => void;
-}
-
-const nodeSqliteWarningMessage =
-  "SQLite is an experimental feature and might change at any time";
-
-function isNodeSqliteInitializationWarning(args: unknown[], stack: string) {
-  return args.length === 4 &&
-    args[0] === nodeSqliteWarningMessage &&
-    args[1] === "ExperimentalWarning" &&
-    args[2] === undefined &&
-    args[3] === undefined &&
-    /(?:^|\n)\s*at node:sqlite:\d+:\d+(?:\n|$)/.test(stack);
-}
-
-export function installNodeSqliteWarningException(
-  processLike: WarningEmitter,
-  captureStack = () => String(new Error().stack),
-) {
-  const originalEmitWarning = processLike.emitWarning;
-  const filteredEmitWarning = function (this: unknown, ...args: unknown[]) {
-    if (isNodeSqliteInitializationWarning(args, captureStack())) {
-      if (processLike.emitWarning === filteredEmitWarning) {
-        processLike.emitWarning = originalEmitWarning;
-      }
-      return;
-    }
-    Reflect.apply(originalEmitWarning, this, args);
-  };
-
-  processLike.emitWarning = filteredEmitWarning;
-  return () => {
-    if (processLike.emitWarning === filteredEmitWarning) {
-      processLike.emitWarning = originalEmitWarning;
-    }
-  };
-}
-
 function formatValue(value: unknown) {
   if (typeof value === "string") return value;
   if (value instanceof Error) return value.stack ?? `${value.name}: ${value.message}`;
@@ -132,8 +93,6 @@ const errorWrapper: typeof console.error = createConsoleDiagnosticWrapper(
 
 console.warn = warningWrapper;
 console.error = errorWrapper;
-
-installNodeSqliteWarningException(process as unknown as WarningEmitter);
 
 process.on("warning", collector.captureProcessWarning);
 

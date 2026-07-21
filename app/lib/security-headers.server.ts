@@ -1,5 +1,5 @@
 /**
- * Baseline security response headers + a report-only Content-Security-Policy,
+ * Baseline security response headers + a mode-controlled Content-Security-Policy,
  * applied to every Worker response by {@link withSecurityHeaders}.
  *
  * Static headers (never depend on per-request state):
@@ -13,65 +13,191 @@
  *   intentionally does NOT touch `publickey-credentials-*`, so passkeys keep
  *   their default `self` allowance.
  *
- * `Content-Security-Policy-Report-Only` is built per-request by
- * {@link buildContentSecurityPolicy}. It is still NON-enforcing (report-only):
- * it never blocks a request, only POSTs violations to `/csp-report`.
+ * `SPOONJOY_CSP_MODE=report-only` emits
+ * `Content-Security-Policy-Report-Only`; every other runtime value fails closed
+ * to `Content-Security-Policy`.
  *
  * `script-src` is **nonce-based**: a per-request nonce ({@link generateNonce},
  * generated once in `workers/app.ts`) is threaded both into this header AND into
  * the SSR shell's inline `<script>`s (theme-flash guard + React Router's
  * `<Scripts>`/`<ScrollRestoration>`, via `AppLoadContext` → `NonceContext`), and
- * `'unsafe-inline'` is dropped from `script-src`. Under report-only this surfaces
- * any inline script lacking the nonce (e.g. a third-party snippet) before
- * enforcing. `style-src` deliberately KEEPS `'unsafe-inline'`: a CSP nonce covers
+ * `'unsafe-inline'` is dropped from `script-src`, so any inline script lacking
+ * the nonce is rejected or reported according to the selected mode. `style-src`
+ * deliberately KEEPS `'unsafe-inline'`: a CSP nonce covers
  * `<style>` elements but NOT inline `style="…"` attributes, which React emits
- * everywhere — so a nonce cannot replace `'unsafe-inline'` for styles. Flipping
- * report-only → enforce is the remaining follow-up, after a clean report-only
- * window confirms nothing legitimate is blocked.
+ * everywhere — so a nonce cannot replace `'unsafe-inline'` for styles.
  */
 
 /**
  * CSP directives, keyed in serialization order. `script-src` varies with the
- * per-request `nonce`; every other directive is static. Each non-`self` origin
- * is justified against a real dependency: PostHog (`us-assets.i.posthog.com`
- * bundle, `us.i.posthog.com` ingest), Google Fonts (`fonts.googleapis.com`
- * stylesheet, `fonts.gstatic.com` files). `img-src` stays broad (`https:`) for
- * the report-only pass and is tightened later.
+ * per-request `nonce`; every other directive is static except PostHog origins.
+ * Each non-`self` origin is justified against a real dependency: PostHog
+ * (configured ingestion + asset origins), Google Fonts (`fonts.googleapis.com`
+ * stylesheet, `fonts.gstatic.com` files). `img-src` stays broad (`https:`)
+ * because legacy/imported recipe and profile images can still be external.
  */
-function cspDirectives(nonce?: string): Record<string, readonly string[]> {
+const DEFAULT_POSTHOG_INGEST_ORIGIN = "https://us.i.posthog.com";
+const DEFAULT_POSTHOG_ASSETS_ORIGIN = "https://us-assets.i.posthog.com";
+export const OAUTH_FORM_ACTION_ORIGIN_HEADER = "X-Spoonjoy-OAuth-Form-Action-Origin";
+
+interface PostHogCspEnv {
+  VITE_POSTHOG_HOST?: string | null;
+}
+
+export interface PostHogCspOrigins {
+  ingestOrigin: string;
+  assetsOrigin: string;
+}
+
+interface WranglerPostHogEnvironment {
+  vars?: unknown;
+}
+
+interface WranglerPostHogConfig extends WranglerPostHogEnvironment {
+  env?: unknown;
+}
+
+function safeHttpsOrigin(raw: string | null | undefined): string | null {
+  const value = (raw ?? "").trim();
+  if (!value) return null;
+
+  if (/\s/.test(value) || !URL.canParse(value)) {
+    return null;
+  }
+
+  const url = new URL(value);
+  if (url.protocol !== "https:" || url.username || url.password || !url.hostname) {
+    return null;
+  }
+  return url.origin;
+}
+
+function postHogAssetsOriginFor(ingestOrigin: string): string {
+  const url = new URL(ingestOrigin);
+  const postHogIngest = url.hostname.match(/^([a-z0-9-]+)\.i\.posthog\.com$/i);
+  if (postHogIngest) {
+    return `https://${postHogIngest[1].toLowerCase()}-assets.i.posthog.com`;
+  }
+  return ingestOrigin;
+}
+
+export function resolvePostHogCspOrigins(env?: PostHogCspEnv | null): PostHogCspOrigins {
+  const ingestOrigin = safeHttpsOrigin(env?.VITE_POSTHOG_HOST) ?? DEFAULT_POSTHOG_INGEST_ORIGIN;
+  return {
+    ingestOrigin,
+    assetsOrigin: postHogAssetsOriginFor(ingestOrigin),
+  };
+}
+
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+export function resolvePostHogBuildHost(
+  wrangler: WranglerPostHogConfig,
+  environment?: string,
+): string {
+  const root = objectValue(wrangler);
+  const environmentConfig = environment
+    ? objectValue(objectValue(root?.env)?.[environment])
+    : root;
+  if (!environmentConfig) {
+    throw new Error(`Wrangler environment ${environment ?? "production"} is missing.`);
+  }
+
+  const configured = objectValue(environmentConfig.vars)?.VITE_POSTHOG_HOST;
+  const raw = typeof configured === "string" ? configured : "";
+  const origin = safeHttpsOrigin(raw);
+  if (!origin || raw !== origin) {
+    throw new Error(
+      `Wrangler environment ${environment ?? "production"} must define an origin-only HTTPS VITE_POSTHOG_HOST.`,
+    );
+  }
+  return origin;
+}
+
+function uniqueSources(sources: readonly string[]): readonly string[] {
+  return Array.from(new Set(sources));
+}
+
+function safeOAuthFormActionOrigin(raw: string | null): string | null {
+  const value = (raw ?? "").trim();
+  if (!value || /\s/.test(value) || !URL.canParse(value)) return null;
+
+  const url = new URL(value);
+  if (value !== url.origin || url.username || url.password || !url.hostname) return null;
+  if (url.protocol === "https:") return url.origin;
+  if (
+    url.protocol === "http:" &&
+    (url.hostname === "localhost" || url.hostname === "127.0.0.1")
+  ) {
+    return url.origin;
+  }
+  return null;
+}
+
+function cspDirectives(
+  nonce?: string,
+  env?: PostHogCspEnv | null,
+  formActionOrigin?: string | null,
+): Record<string, readonly string[]> {
+  const postHog = resolvePostHogCspOrigins(env);
+  const oauthFormActionOrigin = safeOAuthFormActionOrigin(formActionOrigin ?? null);
   return {
     "default-src": ["'self'"],
     "base-uri": ["'self'"],
     "object-src": ["'none'"],
     "frame-ancestors": ["'none'"],
-    "form-action": ["'self'"],
+    "form-action": uniqueSources([
+      "'self'",
+      ...(oauthFormActionOrigin ? [oauthFormActionOrigin] : []),
+    ]),
     "script-src": nonce
-      ? ["'self'", `'nonce-${nonce}'`, "https://us-assets.i.posthog.com"]
-      : ["'self'", "https://us-assets.i.posthog.com"],
+      ? uniqueSources(["'self'", `'nonce-${nonce}'`, postHog.assetsOrigin])
+      : uniqueSources(["'self'", postHog.assetsOrigin]),
     "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
     "font-src": ["'self'", "https://fonts.gstatic.com"],
     "img-src": ["'self'", "data:", "blob:", "https:"],
-    "connect-src": ["'self'", "https://us.i.posthog.com", "https://us-assets.i.posthog.com"],
+    "connect-src": uniqueSources(["'self'", postHog.ingestOrigin, postHog.assetsOrigin]),
     "report-uri": ["/csp-report"],
     // Modern Reporting API: `report-to` names a group defined by the
     // `Reporting-Endpoints` response header (see SECURITY_HEADERS). Kept
     // alongside the deprecated-but-still-supported `report-uri` so violations
     // are reported across both legacy and current browsers (Chrome has
-    // deprecated `report-uri`) during the report-only window.
+    // deprecated `report-uri`).
     "report-to": ["csp-endpoint"],
   };
 }
 
 /**
- * Serialize the report-only CSP for a response. Pass the per-request `nonce` for
+ * Serialize the CSP for a response. Pass the per-request `nonce` for
  * HTML renders (so the SSR inline scripts validate); omit it for non-HTML
  * responses (redirects, CORS preflight, resource routes) which carry no inline
  * script and therefore need no nonce in `script-src`.
  */
-export function buildContentSecurityPolicy(nonce?: string): string {
-  return Object.entries(cspDirectives(nonce))
+export function buildContentSecurityPolicy(
+  nonce?: string,
+  env?: PostHogCspEnv | null,
+  formActionOrigin?: string | null,
+): string {
+  return Object.entries(cspDirectives(nonce, env, formActionOrigin))
     .map(([directive, sources]) => [directive, ...sources].join(" "))
     .join("; ");
+}
+
+export type ContentSecurityPolicyMode = "enforce" | "report-only";
+
+interface ContentSecurityPolicyEnv {
+  SPOONJOY_CSP_MODE?: string | null;
+  VITE_POSTHOG_HOST?: string | null;
+}
+
+export function resolveContentSecurityPolicyMode(
+  env?: ContentSecurityPolicyEnv | null,
+): ContentSecurityPolicyMode {
+  return env?.SPOONJOY_CSP_MODE === "report-only" ? "report-only" : "enforce";
 }
 
 /**
@@ -108,9 +234,9 @@ export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
 };
 
 /**
- * Return a copy of `response` with the baseline security headers + the
- * report-only CSP added. Pass the per-request `nonce` for HTML renders so the
- * CSP's nonce-based `script-src` matches the SSR inline-script nonces.
+ * Return a copy of `response` with the baseline security headers + the selected
+ * CSP mode added. Pass the per-request `nonce` for HTML renders so the CSP's
+ * nonce-based `script-src` matches the SSR inline-script nonces.
  *
  * Rebuilds the response so a streamed SSR body, a redirect (null body +
  * `Location`), or an immutable `Response.redirect` result all pick the headers
@@ -118,18 +244,26 @@ export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
  * any key collision, except an explicit `Referrer-Policy: no-referrer`, which
  * is stricter than the baseline for sensitive callback routes.
  */
-export function withSecurityHeaders(response: Response, nonce?: string): Response {
+export function withSecurityHeaders(
+  response: Response,
+  nonce?: string,
+  env?: ContentSecurityPolicyEnv | null,
+): Response {
   const headers = new Headers(response.headers);
+  const oauthFormActionOrigin = headers.get(OAUTH_FORM_ACTION_ORIGIN_HEADER);
+  headers.delete(OAUTH_FORM_ACTION_ORIGIN_HEADER);
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
     if (name === "Referrer-Policy" && headers.get(name)?.trim().toLowerCase() === "no-referrer") {
       continue;
     }
     headers.set(name, value);
   }
-  headers.set(
-    "Content-Security-Policy-Report-Only",
-    buildContentSecurityPolicy(nonce),
-  );
+  const cspHeaderName = resolveContentSecurityPolicyMode(env) === "enforce"
+    ? "Content-Security-Policy"
+    : "Content-Security-Policy-Report-Only";
+  headers.delete("Content-Security-Policy");
+  headers.delete("Content-Security-Policy-Report-Only");
+  headers.set(cspHeaderName, buildContentSecurityPolicy(nonce, env, oauthFormActionOrigin));
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,

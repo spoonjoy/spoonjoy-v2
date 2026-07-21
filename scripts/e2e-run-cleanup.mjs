@@ -202,6 +202,9 @@ export async function cleanupE2eRunAfterServer({
       encoding: "utf8",
       maxBuffer: MAX_WRANGLER_BUFFER,
     });
+    if ((result.stderr ?? "").trim() !== "") {
+      throw new Error("Exact E2E OAuth cleanup emitted unexpected stderr output.");
+    }
     const rows = parseWranglerRows(result.stdout ?? "");
     const remaining = rows.find((row) => Object.hasOwn(row, "remainingCount"));
     if (!remaining || Number(remaining.remainingCount) !== 0) {

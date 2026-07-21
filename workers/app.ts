@@ -52,6 +52,16 @@ function cookProtocolUnavailableResponse() {
   return response;
 }
 
+function configuredCookSessionOrigin(env: CloudflareEnvironment): string | null {
+  if (!env.SPOONJOY_BASE_URL) return null;
+  try {
+    const url = new URL(env.SPOONJOY_BASE_URL);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
 function classifyCookRoute(request: Request, url: URL): CookRouteRequirement | null {
   if (url.search) return null;
   if (request.method === "GET" && url.pathname === COOK_SESSION_PREFIX) {
@@ -104,7 +114,10 @@ async function handleCookSessionRequest(
         "This credential does not include the required cook-session scope.",
       );
     }
-    if (requirement.originRequired && request.headers.get("Origin") !== url.origin) {
+    if (
+      requirement.originRequired &&
+      request.headers.get("Origin") !== configuredCookSessionOrigin(env)
+    ) {
       return cookErrorResponse(403, "origin_forbidden", "Request origin is not allowed.");
     }
     return cookProtocolUnavailableResponse();
@@ -123,6 +136,7 @@ async function handleCookSessionBootstrapRequest(
 ): Promise<Response> {
   const url = new URL(request.url);
   const workerVersionId = env.CF_VERSION_METADATA?.id;
+  const connectingIp = request.headers.get("CF-Connecting-IP");
   if (
     url.pathname !== COOK_SESSION_BOOTSTRAP_PATH ||
     url.search ||
@@ -130,10 +144,16 @@ async function handleCookSessionBootstrapRequest(
     env.COOK_SESSION_BOOTSTRAP_MODE !== "1" ||
     !workerVersionId ||
     !env.COOK_SESSIONS ||
-    await request.text() !== ""
+    request.body !== null ||
+    !connectingIp ||
+    !env.AUTH_IP_RATE_LIMITER
   ) {
     return new Response(null, { status: 404 });
   }
+  const rateLimit = await env.AUTH_IP_RATE_LIMITER.limit({
+    key: `cook-session-bootstrap:${connectingIp}`,
+  });
+  if (!rateLimit.success) return new Response(null, { status: 404 });
 
   const objectId = env.COOK_SESSIONS.idFromName(`bootstrap:${workerVersionId}`);
   const response = await env.COOK_SESSIONS.get(objectId).fetch(new Request(
@@ -159,7 +179,7 @@ function finalizeResponse(
   env: CloudflareEnvironment,
   nonce?: string,
 ): Response {
-  const finalized = withSecurityHeaders(response, nonce);
+  const finalized = withSecurityHeaders(response, nonce, env);
   const workerVersionId = env.CF_VERSION_METADATA?.id;
   if (workerVersionId) {
     finalized.headers.set("X-Spoonjoy-Worker-Version", workerVersionId);
@@ -198,8 +218,8 @@ export default {
         return finalizeResponse(response, env);
       }
 
-      // One nonce per request: it must appear identically in the report-only
-      // CSP header (below) and in the SSR shell's inline <script> nonces,
+      // One nonce per request: it must appear identically in the selected CSP
+      // header (below) and in the SSR shell's inline <script> nonces,
       // threaded via loadContext → entry.server → NonceContext.
       const nonce = generateNonce();
       const response = await requestHandler(request, {

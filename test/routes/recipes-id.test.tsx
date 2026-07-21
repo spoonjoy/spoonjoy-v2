@@ -2181,6 +2181,8 @@ describe("Recipes $id Route", () => {
   describe("component", () => {
     const settleBrowserTasks = async () => {
       await act(async () => {
+        await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+        await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       });
     };
@@ -2244,6 +2246,7 @@ describe("Recipes $id Route", () => {
       await openSaveModalFromDock();
 
       expect(await screen.findByRole("dialog", { name: "Save to Cookbook" })).toBeInTheDocument();
+      await settleBrowserTasks();
       expect(screen.getByLabelText("Create new cookbook")).toBeInTheDocument();
 
       const backdrop = document.querySelector('[data-slot="dialog-backdrop"]');
