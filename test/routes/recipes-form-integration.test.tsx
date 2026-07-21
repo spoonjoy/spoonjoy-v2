@@ -301,6 +301,9 @@ describe("RecipeBuilder Route Integration", () => {
         await waitFor(() => {
           expect(submitButton).toHaveAttribute("aria-busy", "true");
         });
+        await waitFor(() => {
+          expect(submitButton).toBeEnabled();
+        });
       });
     });
   });
