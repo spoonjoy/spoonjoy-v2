@@ -32,3 +32,14 @@ Both calls asserted status 200, the exact four-field response, a matching `X-Spo
 ## Cold Review
 
 A fresh reviewer independently inspected Cloudflare's deployment/version metadata, confirmed `migration_tag: v1_cook_session`, replayed two exact bootstrap probes, queried remote D1, and checked the worktree. It returned `CONVERGED` with no finding at any severity. The reviewer classified the immediate post-deploy 405 as edge propagation before convergence, not an acceptance failure, because the required version-bound calls were replayed successfully after the deployment reached 100%.
+
+## Integration Revalidation
+
+After merging current `main`, the final PR candidate added fail-closed public-probe abuse controls. Deployment `34eb892b-c90e-417e-8043-7a06e287084d` exposed a live-runtime mismatch: Cloudflare represented an empty headerless `POST` with a non-null stream, so version `10cb7e21-4a7d-4457-97bb-959da6e95778` returned 404. The candidate was not accepted. A reviewed repair now accepts only a non-null stream paired with explicit `Content-Length: 0`; headerless or otherwise declared bodies return 404 before rate limiting or Durable Object access.
+
+- Final runtime head: `da1fbd30e0e77ed5edb3c9ed5044d69c224cae4b`.
+- QA deployment: `999e7df7-e629-48ac-a1ae-19b75a877dc4`, created `2026-07-21T10:21:42.227883Z`.
+- QA Worker version: `a61526d0-249d-472d-a413-c6cad1bcec5a` at 100% traffic.
+- Two strict `POST` probes with explicit `Content-Length: 0` returned status 200, the matching version header, and exact `{ok:true,storage:"sqlite",residue:0,workerVersionId:"a61526d0-249d-472d-a413-c6cad1bcec5a"}` payloads.
+- Remote QA D1 again returned `table_count: 0` for `CookSessionIndex`; local disposable-data dry-run counts were all zero.
+- Two independent security reviews converged after an adversarial headerless non-empty stream test proved 404 with no body read, limiter call, object derivation, or Durable Object fetch.
