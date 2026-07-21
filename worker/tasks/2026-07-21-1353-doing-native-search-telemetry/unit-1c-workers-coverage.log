@@ -1,0 +1,30 @@
+
+> spoonjoy-v2@1.0.0 verify:clean:test:workers:coverage /Users/arimendelow/Projects/spoonjoy-v2-native-search-telemetry
+> node scripts/run-with-warning-policy.mjs -- pnpm run test:workers:coverage
+
+
+> spoonjoy-v2@1.0.0 test:workers:coverage /Users/arimendelow/Projects/spoonjoy-v2-native-search-telemetry
+> vitest run --config vitest.workers.config.ts --maxWorkers=1 --no-isolate --coverage
+
+
+ RUN  v4.1.10 /Users/arimendelow/Projects/spoonjoy-v2-native-search-telemetry
+      Coverage enabled with istanbul
+
+
+ Test Files  1 passed (1)
+      Tests  13 passed (13)
+   Start at  14:25:09
+   Duration  11.16s (transform 3.17s, setup 91ms, import 5.64s, tests 4.11s, environment 0ms)
+
+ % Coverage report from istanbul
+-----------------|---------|----------|---------|---------|-------------------
+File             | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
+-----------------|---------|----------|---------|---------|-------------------
+-----------------|---------|----------|---------|---------|-------------------
+
+=============================== Coverage summary ===============================
+Statements   : 100% ( 37/37 )
+Branches     : 100% ( 23/23 )
+Functions    : 100% ( 5/5 )
+Lines        : 100% ( 37/37 )
+================================================================================

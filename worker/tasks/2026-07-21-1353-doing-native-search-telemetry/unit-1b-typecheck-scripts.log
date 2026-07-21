@@ -1,0 +1,3 @@
+
+> spoonjoy-v2@1.0.0 typecheck:scripts /Users/arimendelow/Projects/spoonjoy-v2-native-search-telemetry
+> tsc -p tsconfig.scripts.json

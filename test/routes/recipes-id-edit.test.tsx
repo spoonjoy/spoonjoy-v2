@@ -2423,6 +2423,9 @@ describe("Recipes $id Edit Route", () => {
       await waitFor(() => {
         expect(submittedData).not.toBeNull();
       });
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Save Recipe" })).not.toBeDisabled();
+      });
 
       expect(submittedData.title).toBe("Updated Title");
       expect(submittedData.description).toBe("Updated description");
@@ -2490,6 +2493,9 @@ describe("Recipes $id Edit Route", () => {
       await waitFor(() => {
         expect(submittedData).not.toBeNull();
       });
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Save Recipe" })).not.toBeDisabled();
+      });
 
       expect(submittedData.title).toBe("Dock Updated Title");
       expect(submittedData.description).toBe("Dock updated description");
@@ -2541,6 +2547,9 @@ describe("Recipes $id Edit Route", () => {
 
       await waitFor(() => {
         expect(submittedData).not.toBeNull();
+      });
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Save Recipe" })).not.toBeDisabled();
       });
 
       expect(submittedData.title).toBe("Test Recipe");
@@ -2682,6 +2691,9 @@ describe("Recipes $id Edit Route", () => {
 
       await waitFor(() => {
         expect(submittedData).not.toBeNull();
+      });
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Save Recipe" })).not.toBeDisabled();
       });
 
       expect(submittedData.clearImage).toBe("true");

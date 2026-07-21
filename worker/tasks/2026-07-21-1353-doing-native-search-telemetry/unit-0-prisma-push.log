@@ -1,0 +1,12 @@
+
+> spoonjoy-v2@1.0.0 prisma:push /Users/arimendelow/Projects/spoonjoy-v2-native-search-telemetry
+> prisma db push
+
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": SQLite database "test.db" at "file:./test.db"
+
+🚀  Your database is now in sync with your Prisma schema. Done in 212ms
+
+Running generate... (Use --skip-generate to skip the generators)
+[2K[1A[2K[GRunning generate... - Prisma Client
+[2K[1A[2K[G✔ Generated Prisma Client (v6.19.2) to ./node_modules/.prisma/client in 594ms

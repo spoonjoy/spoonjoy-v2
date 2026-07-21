@@ -194,6 +194,9 @@ describe("RecipeBuilder Route Integration", () => {
         await waitFor(() => {
           expect(submittedData).not.toBeNull();
         });
+        await waitFor(() => {
+          expect(screen.getByRole("button", { name: "Create Recipe" })).toBeEnabled();
+        });
 
         expect(submittedData.title).toBe("My New Recipe");
         expect(submittedData.description).toBe("A delicious dish");
@@ -485,6 +488,9 @@ describe("RecipeBuilder Route Integration", () => {
         await waitFor(() => {
           expect(submittedData).not.toBeNull();
         });
+        await waitFor(() => {
+          expect(screen.getByRole("button", { name: "Save Recipe" })).toBeEnabled();
+        });
 
         // RecipeBuilder should include clearImage flag when image is cleared
         expect(submittedData.clearImage).toBe("true");
@@ -593,6 +599,9 @@ describe("RecipeBuilder Route Integration", () => {
 
         await waitFor(() => {
           expect(submittedData).not.toBeNull();
+        });
+        await waitFor(() => {
+          expect(screen.getByRole("button", { name: "Save Recipe" })).toBeEnabled();
         });
 
         // RecipeBuilder should include recipe ID in edit mode submission
