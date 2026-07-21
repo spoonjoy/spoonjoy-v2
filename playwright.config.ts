@@ -5,6 +5,7 @@ const authFile = './e2e/.auth/user.json';
 
 export default defineConfig({
   testDir: './e2e',
+  globalTeardown: './e2e/global-teardown.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -35,6 +36,7 @@ export default defineConfig({
       name: 'chromium-no-auth',
       use: { ...devices['Desktop Chrome'] },
       testMatch: [/auth\.spec\.ts/, /example\.spec\.ts/],
+      dependencies: ['setup'],
     },
     // WebAuthn passkey lifecycle — needs a fresh, unauthenticated context and a
     // CDP virtual authenticator (Chromium-only), so it manages its own user.
@@ -50,6 +52,7 @@ export default defineConfig({
       name: 'oauth',
       use: { ...devices['Desktop Chrome'] },
       testMatch: [/oauth-authorize\.spec\.ts/],
+      dependencies: ['setup'],
     },
   ],
   webServer: {

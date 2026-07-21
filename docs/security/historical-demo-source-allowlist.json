@@ -1,0 +1,78 @@
+[
+  {
+    "path": "migrations/0002_seed.sql",
+    "kind": "historical-applied-migration",
+    "immutable": true,
+    "patterns": [
+      "legacy-demo-email",
+      "legacy-demo-password",
+      "legacy-primary-username",
+      "legacy-demo-user-id"
+    ],
+    "reason": "Historical applied migration retained for D1 migration integrity; active seeds no longer use these demo credentials.",
+    "sha256": "8fbf0c4142c61502e6e837c8543ca79e8e1866a1f349dd66b33a5a7f811f0cc8"
+  },
+  {
+    "path": "migrations/0004_reseed.sql",
+    "kind": "historical-applied-migration",
+    "immutable": true,
+    "patterns": [
+      "legacy-demo-email",
+      "legacy-primary-username",
+      "legacy-julia-email",
+      "legacy-secondary-username",
+      "legacy-marco-email",
+      "legacy-marco-username",
+      "legacy-sarah-email",
+      "legacy-sarah-username",
+      "legacy-primary-user-id",
+      "legacy-julia-user-id",
+      "legacy-marco-user-id",
+      "legacy-sarah-user-id"
+    ],
+    "reason": "Historical applied migration retained for D1 migration integrity; active seeds no longer use these fixed fixture identities.",
+    "sha256": "6bef52a2466e0050a5614468cc1246cd259b371107cca5675a6d11f203a5a190"
+  },
+  {
+    "path": "migrations/0024_remove_legacy_demo_identities.sql",
+    "kind": "legacy-removal-migration",
+    "immutable": true,
+    "patterns": [
+      "legacy-demo-user-id",
+      "legacy-primary-user-id",
+      "legacy-julia-user-id",
+      "legacy-marco-user-id",
+      "legacy-sarah-user-id"
+    ],
+    "reason": "Dedicated removal migration must name each legacy identity exactly so deployed fixture rows are deleted without broad user matching.",
+    "sha256": "1ec961f1d012f020d84eaa27f0eab27a9a5bb3279661eb3e02ab938a5de29d3a"
+  },
+  {
+    "path": "scripts/cleanup-local-qa-data.mjs",
+    "kind": "cleanup-target-definition",
+    "immutable": false,
+    "patterns": [
+      "legacy-demo-user-id",
+      "legacy-primary-user-id",
+      "legacy-julia-user-id",
+      "legacy-marco-user-id",
+      "legacy-sarah-user-id"
+    ],
+    "reason": "Environment-gated cleanup must name each legacy identity exactly; the pinned digest makes any expansion or unrelated source use review-visible.",
+    "sha256": "b15d797b11d8fce3c4900bc9e62ba917620f8a2c5d22ec3eaaf6efdc84c0e1a2"
+  },
+  {
+    "path": "test/scripts/migration-0024-remove-legacy-demo-identities.test.ts",
+    "kind": "legacy-removal-contract-test",
+    "immutable": false,
+    "patterns": [
+      "legacy-demo-user-id",
+      "legacy-primary-user-id",
+      "legacy-julia-user-id",
+      "legacy-marco-user-id",
+      "legacy-sarah-user-id"
+    ],
+    "reason": "The removal migration contract test names each legacy identity to prove exact deletion and preservation of real users.",
+    "sha256": "f918d619a67a76af2feb086ec7aa67db9fa058bf73b24761faea87c33d27dc6c"
+  }
+]

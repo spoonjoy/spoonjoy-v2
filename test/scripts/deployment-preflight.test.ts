@@ -275,7 +275,7 @@ function validInputs(): DeploymentPreflightInputs {
           "node scripts/smoke-live.mjs --target-env qa --base-url https://spoonjoy-v2-qa.mendelow-studio.workers.dev --out qa-live-smoke-artifacts",
         "smoke:qa:image-cover":
           "node scripts/smoke-live.mjs --target-env qa --base-url https://spoonjoy-v2-qa.mendelow-studio.workers.dev --out qa-image-cover-smoke-artifacts --include-image-cover-smoke",
-        "db:seed": "pnpm exec tsx prisma/seed.ts",
+        "db:seed": "node scripts/seed-local.mjs --target-env local",
       },
     },
     productionDeployWorkflow: secureProductionDeployWorkflow(),
@@ -1053,6 +1053,34 @@ describe("deployment preflight", () => {
         ].join("\n"),
       ),
     });
+    const cleanupStep = [
+      "      - name: 🧹 Cleanup local disposable data",
+      "        if: always()",
+      "        run: node scripts/warning-gate.ts -- pnpm run cleanup:local:apply",
+    ].join("\n");
+    const missingCleanup = validateDeploymentConfig({
+      ...validInputs(),
+      ciWorkflow: replaceRequired(validCiWorkflow(), cleanupStep + "\n", ""),
+    });
+    const cleanupOnlyOnSuccess = validateDeploymentConfig({
+      ...validInputs(),
+      ciWorkflow: replaceRequired(
+        validCiWorkflow(),
+        cleanupStep,
+        cleanupStep.replace("if: always()", "if: success()"),
+      ),
+    });
+    const ungatedCleanup = validateDeploymentConfig({
+      ...validInputs(),
+      ciWorkflow: replaceRequired(
+        validCiWorkflow(),
+        cleanupStep,
+        cleanupStep.replace(
+          "node scripts/warning-gate.ts -- pnpm run cleanup:local:apply",
+          "pnpm run cleanup:local:apply",
+        ),
+      ),
+    });
 
     expect(valid.errors.map((item) => item.name)).not.toContain("CI workflow");
     expect(missingGitConfig.errors.map((item) => item.name)).toContain("CI workflow");
@@ -1071,6 +1099,9 @@ describe("deployment preflight", () => {
     expect(unwrappedInstall.errors.map((item) => item.name)).toContain("CI workflow");
     expect(ungatedDuplicate.errors.map((item) => item.name)).toContain("CI workflow");
     expect(ungatedNewCommand.errors.map((item) => item.name)).toContain("CI workflow");
+    expect(missingCleanup.errors.map((item) => item.name)).toContain("CI workflow");
+    expect(cleanupOnlyOnSuccess.errors.map((item) => item.name)).toContain("CI workflow");
+    expect(ungatedCleanup.errors.map((item) => item.name)).toContain("CI workflow");
   });
 
   it.each([
@@ -3094,7 +3125,7 @@ describe("deployment docs", () => {
       "IMAGE_PROVIDER_PRIMARY=gemini",
       "OAuth callback",
       "WebAuthn",
-      "sj-qa-demo",
+      "codex-qa-seed-",
       "codex-smoke-",
       "--target-env qa",
       "Do not run broad production cleanup",

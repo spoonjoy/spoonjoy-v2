@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { installWorkerVersionBrowserRouting } from '../../scripts/smoke-live-helpers.mjs';
-import { loginAsSeedUser, submitPasswordLogin } from '../support/auth';
+import { loginAsDisposableUser, submitPasswordLogin } from '../support/auth';
 
 const CANDIDATE_VERSION = '22222222-2222-4222-8222-222222222222';
 const OVERRIDE_HEADER = 'cloudflare-workers-version-overrides';
@@ -36,7 +36,7 @@ test.describe('Auth Flow', () => {
   test('login with valid credentials redirects to public recipe index', async ({ page }) => {
     await page.goto('/login');
     
-    await loginAsSeedUser(page);
+    await loginAsDisposableUser(page);
     
     // Should redirect to the public recipe index.
     expect(new URL(page.url()).pathname).toBe('/recipes');
@@ -56,7 +56,7 @@ test.describe('Auth Flow', () => {
   test('logout redirects to landing page', async ({ page }) => {
     // First login
     await page.goto('/login');
-    await loginAsSeedUser(page);
+    await loginAsDisposableUser(page);
     
     // Click logout
     const logoutButton = page.getByRole('button', { name: /log\s*out/i }).first();

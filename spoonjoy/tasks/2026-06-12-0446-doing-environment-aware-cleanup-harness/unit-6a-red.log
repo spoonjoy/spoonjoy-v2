@@ -392,7 +392,7 @@ AssertionError: expected '# Spoonjoy v2\n\nRecipe management pl…' to contain '
 +
 + See [docs/deployment.md](./docs/deployment.md) for the full production checklist, local `.dev.vars` guidance, and common failure modes.
 +
-+ The dedicated QA environment uses D1 `spoonjoy-qa`, R2 `spoonjoy-photos-qa`, seed namespace `sj-qa-demo`, and disposable `codex-smoke-` users. Configure QA secrets with commands such as `wrangler secret put SESSION_SECRET --env qa` and verify them with `wrangler secret list --env qa`. QA docs also cover `POSTHOG_DISABLED=true`, `IMAGE_PROVIDER_PRIMARY=gemini`, OAuth callback setup, WebAuthn origins, and the rule: Do not run broad production cleanup.
++ The dedicated QA environment uses D1 `spoonjoy-qa`, R2 `spoonjoy-photos-qa`, seed namespace `codex-qa-seed-`, and disposable `codex-smoke-` users. Configure QA secrets with commands such as `wrangler secret put SESSION_SECRET --env qa` and verify them with `wrangler secret list --env qa`. QA docs also cover `POSTHOG_DISABLED=true`, `IMAGE_PROVIDER_PRIMARY=gemini`, OAuth callback setup, WebAuthn origins, and the rule: Do not run broad production cleanup.
 +
 + ## Project Structure
 +
@@ -484,7 +484,7 @@ AssertionError: expected '# Spoonjoy v2\n\nRecipe management pl…' to contain '
 + - D1 database: `spoonjoy-qa`
 + - R2 bucket: `spoonjoy-photos-qa`
 + - Rate-limit namespaces: `2001`, `2002`, `2003`
-+ - Disposable seed namespace: `sj-qa-demo`
++ - Disposable seed namespace: `codex-qa-seed-`
 + - Disposable smoke users: `codex-smoke-...@example.com`
 +
 + First-time QA resource creation:

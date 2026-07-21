@@ -87,7 +87,7 @@ Tests first → red → minimal impl → green → refactor. Commit per unit.
 **Acceptance**: docs render; BACKLOG updated; `test/repo-hygiene.test.ts` + any doc-referencing tests still pass.
 
 ### ⬜ Unit 5: Full verify + deploy + confirm in Claude Code
-**What**: `pnpm typecheck`, `pnpm test:coverage` (100%), `pnpm build`, `pnpm test:e2e --workers=1`. Open PR, CI green, merge. Deploy (`pnpm deploy:auto`), `pnpm smoke:live` against spoonjoy.app. Mint an `sj_` token for `demo@spoonjoy.com` (createApiCredential; optionally via the device-code flow end-to-end). `claude mcp add --transport http spoonjoy https://spoonjoy.app/mcp --header "Authorization: Bearer sj_…"`. Run `tools/list` + a real `tools/call` (e.g. search) through the connector to confirm. Save confirmation transcript to the artifacts dir.
+**What**: `pnpm typecheck`, `pnpm test:coverage` (100%), `pnpm build`, `pnpm test:e2e --workers=1`. Open PR, CI green, merge. Deploy (`pnpm deploy:auto`), `pnpm smoke:live` against spoonjoy.app. Mint an `sj_` token for an explicitly created disposable reviewer account (createApiCredential; optionally via the device-code flow end-to-end). `claude mcp add --transport http spoonjoy https://spoonjoy.app/mcp --header "Authorization: Bearer sj_…"`. Run `tools/list` + a real `tools/call` (e.g. search) through the connector to confirm. Save confirmation transcript to the artifacts dir.
 **Acceptance**: connector listed in `claude mcp list`, a real tool call returns Spoonjoy data.
 
 ## Execution

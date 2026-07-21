@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { createDisposableE2EUser } from '../support/disposable-auth';
 
 /**
  * Full passkey lifecycle against a real (virtual) authenticator:
@@ -11,6 +12,8 @@ import { test, expect } from '@playwright/test';
  * never mutates the shared seed account other authed specs depend on.
  */
 test.describe('Passkey lifecycle', () => {
+  test.setTimeout(90_000);
+
   test('enroll, rename, sign in, and remove a passkey', async ({ page }) => {
     // Attach a virtual authenticator that auto-approves user presence +
     // verification, so register/authenticate ceremonies resolve without UI.
@@ -27,17 +30,14 @@ test.describe('Passkey lifecycle', () => {
       },
     });
 
-    const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-    const email = `e2e-passkey-${suffix}@example.com`;
-    const username = `epk_${suffix}`.slice(0, 20);
-    const password = 'passkey-e2e-pw-1234';
+    const user = createDisposableE2EUser();
 
     // --- sign up a fresh user (lands logged in on /recipes) ---
     await page.goto('/signup');
-    await page.getByLabel('Email').first().fill(email);
-    await page.getByLabel('Username').first().fill(username);
-    await page.getByLabel('Password', { exact: true }).first().fill(password);
-    await page.getByLabel('Confirm Password').first().fill(password);
+    await page.getByLabel('Email').first().fill(user.email);
+    await page.getByLabel('Username').first().fill(user.username);
+    await page.getByLabel('Password', { exact: true }).first().fill(user.password);
+    await page.getByLabel('Confirm Password').first().fill(user.password);
     await page.getByRole('button', { name: /sign up/i }).first().click();
     await expect(page).toHaveURL('/recipes');
 
@@ -63,7 +63,7 @@ test.describe('Passkey lifecycle', () => {
     // replace the login document so the consent page receives its callback CSP.
     const redirectUri = 'https://client.example/oauth/passkey-e2e-callback';
     const registration = await page.request.post('/oauth/register', {
-      data: { client_name: 'Passkey E2E OAuth Client', redirect_uris: [redirectUri] },
+      data: { client_name: 'E2E OAuth Client', redirect_uris: [redirectUri] },
     });
     expect(registration.status()).toBe(201);
     const { client_id: clientId } = await registration.json() as { client_id: string };
@@ -81,8 +81,8 @@ test.describe('Passkey lifecycle', () => {
     await expect(page).toHaveURL(/\/login\?redirectTo=/);
     const loginEmail = page.getByLabel('Email').first();
     await expect(page.getByRole('button', { name: /sign in with a passkey/i }).first()).toBeVisible();
-    await loginEmail.fill(email);
-    await expect(loginEmail).toHaveValue(email);
+    await loginEmail.fill(user.email);
+    await expect(loginEmail).toHaveValue(user.email);
     const consentDocument = page.waitForResponse((response) => {
       const url = new URL(response.url());
       return url.pathname === '/oauth/authorize'
@@ -90,7 +90,7 @@ test.describe('Passkey lifecycle', () => {
         && response.headers()['content-type']?.includes('text/html') === true;
     });
     await page.getByRole('button', { name: /sign in with a passkey/i }).first().click();
-    await expect(page.getByRole('heading', { name: /connect passkey e2e oauth client to spoonjoy/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /connect e2e oauth client to spoonjoy/i })).toBeVisible();
     const consentResponse = await consentDocument;
     expect(consentResponse.headers()['content-security-policy']).toContain(
       "form-action 'self' https://client.example",

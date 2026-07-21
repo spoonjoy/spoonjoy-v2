@@ -414,47 +414,47 @@ AssertionError: expected '/**\n * Database Seed Script for Spoo…' to contain '
 +
 + const SEED_USERS: SeedUser[] = [
 +   {
-+     email: "demo@spoonjoy.com",
-+     username: "demo_chef",
-+     password: "demo1234",
++     email: "disposable-reviewer@example.test",
++     username: "disposable_user",
++     password: "Redacted-Test-Credential",
 +     photoUrl: CHEF_RJ_AVATAR_URL,
 +   },
 +   {
-+     email: "chef.julia@example.com",
-+     username: "chef_julia",
-+     password: "password123",
++     email: "redacted@example.invalid",
++     username: "redacted_user",
++     password: "Redacted-Test-Credential",
 +     photoUrl: CHEF_RJ_AVATAR_URL,
 +   },
 +   {
-+     email: "marco.rossi@example.com",
-+     username: "marco_rossi",
-+     password: "password123",
++     email: "redacted@example.invalid",
++     username: "redacted_user",
++     password: "Redacted-Test-Credential",
 +     photoUrl: CHEF_RJ_AVATAR_URL,
 +   },
 +   {
-+     email: "sarah.chen@example.com",
-+     username: "sarah_chen",
-+     password: "password123",
++     email: "redacted@example.invalid",
++     username: "redacted_user",
++     password: "Redacted-Test-Credential",
 +     photoUrl: CHEF_RJ_AVATAR_URL,
 +   },
 +   {
-+     email: "alex.google@example.com",
-+     username: "alex_gourmet",
++     email: "redacted-oauth@example.invalid",
++     username: "redacted_oauth_user",
 +     photoUrl: CHEF_RJ_AVATAR_URL,
 +     oauth: {
 +       provider: "google",
-+       providerUserId: "google_123456789",
-+       providerUsername: "alex.google@gmail.com",
++       providerUserId: "redacted_provider_user_id",
++       providerUsername: "redacted-provider@example.invalid",
 +     },
 +   },
 +   {
-+     email: "jamie.apple@example.com",
-+     username: "jamie_kitchen",
++     email: "redacted-oauth@example.invalid",
++     username: "redacted_oauth_user",
 +     photoUrl: CHEF_RJ_AVATAR_URL,
 +     oauth: {
 +       provider: "apple",
-+       providerUserId: "apple_987654321",
-+       providerUsername: "jamie.apple@icloud.com",
++       providerUserId: "redacted_provider_user_id",
++       providerUsername: "redacted-provider@example.invalid",
 +     },
 +   },
 + ];
@@ -1015,7 +1015,7 @@ AssertionError: expected '/**\n * Database Seed Script for Spoo…' to contain '
 +     description:
 +       "A crunchy-edged skillet sandwich with molten cheddar, a parmesan lace crust, and a swipe of tomato paste for depth.",
 +     servings: "2 sandwiches",
-+     chefUsername: "demo_chef",
++     chefUsername: "disposable_user",
 +     imageUrl: "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=900&q=82",
 +     steps: [
 +       {
@@ -1050,7 +1050,7 @@ AssertionError: expected '/**\n * Database Seed Script for Spoo…' to contain '
 +     description:
 +       "A bright, sturdy salad with chickpeas, cucumber, herbs, and feta that can sit on the counter while everyone drifts in.",
 +     servings: "4 servings",
-+     chefUsername: "demo_chef",
++     chefUsername: "disposable_user",
 +     imageUrl: "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=900&q=82",
 +     steps: [
 +       {
@@ -1096,7 +1096,7 @@ AssertionError: expected '/**\n * Database Seed Script for Spoo…' to contain '
 +     description:
 +       "Creamy white beans in tomato-brown butter with sage and parmesan, halfway between pantry dinner and restaurant side.",
 +     servings: "4 servings",
-+     chefUsername: "demo_chef",
++     chefUsername: "disposable_user",
 +     imageUrl: "https://images.unsplash.com/photo-1547592166-23ac45744acd?w=900&q=82",
 +     steps: [
 +       {
@@ -1138,7 +1138,7 @@ AssertionError: expected '/**\n * Database Seed Script for Spoo…' to contain '
 +     description:
 +       "Broccoli roasted hard, tossed with lemony parmesan dressing, crisp crumbs, and enough herbs to keep it lively.",
 +     servings: "4 servings",
-+     chefUsername: "demo_chef",
++     chefUsername: "disposable_user",
 +     imageUrl: "https://images.unsplash.com/photo-1625944525533-473f1a3d54e7?w=900&q=82",
 +     steps: [
 +       {
@@ -1181,7 +1181,7 @@ AssertionError: expected '/**\n * Database Seed Script for Spoo…' to contain '
 +     description:
 +       "Slippery udon, browned mushrooms, miso butter, and scallions for the fastest bowl that still feels considered.",
 +     servings: "2 bowls",
-+     chefUsername: "demo_chef",
++     chefUsername: "disposable_user",
 +     imageUrl: "https://images.unsplash.com/photo-1618841557871-b4664fbf0cb3?w=900&q=82",
 +     steps: [
 +       {
@@ -1222,7 +1222,7 @@ AssertionError: expected '/**\n * Database Seed Script for Spoo…' to contain '
 +     description:
 +       "A plush, not-too-sweet cake with orange zest, olive oil, and yogurt. Better the next morning with coffee.",
 +     servings: "1 cake",
-+     chefUsername: "demo_chef",
++     chefUsername: "disposable_user",
 +     imageUrl: "https://images.unsplash.com/photo-1464195244916-405fa0a82545?w=900&q=82",
 +     steps: [
 +       {
@@ -1264,7 +1264,7 @@ AssertionError: expected '/**\n * Database Seed Script for Spoo…' to contain '
 +     description:
 +       "Tender turkey meatballs with parsley, dill, and lemon, built for bowls, sandwiches, or a quiet plate with yogurt.",
 +     servings: "4 servings",
-+     chefUsername: "demo_chef",
++     chefUsername: "disposable_user",
 +     imageUrl: "https://images.unsplash.com/photo-1529042410759-befb1204b468?w=900&q=82",
 +     steps: [
 +       {
@@ -1306,7 +1306,7 @@ AssertionError: expected '/**\n * Database Seed Script for Spoo…' to contain '
 +     description:
 +       "A soft, golden pot of lentils, coconut milk, ginger, and lime that tastes like someone looked after you.",
 +     servings: "6 servings",
-+     chefUsername: "demo_chef",
++     chefUsername: "disposable_user",
 +     imageUrl: "https://images.unsplash.com/photo-1547592180-85f173990554?w=900&q=82",
 +     steps: [
 +       {
@@ -1351,7 +1351,7 @@ AssertionError: expected '/**\n * Database Seed Script for Spoo…' to contain '
 +     description:
 +       "Thick toast, lemony ricotta, herbs, and honey. Breakfast, snack, appetizer, all depending on the plate.",
 +     servings: "4 toasts",
-+     chefUsername: "demo_chef",
++     chefUsername: "disposable_user",
 +     imageUrl: "https://images.unsplash.com/photo-1484723091739-30a097e8f929?w=900&q=82",
 +     steps: [
 +       {
@@ -1574,12 +1574,12 @@ AssertionError: expected '/**\n * Database Seed Script for Spoo…' to contain '
 +   },
 +   {
 +     title: "Weeknight Winners",
-+     authorUsername: "demo_chef",
++     authorUsername: "disposable_user",
 +     recipeIndices: [8, 10, 12, 14, 15],
 +   },
 +   {
 +     title: "Market Run Dinners",
-+     authorUsername: "demo_chef",
++     authorUsername: "disposable_user",
 +     recipeIndices: [9, 11, 12, 16],
 +   },
 + ];
@@ -2340,4 +2340,3 @@ AssertionError: expected { …(15) } to match object { sourceType: 'ai-placehold
       Tests  22 failed | 115 passed (137)
    Start at  20:11:27
    Duration  21.54s (transform 375ms, setup 217ms, import 1.54s, tests 18.76s, environment 565ms)
-

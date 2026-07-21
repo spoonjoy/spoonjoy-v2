@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
-import { loginAsSeedUser } from '../support/auth';
+import { loginAsDisposableUser } from '../support/auth';
 
 /**
  * OAuth 2.1 authorize + consent flow against a real browser.
@@ -14,12 +14,11 @@ import { loginAsSeedUser } from '../support/auth';
  * The redirect_uri is intercepted so the assertion reads the exact callback URL
  * the server emits, independent of whatever that in-app route would do next.
  *
- * Runs in the `oauth` project (no stored auth state) and uses the shared seed
- * user — it only reads, so it never mutates the seed account.
+ * Runs in the `oauth` project (no stored auth state) and logs in with the
+ * per-run disposable e2e user created by the setup project.
  */
 
 const REDIRECT_URI = 'https://client.example/oauth/e2e-callback';
-const MCP_RESOURCE = 'https://spoonjoy.app/mcp';
 const APPROVE_STATE = 'oauth-e2e-approve-state';
 const DENY_STATE = 'oauth-e2e-deny-state';
 
@@ -50,7 +49,15 @@ async function registerClient(request: APIRequestContext): Promise<string> {
   return body.client_id;
 }
 
-function authorizeUrl(opts: { clientId: string; codeChallenge: string; state: string }): string {
+async function advertisedMcpResource(request: APIRequestContext): Promise<string> {
+  const response = await request.get('/.well-known/oauth-protected-resource/mcp');
+  expect(response.status()).toBe(200);
+  const body = (await response.json()) as { resource?: unknown };
+  expect(body.resource).toMatch(/^https?:\/\/.+\/mcp$/);
+  return body.resource as string;
+}
+
+function authorizeUrl(opts: { clientId: string; codeChallenge: string; state: string; resource: string }): string {
   const params = new URLSearchParams({
     client_id: opts.clientId,
     redirect_uri: REDIRECT_URI,
@@ -59,7 +66,7 @@ function authorizeUrl(opts: { clientId: string; codeChallenge: string; state: st
     code_challenge_method: 'S256',
     scope: 'kitchen:read',
     state: opts.state,
-    resource: MCP_RESOURCE,
+    resource: opts.resource,
   });
   return `/oauth/authorize?${params}`;
 }
@@ -197,9 +204,10 @@ test.describe('OAuth authorize + consent flow', () => {
   test('unauthenticated authorize gates to login, then consent grants a code', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const clientId = await registerClient(page.request);
+    const resource = await advertisedMcpResource(page.request);
     const verifier = randomVerifier();
     const challenge = await pkceChallenge(verifier);
-    const authorize = authorizeUrl({ clientId, codeChallenge: challenge, state: APPROVE_STATE });
+    const authorize = authorizeUrl({ clientId, codeChallenge: challenge, state: APPROVE_STATE, resource });
 
     // Unauthenticated: the authorize endpoint must redirect to /login, carrying
     // the authorize URL forward in redirectTo so we return after signing in.
@@ -207,14 +215,14 @@ test.describe('OAuth authorize + consent flow', () => {
     await expect(page).toHaveURL(/\/login\?redirectTo=/);
     expect(decodeURIComponent(page.url())).toContain('/oauth/authorize');
 
-    // Log in as the seed user; the preserved redirectTo lands us on consent.
+    // Log in as the disposable e2e user; the preserved redirectTo lands us on consent.
     const consentDocument = page.waitForResponse((response) => {
       const url = new URL(response.url());
       return url.pathname === '/oauth/authorize'
         && response.request().method() === 'GET'
         && response.headers()['content-type']?.includes('text/html') === true;
     });
-    await loginAsSeedUser(page, /\/oauth\/authorize\?/);
+    await loginAsDisposableUser(page, /\/oauth\/authorize\?/);
     const consentResponse = await consentDocument;
     expect(consentResponse.headers()['content-security-policy']).toContain(
       "form-action 'self' https://client.example",
@@ -247,14 +255,15 @@ test.describe('OAuth authorize + consent flow', () => {
 
   test('denying consent redirects back with access_denied', async ({ page }) => {
     const clientId = await registerClient(page.request);
+    const resource = await advertisedMcpResource(page.request);
     const verifier = randomVerifier();
     const challenge = await pkceChallenge(verifier);
-    const authorize = authorizeUrl({ clientId, codeChallenge: challenge, state: DENY_STATE });
+    const authorize = authorizeUrl({ clientId, codeChallenge: challenge, state: DENY_STATE, resource });
 
     await page.goto(authorize);
     await expect(page).toHaveURL(/\/login\?redirectTo=/);
 
-    await loginAsSeedUser(page, /\/oauth\/authorize\?/);
+    await loginAsDisposableUser(page, /\/oauth\/authorize\?/);
 
     const deny = page.getByRole('button', { name: /^deny$/i });
     await expect(deny).toBeVisible();

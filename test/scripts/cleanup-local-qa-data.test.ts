@@ -1,9 +1,12 @@
+import { createRequire } from "node:module";
 import { afterEach, describe, expect, it } from "vitest";
 import { vi } from "vitest";
 
 import * as cleanup from "../../scripts/cleanup-local-qa-data.mjs";
 
 const { buildApplySql, buildDryRunSql, wranglerLocalD1Args } = cleanup;
+const nodeRequire = createRequire(import.meta.url);
+const { DatabaseSync } = nodeRequire("node:sqlite") as typeof import("node:sqlite");
 
 const originalArgv = process.argv;
 const originalExitCode = process.exitCode;
@@ -18,6 +21,10 @@ function writableBuffer() {
     },
     text: () => text,
   };
+}
+
+function wranglerJson(results: unknown[] = []) {
+  return JSON.stringify([{ success: true, results }]);
 }
 
 function expectInOrder(text: string, fragments: string[]) {
@@ -48,9 +55,33 @@ describe("cleanup-local-qa-data", () => {
     expect(sql).toContain("lower(title) LIKE 'e2e %'");
     expect(sql).toContain("lower(title) LIKE 'mobile dock save%'");
     expect(sql).toContain("lower(title) LIKE 'codex %'");
+    expect(sql).toContain("id IN (");
     expect(sql).toContain("email LIKE 'codex-%'");
     expect(sql).toContain("email LIKE 'e2e-passkey-%'");
+    expect(sql).toContain("instr(username, 'codex_') = 1");
+    expect(sql).toContain("instr(username, 'e2e_passkey_') = 1");
+    expect(sql).toContain("email LIKE 'codex-%' AND instr(username, 'codex_') = 1");
+    expect(sql).not.toContain("username LIKE 'codex_%'");
+    expect(sql).not.toContain("username LIKE 'e2e_passkey_%'");
+    expect(sql).not.toContain("lower(coalesce(note,''))");
     expect(sql).toContain("clientName = 'E2E OAuth Client'");
+  });
+
+  it("requires coupled literal email and username markers for generated disposable users", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec(`
+      CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL);
+      INSERT INTO User VALUES
+        ('real-lookalike', 'person@example.com', 'codexXvictim'),
+        ('email-only', 'codex-run@example.com', 'ordinary_user'),
+        ('username-only', 'person2@example.com', 'codex_generated'),
+        ('codex-disposable', 'codex-run@example.com', 'codex_generated'),
+        ('passkey-disposable', 'e2e-passkey-run@example.com', 'e2e_passkey_generated');
+    `);
+
+    const rows = db.prepare(`SELECT id FROM User WHERE ${cleanup.DISPOSABLE_USER_WHERE} ORDER BY id`).all();
+
+    expect(rows).toEqual([{ id: "codex-disposable" }, { id: "passkey-disposable" }]);
   });
 
   it("soft-deletes recipes and deletes only disposable local support rows on apply", () => {
@@ -89,7 +120,7 @@ describe("cleanup-local-qa-data", () => {
         targetEnv: "local",
         baseUrl: "http://localhost:5173",
         d1Target: "local D1 (--local)",
-        r2Target: "local photos binding",
+        r2Target: "local R2 spoonjoy-photos (--local)",
         destructiveScope: "local disposable test data only",
       },
     });
@@ -160,7 +191,7 @@ describe("cleanup-local-qa-data", () => {
   it("runs local dry-run and local apply with explicit target summaries and local Wrangler args", async () => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();
-    const runCommand = vi.fn(async () => ({ stdout: "[]", stderr: "" }));
+    const runCommand = vi.fn(async () => ({ stdout: wranglerJson(), stderr: "" }));
 
     await cleanup.runCleanupCli({
       argv: ["--target-env", "local"],
@@ -192,10 +223,82 @@ describe("cleanup-local-qa-data", () => {
     );
   });
 
+  it("deletes and verifies exact disposable local R2 keys before D1 cleanup", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      const command = args.join(" ");
+      if (command.includes("candidate_r2_keys")) {
+        return {
+          stdout: JSON.stringify([
+            { success: true, results: [{ action: "delete", key: "spoons/codex-user/recipe-1/spoon.jpg" }] },
+          ]),
+          stderr: "",
+        };
+      }
+      if (command.includes("r2 object get")) {
+        const error = new Error("NoSuchKey");
+        Object.assign(error, { stderr: "The specified key does not exist." });
+        throw error;
+      }
+      return { stdout: wranglerJson(), stderr: "" };
+    });
+
+    await cleanup.runCleanupCli({
+      argv: ["--target-env", "local", "--apply"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    });
+
+    const calls = runCommand.mock.calls.map((call) => call[1] as string[]);
+    const joinedCalls = calls.map((args) => args.join(" "));
+    expectInOrder(joinedCalls.join("\n"), [
+      "candidate_r2_keys",
+      "r2_reference_blockers",
+      "r2 object delete",
+      "r2 object get",
+      buildApplySql(),
+    ]);
+    expect(calls).toEqual(expect.arrayContaining([
+      cleanup.buildLocalR2DeleteArgs("spoons/codex-user/recipe-1/spoon.jpg"),
+      cleanup.buildLocalR2GetArgs("spoons/codex-user/recipe-1/spoon.jpg"),
+    ]));
+    expect(stdout.text()).toContain("Verified deleted local R2 keys: spoons/codex-user/recipe-1/spoon.jpg");
+  });
+
+  it("reports retained local R2 keys without deleting them", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      if (args.join(" ").includes("candidate_r2_keys")) {
+        return {
+          stdout: JSON.stringify([
+            { success: true, results: [{ action: "retain", key: "recipes/real-user/recipe-9/source.jpg" }] },
+          ]),
+          stderr: "",
+        };
+      }
+      return { stdout: wranglerJson(), stderr: "" };
+    });
+
+    await cleanup.runCleanupCli({
+      argv: ["--target-env", "local", "--apply"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    });
+
+    expect(stdout.text()).toContain("Retained local R2 keys: recipes/real-user/recipe-9/source.jpg");
+    expect(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "))).not.toEqual(
+      expect.arrayContaining([expect.stringContaining("r2 object delete")]),
+    );
+  });
+
   it("prints help without executing a cleanup command", async () => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();
-    const runCommand = vi.fn(async () => ({ stdout: "[]", stderr: "" }));
+    const runCommand = vi.fn(async () => ({ stdout: wranglerJson(), stderr: "" }));
 
     await cleanup.runCleanupCli({
       argv: ["--help"],
@@ -221,7 +324,7 @@ describe("cleanup-local-qa-data", () => {
   it("forwards Wrangler stderr from successful cleanup checks", async () => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();
-    const runCommand = vi.fn(async () => ({ stdout: "[]", stderr: "wrangler note\n" }));
+    const runCommand = vi.fn(async () => ({ stdout: wranglerJson(), stderr: "wrangler note\n" }));
 
     await cleanup.runCleanupCli({
       argv: ["--target-env", "local"],
@@ -237,7 +340,7 @@ describe("cleanup-local-qa-data", () => {
   it("does not write stderr when Wrangler returns no stderr field", async () => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();
-    const runCommand = vi.fn(async () => ({ stdout: "[]" }));
+    const runCommand = vi.fn(async () => ({ stdout: wranglerJson() }));
 
     await cleanup.runCleanupCli({
       argv: ["--target-env", "local"],
@@ -275,8 +378,7 @@ describe("cleanup-local-qa-data", () => {
       if (command.includes("candidate_r2_keys")) {
         return {
           stdout: JSON.stringify([
-            {
-              results: [
+            { success: true, results: [
                 { action: "delete", key: "profiles/codex-user/avatar.jpg" },
                 { action: "delete", key: "recipes/codex-user/recipe-1/source.jpg" },
                 { action: "delete", key: "spoons/codex-user/recipe-1/spoon.jpg" },
@@ -292,7 +394,7 @@ describe("cleanup-local-qa-data", () => {
         Object.assign(error, { stderr: "The specified key does not exist." });
         throw error;
       }
-      return { stdout: "[]", stderr: "" };
+      return { stdout: wranglerJson(), stderr: "" };
     });
 
     await cleanup.runCleanupCli({
@@ -323,11 +425,20 @@ describe("cleanup-local-qa-data", () => {
     expect(joinedCalls[1]).toContain("sqlite_master");
     expect(joinedCalls[1]).toContain("SearchDocument");
     expect(joinedCalls[1]).toContain("SearchIndexMetadata");
-    expect(joinedCalls[2]).toContain("candidate_r2_keys");
-    expect(joinedCalls[3]).toContain(cleanup.buildBlockerReportSql());
-    expect(joinedCalls[4]).toContain(buildApplySql());
-    expect(joinedCalls.slice(1, 4)).not.toEqual(expect.arrayContaining([expect.stringContaining("FROM SearchDocument")]));
-    expect(calls.slice(5)).toEqual([
+    expect(joinedCalls.filter((command) => command.includes("candidate_r2_keys"))).toHaveLength(5);
+    expectInOrder(joinedCalls.join("\n"), [
+      "candidate_r2_keys",
+      "r2_reference_blockers",
+      "blocker_recipe_sourceRecipeId",
+      "r2 object delete",
+      "r2 object get",
+      buildApplySql(),
+    ]);
+    expect(joinedCalls.filter((command) => command.includes(" AS blocker"))).toHaveLength(9);
+    expect(joinedCalls.filter((command) => command.includes("candidate_r2_keys"))).not.toEqual(
+      expect.arrayContaining([expect.stringContaining("FROM SearchDocument")]),
+    );
+    expect(calls.filter((args) => args.includes("object"))).toEqual([
       cleanup.buildQaR2DeleteArgs("profiles/codex-user/avatar.jpg"),
       cleanup.buildQaR2GetArgs("profiles/codex-user/avatar.jpg"),
       cleanup.buildQaR2DeleteArgs("recipes/codex-user/recipe-1/source.jpg"),
@@ -344,7 +455,7 @@ describe("cleanup-local-qa-data", () => {
   it("runs production read-only dry-run and refuses broad production apply", async () => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();
-    const runCommand = vi.fn(async () => ({ stdout: "[]", stderr: "" }));
+    const runCommand = vi.fn(async () => ({ stdout: wranglerJson(), stderr: "" }));
 
     await cleanup.runCleanupCli({
       argv: ["--target-env", "production"],
@@ -423,7 +534,7 @@ describe("cleanup-local-qa-data", () => {
       "'hard-delete recipes owned by disposable users'",
       "'soft-delete suspicious recipes owned by non-disposable users'",
       "'disposable users'",
-      "'disposable spoons by chef or note'",
+      "'spoons owned by disposable users'",
       "'e2e oauth clients with test redirect signature'",
       "'cross-boundary cleanup blockers'",
       "clientName = 'E2E OAuth Client'",
@@ -434,6 +545,7 @@ describe("cleanup-local-qa-data", () => {
       "chefId IN (SELECT id FROM disposable_users)",
       "chefId NOT IN (SELECT id FROM disposable_users)",
     ]);
+    expect(sql).not.toContain("coalesce(note");
   });
 
   it("dry-run blocker count is computed from real cross-boundary blocker queries", () => {
@@ -726,7 +838,7 @@ describe("cleanup-local-qa-data", () => {
     expect(plan.blockers).toEqual([]);
   });
 
-  it("builds QA R2 candidate SQL with retained unsafe keys and surviving-reference blockers", () => {
+  it("splits R2 candidate collection from surviving-reference checks for D1 compatibility", () => {
     const sql = cleanup.buildQaR2CandidateSql();
 
     expectAll(sql, [
@@ -736,33 +848,70 @@ describe("cleanup-local-qa-data", () => {
       "unsafe disposable cover imageUrl namespace",
       "unsafe disposable cover stylizedImageUrl namespace",
       "unsafe disposable cover sourceImageUrl namespace",
+      "WHERE key IS NOT NULL AND key != ''",
+    ]);
+    expect(sql).not.toContain("r2_reference_blockers");
+    const statements = sql.split(/;\s*(?=WITH\b)/);
+    expect(statements).toHaveLength(5);
+    expect(statements.every((statement) => (statement.match(/\bUNION\b/g) ?? []).length <= 1)).toBe(true);
+    expect(statements.every((statement) => /SELECT 'delete' AS action,[\s\S]+ AS key,[\s\S]+ AS reason/.test(statement))).toBe(true);
+    expect(sql).not.toContain("FROM SearchDocument");
+
+    const referencesSql = cleanup.buildR2ReferenceSql([
+      "profiles/codex-user/avatar.jpg",
+      "spoons/codex-user/recipe-1/spoon.jpg",
+    ]);
+    expectAll(referencesSql, [
       "r2_reference_blockers",
       "blocker_user_photoUrl",
       "blocker_spoon_photoUrl",
       "blocker_cover_imageUrl",
       "blocker_cover_stylizedImageUrl",
       "blocker_cover_sourceImageUrl",
-      "WHERE key IS NOT NULL AND key != ''",
+      "profiles/codex-user/avatar.jpg",
+      "spoons/codex-user/recipe-1/spoon.jpg",
     ]);
-    expect(sql).not.toContain("FROM SearchDocument");
   });
 
-  it("does not delete spoon R2 keys for note-matched spoons owned by non-disposable users", () => {
+  it("uses literal prefix checks for dynamic R2 namespaces", () => {
     const sql = cleanup.buildQaR2CandidateSql();
 
-    expect(sql).toMatch(/SELECT 'delete', substr\(photoUrl, length\('\/photos\/'\) \+ 1\), NULL\s+FROM disposable_spoons\s+WHERE chefId IN \(SELECT id FROM disposable_users\)/s);
-    expect(sql).toContain("photoUrl LIKE '/photos/spoons/' || chefId || '/' || recipeId || '/%'");
-    expect(sql).toContain("photoUrl LIKE '/photos/spoons/' || chefId || '/uploads/%'");
+    expectAll(sql, [
+      "instr(photoUrl, '/photos/profiles/' || id || '/') = 1",
+      "instr(photoUrl, '/photos/spoons/' || chefId || '/' || recipeId || '/') = 1",
+      "instr(photoUrl, '/photos/spoons/' || chefId || '/uploads/') = 1",
+      "instr(imageUrl, '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/') = 1",
+      "instr(stylizedImageUrl, '/photos/recipes/' || r.chefId || '/uploads/') = 1",
+      "instr(sourceImageUrl, '/photos/covers/') = 1",
+    ]);
+    expect(sql).not.toMatch(/\b(?:photoUrl|imageUrl|stylizedImageUrl|sourceImageUrl)\s+(?:NOT\s+)?LIKE\s+'[^']*'\s*\|\|/);
+  });
+
+  it("builds an empty base-table R2 blocker query safely", () => {
+    const sql = cleanup.buildR2ReferenceSql();
+
+    expect(sql).toContain("SELECT NULL AS key WHERE 0");
+    expect(sql).toContain("r2_reference_blockers");
+  });
+
+  it("does not classify spoons from non-disposable users by their free-form notes", () => {
+    const sql = cleanup.buildQaR2CandidateSql();
+
+    expect(sql).toMatch(/SELECT 'delete' AS action,\s+substr\(photoUrl, length\('\/photos\/'\) \+ 1\) AS key,\s+NULL AS reason\s+FROM disposable_spoons\s+WHERE chefId IN \(SELECT id FROM disposable_users\)/s);
+    expect(sql).toMatch(/disposable_spoons AS \(\s+SELECT id, chefId, recipeId, photoUrl FROM RecipeSpoon\s+WHERE chefId IN \(SELECT id FROM disposable_users\)\s+\)/s);
+    expect(sql).toContain("instr(photoUrl, '/photos/spoons/' || chefId || '/' || recipeId || '/') = 1");
+    expect(sql).toContain("instr(photoUrl, '/photos/spoons/' || chefId || '/uploads/') = 1");
     expect(sql).toContain("'unsafe disposable spoon photo namespace'");
+    expect(sql).not.toContain("coalesce(note");
   });
 
   it("deletes generated cover R2 keys under the app's covers namespace for hard-delete recipes", () => {
     const sql = cleanup.buildQaR2CandidateSql();
 
     expectAll(sql, [
-      "imageUrl LIKE '/photos/covers/%'",
-      "stylizedImageUrl LIKE '/photos/covers/%'",
-      "sourceImageUrl LIKE '/photos/covers/%'",
+      "instr(imageUrl, '/photos/covers/') = 1",
+      "instr(stylizedImageUrl, '/photos/covers/') = 1",
+      "instr(sourceImageUrl, '/photos/covers/') = 1",
     ]);
   });
 
@@ -790,24 +939,19 @@ describe("cleanup-local-qa-data", () => {
     expect(sql).toContain("FROM SearchDocument");
   });
 
-  it("refuses QA apply before D1 mutation when R2 candidates have surviving non-disposable references", async () => {
+  it("refuses QA apply before D1 mutation when base tables retain candidate R2 references", async () => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();
     const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
       const command = args.join(" ");
-      if (command.includes("candidate_r2_keys")) {
+      if (command.includes("r2_reference_blockers")) {
         return {
           stdout: JSON.stringify([
-            {
-              results: [
+            { success: true, results: [
                 {
                   action: "blocker_user_photoUrl",
                   key: "profiles/codex-user/avatar.jpg",
                   reason: "non-disposable User.photoUrl still references candidate key",
-                },
-                {
-                  action: "blocker_search_imageUrl",
-                  key: "recipes/codex-user/recipe-1/source.jpg",
                 },
               ],
             },
@@ -815,7 +959,15 @@ describe("cleanup-local-qa-data", () => {
           stderr: "",
         };
       }
-      return { stdout: "[]", stderr: "" };
+      if (command.includes("candidate_r2_keys")) {
+        return {
+          stdout: JSON.stringify([
+            { success: true, results: [{ action: "delete", key: "profiles/codex-user/avatar.jpg" }] },
+          ]),
+          stderr: "",
+        };
+      }
+      return { stdout: wranglerJson(), stderr: "" };
     });
 
     await expect(
@@ -832,22 +984,90 @@ describe("cleanup-local-qa-data", () => {
     );
   });
 
+  it("formats base-table R2 blockers that omit an optional reason", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      const command = args.join(" ");
+      if (command.includes("r2_reference_blockers")) {
+        return {
+          stdout: JSON.stringify([
+            { success: true, results: [{ action: "blocker_user_photoUrl", key: "profiles/codex-user/avatar.jpg" }] },
+          ]),
+          stderr: "",
+        };
+      }
+      if (command.includes("candidate_r2_keys")) {
+        return {
+          stdout: JSON.stringify([
+            { success: true, results: [{ action: "delete", key: "profiles/codex-user/avatar.jpg" }] },
+          ]),
+          stderr: "",
+        };
+      }
+      return { stdout: wranglerJson(), stderr: "" };
+    });
+
+    await expect(
+      cleanup.runCleanupCli({
+        argv: ["--target-env", "qa", "--apply"],
+        runCommand,
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+      }),
+    ).rejects.toThrow(
+      "non-disposable rows still reference candidate keys: blocker_user_photoUrl:profiles/codex-user/avatar.jpg",
+    );
+  });
+
+  it("fails closed when a base-reference preflight omits Wrangler output", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      const command = args.join(" ");
+      if (command.includes("candidate_r2_keys")) {
+        return {
+          stdout: JSON.stringify([
+            { success: true, results: [{ action: "delete", key: "spoons/codex-user/recipe-1/spoon.jpg" }] },
+          ]),
+          stderr: "",
+        };
+      }
+      if (command.includes("r2_reference_blockers")) return { stderr: "" };
+      if (command.includes("r2 object get")) {
+        const error = new Error("NoSuchKey");
+        Object.assign(error, { stderr: "The specified key does not exist." });
+        throw error;
+      }
+      return { stdout: wranglerJson(), stderr: "" };
+    });
+
+    await expect(cleanup.runCleanupCli({
+      argv: ["--target-env", "local", "--apply"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    })).rejects.toThrow(/base R2 reference preflight.*valid Wrangler JSON/i);
+    expect(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "))).not.toEqual(
+      expect.arrayContaining([expect.stringContaining(buildApplySql())]),
+    );
+  });
+
   it("refuses QA apply before D1 mutation when search documents reference candidate R2 keys", async () => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();
     const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
       const command = args.join(" ");
       if (command.includes("candidate_r2_keys")) {
-        return { stdout: JSON.stringify([{ results: [{ action: "delete", key: "profiles/codex-user/avatar.jpg" }] }]), stderr: "" };
+        return { stdout: JSON.stringify([{ success: true, results: [{ action: "delete", key: "profiles/codex-user/avatar.jpg" }] }]), stderr: "" };
       }
       if (command.includes("sqlite_master") && command.includes("SearchDocument")) {
-        return { stdout: JSON.stringify([{ results: [{ name: "SearchDocument" }] }]), stderr: "" };
+        return { stdout: JSON.stringify([{ success: true, results: [{ name: "SearchDocument" }] }]), stderr: "" };
       }
       if (command.includes("FROM SearchDocument")) {
         return {
           stdout: JSON.stringify([
-            {
-              results: [
+            { success: true, results: [
                 {
                   action: "blocker_search_imageUrl",
                   key: "profiles/codex-user/avatar.jpg",
@@ -859,7 +1079,7 @@ describe("cleanup-local-qa-data", () => {
           stderr: "",
         };
       }
-      return { stdout: "[]", stderr: "" };
+      return { stdout: wranglerJson(), stderr: "" };
     });
 
     await expect(
@@ -893,12 +1113,12 @@ describe("cleanup-local-qa-data", () => {
       if (command.includes("'blocker_recipe_activeCoverId' AS blocker")) {
         return {
           stdout: JSON.stringify([
-            { results: [{ blocker: "blocker_recipe_activeCoverId", rowId: "recipe-1" }] },
+            { success: true, results: [{ blocker: "blocker_recipe_activeCoverId", rowId: "recipe-1" }] },
           ]),
           stderr: "",
         };
       }
-      return { stdout: "[]", stderr: "" };
+      return { stdout: wranglerJson(), stderr: "" };
     });
 
     await expect(
@@ -915,15 +1135,15 @@ describe("cleanup-local-qa-data", () => {
     );
   });
 
-  it("runs QA apply with no R2 candidates and no R2 delete/get commands", async () => {
+  it("runs QA apply with valid empty R2 candidate results and no R2 delete/get commands", async () => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();
     const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
       const command = args.join(" ");
       if (command.includes("candidate_r2_keys")) {
-        return { stdout: "", stderr: "" };
+        return { stdout: wranglerJson(), stderr: "" };
       }
-      return { stdout: "[]", stderr: "" };
+      return { stdout: wranglerJson(), stderr: "" };
     });
 
     await cleanup.runCleanupCli({
@@ -940,13 +1160,13 @@ describe("cleanup-local-qa-data", () => {
     expect(stdout.text()).not.toContain("Verified deleted QA R2 keys");
   });
 
-  it("treats missing stdout from the search-table existence check as absent search", async () => {
+  it("fails closed when the search-table existence preflight omits Wrangler output", async () => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();
     const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
       const command = args.join(" ");
       if (command.includes("candidate_r2_keys")) {
-        return { stdout: JSON.stringify([{ results: [{ action: "delete", key: "profiles/codex-user/avatar.jpg" }] }]), stderr: "" };
+        return { stdout: JSON.stringify([{ success: true, results: [{ action: "delete", key: "profiles/codex-user/avatar.jpg" }] }]), stderr: "" };
       }
       if (command.includes("sqlite_master") && command.includes("SearchDocument")) {
         return { stderr: "" };
@@ -954,36 +1174,90 @@ describe("cleanup-local-qa-data", () => {
       if (command.includes("r2 object get")) {
         throw "NoSuchKey";
       }
-      return { stdout: "[]", stderr: "" };
+      return { stdout: wranglerJson(), stderr: "" };
     });
 
-    await cleanup.runCleanupCli({
+    await expect(cleanup.runCleanupCli({
       argv: ["--target-env", "qa", "--apply"],
       runCommand,
       stdout: stdout.stream,
       stderr: stderr.stream,
-    });
-
+    })).rejects.toThrow(/search-table existence preflight.*valid Wrangler JSON/i);
     expect(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "))).not.toEqual(
-      expect.arrayContaining([expect.stringContaining("blocker_search_imageUrl")]),
+      expect.arrayContaining([expect.stringContaining(buildApplySql())]),
     );
-    const applyCall = runCommand.mock.calls.map((call) => (call[1] as string[]).join(" ")).find(
-      (command) => command.includes("DELETE FROM User"),
-    );
-    expect(applyCall).not.toContain("SearchDocument");
-    expect(stdout.text()).toContain("Skipped SearchDocument cleanup: table absent.");
   });
 
-  it("treats missing stdout from search blocker and D1 blocker preflights as empty", async () => {
+  it.each([
+    ["non-JSON output", "wrangler completed without a result envelope", /valid Wrangler JSON/i],
+    ["malformed JSON", "[not-json]", /valid Wrangler JSON/i],
+    ["zero result sets", "[]", /exactly one Wrangler result set/i],
+  ])("fails closed when a preflight returns %s", async (_case, preflightOutput, errorPattern) => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async () => ({ stdout: preflightOutput, stderr: "" }));
+
+    await expect(cleanup.runCleanupCli({
+      argv: ["--target-env", "local", "--apply"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    })).rejects.toThrow(errorPattern);
+    expect(runCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed when a preflight result does not report success", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async () => ({ stdout: JSON.stringify([{ results: [] }]), stderr: "" }));
+
+    await expect(cleanup.runCleanupCli({
+      argv: ["--target-env", "local", "--apply"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    })).rejects.toThrow(/did not report Wrangler success/i);
+    expect(runCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["search-table existence", "sqlite_master", { unexpected: "table" }, /search-table existence preflight.*row shape/i],
+    ["R2 candidate", "candidate_r2_keys", { action: "delete" }, /R2 candidate preflight.*row shape/i],
+    ["base R2 reference", "r2_reference_blockers", { action: "unexpected", key: "profiles/disposable/avatar.jpg" }, /base R2 reference preflight.*row shape/i],
+    ["D1 blocker", "blocker_recipe_sourceRecipeId", { blocker: "blocker_recipe_sourceRecipeId" }, /D1 cleanup blocker preflight.*row shape/i],
+  ])("fails closed on malformed %s rows", async (_case, commandMarker, malformedRow, errorPattern) => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      const command = args.join(" ");
+      if (command.includes(commandMarker)) return { stdout: wranglerJson([malformedRow]), stderr: "" };
+      if (command.includes("candidate_r2_keys")) {
+        return { stdout: wranglerJson([{ action: "delete", key: "profiles/disposable/avatar.jpg" }]), stderr: "" };
+      }
+      return { stdout: wranglerJson(), stderr: "" };
+    });
+
+    await expect(cleanup.runCleanupCli({
+      argv: ["--target-env", "local", "--apply"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    })).rejects.toThrow(errorPattern);
+    expect(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "))).not.toEqual(
+      expect.arrayContaining([expect.stringContaining(buildApplySql())]),
+    );
+  });
+
+  it("fails closed when search-reference or D1 blocker preflights omit Wrangler output", async () => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();
     const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
       const command = args.join(" ");
       if (command.includes("candidate_r2_keys")) {
-        return { stdout: JSON.stringify([{ results: [{ action: "delete", key: "profiles/codex-user/avatar.jpg" }] }]), stderr: "" };
+        return { stdout: JSON.stringify([{ success: true, results: [{ action: "delete", key: "profiles/codex-user/avatar.jpg" }] }]), stderr: "" };
       }
       if (command.includes("sqlite_master") && command.includes("SearchDocument")) {
-        return { stdout: JSON.stringify([{ results: [{ name: "SearchDocument" }] }]), stderr: "" };
+        return { stdout: JSON.stringify([{ success: true, results: [{ name: "SearchDocument" }] }]), stderr: "" };
       }
       if (command.includes("FROM SearchDocument")) {
         return { stderr: "" };
@@ -994,24 +1268,21 @@ describe("cleanup-local-qa-data", () => {
       if (command.includes("r2 object get")) {
         throw "NoSuchKey";
       }
-      return { stdout: "[]", stderr: "" };
+      return { stdout: wranglerJson(), stderr: "" };
     });
 
-    await cleanup.runCleanupCli({
+    await expect(cleanup.runCleanupCli({
       argv: ["--target-env", "qa", "--apply"],
       runCommand,
       stdout: stdout.stream,
       stderr: stderr.stream,
-    });
-
-    const joinedCalls = runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "));
-    expect(joinedCalls).toEqual(expect.arrayContaining([
-      expect.stringContaining("FROM SearchDocument"),
-      expect.stringContaining(buildApplySql({ existingSearchTables: ["SearchDocument"] })),
-    ]));
+    })).rejects.toThrow(/SearchDocument R2 reference preflight.*valid Wrangler JSON/i);
+    expect(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "))).not.toEqual(
+      expect.arrayContaining([expect.stringContaining(buildApplySql({ existingSearchTables: ["SearchDocument"] }))]),
+    );
   });
 
-  it("handles candidate rows without results and candidates command without stdout", async () => {
+  it("fails closed when candidate rows omit results or candidate output is missing", async () => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();
     let candidateCalls = 0;
@@ -1021,21 +1292,21 @@ describe("cleanup-local-qa-data", () => {
         candidateCalls += 1;
         return candidateCalls === 1 ? { stdout: JSON.stringify([{}]), stderr: "" } : { stderr: "" };
       }
-      return { stdout: "[]", stderr: "" };
+      return { stdout: wranglerJson(), stderr: "" };
     });
 
-    await cleanup.runCleanupCli({
+    await expect(cleanup.runCleanupCli({
       argv: ["--target-env", "qa", "--apply"],
       runCommand,
       stdout: stdout.stream,
       stderr: stderr.stream,
-    });
-    await cleanup.runCleanupCli({
+    })).rejects.toThrow(/R2 candidate preflight.*results array/i);
+    await expect(cleanup.runCleanupCli({
       argv: ["--target-env", "qa", "--apply"],
       runCommand,
       stdout: stdout.stream,
       stderr: stderr.stream,
-    });
+    })).rejects.toThrow(/R2 candidate preflight.*valid Wrangler JSON/i);
 
     expect(candidateCalls).toBe(2);
     expect(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "))).not.toEqual(
@@ -1052,8 +1323,7 @@ describe("cleanup-local-qa-data", () => {
       if (command.includes("candidate_r2_keys")) {
         return {
           stdout: JSON.stringify([
-            {
-              results: [
+            { success: true, results: [
                 { action: "delete", key: "profiles/codex-user/avatar.jpg" },
                 { action: "delete", key: "spoons/codex-user/uploads/spoon.jpg" },
               ],
@@ -1065,9 +1335,9 @@ describe("cleanup-local-qa-data", () => {
       if (command.includes("r2 object get")) {
         getCalls += 1;
         if (getCalls === 1) throw "NoSuchKey";
-        throw { stdout: "not found" };
+        throw { stdout: "The specified key does not exist." };
       }
-      return { stdout: "[]", stderr: "" };
+      return { stdout: wranglerJson(), stderr: "" };
     });
 
     await cleanup.runCleanupCli({
@@ -1080,15 +1350,40 @@ describe("cleanup-local-qa-data", () => {
     expect(stdout.text()).toContain("Verified deleted QA R2 keys: profiles/codex-user/avatar.jpg, spoons/codex-user/uploads/spoon.jpg");
   });
 
+  it.each(["delete", "get"])("does not treat a missing R2 bucket during %s as proof that an object is absent", async (failurePhase) => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      const command = args.join(" ");
+      if (command.includes("candidate_r2_keys")) {
+        return { stdout: wranglerJson([{ action: "delete", key: "profiles/codex-user/avatar.jpg" }]), stderr: "" };
+      }
+      if (command.includes(`r2 object ${failurePhase}`)) {
+        throw new Error("404 Not Found: R2 bucket not found");
+      }
+      return { stdout: wranglerJson(), stderr: "" };
+    });
+
+    await expect(cleanup.runCleanupCli({
+      argv: ["--target-env", "qa", "--apply"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    })).rejects.toThrow(/R2 bucket not found/);
+    expect(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "))).not.toEqual(
+      expect.arrayContaining([expect.stringContaining(buildApplySql())]),
+    );
+  });
+
   it("fails QA apply when R2 verification still fetches a deleted key", async () => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();
     const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
       const command = args.join(" ");
       if (command.includes("candidate_r2_keys")) {
-        return { stdout: JSON.stringify([{ results: [{ action: "delete", key: "profiles/codex-user/avatar.jpg" }] }]), stderr: "" };
+        return { stdout: JSON.stringify([{ success: true, results: [{ action: "delete", key: "profiles/codex-user/avatar.jpg" }] }]), stderr: "" };
       }
-      return { stdout: "[]", stderr: "" };
+      return { stdout: wranglerJson(), stderr: "" };
     });
 
     await expect(
@@ -1107,12 +1402,12 @@ describe("cleanup-local-qa-data", () => {
     const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
       const command = args.join(" ");
       if (command.includes("candidate_r2_keys")) {
-        return { stdout: JSON.stringify([{ results: [{ action: "delete", key: "profiles/codex-user/avatar.jpg" }] }]), stderr: "" };
+        return { stdout: JSON.stringify([{ success: true, results: [{ action: "delete", key: "profiles/codex-user/avatar.jpg" }] }]), stderr: "" };
       }
       if (command.includes("r2 object get")) {
         throw new Error("network timeout");
       }
-      return { stdout: "[]", stderr: "" };
+      return { stdout: wranglerJson(), stderr: "" };
     });
 
     await expect(
@@ -1123,20 +1418,47 @@ describe("cleanup-local-qa-data", () => {
         stderr: stderr.stream,
       }),
     ).rejects.toThrow(/network timeout/);
+    expect(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "))).not.toEqual(
+      expect.arrayContaining([expect.stringContaining(buildApplySql())]),
+    );
   });
 
-  it("skips every R2 delete/get command when QA D1 apply fails", async () => {
+  it("surfaces unexpected R2 deletion failures before D1 mutation", async () => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();
     const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
       const command = args.join(" ");
       if (command.includes("candidate_r2_keys")) {
-        return { stdout: JSON.stringify([{ results: [{ action: "delete", key: "profiles/codex-user/avatar.jpg" }] }]), stderr: "" };
+        return { stdout: wranglerJson([{ action: "delete", key: "profiles/codex-user/avatar.jpg" }]), stderr: "" };
+      }
+      if (command.includes("r2 object delete")) throw new Error("R2 permission denied");
+      return { stdout: wranglerJson(), stderr: "" };
+    });
+
+    await expect(cleanup.runCleanupCli({
+      argv: ["--target-env", "qa", "--apply"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    })).rejects.toThrow(/R2 permission denied/);
+    expect(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "))).not.toEqual(
+      expect.arrayContaining([expect.stringContaining(buildApplySql())]),
+    );
+  });
+
+  it("deletes R2 first so a failed D1 apply remains discoverable and retryable", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      const command = args.join(" ");
+      if (command.includes("candidate_r2_keys")) {
+        return { stdout: JSON.stringify([{ success: true, results: [{ action: "delete", key: "profiles/codex-user/avatar.jpg" }] }]), stderr: "" };
       }
       if (command.includes(buildApplySql())) {
         throw new Error("D1 apply failed");
       }
-      return { stdout: "", stderr: "" };
+      if (command.includes("r2 object get")) throw "NoSuchKey";
+      return { stdout: wranglerJson(), stderr: "" };
     });
 
     await expect(
@@ -1148,8 +1470,34 @@ describe("cleanup-local-qa-data", () => {
       }),
     ).rejects.toThrow(/D1 apply failed/);
 
-    expect(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "))).not.toEqual(
-      expect.arrayContaining([expect.stringContaining("r2 object delete")]),
+    expectInOrder(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" ")).join("\n"), [
+      "r2 object delete",
+      "r2 object get",
+      buildApplySql(),
+    ]);
+  });
+
+  it("treats an already-missing R2 delete as an idempotent retry before D1 apply", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      const command = args.join(" ");
+      if (command.includes("candidate_r2_keys")) {
+        return { stdout: wranglerJson([{ action: "delete", key: "profiles/codex-user/avatar.jpg" }]), stderr: "" };
+      }
+      if (command.includes("r2 object delete") || command.includes("r2 object get")) throw "NoSuchKey";
+      return { stdout: wranglerJson(), stderr: "" };
+    });
+
+    await cleanup.runCleanupCli({
+      argv: ["--target-env", "qa", "--apply"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    });
+
+    expect(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "))).toEqual(
+      expect.arrayContaining([expect.stringContaining(buildApplySql())]),
     );
   });
 });

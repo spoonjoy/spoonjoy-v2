@@ -64,7 +64,7 @@ pnpm run deploy:qa
 pnpm run smoke:qa
 ```
 
-`pnpm run qa:seed` writes only `sj-qa-demo` data. `pnpm run smoke:qa` uses `--target-env qa`, creates `codex-smoke-` data, cleans it from QA D1, and verifies the cleanup. Do not run broad production cleanup.
+`pnpm run qa:seed` creates a per-run `codex-qa-seed-` user and tears it down unless `--skip-teardown` is passed for a reviewed QA debugging session. `pnpm run smoke:qa` uses `--target-env qa`, creates `codex-smoke-` data, cleans it from QA D1, and verifies the cleanup. Do not run broad production cleanup.
 
 ### R2 Bucket (required for recipe images)
 
