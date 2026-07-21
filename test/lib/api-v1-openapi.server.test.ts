@@ -927,6 +927,33 @@ describe("API v1 OpenAPI document", () => {
       required: ["ok", "requestId", "data"],
       properties: { ok: { const: true } },
     });
+    expect(components.schemas.NativeTelemetryRequest).toMatchObject({
+      additionalProperties: false,
+      required: ["event"],
+      properties: {
+        event: {
+          enum: expect.arrayContaining(["search_started", "search_completed", "search_failed"]),
+          description: expect.stringContaining("Raw search text"),
+        },
+        searchScope: {
+          type: ["string", "null"],
+          enum: ["all", "recipes", "cookbooks", "chefs", "shopping-list", null],
+        },
+        searchQueryLength: { type: ["integer", "null"], minimum: 0, maximum: 100_000 },
+        searchResultCount: { type: ["integer", "null"], minimum: 0, maximum: 100_000 },
+        durationMilliseconds: { type: ["integer", "null"], minimum: 0, maximum: 86_400_000 },
+      },
+    });
+    expect(components.schemas.NativeTelemetryRequest.properties).not.toHaveProperty("query");
+    expect(components.schemas.NativeTelemetryRequest.properties).not.toHaveProperty("searchQuery");
+    expect(components.schemas.NativeTelemetryRequest.properties).not.toHaveProperty("rawQuery");
+    expect(requestExample(buildApiV1OpenApiDocument(), "/api/v1/native/telemetry", "POST")).toMatchObject({
+      event: "search_completed",
+      searchScope: "all",
+      searchQueryLength: 12,
+      searchResultCount: 4,
+      durationMilliseconds: 184,
+    });
     expect(components.schemas.RecipeSummary.required).toEqual([
       "id",
       "title",

@@ -1,0 +1,142 @@
+
+ RUN  v4.1.10 /Users/arimendelow/Projects/spoonjoy-v2-native-search-telemetry
+
+ ❯ test/routes/api-v1-native-telemetry.test.ts (14 tests | 2 failed) 781ms
+     × captures privacy-safe search lifecycle telemetry without search text 27ms
+     × rejects unsupported search scopes and malformed or out-of-range search metrics 20ms
+ ❯ test/lib/api-v1-openapi.server.test.ts (12 tests | 1 failed) 368ms
+     × defines reusable schemas with strict objects, nullable fields, and error enums 30ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/lib/api-v1-openapi.server.test.ts > API v1 OpenAPI document > defines reusable schemas with strict objects, nullable fields, and error enums
+AssertionError: expected { type: 'object', …(3) } to match object { additionalProperties: false, …(2) }
+(109 matching properties omitted from actual)
+
+- Expected
++ Received
+
+@@ -1,52 +1,20 @@
+  {
+    "additionalProperties": false,
+    "properties": {
+-     "durationMilliseconds": {
+-       "maximum": 86400000,
+-       "minimum": 0,
+-       "type": [
+-         "integer",
+-         "null",
+-       ],
+-     },
+      "event": {
+-       "description": StringContaining "Raw search text",
++       "description": "Constrained native diagnostic event name. Raw error messages and response bodies are not accepted.",
+        "enum": [
+-         "search_started",
+-         "search_completed",
+-         "search_failed",
+-       ],
+-     },
+-     "searchQueryLength": {
+-       "maximum": 100000,
+-       "minimum": 0,
+-       "type": [
+-         "integer",
+-         "null",
+-       ],
+-     },
+-     "searchResultCount": {
+-       "maximum": 100000,
+-       "minimum": 0,
+-       "type": [
+-         "integer",
+-         "null",
+-       ],
+-     },
+-     "searchScope": {
+-       "enum": [
+-         "all",
+-         "recipes",
+-         "cookbooks",
+-         "chefs",
+-         "shopping-list",
+-         null,
+-       ],
+-       "type": [
+-         "string",
+-         "null",
++         "bootstrap_failed",
++         "bootstrap_offline",
++         "app_intent_completed",
++         "app_intent_failed",
++         "auth_flow_started",
++         "auth_flow_completed",
++         "auth_flow_failed",
++         "settings_refresh_failed",
++         "sync_failed",
+        ],
+      },
+    },
+    "required": [
+      "event",
+
+ ❯ test/lib/api-v1-openapi.server.test.ts:930:55
+    928|       properties: { ok: { const: true } },
+    929|     });
+    930|     expect(components.schemas.NativeTelemetryRequest).toMatchObject({
+       |                                                       ^
+    931|       additionalProperties: false,
+    932|       required: ["event"],
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  test/routes/api-v1-native-telemetry.test.ts > API v1 native telemetry > captures privacy-safe search lifecycle telemetry without search text
+AssertionError: expected 400 to be 202 // Object.is equality
+
+- Expected
++ Received
+
+- 202
++ 400
+
+ ❯ test/routes/api-v1-native-telemetry.test.ts:334:31
+    332|       const response = await action(context.args);
+    333|
+    334|       expect(response.status).toBe(202);
+       |                               ^
+    335|       expect(context.waitUntil).toHaveBeenCalledWith(expect.any(Promis…
+    336|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  test/routes/api-v1-native-telemetry.test.ts > API v1 native telemetry > rejects unsupported search scopes and malformed or out-of-range search metrics
+AssertionError: expected { ok: false, …(2) } to match object { error: { …(2) } }
+(5 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "error": {
+      "code": "validation_error",
+-     "message": "searchScope is not supported",
++     "message": "Unknown request body fields",
+    },
+  }
+
+ ❯ test/routes/api-v1-native-telemetry.test.ts:569:35
+    567|
+    568|       expect(response.status, invalid.field).toBe(400);
+    569|       await expect(response.json()).resolves.toMatchObject({
+       |                                   ^
+    570|         error: { code: "validation_error", message: invalid.message },
+    571|       });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 23 passed (26)
+   Start at  14:07:20
+   Duration  5.33s (transform 1.07s, setup 491ms, import 2.22s, tests 1.15s, environment 1.04s)
+
