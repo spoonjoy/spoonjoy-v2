@@ -19,7 +19,7 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 - None
 
 ## Completion Criteria
-- [ ] Homepage HTML exposes absolute canonical, `og:title`, `og:description`, `og:type=website`, `og:url`, `og:image`, `og:image:type=image/png`, image dimensions, and Twitter-card fields.
+- [x] Homepage HTML exposes absolute canonical, `og:title`, `og:description`, `og:type=website`, `og:url`, `og:image`, `og:image:type=image/png`, image dimensions, and Twitter-card fields.
 - [ ] The declared social image is a valid 1200×630 PNG with a branded, legible design.
 - [ ] Production homepage HTML contains the expected metadata without Cloudflare challenge markers.
 - [ ] Production serves the declared image as `image/png`; its bytes have the PNG signature and a 1200×630 IHDR.
@@ -62,7 +62,7 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 **Output**: Tests that fail because metadata fields and the PNG asset do not yet exist.
 **Acceptance**: The targeted test command fails through clean metadata and file-existence assertions rather than an unhandled `ENOENT`, setup, or mock error.
 
-### 🔄 Unit 1b: Homepage social metadata and raster card — Implementation
+### ✅ Unit 1b: Homepage social metadata and raster card — Implementation
 **What**: Add the metadata entries to `app/routes/_index.tsx`, create a non-executable static SVG source at `assets/og/spoonjoy-home.svg`, and commit its rasterized `public/og/spoonjoy-home.png` output; `meta()` remains the only new covered executable code.
 **Output**: Complete homepage metadata and a 1200×630 PNG social card.
 **Acceptance**: Targeted tests pass, the route builds without warnings, and metadata points only to absolute production URLs.
@@ -96,3 +96,4 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 - 2026-07-21 11:59 Created from planning doc after cold-review convergence.
 - 2026-07-21 12:05 Unit 0 complete: LinkedInBot received the real homepage and a valid PNG asset without Cloudflare challenge markers; the homepage exposed only its basic description and no canonical, Open Graph, or Twitter metadata. Unit review skipped because this was a read-only evidence capture.
 - 2026-07-21 12:11 Unit 1a complete: targeted tests failed cleanly on the fourteen missing social metadata entries and the missing raster asset.
+- 2026-07-21 12:19 Unit 1b complete: added the complete homepage metadata contract plus a branded 1200×630 raster card sourced from a committed static SVG; 20 targeted tests passed and the production build completed cleanly.
