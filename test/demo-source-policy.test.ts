@@ -6,8 +6,12 @@ import { describe, expect, it } from "vitest";
 
 type AllowlistEntry = {
   path: string;
-  kind: "historical-applied-migration";
-  immutable: true;
+  kind:
+    | "historical-applied-migration"
+    | "legacy-removal-migration"
+    | "cleanup-target-definition"
+    | "legacy-removal-contract-test";
+  immutable: boolean;
   patterns: string[];
   reason: string;
   sha256: string;
@@ -35,6 +39,11 @@ const FORBIDDEN_DEMO_PATTERNS = [
   { id: "legacy-jamie-username", regex: /\bjamie_kitchen\b/i },
   { id: "legacy-jamie-provider-id", regex: /\bapple_987654321\b/i },
   { id: "legacy-jamie-provider-email", regex: /\bjamie\.apple@icloud\.com\b/i },
+  { id: "legacy-demo-user-id", regex: /\bdemo_user_001\b/ },
+  { id: "legacy-primary-user-id", regex: /\buser_demo\b/ },
+  { id: "legacy-julia-user-id", regex: /\buser_julia\b/ },
+  { id: "legacy-marco-user-id", regex: /\buser_marco\b/ },
+  { id: "legacy-sarah-user-id", regex: /\buser_sarah\b/ },
 ];
 
 const IGNORED_PATH_PARTS = new Set([
@@ -58,10 +67,23 @@ function readPolicyAllowlist(): AllowlistEntry[] {
   );
   const parsed = JSON.parse(readFileSync(POLICY_ALLOWLIST_PATH, "utf8")) as AllowlistEntry[];
   for (const entry of parsed) {
-    expect(entry.kind).toBe("historical-applied-migration");
-    expect(entry.immutable).toBe(true);
-    expect(entry.reason).toMatch(/applied migration/i);
-    expect(entry.path).toMatch(/^migrations\/.*\.sql$/);
+    expect([
+      "historical-applied-migration",
+      "legacy-removal-migration",
+      "cleanup-target-definition",
+      "legacy-removal-contract-test",
+    ]).toContain(entry.kind);
+    expect(entry.reason).toMatch(/migration|cleanup/i);
+    if (entry.kind.endsWith("migration")) {
+      expect(entry.immutable).toBe(true);
+      expect(entry.path).toMatch(/^migrations\/.*\.sql$/);
+    } else if (entry.kind === "cleanup-target-definition") {
+      expect(entry.immutable).toBe(false);
+      expect(entry.path).toBe("scripts/cleanup-local-qa-data.mjs");
+    } else {
+      expect(entry.immutable).toBe(false);
+      expect(entry.path).toBe("test/scripts/migration-0024-remove-legacy-demo-identities.test.ts");
+    }
     expect(existsSync(entry.path), `${entry.path} must still exist`).toBe(true);
     expect(entry.sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(createHash("sha256").update(readFileSync(entry.path)).digest("hex")).toBe(entry.sha256);
@@ -95,16 +117,15 @@ function collectTrackedSourceFiles(): string[] {
     .sort();
 }
 
-function findForbiddenReferences(allowedPaths: Set<string>) {
+function findForbiddenReferences(allowedPatterns: Map<string, Set<string>>) {
   return collectTrackedSourceFiles()
     .filter((filePath) => filePath !== path.join("test", "demo-source-policy.test.ts"))
     .flatMap((filePath) => {
-      if (allowedPaths.has(filePath)) return [];
       const source = readFileSync(filePath, "utf8");
-      return FORBIDDEN_DEMO_PATTERNS.filter((pattern) => pattern.regex.test(source)).map((pattern) => ({
-        filePath,
-        patternId: pattern.id,
-      }));
+      return FORBIDDEN_DEMO_PATTERNS
+        .filter((pattern) => pattern.regex.test(source))
+        .filter((pattern) => !allowedPatterns.get(filePath)?.has(pattern.id))
+        .map((pattern) => ({ filePath, patternId: pattern.id }));
     });
 }
 
@@ -112,7 +133,13 @@ describe("demo-source policy", () => {
   it("quarantines immutable historical migration references instead of editing applied SQL", () => {
     const allowlist = readPolicyAllowlist();
 
-    expect(allowlist.map((entry) => entry.path).sort()).toEqual(["migrations/0002_seed.sql", "migrations/0004_reseed.sql"]);
+    expect(allowlist.map((entry) => entry.path).sort()).toEqual([
+      "migrations/0002_seed.sql",
+      "migrations/0004_reseed.sql",
+      "migrations/0024_remove_legacy_demo_identities.sql",
+      "scripts/cleanup-local-qa-data.mjs",
+      "test/scripts/migration-0024-remove-legacy-demo-identities.test.ts",
+    ]);
     for (const entry of allowlist) {
       const source = readFileSync(entry.path, "utf8");
       const matchingPatternIds = FORBIDDEN_DEMO_PATTERNS
@@ -131,9 +158,11 @@ describe("demo-source policy", () => {
   });
 
   it("keeps the complete active source tree free of fixed demo identities", () => {
-    const allowedPaths = new Set(readPolicyAllowlist().map((entry) => entry.path));
+    const allowedPatterns = new Map(
+      readPolicyAllowlist().map((entry) => [entry.path, new Set(entry.patterns)]),
+    );
 
-    expect(findForbiddenReferences(allowedPaths)).toEqual([]);
+    expect(findForbiddenReferences(allowedPatterns)).toEqual([]);
   });
 
   it("scans tracked env examples and extensionless text files", () => {
@@ -154,7 +183,7 @@ describe("demo-source policy", () => {
     const untrackedPath = path.join(tempDir, ".env.local");
     try {
       writeFileSync(untrackedPath, "PRIVATE_TEST_VALUE=demo1234\n");
-      expect(findForbiddenReferences(new Set())).not.toContainEqual({
+      expect(findForbiddenReferences(new Map())).not.toContainEqual({
         filePath: untrackedPath,
         patternId: "legacy-demo-password",
       });

@@ -26,16 +26,8 @@ export const SUSPICIOUS_RECIPE_WHERE = [
 
 export const DISPOSABLE_USER_WHERE = [
   "id IN ('demo_user_001', 'user_demo', 'user_julia', 'user_marco', 'user_sarah')",
-  "email LIKE 'codex-%'",
-  "email LIKE 'e2e-passkey-%'",
-  "username LIKE 'codex_%'",
-  "username LIKE 'e2e_passkey_%'",
-].join("\n    OR ");
-
-export const DISPOSABLE_SPOON_WHERE = [
-  "lower(coalesce(note,'')) LIKE 'e2e %'",
-  "lower(coalesce(note,'')) LIKE 'codex %'",
-  "lower(coalesce(note,'')) LIKE 'playwright%'",
+  "(email LIKE 'codex-%' AND instr(username, 'codex_') = 1)",
+  "(email LIKE 'e2e-passkey-%' AND instr(username, 'e2e_passkey_') = 1)",
 ].join("\n    OR ");
 
 export const E2E_OAUTH_CLIENT_WHERE = [
@@ -199,7 +191,6 @@ WITH
   disposable_spoons AS (
     SELECT id, chefId, recipeId, photoUrl FROM RecipeSpoon
     WHERE chefId IN (SELECT id FROM disposable_users)
-       OR ${DISPOSABLE_SPOON_WHERE}
   ),
   candidate_r2_keys AS (
     SELECT 'delete' AS action,
@@ -287,7 +278,6 @@ WITH
   disposable_spoons AS (
     SELECT id FROM RecipeSpoon
     WHERE chefId IN (SELECT id FROM disposable_users)
-       OR ${DISPOSABLE_SPOON_WHERE}
   ),
   r2_reference_keys(key) AS (
     ${referenceKeysCte}
@@ -371,7 +361,6 @@ WITH
   disposable_spoons AS (
     SELECT id FROM RecipeSpoon
     WHERE chefId IN (SELECT id FROM disposable_users)
-       OR ${DISPOSABLE_SPOON_WHERE}
   ),
   disposable_covers AS (
     SELECT id FROM RecipeCover
@@ -415,7 +404,6 @@ WITH
   disposable_spoons AS (
     SELECT id FROM RecipeSpoon
     WHERE chefId IN (SELECT id FROM disposable_users)
-       OR ${DISPOSABLE_SPOON_WHERE}
   ),
   e2e_oauth_clients AS (
     SELECT id FROM OAuthClient
@@ -508,12 +496,38 @@ WHERE recipientId NOT IN (SELECT id FROM disposable_users)
   ];
 }
 
-function parseWranglerRows(stdout) {
+function parseWranglerRows(stdout, label) {
+  if (typeof stdout !== "string" || stdout.trim() === "") {
+    throw new Error(`Refusing cleanup because ${label} did not return valid Wrangler JSON.`);
+  }
   const start = stdout.indexOf("[");
   const end = stdout.lastIndexOf("]");
-  if (start === -1 || end === -1 || end < start) return [];
-  const parsed = JSON.parse(stdout.slice(start, end + 1));
-  return parsed.flatMap((entry) => (Array.isArray(entry?.results) ? entry.results : []));
+  if (start === -1 || end === -1 || end < start) {
+    throw new Error(`Refusing cleanup because ${label} did not return valid Wrangler JSON.`);
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(stdout.slice(start, end + 1));
+  } catch {
+    throw new Error(`Refusing cleanup because ${label} did not return valid Wrangler JSON.`);
+  }
+  if (parsed.length !== 1) {
+    throw new Error(`Refusing cleanup because ${label} did not return exactly one Wrangler result set.`);
+  }
+  if (!Array.isArray(parsed[0]?.results)) {
+    throw new Error(`Refusing cleanup because ${label} did not return a results array.`);
+  }
+  if (parsed[0].success !== true) {
+    throw new Error(`Refusing cleanup because ${label} did not report Wrangler success.`);
+  }
+  return parsed[0].results;
+}
+
+function requireWranglerRowShape(rows, label, isValid) {
+  if (rows.some((row) => !isValid(row))) {
+    throw new Error(`Refusing cleanup because ${label} returned an unexpected row shape.`);
+  }
+  return rows;
 }
 
 function isR2ObjectMissingError(error) {
@@ -543,16 +557,33 @@ async function collectExistingSearchTables({ dbName, target, runCommand }) {
     encoding: "utf8",
     maxBuffer: MAX_WRANGLER_BUFFER,
   });
-  return normalizeExistingSearchTables(parseWranglerRows(result.stdout ?? "").map((row) => row.name));
+  const rows = requireWranglerRowShape(
+    parseWranglerRows(result.stdout, "search-table existence preflight"),
+    "search-table existence preflight",
+    (row) => typeof row?.name === "string",
+  );
+  return normalizeExistingSearchTables(rows.map((row) => row.name));
 }
 
 async function collectR2Candidates({ dbName, target, runCommand, existingSearchTables }) {
   const targetLabel = target.targetEnv === "local" ? "local" : "QA";
-  const result = await runCommand("pnpm", wranglerD1Args(dbName, buildQaR2CandidateSql(), target), {
-    encoding: "utf8",
-    maxBuffer: MAX_WRANGLER_BUFFER,
-  });
-  const rows = parseWranglerRows(result.stdout ?? "");
+  const rows = [];
+  const candidateStatements = buildQaR2CandidateSql().split(/;\s*(?=WITH\b)/);
+  for (const statement of candidateStatements) {
+    const result = await runCommand("pnpm", wranglerD1Args(dbName, statement, target), {
+      encoding: "utf8",
+      maxBuffer: MAX_WRANGLER_BUFFER,
+    });
+    rows.push(...requireWranglerRowShape(
+      parseWranglerRows(result.stdout, "R2 candidate preflight"),
+      "R2 candidate preflight",
+      (row) =>
+        (row?.action === "delete" || row?.action === "retain") &&
+        typeof row.key === "string" &&
+        row.key !== "" &&
+        (row.reason == null || typeof row.reason === "string"),
+    ));
+  }
   assertNoR2Blockers(rows, targetLabel);
   const deleteKeys = unique(rows.filter((row) => row.action === "delete").map((row) => row.key));
   const retainedKeys = unique(rows.filter((row) => row.action === "retain").map((row) => row.key));
@@ -561,14 +592,34 @@ async function collectR2Candidates({ dbName, target, runCommand, existingSearchT
       encoding: "utf8",
       maxBuffer: MAX_WRANGLER_BUFFER,
     });
-    assertNoR2Blockers(parseWranglerRows(referenceResult.stdout ?? ""), targetLabel);
+    const referenceRows = requireWranglerRowShape(
+      parseWranglerRows(referenceResult.stdout, "base R2 reference preflight"),
+      "base R2 reference preflight",
+      (row) =>
+        typeof row?.action === "string" &&
+        row.action.startsWith("blocker") &&
+        typeof row.key === "string" &&
+        row.key !== "" &&
+        (row.reason == null || typeof row.reason === "string"),
+    );
+    assertNoR2Blockers(referenceRows, targetLabel);
   }
   if (deleteKeys.length > 0 && existingSearchTables.has("SearchDocument")) {
     const searchResult = await runCommand("pnpm", wranglerD1Args(dbName, buildQaR2SearchReferenceSql(deleteKeys), target), {
       encoding: "utf8",
       maxBuffer: MAX_WRANGLER_BUFFER,
     });
-    assertNoR2Blockers(parseWranglerRows(searchResult.stdout ?? ""), targetLabel);
+    const searchRows = requireWranglerRowShape(
+      parseWranglerRows(searchResult.stdout, "SearchDocument R2 reference preflight"),
+      "SearchDocument R2 reference preflight",
+      (row) =>
+        typeof row?.action === "string" &&
+        row.action.startsWith("blocker") &&
+        typeof row.key === "string" &&
+        row.key !== "" &&
+        (row.reason == null || typeof row.reason === "string"),
+    );
+    assertNoR2Blockers(searchRows, targetLabel);
   }
   return {
     deleteKeys,
@@ -583,11 +634,15 @@ async function deleteAndVerifyR2Keys({ deleteKeys, targetEnv, runCommand, stdout
   const deletedKeys = [];
   const verifiedDeletedKeys = [];
   for (const key of deleteKeys) {
-    await runCommand("pnpm", deleteArgs(key), {
-      encoding: "utf8",
-      maxBuffer: MAX_WRANGLER_BUFFER,
-    });
-    deletedKeys.push(key);
+    try {
+      await runCommand("pnpm", deleteArgs(key), {
+        encoding: "utf8",
+        maxBuffer: MAX_WRANGLER_BUFFER,
+      });
+      deletedKeys.push(key);
+    } catch (error) {
+      if (!isR2ObjectMissingError(error)) throw error;
+    }
     try {
       await runCommand("pnpm", getArgs(key), {
         encoding: "buffer",
@@ -639,10 +694,9 @@ WHERE ${DISPOSABLE_USER_WHERE};
 WITH disposable_users AS (
   SELECT id FROM User WHERE ${DISPOSABLE_USER_WHERE}
 )
-SELECT 'disposable spoons by chef or note' AS item, COUNT(*) AS count
+SELECT 'spoons owned by disposable users' AS item, COUNT(*) AS count
 FROM RecipeSpoon
-WHERE chefId IN (SELECT id FROM disposable_users)
-   OR ${DISPOSABLE_SPOON_WHERE};
+WHERE chefId IN (SELECT id FROM disposable_users);
 
 SELECT 'e2e oauth clients with test redirect signature' AS item, COUNT(*) AS count
 FROM OAuthClient
@@ -719,8 +773,7 @@ CREATE TABLE IF NOT EXISTS disposable_spoons (id TEXT PRIMARY KEY);
 DELETE FROM disposable_spoons;
 INSERT INTO disposable_spoons
 SELECT id FROM RecipeSpoon
-WHERE chefId IN (SELECT id FROM disposable_users)
-   OR ${DISPOSABLE_SPOON_WHERE};
+WHERE chefId IN (SELECT id FROM disposable_users);
 
 -- CREATE TEMP TABLE e2e_oauth_clients
 CREATE TABLE IF NOT EXISTS e2e_oauth_clients (id TEXT PRIMARY KEY);
@@ -991,13 +1044,19 @@ function cleanupResultMessage(options) {
 }
 
 async function assertNoCleanupBlockers({ dbName, target, runCommand }) {
-  const result = await runCommand("pnpm", wranglerD1Args(dbName, buildBlockerReportSql(), target), {
-    encoding: "utf8",
-    maxBuffer: MAX_WRANGLER_BUFFER,
-  });
-  const blockers = parseWranglerRows(result.stdout ?? "").filter(
-    (row) => typeof row.blocker === "string" && typeof row.rowId === "string",
-  );
+  const blockers = [];
+  const blockerStatements = buildBlockerReportSql().split(/;\s*(?=WITH\b)/);
+  for (const statement of blockerStatements) {
+    const result = await runCommand("pnpm", wranglerD1Args(dbName, statement, target), {
+      encoding: "utf8",
+      maxBuffer: MAX_WRANGLER_BUFFER,
+    });
+    blockers.push(...requireWranglerRowShape(
+      parseWranglerRows(result.stdout, "D1 cleanup blocker preflight"),
+      "D1 cleanup blocker preflight",
+      (row) => typeof row?.blocker === "string" && row.blocker !== "" && typeof row.rowId === "string" && row.rowId !== "",
+    ));
+  }
   if (blockers.length === 0) return;
   const details = blockers.map((row) => `${row.blocker}:${row.rowId}`).join(", ");
   throw new Error(`Refusing cleanup because non-disposable rows still reference disposable targets: ${details}`);
@@ -1063,6 +1122,15 @@ export async function runCleanupCli({
     });
   }
 
+  if (cleansR2) {
+    await deleteAndVerifyR2Keys({
+      deleteKeys: r2Candidates.deleteKeys,
+      targetEnv: options.target.targetEnv,
+      runCommand,
+      stdout,
+    });
+  }
+
   const sql = options.apply ? buildApplySql({ existingSearchTables }) : buildDryRunSql();
   const args = wranglerD1Args(options.dbName, sql, options.target);
 
@@ -1075,14 +1143,6 @@ export async function runCleanupCli({
   if (result.stdout) stdout.write(result.stdout);
   if (result.stderr) stderr.write(result.stderr);
 
-  if (cleansR2) {
-    await deleteAndVerifyR2Keys({
-      deleteKeys: r2Candidates.deleteKeys,
-      targetEnv: options.target.targetEnv,
-      runCommand,
-      stdout,
-    });
-  }
 }
 
 export function isCliEntry(moduleUrl, argv1 = process.argv[1]) {
