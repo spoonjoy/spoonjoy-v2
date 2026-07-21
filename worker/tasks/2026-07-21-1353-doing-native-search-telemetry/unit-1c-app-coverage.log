@@ -24,7 +24,7 @@ direct clean child
 
  % Coverage report from istanbul
 -------------------|---------|----------|---------|---------|-------------------
-File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
 -------------------|---------|----------|---------|---------|-------------------
 -------------------|---------|----------|---------|---------|-------------------
 
