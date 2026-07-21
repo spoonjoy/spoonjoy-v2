@@ -2241,6 +2241,14 @@ describe("Recipes $id Edit Route", () => {
       expect(await screen.findByRole("alertdialog", { name: "Delete Step" })).toBeInTheDocument();
 
       await user.click(screen.getByRole("button", { name: "Cancel" }));
+      await waitFor(() => {
+        expect(screen.queryByRole("alertdialog", { name: "Delete Step" })).not.toBeInTheDocument();
+      });
+      await act(async () => {
+        await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+        await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      });
       expect(submittedStepIds).toEqual([]);
 
       await user.click(screen.getAllByRole("button", { name: "Delete" })[0]);
@@ -2248,6 +2256,14 @@ describe("Recipes $id Edit Route", () => {
 
       await waitFor(() => {
         expect(submittedStepIds).toEqual(["step-delete"]);
+      });
+      await waitFor(() => {
+        expect(screen.queryByRole("alertdialog", { name: "Delete Step" })).not.toBeInTheDocument();
+      });
+      await act(async () => {
+        await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+        await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       });
     });
 
