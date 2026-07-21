@@ -142,8 +142,8 @@ describe("CookSession namespace configuration", () => {
 
     expectCookSessionLifecycle(config);
     expectCookSessionLifecycle(config.env?.qa ?? {});
-    expect(config.vars?.COOK_SESSION_BOOTSTRAP_MODE).toBe("1");
-    expect(config.env?.qa?.vars?.COOK_SESSION_BOOTSTRAP_MODE).toBe("1");
+    expect(config.vars).not.toHaveProperty("COOK_SESSION_BOOTSTRAP_MODE");
+    expect(config.env?.qa?.vars).not.toHaveProperty("COOK_SESSION_BOOTSTRAP_MODE");
     expect(config.version_metadata).toEqual({ binding: "CF_VERSION_METADATA" });
     expect(config.env?.qa?.version_metadata).toEqual({ binding: "CF_VERSION_METADATA" });
   });
@@ -153,7 +153,7 @@ describe("CookSession namespace configuration", () => {
     const vitestSource = readFileSync("vitest.workers.config.ts", "utf8");
 
     expectCookSessionLifecycle(config);
-    expect(config.vars?.COOK_SESSION_BOOTSTRAP_MODE).toBe("1");
+    expect(config.vars).not.toHaveProperty("COOK_SESSION_BOOTSTRAP_MODE");
     expect(config.vars?.SESSION_SECRET).toBe("spoonjoy-workers-cook-session-test-secret");
     expect(config.ratelimits).toContainEqual(expect.objectContaining({ name: "AUTH_IP_RATE_LIMITER" }));
     expect(config.version_metadata).toEqual({ binding: "CF_VERSION_METADATA" });
@@ -180,8 +180,9 @@ describe("CookSession namespace configuration", () => {
     ]);
     expect(storageMethodCalls(classSource, "deleteAll")).toHaveLength(1);
     expect(appSource).toMatch(/export\s*\{\s*CookSession\s*\}/);
+    expect(appSource).not.toContain("COOK_SESSION_BOOTSTRAP_MODE");
     expect(envTypes).toMatch(/COOK_SESSIONS\??:\s*DurableObjectNamespace/);
-    expect(envTypes).toContain("COOK_SESSION_BOOTSTRAP_MODE?: string;");
+    expect(envTypes).not.toContain("COOK_SESSION_BOOTSTRAP_MODE");
   });
 
   it("documents the bootstrap binding lifecycle and managed E2E server accurately", () => {

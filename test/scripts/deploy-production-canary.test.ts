@@ -7401,6 +7401,8 @@ describe("release artifact and CLI boundary", () => {
       expect(deps.writeReleaseArtifact).toHaveBeenCalledTimes(1);
       expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(result);
       expect(commands).toEqual(atomicCommandSequence("atomic-product-activation"));
+      expect(commands.some((command) => command.includes("wrangler versions upload"))).toBe(false);
+      expect(commands.some((command) => command.includes("wrangler versions deploy"))).toBe(false);
       expect(readBootstrapProbe).not.toHaveBeenCalled();
     });
 

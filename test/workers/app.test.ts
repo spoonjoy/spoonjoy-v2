@@ -505,24 +505,21 @@ describe("Cloudflare worker app", () => {
   });
 
   it.each([
-    ["path", "/.well-known/spoonjoy-cook-session-bootstrap/extra", "POST", "1", true, ""],
-    ["query", "/.well-known/spoonjoy-cook-session-bootstrap?bad=1", "POST", "1", true, ""],
-    ["method", "/.well-known/spoonjoy-cook-session-bootstrap", "GET", "1", true, undefined],
-    ["mode", "/.well-known/spoonjoy-cook-session-bootstrap", "POST", "0", true, ""],
-    ["version", "/.well-known/spoonjoy-cook-session-bootstrap", "POST", "1", false, ""],
-    ["binding", "/.well-known/spoonjoy-cook-session-bootstrap", "POST", "1", true, ""],
-    ["body", "/.well-known/spoonjoy-cook-session-bootstrap", "POST", "1", true, "not-empty"],
+    ["path", "/.well-known/spoonjoy-cook-session-bootstrap/extra", "POST", true, ""],
+    ["query", "/.well-known/spoonjoy-cook-session-bootstrap?bad=1", "POST", true, ""],
+    ["method", "/.well-known/spoonjoy-cook-session-bootstrap", "GET", true, undefined],
+    ["version", "/.well-known/spoonjoy-cook-session-bootstrap", "POST", false, ""],
+    ["binding", "/.well-known/spoonjoy-cook-session-bootstrap", "POST", true, ""],
+    ["body", "/.well-known/spoonjoy-cook-session-bootstrap", "POST", true, "not-empty"],
   ])("keeps invalid bootstrap %s requests inert", async (
     _case,
     path,
     method,
-    mode,
     includeVersion,
     body,
   ) => {
     const namespace = cookSessionNamespace();
     const env = {
-      COOK_SESSION_BOOTSTRAP_MODE: mode,
       COOK_SESSIONS: _case === "binding" ? undefined : namespace.namespace,
       CF_VERSION_METADATA: includeVersion
         ? versionedEnvironment().CF_VERSION_METADATA
@@ -540,10 +537,9 @@ describe("Cloudflare worker app", () => {
     expect(namespace.fetch).not.toHaveBeenCalled();
   });
 
-  it("forwards the exact bootstrap probe and propagates its response", async () => {
+  it("keeps the former public bootstrap probe permanently inert", async () => {
     const namespace = cookSessionNamespace();
     const env = versionedEnvironment({
-      COOK_SESSION_BOOTSTRAP_MODE: "1",
       COOK_SESSIONS: namespace.namespace,
     });
 
@@ -556,28 +552,11 @@ describe("Cloudflare worker app", () => {
       context(),
     );
 
-    expect(namespace.idFromName).toHaveBeenCalledWith(`bootstrap:${WORKER_VERSION_ID}`);
-    expect(namespace.get).toHaveBeenCalledWith(expect.objectContaining({
-      toString: expect.any(Function),
-    }));
-    expect(namespace.fetch).toHaveBeenCalledTimes(1);
-    const forwarded = namespace.fetch.mock.calls[0]?.[0] as Request;
-    expect(forwarded.url).toBe("https://cook-session.internal/__bootstrap/probe");
-    expect(forwarded.method).toBe("POST");
-    expect(forwarded.headers.get("X-Spoonjoy-Internal-Probe")).toBe("1");
-    expect(forwarded.headers.get("Content-Type")).toBeNull();
-    await expect(forwarded.text()).resolves.toBe('{"version":1}');
-    expect(response.status).toBe(202);
-    expect(response.statusText).toBe("Accepted");
-    expect(response.headers.get("Content-Length")).toBeNull();
-    expect(response.headers.get("X-Probe-Result")).toBe("ready");
+    expect(response.status).toBe(404);
     expect(response.headers.get("X-Spoonjoy-Worker-Version")).toBe(WORKER_VERSION_ID);
-    await expect(response.json()).resolves.toEqual({
-      ok: true,
-      storage: "sqlite",
-      residue: 0,
-      workerVersionId: WORKER_VERSION_ID,
-    });
+    expect(namespace.idFromName).not.toHaveBeenCalled();
+    expect(namespace.get).not.toHaveBeenCalled();
+    expect(namespace.fetch).not.toHaveBeenCalled();
   });
 
   it("accepts Cloudflare's empty incoming POST stream without treating it as a request body", async () => {
@@ -599,14 +578,13 @@ describe("Cloudflare worker app", () => {
     const response = await worker.fetch(
       request,
       versionedEnvironment({
-        COOK_SESSION_BOOTSTRAP_MODE: "1",
         COOK_SESSIONS: namespace.namespace,
       }),
       context(),
     );
 
-    expect(response.status).toBe(202);
-    expect(namespace.fetch).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(404);
+    expect(namespace.fetch).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -624,7 +602,6 @@ describe("Cloudflare worker app", () => {
         },
       }),
       versionedEnvironment({
-        COOK_SESSION_BOOTSTRAP_MODE: "1",
         COOK_SESSIONS: namespace.namespace,
       }),
       context(),
@@ -659,7 +636,6 @@ describe("Cloudflare worker app", () => {
       request,
       versionedEnvironment({
         AUTH_IP_RATE_LIMITER: limiter,
-        COOK_SESSION_BOOTSTRAP_MODE: "1",
         COOK_SESSIONS: namespace.namespace,
       }),
       context(),
@@ -682,14 +658,13 @@ describe("Cloudflare worker app", () => {
       }),
       versionedEnvironment({
         AUTH_IP_RATE_LIMITER: limiter,
-        COOK_SESSION_BOOTSTRAP_MODE: "1",
         COOK_SESSIONS: namespace.namespace,
       }),
       context(),
     );
 
     expect(response.status).toBe(404);
-    expect(limiter.limit).toHaveBeenCalledWith({ key: "cook-session-bootstrap:203.0.113.41" });
+    expect(limiter.limit).not.toHaveBeenCalled();
     expect(namespace.fetch).not.toHaveBeenCalled();
   });
 
@@ -704,7 +679,6 @@ describe("Cloudflare worker app", () => {
         AUTH_IP_RATE_LIMITER: missing === "rate limiter" ? undefined : {
           limit: vi.fn(async () => ({ success: true })),
         },
-        COOK_SESSION_BOOTSTRAP_MODE: "1",
         COOK_SESSIONS: namespace.namespace,
       }),
       context(),
@@ -729,7 +703,6 @@ describe("Cloudflare worker app", () => {
     const response = await worker.fetch(
       request,
       versionedEnvironment({
-        COOK_SESSION_BOOTSTRAP_MODE: "1",
         COOK_SESSIONS: namespace.namespace,
       }),
       context(),

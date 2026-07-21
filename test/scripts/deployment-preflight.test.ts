@@ -773,6 +773,18 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).not.toContain("production deploy workflow");
   });
 
+  it("pins the checked-in workflow to atomic product activation before canaries resume", () => {
+    const workflow = readFileSync(
+      path.join(process.cwd(), ".github/workflows/production-deploy.yml"),
+      "utf8",
+    );
+
+    expect(workflow.match(/^  SPOONJOY_RELEASE_MODE: (.+)$/m)?.[1]).toBe(
+      "atomic-product-activation",
+    );
+    expect(workflow.match(/^  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: (.*)$/m)?.[1]).toBe('""');
+  });
+
   it("executes the release guard and rejects arbitrary or ambiguous marker history", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-protocol-boundary-"));
     const markerPath = path.join(root, "workers/cook-session-protocol-v1-boundary");

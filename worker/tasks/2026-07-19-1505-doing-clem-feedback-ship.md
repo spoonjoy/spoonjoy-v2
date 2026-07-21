@@ -154,10 +154,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 
 **Completed**: Replayed the frozen fixture and migrations in native SQLite and isolated Wrangler D1, froze the eight-path Pebble manifest, closed six cold-review rounds, and recorded immutable source/contract/fixture/migration hashes plus point-in-time execution-document hashes in `unit-0r-audited-baseline.md`.
 
-### ⬜ Unit 1.8a: Product Deployment Mode - Tests
+### ✅ Unit 1.8a: Product Deployment Mode - Tests
 **What**: On the product branch, change config/runtime/deploy contract tests to require no `COOK_SESSION_BOOTSTRAP_MODE`, public probe 404 with the private inert probe still covered, retained binding/migration, the source-controlled atomic-product-activation workflow branch, and explicit rejection of versions-upload/canary before the product smoke boundary.
 **Output**: Red updated binding/bootstrap/deploy tests.
 **Acceptance**: Focused tests fail only because the checked-in config/workflow still enables bootstrap deployment mode.
+
+**Completed**: Added config/type/source, Node Worker, real-Workers, and deploy-contract regressions. The app lane has exactly four expected failures with 946 passing tests; the real-Workers lane has exactly two expected public-adapter failures with 11 private-probe/protocol tests passing. A harsh test review returned `CONVERGED`.
 
 ### ⬜ Unit 1.8b: Product Deployment Mode - Implementation
 **What**: Remove `COOK_SESSION_BOOTSTRAP_MODE`, retain private probe compatibility through Unit 7.1, and select the workflow/script's atomic-product-activation branch; do not change the Durable Object binding or migration and do not restore canaries yet.
@@ -705,3 +707,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-21 05:43 Reopened planning/doing for latest-model audit. The prior per-recipe DO plus D1 registry contradicted Clem's no-D1-progress feedback; this revision supersedes it with one owner-scoped SQLite DO, direct discovery, no D1 cook schema, and permanent owner tombstoning. Historical progress lines remain evidence of the superseded design process.
 - 2026-07-21 06:31 Latest-model architecture and product/data reviews rejected the first audit revision on protocol executability, expression-index uniqueness, bootstrap-version provenance, shopping migration skew, alarm/logical-expiry semantics, hibernation identity, deletion crash repair, cleanup observability, tombstone consistency, duplicate discovery ownership, and canary-boundary placement. The normative `product-data-contract.md` and `cook-session-protocol-v1.md` now freeze every schema/body/status/error/transition/reconnect/index/proof contract; the doing units assign the separate compatibility release, Unit 0R refresh, protocol-boundary commit, exact cleanup headers, and non-duplicated ownership. Fresh convergence review is required before execution resumes.
 - 2026-07-21 11:59 Unit 1.7R complete after six cold-review rounds. Final reviewers converged on the product/data contract, repeatable release repair state graph, owner-DO protocol/security boundary, and cross-document unit ownership; native SQLite, isolated Wrangler D1, Pebble preservation, warning-clean 950-test deployment baseline, and authority hashes are frozen in `unit-0r-audited-baseline.md`.
+- 2026-07-21 12:08 Unit 1.8a complete: froze removal of the bootstrap variable/type/adapter in production, QA, and real Workers; retained the private SQLite probe and namespace migration; pinned atomic product activation; and proved six expected red assertions with every unrelated focused test green. Harsh test review converged.

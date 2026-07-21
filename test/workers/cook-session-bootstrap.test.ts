@@ -22,7 +22,6 @@ interface TestD1Database {
 interface TestWorkerEnvironment {
   CF_VERSION_METADATA?: { id: string; tag: string; timestamp: string };
   COOK_SESSIONS?: DurableObjectNamespace;
-  COOK_SESSION_BOOTSTRAP_MODE?: string;
   DB: TestD1Database;
   NODE_ENV?: string;
   SESSION_SECRET?: string;
@@ -554,7 +553,7 @@ describe("CookSession lifecycle bootstrap", () => {
     }
   });
 
-  itWithCookSessionNamespace("constructs the exact public-to-private bootstrap request and handles its response separately", async () => {
+  itWithCookSessionNamespace("keeps the former public bootstrap adapter permanently inert", async () => {
     const worker = (await import("../../workers/app")).default;
     const captured = createCapturingNamespace();
     const versionId = "33333333-3333-4333-8333-333333333333";
@@ -571,36 +570,23 @@ describe("CookSession lifecycle bootstrap", () => {
           timestamp: "2026-07-20T00:00:00Z",
         },
         COOK_SESSIONS: captured.namespace,
-        COOK_SESSION_BOOTSTRAP_MODE: "1",
       } as unknown as CloudflareEnvironment,
       createExecutionContext(),
     );
 
-    expect(captured.names).toEqual([`bootstrap:${versionId}`]);
-    expect(captured.ids).toEqual([captured.objectId]);
-    expect(captured.getOptions).toEqual([undefined]);
-    expect(captured.requests).toHaveLength(1);
-    const outbound = captured.requests[0];
-    expect(outbound.url).toBe("https://cook-session.internal/__bootstrap/probe");
-    expect(outbound.method).toBe("POST");
-    expect(outbound.headers.get("X-Spoonjoy-Internal-Probe")).toBe("1");
-    expect(outbound.headers.get("Content-Type")).toBeNull();
-    await expect(outbound.text()).resolves.toBe('{"version":1}');
-
-    expect(response.status).toBe(200);
+    expect(captured.names).toEqual([]);
+    expect(captured.ids).toEqual([]);
+    expect(captured.getOptions).toEqual([]);
+    expect(captured.requests).toEqual([]);
+    expect(response.status).toBe(404);
     expect(response.headers.get("X-Spoonjoy-Worker-Version")).toBe(versionId);
-    await expect(response.json()).resolves.toEqual({
-      ok: true,
-      storage: "captured-sqlite",
-      residue: 7,
-      workerVersionId: versionId,
-    });
   });
 
-  itWithCookSessionNamespace("runs the public bootstrap probe twice against one version-derived object", async (namespace) => {
+  itWithCookSessionNamespace("returns 404 twice without deriving a public-probe object", async (namespace) => {
     const environment = testEnvironment();
     const versionId = environment.CF_VERSION_METADATA?.id;
     if (!versionId) throw new Error("CF_VERSION_METADATA binding is required for the bootstrap probe.");
+    const idsBefore = await listDurableObjectIds(namespace);
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const response = await SELF.fetch(new Request(
@@ -610,23 +596,17 @@ describe("CookSession lifecycle bootstrap", () => {
           headers: { "CF-Connecting-IP": "203.0.113.51" },
         },
       ));
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(404);
       expect(response.headers.get("X-Spoonjoy-Worker-Version")).toBe(versionId);
-      await expect(response.json()).resolves.toEqual({
-        ok: true,
-        storage: "sqlite",
-        residue: 0,
-        workerVersionId: versionId,
-      });
     }
 
-    const expectedId = namespace.idFromName(`bootstrap:${versionId}`);
-    const ids = await listDurableObjectIds(namespace);
-    expect(ids.some((id) => id.equals(expectedId))).toBe(true);
-    await expectDurableObjectStorageEmpty(namespace.get(expectedId));
+    const idsAfter = await listDurableObjectIds(namespace);
+    expect(idsAfter.map((id) => id.toString()).sort()).toEqual(
+      idsBefore.map((id) => id.toString()).sort(),
+    );
   });
 
-  itWithCookSessionNamespace("returns 404 for malformed or bootstrap-disabled public probes", async () => {
+  itWithCookSessionNamespace("returns 404 for every malformed former public probe", async () => {
     const worker = (await import("../../workers/app")).default;
     const captured = createCapturingNamespace();
     const baseEnvironment = {
@@ -661,21 +641,6 @@ describe("CookSession lifecycle bootstrap", () => {
       expect((response as Response & { webSocket?: unknown }).webSocket).toBeNull();
     }
 
-    for (const mode of [undefined, "0", "2", "true"]) {
-      const response = await worker.fetch(
-        new Request(`${TEST_ORIGIN}/.well-known/spoonjoy-cook-session-bootstrap`, {
-          method: "POST",
-        }),
-        {
-          ...baseEnvironment,
-          COOK_SESSION_BOOTSTRAP_MODE: mode,
-        } as unknown as CloudflareEnvironment,
-        createExecutionContext(),
-      );
-      expect(response.status).toBe(404);
-      expect(response.headers.get("Retry-After")).toBeNull();
-    }
-
     const missingVersionResponse = await worker.fetch(
       new Request(`${TEST_ORIGIN}/.well-known/spoonjoy-cook-session-bootstrap`, {
         method: "POST",
@@ -683,7 +648,6 @@ describe("CookSession lifecycle bootstrap", () => {
       {
         ...baseEnvironment,
         CF_VERSION_METADATA: undefined,
-        COOK_SESSION_BOOTSTRAP_MODE: "1",
       } as unknown as CloudflareEnvironment,
       createExecutionContext(),
     );
