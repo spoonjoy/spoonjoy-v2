@@ -1,6 +1,6 @@
 # Doing: Native Search Telemetry
 
-**Status**: READY_FOR_EXECUTION
+**Status**: COMPLETE
 **Execution Mode**: direct
 **Created**: 2026-07-21 14:01
 **Planning**: ./2026-07-21-1353-planning-native-search-telemetry.md
@@ -21,7 +21,7 @@ Extend the existing closed-schema native telemetry endpoint with privacy-safe se
 - [x] OpenAPI and generated API playground artifacts expose the exact closed schema and privacy language.
 - [x] Focused tests, generated-contract verification, full app and Worker coverage, both typechecks, and build pass with zero warnings.
 - [x] A hostile final review converges with no BLOCKER or MAJOR findings.
-- [ ] Atomic commits are pushed and a ready, unmerged PR is open.
+- [x] Atomic commits are pushed and a ready, unmerged PR is open.
 
 ## Code Coverage Requirements
 
@@ -60,7 +60,7 @@ Extend the existing closed-schema native telemetry endpoint with privacy-safe se
 **Output**: Validation logs and reviewer verdict in the artifacts directory.
 **Acceptance**: All local gates pass, coverage remains 100%, warnings are zero, no raw-query field/logging path exists, and review converges.
 
-### ⬜ Unit 2: Ready Pull Request
+### ✅ Unit 2: Ready Pull Request
 **What**: Push the exact reviewed head and open a ready PR to `main` with scope, privacy guarantees, and validation evidence. Do not merge or deploy.
 **Output**: Ready PR URL and exact branch/head metadata.
 **Acceptance**: PR is open and non-draft at the reviewed SHA; no deployment/release/provider/native mutation occurred.
@@ -73,3 +73,4 @@ Extend the existing closed-schema native telemetry endpoint with privacy-safe se
 - 2026-07-21 14:10 Unit 1b complete at `039595494c6291fd283f906691262a0b40cafa1d`: 26 focused tests, generated-contract verification, both typechecks, and production build passed with zero warnings.
 - 2026-07-21 14:26 Unit 1c verification: 8,114 app tests and 13 Worker tests passed with 100% statements/branches/functions/lines; exact pushed-head hostile review converged with no findings. Final committed-head diff scan remains.
 - 2026-07-21 14:29 Unit 1c complete: committed-head diff check, raw-query runtime allowlist scan, restricted-surface scan, and clean-status check passed at `8a85a9b2821d99d13c3bc7db50e9243df61324f8`.
+- 2026-07-21 14:30 Unit 2 complete: ready PR `https://github.com/spoonjoy/spoonjoy-v2/pull/287` opened against `main`; no merge, deployment, provider, native, or release mutation performed.
