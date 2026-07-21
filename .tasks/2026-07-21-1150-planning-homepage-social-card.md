@@ -1,7 +1,7 @@
 # Planning: Homepage social card
 
-**Status**: drafting
-**Created**: pending initial commit
+**Status**: approved
+**Created**: 2026-07-21 11:51
 
 ## Goal
 Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter preview backed by a real 1200×630 PNG so LinkedIn can render a branded Featured card instead of the current gray placeholder.
@@ -12,7 +12,7 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 ## Scope
 
 ### In Scope
-- Add complete homepage title, description, canonical, Open Graph, and Twitter metadata in `app/routes/_index.tsx`.
+- Update the existing exact metadata assertion in `test/routes/index.test.tsx`, then add complete homepage title, description, canonical, Open Graph, and Twitter metadata in `app/routes/_index.tsx`.
 - Add a branded 1200×630 PNG social card and a maintainable source asset.
 - Add tests that lock the metadata contract and verify the committed image is a 1200×630 PNG.
 - Run repository validation, cold review, PR/merge, deployment verification, and production metadata/image smoke checks.
@@ -23,9 +23,11 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 - Edit LinkedIn or add Spoonjoy to Featured before the headline crossover finishes and Ari approves the final profile action.
 
 ## Completion Criteria
-- [ ] Homepage HTML exposes complete canonical, Open Graph, and Twitter metadata with absolute production URLs.
+- [ ] Homepage HTML exposes absolute canonical, `og:title`, `og:description`, `og:type=website`, `og:url`, `og:image`, `og:image:type=image/png`, image dimensions, and Twitter-card fields.
 - [ ] The declared social image is a valid 1200×630 PNG with a branded, legible design.
-- [ ] Production serves the merged metadata and image successfully.
+- [ ] Production homepage HTML contains the expected metadata without Cloudflare challenge markers.
+- [ ] Production serves the declared image as `image/png`; its bytes have the PNG signature and a 1200×630 IHDR.
+- [ ] Homepage and image return real content rather than a Cloudflare challenge when requested with LinkedIn's crawler user agent.
 - [ ] 100% test coverage on all new code
 - [ ] All tests pass
 - [ ] No warnings
@@ -52,10 +54,12 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 - `app/lib/og-image.server.tsx`
 - `test/routes/index.test.tsx`
 - `test/routes/og-routes.test.ts`
+- `wrangler.json`
 - `AGENTS.md`
 
 ## Notes
 The LinkedIn profile itself remains discussion-gated and frozen through the headline experiment; this task only repairs the underlying public-site card.
 
 ## Progress Log
-- Pending initial commit: Created
+- 2026-07-21 11:51 Created
+- 2026-07-21 11:54 Tightened the metadata contract and crawler-perspective production gates after cold review; a live LinkedInBot probe confirmed Cloudflare currently serves the real homepage and existing PNG assets to that crawler.
