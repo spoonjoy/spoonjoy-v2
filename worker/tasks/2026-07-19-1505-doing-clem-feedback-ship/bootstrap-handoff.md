@@ -1,6 +1,7 @@
 # Bootstrap To Product Handoff
 
 **Recorded**: 2026-07-21 05:43 PDT
+**Product-mode checkpoint**: 2026-07-21 12:49 PDT
 **Lifecycle boundary**: verified
 
 ## Source Chain
@@ -49,3 +50,18 @@
 ## Product Boundary
 
 Product work uses one SQLite-backed DO per owner (`owner:v1:<userId>`) and stores no cook state/index in D1. Product activation remains atomic and forward-repair-only. The inert version above is not a valid rollback target after product state exists. Gradual canary behavior is restored only in the final workflow-only PR after the product version has passed production smoke and cleanup.
+
+## Atomic Product-Mode Checkpoint
+
+- Implementation commit and pushed remote head at verification: `1e2aeea6debea36e386b8ca95ad01f1e9089b2cb`
+- Tree hash: `f46603701a605202e37f8a5cce9d6c7070887711`
+- Checked-in release mode: `atomic-product-activation`
+- Protocol boundary SHA: empty until Unit 7.1 introduces the reviewed protocol marker
+- Public bootstrap route: explicit HTTP 404 before body, limiter, or Durable Object work
+- Public bootstrap configuration/type: absent from production, QA, and real-Workers environments
+- Private bootstrap compatibility: `workers/cook-session.ts`, `COOK_SESSIONS`, and migration `v1_cook_session` unchanged
+- Atomic command contract: no `wrangler versions upload` or `wrangler versions deploy`
+- Verification: 8,111 app tests and 13 real-Workers tests at exact 100% coverage; app and script typechecks plus production build warning-clean
+- Review receipt: `019f8635-425d-7ba0-81fa-be2bb869138c`, final verdict `CONVERGED`
+
+`git ls-remote origin refs/heads/worker/clem-feedback-product` returned the exact implementation commit above before this verification-only evidence update. The evidence commit may advance the branch head without changing the recorded product-mode tree.
