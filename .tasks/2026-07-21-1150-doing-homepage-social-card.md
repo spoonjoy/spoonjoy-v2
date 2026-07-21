@@ -58,12 +58,12 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 **Acceptance**: Evidence shows the real homepage and PNG assets are crawler-accessible while the homepage lacks the complete social contract.
 
 ### ⬜ Unit 1a: Homepage social metadata and raster card — Tests
-**What**: Update `test/routes/index.test.tsx` to require the complete metadata contract and add a test that reads the committed image bytes and asserts PNG signature plus 1200×630 IHDR dimensions.
+**What**: Update `test/routes/index.test.tsx` to require the complete metadata contract and add a test that first asserts `public/og/spoonjoy-home.png` exists, then reads its bytes and asserts PNG signature plus 1200×630 IHDR dimensions.
 **Output**: Tests that fail because metadata fields and the PNG asset do not yet exist.
-**Acceptance**: The targeted test command fails on the new metadata and raster-image assertions rather than setup or mock errors.
+**Acceptance**: The targeted test command fails through clean metadata and file-existence assertions rather than an unhandled `ENOENT`, setup, or mock error.
 
 ### ⬜ Unit 1b: Homepage social metadata and raster card — Implementation
-**What**: Add the metadata entries to `app/routes/_index.tsx`, create a maintainable source design, and commit its rasterized `public/og/spoonjoy-home.png` output.
+**What**: Add the metadata entries to `app/routes/_index.tsx`, create a non-executable static SVG source at `assets/og/spoonjoy-home.svg`, and commit its rasterized `public/og/spoonjoy-home.png` output; `meta()` remains the only new covered executable code.
 **Output**: Complete homepage metadata and a 1200×630 PNG social card.
 **Acceptance**: Targeted tests pass, the route builds without warnings, and metadata points only to absolute production URLs.
 
@@ -73,12 +73,12 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 **Acceptance**: New executable code is fully covered, all tests pass, typecheck/build succeed, and no warnings remain.
 
 ### ⬜ Unit 1d: Homepage social card — Visual QA Dogfood
-**What**: Run `visual-qa-dogfood` against the raster card, capture the rendered image, inspect legibility at LinkedIn-card scale, and maintain an absurdity ledger.
+**What**: Apply the `visual-qa-dogfood` critique method to the standalone raster asset, capture the rendered image at full size and LinkedIn-card scale, inspect legibility, and maintain an absurdity ledger without treating the unchanged homepage route as a visual target.
 **Output**: Image evidence and a closed absurdity ledger in the artifacts directory.
 **Acceptance**: The card is branded and legible, with no ready or reviewer-gated visual findings.
 
 ### ⬜ Unit 2: Delivery and production smoke
-**What**: Cold-review the branch, open and merge the PR, verify the deployment for the merged commit, and probe homepage/image bytes with LinkedIn's crawler user agent.
+**What**: Cold-review the branch, open and merge the PR, verify the deployment for the merged commit, assert the production `og:image` value exactly matches the fetched asset URL, and probe homepage/image bytes with LinkedIn's crawler user agent.
 **Output**: PR, deployment, and production smoke evidence.
 **Acceptance**: Production HTML contains every expected tag without challenge markers, and the image returns `image/png` with valid 1200×630 PNG bytes.
 
