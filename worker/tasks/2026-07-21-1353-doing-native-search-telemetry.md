@@ -50,7 +50,7 @@ Extend the existing closed-schema native telemetry endpoint with privacy-safe se
 **Output**: Red tests in `test/routes/api-v1-native-telemetry.test.ts` and `test/lib/api-v1-openapi.server.test.ts`, plus the red log.
 **Acceptance**: The focused command fails because search events/fields are absent while existing tests remain healthy; tests capture analytics output and prove forbidden text is absent.
 
-### ⬜ Unit 1b: Endpoint And OpenAPI Implementation
+### ✅ Unit 1b: Endpoint And OpenAPI Implementation
 **What**: Extend `app/lib/api-v1.server.ts` using canonical `SEARCH_SCOPES`, bounded field parsers, and privacy-safe analytics keys; extend `NativeTelemetryRequest` and its example in `app/lib/api-v1-openapi.server.ts`; regenerate `app/lib/generated/api-v1-playground.ts`.
 **Output**: Passing focused tests and current generated artifact.
 **Acceptance**: Focused tests pass unchanged; raw query remains unrecognized; generated-contract verification, typechecks, and build pass with zero warnings.
@@ -70,3 +70,4 @@ Extend the existing closed-schema native telemetry endpoint with privacy-safe se
 - 2026-07-21 14:01 Doing doc created after planning review convergence.
 - 2026-07-21 14:06 Unit 0 complete: exact provenance recorded and 23 focused baseline tests passed after local test database initialization.
 - 2026-07-21 14:08 Unit 1a complete: 26 focused tests produced three expected failures for the absent search event, field mapping, and OpenAPI contract; existing privacy rejection remained green.
+- 2026-07-21 14:10 Unit 1b complete at `039595494c6291fd283f906691262a0b40cafa1d`: 26 focused tests, generated-contract verification, both typechecks, and production build passed with zero warnings.
