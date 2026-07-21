@@ -295,7 +295,10 @@ async function readBootstrapProbe(
   const url = new URL("/.well-known/spoonjoy-cook-session-bootstrap", baseUrl);
   const response = await fetchImpl(url, {
     cache: "no-store",
-    headers: { Accept: "application/json" },
+    headers: {
+      Accept: "application/json",
+      "Content-Length": "0",
+    },
     method: "POST",
     redirect: "error",
   });

@@ -7285,7 +7285,10 @@ describe("release artifact and CLI boundary", () => {
         );
         expect(options).toEqual({
           cache: "no-store",
-          headers: { Accept: "application/json" },
+          headers: {
+            Accept: "application/json",
+            "Content-Length": "0",
+          },
           method: "POST",
           redirect: "error",
         });
