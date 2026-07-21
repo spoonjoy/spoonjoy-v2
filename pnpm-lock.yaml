@@ -9,6 +9,7 @@ overrides:
   axios: 1.18.0
   brace-expansion@1: 1.1.16
   brace-expansion@2: 2.1.2
+  dompurify: 3.4.12
   js-yaml@3: 3.15.0
   js-yaml@4: 4.3.0
   protobufjs@7: 7.6.5
@@ -3048,8 +3049,8 @@ packages:
   domhandler@2.4.2:
     resolution: {integrity: sha512-JiK04h0Ht5u/80fdLMCEmV4zkNh2BcoMFBmZ/91WtYZ8qVXSKjiw7fXMgFPnHcSZgOo3XdinHvmnDUeMf5R4wA==}
 
-  dompurify@3.3.1:
-    resolution: {integrity: sha512-qkdCKzLNtrgPFP1Vo+98FRzJnBRGe4ffyCea9IwHB1fyxPOeNTHpLKYGd4Uk9xvNoH0ZoOjwZxNptyMwqrId1Q==}
+  dompurify@3.4.12:
+    resolution: {integrity: sha512-zQvGet8Z2sWbQhCmfFz/T5QWH2oBmjnqK3qvOjaqaNLrLEF912WamU+ohnTp0TCep/MFVHpdJuCZEdFOdTnEFg==}
 
   domutils@1.7.0:
     resolution: {integrity: sha512-Lgd2XcJ/NjEw+7tFvfKxOzCYKZsdct5lczQ2ZaQY8Djz7pfAD3Gbp8ySJWtreII/vDlMVmxwa6pHmdxIYgttDg==}
@@ -7774,7 +7775,7 @@ snapshots:
     dependencies:
       domelementtype: 1.3.1
 
-  dompurify@3.3.1:
+  dompurify@3.4.12:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -9177,7 +9178,7 @@ snapshots:
       '@posthog/core': 1.17.0
       '@posthog/types': 1.336.4
       core-js: 3.48.0
-      dompurify: 3.3.1
+      dompurify: 3.4.12
       fflate: 0.4.8
       preact: 10.28.2
       query-selector-shadow-dom: 1.0.1
