@@ -67,7 +67,7 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 **Output**: Complete homepage metadata and a 1200×630 PNG social card.
 **Acceptance**: Targeted tests pass, the route builds without warnings, and metadata points only to absolute production URLs.
 
-### ⬜ Unit 1c: Homepage social metadata and raster card — Coverage & Refactor
+### 🔄 Unit 1c: Homepage social metadata and raster card — Coverage & Refactor
 **What**: Run coverage and the repository's complete validation gates, then refactor only if needed.
 **Output**: Coverage and validation evidence in the artifacts directory.
 **Acceptance**: New executable code is fully covered, all tests pass, typecheck/build succeed, and no warnings remain.
