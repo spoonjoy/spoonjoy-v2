@@ -99,3 +99,4 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 - 2026-07-21 12:19 Unit 1b complete: added the complete homepage metadata contract plus a branded 1200×630 raster card sourced from a committed static SVG; 20 targeted tests passed and the production build completed cleanly.
 - 2026-07-21 12:28 Operator feedback correction: removed the invented faux-cookbook illustration and rebuilt the card around the real food photograph already used by Spoonjoy's guest homepage; 20 targeted tests remained green.
 - 2026-07-21 12:40 Unit 1c complete: typecheck and production build passed cleanly; 8,112 application tests plus 13 worker tests passed with 100% statement, branch, function, and line coverage.
+- 2026-07-21 12:50 Unit 1c cold-review findings closed: added explicit typecheck proof, applied all local D1 migrations, seeded the disposable e2e baseline, and passed all 63 Playwright tests.
