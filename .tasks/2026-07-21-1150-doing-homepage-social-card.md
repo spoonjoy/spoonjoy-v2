@@ -62,7 +62,7 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 **Output**: Tests that fail because metadata fields and the PNG asset do not yet exist.
 **Acceptance**: The targeted test command fails through clean metadata and file-existence assertions rather than an unhandled `ENOENT`, setup, or mock error.
 
-### ⬜ Unit 1b: Homepage social metadata and raster card — Implementation
+### 🔄 Unit 1b: Homepage social metadata and raster card — Implementation
 **What**: Add the metadata entries to `app/routes/_index.tsx`, create a non-executable static SVG source at `assets/og/spoonjoy-home.svg`, and commit its rasterized `public/og/spoonjoy-home.png` output; `meta()` remains the only new covered executable code.
 **Output**: Complete homepage metadata and a 1200×630 PNG social card.
 **Acceptance**: Targeted tests pass, the route builds without warnings, and metadata points only to absolute production URLs.
