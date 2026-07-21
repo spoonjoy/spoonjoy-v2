@@ -137,6 +137,7 @@ async function handleCookSessionBootstrapRequest(
   const url = new URL(request.url);
   const workerVersionId = env.CF_VERSION_METADATA?.id;
   const connectingIp = request.headers.get("CF-Connecting-IP");
+  const contentLength = request.headers.get("Content-Length");
   if (
     url.pathname !== COOK_SESSION_BOOTSTRAP_PATH ||
     url.search ||
@@ -144,7 +145,10 @@ async function handleCookSessionBootstrapRequest(
     env.COOK_SESSION_BOOTSTRAP_MODE !== "1" ||
     !workerVersionId ||
     !env.COOK_SESSIONS ||
-    request.body !== null ||
+    (request.body !== null && contentLength !== "0") ||
+    request.headers.has("Content-Type") ||
+    request.headers.has("Transfer-Encoding") ||
+    ![null, "0"].includes(contentLength) ||
     !connectingIp ||
     !env.AUTH_IP_RATE_LIMITER
   ) {

@@ -580,6 +580,98 @@ describe("Cloudflare worker app", () => {
     });
   });
 
+  it("accepts Cloudflare's empty incoming POST stream without treating it as a request body", async () => {
+    const namespace = cookSessionNamespace();
+    const request = new Request(
+      "https://spoonjoy.app/.well-known/spoonjoy-cook-session-bootstrap",
+      {
+        method: "POST",
+        headers: {
+          "CF-Connecting-IP": "203.0.113.44",
+          "Content-Length": "0",
+        },
+      },
+    );
+    Object.defineProperty(request, "body", {
+      value: new ReadableStream({ start(controller) { controller.close(); } }),
+    });
+
+    const response = await worker.fetch(
+      request,
+      versionedEnvironment({
+        COOK_SESSION_BOOTSTRAP_MODE: "1",
+        COOK_SESSIONS: namespace.namespace,
+      }),
+      context(),
+    );
+
+    expect(response.status).toBe(202);
+    expect(namespace.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["content type", { "Content-Type": "application/octet-stream" }],
+    ["transfer encoding", { "Transfer-Encoding": "chunked" }],
+    ["nonzero content length", { "Content-Length": "1" }],
+  ])("rejects a bootstrap request with a declared %s", async (_case, bodyHeaders) => {
+    const namespace = cookSessionNamespace();
+    const response = await worker.fetch(
+      new Request("https://spoonjoy.app/.well-known/spoonjoy-cook-session-bootstrap", {
+        method: "POST",
+        headers: {
+          "CF-Connecting-IP": "203.0.113.45",
+          ...bodyHeaders,
+        },
+      }),
+      versionedEnvironment({
+        COOK_SESSION_BOOTSTRAP_MODE: "1",
+        COOK_SESSIONS: namespace.namespace,
+      }),
+      context(),
+    );
+
+    expect(response.status).toBe(404);
+    expect(namespace.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a headerless non-empty bootstrap stream without reading it", async () => {
+    const namespace = cookSessionNamespace();
+    const limiter = { limit: vi.fn(async () => ({ success: true })) };
+    const request = new Request(
+      "https://spoonjoy.app/.well-known/spoonjoy-cook-session-bootstrap",
+      {
+        method: "POST",
+        headers: { "CF-Connecting-IP": "203.0.113.46" },
+      },
+    );
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1]));
+        controller.close();
+      },
+    });
+    const getReader = vi.spyOn(body, "getReader");
+    Object.defineProperty(request, "body", {
+      value: body,
+    });
+
+    const response = await worker.fetch(
+      request,
+      versionedEnvironment({
+        AUTH_IP_RATE_LIMITER: limiter,
+        COOK_SESSION_BOOTSTRAP_MODE: "1",
+        COOK_SESSIONS: namespace.namespace,
+      }),
+      context(),
+    );
+
+    expect(response.status).toBe(404);
+    expect(getReader).not.toHaveBeenCalled();
+    expect(limiter.limit).not.toHaveBeenCalled();
+    expect(namespace.idFromName).not.toHaveBeenCalled();
+    expect(namespace.fetch).not.toHaveBeenCalled();
+  });
+
   it("rate-limits the public bootstrap probe before Durable Object work", async () => {
     const namespace = cookSessionNamespace();
     const limiter = { limit: vi.fn(async () => ({ success: false })) };
@@ -622,11 +714,14 @@ describe("Cloudflare worker app", () => {
     expect(namespace.fetch).not.toHaveBeenCalled();
   });
 
-  it("rejects any public bootstrap request body without reading its stream", async () => {
+  it("rejects a declared public bootstrap request body without reading its stream", async () => {
     const namespace = cookSessionNamespace();
     const request = new Request("https://spoonjoy.app/.well-known/spoonjoy-cook-session-bootstrap", {
       method: "POST",
-      headers: { "CF-Connecting-IP": "203.0.113.42" },
+      headers: {
+        "CF-Connecting-IP": "203.0.113.42",
+        "Content-Length": "1",
+      },
     });
     const readBody = vi.spyOn(request, "text").mockRejectedValue(new Error("body must not be read"));
     Object.defineProperty(request, "body", { value: {} as ReadableStream });
