@@ -20,14 +20,14 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 
 ## Completion Criteria
 - [x] Homepage HTML exposes absolute canonical, `og:title`, `og:description`, `og:type=website`, `og:url`, `og:image`, `og:image:type=image/png`, image dimensions, and Twitter-card fields.
-- [ ] The declared social image is a valid 1200×630 PNG with a branded, legible design.
+- [x] The declared social image is a valid 1200×630 PNG with a branded, legible design.
 - [ ] Production homepage HTML contains the expected metadata without Cloudflare challenge markers.
 - [ ] Production serves the declared image as `image/png`; its bytes have the PNG signature and a 1200×630 IHDR.
 - [ ] Homepage and image return real content rather than a Cloudflare challenge when requested with LinkedIn's crawler user agent.
 - [x] 100% test coverage on all new code
 - [x] All tests pass
 - [x] No warnings
-- [ ] If UI/rendering/layout changed: `visual-qa-dogfood` evidence captured, absurdity ledger closed, and automated visual metrics still pass
+- [x] If UI/rendering/layout changed: `visual-qa-dogfood` evidence captured, absurdity ledger closed, and automated visual metrics still pass
 
 ## Code Coverage Requirements
 **MANDATORY: 100% coverage on all new code.**
@@ -72,7 +72,7 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 **Output**: Coverage and validation evidence in the artifacts directory.
 **Acceptance**: New executable code is fully covered, all tests pass, typecheck/build succeed, and no warnings remain.
 
-### ⬜ Unit 1d: Homepage social card — Visual QA Dogfood
+### ✅ Unit 1d: Homepage social card — Visual QA Dogfood
 **What**: Apply the `visual-qa-dogfood` critique method to the standalone raster asset, capture the rendered image at full size and LinkedIn-card scale, inspect legibility, and maintain an absurdity ledger without treating the unchanged homepage route as a visual target.
 **Output**: Image evidence and a closed absurdity ledger in the artifacts directory.
 **Acceptance**: The card is branded and legible, with no ready or reviewer-gated visual findings.
@@ -100,3 +100,4 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 - 2026-07-21 12:28 Operator feedback correction: removed the invented faux-cookbook illustration and rebuilt the card around the real food photograph already used by Spoonjoy's guest homepage; 20 targeted tests remained green.
 - 2026-07-21 12:40 Unit 1c complete: typecheck and production build passed cleanly; 8,112 application tests plus 13 worker tests passed with 100% statement, branch, function, and line coverage.
 - 2026-07-21 12:50 Unit 1c cold-review findings closed: added explicit typecheck proof, applied all local D1 migrations, seeded the disposable e2e baseline, and passed all 63 Playwright tests.
+- 2026-07-21 14:22 Unit 1d complete: captured native and LinkedIn-scale renders, closed the absurdity ledger, reran all 20 targeted tests, and passed a cold visual reviewer gate.

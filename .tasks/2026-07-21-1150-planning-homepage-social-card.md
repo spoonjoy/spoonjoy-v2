@@ -23,15 +23,15 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 - Edit LinkedIn or add Spoonjoy to Featured before the headline crossover finishes and Ari approves the final profile action.
 
 ## Completion Criteria
-- [ ] Homepage HTML exposes absolute canonical, `og:title`, `og:description`, `og:type=website`, `og:url`, `og:image`, `og:image:type=image/png`, image dimensions, and Twitter-card fields.
-- [ ] The declared social image is a valid 1200×630 PNG with a branded, legible design.
+- [x] Homepage HTML exposes absolute canonical, `og:title`, `og:description`, `og:type=website`, `og:url`, `og:image`, `og:image:type=image/png`, image dimensions, and Twitter-card fields.
+- [x] The declared social image is a valid 1200×630 PNG with a branded, legible design.
 - [ ] Production homepage HTML contains the expected metadata without Cloudflare challenge markers.
 - [ ] Production serves the declared image as `image/png`; its bytes have the PNG signature and a 1200×630 IHDR.
 - [ ] Homepage and image return real content rather than a Cloudflare challenge when requested with LinkedIn's crawler user agent.
-- [ ] 100% test coverage on all new code
-- [ ] All tests pass
-- [ ] No warnings
-- [ ] If UI/rendering/layout changed: `visual-qa-dogfood` evidence captured, absurdity ledger closed, and automated visual metrics still pass
+- [x] 100% test coverage on all new code
+- [x] All tests pass
+- [x] No warnings
+- [x] If UI/rendering/layout changed: `visual-qa-dogfood` evidence captured, absurdity ledger closed, and automated visual metrics still pass
 
 ## Code Coverage Requirements
 **MANDATORY: 100% coverage on all new code.**
