@@ -90,7 +90,7 @@ describe("cleanup-local-qa-data", () => {
         targetEnv: "local",
         baseUrl: "http://localhost:5173",
         d1Target: "local D1 (--local)",
-        r2Target: "local photos binding",
+        r2Target: "local R2 spoonjoy-photos (--local)",
         destructiveScope: "local disposable test data only",
       },
     });
@@ -190,6 +190,78 @@ describe("cleanup-local-qa-data", () => {
       "pnpm",
       ["exec", "wrangler", "d1", "execute", "DB", "--local", "--command", buildApplySql()],
       expect.objectContaining({ encoding: "utf8" }),
+    );
+  });
+
+  it("deletes and verifies exact disposable local R2 keys after D1 cleanup succeeds", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      const command = args.join(" ");
+      if (command.includes("candidate_r2_keys")) {
+        return {
+          stdout: JSON.stringify([
+            { results: [{ action: "delete", key: "spoons/codex-user/recipe-1/spoon.jpg" }] },
+          ]),
+          stderr: "",
+        };
+      }
+      if (command.includes("r2 object get")) {
+        const error = new Error("NoSuchKey");
+        Object.assign(error, { stderr: "The specified key does not exist." });
+        throw error;
+      }
+      return { stdout: "[]", stderr: "" };
+    });
+
+    await cleanup.runCleanupCli({
+      argv: ["--target-env", "local", "--apply"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    });
+
+    const calls = runCommand.mock.calls.map((call) => call[1] as string[]);
+    const joinedCalls = calls.map((args) => args.join(" "));
+    expectInOrder(joinedCalls.join("\n"), [
+      "candidate_r2_keys",
+      "r2_reference_blockers",
+      buildApplySql(),
+      "r2 object delete",
+      "r2 object get",
+    ]);
+    expect(calls.slice(-2)).toEqual([
+      cleanup.buildLocalR2DeleteArgs("spoons/codex-user/recipe-1/spoon.jpg"),
+      cleanup.buildLocalR2GetArgs("spoons/codex-user/recipe-1/spoon.jpg"),
+    ]);
+    expect(stdout.text()).toContain("Verified deleted local R2 keys: spoons/codex-user/recipe-1/spoon.jpg");
+  });
+
+  it("reports retained local R2 keys without deleting them", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      if (args.join(" ").includes("candidate_r2_keys")) {
+        return {
+          stdout: JSON.stringify([
+            { results: [{ action: "retain", key: "recipes/real-user/recipe-9/source.jpg" }] },
+          ]),
+          stderr: "",
+        };
+      }
+      return { stdout: "[]", stderr: "" };
+    });
+
+    await cleanup.runCleanupCli({
+      argv: ["--target-env", "local", "--apply"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    });
+
+    expect(stdout.text()).toContain("Retained local R2 keys: recipes/real-user/recipe-9/source.jpg");
+    expect(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "))).not.toEqual(
+      expect.arrayContaining([expect.stringContaining("r2 object delete")]),
     );
   });
 
@@ -325,10 +397,11 @@ describe("cleanup-local-qa-data", () => {
     expect(joinedCalls[1]).toContain("SearchDocument");
     expect(joinedCalls[1]).toContain("SearchIndexMetadata");
     expect(joinedCalls[2]).toContain("candidate_r2_keys");
-    expect(joinedCalls[3]).toContain(cleanup.buildBlockerReportSql());
-    expect(joinedCalls[4]).toContain(buildApplySql());
-    expect(joinedCalls.slice(1, 4)).not.toEqual(expect.arrayContaining([expect.stringContaining("FROM SearchDocument")]));
-    expect(calls.slice(5)).toEqual([
+    expect(joinedCalls[3]).toContain("r2_reference_blockers");
+    expect(joinedCalls[4]).toContain(cleanup.buildBlockerReportSql());
+    expect(joinedCalls[5]).toContain(buildApplySql());
+    expect(joinedCalls.slice(1, 5)).not.toEqual(expect.arrayContaining([expect.stringContaining("FROM SearchDocument")]));
+    expect(calls.slice(6)).toEqual([
       cleanup.buildQaR2DeleteArgs("profiles/codex-user/avatar.jpg"),
       cleanup.buildQaR2GetArgs("profiles/codex-user/avatar.jpg"),
       cleanup.buildQaR2DeleteArgs("recipes/codex-user/recipe-1/source.jpg"),
@@ -727,7 +800,7 @@ describe("cleanup-local-qa-data", () => {
     expect(plan.blockers).toEqual([]);
   });
 
-  it("builds QA R2 candidate SQL with retained unsafe keys and surviving-reference blockers", () => {
+  it("splits R2 candidate collection from surviving-reference checks for D1 compatibility", () => {
     const sql = cleanup.buildQaR2CandidateSql();
 
     expectAll(sql, [
@@ -737,21 +810,42 @@ describe("cleanup-local-qa-data", () => {
       "unsafe disposable cover imageUrl namespace",
       "unsafe disposable cover stylizedImageUrl namespace",
       "unsafe disposable cover sourceImageUrl namespace",
+      "WHERE key IS NOT NULL AND key != ''",
+    ]);
+    expect(sql).not.toContain("r2_reference_blockers");
+    const statements = sql.split(/;\s*(?=WITH\b)/);
+    expect(statements).toHaveLength(5);
+    expect(statements.every((statement) => (statement.match(/\bUNION\b/g) ?? []).length <= 1)).toBe(true);
+    expect(statements.every((statement) => /SELECT 'delete' AS action,[\s\S]+ AS key,[\s\S]+ AS reason/.test(statement))).toBe(true);
+    expect(sql).not.toContain("FROM SearchDocument");
+
+    const referencesSql = cleanup.buildR2ReferenceSql([
+      "profiles/codex-user/avatar.jpg",
+      "spoons/codex-user/recipe-1/spoon.jpg",
+    ]);
+    expectAll(referencesSql, [
       "r2_reference_blockers",
       "blocker_user_photoUrl",
       "blocker_spoon_photoUrl",
       "blocker_cover_imageUrl",
       "blocker_cover_stylizedImageUrl",
       "blocker_cover_sourceImageUrl",
-      "WHERE key IS NOT NULL AND key != ''",
+      "profiles/codex-user/avatar.jpg",
+      "spoons/codex-user/recipe-1/spoon.jpg",
     ]);
-    expect(sql).not.toContain("FROM SearchDocument");
+  });
+
+  it("builds an empty base-table R2 blocker query safely", () => {
+    const sql = cleanup.buildR2ReferenceSql();
+
+    expect(sql).toContain("SELECT NULL AS key WHERE 0");
+    expect(sql).toContain("r2_reference_blockers");
   });
 
   it("does not delete spoon R2 keys for note-matched spoons owned by non-disposable users", () => {
     const sql = cleanup.buildQaR2CandidateSql();
 
-    expect(sql).toMatch(/SELECT 'delete', substr\(photoUrl, length\('\/photos\/'\) \+ 1\), NULL\s+FROM disposable_spoons\s+WHERE chefId IN \(SELECT id FROM disposable_users\)/s);
+    expect(sql).toMatch(/SELECT 'delete' AS action,\s+substr\(photoUrl, length\('\/photos\/'\) \+ 1\) AS key,\s+NULL AS reason\s+FROM disposable_spoons\s+WHERE chefId IN \(SELECT id FROM disposable_users\)/s);
     expect(sql).toContain("photoUrl LIKE '/photos/spoons/' || chefId || '/' || recipeId || '/%'");
     expect(sql).toContain("photoUrl LIKE '/photos/spoons/' || chefId || '/uploads/%'");
     expect(sql).toContain("'unsafe disposable spoon photo namespace'");
@@ -791,12 +885,12 @@ describe("cleanup-local-qa-data", () => {
     expect(sql).toContain("FROM SearchDocument");
   });
 
-  it("refuses QA apply before D1 mutation when R2 candidates have surviving non-disposable references", async () => {
+  it("refuses QA apply before D1 mutation when base tables retain candidate R2 references", async () => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();
     const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
       const command = args.join(" ");
-      if (command.includes("candidate_r2_keys")) {
+      if (command.includes("r2_reference_blockers")) {
         return {
           stdout: JSON.stringify([
             {
@@ -806,12 +900,16 @@ describe("cleanup-local-qa-data", () => {
                   key: "profiles/codex-user/avatar.jpg",
                   reason: "non-disposable User.photoUrl still references candidate key",
                 },
-                {
-                  action: "blocker_search_imageUrl",
-                  key: "recipes/codex-user/recipe-1/source.jpg",
-                },
               ],
             },
+          ]),
+          stderr: "",
+        };
+      }
+      if (command.includes("candidate_r2_keys")) {
+        return {
+          stdout: JSON.stringify([
+            { results: [{ action: "delete", key: "profiles/codex-user/avatar.jpg" }] },
           ]),
           stderr: "",
         };
@@ -831,6 +929,74 @@ describe("cleanup-local-qa-data", () => {
     expect(runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "))).not.toEqual(
       expect.arrayContaining([expect.stringContaining(buildApplySql())]),
     );
+  });
+
+  it("formats base-table R2 blockers that omit an optional reason", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      const command = args.join(" ");
+      if (command.includes("r2_reference_blockers")) {
+        return {
+          stdout: JSON.stringify([
+            { results: [{ action: "blocker_user_photoUrl", key: "profiles/codex-user/avatar.jpg" }] },
+          ]),
+          stderr: "",
+        };
+      }
+      if (command.includes("candidate_r2_keys")) {
+        return {
+          stdout: JSON.stringify([
+            { results: [{ action: "delete", key: "profiles/codex-user/avatar.jpg" }] },
+          ]),
+          stderr: "",
+        };
+      }
+      return { stdout: "[]", stderr: "" };
+    });
+
+    await expect(
+      cleanup.runCleanupCli({
+        argv: ["--target-env", "qa", "--apply"],
+        runCommand,
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+      }),
+    ).rejects.toThrow(
+      "non-disposable rows still reference candidate keys: blocker_user_photoUrl:profiles/codex-user/avatar.jpg",
+    );
+  });
+
+  it("treats missing base-reference stdout as an empty blocker result", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+      const command = args.join(" ");
+      if (command.includes("candidate_r2_keys")) {
+        return {
+          stdout: JSON.stringify([
+            { results: [{ action: "delete", key: "spoons/codex-user/recipe-1/spoon.jpg" }] },
+          ]),
+          stderr: "",
+        };
+      }
+      if (command.includes("r2_reference_blockers")) return { stderr: "" };
+      if (command.includes("r2 object get")) {
+        const error = new Error("NoSuchKey");
+        Object.assign(error, { stderr: "The specified key does not exist." });
+        throw error;
+      }
+      return { stdout: "[]", stderr: "" };
+    });
+
+    await cleanup.runCleanupCli({
+      argv: ["--target-env", "local", "--apply"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    });
+
+    expect(stdout.text()).toContain("Verified deleted local R2 keys: spoons/codex-user/recipe-1/spoon.jpg");
   });
 
   it("refuses QA apply before D1 mutation when search documents reference candidate R2 keys", async () => {

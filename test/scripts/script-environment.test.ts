@@ -26,8 +26,8 @@ describe("script target resolver", () => {
       origin: "http://localhost:5173",
       d1Target: "local D1 (--local)",
       d1Args: ["--local"],
-      r2Target: "local photos binding",
-      r2Bucket: null,
+      r2Target: "local R2 spoonjoy-photos (--local)",
+      r2Bucket: "spoonjoy-photos",
       destructiveScope: "local disposable test data only",
     });
   });

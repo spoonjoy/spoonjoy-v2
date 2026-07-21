@@ -4,7 +4,8 @@
     "kind": "historical-applied-migration",
     "immutable": true,
     "patterns": ["legacy-demo-email", "legacy-demo-password", "legacy-primary-username"],
-    "reason": "Historical applied migration retained for D1 migration integrity; active seeds no longer use these demo credentials."
+    "reason": "Historical applied migration retained for D1 migration integrity; active seeds no longer use these demo credentials.",
+    "sha256": "8fbf0c4142c61502e6e837c8543ca79e8e1866a1f349dd66b33a5a7f811f0cc8"
   },
   {
     "path": "migrations/0004_reseed.sql",
@@ -20,6 +21,7 @@
       "legacy-sarah-email",
       "legacy-sarah-username"
     ],
-    "reason": "Historical applied migration retained for D1 migration integrity; active seeds no longer use these fixed fixture identities."
+    "reason": "Historical applied migration retained for D1 migration integrity; active seeds no longer use these fixed fixture identities.",
+    "sha256": "6bef52a2466e0050a5614468cc1246cd259b371107cca5675a6d11f203a5a190"
   }
 ]

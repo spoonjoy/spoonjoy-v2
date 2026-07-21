@@ -63,7 +63,7 @@ test.describe('Passkey lifecycle', () => {
     // replace the login document so the consent page receives its callback CSP.
     const redirectUri = 'https://client.example/oauth/passkey-e2e-callback';
     const registration = await page.request.post('/oauth/register', {
-      data: { client_name: 'Passkey E2E OAuth Client', redirect_uris: [redirectUri] },
+      data: { client_name: 'E2E OAuth Client', redirect_uris: [redirectUri] },
     });
     expect(registration.status()).toBe(201);
     const { client_id: clientId } = await registration.json() as { client_id: string };
@@ -90,7 +90,7 @@ test.describe('Passkey lifecycle', () => {
         && response.headers()['content-type']?.includes('text/html') === true;
     });
     await page.getByRole('button', { name: /sign in with a passkey/i }).first().click();
-    await expect(page.getByRole('heading', { name: /connect passkey e2e oauth client to spoonjoy/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /connect e2e oauth client to spoonjoy/i })).toBeVisible();
     const consentResponse = await consentDocument;
     expect(consentResponse.headers()['content-security-policy']).toContain(
       "form-action 'self' https://client.example",

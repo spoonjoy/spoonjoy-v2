@@ -128,11 +128,9 @@ not a submission blocker.
 Both Anthropic and OpenAI test the connector end to end, so they need a working
 login. Do not seed demo fixture data into production.
 
-1. Rehearse the review flow against QA/local only:
-   ```bash
-   SPOONJOY_API_TOKEN=sj_... node scripts/seed-demo-kitchen.mjs --target-env qa
-   ```
-   The script refuses `spoonjoy.app` even when `SPOONJOY_BASE_URL` is set.
+1. Rehearse the review flow with a disposable account created through the normal
+   QA/local product flow. Add only the minimum content needed for that run, then
+   remove it with the environment-scoped cleanup command as soon as rehearsal ends.
 2. If a directory absolutely requires production credentials, create a temporary
    real reviewer account by hand, give it only the content needed for review,
    and remove that account plus its content immediately after review closes.

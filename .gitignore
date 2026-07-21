@@ -9,8 +9,10 @@ node_modules
 .wrangler
 
 # Prisma
-prisma/*.db
-prisma/*.db-journal
+**/*.db
+**/*.db-journal
+**/*.sqlite
+**/*.sqlite3
 
 # TypeScript
 *.tsbuildinfo

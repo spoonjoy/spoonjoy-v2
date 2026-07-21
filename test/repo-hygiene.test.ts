@@ -27,6 +27,11 @@ describe("generated artifact hygiene", () => {
       expect(() => execFileSync("git", ["check-ignore", "-q", artifactPath])).not.toThrow();
     }
   });
+
+  it("does not track local SQLite databases and ignores nested Prisma databases", () => {
+    expect(gitLines(["ls-files", "*.db", "*.sqlite", "*.sqlite3"])).toEqual([]);
+    expect(() => execFileSync("git", ["check-ignore", "-q", "prisma/prisma/dev.db"])).not.toThrow();
+  });
 });
 
 describe("pre-install workflow bootstrap", () => {
@@ -51,6 +56,7 @@ describe("UI audit tooling", () => {
     expect(existsSync("scripts/report-mcp-oauth-canary.mjs")).toBe(true);
     expect(existsSync("scripts/audit-mcp-oauth-d1.mjs")).toBe(true);
     expect(existsSync("scripts/cleanup-local-qa-data.mjs")).toBe(true);
+    expect(existsSync("scripts/seed-demo-kitchen.mjs")).toBe(false);
   });
 
   it("keeps MCP OAuth canary package and workflow wiring in place", () => {

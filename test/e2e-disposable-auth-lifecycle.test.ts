@@ -109,4 +109,13 @@ describe("e2e disposable auth lifecycle", () => {
     expect(`${setupSource}\n${authSource}`).not.toContain(legacyDemoEmail);
     expect(`${setupSource}\n${authSource}`).not.toContain(legacyDemoPassword);
   });
+
+  it("registers only the OAuth client identity covered by disposable cleanup", () => {
+    const passkeySource = readFileSync("e2e/flows/passkey.spec.ts", "utf8");
+    const cleanupSource = readFileSync("scripts/cleanup-local-qa-data.mjs", "utf8");
+
+    expect(passkeySource).toContain("client_name: 'E2E OAuth Client'");
+    expect(passkeySource).not.toContain("Passkey E2E OAuth Client");
+    expect(cleanupSource).toContain("clientName = 'E2E OAuth Client'");
+  });
 });

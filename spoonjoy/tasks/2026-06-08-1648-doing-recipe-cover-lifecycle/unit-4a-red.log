@@ -438,23 +438,23 @@ AssertionError: expected '/**\n * Database Seed Script for Spoo…' to contain '
 +     photoUrl: CHEF_RJ_AVATAR_URL,
 +   },
 +   {
-+     email: "alex.google@example.com",
-+     username: "alex_gourmet",
++     email: "redacted-oauth@example.invalid",
++     username: "redacted_oauth_user",
 +     photoUrl: CHEF_RJ_AVATAR_URL,
 +     oauth: {
 +       provider: "google",
-+       providerUserId: "google_123456789",
-+       providerUsername: "alex.google@gmail.com",
++       providerUserId: "redacted_provider_user_id",
++       providerUsername: "redacted-provider@example.invalid",
 +     },
 +   },
 +   {
-+     email: "jamie.apple@example.com",
-+     username: "jamie_kitchen",
++     email: "redacted-oauth@example.invalid",
++     username: "redacted_oauth_user",
 +     photoUrl: CHEF_RJ_AVATAR_URL,
 +     oauth: {
 +       provider: "apple",
-+       providerUserId: "apple_987654321",
-+       providerUsername: "jamie.apple@icloud.com",
++       providerUserId: "redacted_provider_user_id",
++       providerUsername: "redacted-provider@example.invalid",
 +     },
 +   },
 + ];

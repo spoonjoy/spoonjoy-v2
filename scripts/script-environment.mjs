@@ -14,8 +14,8 @@ const TARGET_METADATA = {
   local: {
     d1Target: "local D1 (--local)",
     d1Args: ["--local"],
-    r2Target: "local photos binding",
-    r2Bucket: null,
+    r2Target: `local R2 ${PRODUCTION_R2_BUCKET} (--local)`,
+    r2Bucket: PRODUCTION_R2_BUCKET,
     destructiveScope: "local disposable test data only",
   },
   qa: {
