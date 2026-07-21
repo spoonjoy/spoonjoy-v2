@@ -4,7 +4,7 @@
 
 - Branch: `worker/clem-feedback-e2e`.
 - Base: `main` at `bb3cdbe3bf00a28c79bb780c8921d84e181628d9`; local `origin/main` and the remote ref matched before PR creation.
-- Reviewed and pushed PR head: `da1fbd30e0e77ed5edb3c9ed5044d69c224cae4b`.
+- Reviewed and QA-deployed runtime head: `da1fbd30e0e77ed5edb3c9ed5044d69c224cae4b`; later commits in this PR are evidence-only.
 - Worktree: clean after generated-contract, Workers, browser, CI-mode coverage, QA deployment, and residue runs.
 - Scope was compared against the planning contract's bootstrap allowlist: task docs/evidence and frozen fixture; package/test-lane/warning infrastructure; Wrangler and environment types; inert Worker/DO namespace; CI and production workflows; deployment scripts/tests/operator docs; and mechanical diagnostic/test repairs. No product schema, migration 0024, cook protocol-v1 implementation, saved/tag/scaling/shopping behavior, import UI, Pebble behavior, or navigation redesign is present.
 
