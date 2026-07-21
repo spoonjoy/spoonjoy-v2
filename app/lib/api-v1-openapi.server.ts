@@ -6,6 +6,7 @@ import {
   type ApiV1ErrorCode,
 } from "~/lib/api-v1-contract.server";
 import { OAUTH_ACCESS_TOKEN_TTL_SECONDS } from "~/lib/oauth-server.server";
+import { SEARCH_SCOPES } from "~/lib/search.server";
 
 type JsonSchema = Record<string, unknown>;
 type HttpMethod = typeof API_V1_RESOURCES[number]["methods"][number];
@@ -277,7 +278,7 @@ const schemas = {
     password: { type: "string", minLength: 1, maxLength: 1024, description: "Spoonjoy account password. Native clients must submit it only over HTTPS and must never persist it." },
   }),
   NativeTelemetryRequest: objectSchema(["event"], {
-    event: { type: "string", enum: ["bootstrap_failed", "bootstrap_offline", "app_intent_completed", "app_intent_failed", "auth_flow_started", "auth_flow_completed", "auth_flow_failed", "settings_refresh_failed", "sync_failed"], description: "Constrained native diagnostic event name. Raw error messages and response bodies are not accepted." },
+    event: { type: "string", enum: ["bootstrap_failed", "bootstrap_offline", "app_intent_completed", "app_intent_failed", "auth_flow_started", "auth_flow_completed", "auth_flow_failed", "search_started", "search_completed", "search_failed", "settings_refresh_failed", "sync_failed"], description: "Constrained native diagnostic event name. Raw search text, error messages, and response bodies are not accepted." },
     stage: { type: ["string", "null"], maxLength: 80 },
     environment: { type: ["string", "null"], enum: ["local", "preview", "production", null] },
     platform: { type: ["string", "null"], enum: ["ios", "macos", null] },
@@ -315,6 +316,10 @@ const schemas = {
     authOAuthStatePresent: { type: ["boolean", "null"] },
     authRedirectScheme: { type: ["string", "null"], maxLength: 40 },
     authRedirectHost: { type: ["string", "null"], maxLength: 160 },
+    searchScope: { type: ["string", "null"], enum: [...SEARCH_SCOPES, null], description: "Canonical search scope. This field never contains search text." },
+    searchQueryLength: { type: ["integer", "null"], minimum: 0, maximum: 100000, description: "Search query length only. The raw query is never accepted." },
+    searchResultCount: { type: ["integer", "null"], minimum: 0, maximum: 100000 },
+    durationMilliseconds: { type: ["integer", "null"], minimum: 0, maximum: 86400000 },
   }),
   NativeTelemetryData: objectSchema(["accepted"], {
     accepted: { type: "boolean" },
@@ -2470,32 +2475,18 @@ const requestExamples: Record<string, unknown> = {
     password: "correct horse battery staple",
   },
   NativeTelemetryRequest: {
-    event: "auth_flow_failed",
-    stage: "auth",
+    event: "search_completed",
+    stage: "search",
     environment: "production",
     platform: "ios",
     appVersion: "1.0",
     buildNumber: "42",
-    route: "kitchen",
-    errorType: "APITransportError",
-    requestId: "req_apple_exchange",
-    status: 401,
-    apiCode: "apple_identity_token_invalid",
-    retry: "do_not_retry",
-    accountBound: false,
-    authProvider: "apple",
-    authPhase: "backend_request_failed",
-    authOutcome: "failed",
-    authDiagnosticCode: "provider_invalid_identity_token",
-    authSessionState: "signed_out",
-    authCredentialPresent: true,
-    authIdentityTokenPresent: true,
-    authRawNoncePresent: true,
-    authEmailPresent: false,
-    authFullNamePresent: false,
-    authOAuthStatePresent: false,
-    authRedirectScheme: "https",
-    authRedirectHost: "spoonjoy.app",
+    route: "search",
+    accountBound: true,
+    searchScope: "all",
+    searchQueryLength: 12,
+    searchResultCount: 4,
+    durationMilliseconds: 184,
   },
   CreateTokenRequest: { name: "Tiny client", scopes: ["recipes:read", "shopping_list:read", "shopping_list:write"] },
   CreateRecipeSpoonRequest: {

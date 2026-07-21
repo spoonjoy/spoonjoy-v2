@@ -36,6 +36,7 @@ import {
 import {
   normalizeSearchLimit,
   normalizeSearchScope,
+  SEARCH_SCOPES,
   searchSpoonjoy,
   type SearchResult,
   type SearchScope,
@@ -195,6 +196,9 @@ type NativeTelemetryEventName =
   | "auth_flow_started"
   | "auth_flow_completed"
   | "auth_flow_failed"
+  | "search_started"
+  | "search_completed"
+  | "search_failed"
   | "settings_refresh_failed"
   | "sync_failed";
 
@@ -206,12 +210,16 @@ const NATIVE_TELEMETRY_EVENTS = new Set<NativeTelemetryEventName>([
   "auth_flow_started",
   "auth_flow_completed",
   "auth_flow_failed",
+  "search_started",
+  "search_completed",
+  "search_failed",
   "settings_refresh_failed",
   "sync_failed",
 ]);
 
 const NATIVE_TELEMETRY_ENVIRONMENTS = new Set(["local", "preview", "production"]);
 const NATIVE_TELEMETRY_PLATFORMS = new Set(["ios", "macos"]);
+const NATIVE_TELEMETRY_SEARCH_SCOPES = new Set<string>(SEARCH_SCOPES);
 
 export class ApiV1Error extends Error {
   code: ApiV1ErrorCode;
@@ -6290,6 +6298,10 @@ async function handleNativeTelemetryRequest(args: ApiV1RouteArgs, requestId: str
     "authOAuthStatePresent",
     "authRedirectScheme",
     "authRedirectHost",
+    "searchScope",
+    "searchQueryLength",
+    "searchResultCount",
+    "durationMilliseconds",
   ]);
 
   const nativeEvent = nativeTelemetryEvent(body.event);
@@ -6334,6 +6346,10 @@ async function handleNativeTelemetryRequest(args: ApiV1RouteArgs, requestId: str
     auth_oauth_state_present: optionalNativeTelemetryBoolean(body.authOAuthStatePresent, "authOAuthStatePresent"),
     auth_redirect_scheme: optionalNullableString(body.authRedirectScheme, "authRedirectScheme", 40),
     auth_redirect_host: optionalNullableString(body.authRedirectHost, "authRedirectHost", 160),
+    search_scope: optionalNativeTelemetryEnum(body.searchScope, "searchScope", NATIVE_TELEMETRY_SEARCH_SCOPES),
+    search_query_length: optionalNativeTelemetryInteger(body.searchQueryLength, "searchQueryLength", 0, 100_000),
+    search_result_count: optionalNativeTelemetryInteger(body.searchResultCount, "searchResultCount", 0, 100_000),
+    duration_milliseconds: optionalNativeTelemetryInteger(body.durationMilliseconds, "durationMilliseconds", 0, 86_400_000),
     server_request_id: requestId,
   };
 
