@@ -178,13 +178,13 @@ WITH
     SELECT 'delete' AS action, substr(photoUrl, length('/photos/') + 1) AS key, NULL AS reason
     FROM User
     WHERE id IN (SELECT id FROM disposable_users)
-      AND photoUrl LIKE '/photos/profiles/' || id || '/%'
+      AND instr(photoUrl, '/photos/profiles/' || id || '/') = 1
     UNION
     SELECT 'retain', substr(photoUrl, length('/photos/') + 1), 'unsafe disposable user photo namespace'
     FROM User
     WHERE id IN (SELECT id FROM disposable_users)
       AND photoUrl LIKE '/photos/%'
-      AND photoUrl NOT LIKE '/photos/profiles/' || id || '/%'
+      AND instr(photoUrl, '/photos/profiles/' || id || '/') != 1
   )
 SELECT action, key, reason
 FROM candidate_r2_keys
@@ -208,8 +208,8 @@ WITH
     FROM disposable_spoons
     WHERE chefId IN (SELECT id FROM disposable_users)
       AND (
-        photoUrl LIKE '/photos/spoons/' || chefId || '/' || recipeId || '/%'
-        OR photoUrl LIKE '/photos/spoons/' || chefId || '/uploads/%'
+        instr(photoUrl, '/photos/spoons/' || chefId || '/' || recipeId || '/') = 1
+        OR instr(photoUrl, '/photos/spoons/' || chefId || '/uploads/') = 1
       )
     UNION
     SELECT 'retain', substr(photoUrl, length('/photos/') + 1), 'unsafe disposable spoon photo namespace'
@@ -218,8 +218,8 @@ WITH
       AND NOT (
         chefId IN (SELECT id FROM disposable_users)
         AND (
-          photoUrl LIKE '/photos/spoons/' || chefId || '/' || recipeId || '/%'
-          OR photoUrl LIKE '/photos/spoons/' || chefId || '/uploads/%'
+          instr(photoUrl, '/photos/spoons/' || chefId || '/' || recipeId || '/') = 1
+          OR instr(photoUrl, '/photos/spoons/' || chefId || '/uploads/') = 1
         )
       )
   )
@@ -245,18 +245,18 @@ WITH
     SELECT 'delete' AS action, substr(${field}, length('/photos/') + 1) AS key, NULL AS reason
     FROM disposable_covers dc
     JOIN Recipe r ON r.id = dc.recipeId
-    WHERE ${field} LIKE '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/%'
-       OR ${field} LIKE '/photos/recipes/' || r.chefId || '/uploads/%'
-       OR ${field} LIKE '/photos/covers/%'
+    WHERE instr(${field}, '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/') = 1
+       OR instr(${field}, '/photos/recipes/' || r.chefId || '/uploads/') = 1
+       OR instr(${field}, '/photos/covers/') = 1
     UNION
     SELECT 'retain', substr(${field}, length('/photos/') + 1), 'unsafe disposable cover ${field} namespace'
     FROM disposable_covers dc
     JOIN Recipe r ON r.id = dc.recipeId
     WHERE ${field} LIKE '/photos/%'
       AND NOT (
-        ${field} LIKE '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/%'
-        OR ${field} LIKE '/photos/recipes/' || r.chefId || '/uploads/%'
-        OR ${field} LIKE '/photos/covers/%'
+        instr(${field}, '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/') = 1
+        OR instr(${field}, '/photos/recipes/' || r.chefId || '/uploads/') = 1
+        OR instr(${field}, '/photos/covers/') = 1
       )
   )
 SELECT action, key, reason

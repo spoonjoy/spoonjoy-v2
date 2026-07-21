@@ -835,6 +835,20 @@ describe("cleanup-local-qa-data", () => {
     ]);
   });
 
+  it("uses literal prefix checks for dynamic R2 namespaces", () => {
+    const sql = cleanup.buildQaR2CandidateSql();
+
+    expectAll(sql, [
+      "instr(photoUrl, '/photos/profiles/' || id || '/') = 1",
+      "instr(photoUrl, '/photos/spoons/' || chefId || '/' || recipeId || '/') = 1",
+      "instr(photoUrl, '/photos/spoons/' || chefId || '/uploads/') = 1",
+      "instr(imageUrl, '/photos/recipes/' || r.chefId || '/' || dc.recipeId || '/') = 1",
+      "instr(stylizedImageUrl, '/photos/recipes/' || r.chefId || '/uploads/') = 1",
+      "instr(sourceImageUrl, '/photos/covers/') = 1",
+    ]);
+    expect(sql).not.toMatch(/\b(?:photoUrl|imageUrl|stylizedImageUrl|sourceImageUrl)\s+(?:NOT\s+)?LIKE\s+'[^']*'\s*\|\|/);
+  });
+
   it("builds an empty base-table R2 blocker query safely", () => {
     const sql = cleanup.buildR2ReferenceSql();
 
@@ -846,8 +860,8 @@ describe("cleanup-local-qa-data", () => {
     const sql = cleanup.buildQaR2CandidateSql();
 
     expect(sql).toMatch(/SELECT 'delete' AS action,\s+substr\(photoUrl, length\('\/photos\/'\) \+ 1\) AS key,\s+NULL AS reason\s+FROM disposable_spoons\s+WHERE chefId IN \(SELECT id FROM disposable_users\)/s);
-    expect(sql).toContain("photoUrl LIKE '/photos/spoons/' || chefId || '/' || recipeId || '/%'");
-    expect(sql).toContain("photoUrl LIKE '/photos/spoons/' || chefId || '/uploads/%'");
+    expect(sql).toContain("instr(photoUrl, '/photos/spoons/' || chefId || '/' || recipeId || '/') = 1");
+    expect(sql).toContain("instr(photoUrl, '/photos/spoons/' || chefId || '/uploads/') = 1");
     expect(sql).toContain("'unsafe disposable spoon photo namespace'");
   });
 
@@ -855,9 +869,9 @@ describe("cleanup-local-qa-data", () => {
     const sql = cleanup.buildQaR2CandidateSql();
 
     expectAll(sql, [
-      "imageUrl LIKE '/photos/covers/%'",
-      "stylizedImageUrl LIKE '/photos/covers/%'",
-      "sourceImageUrl LIKE '/photos/covers/%'",
+      "instr(imageUrl, '/photos/covers/') = 1",
+      "instr(stylizedImageUrl, '/photos/covers/') = 1",
+      "instr(sourceImageUrl, '/photos/covers/') = 1",
     ]);
   });
 
