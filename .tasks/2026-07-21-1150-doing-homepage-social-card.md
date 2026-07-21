@@ -24,9 +24,9 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 - [ ] Production homepage HTML contains the expected metadata without Cloudflare challenge markers.
 - [ ] Production serves the declared image as `image/png`; its bytes have the PNG signature and a 1200×630 IHDR.
 - [ ] Homepage and image return real content rather than a Cloudflare challenge when requested with LinkedIn's crawler user agent.
-- [ ] 100% test coverage on all new code
-- [ ] All tests pass
-- [ ] No warnings
+- [x] 100% test coverage on all new code
+- [x] All tests pass
+- [x] No warnings
 - [ ] If UI/rendering/layout changed: `visual-qa-dogfood` evidence captured, absurdity ledger closed, and automated visual metrics still pass
 
 ## Code Coverage Requirements
@@ -67,7 +67,7 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 **Output**: Complete homepage metadata and a 1200×630 PNG social card.
 **Acceptance**: Targeted tests pass, the route builds without warnings, and metadata points only to absolute production URLs.
 
-### 🔄 Unit 1c: Homepage social metadata and raster card — Coverage & Refactor
+### ✅ Unit 1c: Homepage social metadata and raster card — Coverage & Refactor
 **What**: Run coverage and the repository's complete validation gates, then refactor only if needed.
 **Output**: Coverage and validation evidence in the artifacts directory.
 **Acceptance**: New executable code is fully covered, all tests pass, typecheck/build succeed, and no warnings remain.
@@ -98,3 +98,4 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 - 2026-07-21 12:11 Unit 1a complete: targeted tests failed cleanly on the fourteen missing social metadata entries and the missing raster asset.
 - 2026-07-21 12:19 Unit 1b complete: added the complete homepage metadata contract plus a branded 1200×630 raster card sourced from a committed static SVG; 20 targeted tests passed and the production build completed cleanly.
 - 2026-07-21 12:28 Operator feedback correction: removed the invented faux-cookbook illustration and rebuilt the card around the real food photograph already used by Spoonjoy's guest homepage; 20 targeted tests remained green.
+- 2026-07-21 12:40 Unit 1c complete: typecheck and production build passed cleanly; 8,112 application tests plus 13 worker tests passed with 100% statement, branch, function, and line coverage.
