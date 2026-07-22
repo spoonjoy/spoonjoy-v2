@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import { action as newRecipeAction } from "~/routes/recipes.new";
@@ -725,7 +725,9 @@ describe("E2E: Complete Recipe Creation Flow", () => {
         },
       ]);
 
-      render(<Stub initialEntries={[`/recipes/${recipeId}`]} />);
+      await act(async () => {
+        render(<Stub initialEntries={[`/recipes/${recipeId}`]} />);
+      });
 
       await screen.findByText(new RegExp(newTitle));
     });

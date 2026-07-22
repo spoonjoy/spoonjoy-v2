@@ -19,6 +19,7 @@ import bcrypt from "bcryptjs";
 import { getPlatformProxy } from "wrangler";
 import { randomUUID } from "node:crypto";
 import type { D1Database } from "@cloudflare/workers-types";
+import { provisionSeedShoppingListItem } from "../app/lib/shopping-list-seed-compat.server";
 
 let prisma: PrismaClient;
 let platformDispose: (() => Promise<void>) | undefined;
@@ -1640,28 +1641,17 @@ async function seedShoppingLists(
         continue;
       }
 
-      await prisma.shoppingListItem.upsert({
-        where: {
-          shoppingListId_unitId_ingredientRefId: {
-            shoppingListId: shoppingList.id,
-            unitId,
-            ingredientRefId,
-          },
-        },
-        update: {
-          quantity: item.quantity,
-          checked: item.checked,
-          checkedAt: item.checked ? new Date() : null,
-          deletedAt: null,
-        },
-        create: {
-          shoppingListId: shoppingList.id,
-          quantity: item.quantity,
-          unitId,
-          ingredientRefId,
-          checked: item.checked,
-          checkedAt: item.checked ? new Date() : null,
-        },
+      await provisionSeedShoppingListItem(prisma, {
+        shoppingListId: shoppingList.id,
+        ingredientRefId,
+        unitId,
+        quantity: item.quantity,
+        checked: item.checked,
+        checkedAt: item.checked ? new Date() : null,
+        deletedAt: null,
+        categoryKey: null,
+        iconKey: null,
+        sortIndex: 0,
       });
     }
     createdCount++;

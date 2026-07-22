@@ -1,0 +1,28 @@
+
+> spoonjoy-v2@1.0.0 verify:clean:test:workers:coverage /Users/microsoft/code/worktrees/spoonjoy-v2-homepage-social-card
+> node scripts/run-with-warning-policy.mjs -- pnpm run test:workers:coverage
+
+
+> spoonjoy-v2@1.0.0 test:workers:coverage /Users/microsoft/code/worktrees/spoonjoy-v2-homepage-social-card
+> vitest run --config vitest.workers.config.ts --maxWorkers=1 --no-isolate --coverage
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.10 [39m[90m/Users/microsoft/code/worktrees/spoonjoy-v2-homepage-social-card[39m
+      [2mCoverage enabled with [22m[33mistanbul[39m
+
+ [32m✓[39m test/workers/cook-session-bootstrap.test.ts [2m([22m[2m13 tests[22m[2m)[22m[33m 1313[2mms[22m[39m
+     [33m[2m✓[22m[39m returns the frozen retryable response for every authenticated future public route [33m 490[2mms[22m[39m
+     [33m[2m✓[22m[39m enforces authentication, bearer scopes, and origin checks before the stub response [33m 467[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m13 passed[39m[22m[90m (13)[39m
+[2m   Start at [22m 12:39:12
+[2m   Duration [22m 3.57s[2m (transform 849ms, setup 28ms, import 1.82s, tests 1.31s, environment 0ms)[22m
+
+[34m % [39m[2mCoverage report from [22m[33mistanbul[39m
+-----------------|---------|----------|---------|---------|-------------------
+File             | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-----------------|---------|----------|---------|---------|-------------------
+All files        |     100 |      100 |     100 |     100 |                   
+ cook-session.ts |     100 |      100 |     100 |     100 |                   
+-----------------|---------|----------|---------|---------|-------------------

@@ -78,9 +78,12 @@ import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
 import { shareContent } from "~/components/navigation";
 import {
-  nativeSyncTombstoneUpsertOperation,
-  touchNativeSyncCookbookOperation,
-} from "~/lib/native-sync-invalidation.server";
+  addRecipeToCookbook,
+  asCompatibleCookbookD1Database,
+  deleteCookbookWithTombstone,
+  removeRecipeFromCookbook,
+} from "~/lib/cookbook-membership-compat.server";
+import { productActivationPendingWebResponse } from "~/lib/saved-recipe-cutover.server";
 
 export function meta({ data }: Route.MetaArgs) {
   if (!data) {
@@ -264,20 +267,21 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 
   if (intent === "delete") {
-    const deletedAt = new Date();
-    await database.$transaction([
-      nativeSyncTombstoneUpsertOperation(database, {
+    try {
+      await deleteCookbookWithTombstone({
+        database,
+        nativeDatabase: asCompatibleCookbookD1Database(context.cloudflare?.env?.DB),
         accountId: userId,
-        resourceType: "cookbook",
-        resourceId: id,
+        cookbookId: id,
         title: cookbook.title,
-        deletedAt,
-        updatedAt: deletedAt,
-      }),
-      database.cookbook.delete({
-        where: { id },
-      }),
-    ]);
+      });
+    } catch (error) {
+      const cutoverResponse = productActivationPendingWebResponse(error);
+      if (cutoverResponse) {
+        return cutoverResponse;
+      }
+      throw error;
+    }
     return redirect("/cookbooks");
   }
 
@@ -293,19 +297,16 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       }
 
       try {
-        await database.$transaction(async (tx) => {
-          await tx.recipeInCookbook.create({
-            data: {
-              cookbookId: id,
-              recipeId,
-              addedById: userId,
-            },
-          });
-          await touchNativeSyncCookbookOperation(tx, id);
+        const added = await addRecipeToCookbook({
+          database,
+          nativeDatabase: asCompatibleCookbookD1Database(context.cloudflare?.env?.DB),
+          cookbookId: id,
+          recipeId,
+          userId,
         });
 
         // Fire-and-forget: notify the recipe owner when someone else saved their recipe.
-        try {
+        if (added) try {
           const { vapidEnv, postHogConfig, waitUntil } = getNotificationCtx(context);
           const vapid = getVapidConfig(vapidEnv);
           const notifyTask = notifyCookbookSaveOfMine(
@@ -323,11 +324,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         }
 
         return data({ success: true });
-      } catch (error: any) {
-        if (error.code === "P2002") {
-          // Idempotent re-add — do NOT enqueue a second notification.
-          await touchNativeSyncCookbookOperation(database, id);
-          return data({ success: true });
+      } catch (error) {
+        const cutoverResponse = productActivationPendingWebResponse(error);
+        if (cutoverResponse) {
+          return cutoverResponse;
         }
         captureCookbookActionFailure(request, context, userId, "addRecipe", error);
         throw error;
@@ -338,15 +338,20 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (intent === "removeRecipe") {
     const recipeInCookbookId = formData.get("recipeInCookbookId")?.toString();
     if (recipeInCookbookId) {
-      await database.$transaction(async (tx) => {
-        await tx.recipeInCookbook.deleteMany({
-          where: {
-            id: recipeInCookbookId,
-            cookbookId: id,
-          },
+      try {
+        await removeRecipeFromCookbook({
+          database,
+          nativeDatabase: asCompatibleCookbookD1Database(context.cloudflare?.env?.DB),
+          cookbookId: id,
+          membershipId: recipeInCookbookId,
         });
-        await touchNativeSyncCookbookOperation(tx, id);
-      });
+      } catch (error) {
+        const cutoverResponse = productActivationPendingWebResponse(error);
+        if (cutoverResponse) {
+          return cutoverResponse;
+        }
+        throw error;
+      }
       return data({ success: true });
     }
   }

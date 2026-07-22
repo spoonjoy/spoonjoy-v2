@@ -1,0 +1,14 @@
+
+> spoonjoy-v2@1.0.0 verify:clean:typecheck /Users/microsoft/code/worktrees/spoonjoy-v2-homepage-social-card
+> node scripts/run-with-warning-policy.mjs -- pnpm run typecheck
+
+
+> spoonjoy-v2@1.0.0 typecheck /Users/microsoft/code/worktrees/spoonjoy-v2-homepage-social-card
+> pnpm run api:playground:generate && react-router typegen && tsc
+
+
+> spoonjoy-v2@1.0.0 api:playground:generate /Users/microsoft/code/worktrees/spoonjoy-v2-homepage-social-card
+> tsx scripts/generate-api-playground.ts
+
+Generated app/lib/generated/api-v1-playground.ts
+TYPECHECK_PASS

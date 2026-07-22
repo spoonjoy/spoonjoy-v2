@@ -1,0 +1,9 @@
+
+> spoonjoy-v2@1.0.0 verify:clean:generated-contract /Users/arimendelow/Projects/spoonjoy-v2-native-search-telemetry
+> node scripts/run-with-warning-policy.mjs -- sh -c 'pnpm run api:playground:generate && git diff --exit-code -- app/lib/generated/api-v1-playground.ts'
+
+
+> spoonjoy-v2@1.0.0 api:playground:generate /Users/arimendelow/Projects/spoonjoy-v2-native-search-telemetry
+> tsx scripts/generate-api-playground.ts
+
+Generated app/lib/generated/api-v1-playground.ts

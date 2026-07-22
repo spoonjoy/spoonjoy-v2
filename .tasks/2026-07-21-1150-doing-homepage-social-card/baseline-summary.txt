@@ -1,0 +1,7 @@
+homepage metadata:
+<meta name="description" content="The recipe app for the meals you actually cook. Collect recipes, shape them into cookbooks, and keep a personal kitchen."/>
+
+challenge markers:
+
+image signature:
+89504e470d0a1a0a

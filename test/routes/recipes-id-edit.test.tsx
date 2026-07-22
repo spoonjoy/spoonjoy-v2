@@ -1815,6 +1815,12 @@ describe("Recipes $id Edit Route", () => {
   });
 
   describe("component", () => {
+    async function waitForSaveToSettle() {
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Save Recipe" })).toBeEnabled();
+      });
+    }
+
     it("should render edit recipe form with recipe data", async () => {
       const mockData = {
         recipe: {
@@ -2423,6 +2429,7 @@ describe("Recipes $id Edit Route", () => {
       await waitFor(() => {
         expect(submittedData).not.toBeNull();
       });
+      await waitForSaveToSettle();
 
       expect(submittedData.title).toBe("Updated Title");
       expect(submittedData.description).toBe("Updated description");
@@ -2490,6 +2497,7 @@ describe("Recipes $id Edit Route", () => {
       await waitFor(() => {
         expect(submittedData).not.toBeNull();
       });
+      await waitForSaveToSettle();
 
       expect(submittedData.title).toBe("Dock Updated Title");
       expect(submittedData.description).toBe("Dock updated description");
@@ -2542,6 +2550,7 @@ describe("Recipes $id Edit Route", () => {
       await waitFor(() => {
         expect(submittedData).not.toBeNull();
       });
+      await waitForSaveToSettle();
 
       expect(submittedData.title).toBe("Test Recipe");
     });
@@ -2683,6 +2692,7 @@ describe("Recipes $id Edit Route", () => {
       await waitFor(() => {
         expect(submittedData).not.toBeNull();
       });
+      await waitForSaveToSettle();
 
       expect(submittedData.clearImage).toBe("true");
     });
@@ -2722,6 +2732,7 @@ describe("Recipes $id Edit Route", () => {
       await waitFor(() => {
         expect(screen.getByText("Cannot move Step 1 to position 2 because Step 2 uses its output")).toBeInTheDocument();
       });
+      await waitForSaveToSettle();
     });
 
     it("should display general error message when present", async () => {

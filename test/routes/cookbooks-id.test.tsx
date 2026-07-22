@@ -26,6 +26,60 @@ function extractResponseData(response: any): { data: any; status: number } {
   return { data: response, status: 200 };
 }
 
+const PRODUCT_ACTIVATION_PENDING_RESPONSE = {
+  error: {
+    code: "product_activation_pending",
+    message: "Spoonjoy product activation is still completing. Retry shortly.",
+    retryable: true,
+  },
+};
+const CUTOVER_TRIGGER_NAME = "test_cookbook_saved_recipe_cutover_pending";
+
+async function installCookbookAbortTrigger(
+  event: "INSERT" | "DELETE",
+  message = "saved_recipe_cutover_pending",
+) {
+  await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${CUTOVER_TRIGGER_NAME}"`);
+  // Native Prisma erases RAISE text as P2003; the missing relation preserves
+  // the requested token while retaining BEFORE-trigger rollback semantics.
+  const failureStatement = message === "saved_recipe_cutover_pending"
+    ? `SELECT * FROM "${message}";`
+    : `SELECT RAISE(ABORT, '${message}');`;
+  await db.$executeRawUnsafe(`
+    CREATE TRIGGER "${CUTOVER_TRIGGER_NAME}"
+    BEFORE ${event} ON "RecipeInCookbook"
+    BEGIN
+      ${failureStatement}
+    END
+  `);
+}
+
+async function expectProductActivationPendingResponse(result: unknown) {
+  let status: number | undefined;
+  let body: unknown;
+  let headers = new Headers();
+
+  if (result instanceof Response) {
+    status = result.status;
+    const text = await result.clone().text();
+    body = text ? JSON.parse(text) : undefined;
+    headers = result.headers;
+  } else {
+    const dataResult = result as {
+      data?: unknown;
+      init?: { status?: number; headers?: HeadersInit } | null;
+    };
+    status = dataResult?.init?.status;
+    body = dataResult?.data;
+    headers = new Headers(dataResult?.init?.headers);
+  }
+
+  expect.soft(status).toBe(503);
+  expect.soft(body).toEqual(PRODUCT_ACTIVATION_PENDING_RESPONSE);
+  expect.soft(headers.get("Retry-After")).toBe("1");
+  expect.soft(headers.get("Cache-Control")).toBe("private, no-store");
+}
+
 describe("Cookbooks $id Route", () => {
   let testUserId: string;
   let otherUserId: string;
@@ -56,6 +110,7 @@ describe("Cookbooks $id Route", () => {
   });
 
   afterEach(async () => {
+    await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${CUTOVER_TRIGGER_NAME}"`);
     await cleanupDatabase();
   });
 
@@ -338,6 +393,64 @@ describe("Cookbooks $id Route", () => {
       }));
     });
 
+    it("maps a cutover trigger during cookbook deletion and rolls back the tombstone and delete", async () => {
+      const baselineUpdatedAt = new Date("2000-01-01T00:00:00.000Z");
+      await db.cookbook.update({
+        where: { id: cookbookId },
+        data: { updatedAt: baselineUpdatedAt },
+      });
+      const baseline = await db.cookbook.findUniqueOrThrow({
+        where: { id: cookbookId },
+        select: { title: true, updatedAt: true },
+      });
+      await installCookbookAbortTrigger("DELETE");
+      const request = await createFormRequest({ intent: "delete" }, testUserId);
+
+      const result = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: cookbookId },
+      } as any).catch((error) => error);
+
+      await expectProductActivationPendingResponse(result);
+      await expect(
+        db.cookbook.findUnique({
+          where: { id: cookbookId },
+          select: { title: true, updatedAt: true },
+        }),
+      ).resolves.toEqual(baseline);
+      await expect(
+        db.nativeSyncTombstone.findUnique({
+          where: {
+            accountId_resourceType_resourceId: {
+              accountId: testUserId,
+              resourceType: "cookbook",
+              resourceId: cookbookId,
+            },
+          },
+        }),
+      ).resolves.toBeNull();
+    });
+
+    it("rethrows an unrelated failure during cookbook deletion", async () => {
+      const recipe = await db.recipe.create({
+        data: {
+          title: "Ordinary Delete Failure Recipe " + faker.string.alphanumeric(6),
+          chefId: testUserId,
+        },
+      });
+      await db.recipeInCookbook.create({
+        data: { cookbookId, recipeId: recipe.id, addedById: testUserId },
+      });
+      await installCookbookAbortTrigger("DELETE", "ordinary_cookbook_delete_failure");
+
+      await expect(action({
+        request: await createFormRequest({ intent: "delete" }, testUserId),
+        context: { cloudflare: { env: null } },
+        params: { id: cookbookId },
+      } as any)).rejects.toMatchObject({ code: "P2003" });
+    });
+
     it("should add recipe to cookbook", async () => {
       // Create a recipe to add
       const recipe = await db.recipe.create({
@@ -372,6 +485,39 @@ describe("Cookbooks $id Route", () => {
       expect(recipeInCookbook).not.toBeNull();
       const touchedCookbook = await db.cookbook.findUnique({ where: { id: cookbookId }, select: { updatedAt: true } });
       expect(touchedCookbook!.updatedAt.getTime()).toBeGreaterThan(new Date("2000-01-01T00:00:00.000Z").getTime());
+    });
+
+    it("maps a cutover trigger while adding a recipe and rolls back membership and cookbook touch", async () => {
+      const recipe = await db.recipe.create({
+        data: {
+          title: "Cutover Add Recipe " + faker.string.alphanumeric(6),
+          chefId: testUserId,
+        },
+      });
+      const baselineUpdatedAt = new Date("2000-01-01T00:00:00.000Z");
+      await db.cookbook.update({
+        where: { id: cookbookId },
+        data: { updatedAt: baselineUpdatedAt },
+      });
+      await installCookbookAbortTrigger("INSERT");
+      const request = await createFormRequest(
+        { intent: "addRecipe", recipeId: recipe.id },
+        testUserId,
+      );
+
+      const result = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: cookbookId },
+      } as any).catch((error) => error);
+
+      await expectProductActivationPendingResponse(result);
+      await expect(
+        db.recipeInCookbook.count({ where: { cookbookId, recipeId: recipe.id } }),
+      ).resolves.toBe(0);
+      await expect(
+        db.cookbook.findUniqueOrThrow({ where: { id: cookbookId }, select: { updatedAt: true } }),
+      ).resolves.toEqual({ updatedAt: baselineUpdatedAt });
     });
 
     it("should reject direct attempts to add a soft-deleted recipe", async () => {
@@ -444,6 +590,102 @@ describe("Cookbooks $id Route", () => {
       expect(removed).toBeNull();
       const touchedCookbook = await db.cookbook.findUnique({ where: { id: cookbookId }, select: { updatedAt: true } });
       expect(touchedCookbook!.updatedAt.getTime()).toBeGreaterThan(new Date("2000-01-01T00:00:00.000Z").getTime());
+    });
+
+    it("maps a cutover trigger while removing a recipe and rolls back membership and cookbook touch", async () => {
+      const recipe = await db.recipe.create({
+        data: {
+          title: "Cutover Remove Recipe " + faker.string.alphanumeric(6),
+          chefId: testUserId,
+        },
+      });
+      const membership = await db.recipeInCookbook.create({
+        data: { cookbookId, recipeId: recipe.id, addedById: testUserId },
+      });
+      const baselineUpdatedAt = new Date("2000-01-01T00:00:00.000Z");
+      await db.cookbook.update({
+        where: { id: cookbookId },
+        data: { updatedAt: baselineUpdatedAt },
+      });
+      await installCookbookAbortTrigger("DELETE");
+      const request = await createFormRequest(
+        { intent: "removeRecipe", recipeInCookbookId: membership.id },
+        testUserId,
+      );
+
+      const result = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: cookbookId },
+      } as any).catch((error) => error);
+
+      await expectProductActivationPendingResponse(result);
+      await expect(
+        db.recipeInCookbook.findUnique({ where: { id: membership.id } }),
+      ).resolves.toEqual(membership);
+      await expect(
+        db.cookbook.findUniqueOrThrow({ where: { id: cookbookId }, select: { updatedAt: true } }),
+      ).resolves.toEqual({ updatedAt: baselineUpdatedAt });
+    });
+
+    it("rethrows an unrelated failure while removing a recipe", async () => {
+      const recipe = await db.recipe.create({
+        data: {
+          title: "Ordinary Remove Failure Recipe " + faker.string.alphanumeric(6),
+          chefId: testUserId,
+        },
+      });
+      const membership = await db.recipeInCookbook.create({
+        data: { cookbookId, recipeId: recipe.id, addedById: testUserId },
+      });
+      await installCookbookAbortTrigger("DELETE", "ordinary_cookbook_remove_failure");
+
+      await expect(action({
+        request: await createFormRequest(
+          { intent: "removeRecipe", recipeInCookbookId: membership.id },
+          testUserId,
+        ),
+        context: { cloudflare: { env: null } },
+        params: { id: cookbookId },
+      } as any)).rejects.toMatchObject({ code: "P2003" });
+    });
+
+    it("leaves an unrelated SQLite membership failure unmapped", async () => {
+      const recipe = await db.recipe.create({
+        data: {
+          title: "Ordinary Failure Recipe " + faker.string.alphanumeric(6),
+          chefId: testUserId,
+        },
+      });
+      const baselineUpdatedAt = new Date("2000-01-01T00:00:00.000Z");
+      await db.cookbook.update({
+        where: { id: cookbookId },
+        data: { updatedAt: baselineUpdatedAt },
+      });
+      await installCookbookAbortTrigger("INSERT", "ordinary_membership_failure");
+      const request = await createFormRequest(
+        { intent: "addRecipe", recipeId: recipe.id },
+        testUserId,
+      );
+
+      await expect(
+        action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: { id: cookbookId },
+        } as any),
+      ).rejects.toSatisfy((error: unknown) => {
+        expect(error).not.toBeInstanceOf(Response);
+        expect(error).toMatchObject({ code: "P2003" });
+        expect(String(error)).toContain("Foreign key constraint violated");
+        return true;
+      });
+      await expect(
+        db.recipeInCookbook.count({ where: { cookbookId, recipeId: recipe.id } }),
+      ).resolves.toBe(0);
+      await expect(
+        db.cookbook.findUniqueOrThrow({ where: { id: cookbookId }, select: { updatedAt: true } }),
+      ).resolves.toEqual({ updatedAt: baselineUpdatedAt });
     });
 
     it("should throw 404 for non-existent cookbook in action", async () => {

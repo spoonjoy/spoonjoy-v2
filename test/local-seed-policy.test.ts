@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -23,7 +24,9 @@ describe("local development seed policy", () => {
     };
     const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
 
-    expect(packageJson.scripts["db:seed"]).toBe("node scripts/seed-local.mjs --target-env local");
+    expect(packageJson.scripts["db:seed"]).toBe(
+      "node scripts/seed-local.mjs --target-env local",
+    );
     expect(ciWorkflow).toContain("pnpm db:seed");
     expect(ciWorkflow).toContain("pnpm run cleanup:local:apply");
     expect(ciWorkflow).not.toMatch(/\bpnpm exec tsx prisma\/seed\.ts/);
@@ -40,21 +43,106 @@ describe("local development seed policy", () => {
     expect(seedSource).not.toContain(reusableExamplePassword);
     expect(seedSource).not.toMatch(/console\.(?:warn|error|info)\s*=/);
     expect(seedSource).not.toMatch(/process\.(?:stdout|stderr)\.write\s*=/);
-    expect(seedSource).not.toContain("suppressExpectedPrismaD1TransactionWarningOutput");
+    expect(seedSource).not.toContain(
+      "suppressExpectedPrismaD1TransactionWarningOutput",
+    );
     expect(seedSource).not.toContain("withoutKnownSeedWarnings");
   });
 
   it("uses a D1-only Wrangler proxy config so seeding does not instantiate app Durable Objects", () => {
     const seedSource = readFileSync("prisma/seed.ts", "utf8");
-    const appConfig = JSON.parse(readFileSync("wrangler.json", "utf8")) as Record<string, unknown>;
-    const seedConfig = JSON.parse(readFileSync("wrangler.seed.json", "utf8")) as Record<string, unknown>;
+    const appConfig = JSON.parse(
+      readFileSync("wrangler.json", "utf8"),
+    ) as Record<string, unknown>;
+    const seedConfig = JSON.parse(
+      readFileSync("wrangler.seed.json", "utf8"),
+    ) as Record<string, unknown>;
 
-    expect(seedSource).toContain('getPlatformProxy<{ DB: D1Database }>({ configPath: "wrangler.seed.json" })');
+    expect(seedSource).toContain(
+      'getPlatformProxy<{ DB: D1Database }>({ configPath: "wrangler.seed.json" })',
+    );
     expect(seedConfig.d1_databases).toEqual(appConfig.d1_databases);
     expect(seedConfig).not.toHaveProperty("durable_objects");
     expect(seedConfig).not.toHaveProperty("migrations");
     expect(seedConfig).not.toHaveProperty("r2_buckets");
     expect(seedConfig).not.toHaveProperty("ratelimits");
+  });
+
+  it("delegates shopping-list seed writes to the deterministic exact-set provisioner", () => {
+    const seedSource = readFileSync("prisma/seed.ts", "utf8");
+    const sourceFile = ts.createSourceFile(
+      "prisma/seed.ts",
+      seedSource,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS,
+    );
+    let importedProvisioner = false;
+    let seedFunctionCall: ts.CallExpression | null = null;
+
+    for (const statement of sourceFile.statements) {
+      if (
+        ts.isImportDeclaration(statement) &&
+        ts.isStringLiteral(statement.moduleSpecifier) &&
+        statement.moduleSpecifier.text === "../app/lib/shopping-list-seed-compat.server"
+      ) {
+        importedProvisioner = Boolean(
+          statement.importClause?.namedBindings &&
+          ts.isNamedImports(statement.importClause.namedBindings) &&
+          statement.importClause.namedBindings.elements.some(
+            (element) => element.name.text === "provisionSeedShoppingListItem",
+          ),
+        );
+      }
+
+      if (
+        ts.isFunctionDeclaration(statement) &&
+        statement.name?.text === "seedShoppingLists" &&
+        statement.body
+      ) {
+        const visit = (node: ts.Node): void => {
+          if (
+            ts.isCallExpression(node) &&
+            ts.isIdentifier(node.expression) &&
+            node.expression.text === "provisionSeedShoppingListItem"
+          ) {
+            seedFunctionCall = node;
+          }
+          ts.forEachChild(node, visit);
+        };
+        visit(statement.body);
+      }
+    }
+
+    const call = seedFunctionCall as ts.CallExpression | null;
+    const input = call?.arguments[1];
+    const inputKeys = input && ts.isObjectLiteralExpression(input)
+      ? input.properties.flatMap((property) => {
+          if (ts.isShorthandPropertyAssignment(property)) return [property.name.text];
+          if (ts.isPropertyAssignment(property) && ts.isIdentifier(property.name)) return [property.name.text];
+          return [];
+        })
+      : [];
+
+    expect.soft(importedProvisioner).toBe(true);
+    expect.soft(call).not.toBeNull();
+    expect.soft(call?.arguments[0]?.getText(sourceFile)).toBe("prisma");
+    expect.soft(inputKeys.sort()).toEqual([
+      "categoryKey",
+      "checked",
+      "checkedAt",
+      "deletedAt",
+      "iconKey",
+      "ingredientRefId",
+      "quantity",
+      "shoppingListId",
+      "sortIndex",
+      "unitId",
+    ]);
+    expect.soft(/shoppingListItem\.upsert\s*\(/.test(seedSource)).toBe(false);
+    expect
+      .soft(seedSource.includes("shoppingListId_unitId_ingredientRefId"))
+      .toBe(false);
   });
 
   it("filters only exact whole-line Prisma D1 transaction warnings", () => {
@@ -69,13 +157,15 @@ describe("local development seed policy", () => {
       "",
     ].join("\n");
 
-    expect(filterExpectedPrismaD1WarningLines(output)).toBe([
-      "cleanup remains visible",
-      `prisma:warn ${expected} appended diagnostic`,
-      "prisma:warn unrelated warning",
-      "seed complete",
-      "",
-    ].join("\n"));
+    expect(filterExpectedPrismaD1WarningLines(output)).toBe(
+      [
+        "cleanup remains visible",
+        `prisma:warn ${expected} appended diagnostic`,
+        "prisma:warn unrelated warning",
+        "seed complete",
+        "",
+      ].join("\n"),
+    );
   });
 
   it("filters seed output without suppressing cleanup or altered diagnostics", async () => {
@@ -100,9 +190,15 @@ describe("local development seed policy", () => {
       stderr,
     });
 
-    expect(stdout.write).toHaveBeenNthCalledWith(1, `cleanup out\n${expected}\n`);
+    expect(stdout.write).toHaveBeenNthCalledWith(
+      1,
+      `cleanup out\n${expected}\n`,
+    );
     expect(stdout.write).toHaveBeenNthCalledWith(2, "seed out\nseed done\n");
-    expect(stderr.write).toHaveBeenNthCalledWith(1, `cleanup err\nprisma:warn ${expected}\n`);
+    expect(stderr.write).toHaveBeenNthCalledWith(
+      1,
+      `cleanup err\nprisma:warn ${expected}\n`,
+    );
     expect(stderr.write).toHaveBeenNthCalledWith(
       2,
       `prisma:warn ${expected} appended diagnostic\n`,
@@ -129,21 +225,46 @@ describe("local development seed policy", () => {
       return { stdout: "", stderr: "" };
     });
 
-    await runLocalSeedLifecycle({ argv: ["--target-env", "local"], runCommand });
+    await runLocalSeedLifecycle({
+      argv: ["--target-env", "local"],
+      runCommand,
+    });
 
     expect(calls).toEqual([
-      ["node", ["scripts/cleanup-local-qa-data.mjs", "--target-env", "local", "--apply"]],
-      ["pnpm", ["exec", "tsx", "prisma/seed.ts", "--target-env", "local", "--clean-start"]],
+      [
+        "node",
+        [
+          "scripts/cleanup-local-qa-data.mjs",
+          "--target-env",
+          "local",
+          "--apply",
+        ],
+      ],
+      [
+        "pnpm",
+        [
+          "exec",
+          "tsx",
+          "prisma/seed.ts",
+          "--target-env",
+          "local",
+          "--clean-start",
+        ],
+      ],
     ]);
   });
 
   it("refuses missing and non-local lifecycle targets", () => {
     expect(() => parseLocalSeedLifecycleArgs([])).toThrow(/--target-env local/);
-    expect(() => parseLocalSeedLifecycleArgs(["--target-env", "production"])).toThrow(/--target-env local/);
+    expect(() =>
+      parseLocalSeedLifecycleArgs(["--target-env", "production"]),
+    ).toThrow(/--target-env local/);
   });
 
   it("does not seed when cleanup fails", async () => {
-    const runCommand = vi.fn().mockRejectedValueOnce(new Error("cleanup failed"));
+    const runCommand = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("cleanup failed"));
 
     await expect(
       runLocalSeedLifecycle({ argv: ["--target-env", "local"], runCommand }),
@@ -152,8 +273,12 @@ describe("local development seed policy", () => {
   });
 
   it("recognizes only the executed wrapper module as the CLI entry", () => {
-    expect(isCliEntry("file:///tmp/seed-local.mjs", "/tmp/seed-local.mjs")).toBe(true);
-    expect(isCliEntry("file:///tmp/seed-local.mjs", "/tmp/other.mjs")).toBe(false);
+    expect(
+      isCliEntry("file:///tmp/seed-local.mjs", "/tmp/seed-local.mjs"),
+    ).toBe(true);
+    expect(isCliEntry("file:///tmp/seed-local.mjs", "/tmp/other.mjs")).toBe(
+      false,
+    );
     expect(isCliEntry("file:///tmp/seed-local.mjs", undefined)).toBe(false);
   });
 });

@@ -70,6 +70,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     reason:
       "Best-effort cover assignment fallback; failure leaves the recipe without an auto-assigned cover, which is a non-fatal degraded state.",
   },
+  {
+    file: "app/lib/saved-recipe-cutover.server.ts",
+    category: "swallow",
+    reason:
+      "Cycle-safe error recognizer treats a throwing adapter-wrapper getter as an absent field; recognized cutover errors and all non-matches still return to the instrumented request boundary.",
+  },
 
   // --- pure rethrow / race recovery (surfaced to instrumented callers) ---
   {
@@ -77,6 +83,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     category: "rethrow",
     reason:
       "Catch only recovers a unique-constraint idempotency race or re-throws; the API route layer (api-v1.server.ts) captures the surfaced exception.",
+  },
+  {
+    file: "app/lib/cookbook-membership-compat.server.ts",
+    category: "rethrow",
+    reason:
+      "Catch recovers only the exact cookbook-membership uniqueness race; every other transaction failure rethrows to the instrumented REST or first-party route boundary.",
   },
   {
     file: "app/lib/recipe-import-fetch.server.ts",
@@ -95,6 +107,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     category: "rethrow",
     reason:
       "SSRF-guarded DI fetch wrapper (no PostHog config). Catches map fetch/timeout to a typed Error surfaced to instrumented callers: the import orchestrator captures it via captureImportCoverException, and image-gen wraps it into ImageGenError captured by the stylization caller.",
+  },
+  {
+    file: "app/lib/shopping-list-mutations.server.ts",
+    category: "rethrow",
+    reason:
+      "Catches recover only exact shopping-identity uniqueness races by one bounded reread or full-batch rebuild; all other failures rethrow to the instrumented adapter boundary.",
   },
   {
     file: "app/lib/image-gen.server.ts",

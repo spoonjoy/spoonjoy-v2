@@ -91,6 +91,32 @@ function expectPropertyDescription(toolName: string, propertyName: string, expec
   expect(property?.description, `${toolName}.${propertyName}`).toEqual(expect.stringContaining(expectedText));
 }
 
+const LEGACY_SHOPPING_IDENTITY_INDEX = "ShoppingListItem_shoppingListId_unitId_ingredientRefId_key";
+const ACTIVE_SHOPPING_IDENTITY_INDEX = "ShoppingListItem_active_identity_key";
+
+async function withActiveShoppingIdentityIndex<T>(
+  db: SpoonjoyMcpContext["db"],
+  run: () => Promise<T>,
+): Promise<T> {
+  try {
+    await db.$executeRawUnsafe(`DROP INDEX IF EXISTS "${ACTIVE_SHOPPING_IDENTITY_INDEX}"`);
+    await db.$executeRawUnsafe(`DROP INDEX IF EXISTS "${LEGACY_SHOPPING_IDENTITY_INDEX}"`);
+    await db.$executeRawUnsafe(`
+      CREATE UNIQUE INDEX "${ACTIVE_SHOPPING_IDENTITY_INDEX}"
+      ON "ShoppingListItem" ("shoppingListId", "ingredientRefId", COALESCE('u:' || "unitId", 'n:'))
+      WHERE "deletedAt" IS NULL
+    `);
+    return await run();
+  } finally {
+    await db.shoppingListItem.deleteMany({});
+    await db.$executeRawUnsafe(`DROP INDEX IF EXISTS "${ACTIVE_SHOPPING_IDENTITY_INDEX}"`);
+    await db.$executeRawUnsafe(`
+      CREATE UNIQUE INDEX IF NOT EXISTS "${LEGACY_SHOPPING_IDENTITY_INDEX}"
+      ON "ShoppingListItem" ("shoppingListId", "unitId", "ingredientRefId")
+    `);
+  }
+}
+
 describe("spoonjoy MCP tools", () => {
   let context: SpoonjoyMcpContext;
 
@@ -1925,6 +1951,389 @@ describe("spoonjoy MCP tools", () => {
     expect(added.shoppingList.items[0]).toMatchObject({ name: "sugar", unit: "cup", quantity: 3 });
   });
 
+  it("coalesces shared recipe adds by deterministic step and ingredient order without changing the MCP shape", async () => {
+    const suffix = faker.string.alphanumeric(8).toLowerCase();
+    const owner = await context.db.user.create({
+      data: { email: context.defaultOwnerEmail!, username: `ordered-${suffix}` },
+    });
+    const recipe = await context.db.recipe.create({
+      data: { chefId: owner.id, title: `Ordered shared recipe ${suffix}` },
+    });
+    const unit = await context.db.unit.create({ data: { name: `ordered-unit-${suffix}` } });
+    const alpha = await context.db.ingredientRef.create({ data: { name: `ordered-alpha-${suffix}` } });
+    const beta = await context.db.ingredientRef.create({ data: { name: `ordered-beta-${suffix}` } });
+
+    await context.db.recipeStep.create({
+      data: { recipeId: recipe.id, stepNum: 2, description: "Second step inserted first" },
+    });
+    await context.db.recipeStep.create({
+      data: { recipeId: recipe.id, stepNum: 1, description: "First step inserted second" },
+    });
+    await context.db.ingredient.create({
+      data: {
+        id: `ingredient-step-2-${suffix}`,
+        recipeId: recipe.id,
+        stepNum: 2,
+        quantity: 3,
+        unitId: unit.id,
+        ingredientRefId: alpha.id,
+      },
+    });
+    await context.db.ingredient.create({
+      data: {
+        id: `ingredient-a-${suffix}`,
+        recipeId: recipe.id,
+        stepNum: 1,
+        quantity: 1,
+        unitId: unit.id,
+        ingredientRefId: alpha.id,
+      },
+    });
+    await context.db.ingredient.create({
+      data: {
+        id: `ingredient-A-${suffix}`,
+        recipeId: recipe.id,
+        stepNum: 1,
+        quantity: 2,
+        unitId: unit.id,
+        ingredientRefId: beta.id,
+      },
+    });
+
+    const added = parseJson(await callSpoonjoyMcpTool(
+      "add_recipe_to_shopping_list",
+      { recipeId: recipe.id },
+      context,
+    ));
+
+    expect(added).toEqual({
+      created: 2,
+      updated: 0,
+      shoppingList: {
+        id: expect.any(String),
+        ownerId: owner.id,
+        items: [
+          {
+            id: expect.any(String),
+            quantity: 2,
+            unit: unit.name,
+            name: beta.name,
+            checked: false,
+            categoryKey: null,
+            iconKey: null,
+            sortIndex: 0,
+          },
+          {
+            id: expect.any(String),
+            quantity: 4,
+            unit: unit.name,
+            name: alpha.name,
+            checked: false,
+            categoryKey: null,
+            iconKey: null,
+            sortIndex: 1,
+          },
+        ],
+      },
+    });
+    await expect(context.db.shoppingListItem.count()).resolves.toBe(2);
+  });
+
+  it("rejects a non-finite shared recipe aggregate before writing any shopping item", async () => {
+    const suffix = faker.string.alphanumeric(8).toLowerCase();
+    const owner = await context.db.user.create({
+      data: { email: context.defaultOwnerEmail!, username: `finite-${suffix}` },
+    });
+    const recipe = await context.db.recipe.create({
+      data: { chefId: owner.id, title: `Finite shared recipe ${suffix}` },
+    });
+    const step = await context.db.recipeStep.create({
+      data: { recipeId: recipe.id, stepNum: 1, description: "Overflow deliberately" },
+    });
+    const unit = await context.db.unit.create({ data: { name: `finite-unit-${suffix}` } });
+    const ingredientRef = await context.db.ingredientRef.create({ data: { name: `finite-ref-${suffix}` } });
+    await context.db.ingredient.createMany({
+      data: [
+        {
+          id: `finite-a-${suffix}`,
+          recipeId: recipe.id,
+          stepNum: step.stepNum,
+          quantity: Number.MAX_VALUE,
+          unitId: unit.id,
+          ingredientRefId: ingredientRef.id,
+        },
+        {
+          id: `finite-b-${suffix}`,
+          recipeId: recipe.id,
+          stepNum: step.stepNum,
+          quantity: Number.MAX_VALUE,
+          unitId: unit.id,
+          ingredientRefId: ingredientRef.id,
+        },
+      ],
+    });
+
+    await expect(callSpoonjoyMcpTool(
+      "add_recipe_to_shopping_list",
+      { recipeId: recipe.id },
+      context,
+    )).rejects.toThrow();
+    await expect(context.db.shoppingListItem.count()).resolves.toBe(0);
+  });
+
+  it("rolls back every shared recipe item when a later coalesced identity fails", async () => {
+    const recipe = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "Atomic shared shopping recipe",
+      steps: [{
+        description: "Add two identities",
+        ingredients: [
+          { name: "Atomic shared apples", quantity: 2, unit: "Each" },
+          { name: "Atomic shared flour", quantity: 3, unit: "Cup" },
+        ],
+      }],
+    }, context));
+    const ingredients = await context.db.ingredient.findMany({
+      where: { recipeId: recipe.recipe.id },
+      orderBy: [{ stepNum: "asc" }, { id: "asc" }],
+    });
+    const rejectedIdentity = ingredients[1].ingredientRefId;
+    await context.db.$executeRawUnsafe(`
+      CREATE TRIGGER "compat_shared_bulk_abort"
+      BEFORE INSERT ON "ShoppingListItem"
+      WHEN NEW."ingredientRefId" = '${rejectedIdentity}'
+      BEGIN
+        SELECT RAISE(ABORT, 'compat_shared_bulk_failure');
+      END
+    `);
+
+    try {
+      await expect(callSpoonjoyMcpTool(
+        "add_recipe_to_shopping_list",
+        { recipeId: recipe.recipe.id },
+        context,
+      )).rejects.toThrow();
+      await expect(context.db.shoppingListItem.count()).resolves.toBe(0);
+    } finally {
+      await context.db.$executeRawUnsafe('DROP TRIGGER IF EXISTS "compat_shared_bulk_abort"');
+    }
+  });
+
+  it("rebuilds and retries the complete shared recipe transaction once after a uniqueness race", async () => {
+    const recipe = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "Racing shared shopping recipe",
+      steps: [{
+        description: "Add two identities",
+        ingredients: [
+          { name: "Racing shared apples", quantity: 2, unit: "Each" },
+          { name: "Racing shared flour", quantity: 3, unit: "Cup" },
+        ],
+      }],
+    }, context));
+    const owner = await context.db.user.findUniqueOrThrow({ where: { email: context.defaultOwnerEmail } });
+    const shoppingList = await context.db.shoppingList.create({ data: { authorId: owner.id } });
+    const racedIngredient = await context.db.ingredient.findFirstOrThrow({
+      where: { recipeId: recipe.recipe.id },
+      orderBy: [{ stepNum: "asc" }, { id: "asc" }],
+    });
+    let transactionCalls = 0;
+    const transactionOperationArrays: unknown[][] = [];
+    const racingDb = new Proxy(context.db, {
+      get(target, property, receiver) {
+        if (property !== "$transaction") return Reflect.get(target, property, receiver);
+        const transaction = Reflect.get(target, property, receiver) as (...args: unknown[]) => Promise<unknown>;
+        return async (input: unknown, ...rest: unknown[]) => {
+          transactionCalls += 1;
+          if (!Array.isArray(input)) throw new Error("Expected a batched shopping-list transaction");
+          transactionOperationArrays.push(input);
+          if (transactionCalls === 1) {
+            await target.shoppingListItem.create({
+              data: {
+                id: `shared-race-${faker.string.alphanumeric(8).toLowerCase()}`,
+                shoppingListId: shoppingList.id,
+                ingredientRefId: racedIngredient.ingredientRefId,
+                unitId: racedIngredient.unitId,
+                quantity: 4,
+                sortIndex: 0,
+              },
+            });
+          }
+          return transaction.apply(target, [input, ...rest]);
+        };
+      },
+    }) as SpoonjoyMcpContext["db"];
+
+    const added = parseJson(await callSpoonjoyMcpTool(
+      "add_recipe_to_shopping_list",
+      { recipeId: recipe.recipe.id },
+      { ...context, db: racingDb },
+    ));
+
+    expect(transactionCalls).toBe(2);
+    expect(transactionOperationArrays.map((operations) => operations.length)).toEqual([2, 2]);
+    expect(transactionOperationArrays[1]).not.toBe(transactionOperationArrays[0]);
+    expect(transactionOperationArrays[1][0]).not.toBe(transactionOperationArrays[0][0]);
+    expect(transactionOperationArrays[1][1]).not.toBe(transactionOperationArrays[0][1]);
+    expect(added).toMatchObject({
+      created: 1,
+      updated: 1,
+      shoppingList: {
+        ownerId: owner.id,
+        items: expect.arrayContaining([
+          expect.objectContaining({ quantity: 4 + racedIngredient.quantity }),
+        ]),
+      },
+    });
+    await expect(context.db.shoppingListItem.count({ where: { shoppingListId: shoppingList.id } })).resolves.toBe(2);
+  });
+
+  it("updates the active shared recipe identity even when an earlier tombstone also matches", async () => {
+    const recipe = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "Active-first shared shopping recipe",
+      steps: [{
+        description: "Use the migrated survivor",
+        ingredients: [{ name: "Active-first shared beans", quantity: 2, unit: "Can" }],
+      }],
+    }, context));
+    const owner = await context.db.user.findUniqueOrThrow({ where: { email: context.defaultOwnerEmail } });
+    const shoppingList = await context.db.shoppingList.create({ data: { authorId: owner.id } });
+    const ingredient = await context.db.ingredient.findFirstOrThrow({ where: { recipeId: recipe.recipe.id } });
+    const suffix = faker.string.alphanumeric(8).toLowerCase();
+
+    await withActiveShoppingIdentityIndex(context.db, async () => {
+      const active = await context.db.shoppingListItem.create({
+        data: {
+          id: `recipe-active-z-${suffix}`,
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredient.ingredientRefId,
+          unitId: ingredient.unitId,
+          quantity: 5,
+          sortIndex: 4,
+        },
+      });
+      const tombstone = await context.db.shoppingListItem.create({
+        data: {
+          id: `recipe-deleted-a-${suffix}`,
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredient.ingredientRefId,
+          unitId: ingredient.unitId,
+          quantity: 100,
+          sortIndex: 0,
+          deletedAt: new Date("2025-01-01T00:00:00.000Z"),
+        },
+      });
+
+      const added = parseJson(await callSpoonjoyMcpTool(
+        "add_recipe_to_shopping_list",
+        { recipeId: recipe.recipe.id },
+        context,
+      ));
+
+      expect(added).toEqual({
+        created: 0,
+        updated: 1,
+        shoppingList: {
+          id: shoppingList.id,
+          ownerId: owner.id,
+          items: [{
+            id: active.id,
+            quantity: 7,
+            unit: recipe.recipe.steps[0].ingredients[0].unit,
+            name: recipe.recipe.steps[0].ingredients[0].name,
+            checked: false,
+            categoryKey: null,
+            iconKey: null,
+            sortIndex: 4,
+          }],
+        },
+      });
+      await expect(context.db.shoppingListItem.findUniqueOrThrow({ where: { id: tombstone.id } }))
+        .resolves.toMatchObject({ quantity: 100, deletedAt: expect.any(Date) });
+    });
+  });
+
+  it("restores the earliest post-0025 shared recipe tombstone by sortIndex then BINARY id", async () => {
+    const recipe = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "Tombstone-only shared shopping recipe",
+      steps: [{
+        description: "Restore the deterministic survivor",
+        ingredients: [{ name: "Tombstone-only shared beans", quantity: 2, unit: "Can" }],
+      }],
+    }, context));
+    const owner = await context.db.user.findUniqueOrThrow({ where: { email: context.defaultOwnerEmail } });
+    const shoppingList = await context.db.shoppingList.create({ data: { authorId: owner.id } });
+    const ingredient = await context.db.ingredient.findFirstOrThrow({ where: { recipeId: recipe.recipe.id } });
+    const suffix = faker.string.alphanumeric(8).toLowerCase();
+
+    await withActiveShoppingIdentityIndex(context.db, async () => {
+      const earliest = await context.db.shoppingListItem.create({
+        data: {
+          id: `recipe-deleted-A-same-sort-${suffix}`,
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredient.ingredientRefId,
+          unitId: ingredient.unitId,
+          quantity: 5,
+          checked: true,
+          checkedAt: new Date("2025-03-01T00:00:00.000Z"),
+          sortIndex: 1,
+          categoryKey: "pantry",
+          iconKey: "jar",
+          deletedAt: new Date("2025-03-01T00:00:00.000Z"),
+        },
+      });
+      const laterBySort = await context.db.shoppingListItem.create({
+        data: {
+          id: `recipe-deleted-A-later-sort-${suffix}`,
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredient.ingredientRefId,
+          unitId: ingredient.unitId,
+          quantity: 100,
+          sortIndex: 3,
+          deletedAt: new Date("2025-01-01T00:00:00.000Z"),
+        },
+      });
+      const laterByBinaryId = await context.db.shoppingListItem.create({
+        data: {
+          id: `recipe-deleted-a-same-sort-${suffix}`,
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredient.ingredientRefId,
+          unitId: ingredient.unitId,
+          quantity: 20,
+          sortIndex: 1,
+          deletedAt: new Date("2025-02-01T00:00:00.000Z"),
+        },
+      });
+
+      const added = parseJson(await callSpoonjoyMcpTool(
+        "add_recipe_to_shopping_list",
+        { recipeId: recipe.recipe.id },
+        context,
+      ));
+
+      expect(added).toEqual({
+        created: 0,
+        updated: 1,
+        shoppingList: {
+          id: shoppingList.id,
+          ownerId: owner.id,
+          items: [{
+            id: earliest.id,
+            quantity: 7,
+            unit: recipe.recipe.steps[0].ingredients[0].unit,
+            name: recipe.recipe.steps[0].ingredients[0].name,
+            checked: false,
+            categoryKey: "pantry",
+            iconKey: "jar",
+            sortIndex: 0,
+          }],
+        },
+      });
+      await expect(context.db.shoppingListItem.findUniqueOrThrow({ where: { id: laterByBinaryId.id } }))
+        .resolves.toMatchObject({ quantity: 20, deletedAt: expect.any(Date) });
+      await expect(context.db.shoppingListItem.findUniqueOrThrow({ where: { id: laterBySort.id } }))
+        .resolves.toMatchObject({ quantity: 100, deletedAt: expect.any(Date) });
+    });
+  });
+
   it("rejects adding a soft-deleted recipe to a shopping list", async () => {
     const recipe = parseJson(await callSpoonjoyMcpTool("create_recipe", {
       title: "Deleted Shopping Cake",
@@ -2358,6 +2767,192 @@ describe("spoonjoy MCP tools", () => {
     }, context));
     expect(restored).toMatchObject({ created: 0, updated: 1 });
     expect(restored.shoppingList.items[0]).toMatchObject({ id: itemId, quantity: 4, checked: false });
+  });
+
+  it("always updates the active manual identity before considering a matching tombstone", async () => {
+    const suffix = faker.string.alphanumeric(8).toLowerCase();
+    const owner = await context.db.user.create({
+      data: { email: context.defaultOwnerEmail!, username: `manual-active-${suffix}` },
+    });
+    const shoppingList = await context.db.shoppingList.create({ data: { authorId: owner.id } });
+    const unit = await context.db.unit.create({ data: { name: `manual-active-unit-${suffix}` } });
+    const ingredientRef = await context.db.ingredientRef.create({ data: { name: `manual-active-ref-${suffix}` } });
+
+    await withActiveShoppingIdentityIndex(context.db, async () => {
+      const tombstone = await context.db.shoppingListItem.create({
+        data: {
+          id: `manual-deleted-a-${suffix}`,
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredientRef.id,
+          unitId: unit.id,
+          quantity: 100,
+          sortIndex: 0,
+          deletedAt: new Date("2025-01-01T00:00:00.000Z"),
+        },
+      });
+      const active = await context.db.shoppingListItem.create({
+        data: {
+          id: `manual-active-z-${suffix}`,
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredientRef.id,
+          unitId: unit.id,
+          quantity: 1,
+          sortIndex: 4,
+          categoryKey: "pantry",
+          iconKey: "jar",
+        },
+      });
+
+      const added = parseJson(await callSpoonjoyMcpTool("add_shopping_list_item", {
+        name: ingredientRef.name,
+        quantity: 2,
+        unit: unit.name,
+      }, context));
+
+      expect(added).toEqual({
+        created: 0,
+        updated: 1,
+        shoppingList: {
+          id: shoppingList.id,
+          ownerId: owner.id,
+          items: [{
+            id: active.id,
+            quantity: 3,
+            unit: unit.name,
+            name: ingredientRef.name,
+            checked: false,
+            categoryKey: "pantry",
+            iconKey: "jar",
+            sortIndex: 4,
+          }],
+        },
+      });
+      await expect(context.db.shoppingListItem.findUniqueOrThrow({ where: { id: tombstone.id } }))
+        .resolves.toMatchObject({ quantity: 100, deletedAt: expect.any(Date) });
+    });
+  });
+
+  it("restores the earliest deterministic tombstone when no manual identity is active", async () => {
+    const suffix = faker.string.alphanumeric(8).toLowerCase();
+    const owner = await context.db.user.create({
+      data: { email: context.defaultOwnerEmail!, username: `manual-deleted-${suffix}` },
+    });
+    const shoppingList = await context.db.shoppingList.create({ data: { authorId: owner.id } });
+    const unit = await context.db.unit.create({ data: { name: `manual-deleted-unit-${suffix}` } });
+    const ingredientRef = await context.db.ingredientRef.create({ data: { name: `manual-deleted-ref-${suffix}` } });
+
+    await withActiveShoppingIdentityIndex(context.db, async () => {
+      await context.db.shoppingListItem.create({
+        data: {
+          id: `manual-deleted-a-${suffix}`,
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredientRef.id,
+          unitId: unit.id,
+          quantity: 100,
+          sortIndex: 1,
+          deletedAt: new Date("2025-01-01T00:00:00.000Z"),
+        },
+      });
+      const earliest = await context.db.shoppingListItem.create({
+        data: {
+          id: `manual-deleted-A-${suffix}`,
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredientRef.id,
+          unitId: unit.id,
+          quantity: 10,
+          sortIndex: 1,
+          categoryKey: "pantry",
+          deletedAt: new Date("2025-02-01T00:00:00.000Z"),
+        },
+      });
+
+      const restored = parseJson(await callSpoonjoyMcpTool("add_shopping_list_item", {
+        name: ingredientRef.name,
+        quantity: 2,
+        unit: unit.name,
+        iconKey: "jar",
+      }, context));
+
+      expect(restored).toEqual({
+        created: 0,
+        updated: 1,
+        shoppingList: {
+          id: shoppingList.id,
+          ownerId: owner.id,
+          items: [{
+            id: earliest.id,
+            quantity: 12,
+            unit: unit.name,
+            name: ingredientRef.name,
+            checked: false,
+            categoryKey: "pantry",
+            iconKey: "jar",
+            sortIndex: 0,
+          }],
+        },
+      });
+    });
+  });
+
+  it("rereads the active manual identity once after a real uniqueness race", async () => {
+    type ShoppingCreateArgs = Parameters<SpoonjoyMcpContext["db"]["shoppingListItem"]["create"]>[0];
+    const racedId = `manual-race-${faker.string.alphanumeric(8).toLowerCase()}`;
+    let injected = false;
+    const racingDb = new Proxy(context.db, {
+      get(target, property, receiver) {
+        if (property !== "shoppingListItem") return Reflect.get(target, property, receiver);
+        const delegate = Reflect.get(target, property, receiver);
+        return new Proxy(delegate, {
+          get(delegateTarget, delegateProperty, delegateReceiver) {
+            if (delegateProperty !== "create") {
+              return Reflect.get(delegateTarget, delegateProperty, delegateReceiver);
+            }
+            const create = Reflect.get(delegateTarget, delegateProperty, delegateReceiver) as (
+              args: ShoppingCreateArgs,
+            ) => Promise<unknown>;
+            return async (args: ShoppingCreateArgs) => {
+              if (!injected) {
+                injected = true;
+                await create.call(delegateTarget, {
+                  ...args,
+                  data: { ...args.data, id: racedId, quantity: 5 },
+                });
+              }
+              return create.call(delegateTarget, args);
+            };
+          },
+        });
+      },
+    }) as SpoonjoyMcpContext["db"];
+
+    const added = parseJson(await callSpoonjoyMcpTool("add_shopping_list_item", {
+      name: "Manual race milk",
+      quantity: 2,
+      unit: "Gallon",
+      categoryKey: "dairy",
+      iconKey: "milk",
+    }, { ...context, db: racingDb }));
+
+    expect(injected).toBe(true);
+    expect(added).toEqual({
+      created: 0,
+      updated: 1,
+      shoppingList: {
+        id: expect.any(String),
+        ownerId: expect.any(String),
+        items: [{
+          id: racedId,
+          quantity: 7,
+          unit: "gallon",
+          name: "manual race milk",
+          checked: false,
+          categoryKey: "dairy",
+          iconKey: "milk",
+          sortIndex: 0,
+        }],
+      },
+    });
+    await expect(context.db.shoppingListItem.count()).resolves.toBe(1);
   });
 
   it("exposes unified full-text search and private shopping-list search to Ouroboros agents", async () => {

@@ -1327,12 +1327,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "required": true,
         "contentType": "application/json",
         "fields": [],
-        "example": "{\n  \"event\": \"auth_flow_failed\",\n  \"stage\": \"auth\",\n  \"environment\": \"production\",\n  \"platform\": \"ios\",\n  \"appVersion\": \"1.0\",\n  \"buildNumber\": \"42\",\n  \"route\": \"kitchen\",\n  \"errorType\": \"APITransportError\",\n  \"requestId\": \"req_apple_exchange\",\n  \"status\": 401,\n  \"apiCode\": \"apple_identity_token_invalid\",\n  \"retry\": \"do_not_retry\",\n  \"accountBound\": false,\n  \"authProvider\": \"apple\",\n  \"authPhase\": \"backend_request_failed\",\n  \"authOutcome\": \"failed\",\n  \"authDiagnosticCode\": \"provider_invalid_identity_token\",\n  \"authSessionState\": \"signed_out\",\n  \"authCredentialPresent\": true,\n  \"authIdentityTokenPresent\": true,\n  \"authRawNoncePresent\": true,\n  \"authEmailPresent\": false,\n  \"authFullNamePresent\": false,\n  \"authOAuthStatePresent\": false,\n  \"authRedirectScheme\": \"https\",\n  \"authRedirectHost\": \"spoonjoy.app\"\n}",
+        "example": "{\n  \"event\": \"search_completed\",\n  \"stage\": \"search\",\n  \"environment\": \"production\",\n  \"platform\": \"ios\",\n  \"appVersion\": \"1.0\",\n  \"buildNumber\": \"42\",\n  \"route\": \"search\",\n  \"accountBound\": true,\n  \"searchScope\": \"all\",\n  \"searchQueryLength\": 12,\n  \"searchResultCount\": 4,\n  \"durationMilliseconds\": 184\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"event\": \"auth_flow_failed\",\n  \"stage\": \"auth\",\n  \"environment\": \"production\",\n  \"platform\": \"ios\",\n  \"appVersion\": \"1.0\",\n  \"buildNumber\": \"42\",\n  \"route\": \"kitchen\",\n  \"errorType\": \"APITransportError\",\n  \"requestId\": \"req_apple_exchange\",\n  \"status\": 401,\n  \"apiCode\": \"apple_identity_token_invalid\",\n  \"retry\": \"do_not_retry\",\n  \"accountBound\": false,\n  \"authProvider\": \"apple\",\n  \"authPhase\": \"backend_request_failed\",\n  \"authOutcome\": \"failed\",\n  \"authDiagnosticCode\": \"provider_invalid_identity_token\",\n  \"authSessionState\": \"signed_out\",\n  \"authCredentialPresent\": true,\n  \"authIdentityTokenPresent\": true,\n  \"authRawNoncePresent\": true,\n  \"authEmailPresent\": false,\n  \"authFullNamePresent\": false,\n  \"authOAuthStatePresent\": false,\n  \"authRedirectScheme\": \"https\",\n  \"authRedirectHost\": \"spoonjoy.app\"\n}"
+            "example": "{\n  \"event\": \"search_completed\",\n  \"stage\": \"search\",\n  \"environment\": \"production\",\n  \"platform\": \"ios\",\n  \"appVersion\": \"1.0\",\n  \"buildNumber\": \"42\",\n  \"route\": \"search\",\n  \"accountBound\": true,\n  \"searchScope\": \"all\",\n  \"searchQueryLength\": 12,\n  \"searchResultCount\": 4,\n  \"durationMilliseconds\": 184\n}"
           }
         ]
       },
@@ -8089,7 +8089,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -8127,6 +8128,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: product_activation_pending"
         }
       ],
       "responseExamples": [
@@ -8298,7 +8303,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -8340,6 +8346,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: product_activation_pending"
         }
       ],
       "responseExamples": [
@@ -8533,7 +8543,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -8571,6 +8582,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: product_activation_pending"
         }
       ],
       "responseExamples": [

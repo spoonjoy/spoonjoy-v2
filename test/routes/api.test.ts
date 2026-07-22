@@ -428,6 +428,229 @@ describe("Spoonjoy REST API route", () => {
       .resolves.toMatchObject({ ok: true, data: { created: 1 } });
   });
 
+  it("preserves the exact legacy envelopes for both shared shopping-list writers", async () => {
+    const manualOwner = await db.user.create({
+      data: { email: uniqueEmail("legacy-manual-shape"), username: faker.internet.username() },
+    });
+    const manualCredential = await createApiCredential(db, manualOwner.id, "Legacy manual shape", {
+      scopes: ["shopping_list:write"],
+    });
+    const manualResponse = await action(routeArgs(new UndiciRequest("http://localhost/api/shopping-list/items", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${manualCredential.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "Legacy shape milk",
+        quantity: 2,
+        unit: "Gallon",
+        categoryKey: "dairy",
+        iconKey: "milk",
+      }),
+    }), "shopping-list/items"));
+    expect(manualResponse.status).toBe(200);
+    await expect(readJson(manualResponse)).resolves.toEqual({
+      ok: true,
+      data: {
+        created: 1,
+        updated: 0,
+        shoppingList: {
+          id: expect.any(String),
+          ownerId: manualOwner.id,
+          items: [{
+            id: expect.any(String),
+            quantity: 2,
+            unit: "gallon",
+            name: "legacy shape milk",
+            checked: false,
+            categoryKey: "dairy",
+            iconKey: "milk",
+            sortIndex: 0,
+          }],
+        },
+      },
+    });
+
+    const recipeOwner = await db.user.create({
+      data: { email: uniqueEmail("legacy-recipe-shape"), username: faker.internet.username() },
+    });
+    const recipeCredential = await createApiCredential(db, recipeOwner.id, "Legacy recipe shape", {
+      scopes: ["shopping_list:write"],
+    });
+    const recipe = await db.recipe.create({
+      data: { chefId: recipeOwner.id, title: "Legacy shopping shape recipe" },
+    });
+    await db.recipeStep.create({
+      data: { recipeId: recipe.id, stepNum: 1, description: "Add beans" },
+    });
+    const recipeUnit = await db.unit.create({ data: { name: `shape-can-${faker.string.alphanumeric(6).toLowerCase()}` } });
+    const recipeIngredient = await db.ingredientRef.create({
+      data: { name: `shape-beans-${faker.string.alphanumeric(6).toLowerCase()}` },
+    });
+    await db.ingredient.create({
+      data: {
+        recipeId: recipe.id,
+        stepNum: 1,
+        quantity: 3,
+        unitId: recipeUnit.id,
+        ingredientRefId: recipeIngredient.id,
+      },
+    });
+
+    const recipeResponse = await action(routeArgs(new UndiciRequest(
+      `http://localhost/api/recipes/${recipe.id}/shopping-list`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${recipeCredential.token}` },
+      },
+    ), `recipes/${recipe.id}/shopping-list`));
+    expect(recipeResponse.status).toBe(200);
+    await expect(readJson(recipeResponse)).resolves.toEqual({
+      ok: true,
+      data: {
+        created: 1,
+        updated: 0,
+        shoppingList: {
+          id: expect.any(String),
+          ownerId: recipeOwner.id,
+          items: [{
+            id: expect.any(String),
+            quantity: 3,
+            unit: recipeUnit.name,
+            name: recipeIngredient.name,
+            checked: false,
+            categoryKey: null,
+            iconKey: null,
+            sortIndex: 0,
+          }],
+        },
+      },
+    });
+  });
+
+  it("maps a real membership-insert fence to the frozen legacy activation response and rolls back", async () => {
+    vi.mocked(captureException).mockClear();
+    const user = await db.user.create({
+      data: { email: uniqueEmail("legacy-fenced-add"), username: faker.internet.username() },
+    });
+    const credential = await createApiCredential(db, user.id, "Legacy fenced add", {
+      scopes: ["kitchen:write"],
+    });
+    const recipe = await db.recipe.create({ data: { chefId: user.id, title: "Fenced legacy add recipe" } });
+    const cookbook = await db.cookbook.create({ data: { authorId: user.id, title: "Fenced legacy add cookbook" } });
+    // Native Prisma erases RAISE text as P2003; the Workers D1 suite covers
+    // the production trigger while this preserves the token for local mapping.
+    await db.$executeRawUnsafe(`
+      CREATE TRIGGER "SavedRecipe_cutover_block_membership_insert"
+      BEFORE INSERT ON "RecipeInCookbook"
+      BEGIN
+        SELECT * FROM saved_recipe_cutover_pending;
+      END
+    `);
+
+    try {
+      const response = await action(routeArgs(new UndiciRequest(
+        `http://localhost/api/cookbooks/${cookbook.id}/recipes`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${credential.token}`,
+            "Content-Type": "application/json",
+            "X-Request-Id": "req_legacy_product_pending_add",
+          },
+          body: JSON.stringify({ recipeId: recipe.id }),
+        },
+      ), `cookbooks/${cookbook.id}/recipes`, { POSTHOG_KEY: "ph_test" }));
+
+      await expect(db.recipeInCookbook.count({ where: { cookbookId: cookbook.id, recipeId: recipe.id } }))
+        .resolves.toBe(0);
+      expect(response.status).toBe(503);
+      expect(response.headers.get("Retry-After")).toBe("1");
+      expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+      await expect(readJson(response)).resolves.toEqual({
+        ok: false,
+        error: {
+          message: "Spoonjoy product activation is still completing. Retry shortly.",
+          status: 503,
+        },
+      });
+      expectLegacyEvent({
+        requestId: "req_legacy_product_pending_add",
+        operation: "add_recipe_to_cookbook",
+        status: 503,
+        authMode: "bearer",
+        errorCode: "product_activation_pending",
+      });
+      expect(captureException).not.toHaveBeenCalled();
+    } finally {
+      await db.$executeRawUnsafe('DROP TRIGGER IF EXISTS "SavedRecipe_cutover_block_membership_insert"');
+    }
+  });
+
+  it("maps a real membership-delete fence to the frozen legacy activation response and preserves membership", async () => {
+    vi.mocked(captureException).mockClear();
+    const user = await db.user.create({
+      data: { email: uniqueEmail("legacy-fenced-remove"), username: faker.internet.username() },
+    });
+    const credential = await createApiCredential(db, user.id, "Legacy fenced remove", {
+      scopes: ["kitchen:write"],
+    });
+    const recipe = await db.recipe.create({ data: { chefId: user.id, title: "Fenced legacy remove recipe" } });
+    const cookbook = await db.cookbook.create({ data: { authorId: user.id, title: "Fenced legacy remove cookbook" } });
+    const membership = await db.recipeInCookbook.create({
+      data: { cookbookId: cookbook.id, recipeId: recipe.id, addedById: user.id },
+    });
+    // Native Prisma erases RAISE text as P2003; the Workers D1 suite covers
+    // the production trigger while this preserves the token for local mapping.
+    await db.$executeRawUnsafe(`
+      CREATE TRIGGER "SavedRecipe_cutover_block_membership_delete"
+      BEFORE DELETE ON "RecipeInCookbook"
+      BEGIN
+        SELECT * FROM saved_recipe_cutover_pending;
+      END
+    `);
+
+    try {
+      const response = await action(routeArgs(new UndiciRequest(
+        `http://localhost/api/cookbooks/${cookbook.id}/recipes/${recipe.id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${credential.token}`,
+            "X-Request-Id": "req_legacy_product_pending_remove",
+          },
+        },
+      ), `cookbooks/${cookbook.id}/recipes/${recipe.id}`, { POSTHOG_KEY: "ph_test" }));
+
+      await expect(db.recipeInCookbook.findUnique({ where: { id: membership.id } })).resolves.toMatchObject({
+        id: membership.id,
+        cookbookId: cookbook.id,
+        recipeId: recipe.id,
+      });
+      expect(response.status).toBe(503);
+      expect(response.headers.get("Retry-After")).toBe("1");
+      expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+      await expect(readJson(response)).resolves.toEqual({
+        ok: false,
+        error: {
+          message: "Spoonjoy product activation is still completing. Retry shortly.",
+          status: 503,
+        },
+      });
+      expectLegacyEvent({
+        requestId: "req_legacy_product_pending_remove",
+        operation: "remove_recipe_from_cookbook",
+        status: 503,
+        authMode: "bearer",
+        errorCode: "product_activation_pending",
+      });
+      expect(captureException).not.toHaveBeenCalled();
+    } finally {
+      await db.$executeRawUnsafe('DROP TRIGGER IF EXISTS "SavedRecipe_cutover_block_membership_delete"');
+    }
+  });
+
   it("returns structured REST errors", async () => {
     const badJson = await action(routeArgs(new UndiciRequest("http://localhost/api/tokens", {
       method: "POST",

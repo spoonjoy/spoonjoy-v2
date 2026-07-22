@@ -1,0 +1,13 @@
+
+> spoonjoy-v2@1.0.0 verify:clean:typecheck /Users/arimendelow/Projects/spoonjoy-v2-native-search-telemetry
+> node scripts/run-with-warning-policy.mjs -- pnpm run typecheck
+
+
+> spoonjoy-v2@1.0.0 typecheck /Users/arimendelow/Projects/spoonjoy-v2-native-search-telemetry
+> pnpm run api:playground:generate && react-router typegen && tsc
+
+
+> spoonjoy-v2@1.0.0 api:playground:generate /Users/arimendelow/Projects/spoonjoy-v2-native-search-telemetry
+> tsx scripts/generate-api-playground.ts
+
+Generated app/lib/generated/api-v1-playground.ts

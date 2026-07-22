@@ -1216,6 +1216,34 @@ function assertBootstrapProbe(
   }
 }
 
+async function waitForBootstrapProbe(
+  deps: Pick<
+    RunProductionCanaryReleaseDeps,
+    "readBootstrapProbe" | "sleep" | "verificationAttempts"
+  >,
+  baseUrl: string,
+  expectedVersionId: string,
+): Promise<void> {
+  const attempts = requireVerificationAttempts(deps.verificationAttempts);
+  const probe = deps.readBootstrapProbe ?? readBootstrapProbe;
+
+  for (let observation = 0; observation < 2; observation += 1) {
+    let observationVerified = false;
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        assertBootstrapProbe(await probe(baseUrl, expectedVersionId), expectedVersionId);
+        observationVerified = true;
+        break;
+      } catch (error) {
+        lastError = error;
+      }
+      if (attempt < attempts) await deps.sleep(VERIFICATION_DELAY_MS);
+    }
+    if (!observationVerified) throw lastError;
+  }
+}
+
 export function selectUploadedVersion(
   beforePayload: string,
   afterPayload: string,
@@ -2180,10 +2208,7 @@ export async function runProductionCanaryRelease(
       if (releaseMode === "atomic-bootstrap") {
         phase = "bootstrap_probe";
         const baseUrl = deps.env?.SPOONJOY_MCP_CANARY_BASE_URL ?? "https://spoonjoy.app";
-        const probe = deps.readBootstrapProbe ?? readBootstrapProbe;
-        for (let observation = 0; observation < 2; observation += 1) {
-          assertBootstrapProbe(await probe(baseUrl, candidateVersionId), candidateVersionId);
-        }
+        await waitForBootstrapProbe(deps, baseUrl, candidateVersionId);
       }
     }
 

@@ -36,6 +36,7 @@ import {
 import {
   normalizeSearchLimit,
   normalizeSearchScope,
+  SEARCH_SCOPES,
   searchSpoonjoy,
   type SearchResult,
   type SearchScope,
@@ -85,9 +86,14 @@ import { DEFAULT_RETRY_AFTER_SECONDS, enforceAuthRateLimit, enforceRateLimit } f
 import { getRequestDb } from "~/lib/route-platform.server";
 import {
   nativeSyncDeletedKind,
-  nativeSyncTombstoneUpsertOperation,
   recordNativeSyncTombstone,
 } from "~/lib/native-sync-invalidation.server";
+import {
+  addRecipeToCookbook,
+  asCompatibleCookbookD1Database,
+  deleteCookbookWithTombstone,
+  removeRecipeFromCookbook,
+} from "~/lib/cookbook-membership-compat.server";
 import {
   API_V1_DISCOVERY_DATA,
   API_V1_ERROR_STATUS,
@@ -95,6 +101,20 @@ import {
   API_V1_SCOPE_REQUIREMENTS,
   type ApiV1ErrorCode,
 } from "~/lib/api-v1-contract.server";
+import {
+  asCompatibleD1Database,
+  coalesceShoppingRecipeIngredients,
+  createCompatibleShoppingListD1Batch,
+  findCompatibleShoppingListItem,
+  mutateCompatibleShoppingListItem,
+  runCompatibleShoppingListBatch,
+  type ShoppingListItemWritePlan,
+} from "~/lib/shopping-list-mutations.server";
+import {
+  isSavedRecipeCutoverPendingError,
+  PRODUCT_ACTIVATION_PENDING_CODE,
+  PRODUCT_ACTIVATION_PENDING_MESSAGE,
+} from "~/lib/saved-recipe-cutover.server";
 import {
   deleteStoredImageWithCapture,
   hasUploadedImageFile,
@@ -195,6 +215,9 @@ type NativeTelemetryEventName =
   | "auth_flow_started"
   | "auth_flow_completed"
   | "auth_flow_failed"
+  | "search_started"
+  | "search_completed"
+  | "search_failed"
   | "settings_refresh_failed"
   | "sync_failed";
 
@@ -206,12 +229,16 @@ const NATIVE_TELEMETRY_EVENTS = new Set<NativeTelemetryEventName>([
   "auth_flow_started",
   "auth_flow_completed",
   "auth_flow_failed",
+  "search_started",
+  "search_completed",
+  "search_failed",
   "settings_refresh_failed",
   "sync_failed",
 ]);
 
 const NATIVE_TELEMETRY_ENVIRONMENTS = new Set(["local", "preview", "production"]);
 const NATIVE_TELEMETRY_PLATFORMS = new Set(["ios", "macos"]);
+const NATIVE_TELEMETRY_SEARCH_SCOPES = new Set<string>(SEARCH_SCOPES);
 
 export class ApiV1Error extends Error {
   code: ApiV1ErrorCode;
@@ -324,8 +351,11 @@ export function apiV1ErrorResponse(requestId: string, error: ApiV1Error): Respon
     body.error.details = error.details;
   }
   const headers = apiV1PrivateHeaders(requestId);
-  if (error.code === "idempotency_in_progress") {
-    headers.set("Retry-After", String(IDEMPOTENCY_RETRY_AFTER_SECONDS));
+  if (
+    error.code === "idempotency_in_progress" ||
+    error.code === PRODUCT_ACTIVATION_PENDING_CODE
+  ) {
+    headers.set("Retry-After", String(retryAfterSecondsFromError(error)));
   }
   if (
     error.code === "method_not_allowed" &&
@@ -3141,6 +3171,16 @@ function isPrismaErrorCode(error: unknown, code: string): boolean {
   );
 }
 
+function productActivationPendingApiV1Error(error: unknown): ApiV1Error | null {
+  return isSavedRecipeCutoverPendingError(error)
+    ? new ApiV1Error(
+      PRODUCT_ACTIVATION_PENDING_CODE,
+      PRODUCT_ACTIVATION_PENDING_MESSAGE,
+      { retryAfterSeconds: 1 },
+    )
+    : null;
+}
+
 async function loadExistingCookbookById(db: ApiV1Db, id: string) {
   const cookbook = await loadCookbookById(db, id);
   if (!cookbook) {
@@ -3241,18 +3281,17 @@ async function handleCookbookDelete(args: ApiV1RouteArgs, requestId: string, pri
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "cookbooks.delete", async (db) => {
     const cookbook = await loadOwnedCookbookById(db, principal, id);
-    const deletedAt = new Date();
-    await db.$transaction([
-      nativeSyncTombstoneUpsertOperation(db, {
+    try {
+      await deleteCookbookWithTombstone({
+        database: db,
+        nativeDatabase: asCompatibleCookbookD1Database(args.context.cloudflare?.env?.DB),
         accountId: principal.id,
-        resourceType: "cookbook",
-        resourceId: cookbook.id,
+        cookbookId: cookbook.id,
         title: cookbook.title,
-        deletedAt,
-        updatedAt: deletedAt,
-      }),
-      db.cookbook.delete({ where: { id } }),
-    ]);
+      });
+    } catch (error) {
+      throw productActivationPendingApiV1Error(error) ?? error;
+    }
     return {
       status: 200,
       data: {
@@ -3286,27 +3325,19 @@ async function handleCookbookRecipeAdd(
       throw new ApiV1Error("not_found", "Recipe not found", { resource: "recipe", recipeId });
     }
 
-    let added = true;
+    let added: boolean;
     try {
-      await db.$transaction(async (tx) => {
-        await tx.recipeInCookbook.create({
-          data: { cookbookId, recipeId, addedById: principal.id },
-        });
-        await tx.cookbook.update({
-          where: { id: cookbookId },
-          data: { updatedAt: new Date() },
-        });
+      added = await addRecipeToCookbook({
+        database: db,
+        nativeDatabase: asCompatibleCookbookD1Database(args.context.cloudflare?.env?.DB),
+        cookbookId,
+        recipeId,
+        userId: principal.id,
       });
     } catch (error) {
-      if (isPrismaErrorCode(error, "P2002")) {
-        added = false;
-        await db.cookbook.update({
-          where: { id: cookbookId },
-          data: { updatedAt: new Date() },
-        });
-      } else {
-        throw error;
-      }
+      const activationError = productActivationPendingApiV1Error(error);
+      if (activationError) throw activationError;
+      throw error;
     }
 
     const cookbook = await loadExistingCookbookById(db, cookbookId);
@@ -3341,22 +3372,22 @@ async function handleCookbookRecipeRemove(
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "cookbooks.recipes.remove", async (db) => {
     await loadOwnedCookbookById(db, principal, cookbookId);
-    const updatedAt = new Date();
-    const result = await db.$transaction(async (tx) => {
-      const deleted = await tx.recipeInCookbook.deleteMany({
-        where: { cookbookId, recipeId },
+    let removed: boolean;
+    try {
+      removed = await removeRecipeFromCookbook({
+        database: db,
+        nativeDatabase: asCompatibleCookbookD1Database(args.context.cloudflare?.env?.DB),
+        cookbookId,
+        recipeId,
       });
-      await tx.cookbook.update({
-        where: { id: cookbookId },
-        data: { updatedAt },
-      });
-      return deleted;
-    });
+    } catch (error) {
+      throw productActivationPendingApiV1Error(error) ?? error;
+    }
     const cookbook = await loadExistingCookbookById(db, cookbookId);
     return {
       status: 200,
       data: {
-        removed: result.count > 0,
+        removed,
         recipeId,
         cookbook: cookbookDetail(cookbook, origin),
         mutation: { clientMutationId, replayed: false },
@@ -4016,48 +4047,46 @@ async function handleShoppingItemCreate(args: ApiV1RouteArgs, requestId: string,
     const list = await loadShoppingListForUser(db, principal.id);
     const ingredientRef = await getOrCreateApiV1IngredientRef(db, name);
     const unit = unitName ? await getOrCreateApiV1Unit(db, unitName) : null;
-    const existing = await db.shoppingListItem.findFirst({
-      where: {
-        shoppingListId: list.id,
-        ingredientRefId: ingredientRef.id,
-        unitId: unit?.id ?? null,
-      },
+    const identity = {
+      shoppingListId: list.id,
+      ingredientRefId: ingredientRef.id,
+      unitId: unit?.id ?? null,
+    };
+    const result = await mutateCompatibleShoppingListItem({
+      database: db,
+      identity,
+      update: async (existing) => db.shoppingListItem.update({
+        where: { id: existing.id },
+        data: {
+          quantity: quantity === null ? existing.quantity : (existing.quantity ?? 0) + quantity,
+          checked: false,
+          checkedAt: null,
+          deletedAt: null,
+          sortIndex: existing.checked || existing.checkedAt || existing.deletedAt
+            ? await nextShoppingSortIndex(db, list.id)
+            : existing.sortIndex,
+          categoryKey: categoryKey ?? existing.categoryKey,
+          iconKey: iconKey ?? existing.iconKey,
+        },
+        include: { unit: true, ingredientRef: true },
+      }),
+      create: async () => db.shoppingListItem.create({
+        data: {
+          ...identity,
+          quantity,
+          sortIndex: await nextShoppingSortIndex(db, list.id),
+          categoryKey,
+          iconKey,
+        },
+        include: { unit: true, ingredientRef: true },
+      }),
     });
-
-    const item = existing
-      ? await db.shoppingListItem.update({
-          where: { id: existing.id },
-          data: {
-            quantity: quantity === null ? existing.quantity : (existing.quantity ?? 0) + quantity,
-            checked: false,
-            checkedAt: null,
-            deletedAt: null,
-            sortIndex: existing.checked || existing.checkedAt || existing.deletedAt
-              ? await nextShoppingSortIndex(db, list.id)
-              : existing.sortIndex,
-            categoryKey: categoryKey ?? existing.categoryKey,
-            iconKey: iconKey ?? existing.iconKey,
-          },
-          include: { unit: true, ingredientRef: true },
-        })
-      : await db.shoppingListItem.create({
-          data: {
-            shoppingListId: list.id,
-            ingredientRefId: ingredientRef.id,
-            unitId: unit?.id ?? null,
-            quantity,
-            sortIndex: await nextShoppingSortIndex(db, list.id),
-            categoryKey,
-            iconKey,
-          },
-          include: { unit: true, ingredientRef: true },
-        });
     return {
-      status: existing ? 200 : 201,
+      status: result.created ? 201 : 200,
       data: {
-        created: !existing,
-        updated: Boolean(existing),
-        item: shoppingItem(item),
+        created: result.created,
+        updated: !result.created,
+        item: shoppingItem(result.item),
         mutation: { clientMutationId, replayed: false },
       },
     };
@@ -4164,91 +4193,156 @@ async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: stri
       throw new ApiV1Error("not_found", "Recipe not found", { resource: "recipe", recipeId });
     }
 
-    const requestedRows = new Map<string, {
-      unitId: string;
-      ingredientRefId: string;
-      ingredientName: string;
-      quantity: number;
-    }>();
-    for (const step of recipe.steps) {
-      for (const ingredient of step.ingredients) {
-        const key = `${ingredient.unitId}:${ingredient.ingredientRefId}`;
-        const requested = requestedRows.get(key);
-        const scaledQuantity = ingredient.quantity * scaleFactor;
-        if (requested) {
-          requested.quantity += scaledQuantity;
-        } else {
-          requestedRows.set(key, {
-            unitId: ingredient.unitId,
+    let requestedRows: ReturnType<typeof coalesceShoppingRecipeIngredients>;
+    try {
+      requestedRows = coalesceShoppingRecipeIngredients(
+        recipe.steps.flatMap((step) => step.ingredients.map((ingredient) => {
+          const affordance = resolveIngredientAffordance(ingredient.ingredientRef.name, null, null);
+          return {
+            stepNum: step.stepNum,
+            ingredientId: ingredient.id,
             ingredientRefId: ingredient.ingredientRefId,
-            ingredientName: ingredient.ingredientRef.name,
-            quantity: scaledQuantity,
-          });
-        }
-      }
+            unitId: ingredient.unitId,
+            quantity: ingredient.quantity,
+            categoryKey: affordance.categoryKey,
+            iconKey: affordance.iconKey,
+          };
+        })),
+        scaleFactor,
+      );
+    } catch {
+      throw new ApiV1Error("internal_error", "Internal error");
     }
+    const nativeD1 = asCompatibleD1Database(apiV1CloudflareFor(args)?.env?.DB);
+    const relationsByIdentity = new Map(
+      recipe.steps.flatMap((step) => step.ingredients).map((ingredient) => [
+        JSON.stringify([ingredient.ingredientRefId, ingredient.unitId]),
+        { unit: ingredient.unit, ingredientRef: ingredient.ingredientRef },
+      ]),
+    );
 
-    const ingredientRefIds = Array.from(new Set(Array.from(requestedRows.values()).map((row) => row.ingredientRefId)));
-    const existingRows = ingredientRefIds.length > 0
-      ? await db.shoppingListItem.findMany({
-          where: {
+    const batch = await runCompatibleShoppingListBatch(db, async () => {
+      const existingRows = [];
+      for (const requested of requestedRows) {
+        existingRows.push(await findCompatibleShoppingListItem(db, {
+          shoppingListId: list.id,
+          ingredientRefId: requested.ingredientRefId,
+          unitId: requested.unitId,
+        }));
+      }
+
+      let nextSortIndexValue = await nextShoppingSortIndex(db, list.id);
+      let created = 0;
+      let updated = 0;
+      const operations: Prisma.PrismaPromise<ShoppingItemRow>[] = [];
+      const writePlans: ShoppingListItemWritePlan[] = [];
+
+      for (const [index, requested] of requestedRows.entries()) {
+        const existing = existingRows[index];
+        if (existing) {
+          const sortIndex = existing.deletedAt || existing.checkedAt || existing.checked
+            ? nextSortIndexValue++
+            : existing.sortIndex;
+          const quantity = (existing.quantity ?? 0) + requested.quantity;
+          const categoryKey = existing.categoryKey ?? requested.categoryKey;
+          const iconKey = existing.iconKey ?? requested.iconKey;
+          operations.push(db.shoppingListItem.update({
+            where: { id: existing.id },
+            data: {
+              quantity,
+              checked: false,
+              checkedAt: null,
+              deletedAt: null,
+              sortIndex,
+              categoryKey,
+              iconKey,
+            },
+            include: { unit: true, ingredientRef: true },
+          }));
+          writePlans.push({
+            mode: "update",
+            id: existing.id,
             shoppingListId: list.id,
-            ingredientRefId: { in: ingredientRefIds },
-          },
-          include: { unit: true, ingredientRef: true },
-        })
-      : [];
-    const existingByKey = new Map(existingRows.map((row) => [`${row.unitId ?? ""}:${row.ingredientRefId}`, row]));
-    let nextSortIndexValue = await nextShoppingSortIndex(db, list.id);
-    let created = 0;
-    let updated = 0;
-    const operations: Prisma.PrismaPromise<ShoppingItemRow>[] = [];
-    for (const requested of requestedRows.values()) {
-      const existing = existingByKey.get(`${requested.unitId}:${requested.ingredientRefId}`);
-      const affordance = resolveIngredientAffordance(requested.ingredientName, null, null);
-      if (existing) {
-        const sortIndex = existing.deletedAt || existing.checkedAt || existing.checked
-          ? nextSortIndexValue++
-          : existing.sortIndex;
-        operations.push(db.shoppingListItem.update({
-          where: { id: existing.id },
-          data: {
-            quantity: (existing.quantity ?? 0) + requested.quantity,
+            ingredientRefId: requested.ingredientRefId,
+            unitId: requested.unitId,
+            quantity,
             checked: false,
             checkedAt: null,
             deletedAt: null,
             sortIndex,
-            categoryKey: existing.categoryKey ?? affordance.categoryKey,
-            iconKey: existing.iconKey ?? affordance.iconKey,
-          },
-          include: { unit: true, ingredientRef: true },
-        }));
-        updated += 1;
-      } else {
-        operations.push(db.shoppingListItem.create({
-          data: {
+            categoryKey,
+            iconKey,
+            updatedAt: new Date(),
+          });
+          updated += 1;
+        } else {
+          const id = crypto.randomUUID();
+          const sortIndex = nextSortIndexValue++;
+          operations.push(db.shoppingListItem.create({
+            data: {
+              id,
+              shoppingListId: list.id,
+              quantity: requested.quantity,
+              unitId: requested.unitId,
+              ingredientRefId: requested.ingredientRefId,
+              sortIndex,
+              categoryKey: requested.categoryKey,
+              iconKey: requested.iconKey,
+            },
+            include: { unit: true, ingredientRef: true },
+          }));
+          writePlans.push({
+            mode: "create",
+            id,
             shoppingListId: list.id,
-            quantity: requested.quantity,
-            unitId: requested.unitId,
             ingredientRefId: requested.ingredientRefId,
-            sortIndex: nextSortIndexValue++,
-            categoryKey: affordance.categoryKey,
-            iconKey: affordance.iconKey,
-          },
-          include: { unit: true, ingredientRef: true },
-        }));
-        created += 1;
+            unitId: requested.unitId,
+            quantity: requested.quantity,
+            checked: false,
+            checkedAt: null,
+            deletedAt: null,
+            sortIndex,
+            categoryKey: requested.categoryKey,
+            iconKey: requested.iconKey,
+            updatedAt: new Date(),
+          });
+          created += 1;
+        }
       }
-    }
-    const changedItems = operations.length > 0 ? await db.$transaction(operations) : [];
+
+      const plannedItems = writePlans.map((plan) => ({
+        id: plan.id,
+        shoppingListId: plan.shoppingListId,
+        ingredientRefId: plan.ingredientRefId,
+        unitId: plan.unitId,
+        quantity: plan.quantity,
+        checked: plan.checked,
+        checkedAt: plan.checkedAt,
+        deletedAt: plan.deletedAt,
+        sortIndex: plan.sortIndex,
+        categoryKey: plan.categoryKey,
+        iconKey: plan.iconKey,
+        updatedAt: plan.updatedAt,
+        ...relationsByIdentity.get(JSON.stringify([
+          plan.ingredientRefId,
+          plan.unitId,
+        ]))!,
+      }));
+
+      return {
+        operations,
+        metadata: { created, updated },
+        native: createCompatibleShoppingListD1Batch(nativeD1, writePlans, plannedItems),
+      };
+    });
 
     return {
       status: 200,
       data: {
         recipe: { id: recipe.id, title: recipe.title },
-        created,
-        updated,
-        items: changedItems.map(shoppingItem),
+        created: batch.metadata.created,
+        updated: batch.metadata.updated,
+        items: batch.items.map(shoppingItem),
         mutation: { clientMutationId, replayed: false },
       },
     };
@@ -6290,6 +6384,10 @@ async function handleNativeTelemetryRequest(args: ApiV1RouteArgs, requestId: str
     "authOAuthStatePresent",
     "authRedirectScheme",
     "authRedirectHost",
+    "searchScope",
+    "searchQueryLength",
+    "searchResultCount",
+    "durationMilliseconds",
   ]);
 
   const nativeEvent = nativeTelemetryEvent(body.event);
@@ -6334,6 +6432,10 @@ async function handleNativeTelemetryRequest(args: ApiV1RouteArgs, requestId: str
     auth_oauth_state_present: optionalNativeTelemetryBoolean(body.authOAuthStatePresent, "authOAuthStatePresent"),
     auth_redirect_scheme: optionalNullableString(body.authRedirectScheme, "authRedirectScheme", 40),
     auth_redirect_host: optionalNullableString(body.authRedirectHost, "authRedirectHost", 160),
+    search_scope: optionalNativeTelemetryEnum(body.searchScope, "searchScope", NATIVE_TELEMETRY_SEARCH_SCOPES),
+    search_query_length: optionalNativeTelemetryInteger(body.searchQueryLength, "searchQueryLength", 0, 100_000),
+    search_result_count: optionalNativeTelemetryInteger(body.searchResultCount, "searchResultCount", 0, 100_000),
+    duration_milliseconds: optionalNativeTelemetryInteger(body.durationMilliseconds, "durationMilliseconds", 0, 86_400_000),
     server_request_id: requestId,
   };
 

@@ -272,6 +272,84 @@ describe("API v1 native telemetry", () => {
     });
   });
 
+  it("captures privacy-safe search lifecycle telemetry without search text", async () => {
+    const samples = [
+      {
+        requestId: "req_native_search_started",
+        body: {
+          event: "search_started",
+          searchScope: "all",
+          searchQueryLength: 0,
+          searchResultCount: null,
+          durationMilliseconds: null,
+        },
+        expected: {
+          native_event: "search_started",
+          search_scope: "all",
+          search_query_length: 0,
+          search_result_count: null,
+          duration_milliseconds: null,
+        },
+      },
+      {
+        requestId: "req_native_search_completed",
+        body: {
+          event: "search_completed",
+          searchScope: "recipes",
+          searchQueryLength: 42,
+          searchResultCount: 7,
+          durationMilliseconds: 1_234,
+        },
+        expected: {
+          native_event: "search_completed",
+          search_scope: "recipes",
+          search_query_length: 42,
+          search_result_count: 7,
+          duration_milliseconds: 1_234,
+        },
+      },
+      {
+        requestId: "req_native_search_failed",
+        body: {
+          event: "search_failed",
+          searchScope: "shopping-list",
+          searchQueryLength: 100_000,
+          searchResultCount: 100_000,
+          durationMilliseconds: 86_400_000,
+        },
+        expected: {
+          native_event: "search_failed",
+          search_scope: "shopping-list",
+          search_query_length: 100_000,
+          search_result_count: 100_000,
+          duration_milliseconds: 86_400_000,
+        },
+      },
+    ] as const;
+
+    for (const sample of samples) {
+      const context = routeArgs(nativeTelemetryRequest(null, sample.requestId, sample.body), "native/telemetry");
+      const response = await action(context.args);
+
+      expect(response.status).toBe(202);
+      expect(context.waitUntil).toHaveBeenCalledWith(expect.any(Promise));
+    }
+
+    expect(nativeTelemetryCaptures()).toHaveLength(3);
+    for (const [index, sample] of samples.entries()) {
+      expect(nativeTelemetryCaptures()[index]).toMatchObject({
+        distinctId: "anonymous_native_app",
+        properties: {
+          ...sample.expected,
+          server_request_id: sample.requestId,
+        },
+      });
+    }
+    const captures = JSON.stringify(nativeTelemetryCaptures());
+    expect(captures).not.toContain("searchQuery");
+    expect(captures).not.toContain("rawQuery");
+  });
+
   it("awaits capture inline when waitUntil is unavailable", async () => {
     const user = await db.user.create({ data: createTestUser() });
     const credential = await createApiCredential(db, user.id, "Native telemetry", {
@@ -329,6 +407,26 @@ describe("API v1 native telemetry", () => {
     expect(response.status).toBe(400);
     expect(nativeTelemetryCaptures()).toHaveLength(0);
     expect(JSON.stringify(vi.mocked(captureEvent).mock.calls)).not.toContain("secret kitchen name");
+  });
+
+  it("rejects every raw search query spelling before analytics capture", async () => {
+    const secretQuery = "family secret saffron phrase";
+    for (const rawField of ["query", "searchQuery", "rawQuery"]) {
+      const response = await action(routeArgs(nativeTelemetryRequest(null, `req_native_search_raw_${rawField}`, {
+        event: "search_failed",
+        searchScope: "all",
+        searchQueryLength: secretQuery.length,
+        [rawField]: secretQuery,
+      }), "native/telemetry").args);
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: "validation_error" },
+      });
+    }
+
+    expect(nativeTelemetryCaptures()).toHaveLength(0);
+    expect(JSON.stringify(vi.mocked(captureEvent).mock.calls)).not.toContain(secretQuery);
   });
 
   it("accepts minimal diagnostics without optional counts or booleans", async () => {
@@ -419,6 +517,60 @@ describe("API v1 native telemetry", () => {
     await expect(invalidPlatform.json()).resolves.toMatchObject({
       error: { code: "validation_error", message: "platform is not supported" },
     });
+    expect(nativeTelemetryCaptures()).toHaveLength(0);
+  });
+
+  it("rejects unsupported search scopes and malformed or out-of-range search metrics", async () => {
+    const invalidBodies: Array<{ field: string; body: Record<string, unknown>; message: string }> = [
+      {
+        field: "searchScope",
+        body: { searchScope: "shopping" },
+        message: "searchScope is not supported",
+      },
+      {
+        field: "searchQueryLength",
+        body: { searchQueryLength: -1 },
+        message: "searchQueryLength must be an integer between 0 and 100000",
+      },
+      {
+        field: "searchQueryLength",
+        body: { searchQueryLength: 100_001 },
+        message: "searchQueryLength must be an integer between 0 and 100000",
+      },
+      {
+        field: "searchResultCount",
+        body: { searchResultCount: 1.5 },
+        message: "searchResultCount must be an integer between 0 and 100000",
+      },
+      {
+        field: "searchResultCount",
+        body: { searchResultCount: "7" },
+        message: "searchResultCount must be an integer between 0 and 100000",
+      },
+      {
+        field: "durationMilliseconds",
+        body: { durationMilliseconds: -1 },
+        message: "durationMilliseconds must be an integer between 0 and 86400000",
+      },
+      {
+        field: "durationMilliseconds",
+        body: { durationMilliseconds: 86_400_001 },
+        message: "durationMilliseconds must be an integer between 0 and 86400000",
+      },
+    ];
+
+    for (const [index, invalid] of invalidBodies.entries()) {
+      const response = await action(routeArgs(nativeTelemetryRequest(null, `req_native_search_invalid_${index}`, {
+        event: "search_failed",
+        ...invalid.body,
+      }), "native/telemetry").args);
+
+      expect(response.status, invalid.field).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: "validation_error", message: invalid.message },
+      });
+    }
+
     expect(nativeTelemetryCaptures()).toHaveLength(0);
   });
 

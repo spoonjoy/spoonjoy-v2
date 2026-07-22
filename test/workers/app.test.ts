@@ -56,6 +56,7 @@ vi.mock("../../app/lib/db.server", () => ({
 
 const worker = (await import("../../workers/app")).default;
 const WORKER_VERSION_ID = "22222222-2222-4222-8222-222222222222";
+const ACCOUNT_DELETE_INTENT_RESOURCE = "urn:spoonjoy:account-delete-intent:v1";
 
 function versionedEnvironment(overrides: Partial<CloudflareEnvironment> = {}): CloudflareEnvironment {
   return {
@@ -79,6 +80,7 @@ function context() {
 function principal(
   source: "session" | "bearer" = "session",
   scopes: string[] = ["kitchen:read", "kitchen:write"],
+  metadata: { credentialId?: string; oauthResource?: string | null } = {},
 ) {
   return {
     id: "user-1",
@@ -86,6 +88,7 @@ function principal(
     username: "cook",
     source,
     scopes,
+    ...metadata,
   };
 }
 
@@ -340,6 +343,7 @@ describe("Cloudflare worker app", () => {
   it.each([
     ["PUT", "/api/cook-sessions/recipe-1"],
     ["GET", "/api/cook-sessions/recipe-1?mode=bad"],
+    ["DELETE", "/api/cook-sessions/"],
     ["GET", "/api/cook-sessions/recipe-1/extra"],
     ["POST", "/api/cook-sessions/recipe-1/pause"],
     ["GET", "/api/cook-sessions-bad"],
@@ -353,6 +357,385 @@ describe("Cloudflare worker app", () => {
     expect(response.status).toBe(404);
     expect(apiMocks.getDb).not.toHaveBeenCalled();
     expect(apiMocks.authenticateApiRequest).not.toHaveBeenCalled();
+  });
+
+  it.each(["?confirm=1", "?"])("rejects owner DELETE query component %s before authentication", async (suffix) => {
+    const namespace = cookSessionNamespace();
+    const response = await worker.fetch(
+      new Request(`https://spoonjoy.app/api/cook-sessions${suffix}`, { method: "DELETE" }),
+      versionedEnvironment({ COOK_SESSIONS: namespace.namespace }),
+      context(),
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "invalid_request",
+        message: "Cook session request is invalid.",
+        retryable: false,
+      },
+    });
+    expect(apiMocks.getDb).not.toHaveBeenCalled();
+    expect(apiMocks.authenticateApiRequest).not.toHaveBeenCalled();
+    expect(namespace.idFromName).not.toHaveBeenCalled();
+    expect(namespace.get).not.toHaveBeenCalled();
+    expect(namespace.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a body on owner DELETE after the complete deletion intent without DO access", async () => {
+    apiMocks.authenticateApiRequest.mockResolvedValueOnce(principal(
+      "bearer",
+      ["account:write"],
+      {
+        credentialId: "account-delete-credential",
+        oauthResource: ACCOUNT_DELETE_INTENT_RESOURCE,
+      },
+    ));
+    const namespace = cookSessionNamespace();
+    const cancelBody = vi.fn();
+    const request = new Request("https://spoonjoy.app/api/cook-sessions", {
+      method: "DELETE",
+      headers: { Origin: "https://spoonjoy.app" },
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("{"));
+          controller.enqueue(new TextEncoder().encode("}"));
+        },
+        cancel: cancelBody,
+      }),
+      duplex: "half",
+    } as RequestInit & { duplex: "half" });
+    const response = await worker.fetch(
+      request,
+      versionedEnvironment({ DB: {} as D1Database, COOK_SESSIONS: namespace.namespace }),
+      context(),
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "invalid_request",
+        message: "Cook session request is invalid.",
+        retryable: false,
+      },
+    });
+    expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(apiMocks.db, request, expect.anything());
+    expect(namespace.idFromName).not.toHaveBeenCalled();
+    expect(namespace.get).not.toHaveBeenCalled();
+    expect(namespace.fetch).not.toHaveBeenCalled();
+    expect(cancelBody).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects an owner DELETE payload when best-effort stream cancellation fails", async () => {
+    apiMocks.authenticateApiRequest.mockResolvedValueOnce(principal(
+      "bearer",
+      ["account:write"],
+      {
+        credentialId: "account-delete-credential",
+        oauthResource: ACCOUNT_DELETE_INTENT_RESOURCE,
+      },
+    ));
+    const namespace = cookSessionNamespace();
+    const request = new Request("https://spoonjoy.app/api/cook-sessions", {
+      method: "DELETE",
+      headers: { Origin: "https://spoonjoy.app" },
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("payload"));
+        },
+        cancel() {
+          throw new Error("cancel failed");
+        },
+      }),
+      duplex: "half",
+    } as RequestInit & { duplex: "half" });
+
+    const response = await worker.fetch(
+      request,
+      versionedEnvironment({ DB: {} as D1Database, COOK_SESSIONS: namespace.namespace }),
+      context(),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "invalid_request" } });
+    expect(namespace.idFromName).not.toHaveBeenCalled();
+    expect(namespace.get).not.toHaveBeenCalled();
+    expect(namespace.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects an owner DELETE when reading its body stream fails", async () => {
+    apiMocks.authenticateApiRequest.mockResolvedValueOnce(principal(
+      "bearer",
+      ["account:write"],
+      {
+        credentialId: "account-delete-credential",
+        oauthResource: ACCOUNT_DELETE_INTENT_RESOURCE,
+      },
+    ));
+    const namespace = cookSessionNamespace();
+    const streamError = new Error("read failed");
+    const request = new Request("https://spoonjoy.app/api/cook-sessions", {
+      method: "DELETE",
+      headers: { Origin: "https://spoonjoy.app" },
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.error(streamError);
+        },
+      }),
+      duplex: "half",
+    } as RequestInit & { duplex: "half" });
+
+    const response = await worker.fetch(
+      request,
+      versionedEnvironment({ DB: {} as D1Database, COOK_SESSIONS: namespace.namespace }),
+      context(),
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "invalid_request",
+        message: "Cook session request is invalid.",
+        retryable: false,
+      },
+    });
+    expect(namespace.idFromName).not.toHaveBeenCalled();
+    expect(namespace.get).not.toHaveBeenCalled();
+    expect(namespace.fetch).not.toHaveBeenCalled();
+  });
+
+  it("accepts an edge-normalized zero-byte owner DELETE stream without DO access", async () => {
+    apiMocks.authenticateApiRequest.mockResolvedValueOnce(principal(
+      "bearer",
+      ["account:write"],
+      {
+        credentialId: "account-delete-credential",
+        oauthResource: ACCOUNT_DELETE_INTENT_RESOURCE,
+      },
+    ));
+    const namespace = cookSessionNamespace();
+    const request = new Request("https://spoonjoy.app/api/cook-sessions", {
+      method: "DELETE",
+      headers: { Origin: "https://spoonjoy.app" },
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(0));
+          controller.close();
+        },
+      }),
+      duplex: "half",
+    } as RequestInit & { duplex: "half" });
+
+    expect(request.body).not.toBeNull();
+    const response = await worker.fetch(
+      request,
+      versionedEnvironment({ DB: {} as D1Database, COOK_SESSIONS: namespace.namespace }),
+      context(),
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBe("1");
+    expect(namespace.idFromName).not.toHaveBeenCalled();
+    expect(namespace.get).not.toHaveBeenCalled();
+    expect(namespace.fetch).not.toHaveBeenCalled();
+  });
+
+  it("reserves exact owner DELETE for a complete bearer deletion-intent principal without Durable Object access", async () => {
+    apiMocks.authenticateApiRequest.mockResolvedValueOnce(principal(
+      "bearer",
+      ["account:write"],
+      {
+        credentialId: "account-delete-credential",
+        oauthResource: ACCOUNT_DELETE_INTENT_RESOURCE,
+      },
+    ));
+    const namespace = cookSessionNamespace();
+    const request = new Request("https://spoonjoy.app/api/cook-sessions", {
+      method: "DELETE",
+      headers: { Origin: "https://spoonjoy.app" },
+    });
+    const env = versionedEnvironment({
+      DB: {} as D1Database,
+      COOK_SESSIONS: namespace.namespace,
+    });
+
+    const response = await worker.fetch(request, env, context());
+
+    expect(namespace.idFromName).not.toHaveBeenCalled();
+    expect(namespace.get).not.toHaveBeenCalled();
+    expect(namespace.fetch).not.toHaveBeenCalled();
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(response.headers.get("Retry-After")).toBe("1");
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "cook_session_protocol_unavailable",
+        message: "Cook session protocol is temporarily unavailable.",
+        retryable: true,
+      },
+    });
+    expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(apiMocks.db, request, env);
+  });
+
+  it.each([
+    ["missing credentials", null, 401, "authentication_required", "Authentication required."],
+    [
+      "a session principal",
+      principal("session", ["account:write"]),
+      403,
+      "insufficient_scope",
+      "This credential does not include the required cook-session scope.",
+    ],
+    [
+      "a bearer principal without a credential id",
+      principal("bearer", ["account:write"], { oauthResource: ACCOUNT_DELETE_INTENT_RESOURCE }),
+      403,
+      "insufficient_scope",
+      "This credential does not include the required cook-session scope.",
+    ],
+    [
+      "a bearer principal without a resource",
+      principal("bearer", ["account:write"], { credentialId: "account-delete-credential" }),
+      403,
+      "insufficient_scope",
+      "This credential does not include the required cook-session scope.",
+    ],
+    [
+      "a bearer principal with the wrong resource",
+      principal("bearer", ["account:write"], {
+        credentialId: "account-delete-credential",
+        oauthResource: `${ACCOUNT_DELETE_INTENT_RESOURCE}:wrong`,
+      }),
+      403,
+      "insufficient_scope",
+      "This credential does not include the required cook-session scope.",
+    ],
+    [
+      "a bearer principal without account write scope",
+      principal("bearer", ["kitchen:write"], {
+        credentialId: "account-delete-credential",
+        oauthResource: ACCOUNT_DELETE_INTENT_RESOURCE,
+      }),
+      403,
+      "insufficient_scope",
+      "This credential does not include the required cook-session scope.",
+    ],
+  ])("rejects owner DELETE for %s before checking Origin", async (
+    _case,
+    authenticated,
+    status,
+    code,
+    message,
+  ) => {
+    apiMocks.authenticateApiRequest.mockResolvedValueOnce(authenticated);
+    const namespace = cookSessionNamespace();
+
+    const response = await worker.fetch(
+      new Request("https://spoonjoy.app/api/cook-sessions", {
+        method: "DELETE",
+        headers: { Origin: "https://attacker.example" },
+      }),
+      versionedEnvironment({ DB: {} as D1Database, COOK_SESSIONS: namespace.namespace }),
+      context(),
+    );
+
+    expect(namespace.idFromName).not.toHaveBeenCalled();
+    expect(namespace.get).not.toHaveBeenCalled();
+    expect(namespace.fetch).not.toHaveBeenCalled();
+    expect(response.status).toBe(status);
+    await expect(response.json()).resolves.toEqual({
+      error: { code, message, retryable: false },
+    });
+  });
+
+  it("checks owner DELETE Origin only after validating the bearer deletion intent", async () => {
+    apiMocks.authenticateApiRequest.mockResolvedValueOnce(principal(
+      "bearer",
+      ["account:write"],
+      {
+        credentialId: "account-delete-credential",
+        oauthResource: ACCOUNT_DELETE_INTENT_RESOURCE,
+      },
+    ));
+
+    const response = await worker.fetch(
+      new Request("https://spoonjoy.app/api/cook-sessions", {
+        method: "DELETE",
+        headers: { Origin: "https://attacker.example" },
+      }),
+      versionedEnvironment({ DB: {} as D1Database }),
+      context(),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "origin_forbidden",
+        message: "Request origin is not allowed.",
+        retryable: false,
+      },
+    });
+  });
+
+  it("fails owner DELETE closed when the public origin is not configured", async () => {
+    apiMocks.authenticateApiRequest.mockResolvedValueOnce(principal(
+      "bearer",
+      ["account:write"],
+      {
+        credentialId: "account-delete-credential",
+        oauthResource: ACCOUNT_DELETE_INTENT_RESOURCE,
+      },
+    ));
+    const namespace = cookSessionNamespace();
+
+    const response = await worker.fetch(
+      new Request("https://spoonjoy.app/api/cook-sessions", {
+        method: "DELETE",
+        headers: { Origin: "https://spoonjoy.app" },
+      }),
+      versionedEnvironment({
+        COOK_SESSIONS: namespace.namespace,
+        SPOONJOY_BASE_URL: undefined,
+      }),
+      context(),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "origin_forbidden" } });
+    expect(namespace.idFromName).not.toHaveBeenCalled();
+    expect(namespace.get).not.toHaveBeenCalled();
+    expect(namespace.fetch).not.toHaveBeenCalled();
+  });
+
+  it("preserves malformed owner DELETE authentication as invalid_request", async () => {
+    apiMocks.authenticateApiRequest.mockRejectedValueOnce(
+      new apiMocks.ApiAuthError("Malformed Authorization header", 400),
+    );
+    const namespace = cookSessionNamespace();
+
+    const response = await worker.fetch(
+      new Request("https://spoonjoy.app/api/cook-sessions", {
+        method: "DELETE",
+        headers: { Authorization: "Basic malformed" },
+      }),
+      versionedEnvironment({ COOK_SESSIONS: namespace.namespace }),
+      context(),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "invalid_request",
+        message: "Authentication request is invalid.",
+        retryable: false,
+      },
+    });
+    expect(namespace.idFromName).not.toHaveBeenCalled();
+    expect(namespace.get).not.toHaveBeenCalled();
+    expect(namespace.fetch).not.toHaveBeenCalled();
   });
 
   it("requires an authenticated cook-session principal", async () => {

@@ -6,6 +6,8 @@ import {
   type ApiV1ErrorCode,
 } from "~/lib/api-v1-contract.server";
 import { OAUTH_ACCESS_TOKEN_TTL_SECONDS } from "~/lib/oauth-server.server";
+import { SEARCH_SCOPES } from "~/lib/search.server";
+import { PRODUCT_ACTIVATION_PENDING_MESSAGE } from "~/lib/saved-recipe-cutover.server";
 
 type JsonSchema = Record<string, unknown>;
 type HttpMethod = typeof API_V1_RESOURCES[number]["methods"][number];
@@ -277,7 +279,7 @@ const schemas = {
     password: { type: "string", minLength: 1, maxLength: 1024, description: "Spoonjoy account password. Native clients must submit it only over HTTPS and must never persist it." },
   }),
   NativeTelemetryRequest: objectSchema(["event"], {
-    event: { type: "string", enum: ["bootstrap_failed", "bootstrap_offline", "app_intent_completed", "app_intent_failed", "auth_flow_started", "auth_flow_completed", "auth_flow_failed", "settings_refresh_failed", "sync_failed"], description: "Constrained native diagnostic event name. Raw error messages and response bodies are not accepted." },
+    event: { type: "string", enum: ["bootstrap_failed", "bootstrap_offline", "app_intent_completed", "app_intent_failed", "auth_flow_started", "auth_flow_completed", "auth_flow_failed", "search_started", "search_completed", "search_failed", "settings_refresh_failed", "sync_failed"], description: "Constrained native diagnostic event name. Raw search text, error messages, and response bodies are not accepted." },
     stage: { type: ["string", "null"], maxLength: 80 },
     environment: { type: ["string", "null"], enum: ["local", "preview", "production", null] },
     platform: { type: ["string", "null"], enum: ["ios", "macos", null] },
@@ -315,6 +317,10 @@ const schemas = {
     authOAuthStatePresent: { type: ["boolean", "null"] },
     authRedirectScheme: { type: ["string", "null"], maxLength: 40 },
     authRedirectHost: { type: ["string", "null"], maxLength: 160 },
+    searchScope: { type: ["string", "null"], enum: [...SEARCH_SCOPES, null], description: "Canonical search scope. This field never contains search text." },
+    searchQueryLength: { type: ["integer", "null"], minimum: 0, maximum: 100000, description: "Search query length only. The raw query is never accepted." },
+    searchResultCount: { type: ["integer", "null"], minimum: 0, maximum: 100000 },
+    durationMilliseconds: { type: ["integer", "null"], minimum: 0, maximum: 86400000 },
   }),
   NativeTelemetryData: objectSchema(["accepted"], {
     accepted: { type: "boolean" },
@@ -1465,11 +1471,11 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   "/api/v1/cookbooks/{id}": {
     GET: { operationId: "getApiV1Cookbook", tags: ["Cookbooks"], summary: "Read one public cookbook", auth: "optional", scopes: ["cookbooks:read"], success: { 200: "CookbookDetailEnvelope" }, errors: ["validation_error", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id] },
     PATCH: { operationId: "patchApiV1Cookbook", tags: ["Cookbooks"], summary: "Rename an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "UpdateCookbookEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "UpdateCookbookRequest" },
-    DELETE: { operationId: "deleteApiV1Cookbook", tags: ["Cookbooks"], summary: "Delete an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteCookbookEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.id), requestBody: "DeleteCookbookRequest", requestBodyRequired: false },
+    DELETE: { operationId: "deleteApiV1Cookbook", tags: ["Cookbooks"], summary: "Delete an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteCookbookEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "product_activation_pending", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.id), requestBody: "DeleteCookbookRequest", requestBodyRequired: false },
   },
   "/api/v1/cookbooks/{id}/recipes/{recipeId}": {
-    POST: { operationId: "postApiV1CookbookRecipe", tags: ["Cookbooks"], summary: "Add a recipe to an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "CookbookRecipeMutationEnvelope", 201: "CookbookRecipeMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.recipeId], requestBody: "CookbookRecipeMutationRequest" },
-    DELETE: { operationId: "deleteApiV1CookbookRecipe", tags: ["Cookbooks"], summary: "Remove a recipe from an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "CookbookRecipeRemoveEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.id, pathParameters.recipeId), requestBody: "CookbookRecipeMutationRequest", requestBodyRequired: false },
+    POST: { operationId: "postApiV1CookbookRecipe", tags: ["Cookbooks"], summary: "Add a recipe to an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "CookbookRecipeMutationEnvelope", 201: "CookbookRecipeMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "product_activation_pending", "internal_error"], parameters: [pathParameters.id, pathParameters.recipeId], requestBody: "CookbookRecipeMutationRequest" },
+    DELETE: { operationId: "deleteApiV1CookbookRecipe", tags: ["Cookbooks"], summary: "Remove a recipe from an owned cookbook", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "CookbookRecipeRemoveEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "product_activation_pending", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.id, pathParameters.recipeId), requestBody: "CookbookRecipeMutationRequest", requestBodyRequired: false },
   },
   "/api/v1/me": {
     GET: { operationId: "getApiV1Me", tags: ["Account"], summary: "Read the authenticated account profile", auth: "bearer", scopes: ["account:read"], success: { 200: "AccountProfileEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"] },
@@ -2470,32 +2476,18 @@ const requestExamples: Record<string, unknown> = {
     password: "correct horse battery staple",
   },
   NativeTelemetryRequest: {
-    event: "auth_flow_failed",
-    stage: "auth",
+    event: "search_completed",
+    stage: "search",
     environment: "production",
     platform: "ios",
     appVersion: "1.0",
     buildNumber: "42",
-    route: "kitchen",
-    errorType: "APITransportError",
-    requestId: "req_apple_exchange",
-    status: 401,
-    apiCode: "apple_identity_token_invalid",
-    retry: "do_not_retry",
-    accountBound: false,
-    authProvider: "apple",
-    authPhase: "backend_request_failed",
-    authOutcome: "failed",
-    authDiagnosticCode: "provider_invalid_identity_token",
-    authSessionState: "signed_out",
-    authCredentialPresent: true,
-    authIdentityTokenPresent: true,
-    authRawNoncePresent: true,
-    authEmailPresent: false,
-    authFullNamePresent: false,
-    authOAuthStatePresent: false,
-    authRedirectScheme: "https",
-    authRedirectHost: "spoonjoy.app",
+    route: "search",
+    accountBound: true,
+    searchScope: "all",
+    searchQueryLength: 12,
+    searchResultCount: 4,
+    durationMilliseconds: 184,
   },
   CreateTokenRequest: { name: "Tiny client", scopes: ["recipes:read", "shopping_list:read", "shopping_list:write"] },
   CreateRecipeSpoonRequest: {
@@ -2647,6 +2639,7 @@ const errorMessages: Record<ApiV1ErrorCode, string> = {
   idempotency_in_progress: "Idempotency key is already in progress; retry shortly",
   rate_limited: "Too many requests",
   upstream_error: "Upstream import provider failed",
+  product_activation_pending: PRODUCT_ACTIVATION_PENDING_MESSAGE,
   upstream_timeout: "Upstream import provider timed out",
   internal_error: "Internal error",
 };
@@ -2698,7 +2691,11 @@ function errorExampleFor(code: ApiV1ErrorCode, scopes: readonly string[]) {
       code,
       message: errorMessageFor(code, scopes),
       status: API_V1_ERROR_STATUS[code],
-      ...(code === "idempotency_in_progress" ? { details: { retryAfterSeconds: 2 } } : {}),
+      ...(code === "idempotency_in_progress"
+        ? { details: { retryAfterSeconds: 2 } }
+        : code === "product_activation_pending"
+          ? { details: { retryAfterSeconds: 1 } }
+          : {}),
     },
   };
 }
@@ -2715,7 +2712,14 @@ function errorResponse(codes: ApiV1ErrorCode[], scopes: readonly string[]) {
         description: "Error envelopes are not cacheable.",
         schema: { type: "string", example: "private, no-store" },
       },
-      ...(codes.includes("rate_limited") || codes.includes("idempotency_in_progress")
+      ...(codes.includes("product_activation_pending")
+        ? {
+            "Retry-After": {
+              description: "Seconds to wait before retrying product activation.",
+              schema: { type: "integer", example: 1 },
+            },
+          }
+        : codes.includes("rate_limited") || codes.includes("idempotency_in_progress")
         ? {
             "Retry-After": {
               description: "Seconds to wait before retrying the rate-limited or still-running idempotent request.",

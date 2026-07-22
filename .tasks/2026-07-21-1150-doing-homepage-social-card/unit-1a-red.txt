@@ -1,0 +1,113 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.10 [39m[90m/Users/microsoft/code/worktrees/spoonjoy-v2-homepage-social-card[39m
+
+[33m[39m[32m·[39m[33m[39m[32m·[39m[33m[39m[32m·[39m[33m[39m[32m·[39m[33m[39m[32m·[39m[33m[39m[32m·[39m[33m[39m[32m·[39m[33m[39m[32m·[39m[33m[39m[31mx[39m[33m[39m[31mx[39m[33m[39m[32m·[39m[33m[39m[32m·[39m[33m[39m[32m·[39m[33m[39m[32m·[39m[33m[39m[32m·[39m[33m[39m[32m·[39m[33m[39m[32m·[39m[33m[39m[32m·[39m[33m[39m[32m·[39m[33m[39m[32m·[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m test/routes/index.test.tsx[2m > [22mKitchen Index Route[2m > [22mmeta[2m > [22mreturns kitchen metadata
+[31m[1mAssertionError[22m: expected [ …(2) ] to deeply equal [ …(16) ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[33m@@ -4,63 +4,6 @@[39m
+[2m    },[22m
+[2m    {[22m
+[2m      "content": "The recipe app for the meals you actually cook. Collect recipes, shape them into cookbooks, and keep a personal kitchen.",[22m
+[2m      "name": "description",[22m
+[2m    },[22m
+[32m-   {[39m
+[32m-     "content": "Spoonjoy",[39m
+[32m-     "property": "og:site_name",[39m
+[32m-   },[39m
+[32m-   {[39m
+[32m-     "content": "website",[39m
+[32m-     "property": "og:type",[39m
+[32m-   },[39m
+[32m-   {[39m
+[32m-     "content": "Spoonjoy — The Recipe App",[39m
+[32m-     "property": "og:title",[39m
+[32m-   },[39m
+[32m-   {[39m
+[32m-     "content": "The recipe app for the meals you actually cook. Collect recipes, shape them into cookbooks, and keep a personal kitchen.",[39m
+[32m-     "property": "og:description",[39m
+[32m-   },[39m
+[32m-   {[39m
+[32m-     "content": "https://spoonjoy.app/",[39m
+[32m-     "property": "og:url",[39m
+[32m-   },[39m
+[32m-   {[39m
+[32m-     "content": "https://spoonjoy.app/og/spoonjoy-home.png",[39m
+[32m-     "property": "og:image",[39m
+[32m-   },[39m
+[32m-   {[39m
+[32m-     "content": "1200",[39m
+[32m-     "property": "og:image:width",[39m
+[32m-   },[39m
+[32m-   {[39m
+[32m-     "content": "630",[39m
+[32m-     "property": "og:image:height",[39m
+[32m-   },[39m
+[32m-   {[39m
+[32m-     "content": "image/png",[39m
+[32m-     "property": "og:image:type",[39m
+[32m-   },[39m
+[32m-   {[39m
+[32m-     "content": "summary_large_image",[39m
+[32m-     "name": "twitter:card",[39m
+[32m-   },[39m
+[32m-   {[39m
+[32m-     "content": "Spoonjoy — The Recipe App",[39m
+[32m-     "name": "twitter:title",[39m
+[32m-   },[39m
+[32m-   {[39m
+[32m-     "content": "The recipe app for the meals you actually cook. Collect recipes, shape them into cookbooks, and keep a personal kitchen.",[39m
+[32m-     "name": "twitter:description",[39m
+[32m-   },[39m
+[32m-   {[39m
+[32m-     "content": "https://spoonjoy.app/og/spoonjoy-home.png",[39m
+[32m-     "name": "twitter:image",[39m
+[32m-   },[39m
+[32m-   {[39m
+[32m-     "href": "https://spoonjoy.app/",[39m
+[32m-     "rel": "canonical",[39m
+[32m-     "tagName": "link",[39m
+[32m-   },[39m
+[2m  ][22m
+
+[36m [2m❯[22m test/routes/index.test.tsx:[2m322:22[22m[39m
+    [90m320|[39m       [35mconst[39m result [33m=[39m [34mmeta[39m({} [35mas[39m any)[33m;[39m
+    [90m321|[39m
+    [90m322|[39m       [34mexpect[39m(result)[33m.[39m[34mtoEqual[39m([
+    [90m   |[39m                      [31m^[39m
+    [90m323|[39m         { title[33m:[39m [32m"Spoonjoy — The Recipe App"[39m }[33m,[39m
+    [90m324|[39m         { name: "description", content: "The recipe app for the meals …
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m test/routes/index.test.tsx[2m > [22mKitchen Index Route[2m > [22mmeta[2m > [22mships a real 1200 by 630 PNG for social previews
+[31m[1mAssertionError[22m: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m test/routes/index.test.tsx:[2m346:32[22m[39m
+    [90m344|[39m       [35mconst[39m socialCardExists [33m=[39m [34mexistsSync[39m(socialCardPath)[33m;[39m
+    [90m345|[39m
+    [90m346|[39m       [34mexpect[39m(socialCardExists)[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+    [90m   |[39m                                [31m^[39m
+    [90m347|[39m       [35mif[39m ([33m![39msocialCardExists) [35mreturn[39m[33m;[39m
+    [90m348|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m18 passed[39m[22m[90m (20)[39m
+[2m   Start at [22m 12:11:07
+[2m   Duration [22m 2.51s[2m (transform 209ms, setup 131ms, import 485ms, tests 1.59s, environment 196ms)[22m
+

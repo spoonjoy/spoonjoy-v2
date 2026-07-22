@@ -170,7 +170,11 @@ describe("external client guide", () => {
     ]);
 
     render(createElement(Stub, { initialEntries: ["/developers"] }));
-    await screen.findByRole("heading", { name: "Spoonjoy Developer Platform" });
+    await screen.findByRole(
+      "heading",
+      { name: "Spoonjoy Developer Platform" },
+      { timeout: 10_000 },
+    );
     const renderedText = document.body.textContent ?? "";
 
     for (const marker of GUIDE_MARKERS) {

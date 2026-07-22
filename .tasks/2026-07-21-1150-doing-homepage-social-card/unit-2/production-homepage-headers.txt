@@ -1,0 +1,16 @@
+HTTP/2 200
+date: Wed, 22 Jul 2026 00:05:31 GMT
+content-type: text/html
+cf-ray: a1ee31b4282dd807-SEA
+server: cloudflare
+strict-transport-security: max-age=63072000; includeSubDomains; preload
+content-security-policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'nonce-6Xr5KxJ6nh0nQH2knOaxzQ==' https://us-assets.i.posthog.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com; report-uri /csp-report; report-to csp-endpoint
+cross-origin-opener-policy: same-origin-allow-popups
+permissions-policy: camera=(), microphone=(), geolocation=()
+referrer-policy: strict-origin-when-cross-origin
+reporting-endpoints: csp-endpoint="/csp-report"
+x-content-type-options: nosniff
+x-frame-options: DENY
+x-spoonjoy-worker-version: 43f507c0-c945-48ec-87fa-e429d1f67c67
+content-encoding: gzip
+alt-svc: h3=":443"; ma=86400

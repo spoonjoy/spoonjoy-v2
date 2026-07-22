@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { Request as UndiciRequest } from "undici";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
@@ -320,7 +322,36 @@ describe("Kitchen Index Route", () => {
       expect(result).toEqual([
         { title: "Spoonjoy — The Recipe App" },
         { name: "description", content: "The recipe app for the meals you actually cook. Collect recipes, shape them into cookbooks, and keep a personal kitchen." },
+        { property: "og:site_name", content: "Spoonjoy" },
+        { property: "og:type", content: "website" },
+        { property: "og:title", content: "Spoonjoy — The Recipe App" },
+        { property: "og:description", content: "The recipe app for the meals you actually cook. Collect recipes, shape them into cookbooks, and keep a personal kitchen." },
+        { property: "og:url", content: "https://spoonjoy.app/" },
+        { property: "og:image", content: "https://spoonjoy.app/og/spoonjoy-home.png" },
+        { property: "og:image:width", content: "1200" },
+        { property: "og:image:height", content: "630" },
+        { property: "og:image:type", content: "image/png" },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: "Spoonjoy — The Recipe App" },
+        { name: "twitter:description", content: "The recipe app for the meals you actually cook. Collect recipes, shape them into cookbooks, and keep a personal kitchen." },
+        { name: "twitter:image", content: "https://spoonjoy.app/og/spoonjoy-home.png" },
+        { tagName: "link", rel: "canonical", href: "https://spoonjoy.app/" },
       ]);
+    });
+
+    it("ships a real 1200 by 630 PNG for social previews", () => {
+      const socialCardPath = resolve(process.cwd(), "public/og/spoonjoy-home.png");
+      const socialCardExists = existsSync(socialCardPath);
+
+      expect(socialCardExists).toBe(true);
+      if (!socialCardExists) return;
+
+      const png = readFileSync(socialCardPath);
+
+      expect(Array.from(png.subarray(0, 8))).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+      expect(png.subarray(12, 16).toString("ascii")).toBe("IHDR");
+      expect(png.readUInt32BE(16)).toBe(1200);
+      expect(png.readUInt32BE(20)).toBe(630);
     });
   });
 
