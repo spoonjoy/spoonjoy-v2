@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import * as releaseModule from "../../scripts/deploy-production-canary";
 import { buildContentSecurityPolicy } from "../../app/lib/security-headers.server";
 import {
   createPostHogBuildContract,
@@ -30,9 +31,13 @@ const RELEASE_SHA = "a".repeat(40);
 const TREE_HASH = "b".repeat(40);
 const TOOLING_SHA = "c".repeat(40);
 const PREVIOUS_VERSION = "11111111-1111-4111-8111-111111111111";
+const REVIEWED_COMPATIBILITY_SOURCE_SHA = "40b8f4c85f85f0fa1f807e150013bc7b9675eff5";
+const REVIEWED_COMPATIBILITY_VERSION_ID = "144bd85d-d0c8-41ea-ae3a-9abf0dbcb6aa";
 const CANDIDATE_VERSION = "22222222-2222-4222-8222-222222222222";
+const NEXT_CANDIDATE_VERSION = "33333333-3333-4333-8333-333333333333";
 const PRODUCT_BOUNDARY_SHA = "d".repeat(40);
 const PREVIOUS_PRODUCT_SHA = "e".repeat(40);
+const LATEST_FAILED_REPAIR_SHA = "f".repeat(40);
 const PREVIOUS_DEPLOYMENT = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const STAGED_DEPLOYMENT = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const PROMOTED_DEPLOYMENT = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -60,6 +65,20 @@ const ROLLBACK_RESTORE_COMMAND = `pnpm exec wrangler versions deploy ${PREVIOUS_
 const VALID_CSP_NONCE = "AbCdEfGhIjKlMnOpQrStUg==";
 const VALID_CANDIDATE_CSP = buildContentSecurityPolicy(VALID_CSP_NONCE);
 const CUSTOM_POSTHOG_HOST = "https://analytics.example.com";
+
+type ProductCutoverArtifactWriter = (
+  artifactDir: string,
+  artifact: unknown,
+) => Promise<void>;
+
+function requireProductCutoverArtifactWriter(): ProductCutoverArtifactWriter {
+  const writer = (releaseModule as unknown as {
+    writeProductCutoverArtifactFile?: ProductCutoverArtifactWriter;
+  }).writeProductCutoverArtifactFile;
+  expect(writer, "deploy-production-canary must export writeProductCutoverArtifactFile")
+    .toBeTypeOf("function");
+  return writer as ProductCutoverArtifactWriter;
+}
 
 afterEach(() => {
   vi.useRealTimers();
@@ -207,6 +226,223 @@ function postHogArtifactReaderDeps(host = CUSTOM_POSTHOG_HOST) {
     readGeneratedWorkerConfig: async () => productionGeneratedWorkerConfig(host),
     readClientBuildMetadata: async () => productionBuildMetadata(host),
     readClientBundleSources: async () => productionBundleSources(host),
+  };
+}
+
+function productCutoverEvidence() {
+  const triggerInventory = [
+    "SavedRecipe_cutover_block_membership_delete",
+    "SavedRecipe_cutover_block_membership_insert",
+  ];
+  const sourceRecord = (
+    sourceSha: string,
+    versionId: string | null,
+    releaseMode: "atomic-bootstrap" | "atomic-product-activation",
+    baseSourceSha: string,
+  ) => ({
+    sourceSha,
+    treeSha: TREE_HASH,
+    workerBundleSha256: "1".repeat(64),
+    durableObjectBundleSha256: "2".repeat(64),
+    versionId,
+    releaseMode,
+    baseSourceSha,
+  });
+  return {
+    schemaVersion: 1,
+    environment: "production",
+    transition: "initial",
+    phase: "verified",
+    status: "succeeded",
+    activeBefore: sourceRecord(
+      REVIEWED_COMPATIBILITY_SOURCE_SHA,
+      REVIEWED_COMPATIBILITY_VERSION_ID,
+      "atomic-bootstrap",
+      "0".repeat(40),
+    ),
+    target: sourceRecord(
+      RELEASE_SHA,
+      CANDIDATE_VERSION,
+      "atomic-product-activation",
+      "3".repeat(40),
+    ),
+    predecessor: {
+      relationship: "exact",
+      canonicalSourceSha: REVIEWED_COMPATIBILITY_SOURCE_SHA,
+      canonicalTreeSha: TREE_HASH,
+      canonicalWorkerBundleSha256: "1".repeat(64),
+      canonicalDurableObjectBundleSha256: "2".repeat(64),
+      lineageParentSourceSha: REVIEWED_COMPATIBILITY_SOURCE_SHA,
+      runtimeFloorSourceSha: null,
+      originalFailedRestorationSourceSha: null,
+    },
+    protocolBoundarySha: PRODUCT_BOUNDARY_SHA,
+    compatibilitySourceSha: REVIEWED_COMPATIBILITY_SOURCE_SHA,
+    migration: {
+      name: "0025_clem_feedback_product.sql",
+      sha256: "151009d5410997365ec56c249a50c75b7aeecadd0841b677f1b0bd7a9ab2c6e6",
+      recoveryBookmarkId: "00000085-0000024c-00004c6d-8e61117bf38d7adb71b934ebbf891683",
+      applyState: "applied",
+      triggerInventory,
+    },
+    deployment: {
+      deploymentId: PROMOTED_DEPLOYMENT,
+      versionId: CANDIDATE_VERSION,
+      sourceSha: RELEASE_SHA,
+      trafficPercent: 100,
+    },
+    unlock: {
+      inventoryBefore: triggerInventory,
+      statementsSha256: "066fa3193e478418d7805c49e4053b8e1ffd5f87e96124bfa33ce6297950e51b",
+      applyState: "applied",
+      inventoryAfter: [],
+    },
+    failure: null,
+  } as const;
+}
+
+type RepairCutoverTransition =
+  | "same-target-reconcile"
+  | "forward-repair"
+  | "post-restoration-product-repair";
+
+function productCutoverEvidenceForTransition(transition: RepairCutoverTransition) {
+  const initial = productCutoverEvidence();
+  if (transition === "same-target-reconcile") {
+    return {
+      ...initial,
+      transition,
+      activeBefore: { ...initial.target },
+      predecessor: {
+        ...initial.predecessor,
+        canonicalSourceSha: RELEASE_SHA,
+        lineageParentSourceSha: initial.target.baseSourceSha,
+      },
+      migration: {
+        ...initial.migration,
+        recoveryBookmarkId: null,
+        applyState: "already_applied" as const,
+        triggerInventory: [],
+      },
+      unlock: {
+        ...initial.unlock,
+        inventoryBefore: [],
+        applyState: "already_absent" as const,
+      },
+    };
+  }
+
+  const forwardRepair = {
+    ...initial,
+    transition: "forward-repair" as const,
+    activeBefore: {
+      ...initial.activeBefore,
+      sourceSha: PREVIOUS_PRODUCT_SHA,
+      versionId: PREVIOUS_VERSION,
+      releaseMode: "atomic-product-activation" as const,
+    },
+    target: {
+      ...initial.target,
+      baseSourceSha: PREVIOUS_PRODUCT_SHA,
+    },
+    predecessor: {
+      ...initial.predecessor,
+      canonicalSourceSha: PREVIOUS_PRODUCT_SHA,
+      lineageParentSourceSha: PREVIOUS_PRODUCT_SHA,
+    },
+    migration: {
+      ...initial.migration,
+      recoveryBookmarkId: null,
+      applyState: "already_applied" as const,
+      triggerInventory: [],
+    },
+    unlock: {
+      ...initial.unlock,
+      inventoryBefore: [],
+      applyState: "already_absent" as const,
+    },
+  };
+  if (transition === "forward-repair") return forwardRepair;
+
+  return {
+    ...forwardRepair,
+    transition,
+    target: {
+      ...forwardRepair.target,
+      baseSourceSha: TOOLING_SHA,
+    },
+    predecessor: {
+      ...forwardRepair.predecessor,
+      lineageParentSourceSha: TOOLING_SHA,
+      runtimeFloorSourceSha: PREVIOUS_PRODUCT_SHA,
+      originalFailedRestorationSourceSha: TOOLING_SHA,
+    },
+  };
+}
+
+function failedProductCutoverPrecheckEvidence(transition: RepairCutoverTransition) {
+  const value = productCutoverEvidenceForTransition(transition);
+  return {
+    ...value,
+    phase: "precheck" as const,
+    status: "failed" as const,
+    target: { ...value.target, versionId: null },
+    migration: {
+      ...value.migration,
+      recoveryBookmarkId: null,
+      applyState: "not_started" as const,
+      triggerInventory: null,
+    },
+    deployment: {
+      deploymentId: null,
+      versionId: null,
+      sourceSha: value.target.sourceSha,
+      trafficPercent: null,
+    },
+    unlock: {
+      ...value.unlock,
+      inventoryBefore: null,
+      applyState: "not_started" as const,
+      inventoryAfter: null,
+    },
+    failure: {
+      phase: "precheck" as const,
+      classification: "precondition_mismatch" as const,
+    },
+  };
+}
+
+function productCutoverAdapterSpies(runCommand: ReleaseCommandRunner) {
+  return {
+    runCommand,
+    loadPredecessorBinding: vi.fn(async () => productCutoverEvidence().predecessor),
+    loadPostRestorationChainState: vi.fn(async () => ({
+      runtimeFloorSourceSha: PREVIOUS_PRODUCT_SHA,
+      originalFailedRestorationSourceSha: TOOLING_SHA,
+      latestFailedRepairArtifact: null,
+    })),
+    loadPostRestorationApproval: vi.fn(async () => ({ approved: true })),
+    loadForwardRepairSkewReceipt: vi.fn(async () => ({ approved: true })),
+    loadExecutedSkewReceipt: vi.fn(async () => ({ evidenceMode: "executed" })),
+    readPreflight: vi.fn(async () => ({
+      duplicateSavedRecipePairs: 0,
+      invalidSavedRecipeBackfillRows: 0,
+      cookStateTables: [],
+    })),
+    readPendingMigrationNames: vi.fn(async () => []),
+    createRecoveryBookmark: vi.fn(async () => (
+      "00000085-0000024c-00004c6d-8e61117bf38d7adb71b934ebbf891683"
+    )),
+    applyMigration: vi.fn(async () => undefined),
+    readTriggerInventory: vi.fn(async () => []),
+    resolveTargetVersion: vi.fn(async () => CANDIDATE_VERSION),
+    observeDeployment: vi.fn(async () => productCutoverEvidence().deployment),
+    deployTarget: vi.fn(async () => productCutoverEvidence().deployment),
+    verifyCanonicalHealth: vi.fn(async () => true),
+    applyUnlock: vi.fn(async () => undefined),
+    readQaActiveSource: vi.fn(async () => productCutoverEvidence().target),
+    recordQaBinding: vi.fn(async () => undefined),
+    writeEvidence: vi.fn(async () => undefined),
   };
 }
 
@@ -5741,6 +5977,117 @@ describe("release artifact and CLI boundary", () => {
     }
   });
 
+  it("preserves validated product cutover evidence in production-release.json", async () => {
+    const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-product-release-artifact-"));
+    const cutover = productCutoverEvidence();
+    const releaseArtifact = {
+      status: "promoted",
+      sourceSha: RELEASE_SHA,
+      releaseMode: "atomic-product-activation",
+      deploymentStrategy: "atomic",
+      phase: "complete",
+      treeHash: TREE_HASH,
+      reviewedMigrations: ["0025_clem_feedback_product.sql"],
+      migrationApply: "succeeded",
+      databaseRollbackSupported: false,
+      previousVersionId: REVIEWED_COMPATIBILITY_VERSION_ID,
+      candidateVersionId: CANDIDATE_VERSION,
+      cutover,
+    } as ReleaseArtifact & { cutover: typeof cutover };
+    try {
+      await writeReleaseArtifactFile(artifactDir, releaseArtifact);
+      await expect(readFile(path.join(artifactDir, "production-release.json"), "utf8"))
+        .resolves.toBe(`${JSON.stringify(releaseArtifact, null, 2)}\n`);
+
+      const invalid = structuredClone(releaseArtifact);
+      invalid.cutover.unlock.inventoryAfter = ["SavedRecipe_cutover_block_membership_delete"];
+      await expect(writeReleaseArtifactFile(artifactDir, invalid))
+        .rejects.toThrow("cutover artifact");
+      await expect(readFile(path.join(artifactDir, "production-release.json"), "utf8"))
+        .resolves.toBe(`${JSON.stringify(releaseArtifact, null, 2)}\n`);
+
+      const outerMismatches = [
+        ["source", (value: typeof releaseArtifact) => { value.sourceSha = PREVIOUS_PRODUCT_SHA; }],
+        ["candidate version", (value: typeof releaseArtifact) => {
+          value.candidateVersionId = PREVIOUS_VERSION;
+        }],
+        ["previous version", (value: typeof releaseArtifact) => {
+          value.previousVersionId = PREVIOUS_VERSION;
+        }],
+        ["tree", (value: typeof releaseArtifact) => { value.treeHash = TOOLING_SHA; }],
+        ["release mode", (value: typeof releaseArtifact) => {
+          value.releaseMode = "atomic-bootstrap";
+        }],
+        ["reviewed migration", (value: typeof releaseArtifact) => {
+          value.reviewedMigrations = ["0024_add_release_marker.sql"];
+        }],
+        ["migration result", (value: typeof releaseArtifact) => {
+          value.migrationApply = "not_needed";
+        }],
+      ] as const;
+      for (const [label, mutate] of outerMismatches) {
+        const inconsistent = structuredClone(releaseArtifact);
+        mutate(inconsistent);
+        await expect(writeReleaseArtifactFile(artifactDir, inconsistent), label)
+          .rejects.toThrow("cutover artifact");
+        await expect(readFile(path.join(artifactDir, "production-release.json"), "utf8"))
+          .resolves.toBe(`${JSON.stringify(releaseArtifact, null, 2)}\n`);
+      }
+
+      const forgedCompatibility = structuredClone(releaseArtifact);
+      forgedCompatibility.previousVersionId = PREVIOUS_VERSION;
+      forgedCompatibility.cutover.compatibilitySourceSha = PREVIOUS_PRODUCT_SHA;
+      forgedCompatibility.cutover.activeBefore.sourceSha = PREVIOUS_PRODUCT_SHA;
+      forgedCompatibility.cutover.activeBefore.versionId = PREVIOUS_VERSION;
+      forgedCompatibility.cutover.predecessor.canonicalSourceSha = PREVIOUS_PRODUCT_SHA;
+      forgedCompatibility.cutover.predecessor.lineageParentSourceSha = PREVIOUS_PRODUCT_SHA;
+      await expect(writeReleaseArtifactFile(artifactDir, forgedCompatibility))
+        .rejects.toThrow("cutover artifact");
+      await expect(readFile(path.join(artifactDir, "production-release.json"), "utf8"))
+        .resolves.toBe(`${JSON.stringify(releaseArtifact, null, 2)}\n`);
+
+      const forgedCompatibilityVersion = structuredClone(releaseArtifact);
+      forgedCompatibilityVersion.previousVersionId = PREVIOUS_VERSION;
+      forgedCompatibilityVersion.cutover.activeBefore.versionId = PREVIOUS_VERSION;
+      await expect(writeReleaseArtifactFile(artifactDir, forgedCompatibilityVersion))
+        .rejects.toThrow("cutover artifact");
+      await expect(readFile(path.join(artifactDir, "production-release.json"), "utf8"))
+        .resolves.toBe(`${JSON.stringify(releaseArtifact, null, 2)}\n`);
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    "same-target-reconcile",
+    "forward-repair",
+    "post-restoration-product-repair",
+  ] as const)("persists validated %s evidence through the real release writer", async (transition) => {
+    const artifactDir = await mkdtemp(path.join(os.tmpdir(), `spoonjoy-${transition}-writer-`));
+    const cutover = productCutoverEvidenceForTransition(transition);
+    const releaseArtifact = {
+      status: "promoted",
+      sourceSha: RELEASE_SHA,
+      releaseMode: "atomic-product-activation",
+      deploymentStrategy: "atomic",
+      phase: "complete",
+      treeHash: TREE_HASH,
+      reviewedMigrations: [],
+      migrationApply: "not_needed",
+      databaseRollbackSupported: false,
+      previousVersionId: cutover.activeBefore.versionId,
+      candidateVersionId: cutover.target.versionId,
+      cutover,
+    } as ReleaseArtifact & { cutover: typeof cutover };
+    try {
+      await writeReleaseArtifactFile(artifactDir, releaseArtifact);
+      await expect(readFile(path.join(artifactDir, "production-release.json"), "utf8"))
+        .resolves.toBe(`${JSON.stringify(releaseArtifact, null, 2)}\n`);
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects failure text that sanitizes to an empty artifact field", async () => {
     const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-empty-failure-"));
     try {
@@ -8300,5 +8647,704 @@ describe("release artifact and CLI boundary", () => {
         }
       },
     );
+  });
+});
+
+describe("reviewed product cutover integration", () => {
+  it("routes exact migration 0025 through the production runner and retains cutover evidence", async () => {
+    const sql = await readFile(path.resolve("migrations", "0025_clem_feedback_product.sql"), "utf8");
+    const pending = JSON.stringify([{ Name: "0025_clem_feedback_product.sql" }]);
+    const events: string[] = [];
+    const d1Sql: string[] = [];
+    const activeDeployment = deploymentPayload(
+      REVIEWED_COMPATIBILITY_VERSION_ID,
+      "2026-07-20T00:00:00Z",
+      PREVIOUS_DEPLOYMENT,
+    );
+    const runCommand = successfulRunner({
+      "git show HEAD:migrations/0025_clem_feedback_product.sql": sql,
+      "pnpm exec wrangler d1 migrations list DB --remote": [
+        pending,
+        pending,
+        "No migrations to apply!",
+      ],
+      "pnpm exec wrangler d1 time-travel info DB --remote --json": JSON.stringify({
+        bookmark: "00000085-0000024c-00004c6d-8e61117bf38d7adb71b934ebbf891683",
+      }),
+      "pnpm exec wrangler deployments list --json": [activeDeployment, activeDeployment],
+      "pnpm exec wrangler versions list --json": [
+        JSON.stringify([
+          workerVersion(
+            REVIEWED_COMPATIBILITY_VERSION_ID,
+            REVIEWED_COMPATIBILITY_SOURCE_SHA,
+            "2026-07-20T00:00:00Z",
+          ),
+        ]),
+        JSON.stringify([
+          workerVersion(
+            REVIEWED_COMPATIBILITY_VERSION_ID,
+            REVIEWED_COMPATIBILITY_SOURCE_SHA,
+            "2026-07-20T00:00:00Z",
+          ),
+          workerVersion(CANDIDATE_VERSION, RELEASE_SHA, "2026-07-21T00:00:00Z", 2),
+        ]),
+      ],
+      [`pnpm exec wrangler deploy --tag ${RELEASE_SHA} --message Spoonjoy atomic-product-activation ${RELEASE_SHA}`]: "",
+    }, events);
+    let unlocked = false;
+    const d1Fetch = vi.fn<typeof fetch>(async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as { sql: string };
+      d1Sql.push(body.sql);
+      let results: Record<string, unknown>[] = [];
+      if (body.sql.includes("DROP TRIGGER IF EXISTS")) {
+        events.push("d1:unlock");
+        unlocked = true;
+      } else if (body.sql.includes("INSERT INTO d1_migrations")) {
+        events.push("d1:migration");
+      } else if (
+        body.sql.includes("sqlite_master") &&
+        body.sql.includes("SavedRecipe_cutover_block_membership")
+      ) {
+        events.push(`d1:trigger-read:${unlocked ? "open" : "closed"}`);
+        results = unlocked ? [] : [
+          { name: "SavedRecipe_cutover_block_membership_delete" },
+          { name: "SavedRecipe_cutover_block_membership_insert" },
+        ];
+      } else if (body.sql.includes("duplicateSavedRecipePairs")) {
+        events.push("d1:preflight");
+        results = [{
+          duplicateSavedRecipePairs: 0,
+          invalidSavedRecipeBackfillRows: 0,
+          cookStateTableCount: 0,
+        }];
+      }
+      return Response.json({
+        success: true,
+        errors: [],
+        messages: [],
+        result: [{ success: true, results, meta: {} }],
+      });
+    });
+    const qaActiveSource = {
+      ...productCutoverEvidence().target,
+      sourceSha: "f".repeat(40),
+    };
+    const readQaActiveSource = vi.fn(async () => qaActiveSource);
+    const recordQaBinding = vi.fn(async () => undefined);
+    const deps = {
+      ...atomicReleaseDeps(runCommand, "atomic-product-activation"),
+      d1Fetch,
+      readQaActiveSource,
+      recordQaBinding,
+    };
+
+    const result = await runProductionCanaryRelease(deps);
+
+    expect(result).toMatchObject({
+      status: "promoted",
+      sourceSha: RELEASE_SHA,
+      previousVersionId: REVIEWED_COMPATIBILITY_VERSION_ID,
+      candidateVersionId: CANDIDATE_VERSION,
+      cutover: {
+        schemaVersion: 1,
+        environment: "production",
+        transition: "initial",
+        phase: "verified",
+        status: "succeeded",
+        compatibilitySourceSha: REVIEWED_COMPATIBILITY_SOURCE_SHA,
+        migration: {
+          name: "0025_clem_feedback_product.sql",
+          sha256: "151009d5410997365ec56c249a50c75b7aeecadd0841b677f1b0bd7a9ab2c6e6",
+        },
+        deployment: {
+          versionId: CANDIDATE_VERSION,
+          sourceSha: RELEASE_SHA,
+          trafficPercent: 100,
+        },
+        unlock: { inventoryAfter: [] },
+      },
+    });
+    expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(result);
+    expect(recordedCommands(runCommand)).toContain(
+      "pnpm exec wrangler d1 time-travel info DB --remote --json",
+    );
+    const migrationBatch = d1Sql.find((statement) => statement.includes("INSERT INTO d1_migrations"));
+    expect(migrationBatch).toContain(sql);
+    expect(migrationBatch).toMatch(
+      /INSERT INTO d1_migrations \(name\)\s*values \('0025_clem_feedback_product\.sql'\);/,
+    );
+    const preflight = d1Sql.find((statement) => statement.includes("duplicateSavedRecipePairs"));
+    expect(preflight).toContain("invalidSavedRecipeBackfillRows");
+    expect(preflight).toContain("cookStateTableCount");
+    expect(preflight).toContain("CookSession");
+    const unlock = d1Sql.find((statement) => statement.includes("DROP TRIGGER IF EXISTS"));
+    expect(unlock).toBe([
+      "DROP TRIGGER IF EXISTS SavedRecipe_cutover_block_membership_insert;",
+      "DROP TRIGGER IF EXISTS SavedRecipe_cutover_block_membership_delete;",
+    ].join("\n"));
+    expect(events.filter((event) => event.startsWith("d1:trigger-read:"))).toEqual([
+      "d1:trigger-read:closed",
+      "d1:trigger-read:open",
+    ]);
+
+    const eventIndex = (event: string) => {
+      const index = events.indexOf(event);
+      expect(index, `missing ordered event ${event}`).toBeGreaterThanOrEqual(0);
+      return index;
+    };
+    expect(eventIndex("d1:preflight")).toBeLessThan(eventIndex(
+      "command:pnpm exec wrangler d1 time-travel info DB --remote --json",
+    ));
+    expect(eventIndex("command:pnpm exec wrangler d1 time-travel info DB --remote --json"))
+      .toBeLessThan(eventIndex("d1:migration"));
+    expect(eventIndex("d1:migration")).toBeLessThan(eventIndex("d1:trigger-read:closed"));
+    expect(eventIndex(
+      `command:pnpm exec wrangler deploy --tag ${RELEASE_SHA} --message Spoonjoy atomic-product-activation ${RELEASE_SHA}`,
+    )).toBeLessThan(eventIndex("d1:unlock"));
+    expect(eventIndex("d1:unlock")).toBeLessThan(eventIndex("d1:trigger-read:open"));
+    expect(readQaActiveSource).toHaveBeenCalledTimes(1);
+    expect(recordQaBinding).toHaveBeenCalledExactlyOnceWith(qaActiveSource, {
+      relationship: "same-build-alias",
+      canonicalSourceSha: RELEASE_SHA,
+      canonicalTreeSha: TREE_HASH,
+      canonicalWorkerBundleSha256: "1".repeat(64),
+      canonicalDurableObjectBundleSha256: "2".repeat(64),
+      lineageParentSourceSha: RELEASE_SHA,
+      runtimeFloorSourceSha: null,
+      originalFailedRestorationSourceSha: null,
+    });
+  });
+
+  it.each([
+    "same-target-reconcile",
+    "forward-repair",
+    "post-restoration-product-repair",
+  ] as const)("routes %s through the full production entrypoint", async (transition) => {
+    const sql = await readFile(path.resolve("migrations", "0025_clem_feedback_product.sql"), "utf8");
+    const cutover = productCutoverEvidenceForTransition(transition);
+    const attempt = {
+      environment: "production" as const,
+      transition,
+      activeBefore: cutover.activeBefore,
+      target: transition === "same-target-reconcile"
+        ? cutover.target
+        : { ...cutover.target, versionId: null },
+      predecessor: cutover.predecessor,
+      protocolBoundarySha: cutover.protocolBoundarySha,
+      compatibilitySourceSha: cutover.compatibilitySourceSha,
+      compatibilityVersionId: REVIEWED_COMPATIBILITY_VERSION_ID,
+      migrationName: cutover.migration.name,
+      migrationSha256: cutover.migration.sha256,
+      migrationSql: sql,
+    };
+    const currentVersionId = cutover.activeBefore.versionId;
+    const activeDeployment = deploymentPayload(currentVersionId);
+    const activeVersions = JSON.stringify([
+      workerVersion(currentVersionId, cutover.activeBefore.sourceSha),
+    ]);
+    const deployCommand =
+      `pnpm exec wrangler deploy --tag ${RELEASE_SHA} --message Spoonjoy atomic-product-activation ${RELEASE_SHA}`;
+    const runCommand = successfulRunner({
+      "pnpm exec wrangler d1 migrations list DB --remote": "No migrations to apply!",
+      "pnpm exec wrangler deployments list --json": activeDeployment,
+      "pnpm exec wrangler versions list --json": activeVersions,
+      [deployCommand]: "",
+    });
+    const cutoverAdapters = productCutoverAdapterSpies(runCommand);
+    const resolveProductCutoverAttempt = vi.fn(async () => attempt);
+    const runProductCutover = vi.fn(async (actualAttempt: unknown, effects: unknown) => {
+      expect(actualAttempt).toEqual(attempt);
+      const wiredEffects = effects as Record<string, unknown>;
+      for (const [name, adapter] of Object.entries(cutoverAdapters)) {
+        expect(wiredEffects[name], `cutover adapter ${name}`).toBe(adapter);
+      }
+      expect(wiredEffects.commandEnv).toEqual(expect.objectContaining({ PATH: "/test/bin" }));
+      expect(wiredEffects.commandEnv).not.toEqual(expect.objectContaining({
+        CLOUDFLARE_WORKERS_API_TOKEN: "workers-secret",
+      }));
+      return cutover;
+    });
+    const deps = {
+      ...atomicReleaseDeps(runCommand, "atomic-product-activation"),
+      ...cutoverAdapters,
+      resolveProductCutoverAttempt,
+      runProductCutover,
+    };
+
+    const result = await runProductionCanaryRelease(deps);
+
+    expect(resolveProductCutoverAttempt).toHaveBeenCalledTimes(1);
+    expect(runProductCutover).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      status: "promoted",
+      sourceSha: RELEASE_SHA,
+      releaseMode: "atomic-product-activation",
+      deploymentStrategy: "atomic",
+      phase: "complete",
+      treeHash: TREE_HASH,
+      reviewedMigrations: [],
+      migrationApply: "not_needed",
+      databaseRollbackSupported: false,
+      previousVersionId: currentVersionId,
+      candidateVersionId: cutover.target.versionId,
+      cutover,
+    });
+    expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(result);
+    expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([]);
+    for (const name of ["applyMigration", "deployTarget", "applyUnlock", "recordQaBinding"] as const) {
+      expect(cutoverAdapters[name], `outer runner must not call ${name}`).not.toHaveBeenCalled();
+    }
+  });
+
+  it("routes a resolver-free byte-identical ordinary repair through executed receipt reuse", async () => {
+    const sql = await readFile(path.resolve("migrations", "0025_clem_feedback_product.sql"), "utf8");
+    const cutover = productCutoverEvidenceForTransition("forward-repair");
+    const expectedAttempt = {
+      environment: "production" as const,
+      transition: "forward-repair" as const,
+      activeBefore: cutover.activeBefore,
+      target: { ...cutover.target, versionId: null },
+      predecessor: cutover.predecessor,
+      protocolBoundarySha: cutover.protocolBoundarySha,
+      compatibilitySourceSha: cutover.compatibilitySourceSha,
+      compatibilityVersionId: REVIEWED_COMPATIBILITY_VERSION_ID,
+      migrationName: cutover.migration.name,
+      migrationSha256: cutover.migration.sha256,
+      migrationSql: sql,
+    };
+    const activeDeployment = deploymentPayload(PREVIOUS_VERSION);
+    const activeVersions = JSON.stringify([
+      workerVersion(PREVIOUS_VERSION, PREVIOUS_PRODUCT_SHA),
+    ]);
+    const runCommand = successfulRunner({
+      "git show HEAD:migrations/0025_clem_feedback_product.sql": sql,
+      "pnpm exec wrangler d1 migrations list DB --remote": "No migrations to apply!",
+      "pnpm exec wrangler deployments list --json": activeDeployment,
+      "pnpm exec wrangler versions list --json": activeVersions,
+    });
+    const cutoverAdapters = productCutoverAdapterSpies(runCommand);
+    cutoverAdapters.loadPredecessorBinding.mockResolvedValue(cutover.predecessor);
+    const readProductCutoverSourceRecord = vi.fn(async (
+      environment: "production",
+      sourceSha: string,
+      versionId: string | null,
+    ) => {
+      expect(environment).toBe("production");
+      if (sourceSha === PREVIOUS_PRODUCT_SHA && versionId === PREVIOUS_VERSION) {
+        return cutover.activeBefore;
+      }
+      if (sourceSha === RELEASE_SHA && versionId === null) {
+        return expectedAttempt.target;
+      }
+      throw new Error(`unexpected source-record lookup ${sourceSha}:${versionId}`);
+    });
+    const executedReceiptSha256 = "a".repeat(64);
+    const runProductCutover = vi.fn(async (actualAttempt: unknown, effects: unknown) => {
+      expect(actualAttempt).toEqual(expectedAttempt);
+      await (effects as {
+        loadExecutedSkewReceipt: (receiptSha256: string) => Promise<unknown>;
+      }).loadExecutedSkewReceipt(executedReceiptSha256);
+      return cutover;
+    });
+    const deps = {
+      ...atomicReleaseDeps(runCommand, "atomic-product-activation"),
+      ...cutoverAdapters,
+      readProductCutoverSourceRecord,
+      runProductCutover,
+    };
+
+    const result = await runProductionCanaryRelease(deps);
+
+    expect(readProductCutoverSourceRecord).toHaveBeenCalledWith(
+      "production",
+      PREVIOUS_PRODUCT_SHA,
+      PREVIOUS_VERSION,
+    );
+    expect(runProductCutover).toHaveBeenCalledTimes(1);
+    expect(cutoverAdapters.loadExecutedSkewReceipt)
+      .toHaveBeenCalledExactlyOnceWith(executedReceiptSha256);
+    expect(result).toMatchObject({
+      status: "promoted",
+      previousVersionId: PREVIOUS_VERSION,
+      candidateVersionId: CANDIDATE_VERSION,
+      cutover: {
+        transition: "forward-repair",
+        activeBefore: {
+          sourceSha: PREVIOUS_PRODUCT_SHA,
+          versionId: PREVIOUS_VERSION,
+        },
+      },
+    });
+    expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([]);
+  });
+
+  it.each([
+    "same-target-reconcile",
+    "post-restoration-product-repair",
+  ] as const)("selects resolver-free %s routing from observed and durable state", async (transition) => {
+    const sql = await readFile(path.resolve("migrations", "0025_clem_feedback_product.sql"), "utf8");
+    const cutover = productCutoverEvidenceForTransition(transition);
+    const expectedAttempt = {
+      environment: "production" as const,
+      transition,
+      activeBefore: cutover.activeBefore,
+      target: transition === "same-target-reconcile"
+        ? cutover.target
+        : { ...cutover.target, versionId: null },
+      predecessor: cutover.predecessor,
+      protocolBoundarySha: cutover.protocolBoundarySha,
+      compatibilitySourceSha: cutover.compatibilitySourceSha,
+      compatibilityVersionId: REVIEWED_COMPATIBILITY_VERSION_ID,
+      migrationName: cutover.migration.name,
+      migrationSha256: cutover.migration.sha256,
+      migrationSql: sql,
+    };
+    const currentVersionId = cutover.activeBefore.versionId;
+    const currentSourceSha = cutover.activeBefore.sourceSha;
+    const runCommand = successfulRunner({
+      "git show HEAD:migrations/0025_clem_feedback_product.sql": sql,
+      "pnpm exec wrangler d1 migrations list DB --remote": "No migrations to apply!",
+      "pnpm exec wrangler deployments list --json": deploymentPayload(currentVersionId),
+      "pnpm exec wrangler versions list --json": JSON.stringify([
+        workerVersion(currentVersionId, currentSourceSha),
+      ]),
+    });
+    const cutoverAdapters = productCutoverAdapterSpies(runCommand);
+    cutoverAdapters.loadPredecessorBinding.mockResolvedValue(cutover.predecessor);
+    const readProductCutoverSourceRecord = vi.fn(async (
+      environment: "production",
+      sourceSha: string,
+      versionId: string | null,
+    ) => {
+      expect(environment).toBe("production");
+      if (sourceSha === currentSourceSha && versionId === currentVersionId) {
+        return cutover.activeBefore;
+      }
+      if (sourceSha === RELEASE_SHA && versionId === null) {
+        return expectedAttempt.target;
+      }
+      throw new Error(`unexpected source-record lookup ${sourceSha}:${versionId}`);
+    });
+    const runProductCutover = vi.fn(async (actualAttempt: unknown) => {
+      expect(actualAttempt).toEqual(expectedAttempt);
+      return cutover;
+    });
+    const deps = {
+      ...atomicReleaseDeps(runCommand, "atomic-product-activation"),
+      ...cutoverAdapters,
+      readProductCutoverSourceRecord,
+      runProductCutover,
+    };
+
+    const result = await runProductionCanaryRelease(deps);
+
+    expect(readProductCutoverSourceRecord).toHaveBeenCalledWith(
+      "production",
+      currentSourceSha,
+      currentVersionId,
+    );
+    expect(runProductCutover).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      status: "promoted",
+      previousVersionId: currentVersionId,
+      candidateVersionId: cutover.target.versionId,
+      cutover: { transition },
+    });
+    expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([]);
+  });
+
+  it("routes a resolver-free later post-restoration repair from the durable latest failed head", async () => {
+    const sql = await readFile(path.resolve("migrations", "0025_clem_feedback_product.sql"), "utf8");
+    const cutover = structuredClone(
+      productCutoverEvidenceForTransition("post-restoration-product-repair"),
+    );
+    cutover.target.baseSourceSha = LATEST_FAILED_REPAIR_SHA;
+    cutover.predecessor.lineageParentSourceSha = LATEST_FAILED_REPAIR_SHA;
+    const latestFailedRepairArtifact = failedProductCutoverPrecheckEvidence(
+      "post-restoration-product-repair",
+    );
+    latestFailedRepairArtifact.target.sourceSha = LATEST_FAILED_REPAIR_SHA;
+    latestFailedRepairArtifact.deployment.sourceSha = LATEST_FAILED_REPAIR_SHA;
+    const expectedAttempt = {
+      environment: "production" as const,
+      transition: "post-restoration-product-repair" as const,
+      activeBefore: cutover.activeBefore,
+      target: { ...cutover.target, versionId: null },
+      predecessor: cutover.predecessor,
+      protocolBoundarySha: cutover.protocolBoundarySha,
+      compatibilitySourceSha: cutover.compatibilitySourceSha,
+      compatibilityVersionId: REVIEWED_COMPATIBILITY_VERSION_ID,
+      migrationName: cutover.migration.name,
+      migrationSha256: cutover.migration.sha256,
+      migrationSql: sql,
+    };
+    const runCommand = successfulRunner({
+      "git show HEAD:migrations/0025_clem_feedback_product.sql": sql,
+      "pnpm exec wrangler d1 migrations list DB --remote": "No migrations to apply!",
+      "pnpm exec wrangler deployments list --json": deploymentPayload(PREVIOUS_VERSION),
+      "pnpm exec wrangler versions list --json": JSON.stringify([
+        workerVersion(PREVIOUS_VERSION, PREVIOUS_PRODUCT_SHA),
+      ]),
+    });
+    const cutoverAdapters = {
+      ...productCutoverAdapterSpies(runCommand),
+      loadPostRestorationChainState: vi.fn(async () => ({
+        runtimeFloorSourceSha: PREVIOUS_PRODUCT_SHA,
+        originalFailedRestorationSourceSha: TOOLING_SHA,
+        latestFailedRepairArtifact,
+      })),
+    };
+    cutoverAdapters.loadPredecessorBinding.mockResolvedValue(cutover.predecessor);
+    const readProductCutoverSourceRecord = vi.fn(async (
+      _environment: "production",
+      sourceSha: string,
+      versionId: string | null,
+    ) => {
+      if (sourceSha === PREVIOUS_PRODUCT_SHA && versionId === PREVIOUS_VERSION) {
+        return cutover.activeBefore;
+      }
+      if (sourceSha === RELEASE_SHA && versionId === null) return expectedAttempt.target;
+      throw new Error(`unexpected source-record lookup ${sourceSha}:${versionId}`);
+    });
+    const runProductCutover = vi.fn(async (actualAttempt: unknown) => {
+      expect(actualAttempt).toEqual(expectedAttempt);
+      return cutover;
+    });
+    const deps = {
+      ...atomicReleaseDeps(runCommand, "atomic-product-activation"),
+      ...cutoverAdapters,
+      readProductCutoverSourceRecord,
+      runProductCutover,
+    };
+
+    const result = await runProductionCanaryRelease(deps);
+
+    expect(cutoverAdapters.loadPostRestorationChainState)
+      .toHaveBeenCalledExactlyOnceWith("production");
+    expect(runProductCutover).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      cutover: {
+        transition: "post-restoration-product-repair",
+        target: { baseSourceSha: LATEST_FAILED_REPAIR_SHA },
+        predecessor: { lineageParentSourceSha: LATEST_FAILED_REPAIR_SHA },
+      },
+    });
+    expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([]);
+  });
+
+  it("routes a resolver-free active post-restoration health failure to ordinary forward repair", async () => {
+    const sql = await readFile(path.resolve("migrations", "0025_clem_feedback_product.sql"), "utf8");
+    const latestFailedRepairArtifact = structuredClone(
+      productCutoverEvidenceForTransition("post-restoration-product-repair"),
+    );
+    latestFailedRepairArtifact.phase = "deployment";
+    latestFailedRepairArtifact.status = "failed";
+    latestFailedRepairArtifact.failure = {
+      phase: "deployment",
+      classification: "canonical_health_failed",
+    };
+    const activeSource = {
+      ...latestFailedRepairArtifact.target,
+      versionId: CANDIDATE_VERSION,
+    };
+    latestFailedRepairArtifact.target = activeSource;
+    latestFailedRepairArtifact.deployment = {
+      deploymentId: PROMOTED_DEPLOYMENT,
+      versionId: CANDIDATE_VERSION,
+      sourceSha: activeSource.sourceSha,
+      trafficPercent: 100,
+    };
+    latestFailedRepairArtifact.unlock = {
+      ...latestFailedRepairArtifact.unlock,
+      inventoryBefore: null,
+      applyState: "not_started",
+      inventoryAfter: null,
+    };
+
+    const cutover = structuredClone(productCutoverEvidenceForTransition("forward-repair"));
+    cutover.activeBefore = activeSource;
+    cutover.target = {
+      ...cutover.target,
+      sourceSha: LATEST_FAILED_REPAIR_SHA,
+      versionId: NEXT_CANDIDATE_VERSION,
+      baseSourceSha: activeSource.sourceSha,
+    };
+    cutover.predecessor = {
+      relationship: "exact",
+      canonicalSourceSha: activeSource.sourceSha,
+      canonicalTreeSha: activeSource.treeSha,
+      canonicalWorkerBundleSha256: activeSource.workerBundleSha256,
+      canonicalDurableObjectBundleSha256: activeSource.durableObjectBundleSha256,
+      lineageParentSourceSha: activeSource.sourceSha,
+      runtimeFloorSourceSha: null,
+      originalFailedRestorationSourceSha: null,
+    };
+    cutover.deployment = {
+      deploymentId: PROMOTED_DEPLOYMENT,
+      versionId: NEXT_CANDIDATE_VERSION,
+      sourceSha: LATEST_FAILED_REPAIR_SHA,
+      trafficPercent: 100,
+    };
+    const expectedAttempt = {
+      environment: "production" as const,
+      transition: "forward-repair" as const,
+      activeBefore: activeSource,
+      target: { ...cutover.target, versionId: null },
+      predecessor: cutover.predecessor,
+      protocolBoundarySha: cutover.protocolBoundarySha,
+      compatibilitySourceSha: cutover.compatibilitySourceSha,
+      compatibilityVersionId: REVIEWED_COMPATIBILITY_VERSION_ID,
+      migrationName: cutover.migration.name,
+      migrationSha256: cutover.migration.sha256,
+      migrationSql: sql,
+    };
+    const runCommand = successfulRunner({
+      "git rev-parse HEAD": LATEST_FAILED_REPAIR_SHA,
+      "git show HEAD:migrations/0025_clem_feedback_product.sql": sql,
+      "pnpm exec wrangler d1 migrations list DB --remote": "No migrations to apply!",
+      "pnpm exec wrangler deployments list --json": deploymentPayload(CANDIDATE_VERSION),
+      "pnpm exec wrangler versions list --json": JSON.stringify([
+        workerVersion(CANDIDATE_VERSION, activeSource.sourceSha),
+      ]),
+    });
+    const cutoverAdapters = {
+      ...productCutoverAdapterSpies(runCommand),
+      loadPredecessorBinding: vi.fn(async () => cutover.predecessor),
+      loadPostRestorationChainState: vi.fn(async () => ({
+        runtimeFloorSourceSha: PREVIOUS_PRODUCT_SHA,
+        originalFailedRestorationSourceSha: TOOLING_SHA,
+        latestFailedRepairArtifact,
+      })),
+    };
+    const readProductCutoverSourceRecord = vi.fn(async (
+      _environment: "production",
+      sourceSha: string,
+      versionId: string | null,
+    ) => {
+      if (sourceSha === activeSource.sourceSha && versionId === CANDIDATE_VERSION) {
+        return activeSource;
+      }
+      if (sourceSha === LATEST_FAILED_REPAIR_SHA && versionId === null) {
+        return expectedAttempt.target;
+      }
+      throw new Error(`unexpected source-record lookup ${sourceSha}:${versionId}`);
+    });
+    const runProductCutover = vi.fn(async (actualAttempt: unknown) => {
+      expect(actualAttempt).toEqual(expectedAttempt);
+      return cutover;
+    });
+    const deps = {
+      ...atomicReleaseDeps(runCommand, "atomic-product-activation"),
+      releaseSha: LATEST_FAILED_REPAIR_SHA,
+      ...cutoverAdapters,
+      readProductCutoverSourceRecord,
+      runProductCutover,
+    };
+
+    const result = await runProductionCanaryRelease(deps);
+
+    expect(cutoverAdapters.loadPostRestorationChainState)
+      .toHaveBeenCalledExactlyOnceWith("production");
+    expect(runProductCutover).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      sourceSha: LATEST_FAILED_REPAIR_SHA,
+      previousVersionId: CANDIDATE_VERSION,
+      candidateVersionId: NEXT_CANDIDATE_VERSION,
+      cutover: {
+        transition: "forward-repair",
+        activeBefore: { sourceSha: activeSource.sourceSha },
+        target: { baseSourceSha: activeSource.sourceSha },
+        predecessor: { lineageParentSourceSha: activeSource.sourceSha },
+      },
+    });
+    expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([]);
+  });
+
+  it("preserves durable terminal cutover evidence when the delegated cutover fails", async () => {
+    const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-cutover-entry-failure-"));
+    const sql = await readFile(path.resolve("migrations", "0025_clem_feedback_product.sql"), "utf8");
+    const terminalCutover = failedProductCutoverPrecheckEvidence("forward-repair");
+    const pendingCutover = {
+      ...terminalCutover,
+      status: "pending" as const,
+      failure: null,
+    };
+    const attempt = {
+      environment: "production" as const,
+      transition: "forward-repair" as const,
+      activeBefore: terminalCutover.activeBefore,
+      target: terminalCutover.target,
+      predecessor: terminalCutover.predecessor,
+      protocolBoundarySha: terminalCutover.protocolBoundarySha,
+      compatibilitySourceSha: terminalCutover.compatibilitySourceSha,
+      compatibilityVersionId: REVIEWED_COMPATIBILITY_VERSION_ID,
+      migrationName: terminalCutover.migration.name,
+      migrationSha256: terminalCutover.migration.sha256,
+      migrationSql: sql,
+    };
+    const runCommand = successfulRunner({
+      "pnpm exec wrangler d1 migrations list DB --remote": "No migrations to apply!",
+      [`pnpm exec wrangler deploy --tag ${RELEASE_SHA} --message Spoonjoy atomic-product-activation ${RELEASE_SHA}`]: "",
+    });
+    const cutoverAdapters = {
+      ...productCutoverAdapterSpies(runCommand),
+      writeEvidence: vi.fn(async (evidence: unknown) => (
+        requireProductCutoverArtifactWriter()(artifactDir, evidence)
+      )),
+    };
+    const resolveProductCutoverAttempt = vi.fn(async () => attempt);
+    const runProductCutover = vi.fn(async (_attempt: unknown, effects: unknown) => {
+      await (effects as { writeEvidence: (value: unknown) => Promise<void> })
+        .writeEvidence(pendingCutover);
+      await (effects as { writeEvidence: (value: unknown) => Promise<void> })
+        .writeEvidence(terminalCutover);
+      throw new Error("product cutover failed");
+    });
+    const seed = {
+      status: "promoted",
+      sourceSha: RELEASE_SHA,
+      releaseMode: "atomic-product-activation",
+      deploymentStrategy: "atomic",
+      phase: "complete",
+      treeHash: TREE_HASH,
+      reviewedMigrations: [],
+      migrationApply: "not_needed",
+      databaseRollbackSupported: false,
+      previousVersionId: PREVIOUS_VERSION,
+      candidateVersionId: CANDIDATE_VERSION,
+    };
+    const deps = {
+      ...atomicReleaseDeps(runCommand, "atomic-product-activation"),
+      ...cutoverAdapters,
+      artifactDir,
+      resolveProductCutoverAttempt,
+      runProductCutover,
+      writeReleaseArtifact: (artifact: ReleaseArtifact) => (
+        writeReleaseArtifactFile(artifactDir, artifact)
+      ),
+    };
+
+    try {
+      await writeFile(
+        path.join(artifactDir, "production-release.json"),
+        `${JSON.stringify(seed, null, 2)}\n`,
+        "utf8",
+      );
+
+      await expect(runProductionCanaryRelease(deps)).rejects.toThrow("product cutover failed");
+
+      const persisted = JSON.parse(
+        await readFile(path.join(artifactDir, "production-release.json"), "utf8"),
+      ) as Record<string, unknown>;
+      expect(persisted.cutover).toEqual(terminalCutover);
+      expect(cutoverAdapters.writeEvidence).toHaveBeenNthCalledWith(1, pendingCutover);
+      expect(cutoverAdapters.writeEvidence).toHaveBeenNthCalledWith(2, terminalCutover);
+      expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([]);
+      for (const name of ["applyMigration", "deployTarget", "applyUnlock", "recordQaBinding"] as const) {
+        expect(cutoverAdapters[name], `outer runner must not call ${name}`).not.toHaveBeenCalled();
+      }
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true });
+    }
   });
 });
