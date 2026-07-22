@@ -85,6 +85,9 @@ async function requestHasBodyBytes(request: Request): Promise<boolean> {
         return true;
       }
     }
+  } catch {
+    // An unreadable stream cannot satisfy the required empty-body contract.
+    return true;
   } finally {
     reader.releaseLock();
   }
