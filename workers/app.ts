@@ -64,6 +64,21 @@ function configuredCookSessionOrigin(env: CloudflareEnvironment): string | null 
   }
 }
 
+async function requestHasBodyBytes(request: Request): Promise<boolean> {
+  if (!request.body) return false;
+
+  const reader = request.body.getReader();
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) return false;
+      if (chunk.value.byteLength > 0) return true;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 function classifyCookRoute(request: Request, url: URL): CookRouteRequirement | null {
   if (url.search) return null;
   if (request.method === "DELETE" && url.pathname === COOK_SESSION_PREFIX) {
@@ -139,7 +154,7 @@ async function handleCookSessionRequest(
     ) {
       return cookErrorResponse(403, "origin_forbidden", "Request origin is not allowed.");
     }
-    if (requirement.ownerDelete && request.body !== null) {
+    if (requirement.ownerDelete && await requestHasBodyBytes(request)) {
       return cookErrorResponse(400, "invalid_request", "Cook session request is invalid.");
     }
     return cookProtocolUnavailableResponse();
