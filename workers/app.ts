@@ -77,7 +77,11 @@ async function requestHasBodyBytes(request: Request): Promise<boolean> {
       const chunk = await reader.read();
       if (chunk.done) return false;
       if (chunk.value.byteLength > 0) {
-        await reader.cancel();
+        try {
+          await reader.cancel();
+        } catch {
+          // Payload validation has already failed; cancellation is cleanup only.
+        }
         return true;
       }
     }
