@@ -612,6 +612,12 @@ jobs:
       'test("sentinel", () => console.error("app error sentinel"));',
     ],
     [
+      "app Prisma warning through console.info",
+      "app",
+      "console.info: prisma:warn app info sentinel",
+      'test("sentinel", () => console.info("prisma:warn app info sentinel"));',
+    ],
+    [
       "app process warning",
       "app",
       "process warning: Warning: process warning sentinel",
@@ -628,6 +634,12 @@ jobs:
       "workers",
       "console.error: Workers error sentinel",
       'test("sentinel", () => console.error("Workers error sentinel"));',
+    ],
+    [
+      "Workers Prisma warning through console.info",
+      "workers",
+      "console.info: prisma:warn Workers info sentinel",
+      'test("sentinel", () => console.info("prisma:warn Workers info sentinel"));',
     ],
     [
       "Workers process warning",
@@ -648,6 +660,22 @@ jobs:
     expect(output).toContain("Unexpected warning/error output");
     expect(output).toContain(expectedDiagnostic);
   }, 15_000);
+
+  it.each(["app", "workers"] as const)(
+    "permits ordinary console.info through the installed %s hook",
+    (lane) => {
+      const result = runVitestSentinel(
+        lane,
+        'test("sentinel", () => console.info("ordinary info sentinel"));',
+      );
+
+      expect(result.status).toBe(0);
+      expect(`${result.stdout}${result.stderr}`).not.toContain(
+        "Unexpected warning/error output",
+      );
+    },
+    15_000,
+  );
 
   it.each(["app", "workers"] as const)(
     "rejects top-level, beforeAll, and afterAll diagnostics in the %s lane",
@@ -707,9 +735,10 @@ jobs:
     const unowned = createWarningCollector();
     unowned.captureConsole("warn", ["warning one"]);
     unowned.captureConsole("error", ["error two"]);
+    unowned.captureConsole("info", ["prisma:warn adapter warning"]);
     unowned.captureProcessWarning(new Error("process three"));
     expect(() => unowned.assertClean()).toThrowError(
-      /console\.warn: warning one[\s\S]*console\.error: error two[\s\S]*process warning: Error: process three/,
+      /console\.warn: warning one[\s\S]*console\.error: error two[\s\S]*console\.info: prisma:warn adapter warning[\s\S]*process warning: Error: process three/,
     );
 
     const owned = createWarningCollector();
@@ -717,11 +746,28 @@ jobs:
     owned.captureConsole("error", ["expected owned output"]);
     owned.expectConsole("error", ["structured output", { requestId: "req_owned", status: 500 }]);
     owned.captureConsole("error", ["structured output", { requestId: "req_owned", status: 500 }]);
+    owned.expectConsoleMatching(
+      "error",
+      "matching owned output",
+      (args) => args[0] === "matching" && args[1] instanceof Error,
+    );
+    expect(
+      owned.captureConsole("error", ["matching", new Error("owned")]),
+    ).toBe(true);
     expect(() => owned.assertClean()).not.toThrow();
 
-    const missing = createWarningCollector();
-    missing.expectConsole("error", ["required output"]);
-    expect(() => missing.assertClean()).toThrowError(/expected console\.error not observed: required output/);
+    const missingExact = createWarningCollector();
+    missingExact.expectConsole("error", ["required output"]);
+    expect(() => missingExact.assertClean()).toThrowError(
+      /expected console\.error not observed: required output/,
+    );
+
+    const missingMatching = createWarningCollector();
+    missingMatching.expectConsoleMatching("warn", "required matching warning", () => false);
+    expect(missingMatching.captureConsole("warn", ["different warning"])).toBe(false);
+    expect(() => missingMatching.assertClean()).toThrowError(
+      /expected console\.warn not observed: required matching warning/,
+    );
 
     const formatting = createWarningCollector();
     const stacklessError = new Error("stackless");
@@ -758,6 +804,44 @@ jobs:
     expect(capture).toHaveBeenNthCalledWith(2, "warn", ["owned"]);
     expect(original).toHaveBeenCalledOnce();
     expect(original).toHaveBeenCalledWith("forwarded", { source: "test" });
+  });
+
+  it("captures Prisma warning labels emitted through console.info without intercepting ordinary info", async () => {
+    const warningPolicy = await vi.importActual<typeof import("../warning-policy")>(
+      "../warning-policy",
+    ) as typeof import("../warning-policy") & {
+      createPrismaWarningInfoWrapper?: (
+        capture: (method: "info", args: unknown[]) => boolean,
+        original: (...args: unknown[]) => void,
+      ) => (...args: unknown[]) => void;
+    };
+    const capture = vi.fn()
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+    const original = vi.fn();
+
+    expect(typeof warningPolicy.createPrismaWarningInfoWrapper).toBe("function");
+    const wrapper = warningPolicy.createPrismaWarningInfoWrapper!(capture, original);
+    wrapper("ordinary test progress");
+    wrapper("\u001b[33mprisma:warn\u001b[39m first adapter warning");
+    wrapper("prisma:warn second adapter warning");
+
+    expect(capture).toHaveBeenNthCalledWith(
+      1,
+      "info",
+      ["\u001b[33mprisma:warn\u001b[39m first adapter warning"],
+    );
+    expect(capture).toHaveBeenNthCalledWith(
+      2,
+      "info",
+      ["prisma:warn second adapter warning"],
+    );
+    expect(original).toHaveBeenCalledTimes(2);
+    expect(original).toHaveBeenNthCalledWith(1, "ordinary test progress");
+    expect(original).toHaveBeenNthCalledWith(
+      2,
+      "\u001b[33mprisma:warn\u001b[39m first adapter warning",
+    );
   });
 
   it("clears captured diagnostics between tests", async () => {
@@ -798,6 +882,11 @@ jobs:
     console.warn("owned global warning", { lane: "app" });
     warningPolicy.expectConsoleError("owned global error");
     console.error("owned global error");
+    warningPolicy.expectConsoleErrorMatching(
+      "owned matching global error",
+      (args) => args[0] === "owned matching global error" && args[1] === 503,
+    );
+    console.error("owned matching global error", 503);
   });
 
   it.each(["app", "workers"] as const)(
@@ -834,7 +923,7 @@ jobs:
     expect(appSetup).not.toContain("message.includes('not wrapped in act(')");
   });
 
-  it("prohibits test-local console warning/error overrides", () => {
+  it("prohibits test-local console diagnostic overrides", () => {
     const offenders = filesBelow("test")
       .filter((path) => /\.(?:ts|tsx)$/.test(path))
       .filter((path) => ![
@@ -843,7 +932,7 @@ jobs:
       ].includes(path))
       .filter((path) => {
         const source = readFileSync(path, "utf8");
-        return /spyOn\(console,\s*["'](?:warn|error)["']\)|console\.(?:warn|error)\s*=/.test(source);
+        return /spyOn\(console,\s*["'](?:warn|error|info)["']\)|console\.(?:warn|error|info)\s*=/.test(source);
       });
 
     expect(offenders).toEqual([]);

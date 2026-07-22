@@ -130,6 +130,15 @@ beforeAll(async () => {
   await db.nativePushDevice.deleteMany({});
   await db.pushSubscription.deleteMany({});
   await db.shoppingListItem.deleteMany({});
+  await db.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "ShoppingListItem_active_identity_key"
+    ON "ShoppingListItem" (
+      "shoppingListId",
+      "ingredientRefId",
+      COALESCE('u:' || "unitId", 'n:')
+    )
+    WHERE "deletedAt" IS NULL
+  `);
   await db.shoppingList.deleteMany({});
   await db.stepOutputUse.deleteMany({});
   await db.ingredient.deleteMany({});

@@ -175,10 +175,11 @@ async function withPost0025ShoppingIdentityIndex<T>(
     return await run();
   } finally {
     await db.shoppingListItem.deleteMany({});
-    await db.$executeRawUnsafe(`DROP INDEX IF EXISTS "${ACTIVE_SHOPPING_IDENTITY_INDEX}"`);
+    await db.$executeRawUnsafe(`DROP INDEX IF EXISTS "${LEGACY_SHOPPING_IDENTITY_INDEX}"`);
     await db.$executeRawUnsafe(`
-      CREATE UNIQUE INDEX IF NOT EXISTS "${LEGACY_SHOPPING_IDENTITY_INDEX}"
-      ON "ShoppingListItem" ("shoppingListId", "unitId", "ingredientRefId")
+      CREATE UNIQUE INDEX IF NOT EXISTS "${ACTIVE_SHOPPING_IDENTITY_INDEX}"
+      ON "ShoppingListItem" ("shoppingListId", "ingredientRefId", COALESCE('u:' || "unitId", 'n:'))
+      WHERE "deletedAt" IS NULL
     `);
   }
 }

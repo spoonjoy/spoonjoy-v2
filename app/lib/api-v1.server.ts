@@ -4068,7 +4068,6 @@ async function handleShoppingItemCreate(args: ApiV1RouteArgs, requestId: string,
           categoryKey: categoryKey ?? existing.categoryKey,
           iconKey: iconKey ?? existing.iconKey,
         },
-        include: { unit: true, ingredientRef: true },
       }),
       create: async () => db.shoppingListItem.create({
         data: {
@@ -4078,15 +4077,15 @@ async function handleShoppingItemCreate(args: ApiV1RouteArgs, requestId: string,
           categoryKey,
           iconKey,
         },
-        include: { unit: true, ingredientRef: true },
       }),
     });
+    const item: ShoppingItemRow = { ...result.item, ingredientRef, unit };
     return {
       status: result.created ? 201 : 200,
       data: {
         created: result.created,
         updated: !result.created,
-        item: shoppingItem(result.item),
+        item: shoppingItem(item),
         mutation: { clientMutationId, replayed: false },
       },
     };

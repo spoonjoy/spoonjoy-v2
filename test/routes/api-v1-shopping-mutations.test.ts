@@ -149,10 +149,11 @@ async function withPost0025ShoppingIdentityIndex<T>(
     return await run();
   } finally {
     await db.shoppingListItem.deleteMany({});
-    await db.$executeRawUnsafe(`DROP INDEX IF EXISTS "${ACTIVE_SHOPPING_IDENTITY_INDEX}"`);
+    await db.$executeRawUnsafe(`DROP INDEX IF EXISTS "${LEGACY_SHOPPING_IDENTITY_INDEX}"`);
     await db.$executeRawUnsafe(`
-      CREATE UNIQUE INDEX IF NOT EXISTS "${LEGACY_SHOPPING_IDENTITY_INDEX}"
-      ON "ShoppingListItem" ("shoppingListId", "unitId", "ingredientRefId")
+      CREATE UNIQUE INDEX IF NOT EXISTS "${ACTIVE_SHOPPING_IDENTITY_INDEX}"
+      ON "ShoppingListItem" ("shoppingListId", "ingredientRefId", COALESCE('u:' || "unitId", 'n:'))
+      WHERE "deletedAt" IS NULL
     `);
   }
 }
@@ -285,6 +286,43 @@ describe("API v1 shopping-list mutations", () => {
       }),
     }) as unknown as Request, "shopping-list/items"));
     expect(sessionAdd.status).toBe(201);
+  });
+
+  it("hydrates a created item without a post-commit relation read and replays it once", async () => {
+    const fixture = await createShoppingMutationFixture(db);
+    const postCommitRead = vi.spyOn(db.shoppingListItem, "findUniqueOrThrow");
+    const body = {
+      clientMutationId: "client-add-no-post-commit-read",
+      name: `No reread eggs ${faker.string.alphanumeric(6)}`,
+      quantity: 2,
+      unit: "Each",
+    };
+    const request = (requestId: string) => routeArgs(
+      mutationRequest("POST", "shopping-list/items", fixture.credential.token, requestId, body),
+      "shopping-list/items",
+    );
+
+    const created = await action(request("req_add_no_post_commit_read"));
+    const createdPayload = await readJson(created);
+    const replay = await action(request("req_add_no_post_commit_read_replay"));
+    const replayPayload = await readJson(replay);
+
+    expect(created.status).toBe(201);
+    expect(createdPayload.data).toMatchObject({
+      created: true,
+      item: { name: body.name.toLowerCase(), quantity: 2, unit: "each" },
+      mutation: { clientMutationId: body.clientMutationId, replayed: false },
+    });
+    expect(replay.status).toBe(201);
+    expect(replayPayload.data).toEqual({
+      ...createdPayload.data,
+      mutation: { clientMutationId: body.clientMutationId, replayed: true },
+    });
+    expect(postCommitRead).not.toHaveBeenCalled();
+    await expect(db.shoppingListItem.findMany({
+      where: { shoppingListId: fixture.list.id },
+      select: { quantity: true },
+    })).resolves.toEqual([{ quantity: 2 }]);
   });
 
   it("accepts DELETE clientMutationId from the JSON body, query string, or header", async () => {

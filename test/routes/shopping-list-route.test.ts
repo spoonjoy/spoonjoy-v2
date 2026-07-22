@@ -9,6 +9,9 @@ import { faker } from "@faker-js/faker";
 
 async function installActiveIdentityIndex() {
   await db.$executeRawUnsafe(
+    'DROP INDEX IF EXISTS "ShoppingListItem_active_identity_key"'
+  );
+  await db.$executeRawUnsafe(
     'DROP INDEX IF EXISTS "ShoppingListItem_shoppingListId_unitId_ingredientRefId_key"'
   );
   await db.$executeRawUnsafe(`
@@ -48,6 +51,7 @@ describe("Shopping List Route", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await cleanupDatabase();
+    await installActiveIdentityIndex();
   });
 
   describe("loader", () => {
@@ -427,6 +431,7 @@ describe("Shopping List Route", () => {
     });
 
     it("compatibility: prefers the earliest active unitless identity by sortIndex and id", async () => {
+      await restoreFullIdentityIndex();
       const shoppingList = await db.shoppingList.create({
         data: { authorId: testUserId },
       });

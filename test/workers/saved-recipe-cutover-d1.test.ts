@@ -8,7 +8,7 @@ import { handleShoppingListAction } from "../../app/lib/shopping-list.server";
 import { getRequestDb } from "../../app/lib/route-platform.server";
 import { mutateCompatibleShoppingListItem } from "../../app/lib/shopping-list-mutations.server";
 import { createUserSessionCookie } from "../../app/lib/session.server";
-import { expectConsoleError } from "../warning-policy";
+import { expectConsoleError, expectConsoleErrorMatching } from "../warning-policy";
 
 interface TestD1Statement {
   bind(...values: unknown[]): TestD1Statement;
@@ -182,7 +182,7 @@ async function expectShoppingIdentityMatrix(
     checked: 0,
     checkedAt: null,
     deletedAt: null,
-    sortIndex: 1,
+    sortIndex: 5,
   });
   expect(await shoppingIdentityMatrixRow("matrix-second-a"), label).toMatchObject({
     id: "matrix-second-a",
@@ -199,19 +199,25 @@ async function expectD1AdapterError<T>(
   expectedMessage: RegExp,
   run: () => Promise<T>,
 ): Promise<T> {
-  const originalError = console.error;
-  const diagnostics: unknown[][] = [];
-  console.error = (...args: unknown[]) => diagnostics.push(args);
-  try {
-    const result = await run();
-    expect(diagnostics).toHaveLength(1);
-    expect(diagnostics[0]?.[0]).toBe("Error in performIO: %O");
-    expect(diagnostics[0]?.[1]).toBeInstanceOf(Error);
-    expect((diagnostics[0]?.[1] as Error).message).toMatch(expectedMessage);
-    return result;
-  } finally {
-    console.error = originalError;
-  }
+  let observedError: Error | undefined;
+  expectConsoleErrorMatching(
+    `Prisma D1 performIO error matching ${expectedMessage}`,
+    (args) => {
+      const error = args[1];
+      if (
+        args[0] !== "Error in performIO: %O" ||
+        !(error instanceof Error) ||
+        !expectedMessage.test(error.message)
+      ) {
+        return false;
+      }
+      observedError = error;
+      return true;
+    },
+  );
+  const result = await run();
+  expect(observedError).toBeInstanceOf(Error);
+  return result;
 }
 
 async function seedAdapterFixture() {

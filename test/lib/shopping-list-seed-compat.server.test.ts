@@ -51,6 +51,9 @@ async function createListFixture(db: PrismaClient, suffix: string) {
 
 async function installActiveIdentityIndex(db: PrismaClient) {
   await db.$executeRawUnsafe(
+    'DROP INDEX IF EXISTS "ShoppingListItem_active_identity_key"',
+  );
+  await db.$executeRawUnsafe(
     'DROP INDEX IF EXISTS "ShoppingListItem_shoppingListId_unitId_ingredientRefId_key"',
   );
   await db.$executeRawUnsafe(`
@@ -77,13 +80,14 @@ async function restoreFullIdentityIndex(db: PrismaClient) {
 }
 
 afterEach(async () => {
-  await restoreFullIdentityIndex(await getLocalDb());
   await cleanupDatabase();
+  await installActiveIdentityIndex(await getLocalDb());
 });
 
 describe("shopping-list seed compatibility provisioner", () => {
   it("prefers the earliest active unitless identity before every tombstone", async () => {
     const db = await getLocalDb();
+    await restoreFullIdentityIndex(db);
     const { shoppingList, ingredientRef } = await createListFixture(
       db,
       "active first",
@@ -319,6 +323,7 @@ describe("shopping-list seed compatibility provisioner", () => {
 
   it("restores a tombstone under the old full unitful identity index", async () => {
     const db = await getLocalDb();
+    await restoreFullIdentityIndex(db);
     const { shoppingList, ingredientRef } = await createListFixture(
       db,
       "full index tombstone",
