@@ -7299,10 +7299,11 @@ describe("release artifact and CLI boundary", () => {
       const runCommand = successfulRunner({
         [atomicDeployCommand("atomic-bootstrap")]: "",
       });
-      vi.stubGlobal("fetch", vi.fn(async () => new Response("{", {
+      const fetchImpl = vi.fn(async () => new Response("{", {
         headers: { "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION },
         status: 200,
-      })));
+      }));
+      vi.stubGlobal("fetch", fetchImpl);
 
       await expect(runProductionReleaseCli({
         ...postHogArtifactReaderDeps(),
@@ -7318,8 +7319,10 @@ describe("release artifact and CLI boundary", () => {
         readPublicWorkerVersion: async () => CANDIDATE_VERSION,
         runCommand,
         sleep: async () => undefined,
+        verificationAttempts: 2,
         writeReleaseArtifact: async () => undefined,
       })).rejects.toThrow("bootstrap probe");
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
       expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([atomicDeployCommand("atomic-bootstrap")]);
     });
 
@@ -7338,7 +7341,7 @@ describe("release artifact and CLI boundary", () => {
       }, {
         headers: { "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION },
       })],
-    ] as const)("rejects either real HTTP observation with the wrong %s", async (
+    ] as const)("retries either real HTTP observation with a transient wrong %s", async (
       _label,
       invalidResponse,
     ) => {
@@ -7353,13 +7356,16 @@ describe("release artifact and CLI boundary", () => {
         if (invalidCall === 1) {
           fetchImpl
             .mockResolvedValueOnce(invalidResponse())
+            .mockResolvedValueOnce(validResponse())
             .mockResolvedValueOnce(validResponse());
         } else {
           fetchImpl
             .mockResolvedValueOnce(validResponse())
-            .mockResolvedValueOnce(invalidResponse());
+            .mockResolvedValueOnce(invalidResponse())
+            .mockResolvedValueOnce(validResponse());
         }
         vi.stubGlobal("fetch", fetchImpl);
+        const sleep = vi.fn(async () => undefined);
 
         await expect(runProductionReleaseCli({
           ...postHogArtifactReaderDeps(),
@@ -7374,10 +7380,12 @@ describe("release artifact and CLI boundary", () => {
           },
           readPublicWorkerVersion: async () => CANDIDATE_VERSION,
           runCommand,
-          sleep: async () => undefined,
+          sleep,
+          verificationAttempts: 2,
           writeReleaseArtifact: async () => undefined,
-        })).rejects.toThrow("bootstrap probe");
-        expect(fetchImpl).toHaveBeenCalledTimes(invalidCall);
+        })).resolves.toMatchObject({ status: "promoted" });
+        expect(fetchImpl).toHaveBeenCalledTimes(3);
+        expect(sleep).toHaveBeenCalledTimes(1);
         expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([atomicDeployCommand("atomic-bootstrap")]);
       }
     });
@@ -7424,7 +7432,7 @@ describe("release artifact and CLI boundary", () => {
         body: { ...validProbeResult.body, unexpected: true },
       }],
       ["malformed body", { ...validProbeResult, body: null }],
-    ])("rejects either bootstrap observation with the wrong %s", async (_label, probeResult) => {
+    ])("retries either bootstrap observation with a transient wrong %s", async (_label, probeResult) => {
       for (const invalidCall of [1, 2]) {
         const runCommand = successfulRunner({
           [atomicDeployCommand("atomic-bootstrap")]: "",
@@ -7433,21 +7441,55 @@ describe("release artifact and CLI boundary", () => {
         if (invalidCall === 1) {
           readBootstrapProbe
             .mockResolvedValueOnce(probeResult)
+            .mockResolvedValueOnce(validProbeResult)
             .mockResolvedValueOnce(validProbeResult);
         } else {
           readBootstrapProbe
             .mockResolvedValueOnce(validProbeResult)
-            .mockResolvedValueOnce(probeResult);
+            .mockResolvedValueOnce(probeResult)
+            .mockResolvedValueOnce(validProbeResult);
         }
         const deps = {
           ...atomicReleaseDeps(runCommand, "atomic-bootstrap"),
           readBootstrapProbe,
+          verificationAttempts: 2,
         };
 
-        await expect(runProductionCanaryRelease(deps)).rejects.toThrow("bootstrap probe");
-        expect(readBootstrapProbe).toHaveBeenCalledTimes(invalidCall);
+        await expect(runProductionCanaryRelease(deps)).resolves.toEqual(
+          atomicSuccessArtifact("atomic-bootstrap"),
+        );
+        expect(readBootstrapProbe).toHaveBeenCalledTimes(3);
+        expect(deps.sleep).toHaveBeenCalledTimes(1);
         expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([atomicDeployCommand("atomic-bootstrap")]);
       }
+    });
+
+    it("fails forward-only when a bootstrap observation never converges", async () => {
+      const runCommand = successfulRunner({
+        [atomicDeployCommand("atomic-bootstrap")]: "",
+      });
+      const readBootstrapProbe = vi.fn(async () => ({
+        ...validProbeResult,
+        workerVersionHeader: PREVIOUS_VERSION,
+      }));
+      const deps = {
+        ...atomicReleaseDeps(runCommand, "atomic-bootstrap"),
+        readBootstrapProbe,
+        verificationAttempts: 2,
+      };
+
+      await expect(runProductionCanaryRelease(deps)).rejects.toThrow("bootstrap probe");
+      expect(readBootstrapProbe).toHaveBeenCalledTimes(2);
+      expect(deps.sleep).toHaveBeenCalledTimes(1);
+      expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(expect.objectContaining({
+        status: "forward_repair_required",
+        phase: "bootstrap_probe",
+        previousVersionId: PREVIOUS_VERSION,
+        candidateVersionId: CANDIDATE_VERSION,
+      }));
+      expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+        atomicDeployCommand("atomic-bootstrap"),
+      ]);
     });
 
     it.each([
