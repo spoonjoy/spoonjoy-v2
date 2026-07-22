@@ -1,0 +1,4 @@
+deploy	Checkout approved source SHA	2026-07-21T23:44:58.2225915Z   ref: 193910eb7c54eb2689b91f4902bac16bd18cc448
+deploy	Checkout approved source SHA	2026-07-21T23:44:58.2242340Z   SOURCE_SHA: 193910eb7c54eb2689b91f4902bac16bd18cc448
+deploy	Record release source	2026-07-21T23:46:29.5129509Z [36;1mprintf 'Source SHA: `%s`\n' "$SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"[0m
+deploy	Record release source	2026-07-21T23:46:29.5197366Z   SOURCE_SHA: 193910eb7c54eb2689b91f4902bac16bd18cc448
