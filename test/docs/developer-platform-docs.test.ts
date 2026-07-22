@@ -13,6 +13,7 @@ function readProjectFile(path: string) {
 
 const apiDocs = readProjectFile("docs/api.md");
 const claudeConnectorDocs = readProjectFile("docs/claude-connector.md");
+const developersSource = readProjectFile("app/routes/developers.tsx");
 const ouroborosMcpDocs = readProjectFile("docs/ouroboros-mcp.md");
 const oauthRoutesSource = readProjectFile("app/lib/oauth-routes.server.ts");
 const oauthServerSource = readProjectFile("app/lib/oauth-server.server.ts");
@@ -88,6 +89,15 @@ describe("developer platform docs drift", () => {
       expect(text).toMatch(/rotat/i);
       expect(text).not.toMatch(/no refresh tokens?/i);
       expect(text).not.toMatch(/no refresh/i);
+    }
+  });
+
+  it("keeps legacy agent import distinct from MCP and first-party UI", () => {
+    for (const text of [apiDocs, developersSource, claudeConnectorDocs]) {
+      expect(text).toContain("import_recipe_from_url");
+      expect(text).toMatch(/legacy agent\/API/i);
+      expect(text).toMatch(/not an MCP tool/i);
+      expect(text).toMatch(/no first-party import UI/i);
     }
   });
 });

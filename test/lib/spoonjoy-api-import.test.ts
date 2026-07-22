@@ -273,6 +273,85 @@ describe("spoonjoy-api import_recipe_from_url", () => {
         expect.anything(),
       );
     });
+
+    it("projects persisted recipes to the exact pre-product byte shape", async () => {
+      const { principal } = await makeChef();
+      const createdAt = new Date("2026-01-02T03:04:05.006Z");
+      const updatedAt = new Date("2026-01-03T03:04:05.006Z");
+      const persistedRecipe = {
+        id: "rid",
+        title: "T",
+        description: "D",
+        servings: "4",
+        chefId: principal.id,
+        deletedAt: null,
+        activeCoverId: null,
+        activeCoverVariant: null,
+        coverMode: "auto",
+        sourceRecipeId: null,
+        sourceUrl: "https://example.com/r",
+        createdAt,
+        updatedAt,
+        chef: { id: principal.id, email: principal.email, username: principal.username },
+        covers: [],
+        steps: [],
+      };
+      vi.spyOn(recipeImport, "importRecipeFromUrl").mockResolvedValue({
+        recipeId: "rid",
+        recipe: {
+          ...persistedRecipe,
+          course: "main",
+          tags: [{ label: "Weeknight" }],
+          futureRecipeField: "must-not-leak",
+        },
+        confidence: "high",
+        source: "json-ld",
+        existingRecipeId: null,
+        coverPending: false,
+      });
+
+      const result = (await callSpoonjoyApiOperation(
+        "import_recipe_from_url",
+        { url: "https://example.com/r" },
+        { db, principal },
+      )) as { recipe: unknown };
+
+      expect(result.recipe).toEqual(persistedRecipe);
+    });
+
+    it("projects dry-run drafts to the exact pre-product byte shape", async () => {
+      const { principal } = await makeChef();
+      const draft = {
+        title: "Draft",
+        description: null,
+        servings: "2",
+        ingredients: ["1 cup flour"],
+        steps: ["Mix."],
+        imageUrl: null,
+        sourceUrl: "https://example.com/r",
+      };
+      vi.spyOn(recipeImport, "importRecipeFromUrl").mockResolvedValue({
+        recipeId: null,
+        recipe: {
+          ...draft,
+          course: "dessert",
+          tags: ["Baking"],
+          futureDraftField: "must-not-leak",
+        },
+        confidence: "high",
+        source: "json-ld",
+        existingRecipeId: null,
+        coverPending: false,
+      });
+
+      const result = (await callSpoonjoyApiOperation(
+        "import_recipe_from_url",
+        { url: "https://example.com/r", dryRun: true },
+        { db, principal },
+      )) as { recipe: unknown };
+
+      expect(result.recipe).toEqual(draft);
+    });
   });
 
   describe("error propagation", () => {
