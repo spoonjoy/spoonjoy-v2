@@ -7492,6 +7492,33 @@ describe("release artifact and CLI boundary", () => {
       ]);
     });
 
+    it("fails forward-only when bootstrap probes reject with undefined", async () => {
+      const runCommand = successfulRunner({
+        [atomicDeployCommand("atomic-bootstrap")]: "",
+      });
+      const readBootstrapProbe = vi.fn(
+        async (): Promise<typeof validProbeResult> => Promise.reject(undefined),
+      );
+      const deps = {
+        ...atomicReleaseDeps(runCommand, "atomic-bootstrap"),
+        readBootstrapProbe,
+        verificationAttempts: 2,
+      };
+
+      await expect(runProductionCanaryRelease(deps)).rejects.toThrow();
+      expect(readBootstrapProbe).toHaveBeenCalledTimes(2);
+      expect(deps.sleep).toHaveBeenCalledTimes(1);
+      expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(expect.objectContaining({
+        status: "forward_repair_required",
+        phase: "bootstrap_probe",
+        previousVersionId: PREVIOUS_VERSION,
+        candidateVersionId: CANDIDATE_VERSION,
+      }));
+      expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+        atomicDeployCommand("atomic-bootstrap"),
+      ]);
+    });
+
     it.each([
       ["atomic-bootstrap", "no SHA-tagged version", [workerVersion(PREVIOUS_VERSION, PREVIOUS_PRODUCT_SHA)]],
       ["atomic-bootstrap", "multiple SHA-tagged versions", [
