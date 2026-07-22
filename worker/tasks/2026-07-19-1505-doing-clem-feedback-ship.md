@@ -231,10 +231,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 
 **Completed**: Commit `bb8e0bb0` adds the exact course/tag/save schema, fail-closed mixed-encoding normalization and distinct backfill, and two membership fences without shopping repair or cook state. All 45 focused and 121 migration tests, warning-gated typecheck/build, and all 8,328 app tests at exact 100% coverage pass; fresh cold data/migration review converged.
 
-### ⬜ Unit 2.2c: Product Schema And SavedRecipe Backfill Migration - Verification
+### ✅ Unit 2.2c: Product Schema And SavedRecipe Backfill Migration - Verification
 **What**: Rehearse the current schema/backfill-only 0025 under a newly created temporary Node SQLite database and a newly isolated local Wrangler D1 state directory, then delete both and review prior-Worker compatibility; do not reuse this migration state in Unit 2.3.
 **Output**: Rehearsal and reviewer evidence.
 **Acceptance**: Both engines agree, no existing table contract breaks, and review converges.
+
+**Completed**: Fresh file-backed Node SQLite and isolated Wrangler local D1 states each replayed exact 0000-0024, the frozen fixture, and committed 0025; both produced identical four-save/tag/course/membership/shopping/fence/cook-table/FK results and both temporary roots were deleted with nonexistence proved. The full 168-test prior-Worker compatibility matrix passed and fresh verification review converged without claiming Unit 2.3 shopping behavior.
 
 ### ⬜ Unit 2.3a: Shopping Repair Migration - Tests
 **What**: Add failing migration tests for every `product-data-contract.md` reconciliation rule, the static one-row `_Migration0025Clock` lifecycle and identical captured clock across repaired rows, owner-specific account-global native-sync high-water including a newer non-shopping resource, logical checked normalization, finite quantity/source/sum overflow failure, SQLite-BINARY survivor order, collision-free null/unit discriminator, exact partial expression index `(shoppingListId,ingredientRefId,COALESCE('u:' || unitId,'n:'))`, matching Unit 3.1 conflict target, and setup parity differing only by setup's `IF NOT EXISTS`. Extend the Unit 1.9 harness to execute every exact active compatibility writer against post-0025 active-plus-tombstone and tombstone-only identities.
@@ -738,3 +740,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-22 02:09 Unit 2.1c complete: fresh cold data/privacy review independently reproduced every Prisma, database, focused, compatibility, compiler, build, and exact-coverage gate at implementation `3ba273e4` and converged with no findings.
 - 2026-07-22 02:29 Unit 2.2a complete: commit `544358d0` freezes 45 executable migration contracts across exact additive schema/projection inventory, immutable source data, mixed-time normalization, fail-closed rollback, fences, FKs, and save lifecycle; 44 intended failures are solely absent 0025 behavior, the NaN driver fact passes, and six cold-review rounds converged.
 - 2026-07-22 02:44 Unit 2.2b complete: commit `bb8e0bb0` implements exact product schema/backfill/fences with no shopping or cook-state expansion; 45 focused, 121 migration, compiler/build, and 8,328-test exact-coverage gates pass, and cold data/migration review converged.
+- 2026-07-22 02:52 Unit 2.2c complete: new Node SQLite and isolated Wrangler D1 states agreed on the exact four-save product backfill, unchanged fixture data, fences, no cook state, and zero FK violations; both roots were deleted, 168 prior-Worker compatibility tests passed, and cold verification review converged.
