@@ -148,7 +148,7 @@ function requestForRoute(
 
 function ownerDeleteRequest(
   token: string | null,
-  options: { body?: string; cookie?: string; origin?: string | null; suffix?: string } = {},
+  options: { body?: BodyInit; cookie?: string; origin?: string | null; suffix?: string } = {},
 ) {
   const headers = new Headers();
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -398,6 +398,32 @@ describe("CookSession lifecycle bootstrap", () => {
     const beforeIds = await listDurableObjectIds(namespace);
     const response = await worker.fetch(
       ownerDeleteRequest(DELETE_INTENT_TOKEN),
+      {
+        ...testEnvironment(),
+        COOK_SESSIONS: captured.namespace,
+      } as unknown as CloudflareEnvironment,
+      createExecutionContext(),
+    );
+
+    expect(captured.names).toEqual([]);
+    expect(captured.ids).toEqual([]);
+    expect(captured.getOptions).toEqual([]);
+    expect(captured.requests).toEqual([]);
+    expect((await listDurableObjectIds(namespace)).map(String)).toEqual(beforeIds.map(String));
+    await expectProtocolUnavailable(response);
+  });
+
+  itWithCookSessionNamespace("accepts an edge-normalized zero-byte owner DELETE stream without deriving a Durable Object", async (namespace) => {
+    const worker = (await import("../../workers/app")).default;
+    const captured = createCapturingNamespace();
+    const beforeIds = await listDurableObjectIds(namespace);
+    const request = ownerDeleteRequest(DELETE_INTENT_TOKEN, {
+      body: new Uint8Array(0),
+    });
+
+    expect(request.body).not.toBeNull();
+    const response = await worker.fetch(
+      request,
       {
         ...testEnvironment(),
         COOK_SESSIONS: captured.namespace,
