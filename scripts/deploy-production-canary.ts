@@ -1228,18 +1228,19 @@ async function waitForBootstrapProbe(
   const probe = deps.readBootstrapProbe ?? readBootstrapProbe;
 
   for (let observation = 0; observation < 2; observation += 1) {
+    let observationVerified = false;
     let lastError: unknown;
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       try {
         assertBootstrapProbe(await probe(baseUrl, expectedVersionId), expectedVersionId);
-        lastError = undefined;
+        observationVerified = true;
         break;
       } catch (error) {
         lastError = error;
       }
       if (attempt < attempts) await deps.sleep(VERIFICATION_DELAY_MS);
     }
-    if (lastError !== undefined) throw lastError;
+    if (!observationVerified) throw lastError;
   }
 }
 
