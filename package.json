@@ -20,6 +20,9 @@
       "protobufjs@7": "7.6.5",
       "protobufjs@8": "8.6.6",
       "sharp": "0.35.3"
+    },
+    "patchedDependencies": {
+      "@prisma/adapter-d1@6.19.2": "patches/@prisma__adapter-d1@6.19.2.patch"
     }
   },
   "scripts": {

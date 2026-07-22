@@ -18,6 +18,7 @@
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import {
   handleJsonRpcLine,
+  JsonRpcError,
   type JsonRpcToolRouter,
 } from "~/lib/mcp/json-rpc.server";
 import {
@@ -51,6 +52,11 @@ import {
 } from "~/lib/analytics-server";
 import { RequestBodyTooLargeError, readLimitedTextBody } from "~/lib/request-body-limit.server";
 import type { ImageGenEnv } from "~/lib/image-gen.server";
+import {
+  PRODUCT_ACTIVATION_PENDING_CODE,
+  PRODUCT_ACTIVATION_PENDING_MESSAGE,
+  isSavedRecipeCutoverPendingError,
+} from "~/lib/saved-recipe-cutover.server";
 
 interface CloudflareEnvLike extends ImageGenEnv {
   SESSION_SECRET?: string;
@@ -71,6 +77,18 @@ const MCP_SAFE_JSONRPC_METHODS = new Set([
   "tools/list",
 ]);
 const MCP_TOOL_NAMES = new Set(listSpoonjoyMcpTools().map((tool) => tool.name));
+const PRODUCT_ACTIVATION_PENDING_JSON_RPC_CODE = -32001;
+const PRODUCT_ACTIVATION_RETRY_AFTER_SECONDS = 1;
+
+export function isCookbookMembershipCutoverToolError(
+  toolName: string,
+  error: unknown,
+): boolean {
+  return (
+    toolName === "add_recipe_to_cookbook" ||
+    toolName === "remove_recipe_from_cookbook"
+  ) && isSavedRecipeCutoverPendingError(error);
+}
 
 export interface HandleMcpHttpRequestParams {
   request: Request;
@@ -293,14 +311,31 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
     });
   }
 
+  let productActivationPending = false;
   const router: JsonRpcToolRouter = {
     listTools() {
       return { tools: listSpoonjoyMcpTools() };
     },
     async callTool(name, args) {
       const context = buildSpoonjoyApiContext({ db, principal, cloudflareEnv, waitUntil });
-      const text = await callSpoonjoyMcpTool(name, args, context);
-      return { content: [{ type: "text", text }] };
+      try {
+        const text = await callSpoonjoyMcpTool(name, args, context);
+        return { content: [{ type: "text", text }] };
+      } catch (error) {
+        if (isCookbookMembershipCutoverToolError(name, error)) {
+          productActivationPending = true;
+          throw new JsonRpcError(
+            PRODUCT_ACTIVATION_PENDING_JSON_RPC_CODE,
+            PRODUCT_ACTIVATION_PENDING_MESSAGE,
+            {
+              code: PRODUCT_ACTIVATION_PENDING_CODE,
+              retryable: true,
+              retryAfterSeconds: PRODUCT_ACTIVATION_RETRY_AFTER_SECONDS,
+            },
+          );
+        }
+        throw error;
+      }
     },
   };
 
@@ -355,6 +390,10 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
   }
 
   const httpResponse = jsonResponse(response);
+  if (productActivationPending) {
+    httpResponse.headers.set("Retry-After", String(PRODUCT_ACTIVATION_RETRY_AFTER_SECONDS));
+    httpResponse.headers.set("Cache-Control", "private, no-store");
+  }
   if (!isJsonRpcSuccessResponse(response)) {
     return observeMcpResponse(params, {
       response: httpResponse,

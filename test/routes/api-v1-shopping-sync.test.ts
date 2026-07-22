@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { Request as UndiciRequest } from "undici";
 import { action, loader } from "~/routes/api.v1.$";
@@ -7,6 +7,7 @@ import { resolveApiV1ScopeRequirement } from "~/lib/api-v1.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
+import { expectConsoleError } from "../warning-policy";
 
 function routeArgs(request: Request, splat: string) {
   return { request, params: { "*": splat }, context: { cloudflare: { env: null } } } as any;
@@ -156,6 +157,32 @@ async function createRecipeWithIngredients(
   return recipe;
 }
 
+const LEGACY_SHOPPING_IDENTITY_INDEX = "ShoppingListItem_shoppingListId_unitId_ingredientRefId_key";
+const ACTIVE_SHOPPING_IDENTITY_INDEX = "ShoppingListItem_active_identity_key";
+
+async function withPost0025ShoppingIdentityIndex<T>(
+  db: Awaited<ReturnType<typeof getLocalDb>>,
+  run: () => Promise<T>,
+): Promise<T> {
+  try {
+    await db.$executeRawUnsafe(`DROP INDEX IF EXISTS "${ACTIVE_SHOPPING_IDENTITY_INDEX}"`);
+    await db.$executeRawUnsafe(`DROP INDEX IF EXISTS "${LEGACY_SHOPPING_IDENTITY_INDEX}"`);
+    await db.$executeRawUnsafe(`
+      CREATE UNIQUE INDEX "${ACTIVE_SHOPPING_IDENTITY_INDEX}"
+      ON "ShoppingListItem" ("shoppingListId", "ingredientRefId", COALESCE('u:' || "unitId", 'n:'))
+      WHERE "deletedAt" IS NULL
+    `);
+    return await run();
+  } finally {
+    await db.shoppingListItem.deleteMany({});
+    await db.$executeRawUnsafe(`DROP INDEX IF EXISTS "${ACTIVE_SHOPPING_IDENTITY_INDEX}"`);
+    await db.$executeRawUnsafe(`
+      CREATE UNIQUE INDEX IF NOT EXISTS "${LEGACY_SHOPPING_IDENTITY_INDEX}"
+      ON "ShoppingListItem" ("shoppingListId", "unitId", "ingredientRefId")
+    `);
+  }
+}
+
 describe("API v1 shopping-list read and sync", () => {
   let db: Awaited<ReturnType<typeof getLocalDb>>;
 
@@ -165,6 +192,8 @@ describe("API v1 shopping-list read and sync", () => {
   });
 
   afterEach(async () => {
+    await db.$executeRawUnsafe('DROP TRIGGER IF EXISTS "compat_rest_bulk_abort"');
+    vi.restoreAllMocks();
     await cleanupDatabase();
   });
 
@@ -537,6 +566,407 @@ describe("API v1 shopping-list read and sync", () => {
     expect(await db.shoppingListItem.count({
       where: { shoppingListId: fixture.list.id, ingredientRef: { name: "api duplicate sugar" }, deletedAt: null },
     })).toBe(1);
+  });
+
+  it("uses the active recipe identity and leaves its tombstone under the post-0025 index", async () => {
+    const fixture = await createShoppingFixture(db);
+    const recipe = await createRecipeWithIngredients(db, fixture.user.id, [{
+      name: `compat recipe active ${faker.string.alphanumeric(6)}`,
+      quantity: 3,
+      unit: `compat recipe active unit ${faker.string.alphanumeric(6)}`,
+    }]);
+    const ingredient = await db.ingredient.findFirstOrThrow({ where: { recipeId: recipe.id } });
+
+    await withPost0025ShoppingIdentityIndex(db, async () => {
+      await db.shoppingListItem.deleteMany({ where: { shoppingListId: fixture.list.id } });
+      const active = await db.shoppingListItem.create({
+        data: {
+          id: "compat-rest-recipe-identity-a",
+          shoppingListId: fixture.list.id,
+          ingredientRefId: ingredient.ingredientRefId,
+          unitId: ingredient.unitId,
+          quantity: 2,
+          sortIndex: 4,
+          categoryKey: "existing-category",
+          iconKey: "existing-icon",
+        },
+      });
+      const tombstone = await db.shoppingListItem.create({
+        data: {
+          id: "compat-rest-recipe-identity-A",
+          shoppingListId: fixture.list.id,
+          ingredientRefId: ingredient.ingredientRefId,
+          unitId: ingredient.unitId,
+          quantity: 100,
+          checked: true,
+          checkedAt: new Date(),
+          deletedAt: new Date(),
+          sortIndex: -10,
+        },
+      });
+      const response = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/shopping-list/add-from-recipe", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${fixture.writeOnlyCredential.token}`,
+          "Content-Type": "application/json",
+          "X-Request-Id": "req_compat_recipe_active_first",
+        },
+        body: JSON.stringify({
+          clientMutationId: "compat-recipe-active-first",
+          recipeId: recipe.id,
+        }),
+      }) as unknown as Request, "shopping-list/add-from-recipe"));
+      const payload = await readJson(response);
+
+      expect(response.status).toBe(200);
+      expectEnvelopeHeaders(response, "req_compat_recipe_active_first");
+      expectSuccessEnvelope(payload, "req_compat_recipe_active_first");
+      expectExactKeys(payload.data, ["recipe", "created", "updated", "items", "mutation"]);
+      expect(payload.data).toMatchObject({
+        recipe: { id: recipe.id, title: recipe.title },
+        created: 0,
+        updated: 1,
+        items: [{
+          id: active.id,
+          quantity: 5,
+          checked: false,
+          checkedAt: null,
+          deletedAt: null,
+          sortIndex: 4,
+          categoryKey: "existing-category",
+          iconKey: "existing-icon",
+        }],
+        mutation: { clientMutationId: "compat-recipe-active-first", replayed: false },
+      });
+      expect(payload.data.items).toHaveLength(1);
+      expectShoppingItemShape(payload.data.items[0]);
+      await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: tombstone.id } })).resolves.toMatchObject({
+        quantity: 100,
+        checked: true,
+        deletedAt: expect.any(Date),
+      });
+    });
+  });
+
+  it("restores the earliest sortIndex then BINARY id recipe tombstone under the post-0025 index", async () => {
+    const fixture = await createShoppingFixture(db);
+    const recipe = await createRecipeWithIngredients(db, fixture.user.id, [{
+      name: `compat recipe tombstone ${faker.string.alphanumeric(6)}`,
+      quantity: 3,
+      unit: `compat recipe tombstone unit ${faker.string.alphanumeric(6)}`,
+    }]);
+    const ingredient = await db.ingredient.findFirstOrThrow({ where: { recipeId: recipe.id } });
+
+    await withPost0025ShoppingIdentityIndex(db, async () => {
+      await db.shoppingListItem.deleteMany({ where: { shoppingListId: fixture.list.id } });
+      const expectedTombstone = await db.shoppingListItem.create({
+        data: {
+          id: "compat-rest-recipe-tombstone-A",
+          shoppingListId: fixture.list.id,
+          ingredientRefId: ingredient.ingredientRefId,
+          unitId: ingredient.unitId,
+          quantity: 2,
+          checked: true,
+          checkedAt: new Date(),
+          deletedAt: new Date(),
+          sortIndex: 2,
+          categoryKey: "existing-category",
+          iconKey: "existing-icon",
+        },
+      });
+      const laterSortIndex = await db.shoppingListItem.create({
+        data: {
+          id: "compat-rest-recipe-tombstone-0",
+          shoppingListId: fixture.list.id,
+          ingredientRefId: ingredient.ingredientRefId,
+          unitId: ingredient.unitId,
+          quantity: 200,
+          checked: true,
+          checkedAt: new Date(),
+          deletedAt: new Date(),
+          sortIndex: 3,
+        },
+      });
+      const tiedBinaryLater = await db.shoppingListItem.create({
+        data: {
+          id: "compat-rest-recipe-tombstone-a",
+          shoppingListId: fixture.list.id,
+          ingredientRefId: ingredient.ingredientRefId,
+          unitId: ingredient.unitId,
+          quantity: 20,
+          checked: true,
+          checkedAt: new Date(),
+          deletedAt: new Date(),
+          sortIndex: 2,
+        },
+      });
+
+      const response = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/shopping-list/add-from-recipe", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${fixture.writeOnlyCredential.token}`,
+          "Content-Type": "application/json",
+          "X-Request-Id": "req_compat_recipe_tombstone_first",
+        },
+        body: JSON.stringify({
+          clientMutationId: "compat-recipe-tombstone-first",
+          recipeId: recipe.id,
+        }),
+      }) as unknown as Request, "shopping-list/add-from-recipe"));
+      const payload = await readJson(response);
+
+      expect(response.status).toBe(200);
+      expectEnvelopeHeaders(response, "req_compat_recipe_tombstone_first");
+      expectSuccessEnvelope(payload, "req_compat_recipe_tombstone_first");
+      expectExactKeys(payload.data, ["recipe", "created", "updated", "items", "mutation"]);
+      expect(payload.data).toMatchObject({
+        recipe: { id: recipe.id, title: recipe.title },
+        created: 0,
+        updated: 1,
+        items: [{
+          id: expectedTombstone.id,
+          quantity: 5,
+          checked: false,
+          checkedAt: null,
+          deletedAt: null,
+          sortIndex: 0,
+          categoryKey: "existing-category",
+          iconKey: "existing-icon",
+        }],
+        mutation: { clientMutationId: "compat-recipe-tombstone-first", replayed: false },
+      });
+      expect(payload.data.items).toHaveLength(1);
+      expectShoppingItemShape(payload.data.items[0]);
+      await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: tiedBinaryLater.id } })).resolves.toMatchObject({
+        quantity: 20,
+        checked: true,
+        deletedAt: expect.any(Date),
+      });
+      await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: laterSortIndex.id } })).resolves.toMatchObject({
+        quantity: 200,
+        checked: true,
+        deletedAt: expect.any(Date),
+      });
+    });
+  });
+
+  it("coalesces recipe identities in deterministic step and binary ingredient order", async () => {
+    const fixture = await createShoppingFixture(db);
+    const recipe = await db.recipe.create({ data: createTestRecipe(fixture.user.id) });
+    await db.recipeStep.createMany({
+      data: [
+        { recipeId: recipe.id, stepNum: 2, stepTitle: "Second", description: "Second step." },
+        { recipeId: recipe.id, stepNum: 1, stepTitle: "First", description: "First step." },
+      ],
+    });
+    const unit = await getOrCreateUnit(db, `compat deterministic unit ${faker.string.alphanumeric(6)}`);
+    const firstRef = await getOrCreateIngredientRef(db, `compat deterministic apples ${faker.string.alphanumeric(6)}`);
+    const secondRef = await getOrCreateIngredientRef(db, `compat deterministic beans ${faker.string.alphanumeric(6)}`);
+    await db.ingredient.createMany({
+      data: [
+        {
+          id: "compat-order-a-step-one",
+          recipeId: recipe.id,
+          stepNum: 1,
+          quantity: 2,
+          unitId: unit.id,
+          ingredientRefId: secondRef.id,
+        },
+        {
+          id: "compat-order-z-step-two",
+          recipeId: recipe.id,
+          stepNum: 2,
+          quantity: 3,
+          unitId: unit.id,
+          ingredientRefId: firstRef.id,
+        },
+        {
+          id: "compat-order-A-step-one",
+          recipeId: recipe.id,
+          stepNum: 1,
+          quantity: 1,
+          unitId: unit.id,
+          ingredientRefId: firstRef.id,
+        },
+      ],
+    });
+
+    const response = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/shopping-list/add-from-recipe", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fixture.writeOnlyCredential.token}`,
+        "Content-Type": "application/json",
+        "X-Request-Id": "req_compat_deterministic_recipe",
+      },
+      body: JSON.stringify({
+        clientMutationId: "compat-deterministic-recipe",
+        recipeId: recipe.id,
+        scaleFactor: 2,
+      }),
+    }) as unknown as Request, "shopping-list/add-from-recipe"));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expectEnvelopeHeaders(response, "req_compat_deterministic_recipe");
+    expectSuccessEnvelope(payload, "req_compat_deterministic_recipe");
+    expectExactKeys(payload.data, ["recipe", "created", "updated", "items", "mutation"]);
+    expect(payload.data).toMatchObject({
+      recipe: { id: recipe.id, title: recipe.title },
+      created: 2,
+      updated: 0,
+      mutation: { clientMutationId: "compat-deterministic-recipe", replayed: false },
+    });
+    expect(payload.data.items.map((item: { name: string; quantity: number }) => ({
+      name: item.name,
+      quantity: item.quantity,
+    }))).toEqual([
+      { name: firstRef.name, quantity: 8 },
+      { name: secondRef.name, quantity: 4 },
+    ]);
+    payload.data.items.forEach(expectShoppingItemShape);
+  });
+
+  it("rejects a non-finite coalesced quantity before opening a bulk transaction", async () => {
+    const fixture = await createShoppingFixture(db);
+    const recipe = await createRecipeWithIngredients(db, fixture.user.id, [
+      { name: `compat overflow ${faker.string.alphanumeric(6)}`, quantity: 9e307, unit: "gram" },
+      { name: `compat overflow ${faker.string.alphanumeric(6)}`, quantity: 9e307, unit: "gram" },
+    ]);
+    const ingredients = await db.ingredient.findMany({ where: { recipeId: recipe.id }, orderBy: { id: "asc" } });
+    await db.ingredient.update({
+      where: { id: ingredients[1].id },
+      data: { ingredientRefId: ingredients[0].ingredientRefId, unitId: ingredients[0].unitId },
+    });
+    const transactionSpy = vi.spyOn(db as any, "$transaction");
+    const response = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/shopping-list/add-from-recipe", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fixture.writeOnlyCredential.token}`,
+        "Content-Type": "application/json",
+        "X-Request-Id": "req_compat_non_finite_sum",
+      },
+      body: JSON.stringify({
+        clientMutationId: "compat-non-finite-sum",
+        recipeId: recipe.id,
+      }),
+    }) as unknown as Request, "shopping-list/add-from-recipe"));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(500);
+    expectEnvelopeHeaders(response, "req_compat_non_finite_sum");
+    expectErrorEnvelope(payload, "req_compat_non_finite_sum", "internal_error", 500);
+    expectExactKeys(payload.error, ["code", "message", "status"]);
+    expect(payload.error.message).toBe("Internal error");
+    expect(transactionSpy).not.toHaveBeenCalled();
+    expect(await db.shoppingListItem.count({
+      where: { shoppingListId: fixture.list.id, ingredientRefId: ingredients[0].ingredientRefId },
+    })).toBe(0);
+    expect(await db.apiIdempotencyKey.count({
+      where: { userId: fixture.user.id, key: "compat-non-finite-sum" },
+    })).toBe(0);
+  });
+
+  it("rejects a non-finite scaled product before opening a bulk transaction", async () => {
+    const fixture = await createShoppingFixture(db);
+    const recipe = await createRecipeWithIngredients(db, fixture.user.id, [
+      { name: `compat product overflow ${faker.string.alphanumeric(6)}`, quantity: 1e300, unit: "gram" },
+    ]);
+    const ingredient = await db.ingredient.findFirstOrThrow({ where: { recipeId: recipe.id } });
+    const transactionSpy = vi.spyOn(db as any, "$transaction");
+    const response = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/shopping-list/add-from-recipe", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fixture.writeOnlyCredential.token}`,
+        "Content-Type": "application/json",
+        "X-Request-Id": "req_compat_non_finite_product",
+      },
+      body: JSON.stringify({
+        clientMutationId: "compat-non-finite-product",
+        recipeId: recipe.id,
+        scaleFactor: 1e20,
+      }),
+    }) as unknown as Request, "shopping-list/add-from-recipe"));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(500);
+    expectEnvelopeHeaders(response, "req_compat_non_finite_product");
+    expectErrorEnvelope(payload, "req_compat_non_finite_product", "internal_error", 500);
+    expectExactKeys(payload.error, ["code", "message", "status"]);
+    expect(payload.error.message).toBe("Internal error");
+    expect(transactionSpy).not.toHaveBeenCalled();
+    expect(await db.shoppingListItem.count({
+      where: { shoppingListId: fixture.list.id, ingredientRefId: ingredient.ingredientRefId },
+    })).toBe(0);
+    expect(await db.apiIdempotencyKey.count({
+      where: { userId: fixture.user.id, key: "compat-non-finite-product" },
+    })).toBe(0);
+  });
+
+  it("rolls back every recipe item and releases idempotency when a later insert fails", async () => {
+    const fixture = await createShoppingFixture(db);
+    const recipe = await createRecipeWithIngredients(db, fixture.user.id, [
+      { name: `compat allowed ${faker.string.alphanumeric(6)}`, quantity: 1, unit: "cup" },
+      { name: `compat blocked ${faker.string.alphanumeric(6)}`, quantity: 2, unit: "cup" },
+    ]);
+    const ingredients = await db.ingredient.findMany({
+      where: { recipeId: recipe.id },
+      orderBy: { id: "asc" },
+    });
+    const transactionError = new Error("compat_rest_bulk_abort");
+    const transactionSpy = vi.spyOn(db as any, "$transaction")
+      .mockRejectedValueOnce(transactionError);
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_compat_rest_bulk_rollback",
+      method: "POST",
+      path: "/api/v1/shopping-list/add-from-recipe",
+      error: {
+        name: transactionError.name,
+        message: transactionError.message,
+        stack: transactionError.stack,
+      },
+    });
+    const request = (requestId: string) => new UndiciRequest("http://localhost/api/v1/shopping-list/add-from-recipe", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fixture.writeOnlyCredential.token}`,
+        "Content-Type": "application/json",
+        "X-Request-Id": requestId,
+      },
+      body: JSON.stringify({
+        clientMutationId: "compat-rest-bulk-rollback",
+        recipeId: recipe.id,
+      }),
+    }) as unknown as Request;
+
+    const failed = await action(routeArgs(request("req_compat_rest_bulk_rollback"), "shopping-list/add-from-recipe"));
+    const failedPayload = await readJson(failed);
+    expect(failed.status).toBe(500);
+    expectEnvelopeHeaders(failed, "req_compat_rest_bulk_rollback");
+    expectErrorEnvelope(failedPayload, "req_compat_rest_bulk_rollback", "internal_error", 500);
+    expectExactKeys(failedPayload.error, ["code", "message", "status"]);
+    expect(await db.shoppingListItem.count({
+      where: {
+        shoppingListId: fixture.list.id,
+        ingredientRefId: { in: ingredients.map((ingredient) => ingredient.ingredientRefId) },
+      },
+    })).toBe(0);
+    expect(await db.apiIdempotencyKey.count({
+      where: { userId: fixture.user.id, key: "compat-rest-bulk-rollback" },
+    })).toBe(0);
+    expect(transactionSpy.mock.calls[0]?.[0]).toHaveLength(2);
+
+    const retry = await action(routeArgs(request("req_compat_rest_bulk_retry"), "shopping-list/add-from-recipe"));
+    const retryPayload = await readJson(retry);
+    expect(retry.status).toBe(200);
+    expectEnvelopeHeaders(retry, "req_compat_rest_bulk_retry");
+    expectSuccessEnvelope(retryPayload, "req_compat_rest_bulk_retry");
+    expectExactKeys(retryPayload.data, ["recipe", "created", "updated", "items", "mutation"]);
+    expect(retryPayload.data).toMatchObject({
+      created: 2,
+      updated: 0,
+      mutation: { clientMutationId: "compat-rest-bulk-rollback", replayed: false },
+    });
+    expect(retryPayload.data.items).toHaveLength(2);
   });
 
   it("returns missing recipes as not_found when adding ingredients from a recipe", async () => {

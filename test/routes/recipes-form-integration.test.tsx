@@ -14,6 +14,12 @@ import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
 
+async function waitForRecipeSubmitToSettle(buttonName: "Create Recipe" | "Save Recipe") {
+  await waitFor(() => {
+    expect(screen.getByRole("button", { name: buttonName })).toBeEnabled();
+  });
+}
+
 /**
  * Unit 9a: RecipeBuilder Route Integration Tests
  *
@@ -194,9 +200,7 @@ describe("RecipeBuilder Route Integration", () => {
         await waitFor(() => {
           expect(submittedData).not.toBeNull();
         });
-        await waitFor(() => {
-          expect(screen.getByRole("button", { name: "Create Recipe" })).toBeEnabled();
-        });
+        await waitForRecipeSubmitToSettle("Create Recipe");
 
         expect(submittedData.title).toBe("My New Recipe");
         expect(submittedData.description).toBe("A delicious dish");
@@ -488,9 +492,7 @@ describe("RecipeBuilder Route Integration", () => {
         await waitFor(() => {
           expect(submittedData).not.toBeNull();
         });
-        await waitFor(() => {
-          expect(screen.getByRole("button", { name: "Save Recipe" })).toBeEnabled();
-        });
+        await waitForRecipeSubmitToSettle("Save Recipe");
 
         // RecipeBuilder should include clearImage flag when image is cleared
         expect(submittedData.clearImage).toBe("true");
@@ -548,9 +550,7 @@ describe("RecipeBuilder Route Integration", () => {
         await waitFor(() => {
           expect(submittedData).not.toBeNull();
         });
-        await waitFor(() => {
-          expect(screen.getByRole("button", { name: "Save Recipe" })).toBeEnabled();
-        });
+        await waitForRecipeSubmitToSettle("Save Recipe");
 
         expect(submittedData.hasImage).toBe(true);
         expect(submittedData.imageFileName).toBe("new-image.jpg");
@@ -600,9 +600,7 @@ describe("RecipeBuilder Route Integration", () => {
         await waitFor(() => {
           expect(submittedData).not.toBeNull();
         });
-        await waitFor(() => {
-          expect(screen.getByRole("button", { name: "Save Recipe" })).toBeEnabled();
-        });
+        await waitForRecipeSubmitToSettle("Save Recipe");
 
         // RecipeBuilder should include recipe ID in edit mode submission
         expect(submittedData.id).toBe(recipeId);

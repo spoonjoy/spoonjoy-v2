@@ -1,0 +1,68 @@
+diff --git a/dist/index.js b/dist/index.js
+index d1f9bbd54783b817d9c93262a2f2bcf88788a380..94ffa94defb7cce9810a408ecac02f3f8297f26a 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -282,3 +282,8 @@ function mapDriverError(error) {
+ function isDriverError(error) {
+   return typeof error["message"] === "string";
+ }
++function isExpectedSpoonjoyCompatibilityError(error) {
++  const message = typeof error?.message === "string" ? error.message : "";
++  return /(?<![A-Za-z0-9_])saved_recipe_cutover_pending(?![A-Za-z0-9_])/.test(message) ||
++    /UNIQUE constraint failed: (?:ShoppingListItem\.shoppingListId, ShoppingListItem\.unitId, ShoppingListItem\.ingredientRefId(?![A-Za-z0-9_.]|\s*,)|index ['"]ShoppingListItem_active_identity_key['"](?![A-Za-z0-9_]))/.test(message);
++}
+@@ -295,7 +300,9 @@ function onGenericD1HTTPError(error) {
+   throw new import_driver_adapter_utils2.DriverAdapterError(convertDriverError(error));
+ }
+ function onError(error) {
+-  console.error("Error in performIO: %O", error);
++  if (!isExpectedSpoonjoyCompatibilityError(error)) {
++    console.error("Error in performIO: %O", error);
++  }
+   throw new import_driver_adapter_utils2.DriverAdapterError(convertDriverError(error));
+ }
+ async function performRawQuery(client, options) {
+@@ -686,6 +693,8 @@ var PrismaD1WorkerAdapterFactory = class {
+   }
+ };
+ function onError2(error) {
+-  console.error("Error in performIO: %O", error);
++  if (!isExpectedSpoonjoyCompatibilityError(error)) {
++    console.error("Error in performIO: %O", error);
++  }
+   throw new import_driver_adapter_utils3.DriverAdapterError(convertDriverError(error));
+ }
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 6023c9c96f9a1a5dc8f305f23ccba10c4b124edf..bc881192029e76c0a9c678e3a94784ec6b7a6077 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -248,3 +248,8 @@ function mapDriverError(error) {
+ function isDriverError(error) {
+   return typeof error["message"] === "string";
+ }
++function isExpectedSpoonjoyCompatibilityError(error) {
++  const message = typeof error?.message === "string" ? error.message : "";
++  return /(?<![A-Za-z0-9_])saved_recipe_cutover_pending(?![A-Za-z0-9_])/.test(message) ||
++    /UNIQUE constraint failed: (?:ShoppingListItem\.shoppingListId, ShoppingListItem\.unitId, ShoppingListItem\.ingredientRefId(?![A-Za-z0-9_.]|\s*,)|index ['"]ShoppingListItem_active_identity_key['"](?![A-Za-z0-9_]))/.test(message);
++}
+@@ -261,7 +266,9 @@ function onGenericD1HTTPError(error) {
+   throw new DriverAdapterError(convertDriverError(error));
+ }
+ function onError(error) {
+-  console.error("Error in performIO: %O", error);
++  if (!isExpectedSpoonjoyCompatibilityError(error)) {
++    console.error("Error in performIO: %O", error);
++  }
+   throw new DriverAdapterError(convertDriverError(error));
+ }
+ async function performRawQuery(client, options) {
+@@ -655,6 +662,8 @@ var PrismaD1WorkerAdapterFactory = class {
+   }
+ };
+ function onError2(error) {
+-  console.error("Error in performIO: %O", error);
++  if (!isExpectedSpoonjoyCompatibilityError(error)) {
++    console.error("Error in performIO: %O", error);
++  }
+   throw new DriverAdapterError2(convertDriverError(error));
+ }

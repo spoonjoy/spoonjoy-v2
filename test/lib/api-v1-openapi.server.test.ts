@@ -12,6 +12,13 @@ const AUTH_PATHS = [
   "/oauth/revoke",
   "/oauth/token",
 ];
+const PRODUCT_ACTIVATION_PENDING_OPERATIONS = [
+  "DELETE /api/v1/cookbooks/{id}",
+  "DELETE /api/v1/cookbooks/{id}/recipes/{recipeId}",
+  "POST /api/v1/cookbooks/{id}/recipes/{recipeId}",
+].sort();
+const PRODUCT_ACTIVATION_PENDING_MESSAGE =
+  "Spoonjoy product activation is still completing. Retry shortly.";
 const OPERATION_SCOPES = {
   "GET /api/v1": [],
   "GET /api/v1/health": [],
@@ -134,6 +141,64 @@ function dedupeSecurity(security: Array<Record<string, unknown>>) {
 }
 
 describe("API v1 OpenAPI document", () => {
+  it("assigns product_activation_pending to HTTP 503", () => {
+    expect((API_V1_ERROR_STATUS as Record<string, number>).product_activation_pending).toBe(503);
+  });
+
+  it("documents product_activation_pending on exactly the three cutover-fenced operations", () => {
+    const documents = [
+      ["full", buildApiV1OpenApiDocument()],
+      ["sdk", buildApiV1SdkOpenApiDocument()],
+      ["connector", buildApiV1ConnectorOpenApiDocument()],
+    ] as const;
+
+    for (const [label, document] of documents) {
+      const operationsWithCutoverError = Object.entries(document.paths).flatMap(([path, pathItem]) => (
+        Object.entries(pathItem as Record<string, unknown>).flatMap(([method, candidate]) => {
+          const typedCandidate = candidate as {
+            responses?: Record<string, {
+              content?: Record<string, { examples?: Record<string, unknown> }>;
+            }>;
+          };
+          return typedCandidate.responses?.["503"]?.content?.["application/json"]
+            ?.examples?.product_activation_pending
+              ? [`${method.toUpperCase()} ${path}`]
+              : [];
+        })
+      )).sort();
+
+      expect(operationsWithCutoverError, label).toEqual(PRODUCT_ACTIVATION_PENDING_OPERATIONS);
+
+      for (const key of PRODUCT_ACTIVATION_PENDING_OPERATIONS) {
+        const separator = key.indexOf(" ");
+        const method = key.slice(0, separator);
+        const path = key.slice(separator + 1);
+        const response = operation(document, path, method).responses["503"];
+        const example = response.content["application/json"].examples.product_activation_pending.value;
+
+        expect(response.headers, `${label}: ${key}`).toMatchObject({
+          "Retry-After": {
+            schema: { type: "integer", example: 1 },
+          },
+          "Cache-Control": {
+            schema: { type: "string", example: "private, no-store" },
+          },
+        });
+        expect(example, `${label}: ${key}`).toEqual({
+          ok: false,
+          requestId: "req_example",
+          error: {
+            code: "product_activation_pending",
+            message: PRODUCT_ACTIVATION_PENDING_MESSAGE,
+            status: 503,
+            details: { retryAfterSeconds: 1 },
+          },
+        });
+        expect(example.error).not.toHaveProperty("retryable");
+      }
+    }
+  });
+
   it("generates the required top-level OpenAPI 3.1 contract", () => {
     const document = buildApiV1OpenApiDocument();
 

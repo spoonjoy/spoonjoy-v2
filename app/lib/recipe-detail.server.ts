@@ -33,9 +33,14 @@ import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { buildRecipeJsonLd } from "~/lib/recipe-structured-data.server";
 import {
   nativeSyncTombstoneUpsertOperation,
-  touchNativeSyncCookbookOperation,
   touchNativeSyncRecipeAndContainingCookbooks,
 } from "~/lib/native-sync-invalidation.server";
+import {
+  addRecipeToCookbook,
+  asCompatibleCookbookD1Database,
+  createCookbookWithRecipe,
+  removeRecipeFromCookbook,
+} from "~/lib/cookbook-membership-compat.server";
 import {
   resolvePostHogServerConfig,
   type PostHogServerEnv,
@@ -56,6 +61,7 @@ import {
 } from "~/lib/image-storage.server";
 import { FOOD_IMAGE_SIZE_MESSAGE, FOOD_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
 import { sanitizeImagePromptAddition } from "~/lib/image-gen.server";
+import { productActivationPendingWebResponse } from "~/lib/saved-recipe-cutover.server";
 
 interface CloudflareContextLike {
   cloudflare?: {
@@ -804,22 +810,22 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
     if (!title) {
       throw new Response("Title is required", { status: 400 });
     }
-    const newCookbook = await database.$transaction(async (tx) => {
-      const created = await tx.cookbook.create({
-        data: {
-          title,
-          authorId: userId,
-        },
+    let newCookbook: { id: string; title: string };
+    try {
+      newCookbook = await createCookbookWithRecipe({
+        database,
+        nativeDatabase: asCompatibleCookbookD1Database(context.cloudflare?.env?.DB),
+        title,
+        userId,
+        recipeId: id,
       });
-      await tx.recipeInCookbook.create({
-        data: {
-          cookbookId: created.id,
-          recipeId: id,
-          addedById: userId,
-        },
-      });
-      return created;
-    });
+    } catch (error) {
+      const cutoverResponse = productActivationPendingWebResponse(error);
+      if (cutoverResponse) {
+        return cutoverResponse;
+      }
+      throw error;
+    }
     return { success: true, newCookbook: { id: newCookbook.id, title: newCookbook.title } };
   }
 
@@ -835,36 +841,38 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
       }
 
       if (intent === "removeFromCookbook") {
-        await database.$transaction(async (tx) => {
-          await tx.recipeInCookbook.deleteMany({
-            where: { cookbookId, recipeId: id },
+        try {
+          await removeRecipeFromCookbook({
+            database,
+            nativeDatabase: asCompatibleCookbookD1Database(context.cloudflare?.env?.DB),
+            cookbookId,
+            recipeId: id,
           });
-          await touchNativeSyncCookbookOperation(tx, cookbookId);
-        });
+        } catch (error) {
+          const cutoverResponse = productActivationPendingWebResponse(error);
+          if (cutoverResponse) {
+            return cutoverResponse;
+          }
+          throw error;
+        }
         return { success: true };
       }
 
       await assertActiveRecipe(database, id);
 
       try {
-        await database.$transaction(async (tx) => {
-          await tx.recipeInCookbook.create({
-            data: {
-              cookbookId,
-              recipeId: id,
-              addedById: userId,
-            },
-          });
-          await touchNativeSyncCookbookOperation(tx, cookbookId);
+        await addRecipeToCookbook({
+          database,
+          nativeDatabase: asCompatibleCookbookD1Database(context.cloudflare?.env?.DB),
+          cookbookId,
+          recipeId: id,
+          userId,
         });
         return { success: true };
-      } catch (error: any) {
-        // P2002 = the recipe is already in this cookbook, so re-adding is an
-        // idempotent success. Anything else is a real failure and must surface;
-        // swallowing it silently let "saved" UIs hide actual data loss.
-        if (error?.code === "P2002") {
-          await touchNativeSyncCookbookOperation(database, cookbookId);
-          return { success: true };
+      } catch (error) {
+        const cutoverResponse = productActivationPendingWebResponse(error);
+        if (cutoverResponse) {
+          return cutoverResponse;
         }
         throw error;
       }

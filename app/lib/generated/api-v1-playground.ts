@@ -8089,7 +8089,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -8127,6 +8128,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: product_activation_pending"
         }
       ],
       "responseExamples": [
@@ -8298,7 +8303,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -8340,6 +8346,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: product_activation_pending"
         }
       ],
       "responseExamples": [
@@ -8533,7 +8543,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -8571,6 +8582,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: product_activation_pending"
         }
       ],
       "responseExamples": [

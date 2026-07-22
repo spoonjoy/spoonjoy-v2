@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { db } from "~/lib/db.server";
 import { loader, action, parseShoppingItemFallback, __internal__ } from "~/routes/shopping-list";
@@ -6,6 +6,33 @@ import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
+
+async function installActiveIdentityIndex() {
+  await db.$executeRawUnsafe(
+    'DROP INDEX IF EXISTS "ShoppingListItem_shoppingListId_unitId_ingredientRefId_key"'
+  );
+  await db.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX "ShoppingListItem_active_identity_key"
+    ON "ShoppingListItem" (
+      "shoppingListId",
+      "ingredientRefId",
+      COALESCE('u:' || "unitId", 'n:')
+    )
+    WHERE "deletedAt" IS NULL
+  `);
+}
+
+async function restoreFullIdentityIndex() {
+  await db.shoppingListItem.deleteMany({});
+  await db.$executeRawUnsafe(
+    'DROP INDEX IF EXISTS "ShoppingListItem_active_identity_key"'
+  );
+  await db.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS
+      "ShoppingListItem_shoppingListId_unitId_ingredientRefId_key"
+    ON "ShoppingListItem" ("shoppingListId", "unitId", "ingredientRefId")
+  `);
+}
 
 describe("Shopping List Route", () => {
   let testUserId: string;
@@ -19,6 +46,7 @@ describe("Shopping List Route", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await cleanupDatabase();
   });
 
@@ -189,6 +217,31 @@ describe("Shopping List Route", () => {
       expect(shoppingList?.items[0].quantity).toBe(3);
       expect(shoppingList?.items[0].sortIndex).toBe(0);
       expect(shoppingList?.items[0].deletedAt).toBeNull();
+    });
+
+    it("stores only validated category and icon affordances", async () => {
+      const request = await createFormRequest(
+        {
+          intent: "addItem",
+          ingredientName: "bananas",
+          quantity: "3",
+          categoryKey: "arbitrary-category",
+          iconKey: "arbitrary-icon",
+        },
+        testUserId,
+      );
+
+      await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      const item = await db.shoppingListItem.findFirstOrThrow({
+        where: { shoppingList: { authorId: testUserId } },
+      });
+      expect(item.categoryKey).toBe("produce");
+      expect(item.iconKey).toBe("apple");
     });
 
     it("should add item with unit", async () => {
@@ -371,6 +424,345 @@ describe("Shopping List Route", () => {
           },
         },
       });
+    });
+
+    it("compatibility: prefers the earliest active unitless identity by sortIndex and id", async () => {
+      const shoppingList = await db.shoppingList.create({
+        data: { authorId: testUserId },
+      });
+      const ingredientName = `compat_manual_active_${faker.string.alphanumeric(6)}`.toLowerCase();
+      const ingredientRef = await db.ingredientRef.create({
+        data: { name: ingredientName },
+      });
+
+      const tombstone = await db.shoppingListItem.create({
+        data: {
+          id: "compat-manual-active-deleted",
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredientRef.id,
+          quantity: 100,
+          sortIndex: -10,
+          deletedAt: new Date(),
+        },
+      });
+      const laterBySort = await db.shoppingListItem.create({
+        data: {
+          id: "compat-manual-active-a-later-sort",
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredientRef.id,
+          quantity: 10,
+          sortIndex: 2,
+        },
+      });
+      const laterById = await db.shoppingListItem.create({
+        data: {
+          id: "compat-manual-active-a-same-sort",
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredientRef.id,
+          quantity: 20,
+          sortIndex: 1,
+        },
+      });
+      const expectedActive = await db.shoppingListItem.create({
+        data: {
+          id: "compat-manual-active-A-same-sort",
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredientRef.id,
+          quantity: 30,
+          sortIndex: 1,
+        },
+      });
+
+      const request = await createFormRequest(
+        {
+          intent: "addItem",
+          ingredientName,
+          quantity: "2",
+        },
+        testUserId
+      );
+
+      const result = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+      const [selected, sameSortLater, laterSort, stillDeleted] = await Promise.all([
+        db.shoppingListItem.findUnique({ where: { id: expectedActive.id } }),
+        db.shoppingListItem.findUnique({ where: { id: laterById.id } }),
+        db.shoppingListItem.findUnique({ where: { id: laterBySort.id } }),
+        db.shoppingListItem.findUnique({ where: { id: tombstone.id } }),
+      ]);
+
+      expect(result).toEqual({
+        data: { success: true },
+        init: null,
+        type: "DataWithResponseInit",
+      });
+      expect(selected?.quantity).toBe(32);
+      expect(sameSortLater?.quantity).toBe(20);
+      expect(laterSort?.quantity).toBe(10);
+      expect(stillDeleted?.quantity).toBe(100);
+      expect(stillDeleted?.deletedAt).not.toBeNull();
+    });
+
+    it("compatibility: uses the migrated active unitless survivor before its tombstone", async () => {
+      try {
+        await installActiveIdentityIndex();
+        const shoppingList = await db.shoppingList.create({ data: { authorId: testUserId } });
+        const ingredientName = `compat_manual_migrated_${faker.string.alphanumeric(6)}`.toLowerCase();
+        const ingredientRef = await db.ingredientRef.create({ data: { name: ingredientName } });
+        const tombstone = await db.shoppingListItem.create({
+          data: {
+            id: "compat-manual-migrated-tombstone",
+            shoppingListId: shoppingList.id,
+            ingredientRefId: ingredientRef.id,
+            quantity: 100,
+            sortIndex: -1,
+            deletedAt: new Date(),
+          },
+        });
+        const active = await db.shoppingListItem.create({
+          data: {
+            id: "compat-manual-migrated-active",
+            shoppingListId: shoppingList.id,
+            ingredientRefId: ingredientRef.id,
+            quantity: 4,
+            sortIndex: 1,
+          },
+        });
+
+        await action({
+          request: await createFormRequest(
+            { intent: "addItem", ingredientName, quantity: "3" },
+            testUserId,
+          ),
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any);
+
+        await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: active.id } }))
+          .resolves.toMatchObject({ quantity: 7, deletedAt: null });
+        await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: tombstone.id } }))
+          .resolves.toMatchObject({ quantity: 100, deletedAt: expect.any(Date) });
+      } finally {
+        await restoreFullIdentityIndex();
+      }
+    });
+
+    it("compatibility: restores only the earliest unitless tombstone by sortIndex and id", async () => {
+      try {
+        await installActiveIdentityIndex();
+        const shoppingList = await db.shoppingList.create({
+        data: { authorId: testUserId },
+        });
+        const anchorRef = await db.ingredientRef.create({
+        data: { name: `compat_manual_anchor_${faker.string.alphanumeric(6)}`.toLowerCase() },
+        });
+        await db.shoppingListItem.create({
+        data: {
+          shoppingListId: shoppingList.id,
+          ingredientRefId: anchorRef.id,
+          sortIndex: 4,
+        },
+      });
+
+        const ingredientName = `compat_manual_tombstone_${faker.string.alphanumeric(6)}`.toLowerCase();
+        const ingredientRef = await db.ingredientRef.create({
+        data: { name: ingredientName },
+      });
+        const laterBySort = await db.shoppingListItem.create({
+        data: {
+          id: "compat-manual-tombstone-a-later-sort",
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredientRef.id,
+          quantity: 10,
+          sortIndex: 3,
+          deletedAt: new Date(),
+        },
+      });
+        const laterById = await db.shoppingListItem.create({
+        data: {
+          id: "compat-manual-tombstone-a-same-sort",
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredientRef.id,
+          quantity: 20,
+          sortIndex: 1,
+          deletedAt: new Date(),
+        },
+      });
+        const expectedTombstone = await db.shoppingListItem.create({
+        data: {
+          id: "compat-manual-tombstone-A-same-sort",
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredientRef.id,
+          quantity: 30,
+          sortIndex: 1,
+          deletedAt: new Date(),
+        },
+      });
+
+        const request = await createFormRequest(
+        {
+          intent: "addItem",
+          ingredientName,
+          quantity: "1",
+        },
+        testUserId
+      );
+
+        await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+        const [restored, sameSortLater, laterSort] = await Promise.all([
+        db.shoppingListItem.findUnique({ where: { id: expectedTombstone.id } }),
+        db.shoppingListItem.findUnique({ where: { id: laterById.id } }),
+        db.shoppingListItem.findUnique({ where: { id: laterBySort.id } }),
+      ]);
+
+        expect(restored?.quantity).toBe(31);
+        expect(restored?.deletedAt).toBeNull();
+        expect(restored?.sortIndex).toBe(5);
+        expect(sameSortLater?.quantity).toBe(20);
+        expect(sameSortLater?.deletedAt).not.toBeNull();
+        expect(laterSort?.quantity).toBe(10);
+        expect(laterSort?.deletedAt).not.toBeNull();
+      } finally {
+        await restoreFullIdentityIndex();
+      }
+    });
+
+    it("compatibility: rereads the active identity once after a create uniqueness conflict", async () => {
+      const shoppingList = await db.shoppingList.create({ data: { authorId: testUserId } });
+      const ingredientName = `compat_manual_race_${faker.string.alphanumeric(6)}`.toLowerCase();
+      const unitName = `compat_manual_race_unit_${faker.string.alphanumeric(6)}`.toLowerCase();
+      const ingredientRef = await db.ingredientRef.create({ data: { name: ingredientName } });
+      const unit = await db.unit.create({ data: { name: unitName } });
+      const delegate = db.shoppingListItem as any;
+      const originalCreate = delegate.create.bind(delegate);
+      const createSpy = vi.spyOn(delegate, "create").mockImplementationOnce(async () => {
+        await originalCreate({
+          data: {
+            id: "compat-web-manual-race-winner",
+            shoppingListId: shoppingList.id,
+            ingredientRefId: ingredientRef.id,
+            unitId: unit.id,
+            quantity: 4,
+            sortIndex: 0,
+            categoryKey: "winner-category",
+          },
+        });
+        throw Object.assign(new Error("Unique constraint failed on the fields"), {
+          code: "P2002",
+          meta: {
+            modelName: "ShoppingListItem",
+            target: ["shoppingListId", "unitId", "ingredientRefId"],
+          },
+        });
+      });
+      const request = await createFormRequest(
+        {
+          intent: "addItem",
+          ingredientName,
+          unitName,
+          quantity: "3",
+          iconKey: "incoming-icon",
+        },
+        testUserId
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      expect(response).toEqual({ data: { success: true }, init: null, type: "DataWithResponseInit" });
+      await expect(
+        db.shoppingListItem.findUnique({ where: { id: "compat-web-manual-race-winner" } })
+      ).resolves.toMatchObject({
+        quantity: 7,
+        categoryKey: expect.any(String),
+        iconKey: "package",
+      });
+      expect(createSpy).toHaveBeenCalledTimes(1);
+      await expect(
+        db.shoppingListItem.count({
+          where: { shoppingListId: shoppingList.id, ingredientRefId: ingredientRef.id, unitId: unit.id },
+        })
+      ).resolves.toBe(1);
+    });
+
+    it("compatibility: rereads the migrated active identity after a restore uniqueness conflict", async () => {
+      try {
+        await installActiveIdentityIndex();
+        const shoppingList = await db.shoppingList.create({ data: { authorId: testUserId } });
+        const ingredientName = `compat_manual_restore_race_${faker.string.alphanumeric(6)}`.toLowerCase();
+        const unitName = `compat_manual_restore_unit_${faker.string.alphanumeric(6)}`.toLowerCase();
+        const ingredientRef = await db.ingredientRef.create({ data: { name: ingredientName } });
+        const unit = await db.unit.create({ data: { name: unitName } });
+        const tombstone = await db.shoppingListItem.create({
+          data: {
+            id: "compat-web-manual-restore-loser",
+            shoppingListId: shoppingList.id,
+            ingredientRefId: ingredientRef.id,
+            unitId: unit.id,
+            quantity: 20,
+            sortIndex: 0,
+            deletedAt: new Date(),
+          },
+        });
+        const delegate = db.shoppingListItem as any;
+        const originalCreate = delegate.create.bind(delegate);
+        const originalUpdate = delegate.update.bind(delegate);
+        const updateSpy = vi.spyOn(delegate, "update").mockImplementationOnce(async () => {
+          await originalCreate({
+            data: {
+              id: "compat-web-manual-restore-winner",
+              shoppingListId: shoppingList.id,
+              ingredientRefId: ingredientRef.id,
+              unitId: unit.id,
+              quantity: 4,
+              sortIndex: 1,
+              categoryKey: "winner-category",
+            },
+          });
+          throw Object.assign(new Error("Unique constraint failed on the fields"), {
+            code: "P2002",
+            meta: {
+              modelName: "ShoppingListItem",
+              target: ["shoppingListId", "unitId", "ingredientRefId"],
+            },
+          });
+        });
+        updateSpy.mockImplementation(originalUpdate);
+
+        const response = await action({
+          request: await createFormRequest(
+            {
+              intent: "addItem",
+              ingredientName,
+              unitName,
+              quantity: "3",
+              iconKey: "incoming-icon",
+            },
+            testUserId,
+          ),
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any);
+
+        expect(response).toEqual({ data: { success: true }, init: null, type: "DataWithResponseInit" });
+        await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: "compat-web-manual-restore-winner" } }))
+          .resolves.toMatchObject({ quantity: 7, deletedAt: null, iconKey: "package" });
+        await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: tombstone.id } }))
+          .resolves.toMatchObject({ quantity: 20, deletedAt: expect.any(Date) });
+        expect(updateSpy).toHaveBeenCalledTimes(2);
+      } finally {
+        await restoreFullIdentityIndex();
+      }
     });
   });
 
@@ -1110,6 +1502,59 @@ describe("Shopping List Route", () => {
       expect(updatedList?.items[0].checkedAt).toBeNull();
     });
 
+    it("keeps the existing category but refreshes the icon from the recipe ingredient", async () => {
+      const shoppingList = await db.shoppingList.create({
+        data: { authorId: testUserId },
+      });
+      const unit = await db.unit.create({
+        data: { name: "piece_icon_refresh_" + faker.string.alphanumeric(6) },
+      });
+      const ingredientRef = await db.ingredientRef.create({
+        data: { name: "bananas_icon_refresh_" + faker.string.alphanumeric(6) },
+      });
+      const existing = await db.shoppingListItem.create({
+        data: {
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredientRef.id,
+          unitId: unit.id,
+          quantity: 1,
+          categoryKey: "bakery",
+          iconKey: "beef",
+        },
+      });
+      const recipe = await db.recipe.create({
+        data: { title: "Recipe icon refresh", chefId: testUserId },
+      });
+      await db.recipeStep.create({
+        data: { recipeId: recipe.id, stepNum: 1, description: "Refresh icon" },
+      });
+      await db.ingredient.create({
+        data: {
+          recipeId: recipe.id,
+          stepNum: 1,
+          quantity: 2,
+          unitId: unit.id,
+          ingredientRefId: ingredientRef.id,
+        },
+      });
+
+      await action({
+        request: await createFormRequest(
+          { intent: "addFromRecipe", recipeId: recipe.id },
+          testUserId,
+        ),
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: existing.id } }))
+        .resolves.toMatchObject({
+          quantity: 3,
+          categoryKey: "bakery",
+          iconKey: "apple",
+        });
+    });
+
     it("should restore a soft-deleted recipe ingredient as unchecked at the end", async () => {
       const shoppingList = await db.shoppingList.create({
         data: { authorId: testUserId },
@@ -1191,6 +1636,652 @@ describe("Shopping List Route", () => {
       expect(restored?.checkedAt).toBeNull();
       expect(restored?.deletedAt).toBeNull();
       expect(restored?.sortIndex).toBe(1);
+    });
+
+    it("compatibility: updates the active recipe identity instead of an earlier tombstone", async () => {
+      try {
+        await installActiveIdentityIndex();
+        const shoppingList = await db.shoppingList.create({
+          data: { authorId: testUserId },
+        });
+        const unit = await db.unit.create({
+          data: { name: `compat_recipe_active_unit_${faker.string.alphanumeric(6)}` },
+        });
+        const ingredientRef = await db.ingredientRef.create({
+          data: { name: `compat_recipe_active_ref_${faker.string.alphanumeric(6)}` },
+        });
+        const tombstone = await db.shoppingListItem.create({
+          data: {
+            id: "compat-recipe-active-deleted",
+            shoppingListId: shoppingList.id,
+            ingredientRefId: ingredientRef.id,
+            unitId: unit.id,
+            quantity: 100,
+            sortIndex: 0,
+            deletedAt: new Date(),
+          },
+        });
+        const active = await db.shoppingListItem.create({
+          data: {
+            id: "compat-recipe-active-survivor",
+            shoppingListId: shoppingList.id,
+            ingredientRefId: ingredientRef.id,
+            unitId: unit.id,
+            quantity: 5,
+            sortIndex: 1,
+          },
+        });
+        const recipe = await db.recipe.create({
+          data: {
+            title: "Compatibility active-first recipe",
+            chefId: testUserId,
+          },
+        });
+        await db.recipeStep.create({
+          data: {
+            recipeId: recipe.id,
+            stepNum: 1,
+            description: "Use the active identity",
+          },
+        });
+        await db.ingredient.create({
+          data: {
+            recipeId: recipe.id,
+            stepNum: 1,
+            quantity: 2,
+            unitId: unit.id,
+            ingredientRefId: ingredientRef.id,
+          },
+        });
+
+        const request = await createFormRequest(
+          { intent: "addFromRecipe", recipeId: recipe.id },
+          testUserId
+        );
+        const result = await action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any);
+        const [updatedActive, untouchedTombstone] = await Promise.all([
+          db.shoppingListItem.findUnique({ where: { id: active.id } }),
+          db.shoppingListItem.findUnique({ where: { id: tombstone.id } }),
+        ]);
+
+        expect(result).toEqual({
+          data: { success: true },
+          init: null,
+          type: "DataWithResponseInit",
+        });
+        expect(updatedActive?.quantity).toBe(7);
+        expect(updatedActive?.deletedAt).toBeNull();
+        expect(untouchedTombstone?.quantity).toBe(100);
+        expect(untouchedTombstone?.deletedAt).not.toBeNull();
+      } finally {
+        await restoreFullIdentityIndex();
+      }
+    });
+
+    it("compatibility: restores the earliest recipe tombstone by sortIndex and id", async () => {
+      try {
+        await installActiveIdentityIndex();
+        const shoppingList = await db.shoppingList.create({
+          data: { authorId: testUserId },
+        });
+        const unit = await db.unit.create({
+          data: { name: `compat_recipe_tombstone_unit_${faker.string.alphanumeric(6)}` },
+        });
+        const ingredientRef = await db.ingredientRef.create({
+          data: { name: `compat_recipe_tombstone_ref_${faker.string.alphanumeric(6)}` },
+        });
+        const laterBySort = await db.shoppingListItem.create({
+          data: {
+            id: "compat-recipe-tombstone-a-later-sort",
+            shoppingListId: shoppingList.id,
+            ingredientRefId: ingredientRef.id,
+            unitId: unit.id,
+            quantity: 10,
+            sortIndex: 3,
+            deletedAt: new Date(),
+          },
+        });
+        const laterById = await db.shoppingListItem.create({
+          data: {
+            id: "compat-recipe-tombstone-a-same-sort",
+            shoppingListId: shoppingList.id,
+            ingredientRefId: ingredientRef.id,
+            unitId: unit.id,
+            quantity: 20,
+            sortIndex: 1,
+            deletedAt: new Date(),
+          },
+        });
+        const expectedTombstone = await db.shoppingListItem.create({
+          data: {
+            id: "compat-recipe-tombstone-A-same-sort",
+            shoppingListId: shoppingList.id,
+            ingredientRefId: ingredientRef.id,
+            unitId: unit.id,
+            quantity: 30,
+            sortIndex: 1,
+            deletedAt: new Date(),
+          },
+        });
+        const recipe = await db.recipe.create({
+          data: {
+            title: "Compatibility tombstone-order recipe",
+            chefId: testUserId,
+          },
+        });
+        await db.recipeStep.create({
+          data: {
+            recipeId: recipe.id,
+            stepNum: 1,
+            description: "Restore the deterministic tombstone",
+          },
+        });
+        await db.ingredient.create({
+          data: {
+            recipeId: recipe.id,
+            stepNum: 1,
+            quantity: 1,
+            unitId: unit.id,
+            ingredientRefId: ingredientRef.id,
+          },
+        });
+
+        const request = await createFormRequest(
+          { intent: "addFromRecipe", recipeId: recipe.id },
+          testUserId
+        );
+        await action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any);
+        const [restored, sameSortLater, laterSort] = await Promise.all([
+          db.shoppingListItem.findUnique({ where: { id: expectedTombstone.id } }),
+          db.shoppingListItem.findUnique({ where: { id: laterById.id } }),
+          db.shoppingListItem.findUnique({ where: { id: laterBySort.id } }),
+        ]);
+
+        expect(restored?.quantity).toBe(31);
+        expect(restored?.deletedAt).toBeNull();
+        expect(restored?.sortIndex).toBe(0);
+        expect(sameSortLater?.quantity).toBe(20);
+        expect(sameSortLater?.deletedAt).not.toBeNull();
+        expect(laterSort?.quantity).toBe(10);
+        expect(laterSort?.deletedAt).not.toBeNull();
+      } finally {
+        await restoreFullIdentityIndex();
+      }
+    });
+
+    it("compatibility: coalesces recipe identities once in stepNum and ingredient id order", async () => {
+      const recipe = await db.recipe.create({
+        data: {
+          title: "Compatibility coalescing recipe",
+          chefId: testUserId,
+        },
+      });
+      await db.recipeStep.create({
+        data: {
+          id: "compat-coalesce-step-a-created-first",
+          recipeId: recipe.id,
+          stepNum: 2,
+          description: "Created first but traversed second",
+        },
+      });
+      await db.recipeStep.create({
+        data: {
+          id: "compat-coalesce-step-z-created-second",
+          recipeId: recipe.id,
+          stepNum: 1,
+          description: "Created second but traversed first",
+        },
+      });
+
+      const repeatedUnit = await db.unit.create({
+        data: { name: `compat_coalesce_repeated_unit_${faker.string.alphanumeric(6)}` },
+      });
+      const secondUnit = await db.unit.create({
+        data: { name: `compat_coalesce_second_unit_${faker.string.alphanumeric(6)}` },
+      });
+      const thirdUnit = await db.unit.create({
+        data: { name: `compat_coalesce_third_unit_${faker.string.alphanumeric(6)}` },
+      });
+      const repeatedRef = await db.ingredientRef.create({
+        data: { name: `compat_coalesce_repeated_ref_${faker.string.alphanumeric(6)}` },
+      });
+      const secondRef = await db.ingredientRef.create({
+        data: { name: `compat_coalesce_second_ref_${faker.string.alphanumeric(6)}` },
+      });
+      const thirdRef = await db.ingredientRef.create({
+        data: { name: `compat_coalesce_third_ref_${faker.string.alphanumeric(6)}` },
+      });
+
+      await db.ingredient.create({
+        data: {
+          id: "compat-coalesce-step2-a-repeat",
+          recipeId: recipe.id,
+          stepNum: 2,
+          quantity: 4,
+          unitId: repeatedUnit.id,
+          ingredientRefId: repeatedRef.id,
+        },
+      });
+      await db.ingredient.create({
+        data: {
+          id: "compat-coalesce-step2-b-third",
+          recipeId: recipe.id,
+          stepNum: 2,
+          quantity: 3,
+          unitId: thirdUnit.id,
+          ingredientRefId: thirdRef.id,
+        },
+      });
+      await db.ingredient.create({
+        data: {
+          id: "compat-coalesce-step1-a-second-created-first",
+          recipeId: recipe.id,
+          stepNum: 1,
+          quantity: 2,
+          unitId: secondUnit.id,
+          ingredientRefId: secondRef.id,
+        },
+      });
+      await db.ingredient.create({
+        data: {
+          id: "compat-coalesce-step1-A-repeat-created-second",
+          recipeId: recipe.id,
+          stepNum: 1,
+          quantity: 1,
+          unitId: repeatedUnit.id,
+          ingredientRefId: repeatedRef.id,
+        },
+      });
+
+      let result: Awaited<ReturnType<typeof action>> | undefined;
+      let items: Awaited<ReturnType<typeof db.shoppingListItem.findMany>> = [];
+      let repeatedMutationCount = 0;
+
+      try {
+        await db.$executeRawUnsafe(
+          'DROP TRIGGER IF EXISTS "__ShoppingCompatMutationAudit_update"'
+        );
+        await db.$executeRawUnsafe(
+          'DROP TRIGGER IF EXISTS "__ShoppingCompatMutationAudit_insert"'
+        );
+        await db.$executeRawUnsafe('DROP TABLE IF EXISTS "__ShoppingCompatMutationAudit"');
+        await db.$executeRawUnsafe(`
+          CREATE TABLE "__ShoppingCompatMutationAudit" (
+            "itemId" TEXT NOT NULL
+          )
+        `);
+        await db.$executeRawUnsafe(`
+          CREATE TRIGGER "__ShoppingCompatMutationAudit_insert"
+          AFTER INSERT ON "ShoppingListItem"
+          WHEN NEW."ingredientRefId" = '${repeatedRef.id}'
+          BEGIN
+            INSERT INTO "__ShoppingCompatMutationAudit" ("itemId") VALUES (NEW."id");
+          END
+        `);
+        await db.$executeRawUnsafe(`
+          CREATE TRIGGER "__ShoppingCompatMutationAudit_update"
+          AFTER UPDATE ON "ShoppingListItem"
+          WHEN NEW."ingredientRefId" = '${repeatedRef.id}'
+          BEGIN
+            INSERT INTO "__ShoppingCompatMutationAudit" ("itemId") VALUES (NEW."id");
+          END
+        `);
+        const request = await createFormRequest(
+          { intent: "addFromRecipe", recipeId: recipe.id },
+          testUserId
+        );
+        result = await action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any);
+        const shoppingList = await db.shoppingList.findUniqueOrThrow({
+          where: { authorId: testUserId },
+        });
+        items = await db.shoppingListItem.findMany({
+          where: { shoppingListId: shoppingList.id },
+        });
+        const auditRows = await db.$queryRawUnsafe<Array<{ mutationCount: bigint | number }>>(
+          'SELECT COUNT(*) AS "mutationCount" FROM "__ShoppingCompatMutationAudit"'
+        );
+        repeatedMutationCount = Number(auditRows[0]?.mutationCount ?? 0);
+      } finally {
+        await db.$executeRawUnsafe(
+          'DROP TRIGGER IF EXISTS "__ShoppingCompatMutationAudit_update"'
+        );
+        await db.$executeRawUnsafe(
+          'DROP TRIGGER IF EXISTS "__ShoppingCompatMutationAudit_insert"'
+        );
+        await db.$executeRawUnsafe('DROP TABLE IF EXISTS "__ShoppingCompatMutationAudit"');
+      }
+
+      const byIngredient = new Map(items.map((item) => [item.ingredientRefId, item]));
+
+      expect(result).toEqual({
+        data: { success: true },
+        init: null,
+        type: "DataWithResponseInit",
+      });
+      expect(items).toHaveLength(3);
+      expect.soft(byIngredient.get(repeatedRef.id)).toMatchObject({ quantity: 5, sortIndex: 0 });
+      expect.soft(byIngredient.get(secondRef.id)).toMatchObject({ quantity: 2, sortIndex: 1 });
+      expect.soft(byIngredient.get(thirdRef.id)).toMatchObject({ quantity: 3, sortIndex: 2 });
+      expect.soft(repeatedMutationCount).toBe(1);
+    });
+
+    it("compatibility: rejects a non-finite scaled product without partial writes", async () => {
+      const recipe = await db.recipe.create({
+        data: {
+          title: "Compatibility product overflow recipe",
+          chefId: testUserId,
+        },
+      });
+      await db.recipeStep.create({
+        data: { recipeId: recipe.id, stepNum: 1, description: "Overflow product" },
+      });
+      const finiteUnit = await db.unit.create({
+        data: { name: `compat_product_finite_unit_${faker.string.alphanumeric(6)}` },
+      });
+      const overflowUnit = await db.unit.create({
+        data: { name: `compat_product_overflow_unit_${faker.string.alphanumeric(6)}` },
+      });
+      const finiteRef = await db.ingredientRef.create({
+        data: { name: `compat_product_finite_ref_${faker.string.alphanumeric(6)}` },
+      });
+      const overflowRef = await db.ingredientRef.create({
+        data: { name: `compat_product_overflow_ref_${faker.string.alphanumeric(6)}` },
+      });
+      await db.ingredient.create({
+        data: {
+          id: "compat-product-a-finite",
+          recipeId: recipe.id,
+          stepNum: 1,
+          quantity: 1,
+          unitId: finiteUnit.id,
+          ingredientRefId: finiteRef.id,
+        },
+      });
+      await db.ingredient.create({
+        data: {
+          id: "compat-product-z-overflow",
+          recipeId: recipe.id,
+          stepNum: 1,
+          quantity: 1e308,
+          unitId: overflowUnit.id,
+          ingredientRefId: overflowRef.id,
+        },
+      });
+
+      const request = await createFormRequest(
+        { intent: "addFromRecipe", recipeId: recipe.id, scaleFactor: "10" },
+        testUserId
+      );
+
+      await expect(
+        action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any)
+      ).rejects.toThrow();
+      const shoppingList = await db.shoppingList.findUniqueOrThrow({
+        where: { authorId: testUserId },
+      });
+      const items = await db.shoppingListItem.findMany({
+        where: { shoppingListId: shoppingList.id },
+      });
+
+      expect(items).toHaveLength(0);
+    });
+
+    it("compatibility: rejects a non-finite coalesced sum without partial writes", async () => {
+      const recipe = await db.recipe.create({
+        data: {
+          title: "Compatibility sum overflow recipe",
+          chefId: testUserId,
+        },
+      });
+      await db.recipeStep.create({
+        data: { recipeId: recipe.id, stepNum: 1, description: "Overflow sum" },
+      });
+      const unit = await db.unit.create({
+        data: { name: `compat_sum_unit_${faker.string.alphanumeric(6)}` },
+      });
+      const ingredientRef = await db.ingredientRef.create({
+        data: { name: `compat_sum_ref_${faker.string.alphanumeric(6)}` },
+      });
+      await db.ingredient.create({
+        data: {
+          id: "compat-sum-a",
+          recipeId: recipe.id,
+          stepNum: 1,
+          quantity: 1e308,
+          unitId: unit.id,
+          ingredientRefId: ingredientRef.id,
+        },
+      });
+      await db.ingredient.create({
+        data: {
+          id: "compat-sum-b",
+          recipeId: recipe.id,
+          stepNum: 1,
+          quantity: 1e308,
+          unitId: unit.id,
+          ingredientRefId: ingredientRef.id,
+        },
+      });
+
+      const request = await createFormRequest(
+        { intent: "addFromRecipe", recipeId: recipe.id },
+        testUserId
+      );
+
+      await expect(
+        action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any)
+      ).rejects.toThrow();
+      const shoppingList = await db.shoppingList.findUniqueOrThrow({
+        where: { authorId: testUserId },
+      });
+      const items = await db.shoppingListItem.findMany({
+        where: { shoppingListId: shoppingList.id },
+      });
+
+      expect(items).toHaveLength(0);
+    });
+
+    it("compatibility: rolls back the complete recipe add when a database write fails", async () => {
+      const shoppingList = await db.shoppingList.create({
+        data: { authorId: testUserId },
+      });
+      const recipe = await db.recipe.create({
+        data: {
+          title: "Compatibility injected failure recipe",
+          chefId: testUserId,
+        },
+      });
+      await db.recipeStep.create({
+        data: { recipeId: recipe.id, stepNum: 1, description: "Fail atomically" },
+      });
+      const firstUnit = await db.unit.create({
+        data: { name: `compat_failure_first_unit_${faker.string.alphanumeric(6)}` },
+      });
+      const secondUnit = await db.unit.create({
+        data: { name: `compat_failure_second_unit_${faker.string.alphanumeric(6)}` },
+      });
+      const firstRef = await db.ingredientRef.create({
+        data: { name: `compat_failure_first_ref_${faker.string.alphanumeric(6)}` },
+      });
+      const secondRef = await db.ingredientRef.create({
+        data: { name: `compat_failure_second_ref_${faker.string.alphanumeric(6)}` },
+      });
+      await db.ingredient.create({
+        data: {
+          id: "compat-failure-a",
+          recipeId: recipe.id,
+          stepNum: 1,
+          quantity: 1,
+          unitId: firstUnit.id,
+          ingredientRefId: firstRef.id,
+        },
+      });
+      await db.ingredient.create({
+        data: {
+          id: "compat-failure-b",
+          recipeId: recipe.id,
+          stepNum: 1,
+          quantity: 2,
+          unitId: secondUnit.id,
+          ingredientRefId: secondRef.id,
+        },
+      });
+
+      await db.$executeRawUnsafe(`
+        CREATE TRIGGER "__ShoppingCompatInjectedFailure"
+        BEFORE INSERT ON "ShoppingListItem"
+        WHEN NEW."shoppingListId" = '${shoppingList.id}'
+          AND (
+            SELECT COUNT(*)
+            FROM "ShoppingListItem"
+            WHERE "shoppingListId" = NEW."shoppingListId"
+          ) >= 1
+        BEGIN
+          SELECT RAISE(ABORT, 'compatibility-injected-shopping-write-failure');
+        END
+      `);
+
+      let itemsAfterFailure: Awaited<ReturnType<typeof db.shoppingListItem.findMany>> = [];
+
+      try {
+        const request = await createFormRequest(
+          { intent: "addFromRecipe", recipeId: recipe.id },
+          testUserId
+        );
+        await expect(
+          action({
+            request,
+            context: { cloudflare: { env: null } },
+            params: {},
+          } as any)
+        ).rejects.toThrow();
+        itemsAfterFailure = await db.shoppingListItem.findMany({
+          where: { shoppingListId: shoppingList.id },
+        });
+      } finally {
+        await db.$executeRawUnsafe(
+          'DROP TRIGGER IF EXISTS "__ShoppingCompatInjectedFailure"'
+        );
+      }
+
+      expect(itemsAfterFailure).toHaveLength(0);
+    });
+
+    it("compatibility: rebuilds and retries the complete recipe transaction once after a uniqueness race", async () => {
+      const shoppingList = await db.shoppingList.create({ data: { authorId: testUserId } });
+      const recipe = await db.recipe.create({
+        data: { title: "Compatibility web race recipe", chefId: testUserId },
+      });
+      await db.recipeStep.create({
+        data: { recipeId: recipe.id, stepNum: 1, description: "Race atomically" },
+      });
+      const firstUnit = await db.unit.create({
+        data: { name: `compat_web_race_first_unit_${faker.string.alphanumeric(6)}` },
+      });
+      const secondUnit = await db.unit.create({
+        data: { name: `compat_web_race_second_unit_${faker.string.alphanumeric(6)}` },
+      });
+      const firstRef = await db.ingredientRef.create({
+        data: { name: `compat_web_race_first_ref_${faker.string.alphanumeric(6)}` },
+      });
+      const secondRef = await db.ingredientRef.create({
+        data: { name: `compat_web_race_second_ref_${faker.string.alphanumeric(6)}` },
+      });
+      await db.ingredient.createMany({
+        data: [
+          {
+            id: "compat-web-race-a",
+            recipeId: recipe.id,
+            stepNum: 1,
+            quantity: 2,
+            unitId: firstUnit.id,
+            ingredientRefId: firstRef.id,
+          },
+          {
+            id: "compat-web-race-b",
+            recipeId: recipe.id,
+            stepNum: 1,
+            quantity: 3,
+            unitId: secondUnit.id,
+            ingredientRefId: secondRef.id,
+          },
+        ],
+      });
+
+      const client = db as any;
+      const originalTransaction = client.$transaction.bind(client);
+      const transactionOperationSets: unknown[][] = [];
+      vi.spyOn(client, "$transaction").mockImplementation(async (input: unknown, ...rest: unknown[]) => {
+        if (!Array.isArray(input)) {
+          throw new Error("Expected an operation-array transaction");
+        }
+        transactionOperationSets.push(input);
+        if (transactionOperationSets.length === 1) {
+          await db.shoppingListItem.create({
+            data: {
+              id: "compat-web-race-winner",
+              shoppingListId: shoppingList.id,
+              ingredientRefId: firstRef.id,
+              unitId: firstUnit.id,
+              quantity: 4,
+              sortIndex: 0,
+            },
+          });
+        }
+        return originalTransaction(input, ...rest);
+      });
+
+      const request = await createFormRequest(
+        { intent: "addFromRecipe", recipeId: recipe.id },
+        testUserId
+      );
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      expect(response).toEqual({ data: { success: true }, init: null, type: "DataWithResponseInit" });
+      expect(transactionOperationSets.map((operations) => operations.length)).toEqual([2, 2]);
+      expect(transactionOperationSets[1]).not.toBe(transactionOperationSets[0]);
+      expect(transactionOperationSets[1][0]).not.toBe(transactionOperationSets[0][0]);
+      expect(transactionOperationSets[1][1]).not.toBe(transactionOperationSets[0][1]);
+      await expect(
+        db.shoppingListItem.findMany({
+          where: { shoppingListId: shoppingList.id },
+          orderBy: [{ sortIndex: "asc" }, { id: "asc" }],
+        })
+      ).resolves.toEqual([
+        expect.objectContaining({
+          id: "compat-web-race-winner",
+          ingredientRefId: firstRef.id,
+          quantity: 6,
+        }),
+        expect.objectContaining({
+          ingredientRefId: secondRef.id,
+          quantity: 3,
+        }),
+      ]);
     });
 
     it("should do nothing when recipeId is not provided", async () => {

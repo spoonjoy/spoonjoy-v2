@@ -45,6 +45,61 @@ function extractResponseData(response: any): { data: any; status: number } {
   return { data: response, status: 200 };
 }
 
+const PRODUCT_ACTIVATION_PENDING_RESPONSE = {
+  error: {
+    code: "product_activation_pending",
+    message: "Spoonjoy product activation is still completing. Retry shortly.",
+    retryable: true,
+  },
+};
+const CUTOVER_TRIGGER_NAME = "test_recipe_detail_saved_recipe_cutover_pending";
+
+async function installRecipeDetailAbortTrigger(
+  table: "RecipeInCookbook",
+  event: "INSERT" | "DELETE",
+  message = "saved_recipe_cutover_pending",
+) {
+  await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${CUTOVER_TRIGGER_NAME}"`);
+  // Native Prisma erases RAISE text as P2003; this keeps the token and the
+  // same BEFORE-trigger rollback semantics. The Workers suite uses real RAISE.
+  const failureStatement = message === "saved_recipe_cutover_pending"
+    ? `SELECT * FROM ${message};`
+    : `SELECT RAISE(ABORT, '${message}');`;
+  await db.$executeRawUnsafe(`
+    CREATE TRIGGER "${CUTOVER_TRIGGER_NAME}"
+    BEFORE ${event} ON "${table}"
+    BEGIN
+      ${failureStatement}
+    END
+  `);
+}
+
+async function expectProductActivationPendingResponse(result: unknown) {
+  let status: number | undefined;
+  let body: unknown;
+  let headers = new Headers();
+
+  if (result instanceof Response) {
+    status = result.status;
+    const text = await result.clone().text();
+    body = text ? JSON.parse(text) : undefined;
+    headers = result.headers;
+  } else {
+    const dataResult = result as {
+      data?: unknown;
+      init?: { status?: number; headers?: HeadersInit } | null;
+    };
+    status = dataResult?.init?.status;
+    body = dataResult?.data;
+    headers = new Headers(dataResult?.init?.headers);
+  }
+
+  expect.soft(status).toBe(503);
+  expect.soft(body).toEqual(PRODUCT_ACTIVATION_PENDING_RESPONSE);
+  expect.soft(headers.get("Retry-After")).toBe("1");
+  expect.soft(headers.get("Cache-Control")).toBe("private, no-store");
+}
+
 const VALID_PNG_BYTES = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
   0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
@@ -89,6 +144,7 @@ describe("Recipes $id Route", () => {
 
   afterEach(async () => {
     window.history.replaceState(null, "", "/");
+    await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${CUTOVER_TRIGGER_NAME}"`);
     await cleanupDatabase();
   });
 
@@ -2130,6 +2186,46 @@ describe("Recipes $id Route", () => {
         },
       });
       expect(recipeInCookbook).not.toBeNull();
+    });
+
+    it("maps a cutover trigger while creating and saving and rolls back the new cookbook", async () => {
+      const title = "Cutover Cookbook " + faker.string.alphanumeric(6);
+      await installRecipeDetailAbortTrigger("RecipeInCookbook", "INSERT");
+      const request = await createFormRequest(
+        { intent: "createCookbookAndSave", title },
+        testUserId,
+      );
+
+      const result = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any).catch((error) => error);
+
+      await expectProductActivationPendingResponse(result);
+      await expect(
+        db.cookbook.count({ where: { authorId: testUserId, title } }),
+      ).resolves.toBe(0);
+      await expect(
+        db.recipeInCookbook.count({ where: { recipeId } }),
+      ).resolves.toBe(0);
+    });
+
+    it("rethrows an unrelated failure while creating and saving a cookbook", async () => {
+      await installRecipeDetailAbortTrigger(
+        "RecipeInCookbook",
+        "INSERT",
+        "ordinary_create_cookbook_failure",
+      );
+
+      await expect(action({
+        request: await createFormRequest(
+          { intent: "createCookbookAndSave", title: "Ordinary failure cookbook" },
+          testUserId,
+        ),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any)).rejects.toMatchObject({ code: "P2003" });
     });
 
     it("throws 400 when creating a cookbook with a blank title", async () => {
@@ -4547,6 +4643,36 @@ describe("Recipes $id Route", () => {
       expect(recipeInCookbook?.addedById).toBe(testUserId);
     });
 
+    it("maps a cutover trigger while adding to a cookbook and rolls back membership and cookbook touch", async () => {
+      const baselineUpdatedAt = new Date("2000-01-01T00:00:00.000Z");
+      await db.cookbook.update({
+        where: { id: testCookbookId },
+        data: { updatedAt: baselineUpdatedAt },
+      });
+      await installRecipeDetailAbortTrigger("RecipeInCookbook", "INSERT");
+      const request = await createFormRequest(
+        { intent: "addToCookbook", cookbookId: testCookbookId },
+        testUserId,
+      );
+
+      const result = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any).catch((error) => error);
+
+      await expectProductActivationPendingResponse(result);
+      await expect(
+        db.recipeInCookbook.count({ where: { cookbookId: testCookbookId, recipeId } }),
+      ).resolves.toBe(0);
+      await expect(
+        db.cookbook.findUniqueOrThrow({
+          where: { id: testCookbookId },
+          select: { updatedAt: true },
+        }),
+      ).resolves.toEqual({ updatedAt: baselineUpdatedAt });
+    });
+
     it("should return success even if recipe already in cookbook", async () => {
       // First add the recipe
       await db.recipeInCookbook.create({
@@ -4715,6 +4841,67 @@ describe("Recipes $id Route", () => {
         },
       });
       expect(recipeInCookbook).toBeNull();
+    });
+
+    it("maps a cutover trigger while removing from a cookbook and rolls back membership and cookbook touch", async () => {
+      const membership = await db.recipeInCookbook.create({
+        data: {
+          cookbookId: testCookbookId,
+          recipeId,
+          addedById: testUserId,
+        },
+      });
+      const baselineUpdatedAt = new Date("2000-01-01T00:00:00.000Z");
+      await db.cookbook.update({
+        where: { id: testCookbookId },
+        data: { updatedAt: baselineUpdatedAt },
+      });
+      await installRecipeDetailAbortTrigger("RecipeInCookbook", "DELETE");
+      const request = await createFormRequest(
+        { intent: "removeFromCookbook", cookbookId: testCookbookId },
+        testUserId,
+      );
+
+      const result = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any).catch((error) => error);
+
+      await expectProductActivationPendingResponse(result);
+      await expect(
+        db.recipeInCookbook.findUnique({ where: { id: membership.id } }),
+      ).resolves.toEqual(membership);
+      await expect(
+        db.cookbook.findUniqueOrThrow({
+          where: { id: testCookbookId },
+          select: { updatedAt: true },
+        }),
+      ).resolves.toEqual({ updatedAt: baselineUpdatedAt });
+    });
+
+    it("rethrows an unrelated failure while removing from a cookbook", async () => {
+      await db.recipeInCookbook.create({
+        data: {
+          cookbookId: testCookbookId,
+          recipeId,
+          addedById: testUserId,
+        },
+      });
+      await installRecipeDetailAbortTrigger(
+        "RecipeInCookbook",
+        "DELETE",
+        "ordinary_remove_cookbook_failure",
+      );
+
+      await expect(action({
+        request: await createFormRequest(
+          { intent: "removeFromCookbook", cookbookId: testCookbookId },
+          testUserId,
+        ),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any)).rejects.toMatchObject({ code: "P2003" });
     });
 
     it("should throw 403 when removing from someone else's cookbook", async () => {

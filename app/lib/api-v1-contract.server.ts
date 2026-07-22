@@ -135,6 +135,7 @@ export const API_V1_ERROR_STATUS = {
   idempotency_in_progress: 409,
   rate_limited: 429,
   upstream_error: 502,
+  product_activation_pending: 503,
   upstream_timeout: 504,
   internal_error: 500,
 } as const;

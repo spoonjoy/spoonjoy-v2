@@ -23,10 +23,12 @@ const requestHandler = createRequestHandler(
 
 const COOK_SESSION_PREFIX = "/api/cook-sessions";
 const COOK_SESSION_BOOTSTRAP_PATH = "/.well-known/spoonjoy-cook-session-bootstrap";
+const ACCOUNT_DELETE_INTENT_RESOURCE = "urn:spoonjoy:account-delete-intent:v1";
 
 interface CookRouteRequirement {
+  ownerDelete?: boolean;
   originRequired: boolean;
-  scope: "kitchen:read" | "kitchen:write";
+  scope: "account:write" | "kitchen:read" | "kitchen:write";
 }
 
 function cookErrorResponse(
@@ -62,8 +64,40 @@ function configuredCookSessionOrigin(env: CloudflareEnvironment): string | null 
   }
 }
 
+function requestHasQueryComponent(request: Request): boolean {
+  return request.url.includes("?");
+}
+
+async function requestHasBodyBytes(request: Request): Promise<boolean> {
+  if (!request.body) return false;
+
+  const reader = request.body.getReader();
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) return false;
+      if (chunk.value.byteLength > 0) {
+        try {
+          await reader.cancel();
+        } catch {
+          // Payload validation has already failed; cancellation is cleanup only.
+        }
+        return true;
+      }
+    }
+  } catch {
+    // An unreadable stream cannot satisfy the required empty-body contract.
+    return true;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 function classifyCookRoute(request: Request, url: URL): CookRouteRequirement | null {
-  if (url.search) return null;
+  if (requestHasQueryComponent(request)) return null;
+  if (request.method === "DELETE" && url.pathname === COOK_SESSION_PREFIX) {
+    return { scope: "account:write", originRequired: true, ownerDelete: true };
+  }
   if (request.method === "GET" && url.pathname === COOK_SESSION_PREFIX) {
     return { scope: "kitchen:read", originRequired: false };
   }
@@ -95,6 +129,10 @@ async function handleCookSessionRequest(
   env: CloudflareEnvironment,
 ): Promise<Response> {
   const url = new URL(request.url);
+  const isOwnerDelete = request.method === "DELETE" && url.pathname === COOK_SESSION_PREFIX;
+  if (isOwnerDelete && requestHasQueryComponent(request)) {
+    return cookErrorResponse(400, "invalid_request", "Cook session request is invalid.");
+  }
   const requirement = classifyCookRoute(request, url);
   if (!requirement) return new Response(null, { status: 404 });
 
@@ -107,18 +145,31 @@ async function handleCookSessionRequest(
     if (!principal) {
       return cookErrorResponse(401, "authentication_required", "Authentication required.");
     }
-    if (principal.source === "bearer" && !principal.scopes.includes(requirement.scope)) {
+    if (
+      requirement.ownerDelete
+        ? principal.source !== "bearer" ||
+          !principal.credentialId ||
+          !principal.scopes.includes(requirement.scope) ||
+          principal.oauthResource !== ACCOUNT_DELETE_INTENT_RESOURCE
+        : principal.source === "bearer" && !principal.scopes.includes(requirement.scope)
+    ) {
       return cookErrorResponse(
         403,
         "insufficient_scope",
         "This credential does not include the required cook-session scope.",
       );
     }
+    const configuredOrigin = requirement.originRequired
+      ? configuredCookSessionOrigin(env)
+      : null;
     if (
       requirement.originRequired &&
-      request.headers.get("Origin") !== configuredCookSessionOrigin(env)
+      (!configuredOrigin || request.headers.get("Origin") !== configuredOrigin)
     ) {
       return cookErrorResponse(403, "origin_forbidden", "Request origin is not allowed.");
+    }
+    if (requirement.ownerDelete && await requestHasBodyBytes(request)) {
+      return cookErrorResponse(400, "invalid_request", "Cook session request is invalid.");
     }
     return cookProtocolUnavailableResponse();
   } catch (error) {

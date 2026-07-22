@@ -28,7 +28,13 @@ function routeArgs(request: Request, splat: string) {
   return { request, params: { "*": splat }, context: { cloudflare: { env: null } } } as any;
 }
 
-function withD1TransactionGuard(db: PrismaClientType): PrismaClientType {
+function withD1TransactionGuard(
+  db: PrismaClientType,
+  interceptArrayTransaction?: (
+    operations: unknown[],
+    execute: () => unknown,
+  ) => unknown,
+): PrismaClientType {
   return new Proxy(db, {
     get(target, property, receiver) {
       if (property !== "$transaction") {
@@ -41,7 +47,10 @@ function withD1TransactionGuard(db: PrismaClientType): PrismaClientType {
         }
 
         const transaction = Reflect.get(target, property, receiver) as (...args: unknown[]) => unknown;
-        return transaction.apply(target, [input, ...rest]);
+        const execute = () => transaction.apply(target, [input, ...rest]);
+        return interceptArrayTransaction
+          ? interceptArrayTransaction(input as unknown[], execute)
+          : execute();
       };
     },
   });
@@ -58,6 +67,7 @@ describe("API v1 shopping-list mutations on D1", () => {
 
   afterEach(async () => {
     mocked.db = null;
+    vi.restoreAllMocks();
     await cleanupDatabase();
   });
 
@@ -206,5 +216,119 @@ describe("API v1 shopping-list mutations on D1", () => {
         mutation: { clientMutationId: "d1-clear-all", replayed: false },
       },
     });
+  });
+
+  it("rebuilds and retries the complete array transaction once after a uniqueness conflict", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const credential = await createApiCredential(db, user.id, "D1 shopping retry writer", {
+      scopes: ["shopping_list:write"],
+    });
+    const list = await db.shoppingList.create({ data: { authorId: user.id } });
+    const recipe = await db.recipe.create({ data: createTestRecipe(user.id) });
+    await db.recipeStep.create({
+      data: {
+        recipeId: recipe.id,
+        stepNum: 1,
+        stepTitle: "Retry",
+        description: "Retry every coalesced mutation.",
+      },
+    });
+    const unit = await getOrCreateUnit(db, `d1 retry unit ${faker.string.alphanumeric(6)}`.toLowerCase());
+    const firstRef = await getOrCreateIngredientRef(db, `d1 retry first ${faker.string.alphanumeric(6)}`.toLowerCase());
+    const secondRef = await getOrCreateIngredientRef(db, `d1 retry second ${faker.string.alphanumeric(6)}`.toLowerCase());
+    await db.ingredient.createMany({
+      data: [
+        {
+          id: "compat-d1-retry-a",
+          recipeId: recipe.id,
+          stepNum: 1,
+          quantity: 1,
+          unitId: unit.id,
+          ingredientRefId: firstRef.id,
+        },
+        {
+          id: "compat-d1-retry-z",
+          recipeId: recipe.id,
+          stepNum: 1,
+          quantity: 2,
+          unitId: unit.id,
+          ingredientRefId: secondRef.id,
+        },
+      ],
+    });
+
+    const attempts: unknown[][] = [];
+    mocked.db = withD1TransactionGuard(db, async (operations, execute) => {
+      attempts.push(operations);
+      if (attempts.length === 1) {
+        await db.shoppingListItem.create({
+          data: {
+            id: "compat-d1-retry-race-winner",
+            shoppingListId: list.id,
+            ingredientRefId: firstRef.id,
+            unitId: unit.id,
+            quantity: 4,
+            sortIndex: 0,
+          },
+        });
+        throw Object.assign(new Error("Unique constraint failed on the fields"), {
+          code: "P2002",
+          meta: {
+            modelName: "ShoppingListItem",
+            target: ["shoppingListId", "unitId", "ingredientRefId"],
+          },
+        });
+      }
+      return execute();
+    });
+    const request = (requestId: string) => new UndiciRequest("http://localhost/api/v1/shopping-list/add-from-recipe", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${credential.token}`,
+        "Content-Type": "application/json",
+        "X-Request-Id": requestId,
+      },
+      body: JSON.stringify({
+        clientMutationId: "compat-d1-retry",
+        recipeId: recipe.id,
+      }),
+    }) as unknown as Request;
+
+    const response = await action(routeArgs(request("req_compat_d1_retry"), "shopping-list/add-from-recipe"));
+    const payload = await response.json() as any;
+    expect(response.status).toBe(200);
+    expect(Object.keys(payload).sort()).toEqual(["data", "ok", "requestId"]);
+    expect(Object.keys(payload.data).sort()).toEqual(["created", "items", "mutation", "recipe", "updated"]);
+    expect(payload).toMatchObject({
+      ok: true,
+      requestId: "req_compat_d1_retry",
+      data: {
+        created: 1,
+        updated: 1,
+        mutation: { clientMutationId: "compat-d1-retry", replayed: false },
+      },
+    });
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]).toHaveLength(2);
+    expect(attempts[1]).toHaveLength(2);
+    expect(attempts[1]).not.toBe(attempts[0]);
+    expect(attempts[1][0]).not.toBe(attempts[0][0]);
+    await expect(db.shoppingListItem.findUniqueOrThrow({
+      where: { id: "compat-d1-retry-race-winner" },
+    })).resolves.toMatchObject({ quantity: 5, deletedAt: null });
+    expect(await db.shoppingListItem.count({
+      where: {
+        shoppingListId: list.id,
+        ingredientRefId: { in: [firstRef.id, secondRef.id] },
+      },
+    })).toBe(2);
+
+    const replay = await action(routeArgs(request("req_compat_d1_retry_replay"), "shopping-list/add-from-recipe"));
+    await expect(replay.json()).resolves.toMatchObject({
+      ok: true,
+      requestId: "req_compat_d1_retry_replay",
+      data: { mutation: { clientMutationId: "compat-d1-retry", replayed: true } },
+    });
+    expect(attempts).toHaveLength(2);
   });
 });

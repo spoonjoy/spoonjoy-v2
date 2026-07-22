@@ -42,6 +42,13 @@ const TEST_USER_ID = "cook-session-user";
 const READ_TOKEN = "sj_cook_session_read_test";
 const WRITE_TOKEN = "sj_cook_session_write_test";
 const WRONG_SCOPE_TOKEN = "sj_cook_session_wrong_scope_test";
+const ACCOUNT_DELETE_INTENT_RESOURCE = "urn:spoonjoy:account-delete-intent:v1";
+const DELETE_INTENT_TOKEN = "sj_cook_session_delete_intent_test";
+const DELETE_INTENT_MISSING_RESOURCE_TOKEN = "sj_cook_session_delete_missing_resource_test";
+const DELETE_INTENT_WRONG_RESOURCE_TOKEN = "sj_cook_session_delete_wrong_resource_test";
+const DELETE_INTENT_WRONG_SCOPE_TOKEN = "sj_cook_session_delete_wrong_scope_test";
+const DELETE_INTENT_EXPIRED_TOKEN = "sj_cook_session_delete_expired_test";
+const DELETE_INTENT_REVOKED_TOKEN = "sj_cook_session_delete_revoked_test";
 const protocolUnavailableBody = {
   error: {
     code: "cook_session_protocol_unavailable",
@@ -83,13 +90,22 @@ async function tokenHash(token: string) {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-async function insertCredential(id: string, token: string, scopes: string) {
+async function insertCredential(
+  id: string,
+  token: string,
+  scopes: string,
+  options: {
+    expiresAt?: string | null;
+    oauthResource?: string | null;
+    revokedAt?: string | null;
+  } = {},
+) {
   const now = "2026-07-20T00:00:00.000Z";
   await testEnvironment().DB.prepare(`
     INSERT INTO ApiCredential (
       id, userId, name, tokenHash, tokenPrefix, scopes, lastUsedAt, revokedAt,
       oauthClientId, oauthResource, expiresAt, createdAt, updatedAt
-    ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, NULL, ?, ?, ?, ?)
   `).bind(
     id,
     TEST_USER_ID,
@@ -97,6 +113,9 @@ async function insertCredential(id: string, token: string, scopes: string) {
     await tokenHash(token),
     token.slice(0, 12),
     scopes,
+    options.revokedAt ?? null,
+    options.oauthResource ?? null,
+    options.expiresAt ?? null,
     now,
     now,
   ).run();
@@ -124,6 +143,22 @@ function requestForRoute(
     method: route.method,
     headers,
     body: route.method === "POST" || route.method === "PATCH" ? "{}" : undefined,
+  });
+}
+
+function ownerDeleteRequest(
+  token: string | null,
+  options: { body?: BodyInit; cookie?: string; origin?: string | null; suffix?: string } = {},
+) {
+  const headers = new Headers();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  if (options.cookie) headers.set("Cookie", options.cookie);
+  const origin = options.origin === undefined ? TEST_ORIGIN : options.origin;
+  if (origin) headers.set("Origin", origin);
+  return new Request(`${TEST_ORIGIN}/api/cook-sessions${options.suffix ?? ""}`, {
+    method: "DELETE",
+    headers,
+    body: options.body,
   });
 }
 
@@ -248,6 +283,47 @@ describe("CookSession lifecycle bootstrap", () => {
     await insertCredential("cook-read", READ_TOKEN, "kitchen:read");
     await insertCredential("cook-write", WRITE_TOKEN, "kitchen:write");
     await insertCredential("cook-wrong", WRONG_SCOPE_TOKEN, "public:read");
+    await insertCredential(
+      "cook-delete-intent",
+      DELETE_INTENT_TOKEN,
+      "account:write",
+      { oauthResource: ACCOUNT_DELETE_INTENT_RESOURCE },
+    );
+    await insertCredential(
+      "cook-delete-missing-resource",
+      DELETE_INTENT_MISSING_RESOURCE_TOKEN,
+      "account:write",
+    );
+    await insertCredential(
+      "cook-delete-wrong-resource",
+      DELETE_INTENT_WRONG_RESOURCE_TOKEN,
+      "account:write",
+      { oauthResource: `${ACCOUNT_DELETE_INTENT_RESOURCE}:wrong` },
+    );
+    await insertCredential(
+      "cook-delete-wrong-scope",
+      DELETE_INTENT_WRONG_SCOPE_TOKEN,
+      "kitchen:write",
+      { oauthResource: ACCOUNT_DELETE_INTENT_RESOURCE },
+    );
+    await insertCredential(
+      "cook-delete-expired",
+      DELETE_INTENT_EXPIRED_TOKEN,
+      "account:write",
+      {
+        expiresAt: "2000-01-01T00:00:00.000Z",
+        oauthResource: ACCOUNT_DELETE_INTENT_RESOURCE,
+      },
+    );
+    await insertCredential(
+      "cook-delete-revoked",
+      DELETE_INTENT_REVOKED_TOKEN,
+      "account:write",
+      {
+        oauthResource: ACCOUNT_DELETE_INTENT_RESOURCE,
+        revokedAt: "2026-07-20T00:00:00.000Z",
+      },
+    );
     sessionCookie = (await createUserSessionCookie(
       TEST_USER_ID,
       {
@@ -316,6 +392,275 @@ describe("CookSession lifecycle bootstrap", () => {
     }
   });
 
+  itWithCookSessionNamespace("accepts only the exact bearer account-deletion intent without deriving a Durable Object", async (namespace) => {
+    const worker = (await import("../../workers/app")).default;
+    const captured = createCapturingNamespace();
+    const beforeIds = await listDurableObjectIds(namespace);
+    const response = await worker.fetch(
+      ownerDeleteRequest(DELETE_INTENT_TOKEN),
+      {
+        ...testEnvironment(),
+        COOK_SESSIONS: captured.namespace,
+      } as unknown as CloudflareEnvironment,
+      createExecutionContext(),
+    );
+
+    expect(captured.names).toEqual([]);
+    expect(captured.ids).toEqual([]);
+    expect(captured.getOptions).toEqual([]);
+    expect(captured.requests).toEqual([]);
+    expect((await listDurableObjectIds(namespace)).map(String)).toEqual(beforeIds.map(String));
+    await expectProtocolUnavailable(response);
+  });
+
+  itWithCookSessionNamespace("accepts an edge-normalized zero-byte owner DELETE stream without deriving a Durable Object", async (namespace) => {
+    const worker = (await import("../../workers/app")).default;
+    const captured = createCapturingNamespace();
+    const beforeIds = await listDurableObjectIds(namespace);
+    const request = ownerDeleteRequest(DELETE_INTENT_TOKEN, {
+      body: new Uint8Array(0),
+    });
+
+    expect(request.body).not.toBeNull();
+    const response = await worker.fetch(
+      request,
+      {
+        ...testEnvironment(),
+        COOK_SESSIONS: captured.namespace,
+      } as unknown as CloudflareEnvironment,
+      createExecutionContext(),
+    );
+
+    expect(captured.names).toEqual([]);
+    expect(captured.ids).toEqual([]);
+    expect(captured.getOptions).toEqual([]);
+    expect(captured.requests).toEqual([]);
+    expect((await listDurableObjectIds(namespace)).map(String)).toEqual(beforeIds.map(String));
+    await expectProtocolUnavailable(response);
+  });
+
+  it.each([
+    [
+      "missing credentials",
+      null,
+      false,
+      401,
+      "authentication_required",
+      "Authentication required.",
+    ],
+    [
+      "an invalid bearer token",
+      "sj_cook_session_delete_invalid_test",
+      false,
+      401,
+      "authentication_required",
+      "Authentication required.",
+    ],
+    [
+      "an expired bearer token",
+      DELETE_INTENT_EXPIRED_TOKEN,
+      false,
+      401,
+      "authentication_required",
+      "Authentication required.",
+    ],
+    [
+      "a revoked bearer token",
+      DELETE_INTENT_REVOKED_TOKEN,
+      false,
+      401,
+      "authentication_required",
+      "Authentication required.",
+    ],
+    [
+      "a first-party session",
+      null,
+      true,
+      403,
+      "insufficient_scope",
+      "This credential does not include the required cook-session scope.",
+    ],
+    [
+      "a bearer token without the deletion-intent resource",
+      DELETE_INTENT_MISSING_RESOURCE_TOKEN,
+      false,
+      403,
+      "insufficient_scope",
+      "This credential does not include the required cook-session scope.",
+    ],
+    [
+      "a bearer token with the wrong deletion-intent resource",
+      DELETE_INTENT_WRONG_RESOURCE_TOKEN,
+      false,
+      403,
+      "insufficient_scope",
+      "This credential does not include the required cook-session scope.",
+    ],
+    [
+      "a deletion-intent bearer token without account write scope",
+      DELETE_INTENT_WRONG_SCOPE_TOKEN,
+      false,
+      403,
+      "insufficient_scope",
+      "This credential does not include the required cook-session scope.",
+    ],
+  ])("rejects owner DELETE for %s before checking Origin without Durable Object access", async (
+    _case,
+    token,
+    useSession,
+    status,
+    code,
+    message,
+  ) => {
+    const worker = (await import("../../workers/app")).default;
+    const captured = createCapturingNamespace();
+    const environment = {
+      ...testEnvironment(),
+      COOK_SESSIONS: captured.namespace,
+    } as unknown as CloudflareEnvironment;
+    const response = await worker.fetch(
+      ownerDeleteRequest(token, {
+        cookie: useSession ? sessionCookie : undefined,
+        origin: "https://attacker.example",
+      }),
+      environment,
+      createExecutionContext(),
+    );
+
+    expect(captured.names).toEqual([]);
+    expect(captured.ids).toEqual([]);
+    expect(captured.getOptions).toEqual([]);
+    expect(captured.requests).toEqual([]);
+    expect(response.status).toBe(status);
+    await expect(response.json()).resolves.toEqual({
+      error: { code, message, retryable: false },
+    });
+  });
+
+  itWithCookSessionNamespace("checks owner-deletion Origin after the complete bearer intent", async () => {
+    await expectCookError(
+      await SELF.fetch(ownerDeleteRequest(DELETE_INTENT_TOKEN, {
+        origin: "https://attacker.example",
+      })),
+      403,
+      "origin_forbidden",
+      "Request origin is not allowed.",
+    );
+  });
+
+  itWithCookSessionNamespace("fails owner deletion closed without a configured public origin", async (namespace) => {
+    const worker = (await import("../../workers/app")).default;
+    const captured = createCapturingNamespace();
+    const beforeIds = await listDurableObjectIds(namespace);
+    const response = await worker.fetch(
+      ownerDeleteRequest(DELETE_INTENT_TOKEN),
+      {
+        ...testEnvironment(),
+        SPOONJOY_BASE_URL: undefined,
+        COOK_SESSIONS: captured.namespace,
+      } as unknown as CloudflareEnvironment,
+      createExecutionContext(),
+    );
+
+    await expectCookError(
+      response,
+      403,
+      "origin_forbidden",
+      "Request origin is not allowed.",
+    );
+    expect(captured.names).toEqual([]);
+    expect(captured.ids).toEqual([]);
+    expect(captured.getOptions).toEqual([]);
+    expect(captured.requests).toEqual([]);
+    expect((await listDurableObjectIds(namespace)).map(String)).toEqual(beforeIds.map(String));
+  });
+
+  itWithCookSessionNamespace("preserves malformed owner deletion authorization as invalid_request", async (namespace) => {
+    const worker = (await import("../../workers/app")).default;
+    const captured = createCapturingNamespace();
+    const beforeIds = await listDurableObjectIds(namespace);
+    const response = await worker.fetch(
+      new Request(`${TEST_ORIGIN}/api/cook-sessions`, {
+        method: "DELETE",
+        headers: {
+          Authorization: "Basic malformed",
+          Origin: TEST_ORIGIN,
+        },
+      }),
+      {
+        ...testEnvironment(),
+        COOK_SESSIONS: captured.namespace,
+      } as unknown as CloudflareEnvironment,
+      createExecutionContext(),
+    );
+
+    await expectCookError(
+      response,
+      400,
+      "invalid_request",
+      "Authentication request is invalid.",
+    );
+    expect(captured.names).toEqual([]);
+    expect(captured.ids).toEqual([]);
+    expect(captured.getOptions).toEqual([]);
+    expect(captured.requests).toEqual([]);
+    expect((await listDurableObjectIds(namespace)).map(String)).toEqual(beforeIds.map(String));
+  });
+
+  for (const suffix of ["?unexpected=1", "?"]) {
+    itWithCookSessionNamespace(`rejects owner DELETE query component ${suffix} before authentication without Durable Object access`, async (namespace) => {
+      const worker = (await import("../../workers/app")).default;
+      const captured = createCapturingNamespace();
+      const beforeIds = await listDurableObjectIds(namespace);
+      const response = await worker.fetch(
+        ownerDeleteRequest(null, { suffix }),
+        {
+          ...testEnvironment(),
+          COOK_SESSIONS: captured.namespace,
+        } as unknown as CloudflareEnvironment,
+        createExecutionContext(),
+      );
+
+      await expectCookError(
+        response,
+        400,
+        "invalid_request",
+        "Cook session request is invalid.",
+      );
+      expect(captured.names).toEqual([]);
+      expect(captured.ids).toEqual([]);
+      expect(captured.getOptions).toEqual([]);
+      expect(captured.requests).toEqual([]);
+      expect((await listDurableObjectIds(namespace)).map(String)).toEqual(beforeIds.map(String));
+    });
+  }
+
+  itWithCookSessionNamespace("rejects an owner DELETE body after the complete bearer intent without Durable Object access", async (namespace) => {
+    const worker = (await import("../../workers/app")).default;
+    const captured = createCapturingNamespace();
+    const beforeIds = await listDurableObjectIds(namespace);
+    const response = await worker.fetch(
+      ownerDeleteRequest(DELETE_INTENT_TOKEN, { body: "{}" }),
+      {
+        ...testEnvironment(),
+        COOK_SESSIONS: captured.namespace,
+      } as unknown as CloudflareEnvironment,
+      createExecutionContext(),
+    );
+
+    await expectCookError(
+      response,
+      400,
+      "invalid_request",
+      "Cook session request is invalid.",
+    );
+    expect(captured.names).toEqual([]);
+    expect(captured.ids).toEqual([]);
+    expect(captured.getOptions).toEqual([]);
+    expect(captured.requests).toEqual([]);
+    expect((await listDurableObjectIds(namespace)).map(String)).toEqual(beforeIds.map(String));
+  });
+
   itWithCookSessionNamespace("enforces authentication, bearer scopes, and origin checks before the stub response", async () => {
     for (const route of publicCookRoutes) {
       await expectCookError(
@@ -381,6 +726,7 @@ describe("CookSession lifecycle bootstrap", () => {
   itWithCookSessionNamespace("returns 404 for malformed or unrecognized public cook paths before authentication", async () => {
     for (const [method, path] of [
       ["POST", "/api/cook-sessions"],
+      ["DELETE", "/api/cook-sessions/"],
       ["GET", "/api/cook-sessions/recipe-1/start"],
       ["PUT", "/api/cook-sessions/recipe-1"],
       ["GET", "/api/cook-sessions/recipe-1/complete"],
@@ -419,6 +765,26 @@ describe("CookSession lifecycle bootstrap", () => {
       }
       await expect(durableObjectStorageSnapshot(stub)).resolves.toEqual(storageBefore);
     }
+  });
+
+  itWithCookSessionNamespace("keeps the legacy internal owner DELETE storage-inert", async (namespace) => {
+    const stub = namespace.get(namespace.idFromName("legacy-owner-delete"));
+    await seedDurableObjectStorage(stub);
+    const storageBefore = await durableObjectStorageSnapshot(stub);
+
+    const response = await stub.fetch(new Request(
+      "https://cook-session.internal/api/cook-sessions/__owner__",
+      {
+        method: "DELETE",
+        headers: {
+          "X-Spoonjoy-Cook-Protocol": "1",
+          "X-Spoonjoy-Cook-Operation": "owner-delete",
+        },
+      },
+    ));
+
+    await expectProtocolUnavailable(response);
+    await expect(durableObjectStorageSnapshot(stub)).resolves.toEqual(storageBefore);
   });
 
   itWithCookSessionNamespace("requires the internal protocol header and recognizes only frozen internal paths", async (namespace) => {
