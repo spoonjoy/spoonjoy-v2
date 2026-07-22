@@ -206,7 +206,7 @@ describe("/developers route", () => {
     expect(screen.getByRole("heading", { name: "Spoonjoy session" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Bearer credentials" })).toBeInTheDocument();
     expect(screen.getByText(/OAuth\/PKCE apps/i)).toBeInTheDocument();
-    expect(screen.getByText(/MCP clients/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "MCP clients" })).toBeInTheDocument();
     expect(screen.getByText(/Delegated and device-style authorization/i)).toBeInTheDocument();
     expect(screen.getByText(/API v1 REST response shape/i)).toBeInTheDocument();
     expect(screen.getByText(/Protocol exceptions/i)).toBeInTheDocument();

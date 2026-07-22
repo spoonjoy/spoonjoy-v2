@@ -18,6 +18,9 @@ const ouroborosMcpDocs = readProjectFile("docs/ouroboros-mcp.md");
 const oauthRoutesSource = readProjectFile("app/lib/oauth-routes.server.ts");
 const oauthServerSource = readProjectFile("app/lib/oauth-server.server.ts");
 
+const LEGACY_IMPORT_BOUNDARY =
+  /legacy agent\/API operation [`]?import_recipe_from_url[`]? remains available[\s\S]{0,220}not an MCP tool[\s\S]{0,220}no first-party import UI/i;
+
 const uniqueResourcePaths = Array.from(new Set(API_V1_RESOURCES.map((resource) => resource.path))).sort();
 const uniqueScopes = Array.from(
   new Set(API_V1_SCOPE_REQUIREMENTS.flatMap((requirement) => requirement.scopes)),
@@ -92,12 +95,18 @@ describe("developer platform docs drift", () => {
     }
   });
 
-  it("keeps legacy agent import distinct from MCP and first-party UI", () => {
-    for (const text of [apiDocs, developersSource, claudeConnectorDocs]) {
-      expect(text).toContain("import_recipe_from_url");
-      expect(text).toMatch(/legacy agent\/API/i);
-      expect(text).toMatch(/not an MCP tool/i);
-      expect(text).toMatch(/no first-party import UI/i);
-    }
+  it.each([
+    ["docs/api.md", apiDocs],
+    ["app/routes/developers.tsx", developersSource],
+    ["docs/claude-connector.md", claudeConnectorDocs],
+  ])("keeps the legacy import boundary coherent in %s", (_path, text) => {
+    expect(text).toMatch(LEGACY_IMPORT_BOUNDARY);
+    expect(text).not.toMatch(
+      /import_recipe_from_url[\s\S]{0,140}(?:is|remains) an MCP tool/i,
+    );
+  });
+
+  it("does not claim that the MCP and legacy HTTP APIs have identical tool surfaces", () => {
+    expect(claudeConnectorDocs).not.toContain("same tool surface");
   });
 });

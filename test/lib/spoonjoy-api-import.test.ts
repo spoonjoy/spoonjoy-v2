@@ -278,6 +278,49 @@ describe("spoonjoy-api import_recipe_from_url", () => {
       const { principal } = await makeChef();
       const createdAt = new Date("2026-01-02T03:04:05.006Z");
       const updatedAt = new Date("2026-01-03T03:04:05.006Z");
+      const futureField = `future_${faker.string.alphanumeric(12)}`;
+      const unit = { id: "unit-1", name: "cup", updatedAt };
+      const ingredientRef = { id: "ref-1", name: "flour", updatedAt };
+      const ingredient = {
+        id: "ingredient-1",
+        recipeId: "rid",
+        stepNum: 1,
+        quantity: 1,
+        unitId: unit.id,
+        ingredientRefId: ingredientRef.id,
+        updatedAt,
+        unit,
+        ingredientRef,
+      };
+      const step = {
+        id: "step-1",
+        recipeId: "rid",
+        stepNum: 1,
+        stepTitle: null,
+        description: "Mix.",
+        duration: null,
+        updatedAt,
+        ingredients: [ingredient],
+      };
+      const cover = {
+        id: "cover-1",
+        recipeId: "rid",
+        imageUrl: "https://example.com/cover.jpg",
+        stylizedImageUrl: null,
+        sourceType: "import",
+        sourceSpoonId: null,
+        status: "ready",
+        createdById: principal.id,
+        sourceImageUrl: null,
+        generationStatus: "none",
+        failureReason: null,
+        promptVersion: null,
+        styleVersion: null,
+        promptAddition: null,
+        parentCoverId: null,
+        archivedAt: null,
+        createdAt,
+      };
       const persistedRecipe = {
         id: "rid",
         title: "T",
@@ -293,8 +336,8 @@ describe("spoonjoy-api import_recipe_from_url", () => {
         createdAt,
         updatedAt,
         chef: { id: principal.id, email: principal.email, username: principal.username },
-        covers: [],
-        steps: [],
+        covers: [cover],
+        steps: [step],
       };
       vi.spyOn(recipeImport, "importRecipeFromUrl").mockResolvedValue({
         recipeId: "rid",
@@ -302,7 +345,19 @@ describe("spoonjoy-api import_recipe_from_url", () => {
           ...persistedRecipe,
           course: "main",
           tags: [{ label: "Weeknight" }],
-          futureRecipeField: "must-not-leak",
+          [futureField]: "must-not-leak",
+          chef: { ...persistedRecipe.chef, [futureField]: "must-not-leak" },
+          covers: [{ ...cover, [futureField]: "must-not-leak" }],
+          steps: [{
+            ...step,
+            [futureField]: "must-not-leak",
+            ingredients: [{
+              ...ingredient,
+              [futureField]: "must-not-leak",
+              unit: { ...unit, [futureField]: "must-not-leak" },
+              ingredientRef: { ...ingredientRef, [futureField]: "must-not-leak" },
+            }],
+          }],
         },
         confidence: "high",
         source: "json-ld",
@@ -310,17 +365,25 @@ describe("spoonjoy-api import_recipe_from_url", () => {
         coverPending: false,
       });
 
-      const result = (await callSpoonjoyApiOperation(
+      const result = await callSpoonjoyApiOperation(
         "import_recipe_from_url",
         { url: "https://example.com/r" },
         { db, principal },
-      )) as { recipe: unknown };
+      );
 
-      expect(result.recipe).toEqual(persistedRecipe);
+      expect(JSON.stringify(result)).toBe(JSON.stringify({
+        recipe: persistedRecipe,
+        recipeId: "rid",
+        confidence: "high",
+        source: "json-ld",
+        existingRecipeId: null,
+        coverPending: false,
+      }));
     });
 
     it("projects dry-run drafts to the exact pre-product byte shape", async () => {
       const { principal } = await makeChef();
+      const futureField = `future_${faker.string.alphanumeric(12)}`;
       const draft = {
         title: "Draft",
         description: null,
@@ -336,7 +399,7 @@ describe("spoonjoy-api import_recipe_from_url", () => {
           ...draft,
           course: "dessert",
           tags: ["Baking"],
-          futureDraftField: "must-not-leak",
+          [futureField]: "must-not-leak",
         },
         confidence: "high",
         source: "json-ld",
@@ -344,13 +407,20 @@ describe("spoonjoy-api import_recipe_from_url", () => {
         coverPending: false,
       });
 
-      const result = (await callSpoonjoyApiOperation(
+      const result = await callSpoonjoyApiOperation(
         "import_recipe_from_url",
         { url: "https://example.com/r", dryRun: true },
         { db, principal },
-      )) as { recipe: unknown };
+      );
 
-      expect(result.recipe).toEqual(draft);
+      expect(JSON.stringify(result)).toBe(JSON.stringify({
+        recipe: draft,
+        recipeId: null,
+        confidence: "high",
+        source: "json-ld",
+        existingRecipeId: null,
+        coverPending: false,
+      }));
     });
   });
 
