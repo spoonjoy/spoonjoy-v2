@@ -210,10 +210,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 
 **Completed**: Reviewer repair commit `b5802158` strengthened exact model/D1 absence, recursive serialized legacy-import, coherent docs/render, and complete compatibility regressions. Implementation `3ba273e4` added the exact Prisma models/relations/indexes, removed only the generated full shopping unique, updated both cleanup paths, and recursively allowlisted the persisted/dry-run pre-feature import shapes without adding MCP or UI import. Prisma generate/push, 46 strengthened tests, 168 Unit 1.9 regressions, warning-gated typecheck/build, and all 8,283 app tests at exact 100% coverage pass.
 
-### ⬜ Unit 2.1c: Product Models - Verification
+### ✅ Unit 2.1c: Product Models - Verification
 **What**: Cover model helpers/cleanup branches and review ownership/FK/privacy boundaries.
 **Output**: Coverage and data-review evidence.
 **Acceptance**: New helper code is 100% covered and review converges.
+
+**Completed**: A fresh cold data/privacy review at exact implementation `3ba273e4` reproduced Prisma format/generate and disposable database push, 46 focused tests, 168 complete compatibility regressions, warning-clean typecheck/build, and all 8,283 app tests at exact 100% coverage. Review converged with no ownership, FK, privacy, cleanup, import-boundary, selector, or compatibility finding.
 
 ### ⬜ Unit 2.2a: Product Schema And SavedRecipe Backfill Migration - Tests
 **What**: Add failing migration assertions for empty/fixture application from numeric migrations 0000-0024, every frozen SavedRecipe/RecipeTag/Recipe.course detail, explicit absence of any cook table, exactly four saves, canonical UTC-text user-a/recipe-r1 Jan 3 savedAt, authoritative `RecipeInCookbook.createdAt` with a synthetic differing `updatedAt`, exact integer/real-half-rounding/five-text-grammar normalization, min/max range boundaries, negative-in-range values, and invalid/non-finite/out-of-range abort. Include leap-day acceptance; impossible month/day rejection; `24:00:00`, leap-second, and minute overflow rejection; valid `+14:00|-14:00`; and rejection of offsets beyond `14:00`. Cover direct raw invalid canonical-width savedAt rejection through the full clock/calendar/digit/non-null strftime CHECK, exact two cutover triggers, trigger-blocked insert/delete/cascade with rollback, FK integrity, and saved-row soft/hard recipe deletion behavior; do not assert shopping repair yet.
@@ -729,3 +731,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-22 01:15 Unit 1.9c complete: PRs #291/#294 are merged and production-verified at Worker version `144bd85d-d0c8-41ea-ae3a-9abf0dbcb6aa`; product merge `8ec4cb1d` descends from both compatibility commits, preserves atomic product activation, and passes the combined compatibility/activation integration gates.
 - 2026-07-22 01:24 Unit 2.1a complete: froze exact Prisma product-model/index absence, legacy import allowlist, three-guide boundary, MCP exclusion, and compatibility-selector contracts; the red run produced only the seven intended product gaps.
 - 2026-07-22 01:51 Unit 2.1b complete after cold-review repair: exact models and cleanup paths, recursive schema-proof legacy import projections, and coherent agent/API-versus-MCP docs pass Prisma generation/push, 214 focused/compatibility tests, typecheck/build, and 8,283-test 100% coverage.
+- 2026-07-22 02:09 Unit 2.1c complete: fresh cold data/privacy review independently reproduced every Prisma, database, focused, compatibility, compiler, build, and exact-coverage gate at implementation `3ba273e4` and converged with no findings.
