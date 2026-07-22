@@ -245,10 +245,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 
 **Completed**: Commit `ee9c864f` freezes the exact migration clock/use/drop, repair, per-family owner high-water/isolation/validation, finite quantity and overflow, BINARY survivor, logical checked, metadata, tombstone, discriminator, index/setup/conflict-target, and real-D1 six-writer compatibility contracts. The final red is 47 pass/37 intentional migration failures plus 12 pass/two intentional Workers failures, all confined to the absent repair/active-index behavior; typecheck is warning-clean and three cold-review rounds converged.
 
-### ⬜ Unit 2.3b: Shopping Repair Migration - Implementation
+### ✅ Unit 2.3b: Shopping Repair Migration - Implementation
 **What**: Add the exact migration-clock create/capture/use/drop, repair, legacy-index drop, and non-`IF NOT EXISTS` partial expression index from `product-data-contract.md` to migration 0025. In `test/setup.ts` immediately after shopping-row cleanup, add the same index name/columns/expression/predicate via Prisma raw execution with setup-only `IF NOT EXISTS`.
 **Output**: One database-enforced active shopping identity per list/ingredient/unit.
 **Acceptance**: All repair/index fixtures pass and the exact Unit 1.9 production compatibility Worker remains correct during the migration-before-product-promotion gap.
+
+**Completed**: Commit `7df3662f` implements the frozen migration clock, deterministic active-row reconciliation, owner-global high-water validation, legacy-index replacement, and setup parity. It also removes Prisma's ignored D1 transaction facade from REST manual-item hydration, makes `prisma:warn` on `console.info` a centrally enforced failure, and preserves idempotent replay without a post-commit read. The 84 focused migration cases, 318 migration/writer cases, 57 warning-policy cases, 14 real-D1 cases, exact 100% app/Workers coverage, typecheck, build, and two-stage cold review all pass; full evidence is in `unit-2.3b-verification.md`.
 
 ### ⬜ Unit 2.3c: Shopping Repair Migration - Verification
 **What**: Create fresh temporary Node SQLite and isolated local Wrangler D1 state after Unit 2.3b, apply complete final 0025 from migrations 0000-0024 plus fixture, run duplicate/rollback-failure checks, run apply/list twice in that fresh state, review data, then delete both states.
