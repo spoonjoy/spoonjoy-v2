@@ -64,6 +64,10 @@ function configuredCookSessionOrigin(env: CloudflareEnvironment): string | null 
   }
 }
 
+function requestHasQueryComponent(request: Request): boolean {
+  return request.url.includes("?");
+}
+
 async function requestHasBodyBytes(request: Request): Promise<boolean> {
   if (!request.body) return false;
 
@@ -72,7 +76,10 @@ async function requestHasBodyBytes(request: Request): Promise<boolean> {
     while (true) {
       const chunk = await reader.read();
       if (chunk.done) return false;
-      if (chunk.value.byteLength > 0) return true;
+      if (chunk.value.byteLength > 0) {
+        await reader.cancel();
+        return true;
+      }
     }
   } finally {
     reader.releaseLock();
@@ -80,7 +87,7 @@ async function requestHasBodyBytes(request: Request): Promise<boolean> {
 }
 
 function classifyCookRoute(request: Request, url: URL): CookRouteRequirement | null {
-  if (url.search) return null;
+  if (requestHasQueryComponent(request)) return null;
   if (request.method === "DELETE" && url.pathname === COOK_SESSION_PREFIX) {
     return { scope: "account:write", originRequired: true, ownerDelete: true };
   }
@@ -116,7 +123,7 @@ async function handleCookSessionRequest(
 ): Promise<Response> {
   const url = new URL(request.url);
   const isOwnerDelete = request.method === "DELETE" && url.pathname === COOK_SESSION_PREFIX;
-  if (isOwnerDelete && url.search) {
+  if (isOwnerDelete && requestHasQueryComponent(request)) {
     return cookErrorResponse(400, "invalid_request", "Cook session request is invalid.");
   }
   const requirement = classifyCookRoute(request, url);
