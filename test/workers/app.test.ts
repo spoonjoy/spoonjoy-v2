@@ -428,6 +428,43 @@ describe("Cloudflare worker app", () => {
     expect(cancelBody).toHaveBeenCalledTimes(1);
   });
 
+  it("rejects an owner DELETE payload when best-effort stream cancellation fails", async () => {
+    apiMocks.authenticateApiRequest.mockResolvedValueOnce(principal(
+      "bearer",
+      ["account:write"],
+      {
+        credentialId: "account-delete-credential",
+        oauthResource: ACCOUNT_DELETE_INTENT_RESOURCE,
+      },
+    ));
+    const namespace = cookSessionNamespace();
+    const request = new Request("https://spoonjoy.app/api/cook-sessions", {
+      method: "DELETE",
+      headers: { Origin: "https://spoonjoy.app" },
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("payload"));
+        },
+        cancel() {
+          throw new Error("cancel failed");
+        },
+      }),
+      duplex: "half",
+    } as RequestInit & { duplex: "half" });
+
+    const response = await worker.fetch(
+      request,
+      versionedEnvironment({ DB: {} as D1Database, COOK_SESSIONS: namespace.namespace }),
+      context(),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "invalid_request" } });
+    expect(namespace.idFromName).not.toHaveBeenCalled();
+    expect(namespace.get).not.toHaveBeenCalled();
+    expect(namespace.fetch).not.toHaveBeenCalled();
+  });
+
   it("accepts an edge-normalized zero-byte owner DELETE stream without DO access", async () => {
     apiMocks.authenticateApiRequest.mockResolvedValueOnce(principal(
       "bearer",
