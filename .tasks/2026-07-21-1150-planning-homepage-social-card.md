@@ -1,6 +1,6 @@
 # Planning: Homepage social card
 
-**Status**: approved
+**Status**: complete
 **Created**: 2026-07-21 11:51
 
 ## Goal
@@ -25,9 +25,9 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 ## Completion Criteria
 - [x] Homepage HTML exposes absolute canonical, `og:title`, `og:description`, `og:type=website`, `og:url`, `og:image`, `og:image:type=image/png`, image dimensions, and Twitter-card fields.
 - [x] The declared social image is a valid 1200×630 PNG with a branded, legible design.
-- [ ] Production homepage HTML contains the expected metadata without Cloudflare challenge markers.
-- [ ] Production serves the declared image as `image/png`; its bytes have the PNG signature and a 1200×630 IHDR.
-- [ ] Homepage and image return real content rather than a Cloudflare challenge when requested with LinkedIn's crawler user agent.
+- [x] Production homepage HTML contains the expected metadata without Cloudflare challenge markers.
+- [x] Production serves the declared image as `image/png`; its bytes have the PNG signature and a 1200×630 IHDR.
+- [x] Homepage and image return real content rather than a Cloudflare challenge when requested with LinkedIn's crawler user agent.
 - [x] 100% test coverage on all new code
 - [x] All tests pass
 - [x] No warnings
@@ -63,3 +63,4 @@ The LinkedIn profile itself remains discussion-gated and frozen through the head
 ## Progress Log
 - 2026-07-21 11:51 Created
 - 2026-07-21 11:54 Tightened the metadata contract and crawler-perspective production gates after cold review; a live LinkedInBot probe confirmed Cloudflare currently serves the real homepage and existing PNG assets to that crawler.
+- 2026-07-21 17:41 Complete: the metadata and real-photo card shipped through PRs #288 and #289, exact-head CI and Production Deploy succeeded, and production passed the full LinkedInBot HTML/image smoke.
