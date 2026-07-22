@@ -522,6 +522,65 @@ describe("CookSession lifecycle bootstrap", () => {
     );
   });
 
+  itWithCookSessionNamespace("fails owner deletion closed without a configured public origin", async (namespace) => {
+    const worker = (await import("../../workers/app")).default;
+    const captured = createCapturingNamespace();
+    const beforeIds = await listDurableObjectIds(namespace);
+    const response = await worker.fetch(
+      ownerDeleteRequest(DELETE_INTENT_TOKEN),
+      {
+        ...testEnvironment(),
+        SPOONJOY_BASE_URL: undefined,
+        COOK_SESSIONS: captured.namespace,
+      } as unknown as CloudflareEnvironment,
+      createExecutionContext(),
+    );
+
+    await expectCookError(
+      response,
+      403,
+      "origin_forbidden",
+      "Request origin is not allowed.",
+    );
+    expect(captured.names).toEqual([]);
+    expect(captured.ids).toEqual([]);
+    expect(captured.getOptions).toEqual([]);
+    expect(captured.requests).toEqual([]);
+    expect((await listDurableObjectIds(namespace)).map(String)).toEqual(beforeIds.map(String));
+  });
+
+  itWithCookSessionNamespace("preserves malformed owner deletion authorization as invalid_request", async (namespace) => {
+    const worker = (await import("../../workers/app")).default;
+    const captured = createCapturingNamespace();
+    const beforeIds = await listDurableObjectIds(namespace);
+    const response = await worker.fetch(
+      new Request(`${TEST_ORIGIN}/api/cook-sessions`, {
+        method: "DELETE",
+        headers: {
+          Authorization: "Basic malformed",
+          Origin: TEST_ORIGIN,
+        },
+      }),
+      {
+        ...testEnvironment(),
+        COOK_SESSIONS: captured.namespace,
+      } as unknown as CloudflareEnvironment,
+      createExecutionContext(),
+    );
+
+    await expectCookError(
+      response,
+      400,
+      "invalid_request",
+      "Authentication request is invalid.",
+    );
+    expect(captured.names).toEqual([]);
+    expect(captured.ids).toEqual([]);
+    expect(captured.getOptions).toEqual([]);
+    expect(captured.requests).toEqual([]);
+    expect((await listDurableObjectIds(namespace)).map(String)).toEqual(beforeIds.map(String));
+  });
+
   itWithCookSessionNamespace("rejects an owner DELETE query before authentication without Durable Object access", async (namespace) => {
     const worker = (await import("../../workers/app")).default;
     const captured = createCapturingNamespace();

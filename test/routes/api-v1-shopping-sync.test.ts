@@ -7,6 +7,7 @@ import { resolveApiV1ScopeRequirement } from "~/lib/api-v1.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
+import { expectConsoleError } from "../warning-policy";
 
 function routeArgs(request: Request, splat: string) {
   return { request, params: { "*": splat }, context: { cloudflare: { env: null } } } as any;
@@ -603,8 +604,6 @@ describe("API v1 shopping-list read and sync", () => {
           sortIndex: -10,
         },
       });
-      vi.spyOn(console, "error").mockImplementation(() => {});
-
       const response = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/shopping-list/add-from-recipe", {
         method: "POST",
         headers: {
@@ -839,8 +838,6 @@ describe("API v1 shopping-list read and sync", () => {
       data: { ingredientRefId: ingredients[0].ingredientRefId, unitId: ingredients[0].unitId },
     });
     const transactionSpy = vi.spyOn(db as any, "$transaction");
-    vi.spyOn(console, "error").mockImplementation(() => {});
-
     const response = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/shopping-list/add-from-recipe", {
       method: "POST",
       headers: {
@@ -876,8 +873,6 @@ describe("API v1 shopping-list read and sync", () => {
     ]);
     const ingredient = await db.ingredient.findFirstOrThrow({ where: { recipeId: recipe.id } });
     const transactionSpy = vi.spyOn(db as any, "$transaction");
-    vi.spyOn(console, "error").mockImplementation(() => {});
-
     const response = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/shopping-list/add-from-recipe", {
       method: "POST",
       headers: {
@@ -917,15 +912,19 @@ describe("API v1 shopping-list read and sync", () => {
       where: { recipeId: recipe.id },
       orderBy: { id: "asc" },
     });
-    await db.$executeRawUnsafe(`
-      CREATE TRIGGER "compat_rest_bulk_abort"
-      BEFORE INSERT ON "ShoppingListItem"
-      WHEN NEW."ingredientRefId" = '${ingredients[1].ingredientRefId}'
-      BEGIN
-        SELECT RAISE(ABORT, 'compat_rest_bulk_abort');
-      END;
-    `);
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    const transactionError = new Error("compat_rest_bulk_abort");
+    const transactionSpy = vi.spyOn(db as any, "$transaction")
+      .mockRejectedValueOnce(transactionError);
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_compat_rest_bulk_rollback",
+      method: "POST",
+      path: "/api/v1/shopping-list/add-from-recipe",
+      error: {
+        name: transactionError.name,
+        message: transactionError.message,
+        stack: transactionError.stack,
+      },
+    });
     const request = (requestId: string) => new UndiciRequest("http://localhost/api/v1/shopping-list/add-from-recipe", {
       method: "POST",
       headers: {
@@ -954,8 +953,8 @@ describe("API v1 shopping-list read and sync", () => {
     expect(await db.apiIdempotencyKey.count({
       where: { userId: fixture.user.id, key: "compat-rest-bulk-rollback" },
     })).toBe(0);
+    expect(transactionSpy.mock.calls[0]?.[0]).toHaveLength(2);
 
-    await db.$executeRawUnsafe('DROP TRIGGER "compat_rest_bulk_abort"');
     const retry = await action(routeArgs(request("req_compat_rest_bulk_retry"), "shopping-list/add-from-recipe"));
     const retryPayload = await readJson(retry);
     expect(retry.status).toBe(200);

@@ -2178,7 +2178,9 @@ describe("spoonjoy MCP tools", () => {
       updated: 1,
       shoppingList: {
         ownerId: owner.id,
-        items: expect.arrayContaining([{ quantity: 4 + racedIngredient.quantity }]),
+        items: expect.arrayContaining([
+          expect.objectContaining({ quantity: 4 + racedIngredient.quantity }),
+        ]),
       },
     });
     await expect(context.db.shoppingListItem.count({ where: { shoppingListId: shoppingList.id } })).resolves.toBe(2);

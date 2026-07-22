@@ -273,12 +273,14 @@ describe("API v1 shopping-list mutations on D1", () => {
         });
         throw Object.assign(new Error("Unique constraint failed on the fields"), {
           code: "P2002",
-          meta: { modelName: "ShoppingListItem" },
+          meta: {
+            modelName: "ShoppingListItem",
+            target: ["shoppingListId", "unitId", "ingredientRefId"],
+          },
         });
       }
       return execute();
     });
-    vi.spyOn(console, "error").mockImplementation(() => {});
     const request = (requestId: string) => new UndiciRequest("http://localhost/api/v1/shopping-list/add-from-recipe", {
       method: "POST",
       headers: {

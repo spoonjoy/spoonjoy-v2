@@ -219,6 +219,31 @@ describe("Shopping List Route", () => {
       expect(shoppingList?.items[0].deletedAt).toBeNull();
     });
 
+    it("stores only validated category and icon affordances", async () => {
+      const request = await createFormRequest(
+        {
+          intent: "addItem",
+          ingredientName: "bananas",
+          quantity: "3",
+          categoryKey: "arbitrary-category",
+          iconKey: "arbitrary-icon",
+        },
+        testUserId,
+      );
+
+      await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      const item = await db.shoppingListItem.findFirstOrThrow({
+        where: { shoppingList: { authorId: testUserId } },
+      });
+      expect(item.categoryKey).toBe("produce");
+      expect(item.iconKey).toBe("apple");
+    });
+
     it("should add item with unit", async () => {
       const request = await createFormRequest(
         {
@@ -631,7 +656,10 @@ describe("Shopping List Route", () => {
         });
         throw Object.assign(new Error("Unique constraint failed on the fields"), {
           code: "P2002",
-          meta: { modelName: "ShoppingListItem" },
+          meta: {
+            modelName: "ShoppingListItem",
+            target: ["shoppingListId", "unitId", "ingredientRefId"],
+          },
         });
       });
       const request = await createFormRequest(
@@ -657,7 +685,7 @@ describe("Shopping List Route", () => {
       ).resolves.toMatchObject({
         quantity: 7,
         categoryKey: expect.any(String),
-        iconKey: "incoming-icon",
+        iconKey: "package",
       });
       expect(createSpy).toHaveBeenCalledTimes(1);
       await expect(
@@ -703,7 +731,10 @@ describe("Shopping List Route", () => {
           });
           throw Object.assign(new Error("Unique constraint failed on the fields"), {
             code: "P2002",
-            meta: { modelName: "ShoppingListItem" },
+            meta: {
+              modelName: "ShoppingListItem",
+              target: ["shoppingListId", "unitId", "ingredientRefId"],
+            },
           });
         });
         updateSpy.mockImplementation(originalUpdate);
@@ -725,7 +756,7 @@ describe("Shopping List Route", () => {
 
         expect(response).toEqual({ data: { success: true }, init: null, type: "DataWithResponseInit" });
         await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: "compat-web-manual-restore-winner" } }))
-          .resolves.toMatchObject({ quantity: 7, deletedAt: null, iconKey: "incoming-icon" });
+          .resolves.toMatchObject({ quantity: 7, deletedAt: null, iconKey: "package" });
         await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: tombstone.id } }))
           .resolves.toMatchObject({ quantity: 20, deletedAt: expect.any(Date) });
         expect(updateSpy).toHaveBeenCalledTimes(2);
@@ -1469,6 +1500,59 @@ describe("Shopping List Route", () => {
       expect(updatedList?.items[0].quantity).toBe(3); // 1 + 2
       expect(updatedList?.items[0].checked).toBe(false);
       expect(updatedList?.items[0].checkedAt).toBeNull();
+    });
+
+    it("keeps the existing category but refreshes the icon from the recipe ingredient", async () => {
+      const shoppingList = await db.shoppingList.create({
+        data: { authorId: testUserId },
+      });
+      const unit = await db.unit.create({
+        data: { name: "piece_icon_refresh_" + faker.string.alphanumeric(6) },
+      });
+      const ingredientRef = await db.ingredientRef.create({
+        data: { name: "bananas_icon_refresh_" + faker.string.alphanumeric(6) },
+      });
+      const existing = await db.shoppingListItem.create({
+        data: {
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredientRef.id,
+          unitId: unit.id,
+          quantity: 1,
+          categoryKey: "bakery",
+          iconKey: "beef",
+        },
+      });
+      const recipe = await db.recipe.create({
+        data: { title: "Recipe icon refresh", chefId: testUserId },
+      });
+      await db.recipeStep.create({
+        data: { recipeId: recipe.id, stepNum: 1, description: "Refresh icon" },
+      });
+      await db.ingredient.create({
+        data: {
+          recipeId: recipe.id,
+          stepNum: 1,
+          quantity: 2,
+          unitId: unit.id,
+          ingredientRefId: ingredientRef.id,
+        },
+      });
+
+      await action({
+        request: await createFormRequest(
+          { intent: "addFromRecipe", recipeId: recipe.id },
+          testUserId,
+        ),
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: existing.id } }))
+        .resolves.toMatchObject({
+          quantity: 3,
+          categoryKey: "bakery",
+          iconKey: "apple",
+        });
     });
 
     it("should restore a soft-deleted recipe ingredient as unchecked at the end", async () => {

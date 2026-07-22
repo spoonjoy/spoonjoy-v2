@@ -42,11 +42,14 @@ async function installCookbookAbortTrigger(
   await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${CUTOVER_TRIGGER_NAME}"`);
   // Native Prisma erases RAISE text as P2003; the missing relation preserves
   // the requested token while retaining BEFORE-trigger rollback semantics.
+  const failureStatement = message === "saved_recipe_cutover_pending"
+    ? `SELECT * FROM "${message}";`
+    : `SELECT RAISE(ABORT, '${message}');`;
   await db.$executeRawUnsafe(`
     CREATE TRIGGER "${CUTOVER_TRIGGER_NAME}"
     BEFORE ${event} ON "RecipeInCookbook"
     BEGIN
-      SELECT * FROM "${message}";
+      ${failureStatement}
     END
   `);
 }
@@ -429,6 +432,25 @@ describe("Cookbooks $id Route", () => {
       ).resolves.toBeNull();
     });
 
+    it("rethrows an unrelated failure during cookbook deletion", async () => {
+      const recipe = await db.recipe.create({
+        data: {
+          title: "Ordinary Delete Failure Recipe " + faker.string.alphanumeric(6),
+          chefId: testUserId,
+        },
+      });
+      await db.recipeInCookbook.create({
+        data: { cookbookId, recipeId: recipe.id, addedById: testUserId },
+      });
+      await installCookbookAbortTrigger("DELETE", "ordinary_cookbook_delete_failure");
+
+      await expect(action({
+        request: await createFormRequest({ intent: "delete" }, testUserId),
+        context: { cloudflare: { env: null } },
+        params: { id: cookbookId },
+      } as any)).rejects.toMatchObject({ code: "P2003" });
+    });
+
     it("should add recipe to cookbook", async () => {
       // Create a recipe to add
       const recipe = await db.recipe.create({
@@ -604,6 +626,28 @@ describe("Cookbooks $id Route", () => {
       await expect(
         db.cookbook.findUniqueOrThrow({ where: { id: cookbookId }, select: { updatedAt: true } }),
       ).resolves.toEqual({ updatedAt: baselineUpdatedAt });
+    });
+
+    it("rethrows an unrelated failure while removing a recipe", async () => {
+      const recipe = await db.recipe.create({
+        data: {
+          title: "Ordinary Remove Failure Recipe " + faker.string.alphanumeric(6),
+          chefId: testUserId,
+        },
+      });
+      const membership = await db.recipeInCookbook.create({
+        data: { cookbookId, recipeId: recipe.id, addedById: testUserId },
+      });
+      await installCookbookAbortTrigger("DELETE", "ordinary_cookbook_remove_failure");
+
+      await expect(action({
+        request: await createFormRequest(
+          { intent: "removeRecipe", recipeInCookbookId: membership.id },
+          testUserId,
+        ),
+        context: { cloudflare: { env: null } },
+        params: { id: cookbookId },
+      } as any)).rejects.toMatchObject({ code: "P2003" });
     });
 
     it("leaves an unrelated SQLite membership failure unmapped", async () => {

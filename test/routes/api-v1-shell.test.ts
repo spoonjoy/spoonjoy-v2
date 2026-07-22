@@ -483,6 +483,7 @@ describe("/api/v1 shell", () => {
       rate_limited: 429,
       upstream_error: 502,
       upstream_timeout: 504,
+      product_activation_pending: 503,
       internal_error: 500,
     });
   });

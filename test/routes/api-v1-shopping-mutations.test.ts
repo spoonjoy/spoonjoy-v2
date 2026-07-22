@@ -484,8 +484,6 @@ describe("API v1 shopping-list mutations", () => {
           iconKey: "existing-icon",
         },
       });
-      vi.spyOn(console, "error").mockImplementation(() => {});
-
       const response = await action(routeArgs(
         mutationRequest("POST", "shopping-list/items", fixture.credential.token, "req_compat_active_first", {
           clientMutationId: "compat-active-first",
@@ -633,11 +631,12 @@ describe("API v1 shopping-list mutations", () => {
       });
       throw Object.assign(new Error("Unique constraint failed on the fields"), {
         code: "P2002",
-        meta: { modelName: "ShoppingListItem" },
+        meta: {
+          modelName: "ShoppingListItem",
+          target: ["shoppingListId", "unitId", "ingredientRefId"],
+        },
       });
     });
-    vi.spyOn(console, "error").mockImplementation(() => {});
-
     const request = (requestId: string) => mutationRequest(
       "POST",
       "shopping-list/items",

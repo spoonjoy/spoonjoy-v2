@@ -1,8 +1,14 @@
 import { SELF, createExecutionContext, env } from "cloudflare:test";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { action as legacyApiAction } from "../../app/routes/api.$";
 import { action as apiV1Action } from "../../app/routes/api.v1.$";
+import { handleRecipeDetailAction } from "../../app/lib/recipe-detail.server";
+import { handleShoppingListAction } from "../../app/lib/shopping-list.server";
+import { getRequestDb } from "../../app/lib/route-platform.server";
+import { mutateCompatibleShoppingListItem } from "../../app/lib/shopping-list-mutations.server";
+import { createUserSessionCookie } from "../../app/lib/session.server";
+import { expectConsoleError } from "../warning-policy";
 
 interface TestD1Statement {
   bind(...values: unknown[]): TestD1Statement;
@@ -11,6 +17,7 @@ interface TestD1Statement {
 }
 
 interface TestD1Database {
+  batch(statements: TestD1Statement[]): Promise<unknown>;
   exec(sql: string): Promise<unknown>;
   prepare(sql: string): TestD1Statement;
 }
@@ -37,6 +44,12 @@ const PRODUCT_ACTIVATION_PENDING_MESSAGE =
   "Spoonjoy product activation is still completing. Retry shortly.";
 const PROBE_TABLE = "SavedRecipeCutoverRecognizerProbe";
 const PROBE_TRIGGER = "SavedRecipeCutoverRecognizerProbe_abort";
+const SHOPPING_LIST_ID = "cutover-d1-shopping-list";
+const SHOPPING_UNIT_ID = "cutover-d1-shopping-unit";
+const SHOPPING_FIRST_REF_ID = "cutover-d1-shopping-first-ref";
+const SHOPPING_SECOND_REF_ID = "cutover-d1-shopping-second-ref";
+const SHOPPING_ABORT_TRIGGER = "ShoppingListItem_atomic_batch_abort";
+const COOKBOOK_ABORT_TRIGGER = "Cookbook_compatibility_batch_abort";
 
 const webActivationPendingBody = {
   error: {
@@ -113,7 +126,7 @@ async function seedAdapterFixture() {
     "Cutover D1 adapter credential",
     await hashToken(TOKEN),
     TOKEN.slice(0, 12),
-    "kitchen:read kitchen:write",
+    "kitchen:read kitchen:write shopping_list:write",
     FIXTURE_TIMESTAMP,
     FIXTURE_TIMESTAMP,
   ).run();
@@ -151,11 +164,80 @@ async function seedAdapterFixture() {
     FIXTURE_TIMESTAMP,
     FIXTURE_TIMESTAMP,
   ).run();
+
+  await db.prepare(`
+    INSERT INTO "ShoppingList" ("id", "authorId", "createdAt", "updatedAt")
+    VALUES (?, ?, ?, ?)
+  `).bind(SHOPPING_LIST_ID, USER_ID, FIXTURE_TIMESTAMP, FIXTURE_TIMESTAMP).run();
+  await db.prepare(`INSERT INTO "Unit" ("id", "name", "updatedAt") VALUES (?, ?, ?)`)
+    .bind(SHOPPING_UNIT_ID, "cutover d1 each", FIXTURE_TIMESTAMP).run();
+  await db.prepare(`INSERT INTO "IngredientRef" ("id", "name", "updatedAt") VALUES (?, ?, ?)`)
+    .bind(SHOPPING_FIRST_REF_ID, "cutover d1 apples", FIXTURE_TIMESTAMP).run();
+  await db.prepare(`INSERT INTO "IngredientRef" ("id", "name", "updatedAt") VALUES (?, ?, ?)`)
+    .bind(SHOPPING_SECOND_REF_ID, "cutover d1 flour", FIXTURE_TIMESTAMP).run();
+  await db.prepare(`
+    INSERT INTO "RecipeStep" (
+      "id", "recipeId", "stepNum", "stepTitle", "description", "updatedAt"
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `).bind(
+    "cutover-d1-shopping-step",
+    REST_RECIPE_ID,
+    1,
+    "Gather",
+    "Gather the atomic D1 ingredients.",
+    FIXTURE_TIMESTAMP,
+  ).run();
+  await db.prepare(`
+    INSERT INTO "Ingredient" (
+      "id", "recipeId", "stepNum", "quantity", "unitId", "ingredientRefId", "updatedAt"
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    "cutover-d1-shopping-ingredient-a",
+    REST_RECIPE_ID,
+    1,
+    2,
+    SHOPPING_UNIT_ID,
+    SHOPPING_FIRST_REF_ID,
+    FIXTURE_TIMESTAMP,
+  ).run();
+  await db.prepare(`
+    INSERT INTO "Ingredient" (
+      "id", "recipeId", "stepNum", "quantity", "unitId", "ingredientRefId", "updatedAt"
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    "cutover-d1-shopping-ingredient-z",
+    REST_RECIPE_ID,
+    1,
+    3,
+    SHOPPING_UNIT_ID,
+    SHOPPING_SECOND_REF_ID,
+    FIXTURE_TIMESTAMP,
+  ).run();
 }
 
 async function dropCutoverFence() {
   await executeStatement(`DROP TRIGGER IF EXISTS "${CUTOVER_INSERT_TRIGGER}"`);
   await executeStatement(`DROP TRIGGER IF EXISTS "${CUTOVER_DELETE_TRIGGER}"`);
+}
+
+async function dropShoppingAbortTrigger() {
+  await executeStatement(`DROP TRIGGER IF EXISTS "${SHOPPING_ABORT_TRIGGER}"`);
+}
+
+async function dropCookbookAbortTrigger() {
+  await executeStatement(`DROP TRIGGER IF EXISTS "${COOKBOOK_ABORT_TRIGGER}"`);
+}
+
+async function installCookbookAbortTrigger() {
+  await dropCookbookAbortTrigger();
+  await executeStatement(`
+    CREATE TRIGGER "${COOKBOOK_ABORT_TRIGGER}"
+    BEFORE UPDATE OF "updatedAt" ON "Cookbook"
+    WHEN OLD."id" = '${COOKBOOK_ID}'
+    BEGIN
+      SELECT RAISE(ABORT, '${CUTOVER_TOKEN}');
+    END
+  `);
 }
 
 async function installCutoverFence(message = CUTOVER_TOKEN) {
@@ -201,6 +283,24 @@ async function idempotencyReservationCount(clientMutationId: string) {
   return row?.count ?? -1;
 }
 
+async function tombstoneCount() {
+  const row = await database().prepare(`
+    SELECT COUNT(*) AS "count"
+    FROM "NativeSyncTombstone"
+    WHERE "accountId" = ? AND "resourceType" = 'cookbook' AND "resourceId" = ?
+  `).bind(USER_ID, COOKBOOK_ID).first<{ count: number }>();
+  return row?.count ?? -1;
+}
+
+async function cookbookTitleCount(title: string) {
+  const row = await database().prepare(`
+    SELECT COUNT(*) AS "count"
+    FROM "Cookbook"
+    WHERE "authorId" = ? AND "title" = ?
+  `).bind(USER_ID, title).first<{ count: number }>();
+  return row?.count ?? -1;
+}
+
 function bearerHeaders(extra: Record<string, string> = {}) {
   return {
     Authorization: `Bearer ${TOKEN}`,
@@ -208,8 +308,17 @@ function bearerHeaders(extra: Record<string, string> = {}) {
   };
 }
 
-function routeContext() {
-  return { cloudflare: { env, ctx: createExecutionContext() } };
+function routeContext(databaseOverride?: TestD1Database) {
+  const routeEnv = databaseOverride
+    ? new Proxy(env as object, {
+        get(target, property, receiver) {
+          return property === "DB"
+            ? databaseOverride
+            : Reflect.get(target, property, receiver);
+        },
+      })
+    : env;
+  return { cloudflare: { env: routeEnv, ctx: createExecutionContext() } };
 }
 
 async function expectRetryHeaders(response: Response) {
@@ -239,57 +348,134 @@ async function executeFencedProbeInsert(): Promise<unknown> {
   }
 }
 
-async function executeFencedCookbookDelete(): Promise<unknown> {
-  try {
-    await database().prepare(`DELETE FROM "Cookbook" WHERE "id" = ?`).bind(COOKBOOK_ID).run();
-    throw new Error("expected the D1 membership fence to abort the cookbook cascade");
-  } catch (error) {
-    return error;
-  }
-}
-
 describe("saved recipe cutover through the deployed Worker and Wrangler D1", () => {
-  let consoleError: ReturnType<typeof vi.spyOn>;
-
   beforeAll(async () => {
     await applyRepositoryMigrations();
     await seedAdapterFixture();
   });
 
-  beforeEach(() => {
-    consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
-  });
-
   afterEach(async () => {
     await dropCutoverFence();
+    await dropShoppingAbortTrigger();
+    await dropCookbookAbortTrigger();
+    await executeStatement(`DELETE FROM "ShoppingListItem" WHERE "shoppingListId" = '${SHOPPING_LIST_ID}'`);
     await executeStatement(`DROP TRIGGER IF EXISTS "${PROBE_TRIGGER}"`);
     await executeStatement(`DROP TABLE IF EXISTS "${PROBE_TABLE}"`);
-    consoleError.mockRestore();
   });
 
   afterAll(async () => {
     await dropCutoverFence();
   });
 
-  it("maps a real D1 cascade-delete fence through the shared web adapter", async () => {
+  it("rolls back a native D1 tombstone when the REST cookbook delete fails second", async () => {
     await installCutoverFence();
     const beforeUpdatedAt = await cookbookUpdatedAt();
-    const error = await executeFencedCookbookDelete();
-    const { productActivationPendingWebResponse } = await import(
-      "../../app/lib/saved-recipe-cutover.server"
-    );
-    const result = productActivationPendingWebResponse(error);
-    const response = result as { data: unknown; init?: { status?: number; headers?: HeadersInit } | null };
+    const requestId = "req_cutover_d1_delete_second";
+    const clientMutationId = "cm_cutover_d1_delete_second";
+    const response = await apiV1Action({
+      request: new Request(`${TEST_ORIGIN}/api/v1/cookbooks/${COOKBOOK_ID}`, {
+        method: "DELETE",
+        headers: bearerHeaders({
+          "Content-Type": "application/json",
+          "X-Request-Id": requestId,
+        }),
+        body: JSON.stringify({ clientMutationId }),
+      }),
+      params: { "*": `cookbooks/${COOKBOOK_ID}` },
+      context: routeContext(),
+    } as any);
 
-    expect(String(error)).toContain(CUTOVER_TOKEN);
-    expect(response.init?.status).toBe(503);
-    expect(response.data).toEqual(webActivationPendingBody);
-    const responseHeaders = new Headers(response.init?.headers);
-    expect(responseHeaders.get("Retry-After")).toBe("1");
-    expect(responseHeaders.get("Cache-Control")).toBe("private, no-store");
+    expect(response.status).toBe(503);
+    await expectRetryHeaders(response);
     expect(await membershipCount(LEGACY_RECIPE_ID)).toBe(1);
     expect(await cookbookUpdatedAt()).toBe(beforeUpdatedAt);
-    expect(consoleError).not.toHaveBeenCalled();
+    expect(await tombstoneCount()).toBe(0);
+    expect(await idempotencyReservationCount(clientMutationId)).toBe(0);
+  });
+
+  it("rolls back a newly created cookbook when its native D1 membership fails second", async () => {
+    await installCutoverFence();
+    const title = "Cutover D1 Rolled Back Cookbook";
+    const cookie = await createUserSessionCookie(
+      USER_ID,
+      env as unknown as { SESSION_SECRET?: string },
+      new Request(`${TEST_ORIGIN}/recipes/${REST_RECIPE_ID}`),
+    );
+    const formData = new FormData();
+    formData.set("intent", "createCookbookAndSave");
+    formData.set("title", title);
+
+    const result = await handleRecipeDetailAction({
+      request: new Request(`${TEST_ORIGIN}/recipes/${REST_RECIPE_ID}`, {
+        method: "POST",
+        headers: { Cookie: cookie },
+        body: formData,
+      }),
+      params: { id: REST_RECIPE_ID },
+      context: routeContext(),
+    } as any);
+    const response = result as { data: unknown; init?: { status?: number } | null };
+
+    expect(response.init?.status).toBe(503);
+    expect(response.data).toEqual(webActivationPendingBody);
+    expect(await cookbookTitleCount(title)).toBe(0);
+    expect(await membershipCount(REST_RECIPE_ID)).toBe(0);
+  });
+
+  it("rolls back a native D1 REST membership when the cookbook touch fails second", async () => {
+    await installCookbookAbortTrigger();
+    const requestId = "req_cutover_d1_rest_second";
+    const clientMutationId = "cm_cutover_d1_rest_second";
+    const beforeUpdatedAt = await cookbookUpdatedAt();
+
+    const response = await apiV1Action({
+      request: new Request(
+        `${TEST_ORIGIN}/api/v1/cookbooks/${COOKBOOK_ID}/recipes/${REST_RECIPE_ID}`,
+        {
+          method: "POST",
+          headers: bearerHeaders({
+            "Content-Type": "application/json",
+            "X-Request-Id": requestId,
+          }),
+          body: JSON.stringify({ clientMutationId }),
+        },
+      ),
+      params: { "*": `cookbooks/${COOKBOOK_ID}/recipes/${REST_RECIPE_ID}` },
+      context: routeContext(),
+    } as any);
+
+    expect(response.status).toBe(503);
+    await expectRetryHeaders(response);
+    expect(await membershipCount(REST_RECIPE_ID)).toBe(0);
+    expect(await cookbookUpdatedAt()).toBe(beforeUpdatedAt);
+    expect(await idempotencyReservationCount(clientMutationId)).toBe(0);
+  });
+
+  it("restores a native D1 membership when the first-party web cookbook touch fails second", async () => {
+    await installCookbookAbortTrigger();
+    const cookie = await createUserSessionCookie(
+      USER_ID,
+      env as unknown as { SESSION_SECRET?: string },
+      new Request(`${TEST_ORIGIN}/recipes/${LEGACY_RECIPE_ID}`),
+    );
+    const formData = new FormData();
+    formData.set("intent", "removeFromCookbook");
+    formData.set("cookbookId", COOKBOOK_ID);
+
+    const result = await handleRecipeDetailAction({
+      request: new Request(`${TEST_ORIGIN}/recipes/${LEGACY_RECIPE_ID}`, {
+        method: "POST",
+        headers: { Cookie: cookie },
+        body: formData,
+      }),
+      params: { id: LEGACY_RECIPE_ID },
+      context: routeContext(),
+    } as any);
+    const response = result as { data: unknown; init?: { status?: number } | null };
+
+    expect(response.init?.status).toBe(503);
+    expect(response.data).toEqual(webActivationPendingBody);
+    expect(await membershipCount(LEGACY_RECIPE_ID)).toBe(1);
   });
 
   it("maps a real D1 insert fence through REST v1 and releases the rolled-back mutation id", async () => {
@@ -330,7 +516,6 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
     expect(await membershipCount(REST_RECIPE_ID)).toBe(0);
     expect(await cookbookUpdatedAt()).toBe(beforeUpdatedAt);
     expect(await idempotencyReservationCount(clientMutationId)).toBe(0);
-    expect(consoleError).not.toHaveBeenCalled();
   });
 
   it("maps a real D1 delete fence through legacy /api and preserves the membership", async () => {
@@ -358,7 +543,6 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
       },
     });
     expect(await membershipCount(LEGACY_RECIPE_ID)).toBe(1);
-    expect(consoleError).not.toHaveBeenCalled();
   });
 
   it("maps a real D1 insert fence through MCP HTTP and preserves JSON-RPC transport status", async () => {
@@ -394,7 +578,6 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
       },
     });
     expect(await membershipCount(MCP_RECIPE_ID)).toBe(0);
-    expect(consoleError).not.toHaveBeenCalled();
   });
 
   it("recognizes the exact token through the real D1 error wrapper", async () => {
@@ -417,5 +600,295 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
 
     expect(String(error)).toContain(`${CUTOVER_TOKEN}_suffix`);
     expect(isSavedRecipeCutoverPendingError(error)).toBe(false);
+  });
+
+  it("rolls back the second native D1 REST shopping write and safely retries the mutation id", async () => {
+    await executeStatement(`
+      CREATE TRIGGER "${SHOPPING_ABORT_TRIGGER}"
+      BEFORE INSERT ON "ShoppingListItem"
+      WHEN NEW."ingredientRefId" = '${SHOPPING_SECOND_REF_ID}'
+      BEGIN
+        SELECT RAISE(ABORT, 'shopping_bulk_atomic_failure');
+      END
+    `);
+    const clientMutationId = "cm_cutover_d1_shopping_atomic";
+    const request = (requestId: string) => new Request(
+      `${TEST_ORIGIN}/api/v1/shopping-list/add-from-recipe`,
+      {
+        method: "POST",
+        headers: bearerHeaders({
+          "Content-Type": "application/json",
+          "X-Request-Id": requestId,
+        }),
+        body: JSON.stringify({
+          clientMutationId,
+          recipeId: REST_RECIPE_ID,
+        }),
+      },
+    );
+    const blockedRequestId = "req_cutover_d1_shopping_blocked";
+    const nativeBatchError = new Error("shopping_bulk_atomic_failure");
+    const realDatabase = database();
+    const wrappedDatabase: TestD1Database = {
+      exec: realDatabase.exec.bind(realDatabase),
+      prepare: realDatabase.prepare.bind(realDatabase),
+      async batch(statements) {
+        try {
+          return await realDatabase.batch(statements);
+        } catch {
+          throw nativeBatchError;
+        }
+      },
+    };
+    expectConsoleError(
+      "[api-v1] internal_error",
+      {
+        requestId: blockedRequestId,
+        method: "POST",
+        path: "/api/v1/shopping-list/add-from-recipe",
+        error: {
+          name: nativeBatchError.name,
+          message: nativeBatchError.message,
+          stack: nativeBatchError.stack,
+        },
+      },
+    );
+    const blocked = await apiV1Action({
+      request: request(blockedRequestId),
+      params: { "*": "shopping-list/add-from-recipe" },
+      context: routeContext(wrappedDatabase),
+    } as any);
+
+    expect(blocked.status).toBe(500);
+    await expect(blocked.json()).resolves.toEqual({
+      ok: false,
+      requestId: blockedRequestId,
+      error: {
+        code: "internal_error",
+        message: "Internal error",
+        status: 500,
+      },
+    });
+    const blockedRow = await database().prepare(`
+      SELECT COUNT(*) AS "count"
+      FROM "ShoppingListItem"
+      WHERE "shoppingListId" = ?
+    `).bind(SHOPPING_LIST_ID).first<{ count: number }>();
+    expect(blockedRow?.count).toBe(0);
+    expect(await idempotencyReservationCount(clientMutationId)).toBe(0);
+
+    await dropShoppingAbortTrigger();
+    const retryRequestId = "req_cutover_d1_shopping_retry";
+    const retry = await apiV1Action({
+      request: request(retryRequestId),
+      params: { "*": "shopping-list/add-from-recipe" },
+      context: routeContext(),
+    } as any);
+
+    expect(retry.status).toBe(200);
+    await expect(retry.json()).resolves.toMatchObject({
+      ok: true,
+      requestId: retryRequestId,
+      data: {
+        created: 2,
+        updated: 0,
+        items: expect.arrayContaining([
+          expect.objectContaining({ quantity: 2 }),
+          expect.objectContaining({ quantity: 3 }),
+        ]),
+      },
+    });
+    const retriedRow = await database().prepare(`
+      SELECT COUNT(*) AS "count"
+      FROM "ShoppingListItem"
+      WHERE "shoppingListId" = ?
+    `).bind(SHOPPING_LIST_ID).first<{ count: number }>();
+    expect(retriedRow?.count).toBe(2);
+    expect(await idempotencyReservationCount(clientMutationId)).toBe(1);
+  });
+
+  it("recovers a real Prisma-D1 expression-index shopping uniqueness race", async () => {
+    const db = await getRequestDb(routeContext() as any);
+    let observedConflict: unknown;
+    await executeStatement(
+      'DROP INDEX "ShoppingListItem_shoppingListId_unitId_ingredientRefId_key"',
+    );
+    await executeStatement(`
+      CREATE UNIQUE INDEX "ShoppingListItem_active_identity_key"
+      ON "ShoppingListItem" (
+        "shoppingListId",
+        "ingredientRefId",
+        COALESCE('u:' || "unitId", 'n:')
+      )
+      WHERE "deletedAt" IS NULL
+    `);
+
+    try {
+      const result = await mutateCompatibleShoppingListItem({
+        database: db,
+        identity: {
+          shoppingListId: SHOPPING_LIST_ID,
+          ingredientRefId: SHOPPING_FIRST_REF_ID,
+          unitId: SHOPPING_UNIT_ID,
+        },
+        async create() {
+          await db.shoppingListItem.create({
+            data: {
+              id: "cutover-d1-real-race-winner",
+              shoppingListId: SHOPPING_LIST_ID,
+              ingredientRefId: SHOPPING_FIRST_REF_ID,
+              unitId: SHOPPING_UNIT_ID,
+              quantity: 4,
+              sortIndex: 0,
+            },
+          });
+          try {
+            return await db.shoppingListItem.create({
+              data: {
+                id: "cutover-d1-real-race-loser",
+                shoppingListId: SHOPPING_LIST_ID,
+                ingredientRefId: SHOPPING_FIRST_REF_ID,
+                unitId: SHOPPING_UNIT_ID,
+                quantity: 3,
+                sortIndex: 1,
+              },
+            });
+          } catch (error) {
+            observedConflict = error;
+            throw error;
+          }
+        },
+        update(existing) {
+          return db.shoppingListItem.update({
+            where: { id: existing.id },
+            data: { quantity: (existing.quantity ?? 0) + 3 },
+          });
+        },
+      });
+
+      expect(observedConflict).toMatchObject({
+        code: "P2002",
+        meta: { target: ["index 'ShoppingListItem_active_identity_key'"] },
+      });
+      expect(result).toMatchObject({
+        created: false,
+        item: { id: "cutover-d1-real-race-winner", quantity: 7 },
+      });
+      expect(await database().prepare(`
+        SELECT COUNT(*) AS "count"
+        FROM "ShoppingListItem"
+        WHERE "shoppingListId" = ?
+      `).bind(SHOPPING_LIST_ID).first<{ count: number }>()).toEqual({ count: 1 });
+    } finally {
+      await executeStatement('DROP INDEX IF EXISTS "ShoppingListItem_active_identity_key"');
+      await executeStatement(`
+        CREATE UNIQUE INDEX "ShoppingListItem_shoppingListId_unitId_ingredientRefId_key"
+        ON "ShoppingListItem" ("shoppingListId", "unitId", "ingredientRefId")
+      `);
+    }
+  });
+
+  it("uses the same atomic native D1 recipe batch through MCP", async () => {
+    await executeStatement(`
+      CREATE TRIGGER "${SHOPPING_ABORT_TRIGGER}"
+      BEFORE INSERT ON "ShoppingListItem"
+      WHEN NEW."ingredientRefId" = '${SHOPPING_SECOND_REF_ID}'
+      BEGIN
+        SELECT RAISE(ABORT, 'shopping_bulk_atomic_failure');
+      END
+    `);
+    const request = (id: number) => new Request(`${TEST_ORIGIN}/mcp`, {
+      method: "POST",
+      headers: bearerHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id,
+        method: "tools/call",
+        params: {
+          name: "add_recipe_to_shopping_list",
+          arguments: { recipeId: REST_RECIPE_ID },
+        },
+      }),
+    });
+
+    const blocked = await SELF.fetch(request(101));
+    expect(blocked.status).toBe(200);
+    await expect(blocked.json()).resolves.toMatchObject({
+      jsonrpc: "2.0",
+      id: 101,
+      error: { code: -32602 },
+    });
+    const blockedRow = await database().prepare(`
+      SELECT COUNT(*) AS "count"
+      FROM "ShoppingListItem"
+      WHERE "shoppingListId" = ?
+    `).bind(SHOPPING_LIST_ID).first<{ count: number }>();
+    expect(blockedRow?.count).toBe(0);
+
+    await dropShoppingAbortTrigger();
+    const retry = await SELF.fetch(request(102));
+    expect(retry.status).toBe(200);
+    const retryBody = await retry.json() as {
+      result?: { content?: Array<{ text?: string }> };
+    };
+    const toolResult = JSON.parse(retryBody.result?.content?.[0]?.text ?? "null");
+    expect(toolResult).toMatchObject({ created: 2, updated: 0 });
+    const retriedRow = await database().prepare(`
+      SELECT COUNT(*) AS "count"
+      FROM "ShoppingListItem"
+      WHERE "shoppingListId" = ?
+    `).bind(SHOPPING_LIST_ID).first<{ count: number }>();
+    expect(retriedRow?.count).toBe(2);
+  });
+
+  it("uses the same atomic native D1 recipe batch through the first-party web action", async () => {
+    await executeStatement(`
+      CREATE TRIGGER "${SHOPPING_ABORT_TRIGGER}"
+      BEFORE INSERT ON "ShoppingListItem"
+      WHEN NEW."ingredientRefId" = '${SHOPPING_SECOND_REF_ID}'
+      BEGIN
+        SELECT RAISE(ABORT, 'shopping_bulk_atomic_failure');
+      END
+    `);
+    const cookie = await createUserSessionCookie(
+      USER_ID,
+      env as unknown as { SESSION_SECRET?: string },
+      new Request(`${TEST_ORIGIN}/shopping-list`),
+    );
+    const request = () => {
+      const formData = new FormData();
+      formData.set("intent", "addFromRecipe");
+      formData.set("recipeId", REST_RECIPE_ID);
+      formData.set("scaleFactor", "1");
+      return new Request(`${TEST_ORIGIN}/shopping-list`, {
+        method: "POST",
+        headers: { Cookie: cookie },
+        body: formData,
+      });
+    };
+
+    await expect(handleShoppingListAction({
+      request: request(),
+      context: routeContext() as any,
+    })).rejects.toThrow("shopping_bulk_atomic_failure");
+    const blockedRow = await database().prepare(`
+      SELECT COUNT(*) AS "count"
+      FROM "ShoppingListItem"
+      WHERE "shoppingListId" = ?
+    `).bind(SHOPPING_LIST_ID).first<{ count: number }>();
+    expect(blockedRow?.count).toBe(0);
+
+    await dropShoppingAbortTrigger();
+    const retry = await handleShoppingListAction({
+      request: request(),
+      context: routeContext() as any,
+    });
+    expect(retry).toMatchObject({ data: { success: true } });
+    const retriedRow = await database().prepare(`
+      SELECT COUNT(*) AS "count"
+      FROM "ShoppingListItem"
+      WHERE "shoppingListId" = ?
+    `).bind(SHOPPING_LIST_ID).first<{ count: number }>();
+    expect(retriedRow?.count).toBe(2);
   });
 });

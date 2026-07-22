@@ -8,7 +8,12 @@ vi.mock("~/lib/analytics-server", async (importOriginal) => ({
   captureException: vi.fn(async () => undefined),
 }));
 
-import { handleMcpHttpRequest, jsonRpcErrorCode, mcpJsonRpcTelemetry } from "~/lib/mcp/http-mcp.server";
+import {
+  handleMcpHttpRequest,
+  isCookbookMembershipCutoverToolError,
+  jsonRpcErrorCode,
+  mcpJsonRpcTelemetry,
+} from "~/lib/mcp/http-mcp.server";
 import { captureEvent, captureException } from "~/lib/analytics-server";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { CLAUDE_MCP_REDIRECT_URI } from "~/lib/oauth-server.server";
@@ -200,6 +205,14 @@ describe("handleMcpHttpRequest", () => {
     const request = new UndiciRequest("https://spoonjoy.app/mcp", { method: "GET" }) as unknown as Request;
     const response = await handleMcpHttpRequest({ request, db });
     expect(response.status).toBe(405);
+  });
+
+  it("scopes activation-fence errors to the two cookbook membership tools", () => {
+    const error = new Error("saved_recipe_cutover_pending");
+    expect(isCookbookMembershipCutoverToolError("add_recipe_to_cookbook", error)).toBe(true);
+    expect(isCookbookMembershipCutoverToolError("remove_recipe_from_cookbook", error)).toBe(true);
+    expect(isCookbookMembershipCutoverToolError("add_recipe_to_shopping_list", error)).toBe(false);
+    expect(isCookbookMembershipCutoverToolError("add_recipe_to_cookbook", new Error("ordinary"))).toBe(false);
   });
 
   async function mintToken(): Promise<string> {

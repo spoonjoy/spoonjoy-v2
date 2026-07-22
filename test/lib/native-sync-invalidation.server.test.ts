@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "~/lib/db.server";
 import { createUser } from "~/lib/auth.server";
 import {
@@ -29,6 +29,19 @@ describe("native sync invalidation helpers", () => {
     expect(nativeSyncDeletedKind("recipe")).toBe("recipe");
     expect(nativeSyncDeletedKind("cookbook")).toBe("cookbook");
     expect(nativeSyncDeletedKind("shoppingItem")).toBeNull();
+  });
+
+  it("defaults a standalone cookbook touch operation to the current time", () => {
+    const update = vi.fn(() => Promise.resolve({}));
+    const operation = touchNativeSyncCookbookOperation({
+      cookbook: { update },
+    } as never, "cookbook-id");
+
+    expect(operation).toBeInstanceOf(Promise);
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "cookbook-id" },
+      data: { updatedAt: expect.any(Date) },
+    });
   });
 
   it("creates and updates durable native sync tombstones", async () => {

@@ -864,8 +864,6 @@ describe("API v1 public cookbook reads", () => {
     });
     const before = await db.cookbook.findUniqueOrThrow({ where: { id: fixture.cookbook.id } });
     const clientMutationId = "cm_cookbook_cutover_add";
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
-
     await installMembershipCutoverTrigger(db, "INSERT");
     try {
       const blocked = await action(routeArgs(jsonRequest(
@@ -905,10 +903,8 @@ describe("API v1 public cookbook reads", () => {
         where: { cookbookId: fixture.cookbook.id, recipeId: recipeToAdd.id },
       })).resolves.toBe(1);
       await expectProductActivationPendingResponse(blocked, "req_cookbook_cutover_add");
-      expect(consoleError).not.toHaveBeenCalled();
     } finally {
       await dropMembershipCutoverTriggers(db);
-      consoleError.mockRestore();
     }
   });
 
@@ -917,8 +913,6 @@ describe("API v1 public cookbook reads", () => {
     const token = await createApiCredential(db, fixture.chef.id, "Cutover remove writer", { scopes: ["kitchen:write"] });
     const before = await db.cookbook.findUniqueOrThrow({ where: { id: fixture.cookbook.id } });
     const clientMutationId = "cm_cookbook_cutover_remove";
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
-
     await installMembershipCutoverTrigger(db, "DELETE");
     try {
       const blocked = await action(routeArgs(jsonRequest(
@@ -958,10 +952,8 @@ describe("API v1 public cookbook reads", () => {
         where: { cookbookId: fixture.cookbook.id, recipeId: fixture.recipe.id },
       })).resolves.toBe(0);
       await expectProductActivationPendingResponse(blocked, "req_cookbook_cutover_remove");
-      expect(consoleError).not.toHaveBeenCalled();
     } finally {
       await dropMembershipCutoverTriggers(db);
-      consoleError.mockRestore();
     }
   });
 
@@ -969,8 +961,6 @@ describe("API v1 public cookbook reads", () => {
     const fixture = await createCookbookFixture(db, "Api V1 Cutover Delete Cookbook");
     const token = await createApiCredential(db, fixture.chef.id, "Cutover delete writer", { scopes: ["kitchen:write"] });
     const clientMutationId = "cm_cookbook_cutover_delete";
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
-
     await installMembershipCutoverTrigger(db, "DELETE");
     try {
       const blocked = await action(routeArgs(jsonRequest(
@@ -1014,10 +1004,8 @@ describe("API v1 public cookbook reads", () => {
         where: { accountId: fixture.chef.id, resourceType: "cookbook", resourceId: fixture.cookbook.id },
       })).resolves.toBe(1);
       await expectProductActivationPendingResponse(blocked, "req_cookbook_cutover_delete");
-      expect(consoleError).not.toHaveBeenCalled();
     } finally {
       await dropMembershipCutoverTriggers(db);
-      consoleError.mockRestore();
     }
   });
 
@@ -1033,17 +1021,17 @@ describe("API v1 public cookbook reads", () => {
     const originalTransaction = db.$transaction;
 
     try {
-      const transactionError = new Error("membership storage unavailable");
-      const transactionSpy = vi.fn().mockRejectedValueOnce(transactionError);
+      const membershipError = new Error("membership storage unavailable");
+      const transactionSpy = vi.fn().mockRejectedValueOnce(membershipError);
       db.$transaction = transactionSpy as unknown as typeof db.$transaction;
       expectConsoleError("[api-v1] internal_error", {
         requestId: "req_cookbook_recipe_add_fault",
         method: "POST",
         path: `/api/v1/cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`,
         error: {
-          name: transactionError.name,
-          message: transactionError.message,
-          stack: transactionError.stack,
+          name: membershipError.name,
+          message: membershipError.message,
+          stack: membershipError.stack,
         },
       });
       const response = await action(routeArgs(jsonRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`, "POST", token.token, "req_cookbook_recipe_add_fault", {
@@ -1056,6 +1044,57 @@ describe("API v1 public cookbook reads", () => {
         error: { code: "internal_error", status: 500 },
       });
       expect(transactionSpy).toHaveBeenCalledOnce();
+
+      const removeError = new Error("membership remove storage unavailable");
+      transactionSpy.mockRejectedValueOnce(removeError);
+      expectConsoleError("[api-v1] internal_error", {
+        requestId: "req_cookbook_recipe_remove_fault",
+        method: "DELETE",
+        path: `/api/v1/cookbooks/${fixture.cookbook.id}/recipes/${fixture.recipe.id}`,
+        error: {
+          name: removeError.name,
+          message: removeError.message,
+          stack: removeError.stack,
+        },
+      });
+      const removeResponse = await action(routeArgs(jsonRequest(
+        `http://localhost/api/v1/cookbooks/${fixture.cookbook.id}/recipes/${fixture.recipe.id}`,
+        "DELETE",
+        token.token,
+        "req_cookbook_recipe_remove_fault",
+        { clientMutationId: "cm_cookbook_recipe_remove_fault" },
+      ), `cookbooks/${fixture.cookbook.id}/recipes/${fixture.recipe.id}`));
+      expect(removeResponse.status).toBe(500);
+      await expect(readJson(removeResponse)).resolves.toMatchObject({
+        requestId: "req_cookbook_recipe_remove_fault",
+        error: { code: "internal_error", status: 500 },
+      });
+
+      const deleteError = new Error("cookbook delete storage unavailable");
+      transactionSpy.mockRejectedValueOnce(deleteError);
+      expectConsoleError("[api-v1] internal_error", {
+        requestId: "req_cookbook_delete_fault",
+        method: "DELETE",
+        path: `/api/v1/cookbooks/${fixture.cookbook.id}`,
+        error: {
+          name: deleteError.name,
+          message: deleteError.message,
+          stack: deleteError.stack,
+        },
+      });
+      const deleteResponse = await action(routeArgs(jsonRequest(
+        `http://localhost/api/v1/cookbooks/${fixture.cookbook.id}`,
+        "DELETE",
+        token.token,
+        "req_cookbook_delete_fault",
+        { clientMutationId: "cm_cookbook_delete_fault" },
+      ), `cookbooks/${fixture.cookbook.id}`));
+      expect(deleteResponse.status).toBe(500);
+      await expect(readJson(deleteResponse)).resolves.toMatchObject({
+        requestId: "req_cookbook_delete_fault",
+        error: { code: "internal_error", status: 500 },
+      });
+      expect(transactionSpy).toHaveBeenCalledTimes(3);
     } finally {
       db.$transaction = originalTransaction;
     }

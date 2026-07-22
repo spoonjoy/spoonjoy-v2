@@ -16,6 +16,11 @@ overrides:
   protobufjs@8: 8.6.6
   sharp: 0.35.3
 
+patchedDependencies:
+  '@prisma/adapter-d1@6.19.2':
+    hash: e9689cdfdb869cc4ca76e29b717fb6b6456f71d7a7e74498da910497aa434879
+    path: patches/@prisma__adapter-d1@6.19.2.patch
+
 importers:
 
   .:
@@ -37,7 +42,7 @@ importers:
         version: 1.7.0(@types/react@19.2.10)(posthog-js@1.336.4)(react@19.2.4)
       '@prisma/adapter-d1':
         specifier: ^6.19.2
-        version: 6.19.2
+        version: 6.19.2(patch_hash=e9689cdfdb869cc4ca76e29b717fb6b6456f71d7a7e74498da910497aa434879)
       '@prisma/client':
         specifier: 6.19.2
         version: 6.19.2(prisma@6.19.2(typescript@5.9.3))(typescript@5.9.3)
@@ -6447,7 +6452,7 @@ snapshots:
 
   '@posthog/types@1.336.4': {}
 
-  '@prisma/adapter-d1@6.19.2':
+  '@prisma/adapter-d1@6.19.2(patch_hash=e9689cdfdb869cc4ca76e29b717fb6b6456f71d7a7e74498da910497aa434879)':
     dependencies:
       '@cloudflare/workers-types': 4.20260507.1
       '@prisma/driver-adapter-utils': 6.19.2

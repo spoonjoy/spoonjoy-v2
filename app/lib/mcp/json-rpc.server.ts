@@ -17,6 +17,7 @@ export interface JsonRpcFailure {
   error: {
     code: number;
     message: string;
+    data?: unknown;
   };
 }
 
@@ -33,8 +34,29 @@ const METHOD_NOT_FOUND = -32601;
 const INVALID_PARAMS = -32602;
 const INTERNAL_ERROR = -32603;
 
-function failure(id: number | string | null, code: number, message: string): JsonRpcFailure {
-  return { jsonrpc: "2.0", id, error: { code, message } };
+export class JsonRpcError extends Error {
+  readonly code: number;
+  readonly data?: unknown;
+
+  constructor(code: number, message: string, data?: unknown) {
+    super(message);
+    this.name = "JsonRpcError";
+    this.code = code;
+    this.data = data;
+  }
+}
+
+function failure(
+  id: number | string | null,
+  code: number,
+  message: string,
+  data?: unknown,
+): JsonRpcFailure {
+  return {
+    jsonrpc: "2.0",
+    id,
+    error: data === undefined ? { code, message } : { code, message, data },
+  };
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -127,6 +149,9 @@ export async function handleJsonRpcMessage(
         return failure(id, METHOD_NOT_FOUND, `Method not found: ${parsed.method}`);
     }
   } catch (error) {
+    if (error instanceof JsonRpcError) {
+      return failure(id, error.code, error.message, error.data);
+    }
     options.onError?.(error);
     const message = error instanceof Error ? error.message : String(error);
     const code = parsed.method === "tools/call" ? INVALID_PARAMS : INTERNAL_ERROR;

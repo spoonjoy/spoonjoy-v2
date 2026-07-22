@@ -59,6 +59,7 @@ export async function resolveApiPrincipal(
 }
 
 interface CloudflareEnvLike extends ImageGenEnv {
+  DB?: unknown;
   SPOONJOY_BASE_URL?: string;
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
@@ -87,6 +88,7 @@ export function buildSpoonjoyApiContext(params: {
     waitUntil,
     env: cloudflareEnv
       ? {
+          DB: cloudflareEnv.DB,
           OPENAI_API_KEY: cloudflareEnv.OPENAI_API_KEY,
           GOOGLE_API_KEY: cloudflareEnv.GOOGLE_API_KEY,
           GEMINI_API_KEY: cloudflareEnv.GEMINI_API_KEY,

@@ -3,6 +3,7 @@ import {
   PRODUCT_ACTIVATION_PENDING_CODE,
   PRODUCT_ACTIVATION_PENDING_MESSAGE,
   isSavedRecipeCutoverPendingError,
+  productActivationPendingWebResponse,
 } from "~/lib/saved-recipe-cutover.server";
 
 const TOKEN = "saved_recipe_cutover_pending";
@@ -22,6 +23,27 @@ describe("saved recipe cutover recognition", () => {
     expect(PRODUCT_ACTIVATION_PENDING_MESSAGE).toBe(
       "Spoonjoy product activation is still completing. Retry shortly."
     );
+  });
+
+  it("builds the retryable web response only for the exact cutover token", () => {
+    expect(productActivationPendingWebResponse(new Error("ordinary failure"))).toBeNull();
+    expect(productActivationPendingWebResponse(new Error(TOKEN))).toEqual({
+      data: {
+        error: {
+          code: PRODUCT_ACTIVATION_PENDING_CODE,
+          message: PRODUCT_ACTIVATION_PENDING_MESSAGE,
+          retryable: true,
+        },
+      },
+      init: {
+        status: 503,
+        headers: {
+          "Retry-After": "1",
+          "Cache-Control": "private, no-store",
+        },
+      },
+      type: "DataWithResponseInit",
+    });
   });
 
   it.each([
@@ -123,6 +145,16 @@ describe("saved recipe cutover recognition", () => {
     expect(isSavedRecipeCutoverPendingError(throwing)).toBe(false);
   });
 
+  it("treats a wrapper with a throwing prototype trap as uninspectable", () => {
+    const throwingPrototype = new Proxy({}, {
+      getPrototypeOf() {
+        throw new Error("prototype unavailable");
+      },
+    });
+
+    expect(isSavedRecipeCutoverPendingError(throwingPrototype)).toBe(false);
+  });
+
   it("handles Error instances and repeated references without widening the field inventory", () => {
     const shared = { message: TOKEN };
     const wrapped = new Error("adapter failed", { cause: shared });
@@ -133,7 +165,7 @@ describe("saved recipe cutover recognition", () => {
   });
 
   it.each([null, undefined, 0, 1, false, true, 1n, Symbol("value"), () => TOKEN])(
-    "ignores unsupported primitive or callable value %j",
+    "ignores unsupported primitive or callable value %s",
     (value) => {
       expect(isSavedRecipeCutoverPendingError(value)).toBe(false);
     }

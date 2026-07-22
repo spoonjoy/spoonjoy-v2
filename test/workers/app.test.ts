@@ -556,6 +556,64 @@ describe("Cloudflare worker app", () => {
     });
   });
 
+  it("fails owner DELETE closed when the public origin is not configured", async () => {
+    apiMocks.authenticateApiRequest.mockResolvedValueOnce(principal(
+      "bearer",
+      ["account:write"],
+      {
+        credentialId: "account-delete-credential",
+        oauthResource: ACCOUNT_DELETE_INTENT_RESOURCE,
+      },
+    ));
+    const namespace = cookSessionNamespace();
+
+    const response = await worker.fetch(
+      new Request("https://spoonjoy.app/api/cook-sessions", {
+        method: "DELETE",
+        headers: { Origin: "https://spoonjoy.app" },
+      }),
+      versionedEnvironment({
+        COOK_SESSIONS: namespace.namespace,
+        SPOONJOY_BASE_URL: undefined,
+      }),
+      context(),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "origin_forbidden" } });
+    expect(namespace.idFromName).not.toHaveBeenCalled();
+    expect(namespace.get).not.toHaveBeenCalled();
+    expect(namespace.fetch).not.toHaveBeenCalled();
+  });
+
+  it("preserves malformed owner DELETE authentication as invalid_request", async () => {
+    apiMocks.authenticateApiRequest.mockRejectedValueOnce(
+      new apiMocks.ApiAuthError("Malformed Authorization header", 400),
+    );
+    const namespace = cookSessionNamespace();
+
+    const response = await worker.fetch(
+      new Request("https://spoonjoy.app/api/cook-sessions", {
+        method: "DELETE",
+        headers: { Authorization: "Basic malformed" },
+      }),
+      versionedEnvironment({ COOK_SESSIONS: namespace.namespace }),
+      context(),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "invalid_request",
+        message: "Authentication request is invalid.",
+        retryable: false,
+      },
+    });
+    expect(namespace.idFromName).not.toHaveBeenCalled();
+    expect(namespace.get).not.toHaveBeenCalled();
+    expect(namespace.fetch).not.toHaveBeenCalled();
+  });
+
   it("requires an authenticated cook-session principal", async () => {
     apiMocks.authenticateApiRequest.mockResolvedValueOnce(null);
 

@@ -57,15 +57,19 @@ const CUTOVER_TRIGGER_NAME = "test_recipe_detail_saved_recipe_cutover_pending";
 async function installRecipeDetailAbortTrigger(
   table: "RecipeInCookbook",
   event: "INSERT" | "DELETE",
+  message = "saved_recipe_cutover_pending",
 ) {
   await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${CUTOVER_TRIGGER_NAME}"`);
   // Native Prisma erases RAISE text as P2003; this keeps the token and the
   // same BEFORE-trigger rollback semantics. The Workers suite uses real RAISE.
+  const failureStatement = message === "saved_recipe_cutover_pending"
+    ? `SELECT * FROM ${message};`
+    : `SELECT RAISE(ABORT, '${message}');`;
   await db.$executeRawUnsafe(`
     CREATE TRIGGER "${CUTOVER_TRIGGER_NAME}"
     BEFORE ${event} ON "${table}"
     BEGIN
-      SELECT * FROM saved_recipe_cutover_pending;
+      ${failureStatement}
     END
   `);
 }
@@ -2205,6 +2209,23 @@ describe("Recipes $id Route", () => {
       await expect(
         db.recipeInCookbook.count({ where: { recipeId } }),
       ).resolves.toBe(0);
+    });
+
+    it("rethrows an unrelated failure while creating and saving a cookbook", async () => {
+      await installRecipeDetailAbortTrigger(
+        "RecipeInCookbook",
+        "INSERT",
+        "ordinary_create_cookbook_failure",
+      );
+
+      await expect(action({
+        request: await createFormRequest(
+          { intent: "createCookbookAndSave", title: "Ordinary failure cookbook" },
+          testUserId,
+        ),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any)).rejects.toMatchObject({ code: "P2003" });
     });
 
     it("throws 400 when creating a cookbook with a blank title", async () => {
@@ -4857,6 +4878,30 @@ describe("Recipes $id Route", () => {
           select: { updatedAt: true },
         }),
       ).resolves.toEqual({ updatedAt: baselineUpdatedAt });
+    });
+
+    it("rethrows an unrelated failure while removing from a cookbook", async () => {
+      await db.recipeInCookbook.create({
+        data: {
+          cookbookId: testCookbookId,
+          recipeId,
+          addedById: testUserId,
+        },
+      });
+      await installRecipeDetailAbortTrigger(
+        "RecipeInCookbook",
+        "DELETE",
+        "ordinary_remove_cookbook_failure",
+      );
+
+      await expect(action({
+        request: await createFormRequest(
+          { intent: "removeFromCookbook", cookbookId: testCookbookId },
+          testUserId,
+        ),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any)).rejects.toMatchObject({ code: "P2003" });
     });
 
     it("should throw 403 when removing from someone else's cookbook", async () => {

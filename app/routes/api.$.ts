@@ -14,6 +14,11 @@ import {
   safeHeaderHost,
   userAgentFamily,
 } from "~/lib/analytics-server";
+import {
+  PRODUCT_ACTIVATION_PENDING_CODE,
+  PRODUCT_ACTIVATION_PENDING_MESSAGE,
+  isSavedRecipeCutoverPendingError,
+} from "~/lib/saved-recipe-cutover.server";
 
 const API_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -61,6 +66,10 @@ type ApiDispatch = {
 };
 
 const LEGACY_TOOL_OPERATION_NAMES = new Set(listSpoonjoyApiOperations().map((operation) => operation.name));
+const LEGACY_CUTOVER_MEMBERSHIP_OPERATIONS = new Set([
+  "add_recipe_to_cookbook",
+  "remove_recipe_from_cookbook",
+]);
 
 type LegacyApiTelemetryInput = {
   request: Request;
@@ -363,6 +372,35 @@ async function handleApiRequest({ request, context, params }: Route.LoaderArgs |
     // else is an unexpected bug or infra failure: log it via PostHog (so prod
     // incidents aren't invisible) and respond 500 with a generic message rather
     // than leaking the raw error.
+    if (
+      operation &&
+      LEGACY_CUTOVER_MEMBERSHIP_OPERATIONS.has(operation) &&
+      isSavedRecipeCutoverPendingError(error)
+    ) {
+      const response = apiJson(
+        {
+          ok: false,
+          error: {
+            message: PRODUCT_ACTIVATION_PENDING_MESSAGE,
+            status: 503,
+          },
+        },
+        503,
+        {
+          "Retry-After": "1",
+          "Cache-Control": "private, no-store",
+        },
+      );
+      return observeLegacyApiResponse({
+        request,
+        context,
+        response,
+        startedAt,
+        operation,
+        principal,
+        errorCode: PRODUCT_ACTIVATION_PENDING_CODE,
+      });
+    }
     if (error instanceof ApiAuthError) {
       const response = apiJson({ ok: false, error: { message: error.message, status: error.status } }, error.status);
       return observeLegacyApiResponse({

@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient, ShoppingListItem } from "@prisma/client";
 import type { AppLoadContext } from "react-router";
 import { data } from "react-router";
 import { getCloudflareEnv, getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
@@ -9,6 +9,15 @@ import {
   parseShoppingItemFallback,
   type ParsedItemDraft,
 } from "~/lib/shopping-list-parser";
+import {
+  asCompatibleD1Database,
+  coalesceShoppingRecipeIngredients,
+  createCompatibleShoppingListD1Batch,
+  findCompatibleShoppingListItem,
+  mutateCompatibleShoppingListItem,
+  runCompatibleShoppingListBatch,
+  type ShoppingListItemWritePlan,
+} from "~/lib/shopping-list-mutations.server";
 
 type ShoppingListItemState = {
   id: string;
@@ -219,6 +228,8 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
         submittedCategoryKey,
         submittedIconKey
       );
+      const categoryKey = affordance.categoryKey;
+      const iconKey = affordance.iconKey;
 
       let unitId: string | null = null;
 
@@ -238,49 +249,53 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
         unitId = unit.id;
       }
 
-      // Check if item already exists
-      const existingItem = await database.shoppingListItem.findFirst({
-        where: {
-          shoppingListId: shoppingList.id,
-          unitId,
-          ingredientRefId: ingredientRef.id,
+      const identity = {
+        shoppingListId: shoppingList.id,
+        unitId,
+        ingredientRefId: ingredientRef.id,
+      };
+
+      await mutateCompatibleShoppingListItem({
+        database,
+        identity,
+        update: async (existingItem) => {
+          /* istanbul ignore next -- @preserve ternary branches for quantity addition */
+          const newQuantity = quantity
+            ? (existingItem.quantity || 0) + parseFloat(quantity)
+            : existingItem.quantity;
+          const shouldMoveToEnd = Boolean(
+            existingItem.deletedAt || existingItem.checkedAt || existingItem.checked
+          );
+
+          return database.shoppingListItem.update({
+            where: { id: existingItem.id },
+            data: {
+              quantity: newQuantity,
+              checked: false,
+              checkedAt: null,
+              categoryKey,
+              iconKey,
+              deletedAt: null,
+              sortIndex: shouldMoveToEnd
+                ? await nextSortIndex(database, shoppingList.id)
+                : existingItem.sortIndex,
+            },
+          });
+        },
+        create: async () => {
+          const sortIndex = await nextSortIndex(database, shoppingList.id);
+
+          return database.shoppingListItem.create({
+            data: {
+              ...identity,
+              quantity: quantity ? parseFloat(quantity) : null,
+              categoryKey,
+              iconKey,
+              sortIndex,
+            },
+          });
         },
       });
-
-      if (existingItem) {
-        /* istanbul ignore next -- @preserve ternary branches for quantity addition */
-        const newQuantity = quantity
-          ? (existingItem.quantity || 0) + parseFloat(quantity)
-          : existingItem.quantity;
-        const shouldMoveToEnd = Boolean(existingItem.deletedAt || existingItem.checkedAt || existingItem.checked);
-
-        await database.shoppingListItem.update({
-          where: { id: existingItem.id },
-          data: {
-            quantity: newQuantity,
-            checked: false,
-            checkedAt: null,
-            categoryKey: affordance.categoryKey,
-            iconKey: affordance.iconKey,
-            deletedAt: null,
-            sortIndex: shouldMoveToEnd ? await nextSortIndex(database, shoppingList.id) : existingItem.sortIndex,
-          },
-        });
-      } else {
-        const sortIndex = await nextSortIndex(database, shoppingList.id);
-
-        await database.shoppingListItem.create({
-          data: {
-            shoppingListId: shoppingList.id,
-            quantity: quantity ? parseFloat(quantity) : null,
-            unitId,
-            ingredientRefId: ingredientRef.id,
-            categoryKey: affordance.categoryKey,
-            iconKey: affordance.iconKey,
-            sortIndex,
-          },
-        });
-      }
     }
 
     if (!ingredientName || parsedDraft.isAmbiguous) {
@@ -325,62 +340,127 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
         throw new Response("Recipe not found", { status: 404 });
       }
 
-      for (const step of recipe.steps) {
-        for (const ingredient of step.ingredients) {
-          // Check if item already exists
-          const existingItem = await database.shoppingListItem.findUnique({
-            where: {
-              shoppingListId_unitId_ingredientRefId: {
-                shoppingListId: shoppingList.id,
-                unitId: ingredient.unitId,
-                ingredientRefId: ingredient.ingredientRefId,
-              },
-            },
-          });
-
+      const candidates = recipe.steps.flatMap((step) =>
+        step.ingredients.map((ingredient) => {
           const affordance = resolveIngredientAffordance(
             ingredient.ingredientRef.name,
             null,
             null
           );
 
+          return {
+            stepNum: step.stepNum,
+            ingredientId: ingredient.id,
+            ingredientRefId: ingredient.ingredientRefId,
+            unitId: ingredient.unitId,
+            quantity: ingredient.quantity,
+            categoryKey: affordance.categoryKey,
+            iconKey: affordance.iconKey,
+          };
+        })
+      );
+      const ingredients = coalesceShoppingRecipeIngredients(candidates, scaleFactor);
+      const nativeD1 = asCompatibleD1Database(getCloudflareEnv(context)?.DB);
+
+      await runCompatibleShoppingListBatch(database, async () => {
+        const existingItems = await Promise.all(
+          ingredients.map((ingredient) =>
+            findCompatibleShoppingListItem(database, {
+              shoppingListId: shoppingList.id,
+              ingredientRefId: ingredient.ingredientRefId,
+              unitId: ingredient.unitId,
+            })
+          )
+        );
+        let availableSortIndex = await nextSortIndex(database, shoppingList.id);
+        const operations: Array<Prisma.PrismaPromise<ShoppingListItem>> = [];
+        const writePlans: ShoppingListItemWritePlan[] = [];
+
+        for (const [index, ingredient] of ingredients.entries()) {
+          const existingItem = existingItems[index];
+
           if (existingItem) {
             /* istanbul ignore next -- @preserve ternary branches for quantity addition */
-            const scaledQuantity = ingredient.quantity ? ingredient.quantity * scaleFactor : null;
-            const newQuantity = scaledQuantity
-              ? (existingItem.quantity || 0) + scaledQuantity
+            const newQuantity = ingredient.quantity
+              ? (existingItem.quantity || 0) + ingredient.quantity
               : existingItem.quantity;
-            const shouldMoveToEnd = Boolean(existingItem.deletedAt || existingItem.checkedAt || existingItem.checked);
+            const shouldMoveToEnd = Boolean(
+              existingItem.deletedAt || existingItem.checkedAt || existingItem.checked
+            );
+            const sortIndex = shouldMoveToEnd
+              ? availableSortIndex++
+              : existingItem.sortIndex;
+            const categoryKey = existingItem.categoryKey ?? ingredient.categoryKey;
+            const iconKey = ingredient.iconKey;
 
-            await database.shoppingListItem.update({
+            operations.push(database.shoppingListItem.update({
               where: { id: existingItem.id },
               data: {
                 quantity: newQuantity,
                 checked: false,
                 checkedAt: null,
                 deletedAt: null,
-                sortIndex: shouldMoveToEnd ? await nextSortIndex(database, shoppingList.id) : existingItem.sortIndex,
-                categoryKey: existingItem.categoryKey ?? affordance.categoryKey,
-                iconKey: affordance.iconKey,
-              },
-            });
-          } else {
-            const sortIndex = await nextSortIndex(database, shoppingList.id);
-
-            await database.shoppingListItem.create({
-              data: {
-                shoppingListId: shoppingList.id,
-                quantity: ingredient.quantity ? ingredient.quantity * scaleFactor : null,
-                unitId: ingredient.unitId,
-                ingredientRefId: ingredient.ingredientRefId,
                 sortIndex,
-                categoryKey: affordance.categoryKey,
-                iconKey: affordance.iconKey,
+                categoryKey,
+                iconKey,
               },
+            }));
+            writePlans.push({
+              mode: "update",
+              id: existingItem.id,
+              shoppingListId: shoppingList.id,
+              ingredientRefId: ingredient.ingredientRefId,
+              unitId: ingredient.unitId,
+              quantity: newQuantity,
+              checked: false,
+              checkedAt: null,
+              deletedAt: null,
+              sortIndex,
+              categoryKey,
+              iconKey,
+              updatedAt: new Date(),
             });
+            continue;
           }
+
+          const id = crypto.randomUUID();
+          const sortIndex = availableSortIndex++;
+          const quantity = ingredient.quantity || null;
+          operations.push(database.shoppingListItem.create({
+            data: {
+              id,
+              shoppingListId: shoppingList.id,
+              quantity,
+              unitId: ingredient.unitId,
+              ingredientRefId: ingredient.ingredientRefId,
+              sortIndex,
+              categoryKey: ingredient.categoryKey,
+              iconKey: ingredient.iconKey,
+            },
+          }));
+          writePlans.push({
+            mode: "create",
+            id,
+            shoppingListId: shoppingList.id,
+            ingredientRefId: ingredient.ingredientRefId,
+            unitId: ingredient.unitId,
+            quantity,
+            checked: false,
+            checkedAt: null,
+            deletedAt: null,
+            sortIndex,
+            categoryKey: ingredient.categoryKey,
+            iconKey: ingredient.iconKey,
+            updatedAt: new Date(),
+          });
         }
-      }
+
+        return {
+          operations,
+          metadata: null,
+          native: createCompatibleShoppingListD1Batch(nativeD1, writePlans, []),
+        };
+      });
     }
     return data({ success: true });
   }
