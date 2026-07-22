@@ -203,10 +203,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 
 **Completed**: Commit `9e83637cf21c967cdda8d98fa53223ad00e12c81` added the exact schema, persisted/dry-run projection, documentation-boundary, MCP exclusion, and compatibility-selector test matrix. The focused red run had 104 passing tests and seven expected failures limited to the absent product models/index removal, explicit import projections, and guide language; no implementation, generated client, migration, or D1 state changed.
 
-### ⬜ Unit 2.1b: Product Models - Implementation
+### ✅ Unit 2.1b: Product Models - Implementation
 **What**: First replace `import_recipe_from_url` raw row pass-through in `app/lib/spoonjoy-api.server.ts` with explicit pre-feature persisted and dry-run projections and correct the three named docs without adding an import UI/MCP tool. Then remove only the generated shopping compound-unique selector/constraint from Prisma, implement exact SavedRecipe, RecipeTag, and Recipe.course models, regenerate the client, and update both cleanup paths (`test/helpers/cleanup.ts` and `test/setup.ts`). Preserve the Unit 1.9 active-first compatibility service and its find-first selectors; Unit 3.1 later replaces only that transitional runtime service with final atomic raw SQL.
 **Output**: Prisma-modeled product schema aligned with tombstone-preserving shopping identity and generated types.
 **Acceptance**: Model/seed/interim-shopping tests, legacy import byte-shape regressions, Prisma generation/push, typecheck, and build pass; no source references the removed generated `shoppingListId_unitId_ingredientRefId` unique-selector property, the Unit 1.9 find-first compatibility service remains green, no D1 cook model exists, and adding `Recipe.course` does not alter import output.
+
+**Completed**: Reviewer repair commit `b5802158` strengthened exact model/D1 absence, recursive serialized legacy-import, coherent docs/render, and complete compatibility regressions. Implementation `3ba273e4` added the exact Prisma models/relations/indexes, removed only the generated full shopping unique, updated both cleanup paths, and recursively allowlisted the persisted/dry-run pre-feature import shapes without adding MCP or UI import. Prisma generate/push, 46 strengthened tests, 168 Unit 1.9 regressions, warning-gated typecheck/build, and all 8,283 app tests at exact 100% coverage pass.
 
 ### ⬜ Unit 2.1c: Product Models - Verification
 **What**: Cover model helpers/cleanup branches and review ownership/FK/privacy boundaries.
@@ -726,3 +728,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-21 23:38 Unit 1.9b complete: exact compatibility tree `6dc720e8d4af087277c73240d0336d522e1c5aaa` passed focused/full 100% coverage, typecheck/build, migration-gap, live QA, and harsh review gates across all six writers plus owner deletion.
 - 2026-07-22 01:15 Unit 1.9c complete: PRs #291/#294 are merged and production-verified at Worker version `144bd85d-d0c8-41ea-ae3a-9abf0dbcb6aa`; product merge `8ec4cb1d` descends from both compatibility commits, preserves atomic product activation, and passes the combined compatibility/activation integration gates.
 - 2026-07-22 01:24 Unit 2.1a complete: froze exact Prisma product-model/index absence, legacy import allowlist, three-guide boundary, MCP exclusion, and compatibility-selector contracts; the red run produced only the seven intended product gaps.
+- 2026-07-22 01:51 Unit 2.1b complete after cold-review repair: exact models and cleanup paths, recursive schema-proof legacy import projections, and coherent agent/API-versus-MCP docs pass Prisma generation/push, 214 focused/compatibility tests, typecheck/build, and 8,283-test 100% coverage.
