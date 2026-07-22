@@ -359,10 +359,10 @@ describe("Cloudflare worker app", () => {
     expect(apiMocks.authenticateApiRequest).not.toHaveBeenCalled();
   });
 
-  it("rejects a query on the recognized owner DELETE route before authentication", async () => {
+  it.each(["?confirm=1", "?"])("rejects owner DELETE query component %s before authentication", async (suffix) => {
     const namespace = cookSessionNamespace();
     const response = await worker.fetch(
-      new Request("https://spoonjoy.app/api/cook-sessions?confirm=1", { method: "DELETE" }),
+      new Request(`https://spoonjoy.app/api/cook-sessions${suffix}`, { method: "DELETE" }),
       versionedEnvironment({ COOK_SESSIONS: namespace.namespace }),
       context(),
     );
@@ -393,11 +393,19 @@ describe("Cloudflare worker app", () => {
       },
     ));
     const namespace = cookSessionNamespace();
+    const cancelBody = vi.fn();
     const request = new Request("https://spoonjoy.app/api/cook-sessions", {
       method: "DELETE",
       headers: { Origin: "https://spoonjoy.app" },
-      body: "{}",
-    });
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("{"));
+          controller.enqueue(new TextEncoder().encode("}"));
+        },
+        cancel: cancelBody,
+      }),
+      duplex: "half",
+    } as RequestInit & { duplex: "half" });
     const response = await worker.fetch(
       request,
       versionedEnvironment({ DB: {} as D1Database, COOK_SESSIONS: namespace.namespace }),
@@ -414,6 +422,43 @@ describe("Cloudflare worker app", () => {
       },
     });
     expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(apiMocks.db, request, expect.anything());
+    expect(namespace.idFromName).not.toHaveBeenCalled();
+    expect(namespace.get).not.toHaveBeenCalled();
+    expect(namespace.fetch).not.toHaveBeenCalled();
+    expect(cancelBody).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts an edge-normalized zero-byte owner DELETE stream without DO access", async () => {
+    apiMocks.authenticateApiRequest.mockResolvedValueOnce(principal(
+      "bearer",
+      ["account:write"],
+      {
+        credentialId: "account-delete-credential",
+        oauthResource: ACCOUNT_DELETE_INTENT_RESOURCE,
+      },
+    ));
+    const namespace = cookSessionNamespace();
+    const request = new Request("https://spoonjoy.app/api/cook-sessions", {
+      method: "DELETE",
+      headers: { Origin: "https://spoonjoy.app" },
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(0));
+          controller.close();
+        },
+      }),
+      duplex: "half",
+    } as RequestInit & { duplex: "half" });
+
+    expect(request.body).not.toBeNull();
+    const response = await worker.fetch(
+      request,
+      versionedEnvironment({ DB: {} as D1Database, COOK_SESSIONS: namespace.namespace }),
+      context(),
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBe("1");
     expect(namespace.idFromName).not.toHaveBeenCalled();
     expect(namespace.get).not.toHaveBeenCalled();
     expect(namespace.fetch).not.toHaveBeenCalled();

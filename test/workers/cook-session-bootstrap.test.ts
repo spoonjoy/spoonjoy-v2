@@ -607,31 +607,33 @@ describe("CookSession lifecycle bootstrap", () => {
     expect((await listDurableObjectIds(namespace)).map(String)).toEqual(beforeIds.map(String));
   });
 
-  itWithCookSessionNamespace("rejects an owner DELETE query before authentication without Durable Object access", async (namespace) => {
-    const worker = (await import("../../workers/app")).default;
-    const captured = createCapturingNamespace();
-    const beforeIds = await listDurableObjectIds(namespace);
-    const response = await worker.fetch(
-      ownerDeleteRequest(null, { suffix: "?unexpected=1" }),
-      {
-        ...testEnvironment(),
-        COOK_SESSIONS: captured.namespace,
-      } as unknown as CloudflareEnvironment,
-      createExecutionContext(),
-    );
+  for (const suffix of ["?unexpected=1", "?"]) {
+    itWithCookSessionNamespace(`rejects owner DELETE query component ${suffix} before authentication without Durable Object access`, async (namespace) => {
+      const worker = (await import("../../workers/app")).default;
+      const captured = createCapturingNamespace();
+      const beforeIds = await listDurableObjectIds(namespace);
+      const response = await worker.fetch(
+        ownerDeleteRequest(null, { suffix }),
+        {
+          ...testEnvironment(),
+          COOK_SESSIONS: captured.namespace,
+        } as unknown as CloudflareEnvironment,
+        createExecutionContext(),
+      );
 
-    await expectCookError(
-      response,
-      400,
-      "invalid_request",
-      "Cook session request is invalid.",
-    );
-    expect(captured.names).toEqual([]);
-    expect(captured.ids).toEqual([]);
-    expect(captured.getOptions).toEqual([]);
-    expect(captured.requests).toEqual([]);
-    expect((await listDurableObjectIds(namespace)).map(String)).toEqual(beforeIds.map(String));
-  });
+      await expectCookError(
+        response,
+        400,
+        "invalid_request",
+        "Cook session request is invalid.",
+      );
+      expect(captured.names).toEqual([]);
+      expect(captured.ids).toEqual([]);
+      expect(captured.getOptions).toEqual([]);
+      expect(captured.requests).toEqual([]);
+      expect((await listDurableObjectIds(namespace)).map(String)).toEqual(beforeIds.map(String));
+    });
+  }
 
   itWithCookSessionNamespace("rejects an owner DELETE body after the complete bearer intent without Durable Object access", async (namespace) => {
     const worker = (await import("../../workers/app")).default;
