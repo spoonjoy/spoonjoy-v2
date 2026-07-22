@@ -225,6 +225,139 @@ function json(value: unknown): unknown {
   return value;
 }
 
+const LEGACY_IMPORT_PERSISTED_RECIPE_FIELDS = [
+  "id",
+  "title",
+  "description",
+  "servings",
+  "chefId",
+  "deletedAt",
+  "activeCoverId",
+  "activeCoverVariant",
+  "coverMode",
+  "sourceRecipeId",
+  "sourceUrl",
+  "createdAt",
+  "updatedAt",
+  "chef",
+  "covers",
+  "steps",
+] as const;
+
+const LEGACY_IMPORT_DRAFT_FIELDS = [
+  "title",
+  "description",
+  "servings",
+  "ingredients",
+  "steps",
+  "imageUrl",
+  "sourceUrl",
+] as const;
+
+const LEGACY_IMPORT_CHEF_FIELDS = ["id", "email", "username"] as const;
+
+const LEGACY_IMPORT_COVER_FIELDS = [
+  "id",
+  "recipeId",
+  "imageUrl",
+  "stylizedImageUrl",
+  "sourceType",
+  "sourceSpoonId",
+  "status",
+  "createdById",
+  "sourceImageUrl",
+  "generationStatus",
+  "failureReason",
+  "promptVersion",
+  "styleVersion",
+  "promptAddition",
+  "parentCoverId",
+  "archivedAt",
+  "createdAt",
+] as const;
+
+const LEGACY_IMPORT_STEP_FIELDS = [
+  "id",
+  "recipeId",
+  "stepNum",
+  "stepTitle",
+  "description",
+  "duration",
+  "updatedAt",
+  "ingredients",
+] as const;
+
+const LEGACY_IMPORT_INGREDIENT_FIELDS = [
+  "id",
+  "recipeId",
+  "stepNum",
+  "quantity",
+  "unitId",
+  "ingredientRefId",
+  "updatedAt",
+  "unit",
+  "ingredientRef",
+] as const;
+
+const LEGACY_IMPORT_REFERENCE_FIELDS = ["id", "name", "updatedAt"] as const;
+
+function projectKnownFields(
+  value: unknown,
+  fields: readonly string[],
+): Record<string, unknown> {
+  const source = value as Record<string, unknown>;
+  return Object.fromEntries(
+    fields
+      .filter((field) => Object.prototype.hasOwnProperty.call(source, field))
+      .map((field) => [field, source[field]]),
+  );
+}
+
+function projectLegacyImportIngredient(value: unknown): Record<string, unknown> {
+  const source = value as Record<string, unknown>;
+  const projected = projectKnownFields(value, LEGACY_IMPORT_INGREDIENT_FIELDS);
+  projected.unit = projectKnownFields(source.unit, LEGACY_IMPORT_REFERENCE_FIELDS);
+  projected.ingredientRef = projectKnownFields(
+    source.ingredientRef,
+    LEGACY_IMPORT_REFERENCE_FIELDS,
+  );
+  return projected;
+}
+
+function projectLegacyImportStep(value: unknown): Record<string, unknown> {
+  const source = value as Record<string, unknown>;
+  const projected = projectKnownFields(value, LEGACY_IMPORT_STEP_FIELDS);
+  projected.ingredients = (source.ingredients as unknown[]).map(
+    projectLegacyImportIngredient,
+  );
+  return projected;
+}
+
+function projectLegacyImportRecipe(
+  recipe: unknown,
+  dryRun: boolean,
+): Record<string, unknown> {
+  const source = recipe as Record<string, unknown>;
+  const fields = dryRun
+    ? LEGACY_IMPORT_DRAFT_FIELDS
+    : LEGACY_IMPORT_PERSISTED_RECIPE_FIELDS;
+  const projected = projectKnownFields(source, fields);
+
+  if (Object.prototype.hasOwnProperty.call(source, "chef")) {
+    projected.chef = projectKnownFields(source.chef, LEGACY_IMPORT_CHEF_FIELDS);
+  }
+  if (Object.prototype.hasOwnProperty.call(source, "covers")) {
+    projected.covers = (source.covers as unknown[]).map((cover) =>
+      projectKnownFields(cover, LEGACY_IMPORT_COVER_FIELDS),
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(source, "steps") && !dryRun) {
+    projected.steps = (source.steps as unknown[]).map(projectLegacyImportStep);
+  }
+
+  return projected;
+}
+
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
@@ -3546,7 +3679,7 @@ const importRecipeFromUrlTool: SpoonjoyApiOperation = {
       },
     );
     return json({
-      recipe: result.recipe,
+      recipe: projectLegacyImportRecipe(result.recipe, dryRun),
       recipeId: result.recipeId,
       confidence: result.confidence,
       source: result.source,

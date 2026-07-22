@@ -70,6 +70,8 @@ export async function cleanupDatabase() {
   await db.stepOutputUse.deleteMany({});
   await db.ingredient.deleteMany({});
   await db.recipeStep.deleteMany({});
+  await db.recipeTag.deleteMany({});
+  await db.savedRecipe.deleteMany({});
   await db.recipeInCookbook.deleteMany({});
   await db.cookbook.deleteMany({});
   // Clear self/cyclic recipe links before deleting recipe-adjacent rows.

@@ -134,6 +134,8 @@ beforeAll(async () => {
   await db.stepOutputUse.deleteMany({});
   await db.ingredient.deleteMany({});
   await db.recipeStep.deleteMany({});
+  await db.recipeTag.deleteMany({});
+  await db.savedRecipe.deleteMany({});
   await db.recipeInCookbook.deleteMany({});
   await db.cookbook.deleteMany({});
   await db.recipe.updateMany({ data: { activeCoverId: null, sourceRecipeId: null } });

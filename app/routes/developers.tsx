@@ -921,6 +921,9 @@ export default function Developers() {
           Recipe import is an authenticated native app and automation surface at /api/v1/recipes/import. Store nextCursor after applying each native sync or shopping-list sync batch and retry mutations with stable clientMutationId values.
         </Text>
         <Text className="mb-5">
+          The legacy agent/API operation import_recipe_from_url remains available to existing /api integrations. It is not an MCP tool: MCP clients keep import agentic by reading the source and calling recipe-authoring tools. Spoonjoy provides no first-party import UI.
+        </Text>
+        <Text className="mb-5">
           Recipe ingredient quantities, units, servings, temperatures, and timers are original author data in API v1. Units are free-form display strings,
           not a canonical conversion model; there is no /api/v1/units registry or density table yet.
         </Text>
