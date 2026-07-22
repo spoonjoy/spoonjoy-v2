@@ -32,11 +32,42 @@ interface SchemaDefinitionRow {
   sql: string;
 }
 
+interface ShoppingItemRow {
+  id: string;
+  shoppingListId: string;
+  quantity: number | string | Buffer | null;
+  unitId: string | null;
+  ingredientRefId: string;
+  checked: number;
+  updatedAt: string | number;
+  checkedAt: string | null;
+  deletedAt: string | null;
+  sortIndex: number;
+  categoryKey: string | null;
+  iconKey: string | null;
+}
+
 const MIGRATIONS_DIR = resolve(__dirname, "..", "..", "migrations");
 const MIGRATION_FILE = "0025_clem_feedback_product.sql";
 const MIGRATION_PATH = resolve(MIGRATIONS_DIR, MIGRATION_FILE);
 const FIXTURE_SQL = readFileSync(
   resolve(__dirname, "..", "fixtures", "clem-feedback-pre-feature.sql"),
+  "utf8",
+);
+const TEST_SETUP_SOURCE = readFileSync(
+  resolve(__dirname, "..", "setup.ts"),
+  "utf8",
+);
+const PRODUCT_DATA_CONTRACT = readFileSync(
+  resolve(
+    __dirname,
+    "..",
+    "..",
+    "worker",
+    "tasks",
+    "2026-07-19-1505-doing-clem-feedback-ship",
+    "product-data-contract.md",
+  ),
   "utf8",
 );
 const MIGRATION_EXISTS = existsSync(MIGRATION_PATH);
@@ -105,6 +136,39 @@ const EXPECTED_RECIPE_TAG_TABLE_SQL = `
 `;
 const COURSE_COLUMN_SQL =
   "\"course\" TEXT CHECK (\"course\" IS NULL OR \"course\" IN ('main','side','appetizer','dessert'))";
+const MIGRATION_CLOCK_TABLE_SQL = `
+  CREATE TABLE "_Migration0025Clock" (
+    "singleton" INTEGER PRIMARY KEY CHECK ("singleton" = 1),
+    "boundNowMs" INTEGER NOT NULL,
+    "boundNowText" TEXT NOT NULL
+  )
+`;
+const MIGRATION_CLOCK_EXPRESSION =
+  "CAST(round((julianday('now')-2440587.5)*86400000) AS INTEGER)";
+const ACTIVE_IDENTITY_INDEX_SQL = `
+  CREATE UNIQUE INDEX "ShoppingListItem_active_identity_key"
+  ON "ShoppingListItem" (
+    "shoppingListId",
+    "ingredientRefId",
+    COALESCE('u:' || "unitId", 'n:')
+  )
+  WHERE "deletedAt" IS NULL
+`;
+const SETUP_ACTIVE_IDENTITY_INDEX_SQL = ACTIVE_IDENTITY_INDEX_SQL.replace(
+  "CREATE UNIQUE INDEX",
+  "CREATE UNIQUE INDEX IF NOT EXISTS",
+);
+const UNIT_3_CONFLICT_TARGET_SQL = `
+  ON CONFLICT (
+    shoppingListId,
+    ingredientRefId,
+    COALESCE('u:' || unitId, 'n:')
+  )
+  WHERE deletedAt IS NULL
+`;
+const MIGRATION_CLOCK_REPAIR_JOIN_SQL = `
+  CROSS JOIN "_Migration0025Clock" AS "migration_clock"
+`;
 
 function normalizeSql(sql: string): string {
   return sql
@@ -186,6 +250,101 @@ function tableRows(
 
 function count(db: DatabaseSyncType, sql: string): number {
   return (db.prepare(sql).get() as { count: number }).count;
+}
+
+function shoppingItems(db: DatabaseSyncType): ShoppingItemRow[] {
+  return db
+    .prepare(
+      `SELECT id, shoppingListId, quantity, unitId, ingredientRefId, checked,
+        updatedAt, checkedAt, deletedAt, sortIndex, categoryKey, iconKey
+       FROM ShoppingListItem ORDER BY id COLLATE BINARY`,
+    )
+    .all() as ShoppingItemRow[];
+}
+
+function shoppingItem(db: DatabaseSyncType, id: string): ShoppingItemRow {
+  return db
+    .prepare(
+      `SELECT id, shoppingListId, quantity, unitId, ingredientRefId, checked,
+        updatedAt, checkedAt, deletedAt, sortIndex, categoryKey, iconKey
+       FROM ShoppingListItem WHERE id = ?`,
+    )
+    .get(id) as ShoppingItemRow;
+}
+
+function addIngredientRef(db: DatabaseSyncType, id: string): void {
+  db.prepare(
+    "INSERT INTO IngredientRef (id, name, updatedAt) VALUES (?, ?, '2026-01-01T00:00:00.000Z')",
+  ).run(id, `fixture-${id}`);
+}
+
+function addShoppingItem(
+  db: DatabaseSyncType,
+  values: {
+    id: string;
+    ingredientRefId: string;
+    quantity?: number | string | Buffer | null;
+    unitId?: string | null;
+    checked?: number;
+    updatedAt?: string | number;
+    checkedAt?: string | null;
+    deletedAt?: string | null;
+    sortIndex?: number;
+    categoryKey?: string | null;
+    iconKey?: string | null;
+    shoppingListId?: string;
+  },
+): void {
+  db.prepare(
+    `INSERT INTO ShoppingListItem (
+      id, shoppingListId, quantity, unitId, ingredientRefId, checked,
+      updatedAt, checkedAt, deletedAt, sortIndex, categoryKey, iconKey
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    values.id,
+    values.shoppingListId ?? "shopping-a",
+    values.quantity ?? null,
+    values.unitId ?? null,
+    values.ingredientRefId,
+    values.checked ?? 0,
+    values.updatedAt ?? "2026-01-01T00:00:00.000Z",
+    values.checkedAt ?? null,
+    values.deletedAt ?? null,
+    values.sortIndex ?? 0,
+    values.categoryKey ?? null,
+    values.iconKey ?? null,
+  );
+}
+
+function expectCanonicalUtc(value: string | number): void {
+  expect(String(value)).toMatch(
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+  );
+  expect(Buffer.byteLength(String(value), "utf8")).toBe(24);
+}
+
+function expectShoppingMigrationRollback(
+  db: DatabaseSyncType,
+  before: ShoppingItemRow[],
+): void {
+  expect(db.inTransaction).toBe(false);
+  expect(shoppingItems(db)).toEqual(before);
+  expect(
+    schemaObject(
+      db,
+      "index",
+      "ShoppingListItem_shoppingListId_unitId_ingredientRefId_key",
+    ),
+  ).toBeDefined();
+  expect(
+    schemaObject(db, "index", "ShoppingListItem_active_identity_key"),
+  ).toBeUndefined();
+  expect(schemaObject(db, "table", "_Migration0025Clock")).toBeUndefined();
+  expect(schemaObject(db, "table", "SavedRecipe")).toBeUndefined();
+  expect(tableInfo(db, "Recipe").some(({ name }) => name === "course")).toBe(
+    false,
+  );
+  expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
 }
 
 function insertBackfillSubject(
@@ -1251,6 +1410,946 @@ describe("migration 0025 - product schema and SavedRecipe backfill", () => {
         expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
       },
       { fixture: true },
+    );
+  });
+});
+
+describe("migration 0025 - shopping identity repair", () => {
+  it("freezes the one-row clock, exact index, setup parity, and Unit 3 conflict target", () => {
+    const normalizedMigration = normalizeSql(MIGRATION_SQL);
+    const normalizedClockTable = normalizeSql(MIGRATION_CLOCK_TABLE_SQL);
+    const normalizedClockExpression = normalizeSql(MIGRATION_CLOCK_EXPRESSION);
+    const normalizedIndex = normalizeSql(ACTIVE_IDENTITY_INDEX_SQL);
+    const normalizedSetupIndex = normalizeSql(SETUP_ACTIVE_IDENTITY_INDEX_SQL);
+
+    expect(normalizedMigration).toContain(normalizedClockTable);
+    expect(normalizedMigration.split(normalizedClockExpression)).toHaveLength(
+      2,
+    );
+    expect(normalizedMigration).toContain(
+      normalizeSql(`
+        INSERT INTO "_Migration0025Clock" (
+          "singleton", "boundNowMs", "boundNowText"
+        )
+        SELECT
+          1,
+          "captured"."boundNowMs",
+          strftime(
+            '%Y-%m-%dT%H:%M:%fZ',
+            "captured"."boundNowMs" / 1000.0,
+            'unixepoch'
+          )
+        FROM (
+          SELECT ${MIGRATION_CLOCK_EXPRESSION} AS "boundNowMs"
+        ) AS "captured"
+      `),
+    );
+    expect(normalizedMigration).toContain(
+      normalizeSql('DROP TABLE "_Migration0025Clock"'),
+    );
+    expect(normalizedMigration.match(/'now'/g)).toHaveLength(1);
+    expect(normalizedMigration).toContain(
+      normalizeSql(MIGRATION_CLOCK_REPAIR_JOIN_SQL),
+    );
+    expect(normalizedMigration).toContain("migration_clock.boundNowMs");
+    expect(normalizedMigration).toContain("migration_clock.boundNowText");
+    expect(normalizedMigration).toContain(
+      normalizeSql(
+        'DROP INDEX "ShoppingListItem_shoppingListId_unitId_ingredientRefId_key"',
+      ),
+    );
+    expect(normalizedMigration).toContain(normalizedIndex);
+    expect(normalizedMigration).not.toContain(normalizedSetupIndex);
+
+    expect(normalizeSql(TEST_SETUP_SOURCE)).toContain(normalizedSetupIndex);
+    expect(
+      TEST_SETUP_SOURCE.indexOf("ShoppingListItem_active_identity_key"),
+    ).toBeGreaterThan(
+      TEST_SETUP_SOURCE.indexOf("await db.shoppingListItem.deleteMany"),
+    );
+    expect(
+      normalizeSql(SETUP_ACTIVE_IDENTITY_INDEX_SQL).replace(
+        "CREATE UNIQUE INDEX IF NOT EXISTS",
+        "CREATE UNIQUE INDEX",
+      ),
+    ).toBe(normalizedIndex);
+    expect(normalizeSql(PRODUCT_DATA_CONTRACT)).toContain(
+      normalizeSql(UNIT_3_CONFLICT_TARGET_SQL),
+    );
+  });
+
+  it("rolls back without replacing a pre-existing migration-clock table", () => {
+    withDatabase(
+      (db) => {
+        db.exec(`
+          CREATE TABLE "_Migration0025Clock" (
+            "sentinel" TEXT NOT NULL
+          );
+          INSERT INTO "_Migration0025Clock" ("sentinel") VALUES ('keep-me');
+        `);
+        const before = shoppingItems(db);
+
+        expect(() => applyMigration(db)).toThrow();
+        expect(db.inTransaction).toBe(false);
+        expect(shoppingItems(db)).toEqual(before);
+        expect(
+          db
+            .prepare('SELECT sentinel FROM "_Migration0025Clock"')
+            .pluck()
+            .get(),
+        ).toBe("keep-me");
+        expect(schemaObject(db, "table", "SavedRecipe")).toBeUndefined();
+        expect(
+          tableInfo(db, "Recipe").some(({ name }) => name === "course"),
+        ).toBe(false);
+        expect(
+          schemaObject(
+            db,
+            "index",
+            "ShoppingListItem_shoppingListId_unitId_ingredientRefId_key",
+          ),
+        ).toBeDefined();
+        expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+      },
+      { fixture: true, migrate: false },
+    );
+  });
+
+  it("repairs the frozen fixture with one captured clock and enforces active-only uniqueness", () => {
+    withDatabase(
+      (db) => {
+        const before = shoppingItems(db);
+        expect(before.map(({ id }) => id)).toEqual([
+          "item-a",
+          "item-b",
+          "item-c",
+        ]);
+
+        applyMigration(db);
+
+        const survivor = shoppingItem(db, "item-b");
+        const firstExtra = shoppingItem(db, "item-a");
+        const secondExtra = shoppingItem(db, "item-c");
+        expect(survivor).toMatchObject({
+          quantity: 3,
+          checked: 0,
+          checkedAt: null,
+          deletedAt: null,
+          sortIndex: 1,
+        });
+        expect(firstExtra).toMatchObject({
+          quantity: 1,
+          checked: 0,
+          checkedAt: null,
+          sortIndex: 2,
+        });
+        expect(secondExtra).toMatchObject({
+          quantity: null,
+          checked: 0,
+          checkedAt: null,
+          sortIndex: 3,
+        });
+        expect(firstExtra.deletedAt).toBe(survivor.updatedAt);
+        expect(secondExtra.deletedAt).toBe(survivor.updatedAt);
+        expect(firstExtra.updatedAt).toBe(survivor.updatedAt);
+        expect(secondExtra.updatedAt).toBe(survivor.updatedAt);
+        expectCanonicalUtc(survivor.updatedAt);
+        expect(
+          schemaObject(db, "table", "_Migration0025Clock"),
+        ).toBeUndefined();
+        expect(
+          schemaObject(
+            db,
+            "index",
+            "ShoppingListItem_shoppingListId_unitId_ingredientRefId_key",
+          ),
+        ).toBeUndefined();
+        expect(
+          normalizeSql(
+            schemaObject(db, "index", "ShoppingListItem_active_identity_key")
+              ?.sql ?? "",
+          ),
+        ).toBe(normalizeSql(ACTIVE_IDENTITY_INDEX_SQL));
+
+        expect(() =>
+          addShoppingItem(db, {
+            id: "active-duplicate",
+            ingredientRefId: "ingredient-flour",
+          }),
+        ).toThrow(
+          /UNIQUE constraint failed: index 'ShoppingListItem_active_identity_key'/,
+        );
+        expect(() =>
+          db.exec(`
+            INSERT INTO ShoppingListItem (
+              id, shoppingListId, quantity, unitId, ingredientRefId, checked,
+              updatedAt, checkedAt, deletedAt, sortIndex, categoryKey, iconKey
+            ) VALUES (
+              'conflict-target-probe', 'shopping-a', 4, NULL,
+              'ingredient-flour', 0, '2026-01-01T00:00:00.000Z', NULL, NULL,
+              50, NULL, NULL
+            )
+            ${UNIT_3_CONFLICT_TARGET_SQL}
+            DO NOTHING;
+          `),
+        ).not.toThrow();
+        expect(
+          count(
+            db,
+            "SELECT COUNT(*) AS count FROM ShoppingListItem WHERE ingredientRefId = 'ingredient-flour' AND deletedAt IS NULL",
+          ),
+        ).toBe(1);
+        expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+      },
+      { fixture: true, migrate: false },
+    );
+  });
+
+  it("uses BINARY survivor order and reconciles quantity, checked state, and metadata deterministically", () => {
+    withDatabase(
+      (db) => {
+        for (const id of [
+          "binary-ref",
+          "all-null-ref",
+          "mixed-ref",
+          "all-checked-ref",
+          "checked-null-ref",
+          "max-finite-ref",
+          "metadata-ref",
+          "negative-ref",
+          "tombstone-ref",
+          "weird-checked-ref",
+        ]) {
+          addIngredientRef(db, id);
+        }
+
+        addShoppingItem(db, {
+          id: "a-binary-extra",
+          ingredientRefId: "binary-ref",
+          quantity: 2,
+          checked: 1,
+          checkedAt: "2026-01-03T00:00:00.000Z",
+          sortIndex: 7,
+          categoryKey: "extra-category",
+          iconKey: "fallback-icon",
+        });
+        addShoppingItem(db, {
+          id: "binary-same-identity-tombstone",
+          ingredientRefId: "binary-ref",
+          quantity: 100,
+          checked: 1,
+          updatedAt: "2025-02-01T00:00:00.000Z",
+          checkedAt: "2025-02-01T00:00:00.000Z",
+          deletedAt: "2025-02-02T00:00:00.000Z",
+          sortIndex: 0,
+          categoryKey: "tombstone-category",
+          iconKey: "tombstone-icon",
+        });
+        addShoppingItem(db, {
+          id: "A-binary-survivor",
+          ingredientRefId: "binary-ref",
+          quantity: 1,
+          checked: 0,
+          sortIndex: 7,
+          categoryKey: "survivor-category",
+        });
+        addShoppingItem(db, {
+          id: "null-survivor",
+          ingredientRefId: "all-null-ref",
+          quantity: null,
+          checked: 1,
+          sortIndex: 1,
+        });
+        addShoppingItem(db, {
+          id: "null-extra",
+          ingredientRefId: "all-null-ref",
+          quantity: null,
+          checked: 1,
+          sortIndex: 2,
+        });
+        addShoppingItem(db, {
+          id: "mixed-survivor",
+          ingredientRefId: "mixed-ref",
+          quantity: null,
+          checked: 1,
+          checkedAt: "2026-01-04T00:00:00.000Z",
+          sortIndex: 1,
+        });
+        addShoppingItem(db, {
+          id: "mixed-second",
+          ingredientRefId: "mixed-ref",
+          quantity: 1,
+          checked: 0,
+          checkedAt: "2026-01-02T00:00:00.000Z",
+          sortIndex: 2,
+        });
+        addShoppingItem(db, {
+          id: "mixed-third",
+          ingredientRefId: "mixed-ref",
+          quantity: 2.5,
+          checked: 1,
+          checkedAt: "2026-01-03T00:00:00.000Z",
+          sortIndex: 3,
+        });
+        addShoppingItem(db, {
+          id: "checked-survivor",
+          ingredientRefId: "all-checked-ref",
+          checked: 1,
+          checkedAt: "2026-01-04T00:00:00.000Z",
+          sortIndex: 1,
+        });
+        addShoppingItem(db, {
+          id: "checked-logical",
+          ingredientRefId: "all-checked-ref",
+          checked: 0,
+          checkedAt: "2026-01-02T00:00:00.000Z",
+          sortIndex: 2,
+        });
+        addShoppingItem(db, {
+          id: "checked-null-survivor",
+          ingredientRefId: "checked-null-ref",
+          checked: 1,
+          sortIndex: 1,
+        });
+        addShoppingItem(db, {
+          id: "checked-null-extra",
+          ingredientRefId: "checked-null-ref",
+          checked: 1,
+          sortIndex: 2,
+        });
+        addShoppingItem(db, {
+          id: "max-survivor",
+          ingredientRefId: "max-finite-ref",
+          quantity: 8.988465674311579e307,
+          sortIndex: 1,
+        });
+        addShoppingItem(db, {
+          id: "max-extra",
+          ingredientRefId: "max-finite-ref",
+          quantity: 8.988465674311579e307,
+          sortIndex: 2,
+        });
+        addShoppingItem(db, {
+          id: "metadata-survivor",
+          ingredientRefId: "metadata-ref",
+          sortIndex: 1,
+        });
+        addShoppingItem(db, {
+          id: "metadata-first-extra",
+          ingredientRefId: "metadata-ref",
+          sortIndex: 2,
+          categoryKey: "first-category",
+          iconKey: "first-icon",
+        });
+        addShoppingItem(db, {
+          id: "metadata-second-extra",
+          ingredientRefId: "metadata-ref",
+          sortIndex: 3,
+          categoryKey: "second-category",
+          iconKey: "second-icon",
+        });
+        addShoppingItem(db, {
+          id: "negative-survivor",
+          ingredientRefId: "negative-ref",
+          quantity: -1,
+          sortIndex: 1,
+        });
+        addShoppingItem(db, {
+          id: "negative-extra",
+          ingredientRefId: "negative-ref",
+          quantity: -2.5,
+          sortIndex: 2,
+        });
+        addShoppingItem(db, {
+          id: "weird-checked-survivor",
+          ingredientRefId: "weird-checked-ref",
+          checked: 2,
+          sortIndex: 1,
+        });
+        addShoppingItem(db, {
+          id: "weird-checked-extra",
+          ingredientRefId: "weird-checked-ref",
+          checked: 1,
+          sortIndex: 2,
+        });
+        addShoppingItem(db, {
+          id: "existing-tombstone",
+          ingredientRefId: "tombstone-ref",
+          quantity: 9,
+          checked: 1,
+          updatedAt: "2025-01-01T00:00:00.000Z",
+          checkedAt: "2025-01-01T00:00:00.000Z",
+          deletedAt: "2025-01-02T00:00:00.000Z",
+          sortIndex: 99,
+          categoryKey: "untouched-category",
+          iconKey: "untouched-icon",
+        });
+        const binaryExtraBefore = shoppingItem(db, "a-binary-extra");
+        const sameIdentityTombstoneBefore = shoppingItem(
+          db,
+          "binary-same-identity-tombstone",
+        );
+        const tombstoneBefore = shoppingItem(db, "existing-tombstone");
+
+        applyMigration(db);
+
+        expect(shoppingItem(db, "A-binary-survivor")).toMatchObject({
+          quantity: 3,
+          checked: 0,
+          checkedAt: null,
+          deletedAt: null,
+          categoryKey: "survivor-category",
+          iconKey: "fallback-icon",
+        });
+        const binaryExtraAfter = shoppingItem(db, "a-binary-extra");
+        expect(binaryExtraAfter).toEqual({
+          ...binaryExtraBefore,
+          updatedAt: binaryExtraAfter.updatedAt,
+          deletedAt: binaryExtraAfter.updatedAt,
+        });
+        expect(shoppingItem(db, "null-survivor")).toMatchObject({
+          quantity: null,
+          checked: 1,
+          checkedAt: null,
+          deletedAt: null,
+        });
+        expect(shoppingItem(db, "mixed-survivor")).toMatchObject({
+          quantity: 3.5,
+          checked: 1,
+          checkedAt: "2026-01-02T00:00:00.000Z",
+          deletedAt: null,
+        });
+        expect(shoppingItem(db, "checked-survivor")).toMatchObject({
+          checked: 1,
+          checkedAt: "2026-01-02T00:00:00.000Z",
+          deletedAt: null,
+        });
+        expect(shoppingItem(db, "checked-null-survivor")).toMatchObject({
+          checked: 1,
+          checkedAt: null,
+          deletedAt: null,
+        });
+        expect(shoppingItem(db, "max-survivor").quantity).toBe(
+          1.7976931348623157e308,
+        );
+        expect(shoppingItem(db, "metadata-survivor")).toMatchObject({
+          categoryKey: "first-category",
+          iconKey: "first-icon",
+          deletedAt: null,
+        });
+        expect(shoppingItem(db, "negative-survivor")).toMatchObject({
+          quantity: -3.5,
+          deletedAt: null,
+        });
+        expect(shoppingItem(db, "weird-checked-survivor")).toMatchObject({
+          checked: 0,
+          checkedAt: null,
+          deletedAt: null,
+        });
+        expect(shoppingItem(db, "binary-same-identity-tombstone")).toEqual(
+          sameIdentityTombstoneBefore,
+        );
+        expect(shoppingItem(db, "existing-tombstone")).toEqual(tombstoneBefore);
+
+        const repaired = shoppingItems(db).filter(
+          ({ id }) =>
+            id !== "existing-tombstone" &&
+            id !== "binary-same-identity-tombstone",
+        );
+        expect(new Set(repaired.map(({ updatedAt }) => updatedAt)).size).toBe(
+          1,
+        );
+        expectCanonicalUtc(repaired[0].updatedAt);
+        expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+      },
+      { fixture: true, migrate: false },
+    );
+  });
+
+  it.each([
+    ["positive infinity", "1e999"],
+    ["negative infinity", "-1e999"],
+    ["non-numeric text", "'not-numeric'"],
+    ["blob", "X'01'"],
+  ])("rolls back an invalid quantity source: %s", (_label, sqlValue) => {
+    withDatabase(
+      (db) => {
+        addIngredientRef(db, "invalid-quantity-ref");
+        addShoppingItem(db, {
+          id: "invalid-quantity-item",
+          ingredientRefId: "invalid-quantity-ref",
+          quantity: 1,
+        });
+        db.exec(
+          `UPDATE ShoppingListItem SET quantity = ${sqlValue} WHERE id = 'invalid-quantity-item'`,
+        );
+        const before = shoppingItems(db);
+
+        expect(() => applyMigration(db)).toThrow();
+        expectShoppingMigrationRollback(db, before);
+      },
+      { fixture: true, migrate: false },
+    );
+  });
+
+  it("rolls back when finite quantity sources overflow in aggregate", () => {
+    withDatabase(
+      (db) => {
+        addIngredientRef(db, "overflow-ref");
+        addShoppingItem(db, {
+          id: "overflow-survivor",
+          ingredientRefId: "overflow-ref",
+          quantity: 1.7976931348623157e308,
+          sortIndex: 1,
+        });
+        addShoppingItem(db, {
+          id: "overflow-extra",
+          ingredientRefId: "overflow-ref",
+          quantity: 1.7976931348623157e308,
+          sortIndex: 2,
+        });
+        const before = shoppingItems(db);
+
+        expect(() => applyMigration(db)).toThrow();
+        expectShoppingMigrationRollback(db, before);
+      },
+      { fixture: true, migrate: false },
+    );
+  });
+
+  it("rolls back when finite negative quantity sources overflow in aggregate", () => {
+    withDatabase(
+      (db) => {
+        addIngredientRef(db, "negative-overflow-ref");
+        addShoppingItem(db, {
+          id: "negative-overflow-survivor",
+          ingredientRefId: "negative-overflow-ref",
+          quantity: -1.7976931348623157e308,
+          sortIndex: 1,
+        });
+        addShoppingItem(db, {
+          id: "negative-overflow-extra",
+          ingredientRefId: "negative-overflow-ref",
+          quantity: -1.7976931348623157e308,
+          sortIndex: 2,
+        });
+        const before = shoppingItems(db);
+
+        expect(() => applyMigration(db)).toThrow();
+        expectShoppingMigrationRollback(db, before);
+      },
+      { fixture: true, migrate: false },
+    );
+  });
+
+  it("records that the SQLite driver converts a bound NaN quantity to null", () => {
+    withDatabase(
+      (db) => {
+        addIngredientRef(db, "nan-quantity-ref");
+        addShoppingItem(db, {
+          id: "nan-quantity-item",
+          ingredientRefId: "nan-quantity-ref",
+          quantity: 1,
+        });
+        db.prepare(
+          "UPDATE ShoppingListItem SET quantity = ? WHERE id = 'nan-quantity-item'",
+        ).run(Number.NaN);
+        expect(
+          db
+            .prepare(
+              "SELECT quantity FROM ShoppingListItem WHERE id = 'nan-quantity-item'",
+            )
+            .pluck()
+            .get(),
+        ).toBeNull();
+      },
+      { fixture: true, migrate: false },
+    );
+  });
+
+  it("keeps null, empty, and arbitrary unit identities collision-free", () => {
+    withDatabase(
+      (db) => {
+        addIngredientRef(db, "unit-collision-ref");
+        db.exec(`
+          INSERT INTO Unit (id, name, updatedAt) VALUES
+            ('', 'empty-unit', '2026-01-01T00:00:00.000Z'),
+            ('n:', 'n-prefix-unit', '2026-01-01T00:00:00.000Z'),
+            ('u:x', 'u-prefix-unit', '2026-01-01T00:00:00.000Z');
+        `);
+        addShoppingItem(db, {
+          id: "unit-null",
+          ingredientRefId: "unit-collision-ref",
+          unitId: null,
+        });
+        addShoppingItem(db, {
+          id: "unit-empty",
+          ingredientRefId: "unit-collision-ref",
+          unitId: "",
+        });
+        addShoppingItem(db, {
+          id: "unit-n-prefix",
+          ingredientRefId: "unit-collision-ref",
+          unitId: "n:",
+        });
+        addShoppingItem(db, {
+          id: "unit-u-prefix",
+          ingredientRefId: "unit-collision-ref",
+          unitId: "u:x",
+        });
+
+        applyMigration(db);
+
+        expect(
+          db
+            .prepare(
+              `SELECT id, unitId FROM ShoppingListItem
+               WHERE ingredientRefId = 'unit-collision-ref' AND deletedAt IS NULL
+               ORDER BY id`,
+            )
+            .all(),
+        ).toEqual([
+          { id: "unit-empty", unitId: "" },
+          { id: "unit-n-prefix", unitId: "n:" },
+          { id: "unit-null", unitId: null },
+          { id: "unit-u-prefix", unitId: "u:x" },
+        ]);
+      },
+      { fixture: true, migrate: false },
+    );
+  });
+
+  it.each([
+    [
+      "user",
+      (db: DatabaseSyncType) =>
+        db.exec(
+          "UPDATE User SET updatedAt = '9000-01-01T00:00:00.000Z' WHERE id = 'user-a'",
+        ),
+    ],
+    [
+      "owned active recipe",
+      (db: DatabaseSyncType) =>
+        db.exec(
+          "UPDATE Recipe SET updatedAt = '9000-01-01T00:00:00.000Z' WHERE id = 'recipe-r1'",
+        ),
+    ],
+    [
+      "owned cookbook",
+      (db: DatabaseSyncType) =>
+        db.exec(
+          "UPDATE Cookbook SET updatedAt = '9000-01-01T00:00:00.000Z' WHERE id = 'cookbook-a1'",
+        ),
+    ],
+    [
+      "native-sync tombstone",
+      (db: DatabaseSyncType) =>
+        db.exec(`
+          INSERT INTO NativeSyncTombstone (
+            id, accountId, resourceType, resourceId, deletedAt, updatedAt, createdAt
+          ) VALUES (
+            'high-water-tombstone', 'user-a', 'recipe', 'deleted-resource',
+            '8999-12-31T00:00:00.000Z', '9000-01-01T00:00:00.000Z',
+            '8999-12-31T00:00:00.000Z'
+          )
+        `),
+    ],
+    [
+      "owned shopping list",
+      (db: DatabaseSyncType) =>
+        db.exec(
+          "UPDATE ShoppingList SET updatedAt = '9000-01-01T00:00:00.000Z' WHERE id = 'shopping-a'",
+        ),
+    ],
+    [
+      "active shopping item",
+      (db: DatabaseSyncType) =>
+        db.exec(
+          "UPDATE ShoppingListItem SET updatedAt = '9000-01-01T00:00:00.000Z' WHERE id = 'item-a'",
+        ),
+    ],
+    [
+      "deleted shopping item",
+      (db: DatabaseSyncType) => {
+        addIngredientRef(db, "high-water-deleted-ref");
+        addShoppingItem(db, {
+          id: "high-water-deleted-item",
+          ingredientRefId: "high-water-deleted-ref",
+          updatedAt: "9000-01-01T00:00:00.000Z",
+          deletedAt: "8999-12-31T00:00:00.000Z",
+        });
+      },
+    ],
+  ])(
+    "advances repaired rows past the account-global %s high-water",
+    (_label, setup) => {
+      withDatabase(
+        (db) => {
+          setup(db);
+
+          applyMigration(db);
+
+          for (const id of ["item-a", "item-b", "item-c"]) {
+            expect(shoppingItem(db, id).updatedAt).toBe(
+              "9000-01-01T00:00:00.001Z",
+            );
+          }
+        },
+        { fixture: true, migrate: false },
+      );
+    },
+  );
+
+  it.each([
+    [
+      "user",
+      (db: DatabaseSyncType) =>
+        db.exec(
+          "UPDATE User SET updatedAt = '9000-01-01T00:00:00.000Z' WHERE id = 'user-b'",
+        ),
+    ],
+    [
+      "active recipe",
+      (db: DatabaseSyncType) =>
+        db.exec(`
+          INSERT INTO Recipe (id, title, chefId, createdAt, updatedAt)
+          VALUES (
+            'foreign-high-water-recipe', 'Foreign high water', 'user-b',
+            '2026-01-01T00:00:00.000Z', '9000-01-01T00:00:00.000Z'
+          )
+        `),
+    ],
+    [
+      "cookbook",
+      (db: DatabaseSyncType) =>
+        db.exec(
+          "UPDATE Cookbook SET updatedAt = '9000-01-01T00:00:00.000Z' WHERE id = 'cookbook-b1'",
+        ),
+    ],
+    [
+      "native-sync tombstone",
+      (db: DatabaseSyncType) =>
+        db.exec(`
+          INSERT INTO NativeSyncTombstone (
+            id, accountId, resourceType, resourceId, deletedAt, updatedAt, createdAt
+          ) VALUES (
+            'foreign-high-water-tombstone', 'user-b', 'recipe',
+            'foreign-deleted-resource', '8999-12-31T00:00:00.000Z',
+            '9000-01-01T00:00:00.000Z', '8999-12-31T00:00:00.000Z'
+          )
+        `),
+    ],
+    [
+      "shopping list",
+      (db: DatabaseSyncType) =>
+        db.exec(`
+          INSERT INTO ShoppingList (id, authorId, createdAt, updatedAt)
+          VALUES (
+            'foreign-high-water-list', 'user-b',
+            '2026-01-01T00:00:00.000Z', '9000-01-01T00:00:00.000Z'
+          )
+        `),
+    ],
+    [
+      "active shopping item",
+      (db: DatabaseSyncType) => {
+        db.exec(`
+          INSERT INTO ShoppingList (id, authorId, createdAt, updatedAt)
+          VALUES (
+            'foreign-high-water-list', 'user-b',
+            '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
+          )
+        `);
+        addIngredientRef(db, "foreign-high-water-active-ref");
+        addShoppingItem(db, {
+          id: "foreign-high-water-active-item",
+          shoppingListId: "foreign-high-water-list",
+          ingredientRefId: "foreign-high-water-active-ref",
+          updatedAt: "9000-01-01T00:00:00.000Z",
+        });
+      },
+    ],
+    [
+      "deleted shopping item",
+      (db: DatabaseSyncType) => {
+        db.exec(`
+          INSERT INTO ShoppingList (id, authorId, createdAt, updatedAt)
+          VALUES (
+            'foreign-high-water-list', 'user-b',
+            '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
+          )
+        `);
+        addIngredientRef(db, "foreign-high-water-deleted-ref");
+        addShoppingItem(db, {
+          id: "foreign-high-water-deleted-item",
+          shoppingListId: "foreign-high-water-list",
+          ingredientRefId: "foreign-high-water-deleted-ref",
+          updatedAt: "9000-01-01T00:00:00.000Z",
+          deletedAt: "8999-12-31T00:00:00.000Z",
+        });
+      },
+    ],
+  ])("ignores another owner's %s high-water", (_label, setup) => {
+    withDatabase(
+      (db) => {
+        setup(db);
+        db.exec(
+          "UPDATE Cookbook SET updatedAt = '2030-01-01T00:00:00.000Z' WHERE id = 'cookbook-a1'",
+        );
+
+        applyMigration(db);
+
+        expect(shoppingItem(db, "item-b").updatedAt).toBe(
+          "2030-01-01T00:00:00.001Z",
+        );
+      },
+      { fixture: true, migrate: false },
+    );
+  });
+
+  it.each([
+    [
+      "user",
+      (db: DatabaseSyncType) =>
+        db.exec("UPDATE User SET updatedAt = 'not-a-time' WHERE id = 'user-a'"),
+    ],
+    [
+      "active recipe",
+      (db: DatabaseSyncType) =>
+        db.exec(
+          "UPDATE Recipe SET updatedAt = 'not-a-time' WHERE id = 'recipe-r1'",
+        ),
+    ],
+    [
+      "cookbook",
+      (db: DatabaseSyncType) =>
+        db.exec(
+          "UPDATE Cookbook SET updatedAt = 'not-a-time' WHERE id = 'cookbook-a1'",
+        ),
+    ],
+    [
+      "native-sync tombstone",
+      (db: DatabaseSyncType) =>
+        db.exec(`
+          INSERT INTO NativeSyncTombstone (
+            id, accountId, resourceType, resourceId, deletedAt, updatedAt, createdAt
+          ) VALUES (
+            'invalid-high-water-tombstone', 'user-a', 'recipe',
+            'invalid-deleted-resource', '2026-01-01T00:00:00.000Z',
+            'not-a-time', '2026-01-01T00:00:00.000Z'
+          )
+        `),
+    ],
+    [
+      "shopping list",
+      (db: DatabaseSyncType) =>
+        db.exec(
+          "UPDATE ShoppingList SET updatedAt = 'not-a-time' WHERE id = 'shopping-a'",
+        ),
+    ],
+    [
+      "active shopping item",
+      (db: DatabaseSyncType) =>
+        db.exec(
+          "UPDATE ShoppingListItem SET updatedAt = 'not-a-time' WHERE id = 'item-a'",
+        ),
+    ],
+    [
+      "deleted shopping item",
+      (db: DatabaseSyncType) => {
+        addIngredientRef(db, "invalid-high-water-deleted-ref");
+        addShoppingItem(db, {
+          id: "invalid-high-water-deleted-item",
+          ingredientRefId: "invalid-high-water-deleted-ref",
+          updatedAt: "not-a-time",
+          deletedAt: "2026-01-01T00:00:00.000Z",
+        });
+      },
+    ],
+  ])("rolls back an invalid owned %s high-water", (_label, setup) => {
+    withDatabase(
+      (db) => {
+        setup(db);
+        const before = shoppingItems(db);
+
+        expect(() => applyMigration(db)).toThrow();
+        expectShoppingMigrationRollback(db, before);
+      },
+      { fixture: true, migrate: false },
+    );
+  });
+
+  it("truncates numeric real cursors before advancing the owner high-water", () => {
+    withDatabase(
+      (db) => {
+        db.prepare(
+          "UPDATE Recipe SET updatedAt = ? WHERE id = 'recipe-r1'",
+        ).run(221845392000000.9);
+
+        applyMigration(db);
+
+        expect(shoppingItem(db, "item-b").updatedAt).toBe(
+          "9000-01-01T00:00:00.001Z",
+        );
+      },
+      { fixture: true, migrate: false },
+    );
+  });
+
+  it("ignores another owner and an owned deleted recipe when choosing high-water", () => {
+    withDatabase(
+      (db) => {
+        db.exec(`
+          UPDATE User
+          SET updatedAt = '9001-01-01T00:00:00.000Z'
+          WHERE id = 'user-b';
+          UPDATE Recipe
+          SET updatedAt = '9002-01-01T00:00:00.000Z'
+          WHERE id = 'recipe-r3';
+          UPDATE Cookbook
+          SET updatedAt = '2030-01-01T00:00:00.000Z'
+          WHERE id = 'cookbook-a1';
+        `);
+
+        applyMigration(db);
+
+        expect(shoppingItem(db, "item-b").updatedAt).toBe(
+          "2030-01-01T00:00:00.001Z",
+        );
+      },
+      { fixture: true, migrate: false },
+    );
+  });
+
+  it.each([
+    ["invalid text", "'not-a-time'"],
+    ["positive infinity", "1e999"],
+    ["negative infinity", "-1e999"],
+  ])("rolls back an invalid owner high-water: %s", (_label, sqlValue) => {
+    withDatabase(
+      (db) => {
+        db.exec(`UPDATE User SET updatedAt = ${sqlValue} WHERE id = 'user-a'`);
+        const before = shoppingItems(db);
+
+        expect(() => applyMigration(db)).toThrow();
+        expectShoppingMigrationRollback(db, before);
+      },
+      { fixture: true, migrate: false },
+    );
+  });
+
+  it("rolls back when advancing the maximum supported cursor would overflow", () => {
+    withDatabase(
+      (db) => {
+        db.prepare("UPDATE User SET updatedAt = ? WHERE id = 'user-a'").run(
+          253402300799999,
+        );
+        const before = shoppingItems(db);
+
+        expect(() => applyMigration(db)).toThrow();
+        expectShoppingMigrationRollback(db, before);
+      },
+      { fixture: true, migrate: false },
     );
   });
 });
