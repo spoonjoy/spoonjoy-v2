@@ -224,10 +224,12 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 
 **Completed**: Commit `544358d0` freezes the exact numeric baseline and sole target migration, complete additive DDL/projection and existing-row preservation, four-row fixture backfill, every numeric/text timestamp boundary and invalid rollback path, canonical raw SavedRecipe writes, exact membership fences, FK/unique/cascade semantics, and post-fence save independence without asserting Unit 2.3 shopping repair. The executable red has 44 intended absent-migration failures plus one passing NaN driver-limitation fact; six harsh review rounds converged.
 
-### ⬜ Unit 2.2b: Product Schema And SavedRecipe Backfill Migration - Implementation
+### ✅ Unit 2.2b: Product Schema And SavedRecipe Backfill Migration - Implementation
 **What**: Create the exact frozen SavedRecipe/course/tag schema, canonical savedAt raw check/indexes, mixed-encoding deterministic SavedRecipe backfill, exact membership insert/delete cutover triggers, and no cook schema in `migrations/0025_clem_feedback_product.sql`.
 **Output**: Additive new tables/column and one-time saved-state backfill.
 **Acceptance**: Every schema, absence-of-progress-state, index, constraint, trigger/fence, FK, timestamp-normalization, and saved-backfill assertion passes from both fixtures with exact counts and preserved FKs.
+
+**Completed**: Commit `bb8e0bb0` adds the exact course/tag/save schema, fail-closed mixed-encoding normalization and distinct backfill, and two membership fences without shopping repair or cook state. All 45 focused and 121 migration tests, warning-gated typecheck/build, and all 8,328 app tests at exact 100% coverage pass; fresh cold data/migration review converged.
 
 ### ⬜ Unit 2.2c: Product Schema And SavedRecipe Backfill Migration - Verification
 **What**: Rehearse the current schema/backfill-only 0025 under a newly created temporary Node SQLite database and a newly isolated local Wrangler D1 state directory, then delete both and review prior-Worker compatibility; do not reuse this migration state in Unit 2.3.
@@ -735,3 +737,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-22 01:51 Unit 2.1b complete after cold-review repair: exact models and cleanup paths, recursive schema-proof legacy import projections, and coherent agent/API-versus-MCP docs pass Prisma generation/push, 214 focused/compatibility tests, typecheck/build, and 8,283-test 100% coverage.
 - 2026-07-22 02:09 Unit 2.1c complete: fresh cold data/privacy review independently reproduced every Prisma, database, focused, compatibility, compiler, build, and exact-coverage gate at implementation `3ba273e4` and converged with no findings.
 - 2026-07-22 02:29 Unit 2.2a complete: commit `544358d0` freezes 45 executable migration contracts across exact additive schema/projection inventory, immutable source data, mixed-time normalization, fail-closed rollback, fences, FKs, and save lifecycle; 44 intended failures are solely absent 0025 behavior, the NaN driver fact passes, and six cold-review rounds converged.
+- 2026-07-22 02:44 Unit 2.2b complete: commit `bb8e0bb0` implements exact product schema/backfill/fences with no shopping or cook-state expansion; 45 focused, 121 migration, compiler/build, and 8,328-test exact-coverage gates pass, and cold data/migration review converged.
