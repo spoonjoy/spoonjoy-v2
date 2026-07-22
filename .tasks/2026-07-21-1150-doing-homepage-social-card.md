@@ -1,6 +1,6 @@
 # Doing: Homepage social card
 
-**Status**: in-progress
+**Status**: done
 **Execution Mode**: direct
 **Created**: 2026-07-21 11:59
 **Planning**: ./2026-07-21-1150-planning-homepage-social-card.md
@@ -21,9 +21,9 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 ## Completion Criteria
 - [x] Homepage HTML exposes absolute canonical, `og:title`, `og:description`, `og:type=website`, `og:url`, `og:image`, `og:image:type=image/png`, image dimensions, and Twitter-card fields.
 - [x] The declared social image is a valid 1200×630 PNG with a branded, legible design.
-- [ ] Production homepage HTML contains the expected metadata without Cloudflare challenge markers.
-- [ ] Production serves the declared image as `image/png`; its bytes have the PNG signature and a 1200×630 IHDR.
-- [ ] Homepage and image return real content rather than a Cloudflare challenge when requested with LinkedIn's crawler user agent.
+- [x] Production homepage HTML contains the expected metadata without Cloudflare challenge markers.
+- [x] Production serves the declared image as `image/png`; its bytes have the PNG signature and a 1200×630 IHDR.
+- [x] Homepage and image return real content rather than a Cloudflare challenge when requested with LinkedIn's crawler user agent.
 - [x] 100% test coverage on all new code
 - [x] All tests pass
 - [x] No warnings
@@ -77,7 +77,7 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 **Output**: Image evidence and a closed absurdity ledger in the artifacts directory.
 **Acceptance**: The card is branded and legible, with no ready or reviewer-gated visual findings.
 
-### ⬜ Unit 2: Delivery and production smoke
+### ✅ Unit 2: Delivery and production smoke
 **What**: Cold-review the branch, open and merge the PR, verify the deployment for the merged commit, assert the production `og:image` value exactly matches the fetched asset URL, and probe homepage/image bytes with LinkedIn's crawler user agent.
 **Output**: PR, deployment, and production smoke evidence.
 **Acceptance**: Production HTML contains every expected tag without challenge markers, and the image returns `image/png` with valid 1200×630 PNG bytes.
@@ -102,3 +102,6 @@ Give `https://spoonjoy.app/` a complete, crawler-readable Open Graph and Twitter
 - 2026-07-21 12:50 Unit 1c cold-review findings closed: added explicit typecheck proof, applied all local D1 migrations, seeded the disposable e2e baseline, and passed all 63 Playwright tests.
 - 2026-07-21 14:22 Unit 1d complete: captured native and LinkedIn-scale renders, closed the absurdity ledger, reran all 20 targeted tests, and passed a cold visual reviewer gate.
 - 2026-07-21 15:08 PR #288 CI repair: a newly published DOMPurify advisory made the dependency gate red; pinned the first patched release, confirmed the old version reproduced the advisory and the fixed version was clean, reran every local gate with exact test-count parity, and passed a cold dependency review.
+- 2026-07-21 17:41 Unit 2 complete: PR #288 merged as `faa6c9eba1b594b6a20b3df19c2db3fc3b8e48d4`; Sharp repair PR #289 merged as `193910eb7c54eb2689b91f4902bac16bd18cc448`; exact-head CI run `29877381557` and Production Deploy run `29878085678` succeeded; LinkedInBot received real HTTP 200 homepage/image responses with the exact metadata contract and a byte-identical 1200×630 PNG. Exact release-source, response, metadata, and image evidence is captured in `unit-2/`.
+- 2026-07-21 17:46 Unit 2 cold review converged after aligning the captured homepage byte count with the normalized committed response artifact.
+- 2026-07-21 18:25 PR #290 pre-merge review finding addressed: removed volatile Cloudflare NEL and `report-to` response headers from both homepage and PNG evidence captures while preserving the delivery-relevant headers.
