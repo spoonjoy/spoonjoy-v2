@@ -119,10 +119,48 @@ describe("production release provenance", () => {
     const stepNames = deploySteps.map((step) => step.name ?? "");
     const checkout = stepNames.indexOf("Checkout approved source SHA");
     const validation = stepNames.indexOf("Validate release source");
+    const findPrior = stepNames.indexOf("Find prior product cutover artifact");
+    const downloadPrior = stepNames.indexOf("Download prior product cutover artifact");
     const setup = stepNames.indexOf("Setup Node.js");
+    const restorePrior = stepNames.indexOf("Restore prior product cutover state");
     const deploy = stepNames.indexOf("Deploy staged release to Cloudflare Workers");
     const record = stepNames.indexOf("Record release source");
-    expect([checkout, validation, setup, deploy, record]).toEqual([0, 2, 3, 8, 9]);
+    expect([
+      checkout,
+      validation,
+      findPrior,
+      downloadPrior,
+      setup,
+      restorePrior,
+      deploy,
+      record,
+    ]).toEqual([0, 2, 3, 4, 5, 9, 11, 12]);
+    expect(production).toContain("retention-days: 90");
+    expect(production).toContain("run-id: ${{ steps.prior-product-cutover.outputs.run_id }}");
+    expect(production).toContain(
+      "artifact-ids: ${{ steps.prior-product-cutover.outputs.artifact_id }}",
+    );
+    expect(production).toContain("LC_ALL=C sort -t $'\\t' -k1,1r -k2,2nr");
+    expect(production).toContain("max_owner_lookups=20");
+    expect(production).toContain(
+      "/actions/artifacts?per_page=100",
+    );
+    expect(production).not.toContain('/actions/runs/${run_id}/artifacts');
+    expect(production).not.toContain("status=completed");
+    expect(production).not.toContain("overwrite:");
+    expect(production).toContain(
+      "name: mcp-oauth-canary-artifacts-${{ github.run_attempt }}",
+    );
+    expect(production).toContain(
+      "name: product-cutover-state-${{ github.run_id }}-${{ github.run_attempt }}",
+    );
+    expect(production).toContain(
+      "if: always() && steps.cutover-state-validation.outcome == 'success'",
+    );
+    expect(production).toContain("--kind product-cutover-state --file \"$prior_state\"");
+    expect(production).toContain(
+      "install -m 600 \"$prior_state\" mcp-oauth-canary-artifacts/production-product-cutover-state.json",
+    );
   });
 
   it("freezes the deploy step inventory and security-sensitive shell bodies", () => {
@@ -136,23 +174,53 @@ describe("production release provenance", () => {
       "Checkout approved source SHA",
       "Checkout trusted rollback tooling",
       "Validate release source",
+      "Find prior product cutover artifact",
+      "Download prior product cutover artifact",
       "Setup Node.js",
       "Activate pnpm",
       "Install dependencies",
       "Generate Prisma client",
+      "Restore prior product cutover state",
       "Install Playwright Chromium",
       "Deploy staged release to Cloudflare Workers",
       "Record release source",
       "Ensure release artifact exists",
+      "Validate complete release and durable cutover state",
+      "Validate durable product cutover state for continuity",
       "Upload MCP OAuth canary artifacts",
+      "Upload durable product cutover state",
     ]);
-    expect(sha256(normalizedStepRun(production, "Validate release source", "Setup Node.js")))
+    expect(sha256(normalizedStepRun(
+      production,
+      "Validate release source",
+      "Find prior product cutover artifact",
+    )))
       .toBe("7ff584e5c41d0b6b53ad5c0b9b5aefadf05401629951332634ada34c1a843343");
     expect(sha256(normalizedStepRun(
       production,
+      "Find prior product cutover artifact",
+      "Download prior product cutover artifact",
+    ))).toBe("58f5f835daa6a316e2ad987c08a062d8826ff8182b3293f5fb9a7057410bee2d");
+    expect(sha256(normalizedStepRun(
+      production,
+      "Restore prior product cutover state",
+      "Install Playwright Chromium",
+    ))).toBe("8be25172e8bb5d3460ee2e89faaf2d8806e3eb30648b18d298827a9a23b2349b");
+    expect(sha256(normalizedStepRun(
+      production,
       "Ensure release artifact exists",
+      "Validate complete release and durable cutover state",
+    ))).toBe("2de706e32188423b63ade58fcf8943383f18b476b7cc2b2846ee27cda01ae3cf");
+    expect(sha256(normalizedStepRun(
+      production,
+      "Validate complete release and durable cutover state",
+      "Validate durable product cutover state for continuity",
+    ))).toBe("75587e8943f32d9b88ebbad2f01383f47eab12d0b9d63feac7b40ead915df129");
+    expect(sha256(normalizedStepRun(
+      production,
+      "Validate durable product cutover state for continuity",
       "Upload MCP OAuth canary artifacts",
-    ))).toBe("e647c68063dedcd49146a31cc4a18ef3a5062c5600a086bf15d9b7a8004125ce");
+    ))).toBe("79b8a930e4861b594a7e871e37bb36dade99c83af5e2b57a5847c350091bc3f4");
   });
 
   it("pins atomic product activation in source and refuses cross-boundary rollback", () => {
@@ -217,7 +285,16 @@ describe("production release provenance", () => {
     const fallbackEnd = production.indexOf("name: Upload MCP OAuth canary artifacts");
     const fallback = production.slice(fallbackStart, fallbackEnd);
     expect(fallback).toContain('if [ -f "$artifact_path" ] && jq -e');
-    expect(fallback).toContain('((keys - ["candidateVersionId",');
+    expect(fallback).toContain('((keys - ["candidateVersionId", "cutover",');
+    expect(fallback).toContain('(.cutover | keys - ["activeBefore", "compatibilitySourceSha",');
+    expect(fallback).toContain('(.cutover.target.sourceSha == .sourceSha)');
+    expect(fallback).toContain('(.cutover.activeBefore.versionId == .previousVersionId)');
+    expect(fallback).toContain('if .cutover.target.versionId == null then (has("candidateVersionId") | not)');
+    expect(fallback).toContain('(.cutover.migration.name == "0025_clem_feedback_product.sql")');
+    expect(fallback).toContain(
+      '(.cutover.migration.sha256 == "151009d5410997365ec56c249a50c75b7aeecadd0841b677f1b0bd7a9ab2c6e6")',
+    );
+    expect(fallback).toContain('.cutover.transition? == "same-target-reconcile"');
     expect(fallback).toContain('(.status | IN("promoted",');
     expect(fallback).toContain('(.phase | IN("validate",');
     expect(fallback).toContain('"version_lookup", "stage_revalidation", "promotion_revalidation", "rollback_version_lookup", "rollback_current_deployment", "rollback_already_active", "protocol_ancestry", "rollback_protocol_ancestry", "active_version_mapping", "rollback_active_version_mapping", "stage"');
@@ -235,12 +312,16 @@ describe("production release provenance", () => {
     expect(fallback).toContain('if has("failure") then (.failure | sanitized_failure) else true end');
     expect(fallback).toContain('if has("rollbackFailure") then (.rollbackFailure | sanitized_failure) else true end');
     expect(fallback).toContain(
-      'then (if .phase == "rollback_already_active" then .previousVersionId == .candidateVersionId else .previousVersionId != .candidateVersionId end) else true end',
+      'then (if .phase == "rollback_already_active" or (.cutover.transition? == "same-target-reconcile") then .previousVersionId == .candidateVersionId else .previousVersionId != .candidateVersionId end) else true end',
     );
     expect(fallback).toContain('if .migrationApply == "not_needed" then (.reviewedMigrations | length) == 0');
     expect(fallback).toContain(
       'if $release_mode == "protocol-v1-canary" then',
     );
+    expect(fallback).toContain('if has("cutover") then');
+    expect(fallback).toContain('(.reviewedMigrations == ["0025_clem_feedback_product.sql"])');
+    expect(fallback).toContain('if .cutover.migration.applyState == "failed" then .migrationApply == "failed"');
+    expect(fallback).toContain('(.status == "forward_repair_required") and (.phase == "artifact")');
     expect(fallback).toContain(
       '(.phase == "migration_apply" and .migrationApply == "failed")',
     );

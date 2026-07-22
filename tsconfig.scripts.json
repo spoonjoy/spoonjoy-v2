@@ -12,6 +12,7 @@
     "scripts/script-environment.mjs",
     "scripts/deployment-preflight.ts",
     "scripts/deploy-production-canary.ts",
+    "scripts/product-cutover.ts",
     "scripts/migrate-cloudinary-covers-to-r2.ts",
     "scripts/native-dogfood-api-server.ts",
     "scripts/production-readiness.ts",
@@ -20,6 +21,7 @@
     "scripts/react-router-build-runner.ts",
     "scripts/qa-preflight.ts",
     "scripts/warning-gate.ts",
+    "scripts/validate-release-artifact.ts",
     "scripts/workflow-security.mjs"
   ]
 }

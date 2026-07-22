@@ -1,6 +1,6 @@
 import { execFile as nodeExecFile } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -12,6 +12,7 @@ import {
   formatCheck,
   isCliEntry,
   main,
+  parsedProductionWorkflowIsCanonical,
   runCliIfEntry,
   runDeploymentPreflight,
   validateDeploymentConfig,
@@ -291,6 +292,8 @@ function validInputs(): DeploymentPreflightInputs {
         "qa:seed": "node scripts/seed-qa.mjs --target-env qa",
         typecheck: "react-router typegen && tsc",
         "typecheck:scripts": "tsc -p tsconfig.scripts.json",
+        "verify:clean:typecheck:scripts":
+          "node scripts/run-with-warning-policy.mjs -- pnpm run typecheck:scripts",
         "test:coverage": "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then pnpm exec vitest run --coverage --fileParallelism=false",
         "test:e2e": "env -u FORCE_COLOR -u NO_COLOR PLAYWRIGHT_FORCE_TTY=0 tsx scripts/warning-gate.ts -- pnpm exec playwright test --reporter=list,html",
         "smoke:api": "node scripts/smoke-api-live.mjs --target-env production",
@@ -318,9 +321,9 @@ function validInputs(): DeploymentPreflightInputs {
     readme: "pnpm run deploy:preflight gh workflow run production-deploy.yml --ref main -f source_sha=\"$(git rev-parse HEAD)\" wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_NATIVE_CLIENT_IDS APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY GOOGLE_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT GEMINI_API_KEY GEMINI_IMAGE_MODEL GEMINI_IMAGE_TIMEOUT_MS gemini-3.1-flash-image IMAGE_PROVIDER_PRIMARY IMAGE_PROVIDER_FALLBACKS SPOONJOY_CSP_MODE Content-Security-Policy-Report-Only one-commit rollback SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS ACK_REPORT_ONLY_CSP_ROLLBACK VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry docs/analytics-privacy.md cleanup:local cleanup:local:apply cleanup:remote:qa cleanup:remote:qa:apply cleanup:production target-env local target-env qa target-env production broad production cleanup is read-only warning-gate.ts",
     deploymentDoc: "pnpm run deploy:preflight smoke:api gh workflow run production-deploy.yml --ref main -f source_sha=\"$(git rev-parse HEAD)\" wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_NATIVE_CLIENT_IDS APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY GOOGLE_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT GEMINI_API_KEY GEMINI_IMAGE_MODEL GEMINI_IMAGE_TIMEOUT_MS gemini-3.1-flash-image IMAGE_PROVIDER_PRIMARY IMAGE_PROVIDER_FALLBACKS SPOONJOY_CSP_MODE Content-Security-Policy-Report-Only one-commit rollback SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS ACK_REPORT_ONLY_CSP_ROLLBACK wrangler secret put POSTHOG_KEY VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry cleanup:local cleanup:local:apply cleanup:remote:qa cleanup:remote:qa:apply cleanup:production target-env local target-env qa target-env production broad production cleanup is read-only warning-gate.ts",
     migrationFiles: ["0000_init.sql"],
-    vitestConfig: "workers/app.ts scripts/script-environment.mjs scripts/cleanup-local-qa-data.mjs scripts/smoke-api-live.mjs scripts/qa-preflight.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts scripts/production-readiness.ts scripts/posthog-build-metadata.ts scripts/react-router-build-runner.ts scripts/warning-gate.ts scripts/workflow-security.mjs",
+    vitestConfig: "workers/app.ts scripts/script-environment.mjs scripts/cleanup-local-qa-data.mjs scripts/smoke-api-live.mjs scripts/qa-preflight.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts scripts/product-cutover.ts scripts/production-readiness.ts scripts/posthog-build-metadata.ts scripts/react-router-build-runner.ts scripts/warning-gate.ts scripts/validate-release-artifact.ts scripts/workflow-security.mjs",
     tsconfigScripts:
-      "scripts/build-output-hygiene.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts scripts/production-readiness.ts scripts/posthog-build-metadata.ts scripts/qa-preflight.ts scripts/react-router-build.ts scripts/react-router-build-runner.ts scripts/warning-gate.ts scripts/workflow-security.mjs",
+      "scripts/build-output-hygiene.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts scripts/product-cutover.ts scripts/production-readiness.ts scripts/posthog-build-metadata.ts scripts/qa-preflight.ts scripts/react-router-build.ts scripts/react-router-build-runner.ts scripts/warning-gate.ts scripts/validate-release-artifact.ts scripts/workflow-security.mjs",
   };
 }
 
@@ -1327,7 +1330,7 @@ describe("deployment preflight", () => {
     ["existing artifact migration uniqueness", '((.reviewedMigrations | unique | length) == (.reviewedMigrations | length))', "true"],
     [
       "existing artifact phase-specific version identity",
-      'if .phase == "rollback_already_active" then .previousVersionId == .candidateVersionId else .previousVersionId != .candidateVersionId end',
+      'if .phase == "rollback_already_active" or (.cutover.transition? == "same-target-reconcile") then .previousVersionId == .candidateVersionId else .previousVersionId != .candidateVersionId end',
       "true",
     ],
     ["existing artifact migration-list state", 'if .migrationApply == "not_needed" then (.reviewedMigrations | length) == 0', "if true then true"],
@@ -1439,7 +1442,7 @@ describe("deployment preflight", () => {
     const script = workflowRunScript(
       workflow,
       "Ensure release artifact exists",
-      "Upload MCP OAuth canary artifacts",
+      "Validate complete release and durable cutover state",
     );
     const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-workflow-artifact-"));
     const relativeArtifactPath = "mcp-oauth-canary-artifacts/production-release.json";
@@ -1512,6 +1515,22 @@ describe("deployment preflight", () => {
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
     }
+  });
+
+  it("requires the exact independent release-artifact validation step identity", () => {
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
+      "name: Validate complete release and durable cutover state",
+      "name: Renamed release validation",
+    );
+
+    expect(parsedProductionWorkflowIsCanonical(inputs.productionDeployWorkflow)).toBe(false);
+
+    const invalidCondition = secureProductionDeployWorkflow().replace(
+      "      - name: Validate complete release and durable cutover state\n        id: release-artifact-validation\n        if: always()",
+      "      - name: Validate complete release and durable cutover state\n        id: release-artifact-validation\n        if: success()",
+    );
+    expect(parsedProductionWorkflowIsCanonical(invalidCondition)).toBe(false);
   });
 
   it("executes jq and rejects unsanitized failure and rollbackFailure values", async () => {
@@ -1593,7 +1612,7 @@ describe("deployment preflight", () => {
         const script = workflowRunScript(
           secureProductionDeployWorkflow(testCase.releaseMode, testCase.protocolBoundary),
           "Ensure release artifact exists",
-          "Upload MCP OAuth canary artifacts",
+          "Validate complete release and durable cutover state",
         );
         const env = {
           ...process.env,
@@ -1673,7 +1692,7 @@ describe("deployment preflight", () => {
     const script = workflowRunScript(
       secureProductionDeployWorkflow("protocol-v1-canary", boundary),
       "Ensure release artifact exists",
-      "Upload MCP OAuth canary artifacts",
+      "Validate complete release and durable cutover state",
     );
     const env = {
       ...process.env,
@@ -2057,7 +2076,7 @@ describe("deployment preflight", () => {
         const script = workflowRunScript(
           secureProductionDeployWorkflow(releaseMode, protocolBoundary),
           "Ensure release artifact exists",
-          "Upload MCP OAuth canary artifacts",
+          "Validate complete release and durable cutover state",
         );
         const env = {
           ...process.env,
@@ -2214,6 +2233,183 @@ describe("deployment preflight", () => {
     const result = validateDeploymentConfig(inputs);
 
     expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it.each([
+    [
+      "prior cutover discovery",
+      "      - name: Find prior product cutover artifact",
+      "      - name: Skip prior product cutover artifact",
+    ],
+    [
+      "the exact prior cutover discovery body",
+      "gh api --paginate",
+      "gh api",
+    ],
+    [
+      "ordered prior cutover discovery",
+      "LC_ALL=C sort -t $'\\t' -k1,1r -k2,2nr",
+      "cat",
+    ],
+    [
+      "a pinned prior artifact download",
+      "uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+      "uses: actions/download-artifact@v7",
+    ],
+    [
+      "prior cutover validation and restore",
+      "      - name: Restore prior product cutover state",
+      "      - name: Skip prior product cutover state",
+    ],
+    [
+      "independent durable cutover state validation",
+      "      - name: Validate durable product cutover state for continuity",
+      "      - name: Skip durable product cutover state validation",
+    ],
+    [
+      "the exact durable cutover state validation body",
+      "--file mcp-oauth-canary-artifacts/production-product-cutover-state.json",
+      "--file mcp-oauth-canary-artifacts/untrusted-state.json",
+    ],
+    [
+      "the exact prior cutover restore body",
+      "install -m 600 \"$prior_state\" mcp-oauth-canary-artifacts/production-product-cutover-state.json",
+      "cp \"$prior_state\" mcp-oauth-canary-artifacts/production-product-cutover-state.json",
+    ],
+    [
+      "durable product cutover retention",
+      "retention-days: 90",
+      "retention-days: 14",
+    ],
+    [
+      "attempt-unique release artifact names",
+      "name: mcp-oauth-canary-artifacts-${{ github.run_attempt }}",
+      "name: mcp-oauth-canary-artifacts",
+    ],
+    [
+      "attempt-unique cutover artifact names",
+      "name: product-cutover-state-${{ github.run_id }}-${{ github.run_attempt }}",
+      "name: product-cutover-state",
+    ],
+    [
+      "independent cutover-state publication",
+      "steps.cutover-state-validation.outcome == 'success'",
+      "steps.release-artifact-validation.outcome == 'success'",
+    ],
+  ])("requires %s before production deployment", (_name, expected, replacement) => {
+    const inputs = validInputs();
+    inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(expected, replacement);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it("selects the newest unexpired artifact from a trusted production run", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-cutover-artifact-lookup-"));
+    const output = path.join(root, "github-output");
+    const log = path.join(root, "gh-log");
+    const gh = path.join(root, "gh");
+    const date = path.join(root, "date");
+    const script = workflowRunScript(
+      secureProductionDeployWorkflow(),
+      "Find prior product cutover artifact",
+      "Download prior product cutover artifact",
+    );
+    try {
+      await writeFile(gh, [
+        "#!/usr/bin/env bash",
+        "set -euo pipefail",
+        "printf '%s\\n' \"$*\" >> \"$GH_LOG\"",
+        "case \"$*\" in",
+        "  *actions/artifacts*)",
+        "    if [ \"${ONLY_UNTRUSTED:-0}\" = 1 ]; then",
+        "      printf '2026-07-21T13:00:00Z\\t901\\t999\\tproduct-cutover-state-999-1\\n'",
+        "    else",
+        "      printf '2026-07-21T13:00:00Z\\t901\\t999\\tproduct-cutover-state-999-1\\n2026-07-20T13:00:00Z\\t902\\t200\\tproduct-cutover-state-200-1\\n2026-07-21T12:30:00Z\\t903\\t300\\tproduct-cutover-state-300-2\\n'",
+        "    fi",
+        "    ;;",
+        "  *actions/runs/999*)",
+        "    printf '.github/workflows/other.yml@main\\tmain\\t999\\n'",
+        "    ;;",
+        "  *actions/runs/300*)",
+        "    printf '.github/workflows/production-deploy.yml@main\\tmain\\t300\\n'",
+        "    ;;",
+        "  *) exit 1 ;;",
+        "esac",
+        "",
+      ].join("\n"));
+      await writeFile(date, "#!/usr/bin/env bash\nprintf '2026-04-22\\n'\n");
+      await chmod(gh, 0o700);
+      await chmod(date, 0o700);
+
+      await execFile("bash", ["-c", script], {
+        cwd: root,
+        env: {
+          ...process.env,
+          PATH: `${root}:${process.env.PATH ?? ""}`,
+          GH_LOG: log,
+          GITHUB_OUTPUT: output,
+          GITHUB_REPOSITORY: "spoonjoy/spoonjoy",
+        },
+      });
+
+      await expect(readFile(output, "utf8")).resolves.toBe(
+        "run_id=300\nartifact_id=903\n",
+      );
+      const calls = (await readFile(log, "utf8")).trim().split("\n");
+      expect(calls).toHaveLength(3);
+      expect(calls[0]).toContain("actions/artifacts?per_page=100");
+      expect(calls[1]).toContain("actions/runs/999");
+      expect(calls[2]).toContain("actions/runs/300");
+
+      await writeFile(output, "");
+      await execFile("bash", ["-c", script], {
+        cwd: root,
+        env: {
+          ...process.env,
+          PATH: `${root}:${process.env.PATH ?? ""}`,
+          GH_LOG: log,
+          GITHUB_OUTPUT: output,
+          GITHUB_REPOSITORY: "spoonjoy/spoonjoy",
+          ONLY_UNTRUSTED: "1",
+        },
+      });
+      await expect(readFile(output, "utf8")).resolves.toBe("run_id=\nartifact_id=\n");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed when GitHub artifact discovery fails", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-cutover-artifact-failure-"));
+    const output = path.join(root, "github-output");
+    const gh = path.join(root, "gh");
+    const date = path.join(root, "date");
+    const script = workflowRunScript(
+      secureProductionDeployWorkflow(),
+      "Find prior product cutover artifact",
+      "Download prior product cutover artifact",
+    );
+    try {
+      await writeFile(gh, "#!/usr/bin/env bash\nexit 42\n");
+      await writeFile(date, "#!/usr/bin/env bash\nprintf '2026-04-22\\n'\n");
+      await chmod(gh, 0o700);
+      await chmod(date, 0o700);
+
+      await expect(execFile("bash", ["-c", script], {
+        cwd: root,
+        env: {
+          ...process.env,
+          PATH: `${root}:${process.env.PATH ?? ""}`,
+          GITHUB_OUTPUT: output,
+          GITHUB_REPOSITORY: "spoonjoy/spoonjoy",
+        },
+      })).rejects.toMatchObject({ code: 42 });
+      await expect(readFile(output, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("delegates canonical and report-only evidence lookup to the executable validator", () => {
@@ -2550,8 +2746,8 @@ describe("deployment preflight", () => {
       ...validInputs(),
       ciWorkflow: replaceRequired(
         validCiWorkflow(),
-        "        run: pnpm run verify:clean:typecheck",
-        "        run: pnpm run typecheck",
+        "          pnpm run verify:clean:typecheck",
+        "          pnpm run typecheck",
       ),
     });
     const unwrappedBuild = validateDeploymentConfig({
@@ -3713,6 +3909,15 @@ describe("deployment preflight", () => {
     const missingScriptTypecheck = validInputs();
     delete (missingScriptTypecheck.packageJson.scripts as Record<string, string>)["typecheck:scripts"];
     missingScriptTypecheck.tsconfigScripts = "";
+    const ungatedScriptTypecheck = validInputs();
+    delete (ungatedScriptTypecheck.packageJson.scripts as Record<string, string>)[
+      "verify:clean:typecheck:scripts"
+    ];
+    const missingModifiedScript = validInputs();
+    missingModifiedScript.tsconfigScripts = missingModifiedScript.tsconfigScripts.replace(
+      "scripts/validate-release-artifact.ts",
+      "",
+    );
 
     expect(valid.errors.map((item) => item.name)).not.toEqual(
       expect.arrayContaining(["script coverage instrumentation", "script typecheck"]),
@@ -3721,6 +3926,10 @@ describe("deployment preflight", () => {
       "script coverage instrumentation",
     );
     expect(validateDeploymentConfig(missingScriptTypecheck).errors.map((item) => item.name)).toContain("script typecheck");
+    expect(validateDeploymentConfig(ungatedScriptTypecheck).errors.map((item) => item.name))
+      .toContain("script typecheck");
+    expect(validateDeploymentConfig(missingModifiedScript).errors.map((item) => item.name))
+      .toContain("script typecheck");
   });
 
   it("requires coverage and e2e package scripts to run through the warning gate", () => {
@@ -4774,8 +4983,12 @@ describe("package.json deploy scripts", () => {
     const pkg = JSON.parse(pkgRaw) as { scripts: Record<string, string> };
 
     expect(pkg.scripts["typecheck:scripts"]).toBe("tsc -p tsconfig.scripts.json");
+    expect(pkg.scripts["verify:clean:typecheck:scripts"])
+      .toBe("node scripts/run-with-warning-policy.mjs -- pnpm run typecheck:scripts");
     expect(tsconfigScripts).toContain("scripts/deployment-preflight.ts");
+    expect(tsconfigScripts).toContain("scripts/product-cutover.ts");
     expect(tsconfigScripts).toContain("scripts/qa-preflight.ts");
+    expect(tsconfigScripts).toContain("scripts/validate-release-artifact.ts");
   });
 
   it("runs API smoke against the explicit production target", async () => {

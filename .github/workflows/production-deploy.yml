@@ -131,6 +131,76 @@ jobs:
 
           node scripts/workflow-security.mjs validate-production-deploy-source
 
+      - name: Find prior product cutover artifact
+        id: prior-product-cutover
+        if: env.ROLLBACK_VERSION_ID == '' && env.SPOONJOY_RELEASE_MODE == 'atomic-product-activation'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          prior_run_id=
+          prior_artifact_id=
+          artifact_records="$(
+            gh api --paginate \
+              "/repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" \
+              --jq '.artifacts[] | select(.expired == false and (.name | test("^product-cutover-state-[0-9]+-[0-9]+$"))) | [.created_at, (.id | tostring), (.workflow_run.id | tostring), .name] | @tsv' \
+              | LC_ALL=C sort -t $'\t' -k1,1r -k2,2nr
+          )"
+          owner_lookup_count=0
+          owner_lookup_bound_exhausted=0
+          max_owner_lookups=20
+          if [ -n "$artifact_records" ]; then
+            while IFS=$'\t' read -r created_at artifact_id run_id artifact_name unexpected; do
+              if [ "$owner_lookup_count" -ge "$max_owner_lookups" ]; then
+                owner_lookup_bound_exhausted=1
+                break
+              fi
+              if [ -n "$unexpected" ] || \
+                  ! printf '%s' "$created_at" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' || \
+                  ! printf '%s' "$artifact_id" | grep -Eq '^[0-9]+$' || \
+                  ! printf '%s' "$run_id" | grep -Eq '^[0-9]+$' || \
+                  ! printf '%s' "$artifact_name" | grep -Eq "^product-cutover-state-${run_id}-[0-9]+$"; then
+                echo "GitHub returned invalid artifact metadata" >&2
+                exit 1
+              fi
+              owner_lookup_count=$((owner_lookup_count + 1))
+              run_metadata="$(
+                gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" \
+                  --jq '[.path, .head_branch, (.id | tostring)] | @tsv'
+              )"
+              IFS=$'\t' read -r workflow_path head_branch verified_run_id unexpected \
+                <<< "$run_metadata"
+              if [ -n "$unexpected" ] || ! printf '%s' "$verified_run_id" | grep -Eq '^[0-9]+$' || \
+                  [ "$verified_run_id" != "$run_id" ]; then
+                echo "GitHub returned invalid artifact owner metadata" >&2
+                exit 1
+              fi
+              if { [ "$workflow_path" = '.github/workflows/production-deploy.yml' ] || \
+                   [ "$workflow_path" = '.github/workflows/production-deploy.yml@main' ]; } && \
+                  [ "$head_branch" = 'main' ]; then
+                prior_artifact_id="$artifact_id"
+                prior_run_id="$run_id"
+                break
+              fi
+            done <<< "$artifact_records"
+            if [ -z "$prior_artifact_id" ] && [ "$owner_lookup_bound_exhausted" -eq 1 ]; then
+              echo "No trusted product cutover artifact found within the owner lookup bound" >&2
+              exit 1
+            fi
+          fi
+          printf 'run_id=%s\n' "$prior_run_id" >> "$GITHUB_OUTPUT"
+          printf 'artifact_id=%s\n' "$prior_artifact_id" >> "$GITHUB_OUTPUT"
+
+      - name: Download prior product cutover artifact
+        if: steps.prior-product-cutover.outputs.run_id != '' && steps.prior-product-cutover.outputs.artifact_id != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          artifact-ids: ${{ steps.prior-product-cutover.outputs.artifact_id }}
+          path: prior-product-cutover-artifact
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.prior-product-cutover.outputs.run_id }}
+
       - name: Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
@@ -146,6 +216,18 @@ jobs:
 
       - name: Generate Prisma client
         run: pnpm prisma:generate
+
+      - name: Restore prior product cutover state
+        if: steps.prior-product-cutover.outputs.run_id != '' && steps.prior-product-cutover.outputs.artifact_id != ''
+        run: |
+          set -euo pipefail
+          umask 077
+          prior_state=prior-product-cutover-artifact/production-product-cutover-state.json
+          pnpm exec tsx scripts/validate-release-artifact.ts \
+            --kind product-cutover-state --file "$prior_state"
+          mkdir -p mcp-oauth-canary-artifacts
+          install -m 600 "$prior_state" mcp-oauth-canary-artifacts/production-product-cutover-state.json
+          rm -rf prior-product-cutover-artifact
 
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium
@@ -178,10 +260,30 @@ jobs:
           mkdir -p mcp-oauth-canary-artifacts
           artifact_path=mcp-oauth-canary-artifacts/production-release.json
           artifact_valid=0
-          if [ -f "$artifact_path" ] && jq -e --arg source_sha "$SOURCE_SHA" --arg release_mode "$SPOONJOY_RELEASE_MODE" --arg protocol_boundary_sha "$SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA" 'type == "object" and ((keys - ["candidateVersionId", "databaseRollbackSupported", "deploymentStrategy", "failure", "migrationApply", "phase", "previousVersionId", "protocolV1BoundarySha", "releaseMode", "reviewedMigrations", "rollbackFailure", "sourceSha", "status", "treeHash"]) | length == 0) and ((["databaseRollbackSupported", "deploymentStrategy", "migrationApply", "phase", "releaseMode", "reviewedMigrations", "sourceSha", "status"] - keys) | length == 0) and (.sourceSha == $source_sha) and (.releaseMode == $release_mode) and (.deploymentStrategy == (if $release_mode == "protocol-v1-canary" then "gradual" else "atomic" end)) and (.databaseRollbackSupported == false) and (if $protocol_boundary_sha == "" then has("protocolV1BoundarySha") | not else .protocolV1BoundarySha == $protocol_boundary_sha end)' "$artifact_path" >/dev/null; then
+          if [ -f "$artifact_path" ] && jq -e --arg source_sha "$SOURCE_SHA" --arg release_mode "$SPOONJOY_RELEASE_MODE" --arg protocol_boundary_sha "$SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA" 'type == "object" and ((keys - ["candidateVersionId", "cutover", "databaseRollbackSupported", "deploymentStrategy", "failure", "migrationApply", "phase", "previousVersionId", "protocolV1BoundarySha", "releaseMode", "reviewedMigrations", "rollbackFailure", "sourceSha", "status", "treeHash"]) | length == 0) and ((["databaseRollbackSupported", "deploymentStrategy", "migrationApply", "phase", "releaseMode", "reviewedMigrations", "sourceSha", "status"] - keys) | length == 0) and (.sourceSha == $source_sha) and (.releaseMode == $release_mode) and (.deploymentStrategy == (if $release_mode == "protocol-v1-canary" then "gradual" else "atomic" end)) and (.databaseRollbackSupported == false) and (if $protocol_boundary_sha == "" then has("protocolV1BoundarySha") | not else .protocolV1BoundarySha == $protocol_boundary_sha end) and (if has("cutover") then (.releaseMode == "atomic-product-activation") and (.cutover | type == "object") and ((.cutover | keys - ["activeBefore", "compatibilitySourceSha", "deployment", "environment", "failure", "migration", "phase", "predecessor", "protocolBoundarySha", "schemaVersion", "status", "target", "transition", "unlock"]) | length == 0) and ((["activeBefore", "compatibilitySourceSha", "deployment", "environment", "failure", "migration", "phase", "predecessor", "protocolBoundarySha", "schemaVersion", "status", "target", "transition", "unlock"] - (.cutover | keys)) | length == 0) and (.cutover.schemaVersion == 1) and (.cutover.environment == "production") and (.cutover.target.sourceSha == .sourceSha) and (.cutover.target.treeSha == .treeHash) and (.cutover.activeBefore.versionId == .previousVersionId) and (if .cutover.target.versionId == null then (has("candidateVersionId") | not) else .cutover.target.versionId == .candidateVersionId end) and (.cutover.migration.name == "0025_clem_feedback_product.sql") and (.cutover.migration.sha256 == "151009d5410997365ec56c249a50c75b7aeecadd0841b677f1b0bd7a9ab2c6e6") and ((.cutover.activeBefore | keys | sort) == ["baseSourceSha", "durableObjectBundleSha256", "releaseMode", "sourceSha", "treeSha", "versionId", "workerBundleSha256"]) and ((.cutover.target | keys | sort) == ["baseSourceSha", "durableObjectBundleSha256", "releaseMode", "sourceSha", "treeSha", "versionId", "workerBundleSha256"]) and ((.cutover.predecessor | keys | sort) == ["canonicalDurableObjectBundleSha256", "canonicalSourceSha", "canonicalTreeSha", "canonicalWorkerBundleSha256", "lineageParentSourceSha", "originalFailedRestorationSourceSha", "relationship", "runtimeFloorSourceSha"]) and ((.cutover.migration | keys | sort) == ["applyState", "name", "recoveryBookmarkId", "sha256", "triggerInventory"]) and ((.cutover.deployment | keys | sort) == ["deploymentId", "sourceSha", "trafficPercent", "versionId"]) and ((.cutover.unlock | keys | sort) == ["applyState", "inventoryAfter", "inventoryBefore", "statementsSha256"]) and (if .cutover.failure == null then true else ((.cutover.failure | keys | sort) == ["classification", "phase"]) end) and (if .cutover.status == "failed" then .status == "forward_repair_required" and .phase == "artifact" and has("failure") else .cutover.status == "succeeded" and .cutover.phase == "verified" and .status == "promoted" and .phase == "complete" end) else true end)' "$artifact_path" >/dev/null; then
             if jq -e 'def sanitized_failure: . as $failure | type == "string" and (length > 0 and length <= 500) and test("^\\S(?:.*\\S)?$") and (test("\\s{2,}") | not) and (test("[\u0000-\u001f\u007f]") | not) and (test("Bearer\\s+\\S+"; "i") | not) and (test("\\b(token|secret|password|authorization|api[_-]?key)\\s*[=:]\\s*\\S+"; "i") | not) and (test("\\b[A-Za-z0-9_-]{16,}\\.[A-Za-z0-9_-]{16,}\\.[A-Za-z0-9_-]{16,}\\b") | not) and all([($ENV.CLOUDFLARE_D1_API_TOKEN // ""), ($ENV.CLOUDFLARE_WORKERS_API_TOKEN // "")][]; . as $credential | length == 0 or ($failure | contains($credential) | not)); (.status | IN("promoted", "rollback_promoted", "failed_before_stage", "rolled_back", "rollback_failed", "forward_repair_required")) and (.phase | IN("validate", "provenance", "initial_preflight", "build", "post_build_posthog", "post_build_provenance", "migration_list", "migration_review", "migration_apply", "full_preflight", "current_deployment", "deployment_revalidation", "version_snapshot", "version_upload", "version_lookup", "stage_revalidation", "promotion_revalidation", "rollback_version_lookup", "rollback_current_deployment", "rollback_already_active", "protocol_ancestry", "rollback_protocol_ancestry", "active_version_mapping", "rollback_active_version_mapping", "stage", "canary", "candidate_csp", "promote", "atomic_deploy", "verify_promotion", "verify_rollback", "bootstrap_probe", "artifact", "complete")) and (.sourceSha | type == "string" and test("^[0-9a-f]{40}$")) and (if has("treeHash") then (.treeHash | type == "string" and test("^[0-9a-f]{40}$")) else true end) and (if has("previousVersionId") then (.previousVersionId | type == "string" and test("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")) else true end) and (if has("candidateVersionId") then (.candidateVersionId | type == "string" and test("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")) else true end) and (.migrationApply | IN("not_started", "not_needed", "attempted", "succeeded", "failed")) and (.reviewedMigrations | type == "array") and (all(.reviewedMigrations[]; type == "string")) and (if has("failure") then (.failure | sanitized_failure) else true end) and (if has("rollbackFailure") then (.rollbackFailure | sanitized_failure) else true end)' "$artifact_path" >/dev/null; then
-              if jq -e '(all(.reviewedMigrations[]; (test("^[0-9]{4}_[A-Za-z0-9][A-Za-z0-9_.-]*[.]sql$") and (contains("..") | not)))) and ((.reviewedMigrations | unique | length) == (.reviewedMigrations | length)) and (if (has("previousVersionId") and has("candidateVersionId")) then (if .phase == "rollback_already_active" then .previousVersionId == .candidateVersionId else .previousVersionId != .candidateVersionId end) else true end) and (if .migrationApply == "not_needed" then (.reviewedMigrations | length) == 0 elif (.migrationApply | IN("attempted", "succeeded", "failed")) then (.reviewedMigrations | length) > 0 else true end)' "$artifact_path" >/dev/null; then
+              if jq -e '(all(.reviewedMigrations[]; (test("^[0-9]{4}_[A-Za-z0-9][A-Za-z0-9_.-]*[.]sql$") and (contains("..") | not)))) and ((.reviewedMigrations | unique | length) == (.reviewedMigrations | length)) and (if (has("previousVersionId") and has("candidateVersionId")) then (if .phase == "rollback_already_active" or (.cutover.transition? == "same-target-reconcile") then .previousVersionId == .candidateVersionId else .previousVersionId != .candidateVersionId end) else true end) and (if .migrationApply == "not_needed" then (.reviewedMigrations | length) == 0 elif (.migrationApply | IN("attempted", "succeeded", "failed")) then (.reviewedMigrations | length) > 0 else true end)' "$artifact_path" >/dev/null; then
                 if jq -e --arg release_mode "$SPOONJOY_RELEASE_MODE" '
+                  if has("cutover") then
+                    ($release_mode == "atomic-product-activation") and
+                    has("treeHash") and has("previousVersionId") and
+                    (has("rollbackFailure") | not) and
+                    (if .cutover.transition == "initial" then
+                      (.reviewedMigrations == ["0025_clem_feedback_product.sql"]) and
+                      (if .cutover.migration.applyState == "failed" then .migrationApply == "failed"
+                      elif .cutover.migration.applyState == "not_started" then .migrationApply == "not_started"
+                      else .migrationApply == "succeeded" end)
+                    else
+                      (.reviewedMigrations == []) and (.migrationApply == "not_needed")
+                    end) and
+                    (if .cutover.status == "failed" then
+                      (.status == "forward_repair_required") and (.phase == "artifact") and has("failure")
+                    else
+                      (.cutover.status == "succeeded") and (.cutover.phase == "verified") and
+                      (.status == "promoted") and (.phase == "complete") and
+                      has("candidateVersionId") and (has("failure") | not)
+                    end)
+                  else
                   (
                     if $release_mode == "protocol-v1-canary" then
                       if .status == "forward_repair_required" then
@@ -262,6 +364,7 @@ jobs:
                     ((.treeHash | type == "string") and (.previousVersionId | type == "string") and ((.reviewedMigrations | length) > 0))
                   else true
                   end)
+                  end
                 ' "$artifact_path" >/dev/null; then
                   artifact_valid=1
                 fi
@@ -273,14 +376,56 @@ jobs:
             mv "${artifact_path}.tmp" "$artifact_path"
           fi
 
+      - name: Validate complete release and durable cutover state
+        id: release-artifact-validation
+        if: always()
+        run: |
+          set -euo pipefail
+          artifact_path=mcp-oauth-canary-artifacts/production-release.json
+          state_path=mcp-oauth-canary-artifacts/production-product-cutover-state.json
+          state_args=()
+          if [ "$SPOONJOY_RELEASE_MODE" = "atomic-product-activation" ]; then
+            test -f "$state_path"
+            state_args=(--state-file "$state_path")
+          fi
+          pnpm exec tsx scripts/validate-release-artifact.ts \
+            --kind production-release \
+            --file "$artifact_path" \
+            --source-sha "$SOURCE_SHA" \
+            --expected-mode "$SPOONJOY_RELEASE_MODE" \
+            "${state_args[@]}"
+          if [ "$SPOONJOY_RELEASE_MODE" != "atomic-product-activation" ] && [ -f "$state_path" ]; then
+            pnpm exec tsx scripts/validate-release-artifact.ts \
+              --kind product-cutover-state \
+              --file "$state_path"
+          fi
+
+      - name: Validate durable product cutover state for continuity
+        id: cutover-state-validation
+        if: always() && env.SPOONJOY_RELEASE_MODE == 'atomic-product-activation' && hashFiles('mcp-oauth-canary-artifacts/production-product-cutover-state.json') != ''
+        run: |
+          set -euo pipefail
+          pnpm exec tsx scripts/validate-release-artifact.ts \
+            --kind product-cutover-state \
+            --file mcp-oauth-canary-artifacts/production-product-cutover-state.json
+
       - name: Upload MCP OAuth canary artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: mcp-oauth-canary-artifacts
+          name: mcp-oauth-canary-artifacts-${{ github.run_attempt }}
           path: mcp-oauth-canary-artifacts/
           if-no-files-found: error
           retention-days: 14
+
+      - name: Upload durable product cutover state
+        if: always() && steps.cutover-state-validation.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: product-cutover-state-${{ github.run_id }}-${{ github.run_attempt }}
+          path: mcp-oauth-canary-artifacts/production-product-cutover-state.json
+          if-no-files-found: error
+          retention-days: 90
 
   report-canary:
     name: report-canary
@@ -313,7 +458,7 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         continue-on-error: true
         with:
-          name: mcp-oauth-canary-artifacts
+          name: mcp-oauth-canary-artifacts-${{ github.run_attempt }}
           path: mcp-oauth-canary-artifacts
 
       - name: Report MCP OAuth canary

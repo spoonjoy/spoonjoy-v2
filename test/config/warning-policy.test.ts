@@ -165,7 +165,11 @@ function workflowRunCommands(source: string) {
       const firstLine = step.match(/^      - run:\s+([^#]+?)\s*$/m);
       const nested = step.match(/^        run:\s+([^#]+?)\s*$/m);
       const command = firstLine?.[1] ?? nested?.[1];
-      return command ? [command] : [];
+      if (command && command !== "|") return [command];
+      const block = step.match(/^(?:      - |        )run:\s*\|\s*\n((?: {10}[^\n]*\n?)*)/m)?.[1];
+      return block
+        ? block.split("\n").map((line) => line.trim()).filter(Boolean)
+        : [];
     });
   });
 }
@@ -948,6 +952,9 @@ jobs:
     expect(packageJson.scripts?.["verify:clean:typecheck"]).toBe(
       "node scripts/run-with-warning-policy.mjs -- pnpm run typecheck",
     );
+    expect(packageJson.scripts?.["verify:clean:typecheck:scripts"]).toBe(
+      "node scripts/run-with-warning-policy.mjs -- pnpm run typecheck:scripts",
+    );
     expect(packageJson.scripts?.["verify:clean:build"]).toBe(
       "node scripts/run-with-warning-policy.mjs -- pnpm run build",
     );
@@ -975,6 +982,7 @@ jobs:
       "--disable-warning=ExperimentalWarning",
     );
     expect(commands).toContain("pnpm run verify:clean:typecheck");
+    expect(commands).toContain("pnpm run verify:clean:typecheck:scripts");
     expect(commands).toContain("pnpm run verify:clean:build");
     expect(commands).toContain("pnpm run verify:clean:migrations");
     expect(commands).toContain("pnpm run verify:clean:migrations:qa");
@@ -996,6 +1004,8 @@ jobs:
     expect(config).toContain('"e2e/warning-policy.ts"');
     expect(config).toContain('"e2e/fixtures.ts"');
     expect(config).toContain('"scripts/e2e-run-cleanup.mjs"');
+    expect(config).toContain('"scripts/product-cutover.ts"');
+    expect(config).toContain('"scripts/validate-release-artifact.ts"');
     expect(config).toContain('"e2e/support/global-teardown.ts"');
     expect(config).toContain('"e2e/support/start-ephemeral-wrangler.mjs"');
     expect(config).not.toContain('exclude: ["node_modules/**", "test/**"');

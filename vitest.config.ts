@@ -18,6 +18,8 @@ const coverageInclude = [
   "scripts/qa-preflight.ts",
   "scripts/deployment-preflight.ts",
   "scripts/deploy-production-canary.ts",
+  "scripts/product-cutover.ts",
+  "scripts/validate-release-artifact.ts",
   "scripts/run-with-warning-policy.mjs",
   "scripts/e2e-run-cleanup.mjs",
   "test/warning-policy.ts",

@@ -19,7 +19,7 @@
 
 - `pnpm typecheck` passed.
 - Exact-source fixture: 7 passed, 483 skipped.
-- Full product cutover gate: 490 total, 8 passed, 482 intentionally failed. Every failure is isolated to one of the eight absent Unit 2.4b exports: `readD1RecoveryBookmark`, `readPostRestorationApprovalFile`, `readForwardRepairSkewReceiptFile`, `readExecutedSkewReceiptFile`, `assertProductCutoverPreconditions`, `runProductCutover`, `assertProductCutoverArtifact`, or `writeProductCutoverArtifactFile`.
+- Full product cutover gate: 490 total, 8 passed, 482 intentionally failed. Every failure is isolated to one of the nine absent Unit 2.4b exports: `assertReviewedMigrationSql`, `readD1RecoveryBookmark`, `readPostRestorationApprovalFile`, `readForwardRepairSkewReceiptFile`, `readExecutedSkewReceiptFile`, `assertProductCutoverPreconditions`, `runProductCutover`, `assertProductCutoverArtifact`, or `writeProductCutoverArtifactFile`.
 - Existing deployment suite: 483 total, 469 passed, 14 intentionally failed at the Unit 2.4b product integration boundary.
 - `git diff --check` passed.
 

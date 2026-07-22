@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -20,12 +20,17 @@ const REVIEWED_MIGRATION_SQL = readFileSync(
 const MIGRATION_SHA256 = "151009d5410997365ec56c249a50c75b7aeecadd0841b677f1b0bd7a9ab2c6e6";
 const RUNTIME_FIXTURE_DIR = "test/fixtures/product-cutover";
 const RUNTIME_BUNDLE_BUILDER_PATH = `${RUNTIME_FIXTURE_DIR}/build-runtime-bundle.mjs`;
+const CANDIDATE_SOURCE_REF = "candidate";
 const RELEASE_TOPOLOGY = JSON.parse(readFileSync(
   path.resolve(RUNTIME_FIXTURE_DIR, "release-topology.json"),
   "utf8",
 )) as ReleaseTopology;
 const COMPATIBILITY_SOURCE_SHA = "40b8f4c85f85f0fa1f807e150013bc7b9675eff5";
 const COMPATIBILITY_BASE_SHA = "60c46277c01fc1065901a6fba24b9ff8cb15129d";
+const QA_COMPATIBILITY_SOURCE_SHA = "3f79172ff802305ff8180af536a78ecbf5d39712";
+const QA_COMPATIBILITY_BASE_SHA = "d242c37dd0edb3ed0a2452c9f96ce1e7d6e1487c";
+const QA_COMPATIBILITY_TREE_SHA = "6dc720e8d4af087277c73240d0336d522e1c5aaa";
+const QA_COMPATIBILITY_VERSION_ID = "aa058075-115e-4cb9-aaec-af49027eb314";
 const PROTOCOL_BOUNDARY_SHA = "0a473a6b55a9cb0edaf8867b29d2b473c2cf15db";
 const TARGET_SOURCE_SHA = "5de4856aef7d4d9376f9b2ccfa767557da5792b7";
 const TARGET_BASE_SHA = "40fe91b7f21b567aed19ccc2c202bf78ebcab282";
@@ -50,7 +55,7 @@ const NEXT_REPAIR_TREE_SHA = RELEASE_TOPOLOGY.nextPostRestorationRepair.treeSha;
 const POST_REPAIR_TREE_SHA = RELEASE_TOPOLOGY.postRestorationRepair.treeSha;
 const POST_WORKER_REPAIR_TREE_SHA = RELEASE_TOPOLOGY.postRestorationWorkerRepair.treeSha;
 const POST_BOTH_REPAIR_TREE_SHA = RELEASE_TOPOLOGY.postRestorationBothRepair.treeSha;
-const OTHER_TREE_SHA = REPAIR_TREE_SHA;
+const OTHER_TREE_SHA = "f".repeat(40);
 const WORKER_BUNDLE_SHA256 = "eaadd8a4aa477879bbb478d399ef02933a54a76dbb03033aa4174389d9581e94";
 const DO_BUNDLE_SHA256 = "cd7a4aa239af644cce7b4f9f0d3cddbba608028ad65bf8f664a3e68b7fd3e0d4";
 const PRODUCT_WORKER_BUNDLE_SHA256 =
@@ -95,6 +100,7 @@ const TOPOLOGY_RUNTIME_MANIFESTS = JSON.parse(readFileSync(
   "utf8",
 )) as ExactRuntimeFixtureManifest[];
 const ALL_RUNTIME_MANIFESTS = [...EXACT_RUNTIME_MANIFESTS, ...TOPOLOGY_RUNTIME_MANIFESTS];
+const RUNTIME_BUILD_DIGEST_CACHE = new Map<string, string>();
 
 type CutoverEnvironment = "qa" | "production";
 type CutoverTransition =
@@ -267,8 +273,8 @@ interface BidirectionalSkewReceipt {
   predecessorDurableObjectManifest: ExactSourceBundleManifest;
   candidateWorkerManifest: ExactSourceBundleManifest;
   candidateDurableObjectManifest: ExactSourceBundleManifest;
-  candidateWorkerWithPredecessorDo: "passed" | "reused";
-  predecessorWorkerWithCandidateDo: "passed" | "reused";
+  candidateWorkerWithPredecessorDoBundleSha256: string;
+  predecessorWorkerWithCandidateDoBundleSha256: string;
 }
 
 interface PostRestorationApproval {
@@ -304,6 +310,7 @@ interface CutoverVerificationEffects {
 }
 
 interface ProductCutoverEffects extends CutoverVerificationEffects {
+  readEvidence?: () => Promise<ProductCutoverArtifact | null>;
   readPreflight: (environment: CutoverEnvironment) => Promise<ProductCutoverPreflight>;
   readPendingMigrationNames: (environment: CutoverEnvironment) => Promise<string[]>;
   createRecoveryBookmark: (environment: CutoverEnvironment) => Promise<string>;
@@ -317,6 +324,10 @@ interface ProductCutoverEffects extends CutoverVerificationEffects {
     targetSourceSha: string,
   ) => Promise<string>;
   observeDeployment: (environment: CutoverEnvironment) => Promise<CutoverDeploymentRecord>;
+  assertDeploymentOwnership: (
+    environment: CutoverEnvironment,
+    expected: CutoverSourceRecord,
+  ) => Promise<void>;
   deployTarget: (
     environment: CutoverEnvironment,
     target: CutoverSourceRecord,
@@ -338,7 +349,22 @@ interface ProductCutoverEffects extends CutoverVerificationEffects {
 }
 
 interface ProductCutoverApi {
+  productRuntimeBundleDigests: (
+    entrypoint: string,
+    modules: readonly { name: string; bytes: Uint8Array }[],
+  ) => { workerBundleSha256: string; durableObjectBundleSha256: string };
   assertReviewedMigrationSql: (filename: string, sql: string) => void;
+  readProductCutoverSourceRecord: (
+    environment: CutoverEnvironment,
+    sourceSha: string,
+    versionId: string | null,
+    runCommand: ReleaseCommandRunner,
+    env?: NodeJS.ProcessEnv,
+    deployedRuntimeIdentity?: {
+      workerBundleSha256: string;
+      durableObjectBundleSha256: string;
+    },
+  ) => Promise<CutoverSourceRecord>;
   readD1RecoveryBookmark: (
     environment: CutoverEnvironment,
     runCommand: ReleaseCommandRunner,
@@ -356,6 +382,10 @@ interface ProductCutoverApi {
     artifactDir: string,
     artifact: ProductCutoverArtifact,
   ) => Promise<void>;
+  validateProductCutoverStateFile: (
+    filePath: string,
+    environment: CutoverEnvironment,
+  ) => Promise<ProductCutoverArtifact>;
   readPostRestorationApprovalFile: (
     artifactDir: string,
     environment: CutoverEnvironment,
@@ -370,6 +400,10 @@ interface ProductCutoverApi {
     artifactDir: string,
     receiptSha256: string,
   ) => Promise<BidirectionalSkewReceipt>;
+  readPostRestorationChainStateFile: (
+    evidenceDir: string,
+    environment: CutoverEnvironment,
+  ) => Promise<PostRestorationChainState>;
   runProductCutover: (
     attempt: CutoverAttempt,
     effects: ProductCutoverEffects,
@@ -435,6 +469,27 @@ function attempt(overrides: Partial<CutoverAttempt> = {}): CutoverAttempt {
     migrationSql: REVIEWED_MIGRATION_SQL,
     ...overrides,
   };
+}
+
+function initialAttempt(environment: CutoverEnvironment): CutoverAttempt {
+  if (environment === "production") return attempt();
+  const activeBefore = sourceRecord({
+    sourceSha: QA_COMPATIBILITY_SOURCE_SHA,
+    treeSha: QA_COMPATIBILITY_TREE_SHA,
+    versionId: QA_COMPATIBILITY_VERSION_ID,
+    baseSourceSha: QA_COMPATIBILITY_BASE_SHA,
+  });
+  return attempt({
+    environment,
+    activeBefore,
+    predecessor: predecessorRecord({
+      canonicalSourceSha: activeBefore.sourceSha,
+      canonicalTreeSha: activeBefore.treeSha,
+      lineageParentSourceSha: activeBefore.sourceSha,
+    }),
+    compatibilitySourceSha: activeBefore.sourceSha,
+    compatibilityVersionId: QA_COMPATIBILITY_VERSION_ID,
+  });
 }
 
 function observedTarget(overrides: Partial<CutoverDeploymentRecord> = {}): CutoverDeploymentRecord {
@@ -532,13 +587,10 @@ function gitEvidenceRunner(options: GitEvidenceOptions = {}): ReleaseCommandRunn
   return vi.fn<ReleaseCommandRunner>(async (command, args) => {
     if (command === "node" && args[0] === RUNTIME_BUNDLE_BUILDER_PATH) {
       const buildCommand = [command, ...args].join(" ");
-      const digests = [...new Set(ALL_RUNTIME_MANIFESTS
-        .filter((manifest) => manifest.buildCommand === buildCommand)
-        .map((manifest) => manifest.bundleSha256))];
-      if (digests.length !== 1) {
-        throw new Error(`Unknown or ambiguous runtime build command: ${buildCommand}`);
-      }
-      return { stdout: `${JSON.stringify({ bundleSha256: digests[0] })}\n`, stderr: "" };
+      return {
+        stdout: `${JSON.stringify({ bundleSha256: runtimeBuildDigest(buildCommand) })}\n`,
+        stderr: "",
+      };
     }
     if (command !== "git") throw new Error("Unexpected source verification command.");
     if (args[0] === "merge-base" && args[1] === "--is-ancestor") {
@@ -674,11 +726,15 @@ function effects(
       .mockResolvedValue([]),
     resolveTargetVersion: vi.fn(async () => TARGET_VERSION_ID),
     observeDeployment: vi.fn(async () => deployment),
+    assertDeploymentOwnership: vi.fn(async () => undefined),
     deployTarget: vi.fn(async () => deployment),
     verifyCanonicalHealth: vi.fn(async () => true),
     applyUnlock: vi.fn(async () => undefined),
     readQaActiveSource: vi.fn(async () => sourceRecord({
       sourceSha: QA_ALIAS_SHA,
+      treeSha: value.target.treeSha,
+      workerBundleSha256: value.target.workerBundleSha256,
+      durableObjectBundleSha256: value.target.durableObjectBundleSha256,
       versionId: TARGET_VERSION_ID,
       releaseMode: "atomic-product-activation",
     })),
@@ -753,7 +809,10 @@ function writtenLifecycleArtifacts(
   const calls = (runEffects.writeEvidence as unknown as {
     mock: { calls: Array<[ProductCutoverArtifact]> };
   }).mock.calls;
-  return calls.map(([value]) => value);
+  return calls.map(([value]) => value).filter((value, index, values) => (
+    index === 0 || value.phase !== values[index - 1].phase ||
+    value.status !== values[index - 1].status
+  ));
 }
 
 function expectTerminalFailureLifecycle(
@@ -917,6 +976,100 @@ describe("reviewed product migration SQL gate", () => {
       filename,
       mutate(sql),
     )).toThrow("reviewed");
+  });
+});
+
+describe("exact product cutover source records", () => {
+  it("returns the frozen compatibility runtime without rebuilding historical bytes", async () => {
+    const runCommand = vi.fn<ReleaseCommandRunner>();
+
+    await expect(requireApi("readProductCutoverSourceRecord")(
+      "production",
+      COMPATIBILITY_SOURCE_SHA,
+      ACTIVE_VERSION_ID,
+      runCommand,
+    )).resolves.toEqual(sourceRecord());
+    expect(runCommand).not.toHaveBeenCalled();
+  });
+
+  it("returns the separately frozen QA compatibility runtime identity", async () => {
+    const runCommand = vi.fn<ReleaseCommandRunner>();
+
+    await expect(requireApi("readProductCutoverSourceRecord")(
+      "qa",
+      QA_COMPATIBILITY_SOURCE_SHA,
+      QA_COMPATIBILITY_VERSION_ID,
+      runCommand,
+    )).resolves.toEqual(sourceRecord({
+      sourceSha: QA_COMPATIBILITY_SOURCE_SHA,
+      treeSha: QA_COMPATIBILITY_TREE_SHA,
+      versionId: QA_COMPATIBILITY_VERSION_ID,
+      baseSourceSha: QA_COMPATIBILITY_BASE_SHA,
+    }));
+    expect(runCommand).not.toHaveBeenCalled();
+  });
+
+  it("rebuilds an arbitrary exact Git source into deterministic Worker and DO identities", async () => {
+    const deployedEntry = "export class CookSession {}; export default {};\n";
+    const runtimeIdentity = requireApi("productRuntimeBundleDigests")("_worker.js", [{
+      name: "_worker.js",
+      bytes: Buffer.from(deployedEntry),
+    }]);
+    const runCommand = vi.fn<ReleaseCommandRunner>(async (command, args) => {
+      if (command === "git") {
+        const key = args.join(" ");
+        const responses: Record<string, string> = {
+          [`rev-parse ${TARGET_SOURCE_SHA}^{tree}`]: TARGET_TREE_SHA,
+          [`rev-parse ${TARGET_SOURCE_SHA}^`]: TARGET_BASE_SHA,
+          [`show ${TARGET_SOURCE_SHA}:.github/workflows/production-deploy.yml`]:
+            "env:\n  SPOONJOY_RELEASE_MODE: atomic-product-activation\n",
+          "rev-parse HEAD": TARGET_SOURCE_SHA,
+        };
+        if (responses[key] !== undefined) return { stdout: responses[key], stderr: "" };
+      }
+      if (command === "pnpm" && args.slice(0, 4).join(" ") ===
+          "exec wrangler deploy --dry-run") {
+        const outdir = args[args.indexOf("--outdir") + 1];
+        await mkdir(outdir, { recursive: true });
+        await writeFile(path.join(outdir, "_worker.js"), deployedEntry);
+        return { stdout: "", stderr: "" };
+      }
+      throw new Error(`unexpected source-record command: ${command} ${args.join(" ")}`);
+    });
+
+    await expect(requireApi("readProductCutoverSourceRecord")(
+      "qa",
+      TARGET_SOURCE_SHA,
+      null,
+      runCommand,
+      { PATH: "/test/bin" },
+    )).resolves.toEqual(sourceRecord({
+      sourceSha: TARGET_SOURCE_SHA,
+      treeSha: TARGET_TREE_SHA,
+      ...runtimeIdentity,
+      versionId: null,
+      releaseMode: "atomic-product-activation",
+      baseSourceSha: TARGET_BASE_SHA,
+    }));
+    expect(runCommand).toHaveBeenCalledWith(
+      "pnpm",
+      expect.arrayContaining(["exec", "wrangler", "deploy", "--dry-run", "--env", "qa"]),
+      { env: { PATH: "/test/bin" } },
+    );
+  });
+
+  it.each([
+    ["invalid source", "A".repeat(40), null],
+    ["invalid version", TARGET_SOURCE_SHA, "not-a-version"],
+  ])("rejects %s before running evidence commands", async (_label, sourceSha, versionId) => {
+    const runCommand = vi.fn<ReleaseCommandRunner>();
+    await expect(requireApi("readProductCutoverSourceRecord")(
+      "production",
+      sourceSha,
+      versionId,
+      runCommand,
+    )).rejects.toThrow(/source record/i);
+    expect(runCommand).not.toHaveBeenCalled();
   });
 });
 
@@ -1500,8 +1653,8 @@ describe("exact-source runtime bundle fixture", () => {
 
 describe("D1 recovery bookmark adapter", () => {
   it.each([
-    ["production", ["exec", "wrangler", "d1", "time-travel", "info", "DB", "--remote", "--json"]],
-    ["qa", ["exec", "wrangler", "d1", "time-travel", "info", "DB", "--env", "qa", "--remote", "--json"]],
+    ["production", ["exec", "wrangler", "d1", "time-travel", "info", "DB", "--json"]],
+    ["qa", ["exec", "wrangler", "d1", "time-travel", "info", "DB", "--env", "qa", "--json"]],
   ] as const)("captures one exact %s bookmark command and parses its JSON", async (environment, args) => {
     const runCommand = vi.fn<ReleaseCommandRunner>(async () => ({
       stdout: JSON.stringify({ bookmark: RECOVERY_BOOKMARK_ID }),
@@ -1534,22 +1687,56 @@ describe("D1 recovery bookmark adapter", () => {
 });
 
 describe("external post-restoration approval adapter", () => {
+  it("loads an exact source-controlled post-restoration chain across runners", async () => {
+    const evidenceDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-repair-chain-input-"));
+    const chainDir = path.join(evidenceDir, "product-repair-chain");
+    const latest = failedPostRestorationArtifact(
+      POST_REPAIR_SOURCE_SHA,
+      FAILED_RESTORATION_SHA,
+    );
+    const chain: PostRestorationChainState = {
+      runtimeFloorSourceSha: RUNTIME_FLOOR_SHA,
+      originalFailedRestorationSourceSha: FAILED_RESTORATION_SHA,
+      latestFailedRepairArtifact: latest,
+    };
+    try {
+      await mkdir(chainDir, { recursive: true });
+      await writeFile(
+        path.join(chainDir, "production.json"),
+        `${JSON.stringify(chain, null, 2)}\n`,
+      );
+      await expect(requireApi("readPostRestorationChainStateFile")(
+        evidenceDir,
+        "production",
+      )).resolves.toEqual(chain);
+      await expect(requireApi("readPostRestorationChainStateFile")(
+        evidenceDir,
+        "qa",
+      )).rejects.toThrow("chain");
+    } finally {
+      await rm(evidenceDir, { recursive: true, force: true });
+    }
+  });
+
   it.each(["qa", "production"] as const)(
-    "reads an exact target-bound %s approval outside the candidate tree",
+    "reads a candidate-relative %s approval keyed by its known lineage parent",
     async (environment) => {
       const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-repair-approval-"));
       const value = postRestorationAttempt(FAILED_RESTORATION_SHA);
       value.environment = environment;
       const approval = postRestorationApproval(value);
       const approvalDir = path.join(artifactDir, "product-repair-approvals");
-      const approvalPath = path.join(approvalDir, `${environment}-${value.target.sourceSha}.json`);
+      const approvalPath = path.join(
+        approvalDir,
+        `${environment}-from-${value.predecessor.lineageParentSourceSha}.json`,
+      );
       try {
         await mkdir(approvalDir, { recursive: true });
         await writeFile(approvalPath, `${JSON.stringify(approval, null, 2)}\n`, "utf8");
         await expect(requireApi("readPostRestorationApprovalFile")(
           artifactDir,
           environment,
-          value.target.sourceSha,
+          value.predecessor.lineageParentSourceSha,
         )).resolves.toEqual(approval);
       } finally {
         await rm(artifactDir, { recursive: true, force: true });
@@ -1557,25 +1744,58 @@ describe("external post-restoration approval adapter", () => {
     },
   );
 
-  it("rejects a missing or target-mismatched external approval", async () => {
+  it("persists valid terminal evidence when unlock readback is unavailable", async () => {
+    const runEffects = effects({
+      applyUnlock: vi.fn(async () => {
+        throw new Error("unlock response lost");
+      }),
+      readTriggerInventory: vi.fn()
+        .mockResolvedValueOnce([...BOTH_TRIGGERS])
+        .mockRejectedValueOnce(new Error("trigger inventory unavailable")),
+    });
+
+    await expect(requireApi("runProductCutover")(attempt(), runEffects))
+      .rejects.toThrow("ambiguous");
+    expectTerminalFailureLifecycle(
+      runEffects,
+      attempt(),
+      [
+        "precheck:pending",
+        "precheck:succeeded",
+        "migration:pending",
+        "migration:succeeded",
+        "deployment:pending",
+        "deployment:succeeded",
+        "unlock:pending",
+        "unlock:failed",
+      ],
+      "unlock",
+      "unlock_state_ambiguous",
+    );
+  });
+
+  it("rejects a missing or lineage-mismatched external approval", async () => {
     const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-repair-approval-invalid-"));
     const value = postRestorationAttempt(FAILED_RESTORATION_SHA);
     const approvalDir = path.join(artifactDir, "product-repair-approvals");
-    const approvalPath = path.join(approvalDir, `production-${value.target.sourceSha}.json`);
+    const approvalPath = path.join(
+      approvalDir,
+      `production-from-${value.predecessor.lineageParentSourceSha}.json`,
+    );
     try {
       await expect(requireApi("readPostRestorationApprovalFile")(
         artifactDir,
         "production",
-        value.target.sourceSha,
+        value.predecessor.lineageParentSourceSha,
       )).rejects.toThrow("approval");
       await mkdir(approvalDir, { recursive: true });
       await writeFile(approvalPath, JSON.stringify(postRestorationApproval(value, {
-        targetSourceSha: NEXT_REPAIR_SHA,
+        lineageParentSourceSha: NEXT_REPAIR_SHA,
       })), "utf8");
       await expect(requireApi("readPostRestorationApprovalFile")(
         artifactDir,
         "production",
-        value.target.sourceSha,
+        value.predecessor.lineageParentSourceSha,
       )).rejects.toThrow("approval");
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
@@ -1585,7 +1805,7 @@ describe("external post-restoration approval adapter", () => {
 
 describe("durable forward-repair skew receipt adapters", () => {
   it.each(["production", "qa"] as const)(
-    "reads an exact target-bound %s skew receipt outside the candidate tree",
+    "reads a candidate-relative %s skew receipt keyed by its known lineage parent",
     async (environment) => {
       const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-forward-skew-"));
       const value = ordinaryRepairAttempt();
@@ -1593,7 +1813,10 @@ describe("durable forward-repair skew receipt adapters", () => {
       value.target.workerBundleSha256 = CANDIDATE_WORKER_BUNDLE_SHA256;
       const receipt = bidirectionalSkewReceipt(value);
       const receiptDir = path.join(artifactDir, "product-skew-receipts");
-      const receiptPath = path.join(receiptDir, `${environment}-${value.target.sourceSha}.json`);
+      const receiptPath = path.join(
+        receiptDir,
+        `${environment}-from-${value.predecessor.lineageParentSourceSha}.json`,
+      );
       try {
         await mkdir(receiptDir, { recursive: true });
         await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
@@ -1601,7 +1824,7 @@ describe("durable forward-repair skew receipt adapters", () => {
         await expect(requireApi("readForwardRepairSkewReceiptFile")(
           artifactDir,
           environment,
-          value.target.sourceSha,
+          value.predecessor.lineageParentSourceSha,
         )).resolves.toEqual(receipt);
       } finally {
         await rm(artifactDir, { recursive: true, force: true });
@@ -1609,17 +1832,39 @@ describe("durable forward-repair skew receipt adapters", () => {
     },
   );
 
-  it("rejects a missing, wrong-environment, or wrong-target forward-repair receipt", async () => {
+  it("authors repair authority without requiring the candidate commit to contain its own SHA", () => {
+    const value = ordinaryRepairAttempt("both");
+    const receipt = bidirectionalSkewReceipt(value);
+    const serialized = JSON.stringify(receipt);
+
+    expect(receipt.candidateSourceSha).toBe(CANDIDATE_SOURCE_REF);
+    expect(receipt.candidateWorkerManifest).toMatchObject({
+      mergeSha: CANDIDATE_SOURCE_REF,
+      treeSha: CANDIDATE_SOURCE_REF,
+    });
+    expect(receipt.candidateDurableObjectManifest).toMatchObject({
+      mergeSha: CANDIDATE_SOURCE_REF,
+      treeSha: CANDIDATE_SOURCE_REF,
+    });
+    expect(serialized).not.toContain(value.target.sourceSha);
+    expect(`production-from-${value.predecessor.lineageParentSourceSha}.json`)
+      .not.toContain(value.target.sourceSha);
+  });
+
+  it("rejects a missing, wrong-environment, or wrong-lineage forward-repair receipt", async () => {
     const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-forward-skew-invalid-"));
     const value = ordinaryRepairAttempt();
     value.target.workerBundleSha256 = CANDIDATE_WORKER_BUNDLE_SHA256;
     const receiptDir = path.join(artifactDir, "product-skew-receipts");
-    const receiptPath = path.join(receiptDir, `production-${value.target.sourceSha}.json`);
+    const receiptPath = path.join(
+      receiptDir,
+      `production-from-${value.predecessor.lineageParentSourceSha}.json`,
+    );
     try {
       await expect(requireApi("readForwardRepairSkewReceiptFile")(
         artifactDir,
         "production",
-        value.target.sourceSha,
+        value.predecessor.lineageParentSourceSha,
       )).rejects.toThrow("skew");
       await mkdir(receiptDir, { recursive: true });
       await writeFile(receiptPath, `${JSON.stringify({
@@ -1629,16 +1874,16 @@ describe("durable forward-repair skew receipt adapters", () => {
       await expect(requireApi("readForwardRepairSkewReceiptFile")(
         artifactDir,
         "production",
-        value.target.sourceSha,
+        value.predecessor.lineageParentSourceSha,
       )).rejects.toThrow("skew");
       await writeFile(receiptPath, `${JSON.stringify({
         ...bidirectionalSkewReceipt(value),
-        candidateSourceSha: FAILED_REPAIR_SHA,
+        predecessorSourceSha: FAILED_REPAIR_SHA,
       }, null, 2)}\n`, "utf8");
       await expect(requireApi("readForwardRepairSkewReceiptFile")(
         artifactDir,
         "production",
-        value.target.sourceSha,
+        value.predecessor.lineageParentSourceSha,
       )).rejects.toThrow("skew");
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
@@ -1672,6 +1917,38 @@ describe("durable forward-repair skew receipt adapters", () => {
     }
   });
 
+  it("rejects an executed receipt that still contains the candidate source token", async () => {
+    const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-executed-candidate-"));
+    const receipt = {
+      ...executedReceiptForActiveSource(ordinaryRepairAttempt()),
+      candidateSourceSha: CANDIDATE_SOURCE_REF,
+      candidateWorkerManifest: {
+        ...executedReceiptForActiveSource(ordinaryRepairAttempt()).candidateWorkerManifest,
+        mergeSha: CANDIDATE_SOURCE_REF,
+        treeSha: CANDIDATE_SOURCE_REF,
+      },
+      candidateDurableObjectManifest: {
+        ...executedReceiptForActiveSource(ordinaryRepairAttempt()).candidateDurableObjectManifest,
+        mergeSha: CANDIDATE_SOURCE_REF,
+        treeSha: CANDIDATE_SOURCE_REF,
+      },
+    };
+    const digest = skewReceiptSha256(receipt);
+    const receiptDir = path.join(artifactDir, "product-skew-receipts");
+    try {
+      await mkdir(receiptDir, { recursive: true });
+      await writeFile(
+        path.join(receiptDir, `executed-${digest}.json`),
+        `${JSON.stringify(receipt, null, 2)}\n`,
+        "utf8",
+      );
+      await expect(requireApi("readExecutedSkewReceiptFile")(artifactDir, digest))
+        .rejects.toThrow("skew");
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true });
+    }
+  });
+
   it.each([
     ["empty", ""],
     ["short", "0".repeat(63)],
@@ -1698,22 +1975,54 @@ describe("product cutover source and lineage preconditions", () => {
   ) => requireApi("assertProductCutoverPreconditions")(value, verification);
 
   it("accepts initial QA activation through indirect compatibility ancestry", async () => {
-    const value = attempt({ environment: "qa" });
-    const verification = verificationEffects();
+    const activeBefore = sourceRecord({
+      sourceSha: QA_COMPATIBILITY_SOURCE_SHA,
+      treeSha: QA_COMPATIBILITY_TREE_SHA,
+      versionId: QA_COMPATIBILITY_VERSION_ID,
+      baseSourceSha: QA_COMPATIBILITY_BASE_SHA,
+    });
+    const value = attempt({
+      environment: "qa",
+      activeBefore,
+      predecessor: predecessorRecord({
+        canonicalSourceSha: QA_COMPATIBILITY_SOURCE_SHA,
+        canonicalTreeSha: QA_COMPATIBILITY_TREE_SHA,
+        lineageParentSourceSha: QA_COMPATIBILITY_SOURCE_SHA,
+      }),
+      compatibilitySourceSha: QA_COMPATIBILITY_SOURCE_SHA,
+      compatibilityVersionId: QA_COMPATIBILITY_VERSION_ID,
+    });
+    const verification = verificationForAttempt(value);
     await expect(check(value, verification)).resolves.toBeUndefined();
     expect(verification.runCommand).toHaveBeenCalledWith(
       "git",
-      ["merge-base", "--is-ancestor", COMPATIBILITY_SOURCE_SHA, TARGET_SOURCE_SHA],
+      ["merge-base", "--is-ancestor", QA_COMPATIBILITY_SOURCE_SHA, TARGET_SOURCE_SHA],
       { env: undefined },
     );
-    expect(TARGET_BASE_SHA).not.toBe(COMPATIBILITY_SOURCE_SHA);
+    expect(TARGET_BASE_SHA).not.toBe(QA_COMPATIBILITY_SOURCE_SHA);
   });
 
   it("rejects initial activation when compatibility is not an ancestor", async () => {
-    const value = attempt({ environment: "qa" });
+    const activeBefore = sourceRecord({
+      sourceSha: QA_COMPATIBILITY_SOURCE_SHA,
+      treeSha: QA_COMPATIBILITY_TREE_SHA,
+      versionId: QA_COMPATIBILITY_VERSION_ID,
+      baseSourceSha: QA_COMPATIBILITY_BASE_SHA,
+    });
+    const value = attempt({
+      environment: "qa",
+      activeBefore,
+      predecessor: predecessorRecord({
+        canonicalSourceSha: QA_COMPATIBILITY_SOURCE_SHA,
+        canonicalTreeSha: QA_COMPATIBILITY_TREE_SHA,
+        lineageParentSourceSha: QA_COMPATIBILITY_SOURCE_SHA,
+      }),
+      compatibilitySourceSha: QA_COMPATIBILITY_SOURCE_SHA,
+      compatibilityVersionId: QA_COMPATIBILITY_VERSION_ID,
+    });
     const verification = verificationForAttempt(value, {
       deniedAncestry: [{
-        ancestor: COMPATIBILITY_SOURCE_SHA,
+        ancestor: QA_COMPATIBILITY_SOURCE_SHA,
         descendant: TARGET_SOURCE_SHA,
       }],
     });
@@ -1800,6 +2109,41 @@ describe("product cutover source and lineage preconditions", () => {
     }
   });
 
+  it("rejects an ordinary repair whose lineage parent is not the canonical active predecessor", async () => {
+    const value = ordinaryRepairAttempt();
+    const unrelatedParent = FAILED_REPAIR_SHA;
+    value.predecessor.lineageParentSourceSha = unrelatedParent;
+    value.target.baseSourceSha = unrelatedParent;
+    const verification = verificationForAttempt(value, {
+      firstParents: { [value.target.sourceSha]: unrelatedParent },
+    });
+
+    await expect(check(value, verification)).rejects.toThrow(/lineage|predecessor/i);
+  });
+
+  it("parses only the root workflow release mode and ignores matching comments", async () => {
+    const value = ordinaryRepairAttempt();
+    const base = gitEvidenceRunner();
+    const runCommand = vi.fn<ReleaseCommandRunner>(async (command, args, options) => {
+      if (command === "git" && args[0] === "show" &&
+          args[1]?.endsWith(":.github/workflows/production-deploy.yml")) {
+        return {
+          stdout: [
+            "# SPOONJOY_RELEASE_MODE: atomic-product-activation",
+            "env:",
+            "  SPOONJOY_RELEASE_MODE: protocol-v1-canary",
+            "",
+          ].join("\n"),
+          stderr: "",
+        };
+      }
+      return base(command, args, options);
+    });
+    const verification = verificationForAttempt(value, {}, { runCommand });
+
+    await expect(check(value, verification)).rejects.toThrow(/release mode/i);
+  });
+
   it.each([
     ["production", "Worker-only", "worker"],
     ["production", "Durable-Object-only", "durable-object"],
@@ -1820,7 +2164,7 @@ describe("product cutover source and lineage preconditions", () => {
 
     await expect(check(value, verification)).resolves.toBeUndefined();
     expect(loadForwardRepairSkewReceipt)
-      .toHaveBeenCalledExactlyOnceWith(environment, value.target.sourceSha);
+      .toHaveBeenCalledExactlyOnceWith(environment, value.predecessor.lineageParentSourceSha);
     expect([
       value.target.workerBundleSha256 !== value.activeBefore.workerBundleSha256,
       value.target.durableObjectBundleSha256 !== value.activeBefore.durableObjectBundleSha256,
@@ -1836,32 +2180,40 @@ describe("product cutover source and lineage preconditions", () => {
         value.activeBefore,
         "durable-object",
       ),
-      candidateWorkerManifest: exactSourceBundleManifest(value.target, "worker"),
-      candidateDurableObjectManifest: exactSourceBundleManifest(value.target, "durable-object"),
-      candidateWorkerWithPredecessorDo: "passed",
-      predecessorWorkerWithCandidateDo: "passed",
+      candidateWorkerManifest: candidateSourceBundleManifest(value.target, "worker"),
+      candidateDurableObjectManifest: candidateSourceBundleManifest(
+        value.target,
+        "durable-object",
+      ),
     });
+    expect(receipt.candidateWorkerWithPredecessorDoBundleSha256)
+      .toMatch(/^[0-9a-f]{64}$/);
+    expect(receipt.predecessorWorkerWithCandidateDoBundleSha256)
+      .toMatch(/^[0-9a-f]{64}$/);
     for (const manifest of [
       receipt.predecessorWorkerManifest,
       receipt.predecessorDurableObjectManifest,
       receipt.candidateWorkerManifest,
       receipt.candidateDurableObjectManifest,
     ]) {
+      const sourceSha = manifest.mergeSha === CANDIDATE_SOURCE_REF
+        ? value.target.sourceSha
+        : manifest.mergeSha;
       expect(manifest.sourceBlobOid).toMatch(/^[0-9a-f]{40}$/);
       expect(manifest.sourceSha256).toMatch(/^[0-9a-f]{64}$/);
       expect(verification.runCommand).toHaveBeenCalledWith(
         "git",
-        ["rev-parse", `${manifest.mergeSha}^{tree}`],
+        ["rev-parse", `${sourceSha}^{tree}`],
         { env: undefined },
       );
       expect(verification.runCommand).toHaveBeenCalledWith(
         "git",
-        ["rev-parse", `${manifest.mergeSha}:${manifest.sourcePath}`],
+        ["rev-parse", `${sourceSha}:${manifest.sourcePath}`],
         { env: undefined },
       );
       expect(verification.runCommand).toHaveBeenCalledWith(
         "git",
-        ["show", `${manifest.mergeSha}:${manifest.sourcePath}`],
+        ["show", `${sourceSha}:${manifest.sourcePath}`],
         { env: undefined },
       );
       const [buildCommand, ...buildArgs] = manifest.buildCommand.split(" ");
@@ -1870,6 +2222,19 @@ describe("product cutover source and lineage preconditions", () => {
         buildArgs,
         { env: undefined },
       );
+    }
+    for (const crossCommand of [
+      crossRuntimeBuildCommand(
+        receipt.candidateWorkerManifest,
+        receipt.predecessorDurableObjectManifest,
+      ),
+      crossRuntimeBuildCommand(
+        receipt.predecessorWorkerManifest,
+        receipt.candidateDurableObjectManifest,
+      ),
+    ]) {
+      const [command, ...args] = crossCommand.split(" ");
+      expect(verification.runCommand).toHaveBeenCalledWith(command, args, { env: undefined });
     }
   });
 
@@ -1888,13 +2253,15 @@ describe("product cutover source and lineage preconditions", () => {
       loadExecutedSkewReceipt,
     }))).resolves.toBeUndefined();
     expect(loadForwardRepairSkewReceipt)
-      .toHaveBeenCalledExactlyOnceWith(environment, QA_ALIAS_SHA);
+      .toHaveBeenCalledExactlyOnceWith(environment, value.predecessor.lineageParentSourceSha);
     expect(loadExecutedSkewReceipt)
       .toHaveBeenCalledExactlyOnceWith(skewReceiptSha256(executedReceipt));
     expect(receipt).toMatchObject({
       reusedExecutedReceiptSha256: skewReceiptSha256(executedReceipt),
-      candidateWorkerWithPredecessorDo: "reused",
-      predecessorWorkerWithCandidateDo: "reused",
+      candidateWorkerWithPredecessorDoBundleSha256:
+        executedReceipt.candidateWorkerWithPredecessorDoBundleSha256,
+      predecessorWorkerWithCandidateDoBundleSha256:
+        executedReceipt.predecessorWorkerWithCandidateDoBundleSha256,
     });
     expect(receipt.candidateWorkerBundleSha256)
       .toBe(receipt.predecessorWorkerBundleSha256);
@@ -1977,15 +2344,11 @@ describe("product cutover source and lineage preconditions", () => {
     ["executed/non-null digest", "executed", (receipt: BidirectionalSkewReceipt) => {
       receipt.reusedExecutedReceiptSha256 = "a".repeat(64);
     }],
-    ["executed/reused-passed", "executed", (receipt: BidirectionalSkewReceipt) => {
-      receipt.candidateWorkerWithPredecessorDo = "reused";
+    ["executed/malformed candidate cross digest", "executed", (receipt: BidirectionalSkewReceipt) => {
+      receipt.candidateWorkerWithPredecessorDoBundleSha256 = "passed";
     }],
-    ["executed/passed-reused", "executed", (receipt: BidirectionalSkewReceipt) => {
-      receipt.predecessorWorkerWithCandidateDo = "reused";
-    }],
-    ["executed/reused-reused", "executed", (receipt: BidirectionalSkewReceipt) => {
-      receipt.candidateWorkerWithPredecessorDo = "reused";
-      receipt.predecessorWorkerWithCandidateDo = "reused";
+    ["executed/uppercase predecessor cross digest", "executed", (receipt: BidirectionalSkewReceipt) => {
+      receipt.predecessorWorkerWithCandidateDoBundleSha256 = "A".repeat(64);
     }],
     ["reuse/null digest", "reused-byte-identical", (receipt: BidirectionalSkewReceipt) => {
       receipt.reusedExecutedReceiptSha256 = null;
@@ -1996,15 +2359,11 @@ describe("product cutover source and lineage preconditions", () => {
     ["reuse/uppercase digest", "reused-byte-identical", (receipt: BidirectionalSkewReceipt) => {
       receipt.reusedExecutedReceiptSha256 = "A".repeat(64);
     }],
-    ["reuse/passed-reused", "reused-byte-identical", (receipt: BidirectionalSkewReceipt) => {
-      receipt.candidateWorkerWithPredecessorDo = "passed";
+    ["reuse/changed candidate cross digest", "reused-byte-identical", (receipt: BidirectionalSkewReceipt) => {
+      receipt.candidateWorkerWithPredecessorDoBundleSha256 = "a".repeat(64);
     }],
-    ["reuse/reused-passed", "reused-byte-identical", (receipt: BidirectionalSkewReceipt) => {
-      receipt.predecessorWorkerWithCandidateDo = "passed";
-    }],
-    ["reuse/passed-passed", "reused-byte-identical", (receipt: BidirectionalSkewReceipt) => {
-      receipt.candidateWorkerWithPredecessorDo = "passed";
-      receipt.predecessorWorkerWithCandidateDo = "passed";
+    ["reuse/changed predecessor cross digest", "reused-byte-identical", (receipt: BidirectionalSkewReceipt) => {
+      receipt.predecessorWorkerWithCandidateDoBundleSha256 = "b".repeat(64);
     }],
   ] as const)("rejects invalid skew evidence coupling: %s", async (
     _label,
@@ -2043,6 +2402,36 @@ describe("product cutover source and lineage preconditions", () => {
   });
 
   it.each([
+    ["predecessor Worker", (receipt: BidirectionalSkewReceipt) => {
+      receipt.predecessorWorkerManifest.buildCommand = crossRuntimeBuildCommand(
+        receipt.predecessorWorkerManifest,
+        receipt.candidateDurableObjectManifest,
+      );
+    }],
+    ["candidate Worker", (receipt: BidirectionalSkewReceipt) => {
+      receipt.candidateWorkerManifest.buildCommand = crossRuntimeBuildCommand(
+        receipt.candidateWorkerManifest,
+        receipt.predecessorDurableObjectManifest,
+      );
+    }],
+  ] as const)("rejects a %s manifest natively paired with the opposite DO", async (
+    _label,
+    mutate,
+  ) => {
+    const value = ordinaryRepairAttempt("both");
+    const receipt = bidirectionalSkewReceipt(value);
+    mutate(receipt);
+    const verification = verificationForAttempt(value, {}, {
+      loadForwardRepairSkewReceipt: vi.fn(async () => receipt),
+    });
+
+    await expect(check(value, verification)).rejects.toThrow("runtime pairing");
+    expect(vi.mocked(verification.runCommand).mock.calls.filter(
+      ([command]) => command === "node",
+    )).toEqual([]);
+  });
+
+  it.each([
     ["has a malformed candidate Worker blob OID", (receipt: BidirectionalSkewReceipt) => {
       receipt.candidateWorkerManifest.sourceBlobOid = "A".repeat(40);
     }],
@@ -2056,12 +2445,10 @@ describe("product cutover source and lineage preconditions", () => {
       receipt.candidateDurableObjectManifest.buildCommand = "";
     }],
     ["failed the candidate-Worker/predecessor-DO matrix", (receipt: BidirectionalSkewReceipt) => {
-      (receipt as { candidateWorkerWithPredecessorDo: string })
-        .candidateWorkerWithPredecessorDo = "failed";
+      receipt.candidateWorkerWithPredecessorDoBundleSha256 = "failed";
     }],
     ["failed the predecessor-Worker/candidate-DO matrix", (receipt: BidirectionalSkewReceipt) => {
-      (receipt as { predecessorWorkerWithCandidateDo: string })
-        .predecessorWorkerWithCandidateDo = "failed";
+      receipt.predecessorWorkerWithCandidateDoBundleSha256 = "failed";
     }],
   ] as const)("rejects an ordinary runtime-changing repair whose skew receipt %s", async (
     _label,
@@ -2198,7 +2585,7 @@ describe("product cutover source and lineage preconditions", () => {
       { env: undefined },
     );
     expect(verification.loadPostRestorationApproval)
-      .toHaveBeenCalledExactlyOnceWith("production", POST_REPAIR_SOURCE_SHA);
+      .toHaveBeenCalledExactlyOnceWith("production", FAILED_RESTORATION_SHA);
   });
 
   it.each([
@@ -2416,7 +2803,7 @@ describe("product cutover source and lineage preconditions", () => {
 
     await expect(check(value, verification)).resolves.toBeUndefined();
     expect(verification.loadPostRestorationApproval)
-      .toHaveBeenCalledExactlyOnceWith("production", NEXT_REPAIR_SHA);
+      .toHaveBeenCalledExactlyOnceWith("production", FAILED_REPAIR_SHA);
     expect(verification.runCommand).toHaveBeenCalledWith(
       "git",
       ["diff", "--name-only", `${RUNTIME_FLOOR_SHA}...${NEXT_REPAIR_SHA}`],
@@ -2455,7 +2842,7 @@ describe("product cutover source and lineage preconditions", () => {
 
     await expect(check(value, verification)).resolves.toBeUndefined();
     expect(loadPostRestorationApproval)
-      .toHaveBeenCalledExactlyOnceWith(environment, value.target.sourceSha);
+      .toHaveBeenCalledExactlyOnceWith(environment, value.predecessor.lineageParentSourceSha);
     expect([
       value.target.workerBundleSha256 !== value.activeBefore.workerBundleSha256,
       value.target.durableObjectBundleSha256 !== value.activeBefore.durableObjectBundleSha256,
@@ -2467,9 +2854,11 @@ describe("product cutover source and lineage preconditions", () => {
     expect(receipt).toMatchObject({
       environment,
       evidenceMode: "executed",
-      candidateWorkerWithPredecessorDo: "passed",
-      predecessorWorkerWithCandidateDo: "passed",
     });
+    expect(receipt.candidateWorkerWithPredecessorDoBundleSha256)
+      .toMatch(/^[0-9a-f]{64}$/);
+    expect(receipt.predecessorWorkerWithCandidateDoBundleSha256)
+      .toMatch(/^[0-9a-f]{64}$/);
   });
 
   it.each(["production", "qa"] as const)(
@@ -2621,7 +3010,11 @@ describe("product cutover source and lineage preconditions", () => {
       approval.changedPathsSha256 = OTHER_BUNDLE_SHA256;
     }],
     ["reviewed path order", (approval: PostRestorationApproval) => {
-      approval.reviewedPaths.reverse();
+      approval.reviewedPaths = [
+        ...approval.reviewedPaths,
+        ".github/workflows/production-deploy.yml",
+      ].sort().reverse();
+      approval.changedPathsSha256 = changedPathsSha256(approval.reviewedPaths);
     }],
     ["duplicate reviewed path", (approval: PostRestorationApproval) => {
       approval.reviewedPaths.push(approval.reviewedPaths[0]);
@@ -2699,12 +3092,10 @@ describe("product cutover source and lineage preconditions", () => {
       receipt.candidateDurableObjectBundleSha256 = OTHER_BUNDLE_SHA256;
     }],
     ["candidate-Worker/predecessor-DO matrix", (receipt: BidirectionalSkewReceipt) => {
-      (receipt as { candidateWorkerWithPredecessorDo: string })
-        .candidateWorkerWithPredecessorDo = "failed";
+      receipt.candidateWorkerWithPredecessorDoBundleSha256 = "failed";
     }],
     ["predecessor-Worker/candidate-DO matrix", (receipt: BidirectionalSkewReceipt) => {
-      (receipt as { predecessorWorkerWithCandidateDo: string })
-        .predecessorWorkerWithCandidateDo = "failed";
+      receipt.predecessorWorkerWithCandidateDoBundleSha256 = "failed";
     }],
   ])("rejects invalid bidirectional skew receipt: %s", async (_label, mutate) => {
     const value = postRestorationAttempt(FAILED_REPAIR_SHA, NEXT_REPAIR_SHA);
@@ -3168,6 +3559,46 @@ function exactSourceBundleManifest(
   };
 }
 
+function candidateSourceBundleManifest(
+  source: CutoverSourceRecord,
+  kind: "worker" | "durable-object",
+): ExactSourceBundleManifest {
+  return {
+    ...exactSourceBundleManifest(source, kind),
+    mergeSha: CANDIDATE_SOURCE_REF,
+    treeSha: CANDIDATE_SOURCE_REF,
+  };
+}
+
+function sourceFixturePath(manifest: ExactSourceBundleManifest): string {
+  return manifest.buildCommand.split(" ")[2];
+}
+
+function crossRuntimeBuildCommand(
+  worker: ExactSourceBundleManifest,
+  durableObject: ExactSourceBundleManifest,
+): string {
+  return `node ${RUNTIME_BUNDLE_BUILDER_PATH} ${sourceFixturePath(worker)} ` +
+    `--durable-object ${sourceFixturePath(durableObject)}`;
+}
+
+function runtimeBuildDigest(buildCommand: string): string {
+  const cached = RUNTIME_BUILD_DIGEST_CACHE.get(buildCommand);
+  if (cached) return cached;
+  const manifestDigests = [...new Set(ALL_RUNTIME_MANIFESTS
+    .filter((manifest) => manifest.buildCommand === buildCommand)
+    .map((manifest) => manifest.bundleSha256))];
+  const digest = manifestDigests.length === 1
+    ? manifestDigests[0]
+    : (JSON.parse(execFileSync(
+        buildCommand.split(" ")[0],
+        buildCommand.split(" ").slice(1),
+        { encoding: "utf8" },
+      )) as { bundleSha256: string }).bundleSha256;
+  RUNTIME_BUILD_DIGEST_CACHE.set(buildCommand, digest);
+  return digest;
+}
+
 function canonicalEvidenceJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalEvidenceJson).join(",")}]`;
   if (value && typeof value === "object") {
@@ -3194,29 +3625,49 @@ function bidirectionalSkewReceipt(
     workerBundleSha256: value.predecessor.canonicalWorkerBundleSha256,
     durableObjectBundleSha256: value.predecessor.canonicalDurableObjectBundleSha256,
   });
+  const predecessorWorkerManifest = exactSourceBundleManifest(predecessorSource, "worker");
+  const predecessorDurableObjectManifest = exactSourceBundleManifest(
+    predecessorSource,
+    "durable-object",
+  );
+  const candidateWorkerManifest = exactSourceBundleManifest(value.target, "worker");
+  const candidateDurableObjectManifest = exactSourceBundleManifest(
+    value.target,
+    "durable-object",
+  );
+  candidateWorkerManifest.mergeSha = CANDIDATE_SOURCE_REF;
+  candidateWorkerManifest.treeSha = CANDIDATE_SOURCE_REF;
+  candidateDurableObjectManifest.mergeSha = CANDIDATE_SOURCE_REF;
+  candidateDurableObjectManifest.treeSha = CANDIDATE_SOURCE_REF;
+  const executedReceipt = evidenceMode === "reused-byte-identical"
+    ? reusedReceipt ?? executedReceiptForActiveSource(value)
+    : null;
   return {
     schemaVersion: 1,
     environment: value.environment,
     evidenceMode,
     reusedExecutedReceiptSha256: evidenceMode === "reused-byte-identical"
-      ? skewReceiptSha256(reusedReceipt ?? executedReceiptForActiveSource(value))
+      ? skewReceiptSha256(executedReceipt!)
       : null,
     predecessorSourceSha: value.predecessor.canonicalSourceSha,
-    candidateSourceSha: value.target.sourceSha,
+    candidateSourceSha: CANDIDATE_SOURCE_REF,
     predecessorWorkerBundleSha256: value.predecessor.canonicalWorkerBundleSha256,
     predecessorDurableObjectBundleSha256:
       value.predecessor.canonicalDurableObjectBundleSha256,
     candidateWorkerBundleSha256: value.target.workerBundleSha256,
     candidateDurableObjectBundleSha256: value.target.durableObjectBundleSha256,
-    predecessorWorkerManifest: exactSourceBundleManifest(predecessorSource, "worker"),
-    predecessorDurableObjectManifest: exactSourceBundleManifest(
-      predecessorSource,
-      "durable-object",
-    ),
-    candidateWorkerManifest: exactSourceBundleManifest(value.target, "worker"),
-    candidateDurableObjectManifest: exactSourceBundleManifest(value.target, "durable-object"),
-    candidateWorkerWithPredecessorDo: evidenceMode === "executed" ? "passed" : "reused",
-    predecessorWorkerWithCandidateDo: evidenceMode === "executed" ? "passed" : "reused",
+    predecessorWorkerManifest,
+    predecessorDurableObjectManifest,
+    candidateWorkerManifest,
+    candidateDurableObjectManifest,
+    candidateWorkerWithPredecessorDoBundleSha256: executedReceipt
+      ?.candidateWorkerWithPredecessorDoBundleSha256 ?? runtimeBuildDigest(
+        crossRuntimeBuildCommand(candidateWorkerManifest, predecessorDurableObjectManifest),
+      ),
+    predecessorWorkerWithCandidateDoBundleSha256: executedReceipt
+      ?.predecessorWorkerWithCandidateDoBundleSha256 ?? runtimeBuildDigest(
+        crossRuntimeBuildCommand(predecessorWorkerManifest, candidateDurableObjectManifest),
+      ),
   };
 }
 
@@ -3236,7 +3687,16 @@ function executedReceiptForActiveSource(value: CutoverAttempt): BidirectionalSke
     }),
     predecessor: predecessorRecord(),
   });
-  return bidirectionalSkewReceipt(prior);
+  const receipt = bidirectionalSkewReceipt(prior);
+  receipt.candidateSourceSha = prior.target.sourceSha;
+  for (const manifest of [
+    receipt.candidateWorkerManifest,
+    receipt.candidateDurableObjectManifest,
+  ]) {
+    manifest.mergeSha = prior.target.sourceSha;
+    manifest.treeSha = prior.target.treeSha;
+  }
+  return receipt;
 }
 
 function validWrongSourceExecutedReceipt(value: CutoverAttempt): BidirectionalSkewReceipt {
@@ -3291,7 +3751,7 @@ function postRestorationApproval(
     originalFailedRestorationSourceSha:
       value.predecessor.originalFailedRestorationSourceSha ?? FAILED_RESTORATION_SHA,
     lineageParentSourceSha: value.predecessor.lineageParentSourceSha,
-    targetSourceSha: value.target.sourceSha,
+    targetSourceSha: CANDIDATE_SOURCE_REF,
     changedPathsSha256: changedPathsSha256(reviewedPaths),
     reviewedPaths,
     skewReceipt: bidirectionalSkewReceipt(value),
@@ -3302,18 +3762,19 @@ function postRestorationApproval(
 describe("shared QA and production product-cutover runner", () => {
   it.each([
     ["production initial", () => attempt()],
-    ["QA initial", () => attempt({ environment: "qa" })],
+    ["QA initial", () => initialAttempt("qa")],
     ["same-target reconciliation", () => sameTargetAttempt()],
     ["ordinary repair", () => ordinaryRepairAttempt()],
     ["post-restoration repair", () => postRestorationAttempt(FAILED_RESTORATION_SHA)],
   ] as const)("awaits all durable lifecycle writes for %s", async (_label, makeAttempt) => {
-    for (const failingWrite of [1, 2, 3, 4, 5, 6, 7, 8, 9]) {
-    let writeCount = 0;
+    const writeCount = makeAttempt().transition === "initial" ? 10 : 9;
+    for (const failingWrite of Array.from({ length: writeCount }, (_, index) => index + 1)) {
+    let observedWriteCount = 0;
     const runAttempt = makeAttempt();
     const runEffects = successfulEffectsForAttempt(runAttempt, {
       writeEvidence: vi.fn(async () => {
-        writeCount += 1;
-        if (writeCount === failingWrite) {
+        observedWriteCount += 1;
+        if (observedWriteCount === failingWrite) {
           throw new Error(`evidence write ${failingWrite} failed`);
         }
       }),
@@ -3321,21 +3782,25 @@ describe("shared QA and production product-cutover runner", () => {
 
     await expect(requireApi("runProductCutover")(runAttempt, runEffects))
       .rejects.toThrow(`evidence write ${failingWrite} failed`);
-    expect(runEffects.writeEvidence).toHaveBeenCalledTimes(failingWrite);
+    expect(vi.mocked(runEffects.writeEvidence).mock.calls.length)
+      .toBeGreaterThanOrEqual(failingWrite);
     if (failingWrite === 1) {
       expect(runEffects.readPreflight).not.toHaveBeenCalled();
     }
     if (failingWrite <= 3) {
       expect(runEffects.createRecoveryBookmark).not.toHaveBeenCalled();
+    }
+    if (failingWrite <= 4) {
       expect(runEffects.applyMigration).not.toHaveBeenCalled();
     }
     if (failingWrite <= 5) {
       expect(runEffects.deployTarget).not.toHaveBeenCalled();
     }
-    if (failingWrite <= 7) {
+    const unlockPendingWrite = runAttempt.transition === "initial" ? 8 : 7;
+    if (failingWrite <= unlockPendingWrite) {
       expect(runEffects.applyUnlock).not.toHaveBeenCalled();
     }
-    if (failingWrite <= 8) {
+    if (failingWrite <= unlockPendingWrite + 1) {
       expect(runEffects.recordQaBinding).not.toHaveBeenCalled();
     }
     }
@@ -3346,7 +3811,7 @@ describe("shared QA and production product-cutover runner", () => {
     const runEffects = successfulEffectsForAttempt(runAttempt, {
       runCommand: gitEvidenceRunner({
         deniedAncestry: [{
-          ancestor: PROTOCOL_BOUNDARY_SHA,
+          ancestor: runAttempt.protocolBoundarySha,
           descendant: runAttempt.target.sourceSha,
         }],
       }),
@@ -3393,8 +3858,9 @@ describe("shared QA and production product-cutover runner", () => {
     "runs %s preflight, bookmark, migration, exact deployment, health, and unlock in order",
     async (environment) => {
       const sql = await migrationSql();
-      const runEffects = effects();
-      const runAttempt = attempt({ environment, migrationSql: sql });
+      const runAttempt = initialAttempt(environment);
+      runAttempt.migrationSql = sql;
+      const runEffects = effects({}, runAttempt);
 
       const result = await requireApi("runProductCutover")(runAttempt, runEffects);
 
@@ -3416,6 +3882,21 @@ describe("shared QA and production product-cutover runner", () => {
         environment,
         observedTarget(),
       );
+      expect(runEffects.assertDeploymentOwnership).toHaveBeenNthCalledWith(
+        1,
+        environment,
+        runAttempt.activeBefore,
+      );
+      expect(runEffects.assertDeploymentOwnership).toHaveBeenNthCalledWith(
+        2,
+        environment,
+        runAttempt.activeBefore,
+      );
+      expect(runEffects.assertDeploymentOwnership).toHaveBeenNthCalledWith(
+        3,
+        environment,
+        { ...runAttempt.target, versionId: TARGET_VERSION_ID },
+      );
       expect(runEffects.applyUnlock).toHaveBeenCalledExactlyOnceWith(
         environment,
         UNLOCK_STATEMENTS,
@@ -3429,25 +3910,31 @@ describe("shared QA and production product-cutover runner", () => {
       expect(runEffects.deployTarget.mock.invocationCallOrder[0])
         .toBeLessThan(runEffects.applyUnlock.mock.invocationCallOrder[0]);
       if (environment === "production") {
-        const activeQaSource = await runEffects.readQaActiveSource.mock.results[0]?.value;
-        expect(runEffects.readQaActiveSource).toHaveBeenCalledTimes(1);
+        const activeQaSource = await runEffects.readQaActiveSource.mock.results[1]?.value;
+        expect(runEffects.readQaActiveSource).toHaveBeenCalledTimes(2);
         expect(runEffects.recordQaBinding).toHaveBeenCalledExactlyOnceWith(
           activeQaSource,
           predecessorRecord({
             relationship: "same-build-alias",
             canonicalSourceSha: runAttempt.target.sourceSha,
+            canonicalTreeSha: runAttempt.target.treeSha,
+            canonicalWorkerBundleSha256: runAttempt.target.workerBundleSha256,
+            canonicalDurableObjectBundleSha256:
+              runAttempt.target.durableObjectBundleSha256,
             lineageParentSourceSha: runAttempt.target.sourceSha,
           }),
         );
         expect(runEffects.applyUnlock.mock.invocationCallOrder[0])
           .toBeLessThan(runEffects.recordQaBinding.mock.invocationCallOrder[0]);
         expect(runEffects.readTriggerInventory).toHaveBeenCalledTimes(2);
-        expect(runEffects.readTriggerInventory.mock.invocationCallOrder[1])
-          .toBeLessThan(runEffects.readQaActiveSource.mock.invocationCallOrder[0]);
         expect(runEffects.readQaActiveSource.mock.invocationCallOrder[0])
+          .toBeLessThan(runEffects.applyMigration.mock.invocationCallOrder[0]);
+        expect(runEffects.readQaActiveSource.mock.invocationCallOrder[1])
+          .toBeLessThan(runEffects.recordQaBinding.mock.invocationCallOrder[0]);
+        expect(runEffects.readTriggerInventory.mock.invocationCallOrder[1])
           .toBeLessThan(runEffects.recordQaBinding.mock.invocationCallOrder[0]);
         expect(runEffects.recordQaBinding.mock.invocationCallOrder[0])
-          .toBeLessThan(runEffects.writeEvidence.mock.invocationCallOrder[8]);
+          .toBeLessThan(runEffects.writeEvidence.mock.invocationCallOrder[9]);
       } else {
         expect(runEffects.readQaActiveSource).not.toHaveBeenCalled();
         expect(runEffects.recordQaBinding).not.toHaveBeenCalled();
@@ -3455,7 +3942,36 @@ describe("shared QA and production product-cutover runner", () => {
     },
   );
 
-  it("propagates QA rebinding failure only after zero-trigger readback", async () => {
+  it.each(["qa", "production"] as const)(
+    "resumes %s initial activation after an already-applied migration with exact closed fences",
+    async (environment) => {
+      const runAttempt = initialAttempt(environment);
+      const runEffects = effects({
+        readPendingMigrationNames: vi.fn(async () => []),
+      }, runAttempt);
+
+      await expect(requireApi("runProductCutover")(runAttempt, runEffects)).resolves.toMatchObject({
+        environment,
+        transition: "initial",
+        phase: "verified",
+        status: "succeeded",
+        migration: {
+          recoveryBookmarkId: null,
+          applyState: "already_applied",
+          triggerInventory: [...BOTH_TRIGGERS],
+        },
+      });
+      expect(runEffects.createRecoveryBookmark).not.toHaveBeenCalled();
+      expect(runEffects.applyMigration).not.toHaveBeenCalled();
+      expect(runEffects.deployTarget).toHaveBeenCalledExactlyOnceWith(environment, runAttempt.target);
+      expect(runEffects.applyUnlock).toHaveBeenCalledExactlyOnceWith(
+        environment,
+        UNLOCK_STATEMENTS,
+      );
+    },
+  );
+
+  it("verifies QA before mutation and persists a terminal failure if rebinding cannot finalize", async () => {
     const runEffects = effects({
       recordQaBinding: vi.fn(async () => {
         throw new Error("QA rebinding failed");
@@ -3465,14 +3981,119 @@ describe("shared QA and production product-cutover runner", () => {
     await expect(requireApi("runProductCutover")(attempt(), runEffects))
       .rejects.toThrow("QA rebinding failed");
     expect(runEffects.readTriggerInventory).toHaveBeenCalledTimes(2);
-    expect(runEffects.readTriggerInventory.mock.invocationCallOrder[1])
-      .toBeLessThan(runEffects.readQaActiveSource.mock.invocationCallOrder[0]);
     expect(runEffects.readQaActiveSource.mock.invocationCallOrder[0])
+      .toBeLessThan(runEffects.applyMigration.mock.invocationCallOrder[0]);
+    expect(runEffects.readTriggerInventory.mock.invocationCallOrder[1])
       .toBeLessThan(runEffects.recordQaBinding.mock.invocationCallOrder[0]);
-    expect(runEffects.writeEvidence).toHaveBeenCalledTimes(8);
+    expect(runEffects.writeEvidence).toHaveBeenCalledTimes(10);
     expect(writtenLifecycleArtifacts(runEffects).at(-1)).toMatchObject({
       phase: "unlock",
-      status: "succeeded",
+      status: "failed",
+      failure: { classification: "artifact_invalid" },
+    });
+  });
+
+  it("persists the recovery bookmark before the reviewed migration can mutate D1", async () => {
+    const runEffects = effects();
+    await expect(requireApi("runProductCutover")(attempt(), runEffects)).resolves.toBeDefined();
+    const rawArtifacts = vi.mocked(runEffects.writeEvidence).mock.calls.map(([value]) => value);
+    const migrationPending = rawArtifacts.filter(
+      ({ phase, status }) => phase === "migration" && status === "pending",
+    );
+    expect(migrationPending).toHaveLength(2);
+    expect(migrationPending[0].migration.recoveryBookmarkId).toBeNull();
+    expect(migrationPending[1].migration).toMatchObject({
+      recoveryBookmarkId: RECOVERY_BOOKMARK_ID,
+      applyState: "not_started",
+      triggerInventory: null,
+    });
+    expect(runEffects.writeEvidence.mock.invocationCallOrder[3])
+      .toBeLessThan(runEffects.applyMigration.mock.invocationCallOrder[0]);
+  });
+
+  it("retains a durable pre-mutation bookmark when retry proves migration already applied", async () => {
+    const runAttempt = attempt();
+    const previous = artifactForPhase("migration", "pending");
+    previous.activeBefore = clone(runAttempt.activeBefore);
+    previous.target = clone(runAttempt.target);
+    previous.predecessor = clone(runAttempt.predecessor);
+    previous.protocolBoundarySha = runAttempt.protocolBoundarySha;
+    previous.compatibilitySourceSha = runAttempt.compatibilitySourceSha;
+    previous.migration.name = runAttempt.migrationName;
+    previous.migration.sha256 = runAttempt.migrationSha256;
+    previous.deployment.sourceSha = runAttempt.target.sourceSha;
+    previous.migration.recoveryBookmarkId = RECOVERY_BOOKMARK_ID;
+    const readEvidence = vi.fn(async () => previous);
+    const runEffects = effects({
+      readEvidence,
+      readPendingMigrationNames: vi.fn(async () => []),
+    }, runAttempt);
+
+    const result = await requireApi("runProductCutover")(runAttempt, runEffects);
+
+    expect(readEvidence).toHaveBeenCalledExactlyOnceWith();
+    expect(result.migration).toMatchObject({
+      recoveryBookmarkId: RECOVERY_BOOKMARK_ID,
+      applyState: "already_applied",
+      triggerInventory: [...BOTH_TRIGGERS],
+    });
+    expect(vi.mocked(runEffects.writeEvidence).mock.calls.every(
+      ([value]) => value.migration.recoveryBookmarkId === RECOVERY_BOOKMARK_ID,
+    )).toBe(true);
+    expect(runEffects.createRecoveryBookmark).not.toHaveBeenCalled();
+    expect(runEffects.applyMigration).not.toHaveBeenCalled();
+  });
+
+  it("does not carry recovery evidence from a different immutable attempt", async () => {
+    const previous = artifactForPhase("migration", "pending");
+    previous.migration.recoveryBookmarkId = RECOVERY_BOOKMARK_ID;
+    const freshBookmark = "fresh-recovery-bookmark";
+    const runEffects = effects({
+      readEvidence: vi.fn(async () => previous),
+      createRecoveryBookmark: vi.fn(async () => freshBookmark),
+    });
+
+    const result = await requireApi("runProductCutover")(attempt(), runEffects);
+
+    expect(result.migration.recoveryBookmarkId).toBe(freshBookmark);
+    expect(runEffects.createRecoveryBookmark).toHaveBeenCalledExactlyOnceWith("production");
+    expect(vi.mocked(runEffects.writeEvidence).mock.calls.some(
+      ([value]) => value.migration.recoveryBookmarkId === RECOVERY_BOOKMARK_ID,
+    )).toBe(false);
+  });
+
+  it("fails QA verification in precheck before any D1 or deployment mutation", async () => {
+    const runEffects = effects({
+      readQaActiveSource: vi.fn(async () => Promise.reject(new Error("QA unavailable"))),
+    });
+    await expect(requireApi("runProductCutover")(attempt(), runEffects))
+      .rejects.toThrow("QA unavailable");
+    expect(writtenLifecycleArtifacts(runEffects).at(-1)).toMatchObject({
+      phase: "precheck",
+      status: "failed",
+      failure: { classification: "precondition_mismatch" },
+    });
+    expect(runEffects.createRecoveryBookmark).not.toHaveBeenCalled();
+    expect(runEffects.applyMigration).not.toHaveBeenCalled();
+    expect(runEffects.deployTarget).not.toHaveBeenCalled();
+    expect(runEffects.applyUnlock).not.toHaveBeenCalled();
+  });
+
+  it("falls back to terminal post-unlock evidence when the verified-state write fails", async () => {
+    let writes = 0;
+    const writeEvidence = vi.fn(async () => {
+      writes += 1;
+      if (writes === 10) throw new Error("verified state write failed");
+    });
+    const runEffects = effects({ writeEvidence });
+    await expect(requireApi("runProductCutover")(attempt(), runEffects))
+      .rejects.toThrow("verified state write failed");
+    expect(writeEvidence).toHaveBeenCalledTimes(11);
+    expect(writtenLifecycleArtifacts(runEffects).at(-1)).toMatchObject({
+      phase: "unlock",
+      status: "failed",
+      unlock: { applyState: "applied", inventoryAfter: [] },
+      failure: { classification: "artifact_invalid" },
     });
   });
 
@@ -3528,7 +4149,7 @@ describe("shared QA and production product-cutover runner", () => {
       deployment,
     });
     expect(runEffects.loadPostRestorationApproval)
-      .toHaveBeenCalledExactlyOnceWith("production", POST_REPAIR_SOURCE_SHA);
+      .toHaveBeenCalledExactlyOnceWith("production", FAILED_RESTORATION_SHA);
     expectSuccessfulLifecycleWrites(
       runEffects,
       "production",
@@ -3548,7 +4169,13 @@ describe("shared QA and production product-cutover runner", () => {
       predecessorRecord({
         relationship: "same-build-alias",
         canonicalSourceSha: POST_REPAIR_SOURCE_SHA,
+        canonicalTreeSha: runAttempt.target.treeSha,
+        canonicalWorkerBundleSha256: runAttempt.target.workerBundleSha256,
+        canonicalDurableObjectBundleSha256: runAttempt.target.durableObjectBundleSha256,
         lineageParentSourceSha: POST_REPAIR_SOURCE_SHA,
+        runtimeFloorSourceSha: runAttempt.predecessor.runtimeFloorSourceSha,
+        originalFailedRestorationSourceSha:
+          runAttempt.predecessor.originalFailedRestorationSourceSha,
       }),
     );
   });
@@ -3593,6 +4220,8 @@ describe("shared QA and production product-cutover runner", () => {
     ["tree", { treeSha: OTHER_TREE_SHA }],
     ["Worker bundle", { workerBundleSha256: OTHER_BUNDLE_SHA256 }],
     ["Durable Object bundle", { durableObjectBundleSha256: OTHER_BUNDLE_SHA256 }],
+    ["missing live version", { versionId: null }],
+    ["non-product release mode", { releaseMode: "atomic-bootstrap" as const }],
   ])("does not record an invalid QA alias after production when %s differs", async (
     _label,
     mismatch,
@@ -3612,8 +4241,12 @@ describe("shared QA and production product-cutover runner", () => {
   });
 
   it("records an exact QA binding when QA already runs the production merge source", async () => {
+    const runAttempt = attempt();
     const activeQaSource = sourceRecord({
       sourceSha: TARGET_SOURCE_SHA,
+      treeSha: runAttempt.target.treeSha,
+      workerBundleSha256: runAttempt.target.workerBundleSha256,
+      durableObjectBundleSha256: runAttempt.target.durableObjectBundleSha256,
       versionId: TARGET_VERSION_ID,
       releaseMode: "atomic-product-activation",
     });
@@ -3621,13 +4254,51 @@ describe("shared QA and production product-cutover runner", () => {
       readQaActiveSource: vi.fn(async () => activeQaSource),
     });
 
-    await expect(requireApi("runProductCutover")(attempt(), runEffects)).resolves.toMatchObject({
+    await expect(requireApi("runProductCutover")(runAttempt, runEffects)).resolves.toMatchObject({
       status: "succeeded",
     });
     expect(runEffects.recordQaBinding).toHaveBeenCalledExactlyOnceWith(
       activeQaSource,
       predecessorRecord({
         canonicalSourceSha: TARGET_SOURCE_SHA,
+        canonicalTreeSha: runAttempt.target.treeSha,
+        canonicalWorkerBundleSha256: runAttempt.target.workerBundleSha256,
+        canonicalDurableObjectBundleSha256: runAttempt.target.durableObjectBundleSha256,
+        lineageParentSourceSha: TARGET_SOURCE_SHA,
+      }),
+    );
+  });
+
+  it("records the freshly re-read QA source after a concurrent valid QA deployment", async () => {
+    const runAttempt = attempt();
+    const precheckAlias = sourceRecord({
+      sourceSha: QA_ALIAS_SHA,
+      treeSha: runAttempt.target.treeSha,
+      workerBundleSha256: runAttempt.target.workerBundleSha256,
+      durableObjectBundleSha256: runAttempt.target.durableObjectBundleSha256,
+      versionId: ACTIVE_VERSION_ID,
+      releaseMode: "atomic-product-activation",
+    });
+    const currentExactSource = {
+      ...runAttempt.target,
+      versionId: TARGET_VERSION_ID,
+    };
+    const readQaActiveSource = vi.fn()
+      .mockResolvedValueOnce(precheckAlias)
+      .mockResolvedValueOnce(currentExactSource);
+    const runEffects = effects({ readQaActiveSource });
+
+    await expect(requireApi("runProductCutover")(runAttempt, runEffects))
+      .resolves.toMatchObject({ status: "succeeded" });
+
+    expect(readQaActiveSource).toHaveBeenCalledTimes(2);
+    expect(runEffects.recordQaBinding).toHaveBeenCalledExactlyOnceWith(
+      currentExactSource,
+      predecessorRecord({
+        canonicalSourceSha: TARGET_SOURCE_SHA,
+        canonicalTreeSha: runAttempt.target.treeSha,
+        canonicalWorkerBundleSha256: runAttempt.target.workerBundleSha256,
+        canonicalDurableObjectBundleSha256: runAttempt.target.durableObjectBundleSha256,
         lineageParentSourceSha: TARGET_SOURCE_SHA,
       }),
     );
@@ -3742,6 +4413,29 @@ describe("shared QA and production product-cutover runner", () => {
     }
   });
 
+  it("classifies malformed trigger inventory evidence as an ambiguous migration state", async () => {
+    const runEffects = effects({
+      readTriggerInventory: vi.fn(async () => [42] as unknown as string[]),
+    });
+    await expect(requireApi("runProductCutover")(
+      attempt(),
+      runEffects,
+    )).rejects.toThrow("inventory evidence is invalid");
+    expectTerminalFailureLifecycle(
+      runEffects,
+      attempt(),
+      [
+        "precheck:pending",
+        "precheck:succeeded",
+        "migration:pending",
+        "migration:failed",
+      ],
+      "migration",
+      "migration_state_ambiguous",
+    );
+    expect(writtenLifecycleArtifacts(runEffects).at(-1)?.migration.triggerInventory).toBeNull();
+  });
+
   it.each([
     [[]],
     [[INSERT_TRIGGER]],
@@ -3774,6 +4468,9 @@ describe("shared QA and production product-cutover runner", () => {
       predecessorRecord({
         relationship: "same-build-alias",
         canonicalSourceSha: REPAIR_SOURCE_SHA,
+        canonicalTreeSha: repairAttempt.target.treeSha,
+        canonicalWorkerBundleSha256: repairAttempt.target.workerBundleSha256,
+        canonicalDurableObjectBundleSha256: repairAttempt.target.durableObjectBundleSha256,
         lineageParentSourceSha: REPAIR_SOURCE_SHA,
       }),
     );
@@ -3845,6 +4542,7 @@ describe("shared QA and production product-cutover runner", () => {
   it.each(["qa", "production"] as const)(
     "reconciles a lost %s migration response only from exact applied state and closed triggers",
     async (environment) => {
+    const runAttempt = initialAttempt(environment);
     const runEffects = effects({
       applyMigration: vi.fn(async () => {
         throw new Error("lost response");
@@ -3852,9 +4550,9 @@ describe("shared QA and production product-cutover runner", () => {
       readPendingMigrationNames: vi.fn()
         .mockResolvedValueOnce([MIGRATION_NAME])
         .mockResolvedValue([]),
-    });
+    }, runAttempt);
     await expect(requireApi("runProductCutover")(
-      attempt({ environment }),
+      runAttempt,
       runEffects,
     )).resolves.toMatchObject({
       migration: { applyState: "ambiguous_reconciled" },
@@ -3884,7 +4582,9 @@ describe("shared QA and production product-cutover runner", () => {
       applyMigration: vi.fn(async () => {
         throw new Error("lost response");
       }),
-      readPendingMigrationNames: vi.fn(async () => pending),
+      readPendingMigrationNames: vi.fn()
+        .mockResolvedValueOnce([MIGRATION_NAME])
+        .mockResolvedValue(pending),
       readTriggerInventory: vi.fn(async () => triggers),
     });
     await expect(requireApi("runProductCutover")(
@@ -3906,16 +4606,43 @@ describe("shared QA and production product-cutover runner", () => {
     expect(runEffects.deployTarget).not.toHaveBeenCalled();
   });
 
+  it("persists valid terminal evidence when migration reconciliation itself cannot read D1", async () => {
+    const runEffects = effects({
+      applyMigration: vi.fn(async () => {
+        throw new Error("migration response lost");
+      }),
+      readPendingMigrationNames: vi.fn()
+        .mockResolvedValueOnce([MIGRATION_NAME])
+        .mockRejectedValueOnce(new Error("pending inventory unavailable")),
+    });
+
+    await expect(requireApi("runProductCutover")(attempt(), runEffects))
+      .rejects.toThrow("ambiguous");
+    expectTerminalFailureLifecycle(
+      runEffects,
+      attempt(),
+      [
+        "precheck:pending",
+        "precheck:succeeded",
+        "migration:pending",
+        "migration:failed",
+      ],
+      "migration",
+      "migration_state_ambiguous",
+    );
+  });
+
   it.each(["qa", "production"] as const)(
     "reconciles a lost %s deploy response only from exact target identity at 100%",
     async (environment) => {
+    const runAttempt = initialAttempt(environment);
     const runEffects = effects({
       deployTarget: vi.fn(async () => {
         throw new Error("lost deploy response");
       }),
-    });
+    }, runAttempt);
     await expect(requireApi("runProductCutover")(
-      attempt({ environment }),
+      runAttempt,
       runEffects,
     )).resolves.toMatchObject({ status: "succeeded", deployment: observedTarget() });
     expect(writtenLifecycleArtifacts(runEffects).map(
@@ -3964,6 +4691,30 @@ describe("shared QA and production product-cutover runner", () => {
       "target_identity_mismatch",
     );
     expect(runEffects.applyUnlock).not.toHaveBeenCalled();
+  });
+
+  it("persists valid terminal evidence when target topology cannot be observed after upload", async () => {
+    const runEffects = effects({
+      observeDeployment: vi.fn()
+        .mockRejectedValueOnce(new Error("deployment inventory unavailable")),
+    });
+
+    await expect(requireApi("runProductCutover")(attempt(), runEffects))
+      .rejects.toThrow("ambiguous");
+    expectTerminalFailureLifecycle(
+      runEffects,
+      attempt(),
+      [
+        "precheck:pending",
+        "precheck:succeeded",
+        "migration:pending",
+        "migration:succeeded",
+        "deployment:pending",
+        "deployment:failed",
+      ],
+      "deployment",
+      "deployment_state_ambiguous",
+    );
   });
 
   it("classifies a failed activation as ambiguous while the old source remains active", async () => {
@@ -4077,6 +4828,9 @@ describe("shared QA and production product-cutover runner", () => {
       predecessorRecord({
         relationship: "same-build-alias",
         canonicalSourceSha: TARGET_SOURCE_SHA,
+        canonicalTreeSha: retry.target.treeSha,
+        canonicalWorkerBundleSha256: retry.target.workerBundleSha256,
+        canonicalDurableObjectBundleSha256: retry.target.durableObjectBundleSha256,
         lineageParentSourceSha: TARGET_SOURCE_SHA,
       }),
     );
@@ -4113,13 +4867,14 @@ describe("shared QA and production product-cutover runner", () => {
   it.each(["qa", "production"] as const)(
     "reconciles a lost %s unlock response only after zero-trigger readback",
     async (environment) => {
+    const runAttempt = initialAttempt(environment);
     const runEffects = effects({
       applyUnlock: vi.fn(async () => {
         throw new Error("lost unlock response");
       }),
-    });
+    }, runAttempt);
     await expect(requireApi("runProductCutover")(
-      attempt({ environment }),
+      runAttempt,
       runEffects,
     )).resolves.toMatchObject({
       unlock: { applyState: "ambiguous_reconciled", inventoryAfter: [] },
@@ -4164,20 +4919,20 @@ describe("shared QA and production product-cutover runner", () => {
       "unlock",
       "unlock_state_ambiguous",
     );
-    expect(runEffects.readQaActiveSource).not.toHaveBeenCalled();
+    expect(runEffects.readQaActiveSource).toHaveBeenCalledExactlyOnceWith();
     expect(runEffects.recordQaBinding).not.toHaveBeenCalled();
   });
 
   it("never unlocks a different active target after deployment", async () => {
-    const runEffects = effects({
-      observeDeployment: vi.fn()
-        .mockResolvedValueOnce(observedTarget())
-        .mockResolvedValueOnce(observedTarget({ sourceSha: REPAIR_SOURCE_SHA })),
-    });
+    const assertDeploymentOwnership = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("deployment ownership changed before unlock"));
+    const runEffects = effects({ assertDeploymentOwnership });
     await expect(requireApi("runProductCutover")(
       attempt(),
       runEffects,
-    )).rejects.toThrow("target");
+    )).rejects.toThrow("ownership changed");
     expectTerminalFailureLifecycle(
       runEffects,
       attempt(),
@@ -4187,11 +4942,35 @@ describe("shared QA and production product-cutover runner", () => {
         "migration:pending",
         "migration:succeeded",
         "deployment:pending",
-        "deployment:failed",
+        "deployment:succeeded",
+        "unlock:pending",
+        "unlock:failed",
       ],
-      "deployment",
-      "target_identity_mismatch",
+      "unlock",
+      "unlock_state_ambiguous",
     );
+    expect(runEffects.applyUnlock).not.toHaveBeenCalled();
+  });
+
+  it("rechecks target ownership after trigger inventory capture and before unlock", async () => {
+    const assertDeploymentOwnership = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("deployment replaced after inventory capture"));
+    const runEffects = effects({ assertDeploymentOwnership });
+    await expect(requireApi("runProductCutover")(attempt(), runEffects))
+      .rejects.toThrow("replaced after inventory capture");
+    expect(writtenLifecycleArtifacts(runEffects).at(-1)).toMatchObject({
+      phase: "unlock",
+      status: "failed",
+      unlock: {
+        inventoryBefore: [...BOTH_TRIGGERS],
+        applyState: "failed",
+        inventoryAfter: null,
+      },
+      failure: { classification: "unlock_state_ambiguous" },
+    });
     expect(runEffects.applyUnlock).not.toHaveBeenCalled();
   });
 });
@@ -4459,6 +5238,7 @@ describe("schema-v1 product-cutover evidence", () => {
       "precheck:pending>precheck:succeeded",
       "precheck:pending>precheck:failed",
       "precheck:succeeded>migration:pending",
+      "migration:pending>migration:pending",
       "migration:pending>migration:succeeded",
       "migration:pending>migration:failed",
       "migration:pending>migration:ambiguous_reconciled",
@@ -4472,6 +5252,8 @@ describe("schema-v1 product-cutover evidence", () => {
       "unlock:pending>unlock:succeeded",
       "unlock:pending>unlock:failed",
       "unlock:pending>unlock:ambiguous_reconciled",
+      "unlock:succeeded>unlock:failed",
+      "unlock:ambiguous_reconciled>unlock:failed",
       "unlock:succeeded>verified:succeeded",
       "unlock:ambiguous_reconciled>verified:succeeded",
     ]);
@@ -4479,8 +5261,30 @@ describe("schema-v1 product-cutover evidence", () => {
     for (const previous of validStates) {
       for (const current of validStates) {
         const edge = `${previous.key}>${current.key}`;
+        const currentArtifact = clone(current.artifact);
+        if (legalEdges.has(edge)) {
+          const previousPhaseIndex = phases.indexOf(previous.phase);
+          const currentPhaseIndex = phases.indexOf(current.phase);
+          if (previousPhaseIndex >= phases.indexOf("migration") &&
+              currentPhaseIndex > previousPhaseIndex) {
+            currentArtifact.migration = clone(previous.artifact.migration);
+          }
+          if (previousPhaseIndex >= phases.indexOf("deployment") &&
+              currentPhaseIndex > previousPhaseIndex) {
+            currentArtifact.target.versionId = previous.artifact.target.versionId;
+            currentArtifact.deployment = clone(previous.artifact.deployment);
+          }
+          if (previousPhaseIndex >= phases.indexOf("unlock") &&
+              currentPhaseIndex > previousPhaseIndex) {
+            currentArtifact.unlock = clone(previous.artifact.unlock);
+          }
+          if (edge === "unlock:succeeded>unlock:failed" ||
+              edge === "unlock:ambiguous_reconciled>unlock:failed") {
+            currentArtifact.unlock = clone(previous.artifact.unlock);
+          }
+        }
         const assertion = expect(
-          () => validate(current.artifact, previous.artifact),
+          () => validate(currentArtifact, previous.artifact),
           edge,
         );
         if (legalEdges.has(edge)) assertion.not.toThrow();
@@ -4579,20 +5383,24 @@ describe("schema-v1 product-cutover evidence", () => {
   });
 
   it.each([
-    ["migration bookmark", (value: ProductCutoverArtifact) => {
-      value.migration.recoveryBookmarkId = null;
+    ["migration bookmark", "initial", (value: ProductCutoverArtifact) => {
+      value.migration.recoveryBookmarkId = "another-bookmark";
     }],
-    ["migration trigger inventory", (value: ProductCutoverArtifact) => {
+    ["migration trigger inventory", "forward-repair", (value: ProductCutoverArtifact) => {
       value.migration.triggerInventory = [DELETE_TRIGGER];
     }],
-    ["migration reached state", (value: ProductCutoverArtifact) => {
+    ["migration reached state", "initial", (value: ProductCutoverArtifact) => {
       value.migration.recoveryBookmarkId = RECOVERY_BOOKMARK_ID;
       value.migration.applyState = "ambiguous_reconciled";
       value.migration.triggerInventory = [...BOTH_TRIGGERS];
     }],
-  ])("rejects cross-phase rewrite of reached %s evidence", (_label, mutate) => {
-    const previous = artifactForTransitionAtPhase("forward-repair", "migration", "succeeded");
-    const current = artifactForTransitionAtPhase("forward-repair", "deployment", "pending");
+  ] as const)("rejects cross-phase rewrite of reached %s evidence", (
+    _label,
+    transition,
+    mutate,
+  ) => {
+    const previous = artifactForTransitionAtPhase(transition, "migration", "succeeded");
+    const current = artifactForTransitionAtPhase(transition, "deployment", "pending");
     mutate(current);
     expect(() => requireApi("assertProductCutoverArtifact")(current)).not.toThrow();
     expect(() => requireApi("assertProductCutoverArtifact")(current, previous))
@@ -4800,7 +5608,8 @@ describe("schema-v1 product-cutover evidence", () => {
   });
 
   it("accepts a strict QA same-build alias", () => {
-    const valid = artifact({ environment: "qa", transition: "forward-repair" });
+    const valid = artifactForTransition("forward-repair");
+    valid.environment = "qa";
     valid.activeBefore = sourceRecord({
       sourceSha: QA_ALIAS_SHA,
       releaseMode: "atomic-product-activation",
@@ -4993,11 +5802,16 @@ describe("schema-v1 product-cutover evidence", () => {
     ["unsorted", [INSERT_TRIGGER, DELETE_TRIGGER]],
     ["duplicate", [DELETE_TRIGGER, DELETE_TRIGGER]],
     ["empty-name", [""]],
-    ["unknown", ["Unknown"]],
   ])("rejects %s failed unlock inventoryAfter", (_label, inventoryAfter) => {
     const invalid = artifactForFailure("unlock", "unlock_apply_failed");
     invalid.unlock.inventoryAfter = inventoryAfter;
     expect(() => requireApi("assertProductCutoverArtifact")(invalid)).toThrow("artifact");
+  });
+
+  it("preserves unknown failed unlock residue as observed evidence", () => {
+    const observed = artifactForFailure("unlock", "unlock_apply_failed");
+    observed.unlock.inventoryAfter = ["Unexpected"];
+    expect(() => requireApi("assertProductCutoverArtifact")(observed)).not.toThrow();
   });
 
   it.each([
@@ -5245,9 +6059,7 @@ describe("schema-v1 product-cutover evidence", () => {
   it.each([
     ["deployment_failed", 100],
     ["deployment_state_ambiguous", 100],
-    ["target_identity_mismatch", 37],
     ["target_identity_mismatch", 100],
-    ["canonical_health_failed", null],
     ["canonical_health_failed", 37],
   ] as const)("rejects %s with classification-incompatible observation %s", (
     classification,
@@ -5378,12 +6190,12 @@ describe("product-cutover evidence files", () => {
     ];
     for (const evidence of lifecycle) evidence.environment = environment;
     const filename = environment === "production"
-      ? "production-release.json"
+      ? "production-product-cutover-state.json"
       : "qa-product-release.json";
     try {
       if (environment === "production") {
         await writeFile(
-          path.join(artifactDir, filename),
+          path.join(artifactDir, "production-release.json"),
           `${JSON.stringify(releaseArtifact, null, 2)}\n`,
           "utf8",
         );
@@ -5394,21 +6206,65 @@ describe("product-cutover evidence files", () => {
           await readFile(path.join(artifactDir, filename), "utf8"),
         ) as Record<string, unknown>;
         expect(persisted.cutover).toEqual(evidence);
+        expect(persisted).toEqual({ cutover: evidence });
         if (environment === "production") {
-          expect(persisted).toMatchObject(releaseArtifact);
-        } else {
-          expect(persisted).toEqual({ cutover: evidence });
+          await expect(readFile(path.join(artifactDir, "production-release.json"), "utf8"))
+            .resolves.toBe(`${JSON.stringify(releaseArtifact, null, 2)}\n`);
         }
       }
+      await expect(requireApi("validateProductCutoverStateFile")(
+        path.join(artifactDir, filename),
+        environment,
+      )).resolves.toEqual(lifecycle.at(-1));
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
     }
     },
   );
 
-  it("starts a same-target retry from persisted unlock success", async () => {
+  it.each([
+    ["production", "precheck", "succeeded"],
+    ["production", "migration", "succeeded"],
+    ["production", "migration", "ambiguous_reconciled"],
+    ["qa", "precheck", "succeeded"],
+    ["qa", "migration", "succeeded"],
+    ["qa", "migration", "ambiguous_reconciled"],
+  ] as const)(
+    "restarts the exact %s attempt after persisted %s:%s",
+    async (environment, phase, status) => {
+      const artifactDir = await mkdtemp(path.join(
+        os.tmpdir(),
+        `spoonjoy-nonterminal-restart-${environment}-`,
+      ));
+      const previous = artifactForPhase(phase, status);
+      const current = artifactForPhase("precheck", "pending");
+      if (phase === "migration") {
+        current.migration.recoveryBookmarkId = previous.migration.recoveryBookmarkId;
+      }
+      previous.environment = environment;
+      current.environment = environment;
+      const filename = path.join(
+        artifactDir,
+        environment === "production"
+          ? "production-product-cutover-state.json"
+          : "qa-product-release.json",
+      );
+      try {
+        await writeFile(filename, JSON.stringify({ cutover: previous }), "utf8");
+        await expect(requireApi("writeProductCutoverArtifactFile")(artifactDir, current))
+          .resolves.toBeUndefined();
+        await expect(readFile(filename, "utf8"))
+          .resolves.toBe(`${JSON.stringify({ cutover: current }, null, 2)}\n`);
+      } finally {
+        await rm(artifactDir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each(["unlock", "verified"] as const)(
+  "starts a same-target retry from persisted %s success", async (phase) => {
     const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-same-target-restart-"));
-    const previous = artifactForPhase("unlock", "succeeded");
+    const previous = artifactForPhase(phase, "succeeded");
     const current = artifactForTransition("same-target-reconcile");
     current.phase = "precheck";
     current.status = "pending";
@@ -5418,6 +6274,12 @@ describe("product-cutover evidence files", () => {
       applyState: "not_started",
       triggerInventory: null,
     };
+    current.deployment = {
+      deploymentId: null,
+      versionId: null,
+      sourceSha: current.target.sourceSha,
+      trafficPercent: null,
+    };
     current.unlock = {
       ...current.unlock,
       inventoryBefore: null,
@@ -5425,13 +6287,136 @@ describe("product-cutover evidence files", () => {
       inventoryAfter: null,
     };
     current.failure = null;
-    const filename = path.join(artifactDir, "production-release.json");
-    const persisted = { ...validProductionReleaseEnvelope(), cutover: previous };
+    const filename = path.join(artifactDir, "production-product-cutover-state.json");
+    const persisted = { cutover: previous };
     try {
       await writeFile(filename, `${JSON.stringify(persisted, null, 2)}\n`, "utf8");
       await requireApi("writeProductCutoverArtifactFile")(artifactDir, current);
       await expect(readFile(filename, "utf8"))
         .resolves.toBe(`${JSON.stringify({ ...persisted, cutover: current }, null, 2)}\n`);
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true });
+    }
+  });
+
+  it.each(["deployment", "unlock"] as const)(
+    "starts same-target reconciliation after the live topology advanced past %s:pending",
+    async (phase) => {
+      const artifactDir = await mkdtemp(path.join(os.tmpdir(), `spoonjoy-advanced-${phase}-`));
+      const previous = artifactForPhase(phase, "pending");
+      const current = artifactForTransition("same-target-reconcile");
+      current.phase = "precheck";
+      current.status = "pending";
+      current.migration = {
+        ...current.migration,
+        recoveryBookmarkId: null,
+        applyState: "not_started",
+        triggerInventory: null,
+      };
+      current.deployment = {
+        deploymentId: null,
+        versionId: null,
+        sourceSha: current.target.sourceSha,
+        trafficPercent: null,
+      };
+      current.unlock = {
+        ...current.unlock,
+        inventoryBefore: null,
+        applyState: "not_started",
+        inventoryAfter: null,
+      };
+      current.failure = null;
+      const filename = path.join(artifactDir, "production-product-cutover-state.json");
+      try {
+        await writeFile(filename, JSON.stringify({ cutover: previous }), "utf8");
+        await expect(requireApi("writeProductCutoverArtifactFile")(artifactDir, current))
+          .resolves.toBeUndefined();
+        await expect(requireApi("validateProductCutoverStateFile")(
+          filename,
+          "production",
+        )).resolves.toEqual(current);
+      } finally {
+        await rm(artifactDir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each(["migration", "deployment", "unlock"] as const)(
+    "starts a fresh reconciliation attempt after a process stopped at %s:pending",
+    async (phase) => {
+      const artifactDir = await mkdtemp(path.join(os.tmpdir(), `spoonjoy-pending-${phase}-`));
+      const previous = artifactForPhase(phase, "pending");
+      const current = artifactForPhase("precheck", "pending");
+      current.migration.recoveryBookmarkId = previous.migration.recoveryBookmarkId;
+      const filename = path.join(artifactDir, "qa-product-release.json");
+      previous.environment = "qa";
+      current.environment = "qa";
+      try {
+        await writeFile(filename, `${JSON.stringify({ cutover: previous }, null, 2)}\n`, "utf8");
+        await requireApi("writeProductCutoverArtifactFile")(artifactDir, current);
+        const persisted = JSON.parse(await readFile(filename, "utf8")) as {
+          cutover: ProductCutoverArtifact;
+        };
+        expect(persisted.cutover).toEqual(current);
+      } finally {
+        await rm(artifactDir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each([
+    ["verified", "succeeded"],
+    ["unlock", "ambiguous_reconciled"],
+  ] as const)(
+  "starts an ordinary forward repair after persisted %s:%s product activation",
+  async (phase, status) => {
+    const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-forward-after-success-"));
+    const previous = artifactForPhase(phase, status);
+    previous.environment = "qa";
+    const current = artifactForTransition("forward-repair");
+    current.environment = "qa";
+    current.activeBefore = clone(previous.target);
+    current.predecessor = {
+      relationship: "exact",
+      canonicalSourceSha: previous.target.sourceSha,
+      canonicalTreeSha: previous.target.treeSha,
+      canonicalWorkerBundleSha256: previous.target.workerBundleSha256,
+      canonicalDurableObjectBundleSha256: previous.target.durableObjectBundleSha256,
+      lineageParentSourceSha: previous.target.sourceSha,
+      runtimeFloorSourceSha: null,
+      originalFailedRestorationSourceSha: null,
+    };
+    current.target.baseSourceSha = previous.target.sourceSha;
+    current.phase = "precheck";
+    current.status = "pending";
+    current.target.versionId = null;
+    current.migration = {
+      ...current.migration,
+      recoveryBookmarkId: null,
+      applyState: "not_started",
+      triggerInventory: null,
+    };
+    current.deployment = {
+      deploymentId: null,
+      versionId: null,
+      sourceSha: current.target.sourceSha,
+      trafficPercent: null,
+    };
+    current.unlock = {
+      ...current.unlock,
+      inventoryBefore: null,
+      applyState: "not_started",
+      inventoryAfter: null,
+    };
+    current.failure = null;
+    const filename = path.join(artifactDir, "qa-product-release.json");
+    try {
+      await writeFile(filename, `${JSON.stringify({ cutover: previous }, null, 2)}\n`, "utf8");
+      await requireApi("writeProductCutoverArtifactFile")(artifactDir, current);
+      const persisted = JSON.parse(await readFile(filename, "utf8")) as {
+        cutover: ProductCutoverArtifact;
+      };
+      expect(persisted.cutover).toEqual(current);
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
     }
@@ -5523,14 +6508,8 @@ describe("product-cutover evidence files", () => {
       inventoryAfter: null,
     };
     current.failure = null;
-    const filename = path.join(artifactDir, "production-release.json");
-    const outer = {
-      ...validProductionReleaseEnvelope(),
-      sourceSha: FAILED_REPAIR_SHA,
-      reviewedMigrations: [],
-      migrationApply: "not_needed",
-      cutover: previous,
-    };
+    const filename = path.join(artifactDir, "production-product-cutover-state.json");
+    const outer = { cutover: previous };
     try {
       await writeFile(filename, `${JSON.stringify(outer, null, 2)}\n`, "utf8");
       await requireApi("writeProductCutoverArtifactFile")(artifactDir, current);
@@ -5600,15 +6579,8 @@ describe("product-cutover evidence files", () => {
       inventoryAfter: null,
     };
     current.failure = null;
-    const filename = path.join(artifactDir, "production-release.json");
-    const outer = {
-      ...validProductionReleaseEnvelope(),
-      sourceSha: FAILED_REPAIR_SHA,
-      reviewedMigrations: [],
-      migrationApply: "not_needed",
-      previousVersionId: TARGET_VERSION_ID,
-      cutover: previous,
-    };
+    const filename = path.join(artifactDir, "production-product-cutover-state.json");
+    const outer = { cutover: previous };
     try {
       await writeFile(filename, `${JSON.stringify(outer, null, 2)}\n`, "utf8");
       await requireApi("writeProductCutoverArtifactFile")(artifactDir, current);
@@ -5666,11 +6638,11 @@ describe("product-cutover evidence files", () => {
       current.failure = null;
       const filename = path.join(
         artifactDir,
-        environment === "production" ? "production-release.json" : "qa-product-release.json",
+        environment === "production"
+          ? "production-product-cutover-state.json"
+          : "qa-product-release.json",
       );
-      const persisted = environment === "production"
-        ? { ...validProductionReleaseEnvelope(), cutover: malformed }
-        : { cutover: malformed };
+      const persisted = { cutover: malformed };
       try {
         await writeFile(filename, `${JSON.stringify(persisted, null, 2)}\n`, "utf8");
         await expect(requireApi("writeProductCutoverArtifactFile")(artifactDir, current))
@@ -5691,26 +6663,13 @@ describe("product-cutover evidence files", () => {
     const skipped = artifactForPhase("migration", "pending");
     skipped.environment = environment;
     const filename = environment === "production"
-      ? "production-release.json"
+      ? "production-product-cutover-state.json"
       : "qa-product-release.json";
-    const releaseArtifact = validProductionReleaseEnvelope();
     try {
-      if (environment === "production") {
-        await writeFile(
-          path.join(artifactDir, filename),
-          `${JSON.stringify(releaseArtifact, null, 2)}\n`,
-          "utf8",
-        );
-      }
       await expect(requireApi("writeProductCutoverArtifactFile")(artifactDir, skipped))
         .rejects.toThrow("artifact");
-      if (environment === "production") {
-        await expect(readFile(path.join(artifactDir, filename), "utf8"))
-          .resolves.toBe(`${JSON.stringify(releaseArtifact, null, 2)}\n`);
-      } else {
-        await expect(readFile(path.join(artifactDir, filename), "utf8"))
-          .rejects.toThrow();
-      }
+      await expect(readFile(path.join(artifactDir, filename), "utf8"))
+        .rejects.toThrow();
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
     }
@@ -5728,11 +6687,11 @@ describe("product-cutover evidence files", () => {
     try {
       const filename = path.join(
         artifactDir,
-        environment === "production" ? "production-release.json" : "qa-product-release.json",
+        environment === "production"
+          ? "production-product-cutover-state.json"
+          : "qa-product-release.json",
       );
-      const persisted = environment === "production"
-        ? { ...validProductionReleaseEnvelope(), cutover: previous }
-        : { cutover: previous };
+      const persisted = { cutover: previous };
       await writeFile(filename, `${JSON.stringify(persisted, null, 2)}\n`, "utf8");
       await expect(requireApi("writeProductCutoverArtifactFile")(artifactDir, current))
         .rejects.toThrow("artifact");
@@ -5777,6 +6736,7 @@ function artifactForTransition(transition: CutoverTransition): ProductCutoverArt
       canonicalSourceSha: TARGET_SOURCE_SHA,
       lineageParentSourceSha: TARGET_SOURCE_SHA,
     });
+    value.migration.recoveryBookmarkId = null;
     value.migration.applyState = "already_applied";
     value.migration.triggerInventory = [];
     value.deployment = observedTarget({ sourceSha: REPAIR_SOURCE_SHA });
@@ -5989,3 +6949,938 @@ function artifactForPhase(
   }
   return value;
 }
+
+describe("product-cutover focused coverage completion", () => {
+  describe("deployed runtime provenance", () => {
+    it.each([
+      ["empty entrypoint", "", [{ name: "_worker.js", bytes: Buffer.from("worker") }]],
+      ["empty module set", "_worker.js", []],
+      ["empty module name", "_worker.js", [{ name: "", bytes: Buffer.from("worker") }]],
+      ["empty module bytes", "_worker.js", [{ name: "_worker.js", bytes: Buffer.alloc(0) }]],
+      ["duplicate module names", "_worker.js", [
+        { name: "_worker.js", bytes: Buffer.from("one") },
+        { name: "_worker.js", bytes: Buffer.from("two") },
+      ]],
+      ["missing entrypoint module", "_worker.js", [
+        { name: "chunk.js", bytes: Buffer.from("chunk") },
+      ]],
+    ] as const)("rejects an invalid %s", (_label, entrypoint, modules) => {
+      expect(() => requireApi("productRuntimeBundleDigests")(entrypoint, modules))
+        .toThrow("runtime modules");
+    });
+
+    it("sorts a multi-module runtime by bytewise module name", () => {
+      const modules = [
+        { name: "chunks/z.js", bytes: Buffer.from("z") },
+        { name: "_worker.js", bytes: Buffer.from("entry") },
+        { name: "chunks/a.js", bytes: Buffer.from("a") },
+      ];
+
+      expect(requireApi("productRuntimeBundleDigests")("_worker.js", modules))
+        .toEqual(requireApi("productRuntimeBundleDigests")(
+          "_worker.js",
+          [...modules].reverse(),
+        ));
+    });
+
+    it("rejects a frozen compatibility source paired with another version", async () => {
+      const runCommand = vi.fn<ReleaseCommandRunner>();
+      await expect(requireApi("readProductCutoverSourceRecord")(
+        "production",
+        COMPATIBILITY_SOURCE_SHA,
+        TARGET_VERSION_ID,
+        runCommand,
+      )).rejects.toThrow("compatibility version");
+      expect(runCommand).not.toHaveBeenCalled();
+    });
+
+    it("binds a live deployed runtime identity to independently read Git evidence", async () => {
+      const runtimeIdentity = {
+        workerBundleSha256: PRODUCT_WORKER_BUNDLE_SHA256,
+        durableObjectBundleSha256: DO_BUNDLE_SHA256,
+      };
+      const runCommand = vi.fn<ReleaseCommandRunner>(async (_command, args) => {
+        const key = args.join(" ");
+        const outputs: Record<string, string> = {
+          [`rev-parse ${TARGET_SOURCE_SHA}^{tree}`]: TARGET_TREE_SHA,
+          [`rev-parse ${TARGET_SOURCE_SHA}^`]: TARGET_BASE_SHA,
+          [`show ${TARGET_SOURCE_SHA}:.github/workflows/production-deploy.yml`]:
+            "env:\n  SPOONJOY_RELEASE_MODE: atomic-product-activation\n",
+        };
+        return { stdout: outputs[key] ?? "", stderr: "" };
+      });
+
+      await expect(requireApi("readProductCutoverSourceRecord")(
+        "production",
+        TARGET_SOURCE_SHA,
+        TARGET_VERSION_ID,
+        runCommand,
+        { PATH: "/test/bin" },
+        runtimeIdentity,
+      )).resolves.toEqual(sourceRecord({
+        sourceSha: TARGET_SOURCE_SHA,
+        treeSha: TARGET_TREE_SHA,
+        ...runtimeIdentity,
+        versionId: TARGET_VERSION_ID,
+        releaseMode: "atomic-product-activation",
+        baseSourceSha: TARGET_BASE_SHA,
+      }));
+      expect(runCommand).toHaveBeenCalledTimes(3);
+    });
+
+    it.each([
+      ["Worker", { workerBundleSha256: "bad", durableObjectBundleSha256: DO_BUNDLE_SHA256 }],
+      ["Durable Object", {
+        workerBundleSha256: PRODUCT_WORKER_BUNDLE_SHA256,
+        durableObjectBundleSha256: "bad",
+      }],
+    ])("rejects an invalid deployed %s digest before reading Git", async (_label, identity) => {
+      const runCommand = vi.fn<ReleaseCommandRunner>();
+      await expect(requireApi("readProductCutoverSourceRecord")(
+        "production",
+        TARGET_SOURCE_SHA,
+        TARGET_VERSION_ID,
+        runCommand,
+        undefined,
+        identity,
+      )).rejects.toThrow("runtime");
+      expect(runCommand).not.toHaveBeenCalled();
+    });
+
+    it("rejects malformed tree or parent Git evidence", async () => {
+      const runCommand = vi.fn<ReleaseCommandRunner>(async (_command, args) => ({
+        stdout: args[1]?.endsWith("^{tree}")
+          ? "not-a-tree\n"
+          : args[1]?.endsWith("^")
+            ? `${TARGET_BASE_SHA}\n`
+            : "env:\n  SPOONJOY_RELEASE_MODE: atomic-product-activation\n",
+        stderr: "",
+      }));
+      await expect(requireApi("readProductCutoverSourceRecord")(
+        "production",
+        TARGET_SOURCE_SHA,
+        null,
+        runCommand,
+      )).rejects.toThrow("Git evidence");
+    });
+
+    it.each([
+      ["different checkout", `${OTHER_TREE_SHA}\n`, null],
+      ["historical deployed version", `${TARGET_SOURCE_SHA}\n`, TARGET_VERSION_ID],
+    ] as const)("refuses a local dry-run for a %s", async (_label, head, versionId) => {
+      const runCommand = vi.fn<ReleaseCommandRunner>(async (_command, args) => {
+        const key = args.join(" ");
+        const outputs: Record<string, string> = {
+          [`rev-parse ${TARGET_SOURCE_SHA}^{tree}`]: TARGET_TREE_SHA,
+          [`rev-parse ${TARGET_SOURCE_SHA}^`]: TARGET_BASE_SHA,
+          [`show ${TARGET_SOURCE_SHA}:.github/workflows/production-deploy.yml`]:
+            "env:\n  SPOONJOY_RELEASE_MODE: atomic-product-activation\n",
+          "rev-parse HEAD": head,
+        };
+        return { stdout: outputs[key] ?? "", stderr: "" };
+      });
+      await expect(requireApi("readProductCutoverSourceRecord")(
+        "production",
+        TARGET_SOURCE_SHA,
+        versionId,
+        runCommand,
+      )).rejects.toThrow("checked-out target");
+      expect(runCommand).toHaveBeenCalledTimes(4);
+    });
+
+    it("recursively hashes production dry-run modules and excludes Wrangler metadata", async () => {
+      const entry = Buffer.from("export default {};\n");
+      const chunk = Buffer.from("export const value = 1;\n");
+      const expected = requireApi("productRuntimeBundleDigests")("_worker.js", [
+        { name: "_worker.js", bytes: entry },
+        { name: "chunks/value.js", bytes: chunk },
+      ]);
+      const runCommand = vi.fn<ReleaseCommandRunner>(async (command, args) => {
+        if (command === "git") {
+          const key = args.join(" ");
+          const outputs: Record<string, string> = {
+            [`rev-parse ${TARGET_SOURCE_SHA}^{tree}`]: TARGET_TREE_SHA,
+            [`rev-parse ${TARGET_SOURCE_SHA}^`]: TARGET_BASE_SHA,
+            [`show ${TARGET_SOURCE_SHA}:.github/workflows/production-deploy.yml`]:
+              "env:\n  SPOONJOY_RELEASE_MODE: atomic-product-activation\n",
+            "rev-parse HEAD": TARGET_SOURCE_SHA,
+          };
+          return { stdout: outputs[key] ?? "", stderr: "" };
+        }
+        const outdir = args[args.indexOf("--outdir") + 1];
+        await mkdir(path.join(outdir, "chunks"), { recursive: true });
+        await writeFile(path.join(outdir, "_worker.js"), entry);
+        await writeFile(path.join(outdir, "chunks", "value.js"), chunk);
+        await writeFile(path.join(outdir, "README.md"), "ignored metadata\n");
+        return { stdout: "", stderr: "" };
+      });
+
+      await expect(requireApi("readProductCutoverSourceRecord")(
+        "production",
+        TARGET_SOURCE_SHA,
+        null,
+        runCommand,
+      )).resolves.toMatchObject(expected);
+      const dryRunArgs = (runCommand.mock.calls.find(([command]) => command === "pnpm") ?? [
+        "",
+        [],
+      ])[1];
+      expect(dryRunArgs).not.toContain("--env");
+    });
+
+    it("rejects a non-file entry emitted by a Wrangler dry-run", async () => {
+      const runCommand = vi.fn<ReleaseCommandRunner>(async (command, args) => {
+        if (command === "git") {
+          const key = args.join(" ");
+          const outputs: Record<string, string> = {
+            [`rev-parse ${TARGET_SOURCE_SHA}^{tree}`]: TARGET_TREE_SHA,
+            [`rev-parse ${TARGET_SOURCE_SHA}^`]: TARGET_BASE_SHA,
+            [`show ${TARGET_SOURCE_SHA}:.github/workflows/production-deploy.yml`]:
+              "env:\n  SPOONJOY_RELEASE_MODE: atomic-product-activation\n",
+            "rev-parse HEAD": TARGET_SOURCE_SHA,
+          };
+          return { stdout: outputs[key] ?? "", stderr: "" };
+        }
+        const outdir = args[args.indexOf("--outdir") + 1];
+        await writeFile(path.join(outdir, "_worker.js"), "export default {};\n");
+        await symlink(path.join(outdir, "_worker.js"), path.join(outdir, "runtime-link"));
+        return { stdout: "", stderr: "" };
+      });
+
+      await expect(requireApi("readProductCutoverSourceRecord")(
+        "production",
+        TARGET_SOURCE_SHA,
+        null,
+        runCommand,
+      )).rejects.toThrow("unsupported entry");
+    });
+  });
+
+  describe("source-controlled evidence adapters", () => {
+    it.each([
+      ["invalid environment", (receipt: BidirectionalSkewReceipt) => {
+        (receipt as unknown as { environment: string }).environment = "staging";
+      }, "environment"],
+      ["wrong manifest kind", (receipt: BidirectionalSkewReceipt) => {
+        receipt.predecessorWorkerManifest.sourcePath = "workers/cook-session.ts";
+      }, "manifest kind"],
+    ] as const)("rejects a skew receipt with %s", async (_label, mutate, message) => {
+      const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-skew-coverage-"));
+      const value = ordinaryRepairAttempt();
+      const receipt = bidirectionalSkewReceipt(value);
+      mutate(receipt);
+      const directory = path.join(artifactDir, "product-skew-receipts");
+      try {
+        await mkdir(directory, { recursive: true });
+        await writeFile(
+          path.join(
+            directory,
+            `production-from-${value.predecessor.lineageParentSourceSha}.json`,
+          ),
+          JSON.stringify(receipt),
+          "utf8",
+        );
+        await expect(requireApi("readForwardRepairSkewReceiptFile")(
+          artifactDir,
+          "production",
+          value.predecessor.lineageParentSourceSha,
+        )).rejects.toThrow(message);
+      } finally {
+        await rm(artifactDir, { recursive: true, force: true });
+      }
+    });
+
+    it("rejects an executed receipt whose filename digest does not match its bytes", async () => {
+      const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-executed-digest-"));
+      const receipt = bidirectionalSkewReceipt(ordinaryRepairAttempt());
+      const claimedDigest = "a".repeat(64);
+      const directory = path.join(artifactDir, "product-skew-receipts");
+      try {
+        await mkdir(directory, { recursive: true });
+        await writeFile(
+          path.join(directory, `executed-${claimedDigest}.json`),
+          JSON.stringify(receipt),
+          "utf8",
+        );
+        await expect(requireApi("readExecutedSkewReceiptFile")(
+          artifactDir,
+          claimedDigest,
+        )).rejects.toThrow("digest");
+      } finally {
+        await rm(artifactDir, { recursive: true, force: true });
+      }
+    });
+
+    it("rejects a latest repair artifact bound to another environment", async () => {
+      const evidenceDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-chain-binding-"));
+      const latest = failedPostRestorationArtifact(
+        POST_REPAIR_SOURCE_SHA,
+        FAILED_RESTORATION_SHA,
+      );
+      latest.environment = "qa";
+      const directory = path.join(evidenceDir, "product-repair-chain");
+      try {
+        await mkdir(directory, { recursive: true });
+        await writeFile(path.join(directory, "production.json"), JSON.stringify({
+          runtimeFloorSourceSha: RUNTIME_FLOOR_SHA,
+          originalFailedRestorationSourceSha: FAILED_RESTORATION_SHA,
+          latestFailedRepairArtifact: latest,
+        }), "utf8");
+        await expect(requireApi("readPostRestorationChainStateFile")(
+          evidenceDir,
+          "production",
+        )).rejects.toThrow("chain binding");
+      } finally {
+        await rm(evidenceDir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe("artifact invariant rejection paths", () => {
+    it.each([
+      ["deployment source", () => {
+        const value = artifact();
+        value.deployment.sourceSha = OTHER_TREE_SHA;
+        return value;
+      }, "deployment target"],
+      ["failed migration bookmark", () => {
+        const value = artifactForFailure("migration", "migration_apply_failed");
+        value.migration.recoveryBookmarkId = null;
+        return value;
+      }, "migration state"],
+      ["repair migration readback", () => {
+        const value = artifactForTransitionAtPhase("forward-repair", "deployment", "pending");
+        value.migration.recoveryBookmarkId = RECOVERY_BOOKMARK_ID;
+        return value;
+      }, "repair migration state"],
+      ["failed unlock inventory", () => {
+        const value = artifactForPhase("unlock", "failed");
+        value.unlock.inventoryBefore = null;
+        return value;
+      }, "unlock state"],
+      ["premature target version", () => {
+        const value = artifactForPhase("precheck", "pending");
+        value.target.versionId = TARGET_VERSION_ID;
+        return value;
+      }, "target version"],
+      ["failed deployment reachability", () => {
+        const value = artifactForFailure("deployment", "deployment_failed");
+        value.target.versionId = TARGET_VERSION_ID;
+        return value;
+      }, "deployment reached state"],
+      ["precheck migration reachability", () => {
+        const value = artifactForPhase("precheck", "pending");
+        value.migration.applyState = "already_applied";
+        value.migration.triggerInventory = [];
+        return value;
+      }, "migration reached state"],
+      ["precheck unlock reachability", () => {
+        const value = artifactForPhase("precheck", "pending");
+        value.unlock.inventoryBefore = [];
+        value.unlock.applyState = "already_absent";
+        value.unlock.inventoryAfter = [];
+        return value;
+      }, "unlock reached state"],
+      ["verified unlock reachability", () => {
+        const value = artifact();
+        value.unlock.applyState = "failed";
+        value.unlock.inventoryAfter = null;
+        return value;
+      }, "unlock reached state"],
+    ] as const)("rejects invalid %s evidence", (_label, makeValue, message) => {
+      expect(() => requireApi("assertProductCutoverArtifact")(makeValue())).toThrow(message);
+    });
+
+    it("rejects a migration state that changes while an artifact is being validated", () => {
+      const value = artifactForPhase("deployment", "pending");
+      let reads = 0;
+      Object.defineProperty(value.migration, "applyState", {
+        configurable: true,
+        enumerable: true,
+        get: () => ++reads < 6 ? "applied" : "not_started",
+      });
+      expect(() => requireApi("assertProductCutoverArtifact")(value))
+        .toThrow("migration reached state");
+    });
+
+    it("canonicalizes an undefined immutable value before rejecting cross-phase drift", () => {
+      const previous = artifactForPhase("precheck", "pending");
+      const current = artifactForPhase("precheck", "succeeded");
+      let reads = 0;
+      Object.defineProperty(current, "protocolBoundarySha", {
+        configurable: true,
+        enumerable: true,
+        get: () => ++reads === 1 ? PROTOCOL_BOUNDARY_SHA : undefined,
+      });
+      expect(() => requireApi("assertProductCutoverArtifact")(current, previous))
+        .toThrow("cross-phase");
+    });
+
+    it("rejects cross-phase migration metadata that changes after basic validation", () => {
+      const previous = artifactForPhase("precheck", "succeeded");
+      const current = artifactForPhase("migration", "pending");
+      let reads = 0;
+      Object.defineProperty(current.migration, "name", {
+        configurable: true,
+        enumerable: true,
+        get: () => ++reads === 1 ? MIGRATION_NAME : "0026_changed.sql",
+      });
+      expect(() => requireApi("assertProductCutoverArtifact")(current, previous))
+        .toThrow("cross-phase");
+    });
+  });
+
+  describe("precondition evidence rejection paths", () => {
+    it("verifies a receipt by executing every recorded deterministic runtime builder", async () => {
+      const value = ordinaryRepairAttempt("both");
+      const baseRunner = gitEvidenceRunner();
+      const runCommand = vi.fn<ReleaseCommandRunner>(async (command, args, options) => {
+        if (command === "node" && args[0] === RUNTIME_BUNDLE_BUILDER_PATH) {
+          return {
+            stdout: execFileSync(command, args, { encoding: "utf8" }),
+            stderr: "",
+          };
+        }
+        return baseRunner(command, args, options);
+      });
+
+      await expect(requireApi("assertProductCutoverPreconditions")(
+        value,
+        verificationForAttempt(value, {}, { runCommand }),
+      )).resolves.toBeUndefined();
+      expect(runCommand.mock.calls.filter(([command]) => command === "node")).toHaveLength(6);
+    });
+
+    it.each([
+      ["malformed YAML", "env: [", "release mode"],
+      ["unsupported mode", "env:\n  SPOONJOY_RELEASE_MODE: gradual\n", "release mode"],
+    ])("rejects %s workflow evidence", async (_label, workflow, message) => {
+      const value = ordinaryRepairAttempt();
+      const baseRunner = gitEvidenceRunner();
+      const runCommand = vi.fn<ReleaseCommandRunner>(async (command, args, options) => {
+        if (command === "git" && args[0] === "show" &&
+            args[1]?.endsWith(":.github/workflows/production-deploy.yml")) {
+          return { stdout: workflow, stderr: "" };
+        }
+        return baseRunner(command, args, options);
+      });
+      await expect(requireApi("assertProductCutoverPreconditions")(
+        value,
+        verificationForAttempt(value, {}, { runCommand }),
+      )).rejects.toThrow(message);
+    });
+
+    it.each([
+      ["name", { migrationName: "0026_other.sql" }],
+      ["digest", { migrationSha256: OTHER_BUNDLE_SHA256 }],
+    ])("rejects a reviewed migration %s mismatch", async (_label, overrides) => {
+      const value = attempt(overrides);
+      await expect(requireApi("assertProductCutoverPreconditions")(
+        value,
+        verificationForAttempt(value),
+      )).rejects.toThrow("migration identity");
+    });
+
+    it("rejects an internally inconsistent same-target retry", async () => {
+      const value = sameTargetAttempt();
+      value.target.baseSourceSha = OTHER_TREE_SHA;
+      await expect(requireApi("assertProductCutoverPreconditions")(
+        value,
+        verificationForAttempt(value),
+      )).rejects.toThrow("Same-target predecessor binding");
+    });
+
+    it.each([
+      ["wrong digest", JSON.stringify({ bundleSha256: OTHER_BUNDLE_SHA256 })],
+      ["malformed output", "not-json"],
+    ])("rejects a runtime build with %s", async (_label, output) => {
+      const value = ordinaryRepairAttempt();
+      const baseRunner = gitEvidenceRunner();
+      const runCommand = vi.fn<ReleaseCommandRunner>(async (command, args, options) => {
+        if (command === "node") return { stdout: output, stderr: "" };
+        return baseRunner(command, args, options);
+      });
+      await expect(requireApi("assertProductCutoverPreconditions")(
+        value,
+        verificationForAttempt(value, {}, { runCommand }),
+      )).rejects.toThrow("skew build output");
+    });
+
+    it("rejects a reused receipt when the loaded executed receipt has another digest", async () => {
+      const value = ordinaryRepairAttempt("byte-identical");
+      const executed = executedReceiptForActiveSource(value);
+      const receipt = bidirectionalSkewReceipt(value, "reused-byte-identical", executed);
+      await expect(requireApi("assertProductCutoverPreconditions")(
+        value,
+        verificationForAttempt(value, {}, {
+          loadForwardRepairSkewReceipt: vi.fn(async () => receipt),
+          loadExecutedSkewReceipt: vi.fn(async () => validWrongSourceExecutedReceipt(value)),
+        }),
+      )).rejects.toThrow("skew receipt reuse");
+    });
+
+    it("rejects a QA restoration alias not bound to the durable runtime floor", async () => {
+      const value = qaPostRestorationAttempt(FAILED_REPAIR_SHA, FAILED_RESTORATION_SHA);
+      await expect(requireApi("assertProductCutoverPreconditions")(
+        value,
+        verificationForAttempt(value, {}, {
+          loadPostRestorationChainState: vi.fn(async () => restorationChainState()),
+        }),
+      )).rejects.toThrow("durable identity");
+    });
+
+    it("accepts reviewed restoration paths without a trailing newline", async () => {
+      const value = postRestorationAttempt(FAILED_RESTORATION_SHA);
+      const baseRunner = gitEvidenceRunner();
+      const runCommand = vi.fn<ReleaseCommandRunner>(async (command, args, options) => {
+        if (command === "git" && args[0] === "diff") {
+          return { stdout: changedPathsForSourceSha(value.target.sourceSha).join("\n"), stderr: "" };
+        }
+        return baseRunner(command, args, options);
+      });
+      await expect(requireApi("assertProductCutoverPreconditions")(
+        value,
+        verificationForAttempt(value, {}, { runCommand }),
+      )).resolves.toBeUndefined();
+    });
+  });
+
+  describe("runner reconciliation branches", () => {
+    it("classifies a non-JSON pending migration entry without losing canonical evidence", async () => {
+      const runEffects = effects({
+        readPendingMigrationNames: vi.fn(async () => [undefined as unknown as string]),
+      });
+      await expect(requireApi("runProductCutover")(attempt(), runEffects))
+        .rejects.toThrow("migration state changed");
+      expect(writtenLifecycleArtifacts(runEffects).at(-1)?.failure?.classification)
+        .toBe("migration_rejected");
+    });
+
+    it("rejects a pending migration on a reconciliation path", async () => {
+      const value = sameTargetAttempt();
+      const runEffects = successfulEffectsForAttempt(value, {
+        readPendingMigrationNames: vi.fn(async () => [MIGRATION_NAME]),
+      });
+      await expect(requireApi("runProductCutover")(value, runEffects))
+        .rejects.toThrow("migration state changed");
+      expect(writtenLifecycleArtifacts(runEffects).at(-1)?.failure?.classification)
+        .toBe("migration_rejected");
+    });
+
+    it.each([
+      ["unreadable", vi.fn()
+        .mockResolvedValueOnce([])
+        .mockRejectedValueOnce(new Error("D1 unavailable"))],
+      ["still pending", vi.fn()
+        .mockResolvedValueOnce([MIGRATION_NAME])
+        .mockResolvedValueOnce([MIGRATION_NAME])],
+    ])("classifies %s post-migration state as ambiguous", async (_label, readPending) => {
+      const runEffects = effects({ readPendingMigrationNames: readPending });
+      await expect(requireApi("runProductCutover")(attempt(), runEffects)).rejects.toThrow();
+      expect(writtenLifecycleArtifacts(runEffects).at(-1)).toMatchObject({
+        migration: { applyState: "failed" },
+        failure: { classification: "migration_state_ambiguous" },
+      });
+    });
+
+    it("normalizes a non-Error recovery-bookmark failure", async () => {
+      const runEffects = effects({
+        createRecoveryBookmark: vi.fn(async () => Promise.reject("bookmark unavailable")),
+      });
+      await expect(requireApi("runProductCutover")(attempt(), runEffects))
+        .rejects.toThrow("bookmark unavailable");
+      expect(writtenLifecycleArtifacts(runEffects).at(-1)?.failure?.classification)
+        .toBe("recovery_bookmark_failed");
+    });
+
+    it.each([
+      ["after upload", () => attempt(), true, "deployment state is ambiguous",
+        "deployment_state_ambiguous"],
+      ["without upload", () => sameTargetAttempt(), false, "version unavailable",
+        "deployment_failed"],
+    ] as const)(
+      "classifies target-version lookup failure %s",
+      async (_label, makeAttempt, rejectUpload, message, classification) => {
+        const value = makeAttempt();
+        const runEffects = successfulEffectsForAttempt(value, {
+          deployTarget: rejectUpload
+            ? vi.fn(async () => Promise.reject(new Error("upload failed")))
+            : vi.fn(async () => observedTarget()),
+          resolveTargetVersion: vi.fn(async () => Promise.reject(new Error("version unavailable"))),
+        });
+        await expect(requireApi("runProductCutover")(value, runEffects))
+          .rejects.toThrow(message);
+        expect(writtenLifecycleArtifacts(runEffects).at(-1)?.failure?.classification)
+          .toBe(classification);
+      },
+    );
+
+    it("records trigger residue observed after a failed unlock", async () => {
+      const runEffects = effects({
+        applyUnlock: vi.fn(async () => Promise.reject(new Error("unlock failed"))),
+        readTriggerInventory: vi.fn()
+          .mockResolvedValueOnce([...BOTH_TRIGGERS])
+          .mockResolvedValueOnce([INSERT_TRIGGER]),
+      });
+      await expect(requireApi("runProductCutover")(attempt(), runEffects))
+        .rejects.toThrow("unlock state is ambiguous");
+      expect(writtenLifecycleArtifacts(runEffects).at(-1)).toMatchObject({
+        unlock: { applyState: "failed", inventoryAfter: [INSERT_TRIGGER] },
+        failure: { classification: "unlock_state_ambiguous" },
+      });
+    });
+
+    it("normalizes a not-started unlock after inventory was durably captured", async () => {
+      const nativeStructuredClone = globalThis.structuredClone;
+      let liveEvidence: ProductCutoverArtifact | undefined;
+      const cloneSpy = vi.spyOn(globalThis, "structuredClone").mockImplementation((value) => {
+        if (value && typeof value === "object" && "schemaVersion" in value) {
+          return value;
+        }
+        return nativeStructuredClone(value);
+      });
+      const assertDeploymentOwnership = vi.fn(async () => undefined)
+        .mockImplementationOnce(async () => undefined)
+        .mockImplementationOnce(async () => undefined)
+        .mockImplementationOnce(async () => {
+          if (!liveEvidence) throw new Error("missing live evidence");
+          liveEvidence.unlock.inventoryBefore = [];
+          throw new Error("ownership changed after inventory capture");
+        });
+      const runEffects = effects({
+        assertDeploymentOwnership,
+        writeEvidence: vi.fn(async (value) => {
+          liveEvidence = value;
+        }),
+      });
+      try {
+        await expect(requireApi("runProductCutover")(attempt(), runEffects))
+          .rejects.toThrow("ownership changed after inventory capture");
+        expect(writtenLifecycleArtifacts(runEffects).at(-1)?.unlock.applyState).toBe("failed");
+      } finally {
+        cloneSpy.mockRestore();
+      }
+    });
+
+    it("rejects malformed QA source evidence after successful production unlock", async () => {
+      const runEffects = effects({
+        readQaActiveSource: vi.fn(async () => ({} as CutoverSourceRecord)),
+      });
+      await expect(requireApi("runProductCutover")(attempt(), runEffects))
+        .rejects.toThrow("QA active source is invalid");
+      expect(runEffects.recordQaBinding).not.toHaveBeenCalled();
+    });
+  });
+
+  it("persists a validator-accepted repair failure when trigger readback is malformed", async () => {
+    const value = ordinaryRepairAttempt();
+    const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-repair-readback-"));
+    const filename = path.join(artifactDir, "production-product-cutover-state.json");
+    const writeEvidence = vi.fn(async (evidence: ProductCutoverArtifact) => (
+      requireApi("writeProductCutoverArtifactFile")(artifactDir, evidence)
+    ));
+    const runEffects = successfulEffectsForAttempt(value, {
+      readTriggerInventory: vi.fn(async () => [undefined as unknown as string]),
+      writeEvidence,
+    });
+    try {
+      await expect(requireApi("runProductCutover")(value, runEffects))
+        .rejects.toThrow("trigger inventory evidence is invalid");
+      await expect(requireApi("validateProductCutoverStateFile")(
+        filename,
+        "production",
+      )).resolves.toMatchObject({
+        phase: "migration",
+        status: "failed",
+        migration: {
+          recoveryBookmarkId: null,
+          applyState: "failed",
+          triggerInventory: null,
+        },
+        failure: { classification: "migration_state_ambiguous" },
+      });
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true });
+    }
+  });
+
+  it("persists a validator-accepted ambiguous unlock after successful apply readback fails", async () => {
+    const value = attempt();
+    const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-unlock-readback-"));
+    const filename = path.join(artifactDir, "production-product-cutover-state.json");
+    const writeEvidence = vi.fn(async (evidence: ProductCutoverArtifact) => (
+      requireApi("writeProductCutoverArtifactFile")(artifactDir, evidence)
+    ));
+    const runEffects = effects({
+      readTriggerInventory: vi.fn()
+        .mockResolvedValueOnce([...BOTH_TRIGGERS])
+        .mockRejectedValueOnce(new Error("D1 readback unavailable")),
+      writeEvidence,
+    });
+    try {
+      await expect(requireApi("runProductCutover")(value, runEffects))
+        .rejects.toThrow("unlock state is ambiguous");
+      await expect(requireApi("validateProductCutoverStateFile")(
+        filename,
+        "production",
+      )).resolves.toMatchObject({
+        phase: "unlock",
+        status: "failed",
+        unlock: {
+          inventoryBefore: [...BOTH_TRIGGERS],
+          applyState: "failed",
+          inventoryAfter: null,
+        },
+        failure: { classification: "unlock_state_ambiguous" },
+      });
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true });
+    }
+  });
+
+  describe("durable state edge cases", () => {
+    it("refuses to erase a same-attempt recovery bookmark", async () => {
+      const previous = artifactForPhase("migration", "succeeded");
+      const current = artifactForPhase("precheck", "pending");
+      const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-bookmark-edge-"));
+      const filename = path.join(artifactDir, "production-product-cutover-state.json");
+      const original = JSON.stringify({ cutover: previous });
+      try {
+        await writeFile(filename, original, "utf8");
+        await expect(requireApi("writeProductCutoverArtifactFile")(artifactDir, current))
+          .rejects.toThrow("recovery bookmark continuity");
+        await expect(readFile(filename, "utf8")).resolves.toBe(original);
+      } finally {
+        await rm(artifactDir, { recursive: true, force: true });
+      }
+    });
+
+    it("restarts an ordinary failed attempt without deleting durable evidence", async () => {
+      const previous = artifactForPhase("migration", "failed");
+      const current = artifactForPhase("precheck", "pending");
+      current.migration.recoveryBookmarkId = previous.migration.recoveryBookmarkId;
+      const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-restart-edge-"));
+      const filename = path.join(artifactDir, "production-product-cutover-state.json");
+      try {
+        await writeFile(filename, JSON.stringify({ cutover: previous }), "utf8");
+        await expect(requireApi("writeProductCutoverArtifactFile")(artifactDir, current))
+          .resolves.toBeUndefined();
+      } finally {
+        await rm(artifactDir, { recursive: true, force: true });
+      }
+    });
+
+    it("rejects an unsupported restoration restart", async () => {
+      const previous = failedPostRestorationArtifact(
+        POST_REPAIR_SOURCE_SHA,
+        FAILED_RESTORATION_SHA,
+      );
+      const current = artifactForPhase("precheck", "pending");
+      const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-restart-edge-"));
+      const filename = path.join(artifactDir, "production-product-cutover-state.json");
+      try {
+        await writeFile(filename, JSON.stringify({ cutover: previous }), "utf8");
+        await expect(requireApi("writeProductCutoverArtifactFile")(artifactDir, current))
+          .rejects.toThrow("artifact");
+      } finally {
+        await rm(artifactDir, { recursive: true, force: true });
+      }
+    });
+
+    it("rejects an unrelated transition after a nonterminal successful phase", async () => {
+      const previous = artifactForPhase("migration", "succeeded");
+      const current = artifactForTransition("forward-repair");
+      current.phase = "precheck";
+      current.status = "pending";
+      current.target.versionId = null;
+      current.migration = {
+        ...current.migration,
+        recoveryBookmarkId: null,
+        applyState: "not_started",
+        triggerInventory: null,
+      };
+      current.deployment = {
+        deploymentId: null,
+        versionId: null,
+        sourceSha: current.target.sourceSha,
+        trafficPercent: null,
+      };
+      current.unlock = {
+        ...current.unlock,
+        inventoryBefore: null,
+        applyState: "not_started",
+        inventoryAfter: null,
+      };
+      current.failure = null;
+      const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-restart-edge-"));
+      const filename = path.join(artifactDir, "production-product-cutover-state.json");
+      try {
+        await writeFile(filename, JSON.stringify({ cutover: previous }), "utf8");
+        await expect(requireApi("writeProductCutoverArtifactFile")(artifactDir, current))
+          .rejects.toThrow("artifact");
+      } finally {
+        await rm(artifactDir, { recursive: true, force: true });
+      }
+    });
+
+    it("permits same-target reconciliation after an ambiguously reconciled unlock", async () => {
+      const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-ambiguous-restart-"));
+      const previous = artifactForPhase("unlock", "ambiguous_reconciled");
+      const current = artifactForTransition("same-target-reconcile");
+      current.phase = "precheck";
+      current.status = "pending";
+      current.migration = {
+        ...current.migration,
+        recoveryBookmarkId: null,
+        applyState: "not_started",
+        triggerInventory: null,
+      };
+      current.deployment = {
+        deploymentId: null,
+        versionId: null,
+        sourceSha: current.target.sourceSha,
+        trafficPercent: null,
+      };
+      current.unlock = {
+        ...current.unlock,
+        inventoryBefore: null,
+        applyState: "not_started",
+        inventoryAfter: null,
+      };
+      const filename = path.join(artifactDir, "production-product-cutover-state.json");
+      try {
+        await writeFile(filename, JSON.stringify({ cutover: previous }), "utf8");
+        await expect(requireApi("writeProductCutoverArtifactFile")(artifactDir, current))
+          .resolves.toBeUndefined();
+      } finally {
+        await rm(artifactDir, { recursive: true, force: true });
+      }
+    });
+
+    it("refuses to overwrite syntactically invalid durable JSON", async () => {
+      const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-invalid-json-"));
+      const filename = path.join(artifactDir, "production-product-cutover-state.json");
+      try {
+        await writeFile(filename, "{", "utf8");
+        await expect(requireApi("writeProductCutoverArtifactFile")(
+          artifactDir,
+          artifactForPhase("precheck", "pending"),
+        )).rejects.toThrow();
+        await expect(readFile(filename, "utf8")).resolves.toBe("{");
+      } finally {
+        await rm(artifactDir, { recursive: true, force: true });
+      }
+    });
+
+    it("treats an explicitly undefined parsed cutover as an empty state envelope", async () => {
+      const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-undefined-envelope-"));
+      const filename = path.join(artifactDir, "production-product-cutover-state.json");
+      const parse = vi.spyOn(JSON, "parse").mockReturnValueOnce({ cutover: undefined });
+      try {
+        await writeFile(filename, "synthetic envelope", "utf8");
+        await expect(requireApi("writeProductCutoverArtifactFile")(
+          artifactDir,
+          artifactForPhase("precheck", "pending"),
+        )).resolves.toBeUndefined();
+      } finally {
+        parse.mockRestore();
+        await rm(artifactDir, { recursive: true, force: true });
+      }
+    });
+
+    it("rejects a valid state file for the wrong expected environment", async () => {
+      const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-state-environment-"));
+      const filename = path.join(artifactDir, "state.json");
+      try {
+        await writeFile(filename, JSON.stringify({ cutover: artifact() }), "utf8");
+        await expect(requireApi("validateProductCutoverStateFile")(filename, "qa"))
+          .rejects.toThrow("state file environment");
+      } finally {
+        await rm(artifactDir, { recursive: true, force: true });
+      }
+    });
+  });
+});
+
+describe("product-cutover final reachable branch coverage", () => {
+  it("loads a post-restoration chain with no prior failed repair", async () => {
+    const evidenceDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-empty-chain-"));
+    const directory = path.join(evidenceDir, "product-repair-chain");
+    try {
+      await mkdir(directory, { recursive: true });
+      await writeFile(path.join(directory, "production.json"), JSON.stringify({
+        runtimeFloorSourceSha: RUNTIME_FLOOR_SHA,
+        originalFailedRestorationSourceSha: FAILED_RESTORATION_SHA,
+        latestFailedRepairArtifact: null,
+      }), "utf8");
+      await expect(requireApi("readPostRestorationChainStateFile")(
+        evidenceDir,
+        "production",
+      )).resolves.toEqual(restorationChainState());
+    } finally {
+      await rm(evidenceDir, { recursive: true, force: true });
+    }
+  });
+
+  it("accepts initial trigger-mismatch evidence from an already-applied migration", () => {
+    const value = artifactForFailure("migration", "trigger_inventory_mismatch");
+    value.migration.recoveryBookmarkId = null;
+    value.migration.applyState = "already_applied";
+    value.migration.triggerInventory = [INSERT_TRIGGER];
+    expect(() => requireApi("assertProductCutoverArtifact")(value)).not.toThrow();
+  });
+
+  it("rejects failed migration evidence whose classification disappears during validation", () => {
+    const value = artifactForFailure("migration", "migration_rejected");
+    const failure = value.failure;
+    let reads = 0;
+    Object.defineProperty(value, "failure", {
+      configurable: true,
+      enumerable: true,
+      get: () => ++reads === 1 ? null : failure,
+    });
+    expect(() => requireApi("assertProductCutoverArtifact")(value))
+      .toThrow("migration failure state");
+  });
+
+  it("handles a deployment classification that appears after basic failure parsing", () => {
+    const value = artifactForFailure("deployment", "deployment_failed");
+    const failure = value.failure;
+    let reads = 0;
+    Object.defineProperty(value, "failure", {
+      configurable: true,
+      enumerable: true,
+      get: () => ++reads <= 2 ? null : failure,
+    });
+    expect(() => requireApi("assertProductCutoverArtifact")(value)).not.toThrow();
+  });
+
+  it("treats a missing flexible-deployment classification as non-flexible", () => {
+    const value = artifactForFailure("deployment", "deployment_failed");
+    const failure = value.failure;
+    if (!failure) throw new Error("deployment failure fixture must be present");
+    let reads = 0;
+    Object.defineProperty(failure, "classification", {
+      configurable: true,
+      enumerable: true,
+      get: () => ++reads <= 4 ? "deployment_failed" : undefined,
+    });
+    expect(() => requireApi("assertProductCutoverArtifact")(value)).not.toThrow();
+  });
+
+  it("rejects non-100 traffic when a flexible classification disappears", () => {
+    const value = artifactForFailure("deployment", "deployment_failed");
+    value.target.versionId = TARGET_VERSION_ID;
+    value.deployment = observedTarget({ trafficPercent: 37 });
+    const failure = value.failure;
+    if (!failure) throw new Error("deployment failure fixture must be present");
+    let reads = 0;
+    Object.defineProperty(failure, "classification", {
+      configurable: true,
+      enumerable: true,
+      get: () => ++reads <= 6 ? "deployment_failed" : undefined,
+    });
+    expect(() => requireApi("assertProductCutoverArtifact")(value))
+      .toThrow("deployment traffic");
+  });
+});
