@@ -563,6 +563,26 @@ describe("API v1 public recipe reads", () => {
       where: { id: ingredient.id },
       data: { quantity: 1.23456789 },
     });
+    const secondStep = await db.recipeStep.create({
+      data: {
+        recipeId: fixture.recipe.id,
+        stepNum: 2,
+        stepTitle: "Finish",
+        description: "Finish the dish.",
+        duration: 2,
+      },
+    });
+    const secondIngredientRef = await getOrCreateIngredientRef(db, `zest ${faker.string.alphanumeric(6)}`);
+    const secondUnit = await getOrCreateUnit(db, "tbsp");
+    const secondIngredient = await db.ingredient.create({
+      data: {
+        recipeId: fixture.recipe.id,
+        stepNum: secondStep.stepNum,
+        quantity: 0.5,
+        unitId: secondUnit.id,
+        ingredientRefId: secondIngredientRef.id,
+      },
+    });
 
     const unscaledResponse = await loader(routeArgs(new UndiciRequest(
       `http://localhost/api/v1/recipes/${fixture.recipe.id}`,
@@ -580,24 +600,32 @@ describe("API v1 public recipe reads", () => {
     expect(unscaledPayload.data.recipe).not.toHaveProperty("scale");
     expect(scaledResponse.status).toBe(200);
     expectExactKeys(scaledPayload.data.recipe, [...RECIPE_DETAIL_KEYS, "scale"]);
-    expect(scaledPayload.data.recipe.scale).toEqual({
-      factor: 10,
-      appliedTo: "ingredient_quantities",
-      decimalPlaces: 6,
+    expect(scaledPayload.data.recipe).toEqual({
+      ...unscaledPayload.data.recipe,
+      steps: unscaledPayload.data.recipe.steps.map((step: Record<string, any>) => ({
+        ...step,
+        ingredients: step.ingredients.map((item: Record<string, any>) => ({
+          ...item,
+          quantity: item.id === ingredient.id ? 12.345679 : 5,
+        })),
+      })),
+      scale: {
+        factor: 10,
+        appliedTo: "ingredient_quantities",
+        decimalPlaces: 6,
+      },
     });
     expect(scaledPayload.data.recipe.servings).toBe("4");
-    expect(scaledPayload.data.recipe.steps[0].ingredients[0]).toMatchObject({
-      id: ingredient.id,
-      name: fixture.ingredientRef.name,
-      quantity: 12.345679,
-      unit: "lb",
-    });
+    expect(JSON.stringify(scaledPayload.data.recipe)).toContain(secondIngredient.id);
     await expect(db.ingredient.findUniqueOrThrow({ where: { id: ingredient.id } }))
       .resolves.toMatchObject({ quantity: 1.23456789 });
+    await expect(db.ingredient.findUniqueOrThrow({ where: { id: secondIngredient.id } }))
+      .resolves.toMatchObject({ quantity: 0.5 });
   });
 
   it.each([
     ["0.1", 0.1],
+    ["1", 1],
     ["100", 100],
     ["1e2", 100],
     ["1E-1", 0.1],
@@ -655,6 +683,15 @@ describe("API v1 public recipe reads", () => {
 
     expect(response.status).toBe(400);
     await expect(readJson(response)).resolves.toMatchObject({
+      error: { code: "validation_error", details: { field: "scale" } },
+    });
+
+    const duplicateResponse = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}?scale=1&scale=1`,
+      { headers: { "X-Request-Id": "req_recipe_scale_repeated_same" } },
+    ) as unknown as Request, `recipes/${fixture.recipe.id}`));
+    expect(duplicateResponse.status).toBe(400);
+    await expect(readJson(duplicateResponse)).resolves.toMatchObject({
       error: { code: "validation_error", details: { field: "scale" } },
     });
   });

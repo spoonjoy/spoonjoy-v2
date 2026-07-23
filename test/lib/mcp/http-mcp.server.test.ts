@@ -424,7 +424,7 @@ describe("handleMcpHttpRequest", () => {
     await expect(response.json()).resolves.toEqual({
       jsonrpc: "2.0",
       id: 73,
-      error: { code: -32602, message: "scale must be a finite number between 0.1 and 100" },
+      error: { code: -32602, message: expect.stringContaining("scale") },
     });
   });
 

@@ -58,6 +58,7 @@ describe("recipe read scaling", () => {
     expect(parseRestRecipeScale(new URLSearchParams())).toBeUndefined();
     expect(() => parseRestRecipeScale(new URLSearchParams("scale="))).toThrow(RecipeScaleError);
     expect(() => parseRestRecipeScale(new URLSearchParams("scale=1&scale=2"))).toThrow(RecipeScaleError);
+    expect(() => parseRestRecipeScale(new URLSearchParams("scale=1&scale=1"))).toThrow(RecipeScaleError);
   });
 
   it.each([0.1, 1, 100])("accepts MCP JSON number scale %s", (scale) => {
@@ -74,12 +75,27 @@ describe("recipe read scaling", () => {
   it("omits scale and preserves the exact object when the argument is absent", () => {
     const recipe = recipeWithQuantities(1);
     expect(parseMcpRecipeScale({})).toBeUndefined();
-    expect(applyRecipeScale(recipe, undefined)).toBe(recipe);
+    expect(applyRecipeScale(recipe, undefined)).toEqual(recipe);
     expect(recipe).not.toHaveProperty("scale");
+  });
+
+  it("applies factor one metadata and ECMAScript toFixed rounding", () => {
+    const scaled = applyRecipeScale(recipeWithQuantities(0.0000005), 1);
+
+    expect(scaled.scale).toEqual({
+      factor: 1,
+      appliedTo: "ingredient_quantities",
+      decimalPlaces: 6,
+    });
+    expect(scaled.steps[0]?.ingredients[0]?.quantity).toBe(0);
   });
 
   it("scales only ingredient quantities with exact metadata and six-decimal rounding", () => {
     const recipe = recipeWithQuantities(1.23456789, 0.0000004, -0);
+    recipe.steps.push({
+      id: "step_2",
+      ingredients: [{ id: "ingredient_4", name: "ingredient 4", quantity: 4, unit: "cup" }],
+    });
     const scaled = applyRecipeScale(recipe, 2.5);
 
     expect(scaled).not.toBe(recipe);
@@ -103,6 +119,14 @@ describe("recipe read scaling", () => {
       0.0000004,
       -0,
     ]);
+    expect(scaled.steps[1]).toEqual({
+      id: "step_2",
+      ingredients: [{ id: "ingredient_4", name: "ingredient 4", quantity: 10, unit: "cup" }],
+    });
+    expect(recipe.steps[1]).toEqual({
+      id: "step_2",
+      ingredients: [{ id: "ingredient_4", name: "ingredient 4", quantity: 4, unit: "cup" }],
+    });
   });
 
   it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(

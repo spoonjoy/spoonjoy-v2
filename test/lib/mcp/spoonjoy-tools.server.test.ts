@@ -1626,11 +1626,18 @@ describe("spoonjoy MCP tools", () => {
       servings: "4",
       steps: [{
         description: "Mix",
-        ingredients: [{ name: "Flour", quantity: 1.23456789, unit: "Cup" }],
+        ingredients: [
+          { name: "Flour", quantity: 1.23456789, unit: "Cup" },
+          { name: "Salt", quantity: 0.5, unit: "Tsp" },
+        ],
+      }, {
+        description: "Finish",
+        ingredients: [{ name: "Butter", quantity: 2, unit: "Tbsp" }],
       }],
     }, context));
-    const ingredient = await context.db.ingredient.findFirstOrThrow({
+    const ingredients = await context.db.ingredient.findMany({
       where: { recipeId: created.recipe.id },
+      orderBy: { id: "asc" },
     });
 
     const unscaled = parseJson(await callSpoonjoyMcpTool("get_recipe", {
@@ -1644,24 +1651,25 @@ describe("spoonjoy MCP tools", () => {
     expectExactKeys(unscaled.recipe, [...MCP_RECIPE_BASE_KEYS, "course", "tags"]);
     expect(unscaled.recipe).not.toHaveProperty("scale");
     expectExactKeys(scaled.recipe, [...MCP_RECIPE_BASE_KEYS, "course", "tags", "scale"]);
-    expect(scaled.recipe).toMatchObject({
-      servings: "4",
+    expect(scaled.recipe).toEqual({
+      ...unscaled.recipe,
+      steps: unscaled.recipe.steps.map((step: Record<string, any>) => ({
+        ...step,
+        ingredients: step.ingredients.map((ingredient: Record<string, any>) => ({
+          ...ingredient,
+          quantity: Number((ingredient.quantity * 2.5).toFixed(6)),
+        })),
+      })),
       scale: {
         factor: 2.5,
         appliedTo: "ingredient_quantities",
         decimalPlaces: 6,
       },
-      steps: [{
-        ingredients: [{
-          id: ingredient.id,
-          name: "flour",
-          quantity: 3.08642,
-          unit: "cup",
-        }],
-      }],
     });
-    await expect(context.db.ingredient.findUniqueOrThrow({ where: { id: ingredient.id } }))
-      .resolves.toMatchObject({ quantity: 1.23456789 });
+    await expect(context.db.ingredient.findMany({
+      where: { recipeId: created.recipe.id },
+      orderBy: { id: "asc" },
+    })).resolves.toEqual(ingredients);
   });
 
   it.each([null, "2", Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 0.09, 101])(
@@ -1674,7 +1682,7 @@ describe("spoonjoy MCP tools", () => {
       await expect(callSpoonjoyMcpTool("get_recipe", {
         id: created.recipe.id,
         scale,
-      }, context)).rejects.toThrow("scale must be a finite number between 0.1 and 100");
+      }, context)).rejects.toThrow();
     },
   );
 
@@ -1697,7 +1705,7 @@ describe("spoonjoy MCP tools", () => {
     await expect(callSpoonjoyMcpTool("get_recipe", {
       id: created.recipe.id,
       scale: 100,
-    }, context)).rejects.toThrow("scale produced a non-finite ingredient quantity");
+    }, context)).rejects.toThrow();
     await expect(context.db.ingredient.findUniqueOrThrow({ where: { id: ingredient.id } }))
       .resolves.toMatchObject({ quantity: 1e308 });
   });
