@@ -2324,6 +2324,7 @@ describe("Recipes $id Route", () => {
           steps: [],
         },
         isOwner: true,
+        isSaved: false,
         cookbooks: [{ id: "cb-1", title: "Weeknights" }],
         savedInCookbookIds: [],
       };
@@ -2394,6 +2395,7 @@ describe("Recipes $id Route", () => {
           steps: [],
         },
         isOwner: true,
+        isSaved: false,
         cookbooks: [{ id: "cb-1", title: "Weeknights" }],
         savedInCookbookIds: [],
       };
@@ -2440,6 +2442,7 @@ describe("Recipes $id Route", () => {
           steps: [],
         },
         isOwner: true,
+        isSaved: false,
         cookbooks: [
           { id: "cb-unsaved", title: "Weeknights" },
           { id: "cb-saved", title: "Favorites" },
@@ -2465,6 +2468,8 @@ describe("Recipes $id Route", () => {
 
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Toggle Cookbook Recipe" });
+      expect(screen.getByRole("button", { name: "Save recipe" }))
+        .toHaveAttribute("aria-pressed", "false");
 
       await openCookbookModalFromHeader();
       await screen.findByRole("dialog", { name: "Add to Cookbook" });
@@ -2474,10 +2479,14 @@ describe("Recipes $id Route", () => {
       await user.click(unsavedCookbookButton);
       expect(unsavedCookbookButton).toHaveTextContent("✓");
       expect(unsavedCookbookButton).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "Save recipe" }))
+        .toHaveAttribute("aria-pressed", "false");
 
       await user.click(savedCookbookButton);
       expect(savedCookbookButton).not.toHaveTextContent("✓");
       expect(savedCookbookButton).toHaveAttribute("aria-pressed", "false");
+      expect(screen.getByRole("button", { name: "Save recipe" }))
+        .toHaveAttribute("aria-pressed", "false");
 
       await waitFor(() => {
         expect(submittedIntents).toEqual([
@@ -2486,6 +2495,8 @@ describe("Recipes $id Route", () => {
         ]);
       });
       await closeCookbookModal(user);
+      expect(screen.getByRole("button", { name: "Save recipe" }))
+        .toHaveAttribute("aria-pressed", "false");
     });
 
     it("prevents blank cookbook creation submissions in the cookbook modal", async () => {
@@ -2502,6 +2513,7 @@ describe("Recipes $id Route", () => {
           steps: [],
         },
         isOwner: true,
+        isSaved: false,
         cookbooks: [],
         savedInCookbookIds: [],
       };
@@ -2596,6 +2608,14 @@ describe("Recipes $id Route", () => {
       fireEvent.click(pendingSaveButton);
       expect(submittedIntents).toEqual(["saveRecipe"]);
 
+      await user.click(cookbookButton);
+      expect(await screen.findByRole("dialog", { name: "Add to Cookbook" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Weeknights" }))
+        .toHaveAttribute("aria-pressed", "false");
+      expect(screen.getByRole("button", { name: "Remove saved recipe" }))
+        .toHaveAttribute("aria-pressed", "true");
+      await closeCookbookModal(user);
+
       await act(async () => {
         completion.resolve(undefined);
         await completion.promise;
@@ -2607,9 +2627,11 @@ describe("Recipes $id Route", () => {
       expect(screen.getByRole("button", { name: "Remove saved recipe" }))
         .toHaveAttribute("aria-pressed", "true");
 
-      await user.click(cookbookButton);
+      await user.click(screen.getByRole("button", { name: "Add to cookbook" }));
       expect(await screen.findByRole("dialog", { name: "Add to Cookbook" })).toBeInTheDocument();
       expect(submittedIntents).toEqual(["saveRecipe"]);
+      expect(screen.getByRole("button", { name: "Weeknights" }))
+        .toHaveAttribute("aria-pressed", "false");
       expect(screen.getByRole("button", { name: "Remove saved recipe" }))
         .toHaveAttribute("aria-pressed", "true");
       await closeCookbookModal(user);
@@ -2633,8 +2655,11 @@ describe("Recipes $id Route", () => {
         isOwner: false,
         isAuthenticated: true,
         isSaved: true,
-        cookbooks: [],
-        savedInCookbookIds: [],
+        cookbooks: [
+          { id: "cb-unsaved", title: "Weeknights" },
+          { id: "cb-saved", title: "Favorites" },
+        ],
+        savedInCookbookIds: ["cb-saved"],
       };
 
       const Stub = createTestRoutesStub([
@@ -2668,6 +2693,17 @@ describe("Recipes $id Route", () => {
         .toHaveAttribute("aria-pressed", "false");
       expect(screen.getByRole("button", { name: "Save recipe" })).toBeDisabled();
 
+      await user.click(screen.getByRole("button", { name: "Add to cookbook" }));
+      expect(await screen.findByRole("dialog", { name: "Add to Cookbook" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Weeknights" }))
+        .toHaveAttribute("aria-pressed", "false");
+      expect(screen.getByRole("button", { name: "Favorites" }))
+        .toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "Save recipe" }))
+        .toHaveAttribute("aria-pressed", "false");
+      expect(submittedIntents).toEqual(["unsaveRecipe"]);
+      await closeCookbookModal(user);
+
       await act(async () => {
         completion.resolve(undefined);
         await completion.promise;
@@ -2678,6 +2714,17 @@ describe("Recipes $id Route", () => {
       });
       expect(screen.getByRole("button", { name: "Remove saved recipe" }))
         .toHaveAttribute("aria-pressed", "true");
+
+      await user.click(screen.getByRole("button", { name: "Add to cookbook" }));
+      expect(await screen.findByRole("dialog", { name: "Add to Cookbook" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Weeknights" }))
+        .toHaveAttribute("aria-pressed", "false");
+      expect(screen.getByRole("button", { name: "Favorites" }))
+        .toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "Remove saved recipe" }))
+        .toHaveAttribute("aria-pressed", "true");
+      expect(submittedIntents).toEqual(["unsaveRecipe"]);
+      await closeCookbookModal(user);
     });
 
     it("rolls back a failed optimistic save and shows error feedback", async () => {
@@ -2895,12 +2942,17 @@ describe("Recipes $id Route", () => {
         const user = userEvent.setup();
         render(<Stub initialEntries={["/recipes/recipe-1"]} />);
         await screen.findByRole("heading", { name: "Guest Recipe" });
+        const loginRedirect = "/login?redirectTo=%2Frecipes%2Frecipe-1";
 
         await user.click(screen.getByRole("button", { name: "Save recipe" }));
-        await user.click(screen.getByRole("button", { name: "Add to cookbook" }));
+        expect(assign).toHaveBeenCalledTimes(1);
+        expect(assign).toHaveBeenNthCalledWith(1, loginRedirect);
+        expect(submittedIntents).toEqual([]);
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
+        await user.click(screen.getByRole("button", { name: "Add to cookbook" }));
         expect(assign).toHaveBeenCalledTimes(2);
-        expect(assign).toHaveBeenCalledWith("/login?redirectTo=%2Frecipes%2Frecipe-1");
+        expect(assign).toHaveBeenNthCalledWith(2, loginRedirect);
         expect(submittedIntents).toEqual([]);
         expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       } finally {
