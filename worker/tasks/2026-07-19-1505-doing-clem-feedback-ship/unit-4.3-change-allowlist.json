@@ -82,7 +82,7 @@
     "test/fixtures/product-cutover/topology-worker-v2.bundle.mjs": "A:a3d50b03cdf441485fc15626b1630db4ca168151d70426620307275d5547cffa",
     "test/fixtures/product-cutover/topology-worker-v2.ts": "A:67aded03bf3ee130089d9c5c8cf0036b3b1da2a422c2824ae13e33dcd82eb6ac",
     "test/helpers/cleanup.ts": "M:2cc05b1adff1c81459b2a8959b407dcc68fbfee1ef51740c5b0d00808c568aed",
-    "test/lib/api-v1-openapi.server.test.ts": "M:0c11f069cc560e89ba49107efcedcf5547ba3b4c3cb067101a16eec1591527da",
+    "test/lib/api-v1-openapi.server.test.ts": "M:172afccbb07b324b290fce6306fbb20387248c92d8dbd7a9f61be42cedbcb4c7",
     "test/lib/api-v1-recipe-list-query.test.ts": "M:5352972be1cfe11e77dffdfbf768243a3b114b342758be2c8044ca50a1492674",
     "test/lib/cookbook-membership-compat.server.test.ts": "A:56f89aec6ce6551550155450dfd952934b0eb0f7fbd47c07aa5fdfd0f31469a2",
     "test/lib/mcp/http-mcp.server.test.ts": "M:9aa9a177ca802cd2751bc6abff4bb7efc9fee50f8c2b88dd5d9f6278cc46f0ac",

@@ -63,6 +63,9 @@ const OPERATION_SCOPES = {
   "DELETE /api/v1/cookbooks/{id}": ["kitchen:write"],
   "POST /api/v1/cookbooks/{id}/recipes/{recipeId}": ["kitchen:write"],
   "DELETE /api/v1/cookbooks/{id}/recipes/{recipeId}": ["kitchen:write"],
+  "GET /api/v1/saved-recipes": ["kitchen:read"],
+  "PUT /api/v1/saved-recipes/{recipeId}": ["kitchen:write"],
+  "DELETE /api/v1/saved-recipes/{recipeId}": ["kitchen:write"],
   "GET /api/v1/me": ["account:read"],
   "PATCH /api/v1/me": ["account:write"],
   "GET /api/v1/me/sync": ["account:read", "kitchen:read"],
@@ -1676,6 +1679,8 @@ describe("API v1 OpenAPI document", () => {
       "/api/v1/recipes",
       "/api/v1/recipes/import",
       "/api/v1/recipes/{id}",
+      "/api/v1/saved-recipes",
+      "/api/v1/saved-recipes/{recipeId}",
       "/api/v1/shopping-list",
       "/api/v1/shopping-list/add-from-recipe",
       "/api/v1/shopping-list/clear-all",
@@ -1718,6 +1723,18 @@ describe("API v1 OpenAPI document", () => {
     expect(connector.paths["/api/v1/shopping-list/items/{itemId}"].delete.requestBody).toBeUndefined();
     expect(connector.paths["/api/v1/cookbooks/{id}"].delete.requestBody).toBeUndefined();
     expect(connector.paths["/api/v1/cookbooks/{id}/recipes/{recipeId}"].delete.requestBody).toBeUndefined();
+    expect(connector.paths["/api/v1/saved-recipes/{recipeId}"].delete.requestBody).toMatchObject({
+      required: true,
+      content: {
+        "application/json": {
+          schema: { $ref: "#/components/schemas/SavedRecipeMutationRequest" },
+        },
+      },
+    });
+    expect(connector.paths["/api/v1/saved-recipes"].get).toMatchObject({
+      "x-connector-role": "search",
+      "x-display-name": "Search saved recipes",
+    });
     expect(connector.paths["/api/v1/cookbooks/{id}/recipes/{recipeId}"].post).toMatchObject({
       "x-connector-role": "action",
       "x-display-name": "Add recipe to cookbook",
