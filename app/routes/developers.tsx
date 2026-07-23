@@ -596,6 +596,7 @@ export default function Developers() {
             <ul className="mt-3 grid gap-2 text-sm/6 text-[var(--sj-ink-soft)]">
               {currentCapabilities.available.map((item) => <li key={item}>- {item}</li>)}
             </ul>
+            <Text className="mt-3">Public recipe reads expose neutral <code>course</code> and ordered <code>tags</code> without personalized save state or an <code>isSaved</code> field.</Text>
           </div>
           <div>
             <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">Not in v1 yet</p>

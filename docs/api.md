@@ -31,6 +31,8 @@ Available now:
 - Delegated agent/device approval links
 - Remote MCP endpoint
 
+Public recipe reads expose neutral `course` and ordered `tags` without personalized save state or an `isSaved` field.
+
 Not in API v1 yet:
 
 - Recipe export endpoints beyond the current create, edit, delete, fork, import, step, spoon, and cover surfaces

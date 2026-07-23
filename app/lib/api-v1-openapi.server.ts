@@ -157,6 +157,13 @@ const notificationPreferenceRequired = [
   "notifyFellowChefOriginCook",
 ];
 
+const recipeCourseSchema: JsonSchema = {
+  type: ["string", "null"],
+  enum: ["main", "side", "appetizer", "dessert", null],
+};
+
+const recipeTagsSchema: JsonSchema = arrayOf({ type: "string" });
+
 const schemas = {
   ErrorDetails: { type: "object", additionalProperties: true },
   ErrorObject: objectSchema(["code", "message", "status"], {
@@ -517,6 +524,24 @@ const schemas = {
     createdAt: dateTimeSchema,
     updatedAt: dateTimeSchema,
   }),
+  RecipeReadSummary: objectSchema(["id", "title", "description", "servings", "chef", "coverImageUrl", "coverProvenanceLabel", "coverSourceType", "coverVariant", "href", "canonicalUrl", "attribution", "createdAt", "updatedAt", "course", "tags"], {
+    id: idSchema,
+    title: { type: "string" },
+    description: nullableStringSchema,
+    servings: nullableStringSchema,
+    chef: ref("ChefSummary"),
+    coverImageUrl: { ...nullableStringSchema, description: "Public cover image URL for transient display. API v1 does not provide image alt text or a license to copy/store photos outside Spoonjoy." },
+    coverProvenanceLabel: { ...nullableStringSchema, description: "Human-readable active cover provenance label such as Original photo, Editorial photo, Imported photo, or AI generated." },
+    coverSourceType: coverSourceTypeSchema,
+    coverVariant: coverVariantSchema,
+    href: { type: "string" },
+    canonicalUrl: uriSchema,
+    attribution: ref("RecipeAttribution"),
+    createdAt: dateTimeSchema,
+    updatedAt: dateTimeSchema,
+    course: recipeCourseSchema,
+    tags: recipeTagsSchema,
+  }),
   RecipeDetail: objectSchema(["id", "title", "description", "servings", "chef", "coverImageUrl", "coverProvenanceLabel", "coverSourceType", "coverVariant", "href", "canonicalUrl", "attribution", "createdAt", "updatedAt", "steps", "cookbooks"], {
     id: idSchema,
     title: { type: "string" },
@@ -534,6 +559,26 @@ const schemas = {
     updatedAt: dateTimeSchema,
     steps: { ...arrayOf(ref("RecipeStep")), description: "Recipe steps returned in ascending stepNum order." },
     cookbooks: arrayOf(ref("CookbookLink")),
+  }),
+  RecipeReadDetail: objectSchema(["id", "title", "description", "servings", "chef", "coverImageUrl", "coverProvenanceLabel", "coverSourceType", "coverVariant", "href", "canonicalUrl", "attribution", "createdAt", "updatedAt", "steps", "cookbooks", "course", "tags"], {
+    id: idSchema,
+    title: { type: "string" },
+    description: nullableStringSchema,
+    servings: nullableStringSchema,
+    chef: ref("ChefSummary"),
+    coverImageUrl: { ...nullableStringSchema, description: "Public cover image URL for transient display. API v1 does not provide image alt text or a license to copy/store photos outside Spoonjoy." },
+    coverProvenanceLabel: { ...nullableStringSchema, description: "Human-readable active cover provenance label such as Original photo, Editorial photo, Imported photo, or AI generated." },
+    coverSourceType: coverSourceTypeSchema,
+    coverVariant: coverVariantSchema,
+    href: { type: "string" },
+    canonicalUrl: uriSchema,
+    attribution: ref("RecipeAttribution"),
+    createdAt: dateTimeSchema,
+    updatedAt: dateTimeSchema,
+    steps: { ...arrayOf(ref("RecipeStep")), description: "Recipe steps returned in ascending stepNum order." },
+    cookbooks: arrayOf(ref("CookbookLink")),
+    course: recipeCourseSchema,
+    tags: recipeTagsSchema,
   }),
   RecipeCover: objectSchema(["id", "recipeId", "status", "sourceType", "imageUrl", "stylizedImageUrl", "displayUrl", "activeVariant", "provenanceLabel", "archivedAt", "generationStatus", "sourceImageUrl", "createdAt"], {
     id: idSchema,
@@ -722,6 +767,36 @@ const schemas = {
     refreshTokenCount: { type: "integer", minimum: 0 },
     accessTokenCount: { type: "integer", minimum: 0 },
   }),
+  RecipeSearchMetadata: objectSchema(["servings", "chefUsername", "course", "tags", "ingredientNames", "stepCount", "cookbookTitles", "coverProvenanceLabel", "coverSourceType", "coverVariant"], {
+    servings: nullableStringSchema,
+    chefUsername: { type: "string" },
+    course: recipeCourseSchema,
+    tags: recipeTagsSchema,
+    ingredientNames: arrayOf({ type: "string" }),
+    stepCount: { type: "integer", minimum: 0 },
+    cookbookTitles: arrayOf({ type: "string" }),
+    coverProvenanceLabel: nullableStringSchema,
+    coverSourceType: coverSourceTypeSchema,
+    coverVariant: coverVariantSchema,
+  }),
+  CookbookSearchMetadata: objectSchema(["authorUsername", "recipeCount", "recipeTitles"], {
+    authorUsername: { type: "string" },
+    recipeCount: { type: "integer", minimum: 0 },
+    recipeTitles: arrayOf({ type: "string" }),
+  }),
+  ChefSearchMetadata: objectSchema(["username", "recipeCount", "cookbookCount"], {
+    username: { type: "string" },
+    recipeCount: { type: "integer", minimum: 0 },
+    cookbookCount: { type: "integer", minimum: 0 },
+  }),
+  ShoppingListItemSearchMetadata: objectSchema(["quantity", "unit", "checked", "categoryKey", "iconKey", "sortIndex"], {
+    quantity: { type: ["number", "null"] },
+    unit: nullableStringSchema,
+    checked: { type: "boolean" },
+    categoryKey: nullableStringSchema,
+    iconKey: nullableStringSchema,
+    sortIndex: { type: "integer" },
+  }),
   SearchResult: objectSchema(["type", "id", "ownerId", "ownerUsername", "title", "subtitle", "snippet", "href", "canonicalUrl", "imageUrl", "score", "metadata"], {
     type: { type: "string", enum: ["recipe", "cookbook", "chef", "shopping-list-item"] },
     id: idSchema,
@@ -735,8 +810,12 @@ const schemas = {
     imageUrl: { type: ["string", "null"], format: "uri" },
     score: { type: "number", description: "Lower values are better for full-text ranked queries. Empty-query recency results use 0." },
     metadata: {
-      type: "object",
-      additionalProperties: true,
+      oneOf: [
+        ref("RecipeSearchMetadata"),
+        ref("CookbookSearchMetadata"),
+        ref("ChefSearchMetadata"),
+        ref("ShoppingListItemSearchMetadata"),
+      ],
       description: "Type-specific display metadata. Render values as data, not HTML.",
     },
   }),
@@ -931,9 +1010,9 @@ const schemas = {
     cursor: nullableStringSchema,
     nextCursor: nullableStringSchema,
     hasMore: { type: "boolean" },
-    recipes: arrayOf(ref("RecipeSummary")),
+    recipes: arrayOf(ref("RecipeReadSummary")),
   }),
-  RecipeDetailData: objectSchema(["recipe"], { recipe: ref("RecipeDetail") }),
+  RecipeDetailData: objectSchema(["recipe"], { recipe: ref("RecipeReadDetail") }),
   RecipeIngredientInput: objectSchema(["quantity", "unit", "name"], {
     quantity: { type: "number", minimum: 0.001, maximum: 99999 },
     unit: { type: "string", minLength: 1, maxLength: 50 },
@@ -1597,10 +1676,20 @@ const exampleRecipeSummary = {
   createdAt: exampleTimestamp,
   updatedAt: exampleTimestamp,
 };
+const exampleRecipeReadSummary = {
+  ...exampleRecipeSummary,
+  course: "main",
+  tags: ["Weeknight"],
+};
 const exampleRecipeDetail = {
   ...exampleRecipeSummary,
   steps: [exampleRecipeStep, exampleDependentRecipeStep],
   cookbooks: [exampleCookbookLink],
+};
+const exampleRecipeReadDetail = {
+  ...exampleRecipeDetail,
+  course: "main",
+  tags: ["Weeknight"],
 };
 const exampleRecipeDetailAfterStepDelete = {
   ...exampleRecipeDetail,
@@ -1740,6 +1829,22 @@ const exampleEmptyCookbookDetail = {
   coverImageUrls: [],
   recipes: [],
 };
+const exampleRemainingRecipeSummary = {
+  ...exampleRecipeSummary,
+  id: "recipe_2",
+  title: "Salad",
+  href: "/recipes/recipe_2",
+  canonicalUrl: "https://spoonjoy.app/recipes/recipe_2",
+  attribution: {
+    ...exampleRecipeSummary.attribution,
+    creditText: "Salad by ari on Spoonjoy",
+    canonicalUrl: "https://spoonjoy.app/recipes/recipe_2",
+  },
+};
+const exampleCookbookDetailAfterRecipeRemove = {
+  ...exampleCookbookSummary,
+  recipes: [exampleRemainingRecipeSummary],
+};
 const exampleCredential = {
   id: "cred_1",
   name: "Tiny client",
@@ -1849,7 +1954,18 @@ const exampleSearchResults = [
     canonicalUrl: "https://spoonjoy.app/recipes/recipe_1",
     imageUrl: "https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg",
     score: -1.25,
-    metadata: { chefUsername: "ari", ingredientNames: ["pasta"], coverProvenanceLabel: "Original photo" },
+    metadata: {
+      servings: "4",
+      chefUsername: "ari",
+      course: "main",
+      tags: ["Weeknight"],
+      ingredientNames: ["pasta"],
+      stepCount: 2,
+      cookbookTitles: ["Weeknights"],
+      coverProvenanceLabel: "Original photo",
+      coverSourceType: "chef-upload",
+      coverVariant: "image",
+    },
   },
   {
     type: "shopping-list-item",
@@ -1863,7 +1979,42 @@ const exampleSearchResults = [
     canonicalUrl: "https://spoonjoy.app/shopping-list",
     imageUrl: null,
     score: -0.5,
-    metadata: { quantity: 12, unit: "each", checked: false, categoryKey: null },
+    metadata: {
+      quantity: 12,
+      unit: "each",
+      checked: false,
+      categoryKey: null,
+      iconKey: null,
+      sortIndex: 0,
+    },
+  },
+  {
+    type: "cookbook",
+    id: "cookbook_1",
+    ownerId: "chef_1",
+    ownerUsername: "ari",
+    title: "Weeknights",
+    subtitle: "Cookbook by ari",
+    snippet: "Weeknights Pasta",
+    href: "/cookbooks/cookbook_1",
+    canonicalUrl: "https://spoonjoy.app/cookbooks/cookbook_1",
+    imageUrl: null,
+    score: -1,
+    metadata: { authorUsername: "ari", recipeCount: 1, recipeTitles: ["Pasta"] },
+  },
+  {
+    type: "chef",
+    id: "chef_1",
+    ownerId: "chef_1",
+    ownerUsername: "ari",
+    title: "ari",
+    subtitle: "Chef kitchen",
+    snippet: "ari recipes 1 cookbooks 1",
+    href: "/users/ari",
+    canonicalUrl: "https://spoonjoy.app/users/ari",
+    imageUrl: null,
+    score: -0.75,
+    metadata: { username: "ari", recipeCount: 1, cookbookCount: 1 },
   },
 ];
 const exampleShoppingList = {
@@ -1949,10 +2100,10 @@ const responseExamples: Record<string, unknown> = {
       cursor: null,
       nextCursor: "v1.eyJjcmVhdGVkQXQiOiIyMDI2LTA2LTAxVDAwOjAwOjAwLjAwMFoiLCJpZCI6InJlY2lwZV8xIn0",
       hasMore: false,
-      recipes: [exampleRecipeSummary],
+      recipes: [exampleRecipeReadSummary],
     },
   },
-  RecipeDetailEnvelope: { ok: true, requestId: "req_example", data: { recipe: exampleRecipeDetail } },
+  RecipeDetailEnvelope: { ok: true, requestId: "req_example", data: { recipe: exampleRecipeReadDetail } },
   CreateRecipeEnvelope: {
     ok: true,
     requestId: "req_example",
@@ -2191,7 +2342,7 @@ const responseExamples: Record<string, unknown> = {
     data: {
       removed: true,
       recipeId: "recipe_1",
-      cookbook: exampleEmptyCookbookDetail,
+      cookbook: exampleCookbookDetailAfterRecipeRemove,
       mutation: { clientMutationId: "device-uuid-cookbook-recipe-remove", replayed: false },
     },
   },
