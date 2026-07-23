@@ -614,6 +614,77 @@ describe("recipe-tags.server", () => {
         });
       }
     });
+
+    it.each([
+      { label: "nonarray result", rows: null },
+      {
+        label: "nonstring recipe ID",
+        rows: [{ recipeId: 1, course: null, tagId: null, label: null, normalizedLabel: null }],
+      },
+      {
+        label: "mismatched recipe ID",
+        rows: [{ recipeId: "other", course: null, tagId: null, label: null, normalizedLabel: null }],
+      },
+      {
+        label: "invalid course",
+        rows: [{ recipeId: "recipe_1", course: "breakfast", tagId: null, label: null, normalizedLabel: null }],
+      },
+      {
+        label: "mixed recipe IDs",
+        rows: [
+          { recipeId: "recipe_1", course: null, tagId: "tag_1", label: "One", normalizedLabel: "one" },
+          { recipeId: "other", course: null, tagId: "tag_2", label: "Two", normalizedLabel: "two" },
+        ],
+      },
+      {
+        label: "mixed courses",
+        rows: [
+          { recipeId: "recipe_1", course: null, tagId: "tag_1", label: "One", normalizedLabel: "one" },
+          { recipeId: "recipe_1", course: "side", tagId: "tag_2", label: "Two", normalizedLabel: "two" },
+        ],
+      },
+      {
+        label: "label without tag ID",
+        rows: [{ recipeId: "recipe_1", course: null, tagId: null, label: "One", normalizedLabel: null }],
+      },
+      {
+        label: "normalized label without tag ID",
+        rows: [{ recipeId: "recipe_1", course: null, tagId: null, label: null, normalizedLabel: "one" }],
+      },
+      {
+        label: "nonstring tag ID",
+        rows: [{ recipeId: "recipe_1", course: null, tagId: 1, label: "One", normalizedLabel: "one" }],
+      },
+      {
+        label: "nonstring label",
+        rows: [{ recipeId: "recipe_1", course: null, tagId: "tag_1", label: 1, normalizedLabel: "one" }],
+      },
+      {
+        label: "nonstring normalized label",
+        rows: [{ recipeId: "recipe_1", course: null, tagId: "tag_1", label: "One", normalizedLabel: 1 }],
+      },
+    ])("rejects malformed $label read envelopes", async ({ rows }) => {
+      const database = {
+        $queryRawUnsafe: vi.fn().mockResolvedValue(rows),
+      } as unknown as PrismaClient;
+
+      await expect(getRecipeTagMetadata(database, { recipeId: "recipe_1" }))
+        .rejects.toThrow();
+    });
+
+    it("uses tag IDs as the deterministic fallback for equal normalized labels", async () => {
+      const query = vi.fn().mockResolvedValue([
+        { recipeId: "recipe_1", course: null, tagId: "z", label: "Z", normalizedLabel: "same" },
+        { recipeId: "recipe_1", course: null, tagId: "a", label: "A", normalizedLabel: "same" },
+        { recipeId: "recipe_1", course: null, tagId: "a", label: "A", normalizedLabel: "same" },
+      ]);
+      const database = { $queryRawUnsafe: query } as unknown as PrismaClient;
+
+      await expect(getRecipeTagMetadata(database, { recipeId: "recipe_1" }))
+        .resolves.toMatchObject({
+          tags: [{ id: "a" }, { id: "a" }, { id: "z" }],
+        });
+    });
   });
 
   describe("owner-authorized atomic replacement", () => {
@@ -1284,6 +1355,56 @@ describe("recipe-tags.server", () => {
         tags: [],
       })).rejects.toBe(failure);
       expect(database.$transaction).toHaveBeenCalledOnce();
+    });
+
+    it("rejects every malformed local result and composition offset boundary", () => {
+      const database = {
+        $queryRawUnsafe: vi.fn().mockResolvedValue([]),
+        $executeRawUnsafe: vi.fn().mockResolvedValue(0),
+        $transaction: vi.fn(),
+      } as unknown as PrismaClient;
+      const prepared = prepareRecipeTagMetadataReplacement({
+        database,
+        nativeDatabase: null,
+        userId: "owner_1",
+        recipeId: "recipe_1",
+        course: "side",
+        tags: ["Quick"],
+      }, {
+        now: () => BOUND_NOW,
+        randomId: () => "tag_1",
+      });
+      expect(prepared.strategy).toBe("prisma-local");
+      if (prepared.strategy !== "prisma-local") throw new Error("expected local plan");
+
+      const updateRow = {
+        recipeId: "recipe_1",
+        course: "side",
+        updatedAt: BOUND_NOW_TEXT,
+      };
+      const insertRow = {
+        recipeId: "recipe_1",
+        tagId: "tag_1",
+        label: "Quick",
+        normalizedLabel: "quick",
+        createdAt: BOUND_NOW_TEXT,
+        updatedAt: BOUND_NOW_TEXT,
+      };
+      const valid = [[updateRow], 0, [insertRow]];
+
+      for (const results of [null, {}, "invalid"]) {
+        expect(() => prepared.finalizeResults(results)).toThrow();
+      }
+      for (const offset of [1.5, -1, 1]) {
+        expect(() => prepared.finalizeResults(valid, offset)).toThrow();
+      }
+      for (const deleted of [null, -1, 1.5]) {
+        expect(() => prepared.finalizeResults([[updateRow], deleted, [insertRow]]))
+          .toThrow();
+      }
+      expect(() => prepared.finalizeResults([[updateRow, updateRow], 0, [insertRow]]))
+        .toThrow();
+      expect(() => prepared.finalizeResults([[updateRow], 0, []])).toThrow();
     });
   });
 });

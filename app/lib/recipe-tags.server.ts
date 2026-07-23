@@ -441,10 +441,8 @@ function replacementMetadata(plan: ReplacementPlan): RecipeTagMetadata {
   return {
     recipeId: plan.recipeId,
     course: plan.course,
-    tags: [...plan.tags].sort((left, right) => (
-      compareUtf16(left.normalizedLabel, right.normalizedLabel)
-        || compareUtf16(left.id, right.id)
-    )),
+    tags: [...plan.tags].sort((left, right) =>
+      compareUtf16(left.normalizedLabel, right.normalizedLabel)),
   };
 }
 
