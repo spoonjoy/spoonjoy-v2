@@ -318,7 +318,7 @@ describe("Clem feedback rejected-scope boundaries", () => {
     expect(candidateChanges()).toEqual(manifest.entries);
   });
 
-  it("keeps navigation ownership outside this product change", () => {
+  it("limits navigation iteration to the demonstrated saved-dock defect", () => {
     const changedNavigation = git(
       "diff",
       "--name-only",
@@ -328,7 +328,10 @@ describe("Clem feedback rejected-scope boundaries", () => {
       "app/root.tsx",
       "app/routes.ts",
     );
-    expect(changedNavigation).toBe("");
+    expect(changedNavigation).toBe([
+      "app/components/navigation/dock-context.tsx",
+      "app/components/navigation/use-recipe-dock-actions.tsx",
+    ].join("\n"));
   });
 
   it("keeps import agentic without a first-party route or MCP tool", () => {

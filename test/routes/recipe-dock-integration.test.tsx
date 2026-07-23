@@ -84,6 +84,74 @@ describe('Recipe Page Dock Integration', () => {
     expect(screen.getByTestId('action-ids')).toHaveTextContent('recipe-back,cook,add-to-list,share,edit')
   })
 
+  it('refreshes saved semantics and invokes the newest save callback after rerender', () => {
+    const oldSave = vi.fn()
+    const removeSaved = vi.fn()
+
+    function P({ isSaved, isSavePending, onSave }: {
+      isSaved: boolean
+      isSavePending: boolean
+      onSave: () => void
+    }) {
+      useRecipeDetailActions({
+        recipeId: 'recipe-1',
+        chefId: 'chef-1',
+        isOwner: false,
+        isSaved,
+        isSavePending,
+        onSave,
+      })
+      return null
+    }
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <DockContextProvider>
+          <ContextDisplay />
+          <P isSaved={false} isSavePending={false} onSave={oldSave} />
+        </DockContextProvider>
+      </MemoryRouter>,
+    )
+
+    expect(capturedActions?.find(a => a.id === 'save')).toMatchObject({
+      label: 'Save',
+      ariaLabel: 'Save recipe',
+      active: false,
+    })
+
+    rerender(
+      <MemoryRouter>
+        <DockContextProvider>
+          <ContextDisplay />
+          <P isSaved isSavePending={false} onSave={removeSaved} />
+        </DockContextProvider>
+      </MemoryRouter>,
+    )
+
+    const currentSaveAction = capturedActions?.find(a => a.id === 'save')
+    expect(currentSaveAction).toMatchObject({
+      label: 'Saved',
+      ariaLabel: 'Remove saved recipe',
+      active: true,
+    })
+    currentSaveAction?.onAction?.()
+    expect(removeSaved).toHaveBeenCalledOnce()
+    expect(oldSave).not.toHaveBeenCalled()
+
+    rerender(
+      <MemoryRouter>
+        <DockContextProvider>
+          <ContextDisplay />
+          <P isSaved isSavePending onSave={removeSaved} />
+        </DockContextProvider>
+      </MemoryRouter>,
+    )
+
+    expect(capturedActions?.find(a => a.id === 'save')?.ariaLabel).toBe('Updating saved recipe')
+    capturedActions?.find(a => a.id === 'save')?.onAction?.()
+    expect(removeSaved).toHaveBeenCalledOnce()
+  })
+
   it('detail actions use no-op fallbacks', () => {
     function P() { useRecipeDetailActions({ recipeId: 'recipe-1', chefId: 'chef-1', isOwner: false }); return null }
     render(<MemoryRouter><DockContextProvider><ContextDisplay /><P /></DockContextProvider></MemoryRouter>)

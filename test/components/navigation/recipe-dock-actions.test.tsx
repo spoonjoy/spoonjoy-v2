@@ -30,19 +30,21 @@ describe('Recipe Dock Actions', () => {
   })
 
   describe('useRecipeDetailActions', () => {
-    function RecipeDetailPage({ recipeId, chefId, chefProfileHref, isOwner, isInShoppingList, onSave, onAddToList, onShare, onCook, disabled }: {
+    function RecipeDetailPage({ recipeId, chefId, chefProfileHref, isOwner, isInShoppingList, isSaved, isSavePending, onSave, onAddToList, onShare, onCook, disabled }: {
       recipeId: string
       chefId: string
       chefProfileHref?: string
       isOwner: boolean
       isInShoppingList?: boolean
+      isSaved?: boolean
+      isSavePending?: boolean
       onSave?: () => void
       onAddToList?: () => void
       onShare?: () => void
       onCook?: () => void
       disabled?: boolean
     }) {
-      useRecipeDetailActions({ recipeId, chefId, chefProfileHref, isOwner, isInShoppingList, onSave, onAddToList, onShare, onCook, disabled })
+      useRecipeDetailActions({ recipeId, chefId, chefProfileHref, isOwner, isInShoppingList, isSaved, isSavePending, onSave, onAddToList, onShare, onCook, disabled })
       return <div data-testid="recipe-detail">Recipe Detail</div>
     }
 
@@ -65,6 +67,45 @@ describe('Recipe Dock Actions', () => {
       expect(screen.getByTestId('action-labels')).toHaveTextContent('Back,Cook,List,Save,Share')
       expect(capturedActions?.find(a => a.id === 'edit')).toBeUndefined()
       expect(capturedActions?.find(a => a.id === 'recipe-back')?.onAction).toBe('/recipes')
+    })
+
+    it('exposes saved state semantics and blocks the save callback while pending', () => {
+      const onSave = vi.fn()
+      const { rerender } = render(
+        <MemoryRouter>
+          <DockContextProvider>
+            <ContextDisplay />
+            <RecipeDetailPage recipeId="123" chefId="chef-1" isOwner={false} isSaved onSave={onSave} />
+          </DockContextProvider>
+        </MemoryRouter>,
+      )
+
+      let saveAction = capturedActions?.find(a => a.id === 'save')
+      expect(saveAction).toMatchObject({
+        label: 'Saved',
+        ariaLabel: 'Remove saved recipe',
+        active: true,
+      })
+      saveAction?.onAction?.()
+      expect(onSave).toHaveBeenCalledOnce()
+
+      rerender(
+        <MemoryRouter>
+          <DockContextProvider>
+            <ContextDisplay />
+            <RecipeDetailPage recipeId="123" chefId="chef-1" isOwner={false} isSaved isSavePending onSave={onSave} />
+          </DockContextProvider>
+        </MemoryRouter>,
+      )
+
+      saveAction = capturedActions?.find(a => a.id === 'save')
+      expect(saveAction).toMatchObject({
+        label: 'Saved',
+        ariaLabel: 'Updating saved recipe',
+        active: true,
+      })
+      saveAction?.onAction?.()
+      expect(onSave).toHaveBeenCalledOnce()
     })
 
     it('clears the contextual dock while recipe management is expanded', () => {

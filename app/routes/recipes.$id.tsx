@@ -34,6 +34,13 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   return loadRecipeDetail({ request, params, context });
 }
 
+export function headers() {
+  return {
+    "Cache-Control": "private, no-store",
+    Vary: "Authorization, Cookie",
+  };
+}
+
 export function meta({ data }: Route.MetaArgs) {
   if (!data) {
     return [
@@ -96,7 +103,11 @@ type RecipeSavedActionData = {
   success?: boolean;
   intent?: string;
   saved?: boolean;
-  error?: string;
+  error?: string | {
+    code?: string;
+    message?: string;
+    retryable?: boolean;
+  };
 };
 
 const recipeMastheadLinkClass =
@@ -792,9 +803,15 @@ export default function RecipeDetail() {
     }
 
     lastHandledSaveRecipeSubmissionCount.current = saveRecipeSubmissionCount.current;
-    if (saveRecipeFetcher.data.success === false) {
+    const saveError = saveRecipeFetcher.data.error;
+    if (
+      saveRecipeFetcher.data.success === false ||
+      (typeof saveError === "object" && saveError !== null)
+    ) {
       showToast({
-        message: saveRecipeFetcher.data.error ?? "Unable to update saved recipe. Please try again.",
+        message: typeof saveError === "string"
+          ? saveError
+          : saveError?.message ?? "Unable to update saved recipe. Please try again.",
       });
     }
   }, [saveRecipeFetcher.state, saveRecipeFetcher.data, showToast]);
@@ -806,6 +823,8 @@ export default function RecipeDetail() {
     chefProfileHref: `/users/${recipe.chef.username}`,
     isOwner,
     isInShoppingList: isAlreadyInList,
+    isSaved: isRecipeSaved,
+    isSavePending: isSavedMutationPending,
     onSave: handleToggleSaved,
     onAddToList: handleAddToList,
     onShare: handleShare,

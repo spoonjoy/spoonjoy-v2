@@ -3,7 +3,7 @@ import { Request as UndiciRequest } from "undici";
 import { render, screen } from "@testing-library/react";
 import { db } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
-import { loader } from "~/routes/saved-recipes";
+import { headers, loader } from "~/routes/saved-recipes";
 import SavedRecipes from "~/routes/saved-recipes";
 import { createTestRoutesStub } from "../utils";
 import {
@@ -46,6 +46,13 @@ describe("Saved Recipes drawer route", () => {
 
   afterEach(async () => {
     await cleanupDatabase();
+  });
+
+  it("marks every route response private and credential-varying", () => {
+    const responseHeaders = new Headers(headers());
+
+    expect(responseHeaders.get("Cache-Control")).toBe("private, no-store");
+    expect(responseHeaders.get("Vary")).toBe("Authorization, Cookie");
   });
 
   it("redirects unauthenticated cooks to login", async () => {

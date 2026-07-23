@@ -19,6 +19,7 @@ import { shareContent, useRecipeDetailActions } from "~/components/navigation";
 import {
   loader,
   action,
+  headers,
   meta,
   applyCreatedCookbookState,
   findRecipeStepsScrollTarget,
@@ -44,6 +45,13 @@ function extractResponseData(response: any): { data: any; status: number } {
   }
   return { data: response, status: 200 };
 }
+
+it("marks every recipe-detail route response private and credential-varying", () => {
+  const responseHeaders = new Headers(headers());
+
+  expect(responseHeaders.get("Cache-Control")).toBe("private, no-store");
+  expect(responseHeaders.get("Vary")).toBe("Authorization, Cookie");
+});
 
 const PRODUCT_ACTIVATION_PENDING_RESPONSE = {
   error: {
@@ -2727,7 +2735,19 @@ describe("Recipes $id Route", () => {
       await closeCookbookModal(user);
     });
 
-    it("rolls back a failed optimistic save and shows error feedback", async () => {
+    it.each([
+      {
+        response: PRODUCT_ACTIVATION_PENDING_RESPONSE,
+        message: "Spoonjoy product activation is still completing. Retry shortly.",
+      },
+      {
+        response: {
+          success: false,
+          error: "Unable to save recipe. Please try again.",
+        },
+        message: "Unable to save recipe. Please try again.",
+      },
+    ])("rolls back a failed optimistic save and shows $message", async ({ response, message }) => {
       const user = userEvent.setup();
       const completion = createDeferred<void>();
       const mockData = {
@@ -2756,12 +2776,8 @@ describe("Recipes $id Route", () => {
             const formData = await request.formData();
             const intent = formData.get("intent")?.toString() ?? "";
             await completion.promise;
-            return {
-              success: false,
-              intent,
-              saved: false,
-              error: "Unable to save recipe. Please try again.",
-            };
+            expect(intent).toBe("saveRecipe");
+            return response;
           },
         },
       ]);
@@ -2786,9 +2802,7 @@ describe("Recipes $id Route", () => {
       });
       expect(screen.getByRole("button", { name: "Save recipe" }))
         .toHaveAttribute("aria-pressed", "false");
-      expect(await screen.findByRole("status")).toHaveTextContent(
-        "Unable to save recipe. Please try again.",
-      );
+      expect(await screen.findByRole("status")).toHaveTextContent(message);
     });
 
     it("shares from the registered dock action", async () => {

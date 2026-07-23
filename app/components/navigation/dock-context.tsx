@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ElementType,
   type ReactNode,
@@ -130,17 +131,57 @@ export function useDockContext(): DockContextValue {
 
 export function useDockConfig(config: DockConfig | null): void {
   const { setConfig } = useDockContext();
-  const configKey = config
-    ? [
-        config.left.id,
-        config.primary.id,
-        ...config.tools.map((tool) => tool.id),
-        config.variant ?? "",
-      ].join(",")
-    : "";
+  const latestConfigRef = useRef(config);
+  const liveHandlersRef = useRef(new Map<string, () => void>());
+  latestConfigRef.current = config;
+  liveHandlersRef.current = new Map(
+    config
+      ? [config.left, config.primary, ...config.tools].flatMap((button) => (
+          typeof button.onAction === "function"
+            ? [[button.id, button.onAction] as const]
+            : []
+        ))
+      : [],
+  );
+  const configKey = JSON.stringify(config
+    ? {
+        ariaLabel: config.ariaLabel ?? null,
+        variant: config.variant ?? null,
+        buttons: [config.left, config.primary, ...config.tools].map((button) => ({
+          id: button.id,
+          label: button.label,
+          sublabel: button.sublabel ?? null,
+          ariaLabel: button.ariaLabel ?? null,
+          active: button.active ?? false,
+          tone: button.tone ?? null,
+          iconClassName: button.iconClassName ?? null,
+          labelClassName: button.labelClassName ?? null,
+          href: typeof button.onAction === "string" ? button.onAction : null,
+        })),
+      }
+    : null);
 
   useEffect(() => {
-    setConfig(config);
+    const latestConfig = latestConfigRef.current;
+    if (!latestConfig) {
+      setConfig(null);
+      return;
+    }
+
+    const bindLiveHandler = (button: DockButton): DockButton => (
+      typeof button.onAction === "function"
+        ? {
+            ...button,
+            onAction: () => liveHandlersRef.current.get(button.id)?.(),
+          }
+        : button
+    );
+    setConfig({
+      ...latestConfig,
+      left: bindLiveHandler(latestConfig.left),
+      primary: bindLiveHandler(latestConfig.primary),
+      tools: latestConfig.tools.map(bindLiveHandler),
+    });
   }, [configKey, setConfig]);
 
   useEffect(() => {

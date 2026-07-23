@@ -24,6 +24,13 @@ type SavedRecipe = {
   savedAt: string;
 };
 
+export function headers() {
+  return {
+    "Cache-Control": "private, no-store",
+    Vary: "Authorization, Cookie",
+  };
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const url = new URL(request.url);
