@@ -23,6 +23,7 @@ import { action, loader } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
 import {
   hashIdempotencyRequest,
+  IDEMPOTENCY_RETRY_AFTER_SECONDS,
   idempotencyClientKey,
   IDEMPOTENCY_TTL_MS,
 } from "~/lib/api-idempotency.server";
@@ -480,7 +481,7 @@ describe("REST /api/v1/saved-recipes", () => {
       body,
     }), `saved-recipes/${recipe.id}`);
     await expectError(response, "req_saved_in_flight", "idempotency_in_progress", 409);
-    expect(response.headers.get("Retry-After")).toBe("1");
+    expect(response.headers.get("Retry-After")).toBe(String(IDEMPOTENCY_RETRY_AFTER_SECONDS));
     expect(savedService.save).not.toHaveBeenCalled();
   });
 
