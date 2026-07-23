@@ -66,4 +66,51 @@ describe("GET /api/v1/openapi.json", () => {
       }
     }
   });
+
+  it("documents private saved-recipe list and idempotent mutation contracts", () => {
+    for (const document of [
+      buildApiV1OpenApiDocument({ serverUrl: "http://localhost" }),
+      buildApiV1SdkOpenApiDocument({ serverUrl: "http://localhost" }),
+      buildApiV1ConnectorOpenApiDocument({ serverUrl: "http://localhost" }),
+    ]) {
+      const list = document.paths["/api/v1/saved-recipes"].get;
+      const mutation = document.paths["/api/v1/saved-recipes/{recipeId}"];
+
+      expect(list.operationId).toBe("getApiV1SavedRecipes");
+      expect(list["x-auth"]).toBe("bearer");
+      expect(list["x-scopes"]).toEqual(["kitchen:read"]);
+      expect(list.parameters.filter((parameter: { in: string }) => parameter.in === "query")
+        .map((parameter: { name: string }) => parameter.name)).toEqual(["q", "limit", "cursor"]);
+      expect(list.parameters.find((parameter: { name: string }) => parameter.name === "limit").schema)
+        .toMatchObject({ type: "integer", minimum: 1, maximum: 24, default: 24 });
+      expect(list.responses["200"].content["application/json"].schema.$ref)
+        .toBe("#/components/schemas/SavedRecipeListEnvelope");
+      expect(list.responses["200"].headers["Cache-Control"].schema.example).toBe("private, no-store");
+
+      for (const [method, operationId, responseSchema] of [
+        ["put", "putApiV1SavedRecipe", "SaveRecipeEnvelope"],
+        ["delete", "deleteApiV1SavedRecipe", "UnsaveRecipeEnvelope"],
+      ] as const) {
+        const operation = mutation[method];
+        expect(operation.operationId).toBe(operationId);
+        expect(operation["x-auth"]).toBe("bearer");
+        expect(operation["x-scopes"]).toEqual(["kitchen:write"]);
+        expect(operation.requestBody.required).toBe(true);
+        expect(operation.requestBody.content["application/json"].schema.$ref)
+          .toBe("#/components/schemas/SavedRecipeMutationRequest");
+        expect(operation.responses["200"].content["application/json"].schema.$ref)
+          .toBe(`#/components/schemas/${responseSchema}`);
+        expect(operation.responses["200"].headers["Cache-Control"].schema.example)
+          .toBe("private, no-store");
+      }
+
+      expect(document.components.schemas.SavedRecipeMutationRequest).toMatchObject({
+        type: "object",
+        additionalProperties: false,
+        required: ["clientMutationId"],
+        properties: { clientMutationId: { type: "string" } },
+      });
+      expect(document.components.schemas.SavedRecipeListData.required).toEqual(["recipes", "nextCursor"]);
+    }
+  });
 });

@@ -63,6 +63,19 @@ describe("developer platform docs drift", () => {
     expect(apiDocs).toContain("idempotency");
   });
 
+  it("documents private saved recipes independently from cookbook membership", () => {
+    for (const text of [apiDocs, developersSource]) {
+      expect(text).toContain("/api/v1/saved-recipes");
+      expect(text).toContain("/api/v1/saved-recipes/{recipeId}");
+      expect(text).toMatch(/saved recipes/i);
+      expect(text).toMatch(/independent from cookbook membership/i);
+      expect(text).toContain("kitchen:read");
+      expect(text).toContain("kitchen:write");
+      expect(text).toContain("private, no-store");
+      expect(text).toMatch(/cursor/i);
+    }
+  });
+
   it("keeps MCP docs pointed at the same auth and REST surface", () => {
     for (const docs of [claudeConnectorDocs, ouroborosMcpDocs]) {
       expect(docs).toContain("/api");
