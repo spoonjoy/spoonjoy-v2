@@ -340,10 +340,11 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Focused scaling/API/MCP/OpenAPI/playground/docs tests, two stable generations, typecheck, and build pass.
 **Completed**: Commit `e2953a18` adds the shared strict parser/scaler, REST and MCP read adapters, optional detail-only OpenAPI metadata, stable generated playground, docs, and focused desktop/mobile visual evidence. The seven scaling suites pass 222/222 warning-clean, typecheck/build and the post-commit generated-contract gate pass, repeated generation retains SHA-256 `2a6dad7a72cb438f88d35b41e1f3a2df3ea0fcd2751feb1709d7500ca1e4806f`, and fresh API plus visual reviews converge after an unrelated-serializer error-classification regression was frozen and fixed.
 
-### ⬜ Unit 4.2c: Read-Time Scaling - Verification
+### ✅ Unit 4.2c: Read-Time Scaling - Verification
 **What**: Reach 100% validation/rounding/serialization coverage and obtain API review.
 **Output**: Coverage and reviewer evidence.
 **Acceptance**: Null/NaN/infinite/bounds/precision/default branches are covered and review converges.
+**Completed**: Final implementation `e2953a18` plus verification hardening `d8e2cc11` pass the 225-test focused matrix and the isolated 386-file/9,286-test app gate at exact 100% statements, branches, functions, and lines with zero warnings. Typecheck, production build, deterministic generation, focused visual QA, and API/visual/test reviews pass after serializer-classification, defensive-rethrow coverage, exact-envelope, and MCP-overflow transport gaps were closed. See `unit-4.2-verification.md`.
 
 ### ⬜ Unit 4.3: Rejected-Scope Boundary Verification
 **What**: Turn the Unit 1.7R exact `d50b8ff...` Pebble path/blob/SHA-256 provenance manifest into a passing regression: the product hit list remains the same eight paths, unrelated historical task files remain byte-identical, and every Pebble-bearing runtime branch/test case/assertion remains exact in source and behavior even when shared files gain unrelated accepted-feature assertions. Reject any diff hunk that adds/removes/reinterprets a Pebble-bearing span and any new hit outside current task evidence. Also assert no first-party import UI, AI tagging surface, broad navigation regression, or personalized save metadata in MCP/public reads.
@@ -772,3 +773,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-21 20:50 Units 4.1b-4.1c complete: final implementation `50413dfd` passes the 235-test focused matrix, isolated 9,205-test exact-coverage gate, typecheck, stable generation, and production build; Galileo's three findings were fixed and fresh follow-up reviewer Hubble converged.
 - 2026-07-22 21:11 Unit 4.2a complete: commits `8d5e727d`, `89f61072`, and `d6fbf063` freeze the exact 182-test scaling contract with 31 intended feature failures, 151 passing compatibility assertions, fresh red evidence, and three cold review rounds ending in convergence.
 - 2026-07-22 21:40 Unit 4.2b complete: commit `e2953a18` ships strict read-time scaling across REST/MCP/OpenAPI/docs with 222 focused tests, warning-clean typecheck/build, deterministic generation, focused visual QA, and converged API/visual review.
+- 2026-07-22 22:21 Unit 4.2c complete: verification commit `d8e2cc11` closes unexpected-error and MCP-overflow transport coverage; the final committed tree passes 9,286 tests at exact 100% coverage, all clean gates, and converged API/test review.
