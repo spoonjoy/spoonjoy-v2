@@ -343,14 +343,24 @@ describe("REST /api/v1/saved-recipes", () => {
     const missingRecipeId = "missing_recipe";
 
     for (const recipeId of [missingRecipeId, softDeleted.id]) {
+      const body = { clientMutationId: `cm_saved_put_${recipeId}` };
       const put = await invoke(apiRequest({
         path: `saved-recipes/${recipeId}`,
         method: "PUT",
         requestId: `req_saved_put_${recipeId}`,
         token: write.token,
-        body: { clientMutationId: `cm_saved_put_${recipeId}` },
+        body,
       }), `saved-recipes/${recipeId}`);
       await expectError(put, `req_saved_put_${recipeId}`, "not_found", 404);
+
+      const retry = await invoke(apiRequest({
+        path: `saved-recipes/${recipeId}`,
+        method: "PUT",
+        requestId: `req_saved_put_retry_${recipeId}`,
+        token: write.token,
+        body,
+      }), `saved-recipes/${recipeId}`);
+      await expectError(retry, `req_saved_put_retry_${recipeId}`, "not_found", 404);
     }
 
     for (const [recipeId, mutationId] of [

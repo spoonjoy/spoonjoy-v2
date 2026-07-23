@@ -188,6 +188,12 @@ const externalGuideSteps = [
     sample: "curl -fsS 'https://spoonjoy.app/api/v1/me/sync?limit=20' \\\n  -H 'Authorization: Bearer sj_first_party_native_token'",
   },
   {
+    title: "Manage private saved recipes",
+    scope: "Requires kitchen:read or kitchen:write",
+    body: "GET /api/v1/saved-recipes?q=&limit=&cursor= lists the chef's saved recipes with an opaque cursor and kitchen:read. PUT and DELETE /api/v1/saved-recipes/{recipeId} use kitchen:write plus the exact clientMutationId JSON body. Saved recipes are independent from cookbook membership, and every response is Cache-Control: private, no-store.",
+    sample: "GET /api/v1/saved-recipes?limit=24&cursor=...\nPUT /api/v1/saved-recipes/{recipeId}\nDELETE /api/v1/saved-recipes/{recipeId}\n{ \"clientMutationId\": \"device-uuid-saved-recipe\" }",
+  },
+  {
     title: "Sync a private shopping list",
     scope: "Requires shopping_list:read",
     body: "Use GET /api/v1/shopping-list/sync with an opaque cursor to fetch active rows and deletion records for removed rows. Omit cursor on the first request, then store nextCursor only after your client applies the whole response.",
@@ -312,7 +318,7 @@ const authImplementationSteps = [
 const guideSteps = [
   "Read public recipes and cookbooks anonymously before adding auth.",
   "Use Session for logged-in playground calls; use bearer or OAuth only when a client runs outside that session.",
-  "Use a stable mutation id for recipe create, update, delete, fork, step editing, import, and shopping-list writes, then retry with the same value when a network call is interrupted.",
+  "Use a stable mutation id for recipe create, update, delete, fork, step editing, import, saved-recipe writes, and shopping-list writes, then retry with the same value when a network call is interrupted.",
   "Use the sync cursor to fetch shopping-list changes, including removed items.",
 ] as const;
 
@@ -380,7 +386,7 @@ const syncSafetyRows = [
   ["Cursor", "Use the returned nextCursor as the next request cursor after applying every item in the page durably. Treat it as opaque; ISO timestamps are accepted only as a bootstrap convenience."],
   ["Tombstones", "Sync includes deleted rows with deletedAt so offline clients can remove local items."],
   ["Pagination", "Use limit from 1 to 50 for small payloads. hasMore: true means continue with the returned nextCursor; webhooks, REST Hooks, SSE, and event subscriptions are not available yet."],
-  ["Idempotent owner mutations", "clientMutationId is scoped to the chef, retained for 24 hours, and bound to method, path, and body hash for account profile, profile photo, notification preferences, APNs device registration/revocation, recipe create, update, delete, fork, step editing, import, cookbook writes, shopping-list writes, recipe spoon writes, and recipe-cover writes. Persist and retry the exact request values for that mutation id."],
+  ["Idempotent owner mutations", "clientMutationId is scoped to the chef, retained for 24 hours, and bound to method, path, and body hash for account profile, profile photo, notification preferences, APNs device registration/revocation, recipe create, update, delete, fork, step editing, import, cookbook writes, saved-recipe writes, shopping-list writes, recipe spoon writes, and recipe-cover writes. Persist and retry the exact request values for that mutation id."],
   ["Replay", "Retry the same request with the same clientMutationId after a timeout; Spoonjoy returns the recorded response with mutation.replayed: true."],
   ["Conflict", "Reusing the same clientMutationId for a different method, path, or body returns 409 idempotency_conflict."],
   ["Retries", "Retry network timeouts, 429, and 5xx responses with the same mutation id. Refresh or reconnect on 401. Do not retry validation, scope, or idempotency conflicts unchanged."],
@@ -597,6 +603,7 @@ export default function Developers() {
               {currentCapabilities.available.map((item) => <li key={item}>- {item}</li>)}
             </ul>
             <Text className="mt-3">Public recipe reads expose neutral <code>course</code> and ordered <code>tags</code> without personalized save state or an <code>isSaved</code> field.</Text>
+            <Text className="mt-3">Private saved recipes use <code>{"GET /api/v1/saved-recipes?q=&limit=&cursor="}</code> with <code>kitchen:read</code> and <code>{"PUT|DELETE /api/v1/saved-recipes/{recipeId}"}</code> with <code>kitchen:write</code>. They are independent from cookbook membership, page with an opaque cursor, and always return <code>Cache-Control: private, no-store</code>.</Text>
             <Text className="mt-3">Recipe detail supports read-time scaling with <code>{"GET /api/v1/recipes/{id}?scale=2"}</code> or MCP <code>{'get_recipe({ "id": "recipe_1", "scale": 2 })'}</code>. Scaled reads add <code>{'scale: { factor: 2, appliedTo: "ingredient_quantities", decimalPlaces: 6 }'}</code>; servings and stored values remain unchanged. Omit scale for the original response shape.</Text>
           </div>
           <div>

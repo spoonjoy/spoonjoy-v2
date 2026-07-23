@@ -114,6 +114,13 @@ import {
   PRODUCT_ACTIVATION_PENDING_MESSAGE,
 } from "~/lib/saved-recipe-cutover.server";
 import {
+  listSavedRecipes,
+  saveRecipe,
+  SavedRecipeNotFoundError,
+  SavedRecipeValidationError,
+  unsaveRecipe,
+} from "~/lib/saved-recipes.server";
+import {
   deleteStoredImageWithCapture,
   hasUploadedImageFile,
   RECIPE_IMAGE_TYPES,
@@ -591,6 +598,12 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "cookbooks.recipes.add";
     case "DELETE cookbook-recipes":
       return "cookbooks.recipes.remove";
+    case "GET saved-recipes":
+      return "saved-recipes.list";
+    case "PUT saved-recipe":
+      return "saved-recipes.save";
+    case "DELETE saved-recipe":
+      return "saved-recipes.unsave";
     case "GET me":
       return "account.read";
     case "PATCH me":
@@ -669,6 +682,7 @@ function defaultIdempotencyOutcome(operation: string | undefined, errorCode: Api
     !operation.startsWith("recipes.spoons.") &&
     !operation.startsWith("recipes.covers.") &&
     !operation.startsWith("cookbooks.") &&
+    !operation.startsWith("saved-recipes.") &&
     !isIdempotentAccountOperation(operation)
   ) {
     return undefined;
@@ -1677,6 +1691,33 @@ async function queueApiRecipePlaceholderGeneration(
   });
 }
 
+const RECIPE_READ_SUMMARY_SELECT = {
+  id: true,
+  title: true,
+  description: true,
+  servings: true,
+  course: true,
+  sourceUrl: true,
+  activeCoverId: true,
+  activeCoverVariant: true,
+  coverMode: true,
+  createdAt: true,
+  updatedAt: true,
+  chef: { select: { id: true, username: true } },
+  sourceRecipe: {
+    select: {
+      id: true,
+      title: true,
+      deletedAt: true,
+      chef: { select: { id: true, username: true } },
+    },
+  },
+  activeCover: { select: RECIPE_COVER_DISPLAY_SELECT },
+  tags: {
+    select: { id: true, label: true, normalizedLabel: true },
+  },
+} satisfies Prisma.RecipeSelect;
+
 const RECIPE_DETAIL_SELECT = {
   id: true,
   title: true,
@@ -1777,32 +1818,7 @@ async function handleRecipeList(args: ApiV1RouteArgs, requestId: string, princip
       deletedAt: null,
       AND: [cursorWhere, queryWhere],
     },
-    select: {
-      id: true,
-      title: true,
-      description: true,
-      servings: true,
-      course: true,
-      sourceUrl: true,
-      activeCoverId: true,
-      activeCoverVariant: true,
-      coverMode: true,
-      createdAt: true,
-      updatedAt: true,
-      chef: { select: { id: true, username: true } },
-      sourceRecipe: {
-        select: {
-          id: true,
-          title: true,
-          deletedAt: true,
-          chef: { select: { id: true, username: true } },
-        },
-      },
-      activeCover: { select: RECIPE_COVER_DISPLAY_SELECT },
-      tags: {
-        select: { id: true, label: true, normalizedLabel: true },
-      },
-    },
+    select: RECIPE_READ_SUMMARY_SELECT,
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     take: limit + 1,
   });
@@ -1856,6 +1872,214 @@ function objectBody(value: unknown, field: string): Record<string, unknown> {
     throw new ApiV1Error("validation_error", `${field} must be an object`);
   }
   return value as Record<string, unknown>;
+}
+
+function savedRecipeApiError(error: unknown): ApiV1Error | null {
+  if (error instanceof SavedRecipeValidationError) {
+    return new ApiV1Error("validation_error", error.message, { field: error.field });
+  }
+  if (error instanceof SavedRecipeNotFoundError) {
+    return new ApiV1Error("not_found", error.message, {
+      resource: "recipe",
+      recipeId: error.recipeId,
+    });
+  }
+  return null;
+}
+
+function parseSavedRecipeLimit(url: URL): number | undefined {
+  const raw = url.searchParams.get("limit");
+  if (raw === null || raw.trim() === "") return undefined;
+  const limit = Number(raw);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 24) {
+    throw new ApiV1Error("validation_error", "limit must be an integer between 1 and 24", {
+      field: "limit",
+    });
+  }
+  return limit;
+}
+
+async function handleSavedRecipeList(
+  args: ApiV1RouteArgs,
+  requestId: string,
+  principal: ApiPrincipal,
+) {
+  const db = await getRequestDb(args.context);
+  const url = new URL(args.request.url);
+  const origin = publicContentOrigin(args);
+  let page: Awaited<ReturnType<typeof listSavedRecipes>>;
+  try {
+    page = await listSavedRecipes(db, {
+      userId: principal.id,
+      query: url.searchParams.get("q"),
+      limit: parseSavedRecipeLimit(url),
+      cursor: url.searchParams.get("cursor"),
+    });
+  } catch (error) {
+    throw savedRecipeApiError(error) ?? error;
+  }
+
+  const recipes = await db.recipe.findMany({
+    where: {
+      id: { in: page.items.map((item) => item.recipeId) },
+      deletedAt: null,
+    },
+    select: RECIPE_READ_SUMMARY_SELECT,
+  });
+  const recipeById = new Map(recipes.map((recipe) => [recipe.id, recipe]));
+  const savedRecipes = page.items.flatMap((item) => {
+    const recipe = recipeById.get(item.recipeId);
+    return recipe
+      ? [{
+          ...recipeReadSummary({ ...recipe, ...recipeCoverApiFields(recipe, origin) }, origin),
+          savedAt: item.savedAt,
+        }]
+      : [];
+  });
+
+  return apiV1PrivateSuccess(requestId, {
+    recipes: savedRecipes,
+    nextCursor: page.nextCursor,
+  });
+}
+
+async function savedRecipeState(
+  db: ApiV1WriteDb,
+  userId: string,
+  recipeId: string,
+) {
+  return db.savedRecipe.findUnique({
+    where: { userId_recipeId: { userId, recipeId } },
+    select: { savedAt: true },
+  });
+}
+
+async function activeSavedRecipeState(
+  db: ApiV1WriteDb,
+  userId: string,
+  recipeId: string,
+) {
+  return db.savedRecipe.findFirst({
+    where: { userId, recipeId, recipe: { deletedAt: null } },
+    select: { savedAt: true },
+  });
+}
+
+async function recoverSavedRecipeSave(
+  db: ApiV1WriteDb,
+  input: { clientMutationId: string; recipeId: string; userId: string },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const saved = await activeSavedRecipeState(db, input.userId, input.recipeId);
+  if (!saved) return null;
+  return {
+    status: 200,
+    data: {
+      saved: true,
+      recipeId: input.recipeId,
+      savedAt: saved.savedAt,
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverSavedRecipeUnsave(
+  db: ApiV1WriteDb,
+  input: { clientMutationId: string; recipeId: string; userId: string },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const saved = await savedRecipeState(db, input.userId, input.recipeId);
+  if (saved) return null;
+  return {
+    status: 200,
+    data: {
+      saved: false,
+      recipeId: input.recipeId,
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function handleSavedRecipeSave(
+  args: ApiV1RouteArgs,
+  requestId: string,
+  principal: ApiPrincipal,
+  recipeId: string,
+) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId"]);
+  const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
+  const recoveryInput = { clientMutationId, recipeId, userId: principal.id };
+
+  return runIdempotentApiV1Mutation(
+    args,
+    requestId,
+    principal,
+    body,
+    clientMutationId,
+    "saved-recipes.save",
+    async (db) => {
+      let saved: Awaited<ReturnType<typeof saveRecipe>>;
+      try {
+        saved = await saveRecipe(db, {
+          userId: principal.id,
+          recipeId,
+          nowMs: Date.now(),
+        });
+      } catch (error) {
+        throw savedRecipeApiError(error) ?? error;
+      }
+      return {
+        status: 200,
+        data: {
+          saved: true,
+          recipeId: saved.recipeId,
+          savedAt: saved.savedAt,
+          mutation: { clientMutationId, replayed: false },
+        },
+      };
+    },
+    {
+      deleteReservationOnWriteError: false,
+      hasRecoverableWrite: async (db) => Boolean(await activeSavedRecipeState(db, principal.id, recipeId)),
+      recoverInFlight: async (db) => recoverSavedRecipeSave(db, recoveryInput),
+    },
+  );
+}
+
+async function handleSavedRecipeUnsave(
+  args: ApiV1RouteArgs,
+  requestId: string,
+  principal: ApiPrincipal,
+  recipeId: string,
+) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId"]);
+  const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
+  const recoveryInput = { clientMutationId, recipeId, userId: principal.id };
+
+  return runIdempotentApiV1Mutation(
+    args,
+    requestId,
+    principal,
+    body,
+    clientMutationId,
+    "saved-recipes.unsave",
+    async (db) => {
+      await unsaveRecipe(db, { userId: principal.id, recipeId });
+      return {
+        status: 200,
+        data: {
+          saved: false,
+          recipeId,
+          mutation: { clientMutationId, replayed: false },
+        },
+      };
+    },
+    {
+      deleteReservationOnWriteError: false,
+      hasRecoverableWrite: async (db) => !(await savedRecipeState(db, principal.id, recipeId)),
+      recoverInFlight: async (db) => recoverSavedRecipeUnsave(db, recoveryInput),
+    },
+  );
 }
 
 function importText(value: unknown, field: string): string {
@@ -6851,6 +7075,24 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "DELETE" && segments[0] === "cookbooks" && segments[2] === "recipes" && segments.length === 4) {
       const principal = await authorize(path) as ApiPrincipal;
       const response = await handleCookbookRecipeRemove(args, requestId, principal, segments[1], segments[3]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && path === "saved-recipes") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleSavedRecipeList(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "PUT" && segments[0] === "saved-recipes" && segments.length === 2) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleSavedRecipeSave(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "saved-recipes" && segments.length === 2) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleSavedRecipeUnsave(args, requestId, principal, segments[1]);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
