@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { render, screen } from "@testing-library/react";
 import { db } from "~/lib/db.server";
@@ -18,6 +18,25 @@ function routeArgs(request: Request) {
     context: { cloudflare: { env: null } },
     params: {},
   } as any;
+}
+
+async function expectLoaderError(
+  request: Request,
+  expectedStatus: number,
+  expectedMessage: string,
+) {
+  let caught: unknown;
+  try {
+    await loader(routeArgs(request));
+  } catch (error) {
+    caught = error;
+  }
+
+  if (!(caught instanceof Response)) {
+    throw new Error(`Expected loader to throw a ${expectedStatus} Response`);
+  }
+  expect(caught.status).toBe(expectedStatus);
+  expect(await caught.text()).toBe(expectedMessage);
 }
 
 describe("Saved Recipes drawer route", () => {
@@ -100,30 +119,55 @@ describe("Saved Recipes drawer route", () => {
     expect(result.nextCursor).toBeNull();
   });
 
-  it("paginates SavedRecipe rows with the opaque service cursor and no duplicates", async () => {
+  it("paginates active saves in exact savedAt and binary recipe-ID order before hydration", async () => {
     const viewer = await createDrawerUser("saved-pages");
     const chef = await createDrawerUser("saved-pages-chef");
-    const recipeIds: string[] = [];
-    for (let index = 0; index < 25; index += 1) {
-      const recipe = await createDrawerRecipe({
-        chefId: chef.id,
-        title: `Page Recipe ${String(index).padStart(2, "0")}`,
-      });
-      recipeIds.push(recipe.id);
-      await db.savedRecipe.create({
+    const savedAt = "2026-07-22T12:00:00.000Z";
+    const insertionOrderIds = Array.from(
+      { length: 25 },
+      (_, index) => `saved-page-${String(index + 1).padStart(2, "0")}`,
+    );
+    const expectedOrderIds = [...insertionOrderIds].reverse();
+
+    for (const recipeId of insertionOrderIds) {
+      await db.recipe.create({
         data: {
-          userId: viewer.id,
-          recipeId: recipe.id,
-          savedAt: new Date(Date.UTC(2026, 6, 22, 12, 0, index)).toISOString(),
+          id: recipeId,
+          chefId: chef.id,
+          title: `Page Recipe ${recipeId}`,
         },
       });
     }
+    const deleted = await db.recipe.create({
+      data: {
+        id: "saved-page-zz-deleted",
+        chefId: chef.id,
+        title: "Page Recipe Deleted",
+        deletedAt: new Date("2026-07-22T13:00:00.000Z"),
+      },
+    });
+    await db.savedRecipe.createMany({
+      data: [
+        ...insertionOrderIds.map((recipeId) => ({
+          userId: viewer.id,
+          recipeId,
+          savedAt,
+        })),
+        {
+          userId: viewer.id,
+          recipeId: deleted.id,
+          savedAt,
+        },
+      ],
+    });
 
     const first = await loader(routeArgs(new UndiciRequest(
       "http://localhost:3000/saved-recipes?q=page%20recipe",
       { headers: await sessionHeaders(viewer.id) },
     ) as unknown as Request));
-    expect(first.recipes).toHaveLength(24);
+    expect(first.recipes.map((recipe: { id: string }) => recipe.id)).toEqual(
+      expectedOrderIds.slice(0, 24),
+    );
     expect(first.nextCursor).toEqual(expect.any(String));
 
     const second = await loader(routeArgs(new UndiciRequest(
@@ -131,11 +175,13 @@ describe("Saved Recipes drawer route", () => {
       { headers: await sessionHeaders(viewer.id) },
     ) as unknown as Request));
     expect(second.query).toBe("page recipe");
-    expect(second.recipes).toHaveLength(1);
+    expect(second.recipes.map((recipe: { id: string }) => recipe.id)).toEqual(
+      expectedOrderIds.slice(24),
+    );
     expect(second.nextCursor).toBeNull();
     const allIds = [...first.recipes, ...second.recipes].map((recipe: { id: string }) => recipe.id);
-    expect(new Set(allIds).size).toBe(25);
-    expect(new Set(allIds)).toEqual(new Set(recipeIds));
+    expect(allIds).toEqual(expectedOrderIds);
+    expect(allIds).not.toContain(deleted.id);
   });
 
   it("returns an empty drawer for cookbook-only and another owner's saved rows", async () => {
@@ -163,14 +209,74 @@ describe("Saved Recipes drawer route", () => {
   it("maps malformed saved-recipe cursors to a web 400 response", async () => {
     const viewer = await createDrawerUser("saved-invalid-cursor");
 
-    await expect(loader(routeArgs(new UndiciRequest(
+    await expectLoaderError(new UndiciRequest(
       "http://localhost:3000/saved-recipes?cursor=not%2Bbase64url",
       { headers: await sessionHeaders(viewer.id) },
-    ) as unknown as Request))).rejects.toSatisfy((error: unknown) => {
-      expect(error).toBeInstanceOf(Response);
-      expect((error as Response).status).toBe(400);
-      return true;
-    });
+    ) as unknown as Request, 400, "cursor must be unpadded base64url");
+  });
+
+  it.each([
+    {
+      name: "more than 200 code points",
+      query: "x".repeat(201),
+      message: "q must contain at most 200 code points",
+    },
+    {
+      name: "a non-whitespace control character",
+      query: "stew\u0000pot",
+      message: "q contains unsupported control characters",
+    },
+  ])("maps q containing $name to its exact web 400 response", async ({ query, message }) => {
+    const viewer = await createDrawerUser("saved-invalid-query");
+
+    await expectLoaderError(new UndiciRequest(
+      `http://localhost:3000/saved-recipes?q=${encodeURIComponent(query)}`,
+      { headers: await sessionHeaders(viewer.id) },
+    ) as unknown as Request, 400, message);
+  });
+
+  it("propagates unrelated saved-recipe database failures", async () => {
+    const viewer = await createDrawerUser("saved-database-failure");
+    const databaseFailure = new Error("saved recipe query unavailable");
+    const originalQueryRaw = db.$queryRawUnsafe;
+    db.$queryRawUnsafe = vi.fn()
+      .mockRejectedValue(databaseFailure) as unknown as typeof db.$queryRawUnsafe;
+
+    try {
+      await expect(loader(routeArgs(new UndiciRequest(
+        "http://localhost:3000/saved-recipes",
+        { headers: await sessionHeaders(viewer.id) },
+      ) as unknown as Request))).rejects.toBe(databaseFailure);
+    } finally {
+      db.$queryRawUnsafe = originalQueryRaw;
+    }
+  });
+
+  it("renders a useful saved-recipes failure state", async () => {
+    const routeModule = await import("~/routes/saved-recipes");
+    const routeErrorBoundary = (
+      routeModule as unknown as Record<string, unknown>
+    ).ErrorBoundary;
+
+    expect(routeErrorBoundary).toBeTypeOf("function");
+    const Stub = createTestRoutesStub([
+      {
+        path: "/saved-recipes",
+        Component: SavedRecipes,
+        loader: () => {
+          throw new Response("Saved recipes unavailable", { status: 500 });
+        },
+        ErrorBoundary: typeof routeErrorBoundary === "function"
+          ? routeErrorBoundary as any
+          : () => null,
+      },
+    ]);
+
+    render(<Stub initialEntries={["/saved-recipes"]} />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/saved recipes/i);
+    expect(alert).toHaveTextContent(/try again/i);
   });
 
   it("renders an independent empty state without cookbook creation copy", async () => {
@@ -275,6 +381,6 @@ describe("Saved Recipes drawer route", () => {
     render(<Stub initialEntries={["/saved-recipes?q=turnip"]} />);
 
     expect(await screen.findByRole("heading", { name: "No matching saved recipes" })).toBeInTheDocument();
-    expect(screen.getByText("Try a different title, chef, course, or tag.")).toBeInTheDocument();
+    expect(screen.getByText("Try a different title, description, chef, course, or tag.")).toBeInTheDocument();
   });
 });

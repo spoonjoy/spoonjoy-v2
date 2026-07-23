@@ -54,6 +54,16 @@ const PRODUCT_ACTIVATION_PENDING_RESPONSE = {
 };
 const CUTOVER_TRIGGER_NAME = "test_recipe_detail_saved_recipe_cutover_pending";
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 async function installRecipeDetailAbortTrigger(
   table: "RecipeInCookbook",
   event: "INSERT" | "DELETE",
@@ -2290,7 +2300,7 @@ describe("Recipes $id Route", () => {
     };
 
     const openCookbookModalFromHeader = async () => {
-      fireEvent.click(screen.getByTestId("recipe-header-cookbook-action"));
+      fireEvent.click(screen.getByRole("button", { name: "Add to cookbook" }));
     };
 
     const closeCookbookModal = async (user: ReturnType<typeof userEvent.setup>) => {
@@ -2459,13 +2469,15 @@ describe("Recipes $id Route", () => {
       await openCookbookModalFromHeader();
       await screen.findByRole("dialog", { name: "Add to Cookbook" });
 
-      await user.click(screen.getByTestId("cookbook-item-cb-unsaved"));
-      expect(screen.getByTestId("cookbook-item-cb-unsaved")).toHaveTextContent("✓");
-      expect(screen.getByTestId("cookbook-item-cb-unsaved")).toHaveAttribute("aria-pressed", "true");
+      const unsavedCookbookButton = screen.getByRole("button", { name: "Weeknights" });
+      const savedCookbookButton = screen.getByRole("button", { name: "Favorites" });
+      await user.click(unsavedCookbookButton);
+      expect(unsavedCookbookButton).toHaveTextContent("✓");
+      expect(unsavedCookbookButton).toHaveAttribute("aria-pressed", "true");
 
-      await user.click(screen.getByTestId("cookbook-item-cb-saved"));
-      expect(screen.getByTestId("cookbook-item-cb-saved")).not.toHaveTextContent("✓");
-      expect(screen.getByTestId("cookbook-item-cb-saved")).toHaveAttribute("aria-pressed", "false");
+      await user.click(savedCookbookButton);
+      expect(savedCookbookButton).not.toHaveTextContent("✓");
+      expect(savedCookbookButton).toHaveAttribute("aria-pressed", "false");
 
       await waitFor(() => {
         expect(submittedIntents).toEqual([
@@ -2521,9 +2533,12 @@ describe("Recipes $id Route", () => {
       await closeCookbookModal(user);
     });
 
-    it("toggles independent saved state by keyboard while keeping cookbook controls distinct", async () => {
+    it("optimistically saves while pending, prevents a rapid second toggle, and survives revalidation", async () => {
       const user = userEvent.setup();
       const submittedIntents: string[] = [];
+      const completion = createDeferred<void>();
+      let authoritativeSaved = false;
+      let loaderCalls = 0;
       const mockData = {
         recipe: {
           id: "recipe-1",
@@ -2536,8 +2551,152 @@ describe("Recipes $id Route", () => {
         },
         isOwner: false,
         isAuthenticated: true,
-        isSaved: false,
         cookbooks: [{ id: "cb-1", title: "Weeknights" }],
+        savedInCookbookIds: [],
+      };
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader: () => {
+            loaderCalls += 1;
+            return { ...mockData, isSaved: authoritativeSaved };
+          },
+          action: async ({ request }) => {
+            const formData = await request.formData();
+            const intent = formData.get("intent")?.toString() ?? "";
+            submittedIntents.push(intent);
+            await completion.promise;
+            authoritativeSaved = true;
+            return {
+              success: true,
+              intent,
+              saved: true,
+            };
+          },
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+      await screen.findByRole("heading", { name: "Independent Save Recipe" });
+
+      const saveButton = screen.getByRole("button", { name: "Save recipe" });
+      const cookbookButton = screen.getByRole("button", { name: "Add to cookbook" });
+      expect(saveButton).toHaveAccessibleName("Save recipe");
+      expect(saveButton).toHaveAttribute("aria-pressed", "false");
+
+      saveButton.focus();
+      await user.keyboard("{Enter}");
+      await waitFor(() => expect(submittedIntents).toEqual(["saveRecipe"]));
+      const pendingSaveButton = screen.getByRole("button", { name: "Remove saved recipe" });
+      expect(pendingSaveButton).toHaveAttribute("aria-pressed", "true");
+      expect(pendingSaveButton).toBeDisabled();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      fireEvent.click(pendingSaveButton);
+      expect(submittedIntents).toEqual(["saveRecipe"]);
+
+      await act(async () => {
+        completion.resolve(undefined);
+        await completion.promise;
+      });
+      await waitFor(() => {
+        expect(loaderCalls).toBeGreaterThanOrEqual(2);
+        expect(screen.getByRole("button", { name: "Remove saved recipe" })).toBeEnabled();
+      });
+      expect(screen.getByRole("button", { name: "Remove saved recipe" }))
+        .toHaveAttribute("aria-pressed", "true");
+
+      await user.click(cookbookButton);
+      expect(await screen.findByRole("dialog", { name: "Add to Cookbook" })).toBeInTheDocument();
+      expect(submittedIntents).toEqual(["saveRecipe"]);
+      expect(screen.getByRole("button", { name: "Remove saved recipe" }))
+        .toHaveAttribute("aria-pressed", "true");
+      await closeCookbookModal(user);
+    });
+
+    it("starts saved, optimistically unsaves with Space, then accepts newer loader truth", async () => {
+      const user = userEvent.setup();
+      const submittedIntents: string[] = [];
+      const completion = createDeferred<void>();
+      let loaderCalls = 0;
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Initially Saved Recipe",
+          description: null,
+          servings: null,
+          coverImageUrl: null,
+          chef: { id: "user-2", username: "otherchef" },
+          steps: [],
+        },
+        isOwner: false,
+        isAuthenticated: true,
+        isSaved: true,
+        cookbooks: [],
+        savedInCookbookIds: [],
+      };
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader: () => {
+            loaderCalls += 1;
+            return mockData;
+          },
+          action: async ({ request }) => {
+            const formData = await request.formData();
+            const intent = formData.get("intent")?.toString() ?? "";
+            submittedIntents.push(intent);
+            await completion.promise;
+            return { success: true, intent, saved: false };
+          },
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+      await screen.findByRole("heading", { name: "Initially Saved Recipe" });
+
+      const saveButton = screen.getByRole("button", { name: "Remove saved recipe" });
+      expect(saveButton).toHaveAttribute("aria-pressed", "true");
+      saveButton.focus();
+      await user.keyboard(" ");
+
+      await waitFor(() => expect(submittedIntents).toEqual(["unsaveRecipe"]));
+      expect(screen.getByRole("button", { name: "Save recipe" }))
+        .toHaveAttribute("aria-pressed", "false");
+      expect(screen.getByRole("button", { name: "Save recipe" })).toBeDisabled();
+
+      await act(async () => {
+        completion.resolve(undefined);
+        await completion.promise;
+      });
+      await waitFor(() => {
+        expect(loaderCalls).toBeGreaterThanOrEqual(2);
+        expect(screen.getByRole("button", { name: "Remove saved recipe" })).toBeEnabled();
+      });
+      expect(screen.getByRole("button", { name: "Remove saved recipe" }))
+        .toHaveAttribute("aria-pressed", "true");
+    });
+
+    it("rolls back a failed optimistic save and shows error feedback", async () => {
+      const user = userEvent.setup();
+      const completion = createDeferred<void>();
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Failed Save Recipe",
+          description: null,
+          servings: null,
+          coverImageUrl: null,
+          chef: { id: "user-2", username: "otherchef" },
+          steps: [],
+        },
+        isOwner: false,
+        isAuthenticated: true,
+        isSaved: false,
+        cookbooks: [],
         savedInCookbookIds: [],
       };
 
@@ -2549,43 +2708,40 @@ describe("Recipes $id Route", () => {
           action: async ({ request }) => {
             const formData = await request.formData();
             const intent = formData.get("intent")?.toString() ?? "";
-            submittedIntents.push(intent);
+            await completion.promise;
             return {
-              success: true,
+              success: false,
               intent,
-              saved: intent === "saveRecipe",
+              saved: false,
+              error: "Unable to save recipe. Please try again.",
             };
           },
         },
       ]);
 
-      render(<Stub initialEntries={["/recipes/recipe-1"]} />);
-      await screen.findByRole("heading", { name: "Independent Save Recipe" });
+      render(
+        <ToastProvider>
+          <Stub initialEntries={["/recipes/recipe-1"]} />
+        </ToastProvider>,
+      );
+      await screen.findByRole("heading", { name: "Failed Save Recipe" });
 
-      const saveButton = screen.getByTestId("recipe-header-save-action");
-      const cookbookButton = screen.getByTestId("recipe-header-cookbook-action");
-      expect(saveButton).toHaveAccessibleName("Save recipe");
-      expect(saveButton).toHaveAttribute("aria-pressed", "false");
-      expect(cookbookButton).toHaveAccessibleName("Add to cookbook");
+      await user.click(screen.getByRole("button", { name: "Save recipe" }));
+      expect(screen.getByRole("button", { name: "Remove saved recipe" }))
+        .toHaveAttribute("aria-pressed", "true");
 
-      saveButton.focus();
-      await user.keyboard("{Enter}");
-      await waitFor(() => expect(submittedIntents).toEqual(["saveRecipe"]));
-      expect(saveButton).toHaveAccessibleName("Remove saved recipe");
-      expect(saveButton).toHaveAttribute("aria-pressed", "true");
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-
-      await user.click(cookbookButton);
-      expect(await screen.findByRole("dialog", { name: "Add to Cookbook" })).toBeInTheDocument();
-      expect(submittedIntents).toEqual(["saveRecipe"]);
-      expect(saveButton).toHaveAttribute("aria-pressed", "true");
-      await closeCookbookModal(user);
-
-      saveButton.focus();
-      await user.keyboard("{Enter}");
-      await waitFor(() => expect(submittedIntents).toEqual(["saveRecipe", "unsaveRecipe"]));
-      expect(saveButton).toHaveAccessibleName("Save recipe");
-      expect(saveButton).toHaveAttribute("aria-pressed", "false");
+      await act(async () => {
+        completion.resolve(undefined);
+        await completion.promise;
+      });
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Save recipe" })).toBeEnabled();
+      });
+      expect(screen.getByRole("button", { name: "Save recipe" }))
+        .toHaveAttribute("aria-pressed", "false");
+      expect(await screen.findByRole("status")).toHaveTextContent(
+        "Unable to save recipe. Please try again.",
+      );
     });
 
     it("shares from the registered dock action", async () => {
@@ -2696,8 +2852,9 @@ describe("Recipes $id Route", () => {
       expect(submittedScaleFactor).toBe("1.25");
     });
 
-    it("redirects guest recipe mutations to login from header and dock actions", async () => {
+    it("routes guest save and cookbook header controls to login without mutating or opening a dialog", async () => {
       const assign = vi.fn();
+      const submittedIntents: string[] = [];
       const originalAssign = window.location.assign;
       Object.defineProperty(window.location, "assign", {
         configurable: true,
@@ -2717,6 +2874,7 @@ describe("Recipes $id Route", () => {
           },
           isOwner: false,
           isAuthenticated: false,
+          isSaved: false,
           cookbooks: [],
           savedInCookbookIds: [],
         };
@@ -2726,6 +2884,11 @@ describe("Recipes $id Route", () => {
             path: "/recipes/:id",
             Component: RecipeDetail,
             loader: () => mockData,
+            action: async ({ request }) => {
+              const formData = await request.formData();
+              submittedIntents.push(formData.get("intent")?.toString() ?? "");
+              return { success: true };
+            },
           },
         ]);
 
@@ -2733,12 +2896,13 @@ describe("Recipes $id Route", () => {
         render(<Stub initialEntries={["/recipes/recipe-1"]} />);
         await screen.findByRole("heading", { name: "Guest Recipe" });
 
-        await user.click(screen.getByTestId("recipe-header-list-action"));
-        const dockActionRegistration = vi.mocked(useRecipeDetailActions).mock.calls.at(-1)?.[0];
-        dockActionRegistration?.onSave?.();
+        await user.click(screen.getByRole("button", { name: "Save recipe" }));
+        await user.click(screen.getByRole("button", { name: "Add to cookbook" }));
 
         expect(assign).toHaveBeenCalledTimes(2);
         expect(assign).toHaveBeenCalledWith("/login?redirectTo=%2Frecipes%2Frecipe-1");
+        expect(submittedIntents).toEqual([]);
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       } finally {
         Object.defineProperty(window.location, "assign", {
           configurable: true,
