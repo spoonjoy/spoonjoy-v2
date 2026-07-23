@@ -1240,6 +1240,17 @@ type RecipeSummaryRow = {
   coverVariant: RecipeCoverVariant | null;
 };
 
+type RecipeReadTagRow = {
+  id: string;
+  label: string;
+  normalizedLabel: string;
+};
+
+type RecipeReadMetadataRow = {
+  course: string | null;
+  tags: RecipeReadTagRow[];
+};
+
 type RecipeCoverFieldsInput = {
   id: string;
   title: string;
@@ -1295,6 +1306,28 @@ function recipeSummary(recipe: RecipeSummaryRow, origin: string) {
   };
 }
 
+function compareCodeUnits(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function recipeReadMetadata(recipe: RecipeReadMetadataRow) {
+  return {
+    course: recipe.course,
+    tags: [...recipe.tags]
+      .sort((left, right) =>
+        compareCodeUnits(left.normalizedLabel, right.normalizedLabel)
+        || compareCodeUnits(left.id, right.id))
+      .map((tag) => tag.label),
+  };
+}
+
+function recipeReadSummary(recipe: RecipeSummaryRow & RecipeReadMetadataRow, origin: string) {
+  return {
+    ...recipeSummary(recipe, origin),
+    ...recipeReadMetadata(recipe),
+  };
+}
+
 function recipeDetail(recipe: RecipeRow, origin: string) {
   return {
     ...recipeSummary({ ...recipe, ...recipeCoverApiFields(recipe, origin) }, origin),
@@ -1332,6 +1365,13 @@ function recipeDetail(recipe: RecipeRow, origin: string) {
       href: `/cookbooks/${entry.cookbook.id}`,
       canonicalUrl: canonicalUrl(origin, `/cookbooks/${entry.cookbook.id}`),
     })),
+  };
+}
+
+function recipeReadDetail(recipe: RecipeRow, origin: string) {
+  return {
+    ...recipeDetail(recipe, origin),
+    ...recipeReadMetadata(recipe),
   };
 }
 
@@ -1651,6 +1691,7 @@ async function loadRecipeById(db: Awaited<ReturnType<typeof getRequestDb>>, id: 
       title: true,
       description: true,
       servings: true,
+      course: true,
       sourceUrl: true,
       activeCoverId: true,
       activeCoverVariant: true,
@@ -1667,6 +1708,9 @@ async function loadRecipeById(db: Awaited<ReturnType<typeof getRequestDb>>, id: 
         },
       },
       activeCover: { select: RECIPE_COVER_DISPLAY_SELECT },
+      tags: {
+        select: { id: true, label: true, normalizedLabel: true },
+      },
       steps: {
         select: {
           id: true,
@@ -1727,6 +1771,7 @@ async function handleRecipeList(args: ApiV1RouteArgs, requestId: string, princip
       title: true,
       description: true,
       servings: true,
+      course: true,
       sourceUrl: true,
       activeCoverId: true,
       activeCoverVariant: true,
@@ -1743,6 +1788,9 @@ async function handleRecipeList(args: ApiV1RouteArgs, requestId: string, princip
         },
       },
       activeCover: { select: RECIPE_COVER_DISPLAY_SELECT },
+      tags: {
+        select: { id: true, label: true, normalizedLabel: true },
+      },
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     take: limit + 1,
@@ -1757,7 +1805,7 @@ async function handleRecipeList(args: ApiV1RouteArgs, requestId: string, princip
     cursor: cursor?.raw ?? null,
     nextCursor,
     hasMore,
-    recipes: page.map((recipe) => recipeSummary({ ...recipe, ...recipeCoverApiFields(recipe, origin) }, origin)),
+    recipes: page.map((recipe) => recipeReadSummary({ ...recipe, ...recipeCoverApiFields(recipe, origin) }, origin)),
   }, 200, principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders());
 }
 
@@ -1769,7 +1817,7 @@ async function handleRecipeDetail(args: ApiV1RouteArgs, requestId: string, princ
     throw new ApiV1Error("not_found", "Recipe not found");
   }
 
-  return apiV1Success(requestId, { recipe: recipeDetail(recipe, origin) }, 200, principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders());
+  return apiV1Success(requestId, { recipe: recipeReadDetail(recipe, origin) }, 200, principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders());
 }
 
 function objectBody(value: unknown, field: string): Record<string, unknown> {

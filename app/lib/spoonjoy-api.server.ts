@@ -141,6 +141,16 @@ type RecipeWithDetails = Prisma.RecipeGetPayload<{
   };
 }>;
 
+type RecipeReadTag = {
+  id: string;
+  label: string;
+  normalizedLabel: string;
+};
+
+type RecipeReadWithDetails = RecipeWithDetails & {
+  tags: RecipeReadTag[];
+};
+
 type ShoppingListWithItems = Prisma.ShoppingListGetPayload<{
   include: {
     items: { include: { unit: true; ingredientRef: true } };
@@ -989,6 +999,35 @@ function formatRecipeSummary(recipe: RecipeWithDetails) {
   };
 }
 
+function compareCodeUnits(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function formatRecipeReadMetadata(recipe: RecipeReadWithDetails) {
+  return {
+    course: recipe.course,
+    tags: [...recipe.tags]
+      .sort((left, right) =>
+        compareCodeUnits(left.normalizedLabel, right.normalizedLabel)
+        || compareCodeUnits(left.id, right.id))
+      .map((tag) => tag.label),
+  };
+}
+
+function formatRecipeRead(recipe: RecipeReadWithDetails) {
+  return {
+    ...formatRecipe(recipe),
+    ...formatRecipeReadMetadata(recipe),
+  };
+}
+
+function formatRecipeReadSummary(recipe: RecipeReadWithDetails) {
+  return {
+    ...formatRecipeSummary(recipe),
+    ...formatRecipeReadMetadata(recipe),
+  };
+}
+
 function formatShoppingList(list: ShoppingListWithItems) {
   return {
     id: list.id,
@@ -1142,6 +1181,7 @@ async function findRecipeByIdOrTitle(db: PrismaClientType, args: Record<string, 
     include: {
       chef: { select: { id: true, email: true, username: true } },
       covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
+      tags: { select: { id: true, label: true, normalizedLabel: true } },
       steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
     },
   });
@@ -1532,6 +1572,7 @@ const searchRecipesTool: SpoonjoyApiOperation = {
           include: {
             chef: { select: { id: true, email: true, username: true } },
             covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
+            tags: { select: { id: true, label: true, normalizedLabel: true } },
             steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
           },
         })
@@ -1539,7 +1580,7 @@ const searchRecipesTool: SpoonjoyApiOperation = {
 
     recipes.sort((a, b) => (resultOrder.get(a.id) as number) - (resultOrder.get(b.id) as number));
 
-    return json({ recipes: recipes.map(formatRecipeSummary) });
+    return json({ recipes: recipes.map(formatRecipeReadSummary) });
   },
 };
 
@@ -1627,7 +1668,7 @@ const getRecipeTool: SpoonjoyApiOperation = {
   },
   async handle(args, context) {
     const recipe = await findRecipeByIdOrTitle(context.db, args);
-    return json({ recipe: recipe ? formatRecipe(recipe) : null });
+    return json({ recipe: recipe ? formatRecipeRead(recipe) : null });
   },
 };
 
