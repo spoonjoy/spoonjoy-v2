@@ -28,9 +28,9 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - [ ] Owner deletion requires the reserved short-lived deletion-intent bearer, commits a permanent `deleted` tombstone, removes session/receipt rows, application-OPEN sockets, and alarms, is idempotent, and returns 410 `owner_deleted` for every later otherwise-valid authenticated non-delete operation while preserving validation/auth precedence.
 - [ ] Recipe edits never silently remap an active session; completion and abandonment remove resume state without social side effects.
 - [ ] Web, REST, MCP, and legacy shared shopping add paths pass one restoration/concurrency matrix, including repaired unitless duplicates, database-enforced active identity uniqueness, quantity aggregation, rollback, monotonic sync timestamps, native-sync readback, and deterministic fresh-end ordering; existing non-add operations remain compatible.
-- [ ] SavedRecipe migration backfills existing cookbook-derived saved expectations once; subsequent save/unsave and cookbook membership changes are independent and private.
-- [ ] `/saved-recipes` and REST `/api/v1/saved-recipes` perform owner-scoped literal-substring SQL search with canonical UTC-text descending `(savedAt, recipeId)` keyset pagination, return at most 24 recipes, reject malformed/noncanonical cursors, use private no-store responses, and never materialize the full saved collection in Worker memory.
-- [ ] Idempotent `PUT`/`DELETE /api/v1/saved-recipes/:recipeId` mutations use existing `kitchen:write` authorization/idempotency, while `GET /api/v1/saved-recipes` uses `kitchen:read`; soft-deleted recipes are excluded and cascade deletion removes saves.
+- [x] SavedRecipe migration backfills existing cookbook-derived saved expectations once; subsequent save/unsave and cookbook membership changes are independent and private.
+- [x] `/saved-recipes` and REST `/api/v1/saved-recipes` perform owner-scoped literal-substring SQL search with canonical UTC-text descending `(savedAt, recipeId)` keyset pagination, return at most 24 recipes, reject malformed/noncanonical cursors, use private no-store responses, and never materialize the full saved collection in Worker memory.
+- [x] Idempotent `PUT`/`DELETE /api/v1/saved-recipes/:recipeId` mutations use existing `kitchen:write` authorization/idempotency, while `GET /api/v1/saved-recipes` uses `kitchen:read`; soft-deleted recipes are excluded and cascade deletion removes saves.
 - [ ] Recipe tags enforce nullable course `main|side|appetizer|dessert`, ten normalized custom labels, per-recipe uniqueness, code-point/control-character validation, owner-only writes, deterministic output order, and no AI source or endpoint.
 - [ ] My Recipes and global search apply course/tag predicates before their existing result limits; My Recipes rejects unsafe page values and never sends an unsafe SQLite offset.
 - [ ] My Recipes/search treat repeated tag filters as AND, preserve `q`/course/tags through My Recipes pagination and current bounded-search filter links, and expose keyboard-accessible filter/reset and authoring controls.
@@ -394,20 +394,23 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Tests fail because web still derives saves from cookbook membership.
 **Completed**: Commits `5a519d75` and `7f777337` freeze 152 route, server, and component tests with 125 surrounding passes and 27 intentional absent-feature failures. The contract covers canonical cursor ordering and hydration, exact validation/error behavior, persisted independence in both directions, soft-delete history, optimistic pending/revalidation/rollback semantics, rapid-toggle suppression, semantic Enter/Space operation, and exact per-control guest redirects. The 9-test content boundary and diff hygiene pass warning-free, and three harsh review rounds converged. Evidence is recorded in `unit-5.3a-red.md`.
 
-### ⬜ Unit 5.3b: Saved Web Experience - Implementation
+### ✅ Unit 5.3b: Saved Web Experience - Implementation
 **What**: Convert `app/routes/saved-recipes.tsx` to `app/lib/saved-recipes.server.ts`; add the dedicated save action in `app/lib/recipe-detail.server.ts` and save UI alongside distinctly labeled cookbook controls in `app/routes/recipes.$id.tsx`.
 **Output**: Independent private saved-recipe web workflow.
 **Acceptance**: Focused route/component tests and app typecheck/build pass.
+**Completed**: Commits `9d972ecc` through `2b1986d5`, with closeout `60673902`, ship the independent private saved page, recipe-detail save action, optimistic header/dock Save control, and distinct Cookbook workflow. The implementation preserves state across revalidation, rolls back failed optimistic updates, composes repeated response headers across standard and Cloudflare runtimes, and keeps expected private-query failures out of unexpected telemetry. Focused tests, warning-gated typecheck, production build, and direct local Worker/D1 save/unsave/list probes pass.
 
-### ⬜ Unit 5.3c: Saved Web Experience - Verification
+### ✅ Unit 5.3c: Saved Web Experience - Verification
 **What**: Reach 100% route/component coverage, run full gates, and obtain product/accessibility/privacy review.
 **Output**: Coverage and reviewer evidence.
 **Acceptance**: Every UI/action/empty/error branch is covered and review converges.
+**Completed**: Commit `60673902` closes the Cloudflare D1 raw ISO-string coercion gap with a strictly validated text envelope and SQLite storage-class guard. The isolated final gate passes 389 files and 9,404 tests at exact 100% coverage: 21,321 statements, 17,260 branches, 4,114 functions, and 19,606 lines. All 9 scope guards, typecheck, build, focused matrices, and zero-warning policies pass; the implementation reviewer converged after its MINOR BLOB-coercion finding received a red SQL-contract test and repair. Evidence is recorded in `unit-5.3-verification.md`.
 
-### ⬜ Unit 5.4: Saved Web Visual QA
+### ✅ Unit 5.4: Saved Web Visual QA
 **What**: Run `visual-qa-dogfood` on recipe save/cookbook controls and saved empty/populated/search/pagination states at 390x844 and 1440x900.
 **Output**: Screenshots, metrics, and closed absurdity ledger.
 **Acceptance**: Save and cookbook controls have distinct accessible names, keyboard focus, and at least 44px targets; screenshots show no horizontal overflow, overlap, or truncation; the absurdity ledger has no open item.
+**Completed**: Commit `60673902` records 13 inspected desktop/mobile screenshots plus automated metrics for every required state. All roots match viewport width, every measured target is at least 44px, Save and Cookbook retain distinct names and visible keyboard focus, saved descriptions wrap without truncation, and the dialog focus treatment is clean. The absurdity ledger has no open item, fresh visual review converged, Playwright passed 2/2 warning-free, direct Worker/D1 probes returned 200, and all seven local QA residue categories are zero.
 
 ### ⬜ Unit 6.1a: Tag Normalization And Storage - Tests
 **What**: Add failing tests for course enum/null; exact NFKC-first processing; pre-whitespace Unicode General Category `C` rejection; Unicode `White_Space` trim/collapse; `Array.from` code-point count; locale-independent `toLowerCase` without renormalization; tab/newline/format/lone-surrogate cases; 40-code-point and ten-tag limits; first-spelling duplicates; deterministic order; owner checks; and atomic replacement/concurrency.
@@ -790,3 +793,6 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-23 09:16 Unit 5.2b complete: commit `0b428d15` ships the private SavedRecipe REST/OpenAPI/generated/docs contract, passes the 88-test focused matrix plus warning-clean typecheck/build and visual QA, and fixes the audit-discovered soft-delete retry inconsistency before release.
 - 2026-07-23 10:15 Unit 5.2c complete: commit `8cff104a` passes 9,368 tests at exact 100% coverage, all warning-clean contract/compiler/build/boundary gates, and repaired API/security review convergence across all four findings.
 - 2026-07-23 10:58 Unit 5.3a complete: commits `5a519d75` and `7f777337` freeze the independent saved web workflow across 152 tests with the exact 27-red/125-green split; the boundary oracle passes 9/9 and the third harsh review converged.
+- 2026-07-23 14:38 Unit 5.3b complete: commits `9d972ecc` through `60673902` ship the independent saved page and recipe-detail Save workflow, including portable response-header composition and real Cloudflare Worker/D1 save, unsave, and list behavior.
+- 2026-07-23 14:38 Unit 5.3c complete: the isolated 389-file/9,404-test gate is exact 100% across 21,321 statements, 17,260 branches, 4,114 functions, and 19,606 lines; all focused, scope, compiler, build, warning, privacy, accessibility, and repaired integrity-review gates converge.
+- 2026-07-23 14:38 Unit 5.4 complete: 13 final screenshots, 13 state/viewport metric records, 2/2 Playwright projects, closed absurdity ledger, converged visual review, and seven-category zero-residue cleanup prove the desktop/mobile saved experience.
