@@ -62,6 +62,11 @@ import {
 import { FOOD_IMAGE_SIZE_MESSAGE, FOOD_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
 import { sanitizeImagePromptAddition } from "~/lib/image-gen.server";
 import { productActivationPendingWebResponse } from "~/lib/saved-recipe-cutover.server";
+import {
+  saveRecipe as saveSavedRecipe,
+  SavedRecipeNotFoundError,
+  unsaveRecipe as removeSavedRecipe,
+} from "~/lib/saved-recipes.server";
 
 interface CloudflareContextLike {
   cloudflare?: {
@@ -320,6 +325,12 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
   const savedInCookbookIds = userCookbooks
     .filter((cookbook) => cookbook.recipes.length > 0)
     .map((cookbook) => cookbook.id);
+  const isSaved = userId
+    ? Boolean(await database.savedRecipe.findUnique({
+        where: { userId_recipeId: { userId, recipeId: id } },
+        select: { recipeId: true },
+      }))
+    : false;
 
   const recipeIngredientKeys = new Set(
     recipe.steps.flatMap((step) =>
@@ -405,6 +416,7 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
     isOwner,
     cookbooks,
     savedInCookbookIds,
+    isSaved,
     hasIngredientsInShoppingList,
     spoons,
     coverHistory: isOwner
@@ -794,6 +806,44 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
   const intent = formData.get("intent");
 
   const database = await getRequestDb(context);
+
+  if (intent === "saveRecipe") {
+    try {
+      const saved = await saveSavedRecipe(database, {
+        userId,
+        recipeId: id,
+        nowMs: Date.now(),
+      });
+      return {
+        success: true,
+        intent: "saveRecipe",
+        saved: true,
+        savedAt: saved.savedAt,
+      };
+    } catch (error) {
+      if (error instanceof SavedRecipeNotFoundError) {
+        throw new Response(error.message, { status: 404 });
+      }
+      const cutoverResponse = productActivationPendingWebResponse(error);
+      if (cutoverResponse) {
+        return cutoverResponse;
+      }
+      throw error;
+    }
+  }
+
+  if (intent === "unsaveRecipe") {
+    try {
+      await removeSavedRecipe(database, { userId, recipeId: id });
+      return { success: true, intent: "unsaveRecipe", saved: false };
+    } catch (error) {
+      const cutoverResponse = productActivationPendingWebResponse(error);
+      if (cutoverResponse) {
+        return cutoverResponse;
+      }
+      throw error;
+    }
+  }
 
   if (intent === "createSpoon") {
     return handleCreateSpoon(database, userId, id, formData, context);

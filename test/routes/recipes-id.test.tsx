@@ -2468,7 +2468,7 @@ describe("Recipes $id Route", () => {
 
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Toggle Cookbook Recipe" });
-      expect(screen.getByRole("button", { name: "Save recipe" }))
+      expect(screen.getByTestId("recipe-header-save-action"))
         .toHaveAttribute("aria-pressed", "false");
 
       await openCookbookModalFromHeader();
@@ -2479,13 +2479,13 @@ describe("Recipes $id Route", () => {
       await user.click(unsavedCookbookButton);
       expect(unsavedCookbookButton).toHaveTextContent("✓");
       expect(unsavedCookbookButton).toHaveAttribute("aria-pressed", "true");
-      expect(screen.getByRole("button", { name: "Save recipe" }))
+      expect(screen.getByTestId("recipe-header-save-action"))
         .toHaveAttribute("aria-pressed", "false");
 
       await user.click(savedCookbookButton);
       expect(savedCookbookButton).not.toHaveTextContent("✓");
       expect(savedCookbookButton).toHaveAttribute("aria-pressed", "false");
-      expect(screen.getByRole("button", { name: "Save recipe" }))
+      expect(screen.getByTestId("recipe-header-save-action"))
         .toHaveAttribute("aria-pressed", "false");
 
       await waitFor(() => {
@@ -2612,7 +2612,7 @@ describe("Recipes $id Route", () => {
       expect(await screen.findByRole("dialog", { name: "Add to Cookbook" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Weeknights" }))
         .toHaveAttribute("aria-pressed", "false");
-      expect(screen.getByRole("button", { name: "Remove saved recipe" }))
+      expect(screen.getByTestId("recipe-header-save-action"))
         .toHaveAttribute("aria-pressed", "true");
       await closeCookbookModal(user);
 
@@ -2624,7 +2624,7 @@ describe("Recipes $id Route", () => {
         expect(loaderCalls).toBeGreaterThanOrEqual(2);
         expect(screen.getByRole("button", { name: "Remove saved recipe" })).toBeEnabled();
       });
-      expect(screen.getByRole("button", { name: "Remove saved recipe" }))
+      expect(screen.getByTestId("recipe-header-save-action"))
         .toHaveAttribute("aria-pressed", "true");
 
       await user.click(screen.getByRole("button", { name: "Add to cookbook" }));
@@ -2632,7 +2632,7 @@ describe("Recipes $id Route", () => {
       expect(submittedIntents).toEqual(["saveRecipe"]);
       expect(screen.getByRole("button", { name: "Weeknights" }))
         .toHaveAttribute("aria-pressed", "false");
-      expect(screen.getByRole("button", { name: "Remove saved recipe" }))
+      expect(screen.getByTestId("recipe-header-save-action"))
         .toHaveAttribute("aria-pressed", "true");
       await closeCookbookModal(user);
     });
@@ -2689,7 +2689,7 @@ describe("Recipes $id Route", () => {
       await user.keyboard(" ");
 
       await waitFor(() => expect(submittedIntents).toEqual(["unsaveRecipe"]));
-      expect(screen.getByRole("button", { name: "Save recipe" }))
+      expect(screen.getByTestId("recipe-header-save-action"))
         .toHaveAttribute("aria-pressed", "false");
       expect(screen.getByRole("button", { name: "Save recipe" })).toBeDisabled();
 
@@ -2699,7 +2699,7 @@ describe("Recipes $id Route", () => {
         .toHaveAttribute("aria-pressed", "false");
       expect(screen.getByRole("button", { name: "Favorites" }))
         .toHaveAttribute("aria-pressed", "true");
-      expect(screen.getByRole("button", { name: "Save recipe" }))
+      expect(screen.getByTestId("recipe-header-save-action"))
         .toHaveAttribute("aria-pressed", "false");
       expect(submittedIntents).toEqual(["unsaveRecipe"]);
       await closeCookbookModal(user);
@@ -2712,7 +2712,7 @@ describe("Recipes $id Route", () => {
         expect(loaderCalls).toBeGreaterThanOrEqual(2);
         expect(screen.getByRole("button", { name: "Remove saved recipe" })).toBeEnabled();
       });
-      expect(screen.getByRole("button", { name: "Remove saved recipe" }))
+      expect(screen.getByTestId("recipe-header-save-action"))
         .toHaveAttribute("aria-pressed", "true");
 
       await user.click(screen.getByRole("button", { name: "Add to cookbook" }));
@@ -2721,7 +2721,7 @@ describe("Recipes $id Route", () => {
         .toHaveAttribute("aria-pressed", "false");
       expect(screen.getByRole("button", { name: "Favorites" }))
         .toHaveAttribute("aria-pressed", "true");
-      expect(screen.getByRole("button", { name: "Remove saved recipe" }))
+      expect(screen.getByTestId("recipe-header-save-action"))
         .toHaveAttribute("aria-pressed", "true");
       expect(submittedIntents).toEqual(["unsaveRecipe"]);
       await closeCookbookModal(user);
