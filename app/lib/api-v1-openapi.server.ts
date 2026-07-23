@@ -164,6 +164,32 @@ const recipeCourseSchema: JsonSchema = {
 
 const recipeTagsSchema: JsonSchema = arrayOf({ type: "string" });
 
+const searchResultRequired = [
+  "type", "id", "ownerId", "ownerUsername", "title", "subtitle", "snippet", "href",
+  "canonicalUrl", "imageUrl", "score", "metadata",
+];
+
+const searchResultProperties: Record<string, JsonSchema> = {
+  id: idSchema,
+  ownerId: idSchema,
+  ownerUsername: { type: "string" },
+  title: { type: "string" },
+  subtitle: { type: "string" },
+  snippet: { type: "string" },
+  href: { type: "string" },
+  canonicalUrl: uriSchema,
+  imageUrl: { type: ["string", "null"], format: "uri" },
+  score: { type: "number", description: "Lower values are better for full-text ranked queries. Empty-query recency results use 0." },
+};
+
+function searchResultSchema(type: string, metadataSchema: string): JsonSchema {
+  return objectSchema(searchResultRequired, {
+    type: { type: "string", const: type },
+    ...searchResultProperties,
+    metadata: ref(metadataSchema),
+  });
+}
+
 const schemas = {
   ErrorDetails: { type: "object", additionalProperties: true },
   ErrorObject: objectSchema(["code", "message", "status"], {
@@ -797,28 +823,27 @@ const schemas = {
     iconKey: nullableStringSchema,
     sortIndex: { type: "integer" },
   }),
-  SearchResult: objectSchema(["type", "id", "ownerId", "ownerUsername", "title", "subtitle", "snippet", "href", "canonicalUrl", "imageUrl", "score", "metadata"], {
-    type: { type: "string", enum: ["recipe", "cookbook", "chef", "shopping-list-item"] },
-    id: idSchema,
-    ownerId: idSchema,
-    ownerUsername: { type: "string" },
-    title: { type: "string" },
-    subtitle: { type: "string" },
-    snippet: { type: "string" },
-    href: { type: "string" },
-    canonicalUrl: uriSchema,
-    imageUrl: { type: ["string", "null"], format: "uri" },
-    score: { type: "number", description: "Lower values are better for full-text ranked queries. Empty-query recency results use 0." },
-    metadata: {
-      oneOf: [
-        ref("RecipeSearchMetadata"),
-        ref("CookbookSearchMetadata"),
-        ref("ChefSearchMetadata"),
-        ref("ShoppingListItemSearchMetadata"),
-      ],
-      description: "Type-specific display metadata. Render values as data, not HTML.",
+  RecipeSearchResult: searchResultSchema("recipe", "RecipeSearchMetadata"),
+  CookbookSearchResult: searchResultSchema("cookbook", "CookbookSearchMetadata"),
+  ChefSearchResult: searchResultSchema("chef", "ChefSearchMetadata"),
+  ShoppingListItemSearchResult: searchResultSchema("shopping-list-item", "ShoppingListItemSearchMetadata"),
+  SearchResult: {
+    oneOf: [
+      ref("RecipeSearchResult"),
+      ref("CookbookSearchResult"),
+      ref("ChefSearchResult"),
+      ref("ShoppingListItemSearchResult"),
+    ],
+    discriminator: {
+      propertyName: "type",
+      mapping: {
+        recipe: "#/components/schemas/RecipeSearchResult",
+        cookbook: "#/components/schemas/CookbookSearchResult",
+        chef: "#/components/schemas/ChefSearchResult",
+        "shopping-list-item": "#/components/schemas/ShoppingListItemSearchResult",
+      },
     },
-  }),
+  },
   CredentialMetadata: objectSchema(["id", "name", "tokenPrefix", "scopes", "createdAt", "updatedAt", "lastUsedAt", "revokedAt", "expiresAt"], {
     id: idSchema,
     name: shortTextSchema,

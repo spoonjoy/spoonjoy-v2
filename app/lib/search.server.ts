@@ -166,8 +166,8 @@ const SEARCH_METADATA_SCHEMA_SQL = `CREATE TABLE IF NOT EXISTS "SearchIndexMetad
 const SEARCH_SOURCE_FINGERPRINT_SQL = `SELECT
   (SELECT COUNT(*) FROM "User") AS userCount,
   (SELECT MAX("updatedAt") FROM "User") AS userLatestAt,
-  (SELECT COUNT(*) FROM "Recipe" WHERE "deletedAt" IS NULL) AS recipeCount,
-  (SELECT MAX("updatedAt") FROM "Recipe" WHERE "deletedAt" IS NULL) AS recipeLatestAt,
+  (SELECT COUNT(*) FROM "Recipe") AS recipeCount,
+  (SELECT MAX("updatedAt") FROM "Recipe") AS recipeLatestAt,
   (SELECT COUNT(*) FROM "RecipeTag" rt INNER JOIN "Recipe" r ON r."id" = rt."recipeId" WHERE r."deletedAt" IS NULL) AS recipeTagCount,
   (SELECT MAX(rt."updatedAt") FROM "RecipeTag" rt INNER JOIN "Recipe" r ON r."id" = rt."recipeId" WHERE r."deletedAt" IS NULL) AS recipeTagLatestAt,
   (SELECT COUNT(*) FROM "RecipeCover") AS recipeCoverCount,

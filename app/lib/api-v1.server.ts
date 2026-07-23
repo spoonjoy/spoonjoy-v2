@@ -1364,7 +1364,7 @@ function recipeDetail(recipe: RecipeRow, origin: string) {
   };
 }
 
-function recipeReadDetail(recipe: RecipeRow, origin: string) {
+function recipeReadDetail(recipe: RecipeReadRow, origin: string) {
   return {
     ...recipeDetail(recipe, origin),
     ...recipeReadMetadata(recipe),
@@ -1676,68 +1676,82 @@ async function queueApiRecipePlaceholderGeneration(
   });
 }
 
+const RECIPE_DETAIL_SELECT = {
+  id: true,
+  title: true,
+  description: true,
+  servings: true,
+  sourceUrl: true,
+  activeCoverId: true,
+  activeCoverVariant: true,
+  coverMode: true,
+  createdAt: true,
+  updatedAt: true,
+  chef: { select: { id: true, username: true } },
+  sourceRecipe: {
+    select: {
+      id: true,
+      title: true,
+      deletedAt: true,
+      chef: { select: { id: true, username: true } },
+    },
+  },
+  activeCover: { select: RECIPE_COVER_DISPLAY_SELECT },
+  steps: {
+    select: {
+      id: true,
+      stepNum: true,
+      stepTitle: true,
+      description: true,
+      duration: true,
+      ingredients: {
+        select: {
+          id: true,
+          quantity: true,
+          ingredientRef: { select: { name: true } },
+          unit: { select: { name: true } },
+        },
+      },
+      usingSteps: {
+        select: {
+          id: true,
+          inputStepNum: true,
+          outputStepNum: true,
+          outputOfStep: { select: { stepNum: true, stepTitle: true } },
+        },
+        orderBy: { outputStepNum: "asc" },
+      },
+    },
+  },
+  cookbooks: {
+    select: { cookbook: { select: { id: true, title: true } } },
+    orderBy: { createdAt: "asc" },
+  },
+} satisfies Prisma.RecipeSelect;
+
+const RECIPE_READ_DETAIL_SELECT = {
+  ...RECIPE_DETAIL_SELECT,
+  course: true,
+  tags: {
+    select: { id: true, label: true, normalizedLabel: true },
+  },
+} satisfies Prisma.RecipeSelect;
+
 type RecipeRow = NonNullable<Awaited<ReturnType<typeof loadRecipeById>>>;
+type RecipeReadRow = NonNullable<Awaited<ReturnType<typeof loadRecipeReadById>>>;
 type CookbookRow = NonNullable<Awaited<ReturnType<typeof loadCookbookById>>>;
 
 async function loadRecipeById(db: Awaited<ReturnType<typeof getRequestDb>>, id: string) {
   return db.recipe.findFirst({
     where: { id, deletedAt: null },
-    select: {
-      id: true,
-      title: true,
-      description: true,
-      servings: true,
-      course: true,
-      sourceUrl: true,
-      activeCoverId: true,
-      activeCoverVariant: true,
-      coverMode: true,
-      createdAt: true,
-      updatedAt: true,
-      chef: { select: { id: true, username: true } },
-      sourceRecipe: {
-        select: {
-          id: true,
-          title: true,
-          deletedAt: true,
-          chef: { select: { id: true, username: true } },
-        },
-      },
-      activeCover: { select: RECIPE_COVER_DISPLAY_SELECT },
-      tags: {
-        select: { id: true, label: true, normalizedLabel: true },
-      },
-      steps: {
-        select: {
-          id: true,
-          stepNum: true,
-          stepTitle: true,
-          description: true,
-          duration: true,
-          ingredients: {
-            select: {
-              id: true,
-              quantity: true,
-              ingredientRef: { select: { name: true } },
-              unit: { select: { name: true } },
-            },
-          },
-          usingSteps: {
-            select: {
-              id: true,
-              inputStepNum: true,
-              outputStepNum: true,
-              outputOfStep: { select: { stepNum: true, stepTitle: true } },
-            },
-            orderBy: { outputStepNum: "asc" },
-          },
-        },
-      },
-      cookbooks: {
-        select: { cookbook: { select: { id: true, title: true } } },
-        orderBy: { createdAt: "asc" },
-      },
-    },
+    select: RECIPE_DETAIL_SELECT,
+  });
+}
+
+async function loadRecipeReadById(db: Awaited<ReturnType<typeof getRequestDb>>, id: string) {
+  return db.recipe.findFirst({
+    where: { id, deletedAt: null },
+    select: RECIPE_READ_DETAIL_SELECT,
   });
 }
 
@@ -1808,7 +1822,7 @@ async function handleRecipeList(args: ApiV1RouteArgs, requestId: string, princip
 async function handleRecipeDetail(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal | null, id: string) {
   const db = await getRequestDb(args.context);
   const origin = publicContentOrigin(args);
-  const recipe = await loadRecipeById(db, id);
+  const recipe = await loadRecipeReadById(db, id);
   if (!recipe) {
     throw new ApiV1Error("not_found", "Recipe not found");
   }
