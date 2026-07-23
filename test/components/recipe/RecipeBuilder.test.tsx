@@ -51,6 +51,8 @@ function createTestRecipe(
     title: string;
     description: string | null;
     servings: string | null;
+    course: "main" | "side" | "appetizer" | "dessert" | null;
+    tags: string[];
     coverImageUrl: string | null;
     steps: StepData[];
   }> = {},
@@ -60,6 +62,8 @@ function createTestRecipe(
     title: "Test Recipe",
     description: "A test recipe description",
     servings: "4 servings",
+    course: null,
+    tags: [],
     coverImageUrl: "",
     steps: [],
     ...overrides,
@@ -142,6 +146,26 @@ describe("RecipeBuilder", () => {
 
       // Should have servings input
       expect(screen.getByLabelText(/servings/i)).toBeInTheDocument();
+
+      expect(screen.getByLabelText(/^course$/i)).toHaveValue("");
+      expect(screen.getByLabelText(/^tags$/i)).toHaveValue("");
+    });
+
+    it("offers the exact nullable course choices", () => {
+      const Wrapper = createTestWrapper();
+      render(<Wrapper initialEntries={["/recipes/new"]} />);
+
+      expect(screen.getByRole("combobox", { name: "Course" })).toHaveDisplayValue("No course");
+      expect(screen.getAllByRole("option").map((option) => ({
+        label: option.textContent,
+        value: (option as HTMLOptionElement).value,
+      }))).toEqual([
+        { label: "No course", value: "" },
+        { label: "Main", value: "main" },
+        { label: "Side", value: "side" },
+        { label: "Appetizer", value: "appetizer" },
+        { label: "Dessert", value: "dessert" },
+      ]);
     });
 
     it("renders StepList section", () => {
@@ -194,6 +218,21 @@ describe("RecipeBuilder", () => {
 
       // Should have pre-filled servings
       expect(screen.getByLabelText(/servings/i)).toHaveValue("8 slices");
+    });
+
+    it("pre-populates course and editable tag chips", () => {
+      const recipe = createTestRecipe({
+        course: "side",
+        tags: ["Quick", "Weeknight"],
+      });
+      const Wrapper = createTestWrapper({ recipe });
+      render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
+
+      expect(screen.getByRole("combobox", { name: "Course" })).toHaveValue("side");
+      expect(screen.getByText("Quick")).toBeInTheDocument();
+      expect(screen.getByText("Weeknight")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Remove Quick tag" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Remove Weeknight tag" })).toBeInTheDocument();
     });
 
     it("pre-populates with existing steps", () => {
@@ -285,6 +324,31 @@ describe("RecipeBuilder", () => {
               description: "Mix all ingredients",
             }),
           ]),
+        }),
+      );
+    });
+
+    it("adds and removes custom tags with the keyboard and includes course and tags on save", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      const Wrapper = createTestWrapper({ onSave });
+      render(<Wrapper initialEntries={["/recipes/new"]} />);
+
+      await user.type(screen.getByLabelText(/title/i), "Fast Supper");
+      await user.selectOptions(screen.getByRole("combobox", { name: "Course" }), "main");
+      await user.type(screen.getByLabelText(/^tags$/i), "  Weeknight  {Enter}");
+      await user.type(screen.getByLabelText(/^tags$/i), "Quick{Enter}");
+
+      expect(screen.getByText("Weeknight")).toBeInTheDocument();
+      expect(screen.getByText("Quick")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Remove Weeknight tag" }));
+      await user.click(screen.getByRole("button", { name: /create recipe/i }));
+
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          course: "main",
+          tags: ["Quick"],
         }),
       );
     });
@@ -473,6 +537,8 @@ describe("RecipeBuilder", () => {
       expect(screen.getByLabelText(/title/i)).toBeDisabled();
       expect(screen.getByLabelText(/description/i)).toBeDisabled();
       expect(screen.getByLabelText(/servings/i)).toBeDisabled();
+      expect(screen.getByRole("combobox", { name: "Course" })).toBeDisabled();
+      expect(screen.getByLabelText(/^tags$/i)).toBeDisabled();
 
       // Add step button should be disabled
       expect(screen.getByRole("button", { name: /add step/i })).toBeDisabled();
@@ -882,6 +948,23 @@ describe("RecipeBuilder", () => {
       expect(servingsInput).toHaveAttribute("data-invalid");
       expect(servingsInput).toHaveAttribute("aria-invalid", "true");
       expect(servingsInput).toHaveAccessibleDescription("Servings cannot exceed 100 characters");
+    });
+
+    it("associates course and tag validation errors with their controls", () => {
+      const Wrapper = createTestWrapper({
+        errors: {
+          course: "Choose a supported course",
+          tags: "Add no more than 10 tags",
+        },
+      });
+      render(<Wrapper initialEntries={["/recipes/new"]} />);
+
+      expect(screen.getByRole("combobox", { name: "Course" })).toHaveAccessibleDescription(
+        "Choose a supported course",
+      );
+      expect(screen.getByLabelText(/^tags$/i)).toHaveAccessibleDescription(
+        "Add no more than 10 tags",
+      );
     });
 
     it("displays steps validation error when errors prop contains steps error", () => {

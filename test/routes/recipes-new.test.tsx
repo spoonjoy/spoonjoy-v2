@@ -188,7 +188,13 @@ describe("Recipes New Route", () => {
 
     it("should create recipe and redirect on success", async () => {
       const request = await createFormRequest(
-        { title: "My New Recipe", description: "A delicious recipe", servings: "4" },
+        {
+          title: "My New Recipe",
+          description: "A delicious recipe",
+          servings: "4",
+          course: "main",
+          tags: JSON.stringify(["  Weeknight  ", "Quick"]),
+        },
         testUserId
       );
 
@@ -210,7 +216,40 @@ describe("Recipes New Route", () => {
       expect(recipes[0].title).toBe("My New Recipe");
       expect(recipes[0].description).toBe("A delicious recipe");
       expect(recipes[0].servings).toBe("4");
+      expect(recipes[0].course).toBe("main");
+      await expect(db.recipeTag.findMany({
+        where: { recipeId: recipes[0].id },
+        orderBy: { normalizedLabel: "asc" },
+      })).resolves.toEqual([
+        expect.objectContaining({ label: "Quick", normalizedLabel: "quick" }),
+        expect.objectContaining({ label: "Weeknight", normalizedLabel: "weeknight" }),
+      ]);
       await expectAwaitingPlaceholderCover(recipes[0].id, testUserId);
+    });
+
+    it("returns field errors for an unsupported course and malformed tag payload", async () => {
+      const request = await createFormRequest(
+        {
+          title: "Invalid Metadata Recipe",
+          course: "breakfast",
+          tags: "not-json",
+        },
+        testUserId,
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(400);
+      expect(data.errors).toMatchObject({
+        course: "Choose a supported course",
+        tags: "Tags must be valid JSON",
+      });
+      await expect(db.recipe.count({ where: { chefId: testUserId } })).resolves.toBe(0);
     });
 
     it("should parse ingredients for the unsaved new recipe builder", async () => {
@@ -1381,6 +1420,9 @@ describe("Recipes New Route", () => {
       await user.clear(servingsInput);
       await user.type(servingsInput, "4");
 
+      await user.selectOptions(screen.getByRole("combobox", { name: "Course" }), "dessert");
+      await user.type(screen.getByLabelText(/^Tags$/), "Celebration{Enter}");
+
       // Click Create Recipe button (triggers RecipeBuilder.handleSave → onSave → handleSave)
       const submitButton = screen.getByRole("button", { name: "Create Recipe" });
       await user.click(submitButton);
@@ -1390,6 +1432,8 @@ describe("Recipes New Route", () => {
       });
       expect(actionFormData.description).toBe("A test description");
       expect(actionFormData.servings).toBe("4");
+      expect(actionFormData.course).toBe("dessert");
+      expect(JSON.parse(actionFormData.tags)).toEqual(["Celebration"]);
     });
 
     it("should handle image upload in handleSave", async () => {

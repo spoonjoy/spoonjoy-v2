@@ -102,6 +102,16 @@ describe("Recipes $id Edit Route", () => {
     });
 
     it("should return recipe data when logged in as owner", async () => {
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { course: "side" },
+      });
+      await db.recipeTag.createMany({
+        data: [
+          { recipeId, label: "Quick", normalizedLabel: "quick" },
+          { recipeId, label: "Weeknight", normalizedLabel: "weeknight" },
+        ],
+      });
       const session = await sessionStorage.getSession();
       session.set("userId", testUserId);
       const setCookieHeader = await sessionStorage.commitSession(session);
@@ -120,6 +130,11 @@ describe("Recipes $id Edit Route", () => {
 
       expect(result.recipe).toBeDefined();
       expect(result.recipe.id).toBe(recipeId);
+      expect(result.recipe.course).toBe("side");
+      expect(result.recipe.tags.map((tag: { label: string }) => tag.label)).toEqual([
+        "Quick",
+        "Weeknight",
+      ]);
       expect(result.coverImageUrl).toBeNull();
     });
 
@@ -388,6 +403,34 @@ describe("Recipes $id Edit Route", () => {
       expect(data.errors.title).toBe("Title is required");
     });
 
+    it("returns field errors for an unsupported course and malformed tag payload", async () => {
+      const request = await createFormRequest(
+        {
+          title: "Invalid Metadata Recipe",
+          course: "breakfast",
+          tags: "not-json",
+        },
+        testUserId,
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(400);
+      expect(data.errors).toMatchObject({
+        course: "Choose a supported course",
+        tags: "Tags must be valid JSON",
+      });
+      await expect(db.recipe.findUniqueOrThrow({ where: { id: recipeId } })).resolves.toMatchObject({
+        course: null,
+      });
+      await expect(db.recipeTag.count({ where: { recipeId } })).resolves.toBe(0);
+    });
+
     it("should successfully update recipe and redirect", async () => {
       const cookbook = await db.cookbook.create({
         data: { title: "Metadata Edit Sync Box", authorId: testUserId },
@@ -400,15 +443,58 @@ describe("Recipes $id Edit Route", () => {
         },
       });
       const oldCookbookUpdatedAt = new Date("2000-01-01T00:00:00.000Z");
+      const oldRecipeUpdatedAt = new Date("2000-01-02T00:00:00.000Z");
       await db.cookbook.update({
         where: { id: cookbook.id },
         data: { updatedAt: oldCookbookUpdatedAt },
       });
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { updatedAt: oldRecipeUpdatedAt },
+      });
+      await db.recipeTag.create({
+        data: {
+          id: "old-edit-tag",
+          recipeId,
+          label: "Old",
+          normalizedLabel: "old",
+          createdAt: oldRecipeUpdatedAt,
+          updatedAt: oldRecipeUpdatedAt,
+        },
+      });
+      await db.$executeRawUnsafe(
+        `INSERT INTO "SearchDocument" (
+          "entityType", "entityId", "ownerId", "ownerUsername", "sortAt",
+          "title", "subtitle", "body", "href", "imageUrl", "metadata"
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        "recipe",
+        recipeId,
+        testUserId,
+        "owner",
+        oldRecipeUpdatedAt.toISOString(),
+        "Indexed Before Edit",
+        "",
+        "old body",
+        `/recipes/${recipeId}`,
+        null,
+        "old metadata",
+      );
+      await db.$executeRawUnsafe(
+        `INSERT INTO "SearchIndexMetadata" (
+          "id", "sourceFingerprint", "documentCount", "rebuiltAt"
+        ) VALUES (?, ?, ?, ?)`,
+        "current",
+        "fingerprint-before-edit",
+        1,
+        oldRecipeUpdatedAt.toISOString(),
+      );
       const request = await createFormRequest(
         {
           title: "Updated Title",
           description: "Updated Description",
           servings: "6",
+          course: "main",
+          tags: JSON.stringify(["Weeknight", "Quick"]),
         },
         testUserId
       );
@@ -428,11 +514,150 @@ describe("Recipes $id Edit Route", () => {
       expect(recipe?.title).toBe("Updated Title");
       expect(recipe?.description).toBe("Updated Description");
       expect(recipe?.servings).toBe("6");
+      expect(recipe?.course).toBe("main");
       const touchedCookbook = await db.cookbook.findUniqueOrThrow({
         where: { id: cookbook.id },
         select: { updatedAt: true },
       });
-      expect(touchedCookbook.updatedAt.getTime()).toBeGreaterThan(oldCookbookUpdatedAt.getTime());
+      expect(recipe!.updatedAt.getTime()).toBeGreaterThan(oldRecipeUpdatedAt.getTime());
+      expect(touchedCookbook.updatedAt).toEqual(recipe!.updatedAt);
+      const replacementTags = await db.recipeTag.findMany({
+        where: { recipeId },
+        orderBy: { normalizedLabel: "asc" },
+      });
+      expect(replacementTags.map((tag) => ({
+        label: tag.label,
+        normalizedLabel: tag.normalizedLabel,
+      }))).toEqual([
+        { label: "Quick", normalizedLabel: "quick" },
+        { label: "Weeknight", normalizedLabel: "weeknight" },
+      ]);
+      expect(replacementTags.every((tag) => (
+        tag.createdAt.getTime() === recipe!.updatedAt.getTime()
+          && tag.updatedAt.getTime() === recipe!.updatedAt.getTime()
+      ))).toBe(true);
+      await expect(db.$queryRawUnsafe(
+        `SELECT "title", "body", "metadata" FROM "SearchDocument" WHERE "entityId" = ?`,
+        recipeId,
+      )).resolves.toEqual([{ title: "Indexed Before Edit", body: "old body", metadata: "old metadata" }]);
+      await expect(db.$queryRawUnsafe(
+        `SELECT "sourceFingerprint", "documentCount" FROM "SearchIndexMetadata" WHERE "id" = ?`,
+        "current",
+      )).resolves.toEqual([{ sourceFingerprint: "fingerprint-before-edit", documentCount: 1n }]);
+    });
+
+    it("rolls back authoring fields, tags, recipe and cookbook timestamps, and search authority after a later tag failure", async () => {
+      const originalRecipeUpdatedAt = new Date("2001-01-01T00:00:00.000Z");
+      const originalCookbookUpdatedAt = new Date("2001-01-02T00:00:00.000Z");
+      const cookbook = await db.cookbook.create({
+        data: { title: "Rollback Cookbook", authorId: testUserId },
+      });
+      await db.recipeInCookbook.create({
+        data: { cookbookId: cookbook.id, recipeId, addedById: testUserId },
+      });
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { course: "side", updatedAt: originalRecipeUpdatedAt },
+      });
+      await db.cookbook.update({
+        where: { id: cookbook.id },
+        data: { updatedAt: originalCookbookUpdatedAt },
+      });
+      await db.recipeTag.create({
+        data: {
+          id: "preserved-edit-tag",
+          recipeId,
+          label: "Preserved",
+          normalizedLabel: "preserved",
+          createdAt: originalRecipeUpdatedAt,
+          updatedAt: originalRecipeUpdatedAt,
+        },
+      });
+      await db.$executeRawUnsafe(
+        `INSERT INTO "SearchDocument" (
+          "entityType", "entityId", "ownerId", "ownerUsername", "sortAt",
+          "title", "subtitle", "body", "href", "imageUrl", "metadata"
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        "recipe",
+        recipeId,
+        testUserId,
+        "owner",
+        originalRecipeUpdatedAt.toISOString(),
+        "Rollback Search Sentinel",
+        "",
+        "preserve me",
+        `/recipes/${recipeId}`,
+        null,
+        "sentinel metadata",
+      );
+      await db.$executeRawUnsafe(
+        `INSERT INTO "SearchIndexMetadata" (
+          "id", "sourceFingerprint", "documentCount", "rebuiltAt"
+        ) VALUES (?, ?, ?, ?)`,
+        "current",
+        "rollback-fingerprint",
+        1,
+        originalRecipeUpdatedAt.toISOString(),
+      );
+      await db.$executeRawUnsafe(`
+        CREATE TRIGGER "RecipeTag_edit_abort"
+        BEFORE INSERT ON "RecipeTag"
+        WHEN NEW."normalizedLabel" = 'quick'
+        BEGIN
+          SELECT RAISE(ABORT, 'recipe edit tag failure');
+        END
+      `);
+
+      try {
+        const request = await createFormRequest(
+          {
+            title: "Must Roll Back",
+            description: "Must also roll back",
+            servings: "99",
+            course: "dessert",
+            tags: JSON.stringify(["Weeknight", "Quick"]),
+          },
+          testUserId,
+        );
+        const response = await action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: { id: recipeId },
+        } as any);
+
+        expect(extractResponseData(response).status).toBe(500);
+        await expect(db.recipe.findUniqueOrThrow({ where: { id: recipeId } })).resolves.toMatchObject({
+          title: expect.not.stringMatching("Must Roll Back"),
+          description: "Test description",
+          servings: "4",
+          course: "side",
+          updatedAt: originalRecipeUpdatedAt,
+        });
+        await expect(db.cookbook.findUniqueOrThrow({ where: { id: cookbook.id } })).resolves.toMatchObject({
+          updatedAt: originalCookbookUpdatedAt,
+        });
+        await expect(db.recipeTag.findMany({ where: { recipeId } })).resolves.toEqual([
+          expect.objectContaining({
+            id: "preserved-edit-tag",
+            label: "Preserved",
+            normalizedLabel: "preserved",
+            createdAt: originalRecipeUpdatedAt,
+            updatedAt: originalRecipeUpdatedAt,
+          }),
+        ]);
+        await expect(db.$queryRawUnsafe(
+          `SELECT "title", "body", "metadata" FROM "SearchDocument" WHERE "entityId" = ?`,
+          recipeId,
+        )).resolves.toEqual([
+          { title: "Rollback Search Sentinel", body: "preserve me", metadata: "sentinel metadata" },
+        ]);
+        await expect(db.$queryRawUnsafe(
+          `SELECT "sourceFingerprint", "documentCount" FROM "SearchIndexMetadata" WHERE "id" = ?`,
+          "current",
+        )).resolves.toEqual([{ sourceFingerprint: "rollback-fingerprint", documentCount: 1n }]);
+      } finally {
+        await db.$executeRawUnsafe('DROP TRIGGER IF EXISTS "RecipeTag_edit_abort"');
+      }
     });
 
     it("should allow saving a recipe without changing its own active title", async () => {
@@ -2388,6 +2613,10 @@ describe("Recipes $id Edit Route", () => {
               title: "Original Title",
               description: "Original description",
               servings: "4",
+              course: "side",
+              tags: [
+                { id: "tag-existing", label: "Existing", normalizedLabel: "existing" },
+              ],
               steps: [],
             },
               coverImageUrl: "",
@@ -2399,6 +2628,8 @@ describe("Recipes $id Edit Route", () => {
               title: formData.get("title"),
               description: formData.get("description"),
               servings: formData.get("servings"),
+              course: formData.get("course"),
+              tags: formData.get("tags"),
               steps: formData.get("steps"),
               clearImage: formData.get("clearImage"),
             };
@@ -2422,6 +2653,9 @@ describe("Recipes $id Edit Route", () => {
       await user.type(descriptionInput, "Updated description");
       await user.clear(servingsInput);
       await user.type(servingsInput, "8");
+      await user.selectOptions(screen.getByRole("combobox", { name: "Course" }), "dessert");
+      await user.click(screen.getByRole("button", { name: "Remove Existing tag" }));
+      await user.type(screen.getByLabelText(/^Tags$/), "Celebration{Enter}");
 
       // Click Save Recipe to trigger handleSave
       await user.click(screen.getByRole("button", { name: "Save Recipe" }));
@@ -2434,6 +2668,8 @@ describe("Recipes $id Edit Route", () => {
       expect(submittedData.title).toBe("Updated Title");
       expect(submittedData.description).toBe("Updated description");
       expect(submittedData.servings).toBe("8");
+      expect(submittedData.course).toBe("dessert");
+      expect(JSON.parse(submittedData.tags)).toEqual(["Celebration"]);
       expect(submittedData.steps).toBeDefined();
     });
 

@@ -265,5 +265,99 @@ describe("recipe create helpers", () => {
       await expect(db.unit.count({ where: { name: "cup" } })).resolves.toBe(1);
       await expect(db.ingredientRef.count({ where: { name: "flour" } })).resolves.toBe(1);
     });
+
+    it("atomically creates the authenticated chef's recipe, course, and normalized tags with one timestamp", async () => {
+      const timestamp = new Date("2026-07-23T12:34:56.000Z");
+      const tagIds = ["tag-weeknight", "tag-quick"];
+
+      const recipe = await createRecipeDraft(
+        db,
+        {
+          id: "recipe-atomic-metadata",
+          title: "Atomic Metadata Supper",
+          description: null,
+          servings: "2",
+          chefId: testUserId,
+          course: "main",
+          tags: ["  Weeknight  ", "Quick"],
+          steps: [],
+        },
+        {
+          nativeDatabase: null,
+          now: () => timestamp,
+          randomId: () => tagIds.shift() ?? "unexpected-tag-id",
+        },
+      );
+
+      expect(recipe).toMatchObject({
+        id: "recipe-atomic-metadata",
+        chefId: testUserId,
+        course: "main",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+      await expect(db.recipeTag.findMany({
+        where: { recipeId: recipe.id },
+        orderBy: { normalizedLabel: "asc" },
+      })).resolves.toEqual([
+        expect.objectContaining({
+          id: "tag-quick",
+          recipeId: recipe.id,
+          label: "Quick",
+          normalizedLabel: "quick",
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        }),
+        expect.objectContaining({
+          id: "tag-weeknight",
+          recipeId: recipe.id,
+          label: "Weeknight",
+          normalizedLabel: "weeknight",
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        }),
+      ]);
+    });
+
+    it("rolls back the initial recipe when a later tag insertion fails", async () => {
+      const recipeId = "recipe-create-rollback";
+      await db.$executeRawUnsafe(`
+        CREATE TRIGGER "RecipeTag_create_abort"
+        BEFORE INSERT ON "RecipeTag"
+        WHEN NEW."normalizedLabel" = 'quick'
+        BEGIN
+          SELECT RAISE(ABORT, 'recipe create tag failure');
+        END
+      `);
+
+      try {
+        await expect(createRecipeDraft(
+          db,
+          {
+            id: recipeId,
+            title: "Rollback Supper",
+            description: null,
+            servings: null,
+            chefId: testUserId,
+            course: "side",
+            tags: ["Weeknight", "Quick"],
+            steps: [],
+          },
+          {
+            nativeDatabase: null,
+            now: () => new Date("2026-07-23T12:34:56.000Z"),
+            randomId: (() => {
+              let index = 0;
+              return () => `rollback-tag-${index++}`;
+            })(),
+          },
+        )).rejects.toThrow("recipe create tag failure");
+
+        await expect(db.recipe.findUnique({ where: { id: recipeId } })).resolves.toBeNull();
+        await expect(db.recipeTag.count({ where: { recipeId } })).resolves.toBe(0);
+      } finally {
+        await db.$executeRawUnsafe('DROP TRIGGER IF EXISTS "RecipeTag_create_abort"');
+      }
+    });
   });
 });

@@ -1,8 +1,15 @@
 import { env } from "cloudflare:test";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("~/components/recipe/RecipeBuilder", () => ({
+  RecipeBuilder: () => null,
+}));
 
 import { getDb } from "../../app/lib/db.server";
+import { createRecipeDraft } from "../../app/lib/recipe-create.server";
 import { replaceRecipeTagMetadata } from "../../app/lib/recipe-tags.server";
+import { createUserSessionCookie } from "../../app/lib/session.server";
+import { action as editRecipeAction } from "../../app/routes/recipes.$id.edit";
 
 interface TestD1Result<T = unknown> {
   meta: { changes: number };
@@ -11,10 +18,23 @@ interface TestD1Result<T = unknown> {
 }
 
 interface TestD1Statement {
+  __real?: TestD1Statement;
+  __record?: RecordedStatement;
   all<T>(): Promise<TestD1Result<T>>;
   bind(...values: unknown[]): TestD1Statement;
   first<T>(): Promise<T | null>;
+  raw<T>(options?: { columnNames?: boolean }): Promise<T>;
   run(): Promise<TestD1Result>;
+}
+
+interface RecordedStatement {
+  sql: string;
+  values: unknown[];
+}
+
+interface RecordingD1Database extends TestD1Database {
+  batchCalls: RecordedStatement[][];
+  records: RecordedStatement[];
 }
 
 interface TestD1Database {
@@ -43,7 +63,12 @@ interface MetadataState {
 const USER_ID = "unit-6-1-recipe-tags-d1-user";
 const RECIPE_ID = "unit-6-1-recipe-tags-d1-recipe";
 const ORIGINAL_TAG_ID = "unit-6-1-recipe-tags-d1-original";
+const CREATE_RECIPE_ID = "unit-6-2-recipe-tags-d1-create";
+const COOKBOOK_ID = "unit-6-2-recipe-tags-d1-cookbook";
+const MEMBERSHIP_ID = "unit-6-2-recipe-tags-d1-membership";
 const ABORT_TRIGGER = "RecipeTag_unit_6_1_abort";
+const CREATE_ABORT_TRIGGER = "RecipeTag_unit_6_2_create_abort";
+const EDIT_ABORT_TRIGGER = "RecipeTag_unit_6_2_edit_abort";
 const ORIGINAL_TIMESTAMP = "2026-07-23T18:00:00.000Z";
 const FAILURE_TIMESTAMP = "2026-07-23T18:01:00.000Z";
 const WRITER_A_TIMESTAMP = "2026-07-23T18:02:00.000Z";
@@ -51,13 +76,54 @@ const WRITER_B_TIMESTAMP = "2026-07-23T18:03:00.000Z";
 
 const createdSchema = {
   addedCourse: false,
+  addedDescription: false,
+  addedServings: false,
+  cookbook: false,
   recipe: false,
+  recipeInCookbook: false,
   recipeTag: false,
   user: false,
 };
 
 function database(): TestD1Database {
   return (env as unknown as { DB: TestD1Database }).DB;
+}
+
+function recordingDatabase(): RecordingD1Database {
+  const realDatabase = database();
+  const records: RecordedStatement[] = [];
+  const batchCalls: RecordedStatement[][] = [];
+
+  const wrap = (statement: TestD1Statement, record: RecordedStatement): TestD1Statement => ({
+    __real: statement,
+    __record: record,
+    all: <T>() => statement.all<T>(),
+    bind(...values) {
+      record.values = values;
+      return wrap(statement.bind(...values), record);
+    },
+    first: <T>() => statement.first<T>(),
+    raw: <T>(options?: { columnNames?: boolean }) => statement.raw<T>(options),
+    run: () => statement.run(),
+  });
+
+  return {
+    records,
+    batchCalls,
+    exec: realDatabase.exec.bind(realDatabase),
+    prepare(sql) {
+      const record = { sql, values: [] as unknown[] };
+      records.push(record);
+      return wrap(realDatabase.prepare(sql), record);
+    },
+    async batch(statements) {
+      batchCalls.push(statements.map((statement) => {
+        if (!statement.__record) throw new Error("Missing recorded D1 statement");
+        return statement.__record;
+      }));
+      return realDatabase.batch(statements.map((statement) => statement.__real ?? statement));
+    },
+  };
 }
 
 async function execute(sql: string, ...values: unknown[]) {
@@ -99,23 +165,40 @@ async function ensureSchema() {
       CREATE TABLE "Recipe" (
         "id" TEXT NOT NULL PRIMARY KEY,
         "title" TEXT NOT NULL,
+        "description" TEXT,
+        "servings" TEXT,
         "chefId" TEXT NOT NULL,
         "deletedAt" DATETIME,
         "course" TEXT CHECK (
           "course" IS NULL OR "course" IN ('main','side','appetizer','dessert')
         ),
+        "activeCoverId" TEXT,
+        "activeCoverVariant" TEXT,
+        "coverMode" TEXT NOT NULL DEFAULT 'auto',
+        "sourceRecipeId" TEXT,
+        "sourceUrl" TEXT,
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY ("chefId") REFERENCES "User"("id") ON DELETE CASCADE
       )
     `);
     createdSchema.recipe = true;
-  } else if (!(await columnExists("Recipe", "course"))) {
-    await execute(`
-      ALTER TABLE "Recipe" ADD COLUMN "course" TEXT
-      CHECK ("course" IS NULL OR "course" IN ('main','side','appetizer','dessert'))
-    `);
-    createdSchema.addedCourse = true;
+  } else {
+    if (!(await columnExists("Recipe", "description"))) {
+      await execute(`ALTER TABLE "Recipe" ADD COLUMN "description" TEXT`);
+      createdSchema.addedDescription = true;
+    }
+    if (!(await columnExists("Recipe", "servings"))) {
+      await execute(`ALTER TABLE "Recipe" ADD COLUMN "servings" TEXT`);
+      createdSchema.addedServings = true;
+    }
+    if (!(await columnExists("Recipe", "course"))) {
+      await execute(`
+        ALTER TABLE "Recipe" ADD COLUMN "course" TEXT
+        CHECK ("course" IS NULL OR "course" IN ('main','side','appetizer','dessert'))
+      `);
+      createdSchema.addedCourse = true;
+    }
   }
 
   if (!(await tableExists("RecipeTag"))) {
@@ -140,15 +223,54 @@ async function ensureSchema() {
     `);
     createdSchema.recipeTag = true;
   }
+
+  if (!(await tableExists("Cookbook"))) {
+    await execute(`
+      CREATE TABLE "Cookbook" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "title" TEXT NOT NULL,
+        "authorId" TEXT NOT NULL,
+        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY ("authorId") REFERENCES "User"("id") ON DELETE CASCADE
+      )
+    `);
+    createdSchema.cookbook = true;
+  }
+
+  if (!(await tableExists("RecipeInCookbook"))) {
+    await execute(`
+      CREATE TABLE "RecipeInCookbook" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "cookbookId" TEXT NOT NULL,
+        "recipeId" TEXT NOT NULL,
+        "addedById" TEXT NOT NULL,
+        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY ("cookbookId") REFERENCES "Cookbook"("id") ON DELETE CASCADE,
+        FOREIGN KEY ("recipeId") REFERENCES "Recipe"("id"),
+        FOREIGN KEY ("addedById") REFERENCES "User"("id")
+      )
+    `);
+    createdSchema.recipeInCookbook = true;
+  }
 }
 
 async function cleanupFixture() {
   await database().exec(`DROP TRIGGER IF EXISTS "${ABORT_TRIGGER}"`);
+  await database().exec(`DROP TRIGGER IF EXISTS "${CREATE_ABORT_TRIGGER}"`);
+  await database().exec(`DROP TRIGGER IF EXISTS "${EDIT_ABORT_TRIGGER}"`);
+  if (await tableExists("RecipeInCookbook")) {
+    await execute(`DELETE FROM "RecipeInCookbook" WHERE "recipeId" IN (?, ?)`, RECIPE_ID, CREATE_RECIPE_ID);
+  }
+  if (await tableExists("Cookbook")) {
+    await execute(`DELETE FROM "Cookbook" WHERE "id" = ?`, COOKBOOK_ID);
+  }
   if (await tableExists("RecipeTag")) {
-    await execute(`DELETE FROM "RecipeTag" WHERE "recipeId" = ?`, RECIPE_ID);
+    await execute(`DELETE FROM "RecipeTag" WHERE "recipeId" IN (?, ?)`, RECIPE_ID, CREATE_RECIPE_ID);
   }
   if (await tableExists("Recipe")) {
-    await execute(`DELETE FROM "Recipe" WHERE "id" = ?`, RECIPE_ID);
+    await execute(`DELETE FROM "Recipe" WHERE "id" IN (?, ?)`, RECIPE_ID, CREATE_RECIPE_ID);
   }
   if (await tableExists("User")) {
     await execute(`DELETE FROM "User" WHERE "id" = ?`, USER_ID);
@@ -173,6 +295,16 @@ async function seedFixture() {
       "id", "recipeId", "label", "normalizedLabel", "createdAt", "updatedAt"
     ) VALUES (?, ?, ?, ?, ?, ?)
   `, ORIGINAL_TAG_ID, RECIPE_ID, "Original", "original", ORIGINAL_TIMESTAMP, ORIGINAL_TIMESTAMP);
+  await execute(`
+    INSERT INTO "Cookbook" (
+      "id", "title", "authorId", "createdAt", "updatedAt"
+    ) VALUES (?, ?, ?, ?, ?)
+  `, COOKBOOK_ID, "Unit 6.2 D1 Cookbook", USER_ID, ORIGINAL_TIMESTAMP, ORIGINAL_TIMESTAMP);
+  await execute(`
+    INSERT INTO "RecipeInCookbook" (
+      "id", "cookbookId", "recipeId", "addedById", "createdAt", "updatedAt"
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `, MEMBERSHIP_ID, COOKBOOK_ID, RECIPE_ID, USER_ID, ORIGINAL_TIMESTAMP, ORIGINAL_TIMESTAMP);
 }
 
 async function readMetadataState(): Promise<MetadataState> {
@@ -224,12 +356,259 @@ describe("recipe tag native D1 atomicity", () => {
 
   afterAll(async () => {
     await cleanupFixture();
+    if (createdSchema.recipeInCookbook) {
+      await database().exec(`DROP TABLE IF EXISTS "RecipeInCookbook"`);
+    }
+    if (createdSchema.cookbook) await database().exec(`DROP TABLE IF EXISTS "Cookbook"`);
     if (createdSchema.recipeTag) await database().exec(`DROP TABLE IF EXISTS "RecipeTag"`);
     if (createdSchema.addedCourse) {
       await database().exec(`ALTER TABLE "Recipe" DROP COLUMN "course"`);
     }
+    if (createdSchema.addedServings) {
+      await database().exec(`ALTER TABLE "Recipe" DROP COLUMN "servings"`);
+    }
+    if (createdSchema.addedDescription) {
+      await database().exec(`ALTER TABLE "Recipe" DROP COLUMN "description"`);
+    }
     if (createdSchema.recipe) await database().exec(`DROP TABLE IF EXISTS "Recipe"`);
     if (createdSchema.user) await database().exec(`DROP TABLE IF EXISTS "User"`);
+  });
+
+  it("creates the authenticated recipe and requested tags in one inspected native D1 batch", async () => {
+    const nativeDatabase = recordingDatabase();
+    const prisma = await getDb({ DB: nativeDatabase as unknown as D1Database });
+    const timestamp = "2026-07-23T18:04:00.000Z";
+
+    try {
+      await createRecipeDraft(
+        prisma,
+        {
+          id: CREATE_RECIPE_ID,
+          title: "Unit 6.2 Native Create",
+          description: "One native operation set",
+          servings: "2",
+          chefId: USER_ID,
+          course: "main",
+          tags: ["Weeknight", "Quick"],
+          steps: [],
+        },
+        {
+          nativeDatabase,
+          now: () => new Date(timestamp),
+          randomId: (() => {
+            const ids = ["unit-6-2-create-weeknight", "unit-6-2-create-quick"];
+            return () => ids.shift() ?? "unexpected-create-tag-id";
+          })(),
+        },
+      );
+    } finally {
+      await prisma.$disconnect();
+    }
+
+    expect(nativeDatabase.batchCalls).toHaveLength(1);
+    const [recipeInsert, ...tagInserts] = nativeDatabase.batchCalls[0];
+    expect(nativeDatabase.batchCalls[0]).toHaveLength(3);
+    expect(recipeInsert.sql).toMatch(/INSERT INTO\s+"Recipe"/i);
+    expect(recipeInsert.values).toEqual([
+      CREATE_RECIPE_ID,
+      "Unit 6.2 Native Create",
+      "One native operation set",
+      "2",
+      USER_ID,
+      "main",
+      timestamp,
+      timestamp,
+    ]);
+    expect(tagInserts.map((statement) => ({
+      sql: statement.sql,
+      values: statement.values,
+    }))).toEqual([
+      {
+        sql: expect.stringMatching(/INSERT INTO\s+"RecipeTag"/i),
+        values: [
+          "unit-6-2-create-weeknight",
+          CREATE_RECIPE_ID,
+          "Weeknight",
+          "weeknight",
+          timestamp,
+          timestamp,
+        ],
+      },
+      {
+        sql: expect.stringMatching(/INSERT INTO\s+"RecipeTag"/i),
+        values: [
+          "unit-6-2-create-quick",
+          CREATE_RECIPE_ID,
+          "Quick",
+          "quick",
+          timestamp,
+          timestamp,
+        ],
+      },
+    ]);
+    await expect(database().prepare(`
+      SELECT "title", "description", "servings", "chefId", "course", "createdAt", "updatedAt"
+      FROM "Recipe" WHERE "id" = ?
+    `).bind(CREATE_RECIPE_ID).first()).resolves.toEqual({
+      title: "Unit 6.2 Native Create",
+      description: "One native operation set",
+      servings: "2",
+      chefId: USER_ID,
+      course: "main",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    await expect(database().prepare(`
+      SELECT "label", "normalizedLabel", "createdAt", "updatedAt"
+      FROM "RecipeTag" WHERE "recipeId" = ? ORDER BY "normalizedLabel"
+    `).bind(CREATE_RECIPE_ID).all()).resolves.toMatchObject({
+      results: [
+        { label: "Quick", normalizedLabel: "quick", createdAt: timestamp, updatedAt: timestamp },
+        { label: "Weeknight", normalizedLabel: "weeknight", createdAt: timestamp, updatedAt: timestamp },
+      ],
+    });
+  });
+
+  it("rolls back the initial native recipe when its second requested tag fails", async () => {
+    await execute(`
+      CREATE TRIGGER "${CREATE_ABORT_TRIGGER}"
+      BEFORE INSERT ON "RecipeTag"
+      WHEN NEW."recipeId" = '${CREATE_RECIPE_ID}' AND NEW."normalizedLabel" = 'explode'
+      BEGIN
+        SELECT RAISE(ABORT, 'unit_6_2_recipe_create_failure');
+      END
+    `);
+    const nativeDatabase = recordingDatabase();
+    const prisma = await getDb({ DB: nativeDatabase as unknown as D1Database });
+
+    try {
+      await expect(createRecipeDraft(
+        prisma,
+        {
+          id: CREATE_RECIPE_ID,
+          title: "Unit 6.2 Native Create Rollback",
+          description: null,
+          servings: null,
+          chefId: USER_ID,
+          course: "side",
+          tags: ["First", "Explode"],
+          steps: [],
+        },
+        {
+          nativeDatabase,
+          now: () => new Date(FAILURE_TIMESTAMP),
+          randomId: (() => {
+            const ids = ["unit-6-2-create-first", "unit-6-2-create-explode"];
+            return () => ids.shift() ?? "unexpected-create-rollback-tag-id";
+          })(),
+        },
+      )).rejects.toThrow(/unit_6_2_recipe_create_failure/);
+    } finally {
+      await prisma.$disconnect();
+    }
+
+    expect(nativeDatabase.batchCalls).toHaveLength(1);
+    await expect(database().prepare(
+      `SELECT COUNT(*) AS "count" FROM "Recipe" WHERE "id" = ?`,
+    ).bind(CREATE_RECIPE_ID).first()).resolves.toEqual({ count: 0 });
+    await expect(database().prepare(
+      `SELECT COUNT(*) AS "count" FROM "RecipeTag" WHERE "recipeId" = ?`,
+    ).bind(CREATE_RECIPE_ID).first()).resolves.toEqual({ count: 0 });
+  });
+
+  it("passes the request DB binding into one guarded edit batch and rolls every edit back", async () => {
+    await execute(`
+      CREATE TRIGGER "${EDIT_ABORT_TRIGGER}"
+      BEFORE INSERT ON "RecipeTag"
+      WHEN NEW."recipeId" = '${RECIPE_ID}' AND NEW."normalizedLabel" = 'explode'
+      BEGIN
+        SELECT RAISE(ABORT, 'unit_6_2_recipe_edit_failure');
+      END
+    `);
+    const nativeDatabase = recordingDatabase();
+    const routeEnv = {
+      ...(env as unknown as Record<string, unknown>),
+      DB: nativeDatabase,
+      NODE_ENV: "test",
+      SESSION_SECRET: "unit-6-2-session-secret-at-least-32-characters",
+      SPOONJOY_BASE_URL: "https://spoonjoy.app",
+    };
+    const cookie = await createUserSessionCookie(
+      USER_ID,
+      routeEnv,
+      new Request(`https://spoonjoy.app/recipes/${RECIPE_ID}/edit`),
+    );
+    const formData = new FormData();
+    formData.set("title", "Must Roll Back");
+    formData.set("description", "Must also roll back");
+    formData.set("servings", "99");
+    formData.set("course", "dessert");
+    formData.set("tags", JSON.stringify(["First", "Explode"]));
+
+    const prismaWarnings: unknown[][] = [];
+    const info = vi.spyOn(console, "info").mockImplementation((...args) => {
+      prismaWarnings.push(args);
+    });
+    let result: Awaited<ReturnType<typeof editRecipeAction>>;
+    try {
+      result = await editRecipeAction({
+        request: new Request(`https://spoonjoy.app/recipes/${RECIPE_ID}/edit`, {
+          method: "POST",
+          headers: { Cookie: cookie },
+          body: formData,
+        }),
+        params: { id: RECIPE_ID },
+        context: { cloudflare: { env: routeEnv } },
+      } as any);
+    } finally {
+      info.mockRestore();
+    }
+
+    const status = result instanceof Response
+      ? result.status
+      : (result as { init?: { status?: number } }).init?.status;
+    expect(status).toBe(500);
+    if (nativeDatabase.batchCalls.length === 0) {
+      expect(prismaWarnings).toEqual([
+        [expect.stringContaining("Cloudflare D1 does not support transactions yet")],
+      ]);
+    } else {
+      expect(prismaWarnings).toEqual([]);
+    }
+    expect(nativeDatabase.batchCalls).toHaveLength(1);
+    const batch = nativeDatabase.batchCalls[0];
+    expect(batch).toHaveLength(5);
+    const outgoingSql = batch.map((statement) => statement.sql).join("\n");
+    expect(outgoingSql).toMatch(/UPDATE\s+"Recipe"/i);
+    expect(outgoingSql).toMatch(/DELETE FROM\s+"RecipeTag"/i);
+    expect(outgoingSql.match(/INSERT INTO\s+"RecipeTag"/gi)).toHaveLength(2);
+    expect(outgoingSql).toMatch(/UPDATE\s+"Cookbook"/i);
+    expect(outgoingSql).not.toMatch(/SearchDocument|SearchIndexMetadata/i);
+    for (const statement of batch) {
+      const guardedShape = `${statement.sql}\n${JSON.stringify(statement.values)}`;
+      expect(guardedShape).toContain(RECIPE_ID);
+      expect(guardedShape).toContain(USER_ID);
+    }
+
+    await expect(database().prepare(`
+      SELECT "title", "description", "servings", "course", "updatedAt"
+      FROM "Recipe" WHERE "id" = ?
+    `).bind(RECIPE_ID).first()).resolves.toEqual({
+      title: "Unit 6.1 D1 Recipe",
+      description: null,
+      servings: null,
+      course: null,
+      updatedAt: ORIGINAL_TIMESTAMP,
+    });
+    await expect(readMetadataState()).resolves.toEqual({
+      course: null,
+      labels: ["original"],
+      recipeUpdatedAt: ORIGINAL_TIMESTAMP,
+      tagTimestamps: [{ createdAt: ORIGINAL_TIMESTAMP, updatedAt: ORIGINAL_TIMESTAMP }],
+    });
+    await expect(database().prepare(
+      `SELECT "updatedAt" FROM "Cookbook" WHERE "id" = ?`,
+    ).bind(COOKBOOK_ID).first()).resolves.toEqual({ updatedAt: ORIGINAL_TIMESTAMP });
   });
 
   it("rolls back course, tags, and timestamps when a later native batch statement fails", async () => {
