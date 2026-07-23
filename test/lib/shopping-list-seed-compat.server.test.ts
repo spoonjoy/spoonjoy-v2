@@ -85,6 +85,140 @@ afterEach(async () => {
 });
 
 describe("shopping-list seed compatibility provisioner", () => {
+  it.each([
+    {
+      label: "legacy Prisma columns",
+      error: {
+        code: "P2002",
+        meta: { target: ["shoppingListId", "unitId", "ingredientRefId"] },
+      },
+    },
+    {
+      label: "Prisma expression index array",
+      error: {
+        code: "P2002",
+        meta: { target: ["index 'ShoppingListItem_active_identity_key'"] },
+      },
+    },
+    {
+      label: "Prisma expression index string",
+      error: {
+        code: "P2002",
+        meta: { target: "ShoppingListItem_active_identity_key" },
+      },
+    },
+    {
+      label: "legacy SQLite message",
+      error: new Error(
+        "UNIQUE constraint failed: ShoppingListItem.shoppingListId, ShoppingListItem.unitId, ShoppingListItem.ingredientRefId",
+      ),
+    },
+    {
+      label: "expression-index SQLite message",
+      error: new Error(
+        "UNIQUE constraint failed: index 'ShoppingListItem_active_identity_key'",
+      ),
+    },
+  ])("rereads the active seed identity after a $label conflict", async ({ error }) => {
+    const winner = { id: "seed-race-winner" };
+    const findFirst = vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(winner);
+    const create = vi.fn().mockRejectedValue(error);
+    const update = vi.fn().mockResolvedValue(winner);
+    const provision = await loadProvisioner();
+
+    await expect(provision({
+      shoppingListItem: { findFirst, create, update },
+    } as unknown as PrismaClient, {
+      shoppingListId: "list",
+      ingredientRefId: "ref",
+      unitId: null,
+      quantity: 3,
+      checked: false,
+      checkedAt: null,
+      deletedAt: null,
+      categoryKey: "produce",
+      iconKey: "leaf",
+      sortIndex: 2,
+    })).resolves.toBe(winner);
+    expect(create).toHaveBeenCalledOnce();
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: winner.id },
+      data: expect.objectContaining({ quantity: 3, sortIndex: 2 }),
+    }));
+    expect(findFirst).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([
+    { label: "null", error: null },
+    { label: "primitive", error: "unique" },
+    { label: "other Prisma code", error: { code: "P2025", message: "not found" } },
+    { label: "wrong legacy target length", error: { code: "P2002", meta: { target: ["shoppingListId"] } } },
+    { label: "wrong legacy target order", error: { code: "P2002", meta: { target: ["shoppingListId", "ingredientRefId", "unitId"] } } },
+    { label: "wrong expression index", error: { code: "P2002", meta: { target: "Other_index" } } },
+    { label: "non-string message", error: { message: 42 } },
+    { label: "lookalike SQLite message", error: new Error("UNIQUE constraint failed: index 'ShoppingListItem_active_identity_key_extra'") },
+  ])("propagates a $label non-seed conflict without rereading", async ({ error }) => {
+    const findFirst = vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+    const provision = await loadProvisioner();
+
+    await expect(provision({
+      shoppingListItem: {
+        findFirst,
+        create: vi.fn().mockRejectedValue(error),
+        update: vi.fn(),
+      },
+    } as unknown as PrismaClient, {
+      shoppingListId: "list",
+      ingredientRefId: "ref",
+      unitId: null,
+      quantity: null,
+      checked: false,
+      checkedAt: null,
+      deletedAt: null,
+      categoryKey: null,
+      iconKey: null,
+      sortIndex: 0,
+    })).rejects.toBe(error);
+    expect(findFirst).toHaveBeenCalledTimes(2);
+  });
+
+  it("propagates a recognized seed conflict when no active winner exists", async () => {
+    const conflict = {
+      code: "P2002",
+      meta: { target: "ShoppingListItem_active_identity_key" },
+    };
+    const findFirst = vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+    const provision = await loadProvisioner();
+
+    await expect(provision({
+      shoppingListItem: {
+        findFirst,
+        create: vi.fn().mockRejectedValue(conflict),
+        update: vi.fn(),
+      },
+    } as unknown as PrismaClient, {
+      shoppingListId: "list",
+      ingredientRefId: "ref",
+      unitId: null,
+      quantity: null,
+      checked: false,
+      checkedAt: null,
+      deletedAt: null,
+      categoryKey: null,
+      iconKey: null,
+      sortIndex: 0,
+    })).rejects.toBe(conflict);
+    expect(findFirst).toHaveBeenCalledTimes(3);
+  });
+
   it("prefers the earliest active unitless identity before every tombstone", async () => {
     const db = await getLocalDb();
     await restoreFullIdentityIndex(db);

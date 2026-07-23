@@ -1354,6 +1354,78 @@ describe("shopping-list mutation helpers", () => {
   });
 
   it.each([
+    { label: "boolean true", checked: true, created: true, expected: true },
+    { label: "bigint one", checked: 1n, created: 1n, expected: true },
+    { label: "boolean false", checked: false, created: false, expected: false },
+    { label: "bigint zero", checked: 0n, created: 0n, expected: false },
+  ])("normalizes $label flags and Date instances", async ({
+    checked,
+    created,
+    expected,
+  }) => {
+    const timestamp = new Date("2026-07-22T12:00:00.000Z");
+    const statement = { bind: vi.fn() } as unknown as CompatibleD1PreparedStatement;
+    const batch = vi.fn().mockResolvedValue([{
+      success: true,
+      results: [{
+        ...rawAtomicRow({ quantity: null }),
+        checked,
+        checkedAt: timestamp,
+        deletedAt: timestamp,
+        updatedAt: timestamp,
+        created,
+      }],
+    }]);
+
+    await expect(executeAtomicBatch({
+      database: {} as PrismaClient,
+      nativeDatabase: { prepare: vi.fn(() => statement), batch },
+      mutations: [atomicInput()],
+    })).resolves.toMatchObject({
+      items: [{
+        created: expected,
+        item: {
+          quantity: null,
+          checked: expected,
+          checkedAt: timestamp,
+          deletedAt: timestamp,
+          updatedAt: timestamp,
+        },
+      }],
+    });
+    expect(batch).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { label: "non-object", row: null },
+    { label: "invalid required string", row: { ...rawAtomicRow(), id: 1 } },
+    { label: "invalid nullable string", row: { ...rawAtomicRow(), unitId: 1 } },
+    { label: "non-number quantity", row: { ...rawAtomicRow(), quantity: "2" } },
+    { label: "non-finite quantity", row: { ...rawAtomicRow(), quantity: Infinity } },
+    { label: "non-number sort index", row: { ...rawAtomicRow(), sortIndex: "0" } },
+    { label: "non-finite sort index", row: { ...rawAtomicRow(), sortIndex: Infinity } },
+    { label: "invalid checked flag", row: { ...rawAtomicRow(), checked: 2 } },
+    { label: "invalid created flag", row: { ...rawAtomicRow(), created: 2 } },
+    { label: "invalid nullable date text", row: { ...rawAtomicRow(), checkedAt: "not-a-date" } },
+    { label: "invalid nullable Date", row: { ...rawAtomicRow(), deletedAt: new Date(Number.NaN) } },
+    { label: "null required date", row: { ...rawAtomicRow(), updatedAt: null } },
+    { label: "invalid required date", row: { ...rawAtomicRow(), updatedAt: "not-a-date" } },
+  ])("rejects a $label atomic RETURNING row without retry", async ({ row }) => {
+    const statement = { bind: vi.fn() } as unknown as CompatibleD1PreparedStatement;
+    const batch = vi.fn().mockResolvedValue([{
+      success: true,
+      results: [row],
+    }]);
+
+    await expect(executeAtomicBatch({
+      database: {} as PrismaClient,
+      nativeDatabase: { prepare: vi.fn(() => statement), batch },
+      mutations: [atomicInput()],
+    })).rejects.toThrow("Invalid atomic shopping mutation result");
+    expect(batch).toHaveBeenCalledOnce();
+  });
+
+  it.each([
     { label: "missing", results: [] },
     { label: "multiple", results: [{ id: "one" }, { id: "two" }] },
     { label: "malformed", results: null },
@@ -1399,6 +1471,22 @@ describe("shopping-list mutation helpers", () => {
       nativeDatabase: { prepare: vi.fn(() => statement), batch },
       mutations: [atomicInput()],
     })).rejects.toThrow("D1 shopping batch statement failed");
+  });
+
+  it.each([
+    { label: "non-object", result: null },
+    { label: "missing success", result: { results: [rawAtomicRow()] } },
+    { label: "non-boolean success", result: { success: "true", results: [rawAtomicRow()] } },
+  ])("rejects a $label D1 statement result", async ({ result }) => {
+    const statement = { bind: vi.fn() } as unknown as CompatibleD1PreparedStatement;
+    const batch = vi.fn().mockResolvedValue([result]);
+
+    await expect(executeAtomicBatch({
+      database: {} as PrismaClient,
+      nativeDatabase: { prepare: vi.fn(() => statement), batch },
+      mutations: [atomicInput()],
+    })).rejects.toThrow("D1 shopping batch statement failed");
+    expect(batch).toHaveBeenCalledOnce();
   });
 
   it("rejects non-finite scaled and coalesced recipe quantities", () => {

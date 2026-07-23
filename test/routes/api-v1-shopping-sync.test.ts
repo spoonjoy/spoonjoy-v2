@@ -634,8 +634,8 @@ describe("API v1 shopping-list read and sync", () => {
           checkedAt: null,
           deletedAt: null,
           sortIndex: 4,
-          categoryKey: "existing-category",
-          iconKey: "existing-icon",
+          categoryKey: "other",
+          iconKey: "package",
         }],
         mutation: { clientMutationId: "compat-recipe-active-first", replayed: false },
       });
@@ -649,7 +649,7 @@ describe("API v1 shopping-list read and sync", () => {
     });
   });
 
-  it("restores the earliest sortIndex then BINARY id recipe tombstone under the post-0025 index", async () => {
+  it("creates a fresh recipe item without reviving any post-0025 tombstone", async () => {
     const fixture = await createShoppingFixture(db);
     const recipe = await createRecipeWithIngredients(db, fixture.user.id, [{
       name: `compat recipe tombstone ${faker.string.alphanumeric(6)}`,
@@ -722,21 +722,21 @@ describe("API v1 shopping-list read and sync", () => {
       expectExactKeys(payload.data, ["recipe", "created", "updated", "items", "mutation"]);
       expect(payload.data).toMatchObject({
         recipe: { id: recipe.id, title: recipe.title },
-        created: 0,
-        updated: 1,
+        created: 1,
+        updated: 0,
         items: [{
-          id: expectedTombstone.id,
-          quantity: 5,
+          quantity: 3,
           checked: false,
           checkedAt: null,
           deletedAt: null,
           sortIndex: 0,
-          categoryKey: "existing-category",
-          iconKey: "existing-icon",
+          categoryKey: "other",
+          iconKey: "package",
         }],
         mutation: { clientMutationId: "compat-recipe-tombstone-first", replayed: false },
       });
       expect(payload.data.items).toHaveLength(1);
+      expect(payload.data.items[0].id).not.toBe(expectedTombstone.id);
       expectShoppingItemShape(payload.data.items[0]);
       await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: tiedBinaryLater.id } })).resolves.toMatchObject({
         quantity: 20,
@@ -745,6 +745,11 @@ describe("API v1 shopping-list read and sync", () => {
       });
       await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: laterSortIndex.id } })).resolves.toMatchObject({
         quantity: 200,
+        checked: true,
+        deletedAt: expect.any(Date),
+      });
+      await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: expectedTombstone.id } })).resolves.toMatchObject({
+        quantity: 2,
         checked: true,
         deletedAt: expect.any(Date),
       });
@@ -1073,8 +1078,8 @@ describe("API v1 shopping-list read and sync", () => {
           checked: false,
           checkedAt: null,
           deletedAt: null,
-          categoryKey: "dairy",
-          iconKey: "milk",
+          categoryKey: "other",
+          iconKey: "package",
         },
       ),
       expect.objectContaining(

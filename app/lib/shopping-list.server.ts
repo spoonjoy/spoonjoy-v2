@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient, ShoppingListItem } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 import type { AppLoadContext } from "react-router";
 import { data } from "react-router";
 import { getCloudflareEnv, getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
@@ -12,11 +12,8 @@ import {
 import {
   asCompatibleD1Database,
   coalesceShoppingRecipeIngredients,
-  createCompatibleShoppingListD1Batch,
-  findCompatibleShoppingListItem,
-  mutateCompatibleShoppingListItem,
-  runCompatibleShoppingListBatch,
-  type ShoppingListItemWritePlan,
+  mutateAtomicShoppingListItem,
+  runAtomicShoppingListBatch,
 } from "~/lib/shopping-list-mutations.server";
 
 type ShoppingListItemState = {
@@ -28,16 +25,6 @@ type ShoppingListItemState = {
 interface ShoppingListRouteArgs {
   request: Request;
   context: AppLoadContext;
-}
-
-async function nextSortIndex(database: PrismaClient, shoppingListId: string) {
-  const maxItem = await database.shoppingListItem.findFirst({
-    where: { shoppingListId, deletedAt: null },
-    orderBy: { sortIndex: "desc" },
-    select: { sortIndex: true },
-  });
-
-  return (maxItem?.sortIndex ?? -1) + 1;
 }
 
 async function normalizeShoppingListOrdering(
@@ -249,51 +236,18 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
         unitId = unit.id;
       }
 
-      const identity = {
-        shoppingListId: shoppingList.id,
-        unitId,
-        ingredientRefId: ingredientRef.id,
-      };
-
-      await mutateCompatibleShoppingListItem({
+      await mutateAtomicShoppingListItem({
         database,
-        identity,
-        update: async (existingItem) => {
-          /* istanbul ignore next -- @preserve ternary branches for quantity addition */
-          const newQuantity = quantity
-            ? (existingItem.quantity || 0) + parseFloat(quantity)
-            : existingItem.quantity;
-          const shouldMoveToEnd = Boolean(
-            existingItem.deletedAt || existingItem.checkedAt || existingItem.checked
-          );
-
-          return database.shoppingListItem.update({
-            where: { id: existingItem.id },
-            data: {
-              quantity: newQuantity,
-              checked: false,
-              checkedAt: null,
-              categoryKey,
-              iconKey,
-              deletedAt: null,
-              sortIndex: shouldMoveToEnd
-                ? await nextSortIndex(database, shoppingList.id)
-                : existingItem.sortIndex,
-            },
-          });
-        },
-        create: async () => {
-          const sortIndex = await nextSortIndex(database, shoppingList.id);
-
-          return database.shoppingListItem.create({
-            data: {
-              ...identity,
-              quantity: quantity ? parseFloat(quantity) : null,
-              categoryKey,
-              iconKey,
-              sortIndex,
-            },
-          });
+        nativeDatabase: asCompatibleD1Database(getCloudflareEnv(context)?.DB),
+        mutation: {
+          id: crypto.randomUUID(),
+          shoppingListId: shoppingList.id,
+          unitId,
+          ingredientRefId: ingredientRef.id,
+          quantity: quantity ? parseFloat(quantity) : null,
+          categoryKey,
+          iconKey,
+          boundNowMs: Date.now(),
         },
       });
     }
@@ -362,104 +316,20 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
       const ingredients = coalesceShoppingRecipeIngredients(candidates, scaleFactor);
       const nativeD1 = asCompatibleD1Database(getCloudflareEnv(context)?.DB);
 
-      await runCompatibleShoppingListBatch(database, async () => {
-        const existingItems = await Promise.all(
-          ingredients.map((ingredient) =>
-            findCompatibleShoppingListItem(database, {
-              shoppingListId: shoppingList.id,
-              ingredientRefId: ingredient.ingredientRefId,
-              unitId: ingredient.unitId,
-            })
-          )
-        );
-        let availableSortIndex = await nextSortIndex(database, shoppingList.id);
-        const operations: Array<Prisma.PrismaPromise<ShoppingListItem>> = [];
-        const writePlans: ShoppingListItemWritePlan[] = [];
-
-        for (const [index, ingredient] of ingredients.entries()) {
-          const existingItem = existingItems[index];
-
-          if (existingItem) {
-            /* istanbul ignore next -- @preserve ternary branches for quantity addition */
-            const newQuantity = ingredient.quantity
-              ? (existingItem.quantity || 0) + ingredient.quantity
-              : existingItem.quantity;
-            const shouldMoveToEnd = Boolean(
-              existingItem.deletedAt || existingItem.checkedAt || existingItem.checked
-            );
-            const sortIndex = shouldMoveToEnd
-              ? availableSortIndex++
-              : existingItem.sortIndex;
-            const categoryKey = existingItem.categoryKey ?? ingredient.categoryKey;
-            const iconKey = ingredient.iconKey;
-
-            operations.push(database.shoppingListItem.update({
-              where: { id: existingItem.id },
-              data: {
-                quantity: newQuantity,
-                checked: false,
-                checkedAt: null,
-                deletedAt: null,
-                sortIndex,
-                categoryKey,
-                iconKey,
-              },
-            }));
-            writePlans.push({
-              mode: "update",
-              id: existingItem.id,
-              shoppingListId: shoppingList.id,
-              ingredientRefId: ingredient.ingredientRefId,
-              unitId: ingredient.unitId,
-              quantity: newQuantity,
-              checked: false,
-              checkedAt: null,
-              deletedAt: null,
-              sortIndex,
-              categoryKey,
-              iconKey,
-              updatedAt: new Date(),
-            });
-            continue;
-          }
-
-          const id = crypto.randomUUID();
-          const sortIndex = availableSortIndex++;
-          const quantity = ingredient.quantity || null;
-          operations.push(database.shoppingListItem.create({
-            data: {
-              id,
-              shoppingListId: shoppingList.id,
-              quantity,
-              unitId: ingredient.unitId,
-              ingredientRefId: ingredient.ingredientRefId,
-              sortIndex,
-              categoryKey: ingredient.categoryKey,
-              iconKey: ingredient.iconKey,
-            },
-          }));
-          writePlans.push({
-            mode: "create",
-            id,
-            shoppingListId: shoppingList.id,
-            ingredientRefId: ingredient.ingredientRefId,
-            unitId: ingredient.unitId,
-            quantity,
-            checked: false,
-            checkedAt: null,
-            deletedAt: null,
-            sortIndex,
-            categoryKey: ingredient.categoryKey,
-            iconKey: ingredient.iconKey,
-            updatedAt: new Date(),
-          });
-        }
-
-        return {
-          operations,
-          metadata: null,
-          native: createCompatibleShoppingListD1Batch(nativeD1, writePlans, []),
-        };
+      const boundNowMs = Date.now();
+      await runAtomicShoppingListBatch({
+        database,
+        nativeDatabase: nativeD1,
+        mutations: ingredients.map((ingredient) => ({
+          id: crypto.randomUUID(),
+          shoppingListId: shoppingList.id,
+          quantity: ingredient.quantity,
+          unitId: ingredient.unitId,
+          ingredientRefId: ingredient.ingredientRefId,
+          categoryKey: ingredient.categoryKey,
+          iconKey: ingredient.iconKey,
+          boundNowMs,
+        })),
       });
     }
     return data({ success: true });

@@ -109,10 +109,10 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "SSRF-guarded DI fetch wrapper (no PostHog config). Catches map fetch/timeout to a typed Error surfaced to instrumented callers: the import orchestrator captures it via captureImportCoverException, and image-gen wraps it into ImageGenError captured by the stylization caller.",
   },
   {
-    file: "app/lib/shopping-list-mutations.server.ts",
+    file: "app/lib/shopping-list-seed-compat.server.ts",
     category: "rethrow",
     reason:
-      "Catches recover only exact shopping-identity uniqueness races by one bounded reread or full-batch rebuild; all other failures rethrow to the instrumented adapter boundary.",
+      "Seed-only compatibility provisioning catches only exact shopping-identity uniqueness races, performs one bounded winner reread, and rethrows every other failure to the instrumented adapter boundary.",
   },
   {
     file: "app/lib/image-gen.server.ts",

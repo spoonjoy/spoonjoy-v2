@@ -1,7 +1,6 @@
 import type {
   Prisma,
   PrismaClient as PrismaClientType,
-  ShoppingListItem,
 } from "@prisma/client";
 import {
   ApiAuthError,
@@ -75,11 +74,8 @@ import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import {
   asCompatibleD1Database,
   coalesceShoppingRecipeIngredients,
-  createCompatibleShoppingListD1Batch,
-  findCompatibleShoppingListItem,
-  mutateCompatibleShoppingListItem,
-  runCompatibleShoppingListBatch,
-  type ShoppingListItemWritePlan,
+  mutateAtomicShoppingListItem,
+  runAtomicShoppingListBatch,
 } from "~/lib/shopping-list-mutations.server";
 
 export interface SpoonjoyApiContext {
@@ -2771,102 +2767,25 @@ const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
     );
     const nativeD1 = asCompatibleD1Database(context.env?.DB);
 
-    const batch = await runCompatibleShoppingListBatch(context.db, async () => {
-      const existingItems: Array<ShoppingListItem | null> = [];
-      for (const row of coalesced) {
-        existingItems.push(await findCompatibleShoppingListItem(context.db, {
-          shoppingListId: shoppingList.id,
-          ingredientRefId: row.ingredientRefId,
-          unitId: row.unitId,
-        }));
-      }
-
-      let nextSort = await nextSortIndex(context.db, shoppingList.id);
-      let created = 0;
-      let updated = 0;
-      const operations: Array<Prisma.PrismaPromise<ShoppingListItem>> = [];
-      const writePlans: ShoppingListItemWritePlan[] = [];
-      for (const [index, row] of coalesced.entries()) {
-        const existing = existingItems[index];
-        if (existing) {
-          updated += 1;
-          const shouldMoveToEnd = Boolean(existing.checked || existing.checkedAt || existing.deletedAt);
-          const sortIndex = shouldMoveToEnd ? nextSort++ : existing.sortIndex;
-          const quantity = (existing.quantity ?? 0) + row.quantity;
-          const categoryKey = row.categoryKey ?? existing.categoryKey;
-          const iconKey = row.iconKey ?? existing.iconKey;
-          operations.push(context.db.shoppingListItem.update({
-            where: { id: existing.id },
-            data: {
-              quantity,
-              checked: false,
-              checkedAt: null,
-              deletedAt: null,
-              sortIndex,
-              categoryKey,
-              iconKey,
-            },
-          }));
-          writePlans.push({
-            mode: "update",
-            id: existing.id,
-            shoppingListId: shoppingList.id,
-            ingredientRefId: row.ingredientRefId,
-            unitId: row.unitId,
-            quantity,
-            checked: false,
-            checkedAt: null,
-            deletedAt: null,
-            sortIndex,
-            categoryKey,
-            iconKey,
-            updatedAt: new Date(),
-          });
-          continue;
-        }
-
-        created += 1;
-        const id = crypto.randomUUID();
-        const sortIndex = nextSort++;
-        operations.push(context.db.shoppingListItem.create({
-          data: {
-            id,
-            shoppingListId: shoppingList.id,
-            quantity: row.quantity,
-            unitId: row.unitId,
-            ingredientRefId: row.ingredientRefId,
-            sortIndex,
-            categoryKey: row.categoryKey,
-            iconKey: row.iconKey,
-          },
-        }));
-        writePlans.push({
-          mode: "create",
-          id,
-          shoppingListId: shoppingList.id,
-          ingredientRefId: row.ingredientRefId,
-          unitId: row.unitId,
-          quantity: row.quantity,
-          checked: false,
-          checkedAt: null,
-          deletedAt: null,
-          sortIndex,
-          categoryKey: row.categoryKey,
-          iconKey: row.iconKey,
-          updatedAt: new Date(),
-        });
-      }
-
-      return {
-        operations,
-        metadata: { created, updated },
-        native: createCompatibleShoppingListD1Batch(nativeD1, writePlans, []),
-      };
+    const boundNowMs = Date.now();
+    const batch = await runAtomicShoppingListBatch({
+      database: context.db,
+      nativeDatabase: nativeD1,
+      mutations: coalesced.map((row) => ({
+        id: crypto.randomUUID(),
+        shoppingListId: shoppingList.id,
+        quantity: row.quantity,
+        unitId: row.unitId,
+        ingredientRefId: row.ingredientRefId,
+        categoryKey: row.categoryKey,
+        iconKey: row.iconKey,
+        boundNowMs,
+      })),
     });
 
     const result = {
-      created: batch.metadata.created,
-      updated: batch.metadata.updated,
+      created: batch.created,
+      updated: batch.updated,
       shoppingList: await reloadShoppingList(context.db, shoppingList.id),
     };
 
@@ -3151,38 +3070,19 @@ const addShoppingListItemTool: SpoonjoyApiOperation = {
     const shoppingList = await getOrCreateShoppingList(context.db, owner.id);
     const ingredientRef = await getOrCreateIngredientRef(context.db, name);
     const unit = unitName ? await getOrCreateUnit(context.db, unitName) : null;
-    const identity = {
-      shoppingListId: shoppingList.id,
-      ingredientRefId: ingredientRef.id,
-      unitId: unit?.id ?? null,
-    };
-    const mutation = await mutateCompatibleShoppingListItem({
+    const mutation = await mutateAtomicShoppingListItem({
       database: context.db,
-      identity,
-      update: async (existing) => {
-        const shouldMoveToEnd = Boolean(existing.checked || existing.checkedAt || existing.deletedAt);
-        return context.db.shoppingListItem.update({
-          where: { id: existing.id },
-          data: {
-            quantity: quantity === null ? existing.quantity : (existing.quantity ?? 0) + quantity,
-            checked: false,
-            checkedAt: null,
-            deletedAt: null,
-            sortIndex: shouldMoveToEnd ? await nextSortIndex(context.db, shoppingList.id) : existing.sortIndex,
-            categoryKey: categoryKey ?? existing.categoryKey,
-            iconKey: iconKey ?? existing.iconKey,
-          },
-        });
+      nativeDatabase: asCompatibleD1Database(context.env?.DB),
+      mutation: {
+        id: crypto.randomUUID(),
+        shoppingListId: shoppingList.id,
+        ingredientRefId: ingredientRef.id,
+        unitId: unit?.id ?? null,
+        quantity,
+        categoryKey,
+        iconKey,
+        boundNowMs: Date.now(),
       },
-      create: async () => context.db.shoppingListItem.create({
-        data: {
-          ...identity,
-          quantity,
-          sortIndex: await nextSortIndex(context.db, shoppingList.id),
-          categoryKey,
-          iconKey,
-        },
-      }),
     });
     const result = {
       created: mutation.created ? 1 : 0,

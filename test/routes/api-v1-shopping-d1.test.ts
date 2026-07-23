@@ -218,7 +218,7 @@ describe("API v1 shopping-list mutations on D1", () => {
     });
   });
 
-  it("rebuilds and retries the complete array transaction once after a uniqueness conflict", async () => {
+  it("executes the complete coalesced array transaction once without retrying", async () => {
     const user = await db.user.create({ data: createTestUser() });
     const credential = await createApiCredential(db, user.id, "D1 shopping retry writer", {
       scopes: ["shopping_list:write"],
@@ -257,28 +257,19 @@ describe("API v1 shopping-list mutations on D1", () => {
       ],
     });
 
+    await db.shoppingListItem.create({
+      data: {
+        id: "compat-d1-existing-item",
+        shoppingListId: list.id,
+        ingredientRefId: firstRef.id,
+        unitId: unit.id,
+        quantity: 4,
+        sortIndex: 0,
+      },
+    });
     const attempts: unknown[][] = [];
-    mocked.db = withD1TransactionGuard(db, async (operations, execute) => {
+    mocked.db = withD1TransactionGuard(db, (operations, execute) => {
       attempts.push(operations);
-      if (attempts.length === 1) {
-        await db.shoppingListItem.create({
-          data: {
-            id: "compat-d1-retry-race-winner",
-            shoppingListId: list.id,
-            ingredientRefId: firstRef.id,
-            unitId: unit.id,
-            quantity: 4,
-            sortIndex: 0,
-          },
-        });
-        throw Object.assign(new Error("Unique constraint failed on the fields"), {
-          code: "P2002",
-          meta: {
-            modelName: "ShoppingListItem",
-            target: ["shoppingListId", "unitId", "ingredientRefId"],
-          },
-        });
-      }
       return execute();
     });
     const request = (requestId: string) => new UndiciRequest("http://localhost/api/v1/shopping-list/add-from-recipe", {
@@ -308,13 +299,10 @@ describe("API v1 shopping-list mutations on D1", () => {
         mutation: { clientMutationId: "compat-d1-retry", replayed: false },
       },
     });
-    expect(attempts).toHaveLength(2);
+    expect(attempts).toHaveLength(1);
     expect(attempts[0]).toHaveLength(2);
-    expect(attempts[1]).toHaveLength(2);
-    expect(attempts[1]).not.toBe(attempts[0]);
-    expect(attempts[1][0]).not.toBe(attempts[0][0]);
     await expect(db.shoppingListItem.findUniqueOrThrow({
-      where: { id: "compat-d1-retry-race-winner" },
+      where: { id: "compat-d1-existing-item" },
     })).resolves.toMatchObject({ quantity: 5, deletedAt: null });
     expect(await db.shoppingListItem.count({
       where: {
@@ -329,6 +317,6 @@ describe("API v1 shopping-list mutations on D1", () => {
       requestId: "req_compat_d1_retry_replay",
       data: { mutation: { clientMutationId: "compat-d1-retry", replayed: true } },
     });
-    expect(attempts).toHaveLength(2);
+    expect(attempts).toHaveLength(1);
   });
 });

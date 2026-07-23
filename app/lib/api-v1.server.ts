@@ -104,11 +104,8 @@ import {
 import {
   asCompatibleD1Database,
   coalesceShoppingRecipeIngredients,
-  createCompatibleShoppingListD1Batch,
-  findCompatibleShoppingListItem,
-  mutateCompatibleShoppingListItem,
-  runCompatibleShoppingListBatch,
-  type ShoppingListItemWritePlan,
+  mutateAtomicShoppingListItem,
+  runAtomicShoppingListBatch,
 } from "~/lib/shopping-list-mutations.server";
 import {
   isSavedRecipeCutoverPendingError,
@@ -4047,37 +4044,19 @@ async function handleShoppingItemCreate(args: ApiV1RouteArgs, requestId: string,
     const list = await loadShoppingListForUser(db, principal.id);
     const ingredientRef = await getOrCreateApiV1IngredientRef(db, name);
     const unit = unitName ? await getOrCreateApiV1Unit(db, unitName) : null;
-    const identity = {
-      shoppingListId: list.id,
-      ingredientRefId: ingredientRef.id,
-      unitId: unit?.id ?? null,
-    };
-    const result = await mutateCompatibleShoppingListItem({
+    const result = await mutateAtomicShoppingListItem({
       database: db,
-      identity,
-      update: async (existing) => db.shoppingListItem.update({
-        where: { id: existing.id },
-        data: {
-          quantity: quantity === null ? existing.quantity : (existing.quantity ?? 0) + quantity,
-          checked: false,
-          checkedAt: null,
-          deletedAt: null,
-          sortIndex: existing.checked || existing.checkedAt || existing.deletedAt
-            ? await nextShoppingSortIndex(db, list.id)
-            : existing.sortIndex,
-          categoryKey: categoryKey ?? existing.categoryKey,
-          iconKey: iconKey ?? existing.iconKey,
-        },
-      }),
-      create: async () => db.shoppingListItem.create({
-        data: {
-          ...identity,
-          quantity,
-          sortIndex: await nextShoppingSortIndex(db, list.id),
-          categoryKey,
-          iconKey,
-        },
-      }),
+      nativeDatabase: asCompatibleD1Database(apiV1CloudflareFor(args)?.env?.DB),
+      mutation: {
+        id: crypto.randomUUID(),
+        shoppingListId: list.id,
+        ingredientRefId: ingredientRef.id,
+        unitId: unit?.id ?? null,
+        quantity,
+        categoryKey,
+        iconKey,
+        boundNowMs: Date.now(),
+      },
     });
     const item: ShoppingItemRow = { ...result.item, ingredientRef, unit };
     return {
@@ -4220,128 +4199,35 @@ async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: stri
       ]),
     );
 
-    const batch = await runCompatibleShoppingListBatch(db, async () => {
-      const existingRows = [];
-      for (const requested of requestedRows) {
-        existingRows.push(await findCompatibleShoppingListItem(db, {
-          shoppingListId: list.id,
-          ingredientRefId: requested.ingredientRefId,
-          unitId: requested.unitId,
-        }));
-      }
-
-      let nextSortIndexValue = await nextShoppingSortIndex(db, list.id);
-      let created = 0;
-      let updated = 0;
-      const operations: Prisma.PrismaPromise<ShoppingItemRow>[] = [];
-      const writePlans: ShoppingListItemWritePlan[] = [];
-
-      for (const [index, requested] of requestedRows.entries()) {
-        const existing = existingRows[index];
-        if (existing) {
-          const sortIndex = existing.deletedAt || existing.checkedAt || existing.checked
-            ? nextSortIndexValue++
-            : existing.sortIndex;
-          const quantity = (existing.quantity ?? 0) + requested.quantity;
-          const categoryKey = existing.categoryKey ?? requested.categoryKey;
-          const iconKey = existing.iconKey ?? requested.iconKey;
-          operations.push(db.shoppingListItem.update({
-            where: { id: existing.id },
-            data: {
-              quantity,
-              checked: false,
-              checkedAt: null,
-              deletedAt: null,
-              sortIndex,
-              categoryKey,
-              iconKey,
-            },
-            include: { unit: true, ingredientRef: true },
-          }));
-          writePlans.push({
-            mode: "update",
-            id: existing.id,
-            shoppingListId: list.id,
-            ingredientRefId: requested.ingredientRefId,
-            unitId: requested.unitId,
-            quantity,
-            checked: false,
-            checkedAt: null,
-            deletedAt: null,
-            sortIndex,
-            categoryKey,
-            iconKey,
-            updatedAt: new Date(),
-          });
-          updated += 1;
-        } else {
-          const id = crypto.randomUUID();
-          const sortIndex = nextSortIndexValue++;
-          operations.push(db.shoppingListItem.create({
-            data: {
-              id,
-              shoppingListId: list.id,
-              quantity: requested.quantity,
-              unitId: requested.unitId,
-              ingredientRefId: requested.ingredientRefId,
-              sortIndex,
-              categoryKey: requested.categoryKey,
-              iconKey: requested.iconKey,
-            },
-            include: { unit: true, ingredientRef: true },
-          }));
-          writePlans.push({
-            mode: "create",
-            id,
-            shoppingListId: list.id,
-            ingredientRefId: requested.ingredientRefId,
-            unitId: requested.unitId,
-            quantity: requested.quantity,
-            checked: false,
-            checkedAt: null,
-            deletedAt: null,
-            sortIndex,
-            categoryKey: requested.categoryKey,
-            iconKey: requested.iconKey,
-            updatedAt: new Date(),
-          });
-          created += 1;
-        }
-      }
-
-      const plannedItems = writePlans.map((plan) => ({
-        id: plan.id,
-        shoppingListId: plan.shoppingListId,
-        ingredientRefId: plan.ingredientRefId,
-        unitId: plan.unitId,
-        quantity: plan.quantity,
-        checked: plan.checked,
-        checkedAt: plan.checkedAt,
-        deletedAt: plan.deletedAt,
-        sortIndex: plan.sortIndex,
-        categoryKey: plan.categoryKey,
-        iconKey: plan.iconKey,
-        updatedAt: plan.updatedAt,
-        ...relationsByIdentity.get(JSON.stringify([
-          plan.ingredientRefId,
-          plan.unitId,
-        ]))!,
-      }));
-
-      return {
-        operations,
-        metadata: { created, updated },
-        native: createCompatibleShoppingListD1Batch(nativeD1, writePlans, plannedItems),
-      };
+    const boundNowMs = Date.now();
+    const batch = await runAtomicShoppingListBatch({
+      database: db,
+      nativeDatabase: nativeD1,
+      mutations: requestedRows.map((requested) => ({
+        id: crypto.randomUUID(),
+        shoppingListId: list.id,
+        ingredientRefId: requested.ingredientRefId,
+        unitId: requested.unitId,
+        quantity: requested.quantity,
+        categoryKey: requested.categoryKey,
+        iconKey: requested.iconKey,
+        boundNowMs,
+      })),
     });
 
     return {
       status: 200,
       data: {
         recipe: { id: recipe.id, title: recipe.title },
-        created: batch.metadata.created,
-        updated: batch.metadata.updated,
-        items: batch.items.map(shoppingItem),
+        created: batch.created,
+        updated: batch.updated,
+        items: batch.items.map(({ item }) => shoppingItem({
+          ...item,
+          ...relationsByIdentity.get(JSON.stringify([
+            item.ingredientRefId,
+            item.unitId,
+          ]))!,
+        })),
         mutation: { clientMutationId, replayed: false },
       },
     };

@@ -6,7 +6,7 @@ import { action as apiV1Action } from "../../app/routes/api.v1.$";
 import { handleRecipeDetailAction } from "../../app/lib/recipe-detail.server";
 import { handleShoppingListAction } from "../../app/lib/shopping-list.server";
 import { getRequestDb } from "../../app/lib/route-platform.server";
-import { mutateCompatibleShoppingListItem } from "../../app/lib/shopping-list-mutations.server";
+import { provisionSeedShoppingListItem } from "../../app/lib/shopping-list-seed-compat.server";
 import { createUserSessionCookie } from "../../app/lib/session.server";
 import { expectConsoleError, expectConsoleErrorMatching } from "../warning-policy";
 
@@ -154,6 +154,21 @@ async function shoppingIdentityMatrixRow(id: string) {
   `).bind(id).first<ShoppingIdentityMatrixRow>();
 }
 
+async function activeShoppingIdentityMatrixRow(ingredientRefId: string) {
+  return database().prepare(`
+    SELECT "id", "quantity", "checked", "updatedAt", "checkedAt", "deletedAt", "sortIndex"
+    FROM "ShoppingListItem"
+    WHERE "shoppingListId" = ?
+      AND "ingredientRefId" = ?
+      AND "unitId" = ?
+      AND "deletedAt" IS NULL
+  `).bind(
+    SHOPPING_LIST_ID,
+    ingredientRefId,
+    SHOPPING_UNIT_ID,
+  ).first<ShoppingIdentityMatrixRow>();
+}
+
 async function expectShoppingIdentityMatrix(
   label: string,
   firstDelta: number,
@@ -176,13 +191,24 @@ async function expectShoppingIdentityMatrix(
     deletedAt: FIXTURE_TIMESTAMP,
     sortIndex: 0,
   });
-  expect(await shoppingIdentityMatrixRow("matrix-second-A"), label).toMatchObject({
-    id: "matrix-second-A",
-    quantity: 7 + secondDelta,
+  const freshSecond = await activeShoppingIdentityMatrixRow(SHOPPING_SECOND_REF_ID);
+  expect(freshSecond, label).toMatchObject({
+    quantity: secondDelta,
     checked: 0,
     checkedAt: null,
     deletedAt: null,
     sortIndex: 5,
+  });
+  expect(freshSecond?.id, label).not.toBe("matrix-second-A");
+  expect(freshSecond?.id, label).not.toBe("matrix-second-a");
+  expect(await shoppingIdentityMatrixRow("matrix-second-A"), label).toMatchObject({
+    id: "matrix-second-A",
+    quantity: 7,
+    checked: 1,
+    updatedAt: FIXTURE_TIMESTAMP,
+    checkedAt: FIXTURE_TIMESTAMP,
+    deletedAt: FIXTURE_TIMESTAMP,
+    sortIndex: 1,
   });
   expect(await shoppingIdentityMatrixRow("matrix-second-a"), label).toMatchObject({
     id: "matrix-second-a",
@@ -868,7 +894,7 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
       });
       expect(result).toMatchObject({ data: { success: true } });
     };
-    const callRestManual = async (name: string, quantity: number) => {
+    const callRestManual = async (name: string, quantity: number, expectedStatus: number) => {
       const requestId = nextRequestId("rest_manual");
       const response = await apiV1Action({
         request: new Request(`${TEST_ORIGIN}/api/v1/shopping-list/items`, {
@@ -887,7 +913,7 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
         params: { "*": "shopping-list/items" },
         context: routeContext(),
       } as any);
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(expectedStatus);
     };
     const callMcp = async (
       id: number,
@@ -958,8 +984,8 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
         firstDelta: 3,
         secondDelta: 4,
         run: async () => {
-          await callRestManual("cutover d1 apples", 3);
-          await callRestManual("cutover d1 flour", 4);
+          await callRestManual("cutover d1 apples", 3, 200);
+          await callRestManual("cutover d1 flour", 4, 201);
         },
       },
       {
@@ -1012,58 +1038,67 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
     }
   });
 
-  it("recovers a real Prisma-D1 expression-index shopping uniqueness race", async () => {
+  it("recovers a real Prisma-D1 expression-index race inside seed provisioning", async () => {
     const db = await getRequestDb(routeContext() as any);
     let observedConflict: unknown;
-    const result = await expectD1AdapterError(/ShoppingListItem_active_identity_key/, () => mutateCompatibleShoppingListItem({
-      database: db,
-      identity: {
+    let injected = false;
+    const create = db.shoppingListItem.create.bind(db.shoppingListItem);
+    const shoppingListItem = new Proxy(db.shoppingListItem, {
+      get(target, property) {
+        if (property !== "create") return Reflect.get(target, property, target);
+        return async (args: Parameters<typeof db.shoppingListItem.create>[0]) => {
+          if (!injected) {
+            injected = true;
+            await create({
+              data: {
+                id: "cutover-d1-real-race-winner",
+                shoppingListId: SHOPPING_LIST_ID,
+                ingredientRefId: SHOPPING_FIRST_REF_ID,
+                unitId: SHOPPING_UNIT_ID,
+                quantity: 4,
+                sortIndex: 0,
+              },
+            });
+          }
+          try {
+            return await create(args);
+          } catch (error) {
+            observedConflict = error;
+            throw error;
+          }
+        };
+      },
+    });
+    const racingDb = new Proxy(db, {
+      get(target, property) {
+        if (property === "shoppingListItem") return shoppingListItem;
+        return Reflect.get(target, property, target);
+      },
+    });
+    const result = await expectD1AdapterError(
+      /ShoppingListItem_active_identity_key/,
+      () => provisionSeedShoppingListItem(racingDb, {
         shoppingListId: SHOPPING_LIST_ID,
         ingredientRefId: SHOPPING_FIRST_REF_ID,
         unitId: SHOPPING_UNIT_ID,
-      },
-      async create() {
-        await db.shoppingListItem.create({
-          data: {
-            id: "cutover-d1-real-race-winner",
-            shoppingListId: SHOPPING_LIST_ID,
-            ingredientRefId: SHOPPING_FIRST_REF_ID,
-            unitId: SHOPPING_UNIT_ID,
-            quantity: 4,
-            sortIndex: 0,
-          },
-        });
-        try {
-          return await db.shoppingListItem.create({
-            data: {
-              id: "cutover-d1-real-race-loser",
-              shoppingListId: SHOPPING_LIST_ID,
-              ingredientRefId: SHOPPING_FIRST_REF_ID,
-              unitId: SHOPPING_UNIT_ID,
-              quantity: 3,
-              sortIndex: 1,
-            },
-          });
-        } catch (error) {
-          observedConflict = error;
-          throw error;
-        }
-      },
-      update(existing) {
-        return db.shoppingListItem.update({
-          where: { id: existing.id },
-          data: { quantity: (existing.quantity ?? 0) + 3 },
-        });
-      },
-    }));
+        quantity: 3,
+        checked: false,
+        checkedAt: null,
+        deletedAt: null,
+        categoryKey: null,
+        iconKey: null,
+        sortIndex: 1,
+      }),
+    );
 
     expect(observedConflict).toMatchObject({
       code: "P2002",
       meta: { target: ["index 'ShoppingListItem_active_identity_key'"] },
     });
     expect(result).toMatchObject({
-      created: false,
-      item: { id: "cutover-d1-real-race-winner", quantity: 7 },
+      id: "cutover-d1-real-race-winner",
+      quantity: 3,
+      sortIndex: 1,
     });
     expect(await database().prepare(`
       SELECT COUNT(*) AS "count"

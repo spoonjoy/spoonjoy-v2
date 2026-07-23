@@ -2119,7 +2119,7 @@ describe("spoonjoy MCP tools", () => {
     }
   });
 
-  it("rebuilds and retries the complete shared recipe transaction once after a uniqueness race", async () => {
+  it("uses one atomic shared recipe transaction when an identity appears before execution", async () => {
     const recipe = parseJson(await callSpoonjoyMcpTool("create_recipe", {
       title: "Racing shared shopping recipe",
       steps: [{
@@ -2169,11 +2169,8 @@ describe("spoonjoy MCP tools", () => {
       { ...context, db: racingDb },
     ));
 
-    expect(transactionCalls).toBe(2);
-    expect(transactionOperationArrays.map((operations) => operations.length)).toEqual([2, 2]);
-    expect(transactionOperationArrays[1]).not.toBe(transactionOperationArrays[0]);
-    expect(transactionOperationArrays[1][0]).not.toBe(transactionOperationArrays[0][0]);
-    expect(transactionOperationArrays[1][1]).not.toBe(transactionOperationArrays[0][1]);
+    expect(transactionCalls).toBe(1);
+    expect(transactionOperationArrays.map((operations) => operations.length)).toEqual([2]);
     expect(added).toMatchObject({
       created: 1,
       updated: 1,
@@ -2252,7 +2249,7 @@ describe("spoonjoy MCP tools", () => {
     });
   });
 
-  it("restores the earliest post-0025 shared recipe tombstone by sortIndex then BINARY id", async () => {
+  it("creates a fresh shared recipe item without reviving a post-0025 tombstone", async () => {
     const recipe = parseJson(await callSpoonjoyMcpTool("create_recipe", {
       title: "Tombstone-only shared shopping recipe",
       steps: [{
@@ -2311,23 +2308,26 @@ describe("spoonjoy MCP tools", () => {
       ));
 
       expect(added).toEqual({
-        created: 0,
-        updated: 1,
+        created: 1,
+        updated: 0,
         shoppingList: {
           id: shoppingList.id,
           ownerId: owner.id,
           items: [{
-            id: earliest.id,
-            quantity: 7,
+            id: expect.any(String),
+            quantity: 2,
             unit: recipe.recipe.steps[0].ingredients[0].unit,
             name: recipe.recipe.steps[0].ingredients[0].name,
             checked: false,
-            categoryKey: "pantry",
-            iconKey: "jar",
+            categoryKey: null,
+            iconKey: null,
             sortIndex: 0,
           }],
         },
       });
+      expect(added.shoppingList.items[0].id).not.toBe(earliest.id);
+      await expect(context.db.shoppingListItem.findUniqueOrThrow({ where: { id: earliest.id } }))
+        .resolves.toMatchObject({ quantity: 5, checked: true, deletedAt: expect.any(Date) });
       await expect(context.db.shoppingListItem.findUniqueOrThrow({ where: { id: laterByBinaryId.id } }))
         .resolves.toMatchObject({ quantity: 20, deletedAt: expect.any(Date) });
       await expect(context.db.shoppingListItem.findUniqueOrThrow({ where: { id: laterBySort.id } }))
@@ -2766,8 +2766,34 @@ describe("spoonjoy MCP tools", () => {
       quantity: 1,
       unit: "Gallon",
     }, context));
-    expect(restored).toMatchObject({ created: 0, updated: 1 });
-    expect(restored.shoppingList.items[0]).toMatchObject({ id: itemId, quantity: 4, checked: false });
+    expect(restored).toMatchObject({ created: 1, updated: 0 });
+    expect(restored.shoppingList.items[0]).toMatchObject({ quantity: 1, checked: false });
+    expect(restored.shoppingList.items[0].id).not.toBe(itemId);
+  });
+
+  it("keeps shared check ordering at zero when the active list disappears before max lookup", async () => {
+    const added = parseJson(await callSpoonjoyMcpTool("add_shopping_list_item", {
+      name: "Check Race Milk",
+      quantity: 1,
+    }, context));
+    const item = await context.db.shoppingListItem.findUniqueOrThrow({
+      where: { id: added.shoppingList.items[0].id },
+    });
+    const findFirst = vi.spyOn(context.db.shoppingListItem, "findFirst")
+      .mockResolvedValueOnce(item)
+      .mockResolvedValueOnce(null);
+
+    const checked = parseJson(await callSpoonjoyMcpTool("set_shopping_list_item_checked", {
+      itemId: item.id,
+      checked: true,
+    }, context));
+
+    expect(checked.shoppingList.items[0]).toMatchObject({
+      id: item.id,
+      checked: true,
+      sortIndex: 0,
+    });
+    expect(findFirst).toHaveBeenCalledTimes(2);
   });
 
   it("always updates the active manual identity before considering a matching tombstone", async () => {
@@ -2833,7 +2859,7 @@ describe("spoonjoy MCP tools", () => {
     });
   });
 
-  it("restores the earliest deterministic tombstone when no manual identity is active", async () => {
+  it("creates a fresh manual item when no active identity exists", async () => {
     const suffix = faker.string.alphanumeric(8).toLowerCase();
     const owner = await context.db.user.create({
       data: { email: context.defaultOwnerEmail!, username: `manual-deleted-${suffix}` },
@@ -2875,27 +2901,30 @@ describe("spoonjoy MCP tools", () => {
       }, context));
 
       expect(restored).toEqual({
-        created: 0,
-        updated: 1,
+        created: 1,
+        updated: 0,
         shoppingList: {
           id: shoppingList.id,
           ownerId: owner.id,
           items: [{
-            id: earliest.id,
-            quantity: 12,
+            id: expect.any(String),
+            quantity: 2,
             unit: unit.name,
             name: ingredientRef.name,
             checked: false,
-            categoryKey: "pantry",
+            categoryKey: null,
             iconKey: "jar",
             sortIndex: 0,
           }],
         },
       });
+      expect(restored.shoppingList.items[0].id).not.toBe(earliest.id);
+      await expect(context.db.shoppingListItem.findUniqueOrThrow({ where: { id: earliest.id } }))
+        .resolves.toMatchObject({ quantity: 10, deletedAt: expect.any(Date) });
     });
   });
 
-  it("rereads the active manual identity once after a real uniqueness race", async () => {
+  it("uses atomic SQL without invoking the Prisma create delegate", async () => {
     type ShoppingCreateArgs = Parameters<SpoonjoyMcpContext["db"]["shoppingListItem"]["create"]>[0];
     const racedId = `manual-race-${faker.string.alphanumeric(8).toLowerCase()}`;
     let injected = false;
@@ -2934,16 +2963,16 @@ describe("spoonjoy MCP tools", () => {
       iconKey: "milk",
     }, { ...context, db: racingDb }));
 
-    expect(injected).toBe(true);
+    expect(injected).toBe(false);
     expect(added).toEqual({
-      created: 0,
-      updated: 1,
+      created: 1,
+      updated: 0,
       shoppingList: {
         id: expect.any(String),
         ownerId: expect.any(String),
         items: [{
-          id: racedId,
-          quantity: 7,
+          id: expect.any(String),
+          quantity: 2,
           unit: "gallon",
           name: "manual race milk",
           checked: false,

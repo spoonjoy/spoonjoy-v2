@@ -430,87 +430,6 @@ describe("Shopping List Route", () => {
       });
     });
 
-    it("compatibility: prefers the earliest active unitless identity by sortIndex and id", async () => {
-      await restoreFullIdentityIndex();
-      const shoppingList = await db.shoppingList.create({
-        data: { authorId: testUserId },
-      });
-      const ingredientName = `compat_manual_active_${faker.string.alphanumeric(6)}`.toLowerCase();
-      const ingredientRef = await db.ingredientRef.create({
-        data: { name: ingredientName },
-      });
-
-      const tombstone = await db.shoppingListItem.create({
-        data: {
-          id: "compat-manual-active-deleted",
-          shoppingListId: shoppingList.id,
-          ingredientRefId: ingredientRef.id,
-          quantity: 100,
-          sortIndex: -10,
-          deletedAt: new Date(),
-        },
-      });
-      const laterBySort = await db.shoppingListItem.create({
-        data: {
-          id: "compat-manual-active-a-later-sort",
-          shoppingListId: shoppingList.id,
-          ingredientRefId: ingredientRef.id,
-          quantity: 10,
-          sortIndex: 2,
-        },
-      });
-      const laterById = await db.shoppingListItem.create({
-        data: {
-          id: "compat-manual-active-a-same-sort",
-          shoppingListId: shoppingList.id,
-          ingredientRefId: ingredientRef.id,
-          quantity: 20,
-          sortIndex: 1,
-        },
-      });
-      const expectedActive = await db.shoppingListItem.create({
-        data: {
-          id: "compat-manual-active-A-same-sort",
-          shoppingListId: shoppingList.id,
-          ingredientRefId: ingredientRef.id,
-          quantity: 30,
-          sortIndex: 1,
-        },
-      });
-
-      const request = await createFormRequest(
-        {
-          intent: "addItem",
-          ingredientName,
-          quantity: "2",
-        },
-        testUserId
-      );
-
-      const result = await action({
-        request,
-        context: { cloudflare: { env: null } },
-        params: {},
-      } as any);
-      const [selected, sameSortLater, laterSort, stillDeleted] = await Promise.all([
-        db.shoppingListItem.findUnique({ where: { id: expectedActive.id } }),
-        db.shoppingListItem.findUnique({ where: { id: laterById.id } }),
-        db.shoppingListItem.findUnique({ where: { id: laterBySort.id } }),
-        db.shoppingListItem.findUnique({ where: { id: tombstone.id } }),
-      ]);
-
-      expect(result).toEqual({
-        data: { success: true },
-        init: null,
-        type: "DataWithResponseInit",
-      });
-      expect(selected?.quantity).toBe(32);
-      expect(sameSortLater?.quantity).toBe(20);
-      expect(laterSort?.quantity).toBe(10);
-      expect(stillDeleted?.quantity).toBe(100);
-      expect(stillDeleted?.deletedAt).not.toBeNull();
-    });
-
     it("compatibility: uses the migrated active unitless survivor before its tombstone", async () => {
       try {
         await installActiveIdentityIndex();
@@ -555,7 +474,7 @@ describe("Shopping List Route", () => {
       }
     });
 
-    it("compatibility: restores only the earliest unitless tombstone by sortIndex and id", async () => {
+    it("creates a fresh unitless item and leaves every tombstone untouched", async () => {
       try {
         await installActiveIdentityIndex();
         const shoppingList = await db.shoppingList.create({
@@ -621,15 +540,23 @@ describe("Shopping List Route", () => {
         context: { cloudflare: { env: null } },
         params: {},
       } as any);
-        const [restored, sameSortLater, laterSort] = await Promise.all([
+        const [created, restored, sameSortLater, laterSort] = await Promise.all([
+        db.shoppingListItem.findFirst({
+          where: {
+            shoppingListId: shoppingList.id,
+            ingredientRefId: ingredientRef.id,
+            deletedAt: null,
+          },
+        }),
         db.shoppingListItem.findUnique({ where: { id: expectedTombstone.id } }),
         db.shoppingListItem.findUnique({ where: { id: laterById.id } }),
         db.shoppingListItem.findUnique({ where: { id: laterBySort.id } }),
       ]);
 
-        expect(restored?.quantity).toBe(31);
-        expect(restored?.deletedAt).toBeNull();
-        expect(restored?.sortIndex).toBe(5);
+        expect(created).toMatchObject({ quantity: 1, deletedAt: null, sortIndex: 5 });
+        expect(created?.id).not.toBe(expectedTombstone.id);
+        expect(restored?.quantity).toBe(30);
+        expect(restored?.deletedAt).not.toBeNull();
         expect(sameSortLater?.quantity).toBe(20);
         expect(sameSortLater?.deletedAt).not.toBeNull();
         expect(laterSort?.quantity).toBe(10);
@@ -639,7 +566,7 @@ describe("Shopping List Route", () => {
       }
     });
 
-    it("compatibility: rereads the active identity once after a create uniqueness conflict", async () => {
+    it("uses atomic SQL without invoking Prisma create or application retry", async () => {
       const shoppingList = await db.shoppingList.create({ data: { authorId: testUserId } });
       const ingredientName = `compat_manual_race_${faker.string.alphanumeric(6)}`.toLowerCase();
       const unitName = `compat_manual_race_unit_${faker.string.alphanumeric(6)}`.toLowerCase();
@@ -685,14 +612,10 @@ describe("Shopping List Route", () => {
       } as any);
 
       expect(response).toEqual({ data: { success: true }, init: null, type: "DataWithResponseInit" });
-      await expect(
-        db.shoppingListItem.findUnique({ where: { id: "compat-web-manual-race-winner" } })
-      ).resolves.toMatchObject({
-        quantity: 7,
-        categoryKey: expect.any(String),
-        iconKey: "package",
-      });
-      expect(createSpy).toHaveBeenCalledTimes(1);
+      await expect(db.shoppingListItem.findFirstOrThrow({
+        where: { shoppingListId: shoppingList.id, ingredientRefId: ingredientRef.id, unitId: unit.id },
+      })).resolves.toMatchObject({ quantity: 3, iconKey: "package" });
+      expect(createSpy).not.toHaveBeenCalled();
       await expect(
         db.shoppingListItem.count({
           where: { shoppingListId: shoppingList.id, ingredientRefId: ingredientRef.id, unitId: unit.id },
@@ -700,7 +623,7 @@ describe("Shopping List Route", () => {
       ).resolves.toBe(1);
     });
 
-    it("compatibility: rereads the migrated active identity after a restore uniqueness conflict", async () => {
+    it("creates a new active item after deletion without invoking Prisma update", async () => {
       try {
         await installActiveIdentityIndex();
         const shoppingList = await db.shoppingList.create({ data: { authorId: testUserId } });
@@ -760,11 +683,17 @@ describe("Shopping List Route", () => {
         } as any);
 
         expect(response).toEqual({ data: { success: true }, init: null, type: "DataWithResponseInit" });
-        await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: "compat-web-manual-restore-winner" } }))
-          .resolves.toMatchObject({ quantity: 7, deletedAt: null, iconKey: "package" });
+        await expect(db.shoppingListItem.findFirstOrThrow({
+          where: {
+            shoppingListId: shoppingList.id,
+            ingredientRefId: ingredientRef.id,
+            unitId: unit.id,
+            deletedAt: null,
+          },
+        })).resolves.toMatchObject({ quantity: 3, deletedAt: null, iconKey: "package" });
         await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: tombstone.id } }))
           .resolves.toMatchObject({ quantity: 20, deletedAt: expect.any(Date) });
-        expect(updateSpy).toHaveBeenCalledTimes(2);
+        expect(updateSpy).not.toHaveBeenCalled();
       } finally {
         await restoreFullIdentityIndex();
       }
@@ -1507,7 +1436,7 @@ describe("Shopping List Route", () => {
       expect(updatedList?.items[0].checkedAt).toBeNull();
     });
 
-    it("keeps the existing category but refreshes the icon from the recipe ingredient", async () => {
+    it("refreshes category and icon from the incoming recipe ingredient", async () => {
       const shoppingList = await db.shoppingList.create({
         data: { authorId: testUserId },
       });
@@ -1555,12 +1484,12 @@ describe("Shopping List Route", () => {
       await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: existing.id } }))
         .resolves.toMatchObject({
           quantity: 3,
-          categoryKey: "bakery",
+          categoryKey: "produce",
           iconKey: "apple",
         });
     });
 
-    it("should restore a soft-deleted recipe ingredient as unchecked at the end", async () => {
+    it("should create a fresh recipe ingredient after deletion at the end", async () => {
       const shoppingList = await db.shoppingList.create({
         data: { authorId: testUserId },
       });
@@ -1632,15 +1561,23 @@ describe("Shopping List Route", () => {
         params: {},
       } as any);
 
-      const restored = await db.shoppingListItem.findUnique({
-        where: { id: deletedItem.id },
+      const restored = await db.shoppingListItem.findFirst({
+        where: {
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredientRef.id,
+          unitId: unit.id,
+          deletedAt: null,
+        },
       });
 
-      expect(restored?.quantity).toBe(3);
+      expect(restored?.id).not.toBe(deletedItem.id);
+      expect(restored?.quantity).toBe(2);
       expect(restored?.checked).toBe(false);
       expect(restored?.checkedAt).toBeNull();
       expect(restored?.deletedAt).toBeNull();
       expect(restored?.sortIndex).toBe(1);
+      await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: deletedItem.id } }))
+        .resolves.toMatchObject({ quantity: 1, checked: true, deletedAt: expect.any(Date) });
     });
 
     it("compatibility: updates the active recipe identity instead of an earlier tombstone", async () => {
@@ -1727,7 +1664,7 @@ describe("Shopping List Route", () => {
       }
     });
 
-    it("compatibility: restores the earliest recipe tombstone by sortIndex and id", async () => {
+    it("creates a fresh recipe item and leaves every recipe tombstone untouched", async () => {
       try {
         await installActiveIdentityIndex();
         const shoppingList = await db.shoppingList.create({
@@ -1804,15 +1741,24 @@ describe("Shopping List Route", () => {
           context: { cloudflare: { env: null } },
           params: {},
         } as any);
-        const [restored, sameSortLater, laterSort] = await Promise.all([
+        const [created, restored, sameSortLater, laterSort] = await Promise.all([
+          db.shoppingListItem.findFirst({
+            where: {
+              shoppingListId: shoppingList.id,
+              ingredientRefId: ingredientRef.id,
+              unitId: unit.id,
+              deletedAt: null,
+            },
+          }),
           db.shoppingListItem.findUnique({ where: { id: expectedTombstone.id } }),
           db.shoppingListItem.findUnique({ where: { id: laterById.id } }),
           db.shoppingListItem.findUnique({ where: { id: laterBySort.id } }),
         ]);
 
-        expect(restored?.quantity).toBe(31);
-        expect(restored?.deletedAt).toBeNull();
-        expect(restored?.sortIndex).toBe(0);
+        expect(created).toMatchObject({ quantity: 1, deletedAt: null, sortIndex: 0 });
+        expect(created?.id).not.toBe(expectedTombstone.id);
+        expect(restored?.quantity).toBe(30);
+        expect(restored?.deletedAt).not.toBeNull();
         expect(sameSortLater?.quantity).toBe(20);
         expect(sameSortLater?.deletedAt).not.toBeNull();
         expect(laterSort?.quantity).toBe(10);
@@ -2192,7 +2138,7 @@ describe("Shopping List Route", () => {
       expect(itemsAfterFailure).toHaveLength(0);
     });
 
-    it("compatibility: rebuilds and retries the complete recipe transaction once after a uniqueness race", async () => {
+    it("uses one atomic recipe transaction when an active identity appears before execution", async () => {
       const shoppingList = await db.shoppingList.create({ data: { authorId: testUserId } });
       const recipe = await db.recipe.create({
         data: { title: "Compatibility web race recipe", chefId: testUserId },
@@ -2267,10 +2213,7 @@ describe("Shopping List Route", () => {
       } as any);
 
       expect(response).toEqual({ data: { success: true }, init: null, type: "DataWithResponseInit" });
-      expect(transactionOperationSets.map((operations) => operations.length)).toEqual([2, 2]);
-      expect(transactionOperationSets[1]).not.toBe(transactionOperationSets[0]);
-      expect(transactionOperationSets[1][0]).not.toBe(transactionOperationSets[0][0]);
-      expect(transactionOperationSets[1][1]).not.toBe(transactionOperationSets[0][1]);
+      expect(transactionOperationSets.map((operations) => operations.length)).toEqual([2]);
       await expect(
         db.shoppingListItem.findMany({
           where: { shoppingListId: shoppingList.id },
@@ -2557,7 +2500,7 @@ describe("Shopping List Route", () => {
       expect(restored?.sortIndex).toBe(1);
     });
 
-    it("should restore a soft-deleted manual item at the end of the active list", async () => {
+    it("should create a fresh manual item after deletion at the end of the active list", async () => {
       const shoppingList = await db.shoppingList.create({
         data: { authorId: testUserId },
       });
@@ -2607,15 +2550,23 @@ describe("Shopping List Route", () => {
         params: {},
       } as any);
 
-      const restored = await db.shoppingListItem.findUnique({
-        where: { id: deletedItem.id },
+      const restored = await db.shoppingListItem.findFirst({
+        where: {
+          shoppingListId: shoppingList.id,
+          ingredientRefId: ingredientRef.id,
+          unitId: unit.id,
+          deletedAt: null,
+        },
       });
 
-      expect(restored?.quantity).toBe(5);
+      expect(restored?.id).not.toBe(deletedItem.id);
+      expect(restored?.quantity).toBe(1);
       expect(restored?.checked).toBe(false);
       expect(restored?.checkedAt).toBeNull();
       expect(restored?.deletedAt).toBeNull();
       expect(restored?.sortIndex).toBe(1);
+      await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: deletedItem.id } }))
+        .resolves.toMatchObject({ quantity: 4, checked: true, deletedAt: expect.any(Date) });
     });
   });
 
