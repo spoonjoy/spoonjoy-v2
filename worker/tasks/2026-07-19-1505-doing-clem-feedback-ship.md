@@ -298,10 +298,11 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every quantity/state/conflict/error branch is covered and review converges.
 **Completed**: The final 383-file/9,168-test app gate and 44-test Workers gate are exact 100% with zero warnings. Fresh review converged after real-D1 CTE compatibility, strict decoder, seed ownership, meaningful metadata assertions, and non-add interleaving findings were closed. See `unit-3.1c-verification.md`.
 
-### ⬜ Unit 3.2: Web And REST Shopping Verification
+### ✅ Unit 3.2: Web And REST Shopping Verification
 **What**: Run the Unit 1.9 manual/recipe web and REST adapter contracts against the final Unit 3.1 service, including idempotency, exact outgoing inputs, fresh ordering, rollback, and byte-shape-compatible check/delete/clear responses. This is a verification-only unit; any defect receives a failing regression in its owning Unit 3.1 implementation before repair.
 **Output**: Green web/REST matrix, full coverage, and API review evidence.
 **Acceptance**: Every web/REST adapter/auth/idempotency/rollback branch stays green, both web/REST recipe bulk paths prove zero partial writes, non-add contracts are unchanged, and review converges.
+**Completed**: The focused web/REST matrix passes 88/88, the full app and Workers gates remain exact 100%, and a fresh API reviewer converged with no findings across transaction boundaries, rollback, auth/idempotency, response envelopes, ordering, and unchanged non-add behavior. See `unit-3.2-verification.md`.
 
 ### ⬜ Unit 3.3: MCP, Legacy, And Native Sync Shopping Verification
 **What**: Run the Unit 1.9 `addShoppingListItemTool`/`addRecipeToShoppingListTool` contracts and native-sync readback against the final Unit 3.1 service for shared additions, ordering, monotonic timestamps, tombstones, and explicit absence of web/MCP exactly-once claims. This is verification-only; defects return to Unit 3.1 with a failing regression.
@@ -759,3 +760,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-22 03:35 Unit 2.3a complete: commit `ee9c864f` adds 84 executable migration tests and a real-D1 pre-activation matrix for all six deployed compatibility writers; 37 plus two red failures are exclusively the missing shopping repair/index, compiler and 157 existing writer/seed tests are clean, and harsh review converged after three rounds.
 - 2026-07-22 18:06 Unit 3.1b complete: commit `f22f3bcd` atomically linearizes all six deployed shopping add writers against the migrated partial expression index, removes runtime lookup/retry compatibility, and keeps seed-only recovery private.
 - 2026-07-22 18:06 Unit 3.1c complete: 9,168 app tests and 44 Workers tests pass at exact 100% coverage; typechecks/build are warning-clean, real Workerd D1 proves the final SQL, and fresh SQL/concurrency review converged.
+- 2026-07-22 18:09 Unit 3.2 complete: the 88-test web/REST matrix, full exact-coverage gates, and fresh API review confirm atomic bulk rollback, auth/idempotency compatibility, deterministic ordering, and unchanged non-add contracts.
