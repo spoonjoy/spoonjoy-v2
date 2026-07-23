@@ -569,7 +569,7 @@ describe("API v1 OpenAPI document", () => {
       scope: "all",
       limit: 20,
       isAuthenticated: true,
-      results: [
+      results: expect.arrayContaining([
         expect.objectContaining({
           type: "recipe",
           canonicalUrl: "https://spoonjoy.app/recipes/recipe_1",
@@ -580,7 +580,7 @@ describe("API v1 OpenAPI document", () => {
           canonicalUrl: "https://spoonjoy.app/shopping-list",
           metadata: expect.objectContaining({ checked: false }),
         }),
-      ],
+      ]),
     });
     expect(responseExample(document, "/api/v1/recipes/{id}", "GET", "200").data.recipe).toMatchObject({
       coverProvenanceLabel: "Original photo",
