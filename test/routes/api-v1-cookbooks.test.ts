@@ -12,6 +12,16 @@ const CUTOVER_INSERT_TRIGGER = "SavedRecipe_cutover_block_membership_insert";
 const CUTOVER_DELETE_TRIGGER = "SavedRecipe_cutover_block_membership_delete";
 const PRODUCT_ACTIVATION_PENDING_MESSAGE =
   "Spoonjoy product activation is still completing. Retry shortly.";
+const BASE_RECIPE_SUMMARY_KEYS = [
+  "attribution", "canonicalUrl", "chef", "coverImageUrl", "coverProvenanceLabel", "coverSourceType",
+  "coverVariant", "createdAt", "description", "href", "id", "servings", "title", "updatedAt",
+] as const;
+
+function expectBaseRecipeSummaries(cookbook: Record<string, any>) {
+  for (const recipe of cookbook.recipes) {
+    expect(Object.keys(recipe).sort()).toEqual([...BASE_RECIPE_SUMMARY_KEYS].sort());
+  }
+}
 
 function routeArgs(request: Request, splat: string) {
   return { request, params: { "*": splat }, context: { cloudflare: { env: null } } } as any;
@@ -96,6 +106,14 @@ async function createCookbookFixture(db: Awaited<ReturnType<typeof getLocalDb>>,
       title: `${titlePrefix} Recipe ${faker.string.alphanumeric(8)}`,
       description: "A public cookbook recipe for API tests",
       servings: "2",
+      course: "main",
+    },
+  });
+  await db.recipeTag.create({
+    data: {
+      recipeId: recipe.id,
+      label: "Cookbook Boundary",
+      normalizedLabel: "cookbook boundary",
     },
   });
   await db.recipeInCookbook.create({
@@ -359,6 +377,7 @@ describe("API v1 public cookbook reads", () => {
         },
       },
     });
+    expect(Object.keys(payload.data.cookbook.recipes[0]).sort()).toEqual([...BASE_RECIPE_SUMMARY_KEYS].sort());
     expect(payload.data.cookbook.recipes.map((recipe: { id: string }) => recipe.id)).not.toContain(deletedRecipe.id);
 
     const insufficient = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}`, {
@@ -736,6 +755,14 @@ describe("API v1 public cookbook reads", () => {
       data: {
         ...createTestRecipe(fixture.chef.id),
         title: `Api V1 Membership Recipe ${faker.string.alphanumeric(8)}`,
+        course: "dessert",
+      },
+    });
+    await db.recipeTag.create({
+      data: {
+        recipeId: recipeToAdd.id,
+        label: "Membership Boundary",
+        normalizedLabel: "membership boundary",
       },
     });
     const deletedRecipe = await db.recipe.create({
@@ -775,6 +802,7 @@ describe("API v1 public cookbook reads", () => {
       fixture.recipe.id,
       recipeToAdd.id,
     ]);
+    expectBaseRecipeSummaries(addedPayload.data.cookbook);
 
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-07-01T15:00:00.000Z"));
@@ -790,6 +818,7 @@ describe("API v1 public cookbook reads", () => {
       mutation: { clientMutationId: "cm_cookbook_recipe_add_duplicate", replayed: false },
     });
     expect(duplicatePayload.data.cookbook.updatedAt).toBe("2026-07-01T15:00:00.000Z");
+    expectBaseRecipeSummaries(duplicatePayload.data.cookbook);
 
     vi.setSystemTime(new Date("2026-07-01T15:01:00.000Z"));
     const removed = await action(routeArgs(jsonRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`, "DELETE", ownerToken.token, "req_cookbook_recipe_remove", {
@@ -805,6 +834,7 @@ describe("API v1 public cookbook reads", () => {
       mutation: { clientMutationId: "cm_cookbook_recipe_remove", replayed: false },
     });
     expect(removedPayload.data.cookbook.updatedAt).toBe("2026-07-01T15:01:00.000Z");
+    expectBaseRecipeSummaries(removedPayload.data.cookbook);
 
     vi.setSystemTime(new Date("2026-07-01T15:02:00.000Z"));
     const removeAgain = await action(routeArgs(jsonRequest(`http://localhost/api/v1/cookbooks/${fixture.cookbook.id}/recipes/${recipeToAdd.id}`, "DELETE", ownerToken.token, "req_cookbook_recipe_remove_again", {
@@ -819,6 +849,7 @@ describe("API v1 public cookbook reads", () => {
       mutation: { clientMutationId: "cm_cookbook_recipe_remove_again", replayed: false },
     });
     expect(removeAgainPayload.data.cookbook.updatedAt).toBe("2026-07-01T15:02:00.000Z");
+    expectBaseRecipeSummaries(removeAgainPayload.data.cookbook);
 
     await db.recipeInCookbook.create({
       data: { cookbookId: fixture.cookbook.id, recipeId: recipeToAdd.id, addedById: fixture.chef.id },
@@ -836,6 +867,7 @@ describe("API v1 public cookbook reads", () => {
       removed: true,
       mutation: { clientMutationId: "cm_cookbook_recipe_remove_header", replayed: false },
     });
+    expectBaseRecipeSummaries(headerRemovePayload.data.cookbook);
 
     await db.recipeInCookbook.create({
       data: { cookbookId: fixture.cookbook.id, recipeId: recipeToAdd.id, addedById: fixture.chef.id },
@@ -851,6 +883,7 @@ describe("API v1 public cookbook reads", () => {
       removed: true,
       mutation: { clientMutationId: "cm_cookbook_recipe_remove_query", replayed: false },
     });
+    expectBaseRecipeSummaries(queryRemovePayload.data.cookbook);
   });
 
   it("maps the real membership insert fence to retryable 503, rolls back, and releases the mutation id", async () => {

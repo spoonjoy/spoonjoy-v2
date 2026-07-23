@@ -192,6 +192,14 @@ async function createRecipeGraph(
       servings: options.servings ?? "4",
       deletedAt: options.deletedAt ?? null,
       sourceUrl: options.sourceUrl ?? null,
+      course: "main",
+    },
+  });
+  await db.recipeTag.create({
+    data: {
+      recipeId: recipe.id,
+      label: "Mutation Boundary",
+      normalizedLabel: "mutation boundary",
     },
   });
   const firstStep = await db.recipeStep.create({
@@ -730,7 +738,14 @@ describe("API v1 recipe write mutations", () => {
       userId: fixture.chef.id,
     });
     await db.recipe.create({
-      data: { id: createReservation.id, chefId: fixture.chef.id, title: createBody.title },
+      data: { id: createReservation.id, chefId: fixture.chef.id, title: createBody.title, course: "side" },
+    });
+    await db.recipeTag.create({
+      data: {
+        recipeId: createReservation.id,
+        label: "Recovered Create",
+        normalizedLabel: "recovered create",
+      },
     });
     const recoveredCreate = await action(routeArgs(
       mutationRequest("POST", "recipes", fixture.writer.token, "req_recover_route_create", createBody),
@@ -738,6 +753,10 @@ describe("API v1 recipe write mutations", () => {
     ));
     const createPayload = await readJson(recoveredCreate);
     expect(recoveredCreate.status).toBe(201);
+    expectSuccessEnvelope(createPayload, "req_recover_route_create");
+    expectExactKeys(createPayload.data, ["created", "mutation", "recipe"]);
+    expectRecipeDetailShape(createPayload.data.recipe);
+    expectMutationShape(createPayload.data.mutation, createBody.clientMutationId, true);
     expect(createPayload.data).toMatchObject({
       created: true,
       recipe: { id: createReservation.id, title: createBody.title },
@@ -769,6 +788,10 @@ describe("API v1 recipe write mutations", () => {
     ));
     const updatePayload = await readJson(recoveredUpdate);
     expect(recoveredUpdate.status).toBe(200);
+    expectSuccessEnvelope(updatePayload, "req_recover_route_update");
+    expectExactKeys(updatePayload.data, ["mutation", "recipe", "updated"]);
+    expectRecipeDetailShape(updatePayload.data.recipe);
+    expectMutationShape(updatePayload.data.mutation, updateBody.clientMutationId, true);
     expect(updatePayload.data).toMatchObject({
       updated: true,
       recipe: { id: updateRecipe.id, title: updateBody.title, description: null, servings: "8" },
@@ -878,6 +901,10 @@ describe("API v1 recipe write mutations", () => {
     ));
     const deletePayload = await readJson(recoveredDelete);
     expect(recoveredDelete.status).toBe(200);
+    expectSuccessEnvelope(deletePayload, "req_recover_route_delete");
+    expectExactKeys(deletePayload.data, ["deleted", "mutation", "recipe"]);
+    expectExactKeys(deletePayload.data.recipe, ["deletedAt", "id", "updatedAt"]);
+    expectMutationShape(deletePayload.data.mutation, deleteBody.clientMutationId, true);
     expect(deletePayload.data).toMatchObject({
       deleted: true,
       recipe: { id: deleteRecipe.id, deletedAt: expect.any(String), updatedAt: expect.any(String) },
@@ -900,6 +927,14 @@ describe("API v1 recipe write mutations", () => {
         chefId: fixture.chef.id,
         sourceRecipeId: source.id,
         title: forkBody.title,
+        course: "dessert",
+      },
+    });
+    await db.recipeTag.create({
+      data: {
+        recipeId: forkReservation.id,
+        label: "Recovered Fork",
+        normalizedLabel: "recovered fork",
       },
     });
     const recoveredFork = await action(routeArgs(
@@ -908,6 +943,10 @@ describe("API v1 recipe write mutations", () => {
     ));
     const forkPayload = await readJson(recoveredFork);
     expect(recoveredFork.status).toBe(201);
+    expectSuccessEnvelope(forkPayload, "req_recover_route_fork");
+    expectExactKeys(forkPayload.data, ["fork", "mutation", "recipe"]);
+    expectRecipeDetailShape(forkPayload.data.recipe);
+    expectMutationShape(forkPayload.data.mutation, forkBody.clientMutationId, true);
     expect(forkPayload.data).toMatchObject({
       fork: {
         appliedTitle: forkBody.title,
@@ -934,6 +973,14 @@ describe("API v1 recipe write mutations", () => {
         chefId: fixture.chef.id,
         sourceRecipeId: source.id,
         title: source.title,
+        course: "appetizer",
+      },
+    });
+    await db.recipeTag.create({
+      data: {
+        recipeId: sourceTitleForkReservation.id,
+        label: "Recovered Source Title Fork",
+        normalizedLabel: "recovered source title fork",
       },
     });
     const recoveredSourceTitleFork = await action(routeArgs(
@@ -948,6 +995,10 @@ describe("API v1 recipe write mutations", () => {
     ));
     const sourceTitleForkPayload = await readJson(recoveredSourceTitleFork);
     expect(recoveredSourceTitleFork.status).toBe(201);
+    expectSuccessEnvelope(sourceTitleForkPayload, "req_recover_route_fork_source_title");
+    expectExactKeys(sourceTitleForkPayload.data, ["fork", "mutation", "recipe"]);
+    expectRecipeDetailShape(sourceTitleForkPayload.data.recipe);
+    expectMutationShape(sourceTitleForkPayload.data.mutation, sourceTitleForkBody.clientMutationId, true);
     expect(sourceTitleForkPayload.data).toMatchObject({
       fork: { appliedTitle: source.title, titleWasSuffixed: false },
       recipe: { id: sourceTitleForkReservation.id, title: source.title },

@@ -11,6 +11,48 @@ function parseJson(text: string) {
   return JSON.parse(text) as Record<string, any>;
 }
 
+const MCP_RECIPE_BASE_KEYS = [
+  "activeCover",
+  "chef",
+  "coverGenerationStatus",
+  "coverImageUrl",
+  "coverProvenanceLabel",
+  "coverSourceType",
+  "coverStatus",
+  "coverVariant",
+  "description",
+  "id",
+  "imageUrl",
+  "ingredientCount",
+  "servings",
+  "sourceRecipeId",
+  "sourceUrl",
+  "steps",
+  "title",
+] as const;
+
+const MCP_RECIPE_SUMMARY_BASE_KEYS = [
+  "activeCover",
+  "chef",
+  "coverGenerationStatus",
+  "coverImageUrl",
+  "coverProvenanceLabel",
+  "coverSourceType",
+  "coverStatus",
+  "coverVariant",
+  "description",
+  "id",
+  "imageUrl",
+  "ingredientNames",
+  "servings",
+  "stepCount",
+  "title",
+] as const;
+
+function expectExactKeys(value: Record<string, unknown>, keys: readonly string[]) {
+  expect(Object.keys(value).sort()).toEqual([...keys].sort());
+}
+
 const VALID_PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
 const GIF_BYTES = new Uint8Array([0x47, 0x49, 0x46, 0x38, 1, 2, 3]);
 
@@ -116,6 +158,60 @@ async function withActiveShoppingIdentityIndex<T>(
       WHERE "deletedAt" IS NULL
     `);
   }
+}
+
+async function createNeutralMetadataMcpFixture(context: SpoonjoyMcpContext) {
+  context.defaultOwnerEmail = `metadata-boundary-${faker.string.alphanumeric(8).toLowerCase()}@example.com`;
+  const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+    title: `Metadata Boundary Noodles ${faker.string.alphanumeric(8)}`,
+    description: "Metadata boundary recipe",
+  }, context));
+  const owner = await context.db.user.findUniqueOrThrow({
+    where: { email: context.defaultOwnerEmail },
+  });
+  await context.db.recipe.update({
+    where: { id: created.recipe.id },
+    data: { course: "main" },
+  });
+  await context.db.recipeTag.createMany({
+    data: [
+      {
+        id: `tag-mcp-accent-${faker.string.alphanumeric(8)}`,
+        recipeId: created.recipe.id,
+        label: "Accent Apple",
+        normalizedLabel: "\u00e4pfel",
+      },
+      {
+        id: `tag-mcp-zebra-${faker.string.alphanumeric(8)}`,
+        recipeId: created.recipe.id,
+        label: "Zebra",
+        normalizedLabel: "zebra",
+      },
+    ],
+  });
+  await context.db.savedRecipe.create({
+    data: {
+      userId: owner.id,
+      recipeId: created.recipe.id,
+      savedAt: "2026-07-22T18:00:00.000Z",
+    },
+  });
+  const cookbook = parseJson(await callSpoonjoyMcpTool("create_cookbook", {
+    title: `Metadata Boundary Menus ${faker.string.alphanumeric(8)}`,
+  }, context));
+  await callSpoonjoyMcpTool("add_recipe_to_cookbook", {
+    cookbookId: cookbook.cookbook.id,
+    recipeId: created.recipe.id,
+  }, context);
+  const shopping = parseJson(await callSpoonjoyMcpTool("add_shopping_list_item", {
+    name: `Metadata Boundary Tomatoes ${faker.string.alphanumeric(8)}`,
+    quantity: 2,
+    unit: "Each",
+    categoryKey: "produce",
+    iconKey: "tomato",
+  }, context));
+
+  return { cookbook, created, owner, shopping };
 }
 
 describe("spoonjoy MCP tools", () => {
@@ -1488,6 +1584,115 @@ describe("spoonjoy MCP tools", () => {
       chefEmail: uniqueEmail("missing-chef"),
     }, context));
     expect(missingChefSearch.recipes).toEqual([]);
+  });
+
+  it("keeps MCP create and update recipe responses on the exact base serializer", async () => {
+    const fixture = await createNeutralMetadataMcpFixture(context);
+
+    expectExactKeys(fixture.created.recipe, MCP_RECIPE_BASE_KEYS);
+    const updated = parseJson(await callSpoonjoyMcpTool("update_recipe", {
+      id: fixture.created.recipe.id,
+      description: "Mutation shape stays base-only",
+    }, context));
+    expectExactKeys(updated, ["recipe"]);
+    expectExactKeys(updated.recipe, MCP_RECIPE_BASE_KEYS);
+  });
+
+  it("adds neutral metadata only to MCP get_recipe", async () => {
+    const fixture = await createNeutralMetadataMcpFixture(context);
+    const detail = parseJson(await callSpoonjoyMcpTool("get_recipe", {
+      id: fixture.created.recipe.id,
+    }, context));
+
+    expectExactKeys(detail.recipe, [...MCP_RECIPE_BASE_KEYS, "course", "tags"]);
+    expect(detail.recipe).toMatchObject({
+      id: fixture.created.recipe.id,
+      course: "main",
+      tags: ["Zebra", "Accent Apple"],
+    });
+  });
+
+  it("adds neutral metadata only to MCP search_recipes", async () => {
+    const fixture = await createNeutralMetadataMcpFixture(context);
+    const recipes = parseJson(await callSpoonjoyMcpTool("search_recipes", {
+      query: fixture.created.recipe.title,
+    }, context));
+
+    expect(recipes.recipes).toHaveLength(1);
+    expectExactKeys(recipes.recipes[0], [...MCP_RECIPE_SUMMARY_BASE_KEYS, "course", "tags"]);
+    expect(recipes.recipes[0]).toMatchObject({
+      id: fixture.created.recipe.id,
+      course: "main",
+      tags: ["Zebra", "Accent Apple"],
+    });
+  });
+
+  it("keeps authenticated MCP search_spoonjoy non-recipe branches byte-compatible", async () => {
+    const fixture = await createNeutralMetadataMcpFixture(context);
+    const global = parseJson(await callSpoonjoyMcpTool("search_spoonjoy", {
+      query: "Metadata Boundary",
+      scope: "all",
+    }, context));
+    const byType = new Map(global.results.map((result: { type: string }) => [result.type, result]));
+
+    expect([...byType.keys()].sort()).toEqual(["chef", "cookbook", "recipe", "shopping-list-item"]);
+    for (const result of global.results) {
+      expectExactKeys(result, [
+        "href", "id", "imageUrl", "metadata", "ownerId", "ownerUsername",
+        "score", "snippet", "subtitle", "title", "type",
+      ]);
+    }
+    expectExactKeys(byType.get("cookbook").metadata, ["authorUsername", "recipeCount", "recipeTitles"]);
+    expectExactKeys(byType.get("chef").metadata, ["cookbookCount", "recipeCount", "username"]);
+    expectExactKeys(byType.get("shopping-list-item").metadata, [
+      "categoryKey", "checked", "iconKey", "quantity", "sortIndex", "unit",
+    ]);
+    expect(JSON.stringify(global.results)).not.toContain("isSaved");
+    expect(byType.get("cookbook").id).toBe(fixture.cookbook.cookbook.id);
+    expect(byType.get("shopping-list-item").id).toBe(fixture.shopping.shoppingList.items[0].id);
+  });
+
+  it("adds neutral metadata without save state to authenticated MCP search_spoonjoy recipe results", async () => {
+    const fixture = await createNeutralMetadataMcpFixture(context);
+    const global = parseJson(await callSpoonjoyMcpTool("search_spoonjoy", {
+      query: fixture.created.recipe.title,
+      scope: "recipes",
+    }, context));
+    const recipe = global.results.find((result: { type: string }) => result.type === "recipe");
+
+    expect(recipe).toBeDefined();
+    expectExactKeys(recipe.metadata, [
+      "chefUsername", "cookbookTitles", "course", "coverProvenanceLabel", "coverSourceType",
+      "coverVariant", "ingredientNames", "servings", "stepCount", "tags",
+    ]);
+    expect(recipe.metadata).toMatchObject({
+      course: "main",
+      tags: ["Zebra", "Accent Apple"],
+    });
+    expect(recipe.metadata).not.toHaveProperty("isSaved");
+  });
+
+  it("returns null course and empty tags on MCP get_recipe", async () => {
+    const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: `Empty MCP Metadata ${faker.string.alphanumeric(8)}`,
+    }, context));
+    const detail = parseJson(await callSpoonjoyMcpTool("get_recipe", { id: created.recipe.id }, context));
+
+    expectExactKeys(detail.recipe, [...MCP_RECIPE_BASE_KEYS, "course", "tags"]);
+    expect(detail.recipe).toMatchObject({ course: null, tags: [] });
+  });
+
+  it("returns null course and empty tags on MCP search_recipes", async () => {
+    const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: `Empty MCP Summary Metadata ${faker.string.alphanumeric(8)}`,
+    }, context));
+    const search = parseJson(await callSpoonjoyMcpTool("search_recipes", {
+      query: created.recipe.title,
+    }, context));
+
+    expect(search.recipes).toHaveLength(1);
+    expectExactKeys(search.recipes[0], [...MCP_RECIPE_SUMMARY_BASE_KEYS, "course", "tags"]);
+    expect(search.recipes[0]).toMatchObject({ course: null, tags: [] });
   });
 
   it("creates and updates recipe covers from uploaded image URLs with stylization scheduled", async () => {

@@ -15,6 +15,31 @@ async function readJson(response: Response) {
   return await response.json() as any;
 }
 
+const RECIPE_SUMMARY_KEYS = [
+  "attribution",
+  "canonicalUrl",
+  "chef",
+  "course",
+  "coverImageUrl",
+  "coverProvenanceLabel",
+  "coverSourceType",
+  "coverVariant",
+  "createdAt",
+  "description",
+  "href",
+  "id",
+  "servings",
+  "tags",
+  "title",
+  "updatedAt",
+] as const;
+
+const RECIPE_DETAIL_KEYS = [...RECIPE_SUMMARY_KEYS, "cookbooks", "steps"] as const;
+
+function expectExactKeys(value: Record<string, unknown>, keys: readonly string[]) {
+  expect(Object.keys(value).sort()).toEqual([...keys].sort());
+}
+
 function listCursor(value: unknown) {
   return `v1.${Buffer.from(JSON.stringify(value), "utf8").toString("base64url")}`;
 }
@@ -603,6 +628,137 @@ describe("API v1 public recipe reads", () => {
       canonicalUrl: null,
       deleted: true,
     });
+  });
+
+  it("returns neutral course and UTF-16 ordered tags on recipe list reads without personalized save state", async () => {
+    const fixture = await createRecipeFixture(db, "Api V1 Neutral Metadata");
+    await db.recipe.update({
+      where: { id: fixture.recipe.id },
+      data: { course: "dessert" },
+    });
+    await db.recipeTag.createMany({
+      data: [
+        {
+          id: `tag-neutral-accent-${faker.string.alphanumeric(8)}`,
+          recipeId: fixture.recipe.id,
+          label: "Accent Apple",
+          normalizedLabel: "\u00e4pfel",
+        },
+        {
+          id: `tag-neutral-zebra-${faker.string.alphanumeric(8)}`,
+          recipeId: fixture.recipe.id,
+          label: "Zebra",
+          normalizedLabel: "zebra",
+        },
+      ],
+    });
+    const reader = await db.user.create({ data: createTestUser() });
+    await db.savedRecipe.create({
+      data: {
+        userId: reader.id,
+        recipeId: fixture.recipe.id,
+        savedAt: "2026-07-22T18:00:00.000Z",
+      },
+    });
+    const credential = await createApiCredential(db, reader.id, "Neutral recipe reader", {
+      scopes: ["recipes:read"],
+    });
+    const headers = {
+      Authorization: `Bearer ${credential.token}`,
+      "X-Request-Id": "req_recipe_neutral_metadata",
+    };
+
+    const list = await loader(routeArgs(new UndiciRequest(
+      "http://localhost/api/v1/recipes?query=Neutral%20Metadata",
+      { headers },
+    ) as unknown as Request, "recipes"));
+    const listPayload = await readJson(list);
+    const summary = listPayload.data.recipes.find((recipe: { id: string }) => recipe.id === fixture.recipe.id);
+
+    expect(list.status).toBe(200);
+    expectExactKeys(summary, RECIPE_SUMMARY_KEYS);
+    expect(summary).toMatchObject({ id: fixture.recipe.id, course: "dessert", tags: ["Zebra", "Accent Apple"] });
+  });
+
+  it("returns neutral course and ordered tags on recipe detail reads without personalized save state", async () => {
+    const fixture = await createRecipeFixture(db, "Api V1 Neutral Detail Metadata");
+    await db.recipe.update({
+      where: { id: fixture.recipe.id },
+      data: { course: "appetizer" },
+    });
+    await db.recipeTag.createMany({
+      data: [
+        {
+          id: `tag-neutral-detail-weeknight-${faker.string.alphanumeric(8)}`,
+          recipeId: fixture.recipe.id,
+          label: "Weeknight",
+          normalizedLabel: "weeknight",
+        },
+        {
+          id: `tag-neutral-detail-comfort-${faker.string.alphanumeric(8)}`,
+          recipeId: fixture.recipe.id,
+          label: "Comfort Food",
+          normalizedLabel: "comfort food",
+        },
+      ],
+    });
+    const reader = await db.user.create({ data: createTestUser() });
+    await db.savedRecipe.create({
+      data: {
+        userId: reader.id,
+        recipeId: fixture.recipe.id,
+        savedAt: "2026-07-22T18:00:00.000Z",
+      },
+    });
+    const credential = await createApiCredential(db, reader.id, "Neutral recipe detail reader", {
+      scopes: ["recipes:read"],
+    });
+
+    const detail = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}`,
+      {
+        headers: {
+          Authorization: `Bearer ${credential.token}`,
+          "X-Request-Id": "req_recipe_neutral_metadata_detail",
+        },
+      },
+    ) as unknown as Request, `recipes/${fixture.recipe.id}`));
+    const detailPayload = await readJson(detail);
+
+    expect(detail.status).toBe(200);
+    expectExactKeys(detailPayload.data.recipe, RECIPE_DETAIL_KEYS);
+    expect(detailPayload.data.recipe).toMatchObject({
+      id: fixture.recipe.id,
+      course: "appetizer",
+      tags: ["Comfort Food", "Weeknight"],
+    });
+  });
+
+  it("returns course null and empty tags on recipe list reads", async () => {
+    const fixture = await createRecipeFixture(db, "Api V1 Empty List Metadata");
+    const response = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes?query=${encodeURIComponent(fixture.recipe.title)}`,
+      { headers: { "X-Request-Id": "req_recipe_empty_metadata_list" } },
+    ) as unknown as Request, "recipes"));
+    const payload = await readJson(response);
+    const summary = payload.data.recipes.find((recipe: { id: string }) => recipe.id === fixture.recipe.id);
+
+    expect(response.status).toBe(200);
+    expectExactKeys(summary, RECIPE_SUMMARY_KEYS);
+    expect(summary).toMatchObject({ course: null, tags: [] });
+  });
+
+  it("returns course null and empty tags on recipe detail reads", async () => {
+    const fixture = await createRecipeFixture(db, "Api V1 Empty Detail Metadata");
+    const response = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}`,
+      { headers: { "X-Request-Id": "req_recipe_empty_metadata_detail" } },
+    ) as unknown as Request, `recipes/${fixture.recipe.id}`));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expectExactKeys(payload.data.recipe, RECIPE_DETAIL_KEYS);
+    expect(payload.data.recipe).toMatchObject({ course: null, tags: [] });
   });
 
   it("validates limit and rejects bearer tokens without recipes:read", async () => {

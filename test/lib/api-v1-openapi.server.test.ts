@@ -140,6 +140,70 @@ function dedupeSecurity(security: Array<Record<string, unknown>>) {
   });
 }
 
+const RECIPE_SUMMARY_PROPERTIES = [
+  "attribution", "canonicalUrl", "chef", "coverImageUrl", "coverProvenanceLabel", "coverSourceType",
+  "coverVariant", "createdAt", "description", "href", "id", "servings", "title", "updatedAt",
+] as const;
+const RECIPE_DETAIL_PROPERTIES = [...RECIPE_SUMMARY_PROPERTIES, "cookbooks", "steps"] as const;
+
+function componentName(reference: string): string | null {
+  const prefix = "#/components/schemas/";
+  return reference.startsWith(prefix) ? reference.slice(prefix.length) : null;
+}
+
+function reachableComponentNames(document: any, root: unknown): Set<string> {
+  const reached = new Set<string>();
+  const visited = new Set<unknown>();
+  const visit = (value: unknown) => {
+    if (!value || typeof value !== "object" || visited.has(value)) return;
+    visited.add(value);
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    const object = value as Record<string, unknown>;
+    if (typeof object.$ref === "string") {
+      const name = componentName(object.$ref);
+      if (name && !reached.has(name)) {
+        reached.add(name);
+        visit(document.components.schemas[name]);
+      }
+    }
+    Object.values(object).forEach(visit);
+  };
+  visit(root);
+  return reached;
+}
+
+function resolveSchema(document: any, schema: any): any {
+  const name = typeof schema?.$ref === "string" ? componentName(schema.$ref) : null;
+  return name ? document.components.schemas[name] : schema;
+}
+
+function reachablePropertyNames(document: any, root: unknown): Set<string> {
+  const properties = new Set<string>();
+  const visited = new Set<unknown>();
+  const visit = (value: unknown) => {
+    if (!value || typeof value !== "object" || visited.has(value)) return;
+    visited.add(value);
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    const object = value as Record<string, unknown>;
+    if (typeof object.$ref === "string") {
+      const name = componentName(object.$ref);
+      if (name) visit(document.components.schemas[name]);
+    }
+    if (object.properties && typeof object.properties === "object") {
+      Object.keys(object.properties).forEach((name) => properties.add(name));
+    }
+    Object.values(object).forEach(visit);
+  };
+  visit(root);
+  return properties;
+}
+
 describe("API v1 OpenAPI document", () => {
   it("assigns product_activation_pending to HTTP 503", () => {
     expect((API_V1_ERROR_STATUS as Record<string, number>).product_activation_pending).toBe(503);
@@ -1040,6 +1104,8 @@ describe("API v1 OpenAPI document", () => {
       coverSourceType: { type: ["string", "null"], enum: ["ai-placeholder", "chef-upload", "import", "spoon", null] },
       coverVariant: { type: ["string", "null"], enum: ["image", "stylized", null] },
     });
+    expect(components.schemas.RecipeSummary.properties).not.toHaveProperty("course");
+    expect(components.schemas.RecipeSummary.properties).not.toHaveProperty("tags");
     expect(components.schemas.RecipeDetail.required).toEqual([
       "id",
       "title",
@@ -1058,6 +1124,8 @@ describe("API v1 OpenAPI document", () => {
       "steps",
       "cookbooks",
     ]);
+    expect(components.schemas.RecipeDetail.properties).not.toHaveProperty("course");
+    expect(components.schemas.RecipeDetail.properties).not.toHaveProperty("tags");
     expect(components.schemas.ShoppingItem.required).toEqual([
       "id",
       "name",
@@ -1189,6 +1257,211 @@ describe("API v1 OpenAPI document", () => {
       },
     });
     expect(components.schemas.ArchiveRecipeCoverRequest.properties.coverId).toBeUndefined();
+  });
+
+  it("keeps base RecipeSummary and RecipeDetail properties exact", () => {
+    const { components } = buildApiV1OpenApiDocument();
+
+    expect(Object.keys(components.schemas.RecipeSummary.properties).sort()).toEqual([...RECIPE_SUMMARY_PROPERTIES].sort());
+    expect([...components.schemas.RecipeSummary.required].sort()).toEqual([...RECIPE_SUMMARY_PROPERTIES].sort());
+    expect(Object.keys(components.schemas.RecipeDetail.properties).sort()).toEqual([...RECIPE_DETAIL_PROPERTIES].sort());
+    expect([...components.schemas.RecipeDetail.required].sort()).toEqual([...RECIPE_DETAIL_PROPERTIES].sort());
+  });
+
+  it("defines exact read-only recipe summary properties", () => {
+    const { components } = buildApiV1OpenApiDocument();
+    const summary = components.schemas.RecipeReadSummary;
+
+    expect(summary).toBeDefined();
+    expect(summary.additionalProperties).toBe(false);
+    expect(Object.keys(summary.properties).sort()).toEqual([...RECIPE_SUMMARY_PROPERTIES, "course", "tags"].sort());
+    expect([...summary.required].sort()).toEqual([...RECIPE_SUMMARY_PROPERTIES, "course", "tags"].sort());
+    expect(summary.properties.course).toEqual({
+      type: ["string", "null"],
+      enum: ["main", "side", "appetizer", "dessert", null],
+    });
+    expect(summary.properties.tags).toEqual({ type: "array", items: { type: "string" } });
+  });
+
+  it("defines exact read-only recipe detail properties", () => {
+    const { components } = buildApiV1OpenApiDocument();
+    const detail = components.schemas.RecipeReadDetail;
+
+    expect(detail).toBeDefined();
+    expect(detail.additionalProperties).toBe(false);
+    expect(Object.keys(detail.properties).sort()).toEqual([...RECIPE_DETAIL_PROPERTIES, "course", "tags"].sort());
+    expect([...detail.required].sort()).toEqual([...RECIPE_DETAIL_PROPERTIES, "course", "tags"].sort());
+    expect(detail.properties.course).toEqual({
+      type: ["string", "null"],
+      enum: ["main", "side", "appetizer", "dessert", null],
+    });
+    expect(detail.properties.tags).toEqual({ type: "array", items: { type: "string" } });
+  });
+
+  it("uses RecipeRead schemas only from the two public recipe GET envelopes", () => {
+    const document = buildApiV1OpenApiDocument();
+    const allowed = new Map([
+      ["GET /api/v1/recipes", "RecipeReadSummary"],
+      ["GET /api/v1/recipes/{id}", "RecipeReadDetail"],
+    ]);
+    const observed = new Map<string, string[]>();
+
+    for (const [path, pathItem] of Object.entries(document.paths) as Array<[string, Record<string, any>]>) {
+      for (const [method, candidate] of Object.entries(pathItem)) {
+        if (!candidate?.responses) continue;
+        const operationName = `${method.toUpperCase()} ${path}`;
+        const operationReadSchemas = [...reachableComponentNames(document, candidate)]
+          .filter((name) => name === "RecipeReadSummary" || name === "RecipeReadDetail")
+          .sort();
+        const allowedSchema = allowed.get(operationName);
+        expect(operationReadSchemas, operationName).toEqual(allowedSchema ? [allowedSchema] : []);
+        const reached = new Set<string>();
+        for (const [status, response] of Object.entries(candidate.responses) as Array<[string, any]>) {
+          if (!status.startsWith("2")) continue;
+          const schema = response.content?.["application/json"]?.schema;
+          reachableComponentNames(document, schema).forEach((name) => reached.add(name));
+        }
+        const readSchemas = [...reached].filter((name) => name === "RecipeReadSummary" || name === "RecipeReadDetail");
+        if (readSchemas.length > 0) observed.set(operationName, readSchemas.sort());
+      }
+    }
+
+    expect([...observed.keys()].sort()).toEqual([...allowed.keys()].sort());
+    for (const [operationName, schemaName] of allowed) {
+      expect(observed.get(operationName)).toEqual([schemaName]);
+    }
+  });
+
+  it("keeps both public recipe GET request and response roots exact", () => {
+    const document = buildApiV1OpenApiDocument();
+    const operations = [
+      ["/api/v1/recipes", "RecipeListEnvelope"],
+      ["/api/v1/recipes/{id}", "RecipeDetailEnvelope"],
+    ] as const;
+
+    for (const [path, successEnvelope] of operations) {
+      const operation = document.paths[path].get;
+      expect(operation.requestBody, `GET ${path} request`).toBeUndefined();
+      for (const [status, response] of Object.entries(operation.responses) as Array<[string, any]>) {
+        const schema = response.content?.["application/json"]?.schema;
+        expect(schema, `GET ${path} ${status}`).toEqual({
+          $ref: `#/components/schemas/${status.startsWith("2") ? successEnvelope : "ErrorEnvelope"}`,
+        });
+        const reached = [...reachableComponentNames(document, schema)]
+          .filter((name) => name === "RecipeReadSummary" || name === "RecipeReadDetail");
+        if (!status.startsWith("2")) expect(reached, `GET ${path} ${status}`).toEqual([]);
+      }
+    }
+  });
+
+  it("keeps mutation, recovery, native, cookbook, and import schemas on base recipe serializers", () => {
+    const document = buildApiV1OpenApiDocument();
+    const detailConsumers = [
+      "CreateRecipeData",
+      "UpdateRecipeData",
+      "ForkRecipeData",
+      "CreateRecipeStepData",
+      "UpdateRecipeStepData",
+      "DeleteRecipeStepData",
+      "CreateRecipeStepIngredientData",
+      "DeleteRecipeStepIngredientData",
+      "ReorderRecipeStepData",
+      "ReplaceRecipeStepOutputUsesData",
+      "RecipeImportData",
+      "NativeSyncEntry",
+    ];
+
+    for (const name of detailConsumers) {
+      const reached = reachableComponentNames(document, document.components.schemas[name]);
+      expect([...reached], name).toContain("RecipeDetail");
+      expect([...reached], name).not.toContain("RecipeReadSummary");
+      expect([...reached], name).not.toContain("RecipeReadDetail");
+    }
+    const cookbookReached = reachableComponentNames(document, document.components.schemas.CookbookDetail);
+    expect([...cookbookReached]).toContain("RecipeSummary");
+    expect([...cookbookReached]).not.toContain("RecipeReadSummary");
+    expect([...cookbookReached]).not.toContain("RecipeReadDetail");
+
+    const operations = [
+      ["POST", "/api/v1/recipes", "CreateRecipeEnvelope", "CreateRecipeRequest"],
+      ["PATCH", "/api/v1/recipes/{id}", "UpdateRecipeEnvelope", "UpdateRecipeRequest"],
+      ["DELETE", "/api/v1/recipes/{id}", "DeleteRecipeEnvelope", "DeleteRecipeRequest"],
+      ["POST", "/api/v1/recipes/{id}/fork", "ForkRecipeEnvelope", "ForkRecipeRequest"],
+      ["POST", "/api/v1/recipes/import", "RecipeImportEnvelope", "RecipeImportRequest"],
+      ["POST", "/api/v1/recipes/{id}/steps", "CreateRecipeStepEnvelope", "CreateRecipeStepRequest"],
+      ["PATCH", "/api/v1/recipes/{id}/steps/{stepId}", "UpdateRecipeStepEnvelope", "UpdateRecipeStepRequest"],
+      ["DELETE", "/api/v1/recipes/{id}/steps/{stepId}", "DeleteRecipeStepEnvelope", "DeleteRecipeStepRequest"],
+      ["POST", "/api/v1/recipes/{id}/steps/reorder", "ReorderRecipeStepEnvelope", "ReorderRecipeStepRequest"],
+      ["POST", "/api/v1/recipes/{id}/steps/{stepId}/ingredients", "CreateRecipeStepIngredientEnvelope", "CreateRecipeStepIngredientRequest"],
+      ["DELETE", "/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}", "DeleteRecipeStepIngredientEnvelope", "DeleteRecipeStepIngredientRequest"],
+      ["PUT", "/api/v1/recipes/{id}/step-output-uses", "ReplaceRecipeStepOutputUsesEnvelope", "ReplaceRecipeStepOutputUsesRequest"],
+      ["GET", "/api/v1/me/sync", "NativeAccountSyncEnvelope", null],
+      ["GET", "/api/v1/cookbooks/{id}", "CookbookDetailEnvelope", null],
+      ["POST", "/api/v1/cookbooks/{id}/recipes/{recipeId}", "CookbookRecipeMutationEnvelope", "CookbookRecipeMutationRequest"],
+      ["DELETE", "/api/v1/cookbooks/{id}/recipes/{recipeId}", "CookbookRecipeRemoveEnvelope", "CookbookRecipeMutationRequest"],
+    ] as const;
+
+    for (const [method, path, envelope, requestSchema] of operations) {
+      const operation = document.paths[path][method.toLowerCase()];
+      const operationReached = reachableComponentNames(document, operation);
+      expect([...operationReached], `${method} ${path}`).not.toContain("RecipeReadSummary");
+      expect([...operationReached], `${method} ${path}`).not.toContain("RecipeReadDetail");
+      const requestBodySchema = operation.requestBody?.content?.["application/json"]?.schema;
+      expect(requestBodySchema, `${method} ${path} request`).toEqual(
+        requestSchema ? { $ref: `#/components/schemas/${requestSchema}` } : undefined,
+      );
+
+      for (const [status, response] of Object.entries(operation.responses) as Array<[string, any]>) {
+        const schema = response.content?.["application/json"]?.schema;
+        expect(schema, `${method} ${path} ${status}`).toEqual({
+          $ref: `#/components/schemas/${status.startsWith("2") ? envelope : "ErrorEnvelope"}`,
+        });
+        const responseReached = reachableComponentNames(document, schema);
+        expect([...responseReached], `${method} ${path} ${status}`).not.toContain("RecipeReadSummary");
+        expect([...responseReached], `${method} ${path} ${status}`).not.toContain("RecipeReadDetail");
+        if (status.startsWith("2")) {
+          const properties = reachablePropertyNames(document, schema);
+          expect([...properties], `${method} ${path} ${status}`).not.toContain("course");
+          expect([...properties], `${method} ${path} ${status}`).not.toContain("tags");
+          expect([...properties], `${method} ${path} ${status}`).not.toContain("isSaved");
+        }
+      }
+    }
+  });
+
+  it("defines exact recipe and non-recipe search metadata branches", () => {
+    const document = buildApiV1OpenApiDocument();
+    const metadata = document.components.schemas.SearchResult.properties.metadata;
+    expect(metadata.oneOf).toHaveLength(4);
+    const branches = metadata.oneOf.map((branch: any) => resolveSchema(document, branch));
+    const byKeys = new Map(branches.map((branch: any) => [Object.keys(branch.properties).sort().join(","), branch]));
+    const expected = [
+      [
+        "chefUsername", "cookbookTitles", "course", "coverProvenanceLabel", "coverSourceType",
+        "coverVariant", "ingredientNames", "servings", "stepCount", "tags",
+      ],
+      ["authorUsername", "recipeCount", "recipeTitles"],
+      ["cookbookCount", "recipeCount", "username"],
+      ["categoryKey", "checked", "iconKey", "quantity", "sortIndex", "unit"],
+    ];
+
+    for (const keys of expected) {
+      const branch = byKeys.get([...keys].sort().join(","));
+      expect(branch, keys.join(",")).toBeDefined();
+      expect(branch.additionalProperties).toBe(false);
+      expect([...branch.required].sort()).toEqual([...keys].sort());
+      expect(branch.properties).not.toHaveProperty("isSaved");
+    }
+    const recipeBranch = byKeys.get([...expected[0]].sort().join(","));
+    expect(recipeBranch.properties.course).toEqual({
+      type: ["string", "null"],
+      enum: ["main", "side", "appetizer", "dessert", null],
+    });
+    expect(recipeBranch.properties.tags).toEqual({ type: "array", items: { type: "string" } });
+    for (const branch of branches.filter((candidate: any) => candidate !== recipeBranch)) {
+      expect(branch.properties).not.toHaveProperty("course");
+      expect(branch.properties).not.toHaveProperty("tags");
+    }
   });
 
   it("declares exact Photo Studio schemas, examples, and idempotency metadata", () => {

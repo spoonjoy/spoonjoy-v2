@@ -11,6 +11,11 @@ import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
 
 const GENERATED_PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+const BASE_RECIPE_DETAIL_KEYS = [
+  "attribution", "canonicalUrl", "chef", "cookbooks", "coverImageUrl", "coverProvenanceLabel",
+  "coverSourceType", "coverVariant", "createdAt", "description", "href", "id", "servings", "steps",
+  "title", "updatedAt",
+] as const;
 
 function dataUrl(contentType: string, bytes: Uint8Array) {
   return `data:${contentType};base64,${Buffer.from(bytes).toString("base64")}`;
@@ -97,6 +102,14 @@ describe("API v1 native account sync", () => {
         ...createTestRecipe(user.id),
         title: `Native Sync Recipe ${faker.string.alphanumeric(8)}`,
         updatedAt: new Date("2026-06-01T10:00:00.000Z"),
+      },
+    });
+    await db.recipe.update({ where: { id: recipe.id }, data: { course: "main" } });
+    await db.recipeTag.create({
+      data: {
+        recipeId: recipe.id,
+        label: "Native Boundary",
+        normalizedLabel: "native boundary",
       },
     });
     await db.recipe.create({
@@ -221,6 +234,8 @@ describe("API v1 native account sync", () => {
         }),
       }),
     ]));
+    const recipeEntry = payload.data.entries.find((entry: { kind: string }) => entry.kind === "recipe");
+    expect(Object.keys(recipeEntry.payload).sort()).toEqual([...BASE_RECIPE_DETAIL_KEYS].sort());
   });
 
   it("keeps dense cookbook sync payloads summary-only", async () => {

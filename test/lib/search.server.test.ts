@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import { faker } from "@faker-js/faker";
 import { db } from "~/lib/db.server";
 import {
@@ -74,6 +75,22 @@ async function createShoppingItem(ownerId: string, name: string, checked: boolea
       iconKey: checked ? "bread" : "milk",
     },
   });
+}
+
+function sha256(value: string): string {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+async function sourceFingerprint() {
+  const rows = await db.$queryRawUnsafe<Array<{ sourceFingerprint: string }>>(
+    `SELECT "sourceFingerprint" FROM "SearchIndexMetadata" WHERE "id" = 'current' LIMIT 1`,
+  );
+  return JSON.parse(rows[0]!.sourceFingerprint) as Array<{
+    tableName: string;
+    rowCount: number;
+    latestAt: string | null;
+    contentHash: string | null;
+  }>;
 }
 
 describe("search.server", () => {
@@ -256,6 +273,276 @@ describe("search.server", () => {
     const results = await searchSpoonjoy(db, { query: "batchable", scope: "recipes", limit: 20 });
     expect(results).toHaveLength(12);
     expect(results.every((result) => result.type === "recipe")).toBe(true);
+  });
+
+  it("stores ordered neutral metadata only on active recipe search documents", async () => {
+    const chef = await createChef("metadatachef");
+    const recipe = await createSearchableRecipe(chef.id, "Metadata Citrus Noodles", "citrus");
+    await db.recipe.update({ where: { id: recipe.id }, data: { course: "side" } });
+    await db.recipeTag.createMany({
+      data: [
+        { id: "tag-search-accent", recipeId: recipe.id, label: "Accent Apple", normalizedLabel: "\u00e4pfel" },
+        { id: "tag-search-zebra", recipeId: recipe.id, label: "Zebra", normalizedLabel: "zebra" },
+      ],
+    });
+    const deleted = await db.recipe.create({
+      data: { title: "Deleted Metadata Noodles", chefId: chef.id, course: "dessert", deletedAt: new Date() },
+    });
+    await db.recipeTag.create({
+      data: { id: "tag-search-deleted", recipeId: deleted.id, label: "Deleted", normalizedLabel: "deleted" },
+    });
+
+    await rebuildSearchIndex(db);
+
+    const results = await searchSpoonjoy(db, { query: "metadata", scope: "all" });
+    const recipeResult = results.find((result) => result.type === "recipe");
+    expect(recipeResult).toBeDefined();
+    expect(Object.keys(recipeResult!.metadata).sort()).toEqual([
+      "chefUsername", "cookbookTitles", "course", "coverProvenanceLabel", "coverSourceType",
+      "coverVariant", "ingredientNames", "servings", "stepCount", "tags",
+    ].sort());
+    expect(recipeResult!.metadata).toMatchObject({ course: "side", tags: ["Zebra", "Accent Apple"] });
+
+    const rows = await db.$queryRawUnsafe<Array<{ entityId: string; metadata: string }>>(
+      `SELECT "entityId", "metadata" FROM "SearchDocument" WHERE "entityType" = 'recipe' ORDER BY "entityId" ASC`,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.entityId).toBe(recipe.id);
+    expect(JSON.parse(rows[0]!.metadata)).toEqual(recipeResult!.metadata);
+  });
+
+  it("stores null course and empty tags on recipe search documents", async () => {
+    const chef = await createChef("emptymetadatachef");
+    const recipe = await createSearchableRecipe(chef.id, "Empty Metadata Soup", "broth");
+
+    await rebuildSearchIndex(db);
+    const rows = await db.$queryRawUnsafe<Array<{ metadata: string }>>(
+      `SELECT "metadata" FROM "SearchDocument" WHERE "entityType" = 'recipe' AND "entityId" = ?`,
+      recipe.id,
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(JSON.parse(rows[0]!.metadata)).toMatchObject({ course: null, tags: [] });
+  });
+
+  it("fingerprints multiple active recipes and cross-recipe tags in canonical fixed-key order", async () => {
+    const fixedAt = new Date("2026-07-22T12:34:56.789Z");
+    const chef = await createChef("fingerprintchef");
+    const recipeZ = await db.recipe.create({
+      data: {
+        id: "recipe-z-fingerprint",
+        title: "Z Metadata Fingerprint Soup",
+        chefId: chef.id,
+        course: "main",
+        createdAt: fixedAt,
+        updatedAt: fixedAt,
+      },
+    });
+    const recipeA = await db.recipe.create({
+      data: {
+        id: "recipe-\u00e4-fingerprint",
+        title: "A Metadata Fingerprint Soup",
+        chefId: chef.id,
+        course: null,
+        createdAt: fixedAt,
+        updatedAt: fixedAt,
+      },
+    });
+    await db.recipeTag.createMany({
+      data: [
+        {
+          id: "tag-z-beta",
+          recipeId: recipeZ.id,
+          label: "Accent Apple",
+          normalizedLabel: "\u00e4pfel",
+          createdAt: fixedAt,
+          updatedAt: fixedAt,
+        },
+        {
+          id: "tag-a-zeta",
+          recipeId: recipeA.id,
+          label: "Zeta",
+          normalizedLabel: "zeta",
+          createdAt: fixedAt,
+          updatedAt: fixedAt,
+        },
+        {
+          id: "tag-a-alpha",
+          recipeId: recipeA.id,
+          label: "Alpha",
+          normalizedLabel: "alpha",
+          createdAt: fixedAt,
+          updatedAt: fixedAt,
+        },
+        {
+          id: "tag-z-alpha",
+          recipeId: recipeZ.id,
+          label: "Zebra",
+          normalizedLabel: "zebra",
+          createdAt: fixedAt,
+          updatedAt: fixedAt,
+        },
+      ],
+    });
+    const deleted = await db.recipe.create({
+      data: {
+        id: "recipe-metadata-deleted-fingerprint",
+        title: "Deleted Metadata Fingerprint",
+        chefId: chef.id,
+        course: "dessert",
+        deletedAt: fixedAt,
+        createdAt: fixedAt,
+        updatedAt: fixedAt,
+      },
+    });
+    await db.recipeTag.create({
+      data: {
+        id: "tag-fingerprint-deleted",
+        recipeId: deleted.id,
+        label: "Deleted",
+        normalizedLabel: "deleted",
+        createdAt: fixedAt,
+        updatedAt: fixedAt,
+      },
+    });
+
+    await rebuildSearchIndex(db);
+    const fingerprint = await sourceFingerprint();
+
+    expect(fingerprint.find((row) => row.tableName === "Recipe")?.contentHash).toBe(sha256(JSON.stringify([
+      { recipeId: recipeZ.id, course: "main" },
+      { recipeId: recipeA.id, course: null },
+    ])));
+    expect(fingerprint.find((row) => row.tableName === "RecipeTag")?.contentHash).toBe(sha256(JSON.stringify([
+      {
+        id: "tag-z-alpha",
+        recipeId: recipeZ.id,
+        label: "Zebra",
+        normalizedLabel: "zebra",
+        createdAt: fixedAt.toISOString(),
+        updatedAt: fixedAt.toISOString(),
+      },
+      {
+        id: "tag-z-beta",
+        recipeId: recipeZ.id,
+        label: "Accent Apple",
+        normalizedLabel: "\u00e4pfel",
+        createdAt: fixedAt.toISOString(),
+        updatedAt: fixedAt.toISOString(),
+      },
+      {
+        id: "tag-a-alpha",
+        recipeId: recipeA.id,
+        label: "Alpha",
+        normalizedLabel: "alpha",
+        createdAt: fixedAt.toISOString(),
+        updatedAt: fixedAt.toISOString(),
+      },
+      {
+        id: "tag-a-zeta",
+        recipeId: recipeA.id,
+        label: "Zeta",
+        normalizedLabel: "zeta",
+        createdAt: fixedAt.toISOString(),
+        updatedAt: fixedAt.toISOString(),
+      },
+    ])));
+  });
+
+  it("rebuilds after a same-timestamp course replacement", async () => {
+    const fixedAt = new Date("2026-07-22T13:00:00.000Z");
+    const chef = await createChef("substitutionchef");
+    const recipe = await db.recipe.create({
+      data: {
+        title: "Metadata Substitution Stew",
+        chefId: chef.id,
+        course: "main",
+        createdAt: fixedAt,
+        updatedAt: fixedAt,
+      },
+    });
+    await db.recipeTag.create({
+      data: {
+        recipeId: recipe.id,
+        label: "Weeknight",
+        normalizedLabel: "weeknight",
+        createdAt: fixedAt,
+        updatedAt: fixedAt,
+      },
+    });
+    await rebuildSearchIndex(db);
+
+    await db.$executeRawUnsafe(
+      `UPDATE "Recipe" SET "course" = 'side', "updatedAt" = ? WHERE "id" = ?`,
+      fixedAt,
+      recipe.id,
+    );
+    await ensureSearchIndexFresh(db);
+    await expect(searchSpoonjoy(db, { query: "metadata substitution", scope: "recipes" }))
+      .resolves.toMatchObject([{ id: recipe.id, metadata: { course: "side", tags: ["Weeknight"] } }]);
+  });
+
+  it("rebuilds after a same-timestamp display-label-only replacement", async () => {
+    const fixedAt = new Date("2026-07-22T13:10:00.000Z");
+    const chef = await createChef("labelsubstitutionchef");
+    const recipe = await db.recipe.create({
+      data: { title: "Display Label Substitution", chefId: chef.id, createdAt: fixedAt, updatedAt: fixedAt },
+    });
+    const tag = await db.recipeTag.create({
+      data: {
+        recipeId: recipe.id,
+        label: "Weeknight",
+        normalizedLabel: "weeknight",
+        createdAt: fixedAt,
+        updatedAt: fixedAt,
+      },
+    });
+    await rebuildSearchIndex(db);
+
+    await db.$executeRawUnsafe(
+      `UPDATE "RecipeTag" SET "label" = 'WEEKNIGHT', "updatedAt" = ? WHERE "id" = ?`,
+      fixedAt,
+      tag.id,
+    );
+    await ensureSearchIndexFresh(db);
+    await expect(searchSpoonjoy(db, { query: "display label substitution", scope: "recipes" }))
+      .resolves.toMatchObject([{ id: recipe.id, metadata: { tags: ["WEEKNIGHT"] } }]);
+  });
+
+  it("rebuilds after a same-timestamp normalized-label replacement", async () => {
+    const fixedAt = new Date("2026-07-22T13:20:00.000Z");
+    const chef = await createChef("normalizedsubstitutionchef");
+    const recipe = await db.recipe.create({
+      data: { title: "Normalized Label Substitution", chefId: chef.id, createdAt: fixedAt, updatedAt: fixedAt },
+    });
+    const target = await db.recipeTag.create({
+      data: {
+        recipeId: recipe.id,
+        label: "Beta Display",
+        normalizedLabel: "beta",
+        createdAt: fixedAt,
+        updatedAt: fixedAt,
+      },
+    });
+    await db.recipeTag.create({
+      data: {
+        recipeId: recipe.id,
+        label: "Alpha Display",
+        normalizedLabel: "alpha",
+        createdAt: fixedAt,
+        updatedAt: fixedAt,
+      },
+    });
+    await rebuildSearchIndex(db);
+
+    await db.$executeRawUnsafe(
+      `UPDATE "RecipeTag" SET "normalizedLabel" = 'aardvark', "updatedAt" = ? WHERE "id" = ?`,
+      fixedAt,
+      target.id,
+    );
+    await ensureSearchIndexFresh(db);
+    await expect(searchSpoonjoy(db, { query: "normalized label substitution", scope: "recipes" }))
+      .resolves.toMatchObject([{ id: recipe.id, metadata: { tags: ["Beta Display", "Alpha Display"] } }]);
   });
 
   it("reuses a fresh search index and rebuilds after source data changes", async () => {
