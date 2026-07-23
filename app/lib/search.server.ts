@@ -7,6 +7,7 @@ import type {
   RecipeCover,
   RecipeInCookbook,
   RecipeStep,
+  RecipeTag,
   Unit,
   User,
 } from "@prisma/client";
@@ -93,6 +94,20 @@ interface RecipeCoverFingerprintRow {
   archivedAt: Date | string | number | bigint | null;
 }
 
+interface RecipeMetadataFingerprintRow {
+  recipeId: string;
+  course: string | null;
+}
+
+interface RecipeTagFingerprintRow {
+  id: string;
+  recipeId: string;
+  label: string;
+  normalizedLabel: string;
+  createdAt: Date | string | number | bigint;
+  updatedAt: Date | string | number | bigint;
+}
+
 const DEFAULT_SEARCH_LIMIT = 20;
 const MAX_SEARCH_LIMIT = 50;
 const SEARCH_INSERT_COLUMN_COUNT = 11;
@@ -102,6 +117,7 @@ const SEARCH_METADATA_ID = "current";
 const SEARCH_SOURCE_TABLES = [
   { tableName: "User", countKey: "userCount", latestKey: "userLatestAt" },
   { tableName: "Recipe", countKey: "recipeCount", latestKey: "recipeLatestAt" },
+  { tableName: "RecipeTag", countKey: "recipeTagCount", latestKey: "recipeTagLatestAt" },
   { tableName: "RecipeCover", countKey: "recipeCoverCount", latestKey: "recipeCoverLatestAt" },
   { tableName: "RecipeStep", countKey: "recipeStepCount", latestKey: "recipeStepLatestAt" },
   { tableName: "Ingredient", countKey: "ingredientCount", latestKey: "ingredientLatestAt" },
@@ -150,8 +166,10 @@ const SEARCH_METADATA_SCHEMA_SQL = `CREATE TABLE IF NOT EXISTS "SearchIndexMetad
 const SEARCH_SOURCE_FINGERPRINT_SQL = `SELECT
   (SELECT COUNT(*) FROM "User") AS userCount,
   (SELECT MAX("updatedAt") FROM "User") AS userLatestAt,
-  (SELECT COUNT(*) FROM "Recipe") AS recipeCount,
-  (SELECT MAX("updatedAt") FROM "Recipe") AS recipeLatestAt,
+  (SELECT COUNT(*) FROM "Recipe" WHERE "deletedAt" IS NULL) AS recipeCount,
+  (SELECT MAX("updatedAt") FROM "Recipe" WHERE "deletedAt" IS NULL) AS recipeLatestAt,
+  (SELECT COUNT(*) FROM "RecipeTag" rt INNER JOIN "Recipe" r ON r."id" = rt."recipeId" WHERE r."deletedAt" IS NULL) AS recipeTagCount,
+  (SELECT MAX(rt."updatedAt") FROM "RecipeTag" rt INNER JOIN "Recipe" r ON r."id" = rt."recipeId" WHERE r."deletedAt" IS NULL) AS recipeTagLatestAt,
   (SELECT COUNT(*) FROM "RecipeCover") AS recipeCoverCount,
   (SELECT MAX("createdAt") FROM "RecipeCover") AS recipeCoverLatestAt,
   (SELECT COUNT(*) FROM "RecipeStep") AS recipeStepCount,
@@ -213,6 +231,10 @@ function compactText(parts: Array<string | null | undefined | false>): string {
 
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values)].sort((a, b) => a.localeCompare(b));
+}
+
+function compareCodeUnits(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function groupedBy<T>(items: T[], keyFor: (item: T) => string): Map<string, T[]> {
@@ -338,17 +360,73 @@ async function currentRecipeCoverContentHash(database: PrismaClient): Promise<st
   return `sha256:${await sha256Hex(payload)}`;
 }
 
+async function currentRecipeMetadataContentHashes(database: PrismaClient): Promise<{
+  recipe: string;
+  recipeTag: string;
+}> {
+  const [recipeRows, recipeTagRows] = await Promise.all([
+    database.$queryRawUnsafe<RecipeMetadataFingerprintRow[]>(
+      `SELECT
+          r."id" AS "recipeId",
+          r."course" AS "course"
+        FROM "Recipe" r
+        WHERE r."deletedAt" IS NULL
+        ORDER BY r."id" COLLATE BINARY ASC`,
+    ),
+    database.$queryRawUnsafe<RecipeTagFingerprintRow[]>(
+      `SELECT
+          rt."id" AS "id",
+          rt."recipeId" AS "recipeId",
+          rt."label" AS "label",
+          rt."normalizedLabel" AS "normalizedLabel",
+          rt."createdAt" AS "createdAt",
+          rt."updatedAt" AS "updatedAt"
+        FROM "RecipeTag" rt
+        INNER JOIN "Recipe" r ON r."id" = rt."recipeId"
+        WHERE r."deletedAt" IS NULL
+        ORDER BY
+          rt."recipeId" COLLATE BINARY ASC,
+          rt."normalizedLabel" COLLATE BINARY ASC,
+          rt."id" COLLATE BINARY ASC`,
+    ),
+  ]);
+  const recipePayload = JSON.stringify(recipeRows.map((row) => ({
+    recipeId: row.recipeId,
+    course: row.course,
+  })));
+  const recipeTagPayload = JSON.stringify(recipeTagRows.map((row) => ({
+    id: row.id,
+    recipeId: row.recipeId,
+    label: row.label,
+    normalizedLabel: row.normalizedLabel,
+    createdAt: aggregateDateString(row.createdAt),
+    updatedAt: aggregateDateString(row.updatedAt),
+  })));
+
+  return {
+    recipe: `sha256:${await sha256Hex(recipePayload)}`,
+    recipeTag: `sha256:${await sha256Hex(recipeTagPayload)}`,
+  };
+}
+
 async function searchSourceFingerprint(database: PrismaClient): Promise<string> {
-  const [rows, recipeCoverContentHash] = await Promise.all([
+  const [rows, recipeCoverContentHash, recipeMetadataContentHashes] = await Promise.all([
     database.$queryRawUnsafe<SearchSourceFingerprintRow[]>(SEARCH_SOURCE_FINGERPRINT_SQL),
     currentRecipeCoverContentHash(database),
+    currentRecipeMetadataContentHashes(database),
   ]);
   const row = rows[0]!;
   const normalizedRows = SEARCH_SOURCE_TABLES.map((sourceTable) => ({
     tableName: sourceTable.tableName,
     rowCount: toNumber(row[sourceTable.countKey] as number | bigint),
     latestAt: aggregateDateString(row[sourceTable.latestKey] as Date | string | number | bigint | null),
-    contentHash: sourceTable.tableName === "RecipeCover" ? recipeCoverContentHash : null,
+    contentHash: sourceTable.tableName === "Recipe"
+      ? recipeMetadataContentHashes.recipe
+      : sourceTable.tableName === "RecipeTag"
+        ? recipeMetadataContentHashes.recipeTag
+        : sourceTable.tableName === "RecipeCover"
+          ? recipeCoverContentHash
+          : null,
   }));
 
   return JSON.stringify(normalizedRows);
@@ -435,6 +513,9 @@ async function recipeDocuments(database: PrismaClient): Promise<SearchDocumentIn
     where: { deletedAt: null },
     orderBy: { id: "asc" },
   });
+  const tags = await database.recipeTag.findMany({
+    where: { recipe: { deletedAt: null } },
+  });
   const covers = await database.recipeCover.findMany();
   const steps = await database.recipeStep.findMany({
     orderBy: [{ recipeId: "asc" }, { stepNum: "asc" }],
@@ -458,6 +539,7 @@ async function recipeDocuments(database: PrismaClient): Promise<SearchDocumentIn
   const ingredientRefById = new Map(ingredientRefs.map((ingredientRef: IngredientRef) => [ingredientRef.id, ingredientRef]));
   const cookbookById = new Map(cookbooks.map((cookbook: Cookbook) => [cookbook.id, cookbook]));
   const cookbookLinksByRecipeId = groupedBy(recipeCookbooks, (link: RecipeInCookbook) => link.recipeId);
+  const tagsByRecipeId = groupedBy(tags, (tag: RecipeTag) => tag.recipeId);
 
   return recipes.map((recipe: Recipe) => {
     const chef = userById.get(recipe.chefId)!;
@@ -487,6 +569,11 @@ async function recipeDocuments(database: PrismaClient): Promise<SearchDocumentIn
         )
       )
     );
+    const tagLabels = [...(tagsByRecipeId.get(recipe.id) ?? [])]
+      .sort((left, right) =>
+        compareCodeUnits(left.normalizedLabel, right.normalizedLabel)
+        || compareCodeUnits(left.id, right.id))
+      .map((tag) => tag.label);
 
     const coverDisplay = getRecipeCoverDisplay(recipe, coversByRecipeId.get(recipe.id) ?? []);
 
@@ -510,6 +597,8 @@ async function recipeDocuments(database: PrismaClient): Promise<SearchDocumentIn
       metadata: {
         servings: recipe.servings,
         chefUsername: chef.username,
+        course: recipe.course,
+        tags: tagLabels,
         ingredientNames,
         stepCount: recipeSteps.length,
         cookbookTitles,
