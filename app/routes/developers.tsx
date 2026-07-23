@@ -597,6 +597,7 @@ export default function Developers() {
               {currentCapabilities.available.map((item) => <li key={item}>- {item}</li>)}
             </ul>
             <Text className="mt-3">Public recipe reads expose neutral <code>course</code> and ordered <code>tags</code> without personalized save state or an <code>isSaved</code> field.</Text>
+            <Text className="mt-3">Recipe detail supports read-time scaling with <code>{"GET /api/v1/recipes/{id}?scale=2"}</code> or MCP <code>{'get_recipe({ "id": "recipe_1", "scale": 2 })'}</code>. Scaled reads add <code>{'scale: { factor: 2, appliedTo: "ingredient_quantities", decimalPlaces: 6 }'}</code>; servings and stored values remain unchanged. Omit scale for the original response shape.</Text>
           </div>
           <div>
             <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">Not in v1 yet</p>

@@ -33,6 +33,8 @@ Available now:
 
 Public recipe reads expose neutral `course` and ordered `tags` without personalized save state or an `isSaved` field.
 
+Recipe detail can scale ingredient quantities at read time with `GET /api/v1/recipes/{id}?scale=2` or MCP `get_recipe({ "id": "recipe_1", "scale": 2 })`. A scaled response adds `scale: { "factor": 2, "appliedTo": "ingredient_quantities", "decimalPlaces": 6 }`; servings and stored values remain unchanged. Omit `scale` for the original response shape.
+
 Not in API v1 yet:
 
 - Recipe export endpoints beyond the current create, edit, delete, fork, import, step, spoon, and cover surfaces

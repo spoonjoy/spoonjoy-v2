@@ -163,6 +163,11 @@ const recipeCourseSchema: JsonSchema = {
 };
 
 const recipeTagsSchema: JsonSchema = arrayOf({ type: "string" });
+const recipeScaleSchema: JsonSchema = objectSchema(["factor", "appliedTo", "decimalPlaces"], {
+  factor: { type: "number", minimum: 0.1, maximum: 100 },
+  appliedTo: { type: "string", const: "ingredient_quantities" },
+  decimalPlaces: { type: "integer", const: 6 },
+});
 
 const searchResultRequired = [
   "type", "id", "ownerId", "ownerUsername", "title", "subtitle", "snippet", "href",
@@ -605,6 +610,7 @@ const schemas = {
     cookbooks: arrayOf(ref("CookbookLink")),
     course: recipeCourseSchema,
     tags: recipeTagsSchema,
+    scale: recipeScaleSchema,
   }),
   RecipeCover: objectSchema(["id", "recipeId", "status", "sourceType", "imageUrl", "stylizedImageUrl", "displayUrl", "activeVariant", "provenanceLabel", "archivedAt", "generationStatus", "sourceImageUrl", "createdAt"], {
     id: idSchema,
@@ -1469,6 +1475,7 @@ const queryParameters = {
   offset: { name: "offset", in: "query", required: false, description: "Zero-based offset for owner cover-history pagination.", schema: { type: "integer", minimum: 0, default: 0 } },
   includeArchived: { name: "includeArchived", in: "query", required: false, description: "Include archived cover rows in owner cover history.", schema: { type: "boolean", default: false } },
   clientMutationId: { name: "clientMutationId", in: "query", required: false, description: "Optional chef-wide idempotency key for DELETE retries when a client cannot send a JSON body.", schema: { type: "string", minLength: 1, maxLength: 160 } },
+  scale: { name: "scale", in: "query", required: false, description: "Scale ingredient quantities for this read without changing stored values or servings.", schema: { type: "number", minimum: 0.1, maximum: 100 } },
 };
 
 const deleteIdempotencyParameters = (...parameters: unknown[]) => [
@@ -1510,7 +1517,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
     POST: { operationId: "postApiV1Recipes", tags: ["Recipes"], summary: "Create a recipe", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "CreateRecipeEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "CreateRecipeRequest" },
   },
   "/api/v1/recipes/{id}": {
-    GET: { operationId: "getApiV1Recipe", tags: ["Recipes"], summary: "Read one public recipe", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeDetailEnvelope" }, errors: ["validation_error", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id] },
+    GET: { operationId: "getApiV1Recipe", tags: ["Recipes"], summary: "Read one public recipe", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeDetailEnvelope" }, errors: ["validation_error", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, queryParameters.scale] },
     PATCH: { operationId: "patchApiV1Recipe", tags: ["Recipes"], summary: "Update a recipe", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "UpdateRecipeEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "UpdateRecipeRequest" },
     DELETE: { operationId: "deleteApiV1Recipe", tags: ["Recipes"], summary: "Delete a recipe", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.id), requestBody: "DeleteRecipeRequest", requestBodyRequired: false },
   },
@@ -1715,6 +1722,21 @@ const exampleRecipeReadDetail = {
   ...exampleRecipeDetail,
   course: "main",
   tags: ["Weeknight"],
+};
+const exampleScaledRecipeReadDetail = {
+  ...exampleRecipeReadDetail,
+  steps: exampleRecipeReadDetail.steps.map((step) => ({
+    ...step,
+    ingredients: step.ingredients.map((ingredient) => ({
+      ...ingredient,
+      quantity: ingredient.quantity * 2,
+    })),
+  })),
+  scale: {
+    factor: 2,
+    appliedTo: "ingredient_quantities",
+    decimalPlaces: 6,
+  },
 };
 const exampleRecipeDetailAfterStepDelete = {
   ...exampleRecipeDetail,
@@ -3652,7 +3674,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
       const responses: Record<string, unknown> = {};
       const isSearchOperation = path === "/api/v1/search" && method === "GET";
       for (const [status, schemaName] of Object.entries(meta.success)) {
-        responses[status] = successResponse(schemaName, {
+        const response = successResponse(schemaName, {
           publicCache: method === "GET" && (
             path === "/api/v1/search" ||
             path === "/api/v1/recipes" ||
@@ -3664,6 +3686,15 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
           noStore: requirement.auth === "bearer",
           example: responseExampleFor(schemaName, path, method, meta.requestBody),
         });
+        responses[status] = path === "/api/v1/recipes/{id}" && method === "GET" && status === "200"
+          ? {
+              ...response,
+              content: jsonContentExamples(ref(schemaName), {
+                unscaled: responseExampleFor(schemaName, path, method, meta.requestBody),
+                scaled: { ok: true, requestId: "req_example", data: { recipe: exampleScaledRecipeReadDetail } },
+              }),
+            }
+          : response;
       }
       const errorScopes = isSearchOperation ? ["shopping_list:read"] : requirement.scopes;
       for (const [status, codes] of errorCodesByStatus(meta.errors)) {

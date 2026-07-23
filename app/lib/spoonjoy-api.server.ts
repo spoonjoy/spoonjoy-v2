@@ -22,6 +22,7 @@ import {
   startAgentConnection,
 } from "~/lib/agent-connection.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
+import { applyRecipeScale, parseMcpRecipeScale } from "~/lib/recipe-scale";
 import {
   archiveRecipeCover,
   clearActiveRecipeCover,
@@ -1659,12 +1660,19 @@ const getRecipeTool: SpoonjoyApiOperation = {
     properties: {
       id: { type: "string" },
       title: { type: "string" },
+      scale: {
+        type: "number",
+        minimum: 0.1,
+        maximum: 100,
+        description: "Scale ingredient quantities in this read without changing stored values or servings.",
+      },
     },
     additionalProperties: false,
   },
   async handle(args, context) {
+    const scale = parseMcpRecipeScale(args);
     const recipe = await findRecipeByIdOrTitle(context.db, args);
-    return json({ recipe: recipe ? formatRecipeRead(recipe) : null });
+    return json({ recipe: recipe ? applyRecipeScale(formatRecipeRead(recipe), scale) : null });
   },
 };
 

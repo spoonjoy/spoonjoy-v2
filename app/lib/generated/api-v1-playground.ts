@@ -2091,6 +2091,20 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           }
         },
         {
+          "name": "scale",
+          "in": "query",
+          "label": "Scale",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "scale",
+          "description": "Scale ingredient quantities for this read without changing stored values or servings.",
+          "schema": {
+            "type": "number",
+            "minimum": 0.1,
+            "maximum": 100
+          }
+        },
+        {
           "name": "X-Request-Id",
           "in": "header",
           "label": "X Request Id",
@@ -2151,9 +2165,15 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "responseExamples": [
         {
           "status": "200",
-          "name": "example",
-          "label": "Example",
+          "name": "unscaled",
+          "label": "Unscaled",
           "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Original photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 1,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ],\n      \"course\": \"main\",\n      \"tags\": [\n        \"Weeknight\"\n      ]\n    }\n  }\n}"
+        },
+        {
+          "status": "200",
+          "name": "scaled",
+          "label": "Scaled",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"recipe\": {\n      \"id\": \"recipe_1\",\n      \"title\": \"Pasta\",\n      \"description\": \"Weeknight pasta\",\n      \"servings\": \"4\",\n      \"chef\": {\n        \"id\": \"chef_1\",\n        \"username\": \"ari\"\n      },\n      \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n      \"coverProvenanceLabel\": \"Original photo\",\n      \"coverSourceType\": \"chef-upload\",\n      \"coverVariant\": \"image\",\n      \"href\": \"/recipes/recipe_1\",\n      \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n      \"attribution\": {\n        \"creditText\": \"Pasta by ari on Spoonjoy\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\",\n        \"sourceUrl\": \"https://example.com/original-pasta\",\n        \"sourceHost\": \"example.com\",\n        \"sourceRecipe\": null\n      },\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"steps\": [\n        {\n          \"id\": \"step_1\",\n          \"stepNum\": 1,\n          \"stepTitle\": null,\n          \"description\": \"Boil pasta.\",\n          \"duration\": null,\n          \"ingredients\": [\n            {\n              \"id\": \"ingredient_1\",\n              \"name\": \"pasta\",\n              \"quantity\": 2,\n              \"unit\": \"lb\"\n            }\n          ],\n          \"usingSteps\": []\n        },\n        {\n          \"id\": \"step_2\",\n          \"stepNum\": 2,\n          \"stepTitle\": \"Sauce\",\n          \"description\": \"Toss pasta with sauce.\",\n          \"duration\": 3,\n          \"ingredients\": [],\n          \"usingSteps\": [\n            {\n              \"id\": \"step_use_1\",\n              \"inputStepNum\": 2,\n              \"outputStepNum\": 1,\n              \"outputOfStep\": {\n                \"stepNum\": 1,\n                \"stepTitle\": null\n              }\n            }\n          ]\n        }\n      ],\n      \"cookbooks\": [\n        {\n          \"id\": \"cookbook_1\",\n          \"title\": \"Weeknights\",\n          \"href\": \"/cookbooks/cookbook_1\",\n          \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n        }\n      ],\n      \"course\": \"main\",\n      \"tags\": [\n        \"Weeknight\"\n      ],\n      \"scale\": {\n        \"factor\": 2,\n        \"appliedTo\": \"ingredient_quantities\",\n        \"decimalPlaces\": 6\n      }\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -2190,12 +2210,6 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "rate_limited",
           "label": "Rate Limited",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
-        },
-        {
-          "status": "500",
-          "name": "internal_error",
-          "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
         }
       ]
     },

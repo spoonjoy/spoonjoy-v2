@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { Request as UndiciRequest } from "undici";
 import { loader } from "~/routes/api.v1.$";
@@ -6,6 +6,7 @@ import { createApiCredential } from "~/lib/api-auth.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createCookbookTitle, createTestRecipe, createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
+import { expectConsoleError } from "../warning-policy";
 
 function routeArgs(request: Request, splat: string) {
   return { request, params: { "*": splat }, context: { cloudflare: { env: null } } } as any;
@@ -712,6 +713,50 @@ describe("API v1 public recipe reads", () => {
     });
     await expect(db.ingredient.findUniqueOrThrow({ where: { id: ingredient.id } }))
       .resolves.toMatchObject({ quantity: 1e308 });
+  });
+
+  it.each([
+    ["", "unscaled"],
+    ["?scale=2", "scaled"],
+  ])("keeps unrelated %s recipe serialization failures out of scale validation", async (query, requestLabel) => {
+    const fixture = await createRecipeFixture(db, "Api V1 Serializer Failure");
+    const originalToISOString = Date.prototype.toISOString;
+    const recipeCreatedAt = fixture.recipe.createdAt.getTime();
+    const serializationError = new Error("serializer internals must stay private");
+    const toISOString = vi.spyOn(Date.prototype, "toISOString").mockImplementation(function () {
+      if (this.getTime() === recipeCreatedAt) throw serializationError;
+      return originalToISOString.call(this);
+    });
+
+    try {
+      expectConsoleError("[api-v1] internal_error", {
+        requestId: `req_recipe_serializer_${requestLabel}`,
+        method: "GET",
+        path: `/api/v1/recipes/${fixture.recipe.id}`,
+        error: {
+          name: serializationError.name,
+          message: serializationError.message,
+          stack: serializationError.stack,
+        },
+      });
+      const response = await loader(routeArgs(new UndiciRequest(
+        `http://localhost/api/v1/recipes/${fixture.recipe.id}${query}`,
+        { headers: { "X-Request-Id": `req_recipe_serializer_${requestLabel}` } },
+      ) as unknown as Request, `recipes/${fixture.recipe.id}`));
+
+      expect(response.status).toBe(500);
+      await expect(readJson(response)).resolves.toEqual({
+        ok: false,
+        requestId: `req_recipe_serializer_${requestLabel}`,
+        error: {
+          code: "internal_error",
+          message: "Internal error",
+          status: 500,
+        },
+      });
+    } finally {
+      toISOString.mockRestore();
+    }
   });
 
   it("excludes deleted recipes and returns missing/deleted recipes as not_found", async () => {

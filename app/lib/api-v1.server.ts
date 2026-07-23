@@ -41,6 +41,7 @@ import {
   type SearchResult,
   type SearchScope,
 } from "~/lib/search.server";
+import { applyRecipeScale, parseRestRecipeScale, RecipeScaleError } from "~/lib/recipe-scale";
 import {
   createNativeRecipe,
   deleteNativeRecipe,
@@ -1821,13 +1822,33 @@ async function handleRecipeList(args: ApiV1RouteArgs, requestId: string, princip
 
 async function handleRecipeDetail(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal | null, id: string) {
   const db = await getRequestDb(args.context);
+  const url = new URL(args.request.url);
   const origin = publicContentOrigin(args);
+  let scale: number | undefined;
+  try {
+    scale = parseRestRecipeScale(url.searchParams);
+  } catch (error) {
+    if (error instanceof RecipeScaleError) {
+      throw new ApiV1Error("validation_error", error.message, { field: "scale" });
+    }
+    throw error;
+  }
   const recipe = await loadRecipeReadById(db, id);
   if (!recipe) {
     throw new ApiV1Error("not_found", "Recipe not found");
   }
 
-  return apiV1Success(requestId, { recipe: recipeReadDetail(recipe, origin) }, 200, principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders());
+  const formattedRecipe = recipeReadDetail(recipe, origin);
+  let scaledRecipe;
+  try {
+    scaledRecipe = applyRecipeScale(formattedRecipe, scale);
+  } catch (error) {
+    if (error instanceof RecipeScaleError) {
+      throw new ApiV1Error("validation_error", error.message, { field: "scale" });
+    }
+    throw error;
+  }
+  return apiV1Success(requestId, { recipe: scaledRecipe }, 200, principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders());
 }
 
 function objectBody(value: unknown, field: string): Record<string, unknown> {
