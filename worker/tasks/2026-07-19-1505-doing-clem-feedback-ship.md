@@ -358,10 +358,11 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Focused tests fail because the canonical service/cursor is absent.
 **Completed**: Commit `1a563a83` freezes 46 independently enumerated normalization, cursor, SQL, live SQLite, pagination, save, unsave, owner-isolation, and deletion contracts. The red run fails only because `app/lib/saved-recipes.server.ts` is absent; three harsh test-review rounds closed SQL grouping, true two-connection race synchronization, Unicode White_Space/category-C boundaries, cursor symmetry, mixed-lookahead validation, and bidirectional cookbook-independence gaps before converging.
 
-### ⬜ Unit 5.1b: Saved Service And Cursor - Implementation
+### ✅ Unit 5.1b: Saved Service And Cursor - Implementation
 **What**: Add `app/lib/saved-recipes.server.ts` with owner-scoped mutations, list query, cursor codec, and deletion rules.
 **Output**: One private SavedRecipe data/query service.
 **Acceptance**: Focused service tests, typecheck, and build pass.
+**Completed**: Commit `1cac98f0` implements the private owner-scoped SavedRecipe service, bounded literal-search SQL, strict canonical cursor codec, active-recipe save, and idempotent unsave. All 46 frozen service tests, warning-policy typecheck, production build, and diff hygiene pass; a fresh privacy/concurrency review converged with no BLOCKER or MAJOR finding.
 
 ### ⬜ Unit 5.1c: Saved Service And Cursor - Verification
 **What**: Reach 100% service/cursor coverage and obtain data/privacy review.
@@ -778,3 +779,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-22 22:21 Unit 4.2c complete: verification commit `d8e2cc11` closes unexpected-error and MCP-overflow transport coverage; the final committed tree passes 9,286 tests at exact 100% coverage, all clean gates, and converged API/test review.
 - 2026-07-22 23:26 Unit 4.3 complete: commit `b743b639` preserves every rejected-scope boundary with a 133-entry content manifest, 9 executable guards, a 446-test focused matrix, warning-clean typecheck, and five-round review convergence.
 - 2026-07-22 23:46 Unit 5.1a complete: commit `1a563a83` freezes the full red SavedRecipe query/cursor/mutation contract; the expected missing-service failure is isolated and three harsh review rounds converged.
+- 2026-07-23 00:00 Unit 5.1b complete: commit `1cac98f0` ships the private owner-scoped service; 46 focused tests, warning-clean typecheck/build, diff hygiene, and cold privacy/concurrency review pass.
