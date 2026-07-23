@@ -233,10 +233,6 @@ function uniqueSorted(values: string[]): string[] {
   return [...new Set(values)].sort((a, b) => a.localeCompare(b));
 }
 
-function compareCodeUnits(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-
 function groupedBy<T>(items: T[], keyFor: (item: T) => string): Map<string, T[]> {
   const groups = new Map<string, T[]>();
 
@@ -569,11 +565,12 @@ async function recipeDocuments(database: PrismaClient): Promise<SearchDocumentIn
         )
       )
     );
-    const tagLabels = [...(tagsByRecipeId.get(recipe.id) ?? [])]
-      .sort((left, right) =>
-        compareCodeUnits(left.normalizedLabel, right.normalizedLabel)
-        || compareCodeUnits(left.id, right.id))
-      .map((tag) => tag.label);
+    const recipeTags = tagsByRecipeId.get(recipe.id) ?? [];
+    const tagBySortKey = new Map(recipeTags.map((tag) => [
+      `${tag.normalizedLabel}\u0000${tag.id}`,
+      tag,
+    ]));
+    const tagLabels = [...tagBySortKey.keys()].sort().map((sortKey) => tagBySortKey.get(sortKey)!.label);
 
     const coverDisplay = getRecipeCoverDisplay(recipe, coversByRecipeId.get(recipe.id) ?? []);
 

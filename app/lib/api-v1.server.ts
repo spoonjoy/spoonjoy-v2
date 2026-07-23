@@ -1306,18 +1306,14 @@ function recipeSummary(recipe: RecipeSummaryRow, origin: string) {
   };
 }
 
-function compareCodeUnits(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-
 function recipeReadMetadata(recipe: RecipeReadMetadataRow) {
+  const tagBySortKey = new Map(recipe.tags.map((tag) => [
+    `${tag.normalizedLabel}\u0000${tag.id}`,
+    tag,
+  ]));
   return {
     course: recipe.course,
-    tags: [...recipe.tags]
-      .sort((left, right) =>
-        compareCodeUnits(left.normalizedLabel, right.normalizedLabel)
-        || compareCodeUnits(left.id, right.id))
-      .map((tag) => tag.label),
+    tags: [...tagBySortKey.keys()].sort().map((sortKey) => tagBySortKey.get(sortKey)!.label),
   };
 }
 
