@@ -370,10 +370,11 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Every cursor/query/error/boundary branch is covered and review converges.
 **Completed**: Commit `3c5b868c` closes every service branch at exact 100% coverage, replaces the deletion-racy read/upsert pair with one active-recipe `INSERT ... SELECT ... ON CONFLICT ... RETURNING` statement, proves immediate hard-delete cascade, captures the outgoing SQL/bind contract, and removes a random search-test collision. The final warning-clean app gate passes 9,345 tests at exact 100% coverage; typecheck, production build, boundary/telemetry ratchets, diff hygiene, and the repaired data/privacy review all converge. Evidence is recorded in `unit-5.1-verification.md`.
 
-### ⬜ Unit 5.2a: Saved REST API - Tests
+### ✅ Unit 5.2a: Saved REST API - Tests
 **What**: Add failing `test/routes/api-v1-saved-recipes.test.ts` plus existing API v1 OpenAPI/route-coverage/developer-doc tests for exact always-200 PUT/DELETE envelopes, stable row-existence/absence recovery after domain-write/idempotency-completion failure, exact same-request `replayed:false` versus later-request `replayed:true` semantics and later request ID, conflict/in-progress behavior, scopes, privacy, malformed semantic errors, cache headers, PUT soft-delete rejection, DELETE missing/soft/hard-delete idempotence, replay, and outgoing service inputs.
 **Output**: Red saved REST/OpenAPI/contract/docs adapter tests.
 **Acceptance**: Tests fail because the saved routes/contracts are absent.
+**Completed**: Commit `35abf80d` freezes the REST, scope, OpenAPI, generated-playground, and developer-documentation contract. The five-file red gate has 16 intended absent-feature failures and 22 passes; typecheck and the change-boundary ratchet pass warning-free. A cold local audit strengthened PUT/DELETE lifecycle coverage to use real missing, soft-deleted, hard-deleted, and cascaded database states after the fresh reviewer service hit its account-level quota. Evidence is recorded in `unit-5.2a-red.md`.
 
 ### ⬜ Unit 5.2b: Saved REST API - Implementation
 **What**: Add handlers in `app/lib/api-v1.server.ts`, operation/scope mapping in `app/lib/api-v1-contract.server.ts`, schemas/routes in `app/lib/api-v1-openapi.server.ts`, regenerated `app/lib/generated/api-v1-playground.ts`, and documentation in `docs/api.md` plus `app/routes/developers.tsx`, all using the saved service.
@@ -782,3 +783,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-22 23:46 Unit 5.1a complete: commit `1a563a83` freezes the full red SavedRecipe query/cursor/mutation contract; the expected missing-service failure is isolated and three harsh review rounds converged.
 - 2026-07-23 00:00 Unit 5.1b complete: commit `1cac98f0` ships the private owner-scoped service; 46 focused tests, warning-clean typecheck/build, diff hygiene, and cold privacy/concurrency review pass.
 - 2026-07-23 00:30 Unit 5.1c complete: commit `3c5b868c` reaches exact focused/full coverage, atomically linearizes save against deletion, proves cascade behavior and outgoing SQL, and passes all warning, build, boundary, telemetry, and cold data/privacy gates.
+- 2026-07-23 08:48 Unit 5.2a complete: commit `35abf80d` freezes 13 REST adapter tests plus OpenAPI, route-registration, playground, docs, and boundary assertions; all 16 failures are the intended absent feature, 22 surrounding checks and typecheck pass, and the locally repaired cold audit is recorded after the reviewer service reached its account quota.
