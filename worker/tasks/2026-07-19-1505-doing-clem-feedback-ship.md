@@ -334,10 +334,11 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Tests fail because the shared validator/scaler and arguments are absent.
 **Completed**: Commits `8d5e727d`, `89f61072`, and `d6fbf063` freeze 182 pure, REST, MCP, JSON-RPC, OpenAPI, generated-playground, and docs contracts. The final red matrix has 31 intended feature failures and 151 passing compatibility assertions; three cold review rounds closed factor-one/toFixed precision, multi-step deep preservation, duplicate-query, error-wording, and optional/exclusive MCP ownership gaps before converging.
 
-### ⬜ Unit 4.2b: Read-Time Scaling - Implementation
+### ✅ Unit 4.2b: Read-Time Scaling - Implementation
 **What**: Add the pure scaling helper and wire REST detail query plus MCP `get_recipe` argument without changing stored quantities or default responses. Add the bounded `scale` query parameter and optional response metadata to `RecipeReadDetail` in `app/lib/api-v1-openapi.server.ts`, regenerate `app/lib/generated/api-v1-playground.ts`, and update `docs/api.md` plus `app/routes/developers.tsx` with scaled and unscaled detail examples.
 **Output**: One read-only scaling contract across REST and MCP.
 **Acceptance**: Focused scaling/API/MCP/OpenAPI/playground/docs tests, two stable generations, typecheck, and build pass.
+**Completed**: Commit `e2953a18` adds the shared strict parser/scaler, REST and MCP read adapters, optional detail-only OpenAPI metadata, stable generated playground, docs, and focused desktop/mobile visual evidence. The seven scaling suites pass 222/222 warning-clean, typecheck/build and the post-commit generated-contract gate pass, repeated generation retains SHA-256 `2a6dad7a72cb438f88d35b41e1f3a2df3ea0fcd2751feb1709d7500ca1e4806f`, and fresh API plus visual reviews converge after an unrelated-serializer error-classification regression was frozen and fixed.
 
 ### ⬜ Unit 4.2c: Read-Time Scaling - Verification
 **What**: Reach 100% validation/rounding/serialization coverage and obtain API review.
@@ -770,3 +771,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-21 19:20 Unit 4.1a complete: commit `14fd8f0f` freezes 233 neutral-metadata and compatibility contracts with the exact 29-red/204-green split; typecheck is warning-clean and the fourth cold review converged.
 - 2026-07-21 20:50 Units 4.1b-4.1c complete: final implementation `50413dfd` passes the 235-test focused matrix, isolated 9,205-test exact-coverage gate, typecheck, stable generation, and production build; Galileo's three findings were fixed and fresh follow-up reviewer Hubble converged.
 - 2026-07-22 21:11 Unit 4.2a complete: commits `8d5e727d`, `89f61072`, and `d6fbf063` freeze the exact 182-test scaling contract with 31 intended feature failures, 151 passing compatibility assertions, fresh red evidence, and three cold review rounds ending in convergence.
+- 2026-07-22 21:40 Unit 4.2b complete: commit `e2953a18` ships strict read-time scaling across REST/MCP/OpenAPI/docs with 222 focused tests, warning-clean typecheck/build, deterministic generation, focused visual QA, and converged API/visual review.
