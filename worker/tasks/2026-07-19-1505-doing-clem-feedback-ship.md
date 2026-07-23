@@ -286,15 +286,17 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Focused tests fail because the deployed transitional service still performs read/update/retry and restores a tombstoned ID instead of using the final atomic partial-index statement.
 **Completed**: Commit `2ff6f338` freezes 92 focused cases across exact SQL/bindings, every merge/identity/clock boundary, real independent-connection concurrency, canonical local/D1 adapter output, result cardinality, authoritative created counts, and no retry. The 31 existing helper cases remain green; 61 cases are intentionally red only because the two final atomic exports do not exist. Warning-gated typecheck and diff check pass, and four harsh review rounds converged.
 
-### ⬜ Unit 3.1b: Atomic Shopping Service - Implementation
+### ✅ Unit 3.1b: Atomic Shopping Service - Implementation
 **What**: Replace the Unit 1.9 transitional runtime implementation in `app/lib/shopping-list-mutations.server.ts` with one bound SQLite `INSERT ... ON CONFLICT (shoppingListId,ingredientRefId,COALESCE('u:' || unitId,'n:')) WHERE deletedAt IS NULL DO UPDATE ... RETURNING` statement exactly matching the migrated expression index and product contract's owner account-global native-sync high-water, without schema detection or application retry. Preserve adapter outputs and each existing bulk transaction boundary; leave the seed-specific provisioner unchanged.
 **Output**: One database-linearized add/restore function.
 **Acceptance**: Service tests pass under local SQLite and the D1-compatible adapter; typecheck/build pass.
+**Completed**: Commit `f22f3bcd` replaces every deployed manual/recipe writer with one database-linearized partial-index upsert, preserves local/D1 transaction boundaries, isolates seed compatibility, and passes the exact local plus real-D1 matrices, typechecks, and production build.
 
-### ⬜ Unit 3.1c: Atomic Shopping Service - Verification
+### ✅ Unit 3.1c: Atomic Shopping Service - Verification
 **What**: Reach 100% service coverage and obtain SQL/concurrency review.
 **Output**: Coverage and reviewer evidence.
 **Acceptance**: Every quantity/state/conflict/error branch is covered and review converges.
+**Completed**: The final 383-file/9,168-test app gate and 44-test Workers gate are exact 100% with zero warnings. Fresh review converged after real-D1 CTE compatibility, strict decoder, seed ownership, meaningful metadata assertions, and non-add interleaving findings were closed. See `unit-3.1c-verification.md`.
 
 ### ⬜ Unit 3.2: Web And REST Shopping Verification
 **What**: Run the Unit 1.9 manual/recipe web and REST adapter contracts against the final Unit 3.1 service, including idempotency, exact outgoing inputs, fresh ordering, rollback, and byte-shape-compatible check/delete/clear responses. This is a verification-only unit; any defect receives a failing regression in its owning Unit 3.1 implementation before repair.
@@ -755,3 +757,5 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-22 02:44 Unit 2.2b complete: commit `bb8e0bb0` implements exact product schema/backfill/fences with no shopping or cook-state expansion; 45 focused, 121 migration, compiler/build, and 8,328-test exact-coverage gates pass, and cold data/migration review converged.
 - 2026-07-22 02:52 Unit 2.2c complete: new Node SQLite and isolated Wrangler D1 states agreed on the exact four-save product backfill, unchanged fixture data, fences, no cook state, and zero FK violations; both roots were deleted, 168 prior-Worker compatibility tests passed, and cold verification review converged.
 - 2026-07-22 03:35 Unit 2.3a complete: commit `ee9c864f` adds 84 executable migration tests and a real-D1 pre-activation matrix for all six deployed compatibility writers; 37 plus two red failures are exclusively the missing shopping repair/index, compiler and 157 existing writer/seed tests are clean, and harsh review converged after three rounds.
+- 2026-07-22 18:06 Unit 3.1b complete: commit `f22f3bcd` atomically linearizes all six deployed shopping add writers against the migrated partial expression index, removes runtime lookup/retry compatibility, and keeps seed-only recovery private.
+- 2026-07-22 18:06 Unit 3.1c complete: 9,168 app tests and 44 Workers tests pass at exact 100% coverage; typechecks/build are warning-clean, real Workerd D1 proves the final SQL, and fresh SQL/concurrency review converged.
