@@ -46,11 +46,59 @@ function extractResponseData(response: any): { data: any; status: number } {
   return { data: response, status: 200 };
 }
 
+const emptyRecipeDetailHeadersArgs = {
+  parentHeaders: new Headers(),
+  loaderHeaders: new Headers(),
+  actionHeaders: new Headers(),
+  errorHeaders: undefined,
+} as Parameters<typeof headers>[0];
+
 it("marks every recipe-detail route response private and credential-varying", () => {
-  const responseHeaders = new Headers(headers());
+  const responseHeaders = headers(emptyRecipeDetailHeadersArgs);
 
   expect(responseHeaders.get("Cache-Control")).toBe("private, no-store");
   expect(responseHeaders.get("Vary")).toBe("Authorization, Cookie");
+});
+
+it("preserves recipe-detail parent and response headers while composing privacy headers", () => {
+  const parentHeaders = new Headers({
+    "X-Parent": "kept",
+    Vary: "Accept-Encoding, Cookie",
+  });
+  parentHeaders.append("Set-Cookie", "parent=one; Path=/");
+  const loaderHeaders = new Headers({
+    "X-Loader": "kept",
+    Vary: "X-Recipe-Mode",
+  });
+  loaderHeaders.append("Set-Cookie", "loader=two; Path=/");
+  const actionHeaders = new Headers({ Location: "/recipes/after-action" });
+  actionHeaders.append("Set-Cookie", "action=three; Path=/");
+  const errorHeaders = new Headers({
+    "Retry-After": "7",
+    "X-Error": "kept",
+  });
+
+  const responseHeaders = headers({
+    parentHeaders,
+    loaderHeaders,
+    actionHeaders,
+    errorHeaders,
+  });
+
+  expect(responseHeaders.get("X-Parent")).toBe("kept");
+  expect(responseHeaders.get("X-Loader")).toBe("kept");
+  expect(responseHeaders.get("X-Error")).toBe("kept");
+  expect(responseHeaders.get("Location")).toBe("/recipes/after-action");
+  expect(responseHeaders.get("Retry-After")).toBe("7");
+  expect(responseHeaders.getSetCookie()).toEqual([
+    "parent=one; Path=/",
+    "loader=two; Path=/",
+    "action=three; Path=/",
+  ]);
+  expect(responseHeaders.get("Cache-Control")).toBe("private, no-store");
+  expect(responseHeaders.get("Vary")).toBe(
+    "Accept-Encoding, Cookie, X-Recipe-Mode, Authorization",
+  );
 });
 
 const PRODUCT_ACTIVATION_PENDING_RESPONSE = {

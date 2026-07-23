@@ -24,11 +24,31 @@ type SavedRecipe = {
   savedAt: string;
 };
 
-export function headers() {
-  return {
-    "Cache-Control": "private, no-store",
-    Vary: "Authorization, Cookie",
-  };
+export function headers({
+  parentHeaders,
+  loaderHeaders,
+  actionHeaders,
+  errorHeaders,
+}: Route.HeadersArgs) {
+  const responseHeaders = new Headers(parentHeaders);
+  for (const source of [loaderHeaders, actionHeaders, errorHeaders]) {
+    if (!source) continue;
+    for (const [name, value] of source) responseHeaders.append(name, value);
+  }
+
+  responseHeaders.set("Cache-Control", "private, no-store");
+  const varyTokens = (responseHeaders.get("Vary") ?? "")
+    .split(",")
+    .map((token) => token.trim())
+    .filter(Boolean);
+  for (const credentialHeader of ["Authorization", "Cookie"]) {
+    if (!varyTokens.some((token) => token.toLowerCase() === credentialHeader.toLowerCase())) {
+      varyTokens.push(credentialHeader);
+    }
+  }
+  responseHeaders.set("Vary", varyTokens.join(", "));
+
+  return responseHeaders;
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {

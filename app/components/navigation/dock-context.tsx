@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -131,18 +132,8 @@ export function useDockContext(): DockContextValue {
 
 export function useDockConfig(config: DockConfig | null): void {
   const { setConfig } = useDockContext();
-  const latestConfigRef = useRef(config);
+  const latestConfigRef = useRef<DockConfig | null>(null);
   const liveHandlersRef = useRef(new Map<string, () => void>());
-  latestConfigRef.current = config;
-  liveHandlersRef.current = new Map(
-    config
-      ? [config.left, config.primary, ...config.tools].flatMap((button) => (
-          typeof button.onAction === "function"
-            ? [[button.id, button.onAction] as const]
-            : []
-        ))
-      : [],
-  );
   const configKey = JSON.stringify(config
     ? {
         ariaLabel: config.ariaLabel ?? null,
@@ -160,6 +151,19 @@ export function useDockConfig(config: DockConfig | null): void {
         })),
       }
     : null);
+
+  useLayoutEffect(() => {
+    latestConfigRef.current = config;
+    liveHandlersRef.current = new Map(
+      config
+        ? [config.left, config.primary, ...config.tools].flatMap((button) => (
+            typeof button.onAction === "function"
+              ? [[button.id, button.onAction] as const]
+              : []
+          ))
+        : [],
+    );
+  }, [config]);
 
   useEffect(() => {
     const latestConfig = latestConfigRef.current;

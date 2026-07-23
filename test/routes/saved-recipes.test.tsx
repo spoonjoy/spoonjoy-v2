@@ -39,6 +39,61 @@ async function expectLoaderError(
   expect(await caught.text()).toBe(expectedMessage);
 }
 
+const emptySavedRecipesHeadersArgs = {
+  parentHeaders: new Headers(),
+  loaderHeaders: new Headers(),
+  actionHeaders: new Headers(),
+  errorHeaders: undefined,
+} as Parameters<typeof headers>[0];
+
+it("marks every saved-recipes route response private and credential-varying", () => {
+  const responseHeaders = headers(emptySavedRecipesHeadersArgs);
+
+  expect(responseHeaders.get("Cache-Control")).toBe("private, no-store");
+  expect(responseHeaders.get("Vary")).toBe("Authorization, Cookie");
+});
+
+it("preserves saved-recipes parent and response headers while composing privacy headers", () => {
+  const parentHeaders = new Headers({
+    "X-Parent": "kept",
+    Vary: "Accept-Encoding, Cookie",
+  });
+  parentHeaders.append("Set-Cookie", "parent=one; Path=/");
+  const loaderHeaders = new Headers({
+    "X-Loader": "kept",
+    Vary: "X-Saved-View",
+  });
+  loaderHeaders.append("Set-Cookie", "loader=two; Path=/");
+  const actionHeaders = new Headers({ Location: "/saved-recipes/after-action" });
+  actionHeaders.append("Set-Cookie", "action=three; Path=/");
+  const errorHeaders = new Headers({
+    "Retry-After": "11",
+    "X-Error": "kept",
+  });
+
+  const responseHeaders = headers({
+    parentHeaders,
+    loaderHeaders,
+    actionHeaders,
+    errorHeaders,
+  });
+
+  expect(responseHeaders.get("X-Parent")).toBe("kept");
+  expect(responseHeaders.get("X-Loader")).toBe("kept");
+  expect(responseHeaders.get("X-Error")).toBe("kept");
+  expect(responseHeaders.get("Location")).toBe("/saved-recipes/after-action");
+  expect(responseHeaders.get("Retry-After")).toBe("11");
+  expect(responseHeaders.getSetCookie()).toEqual([
+    "parent=one; Path=/",
+    "loader=two; Path=/",
+    "action=three; Path=/",
+  ]);
+  expect(responseHeaders.get("Cache-Control")).toBe("private, no-store");
+  expect(responseHeaders.get("Vary")).toBe(
+    "Accept-Encoding, Cookie, X-Saved-View, Authorization",
+  );
+});
+
 describe("Saved Recipes drawer route", () => {
   beforeEach(async () => {
     await cleanupDatabase();
@@ -46,13 +101,6 @@ describe("Saved Recipes drawer route", () => {
 
   afterEach(async () => {
     await cleanupDatabase();
-  });
-
-  it("marks every route response private and credential-varying", () => {
-    const responseHeaders = new Headers(headers());
-
-    expect(responseHeaders.get("Cache-Control")).toBe("private, no-store");
-    expect(responseHeaders.get("Vary")).toBe("Authorization, Cookie");
   });
 
   it("redirects unauthenticated cooks to login", async () => {
