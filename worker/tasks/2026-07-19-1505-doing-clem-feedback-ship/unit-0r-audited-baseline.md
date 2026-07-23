@@ -11,11 +11,17 @@
 - `origin/main` and merge base at branch creation: `d50b8ff5730c68597f6b80077df799927a56e3bf`
 - Product migration number: `0025_clem_feedback_product.sql`
 - Feedback source SHA-256: `6cfb65216c4387c1ced9d1c42a68952502ef0966495980403d84fe51e346d5f3`
-- Product/data contract SHA-256: `c0d1b4eb7f00315bafc293f71e0d223b066c3c8865fdcf613daf14c701ac8dcc`
+- Product/data contract SHA-256: `bf57163e073ed41968ad7b241a600f8797c8c417db7c25b314b50b850bf1374b`
 - Cook-session protocol SHA-256: `5014c400570d79d09e5d20c168df4c14dccd705db2a140afc0a24abe684d6e8a`
-- Feedback map SHA-256: `10d8c61cd755b1dc15d1303e46e0e83195ba35574fdd537f24e689484009de`
+- Feedback map SHA-256: `10d8c61cd755b1dc15d1303e46e0e0e83195ba35574fdd537f24e689484009de`
 
 The four authority hashes above cover, respectively, `2026-07-14-1313-clem-feedback-source.md`, `product-data-contract.md`, `cook-session-protocol-v1.md`, and `unit-0-feedback-map.md`. Later implementation may update planning/doing progress but must not silently mutate these authorities; a required contract correction receives a new reviewed hash and explicit supersession record.
+
+### Unit 4.3 Authority Reconciliation
+
+- The original product/data contract digest `c0d1b4eb7f00315bafc293f71e0d223b066c3c8865fdcf613daf14c701ac8dcc` is superseded by `bf57163e073ed41968ad7b241a600f8797c8c417db7c25b314b50b850bf1374b`. Reviewed commits `4d8379f2` and `2ff6f338` made the cutover recovery and atomic shopping statements executable and fail-closed; Unit 4.3 re-audited their resulting authority bytes rather than silently retaining the pre-correction digest.
+- The feedback-map bytes never changed after the Unit 1.7R authority commit. Its recorded digest omitted two hexadecimal characters; the corrected SHA-256 is `10d8c61cd755b1dc15d1303e46e0e0e83195ba35574fdd537f24e689484009de`, verified against both commit `756495e2` and the current file.
+- The feedback source and cook-session protocol digests remain unchanged. Unit 4.3's executable authority check now validates all four current files so another correction requires an explicit manifest update and review.
 
 ## Point-In-Time Execution Documents
 
