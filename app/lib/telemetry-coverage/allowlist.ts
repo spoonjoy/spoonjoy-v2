@@ -129,6 +129,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "Validation/draft-parse catch maps to a 4xx form error returned to the user; not an unexpected server exception.",
   },
   {
+    file: "app/lib/saved-recipes.server.ts",
+    category: "expected-4xx",
+    reason:
+      "Cursor decode catches malformed base64url, UTF-8, or JSON supplied by the client and converts it to the typed cursor validation error handled by the REST boundary; no server failure is swallowed.",
+  },
+  {
     file: "app/lib/spoonjoy-api-request.server.ts",
     category: "expected-4xx",
     reason:

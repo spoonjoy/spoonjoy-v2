@@ -97,6 +97,7 @@ describe("saved-recipes.server", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     await cleanupDatabase();
   });
 
@@ -153,6 +154,19 @@ describe("saved-recipes.server", () => {
       expect(result.tagQuery).toBe("i\u03071k");
       expect(normalize).toHaveBeenCalledTimes(1);
       expect(normalize).toHaveBeenCalledWith("NFKC");
+    });
+
+    it("rejects malformed runtime values and category-C introduced by normalization", () => {
+      expect(() => normalizeSavedRecipeQuery(42 as unknown as string))
+        .toThrow(SavedRecipeValidationError);
+
+      vi.spyOn(String.prototype, "normalize").mockReturnValue("tag\u0000");
+      try {
+        normalizeSavedRecipeQuery("tag");
+        throw new Error("expected validation failure");
+      } catch (error) {
+        expectValidation(error, "q");
+      }
     });
 
     it("escapes backslash, percent, and underscore as literal LIKE characters", () => {
@@ -279,6 +293,24 @@ describe("saved-recipes.server", () => {
         }
       }
     });
+
+    it("rejects defensive encoded cursor byte and character cap violations", () => {
+      vi.stubGlobal("TextEncoder", class {
+        encode() {
+          return new Uint8Array(1083);
+        }
+      });
+      expect(() => encodeSavedRecipesCursor({ savedAt: LATER, recipeId: "r" }))
+        .toThrow(SavedRecipeValidationError);
+
+      vi.unstubAllGlobals();
+      for (const encoded of ["", "A".repeat(1444)]) {
+        vi.stubGlobal("btoa", vi.fn(() => encoded));
+        expect(() => encodeSavedRecipesCursor({ savedAt: LATER, recipeId: "r" }))
+          .toThrow(SavedRecipeValidationError);
+        vi.unstubAllGlobals();
+      }
+    });
   });
 
   describe("bounded list query", () => {
@@ -374,6 +406,9 @@ describe("saved-recipes.server", () => {
         ...rows,
         { recipeId: "bad-lookahead", savedAt: "2026-07-21 10:00:00" },
       ]);
+      const invalidRecipeId = fakeRawDatabase([
+        { recipeId: null, savedAt: LATER },
+      ] as never);
 
       await expect(listSavedRecipes(exact.database, { userId: "owner" })).resolves.toEqual({
         query: "",
@@ -384,6 +419,8 @@ describe("saved-recipes.server", () => {
         .rejects.toMatchObject({ field: "savedAt" });
       await expect(listSavedRecipes(invalidLookahead.database, { userId: "owner" }))
         .rejects.toMatchObject({ field: "savedAt" });
+      await expect(listSavedRecipes(invalidRecipeId.database, { userId: "owner" }))
+        .rejects.toMatchObject({ field: "recipeId" });
     });
 
     it("applies owner scoping, active filtering, literal escaping, and ASCII-only LIKE folding", async () => {
@@ -421,6 +458,8 @@ describe("saved-recipes.server", () => {
       const owner = await createUser("saved_search_owner");
       const chef = await createUser("plain_chef");
       const matchingChef = await createUser("needle_chef");
+      await db.user.update({ where: { id: chef.id }, data: { username: "plain_chef_savedsearch" } });
+      await db.user.update({ where: { id: matchingChef.id }, data: { username: "needle_chef_savedsearch" } });
       const matches = await Promise.all([
         createRecipe({ chefId: chef.id, title: "Needle title" }),
         createRecipe({ chefId: chef.id, title: "Description", description: "needle description" }),
@@ -478,6 +517,26 @@ describe("saved-recipes.server", () => {
   });
 
   describe("save and unsave", () => {
+    it("sends one active-recipe insert-or-observe statement with exact bind order", async () => {
+      const query = vi.fn().mockResolvedValue([{ recipeId: "recipe_1", savedAt: LATER }]);
+
+      await expect(saveRecipe(
+        { $queryRawUnsafe: query } as never,
+        { userId: "owner_1", recipeId: "recipe_1", nowMs: Date.parse(LATER) },
+      )).resolves.toEqual({ recipeId: "recipe_1", savedAt: LATER });
+
+      expect(query).toHaveBeenCalledTimes(1);
+      const [sql, ...values] = query.mock.calls[0]!;
+      expect(sql.replace(/\s+/g, " ").trim()).toBe(
+        `INSERT INTO "SavedRecipe" ("userId", "recipeId", "savedAt") ` +
+        `SELECT ?, recipe."id", ? FROM "Recipe" AS recipe ` +
+        `WHERE recipe."id" = ? AND recipe."deletedAt" IS NULL ` +
+        `ON CONFLICT ("userId", "recipeId") DO UPDATE ` +
+        `SET "savedAt" = "SavedRecipe"."savedAt" RETURNING "recipeId", "savedAt"`,
+      );
+      expect(values).toEqual(["owner_1", LATER, "recipe_1"]);
+    });
+
     it("writes one canonical persisted winner and preserves it on idempotent and concurrent saves", async () => {
       const owner = await createUser("save_owner");
       const chef = await createUser("save_chef");
@@ -545,6 +604,34 @@ describe("saved-recipes.server", () => {
       }
     });
 
+    it("linearizes active-recipe enforcement against soft and hard deletion", async () => {
+      const owner = await createUser("save_delete_race_owner");
+      const soft = await createRecipe({ chefId: owner.id, title: "Soft race" });
+      const hard = await createRecipe({ chefId: owner.id, title: "Hard race" });
+
+      await expect(saveRecipe(
+        db,
+        { userId: owner.id, recipeId: soft.id, nowMs: Date.parse(LATER) },
+        {
+          beforePersist: async () => {
+            await db.recipe.update({ where: { id: soft.id }, data: { deletedAt: new Date(LATER) } });
+          },
+        },
+      )).rejects.toBeInstanceOf(SavedRecipeNotFoundError);
+      await expect(db.savedRecipe.count({ where: { recipeId: soft.id } })).resolves.toBe(0);
+
+      await expect(saveRecipe(
+        db,
+        { userId: owner.id, recipeId: hard.id, nowMs: Date.parse(LATER) },
+        {
+          beforePersist: async () => {
+            await db.recipe.delete({ where: { id: hard.id } });
+          },
+        },
+      )).rejects.toBeInstanceOf(SavedRecipeNotFoundError);
+      await expect(db.savedRecipe.count({ where: { recipeId: hard.id } })).resolves.toBe(0);
+    });
+
     it("rejects invalid write clocks before mutation", async () => {
       const owner = await createUser("save_clock_owner");
       const recipe = await createRecipe({ chefId: owner.id, title: "Clock" });
@@ -609,6 +696,9 @@ describe("saved-recipes.server", () => {
       await createSave(owner.id, hard.id, LATER);
       await db.recipe.update({ where: { id: soft.id }, data: { deletedAt: new Date(LATER) } });
       await db.recipe.delete({ where: { id: hard.id } });
+      await expect(db.savedRecipe.findUnique({
+        where: { userId_recipeId: { userId: owner.id, recipeId: hard.id } },
+      })).resolves.toBeNull();
 
       await expect(unsaveRecipe(db, { userId: owner.id, recipeId: soft.id }))
         .resolves.toEqual({ recipeId: soft.id });

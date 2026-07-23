@@ -14,7 +14,7 @@ const CURSOR_ALPHABET = /^[A-Za-z0-9_-]+$/;
 const CATEGORY_C = /\p{C}/u;
 const UNICODE_WHITESPACE = /\p{White_Space}+/gu;
 
-type SavedRecipesDatabase = Pick<PrismaClient, "$queryRawUnsafe" | "recipe" | "savedRecipe">;
+type SavedRecipesDatabase = Pick<PrismaClient, "$queryRawUnsafe" | "savedRecipe">;
 
 export type SavedRecipeCursor = {
   savedAt: string;
@@ -267,24 +267,24 @@ function canonicalSavedAt(nowMs: number) {
 }
 
 export async function saveRecipe(
-  database: Pick<SavedRecipesDatabase, "recipe" | "savedRecipe">,
+  database: Pick<SavedRecipesDatabase, "$queryRawUnsafe">,
   input: { userId: string; recipeId: string; nowMs: number },
   hooks: { beforePersist?: () => Promise<void> } = {},
 ) {
   const savedAt = canonicalSavedAt(input.nowMs);
-  const recipe = await database.recipe.findFirst({
-    where: { id: input.recipeId, deletedAt: null },
-    select: { id: true },
-  });
-  if (!recipe) throw new SavedRecipeNotFoundError(input.recipeId);
-
   await hooks.beforePersist?.();
-  const saved = await database.savedRecipe.upsert({
-    where: { userId_recipeId: { userId: input.userId, recipeId: input.recipeId } },
-    create: { userId: input.userId, recipeId: input.recipeId, savedAt },
-    update: {},
-    select: { recipeId: true, savedAt: true },
-  });
+  const [saved] = await database.$queryRawUnsafe<SavedRecipeListItem[]>(`
+    INSERT INTO "SavedRecipe" ("userId", "recipeId", "savedAt")
+    SELECT ?, recipe."id", ?
+    FROM "Recipe" AS recipe
+    WHERE recipe."id" = ?
+      AND recipe."deletedAt" IS NULL
+    ON CONFLICT ("userId", "recipeId") DO UPDATE
+      SET "savedAt" = "SavedRecipe"."savedAt"
+    RETURNING "recipeId", "savedAt"
+  `, input.userId, savedAt, input.recipeId);
+  if (!saved) throw new SavedRecipeNotFoundError(input.recipeId);
+
   return {
     recipeId: saved.recipeId,
     savedAt: validateCanonicalTimestamp(saved.savedAt, "savedAt"),
