@@ -1339,14 +1339,14 @@ describe("API v1 OpenAPI document", () => {
 
     expect(unscaled).not.toHaveProperty("scale");
     expect(unscaled.steps[0].ingredients[0].quantity).toBe(1);
-    expect(scaled).toMatchObject({
-      scale: {
-        factor: 2,
-        appliedTo: "ingredient_quantities",
-        decimalPlaces: 6,
-      },
-      steps: [{ ingredients: [{ quantity: 2 }] }],
+    expect(scaled.scale).toEqual({
+      factor: 2,
+      appliedTo: "ingredient_quantities",
+      decimalPlaces: 6,
     });
+    expect(scaled.steps).toHaveLength(unscaled.steps.length);
+    expect(scaled.steps[0].ingredients[0].quantity).toBe(2);
+    expect(scaled.steps[1]).toEqual(unscaled.steps[1]);
   });
 
   it("uses RecipeRead schemas only from the two public recipe GET envelopes", () => {
