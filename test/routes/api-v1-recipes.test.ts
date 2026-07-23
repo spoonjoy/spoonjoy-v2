@@ -4,6 +4,7 @@ import { Request as UndiciRequest } from "undici";
 import { loader } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { getLocalDb } from "~/lib/db.server";
+import * as recipeScale from "~/lib/recipe-scale";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createCookbookTitle, createTestRecipe, createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
 import { expectConsoleError } from "../warning-policy";
@@ -757,6 +758,65 @@ describe("API v1 public recipe reads", () => {
     } finally {
       toISOString.mockRestore();
     }
+  });
+
+  it("keeps unexpected scale-parser failures out of validation responses", async () => {
+    const parserError = new Error("unexpected scale parser failure");
+    vi.spyOn(recipeScale, "parseRestRecipeScale").mockImplementationOnce(() => {
+      throw parserError;
+    });
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_recipe_scale_parser_internal",
+      method: "GET",
+      path: "/api/v1/recipes/parser-fixture",
+      error: {
+        name: parserError.name,
+        message: parserError.message,
+        stack: parserError.stack,
+      },
+    });
+
+    const response = await loader(routeArgs(new UndiciRequest(
+      "http://localhost/api/v1/recipes/parser-fixture?scale=2",
+      { headers: { "X-Request-Id": "req_recipe_scale_parser_internal" } },
+    ) as unknown as Request, "recipes/parser-fixture"));
+
+    expect(response.status).toBe(500);
+    await expect(readJson(response)).resolves.toEqual({
+      ok: false,
+      requestId: "req_recipe_scale_parser_internal",
+      error: { code: "internal_error", message: "Internal error", status: 500 },
+    });
+  });
+
+  it("keeps unexpected scaling-adapter failures out of validation responses", async () => {
+    const fixture = await createRecipeFixture(db, "Api V1 Scale Adapter Failure");
+    const scalerError = new Error("unexpected scaling adapter failure");
+    vi.spyOn(recipeScale, "applyRecipeScale").mockImplementationOnce(() => {
+      throw scalerError;
+    });
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_recipe_scaler_internal",
+      method: "GET",
+      path: `/api/v1/recipes/${fixture.recipe.id}`,
+      error: {
+        name: scalerError.name,
+        message: scalerError.message,
+        stack: scalerError.stack,
+      },
+    });
+
+    const response = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}?scale=2`,
+      { headers: { "X-Request-Id": "req_recipe_scaler_internal" } },
+    ) as unknown as Request, `recipes/${fixture.recipe.id}`));
+
+    expect(response.status).toBe(500);
+    await expect(readJson(response)).resolves.toEqual({
+      ok: false,
+      requestId: "req_recipe_scaler_internal",
+      error: { code: "internal_error", message: "Internal error", status: 500 },
+    });
   });
 
   it("excludes deleted recipes and returns missing/deleted recipes as not_found", async () => {

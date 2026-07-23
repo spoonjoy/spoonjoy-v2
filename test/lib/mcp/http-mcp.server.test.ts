@@ -19,7 +19,7 @@ import { createApiCredential } from "~/lib/api-auth.server";
 import { CLAUDE_MCP_REDIRECT_URI } from "~/lib/oauth-server.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../../helpers/cleanup";
-import { createTestRecipe } from "../../utils";
+import { createTestRecipe, getOrCreateIngredientRef, getOrCreateUnit } from "../../utils";
 
 const CUTOVER_INSERT_TRIGGER = "SavedRecipe_cutover_block_membership_insert";
 const CUTOVER_DELETE_TRIGGER = "SavedRecipe_cutover_block_membership_delete";
@@ -426,6 +426,42 @@ describe("handleMcpHttpRequest", () => {
       id: 73,
       error: { code: -32602, message: expect.stringContaining("scale") },
     });
+  });
+
+  it("maps get_recipe scaling overflow to the existing MCP invalid-argument error", async () => {
+    const principal = await mintCredential({ scopes: ["recipes:read"] });
+    const recipe = await db.recipe.create({ data: createTestRecipe(principal.user.id) });
+    const step = await db.recipeStep.create({
+      data: { recipeId: recipe.id, stepNum: 1, description: "Mix" },
+    });
+    const unit = await getOrCreateUnit(db, "Cup");
+    const ingredientRef = await getOrCreateIngredientRef(db, `overflow flour ${faker.string.alphanumeric(8)}`);
+    const ingredient = await db.ingredient.create({
+      data: {
+        recipeId: recipe.id,
+        stepNum: step.stepNum,
+        quantity: 1e308,
+        unitId: unit.id,
+        ingredientRefId: ingredientRef.id,
+      },
+    });
+
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(init(74, "tools/call", {
+        name: "get_recipe",
+        arguments: { id: recipe.id, scale: 100 },
+      }), bearer(principal.token)),
+      db,
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      jsonrpc: "2.0",
+      id: 74,
+      error: { code: -32602, message: expect.stringContaining("scale") },
+    });
+    await expect(db.ingredient.findUniqueOrThrow({ where: { id: ingredient.id } }))
+      .resolves.toMatchObject({ quantity: 1e308 });
   });
 
   it("rejects OAuth tokens that are not audience-bound to the MCP resource", async () => {
