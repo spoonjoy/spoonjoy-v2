@@ -13,6 +13,7 @@ const CANONICAL_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const CURSOR_ALPHABET = /^[A-Za-z0-9_-]+$/;
 const CATEGORY_C = /\p{C}/u;
 const UNICODE_WHITESPACE = /\p{White_Space}+/gu;
+const SAVED_AT_TEXT_PREFIX = "saved-at:";
 
 type SavedRecipesDatabase = Pick<PrismaClient, "$queryRawUnsafe" | "savedRecipe">;
 
@@ -22,6 +23,11 @@ export type SavedRecipeCursor = {
 };
 
 export type SavedRecipeListItem = SavedRecipeCursor;
+
+type SavedRecipeRawRow = {
+  recipeId: string;
+  savedAtText: unknown;
+};
 
 export class SavedRecipeValidationError extends Error {
   readonly field: string;
@@ -96,6 +102,13 @@ function validateCanonicalTimestamp(value: unknown, field: string): string {
     validationError(field, `${field} must be a canonical UTC timestamp`);
   }
   return value;
+}
+
+function validateSavedAtText(value: unknown, field: string) {
+  if (typeof value !== "string" || !value.startsWith(SAVED_AT_TEXT_PREFIX)) {
+    validationError(field, `${field} must be a canonical UTC timestamp`);
+  }
+  return validateCanonicalTimestamp(value.slice(SAVED_AT_TEXT_PREFIX.length), field);
 }
 
 function validateCursorRecipeId(value: unknown): string {
@@ -173,14 +186,14 @@ function parseLimit(value: number | undefined) {
   return limit;
 }
 
-function validateStoredRows(rows: SavedRecipeListItem[]) {
+function validateStoredRows(rows: SavedRecipeRawRow[]) {
   return rows.map((row) => {
     if (!row || typeof row.recipeId !== "string") {
       validationError("recipeId", "Saved recipe row has an invalid recipeId");
     }
     return {
       recipeId: row.recipeId,
-      savedAt: validateCanonicalTimestamp(row.savedAt, "savedAt"),
+      savedAt: validateSavedAtText(row.savedAtText, "savedAt"),
     };
   });
 }
@@ -234,10 +247,10 @@ export async function listSavedRecipes(
     )` : "";
   if (cursor) values.push(cursor.savedAt, cursor.savedAt, cursor.recipeId);
 
-  const rows = await database.$queryRawUnsafe<SavedRecipeListItem[]>(`
+  const rows = await database.$queryRawUnsafe<SavedRecipeRawRow[]>(`
     SELECT
       saved."recipeId" AS "recipeId",
-      saved."savedAt" AS "savedAt"
+      CASE WHEN typeof(saved."savedAt") = 'text' THEN ('saved-at:' || saved."savedAt") END AS "savedAtText"
     FROM "SavedRecipe" AS saved
     INNER JOIN "Recipe" AS recipe ON recipe."id" = saved."recipeId"
     INNER JOIN "User" AS chef ON chef."id" = recipe."chefId"
@@ -273,7 +286,7 @@ export async function saveRecipe(
 ) {
   const savedAt = canonicalSavedAt(input.nowMs);
   await hooks.beforePersist?.();
-  const [saved] = await database.$queryRawUnsafe<SavedRecipeListItem[]>(`
+  const [saved] = await database.$queryRawUnsafe<SavedRecipeRawRow[]>(`
     INSERT INTO "SavedRecipe" ("userId", "recipeId", "savedAt")
     SELECT ?, recipe."id", ?
     FROM "Recipe" AS recipe
@@ -281,13 +294,16 @@ export async function saveRecipe(
       AND recipe."deletedAt" IS NULL
     ON CONFLICT ("userId", "recipeId") DO UPDATE
       SET "savedAt" = "SavedRecipe"."savedAt"
-    RETURNING "recipeId", "savedAt"
+    RETURNING "recipeId",
+      CASE WHEN typeof("savedAt") = 'text'
+        THEN ('saved-at:' || "savedAt")
+      END AS "savedAtText"
   `, input.userId, savedAt, input.recipeId);
   if (!saved) throw new SavedRecipeNotFoundError(input.recipeId);
 
   return {
     recipeId: saved.recipeId,
-    savedAt: validateCanonicalTimestamp(saved.savedAt, "savedAt"),
+    savedAt: validateSavedAtText(saved.savedAtText, "savedAt"),
   };
 }
 

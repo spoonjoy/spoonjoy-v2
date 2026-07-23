@@ -500,6 +500,8 @@ describe("Saved Recipes drawer route", () => {
     expect(screen.getByRole("link", { name: /saved toast/i })).toHaveAttribute("href", "/recipes/recipe-2");
     expect(screen.getByText("By maria")).toBeInTheDocument();
     expect(screen.getByText("Crisp and quick")).toBeInTheDocument();
+    expect(screen.getByText("By maria")).not.toHaveClass("line-clamp-2");
+    expect(screen.getByText("Crisp and quick")).not.toHaveClass("line-clamp-2");
     expect(screen.getByText("Serves 2")).toBeInTheDocument();
     expect(screen.queryByText(/cookbook/i)).not.toBeInTheDocument();
   });

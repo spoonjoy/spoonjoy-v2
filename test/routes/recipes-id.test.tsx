@@ -2476,6 +2476,7 @@ describe("Recipes $id Route", () => {
       expect(modalFooter.contains(screen.getByTestId("create-cookbook-button"))).toBe(true);
 
       expect(document.activeElement).toHaveTextContent("Add to Cookbook");
+      expect(document.activeElement).toHaveClass("focus:outline-none");
       expect(scrollToSpy).not.toHaveBeenCalled();
 
       await closeCookbookModal(user);

@@ -1120,7 +1120,9 @@ export default function RecipeDetail() {
         className="mb-24 max-h-[calc(100dvh-7.5rem)] overflow-hidden !rounded-[var(--sj-radius-surface)] !shadow-[var(--sj-shadow)] pb-[max(0.75rem,env(safe-area-inset-bottom))] data-enter:duration-200 data-enter:ease-out data-leave:duration-150 data-leave:ease-in data-closed:translate-y-4 data-enter:data-closed:translate-y-4 sm:mb-auto sm:max-h-[calc(100dvh-4rem)] sm:data-closed:translate-y-1"
       >
         <div className="flex max-h-full flex-col" data-testid="save-modal">
-          <DialogTitle ref={saveModalTitleRef} tabIndex={-1}>Add to Cookbook</DialogTitle>
+          <DialogTitle ref={saveModalTitleRef} tabIndex={-1} className="focus:outline-none">
+            Add to Cookbook
+          </DialogTitle>
           <DialogBody
             className="mt-4 min-h-0 flex-1 overflow-y-auto pb-3"
             data-testid="save-modal-body"

@@ -55,7 +55,10 @@ async function createSave(userId: string, recipeId: string, savedAt: string) {
 }
 
 function fakeRawDatabase(rows: Array<{ recipeId: string; savedAt: string }>) {
-  const query = vi.fn().mockResolvedValue(rows);
+  const query = vi.fn().mockResolvedValue(rows.map(({ recipeId, savedAt }) => ({
+    recipeId,
+    savedAtText: `saved-at:${savedAt}`,
+  })));
   return {
     database: { $queryRawUnsafe: query } as never,
     query,
@@ -326,6 +329,10 @@ describe("saved-recipes.server", () => {
 
       expect(SAVED_RECIPE_DEFAULT_LIMIT).toBe(24);
       expect(SAVED_RECIPE_MAX_LIMIT).toBe(24);
+      expect(sql).toContain(
+        `CASE WHEN typeof(saved."savedAt") = 'text' ` +
+        `THEN ('saved-at:' || saved."savedAt") END AS "savedAtText"`,
+      );
       expect(result.items).toEqual(rows.slice(0, 24));
       expect(result.nextCursor).toBe(encodeSavedRecipesCursor(rows[23]!));
       expect(sql).toMatch(/LIMIT 25\b/);
@@ -423,6 +430,16 @@ describe("saved-recipes.server", () => {
         .rejects.toMatchObject({ field: "recipeId" });
     });
 
+    it("rejects missing and non-string raw saved-at text envelopes", async () => {
+      for (const savedAtText of [LATER, new Date(LATER)]) {
+        const query = vi.fn().mockResolvedValue([{ recipeId: "recipe_1", savedAtText }]);
+        await expect(listSavedRecipes(
+          { $queryRawUnsafe: query } as never,
+          { userId: "owner" },
+        )).rejects.toMatchObject({ field: "savedAt" });
+      }
+    });
+
     it("applies owner scoping, active filtering, literal escaping, and ASCII-only LIKE folding", async () => {
       const owner = await createUser("saved_list_owner");
       const other = await createUser("saved_list_other");
@@ -518,7 +535,10 @@ describe("saved-recipes.server", () => {
 
   describe("save and unsave", () => {
     it("sends one active-recipe insert-or-observe statement with exact bind order", async () => {
-      const query = vi.fn().mockResolvedValue([{ recipeId: "recipe_1", savedAt: LATER }]);
+      const query = vi.fn().mockResolvedValue([{
+        recipeId: "recipe_1",
+        savedAtText: `saved-at:${LATER}`,
+      }]);
 
       await expect(saveRecipe(
         { $queryRawUnsafe: query } as never,
@@ -532,7 +552,9 @@ describe("saved-recipes.server", () => {
         `SELECT ?, recipe."id", ? FROM "Recipe" AS recipe ` +
         `WHERE recipe."id" = ? AND recipe."deletedAt" IS NULL ` +
         `ON CONFLICT ("userId", "recipeId") DO UPDATE ` +
-        `SET "savedAt" = "SavedRecipe"."savedAt" RETURNING "recipeId", "savedAt"`,
+        `SET "savedAt" = "SavedRecipe"."savedAt" RETURNING "recipeId", ` +
+        `CASE WHEN typeof("savedAt") = 'text' ` +
+        `THEN ('saved-at:' || "savedAt") END AS "savedAtText"`,
       );
       expect(values).toEqual(["owner_1", LATER, "recipe_1"]);
     });

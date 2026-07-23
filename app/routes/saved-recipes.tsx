@@ -143,6 +143,7 @@ export default function SavedRecipes() {
               title={recipe.title}
               subtitle={recipe.description ?? `By ${recipe.chef.username}`}
               stamp={recipe.servings ?? undefined}
+              allowSubtitleWrap
             />
           ))}
         </section>

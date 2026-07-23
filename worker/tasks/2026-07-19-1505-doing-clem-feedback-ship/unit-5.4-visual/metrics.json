@@ -1,0 +1,196 @@
+[
+  {
+    "state": "saved-empty",
+    "viewport": "desktop",
+    "innerWidth": 1440,
+    "innerHeight": 900,
+    "rootScrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "targets": []
+  },
+  {
+    "state": "saved-empty",
+    "viewport": "mobile",
+    "innerWidth": 390,
+    "innerHeight": 844,
+    "rootScrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "targets": []
+  },
+  {
+    "state": "recipe-controls-save-focused",
+    "viewport": "desktop",
+    "innerWidth": 1440,
+    "innerHeight": 900,
+    "rootScrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "targets": [
+      {
+        "name": "header save",
+        "width": 50.875,
+        "height": 44,
+        "x": 1136.078125,
+        "y": 137.5,
+        "focused": true
+      },
+      {
+        "name": "header cookbook",
+        "width": 91.515625,
+        "height": 44,
+        "x": 1206.953125,
+        "y": 137.5,
+        "focused": false
+      }
+    ]
+  },
+  {
+    "state": "recipe-controls-cookbook-focused",
+    "viewport": "desktop",
+    "innerWidth": 1440,
+    "innerHeight": 900,
+    "rootScrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "targets": [
+      {
+        "name": "header save",
+        "width": 60.34375,
+        "height": 44,
+        "x": 1136.078125,
+        "y": 137.5,
+        "focused": false
+      },
+      {
+        "name": "header cookbook",
+        "width": 91.515625,
+        "height": 44,
+        "x": 1216.421875,
+        "y": 137.5,
+        "focused": true
+      }
+    ]
+  },
+  {
+    "state": "recipe-cookbook-dialog",
+    "viewport": "desktop",
+    "innerWidth": 1440,
+    "innerHeight": 900,
+    "rootScrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "targets": []
+  },
+  {
+    "state": "recipe-controls-cookbook-focused",
+    "viewport": "mobile",
+    "innerWidth": 390,
+    "innerHeight": 844,
+    "rootScrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "targets": [
+      {
+        "name": "header save",
+        "width": 60.34375,
+        "height": 48,
+        "x": 136.484375,
+        "y": 392.828125,
+        "focused": false
+      },
+      {
+        "name": "header cookbook",
+        "width": 91.515625,
+        "height": 48,
+        "x": 216.828125,
+        "y": 392.828125,
+        "focused": true
+      },
+      {
+        "name": "dock save",
+        "width": 50,
+        "height": 50,
+        "x": 265,
+        "y": 769,
+        "focused": false
+      }
+    ]
+  },
+  {
+    "state": "recipe-cookbook-dialog",
+    "viewport": "mobile",
+    "innerWidth": 390,
+    "innerHeight": 844,
+    "rootScrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "targets": []
+  },
+  {
+    "state": "saved-populated",
+    "viewport": "desktop",
+    "innerWidth": 1440,
+    "innerHeight": 900,
+    "rootScrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "targets": []
+  },
+  {
+    "state": "saved-pagination",
+    "viewport": "desktop",
+    "innerWidth": 1440,
+    "innerHeight": 900,
+    "rootScrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "targets": [
+      {
+        "name": "next page",
+        "width": 76.109375,
+        "height": 44,
+        "x": 1323.890625,
+        "y": 808,
+        "focused": false
+      }
+    ]
+  },
+  {
+    "state": "saved-populated",
+    "viewport": "mobile",
+    "innerWidth": 390,
+    "innerHeight": 844,
+    "rootScrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "targets": []
+  },
+  {
+    "state": "saved-pagination",
+    "viewport": "mobile",
+    "innerWidth": 390,
+    "innerHeight": 844,
+    "rootScrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "targets": [
+      {
+        "name": "next page",
+        "width": 88.125,
+        "height": 46,
+        "x": 281.875,
+        "y": 606,
+        "focused": false
+      }
+    ]
+  },
+  {
+    "state": "saved-search",
+    "viewport": "desktop",
+    "innerWidth": 1440,
+    "innerHeight": 900,
+    "rootScrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "targets": []
+  },
+  {
+    "state": "saved-search",
+    "viewport": "mobile",
+    "innerWidth": 390,
+    "innerHeight": 844,
+    "rootScrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "targets": []
+  }
+]
