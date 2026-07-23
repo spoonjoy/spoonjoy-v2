@@ -82,7 +82,7 @@ async function columnExists(table: string, column: string): Promise<boolean> {
 async function ensureSchema() {
   await database().exec("PRAGMA foreign_keys = ON");
   if (!(await tableExists("User"))) {
-    await database().exec(`
+    await execute(`
       CREATE TABLE "User" (
         "id" TEXT NOT NULL PRIMARY KEY,
         "email" TEXT NOT NULL UNIQUE,
@@ -95,7 +95,7 @@ async function ensureSchema() {
   }
 
   if (!(await tableExists("Recipe"))) {
-    await database().exec(`
+    await execute(`
       CREATE TABLE "Recipe" (
         "id" TEXT NOT NULL PRIMARY KEY,
         "title" TEXT NOT NULL,
@@ -111,7 +111,7 @@ async function ensureSchema() {
     `);
     createdSchema.recipe = true;
   } else if (!(await columnExists("Recipe", "course"))) {
-    await database().exec(`
+    await execute(`
       ALTER TABLE "Recipe" ADD COLUMN "course" TEXT
       CHECK ("course" IS NULL OR "course" IN ('main','side','appetizer','dessert'))
     `);
@@ -119,7 +119,7 @@ async function ensureSchema() {
   }
 
   if (!(await tableExists("RecipeTag"))) {
-    await database().exec(`
+    await execute(`
       CREATE TABLE "RecipeTag" (
         "id" TEXT NOT NULL PRIMARY KEY,
         "recipeId" TEXT NOT NULL,
@@ -130,11 +130,11 @@ async function ensureSchema() {
         FOREIGN KEY ("recipeId") REFERENCES "Recipe"("id") ON DELETE CASCADE
       )
     `);
-    await database().exec(`
+    await execute(`
       CREATE UNIQUE INDEX "RecipeTag_recipeId_normalizedLabel_key"
       ON "RecipeTag"("recipeId", "normalizedLabel")
     `);
-    await database().exec(`
+    await execute(`
       CREATE INDEX "RecipeTag_normalizedLabel_recipeId_idx"
       ON "RecipeTag"("normalizedLabel", "recipeId")
     `);
@@ -233,7 +233,7 @@ describe("recipe tag native D1 atomicity", () => {
   });
 
   it("rolls back course, tags, and timestamps when a later native batch statement fails", async () => {
-    await database().exec(`
+    await execute(`
       CREATE TRIGGER "${ABORT_TRIGGER}"
       BEFORE INSERT ON "RecipeTag"
       WHEN NEW."recipeId" = '${RECIPE_ID}' AND NEW."normalizedLabel" = 'explode'

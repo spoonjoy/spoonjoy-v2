@@ -163,6 +163,12 @@ function successfulNativeResults(statements: CapturedD1Statement[]) {
   });
 }
 
+function successfulLocalResults(statements: CapturedD1Statement[]) {
+  return successfulNativeResults(statements).map((result, index) => (
+    index === 1 ? result.meta.changes : result.results
+  ));
+}
+
 function captureNativeDatabase(results: unknown[] = []) {
   const statements: CapturedD1Statement[] = [];
   const batch = vi.fn().mockResolvedValue(results);
@@ -845,6 +851,18 @@ describe("recipe-tags.server", () => {
       ]);
       expect(authoringUpdate.boundTimestamp).toBe(BOUND_NOW_TEXT);
       expect(nativeSyncUpdate.boundTimestamp).toBe(BOUND_NOW_TEXT);
+      expect(prepared.finalizeResults([
+        nativeResult([{ kind: "authoring-update" }]),
+        ...successfulNativeResults(native.statements),
+        nativeResult([{ kind: "native-sync-update" }]),
+      ], 1)).toEqual({
+        recipeId: "recipe_1",
+        course: "side",
+        tags: [
+          { id: "tag_1", label: "Quick", normalizedLabel: "quick" },
+          { id: "tag_2", label: "Weeknight", normalizedLabel: "weeknight" },
+        ],
+      });
     });
 
     it("prepares the same exact timestamped inventory as composable local Prisma operations", async () => {
@@ -939,6 +957,18 @@ describe("recipe-tags.server", () => {
       ]);
       await expect(authoringUpdate).resolves.toMatchObject({ boundTimestamp: BOUND_NOW_TEXT });
       await expect(nativeSyncUpdate).resolves.toMatchObject({ boundTimestamp: BOUND_NOW_TEXT });
+      expect(prepared.finalizeResults([
+        { kind: "authoring-update" },
+        ...successfulLocalResults(statements),
+        { kind: "native-sync-update" },
+      ], 1)).toEqual({
+        recipeId: "recipe_1",
+        course: "side",
+        tags: [
+          { id: "tag_1", label: "Quick", normalizedLabel: "quick" },
+          { id: "tag_2", label: "Weeknight", normalizedLabel: "weeknight" },
+        ],
+      });
     });
 
     it("uses one native D1 batch in production and validates its returned rows", async () => {
@@ -1069,6 +1099,44 @@ describe("recipe-tags.server", () => {
       }, { randomId: () => "tag_1" })).rejects.toBeInstanceOf(RecipeTagNotFoundError);
       expect(native.batch).toHaveBeenCalledOnce();
       expect(database.$transaction).not.toHaveBeenCalled();
+    });
+
+    it("validates every no-op result before classifying native or local replacement as not found", async () => {
+      const native = captureNativeDatabase();
+      native.batch.mockImplementation(async (statements: CapturedD1Statement[]) =>
+        statements.map((_, index) => nativeResult([], index === 1 ? 1 : 0))
+      );
+      const nativeDatabase = {
+        $queryRawUnsafe: vi.fn(),
+        $executeRawUnsafe: vi.fn(),
+        $transaction: vi.fn(),
+      } as unknown as PrismaClient;
+
+      const nativeFailure = await replaceRecipeTagMetadata({
+        database: nativeDatabase,
+        nativeDatabase: native.database,
+        userId: "owner_1",
+        recipeId: "recipe_1",
+        course: "side",
+        tags: ["Quick"],
+      }, { randomId: () => "tag_1" }).catch((error: unknown) => error);
+      expect(nativeFailure).toBeInstanceOf(Error);
+      expect(nativeFailure).not.toBeInstanceOf(RecipeTagNotFoundError);
+
+      const localDatabase = {
+        $queryRawUnsafe: vi.fn().mockResolvedValue([]),
+        $executeRawUnsafe: vi.fn().mockResolvedValue(1),
+        $transaction: vi.fn(async (operations: Array<Promise<unknown>>) =>
+          Promise.all(operations)),
+      } as unknown as PrismaClient;
+      const localFailure = await replaceLocally(localDatabase, {
+        userId: "owner_1",
+        recipeId: "recipe_1",
+        course: "side",
+        tags: ["Quick"],
+      }, { randomId: () => "tag_1" }).catch((error: unknown) => error);
+      expect(localFailure).toBeInstanceOf(Error);
+      expect(localFailure).not.toBeInstanceOf(RecipeTagNotFoundError);
     });
 
     it("exposes only complete old or replacement states across concurrent native batches", async () => {
