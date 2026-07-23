@@ -98,7 +98,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
     return { query: page.query, recipes, nextCursor: page.nextCursor };
   } catch (error) {
-    if (error instanceof SavedRecipeValidationError) {
+    if (
+      error instanceof SavedRecipeValidationError
+      && (error.field === "q" || error.field === "cursor")
+    ) {
       throw new Response(error.message, { status: 400 });
     }
     throw error;
@@ -168,6 +171,9 @@ export function ErrorBoundary() {
         <CookbookHeader eyebrow="My Kitchen" title="Saved Recipes unavailable">
           We could not load your saved recipes. Please try again.
         </CookbookHeader>
+        <div className="mt-4">
+          <Button href="/saved-recipes">Reset saved recipes view</Button>
+        </div>
       </div>
     </CookbookPage>
   );

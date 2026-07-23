@@ -21,6 +21,8 @@ export interface DockButton {
   ariaLabel?: string;
   onAction: DockActionHandler;
   active?: boolean;
+  disabled?: boolean;
+  ariaPressed?: boolean;
   tone?: "default" | "primary" | "danger" | "quiet";
   iconClassName?: string;
   labelClassName?: string;
@@ -144,6 +146,8 @@ export function useDockConfig(config: DockConfig | null): void {
           sublabel: button.sublabel ?? null,
           ariaLabel: button.ariaLabel ?? null,
           active: button.active ?? false,
+          disabled: button.disabled ?? false,
+          ariaPressed: button.ariaPressed ?? null,
           tone: button.tone ?? null,
           iconClassName: button.iconClassName ?? null,
           labelClassName: button.labelClassName ?? null,

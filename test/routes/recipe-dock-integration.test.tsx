@@ -147,8 +147,11 @@ describe('Recipe Page Dock Integration', () => {
       </MemoryRouter>,
     )
 
-    expect(capturedActions?.find(a => a.id === 'save')?.ariaLabel).toBe('Updating saved recipe')
-    capturedActions?.find(a => a.id === 'save')?.onAction?.()
+    expect(capturedActions?.find(a => a.id === 'save')).toMatchObject({
+      ariaLabel: 'Updating saved recipe',
+      disabled: true,
+      ariaPressed: true,
+    })
     expect(removeSaved).toHaveBeenCalledOnce()
   })
 

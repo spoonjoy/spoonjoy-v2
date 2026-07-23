@@ -384,6 +384,84 @@ describe("MobileNav", () => {
       expect(handleEdit).toHaveBeenCalledTimes(1);
     });
 
+    it("renders pending saved-recipe actions as disabled pressed toggles", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+
+      function RecipeDetailDock() {
+        useRecipeDetailActions({
+          recipeId: "recipe-1",
+          chefId: "chef-1",
+          isOwner: false,
+          isSaved: true,
+          isSavePending: true,
+          onSave,
+        });
+        return null;
+      }
+
+      render(
+        <MemoryRouter initialEntries={["/recipes/recipe-1"]}>
+          <DockContextProvider>
+            <RecipeDetailDock />
+            <MobileNav />
+          </DockContextProvider>
+        </MemoryRouter>,
+      );
+
+      const saveButton = screen.getByRole("button", { name: "Updating saved recipe" });
+      expect(saveButton).toBeDisabled();
+      expect(saveButton).toHaveAttribute("aria-disabled", "true");
+      expect(saveButton).toHaveAttribute("aria-pressed", "true");
+
+      await user.click(saveButton);
+      saveButton.focus();
+      await user.keyboard("{Enter} ");
+      expect(onSave).not.toHaveBeenCalled();
+    });
+
+    it("updates non-pending saved-recipe toggle semantics and remains operable", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+
+      function RecipeDetailDock({ isSaved }: { isSaved: boolean }) {
+        useRecipeDetailActions({
+          recipeId: "recipe-1",
+          chefId: "chef-1",
+          isOwner: false,
+          isSaved,
+          onSave,
+        });
+        return null;
+      }
+
+      function TestApp({ isSaved }: { isSaved: boolean }) {
+        return (
+          <MemoryRouter initialEntries={["/recipes/recipe-1"]}>
+            <DockContextProvider>
+              <RecipeDetailDock isSaved={isSaved} />
+              <MobileNav />
+            </DockContextProvider>
+          </MemoryRouter>
+        );
+      }
+
+      const { rerender } = render(<TestApp isSaved={false} />);
+      const unsavedButton = screen.getByRole("button", { name: "Save recipe" });
+      expect(unsavedButton).toBeEnabled();
+      expect(unsavedButton).toHaveAttribute("aria-pressed", "false");
+      expect(unsavedButton).not.toHaveAttribute("aria-disabled");
+      await user.click(unsavedButton);
+      expect(onSave).toHaveBeenCalledOnce();
+
+      rerender(<TestApp isSaved />);
+      const savedButton = screen.getByRole("button", { name: "Remove saved recipe" });
+      expect(savedButton).toBeEnabled();
+      expect(savedButton).toHaveAttribute("aria-pressed", "true");
+      await user.click(savedButton);
+      expect(onSave).toHaveBeenCalledTimes(2);
+    });
+
     it("falls back to route-aware root config when context is cleared", () => {
       const actions: DockAction[] = [
         { id: "back", icon: ArrowLeft, label: "Back", onAction: "/recipes", position: "left" },

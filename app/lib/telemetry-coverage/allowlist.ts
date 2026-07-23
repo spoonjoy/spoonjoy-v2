@@ -271,7 +271,7 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     file: "app/routes/saved-recipes.tsx",
     category: "expected-4xx",
     reason:
-      "The loader catch maps only typed query/cursor validation failures from client-supplied URL parameters to 400; every unexpected database or hydration failure is rethrown to the framework error boundary.",
+      "The loader catch maps only SavedRecipeValidationError fields q and cursor from client-supplied URL parameters to 400; persisted-row validation fields recipeId and savedAt, plus unexpected database or hydration failures, rethrow to the framework error boundary.",
   },
 
   // --- owned by the parallel LLM-telemetry workstream ---

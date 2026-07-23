@@ -69,7 +69,7 @@ describe('Recipe Dock Actions', () => {
       expect(capturedActions?.find(a => a.id === 'recipe-back')?.onAction).toBe('/recipes')
     })
 
-    it('exposes saved state semantics and blocks the save callback while pending', () => {
+    it('exposes saved toggle and pending semantics while retaining the live callback', () => {
       const onSave = vi.fn()
       const { rerender } = render(
         <MemoryRouter>
@@ -85,6 +85,8 @@ describe('Recipe Dock Actions', () => {
         label: 'Saved',
         ariaLabel: 'Remove saved recipe',
         active: true,
+        disabled: false,
+        ariaPressed: true,
       })
       saveAction?.onAction?.()
       expect(onSave).toHaveBeenCalledOnce()
@@ -103,9 +105,23 @@ describe('Recipe Dock Actions', () => {
         label: 'Saved',
         ariaLabel: 'Updating saved recipe',
         active: true,
+        disabled: true,
+        ariaPressed: true,
       })
       saveAction?.onAction?.()
-      expect(onSave).toHaveBeenCalledOnce()
+      expect(onSave).toHaveBeenCalledTimes(2)
+    })
+
+    it('exposes an enabled, unpressed save toggle before the recipe is saved', () => {
+      render(<MemoryRouter><DockContextProvider><ContextDisplay /><RecipeDetailPage recipeId="123" chefId="chef-1" isOwner={false} /></DockContextProvider></MemoryRouter>)
+
+      expect(capturedActions?.find(a => a.id === 'save')).toMatchObject({
+        label: 'Save',
+        ariaLabel: 'Save recipe',
+        active: false,
+        disabled: false,
+        ariaPressed: false,
+      })
     })
 
     it('clears the contextual dock while recipe management is expanded', () => {

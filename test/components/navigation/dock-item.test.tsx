@@ -93,6 +93,45 @@ describe('DockItem', () => {
       fireEvent.click(link)
       expect(onClick).toHaveBeenCalledTimes(1)
     })
+
+    it('renders action buttons with explicit toggle semantics', () => {
+      const onClick = vi.fn()
+      render(
+        <RouterWrapper>
+          <DockItem icon={Home} label="Save recipe" onClick={onClick} ariaPressed={false} />
+        </RouterWrapper>
+      )
+
+      const button = screen.getByRole('button', { name: 'Save recipe' })
+      expect(button).toBeEnabled()
+      expect(button).toHaveAttribute('aria-pressed', 'false')
+      expect(button).not.toHaveAttribute('aria-disabled')
+      fireEvent.click(button)
+      expect(onClick).toHaveBeenCalledOnce()
+    })
+
+    it('makes pending action buttons natively and accessibly disabled', () => {
+      const onClick = vi.fn()
+      render(
+        <RouterWrapper>
+          <DockItem
+            icon={Home}
+            label="Updating saved recipe"
+            onClick={onClick}
+            disabled
+            ariaPressed
+          />
+        </RouterWrapper>
+      )
+
+      const button = screen.getByRole('button', { name: 'Updating saved recipe' })
+      expect(button).toBeDisabled()
+      expect(button).toHaveAttribute('aria-disabled', 'true')
+      expect(button).toHaveAttribute('aria-pressed', 'true')
+      expect(button.className).toContain('disabled:cursor-not-allowed')
+      fireEvent.click(button)
+      expect(onClick).not.toHaveBeenCalled()
+    })
   })
 
   describe('active state', () => {

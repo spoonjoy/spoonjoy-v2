@@ -265,6 +265,54 @@ describe('DockContext', () => {
       expect(screen.getByTestId('legacy-action-count')).toHaveTextContent('0')
     })
 
+    it('publishes disabled and pressed state changes as semantic config updates', () => {
+      function TestPage({ disabled, ariaPressed }: { disabled: boolean; ariaPressed: boolean }) {
+        useDockConfig({
+          left: { id: 'back', icon: ArrowLeft, label: 'Back', onAction: '/recipes' },
+          primary: { id: 'save', icon: Edit, label: 'Save', onAction: vi.fn() },
+          tools: [{
+            id: 'toggle',
+            icon: Share,
+            label: 'Toggle',
+            onAction: vi.fn(),
+            disabled,
+            ariaPressed,
+          }],
+          variant: 'context',
+        })
+        return null
+      }
+
+      function TestApp({ disabled, ariaPressed }: { disabled: boolean; ariaPressed: boolean }) {
+        const toggle = useDockContext().config?.tools[0]
+        return (
+          <>
+            <div data-testid="toggle-disabled">{String(toggle?.disabled)}</div>
+            <div data-testid="toggle-pressed">{String(toggle?.ariaPressed)}</div>
+            <TestPage disabled={disabled} ariaPressed={ariaPressed} />
+          </>
+        )
+      }
+
+      const { rerender } = render(
+        <DockContextProvider>
+          <TestApp disabled={false} ariaPressed={false} />
+        </DockContextProvider>,
+      )
+
+      expect(screen.getByTestId('toggle-disabled')).toHaveTextContent('false')
+      expect(screen.getByTestId('toggle-pressed')).toHaveTextContent('false')
+
+      rerender(
+        <DockContextProvider>
+          <TestApp disabled ariaPressed />
+        </DockContextProvider>,
+      )
+
+      expect(screen.getByTestId('toggle-disabled')).toHaveTextContent('true')
+      expect(screen.getByTestId('toggle-pressed')).toHaveTextContent('true')
+    })
+
     it('keeps live handlers on the last committed config while a replacement render is suspended', () => {
       const committedHandler = vi.fn()
       const suspendedHandler = vi.fn()

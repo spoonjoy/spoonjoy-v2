@@ -318,7 +318,7 @@ describe("Clem feedback rejected-scope boundaries", () => {
     expect(candidateChanges()).toEqual(manifest.entries);
   });
 
-  it("limits navigation iteration to the demonstrated saved-dock defect", () => {
+  it("limits navigation iteration to the demonstrated saved-dock defects", () => {
     const changedNavigation = git(
       "diff",
       "--name-only",
@@ -330,6 +330,7 @@ describe("Clem feedback rejected-scope boundaries", () => {
     );
     expect(changedNavigation).toBe([
       "app/components/navigation/dock-context.tsx",
+      "app/components/navigation/dock-item.tsx",
       "app/components/navigation/use-recipe-dock-actions.tsx",
     ].join("\n"));
   });

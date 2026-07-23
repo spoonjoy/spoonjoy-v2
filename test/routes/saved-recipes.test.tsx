@@ -5,6 +5,7 @@ import { db } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { headers, loader } from "~/routes/saved-recipes";
 import SavedRecipes from "~/routes/saved-recipes";
+import { SavedRecipeValidationError } from "~/lib/saved-recipes.server";
 import { createTestRoutesStub } from "../utils";
 import {
   createDrawerRecipe,
@@ -355,6 +356,34 @@ describe("Saved Recipes drawer route", () => {
     }
   });
 
+  it("rethrows persisted saved-row validation failures instead of reporting a client 400", async () => {
+    const viewer = await createDrawerUser("saved-malformed-row");
+    const chef = await createDrawerUser("saved-malformed-row-chef");
+    const recipe = await createDrawerRecipe({
+      chefId: chef.id,
+      title: "Malformed Saved Row",
+    });
+    await db.savedRecipe.create({
+      data: {
+        userId: viewer.id,
+        recipeId: recipe.id,
+        savedAt: "not-a-canonical-timestamp",
+      },
+    });
+
+    await expect(loader(routeArgs(new UndiciRequest(
+      "http://localhost:3000/saved-recipes",
+      { headers: await sessionHeaders(viewer.id) },
+    ) as unknown as Request))).rejects.toSatisfy((error: unknown) => {
+      expect(error).toBeInstanceOf(SavedRecipeValidationError);
+      expect(error).toMatchObject({
+        field: "savedAt",
+        message: "savedAt must be a canonical UTC timestamp",
+      });
+      return true;
+    });
+  });
+
   it("renders a useful saved-recipes failure state", async () => {
     const routeModule = await import("~/routes/saved-recipes");
     const routeErrorBoundary = (
@@ -380,6 +409,10 @@ describe("Saved Recipes drawer route", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/saved recipes/i);
     expect(alert).toHaveTextContent(/try again/i);
+    expect(screen.getByRole("link", { name: "Reset saved recipes view" })).toHaveAttribute(
+      "href",
+      "/saved-recipes",
+    );
   });
 
   it("renders an independent empty state without cookbook copy or pagination when nextCursor is omitted", async () => {

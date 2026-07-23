@@ -61,7 +61,9 @@ export function useRecipeDetailActions({
           ? "Remove saved recipe"
           : "Save recipe",
       active: isSaved,
-      onAction: isSavePending ? (() => {}) : onSave || (() => {}),
+      disabled: isSavePending,
+      ariaPressed: isSaved,
+      onAction: onSave || (() => {}),
     };
 
     const editAction = {
