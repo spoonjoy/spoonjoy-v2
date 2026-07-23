@@ -2822,6 +2822,13 @@ describe("Recipes $id Route", () => {
         },
         message: "Unable to save recipe. Please try again.",
       },
+      {
+        response: {
+          success: false,
+          error: { code: "unexpected_saved_recipe_error" },
+        },
+        message: "Unable to update saved recipe. Please try again.",
+      },
     ])("rolls back a failed optimistic save and shows $message", async ({ response, message }) => {
       const user = userEvent.setup();
       const completion = createDeferred<void>();
