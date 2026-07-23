@@ -545,6 +545,30 @@ describe("search.server", () => {
       .resolves.toMatchObject([{ id: recipe.id, metadata: { tags: ["Beta Display", "Alpha Display"] } }]);
   });
 
+  it("rebuilds chef counts when an already-soft-deleted recipe is hard-deleted", async () => {
+    const chef = await createChef("harddeletechef");
+    await db.recipe.create({
+      data: { title: "Active Chef Count Recipe", chefId: chef.id },
+    });
+    const softDeleted = await db.recipe.create({
+      data: {
+        title: "Soft Deleted Chef Count Recipe",
+        chefId: chef.id,
+        deletedAt: new Date("2026-07-22T14:00:00.000Z"),
+      },
+    });
+    await rebuildSearchIndex(db);
+
+    await expect(searchSpoonjoy(db, { query: "harddeletechef", scope: "chefs" }))
+      .resolves.toMatchObject([{ id: chef.id, metadata: { recipeCount: 2 } }]);
+
+    await db.recipe.delete({ where: { id: softDeleted.id } });
+    await ensureSearchIndexFresh(db);
+
+    await expect(searchSpoonjoy(db, { query: "harddeletechef", scope: "chefs" }))
+      .resolves.toMatchObject([{ id: chef.id, metadata: { recipeCount: 1 } }]);
+  });
+
   it("reuses a fresh search index and rebuilds after source data changes", async () => {
     const chef = await createChef("freshchef");
     const recipe = await createSearchableRecipe(chef.id, "Quiet Pear Toast", "pear");

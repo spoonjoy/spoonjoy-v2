@@ -1433,38 +1433,63 @@ describe("API v1 OpenAPI document", () => {
     }
   });
 
-  it("defines exact recipe and non-recipe search metadata branches", () => {
+  it("defines exact discriminated recipe and non-recipe search result branches", () => {
     const document = buildApiV1OpenApiDocument();
-    const metadata = document.components.schemas.SearchResult.properties.metadata;
-    expect(metadata.oneOf).toHaveLength(4);
-    const branches = metadata.oneOf.map((branch: any) => resolveSchema(document, branch));
-    const byKeys = new Map(branches.map((branch: any) => [Object.keys(branch.properties).sort().join(","), branch]));
-    const expected = [
-      [
+    const result = document.components.schemas.SearchResult;
+    const branchSchemas = {
+      recipe: ["RecipeSearchResult", "RecipeSearchMetadata", [
         "chefUsername", "cookbookTitles", "course", "coverProvenanceLabel", "coverSourceType",
         "coverVariant", "ingredientNames", "servings", "stepCount", "tags",
+      ]],
+      cookbook: ["CookbookSearchResult", "CookbookSearchMetadata", ["authorUsername", "recipeCount", "recipeTitles"]],
+      chef: ["ChefSearchResult", "ChefSearchMetadata", ["cookbookCount", "recipeCount", "username"]],
+      "shopping-list-item": [
+        "ShoppingListItemSearchResult",
+        "ShoppingListItemSearchMetadata",
+        ["categoryKey", "checked", "iconKey", "quantity", "sortIndex", "unit"],
       ],
-      ["authorUsername", "recipeCount", "recipeTitles"],
-      ["cookbookCount", "recipeCount", "username"],
-      ["categoryKey", "checked", "iconKey", "quantity", "sortIndex", "unit"],
+    } as const;
+    const resultKeys = [
+      "type", "id", "ownerId", "ownerUsername", "title", "subtitle", "snippet", "href",
+      "canonicalUrl", "imageUrl", "score", "metadata",
     ];
 
-    for (const keys of expected) {
-      const branch = byKeys.get([...keys].sort().join(","));
-      expect(branch, keys.join(",")).toBeDefined();
-      expect(branch.additionalProperties).toBe(false);
-      expect([...branch.required].sort()).toEqual([...keys].sort());
-      expect(branch.properties).not.toHaveProperty("isSaved");
+    expect(result.oneOf).toEqual(Object.values(branchSchemas).map(([resultSchema]) => ({
+      $ref: `#/components/schemas/${resultSchema}`,
+    })));
+    expect(result.discriminator).toEqual({
+      propertyName: "type",
+      mapping: Object.fromEntries(Object.entries(branchSchemas).map(([type, [resultSchema]]) => [
+        type,
+        `#/components/schemas/${resultSchema}`,
+      ])),
+    });
+
+    for (const [type, [resultSchemaName, metadataSchemaName, metadataKeys]] of Object.entries(branchSchemas)) {
+      const branch = document.components.schemas[resultSchemaName];
+      expect(branch.additionalProperties, type).toBe(false);
+      expect(Object.keys(branch.properties).sort(), type).toEqual([...resultKeys].sort());
+      expect([...branch.required].sort(), type).toEqual([...resultKeys].sort());
+      expect(branch.properties.type, type).toEqual({ type: "string", const: type });
+      expect(branch.properties.metadata, type).toEqual({ $ref: `#/components/schemas/${metadataSchemaName}` });
+
+      const metadata = resolveSchema(document, branch.properties.metadata);
+      expect(metadata.additionalProperties, type).toBe(false);
+      expect(Object.keys(metadata.properties).sort(), type).toEqual([...metadataKeys].sort());
+      expect([...metadata.required].sort(), type).toEqual([...metadataKeys].sort());
+      expect(metadata.properties, type).not.toHaveProperty("isSaved");
     }
-    const recipeBranch = byKeys.get([...expected[0]].sort().join(","));
-    expect(recipeBranch.properties.course).toEqual({
+
+    const recipeMetadata = document.components.schemas.RecipeSearchMetadata;
+    expect(recipeMetadata.properties.course).toEqual({
       type: ["string", "null"],
       enum: ["main", "side", "appetizer", "dessert", null],
     });
-    expect(recipeBranch.properties.tags).toEqual({ type: "array", items: { type: "string" } });
-    for (const branch of branches.filter((candidate: any) => candidate !== recipeBranch)) {
-      expect(branch.properties).not.toHaveProperty("course");
-      expect(branch.properties).not.toHaveProperty("tags");
+    expect(recipeMetadata.properties.tags).toEqual({ type: "array", items: { type: "string" } });
+    for (const [, metadataSchemaName] of Object.values(branchSchemas).slice(1)) {
+      const metadata = document.components.schemas[metadataSchemaName];
+      expect(metadata.properties).not.toHaveProperty("course");
+      expect(metadata.properties).not.toHaveProperty("tags");
     }
   });
 

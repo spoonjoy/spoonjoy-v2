@@ -238,6 +238,40 @@ describe("API v1 native account sync", () => {
     expect(Object.keys(recipeEntry.payload).sort()).toEqual([...BASE_RECIPE_DETAIL_KEYS].sort());
   });
 
+  it("hydrates native recipe entries with the base detail projection only", async () => {
+    const user = await createUser(db, "native-projection@example.com", `native_projection_${faker.string.alphanumeric(8)}`, "correctHorseBatteryStaple");
+    const recipe = await db.recipe.create({
+      data: {
+        ...createTestRecipe(user.id),
+        title: `Native Projection Recipe ${faker.string.alphanumeric(8)}`,
+      },
+    });
+    const credential = await createApiCredential(db, user.id, "Native projection reader", {
+      scopes: ["account:read", "kitchen:read"],
+    });
+    const localDb = await getLocalDb();
+    const originalRecipeFindFirst = localDb.recipe.findFirst;
+    const recipeFindFirst = vi.fn((args: Parameters<typeof localDb.recipe.findFirst>[0]) =>
+      originalRecipeFindFirst.call(localDb.recipe, args));
+    localDb.recipe.findFirst = recipeFindFirst as typeof localDb.recipe.findFirst;
+
+    try {
+      const response = await loader(routeArgs(syncRequest(credential.token, "req_native_projection")));
+      expect(response.status).toBe(200);
+      const payload = await readJson(response);
+      expect(payload.data.entries).toEqual(expect.arrayContaining([
+        expect.objectContaining({ kind: "recipe", resourceId: recipe.id }),
+      ]));
+    } finally {
+      localDb.recipe.findFirst = originalRecipeFindFirst;
+    }
+
+    const hydration = recipeFindFirst.mock.calls.find(([args]) => args?.where?.id === recipe.id)?.[0];
+    expect(hydration).toBeDefined();
+    expect(hydration?.select).not.toHaveProperty("course");
+    expect(hydration?.select).not.toHaveProperty("tags");
+  });
+
   it("keeps dense cookbook sync payloads summary-only", async () => {
     const user = await createUser(db, "dense-sync@example.com", `dense_sync_${faker.string.alphanumeric(8)}`, "correctHorseBatteryStaple");
     const cookbook = await db.cookbook.create({
