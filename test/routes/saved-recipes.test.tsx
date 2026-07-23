@@ -55,19 +55,34 @@ it("marks every saved-recipes route response private and credential-varying", ()
 
 it("preserves saved-recipes parent and response headers while composing privacy headers", () => {
   const parentHeaders = new Headers({
+    "Content-Type": "text/plain",
+    Location: "/saved-recipes/from-parent",
+    "Retry-After": "2",
     "X-Parent": "kept",
     Vary: "Accept-Encoding, Cookie",
   });
   parentHeaders.append("Set-Cookie", "parent=one; Path=/");
   const loaderHeaders = new Headers({
+    "Content-Type": "application/json",
+    Location: "/saved-recipes/from-loader",
+    "Retry-After": "4",
     "X-Loader": "kept",
-    Vary: "X-Saved-View",
+    Vary: "X-Saved-View, ACCEPT-ENCODING",
   });
   loaderHeaders.append("Set-Cookie", "loader=two; Path=/");
-  const actionHeaders = new Headers({ Location: "/saved-recipes/after-action" });
+  loaderHeaders.append("Set-Cookie", "loader=second; Path=/");
+  const actionHeaders = new Headers({
+    "Content-Type": "application/problem+json",
+    Location: "/saved-recipes/after-action",
+    "Retry-After": "8",
+    Vary: "X-Action-View, cookie",
+  });
   actionHeaders.append("Set-Cookie", "action=three; Path=/");
   const errorHeaders = new Headers({
+    "Content-Type": "text/html",
+    Location: "/saved-recipes/from-error",
     "Retry-After": "11",
+    Vary: "x-action-view, X-Error-View",
     "X-Error": "kept",
   });
 
@@ -81,16 +96,18 @@ it("preserves saved-recipes parent and response headers while composing privacy 
   expect(responseHeaders.get("X-Parent")).toBe("kept");
   expect(responseHeaders.get("X-Loader")).toBe("kept");
   expect(responseHeaders.get("X-Error")).toBe("kept");
-  expect(responseHeaders.get("Location")).toBe("/saved-recipes/after-action");
+  expect(responseHeaders.get("Content-Type")).toBe("text/html");
+  expect(responseHeaders.get("Location")).toBe("/saved-recipes/from-error");
   expect(responseHeaders.get("Retry-After")).toBe("11");
   expect(responseHeaders.getSetCookie()).toEqual([
     "parent=one; Path=/",
     "loader=two; Path=/",
+    "loader=second; Path=/",
     "action=three; Path=/",
   ]);
   expect(responseHeaders.get("Cache-Control")).toBe("private, no-store");
   expect(responseHeaders.get("Vary")).toBe(
-    "Accept-Encoding, Cookie, X-Saved-View, Authorization",
+    "Accept-Encoding, Cookie, X-Saved-View, X-Action-View, X-Error-View, Authorization",
   );
 });
 

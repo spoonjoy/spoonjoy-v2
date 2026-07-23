@@ -40,17 +40,32 @@ export function headers({
   actionHeaders,
   errorHeaders,
 }: Route.HeadersArgs) {
-  const responseHeaders = new Headers(parentHeaders);
-  for (const source of [loaderHeaders, actionHeaders, errorHeaders]) {
+  const responseHeaders = new Headers();
+  const varyTokens: string[] = [];
+
+  for (const source of [parentHeaders, loaderHeaders, actionHeaders, errorHeaders]) {
     if (!source) continue;
-    for (const [name, value] of source) responseHeaders.append(name, value);
+
+    for (const [name, value] of source) {
+      const normalizedName = name.toLowerCase();
+      if (normalizedName === "set-cookie" || normalizedName === "vary") continue;
+      responseHeaders.set(name, value);
+    }
+    for (const cookie of source.getSetCookie()) {
+      responseHeaders.append("Set-Cookie", cookie);
+    }
+    for (const token of (source.get("Vary") ?? "").split(",")) {
+      const normalizedToken = token.trim();
+      if (
+        normalizedToken
+        && !varyTokens.some((existing) => existing.toLowerCase() === normalizedToken.toLowerCase())
+      ) {
+        varyTokens.push(normalizedToken);
+      }
+    }
   }
 
   responseHeaders.set("Cache-Control", "private, no-store");
-  const varyTokens = (responseHeaders.get("Vary") ?? "")
-    .split(",")
-    .map((token) => token.trim())
-    .filter(Boolean);
   for (const credentialHeader of ["Authorization", "Cookie"]) {
     if (!varyTokens.some((token) => token.toLowerCase() === credentialHeader.toLowerCase())) {
       varyTokens.push(credentialHeader);
