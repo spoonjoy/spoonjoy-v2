@@ -637,9 +637,13 @@ describe("API v1 OpenAPI document", () => {
     expect(removeCookbookRecipe).toMatchObject({
       removed: true,
       recipeId: "recipe_1",
-      cookbook: { recipeCount: 0, recipes: [] },
+      cookbook: {
+        recipeCount: 1,
+        recipes: [expect.objectContaining({ id: "recipe_2", title: "Salad" })],
+      },
       mutation: { clientMutationId: "device-uuid-cookbook-recipe-remove", replayed: false },
     });
+    expect(removeCookbookRecipe.cookbook.recipes).not.toContainEqual(expect.objectContaining({ id: "recipe_1" }));
     expect(removeCookbookRecipe).not.toHaveProperty("added");
     expect(responseExample(document, "/api/v1/me", "GET", "200").data).toMatchObject({
       email: "ari@spoonjoy.app",
