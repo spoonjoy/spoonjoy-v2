@@ -1613,11 +1613,20 @@ describe("spoonjoy MCP tools", () => {
   });
 
   it("publishes a bounded number-only scale argument on MCP get_recipe", () => {
+    const getRecipe = toolByName("get_recipe");
+    const required = (getRecipe?.inputSchema as { required?: string[] } | undefined)?.required ?? [];
+
     expect(schemaProperty("get_recipe", "scale")).toMatchObject({
       type: "number",
       minimum: 0.1,
       maximum: 100,
     });
+    expect(required).not.toContain("scale");
+    for (const tool of listSpoonjoyMcpTools()) {
+      if (tool.name === "get_recipe") continue;
+      const properties = (tool.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
+      expect(properties, tool.name).not.toHaveProperty("scale");
+    }
   });
 
   it("scales MCP get_recipe quantities without changing servings or stored values", async () => {
