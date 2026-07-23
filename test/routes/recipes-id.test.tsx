@@ -2681,6 +2681,16 @@ describe("Recipes $id Route", () => {
       fireEvent.click(pendingSaveButton);
       expect(submittedIntents).toEqual(["saveRecipe"]);
 
+      const pendingDockSave = vi.mocked(useRecipeDetailActions).mock.calls.at(-1)?.[0].onSave;
+      expect(pendingDockSave).toBeTypeOf("function");
+      if (typeof pendingDockSave !== "function") {
+        throw new Error("Expected the pending recipe dock save action to be registered");
+      }
+      act(() => {
+        pendingDockSave();
+      });
+      expect(submittedIntents).toEqual(["saveRecipe"]);
+
       await user.click(cookbookButton);
       expect(await screen.findByRole("dialog", { name: "Add to Cookbook" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Weeknights" }))
@@ -3034,6 +3044,14 @@ describe("Recipes $id Route", () => {
         expect(assign).toHaveBeenNthCalledWith(2, loginRedirect);
         expect(submittedIntents).toEqual([]);
         expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+        const addToListButton = screen.getByRole("button", { name: "Add to list" });
+        expect(addToListButton).toBeEnabled();
+        expect(addToListButton).toHaveAttribute("aria-pressed", "false");
+        await user.click(addToListButton);
+        expect(assign).toHaveBeenCalledTimes(3);
+        expect(assign).toHaveBeenNthCalledWith(3, loginRedirect);
+        expect(submittedIntents).toEqual([]);
       } finally {
         Object.defineProperty(window.location, "assign", {
           configurable: true,

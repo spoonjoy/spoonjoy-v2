@@ -373,6 +373,72 @@ describe("recipe detail saved state and actions", () => {
       where: { userId_recipeId: { userId: viewer.id, recipeId: recipe.id } },
     })).resolves.toBeNull();
   });
+
+  it("maps only the saved-recipe cutover failure while saving", async () => {
+    const viewer = await makeUser();
+    const cutoverError = new Error("D1_ERROR: saved_recipe_cutover_pending");
+    const ordinaryError = new Error("saved recipe write unavailable");
+    vi.spyOn(db, "$queryRawUnsafe")
+      .mockRejectedValueOnce(cutoverError)
+      .mockRejectedValueOnce(ordinaryError);
+
+    const cutoverForm = new UndiciFormData();
+    cutoverForm.append("intent", "saveRecipe");
+    await expect(handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(viewer.id, "recipe-cutover", cutoverForm) as unknown as Request,
+      params: { id: "recipe-cutover" },
+      context: { cloudflare: { env: null } } as any,
+    })).resolves.toMatchObject({
+      data: {
+        error: {
+          code: "product_activation_pending",
+          retryable: true,
+        },
+      },
+      init: { status: 503 },
+    });
+
+    const ordinaryForm = new UndiciFormData();
+    ordinaryForm.append("intent", "saveRecipe");
+    await expect(handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(viewer.id, "recipe-ordinary", ordinaryForm) as unknown as Request,
+      params: { id: "recipe-ordinary" },
+      context: { cloudflare: { env: null } } as any,
+    })).rejects.toBe(ordinaryError);
+  });
+
+  it("maps only the saved-recipe cutover failure while unsaving", async () => {
+    const viewer = await makeUser();
+    const cutoverError = new Error("D1_ERROR: saved_recipe_cutover_pending");
+    const ordinaryError = new Error("saved recipe delete unavailable");
+    vi.spyOn(db.savedRecipe, "deleteMany")
+      .mockRejectedValueOnce(cutoverError)
+      .mockRejectedValueOnce(ordinaryError);
+
+    const cutoverForm = new UndiciFormData();
+    cutoverForm.append("intent", "unsaveRecipe");
+    await expect(handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(viewer.id, "recipe-cutover", cutoverForm) as unknown as Request,
+      params: { id: "recipe-cutover" },
+      context: { cloudflare: { env: null } } as any,
+    })).resolves.toMatchObject({
+      data: {
+        error: {
+          code: "product_activation_pending",
+          retryable: true,
+        },
+      },
+      init: { status: 503 },
+    });
+
+    const ordinaryForm = new UndiciFormData();
+    ordinaryForm.append("intent", "unsaveRecipe");
+    await expect(handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(viewer.id, "recipe-ordinary", ordinaryForm) as unknown as Request,
+      params: { id: "recipe-ordinary" },
+      context: { cloudflare: { env: null } } as any,
+    })).rejects.toBe(ordinaryError);
+  });
 });
 
 describe("handleRecipeDetailAction cover generation actions", () => {

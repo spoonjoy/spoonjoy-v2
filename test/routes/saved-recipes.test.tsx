@@ -191,6 +191,37 @@ describe("Saved Recipes drawer route", () => {
     expect(result.nextCursor).toBeNull();
   });
 
+  it("omits a saved item deleted between the canonical query and hydration", async () => {
+    const viewer = await createDrawerUser("saved-hydration-race");
+    const chef = await createDrawerUser("saved-hydration-race-chef");
+    const recipe = await createDrawerRecipe({
+      chefId: chef.id,
+      title: "Vanishing Saved Recipe",
+    });
+    await db.savedRecipe.create({
+      data: {
+        userId: viewer.id,
+        recipeId: recipe.id,
+        savedAt: "2026-07-22T12:00:00.000Z",
+      },
+    });
+    const findManySpy = vi.spyOn(db.recipe, "findMany").mockResolvedValue([]);
+
+    try {
+      const result = await loader(routeArgs(new UndiciRequest(
+        "http://localhost:3000/saved-recipes",
+        { headers: await sessionHeaders(viewer.id) },
+      ) as unknown as Request));
+
+      expect(findManySpy).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: { in: [recipe.id] }, deletedAt: null },
+      }));
+      expect(result).toMatchObject({ query: "", recipes: [], nextCursor: null });
+    } finally {
+      findManySpy.mockRestore();
+    }
+  });
+
   it("paginates active saves in exact savedAt and binary recipe-ID order before hydration", async () => {
     const viewer = await createDrawerUser("saved-pages");
     const chef = await createDrawerUser("saved-pages-chef");
@@ -351,12 +382,12 @@ describe("Saved Recipes drawer route", () => {
     expect(alert).toHaveTextContent(/try again/i);
   });
 
-  it("renders an independent empty state without cookbook creation copy", async () => {
+  it("renders an independent empty state without cookbook copy or pagination when nextCursor is omitted", async () => {
     const Stub = createTestRoutesStub([
       {
         path: "/saved-recipes",
         Component: SavedRecipes,
-        loader: () => ({ query: "", recipes: [], nextCursor: null }),
+        loader: () => ({ query: "", recipes: [] }),
       },
     ]);
 
@@ -367,6 +398,8 @@ describe("Saved Recipes drawer route", () => {
     expect(screen.getByRole("link", { name: /explore recipes/i })).toHaveAttribute("href", "/recipes");
     expect(screen.queryByRole("link", { name: /new cookbook/i })).not.toBeInTheDocument();
     expect(screen.getByText("Save a recipe to keep it close at hand.")).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Saved recipes pagination" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Next page" })).not.toBeInTheDocument();
   });
 
   it("renders saved rows without presenting cookbook membership as save context", async () => {
@@ -438,6 +471,34 @@ describe("Saved Recipes drawer route", () => {
     expect(screen.getByRole("link", { name: "Next page" })).toHaveAttribute(
       "href",
       "/saved-recipes?q=red+lentils&cursor=opaque_cursor",
+    );
+  });
+
+  it("renders a cursor link without adding an empty query parameter", async () => {
+    const Stub = createTestRoutesStub([
+      {
+        path: "/saved-recipes",
+        Component: SavedRecipes,
+        loader: () => ({
+          query: "",
+          recipes: [{
+            id: "recipe-1",
+            title: "Plain Cursor Recipe",
+            description: null,
+            servings: null,
+            chef: { id: "chef-1", username: "maria" },
+            savedAt: "2026-07-22T12:00:00.000Z",
+          }],
+          nextCursor: "opaque_cursor",
+        }),
+      },
+    ]);
+
+    render(<Stub initialEntries={["/saved-recipes"]} />);
+
+    expect(await screen.findByRole("link", { name: "Next page" })).toHaveAttribute(
+      "href",
+      "/saved-recipes?cursor=opaque_cursor",
     );
   });
 
