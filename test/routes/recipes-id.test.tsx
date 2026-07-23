@@ -118,6 +118,33 @@ it("preserves recipe-detail parent and response headers while composing privacy 
   );
 });
 
+it("composes recipe-detail cookies across Cloudflare and legacy Headers runtimes", () => {
+  const cloudflareHeaders = new Headers();
+  Object.defineProperty(cloudflareHeaders, "getSetCookie", { value: undefined });
+  Object.defineProperty(cloudflareHeaders, "getAll", {
+    value: (name: string) => name.toLowerCase() === "set-cookie"
+      ? ["cloudflare=one; Path=/", "cloudflare=two; Path=/"]
+      : [],
+  });
+  const legacyHeaders = new Headers({ "Set-Cookie": "legacy=one; Path=/" });
+  Object.defineProperty(legacyHeaders, "getSetCookie", { value: undefined });
+  const emptyLegacyHeaders = new Headers();
+  Object.defineProperty(emptyLegacyHeaders, "getSetCookie", { value: undefined });
+
+  const responseHeaders = headers({
+    parentHeaders: cloudflareHeaders,
+    loaderHeaders: legacyHeaders,
+    actionHeaders: emptyLegacyHeaders,
+    errorHeaders: undefined,
+  });
+
+  expect(responseHeaders.getSetCookie()).toEqual([
+    "cloudflare=one; Path=/",
+    "cloudflare=two; Path=/",
+    "legacy=one; Path=/",
+  ]);
+});
+
 const PRODUCT_ACTIVATION_PENDING_RESPONSE = {
   error: {
     code: "product_activation_pending",

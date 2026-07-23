@@ -12,6 +12,21 @@ import {
 import { requireUserId } from "~/lib/session.server";
 import { DrawerSearch } from "./my-recipes";
 
+function getSetCookieValues(source: Headers) {
+  const cookieHeaders = source as Headers & {
+    getSetCookie?: () => string[];
+    getAll?: (name: string) => string[];
+  };
+  if (typeof cookieHeaders.getSetCookie === "function") {
+    return cookieHeaders.getSetCookie();
+  }
+  if (typeof cookieHeaders.getAll === "function") {
+    return cookieHeaders.getAll("Set-Cookie");
+  }
+  const cookie = source.get("Set-Cookie");
+  return cookie ? [cookie] : [];
+}
+
 type SavedRecipe = {
   id: string;
   title: string;
@@ -41,7 +56,7 @@ export function headers({
       if (normalizedName === "set-cookie" || normalizedName === "vary") continue;
       responseHeaders.set(name, value);
     }
-    for (const cookie of source.getSetCookie()) {
+    for (const cookie of getSetCookieValues(source)) {
       responseHeaders.append("Set-Cookie", cookie);
     }
     for (const token of (source.get("Vary") ?? "").split(",")) {

@@ -30,6 +30,21 @@ import type { StepReference } from "~/components/recipe/StepOutputUseCallout";
 import { shareContent, useDockSuppressed, useRecipeDetailActions } from "~/components/navigation";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 
+function getSetCookieValues(source: Headers) {
+  const cookieHeaders = source as Headers & {
+    getSetCookie?: () => string[];
+    getAll?: (name: string) => string[];
+  };
+  if (typeof cookieHeaders.getSetCookie === "function") {
+    return cookieHeaders.getSetCookie();
+  }
+  if (typeof cookieHeaders.getAll === "function") {
+    return cookieHeaders.getAll("Set-Cookie");
+  }
+  const cookie = source.get("Set-Cookie");
+  return cookie ? [cookie] : [];
+}
+
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   return loadRecipeDetail({ request, params, context });
 }
@@ -51,7 +66,7 @@ export function headers({
       if (normalizedName === "set-cookie" || normalizedName === "vary") continue;
       responseHeaders.set(name, value);
     }
-    for (const cookie of source.getSetCookie()) {
+    for (const cookie of getSetCookieValues(source)) {
       responseHeaders.append("Set-Cookie", cookie);
     }
     for (const token of (source.get("Vary") ?? "").split(",")) {
