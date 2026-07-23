@@ -24,7 +24,7 @@
     "app/lib/shopping-list.server.ts": "M:9ababf3f83e57bdce83753ecc3f4a1875e35277502f6b1ca25b0407156d4825d",
     "app/lib/spoonjoy-api-request.server.ts": "M:1bf0d86930352c67c96ee50dd425247e94bd1b385cf509d4d0cac18d2d217980",
     "app/lib/spoonjoy-api.server.ts": "M:67e37aee478369a292b76741e3312b6d8a82db28f55adf97dde498d88b780d4c",
-    "app/lib/telemetry-coverage/allowlist.ts": "M:a002314c7ce7790d2d148f57f2663a9effdae3ee7162025d2f04ea7292f31d55",
+    "app/lib/telemetry-coverage/allowlist.ts": "M:fe5051e4506b252c3f69bdbfd1395cf40c2fb0e87720d2c3a7da2d4fef905be5",
     "app/routes/_index.tsx": "M:831d9addfb3daf95abdc6b472f89995728155adb74b5f6c7a72c664587cdd8bf",
     "app/routes/api.$.ts": "M:97f41d87ebac99d3507030c2809a2a4ef16615bf3f57a35fa6ed2e561b522f07",
     "app/routes/cookbooks.$id.tsx": "M:6e204a09d6b9399a5620c9dd4db2e87725b20d8f776a4070bd4bae03337fdee7",

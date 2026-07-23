@@ -267,6 +267,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     reason:
       "The only catches here are client-side cook-progress localStorage parse/read/write fallbacks (window-guarded); a corrupt or unavailable store degrades to a fresh session, no user-facing failure. The server action delegates to recipe-detail.server.ts, which owns mutation-failure capture.",
   },
+  {
+    file: "app/routes/saved-recipes.tsx",
+    category: "expected-4xx",
+    reason:
+      "The loader catch maps only typed query/cursor validation failures from client-supplied URL parameters to 400; every unexpected database or hydration failure is rethrown to the framework error boundary.",
+  },
 
   // --- owned by the parallel LLM-telemetry workstream ---
   {
