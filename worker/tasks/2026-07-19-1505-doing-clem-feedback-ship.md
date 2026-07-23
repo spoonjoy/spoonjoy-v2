@@ -413,34 +413,34 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Completed**: Commit `60673902` records 13 inspected desktop/mobile screenshots plus automated metrics for every required state. All roots match viewport width, every measured target is at least 44px, Save and Cookbook retain distinct names and visible keyboard focus, saved descriptions wrap without truncation, and the dialog focus treatment is clean. The absurdity ledger has no open item, fresh visual review converged, Playwright passed 2/2 warning-free, direct Worker/D1 probes returned 200, and all seven local QA residue categories are zero.
 
 ### ⬜ Unit 6.1a: Tag Normalization And Storage - Tests
-**What**: Add failing tests for course enum/null; exact NFKC-first processing; pre-whitespace Unicode General Category `C` rejection; Unicode `White_Space` trim/collapse; `Array.from` code-point count; locale-independent `toLowerCase` without renormalization; tab/newline/format/lone-surrogate cases; 40-code-point and ten-tag limits; first-spelling duplicates; deterministic order; owner checks; and atomic replacement/concurrency.
-**Output**: Red `test/lib/recipe-tags.server.test.ts` tests.
-**Acceptance**: Tests fail because validation/storage services are absent.
+**What**: Add failing service tests for course enum/null; exact NFKC-first processing; pre-whitespace Unicode General Category `C` rejection; Unicode `White_Space` trim/collapse; `Array.from` code-point count; locale-independent `toLowerCase` without renormalization; tab/newline/format/lone-surrogate cases; 40-code-point and ten-tag limits; first-spelling duplicates; deterministic order; edit owner/active-recipe checks; composable SQL operation builders; equivalent local Prisma raw-operation fallback; statement-count/success/affected-row/returned-row validation; and malformed-result and executor-error handling. Add failing isolated Workerd D1 tests for native batch outgoing statements/binds, atomic replacement rollback, concurrency, and no partial observer state.
+**Output**: Red `test/lib/recipe-tags.server.test.ts` and `test/workers/recipe-tags-d1.test.ts` tests.
+**Acceptance**: The service tests fail because validation/storage operation services are absent, and the Worker tests fail because the native D1 batch executor is absent.
 
 ### ⬜ Unit 6.1b: Tag Normalization And Storage - Implementation
-**What**: Add tag validation and owner-authorized atomic storage/query service.
-**Output**: One canonical recipe-owned tag/course service.
-**Acceptance**: Focused service tests, typecheck, and build pass.
+**What**: Add tag validation, composable edit operation builders carrying or causally depending on the recipe/owner/active guard, and one storage/query executor that runs one prepared native `D1Database.batch()` through the request binding in production or the equivalent Prisma raw-operation array transaction locally; validate every outgoing/result contract and keep reads deterministic.
+**Output**: One canonical recipe-owned tag/course service with native-batch and local-fallback executors.
+**Acceptance**: Focused service and isolated Workerd D1 tests, typecheck, and build pass; atomic replacement never relies on a Prisma transaction through `@prisma/adapter-d1`.
 
 ### ⬜ Unit 6.1c: Tag Normalization And Storage - Verification
-**What**: Reach 100% validation/storage coverage and obtain data/concurrency review.
+**What**: Reach 100% validation/storage/executor coverage, run malformed-result and error matrices, prove local fallback rollback plus isolated Workerd D1 rollback/concurrency, and obtain data/concurrency review.
 **Output**: Coverage and reviewer evidence.
-**Acceptance**: Every invalid/boundary/duplicate/concurrent/error branch is covered and review converges.
+**Acceptance**: Every invalid/boundary/duplicate/concurrent/malformed-result/error branch is covered; outgoing native statements and binds, edit recipe/owner/active guards, statement and row contracts, rollback, and absence of partial observer state are proven; review converges.
 
 ### ⬜ Unit 6.2a: Tag Authoring - Tests
-**What**: Add failing tests for `RecipeBuilder`, `createRecipeDraft`, and route `action` in `app/routes/recipes.new.tsx`/`app/routes/recipes.$id.edit.tsx`: course selection, custom-tag editing, hidden payload, validation errors, owner-only create/edit, nested tags in the initial recipe create, create failure never leaving a recipe without its requested tags, edit batch transaction shape, and edit rollback on tag replacement failure.
-**Output**: Red authoring route/component tests.
-**Acceptance**: Tests fail because authoring fields and action wiring are absent.
+**What**: Add failing tests for `RecipeBuilder`, `createRecipeDraft`, and route `action` in `app/routes/recipes.new.tsx`/`app/routes/recipes.$id.edit.tsx`: course selection, custom-tag editing, hidden payload, validation errors, authenticated-chef creation, owner/active-only edits, route passage of the native DB binding, equivalent local fallback, and one atomic operation set containing the authenticated chef's initial Recipe plus foreign-key-dependent requested tags on create or guarded authoring/course update plus tag replacement on edit. Extend the isolated Worker test for create/edit route composition. Both paths bind one timestamp for `Recipe.updatedAt` and every containing `Cookbook.updatedAt`; forced mid-batch failures must preserve Recipe, RecipeTag, recipe/cookbook timestamps, and canonical search-fingerprint authority without direct search-table mutation.
+**Output**: Red authoring route/component tests plus create/edit route-composition extensions in `test/workers/recipe-tags-d1.test.ts`.
+**Acceptance**: Route/component tests fail because authoring fields and dual-executor route wiring are absent, and the extended Worker tests fail because create/edit actions do not yet compose and pass the native batch operations.
 
 ### ⬜ Unit 6.2b: Tag Authoring - Implementation
-**What**: Add controls to `app/components/recipe/RecipeBuilder.tsx`; extend `app/lib/recipe-create.server.ts` so `createRecipeDraft` accepts course/tags and nests tag creates in the initial `recipe.create`; add `app/lib/recipe-tags.server.ts`; and wire create/edit actions. Edit batches recipe/course update, tag delete/recreate, and native-sync invalidation in one Prisma array transaction.
+**What**: Add controls to `app/components/recipe/RecipeBuilder.tsx`; extend `app/lib/recipe-create.server.ts` so `createRecipeDraft` accepts course/tags and composes the initial Recipe insert with authenticated `chefId` plus requested RecipeTag inserts that depend on the new row through their foreign keys; add `app/lib/recipe-tags.server.ts`; and wire create/edit actions to pass the request's native DB binding. Execute create and edit through the dual executor: production uses one prepared `D1Database.batch()`, while local/tests use the equivalent Prisma raw-operation array transaction. The edit batch includes guarded authoring/course update, tag delete/recreate, one-timestamp `Recipe.updatedAt` and containing-`Cookbook.updatedAt` advancement for native sync, and the resulting canonical search-fingerprint change without direct search-table mutation; every edit mutation carries or causally depends on the recipe/owner/active guard and all statement/result contracts are validated.
 **Output**: Manual course/tag authoring on new and edit flows.
-**Acceptance**: Focused authoring/create failure/edit rollback tests and typecheck/build pass; create cannot expose a recipe missing requested tags and edit is all-or-nothing.
+**Acceptance**: Focused authoring, native-binding, dual-executor, forced mid-batch rollback, and canonical-search-authority tests plus typecheck/build pass; create cannot expose a recipe missing requested tags, edit is all-or-nothing, edits of absent/deleted/non-owned recipes mutate nothing, and production atomicity never relies on `@prisma/adapter-d1` transactions.
 
 ### ⬜ Unit 6.2c: Tag Authoring - Verification
-**What**: Reach 100% component/action coverage and obtain product/accessibility review.
+**What**: Reach 100% component/action/dual-executor coverage; prove route binding passage, outgoing native batch shape/binds, equivalent local fallback, and forced mid-batch rollback across Recipe, RecipeTag, recipe/cookbook timestamps, and canonical search authority; obtain product/accessibility/data review.
 **Output**: Coverage and reviewer evidence.
-**Acceptance**: Every payload/validation/rollback/keyboard branch is covered and review converges.
+**Acceptance**: Every payload/validation/binding/executor/result/rollback/keyboard branch is covered, isolated Workerd D1 and local rollback evidence agree, no direct search-table mutation occurs, and review converges.
 
 ### ⬜ Unit 6.3a: Tag Filters And Search - Tests
 **What**: Add failing tests in the named route/service tests for `%20`/`+` input equivalence, raw count rejection before normalization, first-occurrence dedupe/order, SQL AND against canonical `RecipeTag.normalizedLabel`, display-label/Unicode counterexamples, direct Recipe course predicates, My Recipes `q/course/tag*/page` and global `scope/q/course/tag*` URL order with `+` spaces, reset preserving q, all/recipes preservation, non-recipe scope clearing and forged-filter 400, `scope=all` recipe-only filtering before the 30-result limit, invalid-filter 400, pre-limit predicates, and page normalization; assert Unit 4.1's SearchDocument display metadata/freshness contract remains green rather than using it as predicate authority.
@@ -796,3 +796,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-23 14:38 Unit 5.3b complete: commits `9d972ecc` through `60673902` ship the independent saved page and recipe-detail Save workflow, including portable response-header composition and real Cloudflare Worker/D1 save, unsave, and list behavior.
 - 2026-07-23 14:38 Unit 5.3c complete: the isolated 389-file/9,404-test gate is exact 100% across 21,321 statements, 17,260 branches, 4,114 functions, and 19,606 lines; all focused, scope, compiler, build, warning, privacy, accessibility, and repaired integrity-review gates converge.
 - 2026-07-23 14:38 Unit 5.4 complete: 13 final screenshots, 13 state/viewport metric records, 2/2 Playwright projects, closed absurdity ledger, converged visual review, and seven-category zero-residue cleanup prove the desktop/mobile saved experience.
+- 2026-07-23 Architecture audit: replaced the invalid Prisma-D1 atomicity assumptions in the normative tag contract and Units 6.1-6.2 with the reviewed native prepared `D1Database.batch()`/local Prisma raw-operation dual-executor contract, including binding passage, ownership scope, result validation, rollback/concurrency proof, native-sync timestamps, and canonical search-fingerprint authority.

@@ -44,7 +44,7 @@ const AUTHORITY_FILES = [
   },
   {
     path: "worker/tasks/2026-07-19-1505-doing-clem-feedback-ship/product-data-contract.md",
-    sha256: "bf57163e073ed41968ad7b241a600f8797c8c417db7c25b314b50b850bf1374b",
+    sha256: "840302ac53984e384a1c81fa0c8162792247a6caba7276340e8aa3a9df4c52c9",
   },
   {
     path: "worker/tasks/2026-07-19-1505-doing-clem-feedback-ship/cook-session-protocol-v1.md",

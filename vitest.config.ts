@@ -68,6 +68,7 @@ export default defineConfig({
       "**/e2e/**",
       "**/.claude/**",
       "test/workers/cook-session-bootstrap.test.ts",
+      "test/workers/recipe-tags-d1.test.ts",
       "test/workers/saved-recipe-cutover-d1.test.ts",
     ],
     coverage: {

@@ -253,16 +253,26 @@ jobs:
     const appSource = readFileSync("vitest.config.ts", "utf8");
     const appConfig = workersConfigObject(appSource);
     const appTestConfig = appConfig && property(appConfig, "test");
+    const workersSource = readFileSync("vitest.workers.config.ts", "utf8");
+    const workersConfig = workersConfigObject(workersSource);
+    const workersTestConfig = workersConfig && property(workersConfig, "test");
     const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
     const appCoverageJob = workflowJob(workflow, "coverage");
     const workersCoverageJob = workflowJob(workflow, "workers-coverage");
 
     expect(appTestConfig && ts.isObjectLiteralExpression(appTestConfig)).toBe(true);
-    if (!appTestConfig || !ts.isObjectLiteralExpression(appTestConfig)) return;
+    expect(workersTestConfig && ts.isObjectLiteralExpression(workersTestConfig)).toBe(true);
+    if (!appTestConfig || !ts.isObjectLiteralExpression(appTestConfig) ||
+      !workersTestConfig || !ts.isObjectLiteralExpression(workersTestConfig)) return;
     expect(literalValue(property(appTestConfig, "exclude"))).toContain(
-      "test/workers/cook-session-bootstrap.test.ts",
+      "test/workers/recipe-tags-d1.test.ts",
     );
-    expect(literalValue(property(appTestConfig, "exclude"))).not.toContain("test/workers/**");
+    expect(literalValue(property(workersTestConfig, "include"))).toContain(
+      "test/workers/**/*.test.ts",
+    );
+    expect(literalValue(property(workersTestConfig, "exclude"))).not.toContain(
+      "test/workers/recipe-tags-d1.test.ts",
+    );
     expect(appSource).toContain('"workers/app.ts"');
     expect(runCommands(appCoverageJob)).toContain("pnpm run verify:clean:test:coverage");
     expect(runCommands(appCoverageJob)).not.toContain("pnpm run test:coverage");
