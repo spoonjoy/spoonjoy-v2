@@ -288,6 +288,7 @@ function apiV1PrivateHeaders(requestId: string): Headers {
   const headers = apiV1Headers(requestId);
   headers.set("Cache-Control", "private, no-store");
   headers.set("Pragma", "no-cache");
+  headers.set("Vary", "Authorization, Cookie");
   return headers;
 }
 
@@ -682,7 +683,8 @@ function defaultIdempotencyOutcome(operation: string | undefined, errorCode: Api
     !operation.startsWith("recipes.spoons.") &&
     !operation.startsWith("recipes.covers.") &&
     !operation.startsWith("cookbooks.") &&
-    !operation.startsWith("saved-recipes.") &&
+    operation !== "saved-recipes.save" &&
+    operation !== "saved-recipes.unsave" &&
     !isIdempotentAccountOperation(operation)
   ) {
     return undefined;
@@ -1969,7 +1971,7 @@ async function recoverSavedRecipeSave(
   db: ApiV1WriteDb,
   input: { clientMutationId: string; recipeId: string; userId: string },
 ): Promise<ApiV1IdempotentMutationResult | null> {
-  const saved = await activeSavedRecipeState(db, input.userId, input.recipeId);
+  const saved = await savedRecipeState(db, input.userId, input.recipeId);
   if (!saved) return null;
   return {
     status: 200,
@@ -4218,10 +4220,19 @@ async function completeRecoveredIdempotencyKey(
   requestId: string,
   result: ApiV1IdempotentMutationResult,
 ) {
-  await completeIdempotencyKey(db, reservation.id, {
+  const completion = {
     status: result.status,
     body: idempotentMutationBody(requestId, result.data),
-  });
+  };
+  try {
+    await completeIdempotencyKey(db, reservation.id, completion);
+  } catch {
+    try {
+      await completeIdempotencyKey(db, reservation.id, completion);
+    } catch {
+      // The domain result is authoritative; leave the reservation recoverable for a later retry.
+    }
+  }
 }
 
 function normalizeApiV1IdempotentMutationOptions(

@@ -82,6 +82,16 @@ const dateTimeSchema = { type: "string", format: "date-time" };
 const nullableDateTimeSchema = { type: ["string", "null"], format: "date-time" };
 const nullableStringSchema = { type: ["string", "null"] };
 const nullableNumberSchema = { type: ["number", "null"] };
+const savedRecipeCursorConstraints = {
+  minLength: 1,
+  maxLength: 1443,
+  pattern: "^[A-Za-z0-9_-]+$",
+};
+const savedRecipeCursorSchema = { type: "string", ...savedRecipeCursorConstraints };
+const nullableSavedRecipeCursorSchema = {
+  type: ["string", "null"],
+  ...savedRecipeCursorConstraints,
+};
 const coverSourceTypeSchema = {
   type: ["string", "null"],
   enum: ["ai-placeholder", "chef-upload", "import", "spoon", null],
@@ -1299,7 +1309,7 @@ const schemas = {
   }),
   SavedRecipeListData: objectSchema(["recipes", "nextCursor"], {
     recipes: arrayOf(ref("SavedRecipeSummary")),
-    nextCursor: nullableStringSchema,
+    nextCursor: nullableSavedRecipeCursorSchema,
   }),
   SaveRecipeData: objectSchema(["saved", "recipeId", "savedAt", "mutation"], {
     saved: { const: true },
@@ -1511,7 +1521,7 @@ const queryParameters = {
   q: { name: "q", in: "query", required: false, description: "Search-text alias for clients that conventionally use q. Ignored when query is also present.", schema: { type: "string" } },
   savedRecipeQ: { name: "q", in: "query", required: false, description: "Search saved recipe title, description, chef, course, or tag text.", schema: { type: "string", maxLength: 200 } },
   savedRecipeLimit: { name: "limit", in: "query", required: false, description: "Saved-recipe page size from 1 to 24. Defaults to 24.", schema: { type: "integer", minimum: 1, maximum: 24, default: 24 } },
-  savedRecipeCursor: { name: "cursor", in: "query", required: false, description: "Opaque saved-recipe cursor returned as nextCursor. Store and pass it back unchanged.", schema: { type: "string" } },
+  savedRecipeCursor: { name: "cursor", in: "query", required: false, description: "Opaque saved-recipe cursor returned as nextCursor. Store and pass it back unchanged.", schema: savedRecipeCursorSchema },
   scope: { name: "scope", in: "query", required: false, description: "Global search scope. The legacy value shopping is accepted as shopping-list.", schema: { type: "string", enum: ["all", "recipes", "cookbooks", "chefs", "shopping-list"], default: "all" } },
   cursor: { name: "cursor", in: "query", required: false, description: "Opaque pagination cursor returned as nextCursor. Catalog cursors are v1.* values; shopping-list sync also accepts an ISO timestamp only as bootstrap compatibility.", schema: { type: "string" }, examples: { catalog: { value: "v1.cursor_from_nextCursor" }, sync: { value: "v1.cursor_or_iso_bootstrap" } } },
   limit: { name: "limit", in: "query", required: false, description: "Page size from 1 to 50. Defaults to 20.", schema: { type: "integer", minimum: 1, maximum: 50, default: 20 } },
@@ -2953,6 +2963,10 @@ function successResponse(schemaName: string, options: { publicCache?: boolean; n
       description: "Legacy no-cache companion header for authenticated/private responses.",
       schema: { type: "string", example: "no-cache" },
     };
+    headers.Vary = {
+      description: "Authenticated/private responses vary by credential-bearing headers.",
+      schema: { type: "string", example: "Authorization, Cookie" },
+    };
   }
   return {
     description: "Success",
@@ -2994,6 +3008,10 @@ function errorResponse(codes: ApiV1ErrorCode[], scopes: readonly string[]) {
       "Cache-Control": {
         description: "Error envelopes are not cacheable.",
         schema: { type: "string", example: "private, no-store" },
+      },
+      Vary: {
+        description: "Error envelopes vary by credential-bearing headers.",
+        schema: { type: "string", example: "Authorization, Cookie" },
       },
       ...(codes.includes("product_activation_pending")
         ? {

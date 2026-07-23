@@ -68,11 +68,20 @@ describe("GET /api/v1/openapi.json", () => {
   });
 
   it("documents private saved-recipe list and idempotent mutation contracts", () => {
-    for (const document of [
-      buildApiV1OpenApiDocument({ serverUrl: "http://localhost" }),
-      buildApiV1SdkOpenApiDocument({ serverUrl: "http://localhost" }),
-      buildApiV1ConnectorOpenApiDocument({ serverUrl: "http://localhost" }),
-    ]) {
+    for (const [document, nullableCursorShape] of [
+      [
+        buildApiV1OpenApiDocument({ serverUrl: "http://localhost" }),
+        { type: ["string", "null"] },
+      ],
+      [
+        buildApiV1SdkOpenApiDocument({ serverUrl: "http://localhost" }),
+        { type: ["string", "null"] },
+      ],
+      [
+        buildApiV1ConnectorOpenApiDocument({ serverUrl: "http://localhost" }),
+        { type: "string", nullable: true },
+      ],
+    ] as const) {
       const list = document.paths["/api/v1/saved-recipes"].get;
       const mutation = document.paths["/api/v1/saved-recipes/{recipeId}"];
 
@@ -83,9 +92,18 @@ describe("GET /api/v1/openapi.json", () => {
         .map((parameter: { name: string }) => parameter.name)).toEqual(["q", "limit", "cursor"]);
       expect(list.parameters.find((parameter: { name: string }) => parameter.name === "limit").schema)
         .toMatchObject({ type: "integer", minimum: 1, maximum: 24, default: 24 });
+      expect(list.parameters.find((parameter: { name: string }) => parameter.name === "cursor").schema)
+        .toEqual({
+          type: "string",
+          minLength: 1,
+          maxLength: 1443,
+          pattern: "^[A-Za-z0-9_-]+$",
+        });
       expect(list.responses["200"].content["application/json"].schema.$ref)
         .toBe("#/components/schemas/SavedRecipeListEnvelope");
       expect(list.responses["200"].headers["Cache-Control"].schema.example).toBe("private, no-store");
+      expect(list.responses["200"].headers.Vary.schema.example).toBe("Authorization, Cookie");
+      expect(list.responses["400"].headers.Vary.schema.example).toBe("Authorization, Cookie");
 
       for (const [method, operationId, responseSchema] of [
         ["put", "putApiV1SavedRecipe", "SaveRecipeEnvelope"],
@@ -102,6 +120,10 @@ describe("GET /api/v1/openapi.json", () => {
           .toBe(`#/components/schemas/${responseSchema}`);
         expect(operation.responses["200"].headers["Cache-Control"].schema.example)
           .toBe("private, no-store");
+        expect(operation.responses["200"].headers.Vary.schema.example)
+          .toBe("Authorization, Cookie");
+        expect(operation.responses["400"].headers.Vary.schema.example)
+          .toBe("Authorization, Cookie");
       }
 
       expect(document.components.schemas.SavedRecipeMutationRequest).toMatchObject({
@@ -111,6 +133,12 @@ describe("GET /api/v1/openapi.json", () => {
         properties: { clientMutationId: { type: "string" } },
       });
       expect(document.components.schemas.SavedRecipeListData.required).toEqual(["recipes", "nextCursor"]);
+      expect(document.components.schemas.SavedRecipeListData.properties.nextCursor).toEqual({
+        ...nullableCursorShape,
+        minLength: 1,
+        maxLength: 1443,
+        pattern: "^[A-Za-z0-9_-]+$",
+      });
     }
   });
 });

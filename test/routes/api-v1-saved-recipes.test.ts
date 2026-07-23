@@ -31,6 +31,7 @@ import { SavedRecipeValidationError } from "~/lib/saved-recipes.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser } from "../utils";
+import { expectConsoleError } from "../warning-policy";
 
 const SAVED_AT = "2026-07-21T10:00:00.000Z";
 const NOW_MS = Date.parse(SAVED_AT);
@@ -74,6 +75,7 @@ function expectPrivateHeaders(response: Response, requestId: string) {
   expect(response.headers.get("X-Request-Id")).toBe(requestId);
   expect(response.headers.get("Cache-Control")).toBe("private, no-store");
   expect(response.headers.get("Pragma")).toBe("no-cache");
+  expect(response.headers.get("Vary")).toBe("Authorization, Cookie");
 }
 
 async function createUser(db: LocalDb) {
@@ -207,6 +209,31 @@ describe("REST /api/v1/saved-recipes", () => {
       }), "saved-recipes");
       await expectError(response, `req_saved_limit_${encodeURIComponent(limit)}`, "validation_error", 400);
     }
+  });
+
+  it("omits a recipe deleted between the saved query and summary hydration", async () => {
+    const owner = await createUser(db);
+    const read = await createCredential(db, owner.id, ["kitchen:read"]);
+    savedService.list.mockResolvedValueOnce({
+      query: "",
+      items: [{ recipeId: "deleted_during_hydration", savedAt: SAVED_AT }],
+      nextCursor: "next_after_deleted_recipe",
+    });
+
+    const response = await invoke(apiRequest({
+      path: "saved-recipes",
+      requestId: "req_saved_list_hydration_race",
+      token: read.token,
+    }), "saved-recipes");
+
+    expect(response.status).toBe(200);
+    expectPrivateHeaders(response, "req_saved_list_hydration_race");
+    await expect(readJson(response)).resolves.toMatchObject({
+      data: {
+        recipes: [],
+        nextCursor: "next_after_deleted_recipe",
+      },
+    });
   });
 
   it("uses exact PUT and DELETE bodies, service inputs, envelopes, and 200 statuses", async () => {
@@ -495,6 +522,149 @@ describe("REST /api/v1/saved-recipes", () => {
     expect(savedService.save).not.toHaveBeenCalled();
   });
 
+  it("returns idempotency_in_progress when an in-flight DELETE still has a saved row", async () => {
+    const owner = await createUser(db);
+    const recipe = await createRecipe(db, owner.id);
+    const write = await createCredential(db, owner.id, ["kitchen:write"]);
+    const body = { clientMutationId: "cm_saved_delete_in_flight" };
+    const path = `/api/v1/saved-recipes/${recipe.id}`;
+    await db.savedRecipe.create({
+      data: { userId: owner.id, recipeId: recipe.id, savedAt: SAVED_AT },
+    });
+    await db.apiIdempotencyKey.create({
+      data: {
+        userId: owner.id,
+        credentialId: write.credential.id,
+        clientKey: idempotencyClientKey({
+          id: owner.id,
+          source: "bearer",
+          credentialId: write.credential.id,
+        }),
+        key: body.clientMutationId,
+        operation: "saved-recipes.unsave",
+        requestHash: await hashIdempotencyRequest({ method: "DELETE", path, body }),
+        expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_MS),
+      },
+    });
+
+    const response = await invoke(apiRequest({
+      path: `saved-recipes/${recipe.id}`,
+      method: "DELETE",
+      requestId: "req_saved_delete_in_flight",
+      token: write.token,
+      body,
+    }), `saved-recipes/${recipe.id}`);
+
+    await expectError(response, "req_saved_delete_in_flight", "idempotency_in_progress", 409);
+    expect(response.headers.get("Retry-After")).toBe(String(IDEMPOTENCY_RETRY_AFTER_SECONDS));
+    expect(savedService.unsave).not.toHaveBeenCalled();
+  });
+
+  it("recovers an in-flight PUT from its persisted saved row after the recipe is deleted", async () => {
+    const owner = await createUser(db);
+    const recipe = await createRecipe(db, owner.id);
+    const write = await createCredential(db, owner.id, ["kitchen:write"]);
+    const body = { clientMutationId: "cm_saved_deleted_recipe_recovery" };
+    const path = `/api/v1/saved-recipes/${recipe.id}`;
+    await db.savedRecipe.create({
+      data: { userId: owner.id, recipeId: recipe.id, savedAt: SAVED_AT },
+    });
+    await db.recipe.update({
+      where: { id: recipe.id },
+      data: { deletedAt: new Date(NOW_MS + 1_000) },
+    });
+    await db.apiIdempotencyKey.create({
+      data: {
+        userId: owner.id,
+        credentialId: write.credential.id,
+        clientKey: idempotencyClientKey({
+          id: owner.id,
+          source: "bearer",
+          credentialId: write.credential.id,
+        }),
+        key: body.clientMutationId,
+        operation: "saved-recipes.save",
+        requestHash: await hashIdempotencyRequest({ method: "PUT", path, body }),
+        expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_MS),
+      },
+    });
+
+    const response = await invoke(apiRequest({
+      path: `saved-recipes/${recipe.id}`,
+      method: "PUT",
+      requestId: "req_saved_deleted_recipe_recovery",
+      token: write.token,
+      body,
+    }), `saved-recipes/${recipe.id}`);
+
+    expect(response.status).toBe(200);
+    expectPrivateHeaders(response, "req_saved_deleted_recipe_recovery");
+    await expect(readJson(response)).resolves.toMatchObject({
+      requestId: "req_saved_deleted_recipe_recovery",
+      data: {
+        saved: true,
+        recipeId: recipe.id,
+        savedAt: SAVED_AT,
+        mutation: { clientMutationId: body.clientMutationId, replayed: true },
+      },
+    });
+    expect(savedService.save).not.toHaveBeenCalled();
+  });
+
+  it("returns recovered in-flight state when receipt completion remains unavailable", async () => {
+    const owner = await createUser(db);
+    const recipe = await createRecipe(db, owner.id);
+    const write = await createCredential(db, owner.id, ["kitchen:write"]);
+    const body = { clientMutationId: "cm_saved_in_flight_receipt_failure" };
+    const path = `/api/v1/saved-recipes/${recipe.id}`;
+    const completionFailure = new Error("recovered receipt completion unavailable");
+    await db.savedRecipe.create({
+      data: { userId: owner.id, recipeId: recipe.id, savedAt: SAVED_AT },
+    });
+    await db.apiIdempotencyKey.create({
+      data: {
+        userId: owner.id,
+        credentialId: write.credential.id,
+        clientKey: idempotencyClientKey({
+          id: owner.id,
+          source: "bearer",
+          credentialId: write.credential.id,
+        }),
+        key: body.clientMutationId,
+        operation: "saved-recipes.save",
+        requestHash: await hashIdempotencyRequest({ method: "PUT", path, body }),
+        expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_MS),
+      },
+    });
+    const originalUpdate = db.apiIdempotencyKey.update;
+    db.apiIdempotencyKey.update = vi.fn().mockRejectedValue(completionFailure) as typeof originalUpdate;
+    let response: Response;
+    try {
+      response = await invoke(apiRequest({
+        path: `saved-recipes/${recipe.id}`,
+        method: "PUT",
+        requestId: "req_saved_in_flight_receipt_failure",
+        token: write.token,
+        body,
+      }), `saved-recipes/${recipe.id}`);
+    } finally {
+      db.apiIdempotencyKey.update = originalUpdate;
+    }
+
+    expect(response.status).toBe(200);
+    expectPrivateHeaders(response, "req_saved_in_flight_receipt_failure");
+    await expect(readJson(response)).resolves.toMatchObject({
+      requestId: "req_saved_in_flight_receipt_failure",
+      data: {
+        saved: true,
+        recipeId: recipe.id,
+        savedAt: SAVED_AT,
+        mutation: { clientMutationId: body.clientMutationId, replayed: true },
+      },
+    });
+    expect(savedService.save).not.toHaveBeenCalled();
+  });
+
   it.each(["PUT", "DELETE"] as const)(
     "recovers a committed %s domain write in the same request and replays it later",
     async (method) => {
@@ -547,6 +717,101 @@ describe("REST /api/v1/saved-recipes", () => {
       expect(method === "PUT" ? savedService.save : savedService.unsave).toHaveBeenCalledTimes(1);
     },
   );
+
+  it("returns a same-request recovered write when receipt completion remains unavailable", async () => {
+    const owner = await createUser(db);
+    const recipe = await createRecipe(db, owner.id);
+    const write = await createCredential(db, owner.id, ["kitchen:write"]);
+    const body = { clientMutationId: "cm_saved_same_request_receipt_failure" };
+    const path = `/api/v1/saved-recipes/${recipe.id}`;
+    const completionFailure = new Error("same-request recovered receipt completion unavailable");
+    savedService.save.mockImplementationOnce(async (database, input) => {
+      await savedService.actual!.saveRecipe(database, input);
+      throw new Error("save response failed after commit");
+    });
+    const originalUpdate = db.apiIdempotencyKey.update;
+    db.apiIdempotencyKey.update = vi.fn().mockRejectedValue(completionFailure) as typeof originalUpdate;
+    let response: Response;
+    try {
+      response = await invoke(apiRequest({
+        path: `saved-recipes/${recipe.id}`,
+        method: "PUT",
+        requestId: "req_saved_same_request_receipt_failure",
+        token: write.token,
+        body,
+      }), `saved-recipes/${recipe.id}`);
+    } finally {
+      db.apiIdempotencyKey.update = originalUpdate;
+    }
+
+    expect(response.status).toBe(200);
+    expectPrivateHeaders(response, "req_saved_same_request_receipt_failure");
+    await expect(readJson(response)).resolves.toMatchObject({
+      requestId: "req_saved_same_request_receipt_failure",
+      data: {
+        saved: true,
+        recipeId: recipe.id,
+        savedAt: expect.any(String),
+        mutation: { clientMutationId: body.clientMutationId, replayed: false },
+      },
+    });
+    expect(savedService.save).toHaveBeenCalledTimes(1);
+  });
+
+  it("deletes a failed pre-write DELETE reservation so the same key can retry", async () => {
+    const owner = await createUser(db);
+    const recipe = await createRecipe(db, owner.id);
+    const write = await createCredential(db, owner.id, ["kitchen:write"]);
+    const body = { clientMutationId: "cm_saved_delete_prewrite_failure" };
+    const failure = new Error("saved delete storage unavailable before write");
+    await db.savedRecipe.create({
+      data: { userId: owner.id, recipeId: recipe.id, savedAt: SAVED_AT },
+    });
+    savedService.unsave.mockRejectedValueOnce(failure);
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_saved_delete_prewrite_failure",
+      method: "DELETE",
+      path: `/api/v1/saved-recipes/${recipe.id}`,
+      error: {
+        name: failure.name,
+        message: failure.message,
+        stack: failure.stack,
+      },
+    });
+
+    const first = await invoke(apiRequest({
+      path: `saved-recipes/${recipe.id}`,
+      method: "DELETE",
+      requestId: "req_saved_delete_prewrite_failure",
+      token: write.token,
+      body,
+    }), `saved-recipes/${recipe.id}`);
+    await expectError(first, "req_saved_delete_prewrite_failure", "internal_error", 500);
+    await expect(db.apiIdempotencyKey.findFirst({
+      where: { userId: owner.id, key: body.clientMutationId },
+    })).resolves.toBeNull();
+
+    const retry = await invoke(apiRequest({
+      path: `saved-recipes/${recipe.id}`,
+      method: "DELETE",
+      requestId: "req_saved_delete_prewrite_retry",
+      token: write.token,
+      body,
+    }), `saved-recipes/${recipe.id}`);
+    expect(retry.status).toBe(200);
+    await expect(readJson(retry)).resolves.toMatchObject({
+      requestId: "req_saved_delete_prewrite_retry",
+      data: {
+        saved: false,
+        recipeId: recipe.id,
+        mutation: { clientMutationId: body.clientMutationId, replayed: false },
+      },
+    });
+    expect(savedService.unsave).toHaveBeenCalledTimes(2);
+    await expect(db.savedRecipe.findUnique({
+      where: { userId_recipeId: { userId: owner.id, recipeId: recipe.id } },
+    })).resolves.toBeNull();
+  });
 
   it.each(["PUT", "DELETE"] as const)(
     "keeps a committed %s response stable across idempotency-completion failure",
