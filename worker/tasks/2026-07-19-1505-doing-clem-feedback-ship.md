@@ -388,10 +388,11 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Auth/cache/idempotency/error branches and outgoing inputs are covered; review converges.
 **Completed**: Commit `8cff104a` closes hydration-race, pre-write cleanup, telemetry-redaction, cursor-schema, credential-varying cache, and recovered-receipt failure coverage. All 9,368 app tests pass at exact 100% coverage with warning-clean generated-contract, typecheck, build, boundary, and diff gates. The original API/security review's four findings were repaired and the same reviewer returned `CONVERGED`; evidence is recorded in `unit-5.2c-verification.md`.
 
-### ⬜ Unit 5.3a: Saved Web Experience - Tests
+### ✅ Unit 5.3a: Saved Web Experience - Tests
 **What**: Add failing `test/routes/saved-recipes.test.tsx`, `test/lib/recipe-detail.server.test.ts`, and `test/routes/recipes-id.test.tsx` cases for paginated `/saved-recipes`, recipe-detail save/unsave action/UI, distinct cookbook copy/control, independence, empty/search/error states, and keyboard behavior.
 **Output**: Red saved-page and recipe-detail UI tests.
 **Acceptance**: Tests fail because web still derives saves from cookbook membership.
+**Completed**: Commits `5a519d75` and `7f777337` freeze 152 route, server, and component tests with 125 surrounding passes and 27 intentional absent-feature failures. The contract covers canonical cursor ordering and hydration, exact validation/error behavior, persisted independence in both directions, soft-delete history, optimistic pending/revalidation/rollback semantics, rapid-toggle suppression, semantic Enter/Space operation, and exact per-control guest redirects. The 9-test content boundary and diff hygiene pass warning-free, and three harsh review rounds converged. Evidence is recorded in `unit-5.3a-red.md`.
 
 ### ⬜ Unit 5.3b: Saved Web Experience - Implementation
 **What**: Convert `app/routes/saved-recipes.tsx` to `app/lib/saved-recipes.server.ts`; add the dedicated save action in `app/lib/recipe-detail.server.ts` and save UI alongside distinctly labeled cookbook controls in `app/routes/recipes.$id.tsx`.
@@ -788,3 +789,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-23 08:48 Unit 5.2a complete: commit `35abf80d` freezes 13 REST adapter tests plus OpenAPI, route-registration, playground, docs, and boundary assertions; all 16 failures are the intended absent feature, 22 surrounding checks and typecheck pass, and the locally repaired cold audit is recorded after the reviewer service reached its account quota.
 - 2026-07-23 09:16 Unit 5.2b complete: commit `0b428d15` ships the private SavedRecipe REST/OpenAPI/generated/docs contract, passes the 88-test focused matrix plus warning-clean typecheck/build and visual QA, and fixes the audit-discovered soft-delete retry inconsistency before release.
 - 2026-07-23 10:15 Unit 5.2c complete: commit `8cff104a` passes 9,368 tests at exact 100% coverage, all warning-clean contract/compiler/build/boundary gates, and repaired API/security review convergence across all four findings.
+- 2026-07-23 10:58 Unit 5.3a complete: commits `5a519d75` and `7f777337` freeze the independent saved web workflow across 152 tests with the exact 27-red/125-green split; the boundary oracle passes 9/9 and the third harsh review converged.
