@@ -376,10 +376,11 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Tests fail because the saved routes/contracts are absent.
 **Completed**: Commit `35abf80d` freezes the REST, scope, OpenAPI, generated-playground, and developer-documentation contract. The five-file red gate has 16 intended absent-feature failures and 22 passes; typecheck and the change-boundary ratchet pass warning-free. A cold local audit strengthened PUT/DELETE lifecycle coverage to use real missing, soft-deleted, hard-deleted, and cascaded database states after the fresh reviewer service hit its account-level quota. Evidence is recorded in `unit-5.2a-red.md`.
 
-### ⬜ Unit 5.2b: Saved REST API - Implementation
+### ✅ Unit 5.2b: Saved REST API - Implementation
 **What**: Add handlers in `app/lib/api-v1.server.ts`, operation/scope mapping in `app/lib/api-v1-contract.server.ts`, schemas/routes in `app/lib/api-v1-openapi.server.ts`, regenerated `app/lib/generated/api-v1-playground.ts`, and documentation in `docs/api.md` plus `app/routes/developers.tsx`, all using the saved service.
 **Output**: Private documented SavedRecipe REST contract.
 **Acceptance**: Focused API/OpenAPI tests and generated diff pass.
+**Completed**: Commit `0b428d15` ships bearer-scoped saved-recipe list/save/unsave REST handlers, exact private envelopes and idempotency recovery, SDK and connector OpenAPI profiles, deterministic generated playground output, developer docs, and desktop/mobile visual evidence. A fresh adversarial pass added and fixed the same-key soft-delete retry regression so historical saved rows cannot turn a repeated `PUT` from `404` into a false `200`. The final focused gate passes 88/88 with warning-clean typecheck/build and byte-stable generation; evidence is recorded in `unit-5.2b/verification.md`.
 
 ### ⬜ Unit 5.2c: Saved REST API - Verification
 **What**: Reach 100% REST adapter coverage and obtain API/security review.
@@ -784,3 +785,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-23 00:00 Unit 5.1b complete: commit `1cac98f0` ships the private owner-scoped service; 46 focused tests, warning-clean typecheck/build, diff hygiene, and cold privacy/concurrency review pass.
 - 2026-07-23 00:30 Unit 5.1c complete: commit `3c5b868c` reaches exact focused/full coverage, atomically linearizes save against deletion, proves cascade behavior and outgoing SQL, and passes all warning, build, boundary, telemetry, and cold data/privacy gates.
 - 2026-07-23 08:48 Unit 5.2a complete: commit `35abf80d` freezes 13 REST adapter tests plus OpenAPI, route-registration, playground, docs, and boundary assertions; all 16 failures are the intended absent feature, 22 surrounding checks and typecheck pass, and the locally repaired cold audit is recorded after the reviewer service reached its account quota.
+- 2026-07-23 09:16 Unit 5.2b complete: commit `0b428d15` ships the private SavedRecipe REST/OpenAPI/generated/docs contract, passes the 88-test focused matrix plus warning-clean typecheck/build and visual QA, and fixes the audit-discovered soft-delete retry inconsistency before release.
