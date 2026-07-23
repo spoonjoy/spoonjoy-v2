@@ -409,6 +409,25 @@ describe("handleMcpHttpRequest", () => {
     });
   });
 
+  it("maps invalid get_recipe scale to the existing MCP invalid-argument error", async () => {
+    const principal = await mintCredential({ scopes: ["recipes:read"] });
+    const recipe = await db.recipe.create({ data: createTestRecipe(principal.user.id) });
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(init(73, "tools/call", {
+        name: "get_recipe",
+        arguments: { id: recipe.id, scale: 0 },
+      }), bearer(principal.token)),
+      db,
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      jsonrpc: "2.0",
+      id: 73,
+      error: { code: -32602, message: "scale must be a finite number between 0.1 and 100" },
+    });
+  });
+
   it("rejects OAuth tokens that are not audience-bound to the MCP resource", async () => {
     const response = await handleMcpHttpRequest({
       request: rpcRequest(init(6, "tools/list"), bearer(await mintOAuthToken({ oauthResource: null }))),

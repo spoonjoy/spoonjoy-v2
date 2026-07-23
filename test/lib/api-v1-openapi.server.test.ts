@@ -1293,13 +1293,60 @@ describe("API v1 OpenAPI document", () => {
 
     expect(detail).toBeDefined();
     expect(detail.additionalProperties).toBe(false);
-    expect(Object.keys(detail.properties).sort()).toEqual([...RECIPE_DETAIL_PROPERTIES, "course", "tags"].sort());
+    expect(Object.keys(detail.properties).sort()).toEqual([...RECIPE_DETAIL_PROPERTIES, "course", "scale", "tags"].sort());
     expect([...detail.required].sort()).toEqual([...RECIPE_DETAIL_PROPERTIES, "course", "tags"].sort());
     expect(detail.properties.course).toEqual({
       type: ["string", "null"],
       enum: ["main", "side", "appetizer", "dessert", null],
     });
     expect(detail.properties.tags).toEqual({ type: "array", items: { type: "string" } });
+    expect(detail.properties.scale).toEqual({
+      type: "object",
+      additionalProperties: false,
+      required: ["factor", "appliedTo", "decimalPlaces"],
+      properties: {
+        factor: { type: "number", minimum: 0.1, maximum: 100 },
+        appliedTo: { type: "string", const: "ingredient_quantities" },
+        decimalPlaces: { type: "integer", const: 6 },
+      },
+    });
+  });
+
+  it("documents bounded read-time scaling only on recipe detail", () => {
+    const document = buildApiV1OpenApiDocument();
+    const detail = operation(document, "/api/v1/recipes/{id}", "GET");
+    const list = operation(document, "/api/v1/recipes", "GET");
+    const scale = detail.parameters.find((parameter: { name: string }) => parameter.name === "scale");
+
+    expect(scale).toEqual({
+      name: "scale",
+      in: "query",
+      required: false,
+      description: expect.stringContaining("ingredient quantities"),
+      schema: { type: "number", minimum: 0.1, maximum: 100 },
+    });
+    expect(list.parameters.map((parameter: { name: string }) => parameter.name)).not.toContain("scale");
+    expect(document.components.schemas.RecipeReadSummary.properties).not.toHaveProperty("scale");
+    expect(document.components.schemas.RecipeDetail.properties).not.toHaveProperty("scale");
+  });
+
+  it("publishes unscaled and scaled recipe-detail response examples", () => {
+    const document = buildApiV1OpenApiDocument();
+    const examples = operation(document, "/api/v1/recipes/{id}", "GET")
+      .responses["200"].content["application/json"].examples;
+    const unscaled = examples.unscaled.value.data.recipe;
+    const scaled = examples.scaled.value.data.recipe;
+
+    expect(unscaled).not.toHaveProperty("scale");
+    expect(unscaled.steps[0].ingredients[0].quantity).toBe(1);
+    expect(scaled).toMatchObject({
+      scale: {
+        factor: 2,
+        appliedTo: "ingredient_quantities",
+        decimalPlaces: 6,
+      },
+      steps: [{ ingredients: [{ quantity: 2 }] }],
+    });
   });
 
   it("uses RecipeRead schemas only from the two public recipe GET envelopes", () => {

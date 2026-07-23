@@ -554,6 +554,129 @@ describe("API v1 public recipe reads", () => {
     });
   });
 
+  it("scales recipe-detail ingredient quantities without changing servings, identity, or storage", async () => {
+    const fixture = await createRecipeFixture(db, "Api V1 Scaled Detail");
+    const ingredient = await db.ingredient.findFirstOrThrow({
+      where: { recipeId: fixture.recipe.id },
+    });
+    await db.ingredient.update({
+      where: { id: ingredient.id },
+      data: { quantity: 1.23456789 },
+    });
+
+    const unscaledResponse = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}`,
+      { headers: { "X-Request-Id": "req_recipe_unscaled_contract" } },
+    ) as unknown as Request, `recipes/${fixture.recipe.id}`));
+    const unscaledPayload = await readJson(unscaledResponse);
+    const scaledResponse = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}?scale=1e%2B1`,
+      { headers: { "X-Request-Id": "req_recipe_scaled_contract" } },
+    ) as unknown as Request, `recipes/${fixture.recipe.id}`));
+    const scaledPayload = await readJson(scaledResponse);
+
+    expect(unscaledResponse.status).toBe(200);
+    expectExactKeys(unscaledPayload.data.recipe, RECIPE_DETAIL_KEYS);
+    expect(unscaledPayload.data.recipe).not.toHaveProperty("scale");
+    expect(scaledResponse.status).toBe(200);
+    expectExactKeys(scaledPayload.data.recipe, [...RECIPE_DETAIL_KEYS, "scale"]);
+    expect(scaledPayload.data.recipe.scale).toEqual({
+      factor: 10,
+      appliedTo: "ingredient_quantities",
+      decimalPlaces: 6,
+    });
+    expect(scaledPayload.data.recipe.servings).toBe("4");
+    expect(scaledPayload.data.recipe.steps[0].ingredients[0]).toMatchObject({
+      id: ingredient.id,
+      name: fixture.ingredientRef.name,
+      quantity: 12.345679,
+      unit: "lb",
+    });
+    await expect(db.ingredient.findUniqueOrThrow({ where: { id: ingredient.id } }))
+      .resolves.toMatchObject({ quantity: 1.23456789 });
+  });
+
+  it.each([
+    ["0.1", 0.1],
+    ["100", 100],
+    ["1e2", 100],
+    ["1E-1", 0.1],
+    ["1e+1", 10],
+  ])("accepts REST detail scale grammar %s", async (raw, factor) => {
+    const fixture = await createRecipeFixture(db, `Api V1 Scale Grammar ${raw}`);
+    const response = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}?scale=${encodeURIComponent(raw)}`,
+      { headers: { "X-Request-Id": `req_recipe_scale_valid_${factor}` } },
+    ) as unknown as Request, `recipes/${fixture.recipe.id}`));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expect(payload.data.recipe.scale.factor).toBe(factor);
+  });
+
+  it.each([
+    "",
+    "+1",
+    "0x1",
+    " 1 ",
+    "01",
+    ".5",
+    "1.",
+    "NaN",
+    "Infinity",
+    "null",
+    "-0.1",
+    "0.099999",
+    "100.000001",
+  ])("rejects invalid REST detail scale %j with field metadata", async (raw) => {
+    const fixture = await createRecipeFixture(db, "Api V1 Invalid Scale");
+    const response = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}?scale=${encodeURIComponent(raw)}`,
+      { headers: { "X-Request-Id": "req_recipe_scale_invalid" } },
+    ) as unknown as Request, `recipes/${fixture.recipe.id}`));
+
+    expect(response.status).toBe(400);
+    await expect(readJson(response)).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "validation_error",
+        status: 400,
+        details: { field: "scale" },
+      },
+    });
+  });
+
+  it("rejects repeated REST detail scales", async () => {
+    const fixture = await createRecipeFixture(db, "Api V1 Repeated Scale");
+    const response = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}?scale=1&scale=2`,
+      { headers: { "X-Request-Id": "req_recipe_scale_repeated" } },
+    ) as unknown as Request, `recipes/${fixture.recipe.id}`));
+
+    expect(response.status).toBe(400);
+    await expect(readJson(response)).resolves.toMatchObject({
+      error: { code: "validation_error", details: { field: "scale" } },
+    });
+  });
+
+  it("rejects recipe-detail multiplication overflow as an all-or-nothing validation error", async () => {
+    const fixture = await createRecipeFixture(db, "Api V1 Scale Overflow");
+    const ingredient = await db.ingredient.findFirstOrThrow({ where: { recipeId: fixture.recipe.id } });
+    await db.ingredient.update({ where: { id: ingredient.id }, data: { quantity: 1e308 } });
+
+    const response = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}?scale=100`,
+      { headers: { "X-Request-Id": "req_recipe_scale_overflow" } },
+    ) as unknown as Request, `recipes/${fixture.recipe.id}`));
+
+    expect(response.status).toBe(400);
+    await expect(readJson(response)).resolves.toMatchObject({
+      error: { code: "validation_error", details: { field: "scale" } },
+    });
+    await expect(db.ingredient.findUniqueOrThrow({ where: { id: ingredient.id } }))
+      .resolves.toMatchObject({ quantity: 1e308 });
+  });
+
   it("excludes deleted recipes and returns missing/deleted recipes as not_found", async () => {
     const active = await createRecipeFixture(db, "Api V1 Active");
     const deleted = await createRecipeFixture(db, "Api V1 Deleted");

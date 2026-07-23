@@ -1612,6 +1612,96 @@ describe("spoonjoy MCP tools", () => {
     });
   });
 
+  it("publishes a bounded number-only scale argument on MCP get_recipe", () => {
+    expect(schemaProperty("get_recipe", "scale")).toMatchObject({
+      type: "number",
+      minimum: 0.1,
+      maximum: 100,
+    });
+  });
+
+  it("scales MCP get_recipe quantities without changing servings or stored values", async () => {
+    const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: `Scaled MCP Recipe ${faker.string.alphanumeric(8)}`,
+      servings: "4",
+      steps: [{
+        description: "Mix",
+        ingredients: [{ name: "Flour", quantity: 1.23456789, unit: "Cup" }],
+      }],
+    }, context));
+    const ingredient = await context.db.ingredient.findFirstOrThrow({
+      where: { recipeId: created.recipe.id },
+    });
+
+    const unscaled = parseJson(await callSpoonjoyMcpTool("get_recipe", {
+      id: created.recipe.id,
+    }, context));
+    const scaled = parseJson(await callSpoonjoyMcpTool("get_recipe", {
+      id: created.recipe.id,
+      scale: 2.5,
+    }, context));
+
+    expectExactKeys(unscaled.recipe, [...MCP_RECIPE_BASE_KEYS, "course", "tags"]);
+    expect(unscaled.recipe).not.toHaveProperty("scale");
+    expectExactKeys(scaled.recipe, [...MCP_RECIPE_BASE_KEYS, "course", "tags", "scale"]);
+    expect(scaled.recipe).toMatchObject({
+      servings: "4",
+      scale: {
+        factor: 2.5,
+        appliedTo: "ingredient_quantities",
+        decimalPlaces: 6,
+      },
+      steps: [{
+        ingredients: [{
+          id: ingredient.id,
+          name: "flour",
+          quantity: 3.08642,
+          unit: "cup",
+        }],
+      }],
+    });
+    await expect(context.db.ingredient.findUniqueOrThrow({ where: { id: ingredient.id } }))
+      .resolves.toMatchObject({ quantity: 1.23456789 });
+  });
+
+  it.each([null, "2", Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 0.09, 101])(
+    "rejects invalid MCP get_recipe scale %j",
+    async (scale) => {
+      const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+        title: `Invalid Scale MCP Recipe ${faker.string.alphanumeric(8)}`,
+      }, context));
+
+      await expect(callSpoonjoyMcpTool("get_recipe", {
+        id: created.recipe.id,
+        scale,
+      }, context)).rejects.toThrow("scale must be a finite number between 0.1 and 100");
+    },
+  );
+
+  it("rejects MCP get_recipe multiplication overflow without changing storage", async () => {
+    const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: `Overflow MCP Recipe ${faker.string.alphanumeric(8)}`,
+      steps: [{
+        description: "Mix",
+        ingredients: [{ name: "Flour", quantity: 1, unit: "Cup" }],
+      }],
+    }, context));
+    const ingredient = await context.db.ingredient.findFirstOrThrow({
+      where: { recipeId: created.recipe.id },
+    });
+    await context.db.ingredient.update({
+      where: { id: ingredient.id },
+      data: { quantity: 1e308 },
+    });
+
+    await expect(callSpoonjoyMcpTool("get_recipe", {
+      id: created.recipe.id,
+      scale: 100,
+    }, context)).rejects.toThrow("scale produced a non-finite ingredient quantity");
+    await expect(context.db.ingredient.findUniqueOrThrow({ where: { id: ingredient.id } }))
+      .resolves.toMatchObject({ quantity: 1e308 });
+  });
+
   it("adds neutral metadata only to MCP search_recipes", async () => {
     const fixture = await createNeutralMetadataMcpFixture(context);
     const recipes = parseJson(await callSpoonjoyMcpTool("search_recipes", {
