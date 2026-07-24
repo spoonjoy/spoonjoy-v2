@@ -74,7 +74,7 @@ function seededDb(): DatabaseSyncType {
     "r1",
     "legacy default",
     "u1",
-    "https://res.cloudinary.com/dpjmyc4uz/image/upload/v1674541350/clbe7wr180009tkhggghtl1qd.png",
+    "https://legacy-image-host.invalid/image/upload/v1674541350/clbe7wr180009tkhggghtl1qd.png",
     "2026-01-01T00:00:00Z",
     "2026-01-01T00:00:00Z",
   );

@@ -580,10 +580,11 @@ describe("Signup Route", () => {
 
         await screen.findByRole("heading", { name: "Sign Up" });
         const googleButton = screen.getByRole("button", { name: /continue with google/i });
-        // The button should be inside a form that posts to the OAuth initiation route
+        // The button submits a GET navigation to the OAuth initiation route. GET is
+        // required: the service worker aborts cross-origin POST redirects (see oauth.tsx).
         const form = googleButton.closest("form");
         expect(form).toHaveAttribute("action", "/auth/google");
-        expect(form).toHaveAttribute("method", "post");
+        expect(form).toHaveAttribute("method", "get");
       });
 
       it("should have Apple button that links to Apple OAuth initiation route", async () => {
@@ -599,10 +600,11 @@ describe("Signup Route", () => {
 
         await screen.findByRole("heading", { name: "Sign Up" });
         const appleButton = screen.getByRole("button", { name: /continue with apple/i });
-        // The button should be inside a form that posts to the OAuth initiation route
+        // The button submits a GET navigation to the OAuth initiation route. GET is
+        // required: the service worker aborts cross-origin POST redirects (see oauth.tsx).
         const form = appleButton.closest("form");
         expect(form).toHaveAttribute("action", "/auth/apple");
-        expect(form).toHaveAttribute("method", "post");
+        expect(form).toHaveAttribute("method", "get");
       });
 
       it("should have GitHub button that links to GitHub OAuth initiation route", async () => {
@@ -620,10 +622,10 @@ describe("Signup Route", () => {
         const githubButton = screen.getByRole("button", { name: /continue with github/i });
         const form = githubButton.closest("form");
         expect(form).toHaveAttribute("action", "/auth/github");
-        expect(form).toHaveAttribute("method", "post");
+        expect(form).toHaveAttribute("method", "get");
       });
 
-      it("carries redirectTo into the OAuth form action so signup returns to the connector", async () => {
+      it("carries redirectTo into the OAuth form so signup returns to the connector", async () => {
         const returnTo = "/oauth/authorize?client_id=abc&response_type=code";
         const Stub = createTestRoutesStub([
           {
@@ -637,7 +639,11 @@ describe("Signup Route", () => {
 
         await screen.findByRole("heading", { name: "Sign Up" });
         const form = screen.getByRole("button", { name: /continue with apple/i }).closest("form");
-        expect(form).toHaveAttribute("action", `/auth/apple?redirectTo=${encodeURIComponent(returnTo)}`);
+        // GET form: action stays bare and redirectTo rides as a hidden input serialized
+        // into the query string, read by the loader exactly as before.
+        expect(form).toHaveAttribute("action", "/auth/apple");
+        const hidden = form?.querySelector('input[name="redirectTo"]');
+        expect(hidden).toHaveAttribute("value", returnTo);
       });
 
       it("should display OAuth separator between password form and OAuth buttons", async () => {

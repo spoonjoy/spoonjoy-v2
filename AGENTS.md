@@ -73,6 +73,13 @@ npm run prisma:studio # Database GUI
 - Use sub-agents as implementors and reviewers where parallelism improves completeness or quality.
 - If an autopilot/support skill needed for this workflow is unavailable, install or update it from `ouroboros-skills` before falling back.
 
+### Final Response Gate
+- Never send a final completion response while an implementation PR is merely open. An accepted coding task is not done until every required PR is merged or an explicit human-only blocker prevents merging.
+- Before final response, verify the merged commit's required checks, deployment workflow, and production/QA smoke path appropriate to the change. If deployment is not required for the change, say why in the final response.
+- Before final response, clean task-owned remote branches, local branches, worktrees, temporary smoke artifacts, and disposable smoke data. Leave unrelated user or other-agent work untouched.
+- If a repository disables the preferred merge strategy, use the next enabled PR merge strategy and continue through the same post-merge verification and cleanup gate.
+- If any part of merge, deploy, smoke, or cleanup is blocked by a true human-only blocker, state the exact blocker and leave clear continuation instructions. Do not treat an open PR as a completed handoff.
+
 ## Code Style
 
 ### General Principles
@@ -162,7 +169,7 @@ Always notify completion so Slugger (the Ouroboros agent) knows you're finished:
 ouro msg --to slugger "Done: [brief summary of what was accomplished]"
 ```
 
-Include this at the end of your task. Example:
+Include this only after the Final Response Gate is satisfied. Example:
 ```bash
 ouro msg --to slugger "Done: Fixed all 21 ingredientRef test calls, all tests passing"
 ```

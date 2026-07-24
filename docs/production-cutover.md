@@ -56,7 +56,7 @@ The verified source report (preserved for historical reference):
 - v1 had no shopping-list rows to migrate.
 - Auth continuity: GitHub OAuth support preserved the two GitHub-only v1 users after `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` were set in Cloudflare.
 
-Follow-up image hosting cleanup: the imported `RecipeCover.imageUrl` values initially preserved v1 Cloudinary URLs. Run `pnpm run migrate:cloudinary-r2 -- --target-env production --dry-run` to audit and `pnpm run migrate:cloudinary-r2 -- --target-env production --apply` to copy those legacy cover assets into the production R2 bucket and patch both source and search-index references.
+Follow-up image hosting cleanup has been completed. Current import, upload, and generated-cover flows should write Spoonjoy `/photos/...` URLs backed by the production R2 bucket.
 
 Future fresh cutovers (e.g., a v3) should write a new importer rather than resurrecting the v1 scripts — the v1 schema is no longer authoritative.
 
