@@ -1088,6 +1088,22 @@
       "ecosystem": "npm",
       "reason": "React Router RSC-mode CSRF bypass (GHSA-qwww-vcr4-c8h2), fixed only in react-router 8.3.0 (major). This app is SSR-only — react-router.config.ts ssr:true, no RSC mode, zero RSC usage in app/ — so the RSC-mode action-execution path is not reachable. Deferring the v8 migration; re-evaluate if RSC mode is ever adopted.",
       "expiresOn": "2026-10-22"
+    },
+    {
+      "id": "GHSA-mh99-v99m-4gvg",
+      "packageName": "brace-expansion",
+      "version": "1.1.16",
+      "ecosystem": "npm",
+      "reason": "brace-expansion DoS via unbounded brace expansion (GHSA-mh99-v99m-4gvg), newly published. No within-major fix exists: latest 1.x (1.1.16) and 2.x (2.1.2) are both affected; the only fixed release is 5.0.8, so remediation requires a cross-major forced override of the existing pnpm.overrides. brace-expansion here is a transitive build/tooling dependency (via minimatch/glob) with no untrusted-runtime-input path, so practical exposure is minimal. Cross-major remediation to 5.0.8 deferred for operator review; re-evaluate before expiry.",
+      "expiresOn": "2026-10-22"
+    },
+    {
+      "id": "GHSA-mh99-v99m-4gvg",
+      "packageName": "brace-expansion",
+      "version": "2.1.2",
+      "ecosystem": "npm",
+      "reason": "brace-expansion DoS via unbounded brace expansion (GHSA-mh99-v99m-4gvg), newly published. No within-major fix exists: latest 1.x (1.1.16) and 2.x (2.1.2) are both affected; the only fixed release is 5.0.8, so remediation requires a cross-major forced override of the existing pnpm.overrides. brace-expansion here is a transitive build/tooling dependency (via minimatch/glob) with no untrusted-runtime-input path, so practical exposure is minimal. Cross-major remediation to 5.0.8 deferred for operator review; re-evaluate before expiry.",
+      "expiresOn": "2026-10-22"
     }
   ]
 }
