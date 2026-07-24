@@ -1080,6 +1080,14 @@
       "ecosystem": "npm",
       "reason": "Initial W16 OSV baseline from v2.3.8 real pnpm-lock scan; dependency owner must remediate or renew with fresh review before expiry.",
       "expiresOn": "2026-07-30"
+    },
+    {
+      "id": "GHSA-qwww-vcr4-c8h2",
+      "packageName": "react-router",
+      "version": "7.18.1",
+      "ecosystem": "npm",
+      "reason": "React Router RSC-mode CSRF bypass (GHSA-qwww-vcr4-c8h2), fixed only in react-router 8.3.0 (major). This app is SSR-only — react-router.config.ts ssr:true, no RSC mode, zero RSC usage in app/ — so the RSC-mode action-execution path is not reachable. Deferring the v8 migration; re-evaluate if RSC mode is ever adopted.",
+      "expiresOn": "2026-10-22"
     }
   ]
 }
