@@ -587,6 +587,7 @@ async function recipeDocuments(database: PrismaClient): Promise<SearchDocumentIn
         recipe.sourceUrl,
         chef.username,
         ...cookbookTitles,
+        ...tagLabels,
         ...stepText,
       ]),
       href: `/recipes/${recipe.id}`,

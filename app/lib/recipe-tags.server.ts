@@ -38,6 +38,37 @@ interface RecipeTagReplacementDependencies {
   randomId?: () => string;
 }
 
+export interface RecipeAuthoringMetadataFormResult {
+  course: RecipeCourse | null;
+  tags: string[];
+  errors: {
+    course?: string;
+    tags?: string;
+  };
+}
+
+export interface RecipeAuthoringUpdateInput {
+  database: PrismaClient;
+  nativeDatabase: CompatibleRecipeTagD1Database | null;
+  userId: string;
+  recipeId: string;
+  title: string;
+  description: string | null;
+  servings: string | null;
+  course: RecipeCourse | null;
+  tags: string[];
+}
+
+export interface RecipeAuthoringUpdateResult {
+  recipeId: string;
+  title: string;
+  description: string | null;
+  servings: string | null;
+  course: RecipeCourse | null;
+  tags: Array<NormalizedRecipeTag & { id: string }>;
+  boundTimestamp: string;
+}
+
 interface ReplacementTag extends NormalizedRecipeTag {
   id: string;
 }
@@ -120,6 +151,27 @@ const INSERT_RECIPE_TAG_SQL = `
     "updatedAt" AS "updatedAt"
 `;
 
+const UPDATE_RECIPE_AUTHORING_SQL = `
+  UPDATE "Recipe"
+  SET "title" = ?, "description" = ?, "servings" = ?, "course" = ?, "updatedAt" = ?
+  WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL
+  RETURNING
+    "id" AS "recipeId", "title", "description", "servings", "course", "updatedAt"
+`;
+
+const UPDATE_RECIPE_COOKBOOKS_SQL = `
+  UPDATE "Cookbook"
+  SET "updatedAt" = ?
+  WHERE "id" IN (SELECT "cookbookId" FROM "RecipeInCookbook"
+    WHERE "recipeId" = ? AND EXISTS (SELECT 1 FROM "Recipe"
+      WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL))
+  RETURNING "id" AS "cookbookId", "updatedAt" AS "updatedAt"
+`;
+
+const EMPTY_AUTHORING_SLOT_SQL = `
+  SELECT "id" AS "recipeId" FROM "Recipe" WHERE 0
+`;
+
 export class RecipeTagValidationError extends Error {
   readonly field: string;
 
@@ -187,6 +239,52 @@ export function normalizeRecipeTags(value: unknown): NormalizedRecipeTag[] {
     validationError("tags", "tags must contain at most 10 unique values");
   }
   return [...unique.values()];
+}
+
+function tagFormError(error: RecipeTagValidationError): string {
+  if (error.message.includes("at most 10")) return "Add no more than 10 tags";
+  if (error.message.includes("must be an array")) return "Tags must be an array";
+  if (error.message.includes("must be a string")) return "Tags must contain only text";
+  if (error.message.includes("control characters")) return "Tags contain unsupported characters";
+  if (error.message.includes("must not be empty")) return "Tags cannot be empty";
+  if (error.message.includes("at most 40")) return "Tags must be 40 characters or fewer";
+  return "Tags are invalid";
+}
+
+export function parseRecipeAuthoringMetadataForm(
+  courseValue: string | null,
+  tagsValue: string | null,
+): RecipeAuthoringMetadataFormResult {
+  let course: RecipeCourse | null = null;
+  let tags: string[] = [];
+  const errors: RecipeAuthoringMetadataFormResult["errors"] = {};
+
+  try {
+    course = normalizeRecipeCourse(courseValue ? courseValue : null);
+  } catch (error) {
+    if (!(error instanceof RecipeTagValidationError)) throw error;
+    errors.course = "Choose a supported course";
+  }
+
+  let parsedTags: unknown = [];
+  if (tagsValue) {
+    try {
+      parsedTags = JSON.parse(tagsValue);
+    } catch {
+      errors.tags = "Tags must be valid JSON";
+    }
+  }
+
+  if (!errors.tags) {
+    try {
+      tags = normalizeRecipeTags(parsedTags).map((tag) => tag.label);
+    } catch (error) {
+      if (!(error instanceof RecipeTagValidationError)) throw error;
+      errors.tags = tagFormError(error);
+    }
+  }
+
+  return { course, tags, errors };
 }
 
 export function asCompatibleRecipeTagD1Database(
@@ -421,7 +519,7 @@ function validateUpdateRow(
 
 function validateInsertRow(
   value: unknown,
-  plan: ReplacementPlan,
+  plan: Pick<ReplacementPlan, "recipeId" | "boundTimestamp">,
   tag: ReplacementTag,
 ) {
   const row = resultRecord(value);
@@ -552,4 +650,292 @@ export async function replaceRecipeTagMetadata(
 
   const results = await input.database.$transaction(plan.operations);
   return plan.finalizeResults(results);
+}
+
+function validateAuthoringUpdateRow(
+  value: unknown,
+  input: RecipeAuthoringUpdateInput,
+  course: RecipeCourse | null,
+  boundTimestamp: string,
+) {
+  const row = resultRecord(value);
+  if (
+    row.recipeId !== input.recipeId
+    || row.title !== input.title
+    || row.description !== input.description
+    || row.servings !== input.servings
+    || row.course !== course
+    || !matchingTimestamp(row.updatedAt, boundTimestamp)
+  ) {
+    throw new Error("Invalid recipe authoring update result");
+  }
+}
+
+function validateAuthoringCookbookRows(
+  rows: unknown[],
+  boundTimestamp: string,
+): Set<string> {
+  const returnedIds = new Set<string>();
+  for (const value of rows) {
+    const row = resultRecord(value);
+    if (
+      typeof row.cookbookId !== "string"
+      || returnedIds.has(row.cookbookId)
+      || !matchingTimestamp(row.updatedAt, boundTimestamp)
+    ) {
+      throw new Error("Invalid recipe authoring cookbook result");
+    }
+    returnedIds.add(row.cookbookId);
+  }
+  return returnedIds;
+}
+
+async function recipeCookbookIds(database: PrismaClient, recipeId: string): Promise<Set<string>> {
+  const memberships = await database.recipeInCookbook.findMany({
+    where: { recipeId },
+    select: { cookbookId: true },
+    orderBy: { cookbookId: "asc" },
+  });
+  return new Set(memberships.map(({ cookbookId }) => cookbookId));
+}
+
+function setsEqual(left: Set<string>, right: Set<string>): boolean {
+  return left.size === right.size && [...left].every((value) => right.has(value));
+}
+
+async function validateAuthoringCookbookIdentity(
+  database: PrismaClient,
+  recipeId: string,
+  before: Set<string>,
+  returned: Set<string>,
+): Promise<void> {
+  if (setsEqual(before, returned)) return;
+
+  let after: Set<string>;
+  try {
+    after = await recipeCookbookIds(database, recipeId);
+  } catch {
+    // The mutation is already committed. A diagnostic read outage must not
+    // turn a successful atomic batch into a false 500.
+    return;
+  }
+  if (setsEqual(after, returned)) return;
+
+  const stableIds = [...before].filter((cookbookId) => after.has(cookbookId));
+  if (stableIds.some((cookbookId) => !returned.has(cookbookId))) {
+    throw new Error("Invalid recipe authoring cookbook result");
+  }
+}
+
+function authoringResult(
+  input: RecipeAuthoringUpdateInput,
+  course: RecipeCourse | null,
+  tags: ReplacementTag[],
+  boundTimestamp: string,
+): RecipeAuthoringUpdateResult {
+  return {
+    recipeId: input.recipeId,
+    title: input.title,
+    description: input.description,
+    servings: input.servings,
+    course,
+    tags: [...tags].sort((left, right) => (
+      compareUtf16(left.normalizedLabel, right.normalizedLabel)
+        || compareUtf16(left.id, right.id)
+    )),
+    boundTimestamp,
+  };
+}
+
+async function finalizeNativeAuthoringResults(
+  results: unknown,
+  operationCount: number,
+  input: RecipeAuthoringUpdateInput,
+  course: RecipeCourse | null,
+  tags: ReplacementTag[],
+  boundTimestamp: string,
+  cookbookIdsBefore: Set<string>,
+): Promise<RecipeAuthoringUpdateResult> {
+  const slice = resultSlice(results, operationCount, undefined);
+  const update = nativeResult(slice[0], "zero-or-one");
+  const deletion = nativeResult(slice[1], "nonnegative");
+  const insertions = tags.map((_, index) => nativeResult(slice[index + 2], "zero-or-one"));
+  const emptySlotCount = Math.max(0, 2 - tags.length);
+  const emptySlots = Array.from({ length: emptySlotCount }, (_, index) => (
+    nativeResult(slice[index + 2 + tags.length], "nonnegative")
+  ));
+  const cookbook = nativeResult(slice[slice.length - 1], "nonnegative");
+  if (emptySlots.some((slot) => slot.changes !== 0 || slot.rows.length !== 0)) {
+    throw new Error("Invalid recipe authoring empty-slot result");
+  }
+  const allZero = update.changes === 0
+    && update.rows.length === 0
+    && deletion.changes === 0
+    && deletion.rows.length === 0
+    && insertions.every((insertion) => insertion.changes === 0 && insertion.rows.length === 0)
+    && cookbook.changes === 0
+    && cookbook.rows.length === 0;
+  if (allZero) throw new RecipeTagNotFoundError(input.recipeId);
+
+  if (update.changes !== 1 || update.rows.length !== 1) {
+    throw new Error("Invalid recipe authoring update result");
+  }
+  validateAuthoringUpdateRow(update.rows[0], input, course, boundTimestamp);
+  if (deletion.rows.length !== 0) throw new Error("Invalid recipe authoring delete result");
+
+  tags.forEach((tag, index) => {
+    const insertion = insertions[index];
+    if (insertion.changes !== 1 || insertion.rows.length !== 1) {
+      throw new Error("Invalid recipe authoring tag result");
+    }
+    validateInsertRow(insertion.rows[0], {
+      boundTimestamp,
+      recipeId: input.recipeId,
+    }, tag);
+  });
+
+  if (cookbook.changes !== cookbook.rows.length) {
+    throw new Error("Invalid recipe authoring cookbook result");
+  }
+  const returnedCookbookIds = validateAuthoringCookbookRows(cookbook.rows, boundTimestamp);
+  await validateAuthoringCookbookIdentity(
+    input.database,
+    input.recipeId,
+    cookbookIdsBefore,
+    returnedCookbookIds,
+  );
+  return authoringResult(input, course, tags, boundTimestamp);
+}
+
+async function finalizeLocalAuthoringResults(
+  results: unknown,
+  operationCount: number,
+  input: RecipeAuthoringUpdateInput,
+  course: RecipeCourse | null,
+  tags: ReplacementTag[],
+  boundTimestamp: string,
+  cookbookIdsBefore: Set<string>,
+): Promise<RecipeAuthoringUpdateResult> {
+  const slice = resultSlice(results, operationCount, undefined);
+  const updateRows = resultRows(slice[0]);
+  const deleted = slice[1];
+  if (typeof deleted !== "number" || !Number.isInteger(deleted) || deleted < 0) {
+    throw new Error("Invalid recipe authoring delete result");
+  }
+  const insertionRows = tags.map((_, index) => resultRows(slice[index + 2]));
+  const emptySlotCount = Math.max(0, 2 - tags.length);
+  const emptySlotRows = Array.from({ length: emptySlotCount }, (_, index) => (
+    resultRows(slice[index + 2 + tags.length])
+  ));
+  const cookbookRows = resultRows(slice[slice.length - 1]);
+  if (emptySlotRows.some((rows) => rows.length !== 0)) {
+    throw new Error("Invalid recipe authoring empty-slot result");
+  }
+  const allZero = updateRows.length === 0
+    && deleted === 0
+    && insertionRows.every((rows) => rows.length === 0)
+    && cookbookRows.length === 0;
+  if (allZero) throw new RecipeTagNotFoundError(input.recipeId);
+
+  if (updateRows.length !== 1) throw new Error("Invalid recipe authoring update result");
+  validateAuthoringUpdateRow(updateRows[0], input, course, boundTimestamp);
+  tags.forEach((tag, index) => {
+    const rows = insertionRows[index];
+    if (rows.length !== 1) throw new Error("Invalid recipe authoring tag result");
+    validateInsertRow(rows[0], {
+      boundTimestamp,
+      recipeId: input.recipeId,
+    }, tag);
+  });
+  const returnedCookbookIds = validateAuthoringCookbookRows(cookbookRows, boundTimestamp);
+  await validateAuthoringCookbookIdentity(
+    input.database,
+    input.recipeId,
+    cookbookIdsBefore,
+    returnedCookbookIds,
+  );
+  return authoringResult(input, course, tags, boundTimestamp);
+}
+
+export async function updateRecipeAuthoringMetadata(
+  input: RecipeAuthoringUpdateInput,
+  dependencies: RecipeTagReplacementDependencies = {},
+): Promise<RecipeAuthoringUpdateResult> {
+  const course = normalizeRecipeCourse(input.course);
+  const normalizedTags = normalizeRecipeTags(input.tags);
+  const boundTimestamp = (dependencies.now?.() ?? new Date()).toISOString();
+  const randomId = dependencies.randomId ?? (() => crypto.randomUUID());
+  const tags = normalizedTags.map((tag) => ({ ...tag, id: randomId() }));
+  const cookbookIdsBefore = await recipeCookbookIds(input.database, input.recipeId);
+  const updateValues = [
+    input.title,
+    input.description,
+    input.servings,
+    course,
+    boundTimestamp,
+    input.recipeId,
+    input.userId,
+  ];
+  const deleteValues = [input.recipeId, input.recipeId, input.userId];
+  const insertionValues = tags.map((tag) => [
+    tag.id,
+    tag.label,
+    tag.normalizedLabel,
+    boundTimestamp,
+    boundTimestamp,
+    input.recipeId,
+    input.userId,
+  ]);
+  const cookbookValues = [
+    boundTimestamp,
+    input.recipeId,
+    input.recipeId,
+    input.userId,
+  ];
+  const nativeDatabase = asCompatibleRecipeTagD1Database(input.nativeDatabase);
+  const emptySlotCount = Math.max(0, 2 - tags.length);
+
+  if (nativeDatabase) {
+    const operations = [
+      bindNative(nativeDatabase, UPDATE_RECIPE_AUTHORING_SQL, updateValues),
+      bindNative(nativeDatabase, DELETE_RECIPE_TAGS_SQL, deleteValues),
+      ...insertionValues.map((values) => bindNative(nativeDatabase, INSERT_RECIPE_TAG_SQL, values)),
+      ...Array.from({ length: emptySlotCount }, () => (
+        bindNative(nativeDatabase, EMPTY_AUTHORING_SLOT_SQL, [])
+      )),
+      bindNative(nativeDatabase, UPDATE_RECIPE_COOKBOOKS_SQL, cookbookValues),
+    ];
+    const results = await nativeDatabase.batch(operations);
+    return await finalizeNativeAuthoringResults(
+      results,
+      operations.length,
+      { ...input, nativeDatabase },
+      course,
+      tags,
+      boundTimestamp,
+      cookbookIdsBefore,
+    );
+  }
+
+  const operations = [
+    input.database.$queryRawUnsafe(UPDATE_RECIPE_AUTHORING_SQL, ...updateValues),
+    input.database.$executeRawUnsafe(DELETE_RECIPE_TAGS_SQL, ...deleteValues),
+    ...insertionValues.map((values) => (
+      input.database.$queryRawUnsafe(INSERT_RECIPE_TAG_SQL, ...values)
+    )),
+    ...Array.from({ length: emptySlotCount }, () => (
+      input.database.$queryRawUnsafe(EMPTY_AUTHORING_SLOT_SQL)
+    )),
+    input.database.$queryRawUnsafe(UPDATE_RECIPE_COOKBOOKS_SQL, ...cookbookValues),
+  ];
+  const results = await input.database.$transaction(operations);
+  return await finalizeLocalAuthoringResults(
+    results,
+    operations.length,
+    input,
+    course,
+    tags,
+    boundTimestamp,
+    cookbookIdsBefore,
+  );
 }

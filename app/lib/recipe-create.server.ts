@@ -1,6 +1,13 @@
 import type { Prisma, PrismaClient as PrismaClientType, Recipe } from "@prisma/client";
 import type { ParsedIngredient } from "~/lib/ingredient-parse.server";
 import {
+  asCompatibleRecipeTagD1Database,
+  normalizeRecipeCourse,
+  normalizeRecipeTags,
+  type CompatibleRecipeTagD1Database,
+  type RecipeCourse,
+} from "~/lib/recipe-tags.server";
+import {
   validateIngredientName,
   validateQuantity,
   validateStepDescription,
@@ -32,8 +39,35 @@ export interface CreateRecipeDraftInput {
   description: string | null;
   servings: string | null;
   chefId: string;
+  course?: RecipeCourse | null;
+  tags?: unknown;
   steps: RecipeStepDraft[];
 }
+
+export interface CreateRecipeDraftOptions {
+  nativeDatabase?: CompatibleRecipeTagD1Database | null;
+  now?: () => Date;
+  randomId?: () => string;
+}
+
+interface CreationTag {
+  id: string;
+  label: string;
+  normalizedLabel: string;
+}
+
+const INSERT_RECIPE_SQL = `
+  INSERT INTO "Recipe" ("id", "title", "description", "servings", "chefId", "course", "createdAt", "updatedAt")
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  RETURNING "id", "title", "description", "servings", "chefId", "course", "createdAt", "updatedAt"
+`;
+
+const INSERT_RECIPE_TAG_SQL = `
+  INSERT INTO "RecipeTag" ("id", "recipeId", "label", "normalizedLabel", "createdAt", "updatedAt")
+  VALUES (?, ?, ?, ?, ?, ?)
+  RETURNING
+    "recipeId", "id" AS "tagId", "label", "normalizedLabel", "createdAt", "updatedAt"
+`;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Object.prototype.toString.call(value) === "[object Object]";
@@ -225,29 +259,214 @@ async function getOrCreateIngredientRef(db: Database, name: string) {
   });
 }
 
+function resultRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Invalid recipe creation result");
+  }
+  return value as Record<string, unknown>;
+}
+
+function resultRows(value: unknown): unknown[] {
+  if (!Array.isArray(value)) throw new Error("Invalid recipe creation result");
+  return value;
+}
+
+function matchingTimestamp(value: unknown, expected: string): boolean {
+  if (value === expected) return true;
+  return value instanceof Date
+    && Number.isFinite(value.getTime())
+    && value.toISOString() === expected;
+}
+
+function validateCreationRecipeRow(
+  value: unknown,
+  input: CreateRecipeDraftInput,
+  course: RecipeCourse | null,
+  timestamp: string,
+) {
+  const row = resultRecord(value);
+  if (
+    row.id !== input.id
+    || row.title !== input.title
+    || row.description !== input.description
+    || row.servings !== input.servings
+    || row.chefId !== input.chefId
+    || row.course !== course
+    || !matchingTimestamp(row.createdAt, timestamp)
+    || !matchingTimestamp(row.updatedAt, timestamp)
+  ) {
+    throw new Error("Invalid recipe creation row");
+  }
+}
+
+function validateCreationTagRow(
+  value: unknown,
+  recipeId: string,
+  tag: CreationTag,
+  timestamp: string,
+) {
+  const row = resultRecord(value);
+  if (
+    row.recipeId !== recipeId
+    || row.tagId !== tag.id
+    || row.label !== tag.label
+    || row.normalizedLabel !== tag.normalizedLabel
+    || !matchingTimestamp(row.createdAt, timestamp)
+    || !matchingTimestamp(row.updatedAt, timestamp)
+  ) {
+    throw new Error("Invalid recipe tag creation row");
+  }
+}
+
+function validateLocalCreationResults(
+  results: unknown,
+  input: CreateRecipeDraftInput,
+  course: RecipeCourse | null,
+  tags: CreationTag[],
+  timestamp: string,
+) {
+  if (!Array.isArray(results) || results.length !== tags.length + 1) {
+    throw new Error("Invalid recipe creation result");
+  }
+  const recipeRows = resultRows(results[0]);
+  if (recipeRows.length !== 1) throw new Error("Invalid recipe creation result");
+  validateCreationRecipeRow(recipeRows[0], input, course, timestamp);
+
+  tags.forEach((tag, index) => {
+    const rows = resultRows(results[index + 1]);
+    if (rows.length !== 1) throw new Error("Invalid recipe tag creation result");
+    validateCreationTagRow(rows[0], input.id, tag, timestamp);
+  });
+}
+
+function nativeCreationRows(value: unknown): unknown[] {
+  const result = resultRecord(value);
+  if (result.success !== true) throw new Error("Recipe creation batch statement failed");
+  const meta = resultRecord(result.meta);
+  if (meta.changes !== 1) throw new Error("Invalid recipe creation result");
+  return resultRows(result.results);
+}
+
+function validateNativeCreationResults(
+  results: unknown,
+  input: CreateRecipeDraftInput,
+  course: RecipeCourse | null,
+  tags: CreationTag[],
+  timestamp: string,
+) {
+  if (!Array.isArray(results) || results.length !== tags.length + 1) {
+    throw new Error("Invalid recipe creation result");
+  }
+  const recipeRows = nativeCreationRows(results[0]);
+  if (recipeRows.length !== 1) throw new Error("Invalid recipe creation result");
+  validateCreationRecipeRow(recipeRows[0], input, course, timestamp);
+
+  tags.forEach((tag, index) => {
+    const rows = nativeCreationRows(results[index + 1]);
+    if (rows.length !== 1) throw new Error("Invalid recipe tag creation result");
+    validateCreationTagRow(rows[0], input.id, tag, timestamp);
+  });
+}
+
+function creationRecipe(
+  input: CreateRecipeDraftInput,
+  course: RecipeCourse | null,
+  timestamp: Date,
+): Recipe {
+  return {
+    id: input.id,
+    title: input.title,
+    description: input.description,
+    servings: input.servings,
+    chefId: input.chefId,
+    deletedAt: null,
+    course,
+    activeCoverId: null,
+    activeCoverVariant: null,
+    coverMode: "auto",
+    sourceRecipeId: null,
+    sourceUrl: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+async function createRecipeWithMetadata(
+  db: PrismaClientType,
+  input: CreateRecipeDraftInput,
+  options: CreateRecipeDraftOptions,
+): Promise<Recipe> {
+  const course = normalizeRecipeCourse(input.course ?? null);
+  const normalizedTags = normalizeRecipeTags(input.tags ?? []);
+  const timestamp = (options.now?.() ?? new Date());
+  const boundTimestamp = timestamp.toISOString();
+  const randomId = options.randomId ?? (() => crypto.randomUUID());
+  const tags = normalizedTags.map((tag) => ({ ...tag, id: randomId() }));
+  const recipeValues = [
+    input.id,
+    input.title,
+    input.description,
+    input.servings,
+    input.chefId,
+    course,
+    boundTimestamp,
+    boundTimestamp,
+  ];
+  const tagValues = tags.map((tag) => [
+    tag.id,
+    input.id,
+    tag.label,
+    tag.normalizedLabel,
+    boundTimestamp,
+    boundTimestamp,
+  ]);
+  const nativeDatabase = asCompatibleRecipeTagD1Database(options.nativeDatabase);
+
+  if (nativeDatabase) {
+    const operations = [
+      nativeDatabase.prepare(INSERT_RECIPE_SQL).bind(...recipeValues),
+      ...tagValues.map((values) => nativeDatabase.prepare(INSERT_RECIPE_TAG_SQL).bind(...values)),
+    ];
+    const results = await nativeDatabase.batch(operations);
+    validateNativeCreationResults(results, input, course, tags, boundTimestamp);
+  } else {
+    const operations = [
+      db.$queryRawUnsafe(INSERT_RECIPE_SQL, ...recipeValues),
+      ...tagValues.map((values) => db.$queryRawUnsafe(INSERT_RECIPE_TAG_SQL, ...values)),
+    ];
+    const results = await db.$transaction(operations);
+    validateLocalCreationResults(results, input, course, tags, boundTimestamp);
+  }
+
+  return creationRecipe(input, course, timestamp);
+}
+
 export async function createRecipeDraft(
   db: PrismaClientType,
-  input: CreateRecipeDraftInput
+  input: CreateRecipeDraftInput,
+  options: CreateRecipeDraftOptions = {},
 ): Promise<Recipe> {
   // Cloudflare D1 (used in both local dev and production) does not support
   // Prisma's interactive `$transaction(async (tx) => ...)` form. Mirror the
   // F1 forkRecipe pattern (see `recipe-fork.server.ts`) and persist the
   // recipe graph as a sequence of writes against the top-level client.
   //
-  // Trade-off: a mid-sequence failure can leave a partial recipe row in the
-  // database. This is the same risk F1 accepted; the schema's
-  // `@@unique([chefId, title, deletedAt])` index still protects against
-  // duplicate-title races at the storage layer, and single-user create flows
-  // are not contention-prone.
-  const recipe = await db.recipe.create({
-    data: {
-      id: input.id,
-      title: input.title,
-      description: input.description,
-      servings: input.servings,
-      chefId: input.chefId,
-    },
-  });
+  // Metadata-aware web creation atomically commits the initial Recipe and its
+  // requested tags below. The remaining step graph still follows the legacy
+  // sequential path, so a later step failure can leave that initial graph.
+  const hasAuthoringMetadata = Object.prototype.hasOwnProperty.call(input, "course")
+    || Object.prototype.hasOwnProperty.call(input, "tags");
+  const recipe = hasAuthoringMetadata
+    ? await createRecipeWithMetadata(db, input, options)
+    : await db.recipe.create({
+      data: {
+        id: input.id,
+        title: input.title,
+        description: input.description,
+        servings: input.servings,
+        chefId: input.chefId,
+      },
+    });
 
   for (const [stepIndex, step] of input.steps.entries()) {
     const stepNum = stepIndex + 1;

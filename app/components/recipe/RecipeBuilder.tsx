@@ -20,10 +20,11 @@ import { useState, useEffect, useId, useRef } from 'react'
 import { Button } from '~/components/ui/button'
 import { Fieldset, Field, Label, ErrorMessage } from '~/components/ui/fieldset'
 import { Input } from '~/components/ui/input'
+import { Select } from '~/components/ui/select'
 import { Textarea } from '~/components/ui/textarea'
 import { StepList } from './StepList'
 import { RecipeImageUpload } from './RecipeImageUpload'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Plus, X } from 'lucide-react'
 import type { StepData } from './StepEditorCard'
 import {
   TITLE_MAX_LENGTH,
@@ -36,6 +37,8 @@ export interface RecipeBuilderData {
   title: string
   description: string | null
   servings: string | null
+  course: 'main' | 'side' | 'appetizer' | 'dessert' | null
+  tags: string[]
   coverImageUrl: string | null
   imageFile?: File | null
   clearImage?: boolean
@@ -53,11 +56,17 @@ export interface RecipeBuilderProps {
     title?: string
     description?: string
     servings?: string
+    course?: string
+    tags?: string
     image?: string
     steps?: string
     general?: string
   }
   showSteps?: boolean
+}
+
+function normalizePendingTag(value: string): string {
+  return value.trim().replace(/\s+/g, ' ')
 }
 
 export function RecipeBuilder({
@@ -74,6 +83,9 @@ export function RecipeBuilder({
   const titleErrorId = useId()
   const descriptionErrorId = useId()
   const servingsErrorId = useId()
+  const courseErrorId = useId()
+  const tagsErrorId = useId()
+  const tagsInputId = useId()
 
   // Combine disabled and loading for isDisabled
   const isDisabled = disabled || loading
@@ -82,6 +94,9 @@ export function RecipeBuilder({
   const [title, setTitle] = useState(recipe?.title ?? '')
   const [description, setDescription] = useState(recipe?.description ?? '')
   const [servings, setServings] = useState(recipe?.servings ?? '')
+  const [course, setCourse] = useState<RecipeBuilderData['course']>(recipe?.course ?? null)
+  const [tags, setTags] = useState<string[]>(recipe?.tags ?? [])
+  const [tagInput, setTagInput] = useState('')
 
   // Image state
   const [imageFile, setImageFile] = useState<File | null>(null)
@@ -111,11 +126,17 @@ export function RecipeBuilder({
     /* istanbul ignore next -- @preserve defensive guard; save button is disabled for these states */
     if (isDisabled || !title.trim()) return
 
+    const pendingTag = normalizePendingTag(tagInput)
+    const savedTags = pendingTag && !tags.some((tag) => tag.toLowerCase() === pendingTag.toLowerCase())
+      ? [...tags, pendingTag]
+      : tags
     const data: RecipeBuilderData = {
       id: recipe?.id,
       title,
       description: description || null,
       servings: servings || null,
+      course,
+      tags: savedTags,
       coverImageUrl: recipe?.coverImageUrl ?? '',
       imageFile,
       clearImage: clearImage || undefined,
@@ -136,6 +157,25 @@ export function RecipeBuilder({
 
   const handleStepsChange = (newSteps: StepData[]) => {
     setSteps(newSteps)
+  }
+
+  const addPendingTag = () => {
+    const label = normalizePendingTag(tagInput)
+    if (!label) return
+    if (!tags.some((tag) => tag.toLowerCase() === label.toLowerCase())) {
+      setTags((current) => [...current, label])
+    }
+    setTagInput('')
+  }
+
+  const handleTagKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter') return
+    event.preventDefault()
+    addPendingTag()
+  }
+
+  const removeTag = (tagToRemove: string) => {
+    setTags((current) => current.filter((tag) => tag !== tagToRemove))
   }
 
   const handleImageSelect = (file: File) => {
@@ -245,6 +285,77 @@ export function RecipeBuilder({
               aria-describedby={errors?.servings ? servingsErrorId : undefined}
             />
             {errors?.servings && <ErrorMessage id={servingsErrorId}>{errors.servings}</ErrorMessage>}
+          </Field>
+
+          <Field>
+            <Label>Course</Label>
+            <Select
+              value={course ?? ''}
+              onChange={(event) => setCourse((event.target.value || null) as RecipeBuilderData['course'])}
+              disabled={isDisabled}
+              data-invalid={errors?.course ? true : undefined}
+              aria-invalid={errors?.course ? true : undefined}
+              aria-describedby={errors?.course ? courseErrorId : undefined}
+            >
+              <option value="">No course</option>
+              <option value="main">Main</option>
+              <option value="side">Side</option>
+              <option value="appetizer">Appetizer</option>
+              <option value="dessert">Dessert</option>
+            </Select>
+            {errors?.course && <ErrorMessage id={courseErrorId}>{errors.course}</ErrorMessage>}
+          </Field>
+
+          <Field>
+            <Label htmlFor={tagsInputId}>Tags</Label>
+            <div data-slot="control" className="flex gap-2">
+              <input
+                id={tagsInputId}
+                type="text"
+                value={tagInput}
+                onChange={(event) => setTagInput(event.target.value)}
+                onKeyDown={handleTagKeyDown}
+                placeholder="Add a tag"
+                disabled={isDisabled}
+                data-invalid={errors?.tags ? true : undefined}
+                aria-invalid={errors?.tags ? true : undefined}
+                aria-describedby={errors?.tags ? tagsErrorId : undefined}
+                className="font-sj-ui min-h-11 min-w-0 flex-1 rounded-[var(--sj-radius-small)] border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-3.5 py-2.5 text-base/6 text-[var(--sj-ink)] outline-none placeholder:text-[var(--sj-ink-soft)] hover:border-[var(--sj-brass)] focus-visible:ring-2 focus-visible:ring-[var(--sj-brass)] disabled:border-[var(--sj-border)] disabled:opacity-50 data-[invalid]:border-[var(--sj-tomato)] sm:px-3 sm:py-1.5 sm:text-sm/6"
+              />
+              <button
+                type="button"
+                onClick={addPendingTag}
+                disabled={isDisabled || !normalizePendingTag(tagInput)}
+                aria-label="Add tag"
+                title="Add tag"
+                className="inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--sj-radius-small)] border border-[var(--sj-border-strong)] bg-[var(--sj-field)] text-[var(--sj-ink-soft)] hover:border-[var(--sj-brass)] hover:text-[var(--sj-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)] disabled:opacity-50"
+              >
+                <Plus className="size-4" aria-hidden="true" />
+              </button>
+            </div>
+            {tags.length > 0 && (
+              <div className="flex flex-wrap gap-2" aria-label="Recipe tags">
+                {tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex min-h-11 items-center gap-1 rounded-[var(--sj-radius-small)] border border-[var(--sj-border)] bg-[var(--sj-field)] py-1 pl-3 pr-1 text-sm text-[var(--sj-ink)]"
+                  >
+                    {tag}
+                    <button
+                      type="button"
+                      onClick={() => removeTag(tag)}
+                      disabled={isDisabled}
+                      aria-label={`Remove ${tag} tag`}
+                      title={`Remove ${tag} tag`}
+                      className="inline-flex size-9 items-center justify-center rounded-[var(--sj-radius-small)] text-[var(--sj-ink-soft)] hover:text-[var(--sj-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)] disabled:opacity-50"
+                    >
+                      <X className="size-4" aria-hidden="true" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {errors?.tags && <ErrorMessage id={tagsErrorId}>{errors.tags}</ErrorMessage>}
           </Field>
 
           <Field>

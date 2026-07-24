@@ -13,6 +13,10 @@ import {
 } from "~/lib/validation";
 import { createRecipeDraft, parseRecipeStepsJson } from "~/lib/recipe-create.server";
 import {
+  asCompatibleRecipeTagD1Database,
+  parseRecipeAuthoringMetadataForm,
+} from "~/lib/recipe-tags.server";
+import {
   deleteStoredImageWithCapture,
   hasUploadedImageFile,
   RECIPE_IMAGE_TYPES,
@@ -38,6 +42,8 @@ interface ActionData {
     title?: string;
     description?: string;
     servings?: string;
+    course?: string;
+    tags?: string;
     image?: string;
     steps?: string;
     general?: string;
@@ -82,8 +88,14 @@ export async function action({ request, context }: Route.ActionArgs) {
   const imageEntry = formData.get("image");
   const imageFile = hasUploadedImageFile(imageEntry) ? imageEntry : null;
   const stepsJson = formData.get("steps")?.toString() || "[]";
+  const hasMetadataPayload = formData.has("course") || formData.has("tags");
+  const metadata = parseRecipeAuthoringMetadataForm(
+    formData.get("course")?.toString() ?? null,
+    formData.get("tags")?.toString() ?? null,
+  );
 
   const errors: ActionData["errors"] = {};
+  Object.assign(errors, metadata.errors);
 
   // Validation
   const titleResult = validateTitle(title);
@@ -164,8 +176,14 @@ export async function action({ request, context }: Route.ActionArgs) {
       description: trimmedDescription,
       servings: servings.trim() || null,
       chefId: userId,
+      ...(hasMetadataPayload ? {
+        course: metadata.course,
+        tags: metadata.tags,
+      } : {}),
       steps: recipeSteps,
-    });
+    }, hasMetadataPayload ? {
+      nativeDatabase: asCompatibleRecipeTagD1Database(cloudflareEnv?.DB),
+    } : undefined);
 
     if (uploadedImageUrl) {
       const uploadedCover = await createCover(database, {
@@ -301,12 +319,16 @@ export default function NewRecipe() {
     const descriptionInput = form.querySelector('textarea[name="description"]') as HTMLTextAreaElement;
     const servingsInput = form.querySelector('input[name="servings"]') as HTMLInputElement;
     const stepsInput = form.querySelector('input[name="steps"]') as HTMLInputElement;
+    const courseInput = form.querySelector('input[name="course"]') as HTMLInputElement;
+    const tagsInput = form.querySelector('input[name="tags"]') as HTMLInputElement;
     const clearImageInput = form.querySelector('input[name="clearImage"]') as HTMLInputElement;
 
     if (titleInput) titleInput.value = recipeData.title;
     if (descriptionInput) descriptionInput.value = recipeData.description || "";
     if (servingsInput) servingsInput.value = recipeData.servings || "";
     if (stepsInput) stepsInput.value = JSON.stringify(recipeData.steps);
+    if (courseInput) courseInput.value = recipeData.course ?? "";
+    if (tagsInput) tagsInput.value = JSON.stringify(recipeData.tags);
     if (clearImageInput) clearImageInput.value = recipeData.clearImage ? "true" : "";
 
     // Handle image file
@@ -338,6 +360,8 @@ export default function NewRecipe() {
         <textarea name="description" className="hidden" />
         <input type="hidden" name="servings" />
         <input type="hidden" name="steps" />
+        <input type="hidden" name="course" />
+        <input type="hidden" name="tags" />
         <input type="hidden" name="clearImage" />
         <input ref={fileInputRef} type="file" name="image" accept={FOOD_IMAGE_ACCEPT} />
       </Form>

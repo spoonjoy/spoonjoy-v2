@@ -6,6 +6,9 @@ export const Select = forwardRef(function Select(
   { className, multiple, ...props }: { className?: string } & Omit<Headless.SelectProps, 'as' | 'className'>,
   ref: React.ForwardedRef<HTMLSelectElement>
 ) {
+  const dataInvalid = (props as { 'data-invalid'?: boolean })['data-invalid']
+  const ariaInvalid = props['aria-invalid'] ?? props.invalid ?? dataInvalid
+
   return (
     <span
       data-slot="control"
@@ -25,6 +28,7 @@ export const Select = forwardRef(function Select(
         ref={ref}
         multiple={multiple}
         {...props}
+        invalid={Boolean(ariaInvalid)}
         className={clsx([
           // Basic layout
           'relative block min-h-11 w-full appearance-none rounded-[var(--sj-radius-small)] py-[calc(--spacing(2.5)-1px)] sm:py-[calc(--spacing(1.5)-1px)]',
