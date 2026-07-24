@@ -454,10 +454,11 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Tests fail because tag/course predicates and filter UI/query handling are absent.
 **Completed**: Commit `bebcc501` freezes 66 focused tests: 42 existing regressions pass and 24 deliberate contract tests fail only at absent filter parsing, validation, canonical SQL predicates, scope semantics, URL preservation, and accessible controls. The test audit added explicit direct-Recipe/per-tag-EXISTS SQL shape, tampered metadata authority, pre-limit decoys, raw-count ordering, plus/percent space parity, and unsafe-page rejection. Boundary tests pass 9/9; evidence is recorded in `unit-6.3a-red.md`.
 
-### ⬜ Unit 6.3b: Tag Filters And Search - Implementation
+### ✅ Unit 6.3b: Tag Filters And Search - Implementation
 **What**: Update exactly `app/routes/my-recipes.tsx`, `app/lib/my-recipes-search.server.ts`, `app/routes/search.tsx`, and `app/lib/search.server.ts` with the route-specific query ordering/scope semantics from `product-data-contract.md`, accessible controls, direct Recipe/RecipeTag canonical SQL predicates, and safe pagination/link preservation; keep Unit 4.1 metadata for display only and do not change `_index.tsx`, `users.$identifier.tsx`, or the already-complete freshness fingerprint.
 **Output**: Course/tag discovery on existing bounded surfaces.
 **Acceptance**: Focused query/route tests and build pass; no home/profile expansion occurs.
+**Completed**: Commit `dedef207` adds canonical course/tag filtering to exactly the four intended production surfaces, preserving normalized first-occurrence tag order, bound per-tag AND predicates, safe page parsing, all/recipes scope semantics, legacy `shopping` alias compatibility, and deterministic URL state. Accessible course, tag-add, remove, clear, scope, search, and pagination controls ship without changing shared DrawerSearch rendering on cookbooks or saved recipes. The 66-test focused matrix, 100-test adjacent search/drawer/API matrix, typecheck, production build, and 9/9 boundary gate pass; migration 0025 remains byte-identical.
 
 ### ⬜ Unit 6.3c: Tag Filters And Search - Verification
 **What**: Reach 100% query/UI coverage and obtain SQL/search/accessibility review.
