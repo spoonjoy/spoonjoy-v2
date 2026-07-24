@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { Request as UndiciRequest } from "undici";
 import { action } from "~/routes/api.v1.$";
@@ -12,6 +12,8 @@ import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "~/lib/recipe-title-uniquenes
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
+import * as routePlatformModule from "~/lib/route-platform.server";
+import { expectConsoleError } from "../warning-policy";
 
 type LocalDb = Awaited<ReturnType<typeof getLocalDb>>;
 type MutationMethod = "POST" | "PATCH" | "DELETE";
@@ -28,6 +30,32 @@ function routeArgs(request: Request, splat: string, context: Record<string, unkn
     params: { "*": splat },
     context: { cloudflare: { env: null, ...context } },
   } as never;
+}
+
+function throwingNativeDatabase(message: string) {
+  const statements: Array<{ sql: string; values: unknown[]; bind(...values: unknown[]): unknown }> = [];
+  const error = new Error(message);
+  const batch = vi.fn().mockRejectedValue(error);
+  return {
+    batch,
+    error,
+    statements,
+    database: {
+      prepare(sql: string) {
+        const statement = {
+          sql,
+          values: [] as unknown[],
+          bind(...values: unknown[]) {
+            statement.values = values;
+            return statement;
+          },
+        };
+        statements.push(statement);
+        return statement;
+      },
+      batch,
+    },
+  };
 }
 
 function mutationRequest(
@@ -378,6 +406,93 @@ describe("API v1 recipe write mutations", () => {
     expect(replay.status).toBe(201);
     expectPrivateEnvelopeHeaders(replay, "req_recipe_create_replay");
     expect(replayPayload).toEqual(expectedReplay);
+  });
+
+  it("passes the request D1 binding through REST create and update adapters", async () => {
+    const fixture = await createRecipeWriteFixture(db);
+    const requestDb = vi.spyOn(routePlatformModule, "getRequestDb").mockResolvedValue(db);
+    const createNative = throwingNativeDatabase("REST create native binding sentinel");
+    try {
+      expectConsoleError("[api-v1] internal_error", {
+        requestId: "req_recipe_create_native_binding",
+        method: "POST",
+        path: "/api/v1/recipes",
+        error: {
+          name: createNative.error.name,
+          message: createNative.error.message,
+          stack: createNative.error.stack,
+        },
+      });
+      const create = await action(routeArgs(
+        mutationRequest("POST", "recipes", fixture.writer.token, "req_recipe_create_native_binding", {
+          clientMutationId: "recipe-create-native-binding",
+          title: "REST Native Binding Create",
+        }),
+        "recipes",
+        { env: { DB: createNative.database } },
+      ));
+      expect(create.status).toBe(500);
+      expectErrorEnvelope(
+        await readJson(create),
+        "req_recipe_create_native_binding",
+        "internal_error",
+        500,
+      );
+      expect(createNative.batch).toHaveBeenCalledOnce();
+      expect(createNative.statements[0].sql).toMatch(/INSERT INTO "Recipe"/);
+      await expect(db.recipe.findFirst({
+        where: { chefId: fixture.chef.id, title: "REST Native Binding Create" },
+      })).resolves.toBeNull();
+
+      const recipe = await createRecipeGraph(db, fixture.chef.id, {
+        title: "REST Native Binding Update Source",
+      });
+      const updateNative = throwingNativeDatabase("REST update native binding sentinel");
+      expectConsoleError("[api-v1] internal_error", {
+        requestId: "req_recipe_update_native_binding",
+        method: "PATCH",
+        path: `/api/v1/recipes/${recipe.id}`,
+        error: {
+          name: updateNative.error.name,
+          message: updateNative.error.message,
+          stack: updateNative.error.stack,
+        },
+      });
+      const update = await action(routeArgs(
+        mutationRequest(
+          "PATCH",
+          `recipes/${recipe.id}`,
+          fixture.writer.token,
+          "req_recipe_update_native_binding",
+          {
+            clientMutationId: "recipe-update-native-binding",
+            description: "Must use request binding",
+          },
+        ),
+        `recipes/${recipe.id}`,
+        { env: { DB: updateNative.database } },
+      ));
+      expect(update.status).toBe(500);
+      expectErrorEnvelope(
+        await readJson(update),
+        "req_recipe_update_native_binding",
+        "internal_error",
+        500,
+      );
+      expect(updateNative.batch).toHaveBeenCalledOnce();
+      expect(updateNative.statements.map(({ sql }) => sql)).toEqual([
+        expect.stringMatching(/UPDATE "Recipe"/),
+        expect.stringMatching(/UPDATE "Cookbook"/),
+      ]);
+      expect(updateNative.statements[0].sql).toMatch(/"description" = \?/);
+      expect(updateNative.statements[0].sql).not.toMatch(/"title" = \?|"servings" = \?/);
+      await expect(db.recipe.findUniqueOrThrow({ where: { id: recipe.id } })).resolves.toMatchObject({
+        title: "REST Native Binding Update Source",
+        description: "Existing recipe for API mutation tests",
+      });
+    } finally {
+      requestDb.mockRestore();
+    }
   });
 
   it("updates owned recipe metadata and rejects duplicate or cross-owner updates", async () => {

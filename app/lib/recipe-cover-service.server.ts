@@ -2,7 +2,6 @@ import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import { deferBackgroundTask } from "~/lib/background-task.server";
 import { sanitizeImagePromptAddition, type ImageGenEnv, type ImageGenRunner } from "~/lib/image-gen.server";
 import { validateRecipeImageAssignment } from "~/lib/recipe-image-assignment.server";
-import { setActiveRecipeCover } from "~/lib/recipe-cover.server";
 import type { RecipeCoverSourceType } from "~/lib/recipe-cover-schema.server";
 import { scheduleAiPlaceholderCover } from "~/lib/ai-placeholder-cover.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
@@ -22,6 +21,7 @@ export interface RecipeCoverActivationGuard {
   activeCoverVariant: string | null;
   coverMode: string;
 }
+
 
 export type RecipeCoverTaskScheduling = "await" | "waitUntil";
 
@@ -136,19 +136,4 @@ export async function scheduleRecipePlaceholderGeneration(
     logger: context.logger,
   }));
   await dispatchRecipeCoverTask(context, task, options.scheduling ?? "await");
-}
-
-export async function activateRecipeCoverWithBestAvailableVariant(
-  db: PrismaClientType,
-  input: { recipeId: string; coverId: string },
-): Promise<void> {
-  const cover = await db.recipeCover.findUnique({
-    where: { id: input.coverId },
-    select: { stylizedImageUrl: true },
-  });
-  await setActiveRecipeCover(db, {
-    recipeId: input.recipeId,
-    coverId: input.coverId,
-    variant: cover?.stylizedImageUrl ? "stylized" : "image",
-  });
 }

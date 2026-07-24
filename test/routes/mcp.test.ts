@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { faker } from "@faker-js/faker";
 import { action, loader, meta } from "~/routes/mcp";
@@ -113,6 +113,45 @@ describe("/mcp route", () => {
     expect(callResponse.status).toBe(200);
     const callBody = await callResponse.json() as { result: { content: { text: string }[] } };
     expect(JSON.parse(callBody.result.content[0].text)).toHaveProperty("shoppingList");
+  });
+
+  it("returns the exact JSON-RPC title-race error through tools/call", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail("title-race"), username: faker.internet.username() } });
+    const { token } = await createApiCredential(db, user.id, "title race token", {
+      scopes: ["kitchen:write"],
+    });
+    const originalTransaction = db.$transaction;
+    db.$transaction = vi.fn().mockRejectedValue(Object.assign(new Error("Raw query failed"), {
+      code: "P2010",
+      meta: {
+        code: "2067",
+        message: "UNIQUE constraint failed: Recipe.chefId, Recipe.title",
+      },
+    })) as typeof db.$transaction;
+
+    try {
+      const response = await action(routeArgs(rpc({
+        jsonrpc: "2.0",
+        id: "title-race",
+        method: "tools/call",
+        params: {
+          name: "create_recipe",
+          arguments: { title: "Concurrent MCP Recipe" },
+        },
+      }, { Authorization: `Bearer ${token}` })));
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({
+        jsonrpc: "2.0",
+        id: "title-race",
+        error: {
+          code: -32602,
+          message: "You already have an active recipe with this title",
+        },
+      });
+    } finally {
+      db.$transaction = originalTransaction;
+    }
   });
 
   it("round-trips generated placeholder cover results through tools/call", async () => {

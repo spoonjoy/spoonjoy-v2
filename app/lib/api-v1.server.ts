@@ -53,6 +53,7 @@ import {
   updateNativeRecipe,
   type ApiV1RecipeWriteResult,
 } from "~/lib/api-v1-recipe-writes.server";
+import { asCompatibleRecipeTagD1Database } from "~/lib/recipe-tags.server";
 import {
   createNativeRecipeStep,
   createNativeRecipeStepIngredient,
@@ -2264,6 +2265,7 @@ async function handleRecipeImport(args: ApiV1RouteArgs, requestId: string, princ
       const deps: ImportRecipeDeps = {
         db,
         env,
+        nativeDatabase: asCompatibleRecipeTagD1Database(rawEnv.DB),
         bucket: (rawEnv as { PHOTOS?: R2Bucket }).PHOTOS,
         waitUntil: apiV1WaitUntilFor(args),
         imageGenRunner: (args.context as { imageGenRunner?: ImportRecipeDeps["imageGenRunner"] }).imageGenRunner,
@@ -5763,7 +5765,10 @@ async function handleRecipeCreate(args: ApiV1RouteArgs, requestId: string, princ
   const origin = publicContentOrigin(args);
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.create", async (db, reservation) => {
-    const created = recipeWriteResultOrThrow(await createNativeRecipe(db, principal.id, parsed.data, { recipeId: reservation.id }));
+    const created = recipeWriteResultOrThrow(await createNativeRecipe(db, principal.id, parsed.data, {
+      nativeDatabase: asCompatibleRecipeTagD1Database(args.context.cloudflare?.env?.DB),
+      recipeId: reservation.id,
+    }));
     const recipe = await serializedRecipeOrThrow(db, created.data.recipeId, origin);
     return {
       status: created.status,
@@ -5790,7 +5795,13 @@ async function handleRecipeUpdate(args: ApiV1RouteArgs, requestId: string, princ
   const updated = Object.keys(parsed.data.fields).length > 0;
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.update", async (db) => {
-    const updated = recipeWriteResultOrThrow(await updateNativeRecipe(db, principal.id, recipeId, parsed.data));
+    const updated = recipeWriteResultOrThrow(await updateNativeRecipe(
+      db,
+      principal.id,
+      recipeId,
+      parsed.data,
+      { nativeDatabase: asCompatibleRecipeTagD1Database(args.context.cloudflare?.env?.DB) },
+    ));
     const recipe = await serializedRecipeOrThrow(db, updated.data.recipeId, origin);
     return {
       status: updated.status,

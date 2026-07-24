@@ -21,7 +21,18 @@ import {
   pollAgentConnection,
   startAgentConnection,
 } from "~/lib/agent-connection.server";
-import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
+import {
+  ACTIVE_RECIPE_TITLE_CONFLICT_ERROR,
+  isActiveRecipeTitleConflictError,
+  validateActiveRecipeTitleUnique,
+} from "~/lib/recipe-title-uniqueness.server";
+import {
+  createRecipeDraft,
+  readCommittedRecipeGraph,
+  RecipeDraftNotFoundError,
+  updateRecipeDraft,
+} from "~/lib/recipe-create.server";
+import { asCompatibleRecipeTagD1Database } from "~/lib/recipe-tags.server";
 import { applyRecipeScale, parseMcpRecipeScale } from "~/lib/recipe-scale";
 import {
   archiveRecipeCover,
@@ -48,7 +59,6 @@ import {
   SpoonNotFoundError,
 } from "~/lib/recipe-spoon.server";
 import {
-  activateRecipeCoverWithBestAvailableVariant,
   sanitizeRecipeCoverPromptAddition,
   scheduleRecipeCoverStylization,
   scheduleRecipePlaceholderGeneration,
@@ -1260,67 +1270,6 @@ function normalizeCreateApiTokenScopes(value: unknown, principal: ApiPrincipal |
   return storedScopes;
 }
 
-async function replaceRecipeSteps(db: PrismaClientType, recipeId: string, steps: ReturnType<typeof parseSteps>) {
-  // Pre-resolve all unit + ingredientRef ids OUTSIDE the swap. They're
-  // idempotent getOrCreates and don't need to be atomic with the recipe's
-  // step replacement; they just need their ids ready.
-  const unitNames = new Set<string>();
-  const ingredientNames = new Set<string>();
-  for (const step of steps) {
-    for (const ingredient of step.ingredients) {
-      unitNames.add(normalizeName(ingredient.unit));
-      ingredientNames.add(normalizeName(ingredient.name));
-    }
-  }
-  const unitIds = new Map<string, string>();
-  for (const name of unitNames) {
-    unitIds.set(name, (await getOrCreateUnit(db, name)).id);
-  }
-  const ingredientRefIds = new Map<string, string>();
-  for (const name of ingredientNames) {
-    ingredientRefIds.set(name, (await getOrCreateIngredientRef(db, name)).id);
-  }
-
-  // Atomic swap as a single D1 batch: clear-then-rebuild as one transaction so
-  // a mid-sequence failure rolls back the deletes instead of permanently
-  // gutting the recipe. D1 doesn't support Prisma's interactive
-  // `$transaction(async tx => ...)` form, but it does support the batched
-  // PrismaPromise[] form, which is what we use here.
-  const ops: Prisma.PrismaPromise<unknown>[] = [
-    db.stepOutputUse.deleteMany({ where: { recipeId } }),
-    db.ingredient.deleteMany({ where: { recipeId } }),
-    db.recipeStep.deleteMany({ where: { recipeId } }),
-  ];
-  for (const [index, step] of steps.entries()) {
-    const stepNum = index + 1;
-    ops.push(
-      db.recipeStep.create({
-        data: {
-          recipeId,
-          stepNum,
-          stepTitle: step.title ?? null,
-          description: step.description,
-          duration: step.duration ?? null,
-        },
-      }),
-    );
-    for (const ingredient of step.ingredients) {
-      ops.push(
-        db.ingredient.create({
-          data: {
-            recipeId,
-            stepNum,
-            quantity: ingredient.quantity,
-            unitId: unitIds.get(normalizeName(ingredient.unit))!,
-            ingredientRefId: ingredientRefIds.get(normalizeName(ingredient.name))!,
-          },
-        }),
-      );
-    }
-  }
-  await db.$transaction(ops);
-}
-
 const healthTool: SpoonjoyApiOperation = {
   name: "health",
   description: "Check Spoonjoy API readiness and whether the caller can use owner-scoped write operations.",
@@ -2482,6 +2431,9 @@ const createRecipeTool: SpoonjoyApiOperation = {
   async handle(args, context) {
     const email = requireOwnerEmail(args, context);
     const title = requiredString(args, "title");
+    const description = optionalString(args.description) ?? null;
+    const servings = optionalString(args.servings) ?? null;
+    const sourceUrl = optionalString(args.sourceUrl) ?? null;
     const imageUrl = optionalString(args.imageUrl);
     const steps = parseSteps(args.steps);
 
@@ -2500,45 +2452,81 @@ const createRecipeTool: SpoonjoyApiOperation = {
       });
     }
 
-    const created = await context.db.recipe.create({
-      data: {
+    const recipeId = crypto.randomUUID();
+    const coverId = imageUrl ? crypto.randomUUID() : null;
+    let created;
+    try {
+      created = await createRecipeDraft(context.db, {
+        id: recipeId,
         title,
-        description: optionalString(args.description) ?? null,
-        servings: optionalString(args.servings) ?? null,
-        sourceUrl: optionalString(args.sourceUrl) ?? null,
+        description,
+        servings,
+        sourceUrl,
         chefId: owner.id,
-      },
-    });
-
-    await replaceRecipeSteps(context.db, created.id, steps);
-    if (imageUrl) {
-      const cover = await createCover(context.db, {
-        recipeId: created.id,
-        imageUrl,
-        sourceType: "chef-upload",
+        steps: steps.map((step) => ({
+          stepTitle: step.title ?? null,
+          description: step.description,
+          duration: step.duration ?? null,
+          ingredients: step.ingredients.map((ingredient) => ({
+            ingredientName: ingredient.name,
+            quantity: ingredient.quantity,
+            unit: ingredient.unit,
+          })),
+        })),
+      }, {
+        nativeDatabase: asCompatibleRecipeTagD1Database(context.env?.DB),
+        coverMutation: imageUrl && coverId
+          ? { kind: "uploaded", coverId, createdById: owner.id, imageUrl }
+          : null,
       });
-      await scheduleRecipeCoverStylization(context, {
-        userId: owner.id,
-        recipeId: created.id,
-        coverId: cover.id,
-        rawPhotoUrl: imageUrl,
-        recipeTitle: title,
-        sourceType: "chef-upload",
-      });
-      await activateRecipeCoverWithBestAvailableVariant(context.db, {
-        recipeId: created.id,
-        coverId: cover.id,
-      });
+    } catch (error) {
+      if (isActiveRecipeTitleConflictError(error)) {
+        throw new Error(ACTIVE_RECIPE_TITLE_CONFLICT_ERROR);
+      }
+      throw error;
     }
 
-    const recipe = await context.db.recipe.findUniqueOrThrow({
-      where: { id: created.id },
-      include: {
-        chef: { select: { id: true, email: true, username: true } },
-        covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
-        steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
-      },
-    });
+    if (imageUrl && coverId) {
+      try {
+        await scheduleRecipeCoverStylization(context, {
+          userId: owner.id,
+          recipeId: created.id,
+          coverId,
+          rawPhotoUrl: imageUrl,
+          recipeTitle: title,
+          sourceType: "chef-upload",
+          activateWhenReady: true,
+          suppressAutoActivation: true,
+          activationGuard: {
+            activeCoverId: coverId,
+            activeCoverVariant: "image",
+            coverMode: "manual",
+          },
+        });
+      } catch (error) {
+        (context.logger ?? console).error("MCP recipe cover postcommit processing failed", error);
+      }
+    }
+
+    let recipe: RecipeWithDetails;
+    try {
+      recipe = await context.db.recipe.findUniqueOrThrow({
+        where: { id: created.id },
+        include: {
+          chef: { select: { id: true, email: true, username: true } },
+          covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
+          steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
+        },
+      });
+    } catch (error) {
+      (context.logger ?? console).error("MCP recipe postcommit hydration failed", error);
+      const committed = await readCommittedRecipeGraph(context.db, created.id, {
+        chefId: owner.id,
+        nativeDatabase: asCompatibleRecipeTagD1Database(context.env?.DB),
+      });
+      if (!committed) throw error;
+      return json({ recipe: formatRecipe(committed) });
+    }
 
     return json({ recipe: formatRecipe(recipe) });
   },
@@ -2602,11 +2590,14 @@ const updateRecipeTool: SpoonjoyApiOperation = {
     const owner = await getOrCreateOwner(context.db, email);
     const existing = await context.db.recipe.findFirst({
       where: { id, chefId: owner.id, deletedAt: null },
-      select: { id: true, title: true },
+      include: {
+        chef: { select: { id: true, email: true, username: true } },
+        covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
+        steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
+      },
     });
     if (!existing) throw new Error("Recipe not found");
 
-    const data: Prisma.RecipeUpdateInput = {};
     if (title !== undefined) {
       const titleUniqueness = await validateActiveRecipeTitleUnique(context.db, {
         chefId: owner.id,
@@ -2614,11 +2605,7 @@ const updateRecipeTool: SpoonjoyApiOperation = {
         excludeRecipeId: existing.id,
       });
       if (!titleUniqueness.valid) throw new Error(titleUniqueness.error);
-      data.title = title;
     }
-    if (description !== undefined) data.description = description;
-    if (servings !== undefined) data.servings = servings;
-    if (sourceUrl !== undefined) data.sourceUrl = sourceUrl;
 
     if (imageUrl) {
       await validateRecipeCoverImageSource({
@@ -2629,42 +2616,88 @@ const updateRecipeTool: SpoonjoyApiOperation = {
       });
     }
 
-    if (Object.keys(data).length > 0) {
-      await context.db.recipe.update({ where: { id: existing.id }, data });
+    const shouldMutate = title !== undefined
+      || description !== undefined
+      || servings !== undefined
+      || sourceUrl !== undefined
+      || steps !== undefined
+      || Boolean(imageUrl);
+    if (!shouldMutate) return json({ recipe: formatRecipe(existing) });
+
+    const coverId = imageUrl ? crypto.randomUUID() : null;
+    try {
+      await updateRecipeDraft(context.db, {
+        id: existing.id,
+        chefId: owner.id,
+        title,
+        description,
+        servings,
+        sourceUrl,
+        steps: steps?.map((step) => ({
+          stepTitle: step.title ?? null,
+          description: step.description,
+          duration: step.duration ?? null,
+          ingredients: step.ingredients.map((ingredient) => ({
+            ingredientName: ingredient.name,
+            quantity: ingredient.quantity,
+            unit: ingredient.unit,
+          })),
+        })),
+      }, {
+        nativeDatabase: asCompatibleRecipeTagD1Database(context.env?.DB),
+        coverMutation: imageUrl && coverId
+          ? { kind: "uploaded", coverId, createdById: owner.id, imageUrl }
+          : null,
+      });
+    } catch (error) {
+      if (error instanceof RecipeDraftNotFoundError) throw new Error("Recipe not found");
+      if (isActiveRecipeTitleConflictError(error)) {
+        throw new Error(ACTIVE_RECIPE_TITLE_CONFLICT_ERROR);
+      }
+      throw error;
     }
 
-    if (steps) {
-      await replaceRecipeSteps(context.db, existing.id, steps);
-      await context.db.recipe.update({ where: { id: existing.id }, data: { updatedAt: new Date() } });
-    }
-    if (imageUrl) {
-      const cover = await createCover(context.db, {
-        recipeId: existing.id,
-        imageUrl,
-        sourceType: "chef-upload",
-      });
+    if (imageUrl && coverId) {
+      try {
       await scheduleRecipeCoverStylization(context, {
         userId: owner.id,
         recipeId: existing.id,
-        coverId: cover.id,
+        coverId,
         rawPhotoUrl: imageUrl,
         recipeTitle: title ?? existing.title,
         sourceType: "chef-upload",
+        activateWhenReady: true,
+        suppressAutoActivation: true,
+        activationGuard: {
+          activeCoverId: coverId,
+          activeCoverVariant: "image",
+          coverMode: "manual",
+        },
       });
-      await activateRecipeCoverWithBestAvailableVariant(context.db, {
-        recipeId: existing.id,
-        coverId: cover.id,
-      });
+      } catch (error) {
+        (context.logger ?? console).error("MCP recipe cover postcommit processing failed", error);
+      }
     }
 
-    const recipe = await context.db.recipe.findUniqueOrThrow({
-      where: { id: existing.id },
-      include: {
-        chef: { select: { id: true, email: true, username: true } },
-        covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
-        steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
-      },
-    });
+    let recipe: RecipeWithDetails;
+    try {
+      recipe = await context.db.recipe.findFirstOrThrow({
+        where: { id: existing.id, chefId: owner.id, deletedAt: null },
+        include: {
+          chef: { select: { id: true, email: true, username: true } },
+          covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
+          steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
+        },
+      });
+    } catch (error) {
+      (context.logger ?? console).error("MCP recipe update postcommit hydration failed", error);
+      const committed = await readCommittedRecipeGraph(context.db, existing.id, {
+        chefId: owner.id,
+        nativeDatabase: asCompatibleRecipeTagD1Database(context.env?.DB),
+      });
+      if (!committed) throw error;
+      return json({ recipe: formatRecipe(committed) });
+    }
 
     return json({ recipe: formatRecipe(recipe) });
   },
@@ -3617,6 +3650,7 @@ const importRecipeFromUrlTool: SpoonjoyApiOperation = {
       {
         db: context.db,
         env: context.env ?? undefined,
+        nativeDatabase: asCompatibleRecipeTagD1Database(context.env?.DB),
         bucket: context.bucket,
         waitUntil: context.waitUntil,
         imageGenRunner: context.imageGenRunner,

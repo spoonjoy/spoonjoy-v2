@@ -25,7 +25,7 @@ describe("shared recipe cover service architecture", () => {
 
     expect(serviceSource).toContain("scheduleRecipeCoverStylization");
     expect(serviceSource).toContain("scheduleRecipePlaceholderGeneration");
-    expect(serviceSource).toContain("activateRecipeCoverWithBestAvailableVariant");
+    expect(serviceSource).toContain("activationGuard");
     expect(serviceSource).toContain("validateRecipeCoverImageSource");
     expect(restSource).toContain('from "~/lib/recipe-cover-service.server"');
     expect(mcpSource).toContain('from "~/lib/recipe-cover-service.server"');

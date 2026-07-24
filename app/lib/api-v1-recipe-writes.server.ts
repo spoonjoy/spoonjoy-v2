@@ -2,14 +2,23 @@ import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import type { ApiV1ErrorCode } from "~/lib/api-v1-contract.server";
 import {
   createRecipeDraft,
+  RecipeGraphTooLargeError,
   type RecipeStepDraft,
 } from "~/lib/recipe-create.server";
+import {
+  asCompatibleRecipeTagD1Database,
+  type CompatibleRecipeTagD1Database,
+} from "~/lib/recipe-tags.server";
 import {
   forkRecipe,
   ForkSourceNotFoundError,
   ForkTitleExhaustedError,
 } from "~/lib/recipe-fork.server";
-import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
+import {
+  ACTIVE_RECIPE_TITLE_CONFLICT_ERROR,
+  isActiveRecipeTitleConflictError,
+  validateActiveRecipeTitleUnique,
+} from "~/lib/recipe-title-uniqueness.server";
 import {
   validateDescription,
   validateIngredientName,
@@ -31,6 +40,42 @@ type MutableRecipeFields = {
   description?: string | null;
   servings?: string | null;
 };
+
+const UPDATE_NATIVE_RECIPE_COOKBOOKS_SQL = `
+  UPDATE "Cookbook"
+  SET "updatedAt" = ?
+  WHERE "id" IN (
+    SELECT membership."cookbookId"
+    FROM "RecipeInCookbook" AS membership
+    WHERE membership."recipeId" = ?
+      AND EXISTS (
+        SELECT 1 FROM "Recipe"
+        WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL
+      )
+  )
+  RETURNING "id", "updatedAt"
+`;
+
+function isCanonicalNativeZeroResult(result: unknown): boolean {
+  return isRecord(result)
+    && result.success === true
+    && isRecord(result.meta)
+    && result.meta.changes === 0
+    && Array.isArray(result.results)
+    && result.results.length === 0;
+}
+
+function nativeRecipeUpdateWasNotFound(results: unknown): boolean {
+  return Array.isArray(results)
+    && results.length === 2
+    && results.every(isCanonicalNativeZeroResult);
+}
+
+function localRecipeUpdateWasNotFound(results: unknown): boolean {
+  return Array.isArray(results)
+    && results.length === 2
+    && results.every((result) => Array.isArray(result) && result.length === 0);
+}
 
 export type ApiV1RecipeWriteResult<T> =
   | { ok: true; status: number; data: T }
@@ -321,7 +366,10 @@ export async function createNativeRecipe(
   db: Database,
   chefId: string,
   input: NativeRecipeCreateInput,
-  options: { recipeId?: string } = {},
+  options: {
+    nativeDatabase: CompatibleRecipeTagD1Database | null;
+    recipeId?: string;
+  },
 ): Promise<ApiV1RecipeWriteResult<{ recipeId: string }>> {
   const uniqueTitle = await validateActiveRecipeTitleUnique(db, {
     chefId,
@@ -331,14 +379,25 @@ export async function createNativeRecipe(
     return fieldFailure("title", uniqueTitle.error);
   }
 
-  const recipe = await createRecipeDraft(db, {
-    id: options.recipeId ?? crypto.randomUUID(),
-    title: input.title,
-    description: input.description,
-    servings: input.servings,
-    chefId,
-    steps: input.steps,
-  });
+  let recipe;
+  try {
+    recipe = await createRecipeDraft(db, {
+      id: options.recipeId ?? crypto.randomUUID(),
+      title: input.title,
+      description: input.description,
+      servings: input.servings,
+      chefId,
+      steps: input.steps,
+    }, { nativeDatabase: options.nativeDatabase });
+  } catch (error) {
+    if (isActiveRecipeTitleConflictError(error)) {
+      return fieldFailure("title", ACTIVE_RECIPE_TITLE_CONFLICT_ERROR);
+    }
+    if (error instanceof RecipeGraphTooLargeError) {
+      return fieldFailure("steps", error.message);
+    }
+    throw error;
+  }
 
   return success({ recipeId: recipe.id }, 201);
 }
@@ -348,10 +407,15 @@ export async function updateNativeRecipe(
   chefId: string,
   recipeId: string,
   input: NativeRecipePatchInput,
+  options: { nativeDatabase: CompatibleRecipeTagD1Database | null },
 ): Promise<ApiV1RecipeWriteResult<{ recipeId: string; updated: boolean }>> {
   const existing = await db.recipe.findUnique({
     where: { id: recipeId },
-    select: { id: true, chefId: true, deletedAt: true },
+    select: {
+      id: true,
+      chefId: true,
+      deletedAt: true,
+    },
   });
   if (!existing || existing.deletedAt) {
     return failure("not_found", "Recipe not found");
@@ -373,14 +437,48 @@ export async function updateNativeRecipe(
 
   const updated = Object.keys(input.fields).length > 0;
   if (updated) {
-    const updatedAt = new Date();
-    await db.$transaction([
-      db.recipe.update({
-        where: { id: recipeId },
-        data: { ...input.fields, updatedAt },
-      }),
-      touchNativeSyncCookbooksForRecipeOperation(db, recipeId, updatedAt),
-    ]);
+    const updatedAt = new Date().toISOString();
+    const assignments: string[] = [];
+    const updateValues: unknown[] = [];
+    if (input.fields.title !== undefined) {
+      assignments.push('"title" = ?');
+      updateValues.push(input.fields.title);
+    }
+    if (input.fields.description !== undefined) {
+      assignments.push('"description" = ?');
+      updateValues.push(input.fields.description);
+    }
+    if (input.fields.servings !== undefined) {
+      assignments.push('"servings" = ?');
+      updateValues.push(input.fields.servings);
+    }
+    assignments.push('"updatedAt" = ?');
+    updateValues.push(updatedAt, recipeId, chefId);
+    const updateSql = `
+      UPDATE "Recipe"
+      SET ${assignments.join(", ")}
+      WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL
+      RETURNING "id", "title", "description", "servings", "updatedAt"
+    `;
+    const cookbookValues = [updatedAt, recipeId, recipeId, chefId];
+    try {
+      const nativeDatabase = asCompatibleRecipeTagD1Database(options.nativeDatabase);
+      const notFound = nativeDatabase
+        ? nativeRecipeUpdateWasNotFound(await nativeDatabase.batch([
+            nativeDatabase.prepare(updateSql).bind(...updateValues),
+            nativeDatabase.prepare(UPDATE_NATIVE_RECIPE_COOKBOOKS_SQL).bind(...cookbookValues),
+          ]))
+        : localRecipeUpdateWasNotFound(await db.$transaction([
+            db.$queryRawUnsafe(updateSql, ...updateValues),
+            db.$queryRawUnsafe(UPDATE_NATIVE_RECIPE_COOKBOOKS_SQL, ...cookbookValues),
+          ]));
+      if (notFound) return failure("not_found", "Recipe not found");
+    } catch (error) {
+      if (isActiveRecipeTitleConflictError(error)) {
+        return fieldFailure("title", ACTIVE_RECIPE_TITLE_CONFLICT_ERROR);
+      }
+      throw error;
+    }
   }
 
   return success({ recipeId, updated });

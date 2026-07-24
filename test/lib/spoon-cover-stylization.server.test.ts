@@ -346,6 +346,158 @@ describe("scheduleSpoonCoverStylization", () => {
     });
   });
 
+  it("does not process or activate a cover after its recipe is soft-deleted", async () => {
+    await db.recipe.update({
+      where: { id: recipeId },
+      data: {
+        activeCoverId: coverId,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+        deletedAt: new Date(),
+      },
+    });
+    const before = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
+    const runner = makeRunner();
+
+    await scheduleSpoonCoverStylization({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
+      recipeTitle: "Stylize Me",
+      runner,
+      bucket: mockR2(),
+      now: () => 1234,
+      activateWhenReady: true,
+      activationGuard: {
+        activeCoverId: coverId,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      },
+      logger: errorSpy,
+    });
+
+    expect(runner.imageToImage).not.toHaveBeenCalled();
+    await expect(db.recipeCover.findUniqueOrThrow({ where: { id: coverId } }))
+      .resolves.toEqual(before);
+    await expect(db.recipe.findUniqueOrThrow({
+      where: { id: recipeId },
+      select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+    })).resolves.toEqual({
+      activeCoverId: coverId,
+      activeCoverVariant: "image",
+      coverMode: "manual",
+    });
+  });
+
+  it("does not persist or activate stylization when the recipe is deleted during generation", async () => {
+    await db.recipe.update({
+      where: { id: recipeId },
+      data: {
+        activeCoverId: coverId,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      },
+    });
+    const runner = makeRunner();
+    runner.imageToImage.mockImplementationOnce(async () => {
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { deletedAt: new Date() },
+      });
+      return { bytes: GENERATED_BYTES, contentType: "image/png" };
+    });
+
+    await scheduleSpoonCoverStylization({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
+      recipeTitle: "Stylize Me",
+      runner,
+      bucket: mockR2(),
+      now: () => 1234,
+      activateWhenReady: true,
+      activationGuard: {
+        activeCoverId: coverId,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      },
+      logger: errorSpy,
+    });
+
+    expect(runner.imageToImage).toHaveBeenCalledOnce();
+    await expect(db.recipeCover.findUniqueOrThrow({ where: { id: coverId } })).resolves.toMatchObject({
+      stylizedImageUrl: null,
+      status: "processing",
+      generationStatus: "processing",
+    });
+    await expect(db.recipe.findUniqueOrThrow({ where: { id: recipeId } })).resolves.toMatchObject({
+      activeCoverId: coverId,
+      activeCoverVariant: "image",
+      coverMode: "manual",
+      deletedAt: expect.any(Date),
+    });
+  });
+
+  it("does not activate a completed stylization when the recipe is deleted immediately before activation", async () => {
+    await db.recipe.update({
+      where: { id: recipeId },
+      data: {
+        activeCoverId: coverId,
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      },
+    });
+    const originalUpdateMany = db.recipe.updateMany;
+    const activationUpdate = vi.fn(async (...args: Parameters<typeof db.recipe.updateMany>) => {
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { deletedAt: new Date() },
+      });
+      return originalUpdateMany.apply(db.recipe, args);
+    });
+    db.recipe.updateMany = activationUpdate as typeof db.recipe.updateMany;
+
+    try {
+      await scheduleSpoonCoverStylization({
+        db,
+        userId,
+        recipeId,
+        coverId,
+        rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
+        recipeTitle: "Stylize Me",
+        runner: makeRunner(),
+        bucket: mockR2(),
+        now: () => 1234,
+        activateWhenReady: true,
+        activationGuard: {
+          activeCoverId: coverId,
+          activeCoverVariant: "image",
+          coverMode: "manual",
+        },
+        logger: errorSpy,
+      });
+    } finally {
+      db.recipe.updateMany = originalUpdateMany;
+    }
+
+    expect(activationUpdate).toHaveBeenCalledOnce();
+    await expect(db.recipeCover.findUniqueOrThrow({ where: { id: coverId } })).resolves.toMatchObject({
+      stylizedImageUrl: expect.stringMatching(/\S/),
+      status: "ready",
+      generationStatus: "succeeded",
+    });
+    await expect(db.recipe.findUniqueOrThrow({ where: { id: recipeId } })).resolves.toMatchObject({
+      activeCoverId: coverId,
+      activeCoverVariant: "image",
+      coverMode: "manual",
+      deletedAt: expect.any(Date),
+    });
+  });
+
   it("does not auto-activate candidate-only editorial jobs", async () => {
     await db.recipeCover.update({
       where: { id: coverId },

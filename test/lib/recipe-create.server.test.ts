@@ -3,7 +3,11 @@ import { faker } from "@faker-js/faker";
 import {
   createRecipeDraft,
   parseRecipeStepsJson,
+  readCommittedRecipeGraph,
+  RecipeDraftNotFoundError,
+  RecipeGraphTooLargeError,
   type CreateRecipeDraftInput,
+  updateRecipeDraft,
 } from "~/lib/recipe-create.server";
 import { createUser } from "~/lib/auth.server";
 import { db } from "~/lib/db.server";
@@ -56,6 +60,38 @@ function recipeCreationInput(
   };
 }
 
+function recipeGraphCreationInput(
+  chefId: string,
+  overrides: Partial<CreateRecipeDraftInput> = {},
+): CreateRecipeDraftInput {
+  return recipeCreationInput(chefId, {
+    id: "recipe-graph-contract",
+    tags: ["Quick"],
+    steps: [
+      {
+        stepTitle: "Mix",
+        description: "Mix flour and milk",
+        duration: 5,
+        ingredients: [
+          { quantity: 2, unit: "Cup", ingredientName: "Flour" },
+          { quantity: 1, unit: "cup", ingredientName: "Milk" },
+        ],
+      },
+      {
+        stepTitle: null,
+        description: "Cook in butter",
+        duration: null,
+        ingredients: [{ quantity: 1, unit: "Tbsp", ingredientName: "Butter" }],
+      },
+    ],
+    ...overrides,
+  });
+}
+
+function sequentialIds(ids: string[]) {
+  return () => ids.shift() ?? "unexpected-creation-id";
+}
+
 function recipeCreationRow(
   input: CreateRecipeDraftInput,
   course: CreateRecipeDraftInput["course"] = input.course,
@@ -65,6 +101,7 @@ function recipeCreationRow(
     title: input.title,
     description: input.description,
     servings: input.servings,
+    sourceUrl: input.sourceUrl ?? null,
     chefId: input.chefId,
     course: course ?? null,
     createdAt: CREATION_TIMESTAMP_TEXT,
@@ -94,29 +131,101 @@ function nativeCreationResult(
   };
 }
 
-function successfulNativeCreationResults(statements: CapturedCreationStatement[]) {
+function successfulCreationRows(statements: CapturedCreationStatement[]) {
+  const unitIds = new Map<string, unknown>();
+  const ingredientRefIds = new Map<string, unknown>();
+  for (const statement of statements) {
+    const sql = compactSql(statement.sql);
+    if (sql.startsWith('INSERT INTO "Unit"')) {
+      unitIds.set(String(statement.values[1]), statement.values[0]);
+    } else if (sql.startsWith('INSERT INTO "IngredientRef"')) {
+      ingredientRefIds.set(String(statement.values[1]), statement.values[0]);
+    }
+  }
+
   return statements.map((statement) => {
-    if (compactSql(statement.sql).startsWith('INSERT INTO "RecipeTag"')) {
-      return nativeCreationResult([{
+    const sql = compactSql(statement.sql);
+    if (sql.startsWith('INSERT INTO "RecipeTag"')) {
+      return [{
         recipeId: statement.values[1],
         tagId: statement.values[0],
         label: statement.values[2],
         normalizedLabel: statement.values[3],
         createdAt: statement.values[4],
         updatedAt: statement.values[5],
-      }]);
+      }];
     }
-    return nativeCreationResult([{
-      id: statement.values[0],
-      title: statement.values[1],
-      description: statement.values[2],
-      servings: statement.values[3],
-      chefId: statement.values[4],
-      course: statement.values[5],
-      createdAt: statement.values[6],
-      updatedAt: statement.values[7],
-    }]);
+    if (sql.startsWith('INSERT INTO "RecipeStep"')) {
+      return [{
+        id: statement.values[0],
+        recipeId: statement.values[1],
+        stepNum: statement.values[2],
+        stepTitle: statement.values[3],
+        description: statement.values[4],
+        duration: statement.values[5],
+        updatedAt: statement.values[6],
+      }];
+    }
+    if (sql.startsWith('INSERT INTO "Unit"') || sql.startsWith('INSERT INTO "IngredientRef"')) {
+      return [{
+        id: statement.values[0],
+        name: statement.values[1],
+        updatedAt: statement.values[2],
+      }];
+    }
+    if (sql.startsWith('INSERT INTO "Ingredient"')) {
+      return [{
+        id: statement.values[0],
+        recipeId: statement.values[1],
+        stepNum: statement.values[2],
+        quantity: statement.values[3],
+        unitId: unitIds.get(String(statement.values[4])),
+        ingredientRefId: ingredientRefIds.get(String(statement.values[5])),
+        updatedAt: statement.values[6],
+      }];
+    }
+    if (sql.startsWith('INSERT INTO "RecipeCover"')) {
+      return [{
+        id: statement.values[0],
+        recipeId: statement.values[8],
+        imageUrl: statement.values[1],
+        sourceType: statement.values[2],
+        status: statement.values[3],
+        createdById: statement.values[4],
+        sourceImageUrl: statement.values[5],
+        generationStatus: statement.values[6],
+        createdAt: statement.values[7],
+      }];
+    }
+    if (sql.startsWith('UPDATE "Recipe"')) {
+      const clearing = sql.includes('"activeCoverId" = NULL');
+      return [{
+        recipeId: statement.values[clearing ? 1 : 2],
+        activeCoverId: clearing ? null : statement.values[0],
+        activeCoverVariant: clearing ? null : "image",
+        coverMode: clearing ? "none" : "manual",
+        updatedAt: statement.values[clearing ? 0 : 1],
+      }];
+    }
+    if (sql.startsWith('INSERT INTO "Recipe"')) {
+      return [{
+        id: statement.values[0],
+        title: statement.values[1],
+        description: statement.values[2],
+        servings: statement.values[3],
+        sourceUrl: statement.values[4],
+        chefId: statement.values[5],
+        course: statement.values[6],
+        createdAt: statement.values[7],
+        updatedAt: statement.values[8],
+      }];
+    }
+    throw new Error(`Unexpected creation SQL: ${sql}`);
   });
+}
+
+function successfulNativeCreationResults(statements: CapturedCreationStatement[]) {
+  return successfulCreationRows(statements).map((rows) => nativeCreationResult(rows));
 }
 
 function captureNativeCreationDatabase(
@@ -142,9 +251,19 @@ function captureNativeCreationDatabase(
   return { database, statements, batch };
 }
 
-function localCreationDatabase(results: unknown) {
+function localCreationDatabase(
+  results: unknown | ((statements: CapturedCreationStatement[]) => unknown),
+) {
   const queryRaw = vi.fn(async () => []);
-  const transaction = vi.fn(async () => results);
+  const transaction = vi.fn(async () => {
+    if (typeof results !== "function") return results;
+    const statements = queryRaw.mock.calls.map(([sql, ...values]) => ({
+      sql: String(sql),
+      values,
+      bind: vi.fn(),
+    }));
+    return results(statements);
+  });
   const database = {
     $queryRawUnsafe: queryRaw,
     $transaction: transaction,
@@ -334,6 +453,52 @@ describe("recipe create helpers", () => {
   });
 
   describe("createRecipeDraft", () => {
+    it("commits an authoring graph at the exact 900-operation limit", async () => {
+      const ingredients = Array.from({ length: 299 }, (_, index) => ({
+        quantity: 1,
+        unit: `Boundary Unit ${index}`,
+        ingredientName: `Boundary Ingredient ${index}`,
+      }));
+
+      await expect(createRecipeDraft(db, {
+        id: "maximum-create-graph",
+        title: "Maximum Create Graph",
+        description: null,
+        servings: null,
+        chefId: testUserId,
+        tags: ["Boundary"],
+        steps: [{ stepTitle: null, description: "Exactly enough", duration: null, ingredients }],
+      }, { nativeDatabase: null })).resolves.toMatchObject({ id: "maximum-create-graph" });
+      await expect(db.ingredient.count({ where: { recipeId: "maximum-create-graph" } }))
+        .resolves.toBe(299);
+      await expect(db.recipeTag.count({ where: { recipeId: "maximum-create-graph" } }))
+        .resolves.toBe(1);
+    });
+
+    it("rejects oversized authoring graphs before preparing any database work", async () => {
+      const fallback = nativeFallbackDatabase();
+      const ingredients = Array.from({ length: 299 }, (_, index) => ({
+        quantity: 1,
+        unit: `Unit ${index}`,
+        ingredientName: `Ingredient ${index}`,
+      }));
+
+      await expect(createRecipeDraft(fallback.database, {
+        id: "oversized-create-graph",
+        title: "Oversized Create Graph",
+        description: null,
+        servings: null,
+        chefId: testUserId,
+        tags: ["First", "Second"],
+        steps: [{ stepTitle: null, description: "Too much", duration: null, ingredients }],
+      }, { nativeDatabase: null })).rejects.toMatchObject({
+        name: "RecipeGraphTooLargeError",
+        message: "Recipe contains too many steps or ingredients",
+        operationCount: 901,
+      } satisfies Partial<RecipeGraphTooLargeError>);
+      expect(fallback.queryRaw).not.toHaveBeenCalled();
+      expect(fallback.transaction).not.toHaveBeenCalled();
+    });
     it("creates recipes, steps, units, ingredient refs, and ingredients in one durable graph", async () => {
       await db.unit.create({ data: { name: "cup" } });
       await db.ingredientRef.create({ data: { name: "flour" } });
@@ -361,7 +526,7 @@ describe("recipe create helpers", () => {
             ingredients: [{ quantity: 1, unit: "Tbsp", ingredientName: "Butter" }],
           },
         ],
-      });
+      }, { nativeDatabase: null });
 
       const persisted = await db.recipe.findUniqueOrThrow({
         where: { id: recipe.id },
@@ -477,8 +642,8 @@ describe("recipe create helpers", () => {
       ))).toBe(true);
       expect(rawCalls.map(([sql, ...values]) => [compactSql(sql), ...values])).toEqual([
         [
-          'INSERT INTO "Recipe" ("id", "title", "description", "servings", "chefId", "course", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING "id", "title", "description", "servings", "chefId", "course", "createdAt", "updatedAt"',
-          "recipe-atomic-metadata", "Atomic Metadata Supper", null, "2", testUserId, "main",
+          'INSERT INTO "Recipe" ( "id", "title", "description", "servings", "sourceUrl", "chefId", "course", "createdAt", "updatedAt" ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING "id", "title", "description", "servings", "sourceUrl", "chefId", "course", "createdAt", "updatedAt"',
+          "recipe-atomic-metadata", "Atomic Metadata Supper", null, "2", null, testUserId, "main",
           timestamp.toISOString(), timestamp.toISOString(),
         ],
         [
@@ -561,6 +726,7 @@ describe("recipe create helpers", () => {
         input.title,
         input.description,
         input.servings,
+        null,
         input.chefId,
         null,
         CREATION_TIMESTAMP_TEXT,
@@ -596,12 +762,84 @@ describe("recipe create helpers", () => {
       expect(fallback.transaction).not.toHaveBeenCalled();
     });
 
+    it("uses one exact recipe-graph operation contract for native D1 and local Prisma", async () => {
+      const input = recipeGraphCreationInput(testUserId);
+      const ids = [
+        "tag-quick",
+        "step-mix",
+        "step-cook",
+        "unit-cup",
+        "unit-tbsp",
+        "ref-flour",
+        "ref-milk",
+        "ref-butter",
+        "ingredient-flour",
+        "ingredient-milk",
+        "ingredient-butter",
+      ];
+      const native = captureNativeCreationDatabase(successfulNativeCreationResults);
+      const fallback = nativeFallbackDatabase();
+      const local = localCreationDatabase(successfulCreationRows);
+
+      const nativeRecipe = await createRecipeDraft(fallback.database, input, {
+        nativeDatabase: native.database,
+        now: () => CREATION_TIMESTAMP,
+        randomId: sequentialIds([...ids]),
+      });
+      const localRecipe = await createRecipeDraft(local.database, input, {
+        nativeDatabase: null,
+        now: () => CREATION_TIMESTAMP,
+        randomId: sequentialIds([...ids]),
+      });
+
+      const expectedSql = [
+        'INSERT INTO "Recipe" ( "id", "title", "description", "servings", "sourceUrl", "chefId", "course", "createdAt", "updatedAt" ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING "id", "title", "description", "servings", "sourceUrl", "chefId", "course", "createdAt", "updatedAt"',
+        'INSERT INTO "RecipeTag" ("id", "recipeId", "label", "normalizedLabel", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?) RETURNING "recipeId", "id" AS "tagId", "label", "normalizedLabel", "createdAt", "updatedAt"',
+        ...Array(2).fill('INSERT INTO "RecipeStep" ( "id", "recipeId", "stepNum", "stepTitle", "description", "duration", "updatedAt" ) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING "id", "recipeId", "stepNum", "stepTitle", "description", "duration", "updatedAt"'),
+        ...Array(2).fill('INSERT INTO "Unit" ("id", "name", "updatedAt") VALUES (?, ?, ?) ON CONFLICT("name") DO UPDATE SET "name" = excluded."name" RETURNING "id", "name", "updatedAt"'),
+        ...Array(3).fill('INSERT INTO "IngredientRef" ("id", "name", "updatedAt") VALUES (?, ?, ?) ON CONFLICT("name") DO UPDATE SET "name" = excluded."name" RETURNING "id", "name", "updatedAt"'),
+        ...Array(3).fill('INSERT INTO "Ingredient" ( "id", "recipeId", "stepNum", "quantity", "unitId", "ingredientRefId", "updatedAt" ) VALUES ( ?, ?, ?, ?, (SELECT "id" FROM "Unit" WHERE "name" = ?), (SELECT "id" FROM "IngredientRef" WHERE "name" = ?), ? ) RETURNING "id", "recipeId", "stepNum", "quantity", "unitId", "ingredientRefId", "updatedAt"'),
+      ];
+      const expectedBinds = [
+        [input.id, input.title, input.description, input.servings, null, input.chefId, "main", CREATION_TIMESTAMP_TEXT, CREATION_TIMESTAMP_TEXT],
+        ["tag-quick", input.id, "Quick", "quick", CREATION_TIMESTAMP_TEXT, CREATION_TIMESTAMP_TEXT],
+        ["step-mix", input.id, 1, "Mix", "Mix flour and milk", 5, CREATION_TIMESTAMP_TEXT],
+        ["step-cook", input.id, 2, null, "Cook in butter", null, CREATION_TIMESTAMP_TEXT],
+        ["unit-cup", "cup", CREATION_TIMESTAMP_TEXT],
+        ["unit-tbsp", "tbsp", CREATION_TIMESTAMP_TEXT],
+        ["ref-flour", "flour", CREATION_TIMESTAMP_TEXT],
+        ["ref-milk", "milk", CREATION_TIMESTAMP_TEXT],
+        ["ref-butter", "butter", CREATION_TIMESTAMP_TEXT],
+        ["ingredient-flour", input.id, 1, 2, "cup", "flour", CREATION_TIMESTAMP_TEXT],
+        ["ingredient-milk", input.id, 1, 1, "cup", "milk", CREATION_TIMESTAMP_TEXT],
+        ["ingredient-butter", input.id, 2, 1, "tbsp", "butter", CREATION_TIMESTAMP_TEXT],
+      ];
+
+      expect(native.statements.map(({ sql }) => compactSql(sql))).toEqual(expectedSql);
+      expect(native.statements.map(({ values }) => values)).toEqual(expectedBinds);
+      expect(local.queryRaw.mock.calls.map(([sql]) => compactSql(sql))).toEqual(expectedSql);
+      expect(local.queryRaw.mock.calls.map(([, ...values]) => values)).toEqual(expectedBinds);
+      expect(local.transaction.mock.calls[0]?.[0]).toEqual(
+        local.queryRaw.mock.results.map(({ value }) => value),
+      );
+      expect(native.batch.mock.calls[0]?.[0]).toEqual(native.statements);
+      expect(nativeRecipe).toEqual(localRecipe);
+      expect(nativeRecipe).toMatchObject({
+        id: input.id,
+        course: "main",
+        createdAt: CREATION_TIMESTAMP,
+        updatedAt: CREATION_TIMESTAMP,
+      });
+      expect(fallback.queryRaw).not.toHaveBeenCalled();
+      expect(fallback.transaction).not.toHaveBeenCalled();
+    });
+
     it("uses the production clock and UUID generator for local metadata creation", async () => {
       const input = recipeCreationInput(testUserId, {
         id: "recipe-local-default-dependencies",
       });
 
-      const recipe = await createRecipeDraft(db, input);
+      const recipe = await createRecipeDraft(db, input, { nativeDatabase: null });
 
       expect(recipe).toMatchObject({
         id: input.id,
@@ -664,7 +902,7 @@ describe("recipe create helpers", () => {
           normalizedLabel: "wrong",
         }]],
       },
-    ])("rejects local $label", async ({ mutate, expectedError }) => {
+    ])("does not report a false failure for committed local $label", async ({ mutate }) => {
       const input = recipeCreationInput(testUserId);
       const successfulResults = [
         [recipeCreationRow(input)],
@@ -676,7 +914,7 @@ describe("recipe create helpers", () => {
         nativeDatabase: null,
         now: () => CREATION_TIMESTAMP,
         randomId: () => "tag-result-validation",
-      })).rejects.toThrow(expectedError);
+      })).resolves.toMatchObject({ id: input.id, course: "main" });
 
       expect(local.queryRaw).toHaveBeenCalledTimes(2);
       expect(local.transaction).toHaveBeenCalledOnce();
@@ -784,7 +1022,7 @@ describe("recipe create helpers", () => {
           }],
         }],
       },
-    ])("rejects native $label without Prisma fallback", async ({ mutate, expectedError }) => {
+    ])("does not report a false failure for committed native $label", async ({ mutate }) => {
       const input = recipeCreationInput(testUserId);
       const native = captureNativeCreationDatabase((statements) =>
         mutate(successfulNativeCreationResults(statements))
@@ -795,11 +1033,205 @@ describe("recipe create helpers", () => {
         nativeDatabase: native.database,
         now: () => CREATION_TIMESTAMP,
         randomId: () => "tag-result-validation",
-      })).rejects.toThrow(expectedError);
+      })).resolves.toMatchObject({ id: input.id, course: "main" });
 
       expect(native.batch).toHaveBeenCalledOnce();
       expect(fallback.queryRaw).not.toHaveBeenCalled();
       expect(fallback.transaction).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      {
+        label: "step row",
+        index: 2,
+        field: "stepNum",
+        value: 99,
+        expectedError: "Invalid recipe step creation row",
+      },
+      {
+        label: "unit row",
+        index: 3,
+        field: "name",
+        value: "wrong-unit",
+        expectedError: "Invalid recipe unit creation row",
+      },
+      {
+        label: "ingredient reference row",
+        index: 4,
+        field: "id",
+        value: "",
+        expectedError: "Invalid recipe ingredient reference creation row",
+      },
+      {
+        label: "ingredient row",
+        index: 5,
+        field: "unitId",
+        value: "wrong-unit-id",
+        expectedError: "Invalid ingredient creation row",
+      },
+    ])("accepts a committed native graph with a malformed diagnostic $label", async ({
+      index,
+      field,
+      value,
+    }) => {
+      const input = recipeGraphCreationInput(testUserId, {
+        steps: [{
+          stepTitle: null,
+          description: "Mix",
+          duration: null,
+          ingredients: [{ quantity: 1, unit: "Cup", ingredientName: "Flour" }],
+        }],
+      });
+      const native = captureNativeCreationDatabase((statements) => {
+        const results = successfulNativeCreationResults(statements);
+        const envelope = results[index] as Record<string, unknown>;
+        const rows = envelope.results as Record<string, unknown>[];
+        return results.map((result, resultIndex) => resultIndex === index ? {
+          ...envelope,
+          results: [{ ...rows[0], [field]: value }],
+        } : result);
+      });
+      const fallback = nativeFallbackDatabase();
+
+      await expect(createRecipeDraft(fallback.database, input, {
+        nativeDatabase: native.database,
+        now: () => CREATION_TIMESTAMP,
+        randomId: sequentialIds(["tag", "step", "unit", "ref", "ingredient"]),
+      })).resolves.toMatchObject({ id: input.id, course: "main" });
+
+      expect(native.batch).toHaveBeenCalledOnce();
+      expect(fallback.queryRaw).not.toHaveBeenCalled();
+      expect(fallback.transaction).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { index: 2, expectedError: "Invalid recipe step creation result" },
+      { index: 3, expectedError: "Invalid recipe unit creation result" },
+      { index: 4, expectedError: "Invalid recipe ingredient reference creation result" },
+      { index: 5, expectedError: "Invalid ingredient creation result" },
+    ])("accepts a committed local graph with an empty diagnostic at operation $index", async ({
+      index,
+    }) => {
+      const input = recipeGraphCreationInput(testUserId, {
+        steps: [{
+          stepTitle: null,
+          description: "Mix",
+          duration: null,
+          ingredients: [{ quantity: 1, unit: "Cup", ingredientName: "Flour" }],
+        }],
+      });
+      const local = localCreationDatabase((statements) => (
+        successfulCreationRows(statements).map((rows, resultIndex) => (
+          resultIndex === index ? [] : rows
+        ))
+      ));
+
+      await expect(createRecipeDraft(local.database, input, {
+        nativeDatabase: null,
+        now: () => CREATION_TIMESTAMP,
+        randomId: sequentialIds(["tag", "step", "unit", "ref", "ingredient"]),
+      })).resolves.toMatchObject({ id: input.id, course: "main" });
+
+      expect(local.queryRaw).toHaveBeenCalledTimes(6);
+      expect(local.transaction).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      {
+        label: "uploaded cover",
+        mutation: {
+          kind: "uploaded" as const,
+          coverId: "diagnostic-uploaded-cover",
+          createdById: "owner",
+          imageUrl: "/photos/diagnostic-uploaded.jpg",
+        },
+        operationCount: 4,
+      },
+      {
+        label: "placeholder cover",
+        mutation: {
+          kind: "placeholder" as const,
+          coverId: "diagnostic-placeholder-cover",
+          createdById: "owner",
+        },
+        operationCount: 3,
+      },
+      {
+        label: "clear cover",
+        mutation: { kind: "clear" as const },
+        operationCount: 3,
+      },
+    ])("validates a committed native $label diagnostic", async ({ mutation, operationCount }) => {
+      const input = recipeCreationInput(testUserId, { id: `recipe-${mutation.kind}-diagnostic` });
+      const native = captureNativeCreationDatabase(successfulNativeCreationResults);
+      const fallback = nativeFallbackDatabase();
+
+      await expect(createRecipeDraft(fallback.database, input, {
+        coverMutation: {
+          ...mutation,
+          ...(mutation.kind === "clear" ? {} : { createdById: testUserId }),
+        },
+        nativeDatabase: native.database,
+        now: () => CREATION_TIMESTAMP,
+      })).resolves.toMatchObject({ id: input.id });
+
+      expect(native.statements).toHaveLength(operationCount);
+    });
+
+    it.each([
+      { label: "cover insertion row", operationIndex: 2, field: "id", value: "wrong-cover" },
+      { label: "cover activation row", operationIndex: 3, field: "coverMode", value: "auto" },
+    ])("does not report a false failure for a malformed committed native $label", async ({
+      operationIndex,
+      field,
+      value,
+    }) => {
+      const input = recipeCreationInput(testUserId, { id: `recipe-cover-${operationIndex}` });
+      const native = captureNativeCreationDatabase((statements) => {
+        const results = successfulNativeCreationResults(statements);
+        const envelope = results[operationIndex] as Record<string, unknown>;
+        const rows = envelope.results as Record<string, unknown>[];
+        return results.map((result, index) => index === operationIndex ? {
+          ...envelope,
+          results: [{ ...rows[0], [field]: value }],
+        } : result);
+      });
+
+      await expect(createRecipeDraft(nativeFallbackDatabase().database, input, {
+        coverMutation: {
+          kind: "uploaded",
+          coverId: "malformed-diagnostic-cover",
+          createdById: testUserId,
+          imageUrl: "/photos/malformed-diagnostic.jpg",
+        },
+        nativeDatabase: native.database,
+        now: () => CREATION_TIMESTAMP,
+      })).resolves.toMatchObject({ id: input.id });
+    });
+
+    it.each([
+      { label: "cover insertion", operationIndex: 2 },
+      { label: "cover activation", operationIndex: 3 },
+    ])("does not report a false failure for an empty committed native $label diagnostic", async ({
+      operationIndex,
+    }) => {
+      const input = recipeCreationInput(testUserId, { id: `recipe-empty-cover-${operationIndex}` });
+      const native = captureNativeCreationDatabase((statements) => (
+        successfulNativeCreationResults(statements).map((result, index) => index === operationIndex
+          ? { ...(result as Record<string, unknown>), results: [] }
+          : result)
+      ));
+
+      await expect(createRecipeDraft(nativeFallbackDatabase().database, input, {
+        coverMutation: {
+          kind: "uploaded",
+          coverId: "empty-diagnostic-cover",
+          createdById: testUserId,
+          imageUrl: "/photos/empty-diagnostic.jpg",
+        },
+        nativeDatabase: native.database,
+        now: () => CREATION_TIMESTAMP,
+      })).resolves.toMatchObject({ id: input.id });
     });
 
     it("rolls back the initial recipe when a later tag insertion fails", async () => {
@@ -841,6 +1273,384 @@ describe("recipe create helpers", () => {
       } finally {
         await db.$executeRawUnsafe('DROP TRIGGER IF EXISTS "RecipeTag_create_abort"');
       }
+    });
+
+    it("rolls back the recipe, tags, and first step when the second step fails", async () => {
+      const recipeId = "recipe-create-step-rollback";
+      await db.$executeRawUnsafe(`
+        CREATE TRIGGER "RecipeStep_create_abort"
+        BEFORE INSERT ON "RecipeStep"
+        WHEN NEW."recipeId" = '${recipeId}' AND NEW."stepNum" = 2
+        BEGIN
+          SELECT RAISE(ABORT, 'recipe create step failure');
+        END
+      `);
+
+      try {
+        await expect(createRecipeDraft(
+          db,
+          recipeGraphCreationInput(testUserId, {
+            id: recipeId,
+            steps: [
+              { stepTitle: null, description: "First", duration: null, ingredients: [] },
+              { stepTitle: null, description: "Second", duration: null, ingredients: [] },
+            ],
+          }),
+          {
+            nativeDatabase: null,
+            now: () => CREATION_TIMESTAMP,
+            randomId: sequentialIds(["step-rollback-tag", "step-rollback-1", "step-rollback-2"]),
+          },
+        )).rejects.toThrow("recipe create step failure");
+
+        await expect(db.recipe.findUnique({ where: { id: recipeId } })).resolves.toBeNull();
+        await expect(db.recipeTag.count({ where: { recipeId } })).resolves.toBe(0);
+        await expect(db.recipeStep.count({ where: { recipeId } })).resolves.toBe(0);
+      } finally {
+        await db.$executeRawUnsafe('DROP TRIGGER IF EXISTS "RecipeStep_create_abort"');
+      }
+    });
+
+    it("rolls back the full graph and new lookup rows when a later ingredient fails", async () => {
+      const recipeId = "recipe-create-ingredient-rollback";
+      const existingUnit = await db.unit.create({ data: { name: "cup" } });
+      const existingIngredientRef = await db.ingredientRef.create({ data: { name: "flour" } });
+      await db.$executeRawUnsafe(`
+        CREATE TRIGGER "Ingredient_create_abort"
+        BEFORE INSERT ON "Ingredient"
+        WHEN NEW."id" = 'ingredient-rollback-salt'
+        BEGIN
+          SELECT RAISE(ABORT, 'recipe create ingredient failure');
+        END
+      `);
+
+      try {
+        await expect(createRecipeDraft(
+          db,
+          recipeGraphCreationInput(testUserId, {
+            id: recipeId,
+            steps: [{
+              stepTitle: "Mix",
+              description: "Mix before the late failure",
+              duration: 4,
+              ingredients: [
+                { quantity: 1, unit: "Cup", ingredientName: "Flour" },
+                { quantity: 2, unit: "Tsp", ingredientName: "Salt" },
+              ],
+            }],
+          }),
+          {
+            nativeDatabase: null,
+            now: () => CREATION_TIMESTAMP,
+            randomId: sequentialIds([
+              "ingredient-rollback-tag",
+              "ingredient-rollback-step",
+              "ingredient-rollback-unit-cup",
+              "ingredient-rollback-unit-tsp",
+              "ingredient-rollback-ref-flour",
+              "ingredient-rollback-ref-salt",
+              "ingredient-rollback-flour",
+              "ingredient-rollback-salt",
+            ]),
+          },
+        )).rejects.toThrow("recipe create ingredient failure");
+
+        await expect(db.recipe.findUnique({ where: { id: recipeId } })).resolves.toBeNull();
+        await expect(db.recipeTag.count({ where: { recipeId } })).resolves.toBe(0);
+        await expect(db.recipeStep.count({ where: { recipeId } })).resolves.toBe(0);
+        await expect(db.ingredient.count({ where: { recipeId } })).resolves.toBe(0);
+        await expect(db.unit.findMany({
+          where: { name: { in: ["cup", "tsp"] } },
+          orderBy: { name: "asc" },
+        })).resolves.toEqual([existingUnit]);
+        await expect(db.ingredientRef.findMany({
+          where: { name: { in: ["flour", "salt"] } },
+          orderBy: { name: "asc" },
+        })).resolves.toEqual([existingIngredientRef]);
+      } finally {
+        await db.$executeRawUnsafe('DROP TRIGGER IF EXISTS "Ingredient_create_abort"');
+      }
+    });
+  });
+
+  describe("updateRecipeDraft", () => {
+    it("commits a replacement graph at the exact 900-operation limit", async () => {
+      const recipe = await db.recipe.create({
+        data: { id: "maximum-update-graph", title: "Maximum Update Graph", chefId: testUserId },
+      });
+      const ingredients = Array.from({ length: 297 }, (_, index) => ({
+        quantity: 1,
+        unit: `Update Boundary Unit ${index}`,
+        ingredientName: `Update Boundary Ingredient ${index}`,
+      }));
+
+      await expect(updateRecipeDraft(db, {
+        id: recipe.id,
+        chefId: testUserId,
+        steps: [{ stepTitle: null, description: "Exactly enough", duration: null, ingredients }],
+      }, {
+        nativeDatabase: null,
+        coverMutation: {
+          kind: "uploaded",
+          coverId: "maximum-update-cover",
+          createdById: testUserId,
+          imageUrl: "https://example.test/maximum-update.png",
+        },
+      })).resolves.toBeUndefined();
+      await expect(db.ingredient.count({ where: { recipeId: recipe.id } })).resolves.toBe(297);
+      await expect(db.recipe.findUniqueOrThrow({ where: { id: recipe.id } })).resolves.toMatchObject({
+        activeCoverId: "maximum-update-cover",
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      });
+    });
+
+    it("rejects oversized replacement graphs before preparing any database work", async () => {
+      const fallback = nativeFallbackDatabase();
+      const ingredients = Array.from({ length: 298 }, (_, index) => ({
+        quantity: 1,
+        unit: `Update Unit ${index}`,
+        ingredientName: `Update Ingredient ${index}`,
+      }));
+
+      await expect(updateRecipeDraft(fallback.database, {
+        id: "oversized-update-graph",
+        chefId: testUserId,
+        steps: [{ stepTitle: null, description: "Too much", duration: null, ingredients }],
+      }, { nativeDatabase: null })).rejects.toMatchObject({
+        name: "RecipeGraphTooLargeError",
+        operationCount: 901,
+      } satisfies Partial<RecipeGraphTooLargeError>);
+      expect(fallback.queryRaw).not.toHaveBeenCalled();
+      expect(fallback.transaction).not.toHaveBeenCalled();
+    });
+    function capturedNativeUpdate(results: unknown) {
+      const statements: CapturedCreationStatement[] = [];
+      const database: CompatibleRecipeTagD1Database = {
+        prepare(sql) {
+          const statement: CapturedCreationStatement = {
+            sql,
+            values: [],
+            bind(...values) {
+              statement.values = values;
+              return statement;
+            },
+          };
+          statements.push(statement);
+          return statement;
+        },
+        batch: vi.fn(async () => results),
+      };
+      return { database, statements };
+    }
+
+    function canonicalZero() {
+      return { success: true, meta: { changes: 0 }, results: [] };
+    }
+
+    it("recognizes exact all-zero local and native update graphs as not found", async () => {
+      const fallback = nativeFallbackDatabase();
+      fallback.transaction.mockResolvedValueOnce([[], [], []]);
+      await expect(updateRecipeDraft(fallback.database, {
+        id: "missing-local-update",
+        chefId: testUserId,
+      }, { nativeDatabase: null })).rejects.toEqual(
+        new RecipeDraftNotFoundError("missing-local-update"),
+      );
+
+      const native = capturedNativeUpdate([canonicalZero(), canonicalZero(), canonicalZero()]);
+      await expect(updateRecipeDraft(fallback.database, {
+        id: "missing-native-update",
+        chefId: testUserId,
+      }, { nativeDatabase: native.database })).rejects.toEqual(
+        new RecipeDraftNotFoundError("missing-native-update"),
+      );
+      expect(native.statements).toHaveLength(3);
+      expect(compactSql(native.statements[0].sql)).toMatch(
+        /WHERE "id" = \? AND "chefId" = \? AND "deletedAt" IS NULL/,
+      );
+    });
+
+    it.each([
+      ["non-array envelope", null],
+      ["wrong operation count", [canonicalZero(), canonicalZero()]],
+      ["non-object result", [null, canonicalZero(), canonicalZero()]],
+      ["array result", [[], canonicalZero(), canonicalZero()]],
+      ["failed result", [{ ...canonicalZero(), success: false }, canonicalZero(), canonicalZero()]],
+      ["missing rows", [{ success: true, meta: { changes: 0 } }, canonicalZero(), canonicalZero()]],
+      ["returned row", [{ ...canonicalZero(), results: [{}] }, canonicalZero(), canonicalZero()]],
+      ["missing metadata", [{ success: true, results: [] }, canonicalZero(), canonicalZero()]],
+      ["scalar metadata", [{ success: true, meta: 0, results: [] }, canonicalZero(), canonicalZero()]],
+      ["array metadata", [{ success: true, meta: [], results: [] }, canonicalZero(), canonicalZero()]],
+      ["nonzero changes", [{ success: true, meta: { changes: 1 }, results: [] }, canonicalZero(), canonicalZero()]],
+    ])("does not turn a malformed committed native %s into not found", async (_label, results) => {
+      const native = capturedNativeUpdate(results);
+      await expect(updateRecipeDraft(nativeFallbackDatabase().database, {
+        id: "committed-native-update",
+        chefId: testUserId,
+      }, { nativeDatabase: native.database })).resolves.toBeUndefined();
+    });
+
+    it("rolls back a real local update graph after a late ingredient failure", async () => {
+      const recipe = await db.recipe.create({
+        data: { title: "Local Update Rollback", chefId: testUserId },
+      });
+      await db.recipeStep.create({
+        data: { id: "local-update-old-step", recipeId: recipe.id, stepNum: 1, description: "Keep me" },
+      });
+      await db.$executeRawUnsafe(`
+        CREATE TRIGGER "Ingredient_local_update_abort"
+        BEFORE INSERT ON "Ingredient"
+        WHEN NEW."id" = 'local-update-new-ingredient'
+        BEGIN
+          SELECT RAISE(ABORT, 'local update ingredient failure');
+        END
+      `);
+
+      try {
+        await expect(updateRecipeDraft(db, {
+          id: recipe.id,
+          chefId: testUserId,
+          title: "Must Roll Back",
+          steps: [{
+            stepTitle: null,
+            description: "Replacement",
+            duration: null,
+            ingredients: [{ quantity: 1, unit: "Rollback Cup", ingredientName: "Rollback Flour" }],
+          }],
+        }, {
+          nativeDatabase: null,
+          randomId: sequentialIds([
+            "local-update-new-step",
+            "local-update-new-unit",
+            "local-update-new-ref",
+            "local-update-new-ingredient",
+          ]),
+        })).rejects.toThrow("local update ingredient failure");
+      } finally {
+        await db.$executeRawUnsafe('DROP TRIGGER IF EXISTS "Ingredient_local_update_abort"');
+      }
+
+      await expect(db.recipe.findUniqueOrThrow({ where: { id: recipe.id } }))
+        .resolves.toMatchObject({ title: "Local Update Rollback" });
+      await expect(db.recipeStep.findMany({ where: { recipeId: recipe.id } }))
+        .resolves.toMatchObject([{ id: "local-update-old-step", description: "Keep me" }]);
+      await expect(db.unit.count({ where: { name: "rollback cup" } })).resolves.toBe(0);
+      await expect(db.ingredientRef.count({ where: { name: "rollback flour" } })).resolves.toBe(0);
+    });
+  });
+
+  describe("readCommittedRecipeGraph", () => {
+    function committedGraphDatabase(results: unknown[]) {
+      return {
+        $queryRawUnsafe: vi.fn(),
+        $transaction: vi.fn().mockResolvedValue(results),
+      } as unknown as RecipeCreationDatabase;
+    }
+
+    it("returns null for a missing committed recipe", async () => {
+      await expect(readCommittedRecipeGraph(
+        committedGraphDatabase([[], [], [], []]),
+        "missing-recipe",
+        { chefId: "missing-chef" },
+      )).resolves.toBeNull();
+    });
+
+    it.each([
+      ["non-array result", [null, [], [], []]],
+      ["non-object row", [[null], [], [], []]],
+      ["multiple recipe rows", [[{ id: "one" }, { id: "two" }], [], [], []]],
+      ["invalid ingredient step", [[{ id: "recipe" }], [], [], [{ stepNum: "1" }]]],
+    ])("rejects an invalid committed graph %s", async (_label, results) => {
+      await expect(readCommittedRecipeGraph(
+        committedGraphDatabase(results),
+        "recipe",
+        { chefId: "chef" },
+      )).rejects.toThrow(/Invalid committed recipe graph|Invalid committed recipe ingredient/);
+    });
+
+    it("reads a committed graph through one native D1 batch without Prisma transactions", async () => {
+      const statements: CapturedCreationStatement[] = [];
+      const batch = vi.fn().mockResolvedValue([
+        { success: true, meta: { changes: 0 }, results: [{
+          id: "native-recipe",
+          chefId: "native-chef",
+          chefEmail: "native@example.test",
+          chefUsername: "native",
+        }] },
+        { success: true, meta: { changes: 0 }, results: [] },
+        { success: true, meta: { changes: 0 }, results: [{
+          id: "native-step",
+          stepNum: 1,
+          description: "Native snapshot",
+        }] },
+        { success: true, meta: { changes: 0 }, results: [] },
+      ]);
+      const nativeDatabase: CompatibleRecipeTagD1Database = {
+        prepare(sql) {
+          const statement: CapturedCreationStatement = {
+            sql,
+            values: [],
+            bind(...values) {
+              statement.values = values;
+              return statement;
+            },
+          };
+          statements.push(statement);
+          return statement;
+        },
+        batch,
+      };
+      const fallback = nativeFallbackDatabase();
+
+      const ownerScopedOptions = {
+        nativeDatabase,
+        chefId: "native-chef",
+      };
+      await expect(readCommittedRecipeGraph(
+        fallback.database,
+        "native-recipe",
+        ownerScopedOptions,
+      )).resolves.toMatchObject({
+        id: "native-recipe",
+        chef: { id: "native-chef", email: "native@example.test", username: "native" },
+        steps: [{ id: "native-step", ingredients: [] }],
+      });
+      expect(batch).toHaveBeenCalledWith(statements);
+      expect(statements).toHaveLength(4);
+      expect(statements[0]).toMatchObject({
+        sql: expect.stringMatching(/recipe\."chefId" = \?.*recipe\."deletedAt" IS NULL/s),
+        values: ["native-recipe", "native-chef"],
+      });
+      expect(statements.slice(1).map((statement) => statement.values)).toEqual([
+        ["native-recipe"],
+        ["native-recipe"],
+        ["native-recipe"],
+      ]);
+      expect(fallback.transaction).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["wrong native count", []],
+      ["non-object native entry", [null, null, null, null]],
+      ["failed native entry", [
+        { success: false, results: [] },
+        { success: true, results: [] },
+        { success: true, results: [] },
+        { success: true, results: [] },
+      ]],
+      ["missing native rows", [
+        { success: true },
+        { success: true, results: [] },
+        { success: true, results: [] },
+        { success: true, results: [] },
+      ]],
+    ])("rejects an invalid %s recovery envelope", async (_label, results) => {
+      const native = captureNativeCreationDatabase(() => results);
+      await expect(readCommittedRecipeGraph(nativeFallbackDatabase().database, "recipe", {
+        chefId: "chef",
+        nativeDatabase: native.database,
+      })).rejects.toThrow("Invalid committed recipe graph result");
     });
   });
 });

@@ -31,7 +31,12 @@ import {
   DESCRIPTION_MAX_LENGTH,
   SERVINGS_MAX_LENGTH,
 } from '~/lib/validation'
-import { MAX_RECIPE_TAG_CODE_POINTS, MAX_RECIPE_TAGS } from '~/lib/recipe-tags'
+import {
+  MAX_RECIPE_TAG_CODE_POINTS,
+  MAX_RECIPE_TAGS,
+  normalizeRecipeTagIdentity,
+  normalizeRecipeTagLabel,
+} from '~/lib/recipe-tags'
 
 export interface RecipeBuilderData {
   id?: string
@@ -67,7 +72,7 @@ export interface RecipeBuilderProps {
 }
 
 function normalizePendingTag(value: string): string {
-  return value.trim().replace(/\s+/g, ' ')
+  return normalizeRecipeTagLabel(value)
 }
 
 export function RecipeBuilder({
@@ -116,7 +121,7 @@ export function RecipeBuilder({
 
   const pendingTag = normalizePendingTag(tagInput)
   const pendingTagIsDuplicate = tags.some(
-    (tag) => tag.toLowerCase() === pendingTag.toLowerCase(),
+    (tag) => normalizeRecipeTagIdentity(tag) === normalizeRecipeTagIdentity(pendingTag),
   )
   const pendingTagIsTooLong = Array.from(pendingTag.normalize('NFKC')).length > MAX_RECIPE_TAG_CODE_POINTS
   const pendingTagExceedsCount = Boolean(pendingTag) && !pendingTagIsDuplicate && tags.length >= MAX_RECIPE_TAGS
@@ -151,7 +156,9 @@ export function RecipeBuilder({
       tagsInputRef.current?.focus()
       return
     }
-    const savedTags = pendingTag && !tags.some((tag) => tag.toLowerCase() === pendingTag.toLowerCase())
+    const savedTags = pendingTag && !tags.some(
+      (tag) => normalizeRecipeTagIdentity(tag) === normalizeRecipeTagIdentity(pendingTag),
+    )
       ? [...tags, pendingTag]
       : tags
     const data: RecipeBuilderData = {
@@ -203,6 +210,7 @@ export function RecipeBuilder({
     }
     if (!pendingTagIsDuplicate) {
       setTags((current) => [...current, label])
+      setTagAnnouncement(`${label} tag added`)
     }
     setTagClientError(null)
     setTagInput('')
@@ -218,6 +226,9 @@ export function RecipeBuilder({
     const index = tags.indexOf(tagToRemove)
     pendingTagFocus.current = tags[index + 1] ?? tags[index - 1] ?? ''
     setTags((current) => current.filter((tag) => tag !== tagToRemove))
+    if (normalizeRecipeTagIdentity(tagInput) === normalizeRecipeTagIdentity(tagToRemove)) {
+      setTagInput('')
+    }
     setTagClientError(null)
     setTagAnnouncement(`${tagToRemove} tag removed`)
   }
@@ -411,7 +422,9 @@ export function RecipeBuilder({
               </div>
             )}
             {effectiveTagError && <ErrorMessage id={tagsErrorId}>{effectiveTagError}</ErrorMessage>}
-            <p className="sr-only" role="status" aria-live="polite">{tagAnnouncement}</p>
+            <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+              {tagAnnouncement}
+            </p>
           </Field>
 
           <Field>

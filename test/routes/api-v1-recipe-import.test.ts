@@ -11,6 +11,7 @@ import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
 import { expectConsoleError } from "../warning-policy";
+import * as routePlatformModule from "~/lib/route-platform.server";
 
 const BASE_RECIPE_DETAIL_KEYS = [
   "attribution", "canonicalUrl", "chef", "cookbooks", "coverImageUrl", "coverProvenanceLabel",
@@ -22,7 +23,12 @@ function routeArgs(request: Request, splat: string, context = { cloudflare: { en
   return { request, params: { "*": splat }, context } as any;
 }
 
-function mutationRequest(token: string, requestId: string, body: Record<string, unknown>, env = { OPENAI_API_KEY: "test-key" }) {
+function mutationRequest(
+  token: string,
+  requestId: string,
+  body: Record<string, unknown>,
+  env: Record<string, unknown> = { OPENAI_API_KEY: "test-key" },
+) {
   return routeArgs(new UndiciRequest("http://localhost/api/v1/recipes/import", {
     method: "POST",
     headers: {
@@ -123,6 +129,11 @@ describe("API v1 recipe import", () => {
 
   it("imports native text capture sources through the real importer contract and returns API recipe detail", async () => {
     const fixture = await createImportFixture(db);
+    const requestDb = vi.spyOn(routePlatformModule, "getRequestDb").mockResolvedValue(db);
+    const nativeDatabase = {
+      prepare: vi.fn(() => ({ bind: vi.fn() })),
+      batch: vi.fn(),
+    };
     const importSpy = vi.spyOn(recipeImport, "importRecipeFromSource")
       .mockResolvedValueOnce({
         recipeId: fixture.recipe.id,
@@ -145,7 +156,17 @@ describe("API v1 recipe import", () => {
       },
     };
 
-    const response = await action(mutationRequest(fixture.writer.token, "req_native_text_import", body));
+    let response: Response;
+    try {
+      response = await action(mutationRequest(
+        fixture.writer.token,
+        "req_native_text_import",
+        body,
+        { OPENAI_API_KEY: "test-key", DB: nativeDatabase },
+      ));
+    } finally {
+      requestDb.mockRestore();
+    }
     const payload = await readJson(response);
 
     expect(response.status).toBe(201);
@@ -165,6 +186,7 @@ describe("API v1 recipe import", () => {
     }, expect.objectContaining({
       db,
       env: expect.objectContaining({ OPENAI_API_KEY: "test-key" }),
+      nativeDatabase,
     }));
     expect(payload).toMatchObject({
       ok: true,

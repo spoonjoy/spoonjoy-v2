@@ -14,6 +14,7 @@ import {
   prepareRecipeTagMetadataReplacement,
   replaceRecipeTagMetadata,
   updateRecipeAuthoringMetadata,
+  type RecipeAuthoringUpdateInput,
 } from "~/lib/recipe-tags.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser } from "../utils";
@@ -366,35 +367,28 @@ const NATIVE_RESULT_CASES: NativeResultCase[] = [
 ];
 
 interface AuthoringRunOptions {
+  coverMutation?: RecipeAuthoringUpdateInput["coverMutation"];
   tags?: string[];
   tagIds?: string[];
-  cookbookReads?: Array<string[] | Error>;
+  membershipCookbookIds?: string[];
   returnedCookbookIds?: string[];
   executorFailure?: Error;
   mutateResults?: (
     results: unknown[],
     statements: CapturedD1Statement[],
   ) => unknown;
-}
-
-function cookbookFindMany(reads: Array<string[] | Error> = [[]]) {
-  const findMany = vi.fn();
-  for (const read of reads) {
-    if (read instanceof Error) {
-      findMany.mockRejectedValueOnce(read);
-    } else {
-      findMany.mockResolvedValueOnce(read.map((cookbookId) => ({ cookbookId })));
-    }
-  }
-  return findMany;
+  replaceMetadata?: boolean;
 }
 
 function authoringInput(
   database: PrismaClient,
   nativeDatabase: ReturnType<typeof captureNativeDatabase>["database"] | null,
   tags: string[],
+  coverMutation?: RecipeAuthoringUpdateInput["coverMutation"],
+  replaceMetadata?: boolean,
 ) {
   return {
+    coverMutation,
     database,
     nativeDatabase,
     userId: "owner_1",
@@ -404,6 +398,7 @@ function authoringInput(
     servings: "4",
     course: "side" as const,
     tags,
+    replaceMetadata,
   };
 }
 
@@ -439,14 +434,48 @@ function authoringCookbookRows(
   }));
 }
 
+function authoringMembershipRows(cookbookIds: string[]) {
+  return cookbookIds.map((cookbookId) => ({ cookbookId }));
+}
+
+function authoringCoverRow(statement: CapturedD1Statement) {
+  const sql = normalizedSql(statement.sql);
+  if (sql.startsWith(`INSERT INTO "RecipeCover"`)) {
+    return {
+      id: statement.values[0],
+      recipeId: statement.values[8],
+      imageUrl: statement.values[1],
+      sourceType: statement.values[2],
+      status: statement.values[3],
+      createdById: statement.values[4],
+      sourceImageUrl: statement.values[5],
+      generationStatus: statement.values[6],
+      createdAt: statement.values[7],
+    };
+  }
+  const clearing = sql.includes(`"activeCoverId" = NULL`);
+  return {
+    recipeId: statement.values[clearing ? 1 : 2],
+    activeCoverId: clearing ? null : statement.values[0],
+    activeCoverVariant: clearing ? null : "image",
+    coverMode: clearing ? "none" : "manual",
+    updatedAt: statement.values[clearing ? 0 : 1],
+  };
+}
+
 function successfulAuthoringNativeResults(
   statements: CapturedD1Statement[],
-  cookbookIds: string[] = [],
+  membershipCookbookIds: string[] = [],
+  returnedCookbookIds: string[] = membershipCookbookIds,
 ) {
   return statements.map((statement) => {
     const sql = normalizedSql(statement.sql);
-    if (sql.startsWith(`UPDATE "Recipe"`)) {
+    if (sql.startsWith(`UPDATE "Recipe"`) && sql.includes(`SET "title"`)) {
       return nativeResult([authoringUpdateRow(statement)], 1);
+    }
+    if (sql.startsWith(`INSERT INTO "RecipeCover"`)
+      || sql.startsWith(`UPDATE "Recipe"`)) {
+      return nativeResult([authoringCoverRow(statement)], 1);
     }
     if (sql.startsWith(`DELETE FROM "RecipeTag"`)) return nativeResult([], 0);
     if (sql.startsWith(`INSERT INTO "RecipeTag"`)) {
@@ -456,8 +485,11 @@ function successfulAuthoringNativeResults(
       return nativeResult([], 0);
     }
     if (sql.startsWith(`UPDATE "Cookbook"`)) {
-      const rows = authoringCookbookRows(statement, cookbookIds);
+      const rows = authoringCookbookRows(statement, returnedCookbookIds);
       return nativeResult(rows, rows.length);
+    }
+    if (sql.includes(`FROM "RecipeInCookbook"`)) {
+      return nativeResult(authoringMembershipRows(membershipCookbookIds), 0);
     }
     throw new Error(`Unexpected authoring statement: ${sql}`);
   });
@@ -465,16 +497,26 @@ function successfulAuthoringNativeResults(
 
 function successfulAuthoringLocalResults(
   statements: CapturedD1Statement[],
-  cookbookIds: string[] = [],
+  membershipCookbookIds: string[] = [],
+  returnedCookbookIds: string[] = membershipCookbookIds,
 ) {
   return statements.map((statement) => {
     const sql = normalizedSql(statement.sql);
-    if (sql.startsWith(`UPDATE "Recipe"`)) return [authoringUpdateRow(statement)];
+    if (sql.startsWith(`UPDATE "Recipe"`) && sql.includes(`SET "title"`)) {
+      return [authoringUpdateRow(statement)];
+    }
+    if (sql.startsWith(`INSERT INTO "RecipeCover"`)
+      || sql.startsWith(`UPDATE "Recipe"`)) {
+      return [authoringCoverRow(statement)];
+    }
     if (sql.startsWith(`DELETE FROM "RecipeTag"`)) return 0;
     if (sql.startsWith(`INSERT INTO "RecipeTag"`)) return [authoringInsertRow(statement)];
     if (sql.startsWith(`SELECT "id" AS "recipeId" FROM "Recipe" WHERE 0`)) return [];
     if (sql.startsWith(`UPDATE "Cookbook"`)) {
-      return authoringCookbookRows(statement, cookbookIds);
+      return authoringCookbookRows(statement, returnedCookbookIds);
+    }
+    if (sql.includes(`FROM "RecipeInCookbook"`)) {
+      return authoringMembershipRows(membershipCookbookIds);
     }
     throw new Error(`Unexpected authoring statement: ${sql}`);
   });
@@ -482,9 +524,7 @@ function successfulAuthoringLocalResults(
 
 function runNativeAuthoring(options: AuthoringRunOptions = {}) {
   const native = captureNativeDatabase();
-  const findMany = cookbookFindMany(options.cookbookReads);
   const database = {
-    recipeInCookbook: { findMany },
     $queryRawUnsafe: vi.fn(),
     $executeRawUnsafe: vi.fn(),
     $transaction: vi.fn(),
@@ -493,6 +533,7 @@ function runNativeAuthoring(options: AuthoringRunOptions = {}) {
     if (options.executorFailure) throw options.executorFailure;
     const results = successfulAuthoringNativeResults(
       statements,
+      options.membershipCookbookIds,
       options.returnedCookbookIds,
     );
     return options.mutateResults
@@ -501,13 +542,19 @@ function runNativeAuthoring(options: AuthoringRunOptions = {}) {
   });
   const ids = [...(options.tagIds ?? ["authoring_tag_1", "authoring_tag_2"])];
   const result = updateRecipeAuthoringMetadata(
-    authoringInput(database, native.database, options.tags ?? ["Quick"]),
+    authoringInput(
+      database,
+      native.database,
+      options.tags ?? ["Quick"],
+      options.coverMutation,
+      options.replaceMetadata,
+    ),
     {
       now: () => BOUND_NOW,
       randomId: () => ids.shift() ?? "unexpected_authoring_tag",
     },
   );
-  return { ...native, database, findMany, result };
+  return { ...native, database, result };
 }
 
 function runLocalAuthoring(options: AuthoringRunOptions = {}) {
@@ -523,11 +570,11 @@ function runLocalAuthoring(options: AuthoringRunOptions = {}) {
   };
   const query = vi.fn((sql: unknown, ...values: unknown[]) => capture(sql, values));
   const execute = vi.fn((sql: unknown, ...values: unknown[]) => capture(sql, values));
-  const findMany = cookbookFindMany(options.cookbookReads);
   const transaction = vi.fn(async () => {
     if (options.executorFailure) throw options.executorFailure;
     const results = successfulAuthoringLocalResults(
       statements,
+      options.membershipCookbookIds,
       options.returnedCookbookIds,
     );
     return options.mutateResults
@@ -535,20 +582,25 @@ function runLocalAuthoring(options: AuthoringRunOptions = {}) {
       : results;
   });
   const database = {
-    recipeInCookbook: { findMany },
     $queryRawUnsafe: query,
     $executeRawUnsafe: execute,
     $transaction: transaction,
   } as unknown as PrismaClient;
   const ids = [...(options.tagIds ?? ["authoring_tag_1", "authoring_tag_2"])];
   const result = updateRecipeAuthoringMetadata(
-    authoringInput(database, null, options.tags ?? ["Quick"]),
+    authoringInput(
+      database,
+      null,
+      options.tags ?? ["Quick"],
+      options.coverMutation,
+      options.replaceMetadata,
+    ),
     {
       now: () => BOUND_NOW,
       randomId: () => ids.shift() ?? "unexpected_authoring_tag",
     },
   );
-  return { database, execute, findMany, query, result, statements, transaction };
+  return { database, execute, query, result, statements, transaction };
 }
 
 describe("recipe-tags.server", () => {
@@ -1348,7 +1400,7 @@ describe("recipe-tags.server", () => {
     });
 
     it.each(NATIVE_RESULT_CASES)(
-      "rejects native $label without Prisma fallback or read-through",
+      "does not report a false failure for committed native $label",
       async ({ mutate }) => {
         const native = captureNativeDatabase();
         native.batch.mockImplementation(async (statements: CapturedD1Statement[]) =>
@@ -1373,7 +1425,11 @@ describe("recipe-tags.server", () => {
         }, {
           now: () => BOUND_NOW,
           randomId: () => "tag_1",
-        })).rejects.toThrow();
+        })).resolves.toEqual({
+          recipeId: "recipe_1",
+          course: "side",
+          tags: [{ id: "tag_1", label: "Quick", normalizedLabel: "quick" }],
+        });
 
         expect(native.batch).toHaveBeenCalledOnce();
         expect(query).not.toHaveBeenCalled();
@@ -1382,7 +1438,7 @@ describe("recipe-tags.server", () => {
       },
     );
 
-    it("does not fall back or retry when native D1 rejects or reports a failed statement", async () => {
+    it("does not retry a rejected D1 batch or fail on a resolved diagnostic envelope", async () => {
       const failure = new Error("native batch failed and rolled back");
       const rejected = captureNativeDatabase();
       rejected.batch.mockRejectedValue(failure);
@@ -1414,7 +1470,7 @@ describe("recipe-tags.server", () => {
       await expect(replaceRecipeTagMetadata({
         ...input,
         nativeDatabase: unsuccessful.database,
-      })).rejects.toThrow();
+      })).resolves.toEqual({ recipeId: "recipe_1", course: null, tags: [] });
       expect(unsuccessful.batch).toHaveBeenCalledOnce();
       expect(transaction).not.toHaveBeenCalled();
     });
@@ -1442,7 +1498,7 @@ describe("recipe-tags.server", () => {
       expect(database.$transaction).not.toHaveBeenCalled();
     });
 
-    it("validates every no-op result before classifying native or local replacement as not found", async () => {
+    it("classifies only canonical all-zero replacement results as not found", async () => {
       const native = captureNativeDatabase();
       native.batch.mockImplementation(async (statements: CapturedD1Statement[]) =>
         statements.map((_, index) => nativeResult([], index === 1 ? 1 : 0))
@@ -1453,16 +1509,15 @@ describe("recipe-tags.server", () => {
         $transaction: vi.fn(),
       } as unknown as PrismaClient;
 
-      const nativeFailure = await replaceRecipeTagMetadata({
+      const nativeOutcome = await replaceRecipeTagMetadata({
         database: nativeDatabase,
         nativeDatabase: native.database,
         userId: "owner_1",
         recipeId: "recipe_1",
         course: "side",
         tags: ["Quick"],
-      }, { randomId: () => "tag_1" }).catch((error: unknown) => error);
-      expect(nativeFailure).toBeInstanceOf(Error);
-      expect(nativeFailure).not.toBeInstanceOf(RecipeTagNotFoundError);
+      }, { randomId: () => "tag_1" });
+      expect(nativeOutcome).toMatchObject({ recipeId: "recipe_1" });
 
       const localDatabase = {
         $queryRawUnsafe: vi.fn().mockResolvedValue([]),
@@ -1470,14 +1525,13 @@ describe("recipe-tags.server", () => {
         $transaction: vi.fn(async (operations: Array<Promise<unknown>>) =>
           Promise.all(operations)),
       } as unknown as PrismaClient;
-      const localFailure = await replaceLocally(localDatabase, {
+      const localResult = await replaceLocally(localDatabase, {
         userId: "owner_1",
         recipeId: "recipe_1",
         course: "side",
         tags: ["Quick"],
-      }, { randomId: () => "tag_1" }).catch((error: unknown) => error);
-      expect(localFailure).toBeInstanceOf(Error);
-      expect(localFailure).not.toBeInstanceOf(RecipeTagNotFoundError);
+      }, { randomId: () => "tag_1" });
+      expect(localResult).toMatchObject({ recipeId: "recipe_1" });
     });
 
     it("exposes only complete old or replacement states across concurrent native batches", async () => {
@@ -1683,7 +1737,7 @@ describe("recipe-tags.server", () => {
       const run = runNativeAuthoring({
         tags: ["Zulu", "Alpha"],
         tagIds: ["tag_z", "tag_a"],
-        cookbookReads: [["cookbook_a"]],
+        membershipCookbookIds: ["cookbook_a"],
         returnedCookbookIds: ["cookbook_a"],
       });
 
@@ -1707,6 +1761,7 @@ describe("recipe-tags.server", () => {
         expect.stringMatching(/^DELETE FROM "RecipeTag"/),
         expect.stringMatching(/^INSERT INTO "RecipeTag"/),
         expect.stringMatching(/^INSERT INTO "RecipeTag"/),
+        expect.stringMatching(/FROM "RecipeInCookbook"/),
         expect.stringMatching(/^UPDATE "Cookbook"/),
       ]);
       expect(run.statements[0].values).toEqual([
@@ -1739,12 +1794,16 @@ describe("recipe-tags.server", () => {
         ],
       ]);
       expect(run.statements[4].values).toEqual([
+        "recipe_1",
+        "recipe_1",
+        "owner_1",
+      ]);
+      expect(run.statements[5].values).toEqual([
         BOUND_NOW_TEXT,
         "recipe_1",
         "recipe_1",
         "owner_1",
       ]);
-      expect(run.findMany).toHaveBeenCalledOnce();
       expect(run.database.$queryRawUnsafe).not.toHaveBeenCalled();
       expect(run.database.$executeRawUnsafe).not.toHaveBeenCalled();
       expect(run.database.$transaction).not.toHaveBeenCalled();
@@ -1771,23 +1830,64 @@ describe("recipe-tags.server", () => {
         expect.stringMatching(/^DELETE FROM "RecipeTag"/),
         expect.stringMatching(/^INSERT INTO "RecipeTag"/),
         `SELECT "id" AS "recipeId" FROM "Recipe" WHERE 0`,
+        expect.stringMatching(/FROM "RecipeInCookbook"/),
         expect.stringMatching(/^UPDATE "Cookbook"/),
       ]);
-      expect(run.query).toHaveBeenCalledTimes(4);
+      expect(run.query).toHaveBeenCalledTimes(5);
       expect(run.execute).toHaveBeenCalledOnce();
-      expect(run.findMany).toHaveBeenCalledOnce();
       assertMutationOnlySql(run.statements);
     });
 
-    it("pads a native batch to five validated envelopes when no tags are present", async () => {
+    it("pads a native batch to six validated envelopes when no tags are present", async () => {
       const run = runNativeAuthoring({ tags: [] });
 
       await expect(run.result).resolves.toMatchObject({ tags: [] });
-      expect(run.statements).toHaveLength(5);
+      expect(run.statements).toHaveLength(6);
       expect(run.statements.filter((statement) => (
         normalizedSql(statement.sql)
           === `SELECT "id" AS "recipeId" FROM "Recipe" WHERE 0`
       ))).toHaveLength(2);
+    });
+
+    it("uses a no-op tag slot and a course-free update for native metadata preservation", async () => {
+      const native = captureNativeDatabase();
+      native.batch.mockImplementation(async (statements: CapturedD1Statement[]) => (
+        statements.map(() => nativeResult([], 1))
+      ));
+      const database = {
+        $queryRawUnsafe: vi.fn(),
+        $executeRawUnsafe: vi.fn(),
+        $transaction: vi.fn(),
+      } as unknown as PrismaClient;
+
+      await expect(updateRecipeAuthoringMetadata({
+        ...authoringInput(database, native.database, []),
+        replaceMetadata: false,
+      }, { now: () => BOUND_NOW })).resolves.toMatchObject({
+        recipeId: "recipe_1",
+        tags: [],
+      });
+
+      expect(native.statements).toHaveLength(6);
+      expect(normalizedSql(native.statements[0].sql)).not.toContain('"course" = ?');
+      expect(normalizedSql(native.statements[1].sql))
+        .toBe('SELECT "id" AS "recipeId" FROM "Recipe" WHERE 0');
+      expect(native.statements.some(({ sql }) => normalizedSql(sql).startsWith('INSERT INTO "RecipeTag"')))
+        .toBe(false);
+    });
+
+    it("treats a nonempty local metadata-preservation slot as diagnostic only", async () => {
+      const run = runLocalAuthoring({
+        replaceMetadata: false,
+        tags: [],
+        mutateResults(results) {
+          return replaceResultAt(results, 1, [{ unexpected: true }]);
+        },
+      });
+
+      await expect(run.result).resolves.toMatchObject({ recipeId: "recipe_1", tags: [] });
+      expect(normalizedSql(run.statements[1].sql))
+        .toBe('SELECT "id" AS "recipeId" FROM "Recipe" WHERE 0');
     });
 
     it("propagates native and local executor failures without fallback or retry", async () => {
@@ -1804,10 +1904,10 @@ describe("recipe-tags.server", () => {
     });
 
     it.each([null, {}, "invalid", []])(
-      "rejects a malformed native authoring batch envelope %#",
+      "does not report a false failure for malformed committed authoring envelope %#",
       async (results) => {
         const run = runNativeAuthoring({ mutateResults: () => results });
-        await expect(run.result).rejects.toThrow("Invalid recipe tag batch result");
+        await expect(run.result).resolves.toMatchObject({ recipeId: "recipe_1" });
       },
     );
 
@@ -1913,13 +2013,11 @@ describe("recipe-tags.server", () => {
             return mutate(statements, statements.map(() => nativeResult([], 0)));
           },
         });
-        const error = await run.result.catch((failure: unknown) => failure);
-        expect(error, label).toBeInstanceOf(Error);
-        expect(error, label).not.toBeInstanceOf(RecipeTagNotFoundError);
+        await expect(run.result, label).resolves.toMatchObject({ recipeId: "recipe_1" });
       }
     });
 
-    it("rejects either nonempty native padding-envelope signal", async () => {
+    it("tolerates either nonempty native padding-envelope diagnostic", async () => {
       const cases = [
         nativeResult([], 1),
         nativeResult([{ recipeId: "unexpected" }], 0),
@@ -1937,11 +2035,11 @@ describe("recipe-tags.server", () => {
             );
           },
         });
-        await expect(run.result).rejects.toThrow("Invalid recipe authoring empty-slot result");
+        await expect(run.result).resolves.toMatchObject({ recipeId: "recipe_1" });
       }
     });
 
-    it("rejects every mismatched native authoring update field", async () => {
+    it("tolerates every mismatched committed native authoring diagnostic field", async () => {
       const patches = [
         { recipeId: "other_recipe" },
         { title: "Other title" },
@@ -1960,11 +2058,11 @@ describe("recipe-tags.server", () => {
             );
           },
         });
-        await expect(run.result).rejects.toThrow("Invalid recipe authoring update result");
+        await expect(run.result).resolves.toMatchObject({ recipeId: "recipe_1" });
       }
     });
 
-    it("rejects malformed native update, delete, insert, and cookbook result shapes", async () => {
+    it("tolerates malformed committed native authoring result shapes", async () => {
       const cases = [
         {
           label: "update changed without a returned row",
@@ -2008,11 +2106,123 @@ describe("recipe-tags.server", () => {
             return replaceResultAt(results, index, replacement);
           },
         });
-        await expect(run.result, testCase.label).rejects.toThrow(testCase.message);
+        await expect(run.result, testCase.label).resolves.toMatchObject({ recipeId: "recipe_1" });
       }
     });
 
-    it("rejects malformed or contradictory native cookbook rows", async () => {
+    it.each([
+      {
+        label: "uploaded cover",
+        coverMutation: {
+          kind: "uploaded" as const,
+          coverId: "authoring_uploaded_cover",
+          createdById: "owner_1",
+          imageUrl: "/photos/authoring-uploaded.jpg",
+        },
+      },
+      {
+        label: "clear cover",
+        coverMutation: { kind: "clear" as const },
+      },
+    ])("validates committed native and local $label diagnostics", async ({ coverMutation }) => {
+      const native = runNativeAuthoring({ coverMutation });
+      const local = runLocalAuthoring({ coverMutation });
+
+      await expect(native.result).resolves.toMatchObject({ recipeId: "recipe_1" });
+      await expect(local.result).resolves.toMatchObject({ recipeId: "recipe_1" });
+      expect(native.statements.some(({ sql }) => /RecipeCover|activeCoverId/.test(sql))).toBe(true);
+      expect(local.statements.some(({ sql }) => /RecipeCover|activeCoverId/.test(sql))).toBe(true);
+    });
+
+    it.each([
+      { prefix: `INSERT INTO "RecipeCover"`, patch: { id: "wrong_cover" } },
+      { prefix: `UPDATE "Recipe" SET "activeCoverId"`, patch: { coverMode: "auto" } },
+    ])("tolerates a malformed committed native cover diagnostic at $prefix", async ({
+      prefix,
+      patch,
+    }) => {
+      const run = runNativeAuthoring({
+        coverMutation: {
+          kind: "uploaded",
+          coverId: "authoring_diagnostic_cover",
+          createdById: "owner_1",
+          imageUrl: "/photos/authoring-diagnostic.jpg",
+        },
+        mutateResults(results, statements) {
+          const index = statementIndex(statements, prefix);
+          return mutateReturnedRows(results, index, (rows) => patchFirstRow(rows, patch));
+        },
+      });
+
+      await expect(run.result).resolves.toMatchObject({ recipeId: "recipe_1" });
+    });
+
+    it.each([
+      `INSERT INTO "RecipeCover"`,
+      `UPDATE "Recipe" SET "activeCoverId"`,
+    ])("tolerates an empty committed native cover diagnostic at %s", async (prefix) => {
+      const run = runNativeAuthoring({
+        coverMutation: {
+          kind: "uploaded",
+          coverId: "authoring_empty_cover",
+          createdById: "owner_1",
+          imageUrl: "/photos/authoring-empty.jpg",
+        },
+        mutateResults(results, statements) {
+          return replaceResultAt(
+            results,
+            statementIndex(statements, prefix),
+            nativeResult([], 1),
+          );
+        },
+      });
+
+      await expect(run.result).resolves.toMatchObject({ recipeId: "recipe_1" });
+    });
+
+    it("tolerates an empty committed local cover diagnostic", async () => {
+      const run = runLocalAuthoring({
+        coverMutation: {
+          kind: "uploaded",
+          coverId: "authoring_empty_local_cover",
+          createdById: "owner_1",
+          imageUrl: "/photos/authoring-empty-local.jpg",
+        },
+        mutateResults(results, statements) {
+          return replaceResultAt(
+            results,
+            statementIndex(statements, `INSERT INTO "RecipeCover"`),
+            [],
+          );
+        },
+      });
+
+      await expect(run.result).resolves.toMatchObject({ recipeId: "recipe_1" });
+    });
+
+    it("classifies native and local cover-aware all-zero results as not found", async () => {
+      const coverMutation = {
+        kind: "uploaded" as const,
+        coverId: "authoring_zero_cover",
+        createdById: "owner_1",
+        imageUrl: "/photos/authoring-zero.jpg",
+      };
+      const native = runNativeAuthoring({
+        coverMutation,
+        mutateResults: (_, statements) => statements.map(() => nativeResult([], 0)),
+      });
+      const local = runLocalAuthoring({
+        coverMutation,
+        mutateResults: (_, statements) => statements.map((statement) => (
+          normalizedSql(statement.sql).startsWith(`DELETE FROM "RecipeTag"`) ? 0 : []
+        )),
+      });
+
+      await expect(native.result).rejects.toBeInstanceOf(RecipeTagNotFoundError);
+      await expect(local.result).rejects.toBeInstanceOf(RecipeTagNotFoundError);
+    });
+
+    it("tolerates malformed or contradictory committed native cookbook rows", async () => {
       const rowCases = [
         [{ cookbookId: 1, updatedAt: BOUND_NOW_TEXT }],
         [
@@ -2032,7 +2242,28 @@ describe("recipe-tags.server", () => {
             );
           },
         });
-        await expect(run.result).rejects.toThrow("Invalid recipe authoring cookbook result");
+        await expect(run.result).resolves.toMatchObject({ recipeId: "recipe_1" });
+      }
+    });
+
+    it("tolerates malformed committed native cookbook membership envelopes", async () => {
+      const cases = [
+        nativeResult([{ cookbookId: 1 }], 0),
+        nativeResult([{ cookbookId: "duplicate" }, { cookbookId: "duplicate" }], 0),
+        nativeResult([], 1),
+      ];
+
+      for (const replacement of cases) {
+        const run = runNativeAuthoring({
+          mutateResults(results, statements) {
+            return replaceResultAt(
+              results,
+              statementIndex(statements, `SELECT membership."cookbookId"`),
+              replacement,
+            );
+          },
+        });
+        await expect(run.result).resolves.toMatchObject({ recipeId: "recipe_1" });
       }
     });
 
@@ -2081,14 +2312,12 @@ describe("recipe-tags.server", () => {
             return mutate(statements, zeroResults(statements));
           },
         });
-        const error = await run.result.catch((failure: unknown) => failure);
-        expect(error, label).toBeInstanceOf(Error);
-        expect(error, label).not.toBeInstanceOf(RecipeTagNotFoundError);
+        await expect(run.result, label).resolves.toMatchObject({ recipeId: "recipe_1" });
       }
     });
 
     it.each([null, -1, 1.5])(
-      "rejects malformed local delete count %#",
+      "tolerates malformed committed local delete count %#",
       async (deleted) => {
         const run = runLocalAuthoring({
           mutateResults(results, statements) {
@@ -2099,11 +2328,11 @@ describe("recipe-tags.server", () => {
             );
           },
         });
-        await expect(run.result).rejects.toThrow("Invalid recipe authoring delete result");
+        await expect(run.result).resolves.toMatchObject({ recipeId: "recipe_1" });
       },
     );
 
-    it("rejects a nonempty local padding result", async () => {
+    it("tolerates a nonempty committed local padding diagnostic", async () => {
       const run = runLocalAuthoring({
         mutateResults(results, statements) {
           return replaceResultAt(
@@ -2116,10 +2345,10 @@ describe("recipe-tags.server", () => {
           );
         },
       });
-      await expect(run.result).rejects.toThrow("Invalid recipe authoring empty-slot result");
+      await expect(run.result).resolves.toMatchObject({ recipeId: "recipe_1" });
     });
 
-    it("rejects malformed local update and insertion row counts", async () => {
+    it("tolerates malformed committed local row-count diagnostics", async () => {
       const cases = [
         {
           label: "extra update row",
@@ -2156,55 +2385,44 @@ describe("recipe-tags.server", () => {
             );
           },
         });
-        await expect(run.result, testCase.label).rejects.toThrow(testCase.message);
+        await expect(run.result, testCase.label).resolves.toMatchObject({ recipeId: "recipe_1" });
       }
     });
 
-    it("accepts a cookbook membership race when the diagnostic read matches the batch", async () => {
+    it("validates cookbook updates against the membership snapshot inside the batch", async () => {
       const run = runNativeAuthoring({
-        cookbookReads: [
-          ["stable", "removed"],
-          ["added", "stable"],
-        ],
-        returnedCookbookIds: ["added", "stable"],
+        membershipCookbookIds: ["cookbook_a", "cookbook_b"],
+        returnedCookbookIds: ["cookbook_a", "cookbook_b"],
       });
 
       await expect(run.result).resolves.toMatchObject({ recipeId: "recipe_1" });
-      expect(run.findMany).toHaveBeenCalledTimes(2);
+      expect(run.statements.map((statement) => normalizedSql(statement.sql))).toEqual([
+        expect.stringMatching(/^UPDATE "Recipe"/),
+        expect.stringMatching(/^DELETE FROM "RecipeTag"/),
+        expect.stringMatching(/^INSERT INTO "RecipeTag"/),
+        `SELECT "id" AS "recipeId" FROM "Recipe" WHERE 0`,
+        expect.stringMatching(/FROM "RecipeInCookbook"/),
+        expect.stringMatching(/^UPDATE "Cookbook"/),
+      ]);
+      expect(run.database).not.toHaveProperty("recipeInCookbook");
     });
 
-    it("does not turn a committed authoring batch into a failure when reconciliation read fails", async () => {
-      const readFailure = new Error("diagnostic read unavailable");
-      const run = runNativeAuthoring({
-        cookbookReads: [["removed"], readFailure],
+    it("does not fail after commit when local diagnostics omit a cookbook membership", async () => {
+      const run = runLocalAuthoring({
+        membershipCookbookIds: ["stable"],
         returnedCookbookIds: [],
       });
 
       await expect(run.result).resolves.toMatchObject({ recipeId: "recipe_1" });
-      expect(run.findMany).toHaveBeenCalledTimes(2);
     });
 
-    it("rejects a local result that omits a cookbook membership stable across the race", async () => {
+    it("does not fail after commit for extra local cookbook diagnostic rows", async () => {
       const run = runLocalAuthoring({
-        cookbookReads: [["stable"], ["stable"]],
-        returnedCookbookIds: [],
-      });
-
-      await expect(run.result).rejects.toThrow("Invalid recipe authoring cookbook result");
-      expect(run.findMany).toHaveBeenCalledTimes(2);
-    });
-
-    it("accepts transient cookbook rows while retaining every stable membership", async () => {
-      const run = runLocalAuthoring({
-        cookbookReads: [
-          ["removed", "stable"],
-          ["stable"],
-        ],
+        membershipCookbookIds: ["stable"],
         returnedCookbookIds: ["added", "stable"],
       });
 
       await expect(run.result).resolves.toMatchObject({ recipeId: "recipe_1" });
-      expect(run.findMany).toHaveBeenCalledTimes(2);
     });
   });
 });

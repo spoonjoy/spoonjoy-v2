@@ -387,6 +387,60 @@ describe("RecipeBuilder", () => {
       );
     });
 
+    it("uses the server-compatible NFKC identity for pending tags", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      const Wrapper = createTestWrapper({
+        onSave,
+        recipe: createTestRecipe({ tags: ["Quick"] }),
+      });
+      render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
+
+      await user.type(screen.getByLabelText(/^tags$/i), "Ｑｕｉｃｋ");
+      await user.click(screen.getByRole("button", { name: /save recipe/i }));
+
+      expect(screen.getAllByText("Quick")).toHaveLength(1);
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ tags: ["Quick"] }),
+      );
+    });
+
+    it("does not duplicate a legacy fullwidth tag when saving normalized pending input", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      const Wrapper = createTestWrapper({
+        onSave,
+        recipe: createTestRecipe({ tags: ["Ｑｕｉｃｋ"] }),
+      });
+      render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
+
+      await user.type(screen.getByLabelText(/^tags$/i), "Quick");
+      await user.click(screen.getByRole("button", { name: /save recipe/i }));
+
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ tags: ["Ｑｕｉｃｋ"] }),
+      );
+    });
+
+    it("does not restore a removed tag from pending NFKC-equivalent input", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      const Wrapper = createTestWrapper({
+        onSave,
+        recipe: createTestRecipe({ tags: ["Quick"] }),
+      });
+      render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
+
+      await user.type(screen.getByLabelText(/^tags$/i), "Ｑｕｉｃｋ");
+      await user.click(screen.getByRole("button", { name: "Remove Quick tag" }));
+      await user.click(screen.getByRole("button", { name: /save recipe/i }));
+
+      expect(screen.getByLabelText(/^tags$/i)).toHaveValue("");
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ tags: [] }),
+      );
+    });
+
     it("ignores blank and duplicate tags entered with the keyboard", async () => {
       const user = userEvent.setup();
       const Wrapper = createTestWrapper({
@@ -416,24 +470,33 @@ describe("RecipeBuilder", () => {
       expect(tagsInput).toHaveValue("\u6599\u7406");
     });
 
-    it("moves focus after tag removal and announces the change", async () => {
+    it("keeps a mounted live region and announces additions and repeated removals", async () => {
       const user = userEvent.setup();
       const Wrapper = createTestWrapper({
         recipe: createTestRecipe({ tags: ["First", "Second"] }),
       });
       render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
 
+      const status = screen.getByRole("status");
+      expect(status).toBeEmptyDOMElement();
+
       await user.click(screen.getByRole("button", { name: "Remove First tag" }));
       await waitFor(() => {
         expect(screen.getByRole("button", { name: "Remove Second tag" })).toHaveFocus();
       });
-      expect(screen.getByRole("status")).toHaveTextContent("First tag removed");
+      expect(screen.getByRole("status")).toBe(status);
+      expect(status).toHaveTextContent("First tag removed");
+
+      await user.type(screen.getByLabelText(/^tags$/i), "First{Enter}");
+      expect(status).toHaveTextContent("First tag added");
+      await user.click(screen.getByRole("button", { name: "Remove First tag" }));
+      expect(status).toHaveTextContent("First tag removed");
 
       await user.click(screen.getByRole("button", { name: "Remove Second tag" }));
       await waitFor(() => {
         expect(screen.getByLabelText(/^tags$/i)).toHaveFocus();
       });
-      expect(screen.getByRole("status")).toHaveTextContent("Second tag removed");
+      expect(status).toHaveTextContent("Second tag removed");
     });
 
     it("exposes and enforces the shared tag count and code-point limits", async () => {
@@ -1116,6 +1179,27 @@ describe("RecipeBuilder", () => {
       expect(servingsInput).toHaveAttribute("data-invalid");
       expect(servingsInput).toHaveAttribute("aria-invalid", "true");
       expect(servingsInput).toHaveAccessibleDescription("Servings cannot exceed 100 characters");
+    });
+
+    it("associates title and description errors and renders the general alert", () => {
+      const Wrapper = createTestWrapper({
+        errors: {
+          general: "Recipe could not be saved",
+          title: "Title is already in use",
+          description: "Description is too long",
+        },
+      });
+      render(<Wrapper initialEntries={["/recipes/new"]} />);
+
+      expect(screen.getByText("Recipe could not be saved")).toHaveAttribute("role", "alert");
+      const title = screen.getByLabelText(/title/i);
+      const description = screen.getByLabelText(/description/i);
+      expect(title).toHaveAttribute("data-invalid");
+      expect(title).toHaveAttribute("aria-invalid", "true");
+      expect(title).toHaveAccessibleDescription("Title is already in use");
+      expect(description).toHaveAttribute("data-invalid");
+      expect(description).toHaveAttribute("aria-invalid", "true");
+      expect(description).toHaveAccessibleDescription("Description is too long");
     });
 
     it("associates course and tag validation errors with their controls", () => {

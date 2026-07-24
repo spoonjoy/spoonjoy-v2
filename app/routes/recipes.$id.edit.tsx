@@ -22,8 +22,12 @@ import {
 } from "~/lib/image-storage.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { FOOD_IMAGE_ACCEPT, RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
-import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
-import { createCover, getRecipeCoverImageUrl, setActiveRecipeCover } from "~/lib/recipe-cover.server";
+import {
+  ACTIVE_RECIPE_TITLE_CONFLICT_ERROR,
+  isActiveRecipeTitleConflictError,
+  validateActiveRecipeTitleUnique,
+} from "~/lib/recipe-title-uniqueness.server";
+import { getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
 import {
   asCompatibleRecipeTagD1Database,
@@ -32,7 +36,6 @@ import {
   updateRecipeAuthoringMetadata,
 } from "~/lib/recipe-tags.server";
 import {
-  touchNativeSyncCookbooksForRecipeOperation,
   touchNativeSyncRecipeOperation,
 } from "~/lib/native-sync-invalidation.server";
 import { Button } from "~/components/ui/button";
@@ -236,17 +239,21 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const imageEntry = formData.get("image");
   const imageFile = hasUploadedImageFile(imageEntry) ? imageEntry : null;
   const clearImage = formData.get("clearImage")?.toString() === "true";
-  const metadata = parseRecipeAuthoringMetadataForm(
-    formData.has("course")
-      ? formData.get("course")!.toString()
-      : recipe.course,
-    formData.has("tags")
-      ? formData.get("tags")!.toString()
-      : JSON.stringify(recipe.tags.map((tag) => tag.label)),
-  );
+  const hasCourse = formData.has("course");
+  const hasTags = formData.has("tags");
+  const replaceMetadata = hasCourse && hasTags;
+  const metadata = replaceMetadata
+    ? parseRecipeAuthoringMetadataForm(
+        formData.get("course")!.toString(),
+        formData.get("tags")!.toString(),
+      )
+    : { course: null, tags: [], errors: {} };
 
   const errors: ActionData["errors"] = {};
   Object.assign(errors, metadata.errors);
+  if (hasCourse !== hasTags) {
+    errors.general = "Course and tags must be submitted together";
+  }
 
   // Validation
   const titleResult = validateTitle(title);
@@ -300,6 +307,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     servings: servings.trim() || null,
   };
   let uploadedImageUrl: string | null = null;
+  let coverId: string | null = null;
+  let recipeCommitted = false;
 
   if (imageFile) {
     try {
@@ -308,6 +317,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         file: imageFile,
         namespace: `recipes/${userId}/${id}`,
       });
+      coverId = crypto.randomUUID();
     } catch {
       return data(
         { errors: { image: "Failed to upload image. Please try again." } },
@@ -325,52 +335,37 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       ...updateData,
       course: metadata.course,
       tags: metadata.tags,
+      replaceMetadata,
+      coverMutation: uploadedImageUrl && coverId
+        ? {
+            kind: "uploaded",
+            coverId,
+            createdById: userId,
+            imageUrl: uploadedImageUrl,
+          }
+        : clearImage
+          ? { kind: "clear" }
+          : null,
     });
+    recipeCommitted = true;
 
-    if (uploadedImageUrl) {
-      const uploadedCover = await createCover(database, {
-        recipeId: id,
-        imageUrl: uploadedImageUrl,
-        sourceType: "chef-upload",
-        status: "ready",
-        createdById: userId,
-        sourceImageUrl: uploadedImageUrl,
-        generationStatus: "none",
-      });
-      await setActiveRecipeCover(database, {
-        recipeId: id,
-        coverId: uploadedCover.id,
-        variant: "image",
-      });
+    if (uploadedImageUrl && coverId) {
       await scheduleSpoonCoverStylization({
         db: database,
         userId,
         recipeId: id,
-        coverId: uploadedCover.id,
+        coverId,
         rawPhotoUrl: uploadedImageUrl,
         recipeTitle: updateData.title,
         env: cloudflareEnv,
         bucket: photosBucket,
         sourceType: "chef-upload",
       });
-    } else if (clearImage) {
-      const updatedAt = new Date();
-      await database.$transaction([
-        database.recipe.update({
-          where: { id },
-          data: {
-            activeCoverId: null,
-            activeCoverVariant: null,
-            coverMode: "none",
-            updatedAt,
-          },
-        }),
-        touchNativeSyncCookbooksForRecipeOperation(database, id, updatedAt),
-      ]);
     }
 
     return redirect(`/recipes/${id}`);
   } catch (error) {
+    const titleConflict = isActiveRecipeTitleConflictError(error);
     // The recipe update failed after a replacement image landed in R2. Capture
     // the real failure (previously discarded), then best-effort delete the
     // orphaned upload — capturing if that delete also throws.
@@ -380,7 +375,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     const waitUntil = context.cloudflare?.ctx?.waitUntil
       ? context.cloudflare.ctx.waitUntil.bind(context.cloudflare.ctx)
       : undefined;
-    if (postHogConfig.enabled && !(error instanceof RecipeTagNotFoundError)) {
+    if (
+      postHogConfig.enabled
+      && !titleConflict
+      && !(error instanceof RecipeTagNotFoundError)
+    ) {
       const capture = captureException(postHogConfig, {
         error,
         distinctId: userId,
@@ -392,6 +391,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       } else {
         void capture;
       }
+    }
+    if (recipeCommitted) {
+      return redirect(`/recipes/${id}`);
     }
     if (uploadedImageUrl) {
       await deleteStoredImageWithCapture({
@@ -407,6 +409,13 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
     if (error instanceof RecipeTagNotFoundError) {
       return data({ errors: { general: "Recipe not found" } }, { status: 404 });
+    }
+
+    if (titleConflict) {
+      return data(
+        { errors: { title: ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } },
+        { status: 400 },
+      );
     }
 
     return data(

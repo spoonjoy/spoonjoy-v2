@@ -6,8 +6,11 @@ vi.mock("~/components/recipe/RecipeBuilder", () => ({
 }));
 
 import { getDb } from "../../app/lib/db.server";
+import { updateNativeRecipe } from "../../app/lib/api-v1-recipe-writes.server";
 import { createRecipeDraft } from "../../app/lib/recipe-create.server";
 import * as recipeCreateModule from "../../app/lib/recipe-create.server";
+import { callSpoonjoyMcpTool } from "../../app/lib/mcp/spoonjoy-tools.server";
+import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "../../app/lib/recipe-title-uniqueness.server";
 import { replaceRecipeTagMetadata } from "../../app/lib/recipe-tags.server";
 import * as recipeTagsModule from "../../app/lib/recipe-tags.server";
 import { createUserSessionCookie } from "../../app/lib/session.server";
@@ -74,11 +77,16 @@ const USER_ID = "unit-6-1-recipe-tags-d1-user";
 const RECIPE_ID = "unit-6-1-recipe-tags-d1-recipe";
 const ORIGINAL_TAG_ID = "unit-6-1-recipe-tags-d1-original";
 const CREATE_RECIPE_ID = "unit-6-2-recipe-tags-d1-create";
+const TITLE_RACE_CONFLICT_ID = "unit-6-2-recipe-title-race-conflict";
 const COOKBOOK_ID = "unit-6-2-recipe-tags-d1-cookbook";
 const MEMBERSHIP_ID = "unit-6-2-recipe-tags-d1-membership";
 const ABORT_TRIGGER = "RecipeTag_unit_6_1_abort";
 const CREATE_ABORT_TRIGGER = "RecipeTag_unit_6_2_create_abort";
+const CREATE_COVER_ABORT_TRIGGER = "Recipe_unit_6_2_cover_abort";
+const CREATE_INGREDIENT_ABORT_TRIGGER = "Ingredient_unit_6_2_create_abort";
+const API_COOKBOOK_ABORT_TRIGGER = "Cookbook_unit_6_2_api_abort";
 const EDIT_ABORT_TRIGGER = "RecipeTag_unit_6_2_edit_abort";
+const ACTIVE_TITLE_INDEX = "Recipe_active_chefId_title_key";
 const ORIGINAL_TIMESTAMP = "2026-07-23T18:00:00.000Z";
 const FAILURE_TIMESTAMP = "2026-07-23T18:01:00.000Z";
 const WRITER_A_TIMESTAMP = "2026-07-23T18:02:00.000Z";
@@ -89,10 +97,15 @@ const createdSchema = {
   addedDescription: false,
   addedServings: false,
   cookbook: false,
+  ingredient: false,
+  ingredientRef: false,
   recipe: false,
   recipeCover: false,
   recipeInCookbook: false,
+  recipeStep: false,
   recipeTag: false,
+  stepOutputUse: false,
+  unit: false,
   user: false,
 };
 
@@ -148,7 +161,7 @@ function normalizeSql(sql: string): string {
 }
 
 function isCoreAuthoringMutation(statement: RecordedStatement): boolean {
-  return /^(?:INSERT INTO|UPDATE|DELETE FROM)\s+"(?:Recipe|RecipeTag|Cookbook)"/i
+  return /^(?:INSERT INTO|UPDATE|DELETE FROM)\s+"(?:Recipe|RecipeTag|RecipeStep|Unit|IngredientRef|Ingredient|RecipeCover|Cookbook)"/i
     .test(normalizeSql(statement.sql));
 }
 
@@ -163,64 +176,6 @@ function rejectPrismaTransactions<T extends object>(prisma: T): T {
       return Reflect.get(target, property, target);
     },
   });
-}
-
-function validCreateResultEnvelopes(records: RecordedStatement[]): TestD1Result[] {
-  const recipeValues = records[0].values;
-  const result = (results: unknown[]): TestD1Result => ({
-    meta: { changes: 1 },
-    results,
-    success: true,
-  });
-  return [
-    result([{
-      id: recipeValues[0],
-      title: recipeValues[1],
-      description: recipeValues[2],
-      servings: recipeValues[3],
-      chefId: recipeValues[4],
-      course: recipeValues[5],
-      createdAt: recipeValues[6],
-      updatedAt: recipeValues[7],
-    }]),
-    ...records.slice(1).map((record) => result([{
-      recipeId: record.values[1],
-      tagId: record.values[0],
-      label: record.values[2],
-      normalizedLabel: record.values[3],
-      createdAt: record.values[4],
-      updatedAt: record.values[5],
-    }])),
-  ];
-}
-
-function validEditResultEnvelopes(records: RecordedStatement[]): TestD1Result[] {
-  const timestamp = records[0].values[4] as string;
-  const result = (changes: number, results: unknown[]): TestD1Result => ({
-    meta: { changes },
-    results,
-    success: true,
-  });
-  return [
-    result(1, [{
-      recipeId: RECIPE_ID,
-      title: records[0].values[0],
-      description: records[0].values[1],
-      servings: records[0].values[2],
-      course: records[0].values[3],
-      updatedAt: timestamp,
-    }]),
-    result(1, []),
-    ...records.slice(2, -1).map((record) => result(1, [{
-      recipeId: RECIPE_ID,
-      tagId: record.values[0],
-      label: record.values[1],
-      normalizedLabel: record.values[2],
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    }])),
-    result(1, [{ cookbookId: COOKBOOK_ID, updatedAt: timestamp }]),
-  ];
 }
 
 interface EnvelopeDefect {
@@ -287,7 +242,14 @@ function createEnvelopeDefects(): EnvelopeDefect[] {
 }
 
 function editEnvelopeDefects(): EnvelopeDefect[] {
-  const operations = ["recipe", "tag deletion", "first tag", "second tag", "cookbook"];
+  const operations = [
+    "recipe",
+    "tag deletion",
+    "first tag",
+    "second tag",
+    "cookbook membership",
+    "cookbook",
+  ];
   const defects: EnvelopeDefect[] = [{
     defect: "missing operation count",
     mutate: (results) => results.slice(0, -1),
@@ -320,13 +282,19 @@ function editEnvelopeDefects(): EnvelopeDefect[] {
       return results;
     },
   }, {
+    defect: "cookbook membership affected count",
+    mutate(results) {
+      results[4] = { ...results[4], meta: { changes: 1 } };
+      return results;
+    },
+  }, {
     defect: "cookbook affected count",
     mutate(results) {
-      results[4] = { ...results[4], meta: { changes: 2 } };
+      results[5] = { ...results[5], meta: { changes: 2 } };
       return results;
     },
   });
-  [0, 2, 3, 4].forEach((operation) => {
+  [0, 2, 3, 4, 5].forEach((operation) => {
     defects.push({
       defect: `${operations[operation]} returned row count`,
       mutate(results) {
@@ -346,7 +314,8 @@ function editEnvelopeDefects(): EnvelopeDefect[] {
     [0, ["recipeId", "title", "description", "servings", "course", "updatedAt"]],
     [2, ["recipeId", "tagId", "label", "normalizedLabel", "createdAt", "updatedAt"]],
     [3, ["recipeId", "tagId", "label", "normalizedLabel", "createdAt", "updatedAt"]],
-    [4, ["cookbookId", "updatedAt"]],
+    [4, ["cookbookId"]],
+    [5, ["cookbookId", "updatedAt"]],
   ].forEach(([operation, fields]) => {
     (fields as string[]).forEach((field) => {
       defects.push({
@@ -385,6 +354,12 @@ async function ensureSchema() {
         "id" TEXT NOT NULL PRIMARY KEY,
         "email" TEXT NOT NULL UNIQUE,
         "username" TEXT NOT NULL UNIQUE,
+        "hashedPassword" TEXT,
+        "salt" TEXT,
+        "resetToken" TEXT,
+        "resetTokenExpiresAt" DATETIME,
+        "webAuthnChallenge" TEXT UNIQUE,
+        "photoUrl" TEXT,
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
@@ -456,6 +431,80 @@ async function ensureSchema() {
     createdSchema.recipeTag = true;
   }
 
+  if (!(await tableExists("RecipeStep"))) {
+    await execute(`
+      CREATE TABLE "RecipeStep" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "recipeId" TEXT NOT NULL,
+        "stepNum" INTEGER NOT NULL,
+        "stepTitle" TEXT,
+        "description" TEXT NOT NULL,
+        "duration" INTEGER,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY ("recipeId") REFERENCES "Recipe"("id") ON DELETE CASCADE
+      )
+    `);
+    await execute(`
+      CREATE UNIQUE INDEX "RecipeStep_recipeId_stepNum_key"
+      ON "RecipeStep"("recipeId", "stepNum")
+    `);
+    createdSchema.recipeStep = true;
+  }
+
+  if (!(await tableExists("StepOutputUse"))) {
+    await execute(`
+      CREATE TABLE "StepOutputUse" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "recipeId" TEXT NOT NULL,
+        "outputStepNum" INTEGER NOT NULL,
+        "inputStepNum" INTEGER NOT NULL,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    createdSchema.stepOutputUse = true;
+  }
+
+  if (!(await tableExists("Unit"))) {
+    await execute(`
+      CREATE TABLE "Unit" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "name" TEXT NOT NULL UNIQUE,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    createdSchema.unit = true;
+  }
+
+  if (!(await tableExists("IngredientRef"))) {
+    await execute(`
+      CREATE TABLE "IngredientRef" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "name" TEXT NOT NULL UNIQUE,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    createdSchema.ingredientRef = true;
+  }
+
+  if (!(await tableExists("Ingredient"))) {
+    await execute(`
+      CREATE TABLE "Ingredient" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "recipeId" TEXT NOT NULL,
+        "stepNum" INTEGER NOT NULL,
+        "quantity" REAL NOT NULL,
+        "unitId" TEXT NOT NULL,
+        "ingredientRefId" TEXT NOT NULL,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY ("recipeId", "stepNum")
+          REFERENCES "RecipeStep"("recipeId", "stepNum") ON DELETE CASCADE,
+        FOREIGN KEY ("unitId") REFERENCES "Unit"("id"),
+        FOREIGN KEY ("ingredientRefId") REFERENCES "IngredientRef"("id")
+      )
+    `);
+    createdSchema.ingredient = true;
+  }
+
   if (!(await tableExists("RecipeCover"))) {
     await execute(`
       CREATE TABLE "RecipeCover" (
@@ -515,8 +564,12 @@ async function ensureSchema() {
 }
 
 async function cleanupFixture() {
+  await database().exec(`DROP INDEX IF EXISTS "${ACTIVE_TITLE_INDEX}"`);
   await database().exec(`DROP TRIGGER IF EXISTS "${ABORT_TRIGGER}"`);
   await database().exec(`DROP TRIGGER IF EXISTS "${CREATE_ABORT_TRIGGER}"`);
+  await database().exec(`DROP TRIGGER IF EXISTS "${CREATE_COVER_ABORT_TRIGGER}"`);
+  await database().exec(`DROP TRIGGER IF EXISTS "${CREATE_INGREDIENT_ABORT_TRIGGER}"`);
+  await database().exec(`DROP TRIGGER IF EXISTS "${API_COOKBOOK_ABORT_TRIGGER}"`);
   await database().exec(`DROP TRIGGER IF EXISTS "${EDIT_ABORT_TRIGGER}"`);
   if (await tableExists("RecipeInCookbook")) {
     await execute(`DELETE FROM "RecipeInCookbook" WHERE "recipeId" IN (?, ?)`, RECIPE_ID, CREATE_RECIPE_ID);
@@ -530,8 +583,28 @@ async function cleanupFixture() {
   if (await tableExists("RecipeCover")) {
     await execute(`DELETE FROM "RecipeCover" WHERE "recipeId" IN (?, ?)`, RECIPE_ID, CREATE_RECIPE_ID);
   }
+  if (await tableExists("Ingredient")) {
+    await execute(`DELETE FROM "Ingredient" WHERE "recipeId" IN (?, ?)`, RECIPE_ID, CREATE_RECIPE_ID);
+  }
+  if (await tableExists("StepOutputUse")) {
+    await execute(`DELETE FROM "StepOutputUse" WHERE "recipeId" IN (?, ?)`, RECIPE_ID, CREATE_RECIPE_ID);
+  }
+  if (await tableExists("RecipeStep")) {
+    await execute(`DELETE FROM "RecipeStep" WHERE "recipeId" IN (?, ?)`, RECIPE_ID, CREATE_RECIPE_ID);
+  }
   if (await tableExists("Recipe")) {
-    await execute(`DELETE FROM "Recipe" WHERE "id" IN (?, ?)`, RECIPE_ID, CREATE_RECIPE_ID);
+    await execute(
+      `DELETE FROM "Recipe" WHERE "id" IN (?, ?, ?)`,
+      RECIPE_ID,
+      CREATE_RECIPE_ID,
+      TITLE_RACE_CONFLICT_ID,
+    );
+  }
+  if (await tableExists("Unit")) {
+    await execute(`DELETE FROM "Unit" WHERE "name" LIKE 'unit 6.2 %'`);
+  }
+  if (await tableExists("IngredientRef")) {
+    await execute(`DELETE FROM "IngredientRef" WHERE "name" LIKE 'unit 6.2 %'`);
   }
   if (await tableExists("User")) {
     await execute(`DELETE FROM "User" WHERE "id" = ?`, USER_ID);
@@ -622,6 +695,11 @@ describe("recipe tag native D1 atomicity", () => {
     }
     if (createdSchema.cookbook) await database().exec(`DROP TABLE IF EXISTS "Cookbook"`);
     if (createdSchema.recipeCover) await database().exec(`DROP TABLE IF EXISTS "RecipeCover"`);
+    if (createdSchema.ingredient) await database().exec(`DROP TABLE IF EXISTS "Ingredient"`);
+    if (createdSchema.stepOutputUse) await database().exec(`DROP TABLE IF EXISTS "StepOutputUse"`);
+    if (createdSchema.ingredientRef) await database().exec(`DROP TABLE IF EXISTS "IngredientRef"`);
+    if (createdSchema.unit) await database().exec(`DROP TABLE IF EXISTS "Unit"`);
+    if (createdSchema.recipeStep) await database().exec(`DROP TABLE IF EXISTS "RecipeStep"`);
     if (createdSchema.recipeTag) await database().exec(`DROP TABLE IF EXISTS "RecipeTag"`);
     if (createdSchema.addedCourse) {
       await database().exec(`ALTER TABLE "Recipe" DROP COLUMN "course"`);
@@ -656,11 +734,27 @@ describe("recipe tag native D1 atomicity", () => {
     formData.set("servings", "2");
     formData.set("course", "main");
     formData.set("tags", JSON.stringify(["Weeknight", "Quick"]));
-    formData.set("steps", "[]");
+    formData.set("steps", JSON.stringify([{
+      stepTitle: "Build the sauce",
+      description: "Combine the full graph.",
+      duration: 12,
+      ingredients: [
+        { quantity: 2, unit: "Unit 6.2 Tablespoon", ingredientName: "Unit 6.2 Olive Oil" },
+        { quantity: 3, unit: "Unit 6.2 Clove", ingredientName: "Unit 6.2 Garlic" },
+      ],
+    }]));
     const generatedIds = [
       CREATE_RECIPE_ID,
+      "unit-6-2-create-cover",
       "unit-6-2-create-weeknight",
       "unit-6-2-create-quick",
+      "unit-6-2-create-step",
+      "unit-6-2-create-tablespoon-unit",
+      "unit-6-2-create-clove-unit",
+      "unit-6-2-create-olive-oil-ref",
+      "unit-6-2-create-garlic-ref",
+      "unit-6-2-create-olive-oil-ingredient",
+      "unit-6-2-create-garlic-ingredient",
     ];
     const nextRandomUuid = (() => (
       generatedIds.shift() ?? "unit-6-2-unexpected-generated-id"
@@ -693,18 +787,32 @@ describe("recipe tag native D1 atomicity", () => {
     expect(createCallCount).toBe(1);
     expect(createCallOptions).toMatchObject({ nativeDatabase });
     expect(nativeDatabase.batchCalls).toHaveLength(1);
-    const [recipeInsert, ...tagInserts] = nativeDatabase.batchCalls[0];
-    expect(nativeDatabase.batchCalls[0]).toHaveLength(3);
-    const timestamp = recipeInsert.values[6];
+    const [
+      recipeInsert,
+      firstTagInsert,
+      secondTagInsert,
+      stepInsert,
+      firstUnitUpsert,
+      secondUnitUpsert,
+      firstIngredientRefUpsert,
+      secondIngredientRefUpsert,
+      firstIngredientInsert,
+      secondIngredientInsert,
+      coverInsert,
+    ] = nativeDatabase.batchCalls[0];
+    const tagInserts = [firstTagInsert, secondTagInsert];
+    expect(nativeDatabase.batchCalls[0]).toHaveLength(11);
+    const timestamp = recipeInsert.values[7];
     expect(timestamp).toEqual(expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/));
     expect(normalizeSql(recipeInsert.sql)).toBe(
-      'INSERT INTO "Recipe" ("id", "title", "description", "servings", "chefId", "course", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING "id", "title", "description", "servings", "chefId", "course", "createdAt", "updatedAt"',
+      'INSERT INTO "Recipe" ( "id", "title", "description", "servings", "sourceUrl", "chefId", "course", "createdAt", "updatedAt" ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING "id", "title", "description", "servings", "sourceUrl", "chefId", "course", "createdAt", "updatedAt"',
     );
     expect(recipeInsert.values).toEqual([
       CREATE_RECIPE_ID,
       "Unit 6.2 Native Create",
       "One native operation set",
       "2",
+      null,
       USER_ID,
       "main",
       timestamp,
@@ -741,6 +849,63 @@ describe("recipe tag native D1 atomicity", () => {
       'INSERT INTO "RecipeTag" ("id", "recipeId", "label", "normalizedLabel", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?) RETURNING "recipeId", "id" AS "tagId", "label", "normalizedLabel", "createdAt", "updatedAt"',
       'INSERT INTO "RecipeTag" ("id", "recipeId", "label", "normalizedLabel", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?) RETURNING "recipeId", "id" AS "tagId", "label", "normalizedLabel", "createdAt", "updatedAt"',
     ]);
+    expect(normalizeSql(stepInsert.sql)).toBe(
+      'INSERT INTO "RecipeStep" ( "id", "recipeId", "stepNum", "stepTitle", "description", "duration", "updatedAt" ) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING "id", "recipeId", "stepNum", "stepTitle", "description", "duration", "updatedAt"',
+    );
+    expect(stepInsert.values).toEqual([
+      "unit-6-2-create-step",
+      CREATE_RECIPE_ID,
+      1,
+      "Build the sauce",
+      "Combine the full graph.",
+      12,
+      timestamp,
+    ]);
+    expect([firstUnitUpsert, secondUnitUpsert].map((statement) => statement.values)).toEqual([
+      ["unit-6-2-create-tablespoon-unit", "unit 6.2 tablespoon", timestamp],
+      ["unit-6-2-create-clove-unit", "unit 6.2 clove", timestamp],
+    ]);
+    expect([firstIngredientRefUpsert, secondIngredientRefUpsert].map(
+      (statement) => statement.values,
+    )).toEqual([
+      ["unit-6-2-create-olive-oil-ref", "unit 6.2 olive oil", timestamp],
+      ["unit-6-2-create-garlic-ref", "unit 6.2 garlic", timestamp],
+    ]);
+    expect([firstIngredientInsert, secondIngredientInsert].map(
+      (statement) => statement.values,
+    )).toEqual([
+      [
+        "unit-6-2-create-olive-oil-ingredient",
+        CREATE_RECIPE_ID,
+        1,
+        2,
+        "unit 6.2 tablespoon",
+        "unit 6.2 olive oil",
+        timestamp,
+      ],
+      [
+        "unit-6-2-create-garlic-ingredient",
+        CREATE_RECIPE_ID,
+        1,
+        3,
+        "unit 6.2 clove",
+        "unit 6.2 garlic",
+        timestamp,
+      ],
+    ]);
+    expect(normalizeSql(coverInsert.sql)).toContain('INSERT INTO "RecipeCover"');
+    expect(coverInsert.values).toEqual([
+      "unit-6-2-create-cover",
+      "",
+      "ai-placeholder",
+      "processing",
+      USER_ID,
+      null,
+      "processing",
+      timestamp,
+      CREATE_RECIPE_ID,
+      USER_ID,
+    ]);
     const batchSet = new Set(nativeDatabase.batchCalls[0]);
     expect(nativeDatabase.records.filter(isCoreAuthoringMutation).every((statement) => (
       batchSet.has(statement)
@@ -768,6 +933,103 @@ describe("recipe tag native D1 atomicity", () => {
         { label: "Weeknight", normalizedLabel: "weeknight", createdAt: timestamp, updatedAt: timestamp },
       ],
     });
+    await expect(database().prepare(`
+      SELECT "id", "sourceType", "createdById"
+      FROM "RecipeCover" WHERE "recipeId" = ?
+    `).bind(CREATE_RECIPE_ID).first()).resolves.toEqual({
+      id: "unit-6-2-create-cover",
+      sourceType: "ai-placeholder",
+      createdById: USER_ID,
+    });
+    await expect(database().prepare(`
+      SELECT "stepNum", "stepTitle", "description", "duration", "updatedAt"
+      FROM "RecipeStep" WHERE "recipeId" = ?
+    `).bind(CREATE_RECIPE_ID).first()).resolves.toEqual({
+      stepNum: 1,
+      stepTitle: "Build the sauce",
+      description: "Combine the full graph.",
+      duration: 12,
+      updatedAt: timestamp,
+    });
+    await expect(database().prepare(`
+      SELECT
+        ingredient."id" AS "id",
+        ingredient."quantity" AS "quantity",
+        unit."name" AS "unit",
+        ingredientRef."name" AS "ingredientName",
+        ingredient."updatedAt" AS "updatedAt"
+      FROM "Ingredient" AS ingredient
+      JOIN "Unit" AS unit ON unit."id" = ingredient."unitId"
+      JOIN "IngredientRef" AS ingredientRef
+        ON ingredientRef."id" = ingredient."ingredientRefId"
+      WHERE ingredient."recipeId" = ?
+      ORDER BY ingredient."id"
+    `).bind(CREATE_RECIPE_ID).all()).resolves.toMatchObject({
+      results: [
+        {
+          id: "unit-6-2-create-garlic-ingredient",
+          quantity: 3,
+          unit: "unit 6.2 clove",
+          ingredientName: "unit 6.2 garlic",
+          updatedAt: timestamp,
+        },
+        {
+          id: "unit-6-2-create-olive-oil-ingredient",
+          quantity: 2,
+          unit: "unit 6.2 tablespoon",
+          ingredientName: "unit 6.2 olive oil",
+          updatedAt: timestamp,
+        },
+      ],
+    });
+  });
+
+  it("passes the native D1 binding for metadata-free web creation", async () => {
+    const nativeDatabase = recordingDatabase();
+    const routeEnv = {
+      ...(env as unknown as Record<string, unknown>),
+      DB: nativeDatabase,
+      NODE_ENV: "test",
+      SESSION_SECRET: "unit-6-2-session-secret-at-least-32-characters",
+      SPOONJOY_BASE_URL: "https://spoonjoy.app",
+    };
+    const cookie = await createUserSessionCookie(
+      USER_ID,
+      routeEnv,
+      new Request("https://spoonjoy.app/recipes/new"),
+    );
+    const formData = new FormData();
+    formData.set("title", "Unit 6.2 Metadata Free");
+    formData.set("description", "");
+    formData.set("servings", "");
+    formData.set("steps", "[]");
+    const randomUuid = vi.spyOn(crypto, "randomUUID").mockReturnValue(CREATE_RECIPE_ID);
+    const createSpy = vi.spyOn(recipeCreateModule, "createRecipeDraft");
+
+    try {
+      const result = await newRecipeAction({
+        request: new Request("https://spoonjoy.app/recipes/new", {
+          method: "POST",
+          headers: { Cookie: cookie },
+          body: formData,
+        }),
+        params: {},
+        context: { cloudflare: { env: routeEnv } },
+      } as any);
+
+      expect(result).toBeInstanceOf(Response);
+      expect((result as Response).status).toBe(302);
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ id: CREATE_RECIPE_ID }),
+        expect.objectContaining({ nativeDatabase }),
+      );
+      expect(nativeDatabase.batchCalls).toHaveLength(1);
+      expect(nativeDatabase.batchCalls[0]).toHaveLength(2);
+    } finally {
+      createSpy.mockRestore();
+      randomUuid.mockRestore();
+    }
   });
 
   it("rolls back the initial native recipe when its second requested tag fails", async () => {
@@ -818,8 +1080,573 @@ describe("recipe tag native D1 atomicity", () => {
     ).bind(CREATE_RECIPE_ID).first()).resolves.toEqual({ count: 0 });
   });
 
+  it("rolls back the complete native graph when the final ingredient fails", async () => {
+    await execute(`
+      CREATE TRIGGER "${CREATE_INGREDIENT_ABORT_TRIGGER}"
+      BEFORE INSERT ON "Ingredient"
+      WHEN NEW."id" = 'unit-6-2-rollback-second-ingredient'
+      BEGIN
+        SELECT RAISE(ABORT, 'unit_6_2_late_ingredient_failure');
+      END
+    `);
+    const nativeDatabase = recordingDatabase();
+    const prisma = await getDb({ DB: database() as unknown as D1Database });
+    const prismaWithoutTransactions = rejectPrismaTransactions(prisma);
+    const generatedIds = [
+      "unit-6-2-rollback-tag",
+      "unit-6-2-rollback-step",
+      "unit-6-2-rollback-cup-unit",
+      "unit-6-2-rollback-pinch-unit",
+      "unit-6-2-rollback-flour-ref",
+      "unit-6-2-rollback-salt-ref",
+      "unit-6-2-rollback-first-ingredient",
+      "unit-6-2-rollback-second-ingredient",
+    ];
+
+    try {
+      await expect(createRecipeDraft(
+        prismaWithoutTransactions,
+        {
+          id: CREATE_RECIPE_ID,
+          title: "Unit 6.2 Full Graph Rollback",
+          description: null,
+          servings: "4",
+          chefId: USER_ID,
+          course: "side",
+          tags: ["Rollback"],
+          steps: [{
+            stepTitle: "Mix",
+            description: "Fail on the last ingredient.",
+            duration: 4,
+            ingredients: [
+              { quantity: 1, unit: "Unit 6.2 Cup", ingredientName: "Unit 6.2 Flour" },
+              { quantity: 1, unit: "Unit 6.2 Pinch", ingredientName: "Unit 6.2 Salt" },
+            ],
+          }],
+        },
+        {
+          nativeDatabase,
+          now: () => new Date(FAILURE_TIMESTAMP),
+          randomId: () => generatedIds.shift() ?? "unexpected-full-graph-rollback-id",
+        },
+      )).rejects.toThrow(/unit_6_2_late_ingredient_failure/);
+    } finally {
+      await prisma.$disconnect();
+    }
+
+    expect(nativeDatabase.batchCalls).toHaveLength(1);
+    expect(nativeDatabase.batchCalls[0]).toHaveLength(9);
+    for (const table of ["Recipe", "RecipeTag", "RecipeStep", "Ingredient"]) {
+      await expect(database().prepare(
+        `SELECT COUNT(*) AS "count" FROM "${table}" WHERE "${table === "Recipe" ? "id" : "recipeId"}" = ?`,
+      ).bind(CREATE_RECIPE_ID).first()).resolves.toEqual({ count: 0 });
+    }
+    await expect(database().prepare(`
+      SELECT COUNT(*) AS "count" FROM "Unit" WHERE "id" LIKE 'unit-6-2-rollback-%'
+    `).first()).resolves.toEqual({ count: 0 });
+    await expect(database().prepare(`
+      SELECT COUNT(*) AS "count" FROM "IngredientRef" WHERE "id" LIKE 'unit-6-2-rollback-%'
+    `).first()).resolves.toEqual({ count: 0 });
+  });
+
+  it("routes MCP creation through one native batch and rolls back a late ingredient failure", async () => {
+    const title = "Unit 6.2 MCP Native Rollback";
+    await execute(`
+      CREATE TRIGGER "${CREATE_INGREDIENT_ABORT_TRIGGER}"
+      BEFORE INSERT ON "Ingredient"
+      WHEN EXISTS (
+        SELECT 1 FROM "Recipe"
+        WHERE "id" = NEW."recipeId" AND "title" = '${title}'
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'unit_6_2_mcp_ingredient_failure');
+      END
+    `);
+    const nativeDatabase = recordingDatabase();
+    const prisma = await getDb({ DB: database() as unknown as D1Database });
+
+    try {
+      await expect(callSpoonjoyMcpTool("create_recipe", {
+        ownerEmail: "unit-6-1-recipe-tags-d1@example.test",
+        title,
+        steps: [{
+          description: "Fail after all lookup writes.",
+          ingredients: [{
+            name: "Unit 6.2 MCP Stock",
+            quantity: 1,
+            unit: "Unit 6.2 MCP Cup",
+          }],
+        }],
+      }, {
+        db: prisma,
+        allowOwnerEmailFallback: true,
+        defaultOwnerEmail: "unit-6-1-recipe-tags-d1@example.test",
+        env: { DB: nativeDatabase },
+      })).rejects.toThrow(/unit_6_2_mcp_ingredient_failure/);
+    } finally {
+      await prisma.$disconnect();
+    }
+
+    expect(nativeDatabase.batchCalls).toHaveLength(1);
+    expect(nativeDatabase.batchCalls[0].map(({ sql }) => normalizeSql(sql))).toEqual([
+      expect.stringMatching(/^INSERT INTO "Recipe"/),
+      expect.stringMatching(/^INSERT INTO "RecipeStep"/),
+      expect.stringMatching(/^INSERT INTO "Unit"/),
+      expect.stringMatching(/^INSERT INTO "IngredientRef"/),
+      expect.stringMatching(/^INSERT INTO "Ingredient"/),
+    ]);
+    await expect(database().prepare(`
+      SELECT COUNT(*) AS "count" FROM "Recipe" WHERE "title" = ?
+    `).bind(title).first()).resolves.toEqual({ count: 0 });
+    await expect(database().prepare(`
+      SELECT COUNT(*) AS "count" FROM "Unit" WHERE "name" = 'unit 6.2 mcp cup'
+    `).first()).resolves.toEqual({ count: 0 });
+    await expect(database().prepare(`
+      SELECT COUNT(*) AS "count" FROM "IngredientRef" WHERE "name" = 'unit 6.2 mcp stock'
+    `).first()).resolves.toEqual({ count: 0 });
+  });
+
+  it("routes MCP update through one native batch and rolls back a late ingredient failure", async () => {
+    await execute(`
+      INSERT INTO "RecipeStep" (
+        "id", "recipeId", "stepNum", "description", "updatedAt"
+      ) VALUES ('unit-6-2-mcp-old-step', ?, 1, 'Keep this step.', ?)
+    `, RECIPE_ID, ORIGINAL_TIMESTAMP);
+    await execute(`
+      CREATE TRIGGER "${CREATE_INGREDIENT_ABORT_TRIGGER}"
+      BEFORE INSERT ON "Ingredient"
+      WHEN NEW."recipeId" = '${RECIPE_ID}'
+      BEGIN
+        SELECT RAISE(ABORT, 'unit_6_2_mcp_update_ingredient_failure');
+      END
+    `);
+    const nativeDatabase = recordingDatabase();
+    const prisma = await getDb({ DB: database() as unknown as D1Database });
+
+    try {
+      await expect(callSpoonjoyMcpTool("update_recipe", {
+        ownerEmail: "unit-6-1-recipe-tags-d1@example.test",
+        id: RECIPE_ID,
+        title: "Unit 6.2 MCP Update Must Roll Back",
+        steps: [{
+          description: "Fail after replacing the old graph.",
+          ingredients: [{
+            name: "Unit 6.2 MCP Update Stock",
+            quantity: 1,
+            unit: "Unit 6.2 MCP Update Cup",
+          }],
+        }],
+      }, {
+        db: prisma,
+        allowOwnerEmailFallback: true,
+        defaultOwnerEmail: "unit-6-1-recipe-tags-d1@example.test",
+        env: { DB: nativeDatabase },
+      })).rejects.toThrow(/unit_6_2_mcp_update_ingredient_failure/);
+    } finally {
+      await prisma.$disconnect();
+    }
+
+    expect(nativeDatabase.batchCalls).toHaveLength(1);
+    expect(nativeDatabase.batchCalls[0].map(({ sql }) => normalizeSql(sql))).toEqual([
+      expect.stringMatching(/^UPDATE "Recipe"/),
+      expect.stringMatching(/^DELETE FROM "StepOutputUse"/),
+      expect.stringMatching(/^DELETE FROM "Ingredient"/),
+      expect.stringMatching(/^DELETE FROM "RecipeStep"/),
+      expect.stringMatching(/^INSERT INTO "RecipeStep"/),
+      expect.stringMatching(/^INSERT INTO "Unit"/),
+      expect.stringMatching(/^INSERT INTO "IngredientRef"/),
+      expect.stringMatching(/^INSERT INTO "Ingredient"/),
+      expect.stringMatching(/^SELECT membership\."cookbookId"/),
+      expect.stringMatching(/^UPDATE "Cookbook"/),
+    ]);
+    await expect(database().prepare(`
+      SELECT "title", "updatedAt" FROM "Recipe" WHERE "id" = ?
+    `).bind(RECIPE_ID).first()).resolves.toEqual({
+      title: "Unit 6.1 D1 Recipe",
+      updatedAt: ORIGINAL_TIMESTAMP,
+    });
+    await expect(database().prepare(`
+      SELECT "id", "description" FROM "RecipeStep" WHERE "recipeId" = ?
+    `).bind(RECIPE_ID).all()).resolves.toMatchObject({
+      results: [{ id: "unit-6-2-mcp-old-step", description: "Keep this step." }],
+    });
+    await expect(database().prepare(`
+      SELECT COUNT(*) AS "count" FROM "Unit" WHERE "name" = 'unit 6.2 mcp update cup'
+    `).first()).resolves.toEqual({ count: 0 });
+    await expect(database().prepare(`
+      SELECT COUNT(*) AS "count" FROM "IngredientRef"
+      WHERE "name" = 'unit 6.2 mcp update stock'
+    `).first()).resolves.toEqual({ count: 0 });
+  });
+
+  it("maps a soft-delete race before the MCP update batch to not found without residue", async () => {
+    let actualResults: TestD1Result[] = [];
+    const nativeDatabase = recordingDatabase({
+      async interceptBatch(records, runRealBatch) {
+        if (!/^UPDATE\s+"Recipe"/i.test(normalizeSql(records[0]?.sql ?? ""))) {
+          return runRealBatch();
+        }
+        await execute(`UPDATE "Recipe" SET "deletedAt" = ? WHERE "id" = ?`, FAILURE_TIMESTAMP, RECIPE_ID);
+        actualResults = await runRealBatch();
+        return actualResults;
+      },
+    });
+    const prisma = await getDb({ DB: database() as unknown as D1Database });
+
+    try {
+      await expect(callSpoonjoyMcpTool("update_recipe", {
+        ownerEmail: "unit-6-1-recipe-tags-d1@example.test",
+        id: RECIPE_ID,
+        title: "Never Persisted",
+        steps: [{
+          description: "Never inserted.",
+          ingredients: [{
+            name: "Unit 6.2 MCP Raced Stock",
+            quantity: 1,
+            unit: "Unit 6.2 MCP Raced Cup",
+          }],
+        }],
+      }, {
+        db: prisma,
+        allowOwnerEmailFallback: true,
+        defaultOwnerEmail: "unit-6-1-recipe-tags-d1@example.test",
+        env: { DB: nativeDatabase },
+      })).rejects.toThrow("Recipe not found");
+    } finally {
+      await prisma.$disconnect();
+    }
+
+    expect(actualResults).toHaveLength(10);
+    expect(actualResults.every((result) => (
+      result.success === true
+      && result.meta.changes === 0
+      && result.results.length === 0
+    ))).toBe(true);
+    await expect(database().prepare(`
+      SELECT "title", "deletedAt" FROM "Recipe" WHERE "id" = ?
+    `).bind(RECIPE_ID).first()).resolves.toEqual({
+      title: "Unit 6.1 D1 Recipe",
+      deletedAt: FAILURE_TIMESTAMP,
+    });
+    await expect(database().prepare(`
+      SELECT COUNT(*) AS "count" FROM "Unit" WHERE "name" = 'unit 6.2 mcp raced cup'
+    `).first()).resolves.toEqual({ count: 0 });
+    await expect(database().prepare(`
+      SELECT COUNT(*) AS "count" FROM "IngredientRef"
+      WHERE "name" = 'unit 6.2 mcp raced stock'
+    `).first()).resolves.toEqual({ count: 0 });
+  });
+
+  it("rolls back a native REST recipe update when cookbook invalidation fails", async () => {
+    await execute(`
+      CREATE TRIGGER "${API_COOKBOOK_ABORT_TRIGGER}"
+      BEFORE UPDATE ON "Cookbook"
+      WHEN NEW."id" = '${COOKBOOK_ID}'
+      BEGIN
+        SELECT RAISE(ABORT, 'unit_6_2_api_cookbook_failure');
+      END
+    `);
+    const nativeDatabase = recordingDatabase();
+    const prisma = await getDb({ DB: database() as unknown as D1Database });
+
+    try {
+      await expect(updateNativeRecipe(prisma, USER_ID, RECIPE_ID, {
+        clientMutationId: "unit-6-2-api-rollback",
+        fields: { title: "Unit 6.2 API Must Roll Back" },
+      }, { nativeDatabase })).rejects.toThrow(/unit_6_2_api_cookbook_failure/);
+    } finally {
+      await prisma.$disconnect();
+    }
+
+    expect(nativeDatabase.batchCalls).toHaveLength(1);
+    expect(nativeDatabase.batchCalls[0].map(({ sql }) => normalizeSql(sql))).toEqual([
+      expect.stringMatching(/^UPDATE "Recipe"/),
+      expect.stringMatching(/^UPDATE "Cookbook"/),
+    ]);
+    await expect(database().prepare(`
+      SELECT "title", "updatedAt" FROM "Recipe" WHERE "id" = ?
+    `).bind(RECIPE_ID).first()).resolves.toEqual({
+      title: "Unit 6.1 D1 Recipe",
+      updatedAt: ORIGINAL_TIMESTAMP,
+    });
+    await expect(database().prepare(`
+      SELECT "updatedAt" FROM "Cookbook" WHERE "id" = ?
+    `).bind(COOKBOOK_ID).first()).resolves.toEqual({ updatedAt: ORIGINAL_TIMESTAMP });
+  });
+
+  it("maps the exact native D1 active-title update race to the REST field error", async () => {
+    const racedTitle = "Unit 6.2 Native REST Title Race";
+    await execute(
+      `CREATE UNIQUE INDEX "${ACTIVE_TITLE_INDEX}" ON "Recipe"("chefId", "title") WHERE "deletedAt" IS NULL`,
+    );
+    let nativeError: unknown;
+    const nativeDatabase = recordingDatabase({
+      async interceptBatch(records, runRealBatch) {
+        if (!/^UPDATE\s+"Recipe"/i.test(normalizeSql(records[0]?.sql ?? ""))) {
+          return runRealBatch();
+        }
+        await execute(`
+          INSERT INTO "Recipe" (
+            "id", "title", "chefId", "createdAt", "updatedAt"
+          ) VALUES (?, ?, ?, ?, ?)
+        `, TITLE_RACE_CONFLICT_ID, racedTitle, USER_ID, FAILURE_TIMESTAMP, FAILURE_TIMESTAMP);
+        try {
+          return await runRealBatch();
+        } catch (error) {
+          nativeError = error;
+          throw error;
+        }
+      },
+    });
+    const prisma = await getDb({ DB: database() as unknown as D1Database });
+    let result: Awaited<ReturnType<typeof updateNativeRecipe>>;
+    try {
+      result = await updateNativeRecipe(prisma, USER_ID, RECIPE_ID, {
+        clientMutationId: "unit-6-2-native-title-race",
+        fields: { title: racedTitle },
+      }, { nativeDatabase });
+    } finally {
+      await prisma.$disconnect();
+    }
+
+    expect(nativeError).toMatchObject({
+      message: "D1_ERROR: UNIQUE constraint failed: Recipe.chefId, Recipe.title: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_UNIQUE)",
+    });
+    expect(result).toEqual({
+      ok: false,
+      code: "validation_error",
+      message: "Invalid recipe fields",
+      details: { fieldErrors: { title: ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } },
+    });
+    await expect(database().prepare(`
+      SELECT "title", "updatedAt" FROM "Recipe" WHERE "id" = ?
+    `).bind(RECIPE_ID).first()).resolves.toEqual({
+      title: "Unit 6.1 D1 Recipe",
+      updatedAt: ORIGINAL_TIMESTAMP,
+    });
+    await expect(database().prepare(`
+      SELECT "id" FROM "Recipe" WHERE "chefId" = ? AND "title" = ?
+    `).bind(USER_ID, racedTitle).all()).resolves.toMatchObject({
+      results: [{ id: TITLE_RACE_CONFLICT_ID }],
+    });
+  });
+
+  it("maps the exact native D1 active-title create race to the MCP error", async () => {
+    const racedTitle = "Unit 6.2 Native MCP Title Race";
+    await execute(
+      `CREATE UNIQUE INDEX "${ACTIVE_TITLE_INDEX}" ON "Recipe"("chefId", "title") WHERE "deletedAt" IS NULL`,
+    );
+    let nativeError: unknown;
+    const nativeDatabase = recordingDatabase({
+      async interceptBatch(records, runRealBatch) {
+        if (!/^INSERT INTO\s+"Recipe"/i.test(normalizeSql(records[0]?.sql ?? ""))) {
+          return runRealBatch();
+        }
+        await execute(`
+          INSERT INTO "Recipe" (
+            "id", "title", "chefId", "createdAt", "updatedAt"
+          ) VALUES (?, ?, ?, ?, ?)
+        `, TITLE_RACE_CONFLICT_ID, racedTitle, USER_ID, FAILURE_TIMESTAMP, FAILURE_TIMESTAMP);
+        try {
+          return await runRealBatch();
+        } catch (error) {
+          nativeError = error;
+          throw error;
+        }
+      },
+    });
+    const prisma = await getDb({ DB: database() as unknown as D1Database });
+    try {
+      await expect(callSpoonjoyMcpTool("create_recipe", {
+        ownerEmail: "unit-6-1-recipe-tags-d1@example.test",
+        title: racedTitle,
+      }, {
+        db: prisma,
+        allowOwnerEmailFallback: true,
+        defaultOwnerEmail: "unit-6-1-recipe-tags-d1@example.test",
+        env: { DB: nativeDatabase },
+      })).rejects.toThrow(ACTIVE_RECIPE_TITLE_CONFLICT_ERROR);
+    } finally {
+      await prisma.$disconnect();
+    }
+
+    expect(nativeError).toMatchObject({
+      message: "D1_ERROR: UNIQUE constraint failed: Recipe.chefId, Recipe.title: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_UNIQUE)",
+    });
+    await expect(database().prepare(`
+      SELECT "id" FROM "Recipe" WHERE "chefId" = ? AND "title" = ?
+    `).bind(USER_ID, racedTitle).all()).resolves.toMatchObject({
+      results: [{ id: TITLE_RACE_CONFLICT_ID }],
+    });
+    expect(nativeDatabase.batchCalls).toHaveLength(1);
+  });
+
+  it("maps the exact native D1 active-title update race to the MCP error", async () => {
+    const racedTitle = "Unit 6.2 Native MCP Update Title Race";
+    await execute(
+      `CREATE UNIQUE INDEX "${ACTIVE_TITLE_INDEX}" ON "Recipe"("chefId", "title") WHERE "deletedAt" IS NULL`,
+    );
+    let nativeError: unknown;
+    const nativeDatabase = recordingDatabase({
+      async interceptBatch(records, runRealBatch) {
+        if (!/^UPDATE\s+"Recipe"/i.test(normalizeSql(records[0]?.sql ?? ""))) {
+          return runRealBatch();
+        }
+        await execute(`
+          INSERT INTO "Recipe" (
+            "id", "title", "chefId", "createdAt", "updatedAt"
+          ) VALUES (?, ?, ?, ?, ?)
+        `, TITLE_RACE_CONFLICT_ID, racedTitle, USER_ID, FAILURE_TIMESTAMP, FAILURE_TIMESTAMP);
+        try {
+          return await runRealBatch();
+        } catch (error) {
+          nativeError = error;
+          throw error;
+        }
+      },
+    });
+    const prisma = await getDb({ DB: database() as unknown as D1Database });
+    try {
+      await expect(callSpoonjoyMcpTool("update_recipe", {
+        ownerEmail: "unit-6-1-recipe-tags-d1@example.test",
+        id: RECIPE_ID,
+        title: racedTitle,
+      }, {
+        db: prisma,
+        allowOwnerEmailFallback: true,
+        defaultOwnerEmail: "unit-6-1-recipe-tags-d1@example.test",
+        env: { DB: nativeDatabase },
+      })).rejects.toThrow(ACTIVE_RECIPE_TITLE_CONFLICT_ERROR);
+    } finally {
+      await prisma.$disconnect();
+    }
+
+    expect(nativeError).toMatchObject({
+      message: "D1_ERROR: UNIQUE constraint failed: Recipe.chefId, Recipe.title: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_UNIQUE)",
+    });
+    await expect(database().prepare(`
+      SELECT "title", "updatedAt" FROM "Recipe" WHERE "id" = ?
+    `).bind(RECIPE_ID).first()).resolves.toEqual({
+      title: "Unit 6.1 D1 Recipe",
+      updatedAt: ORIGINAL_TIMESTAMP,
+    });
+    expect(nativeDatabase.batchCalls).toHaveLength(1);
+  });
+
+  it("creates and activates an uploaded cover inside the native graph batch", async () => {
+    const nativeDatabase = recordingDatabase();
+    const prisma = await getDb({ DB: database() as unknown as D1Database });
+    const prismaWithoutTransactions = rejectPrismaTransactions(prisma);
+
+    try {
+      await expect(createRecipeDraft(
+        prismaWithoutTransactions,
+        {
+          id: CREATE_RECIPE_ID,
+          title: "Unit 6.2 Atomic Uploaded Cover",
+          description: null,
+          servings: null,
+          chefId: USER_ID,
+          steps: [],
+        },
+        {
+          coverMutation: {
+            kind: "uploaded",
+            coverId: "unit-6-2-uploaded-cover",
+            createdById: USER_ID,
+            imageUrl: "/photos/unit-6-2-uploaded-cover.jpg",
+          },
+          nativeDatabase,
+          now: () => new Date(FAILURE_TIMESTAMP),
+        },
+      )).resolves.toMatchObject({
+        id: CREATE_RECIPE_ID,
+        activeCoverId: "unit-6-2-uploaded-cover",
+        activeCoverVariant: "image",
+        coverMode: "manual",
+      });
+    } finally {
+      await prisma.$disconnect();
+    }
+
+    expect(nativeDatabase.batchCalls).toHaveLength(1);
+    expect(nativeDatabase.batchCalls[0]).toHaveLength(3);
+    await expect(database().prepare(`
+      SELECT "activeCoverId", "activeCoverVariant", "coverMode"
+      FROM "Recipe" WHERE "id" = ?
+    `).bind(CREATE_RECIPE_ID).first()).resolves.toEqual({
+      activeCoverId: "unit-6-2-uploaded-cover",
+      activeCoverVariant: "image",
+      coverMode: "manual",
+    });
+    await expect(database().prepare(`
+      SELECT "imageUrl", "sourceType", "status", "createdById", "sourceImageUrl"
+      FROM "RecipeCover" WHERE "id" = ?
+    `).bind("unit-6-2-uploaded-cover").first()).resolves.toEqual({
+      imageUrl: "/photos/unit-6-2-uploaded-cover.jpg",
+      sourceType: "chef-upload",
+      status: "ready",
+      createdById: USER_ID,
+      sourceImageUrl: "/photos/unit-6-2-uploaded-cover.jpg",
+    });
+  });
+
+  it("rolls back the native graph when uploaded-cover activation fails", async () => {
+    await execute(`
+      CREATE TRIGGER "${CREATE_COVER_ABORT_TRIGGER}"
+      BEFORE UPDATE OF "activeCoverId" ON "Recipe"
+      WHEN NEW."activeCoverId" = 'unit-6-2-failing-cover'
+      BEGIN
+        SELECT RAISE(ABORT, 'unit_6_2_cover_activation_failure');
+      END
+    `);
+    const nativeDatabase = recordingDatabase();
+    const prisma = await getDb({ DB: database() as unknown as D1Database });
+    const prismaWithoutTransactions = rejectPrismaTransactions(prisma);
+
+    try {
+      await expect(createRecipeDraft(
+        prismaWithoutTransactions,
+        {
+          id: CREATE_RECIPE_ID,
+          title: "Unit 6.2 Cover Rollback",
+          description: null,
+          servings: null,
+          chefId: USER_ID,
+          tags: ["Rollback"],
+          steps: [],
+        },
+        {
+          coverMutation: {
+            kind: "uploaded",
+            coverId: "unit-6-2-failing-cover",
+            createdById: USER_ID,
+            imageUrl: "/photos/unit-6-2-failing-cover.jpg",
+          },
+          nativeDatabase,
+          now: () => new Date(FAILURE_TIMESTAMP),
+          randomId: () => "unit-6-2-cover-rollback-tag",
+        },
+      )).rejects.toThrow(/unit_6_2_cover_activation_failure/);
+    } finally {
+      await prisma.$disconnect();
+    }
+
+    expect(nativeDatabase.batchCalls).toHaveLength(1);
+    expect(nativeDatabase.batchCalls[0]).toHaveLength(4);
+    await expect(database().prepare(
+      `SELECT COUNT(*) AS "count" FROM "Recipe" WHERE "id" = ?`,
+    ).bind(CREATE_RECIPE_ID).first()).resolves.toEqual({ count: 0 });
+    await expect(database().prepare(
+      `SELECT COUNT(*) AS "count" FROM "RecipeTag" WHERE "recipeId" = ?`,
+    ).bind(CREATE_RECIPE_ID).first()).resolves.toEqual({ count: 0 });
+    await expect(database().prepare(
+      `SELECT COUNT(*) AS "count" FROM "RecipeCover" WHERE "recipeId" = ?`,
+    ).bind(CREATE_RECIPE_ID).first()).resolves.toEqual({ count: 0 });
+  });
+
   it.each(createEnvelopeDefects())(
-    "rejects a malformed native create $defect envelope without mutation",
+    "keeps a committed native create successful after $defect envelope corruption",
     async ({ mutate }) => {
     let intercepted = false;
     const nativeDatabase = recordingDatabase({
@@ -828,8 +1655,7 @@ describe("recipe tag native D1 atomicity", () => {
           return runRealBatch();
         }
         intercepted = true;
-        const validResults = validCreateResultEnvelopes(records);
-        return mutate(validResults);
+        return mutate(await runRealBatch());
       },
     });
     const prisma = await getDb({ DB: database() as unknown as D1Database });
@@ -856,18 +1682,28 @@ describe("recipe tag native D1 atomicity", () => {
             return () => ids.shift() ?? "unexpected-malformed-create-id";
           })(),
         },
-      )).rejects.toThrow();
+      )).resolves.toMatchObject({
+        id: CREATE_RECIPE_ID,
+        title: "Malformed Native Create",
+        course: "side",
+      });
     } finally {
       await prisma.$disconnect();
     }
 
     expect(intercepted).toBe(true);
-    await expect(database().prepare(
-      `SELECT COUNT(*) AS "count" FROM "Recipe" WHERE "id" = ?`,
-    ).bind(CREATE_RECIPE_ID).first()).resolves.toEqual({ count: 0 });
-    await expect(database().prepare(
-      `SELECT COUNT(*) AS "count" FROM "RecipeTag" WHERE "recipeId" = ?`,
-    ).bind(CREATE_RECIPE_ID).first()).resolves.toEqual({ count: 0 });
+    await expect(database().prepare(`
+      SELECT "title", "servings", "course" FROM "Recipe" WHERE "id" = ?
+    `).bind(CREATE_RECIPE_ID).first()).resolves.toEqual({
+      title: "Malformed Native Create",
+      servings: "3",
+      course: "side",
+    });
+    await expect(database().prepare(`
+      SELECT "label" FROM "RecipeTag" WHERE "recipeId" = ? ORDER BY "normalizedLabel"
+    `).bind(CREATE_RECIPE_ID).all()).resolves.toMatchObject({
+      results: [{ label: "First" }, { label: "Second" }],
+    });
     },
   );
 
@@ -939,7 +1775,7 @@ describe("recipe tag native D1 atomicity", () => {
     expect(status).toBe(500);
     expect(nativeDatabase.batchCalls).toHaveLength(1);
     const batch = nativeDatabase.batchCalls[0];
-    expect(batch).toHaveLength(5);
+    expect(batch).toHaveLength(6);
     const timestamp = batch[0].values[4];
     expect(timestamp).toEqual(expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/));
     expect(batch.map((statement) => normalizeSql(statement.sql))).toEqual([
@@ -947,6 +1783,7 @@ describe("recipe tag native D1 atomicity", () => {
       'DELETE FROM "RecipeTag" WHERE "recipeId" = ? AND EXISTS (SELECT 1 FROM "Recipe" WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL)',
       'INSERT INTO "RecipeTag" ("id", "recipeId", "label", "normalizedLabel", "createdAt", "updatedAt") SELECT ?, "id", ?, ?, ?, ? FROM "Recipe" WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL RETURNING "recipeId" AS "recipeId", "id" AS "tagId", "label" AS "label", "normalizedLabel" AS "normalizedLabel", "createdAt" AS "createdAt", "updatedAt" AS "updatedAt"',
       'INSERT INTO "RecipeTag" ("id", "recipeId", "label", "normalizedLabel", "createdAt", "updatedAt") SELECT ?, "id", ?, ?, ?, ? FROM "Recipe" WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL RETURNING "recipeId" AS "recipeId", "id" AS "tagId", "label" AS "label", "normalizedLabel" AS "normalizedLabel", "createdAt" AS "createdAt", "updatedAt" AS "updatedAt"',
+      'SELECT membership."cookbookId" AS "cookbookId" FROM "RecipeInCookbook" AS membership WHERE membership."recipeId" = ? AND EXISTS (SELECT 1 FROM "Recipe" WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL) ORDER BY membership."cookbookId" COLLATE BINARY ASC',
       'UPDATE "Cookbook" SET "updatedAt" = ? WHERE "id" IN (SELECT "cookbookId" FROM "RecipeInCookbook" WHERE "recipeId" = ? AND EXISTS (SELECT 1 FROM "Recipe" WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL)) RETURNING "id" AS "cookbookId", "updatedAt" AS "updatedAt"',
     ]);
     expect(batch.map((statement) => statement.values)).toEqual([
@@ -954,6 +1791,7 @@ describe("recipe tag native D1 atomicity", () => {
       [RECIPE_ID, RECIPE_ID, USER_ID],
       [expect.any(String), "First", "first", timestamp, timestamp, RECIPE_ID, USER_ID],
       [expect.any(String), "Explode", "explode", timestamp, timestamp, RECIPE_ID, USER_ID],
+      [RECIPE_ID, RECIPE_ID, USER_ID],
       [timestamp, RECIPE_ID, RECIPE_ID, USER_ID],
     ]);
     const batchSet = new Set(batch);
@@ -1036,18 +1874,77 @@ describe("recipe tag native D1 atomicity", () => {
     });
   });
 
+  it("preserves metadata written concurrently before a legacy native edit batch", async () => {
+    let intercepted = false;
+    const nativeDatabase = recordingDatabase({
+      async interceptBatch(records, runRealBatch) {
+        if (!/^UPDATE\s+"Recipe"/i.test(normalizeSql(records[0]?.sql ?? ""))) {
+          return runRealBatch();
+        }
+        intercepted = true;
+        await execute(`UPDATE "Recipe" SET "course" = 'dessert' WHERE "id" = ?`, RECIPE_ID);
+        await execute(`
+          UPDATE "RecipeTag"
+          SET "label" = 'Concurrent', "normalizedLabel" = 'concurrent'
+          WHERE "recipeId" = ?
+        `, RECIPE_ID);
+        return runRealBatch();
+      },
+    });
+    const routeEnv = {
+      ...(env as unknown as Record<string, unknown>),
+      DB: nativeDatabase,
+      NODE_ENV: "test",
+      SESSION_SECRET: "unit-6-2-session-secret-at-least-32-characters",
+      SPOONJOY_BASE_URL: "https://spoonjoy.app",
+    };
+    const cookie = await createUserSessionCookie(
+      USER_ID,
+      routeEnv,
+      new Request(`https://spoonjoy.app/recipes/${RECIPE_ID}/edit`),
+    );
+    const formData = new FormData();
+    formData.set("title", "Legacy Concurrent Edit");
+
+    const result = await editRecipeAction({
+      request: new Request(`https://spoonjoy.app/recipes/${RECIPE_ID}/edit`, {
+        method: "POST",
+        headers: { Cookie: cookie },
+        body: formData,
+      }),
+      params: { id: RECIPE_ID },
+      context: { cloudflare: { env: routeEnv } },
+    } as any);
+
+    expect(intercepted).toBe(true);
+    expect(result).toBeInstanceOf(Response);
+    expect((result as Response).status).toBe(302);
+    await expect(database().prepare(`
+      SELECT "title", "course" FROM "Recipe" WHERE "id" = ?
+    `).bind(RECIPE_ID).first()).resolves.toEqual({
+      title: "Legacy Concurrent Edit",
+      course: "dessert",
+    });
+    await expect(database().prepare(`
+      SELECT "label", "normalizedLabel" FROM "RecipeTag" WHERE "recipeId" = ?
+    `).bind(RECIPE_ID).all()).resolves.toMatchObject({
+      results: [{ label: "Concurrent", normalizedLabel: "concurrent" }],
+    });
+    expect(nativeDatabase.batchCalls[0].map((record) => normalizeSql(record.sql)).join("\n"))
+      .not.toMatch(/DELETE FROM "RecipeTag" WHERE "recipeId"|INSERT INTO "RecipeTag"/);
+  });
+
   it.each(editEnvelopeDefects())(
-    "rejects a malformed native edit $defect envelope without mutation",
+    "keeps a committed native edit successful after $defect envelope corruption",
     async ({ mutate }) => {
     let intercepted = false;
     const nativeDatabase = recordingDatabase({
       async interceptBatch(records, runRealBatch) {
-        if (records.length !== 5 || !/^UPDATE\s+"Recipe"/i.test(normalizeSql(records[0].sql))) {
+        if (records.length !== 6 || !/^UPDATE\s+"Recipe"/i.test(normalizeSql(records[0].sql))) {
           return runRealBatch();
         }
         intercepted = true;
-        const validResults = validEditResultEnvelopes(records);
-        return mutate(validResults);
+        return mutate(await runRealBatch());
       },
     });
     const routeEnv = {
@@ -1083,38 +1980,42 @@ describe("recipe tag native D1 atomicity", () => {
       ? result.status
       : (result as { init?: { status?: number } }).init?.status;
     expect(intercepted).toBe(true);
-    expect(status).toBe(500);
+    expect(status).toBe(302);
     await expect(database().prepare(`
       SELECT "title", "description", "servings", "course", "updatedAt"
       FROM "Recipe" WHERE "id" = ?
     `).bind(RECIPE_ID).first()).resolves.toEqual({
-      title: "Unit 6.1 D1 Recipe",
-      description: null,
-      servings: null,
-      course: null,
-      updatedAt: ORIGINAL_TIMESTAMP,
+      title: "Envelope Check",
+      description: "Must not persist",
+      servings: "8",
+      course: "appetizer",
+      updatedAt: expect.not.stringMatching(ORIGINAL_TIMESTAMP),
     });
-    await expect(readMetadataState()).resolves.toEqual({
-      course: null,
-      labels: ["original"],
-      recipeUpdatedAt: ORIGINAL_TIMESTAMP,
-      tagTimestamps: [{ createdAt: ORIGINAL_TIMESTAMP, updatedAt: ORIGINAL_TIMESTAMP }],
+    await expect(readMetadataState()).resolves.toMatchObject({
+      course: "appetizer",
+      labels: ["first", "second"],
     });
-    await expect(database().prepare(
+    const cookbook = await database().prepare(
       `SELECT "updatedAt" FROM "Cookbook" WHERE "id" = ?`,
-    ).bind(COOKBOOK_ID).first()).resolves.toEqual({ updatedAt: ORIGINAL_TIMESTAMP });
+    ).bind(COOKBOOK_ID).first<{ updatedAt: string }>();
+    expect(cookbook?.updatedAt).not.toBe(ORIGINAL_TIMESTAMP);
     },
   );
 
-  it("treats a complete all-zero native edit envelope as a raced not-found without mutation", async () => {
+  it("maps the real all-zero D1 envelope from a deletion race to 404", async () => {
     let intercepted = false;
+    let actualResults: TestD1Result[] = [];
     const nativeDatabase = recordingDatabase({
       async interceptBatch(records, runRealBatch) {
-        if (records.length !== 5 || !/^UPDATE\s+"Recipe"/i.test(normalizeSql(records[0].sql))) {
+        if (records.length !== 6 || !/^UPDATE\s+"Recipe"/i.test(normalizeSql(records[0].sql))) {
           return runRealBatch();
         }
         intercepted = true;
-        return records.map(() => ({ meta: { changes: 0 }, results: [], success: true }));
+        await execute(`DELETE FROM "RecipeInCookbook" WHERE "recipeId" = ?`, RECIPE_ID);
+        await execute(`DELETE FROM "RecipeTag" WHERE "recipeId" = ?`, RECIPE_ID);
+        await execute(`DELETE FROM "Recipe" WHERE "id" = ?`, RECIPE_ID);
+        actualResults = await runRealBatch();
+        return actualResults;
       },
     });
     const routeEnv = {
@@ -1148,12 +2049,18 @@ describe("recipe tag native D1 atomicity", () => {
       : (result as { init?: { status?: number } }).init?.status;
     expect(intercepted).toBe(true);
     expect(status).toBe(404);
-    await expect(readMetadataState()).resolves.toEqual({
-      course: null,
-      labels: ["original"],
-      recipeUpdatedAt: ORIGINAL_TIMESTAMP,
-      tagTimestamps: [{ createdAt: ORIGINAL_TIMESTAMP, updatedAt: ORIGINAL_TIMESTAMP }],
-    });
+    expect(actualResults).toHaveLength(6);
+    expect(actualResults.every((result) => (
+      result.success === true
+      && result.meta.changes === 0
+      && result.results.length === 0
+    ))).toBe(true);
+    await expect(database().prepare(
+      `SELECT COUNT(*) AS "count" FROM "Recipe" WHERE "id" = ?`,
+    ).bind(RECIPE_ID).first()).resolves.toEqual({ count: 0 });
+    await expect(database().prepare(
+      `SELECT COUNT(*) AS "count" FROM "RecipeTag" WHERE "recipeId" = ?`,
+    ).bind(RECIPE_ID).first()).resolves.toEqual({ count: 0 });
     await expect(database().prepare(
       `SELECT "updatedAt" FROM "Cookbook" WHERE "id" = ?`,
     ).bind(COOKBOOK_ID).first()).resolves.toEqual({ updatedAt: ORIGINAL_TIMESTAMP });

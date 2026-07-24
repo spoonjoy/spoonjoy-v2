@@ -14,6 +14,7 @@ import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
 import { ensureSearchIndexFresh, rebuildSearchIndex, searchSpoonjoy } from "~/lib/search.server";
 import { RecipeTagNotFoundError } from "~/lib/recipe-tags.server";
+import * as spoonCoverStylizationModule from "~/lib/spoon-cover-stylization.server";
 
 function compactSql(sql: unknown): string {
   return String(sql).replace(/\s+/g, " ").trim();
@@ -551,6 +552,22 @@ describe("Recipes $id Edit Route", () => {
       expect(tags.map((tag) => tag.label)).toEqual(["Weeknight"]);
     });
 
+    it("rejects a partial metadata pair instead of merging it with stale state", async () => {
+      const original = await db.recipe.findUniqueOrThrow({ where: { id: recipeId } });
+      const response = await action({
+        request: await createFormRequest({ title: "Partial Metadata", course: "main" }, testUserId),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(400);
+      expect(data.errors.general).toBe("Course and tags must be submitted together");
+      await expect(db.recipe.findUniqueOrThrow({ where: { id: recipeId } })).resolves.toMatchObject({
+        title: original.title,
+      });
+    });
+
     it("returns not found when the recipe disappears during the authoring transaction", async () => {
       const originalTransaction = db.$transaction;
       db.$transaction = vi.fn().mockRejectedValue(new RecipeTagNotFoundError(recipeId));
@@ -655,13 +672,14 @@ describe("Recipes $id Edit Route", () => {
 
       expect(transactionCalls).toBe(1);
       expect(Array.isArray(transactionInput)).toBe(true);
-      expect(transactionInput).toHaveLength(5);
+      expect(transactionInput).toHaveLength(6);
       expect(transactionInput).toEqual([
         queryRawPromises[0],
         executeRawPromises[0],
         queryRawPromises[1],
         queryRawPromises[2],
         queryRawPromises[3],
+        queryRawPromises[4],
       ]);
       const timestamp = queryRawCalls[0]?.[5];
       expect(timestamp).toEqual(expect.stringMatching(
@@ -679,6 +697,10 @@ describe("Recipes $id Edit Route", () => {
         [
           'INSERT INTO "RecipeTag" ("id", "recipeId", "label", "normalizedLabel", "createdAt", "updatedAt") SELECT ?, "id", ?, ?, ?, ? FROM "Recipe" WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL RETURNING "recipeId" AS "recipeId", "id" AS "tagId", "label" AS "label", "normalizedLabel" AS "normalizedLabel", "createdAt" AS "createdAt", "updatedAt" AS "updatedAt"',
           expect.any(String), "Quick", "quick", timestamp, timestamp, recipeId, testUserId,
+        ],
+        [
+          'SELECT membership."cookbookId" AS "cookbookId" FROM "RecipeInCookbook" AS membership WHERE membership."recipeId" = ? AND EXISTS (SELECT 1 FROM "Recipe" WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL) ORDER BY membership."cookbookId" COLLATE BINARY ASC',
+          recipeId, recipeId, testUserId,
         ],
         [
           'UPDATE "Cookbook" SET "updatedAt" = ? WHERE "id" IN (SELECT "cookbookId" FROM "RecipeInCookbook" WHERE "recipeId" = ? AND EXISTS (SELECT 1 FROM "Recipe" WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL)) RETURNING "id" AS "cookbookId", "updatedAt" AS "updatedAt"',
@@ -908,6 +930,48 @@ describe("Recipes $id Edit Route", () => {
       expect(data.errors.title).toBe(ACTIVE_RECIPE_TITLE_CONFLICT_ERROR);
       const unchangedRecipe = await db.recipe.findUniqueOrThrow({ where: { id: recipeId } });
       expect(unchangedRecipe.title).toBe(originalRecipe.title);
+    });
+
+    it("should map an update-time active-title race to the title field", async () => {
+      const originalTransaction = db.$transaction;
+      db.$transaction = vi.fn().mockRejectedValue(
+        Object.assign(new Error("Raw query failed"), {
+          code: "P2010",
+          meta: {
+            code: "2067",
+            message: "UNIQUE constraint failed: Recipe.chefId, Recipe.title",
+          },
+        }),
+      ) as typeof db.$transaction;
+
+      try {
+        const originalRecipe = await db.recipe.findUniqueOrThrow({
+          where: { id: recipeId },
+        });
+        const request = await createFormRequest(
+          { title: "Concurrent Rename" },
+          testUserId,
+        );
+        const response = await action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: { id: recipeId },
+        } as any);
+
+        const { data, status } = extractResponseData(response);
+        expect(status).toBe(400);
+        expect(data.errors).toEqual({
+          title: ACTIVE_RECIPE_TITLE_CONFLICT_ERROR,
+        });
+        await expect(
+          db.recipe.findUniqueOrThrow({ where: { id: recipeId } }),
+        ).resolves.toMatchObject({
+          title: originalRecipe.title,
+          updatedAt: originalRecipe.updatedAt,
+        });
+      } finally {
+        db.$transaction = originalTransaction;
+      }
     });
 
     it("should allow updates to a soft-deleted recipe title", async () => {
@@ -1858,6 +1922,43 @@ describe("Recipes $id Edit Route", () => {
       expect(captured).toHaveLength(0);
     });
 
+    it("redirects to the committed edit when cover scheduling throws", async () => {
+      const scheduling = vi.spyOn(
+        spoonCoverStylizationModule,
+        "scheduleSpoonCoverStylization",
+      ).mockRejectedValueOnce(new Error("stylization scheduler unavailable"));
+      const mockR2Bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn().mockResolvedValue(undefined),
+      };
+      const formData = new UndiciFormData();
+      formData.append("title", "Committed Edit Schedule Failure");
+      formData.append("image", validImageFile("schedule-failure.png", "image/png"));
+      const request = await createMultipartRequest(formData, testUserId);
+
+      try {
+        const response = await action({
+          request,
+          context: { cloudflare: { env: { PHOTOS: mockR2Bucket } } },
+          params: { id: recipeId },
+        } as any);
+
+        expect(response).toBeInstanceOf(Response);
+        expect(response.status).toBe(302);
+        expect(response.headers.get("Location")).toBe(`/recipes/${recipeId}`);
+        await expect(db.recipe.findUniqueOrThrow({
+          where: { id: recipeId },
+          include: { covers: true },
+        })).resolves.toMatchObject({
+          title: "Committed Edit Schedule Failure",
+          covers: [expect.objectContaining({ sourceType: "chef-upload" })],
+        });
+        expect(mockR2Bucket.delete).not.toHaveBeenCalled();
+      } finally {
+        scheduling.mockRestore();
+      }
+    });
+
     it("does not try old R2 cleanup after replacement while the old cover row still references it", async () => {
       await db.recipeCover.create({
         data: {
@@ -2117,6 +2218,102 @@ describe("Recipes $id Edit Route", () => {
         expect(mockR2Bucket.delete).toHaveBeenCalledWith(uploadedKey);
       } finally {
         db.$transaction = originalTransaction;
+      }
+    });
+
+    it("rolls back metadata when uploaded-cover insertion fails", async () => {
+      const trigger = "RecipeCover_test_edit_atomic_abort";
+      const original = await db.recipe.findUniqueOrThrow({ where: { id: recipeId } });
+      const mockR2Bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn().mockResolvedValue(undefined),
+      };
+      await db.$executeRawUnsafe(`
+        CREATE TRIGGER "${trigger}"
+        BEFORE INSERT ON "RecipeCover"
+        WHEN NEW."recipeId" = '${recipeId}' AND NEW."sourceType" = 'chef-upload'
+        BEGIN
+          SELECT RAISE(ABORT, 'edit_cover_atomic_failure');
+        END
+      `);
+
+      try {
+        const formData = new UndiciFormData();
+        formData.append("title", "Must Roll Back With Cover");
+        formData.append("course", "dessert");
+        formData.append("tags", JSON.stringify(["Never Persisted"]));
+        formData.append("image", validImageFile("replacement.jpg", "image/jpeg"));
+        const request = await createMultipartRequest(formData, testUserId);
+
+        const response = await action({
+          request,
+          context: { cloudflare: { env: { PHOTOS: mockR2Bucket } } },
+          params: { id: recipeId },
+        } as any);
+
+        const { data, status } = extractResponseData(response);
+        expect(status).toBe(500);
+        expect(data.errors.general).toBe("Failed to update recipe. Please try again.");
+        expect(mockR2Bucket.delete).toHaveBeenCalledWith(mockR2Bucket.put.mock.calls[0][0]);
+        await expect(db.recipe.findUniqueOrThrow({ where: { id: recipeId } })).resolves.toMatchObject({
+          title: original.title,
+          course: original.course,
+          updatedAt: original.updatedAt,
+        });
+        await expect(db.recipeTag.count({ where: { recipeId } })).resolves.toBe(0);
+        await expect(db.recipeCover.count({ where: { recipeId } })).resolves.toBe(0);
+      } finally {
+        await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${trigger}"`);
+      }
+    });
+
+    it("rolls back metadata when clearing the active cover fails", async () => {
+      const trigger = "Recipe_test_clear_cover_atomic_abort";
+      const cover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "/photos/recipes/atomic-clear/source.jpg",
+          sourceType: "chef-upload",
+        },
+      });
+      await activateRecipeCoverForTest(recipeId, cover.id);
+      const original = await db.recipe.findUniqueOrThrow({ where: { id: recipeId } });
+      await db.$executeRawUnsafe(`
+        CREATE TRIGGER "${trigger}"
+        BEFORE UPDATE OF "activeCoverId" ON "Recipe"
+        WHEN OLD."id" = '${recipeId}' AND NEW."activeCoverId" IS NULL
+        BEGIN
+          SELECT RAISE(ABORT, 'clear_cover_atomic_failure');
+        END
+      `);
+
+      try {
+        const request = await createFormRequest({
+          title: "Must Roll Back With Clear",
+          course: "side",
+          tags: JSON.stringify(["Never Persisted"]),
+          clearImage: "true",
+        }, testUserId);
+        const response = await action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: { id: recipeId },
+        } as any);
+
+        const { data, status } = extractResponseData(response);
+        expect(status).toBe(500);
+        expect(data.errors.general).toBe("Failed to update recipe. Please try again.");
+        await expect(db.recipe.findUniqueOrThrow({ where: { id: recipeId } })).resolves.toMatchObject({
+          title: original.title,
+          course: original.course,
+          activeCoverId: cover.id,
+          activeCoverVariant: "image",
+          coverMode: "manual",
+          updatedAt: original.updatedAt,
+        });
+        await expect(db.recipeTag.count({ where: { recipeId } })).resolves.toBe(0);
+      } finally {
+        await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${trigger}"`);
       }
     });
 
@@ -3047,7 +3244,7 @@ describe("Recipes $id Edit Route", () => {
       await waitFor(() => {
         expect(actionCalls).toBe(1);
       });
-      expect(screen.getByRole("status")).toHaveTextContent(/uploading image/i);
+      expect(screen.getByText(/uploading image/i).closest('[role="status"]')).toBeInTheDocument();
       expect(submitButton).toBeDisabled();
 
       await act(async () => {
@@ -3055,7 +3252,7 @@ describe("Recipes $id Edit Route", () => {
         await actionPromise;
       });
       await waitFor(() => {
-        expect(screen.queryByRole("status")).not.toBeInTheDocument();
+        expect(screen.queryByText(/uploading image/i)).not.toBeInTheDocument();
         expect(submitButton).not.toBeDisabled();
       });
     });

@@ -11,7 +11,11 @@ import {
   validateDescription,
   validateServings,
 } from "~/lib/validation";
-import { createRecipeDraft, parseRecipeStepsJson } from "~/lib/recipe-create.server";
+import {
+  createRecipeDraft,
+  parseRecipeStepsJson,
+  RecipeGraphTooLargeError,
+} from "~/lib/recipe-create.server";
 import {
   asCompatibleRecipeTagD1Database,
   parseRecipeAuthoringMetadataForm,
@@ -25,8 +29,11 @@ import {
 } from "~/lib/image-storage.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { FOOD_IMAGE_ACCEPT, RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
-import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
-import { createCover, setActiveRecipeCover } from "~/lib/recipe-cover.server";
+import {
+  ACTIVE_RECIPE_TITLE_CONFLICT_ERROR,
+  isActiveRecipeTitleConflictError,
+  validateActiveRecipeTitleUnique,
+} from "~/lib/recipe-title-uniqueness.server";
 import { scheduleAiPlaceholderCover } from "~/lib/ai-placeholder-cover.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
 import {
@@ -150,7 +157,9 @@ export async function action({ request, context }: Route.ActionArgs) {
   const cloudflareEnv = getCloudflareEnv(context);
   const photosBucket = cloudflareEnv?.PHOTOS;
   const recipeId = crypto.randomUUID();
+  const coverId = crypto.randomUUID();
   let uploadedImageUrl = "";
+  let recipeCommitted = false;
 
   if (imageFile) {
     try {
@@ -181,30 +190,25 @@ export async function action({ request, context }: Route.ActionArgs) {
         tags: metadata.tags,
       } : {}),
       steps: recipeSteps,
-    }, hasMetadataPayload ? {
+    }, {
+      coverMutation: uploadedImageUrl
+        ? {
+            kind: "uploaded",
+            coverId,
+            createdById: userId,
+            imageUrl: uploadedImageUrl,
+          }
+        : { kind: "placeholder", coverId, createdById: userId },
       nativeDatabase: asCompatibleRecipeTagD1Database(cloudflareEnv?.DB),
-    } : undefined);
+    });
+    recipeCommitted = true;
 
     if (uploadedImageUrl) {
-      const uploadedCover = await createCover(database, {
-        recipeId: recipe.id,
-        imageUrl: uploadedImageUrl,
-        sourceType: "chef-upload",
-        status: "ready",
-        createdById: userId,
-        sourceImageUrl: uploadedImageUrl,
-        generationStatus: "none",
-      });
-      await setActiveRecipeCover(database, {
-        recipeId: recipe.id,
-        coverId: uploadedCover.id,
-        variant: "image",
-      });
       await scheduleSpoonCoverStylization({
         db: database,
         userId,
         recipeId: recipe.id,
-        coverId: uploadedCover.id,
+        coverId,
         rawPhotoUrl: uploadedImageUrl,
         recipeTitle: trimmedTitle,
         env: cloudflareEnv,
@@ -212,20 +216,12 @@ export async function action({ request, context }: Route.ActionArgs) {
         sourceType: "chef-upload",
       });
     } else {
-      const placeholderCover = await createCover(database, {
-        recipeId: recipe.id,
-        imageUrl: "",
-        sourceType: "ai-placeholder",
-        status: "processing",
-        createdById: userId,
-        generationStatus: "processing",
-      });
       const waitUntil = context.cloudflare?.ctx?.waitUntil;
       const task = scheduleAiPlaceholderCover({
         db: database,
         userId,
         recipeId: recipe.id,
-        coverId: placeholderCover.id,
+        coverId,
         title: trimmedTitle,
         description: trimmedDescription,
         env: cloudflareEnv,
@@ -240,6 +236,8 @@ export async function action({ request, context }: Route.ActionArgs) {
 
     return redirect(`/recipes/${recipe.id}`);
   } catch (error) {
+    const titleConflict = isActiveRecipeTitleConflictError(error);
+    const graphTooLarge = error instanceof RecipeGraphTooLargeError;
     // The recipe create failed after the image landed in R2. Record the real
     // failure first (it was previously discarded behind a generic 500), then
     // best-effort roll back the orphaned upload — capturing if that delete also
@@ -250,7 +248,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     const waitUntil = context.cloudflare?.ctx?.waitUntil
       ? context.cloudflare.ctx.waitUntil.bind(context.cloudflare.ctx)
       : undefined;
-    if (postHogConfig.enabled) {
+    if (postHogConfig.enabled && !titleConflict && !graphTooLarge) {
       const capture = captureException(postHogConfig, {
         error,
         distinctId: userId,
@@ -263,6 +261,9 @@ export async function action({ request, context }: Route.ActionArgs) {
         void capture;
       }
     }
+    if (recipeCommitted) {
+      return redirect(`/recipes/${recipeId}`);
+    }
     if (uploadedImageUrl) {
       await deleteStoredImageWithCapture({
         bucket: photosBucket,
@@ -273,6 +274,17 @@ export async function action({ request, context }: Route.ActionArgs) {
         distinctId: userId,
         extras: { surface: "recipe_create" },
       });
+    }
+
+    if (titleConflict) {
+      return data(
+        { errors: { title: ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } },
+        { status: 400 },
+      );
+    }
+
+    if (graphTooLarge) {
+      return data({ errors: { general: error.message } }, { status: 400 });
     }
 
     return data(
