@@ -911,7 +911,7 @@ describe("search.server", () => {
     const querySpy = vi.spyOn(db, "$queryRawUnsafe");
     const results = await searchSpoonjoy(db, options);
     const searchCall = querySpy.mock.calls.find(([sql]) => (
-      typeof sql === "string" && sql.includes('FROM "SearchDocument"')
+      typeof sql === "string" && sql.includes('INNER JOIN "Recipe" AS recipe')
     ));
     querySpy.mockRestore();
 

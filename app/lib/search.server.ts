@@ -14,6 +14,12 @@ import type {
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { toDate, toNumber } from "~/lib/d1-coerce.server";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
+import {
+  normalizeRecipeCourse,
+  normalizeRecipeTags,
+  RecipeTagValidationError,
+  type RecipeCourse,
+} from "~/lib/recipe-tags.server";
 
 export const SEARCH_SCOPES = ["all", "recipes", "cookbooks", "chefs", "shopping-list"] as const;
 export type SearchScope = (typeof SEARCH_SCOPES)[number];
@@ -37,6 +43,8 @@ export interface SearchResult {
 export interface SearchOptions {
   query?: string | null;
   scope?: SearchScope;
+  course?: string | null;
+  tags?: string[];
   viewerId?: string | null;
   ownerId?: string | null;
   limit?: number;
@@ -200,6 +208,35 @@ export function normalizeSearchScope(value: string | null | undefined): SearchSc
   return "all";
 }
 
+export class SearchValidationError extends Error {
+  readonly field: "scope" | "course" | "tags";
+
+  constructor(field: "scope" | "course" | "tags", message: string) {
+    super(message);
+    this.name = "SearchValidationError";
+    this.field = field;
+  }
+}
+
+export function normalizeSearchRecipeFilters(
+  courseValue: string | null | undefined,
+  rawTags: readonly string[],
+): { course: RecipeCourse | null; tags: string[] } {
+  if (rawTags.length > 10) {
+    throw new SearchValidationError("tags", "At most 10 tag filters are allowed");
+  }
+
+  try {
+    const course = normalizeRecipeCourse(courseValue ? courseValue : null);
+    const tags = normalizeRecipeTags([...rawTags]).map((tag) => tag.normalizedLabel);
+    return { course, tags };
+  } catch (error) {
+    if (!(error instanceof RecipeTagValidationError)) throw error;
+    const field = error.field === "course" ? "course" : "tags";
+    throw new SearchValidationError(field, error.message);
+  }
+}
+
 export function normalizeSearchLimit(value: number | null | undefined): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return DEFAULT_SEARCH_LIMIT;
@@ -258,21 +295,43 @@ function entityTypesForSearch(scope: SearchScope, viewerId: string | null | unde
   return scopedTypes.filter((type) => type !== "shopping-list-item");
 }
 
-function buildWhereClause(entityTypes: SearchEntityType[], ownerId: string | null | undefined, viewerId: string | null | undefined) {
+function buildWhereClause(
+  entityTypes: SearchEntityType[],
+  ownerId: string | null | undefined,
+  viewerId: string | null | undefined,
+  filters: { course: RecipeCourse | null; tags: string[] },
+) {
   const values: Array<string | number> = [...entityTypes];
   const placeholders = entityTypes.map(() => "?").join(", ");
-  const conditions = [`entityType IN (${placeholders})`];
+  const conditions = [`"SearchDocument"."entityType" IN (${placeholders})`];
 
   if (ownerId) {
-    conditions.push("ownerId = ?");
+    conditions.push('"SearchDocument"."ownerId" = ?');
     values.push(ownerId);
   }
 
   if (viewerId) {
-    conditions.push("(entityType != 'shopping-list-item' OR ownerId = ?)");
+    conditions.push(`(
+      "SearchDocument"."entityType" != 'shopping-list-item'
+      OR "SearchDocument"."ownerId" = ?
+    )`);
     values.push(viewerId);
   } else {
-    conditions.push("entityType != 'shopping-list-item'");
+    conditions.push(`"SearchDocument"."entityType" != 'shopping-list-item'`);
+  }
+
+  if (filters.course) {
+    conditions.push('recipe."course" = ?');
+    values.push(filters.course);
+  }
+  for (const tag of filters.tags) {
+    conditions.push(`EXISTS (
+      SELECT 1
+      FROM "RecipeTag" AS tag
+      WHERE tag."recipeId" = recipe."id"
+        AND tag."normalizedLabel" = ?
+    )`);
+    values.push(tag);
   }
 
   return { sql: conditions.join(" AND "), values };
@@ -759,8 +818,15 @@ export async function ensureSearchIndexFresh(database: PrismaClient): Promise<nu
 export async function searchSpoonjoy(database: PrismaClient, options: SearchOptions = {}): Promise<SearchResult[]> {
   const scope = options.scope ?? "all";
   const query = options.query?.trim() ?? "";
+  const filters = normalizeSearchRecipeFilters(options.course, options.tags ?? []);
+  const hasRecipeFilters = Boolean(filters.course || filters.tags.length > 0);
+  if (hasRecipeFilters && scope !== "all" && scope !== "recipes") {
+    throw new SearchValidationError("scope", "Recipe filters require all or recipes scope");
+  }
   const limit = normalizeSearchLimit(options.limit);
-  const entityTypes = entityTypesForSearch(scope, options.viewerId);
+  const entityTypes = hasRecipeFilters
+    ? ["recipe" as const]
+    : entityTypesForSearch(scope, options.viewerId);
 
   if (entityTypes.length === 0) {
     return [];
@@ -773,26 +839,33 @@ export async function searchSpoonjoy(database: PrismaClient, options: SearchOpti
 
   await ensureSearchIndexFresh(database);
 
-  const where = buildWhereClause(entityTypes, options.ownerId, options.viewerId);
+  const where = buildWhereClause(entityTypes, options.ownerId, options.viewerId, filters);
+  const recipeJoin = hasRecipeFilters
+    ? `INNER JOIN "Recipe" AS recipe
+        ON recipe."id" = "SearchDocument"."entityId"
+        AND "SearchDocument"."entityType" = 'recipe'
+        AND recipe."deletedAt" IS NULL`
+    : "";
 
   if (ftsQuery) {
     const rows = await database.$queryRawUnsafe<SearchRow[]>(
       `SELECT
-        entityType,
-        entityId,
-        ownerId,
-        ownerUsername,
-        title,
-        subtitle,
-        body,
-        href,
-        imageUrl,
-        metadata,
+        "SearchDocument"."entityType" AS entityType,
+        "SearchDocument"."entityId" AS entityId,
+        "SearchDocument"."ownerId" AS ownerId,
+        "SearchDocument"."ownerUsername" AS ownerUsername,
+        "SearchDocument"."title" AS title,
+        "SearchDocument"."subtitle" AS subtitle,
+        "SearchDocument"."body" AS body,
+        "SearchDocument"."href" AS href,
+        "SearchDocument"."imageUrl" AS imageUrl,
+        "SearchDocument"."metadata" AS metadata,
         bm25("SearchDocument", 0, 0, 0, 0, 0, 8, 3, 1, 0, 0, 0) AS rank,
         snippet("SearchDocument", -1, '', '', '...', 24) AS snippet
       FROM "SearchDocument"
+      ${recipeJoin}
       WHERE "SearchDocument" MATCH ? AND ${where.sql}
-      ORDER BY rank ASC, title COLLATE NOCASE ASC
+      ORDER BY rank ASC, "SearchDocument"."title" COLLATE NOCASE ASC
       LIMIT ?`,
       ftsQuery,
       ...where.values,
@@ -804,21 +877,22 @@ export async function searchSpoonjoy(database: PrismaClient, options: SearchOpti
 
   const rows = await database.$queryRawUnsafe<SearchRow[]>(
     `SELECT
-      entityType,
-      entityId,
-      ownerId,
-      ownerUsername,
-      title,
-      subtitle,
-      body,
-      href,
-      imageUrl,
-      metadata,
+      "SearchDocument"."entityType" AS entityType,
+      "SearchDocument"."entityId" AS entityId,
+      "SearchDocument"."ownerId" AS ownerId,
+      "SearchDocument"."ownerUsername" AS ownerUsername,
+      "SearchDocument"."title" AS title,
+      "SearchDocument"."subtitle" AS subtitle,
+      "SearchDocument"."body" AS body,
+      "SearchDocument"."href" AS href,
+      "SearchDocument"."imageUrl" AS imageUrl,
+      "SearchDocument"."metadata" AS metadata,
       0.0 AS rank,
-      body AS snippet
+      "SearchDocument"."body" AS snippet
     FROM "SearchDocument"
+    ${recipeJoin}
     WHERE ${where.sql}
-    ORDER BY sortAt DESC, title COLLATE NOCASE ASC
+    ORDER BY "SearchDocument"."sortAt" DESC, "SearchDocument"."title" COLLATE NOCASE ASC
     LIMIT ?`,
     ...where.values,
     limit
