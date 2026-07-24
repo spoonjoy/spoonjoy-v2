@@ -466,10 +466,11 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 **Acceptance**: Empty/malformed/multi-filter/pagination/freshness branches are covered and review converges.
 **Completed**: Commit `7faf16d2` hardens the canonical filter boundary, live search/filter/scope/pagination state, Unicode identity preservation, iterable and prepared-filter validation, accessibility behavior, exact expected-4xx telemetry classification, and desktop/mobile visual evidence. The focused 123-test matrix and isolated 390-file/9,791-test full gate both reach exact 100% coverage; typecheck, production build, 9/9 boundary checks, immutable migration digest, zero-residue cleanup, and final pagination plus telemetry review all converge.
 
-### ⬜ Unit 6.4a: Web Tag Read Parity - Tests
+### ✅ Unit 6.4a: Web Tag Read Parity - Tests
 **What**: Add failing persisted-data tests only for recipe-detail metadata, My Recipes cards, and global-search cards; assert deterministic public course/tags and no AI/save metadata. REST/MCP serializers are already complete in Unit 4.1 and remain regression tests, not red targets.
 **Output**: Red web read-surface integration tests.
 **Acceptance**: Tests fail only because persisted tag data does not yet reach the three named web surfaces.
+**Completed**: Commit `1702b327` freezes three persisted target/decoy integration contracts across recipe detail, My Recipes, and global search. The exact red split is 3 intended failures with 181 surrounding tests passing; semantic card assertions require deterministic per-recipe course/tags while rejecting personalized save and categorization-source leakage. Three harsh review rounds close global and cross-recipe projection escape hatches.
 
 ### ⬜ Unit 6.4b: Web Tag Read Parity - Implementation
 **What**: Complete includes/displays in `app/lib/recipe-detail.server.ts`, `app/routes/recipes.$id.tsx`, `app/routes/my-recipes.tsx`, `app/routes/search.tsx`, and `app/lib/search.server.ts` for the three Unit 6.4a web surfaces; do not change REST/MCP serializers.
@@ -818,3 +819,4 @@ Ship Clem's accepted feedback as focused Spoonjoy product behavior: cross-device
 - 2026-07-23 18:02 Unit 6.2b complete: commit `6717c1cf` ships atomic course/tag authoring across native D1 and local Prisma raw executors; 186 app, 75 Workerd, 152 adjacent, and 9 boundary checks plus compiler/build pass, and four harsh review rounds converge.
 - 2026-07-23 23:52 Unit 6.2c complete: commit `9b1f0bf1` passes 9,742 app tests and 135 Workers tests at exact 100% coverage, warning-clean typecheck/build, 9/9 boundaries, immutable 0025 hash verification, and three converged cold review lenses after owner-recovery and cover-race repairs.
 - 2026-07-24 02:14 Unit 6.3c complete: commit `7faf16d2` passes 9,791 app tests at exact 100% coverage, warning-clean typecheck/build, 9/9 boundaries, immutable 0025 hash verification, five-screenshot visual QA, seven-category zero-residue cleanup, and converged pagination plus telemetry reviews after repairing every audit finding.
+- 2026-07-24 02:30 Unit 6.4a complete: commit `1702b327` freezes the three persisted web read surfaces with target/decoy association proofs, exact 3-red/181-green compatibility evidence, clean typecheck and boundaries, and three-round harsh review convergence.
