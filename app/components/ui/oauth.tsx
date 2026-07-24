@@ -29,12 +29,20 @@ interface OAuthButtonProps {
 
 export function OAuthButton({ provider, className, redirectTo }: OAuthButtonProps) {
   const { label } = providerStyles[provider]
-  const action = redirectTo
-    ? `/auth/${provider}?redirectTo=${encodeURIComponent(redirectTo)}`
-    : `/auth/${provider}`
 
+  // Native GET navigation — deliberately NOT POST. Spoonjoy's service worker
+  // (public/sw.js) calls clients.claim(), so it controls every open page. A
+  // controlled client aborts a top-level navigation whose response is a
+  // *cross-origin* redirect (net::ERR_ABORTED) — which is exactly what OAuth
+  // start returns (302 to appleid.apple.com / accounts.google.com / github.com).
+  // The SW resolves GET navigations in-worker via respondWith(fetch(...)), so a
+  // GET reaches the provider; a POST was bypassed by the SW and hit the native
+  // path that aborts. redirectTo rides as a query param (serialized from the
+  // hidden input, so it survives Referer stripping) and the route's loader reads
+  // it from the query exactly as the old POST action did.
   return (
-    <form action={action} method="post">
+    <form action={`/auth/${provider}`} method="get">
+      {redirectTo ? <input type="hidden" name="redirectTo" value={redirectTo} /> : null}
       <Button type="submit" className={clsx('w-full', className)}>
         {label}
       </Button>
