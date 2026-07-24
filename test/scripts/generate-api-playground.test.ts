@@ -38,9 +38,19 @@ describe("generate-api-playground", () => {
     expect(manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes/{id}")).toMatchObject({
       params: expect.arrayContaining([
         expect.objectContaining({ name: "id", in: "path", placeholder: "recipe_1" }),
+        expect.objectContaining({
+          name: "scale",
+          in: "query",
+          schema: { type: "number", minimum: 0.1, maximum: 100 },
+        }),
         expect.objectContaining({ name: "X-Request-Id", in: "header" }),
       ]),
     });
+    const recipeDetailExamples = operation(manifest, "GET /api/v1/recipes/{id}").responseExamples;
+    expect(recipeDetailExamples.map((example) => example.name)).toEqual(expect.arrayContaining(["unscaled", "scaled"]));
+    expect(recipeDetailExamples.find((example) => example.name === "unscaled")?.example).not.toContain('"scale"');
+    expect(recipeDetailExamples.find((example) => example.name === "scaled")?.example)
+      .toContain('"appliedTo": "ingredient_quantities"');
     const cookbookRecipeDelete = manifest.operations.find((operation) => operation.id === "DELETE /api/v1/cookbooks/{id}/recipes/{recipeId}");
     const cookbookRecipeDeleteExamples = cookbookRecipeDelete?.responseExamples.map((example) => example.example).join("\n") ?? "";
     expect(cookbookRecipeDeleteExamples).toContain("\"removed\": true");

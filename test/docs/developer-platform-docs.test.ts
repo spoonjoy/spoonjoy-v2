@@ -13,9 +13,13 @@ function readProjectFile(path: string) {
 
 const apiDocs = readProjectFile("docs/api.md");
 const claudeConnectorDocs = readProjectFile("docs/claude-connector.md");
+const developersSource = readProjectFile("app/routes/developers.tsx");
 const ouroborosMcpDocs = readProjectFile("docs/ouroboros-mcp.md");
 const oauthRoutesSource = readProjectFile("app/lib/oauth-routes.server.ts");
 const oauthServerSource = readProjectFile("app/lib/oauth-server.server.ts");
+
+const LEGACY_IMPORT_BOUNDARY =
+  /legacy agent\/API operation [`]?import_recipe_from_url[`]? remains available[\s\S]{0,220}not an MCP tool[\s\S]{0,220}no first-party import UI/i;
 
 const uniqueResourcePaths = Array.from(new Set(API_V1_RESOURCES.map((resource) => resource.path))).sort();
 const uniqueScopes = Array.from(
@@ -59,6 +63,19 @@ describe("developer platform docs drift", () => {
     expect(apiDocs).toContain("idempotency");
   });
 
+  it("documents private saved recipes independently from cookbook membership", () => {
+    for (const text of [apiDocs, developersSource]) {
+      expect(text).toContain("/api/v1/saved-recipes");
+      expect(text).toContain("/api/v1/saved-recipes/{recipeId}");
+      expect(text).toMatch(/saved recipes/i);
+      expect(text).toMatch(/independent from cookbook membership/i);
+      expect(text).toContain("kitchen:read");
+      expect(text).toContain("kitchen:write");
+      expect(text).toContain("private, no-store");
+      expect(text).toMatch(/cursor/i);
+    }
+  });
+
   it("keeps MCP docs pointed at the same auth and REST surface", () => {
     for (const docs of [claudeConnectorDocs, ouroborosMcpDocs]) {
       expect(docs).toContain("/api");
@@ -89,5 +106,20 @@ describe("developer platform docs drift", () => {
       expect(text).not.toMatch(/no refresh tokens?/i);
       expect(text).not.toMatch(/no refresh/i);
     }
+  });
+
+  it.each([
+    ["docs/api.md", apiDocs],
+    ["app/routes/developers.tsx", developersSource],
+    ["docs/claude-connector.md", claudeConnectorDocs],
+  ])("keeps the legacy import boundary coherent in %s", (_path, text) => {
+    expect(text).toMatch(LEGACY_IMPORT_BOUNDARY);
+    expect(text).not.toMatch(
+      /import_recipe_from_url[\s\S]{0,140}(?:is|remains) an MCP tool/i,
+    );
+  });
+
+  it("does not claim that the MCP and legacy HTTP APIs have identical tool surfaces", () => {
+    expect(claudeConnectorDocs).not.toContain("same tool surface");
   });
 });

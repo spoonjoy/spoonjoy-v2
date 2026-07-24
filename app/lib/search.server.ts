@@ -7,12 +7,19 @@ import type {
   RecipeCover,
   RecipeInCookbook,
   RecipeStep,
+  RecipeTag,
   Unit,
   User,
 } from "@prisma/client";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { toDate, toNumber } from "~/lib/d1-coerce.server";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
+import {
+  normalizeRecipeCourse,
+  normalizeRecipeTags,
+  RecipeTagValidationError,
+  type RecipeCourse,
+} from "~/lib/recipe-tags.server";
 
 export const SEARCH_SCOPES = ["all", "recipes", "cookbooks", "chefs", "shopping-list"] as const;
 export type SearchScope = (typeof SEARCH_SCOPES)[number];
@@ -36,6 +43,9 @@ export interface SearchResult {
 export interface SearchOptions {
   query?: string | null;
   scope?: SearchScope;
+  course?: string | null;
+  tags?: string[];
+  normalizedFilters?: NormalizedSearchRecipeFilters;
   viewerId?: string | null;
   ownerId?: string | null;
   limit?: number;
@@ -93,6 +103,20 @@ interface RecipeCoverFingerprintRow {
   archivedAt: Date | string | number | bigint | null;
 }
 
+interface RecipeMetadataFingerprintRow {
+  recipeId: string;
+  course: string | null;
+}
+
+interface RecipeTagFingerprintRow {
+  id: string;
+  recipeId: string;
+  label: string;
+  normalizedLabel: string;
+  createdAt: Date | string | number | bigint;
+  updatedAt: Date | string | number | bigint;
+}
+
 const DEFAULT_SEARCH_LIMIT = 20;
 const MAX_SEARCH_LIMIT = 50;
 const SEARCH_INSERT_COLUMN_COUNT = 11;
@@ -102,6 +126,7 @@ const SEARCH_METADATA_ID = "current";
 const SEARCH_SOURCE_TABLES = [
   { tableName: "User", countKey: "userCount", latestKey: "userLatestAt" },
   { tableName: "Recipe", countKey: "recipeCount", latestKey: "recipeLatestAt" },
+  { tableName: "RecipeTag", countKey: "recipeTagCount", latestKey: "recipeTagLatestAt" },
   { tableName: "RecipeCover", countKey: "recipeCoverCount", latestKey: "recipeCoverLatestAt" },
   { tableName: "RecipeStep", countKey: "recipeStepCount", latestKey: "recipeStepLatestAt" },
   { tableName: "Ingredient", countKey: "ingredientCount", latestKey: "ingredientLatestAt" },
@@ -152,6 +177,8 @@ const SEARCH_SOURCE_FINGERPRINT_SQL = `SELECT
   (SELECT MAX("updatedAt") FROM "User") AS userLatestAt,
   (SELECT COUNT(*) FROM "Recipe") AS recipeCount,
   (SELECT MAX("updatedAt") FROM "Recipe") AS recipeLatestAt,
+  (SELECT COUNT(*) FROM "RecipeTag" rt INNER JOIN "Recipe" r ON r."id" = rt."recipeId" WHERE r."deletedAt" IS NULL) AS recipeTagCount,
+  (SELECT MAX(rt."updatedAt") FROM "RecipeTag" rt INNER JOIN "Recipe" r ON r."id" = rt."recipeId" WHERE r."deletedAt" IS NULL) AS recipeTagLatestAt,
   (SELECT COUNT(*) FROM "RecipeCover") AS recipeCoverCount,
   (SELECT MAX("createdAt") FROM "RecipeCover") AS recipeCoverLatestAt,
   (SELECT COUNT(*) FROM "RecipeStep") AS recipeStepCount,
@@ -180,6 +207,51 @@ export function normalizeSearchScope(value: string | null | undefined): SearchSc
   }
 
   return "all";
+}
+
+export class SearchValidationError extends Error {
+  readonly field: "scope" | "course" | "tags";
+
+  constructor(field: "scope" | "course" | "tags", message: string) {
+    super(message);
+    this.name = "SearchValidationError";
+    this.field = field;
+  }
+}
+
+export type NormalizedSearchRecipeFilters = {
+  course: RecipeCourse | null;
+  tags: readonly string[];
+  displayTags: readonly string[];
+};
+
+const PREPARED_SEARCH_RECIPE_FILTERS = new WeakSet<object>();
+
+export function normalizeSearchRecipeFilters(
+  courseValue: string | null | undefined,
+  rawTags: readonly string[],
+): NormalizedSearchRecipeFilters {
+  const tagSnapshot = [...rawTags];
+  if (tagSnapshot.length > 10) {
+    throw new SearchValidationError("tags", "At most 10 tag filters are allowed");
+  }
+  let course: RecipeCourse | null;
+  let normalizedTags: ReturnType<typeof normalizeRecipeTags>;
+  try {
+    course = normalizeRecipeCourse(courseValue ?? null);
+    normalizedTags = normalizeRecipeTags(tagSnapshot);
+  } catch (error) {
+    if (!(error instanceof RecipeTagValidationError)) throw error;
+    const field = error.field === "course" ? "course" : "tags";
+    throw new SearchValidationError(field, error.message);
+  }
+  const filters = Object.freeze({
+    course,
+    tags: Object.freeze(normalizedTags.map((tag) => tag.normalizedLabel)),
+    displayTags: Object.freeze(normalizedTags.map((tag) => tag.label)),
+  });
+  PREPARED_SEARCH_RECIPE_FILTERS.add(filters);
+  return filters;
 }
 
 export function normalizeSearchLimit(value: number | null | undefined): number {
@@ -240,21 +312,43 @@ function entityTypesForSearch(scope: SearchScope, viewerId: string | null | unde
   return scopedTypes.filter((type) => type !== "shopping-list-item");
 }
 
-function buildWhereClause(entityTypes: SearchEntityType[], ownerId: string | null | undefined, viewerId: string | null | undefined) {
+function buildWhereClause(
+  entityTypes: SearchEntityType[],
+  ownerId: string | null | undefined,
+  viewerId: string | null | undefined,
+  filters: { course: RecipeCourse | null; tags: readonly string[] },
+) {
   const values: Array<string | number> = [...entityTypes];
   const placeholders = entityTypes.map(() => "?").join(", ");
-  const conditions = [`entityType IN (${placeholders})`];
+  const conditions = [`"SearchDocument"."entityType" IN (${placeholders})`];
 
   if (ownerId) {
-    conditions.push("ownerId = ?");
+    conditions.push('"SearchDocument"."ownerId" = ?');
     values.push(ownerId);
   }
 
   if (viewerId) {
-    conditions.push("(entityType != 'shopping-list-item' OR ownerId = ?)");
+    conditions.push(`(
+      "SearchDocument"."entityType" != 'shopping-list-item'
+      OR "SearchDocument"."ownerId" = ?
+    )`);
     values.push(viewerId);
   } else {
-    conditions.push("entityType != 'shopping-list-item'");
+    conditions.push(`"SearchDocument"."entityType" != 'shopping-list-item'`);
+  }
+
+  if (filters.course) {
+    conditions.push('recipe."course" = ?');
+    values.push(filters.course);
+  }
+  for (const tag of filters.tags) {
+    conditions.push(`EXISTS (
+      SELECT 1
+      FROM "RecipeTag" AS tag
+      WHERE tag."recipeId" = recipe."id"
+        AND tag."normalizedLabel" = ?
+    )`);
+    values.push(tag);
   }
 
   return { sql: conditions.join(" AND "), values };
@@ -338,17 +432,73 @@ async function currentRecipeCoverContentHash(database: PrismaClient): Promise<st
   return `sha256:${await sha256Hex(payload)}`;
 }
 
+async function currentRecipeMetadataContentHashes(database: PrismaClient): Promise<{
+  recipe: string;
+  recipeTag: string;
+}> {
+  const [recipeRows, recipeTagRows] = await Promise.all([
+    database.$queryRawUnsafe<RecipeMetadataFingerprintRow[]>(
+      `SELECT
+          r."id" AS "recipeId",
+          r."course" AS "course"
+        FROM "Recipe" r
+        WHERE r."deletedAt" IS NULL
+        ORDER BY r."id" COLLATE BINARY ASC`,
+    ),
+    database.$queryRawUnsafe<RecipeTagFingerprintRow[]>(
+      `SELECT
+          rt."id" AS "id",
+          rt."recipeId" AS "recipeId",
+          rt."label" AS "label",
+          rt."normalizedLabel" AS "normalizedLabel",
+          rt."createdAt" AS "createdAt",
+          rt."updatedAt" AS "updatedAt"
+        FROM "RecipeTag" rt
+        INNER JOIN "Recipe" r ON r."id" = rt."recipeId"
+        WHERE r."deletedAt" IS NULL
+        ORDER BY
+          rt."recipeId" COLLATE BINARY ASC,
+          rt."normalizedLabel" COLLATE BINARY ASC,
+          rt."id" COLLATE BINARY ASC`,
+    ),
+  ]);
+  const recipePayload = JSON.stringify(recipeRows.map((row) => ({
+    recipeId: row.recipeId,
+    course: row.course,
+  })));
+  const recipeTagPayload = JSON.stringify(recipeTagRows.map((row) => ({
+    id: row.id,
+    recipeId: row.recipeId,
+    label: row.label,
+    normalizedLabel: row.normalizedLabel,
+    createdAt: aggregateDateString(row.createdAt),
+    updatedAt: aggregateDateString(row.updatedAt),
+  })));
+
+  return {
+    recipe: `sha256:${await sha256Hex(recipePayload)}`,
+    recipeTag: `sha256:${await sha256Hex(recipeTagPayload)}`,
+  };
+}
+
 async function searchSourceFingerprint(database: PrismaClient): Promise<string> {
-  const [rows, recipeCoverContentHash] = await Promise.all([
+  const [rows, recipeCoverContentHash, recipeMetadataContentHashes] = await Promise.all([
     database.$queryRawUnsafe<SearchSourceFingerprintRow[]>(SEARCH_SOURCE_FINGERPRINT_SQL),
     currentRecipeCoverContentHash(database),
+    currentRecipeMetadataContentHashes(database),
   ]);
   const row = rows[0]!;
   const normalizedRows = SEARCH_SOURCE_TABLES.map((sourceTable) => ({
     tableName: sourceTable.tableName,
     rowCount: toNumber(row[sourceTable.countKey] as number | bigint),
     latestAt: aggregateDateString(row[sourceTable.latestKey] as Date | string | number | bigint | null),
-    contentHash: sourceTable.tableName === "RecipeCover" ? recipeCoverContentHash : null,
+    contentHash: sourceTable.tableName === "Recipe"
+      ? recipeMetadataContentHashes.recipe
+      : sourceTable.tableName === "RecipeTag"
+        ? recipeMetadataContentHashes.recipeTag
+        : sourceTable.tableName === "RecipeCover"
+          ? recipeCoverContentHash
+          : null,
   }));
 
   return JSON.stringify(normalizedRows);
@@ -435,6 +585,9 @@ async function recipeDocuments(database: PrismaClient): Promise<SearchDocumentIn
     where: { deletedAt: null },
     orderBy: { id: "asc" },
   });
+  const tags = await database.recipeTag.findMany({
+    where: { recipe: { deletedAt: null } },
+  });
   const covers = await database.recipeCover.findMany();
   const steps = await database.recipeStep.findMany({
     orderBy: [{ recipeId: "asc" }, { stepNum: "asc" }],
@@ -458,6 +611,7 @@ async function recipeDocuments(database: PrismaClient): Promise<SearchDocumentIn
   const ingredientRefById = new Map(ingredientRefs.map((ingredientRef: IngredientRef) => [ingredientRef.id, ingredientRef]));
   const cookbookById = new Map(cookbooks.map((cookbook: Cookbook) => [cookbook.id, cookbook]));
   const cookbookLinksByRecipeId = groupedBy(recipeCookbooks, (link: RecipeInCookbook) => link.recipeId);
+  const tagsByRecipeId = groupedBy(tags, (tag: RecipeTag) => tag.recipeId);
 
   return recipes.map((recipe: Recipe) => {
     const chef = userById.get(recipe.chefId)!;
@@ -487,6 +641,12 @@ async function recipeDocuments(database: PrismaClient): Promise<SearchDocumentIn
         )
       )
     );
+    const recipeTags = tagsByRecipeId.get(recipe.id) ?? [];
+    const tagBySortKey = new Map(recipeTags.map((tag) => [
+      `${tag.normalizedLabel}\u0000${tag.id}`,
+      tag,
+    ]));
+    const tagLabels = [...tagBySortKey.keys()].sort().map((sortKey) => tagBySortKey.get(sortKey)!.label);
 
     const coverDisplay = getRecipeCoverDisplay(recipe, coversByRecipeId.get(recipe.id) ?? []);
 
@@ -503,6 +663,7 @@ async function recipeDocuments(database: PrismaClient): Promise<SearchDocumentIn
         recipe.sourceUrl,
         chef.username,
         ...cookbookTitles,
+        ...tagLabels,
         ...stepText,
       ]),
       href: `/recipes/${recipe.id}`,
@@ -510,6 +671,8 @@ async function recipeDocuments(database: PrismaClient): Promise<SearchDocumentIn
       metadata: {
         servings: recipe.servings,
         chefUsername: chef.username,
+        course: recipe.course,
+        tags: tagLabels,
         ingredientNames,
         stepCount: recipeSteps.length,
         cookbookTitles,
@@ -672,8 +835,28 @@ export async function ensureSearchIndexFresh(database: PrismaClient): Promise<nu
 export async function searchSpoonjoy(database: PrismaClient, options: SearchOptions = {}): Promise<SearchResult[]> {
   const scope = options.scope ?? "all";
   const query = options.query?.trim() ?? "";
+  const normalizedFilters = options.normalizedFilters;
+  let filters: NormalizedSearchRecipeFilters;
+  if (normalizedFilters) {
+    if (
+      !PREPARED_SEARCH_RECIPE_FILTERS.has(normalizedFilters)
+      || Object.prototype.hasOwnProperty.call(options, "course")
+      || Object.prototype.hasOwnProperty.call(options, "tags")
+    ) {
+      throw new SearchValidationError("tags", "Prepared recipe filters are invalid");
+    }
+    filters = normalizedFilters;
+  } else {
+    filters = normalizeSearchRecipeFilters(options.course, options.tags ?? []);
+  }
+  const hasRecipeFilters = Boolean(filters.course || filters.tags.length > 0);
+  if (hasRecipeFilters && scope !== "all" && scope !== "recipes") {
+    throw new SearchValidationError("scope", "Recipe filters require all or recipes scope");
+  }
   const limit = normalizeSearchLimit(options.limit);
-  const entityTypes = entityTypesForSearch(scope, options.viewerId);
+  const entityTypes = hasRecipeFilters
+    ? ["recipe" as const]
+    : entityTypesForSearch(scope, options.viewerId);
 
   if (entityTypes.length === 0) {
     return [];
@@ -686,26 +869,33 @@ export async function searchSpoonjoy(database: PrismaClient, options: SearchOpti
 
   await ensureSearchIndexFresh(database);
 
-  const where = buildWhereClause(entityTypes, options.ownerId, options.viewerId);
+  const where = buildWhereClause(entityTypes, options.ownerId, options.viewerId, filters);
+  const recipeJoin = hasRecipeFilters
+    ? `INNER JOIN "Recipe" AS recipe
+        ON recipe."id" = "SearchDocument"."entityId"
+        AND "SearchDocument"."entityType" = 'recipe'
+        AND recipe."deletedAt" IS NULL`
+    : "";
 
   if (ftsQuery) {
     const rows = await database.$queryRawUnsafe<SearchRow[]>(
       `SELECT
-        entityType,
-        entityId,
-        ownerId,
-        ownerUsername,
-        title,
-        subtitle,
-        body,
-        href,
-        imageUrl,
-        metadata,
+        "SearchDocument"."entityType" AS entityType,
+        "SearchDocument"."entityId" AS entityId,
+        "SearchDocument"."ownerId" AS ownerId,
+        "SearchDocument"."ownerUsername" AS ownerUsername,
+        "SearchDocument"."title" AS title,
+        "SearchDocument"."subtitle" AS subtitle,
+        "SearchDocument"."body" AS body,
+        "SearchDocument"."href" AS href,
+        "SearchDocument"."imageUrl" AS imageUrl,
+        "SearchDocument"."metadata" AS metadata,
         bm25("SearchDocument", 0, 0, 0, 0, 0, 8, 3, 1, 0, 0, 0) AS rank,
         snippet("SearchDocument", -1, '', '', '...', 24) AS snippet
       FROM "SearchDocument"
+      ${recipeJoin}
       WHERE "SearchDocument" MATCH ? AND ${where.sql}
-      ORDER BY rank ASC, title COLLATE NOCASE ASC
+      ORDER BY rank ASC, "SearchDocument"."title" COLLATE NOCASE ASC
       LIMIT ?`,
       ftsQuery,
       ...where.values,
@@ -717,21 +907,22 @@ export async function searchSpoonjoy(database: PrismaClient, options: SearchOpti
 
   const rows = await database.$queryRawUnsafe<SearchRow[]>(
     `SELECT
-      entityType,
-      entityId,
-      ownerId,
-      ownerUsername,
-      title,
-      subtitle,
-      body,
-      href,
-      imageUrl,
-      metadata,
+      "SearchDocument"."entityType" AS entityType,
+      "SearchDocument"."entityId" AS entityId,
+      "SearchDocument"."ownerId" AS ownerId,
+      "SearchDocument"."ownerUsername" AS ownerUsername,
+      "SearchDocument"."title" AS title,
+      "SearchDocument"."subtitle" AS subtitle,
+      "SearchDocument"."body" AS body,
+      "SearchDocument"."href" AS href,
+      "SearchDocument"."imageUrl" AS imageUrl,
+      "SearchDocument"."metadata" AS metadata,
       0.0 AS rank,
-      body AS snippet
+      "SearchDocument"."body" AS snippet
     FROM "SearchDocument"
+    ${recipeJoin}
     WHERE ${where.sql}
-    ORDER BY sortAt DESC, title COLLATE NOCASE ASC
+    ORDER BY "SearchDocument"."sortAt" DESC, "SearchDocument"."title" COLLATE NOCASE ASC
     LIMIT ?`,
     ...where.values,
     limit

@@ -1,0 +1,608 @@
+{
+  "browserErrors": [],
+  "captures": [
+    {
+      "name": "global-desktop",
+      "path": "/search?scope=all&q=tomato+soup&course=main&tag=quick+dinner&tag=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "screenshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback-product/worker/tasks/2026-07-19-1505-doing-clem-feedback-ship/unit-6.3c-visual/global-desktop.png",
+      "viewportWidth": 1440,
+      "viewportHeight": 900,
+      "documentWidth": 1440,
+      "documentHeight": 1198,
+      "bodyWidth": 1440,
+      "horizontalOverflow": false,
+      "controls": [
+        {
+          "label": "q",
+          "width": 612.453125,
+          "height": 70,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Search",
+          "width": 69.546875,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "course",
+          "width": 185.421875,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Apply",
+          "width": 62.859375,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Clear course",
+          "width": 73.375,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "tag",
+          "width": 277.59375,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Add",
+          "width": 52.078125,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Clear filters",
+          "width": 68.671875,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Remove tag quick dinner",
+          "width": 44,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Remove tag xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "width": 44,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        }
+      ],
+      "allEnabledControlsNativelyFocusable": true,
+      "allEnabledControlsMeetTargetSize": true,
+      "removeTargets": [
+        {
+          "width": 44,
+          "height": 44,
+          "right": 186.59375
+        },
+        {
+          "width": 44,
+          "height": 44,
+          "right": 577.96875
+        }
+      ]
+    },
+    {
+      "name": "global-mobile",
+      "path": "/search?scope=all&q=tomato+soup&course=main&tag=quick+dinner&tag=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "screenshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback-product/worker/tasks/2026-07-19-1505-doing-clem-feedback-ship/unit-6.3c-visual/global-mobile.png",
+      "viewportWidth": 390,
+      "viewportHeight": 844,
+      "documentWidth": 390,
+      "documentHeight": 1924,
+      "bodyWidth": 390,
+      "horizontalOverflow": false,
+      "controls": [
+        {
+          "label": "q",
+          "width": 276,
+          "height": 70,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Search",
+          "width": 350,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "course",
+          "width": 188.796875,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Apply",
+          "width": 71.828125,
+          "height": 46,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Clear course",
+          "width": 73.375,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "tag",
+          "width": 282.484375,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Add",
+          "width": 59.515625,
+          "height": 46,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Clear filters",
+          "width": 350,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Remove tag quick dinner",
+          "width": 44,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Remove tag xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "width": 44,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        }
+      ],
+      "allEnabledControlsNativelyFocusable": true,
+      "allEnabledControlsMeetTargetSize": true,
+      "removeTargets": [
+        {
+          "width": 44,
+          "height": 44,
+          "right": 166.59375
+        },
+        {
+          "width": 44,
+          "height": 44,
+          "right": 369
+        }
+      ]
+    },
+    {
+      "name": "my-recipes-desktop",
+      "path": "/my-recipes?q=tomato+soup&course=main&tag=quick+dinner&tag=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "screenshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback-product/worker/tasks/2026-07-19-1505-doing-clem-feedback-ship/unit-6.3c-visual/my-recipes-desktop.png",
+      "viewportWidth": 1440,
+      "viewportHeight": 900,
+      "documentWidth": 1440,
+      "documentHeight": 977,
+      "bodyWidth": 1440,
+      "horizontalOverflow": false,
+      "controls": [
+        {
+          "label": "q",
+          "width": 1161.390625,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Search",
+          "width": 69.546875,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Clear",
+          "width": 47.0625,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "course",
+          "width": 481.421875,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Apply",
+          "width": 62.859375,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Clear course",
+          "width": 73.375,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "tag",
+          "width": 573.59375,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Add",
+          "width": 52.078125,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Clear filters",
+          "width": 68.671875,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Remove tag quick dinner",
+          "width": 44,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Remove tag xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "width": 44,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        }
+      ],
+      "allEnabledControlsNativelyFocusable": true,
+      "allEnabledControlsMeetTargetSize": true,
+      "removeTargets": [
+        {
+          "width": 44,
+          "height": 44,
+          "right": 186.59375
+        },
+        {
+          "width": 44,
+          "height": 44,
+          "right": 577.96875
+        }
+      ]
+    },
+    {
+      "name": "my-recipes-mobile",
+      "path": "/my-recipes?q=tomato+soup&course=main&tag=quick+dinner&tag=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "screenshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback-product/worker/tasks/2026-07-19-1505-doing-clem-feedback-ship/unit-6.3c-visual/my-recipes-mobile.png",
+      "viewportWidth": 390,
+      "viewportHeight": 844,
+      "documentWidth": 390,
+      "documentHeight": 1183,
+      "bodyWidth": 390,
+      "horizontalOverflow": false,
+      "controls": [
+        {
+          "label": "q",
+          "width": 292,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Search",
+          "width": 350,
+          "height": 46,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Clear",
+          "width": 350,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "course",
+          "width": 188.796875,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Apply",
+          "width": 71.828125,
+          "height": 46,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Clear course",
+          "width": 73.375,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "tag",
+          "width": 282.484375,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Add",
+          "width": 59.515625,
+          "height": 46,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Clear filters",
+          "width": 350,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Remove tag quick dinner",
+          "width": 44,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Remove tag xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "width": 44,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        }
+      ],
+      "allEnabledControlsNativelyFocusable": true,
+      "allEnabledControlsMeetTargetSize": true,
+      "removeTargets": [
+        {
+          "width": 44,
+          "height": 44,
+          "right": 166.59375
+        },
+        {
+          "width": 44,
+          "height": 44,
+          "right": 369
+        }
+      ]
+    },
+    {
+      "name": "global-mobile-long-query",
+      "path": "/search?scope=all&q=qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq&course=main&tag=quick+dinner&tag=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "screenshotPath": "/Users/arimendelow/Projects/spoonjoy-v2-clem-feedback-product/worker/tasks/2026-07-19-1505-doing-clem-feedback-ship/unit-6.3c-visual/global-mobile-long-query.png",
+      "viewportWidth": 390,
+      "viewportHeight": 844,
+      "documentWidth": 390,
+      "documentHeight": 2064,
+      "bodyWidth": 390,
+      "horizontalOverflow": false,
+      "controls": [
+        {
+          "label": "q",
+          "width": 276,
+          "height": 70,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Search",
+          "width": 350,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "course",
+          "width": 188.796875,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Apply",
+          "width": 71.828125,
+          "height": 46,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Clear course",
+          "width": 73.375,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "tag",
+          "width": 282.484375,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Add",
+          "width": 59.515625,
+          "height": 46,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Clear filters",
+          "width": 350,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Remove tag quick dinner",
+          "width": 44,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        },
+        {
+          "label": "Remove tag xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "width": 44,
+          "height": 44,
+          "tabIndex": 0,
+          "disabled": false,
+          "nativelyFocusable": true,
+          "meetsTargetSize": true
+        }
+      ],
+      "allEnabledControlsNativelyFocusable": true,
+      "allEnabledControlsMeetTargetSize": true,
+      "removeTargets": [
+        {
+          "width": 44,
+          "height": 44,
+          "right": 166.59375
+        },
+        {
+          "width": 44,
+          "height": 44,
+          "right": 369
+        }
+      ]
+    }
+  ]
+}

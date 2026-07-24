@@ -5,10 +5,54 @@ import { authenticateApiToken, createApiCredential } from "~/lib/api-auth.server
 import { buildApiV1OpenApiDocument } from "~/lib/api-v1-openapi.server";
 import { callSpoonjoyMcpTool, listSpoonjoyMcpTools, type SpoonjoyMcpContext } from "~/lib/mcp/spoonjoy-tools.server";
 import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "~/lib/recipe-title-uniqueness.server";
+import * as recipeCoverServiceModule from "~/lib/recipe-cover-service.server";
 import { cleanupDatabase } from "../../helpers/cleanup";
+import { expectConsoleError } from "../../warning-policy";
 
 function parseJson(text: string) {
   return JSON.parse(text) as Record<string, any>;
+}
+
+const MCP_RECIPE_BASE_KEYS = [
+  "activeCover",
+  "chef",
+  "coverGenerationStatus",
+  "coverImageUrl",
+  "coverProvenanceLabel",
+  "coverSourceType",
+  "coverStatus",
+  "coverVariant",
+  "description",
+  "id",
+  "imageUrl",
+  "ingredientCount",
+  "servings",
+  "sourceRecipeId",
+  "sourceUrl",
+  "steps",
+  "title",
+] as const;
+
+const MCP_RECIPE_SUMMARY_BASE_KEYS = [
+  "activeCover",
+  "chef",
+  "coverGenerationStatus",
+  "coverImageUrl",
+  "coverProvenanceLabel",
+  "coverSourceType",
+  "coverStatus",
+  "coverVariant",
+  "description",
+  "id",
+  "imageUrl",
+  "ingredientNames",
+  "servings",
+  "stepCount",
+  "title",
+] as const;
+
+function expectExactKeys(value: Record<string, unknown>, keys: readonly string[]) {
+  expect(Object.keys(value).sort()).toEqual([...keys].sort());
 }
 
 const VALID_PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
@@ -109,12 +153,67 @@ async function withActiveShoppingIdentityIndex<T>(
     return await run();
   } finally {
     await db.shoppingListItem.deleteMany({});
-    await db.$executeRawUnsafe(`DROP INDEX IF EXISTS "${ACTIVE_SHOPPING_IDENTITY_INDEX}"`);
+    await db.$executeRawUnsafe(`DROP INDEX IF EXISTS "${LEGACY_SHOPPING_IDENTITY_INDEX}"`);
     await db.$executeRawUnsafe(`
-      CREATE UNIQUE INDEX IF NOT EXISTS "${LEGACY_SHOPPING_IDENTITY_INDEX}"
-      ON "ShoppingListItem" ("shoppingListId", "unitId", "ingredientRefId")
+      CREATE UNIQUE INDEX IF NOT EXISTS "${ACTIVE_SHOPPING_IDENTITY_INDEX}"
+      ON "ShoppingListItem" ("shoppingListId", "ingredientRefId", COALESCE('u:' || "unitId", 'n:'))
+      WHERE "deletedAt" IS NULL
     `);
   }
+}
+
+async function createNeutralMetadataMcpFixture(context: SpoonjoyMcpContext) {
+  context.defaultOwnerEmail = `metadata-boundary-${faker.string.alphanumeric(8).toLowerCase()}@example.com`;
+  const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+    title: `Metadata Boundary Noodles ${faker.string.alphanumeric(8)}`,
+    description: "Metadata boundary recipe",
+  }, context));
+  const owner = await context.db.user.findUniqueOrThrow({
+    where: { email: context.defaultOwnerEmail },
+  });
+  await context.db.recipe.update({
+    where: { id: created.recipe.id },
+    data: { course: "main" },
+  });
+  await context.db.recipeTag.createMany({
+    data: [
+      {
+        id: `tag-mcp-accent-${faker.string.alphanumeric(8)}`,
+        recipeId: created.recipe.id,
+        label: "Accent Apple",
+        normalizedLabel: "\u00e4pfel",
+      },
+      {
+        id: `tag-mcp-zebra-${faker.string.alphanumeric(8)}`,
+        recipeId: created.recipe.id,
+        label: "Zebra",
+        normalizedLabel: "zebra",
+      },
+    ],
+  });
+  await context.db.savedRecipe.create({
+    data: {
+      userId: owner.id,
+      recipeId: created.recipe.id,
+      savedAt: "2026-07-22T18:00:00.000Z",
+    },
+  });
+  const cookbook = parseJson(await callSpoonjoyMcpTool("create_cookbook", {
+    title: `Metadata Boundary Menus ${faker.string.alphanumeric(8)}`,
+  }, context));
+  await callSpoonjoyMcpTool("add_recipe_to_cookbook", {
+    cookbookId: cookbook.cookbook.id,
+    recipeId: created.recipe.id,
+  }, context);
+  const shopping = parseJson(await callSpoonjoyMcpTool("add_shopping_list_item", {
+    name: `Metadata Boundary Tomatoes ${faker.string.alphanumeric(8)}`,
+    quantity: 2,
+    unit: "Each",
+    categoryKey: "produce",
+    iconKey: "tomato",
+  }, context));
+
+  return { cookbook, created, owner, shopping };
 }
 
 describe("spoonjoy MCP tools", () => {
@@ -1489,6 +1588,377 @@ describe("spoonjoy MCP tools", () => {
     expect(missingChefSearch.recipes).toEqual([]);
   });
 
+  it("returns a committed MCP graph when postcommit hydration is unavailable", async () => {
+    const logger = { error: vi.fn() };
+    const hydrationError = new Error("MCP hydration unavailable");
+    const hydration = vi.spyOn(context.db.recipe, "findUniqueOrThrow")
+      .mockRejectedValueOnce(hydrationError);
+
+    let created;
+    try {
+      created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+        title: "MCP Hydration Recovery",
+        description: "Return the committed graph",
+        servings: "3",
+        steps: [{
+          title: "Mix",
+          description: "Mix gently",
+          duration: 4,
+          ingredients: [
+            { name: "Salt", quantity: 1, unit: "Pinch" },
+            { name: "Flour", quantity: 2, unit: "Cup" },
+          ],
+        }, {
+          description: "Rest briefly",
+          ingredients: [],
+        }],
+      }, { ...context, logger }));
+    } finally {
+      hydration.mockRestore();
+    }
+
+    expectExactKeys(created.recipe, MCP_RECIPE_BASE_KEYS);
+    expect(created.recipe).toMatchObject({
+      title: "MCP Hydration Recovery",
+      description: "Return the committed graph",
+      servings: "3",
+      activeCover: null,
+      imageUrl: null,
+      ingredientCount: 2,
+      steps: [
+        {
+          id: expect.any(String),
+          stepNum: 1,
+          title: "Mix",
+          description: "Mix gently",
+          duration: 4,
+          ingredients: [{
+            id: expect.any(String),
+            name: "flour",
+            quantity: 2,
+            unit: "cup",
+          }, {
+            id: expect.any(String),
+            name: "salt",
+            quantity: 1,
+            unit: "pinch",
+          }],
+        },
+        {
+          id: expect.any(String),
+          stepNum: 2,
+          title: null,
+          description: "Rest briefly",
+          duration: null,
+          ingredients: [],
+        },
+      ],
+    });
+    expect(logger.error).toHaveBeenCalledWith(
+      "MCP recipe postcommit hydration failed",
+      hydrationError,
+    );
+    await expect(context.db.recipe.findUnique({ where: { id: created.recipe.id } }))
+      .resolves.toMatchObject({ title: "MCP Hydration Recovery" });
+    await expect(context.db.recipeStep.count({ where: { recipeId: created.recipe.id } })).resolves.toBe(2);
+    await expect(context.db.ingredient.count({ where: { recipeId: created.recipe.id } })).resolves.toBe(2);
+  });
+
+  it("propagates MCP create hydration failure when committed recovery is unavailable", async () => {
+    const hydrationError = new Error("MCP hydration and recovery unavailable");
+    const logger = { error: vi.fn() };
+    const hydration = vi.spyOn(context.db.recipe, "findUniqueOrThrow")
+      .mockRejectedValueOnce(hydrationError);
+    const originalTransaction = context.db.$transaction;
+    let transactionCalls = 0;
+    context.db.$transaction = vi.fn(async (...args: Parameters<typeof context.db.$transaction>) => {
+      transactionCalls += 1;
+      if (transactionCalls === 2) return [[], [], [], []] as never;
+      return originalTransaction.apply(context.db, args);
+    }) as typeof context.db.$transaction;
+
+    try {
+      await expect(callSpoonjoyMcpTool("create_recipe", {
+        title: "MCP Unavailable Recovery",
+      }, { ...context, logger })).rejects.toBe(hydrationError);
+    } finally {
+      context.db.$transaction = originalTransaction;
+      hydration.mockRestore();
+    }
+
+    expect(transactionCalls).toBe(2);
+    expect(logger.error).toHaveBeenCalledWith(
+      "MCP recipe postcommit hydration failed",
+      hydrationError,
+    );
+  });
+
+  it("propagates an unrelated native MCP create batch failure", async () => {
+    const failure = new Error("MCP native create batch unavailable");
+    const statements: Array<{ sql: string; bind(...values: unknown[]): unknown }> = [];
+    const batch = vi.fn().mockRejectedValue(failure);
+    const nativeDatabase = {
+      prepare(sql: string) {
+        const statement = {
+          sql,
+          bind: vi.fn(() => statement),
+        };
+        statements.push(statement);
+        return statement;
+      },
+      batch,
+    };
+
+    await expect(callSpoonjoyMcpTool("create_recipe", {
+      title: "MCP Native Failure",
+    }, {
+      ...context,
+      env: { DB: nativeDatabase },
+    })).rejects.toBe(failure);
+
+    expect(batch).toHaveBeenCalledOnce();
+    expect(statements[0].sql).toMatch(/INSERT INTO "Recipe"/);
+    await expect(context.db.recipe.findFirst({
+      where: { title: "MCP Native Failure" },
+    })).resolves.toBeNull();
+  });
+
+  it("propagates an unrelated MCP recipe update failure", async () => {
+    const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "MCP Update Failure Source",
+    }, context));
+    const failure = new Error("MCP recipe update unavailable");
+    const transaction = vi.spyOn(context.db, "$transaction").mockRejectedValueOnce(failure);
+
+    try {
+      await expect(callSpoonjoyMcpTool("update_recipe", {
+        id: created.recipe.id,
+        title: "MCP Update Failure Target",
+      }, context)).rejects.toBe(failure);
+    } finally {
+      transaction.mockRestore();
+    }
+
+    await expect(context.db.recipe.findUniqueOrThrow({ where: { id: created.recipe.id } }))
+      .resolves.toMatchObject({ title: "MCP Update Failure Source" });
+  });
+
+  it("keeps MCP create and update recipe responses on the exact base serializer", async () => {
+    const fixture = await createNeutralMetadataMcpFixture(context);
+
+    expectExactKeys(fixture.created.recipe, MCP_RECIPE_BASE_KEYS);
+    const updated = parseJson(await callSpoonjoyMcpTool("update_recipe", {
+      id: fixture.created.recipe.id,
+      description: "Mutation shape stays base-only",
+    }, context));
+    expectExactKeys(updated, ["recipe"]);
+    expectExactKeys(updated.recipe, MCP_RECIPE_BASE_KEYS);
+  });
+
+  it("adds neutral metadata only to MCP get_recipe", async () => {
+    const fixture = await createNeutralMetadataMcpFixture(context);
+    const detail = parseJson(await callSpoonjoyMcpTool("get_recipe", {
+      id: fixture.created.recipe.id,
+    }, context));
+
+    expectExactKeys(detail.recipe, [...MCP_RECIPE_BASE_KEYS, "course", "tags"]);
+    expect(detail.recipe).toMatchObject({
+      id: fixture.created.recipe.id,
+      course: "main",
+      tags: ["Zebra", "Accent Apple"],
+    });
+  });
+
+  it("publishes a bounded number-only scale argument on MCP get_recipe", () => {
+    const getRecipe = toolByName("get_recipe");
+    const required = (getRecipe?.inputSchema as { required?: string[] } | undefined)?.required ?? [];
+
+    expect(schemaProperty("get_recipe", "scale")).toMatchObject({
+      type: "number",
+      minimum: 0.1,
+      maximum: 100,
+    });
+    expect(required).not.toContain("scale");
+    for (const tool of listSpoonjoyMcpTools()) {
+      if (tool.name === "get_recipe") continue;
+      const properties = (tool.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
+      expect(properties, tool.name).not.toHaveProperty("scale");
+    }
+  });
+
+  it("scales MCP get_recipe quantities without changing servings or stored values", async () => {
+    const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: `Scaled MCP Recipe ${faker.string.alphanumeric(8)}`,
+      servings: "4",
+      steps: [{
+        description: "Mix",
+        ingredients: [
+          { name: "Flour", quantity: 1.23456789, unit: "Cup" },
+          { name: "Salt", quantity: 0.5, unit: "Tsp" },
+        ],
+      }, {
+        description: "Finish",
+        ingredients: [{ name: "Butter", quantity: 2, unit: "Tbsp" }],
+      }],
+    }, context));
+    const ingredients = await context.db.ingredient.findMany({
+      where: { recipeId: created.recipe.id },
+      orderBy: { id: "asc" },
+    });
+
+    const unscaled = parseJson(await callSpoonjoyMcpTool("get_recipe", {
+      id: created.recipe.id,
+    }, context));
+    const scaled = parseJson(await callSpoonjoyMcpTool("get_recipe", {
+      id: created.recipe.id,
+      scale: 2.5,
+    }, context));
+
+    expectExactKeys(unscaled.recipe, [...MCP_RECIPE_BASE_KEYS, "course", "tags"]);
+    expect(unscaled.recipe).not.toHaveProperty("scale");
+    expectExactKeys(scaled.recipe, [...MCP_RECIPE_BASE_KEYS, "course", "tags", "scale"]);
+    expect(scaled.recipe).toEqual({
+      ...unscaled.recipe,
+      steps: unscaled.recipe.steps.map((step: Record<string, any>) => ({
+        ...step,
+        ingredients: step.ingredients.map((ingredient: Record<string, any>) => ({
+          ...ingredient,
+          quantity: Number((ingredient.quantity * 2.5).toFixed(6)),
+        })),
+      })),
+      scale: {
+        factor: 2.5,
+        appliedTo: "ingredient_quantities",
+        decimalPlaces: 6,
+      },
+    });
+    await expect(context.db.ingredient.findMany({
+      where: { recipeId: created.recipe.id },
+      orderBy: { id: "asc" },
+    })).resolves.toEqual(ingredients);
+  });
+
+  it.each([null, "2", Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 0.09, 101])(
+    "rejects invalid MCP get_recipe scale %j",
+    async (scale) => {
+      const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+        title: `Invalid Scale MCP Recipe ${faker.string.alphanumeric(8)}`,
+      }, context));
+
+      await expect(callSpoonjoyMcpTool("get_recipe", {
+        id: created.recipe.id,
+        scale,
+      }, context)).rejects.toThrow();
+    },
+  );
+
+  it("rejects MCP get_recipe multiplication overflow without changing storage", async () => {
+    const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: `Overflow MCP Recipe ${faker.string.alphanumeric(8)}`,
+      steps: [{
+        description: "Mix",
+        ingredients: [{ name: "Flour", quantity: 1, unit: "Cup" }],
+      }],
+    }, context));
+    const ingredient = await context.db.ingredient.findFirstOrThrow({
+      where: { recipeId: created.recipe.id },
+    });
+    await context.db.ingredient.update({
+      where: { id: ingredient.id },
+      data: { quantity: 1e308 },
+    });
+
+    await expect(callSpoonjoyMcpTool("get_recipe", {
+      id: created.recipe.id,
+      scale: 100,
+    }, context)).rejects.toThrow();
+    await expect(context.db.ingredient.findUniqueOrThrow({ where: { id: ingredient.id } }))
+      .resolves.toMatchObject({ quantity: 1e308 });
+  });
+
+  it("adds neutral metadata only to MCP search_recipes", async () => {
+    const fixture = await createNeutralMetadataMcpFixture(context);
+    const recipes = parseJson(await callSpoonjoyMcpTool("search_recipes", {
+      query: fixture.created.recipe.title,
+    }, context));
+
+    expect(recipes.recipes).toHaveLength(1);
+    expectExactKeys(recipes.recipes[0], [...MCP_RECIPE_SUMMARY_BASE_KEYS, "course", "tags"]);
+    expect(recipes.recipes[0]).toMatchObject({
+      id: fixture.created.recipe.id,
+      course: "main",
+      tags: ["Zebra", "Accent Apple"],
+    });
+  });
+
+  it("keeps authenticated MCP search_spoonjoy non-recipe branches byte-compatible", async () => {
+    const fixture = await createNeutralMetadataMcpFixture(context);
+    const global = parseJson(await callSpoonjoyMcpTool("search_spoonjoy", {
+      query: "Metadata Boundary",
+      scope: "all",
+    }, context));
+    const byType = new Map(global.results.map((result: { type: string }) => [result.type, result]));
+
+    expect([...byType.keys()].sort()).toEqual(["chef", "cookbook", "recipe", "shopping-list-item"]);
+    for (const result of global.results) {
+      expectExactKeys(result, [
+        "href", "id", "imageUrl", "metadata", "ownerId", "ownerUsername",
+        "score", "snippet", "subtitle", "title", "type",
+      ]);
+    }
+    expectExactKeys(byType.get("cookbook").metadata, ["authorUsername", "recipeCount", "recipeTitles"]);
+    expectExactKeys(byType.get("chef").metadata, ["cookbookCount", "recipeCount", "username"]);
+    expectExactKeys(byType.get("shopping-list-item").metadata, [
+      "categoryKey", "checked", "iconKey", "quantity", "sortIndex", "unit",
+    ]);
+    expect(JSON.stringify(global.results)).not.toContain("isSaved");
+    expect(byType.get("cookbook").id).toBe(fixture.cookbook.cookbook.id);
+    expect(byType.get("shopping-list-item").id).toBe(fixture.shopping.shoppingList.items[0].id);
+  });
+
+  it("adds neutral metadata without save state to authenticated MCP search_spoonjoy recipe results", async () => {
+    const fixture = await createNeutralMetadataMcpFixture(context);
+    const global = parseJson(await callSpoonjoyMcpTool("search_spoonjoy", {
+      query: fixture.created.recipe.title,
+      scope: "recipes",
+    }, context));
+    const recipe = global.results.find((result: { type: string }) => result.type === "recipe");
+
+    expect(recipe).toBeDefined();
+    expectExactKeys(recipe.metadata, [
+      "chefUsername", "cookbookTitles", "course", "coverProvenanceLabel", "coverSourceType",
+      "coverVariant", "ingredientNames", "servings", "stepCount", "tags",
+    ]);
+    expect(recipe.metadata).toMatchObject({
+      course: "main",
+      tags: ["Zebra", "Accent Apple"],
+    });
+    expect(recipe.metadata).not.toHaveProperty("isSaved");
+  });
+
+  it("returns null course and empty tags on MCP get_recipe", async () => {
+    const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: `Empty MCP Metadata ${faker.string.alphanumeric(8)}`,
+    }, context));
+    const detail = parseJson(await callSpoonjoyMcpTool("get_recipe", { id: created.recipe.id }, context));
+
+    expectExactKeys(detail.recipe, [...MCP_RECIPE_BASE_KEYS, "course", "tags"]);
+    expect(detail.recipe).toMatchObject({ course: null, tags: [] });
+  });
+
+  it("returns null course and empty tags on MCP search_recipes", async () => {
+    const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: `Empty MCP Summary Metadata ${faker.string.alphanumeric(8)}`,
+    }, context));
+    const search = parseJson(await callSpoonjoyMcpTool("search_recipes", {
+      query: created.recipe.title,
+    }, context));
+
+    expect(search.recipes).toHaveLength(1);
+    expectExactKeys(search.recipes[0], [...MCP_RECIPE_SUMMARY_BASE_KEYS, "course", "tags"]);
+    expect(search.recipes[0]).toMatchObject({ course: null, tags: [] });
+  });
+
   it("creates and updates recipe covers from uploaded image URLs with stylization scheduled", async () => {
     const bucket = mockR2();
     const captured: Promise<unknown>[] = [];
@@ -1545,8 +2015,7 @@ describe("spoonjoy MCP tools", () => {
       select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
     });
     const replacementCover = await context.db.recipeCover.findFirstOrThrow({
-      where: { recipeId: created.recipe.id },
-      orderBy: { createdAt: "desc" },
+      where: { recipeId: created.recipe.id, imageUrl: secondUpload.imageUrl },
     });
     expect(activeAfterUpdate).toMatchObject({
       activeCoverId: replacementCover.id,
@@ -1555,6 +2024,107 @@ describe("spoonjoy MCP tools", () => {
     });
     expect(captured).toHaveLength(0);
     expect(runner.imageToImage).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns the committed MCP cover when postcommit processing and hydration fail", async () => {
+    const upload = parseJson(await callSpoonjoyMcpTool("upload_recipe_image", {
+      imageBase64: b64(VALID_PNG_BYTES),
+      mimeType: "image/png",
+      filename: "postcommit-cover.png",
+    }, { ...context, allowLocalImageFallback: true }));
+    const schedulingError = new Error("MCP cover scheduler unavailable");
+    const hydrationError = new Error("MCP cover hydration unavailable");
+    expectConsoleError("MCP recipe cover postcommit processing failed", schedulingError);
+    expectConsoleError("MCP recipe postcommit hydration failed", hydrationError);
+    const scheduler = vi.spyOn(recipeCoverServiceModule, "scheduleRecipeCoverStylization")
+      .mockRejectedValueOnce(schedulingError);
+    const hydration = vi.spyOn(context.db.recipe, "findUniqueOrThrow")
+      .mockRejectedValueOnce(hydrationError);
+
+    let created;
+    try {
+      created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+        title: "MCP Cover Recovery",
+        imageUrl: upload.imageUrl,
+      }, {
+        ...context,
+        allowLocalImageFallback: true,
+      }));
+    } finally {
+      scheduler.mockRestore();
+      hydration.mockRestore();
+    }
+
+    expect(created.recipe).toMatchObject({
+      title: "MCP Cover Recovery",
+      imageUrl: upload.imageUrl,
+      coverImageUrl: upload.imageUrl,
+      coverSourceType: "chef-upload",
+      coverVariant: "image",
+      activeCover: {
+        id: expect.any(String),
+        recipeId: created.recipe.id,
+        imageUrl: upload.imageUrl,
+        displayUrl: upload.imageUrl,
+        sourceType: "chef-upload",
+        activeVariant: "image",
+        status: "ready",
+        generationStatus: "none",
+      },
+    });
+    await expect(context.db.recipe.findUnique({ where: { id: created.recipe.id } }))
+      .resolves.toMatchObject({ activeCoverId: created.recipe.activeCover.id });
+    await expect(context.db.recipeCover.findUnique({ where: { id: created.recipe.activeCover.id } }))
+      .resolves.toMatchObject({ recipeId: created.recipe.id, imageUrl: upload.imageUrl });
+  });
+
+  it("reports the activated stylized variant when MCP create hydration fails", async () => {
+    const bucket = mockR2();
+    const runner = {
+      textToImage: vi.fn(),
+      imageToImage: vi.fn().mockResolvedValue({ bytes: VALID_PNG_BYTES, contentType: "image/png" }),
+    };
+    const upload = parseJson(await callSpoonjoyMcpTool("upload_recipe_image", {
+      imageBase64: b64(VALID_PNG_BYTES),
+      mimeType: "image/png",
+      filename: "stylized-hydration-fallback.png",
+    }, { ...context, bucket }));
+    const hydrationError = new Error("MCP stylized hydration unavailable");
+    const logger = { error: vi.fn() };
+    const hydration = vi.spyOn(context.db.recipe, "findUniqueOrThrow")
+      .mockRejectedValueOnce(hydrationError);
+
+    let created;
+    try {
+      created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+        title: "MCP Stylized Hydration Recovery",
+        imageUrl: upload.imageUrl,
+      }, { ...context, bucket, imageGenRunner: runner, logger }));
+    } finally {
+      hydration.mockRestore();
+    }
+
+    expect(created.recipe).toMatchObject({
+      imageUrl: expect.stringMatching(/^\/photos\/covers\/\d+-[a-f0-9-]+\.png$/),
+      coverImageUrl: expect.stringMatching(/^\/photos\/covers\/\d+-[a-f0-9-]+\.png$/),
+      coverVariant: "stylized",
+      coverGenerationStatus: "succeeded",
+      activeCover: {
+        imageUrl: expect.stringMatching(/^\/photos\/covers\/\d+-[a-f0-9-]+\.png$/),
+        displayUrl: expect.stringMatching(/^\/photos\/covers\/\d+-[a-f0-9-]+\.png$/),
+        activeVariant: "stylized",
+        generationStatus: "succeeded",
+      },
+    });
+    expect(created.recipe.imageUrl).toBe(created.recipe.activeCover.displayUrl);
+    expect(logger.error).toHaveBeenCalledWith(
+      "MCP recipe postcommit hydration failed",
+      hydrationError,
+    );
+    await expect(context.db.recipe.findUniqueOrThrow({
+      where: { id: created.recipe.id },
+      select: { activeCoverVariant: true },
+    })).resolves.toEqual({ activeCoverVariant: "stylized" });
   });
 
   it("round-trips explicit local recipe image data URLs when no bucket is available", async () => {
@@ -1785,6 +2355,261 @@ describe("spoonjoy MCP tools", () => {
     });
   });
 
+  it("keeps an ID-only MCP update as a true no-op", async () => {
+    const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "MCP No-op Recipe",
+      steps: [{ description: "Stay unchanged", ingredients: [] }],
+    }, context));
+    const before = await context.db.recipe.findUniqueOrThrow({ where: { id: created.recipe.id } });
+
+    const result = parseJson(await callSpoonjoyMcpTool("update_recipe", {
+      id: created.recipe.id,
+    }, context));
+    const after = await context.db.recipe.findUniqueOrThrow({ where: { id: created.recipe.id } });
+
+    expect(result.recipe).toMatchObject({
+      id: created.recipe.id,
+      title: "MCP No-op Recipe",
+      steps: [{ description: "Stay unchanged" }],
+    });
+    expect(after.updatedAt).toEqual(before.updatedAt);
+  });
+
+  it("returns the committed MCP update graph when postcommit hydration is unavailable", async () => {
+    const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "MCP Update Hydration Source",
+      description: "Old description",
+      servings: "2",
+      steps: [{ description: "Old step", ingredients: [] }],
+    }, context));
+    const hydrationError = new Error("MCP update hydration unavailable");
+    const logger = { error: vi.fn() };
+    const hydration = vi.spyOn(context.db.recipe, "findFirstOrThrow")
+      .mockRejectedValueOnce(hydrationError);
+
+    let updated;
+    try {
+      updated = parseJson(await callSpoonjoyMcpTool("update_recipe", {
+        id: created.recipe.id,
+        title: "MCP Update Hydration Target",
+        description: null,
+        steps: [{
+          title: "New step",
+          description: "Persist this graph",
+          duration: 3,
+          ingredients: [{ name: "Pepper", quantity: 1, unit: "Pinch" }],
+        }],
+      }, { ...context, logger }));
+    } finally {
+      hydration.mockRestore();
+    }
+
+    expect(updated.recipe).toMatchObject({
+      id: created.recipe.id,
+      title: "MCP Update Hydration Target",
+      description: null,
+      servings: "2",
+      ingredientCount: 1,
+      steps: [{
+        id: expect.any(String),
+        stepNum: 1,
+        title: "New step",
+        description: "Persist this graph",
+        duration: 3,
+        ingredients: [{
+          id: expect.any(String),
+          name: "pepper",
+          quantity: 1,
+          unit: "pinch",
+        }],
+      }],
+    });
+    expect(logger.error).toHaveBeenCalledWith(
+      "MCP recipe update postcommit hydration failed",
+      hydrationError,
+    );
+    const step = await context.db.recipeStep.findFirstOrThrow({
+      where: { recipeId: created.recipe.id },
+      include: { ingredients: true },
+    });
+    expect(updated.recipe.steps[0].id).toBe(step.id);
+    expect(updated.recipe.steps[0].ingredients[0].id).toBe(step.ingredients[0].id);
+  });
+
+  it("propagates MCP update hydration failure when committed recovery is unavailable", async () => {
+    const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "MCP Update Unavailable Recovery Source",
+    }, context));
+    const hydrationError = new Error("MCP update hydration and recovery unavailable");
+    expectConsoleError("MCP recipe update postcommit hydration failed", hydrationError);
+    const hydration = vi.spyOn(context.db.recipe, "findFirstOrThrow")
+      .mockRejectedValueOnce(hydrationError);
+    const originalTransaction = context.db.$transaction;
+    let transactionCalls = 0;
+    context.db.$transaction = vi.fn(async (...args: Parameters<typeof context.db.$transaction>) => {
+      transactionCalls += 1;
+      if (transactionCalls === 2) return [[], [], [], []] as never;
+      return originalTransaction.apply(context.db, args);
+    }) as typeof context.db.$transaction;
+
+    try {
+      await expect(callSpoonjoyMcpTool("update_recipe", {
+        id: created.recipe.id,
+        title: "MCP Update Unavailable Recovery Target",
+      }, context)).rejects.toBe(hydrationError);
+    } finally {
+      context.db.$transaction = originalTransaction;
+      hydration.mockRestore();
+    }
+
+    expect(transactionCalls).toBe(2);
+  });
+
+  it("does not recover an MCP update graph after the recipe is soft-deleted", async () => {
+    const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "MCP Update Recovery Delete Race Source",
+    }, context));
+    const logger = { error: vi.fn() };
+    const originalTransaction = context.db.$transaction;
+    let transactionCalls = 0;
+    context.db.$transaction = vi.fn(async (...args: Parameters<typeof context.db.$transaction>) => {
+      transactionCalls += 1;
+      const result = await originalTransaction.apply(context.db, args);
+      if (transactionCalls === 1) {
+        await context.db.recipe.update({
+          where: { id: created.recipe.id },
+          data: { deletedAt: new Date() },
+        });
+      }
+      return result;
+    }) as typeof context.db.$transaction;
+
+    try {
+      await expect(callSpoonjoyMcpTool("update_recipe", {
+        id: created.recipe.id,
+        title: "MCP Update Recovery Delete Race Target",
+      }, { ...context, logger })).rejects.toThrow();
+    } finally {
+      context.db.$transaction = originalTransaction;
+    }
+
+    expect(transactionCalls).toBe(2);
+    expect(logger.error).toHaveBeenCalledWith(
+      "MCP recipe update postcommit hydration failed",
+      expect.any(Error),
+    );
+  });
+
+  it("maps an MCP update deleted after preflight to recipe not found", async () => {
+    const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "MCP Update Delete Race Source",
+    }, context));
+    const originalTransaction = context.db.$transaction;
+    context.db.$transaction = vi.fn(async (...args: Parameters<typeof context.db.$transaction>) => {
+      await context.db.recipe.update({
+        where: { id: created.recipe.id },
+        data: { deletedAt: new Date() },
+      });
+      return originalTransaction.apply(context.db, args);
+    }) as typeof context.db.$transaction;
+
+    try {
+      await expect(callSpoonjoyMcpTool("update_recipe", {
+        id: created.recipe.id,
+        title: "MCP Update Delete Race Target",
+      }, context)).rejects.toThrow("Recipe not found");
+    } finally {
+      context.db.$transaction = originalTransaction;
+    }
+  });
+
+  it("logs MCP update cover postcommit failures through configured and default loggers", async () => {
+    const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "MCP Update Cover Failure Source",
+    }, context));
+    const firstUpload = parseJson(await callSpoonjoyMcpTool("upload_recipe_image", {
+      imageBase64: b64(VALID_PNG_BYTES),
+      mimeType: "image/png",
+      filename: "update-cover-failure-one.png",
+    }, { ...context, allowLocalImageFallback: true }));
+    const secondUpload = parseJson(await callSpoonjoyMcpTool("upload_recipe_image", {
+      imageBase64: b64(VALID_PNG_BYTES),
+      mimeType: "image/png",
+      filename: "update-cover-failure-two.png",
+    }, { ...context, allowLocalImageFallback: true }));
+    const firstError = new Error("configured update cover logger");
+    const secondError = new Error("default update cover logger");
+    const logger = { error: vi.fn() };
+    expectConsoleError("MCP recipe cover postcommit processing failed", secondError);
+    const scheduler = vi.spyOn(recipeCoverServiceModule, "scheduleRecipeCoverStylization")
+      .mockRejectedValueOnce(firstError)
+      .mockRejectedValueOnce(secondError);
+
+    try {
+      await callSpoonjoyMcpTool("update_recipe", {
+        id: created.recipe.id,
+        imageUrl: firstUpload.imageUrl,
+      }, { ...context, allowLocalImageFallback: true, logger });
+      await callSpoonjoyMcpTool("update_recipe", {
+        id: created.recipe.id,
+        imageUrl: secondUpload.imageUrl,
+      }, { ...context, allowLocalImageFallback: true });
+    } finally {
+      scheduler.mockRestore();
+    }
+
+    expect(logger.error).toHaveBeenCalledWith(
+      "MCP recipe cover postcommit processing failed",
+      firstError,
+    );
+  });
+
+  it("returns concurrently preserved fields from the committed MCP update snapshot", async () => {
+    const created = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "MCP Preserved Snapshot Source",
+      description: "Preflight description",
+      steps: [{ description: "Preserved step", ingredients: [] }],
+    }, context));
+    const hydrationError = new Error("MCP preserved snapshot hydration unavailable");
+    const logger = { error: vi.fn() };
+    const hydration = vi.spyOn(context.db.recipe, "findFirstOrThrow")
+      .mockRejectedValueOnce(hydrationError);
+    const originalTransaction = context.db.$transaction;
+    let transactionCalls = 0;
+    context.db.$transaction = vi.fn(async (...args: Parameters<typeof context.db.$transaction>) => {
+      transactionCalls += 1;
+      if (transactionCalls === 1) {
+        await context.db.recipe.update({
+          where: { id: created.recipe.id },
+          data: { description: "Concurrent committed description" },
+        });
+      }
+      return originalTransaction.apply(context.db, args);
+    }) as typeof context.db.$transaction;
+
+    let updated;
+    try {
+      updated = parseJson(await callSpoonjoyMcpTool("update_recipe", {
+        id: created.recipe.id,
+        title: "MCP Preserved Snapshot Target",
+      }, { ...context, logger }));
+    } finally {
+      context.db.$transaction = originalTransaction;
+      hydration.mockRestore();
+    }
+
+    expect(updated.recipe).toMatchObject({
+      title: "MCP Preserved Snapshot Target",
+      description: "Concurrent committed description",
+      steps: [{ description: "Preserved step" }],
+    });
+    expect(logger.error).toHaveBeenCalledWith(
+      "MCP recipe update postcommit hydration failed",
+      hydrationError,
+    );
+    expect(transactionCalls).toBe(2);
+  });
+
   it("rejects invalid or unauthorized recipe updates", async () => {
     const first = parseJson(await callSpoonjoyMcpTool("create_recipe", { title: "Update Owner Recipe" }, context));
     await callSpoonjoyMcpTool("create_recipe", { title: "Update Duplicate Recipe" }, context);
@@ -1809,6 +2634,69 @@ describe("spoonjoy MCP tools", () => {
       description: 42,
     }, context)).rejects.toThrow("description must be a string or null");
     await expect(callSpoonjoyMcpTool("update_recipe", { id: "missing-recipe", title: "Missing" }, context)).rejects.toThrow("Recipe not found");
+  });
+
+  it("rejects oversized MCP create and update graphs before mutation", async () => {
+    const ingredients = Array.from({ length: 300 }, (_, index) => ({
+      name: `ingredient ${index}`,
+      quantity: 1,
+      unit: `unit ${index}`,
+    }));
+    await expect(callSpoonjoyMcpTool("create_recipe", {
+      title: "Oversized MCP Create",
+      steps: [{ description: "Too much", ingredients }],
+    }, context)).rejects.toThrow("Recipe contains too many steps or ingredients");
+    await expect(context.db.recipe.findFirst({
+      where: { title: "Oversized MCP Create" },
+    })).resolves.toBeNull();
+
+    const existing = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "MCP Oversized Update Source",
+    }, context));
+    await expect(callSpoonjoyMcpTool("update_recipe", {
+      id: existing.recipe.id,
+      title: "MCP Oversized Update Target",
+      steps: [{ description: "Too much", ingredients }],
+    }, context)).rejects.toThrow("Recipe contains too many steps or ingredients");
+    await expect(context.db.recipe.findUniqueOrThrow({ where: { id: existing.recipe.id } }))
+      .resolves.toMatchObject({ title: "MCP Oversized Update Source" });
+  });
+
+  it("maps write-time create and update title races to the shared MCP error", async () => {
+    const conflict = Object.assign(new Error("Raw query failed"), {
+      code: "P2010",
+      meta: {
+        code: "2067",
+        message: "UNIQUE constraint failed: Recipe.chefId, Recipe.title",
+      },
+    });
+    const originalTransaction = context.db.$transaction;
+    context.db.$transaction = vi.fn().mockRejectedValue(conflict) as typeof context.db.$transaction;
+    try {
+      await expect(callSpoonjoyMcpTool("create_recipe", {
+        title: "Concurrent MCP Create",
+      }, context)).rejects.toThrow(ACTIVE_RECIPE_TITLE_CONFLICT_ERROR);
+    } finally {
+      context.db.$transaction = originalTransaction;
+    }
+
+    const existing = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "MCP Race Source",
+    }, context));
+    const originalUpdateTransaction = context.db.$transaction;
+    context.db.$transaction = vi.fn().mockRejectedValue(conflict) as typeof context.db.$transaction;
+    try {
+      await expect(callSpoonjoyMcpTool("update_recipe", {
+        id: existing.recipe.id,
+        title: "Concurrent MCP Update",
+      }, context)).rejects.toThrow(ACTIVE_RECIPE_TITLE_CONFLICT_ERROR);
+    } finally {
+      context.db.$transaction = originalUpdateTransaction;
+    }
+
+    await expect(context.db.recipe.findUniqueOrThrow({
+      where: { id: existing.recipe.id },
+    })).resolves.toMatchObject({ title: "MCP Race Source" });
   });
 
   it("soft-deletes owner recipes through MCP for agent cleanup", async () => {
@@ -2118,7 +3006,7 @@ describe("spoonjoy MCP tools", () => {
     }
   });
 
-  it("rebuilds and retries the complete shared recipe transaction once after a uniqueness race", async () => {
+  it("uses one atomic shared recipe transaction when an identity appears before execution", async () => {
     const recipe = parseJson(await callSpoonjoyMcpTool("create_recipe", {
       title: "Racing shared shopping recipe",
       steps: [{
@@ -2168,11 +3056,8 @@ describe("spoonjoy MCP tools", () => {
       { ...context, db: racingDb },
     ));
 
-    expect(transactionCalls).toBe(2);
-    expect(transactionOperationArrays.map((operations) => operations.length)).toEqual([2, 2]);
-    expect(transactionOperationArrays[1]).not.toBe(transactionOperationArrays[0]);
-    expect(transactionOperationArrays[1][0]).not.toBe(transactionOperationArrays[0][0]);
-    expect(transactionOperationArrays[1][1]).not.toBe(transactionOperationArrays[0][1]);
+    expect(transactionCalls).toBe(1);
+    expect(transactionOperationArrays.map((operations) => operations.length)).toEqual([2]);
     expect(added).toMatchObject({
       created: 1,
       updated: 1,
@@ -2251,7 +3136,7 @@ describe("spoonjoy MCP tools", () => {
     });
   });
 
-  it("restores the earliest post-0025 shared recipe tombstone by sortIndex then BINARY id", async () => {
+  it("creates a fresh shared recipe item without reviving a post-0025 tombstone", async () => {
     const recipe = parseJson(await callSpoonjoyMcpTool("create_recipe", {
       title: "Tombstone-only shared shopping recipe",
       steps: [{
@@ -2310,23 +3195,26 @@ describe("spoonjoy MCP tools", () => {
       ));
 
       expect(added).toEqual({
-        created: 0,
-        updated: 1,
+        created: 1,
+        updated: 0,
         shoppingList: {
           id: shoppingList.id,
           ownerId: owner.id,
           items: [{
-            id: earliest.id,
-            quantity: 7,
+            id: expect.any(String),
+            quantity: 2,
             unit: recipe.recipe.steps[0].ingredients[0].unit,
             name: recipe.recipe.steps[0].ingredients[0].name,
             checked: false,
-            categoryKey: "pantry",
-            iconKey: "jar",
+            categoryKey: null,
+            iconKey: null,
             sortIndex: 0,
           }],
         },
       });
+      expect(added.shoppingList.items[0].id).not.toBe(earliest.id);
+      await expect(context.db.shoppingListItem.findUniqueOrThrow({ where: { id: earliest.id } }))
+        .resolves.toMatchObject({ quantity: 5, checked: true, deletedAt: expect.any(Date) });
       await expect(context.db.shoppingListItem.findUniqueOrThrow({ where: { id: laterByBinaryId.id } }))
         .resolves.toMatchObject({ quantity: 20, deletedAt: expect.any(Date) });
       await expect(context.db.shoppingListItem.findUniqueOrThrow({ where: { id: laterBySort.id } }))
@@ -2765,8 +3653,34 @@ describe("spoonjoy MCP tools", () => {
       quantity: 1,
       unit: "Gallon",
     }, context));
-    expect(restored).toMatchObject({ created: 0, updated: 1 });
-    expect(restored.shoppingList.items[0]).toMatchObject({ id: itemId, quantity: 4, checked: false });
+    expect(restored).toMatchObject({ created: 1, updated: 0 });
+    expect(restored.shoppingList.items[0]).toMatchObject({ quantity: 1, checked: false });
+    expect(restored.shoppingList.items[0].id).not.toBe(itemId);
+  });
+
+  it("keeps shared check ordering at zero when the active list disappears before max lookup", async () => {
+    const added = parseJson(await callSpoonjoyMcpTool("add_shopping_list_item", {
+      name: "Check Race Milk",
+      quantity: 1,
+    }, context));
+    const item = await context.db.shoppingListItem.findUniqueOrThrow({
+      where: { id: added.shoppingList.items[0].id },
+    });
+    const findFirst = vi.spyOn(context.db.shoppingListItem, "findFirst")
+      .mockResolvedValueOnce(item)
+      .mockResolvedValueOnce(null);
+
+    const checked = parseJson(await callSpoonjoyMcpTool("set_shopping_list_item_checked", {
+      itemId: item.id,
+      checked: true,
+    }, context));
+
+    expect(checked.shoppingList.items[0]).toMatchObject({
+      id: item.id,
+      checked: true,
+      sortIndex: 0,
+    });
+    expect(findFirst).toHaveBeenCalledTimes(2);
   });
 
   it("always updates the active manual identity before considering a matching tombstone", async () => {
@@ -2832,7 +3746,7 @@ describe("spoonjoy MCP tools", () => {
     });
   });
 
-  it("restores the earliest deterministic tombstone when no manual identity is active", async () => {
+  it("creates a fresh manual item when no active identity exists", async () => {
     const suffix = faker.string.alphanumeric(8).toLowerCase();
     const owner = await context.db.user.create({
       data: { email: context.defaultOwnerEmail!, username: `manual-deleted-${suffix}` },
@@ -2874,27 +3788,30 @@ describe("spoonjoy MCP tools", () => {
       }, context));
 
       expect(restored).toEqual({
-        created: 0,
-        updated: 1,
+        created: 1,
+        updated: 0,
         shoppingList: {
           id: shoppingList.id,
           ownerId: owner.id,
           items: [{
-            id: earliest.id,
-            quantity: 12,
+            id: expect.any(String),
+            quantity: 2,
             unit: unit.name,
             name: ingredientRef.name,
             checked: false,
-            categoryKey: "pantry",
+            categoryKey: null,
             iconKey: "jar",
             sortIndex: 0,
           }],
         },
       });
+      expect(restored.shoppingList.items[0].id).not.toBe(earliest.id);
+      await expect(context.db.shoppingListItem.findUniqueOrThrow({ where: { id: earliest.id } }))
+        .resolves.toMatchObject({ quantity: 10, deletedAt: expect.any(Date) });
     });
   });
 
-  it("rereads the active manual identity once after a real uniqueness race", async () => {
+  it("uses atomic SQL without invoking the Prisma create delegate", async () => {
     type ShoppingCreateArgs = Parameters<SpoonjoyMcpContext["db"]["shoppingListItem"]["create"]>[0];
     const racedId = `manual-race-${faker.string.alphanumeric(8).toLowerCase()}`;
     let injected = false;
@@ -2933,16 +3850,16 @@ describe("spoonjoy MCP tools", () => {
       iconKey: "milk",
     }, { ...context, db: racingDb }));
 
-    expect(injected).toBe(true);
+    expect(injected).toBe(false);
     expect(added).toEqual({
-      created: 0,
-      updated: 1,
+      created: 1,
+      updated: 0,
       shoppingList: {
         id: expect.any(String),
         ownerId: expect.any(String),
         items: [{
-          id: racedId,
-          quantity: 7,
+          id: expect.any(String),
+          quantity: 2,
           unit: "gallon",
           name: "manual race milk",
           checked: false,

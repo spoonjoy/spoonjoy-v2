@@ -11,12 +11,24 @@ import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
 import { expectConsoleError } from "../warning-policy";
+import * as routePlatformModule from "~/lib/route-platform.server";
+
+const BASE_RECIPE_DETAIL_KEYS = [
+  "attribution", "canonicalUrl", "chef", "cookbooks", "coverImageUrl", "coverProvenanceLabel",
+  "coverSourceType", "coverVariant", "createdAt", "description", "href", "id", "servings", "steps",
+  "title", "updatedAt",
+] as const;
 
 function routeArgs(request: Request, splat: string, context = { cloudflare: { env: { OPENAI_API_KEY: "test-key" } } }) {
   return { request, params: { "*": splat }, context } as any;
 }
 
-function mutationRequest(token: string, requestId: string, body: Record<string, unknown>, env = { OPENAI_API_KEY: "test-key" }) {
+function mutationRequest(
+  token: string,
+  requestId: string,
+  body: Record<string, unknown>,
+  env: Record<string, unknown> = { OPENAI_API_KEY: "test-key" },
+) {
   return routeArgs(new UndiciRequest("http://localhost/api/v1/recipes/import", {
     method: "POST",
     headers: {
@@ -52,6 +64,14 @@ async function createImportFixture(db: Awaited<ReturnType<typeof getLocalDb>>) {
       description: "Imported from a native capture source",
       servings: "4",
       sourceUrl: "https://capture.example/native-import",
+      course: "appetizer",
+    },
+  });
+  await db.recipeTag.create({
+    data: {
+      recipeId: recipe.id,
+      label: "Import Boundary",
+      normalizedLabel: "import boundary",
     },
   });
   const step = await db.recipeStep.create({
@@ -109,6 +129,11 @@ describe("API v1 recipe import", () => {
 
   it("imports native text capture sources through the real importer contract and returns API recipe detail", async () => {
     const fixture = await createImportFixture(db);
+    const requestDb = vi.spyOn(routePlatformModule, "getRequestDb").mockResolvedValue(db);
+    const nativeDatabase = {
+      prepare: vi.fn(() => ({ bind: vi.fn() })),
+      batch: vi.fn(),
+    };
     const importSpy = vi.spyOn(recipeImport, "importRecipeFromSource")
       .mockResolvedValueOnce({
         recipeId: fixture.recipe.id,
@@ -131,7 +156,17 @@ describe("API v1 recipe import", () => {
       },
     };
 
-    const response = await action(mutationRequest(fixture.writer.token, "req_native_text_import", body));
+    let response: Response;
+    try {
+      response = await action(mutationRequest(
+        fixture.writer.token,
+        "req_native_text_import",
+        body,
+        { OPENAI_API_KEY: "test-key", DB: nativeDatabase },
+      ));
+    } finally {
+      requestDb.mockRestore();
+    }
     const payload = await readJson(response);
 
     expect(response.status).toBe(201);
@@ -151,6 +186,7 @@ describe("API v1 recipe import", () => {
     }, expect.objectContaining({
       db,
       env: expect.objectContaining({ OPENAI_API_KEY: "test-key" }),
+      nativeDatabase,
     }));
     expect(payload).toMatchObject({
       ok: true,
@@ -180,6 +216,7 @@ describe("API v1 recipe import", () => {
         mutation: { clientMutationId: "cm_native_text_import", replayed: false },
       },
     });
+    expect(Object.keys(payload.data.recipe).sort()).toEqual([...BASE_RECIPE_DETAIL_KEYS].sort());
   });
 
   it("recovers in-flight imported recipes without duplicating provider work", async () => {
@@ -216,6 +253,14 @@ describe("API v1 recipe import", () => {
         id: idempotencyId,
         title: `Recovered Native Import ${faker.string.alphanumeric(8)}`,
         sourceUrl: "https://capture.example/recovered-import",
+        course: "dessert",
+      },
+    });
+    await db.recipeTag.create({
+      data: {
+        recipeId: idempotencyId,
+        label: "Recovered Import Boundary",
+        normalizedLabel: "recovered import boundary",
       },
     });
 
@@ -247,14 +292,17 @@ describe("API v1 recipe import", () => {
         mutation: { clientMutationId: "cm_native_import_recover", replayed: true },
       },
     });
+    expect(Object.keys(payload.data.recipe).sort()).toEqual([...BASE_RECIPE_DETAIL_KEYS].sort());
     expect(completed.responseStatus).toBe(201);
-    expect(JSON.parse(completed.responseBody!)).toMatchObject({
+    const completedPayload = JSON.parse(completed.responseBody!);
+    expect(completedPayload).toMatchObject({
       ok: true,
       data: {
         recipe: { id: idempotencyId },
         mutation: { clientMutationId: "cm_native_import_recover", replayed: false },
       },
     });
+    expect(Object.keys(completedPayload.data.recipe).sort()).toEqual([...BASE_RECIPE_DETAIL_KEYS].sort());
   });
 
   it("supports dry-run imports that return draft metadata without a persisted recipe", async () => {

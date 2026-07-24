@@ -180,7 +180,7 @@ describe("shopping list OpenAI and add-from-recipe coverage", () => {
     });
   });
 
-  it("defaults invalid recipe scale factors and preserves zero ingredient quantities as no quantity", async () => {
+  it("defaults invalid recipe scale factors and preserves zero ingredient quantities as zero", async () => {
     const recipe = await db.recipe.create({
       data: { title: "Null Quantity Recipe", chefId: testUserId },
     });
@@ -213,7 +213,7 @@ describe("shopping list OpenAI and add-from-recipe coverage", () => {
       include: { items: true },
     });
     expect(shoppingList?.items).toHaveLength(1);
-    expect(shoppingList?.items[0].quantity).toBeNull();
+    expect(shoppingList?.items[0].quantity).toBe(0);
   });
 
   it("adds scaled recipe quantity onto an existing item with null quantity", async () => {
@@ -261,7 +261,7 @@ describe("shopping list OpenAI and add-from-recipe coverage", () => {
     expect(updatedItem?.categoryKey).not.toBeNull();
   });
 
-  it("keeps an existing quantity when a recipe ingredient has zero quantity", async () => {
+  it("keeps an existing quantity and refreshes metadata when a recipe ingredient has zero quantity", async () => {
     const shoppingList = await db.shoppingList.create({ data: { authorId: testUserId } });
     const recipe = await db.recipe.create({
       data: { title: "Existing Quantity Zero Recipe", chefId: testUserId },
@@ -303,6 +303,6 @@ describe("shopping list OpenAI and add-from-recipe coverage", () => {
       where: { shoppingListId: shoppingList.id, ingredientRefId: ingredientRef.id },
     });
     expect(updatedItem?.quantity).toBe(5);
-    expect(updatedItem?.categoryKey).toBe("baking");
+    expect(updatedItem?.categoryKey).toBe("other");
   });
 });

@@ -11,6 +11,11 @@ import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
 
 const GENERATED_PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+const BASE_RECIPE_DETAIL_KEYS = [
+  "attribution", "canonicalUrl", "chef", "cookbooks", "coverImageUrl", "coverProvenanceLabel",
+  "coverSourceType", "coverVariant", "createdAt", "description", "href", "id", "servings", "steps",
+  "title", "updatedAt",
+] as const;
 
 function dataUrl(contentType: string, bytes: Uint8Array) {
   return `data:${contentType};base64,${Buffer.from(bytes).toString("base64")}`;
@@ -97,6 +102,14 @@ describe("API v1 native account sync", () => {
         ...createTestRecipe(user.id),
         title: `Native Sync Recipe ${faker.string.alphanumeric(8)}`,
         updatedAt: new Date("2026-06-01T10:00:00.000Z"),
+      },
+    });
+    await db.recipe.update({ where: { id: recipe.id }, data: { course: "main" } });
+    await db.recipeTag.create({
+      data: {
+        recipeId: recipe.id,
+        label: "Native Boundary",
+        normalizedLabel: "native boundary",
       },
     });
     await db.recipe.create({
@@ -221,6 +234,42 @@ describe("API v1 native account sync", () => {
         }),
       }),
     ]));
+    const recipeEntry = payload.data.entries.find((entry: { kind: string }) => entry.kind === "recipe");
+    expect(Object.keys(recipeEntry.payload).sort()).toEqual([...BASE_RECIPE_DETAIL_KEYS].sort());
+  });
+
+  it("hydrates native recipe entries with the base detail projection only", async () => {
+    const user = await createUser(db, "native-projection@example.com", `native_projection_${faker.string.alphanumeric(8)}`, "correctHorseBatteryStaple");
+    const recipe = await db.recipe.create({
+      data: {
+        ...createTestRecipe(user.id),
+        title: `Native Projection Recipe ${faker.string.alphanumeric(8)}`,
+      },
+    });
+    const credential = await createApiCredential(db, user.id, "Native projection reader", {
+      scopes: ["account:read", "kitchen:read"],
+    });
+    const localDb = await getLocalDb();
+    const originalRecipeFindFirst = localDb.recipe.findFirst;
+    const recipeFindFirst = vi.fn((args: Parameters<typeof localDb.recipe.findFirst>[0]) =>
+      originalRecipeFindFirst.call(localDb.recipe, args));
+    localDb.recipe.findFirst = recipeFindFirst as typeof localDb.recipe.findFirst;
+
+    try {
+      const response = await loader(routeArgs(syncRequest(credential.token, "req_native_projection")));
+      expect(response.status).toBe(200);
+      const payload = await readJson(response);
+      expect(payload.data.entries).toEqual(expect.arrayContaining([
+        expect.objectContaining({ kind: "recipe", resourceId: recipe.id }),
+      ]));
+    } finally {
+      localDb.recipe.findFirst = originalRecipeFindFirst;
+    }
+
+    const hydration = recipeFindFirst.mock.calls.find(([args]) => args?.where?.id === recipe.id)?.[0];
+    expect(hydration).toBeDefined();
+    expect(hydration?.select).not.toHaveProperty("course");
+    expect(hydration?.select).not.toHaveProperty("tags");
   });
 
   it("keeps dense cookbook sync payloads summary-only", async () => {

@@ -6,9 +6,9 @@ import { action as apiV1Action } from "../../app/routes/api.v1.$";
 import { handleRecipeDetailAction } from "../../app/lib/recipe-detail.server";
 import { handleShoppingListAction } from "../../app/lib/shopping-list.server";
 import { getRequestDb } from "../../app/lib/route-platform.server";
-import { mutateCompatibleShoppingListItem } from "../../app/lib/shopping-list-mutations.server";
+import { provisionSeedShoppingListItem } from "../../app/lib/shopping-list-seed-compat.server";
 import { createUserSessionCookie } from "../../app/lib/session.server";
-import { expectConsoleError } from "../warning-policy";
+import { expectConsoleError, expectConsoleErrorMatching } from "../warning-policy";
 
 interface TestD1Statement {
   bind(...values: unknown[]): TestD1Statement;
@@ -68,8 +68,10 @@ async function hashToken(token: string) {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-async function applyRepositoryMigrations() {
-  for (const [, sql] of Object.entries(migrations).sort(([left], [right]) => left.localeCompare(right))) {
+async function applyRepositoryMigrations(options: { product?: boolean } = {}) {
+  for (const [path, sql] of Object.entries(migrations).sort(([left], [right]) => left.localeCompare(right))) {
+    const isProductMigration = path.endsWith("/0025_clem_feedback_product.sql");
+    if (isProductMigration !== Boolean(options.product)) continue;
     for (const statement of splitMigrationStatements(sql)) {
       await database().prepare(statement).run();
     }
@@ -102,6 +104,146 @@ function splitMigrationStatements(sql: string): string[] {
 
 async function executeStatement(sql: string) {
   await database().prepare(sql).run();
+}
+
+interface ShoppingIdentityMatrixRow {
+  id: string;
+  quantity: number | null;
+  checked: number;
+  updatedAt: string;
+  checkedAt: string | null;
+  deletedAt: string | null;
+  sortIndex: number;
+}
+
+async function resetShoppingIdentityMatrix() {
+  await executeStatement(`DELETE FROM "ShoppingListItem" WHERE "shoppingListId" = '${SHOPPING_LIST_ID}'`);
+  await executeStatement(`
+    INSERT INTO "ShoppingListItem" (
+      "id", "shoppingListId", "quantity", "unitId", "ingredientRefId",
+      "checked", "updatedAt", "checkedAt", "deletedAt", "sortIndex"
+    ) VALUES
+      (
+        'matrix-first-tombstone', '${SHOPPING_LIST_ID}', 100,
+        '${SHOPPING_UNIT_ID}', '${SHOPPING_FIRST_REF_ID}', 1,
+        '${FIXTURE_TIMESTAMP}', '${FIXTURE_TIMESTAMP}', '${FIXTURE_TIMESTAMP}', 0
+      ),
+      (
+        'matrix-first-active', '${SHOPPING_LIST_ID}', 5,
+        '${SHOPPING_UNIT_ID}', '${SHOPPING_FIRST_REF_ID}', 0,
+        '${FIXTURE_TIMESTAMP}', NULL, NULL, 4
+      ),
+      (
+        'matrix-second-A', '${SHOPPING_LIST_ID}', 7,
+        '${SHOPPING_UNIT_ID}', '${SHOPPING_SECOND_REF_ID}', 1,
+        '${FIXTURE_TIMESTAMP}', '${FIXTURE_TIMESTAMP}', '${FIXTURE_TIMESTAMP}', 1
+      ),
+      (
+        'matrix-second-a', '${SHOPPING_LIST_ID}', 20,
+        '${SHOPPING_UNIT_ID}', '${SHOPPING_SECOND_REF_ID}', 1,
+        '${FIXTURE_TIMESTAMP}', '${FIXTURE_TIMESTAMP}', '${FIXTURE_TIMESTAMP}', 1
+      )
+  `);
+}
+
+async function shoppingIdentityMatrixRow(id: string) {
+  return database().prepare(`
+    SELECT "id", "quantity", "checked", "updatedAt", "checkedAt", "deletedAt", "sortIndex"
+    FROM "ShoppingListItem"
+    WHERE "id" = ?
+  `).bind(id).first<ShoppingIdentityMatrixRow>();
+}
+
+async function activeShoppingIdentityMatrixRow(ingredientRefId: string) {
+  return database().prepare(`
+    SELECT "id", "quantity", "checked", "updatedAt", "checkedAt", "deletedAt", "sortIndex"
+    FROM "ShoppingListItem"
+    WHERE "shoppingListId" = ?
+      AND "ingredientRefId" = ?
+      AND "unitId" = ?
+      AND "deletedAt" IS NULL
+  `).bind(
+    SHOPPING_LIST_ID,
+    ingredientRefId,
+    SHOPPING_UNIT_ID,
+  ).first<ShoppingIdentityMatrixRow>();
+}
+
+async function expectShoppingIdentityMatrix(
+  label: string,
+  firstDelta: number,
+  secondDelta: number,
+) {
+  expect(await shoppingIdentityMatrixRow("matrix-first-active"), label).toMatchObject({
+    id: "matrix-first-active",
+    quantity: 5 + firstDelta,
+    checked: 0,
+    checkedAt: null,
+    deletedAt: null,
+    sortIndex: 4,
+  });
+  expect(await shoppingIdentityMatrixRow("matrix-first-tombstone"), label).toMatchObject({
+    id: "matrix-first-tombstone",
+    quantity: 100,
+    checked: 1,
+    updatedAt: FIXTURE_TIMESTAMP,
+    checkedAt: FIXTURE_TIMESTAMP,
+    deletedAt: FIXTURE_TIMESTAMP,
+    sortIndex: 0,
+  });
+  const freshSecond = await activeShoppingIdentityMatrixRow(SHOPPING_SECOND_REF_ID);
+  expect(freshSecond, label).toMatchObject({
+    quantity: secondDelta,
+    checked: 0,
+    checkedAt: null,
+    deletedAt: null,
+    sortIndex: 5,
+  });
+  expect(freshSecond?.id, label).not.toBe("matrix-second-A");
+  expect(freshSecond?.id, label).not.toBe("matrix-second-a");
+  expect(await shoppingIdentityMatrixRow("matrix-second-A"), label).toMatchObject({
+    id: "matrix-second-A",
+    quantity: 7,
+    checked: 1,
+    updatedAt: FIXTURE_TIMESTAMP,
+    checkedAt: FIXTURE_TIMESTAMP,
+    deletedAt: FIXTURE_TIMESTAMP,
+    sortIndex: 1,
+  });
+  expect(await shoppingIdentityMatrixRow("matrix-second-a"), label).toMatchObject({
+    id: "matrix-second-a",
+    quantity: 20,
+    checked: 1,
+    updatedAt: FIXTURE_TIMESTAMP,
+    checkedAt: FIXTURE_TIMESTAMP,
+    deletedAt: FIXTURE_TIMESTAMP,
+    sortIndex: 1,
+  });
+}
+
+async function expectD1AdapterError<T>(
+  expectedMessage: RegExp,
+  run: () => Promise<T>,
+): Promise<T> {
+  let observedError: Error | undefined;
+  expectConsoleErrorMatching(
+    `Prisma D1 performIO error matching ${expectedMessage}`,
+    (args) => {
+      const error = args[1];
+      if (
+        args[0] !== "Error in performIO: %O" ||
+        !(error instanceof Error) ||
+        !expectedMessage.test(error.message)
+      ) {
+        return false;
+      }
+      observedError = error;
+      return true;
+    },
+  );
+  const result = await run();
+  expect(observedError).toBeInstanceOf(Error);
+  return result;
 }
 
 async function seedAdapterFixture() {
@@ -352,6 +494,8 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
   beforeAll(async () => {
     await applyRepositoryMigrations();
     await seedAdapterFixture();
+    await applyRepositoryMigrations({ product: true });
+    await dropCutoverFence();
   });
 
   afterEach(async () => {
@@ -521,7 +665,7 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
   it("maps a real D1 delete fence through legacy /api and preserves the membership", async () => {
     await installCutoverFence();
 
-    const response = await legacyApiAction({
+    const response = await expectD1AdapterError(/saved_recipe_cutover_pending/, () => legacyApiAction({
       request: new Request(
         `${TEST_ORIGIN}/api/cookbooks/${COOKBOOK_ID}/recipes/${LEGACY_RECIPE_ID}`,
         {
@@ -531,7 +675,7 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
       ),
       params: { "*": `cookbooks/${COOKBOOK_ID}/recipes/${LEGACY_RECIPE_ID}` },
       context: routeContext(),
-    } as any);
+    } as any));
 
     expect(response.status).toBe(503);
     await expectRetryHeaders(response);
@@ -548,7 +692,7 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
   it("maps a real D1 insert fence through MCP HTTP and preserves JSON-RPC transport status", async () => {
     await installCutoverFence();
 
-    const response = await SELF.fetch(new Request(`${TEST_ORIGIN}/mcp`, {
+    const response = await expectD1AdapterError(/saved_recipe_cutover_pending/, () => SELF.fetch(new Request(`${TEST_ORIGIN}/mcp`, {
       method: "POST",
       headers: bearerHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
@@ -560,7 +704,7 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
           arguments: { cookbookId: COOKBOOK_ID, recipeId: MCP_RECIPE_ID },
         },
       }),
-    }));
+    })));
 
     expect(response.status).toBe(200);
     await expectRetryHeaders(response);
@@ -707,85 +851,260 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
     expect(await idempotencyReservationCount(clientMutationId)).toBe(1);
   });
 
-  it("recovers a real Prisma-D1 expression-index shopping uniqueness race", async () => {
+  it("runs all six compatibility writers across both post-0025 identity states before activation", async () => {
+    await installCutoverFence();
+    expect(await database().prepare(`
+      SELECT COUNT(*) AS "count"
+      FROM sqlite_master
+      WHERE type = 'trigger'
+        AND name IN ('${CUTOVER_INSERT_TRIGGER}', '${CUTOVER_DELETE_TRIGGER}')
+    `).first<{ count: number }>()).toEqual({ count: 2 });
+    expect(await database().prepare(`
+      SELECT COUNT(*) AS "count"
+      FROM sqlite_master
+      WHERE type = 'index' AND name = 'ShoppingListItem_active_identity_key'
+    `).first<{ count: number }>()).toEqual({ count: 1 });
+    expect(await database().prepare(`
+      SELECT COUNT(*) AS "count"
+      FROM sqlite_master
+      WHERE type = 'index'
+        AND name = 'ShoppingListItem_shoppingListId_unitId_ingredientRefId_key'
+    `).first<{ count: number }>()).toEqual({ count: 0 });
+
+    const cookie = await createUserSessionCookie(
+      USER_ID,
+      env as unknown as { SESSION_SECRET?: string },
+      new Request(`${TEST_ORIGIN}/shopping-list`),
+    );
+    let requestNumber = 0;
+    const nextRequestId = (label: string) => `req_matrix_${label}_${++requestNumber}`;
+    const callWebManual = async (name: string, quantity: number) => {
+      const formData = new FormData();
+      formData.set("intent", "addItem");
+      formData.set("ingredientName", name);
+      formData.set("unitName", "cutover d1 each");
+      formData.set("quantity", String(quantity));
+      const result = await handleShoppingListAction({
+        request: new Request(`${TEST_ORIGIN}/shopping-list`, {
+          method: "POST",
+          headers: { Cookie: cookie },
+          body: formData,
+        }),
+        context: routeContext() as any,
+      });
+      expect(result).toMatchObject({ data: { success: true } });
+    };
+    const callRestManual = async (name: string, quantity: number, expectedStatus: number) => {
+      const requestId = nextRequestId("rest_manual");
+      const response = await apiV1Action({
+        request: new Request(`${TEST_ORIGIN}/api/v1/shopping-list/items`, {
+          method: "POST",
+          headers: bearerHeaders({
+            "Content-Type": "application/json",
+            "X-Request-Id": requestId,
+          }),
+          body: JSON.stringify({
+            clientMutationId: requestId,
+            name,
+            unit: "cutover d1 each",
+            quantity,
+          }),
+        }),
+        params: { "*": "shopping-list/items" },
+        context: routeContext(),
+      } as any);
+      expect(response.status).toBe(expectedStatus);
+    };
+    const callMcp = async (
+      id: number,
+      name: "add_shopping_list_item" | "add_recipe_to_shopping_list",
+      args: Record<string, unknown>,
+    ) => {
+      const response = await SELF.fetch(new Request(`${TEST_ORIGIN}/mcp`, {
+        method: "POST",
+        headers: bearerHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id,
+          method: "tools/call",
+          params: { name, arguments: args },
+        }),
+      }));
+      expect(response.status).toBe(200);
+      const body = await response.json() as { error?: unknown };
+      expect(body.error).toBeUndefined();
+    };
+    const callWebRecipe = async () => {
+      const formData = new FormData();
+      formData.set("intent", "addFromRecipe");
+      formData.set("recipeId", REST_RECIPE_ID);
+      formData.set("scaleFactor", "1");
+      const result = await handleShoppingListAction({
+        request: new Request(`${TEST_ORIGIN}/shopping-list`, {
+          method: "POST",
+          headers: { Cookie: cookie },
+          body: formData,
+        }),
+        context: routeContext() as any,
+      });
+      expect(result).toMatchObject({ data: { success: true } });
+    };
+    const callRestRecipe = async () => {
+      const requestId = nextRequestId("rest_recipe");
+      const response = await apiV1Action({
+        request: new Request(`${TEST_ORIGIN}/api/v1/shopping-list/add-from-recipe`, {
+          method: "POST",
+          headers: bearerHeaders({
+            "Content-Type": "application/json",
+            "X-Request-Id": requestId,
+          }),
+          body: JSON.stringify({
+            clientMutationId: requestId,
+            recipeId: REST_RECIPE_ID,
+          }),
+        }),
+        params: { "*": "shopping-list/add-from-recipe" },
+        context: routeContext(),
+      } as any);
+      expect(response.status).toBe(200);
+    };
+
+    const scenarios = [
+      {
+        label: "web addItem",
+        firstDelta: 3,
+        secondDelta: 4,
+        run: async () => {
+          await callWebManual("cutover d1 apples", 3);
+          await callWebManual("cutover d1 flour", 4);
+        },
+      },
+      {
+        label: "REST handleShoppingItemCreate",
+        firstDelta: 3,
+        secondDelta: 4,
+        run: async () => {
+          await callRestManual("cutover d1 apples", 3, 200);
+          await callRestManual("cutover d1 flour", 4, 201);
+        },
+      },
+      {
+        label: "shared addShoppingListItemTool",
+        firstDelta: 3,
+        secondDelta: 4,
+        run: async () => {
+          await callMcp(201, "add_shopping_list_item", {
+            name: "cutover d1 apples",
+            unit: "cutover d1 each",
+            quantity: 3,
+          });
+          await callMcp(202, "add_shopping_list_item", {
+            name: "cutover d1 flour",
+            unit: "cutover d1 each",
+            quantity: 4,
+          });
+        },
+      },
+      {
+        label: "web addFromRecipe",
+        firstDelta: 2,
+        secondDelta: 3,
+        run: callWebRecipe,
+      },
+      {
+        label: "REST handleShoppingAddFromRecipe",
+        firstDelta: 2,
+        secondDelta: 3,
+        run: callRestRecipe,
+      },
+      {
+        label: "shared addRecipeToShoppingListTool",
+        firstDelta: 2,
+        secondDelta: 3,
+        run: () => callMcp(203, "add_recipe_to_shopping_list", {
+          recipeId: REST_RECIPE_ID,
+        }),
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      await resetShoppingIdentityMatrix();
+      await scenario.run();
+      await expectShoppingIdentityMatrix(
+        scenario.label,
+        scenario.firstDelta,
+        scenario.secondDelta,
+      );
+    }
+  });
+
+  it("recovers a real Prisma-D1 expression-index race inside seed provisioning", async () => {
     const db = await getRequestDb(routeContext() as any);
     let observedConflict: unknown;
-    await executeStatement(
-      'DROP INDEX "ShoppingListItem_shoppingListId_unitId_ingredientRefId_key"',
-    );
-    await executeStatement(`
-      CREATE UNIQUE INDEX "ShoppingListItem_active_identity_key"
-      ON "ShoppingListItem" (
-        "shoppingListId",
-        "ingredientRefId",
-        COALESCE('u:' || "unitId", 'n:')
-      )
-      WHERE "deletedAt" IS NULL
-    `);
-
-    try {
-      const result = await mutateCompatibleShoppingListItem({
-        database: db,
-        identity: {
-          shoppingListId: SHOPPING_LIST_ID,
-          ingredientRefId: SHOPPING_FIRST_REF_ID,
-          unitId: SHOPPING_UNIT_ID,
-        },
-        async create() {
-          await db.shoppingListItem.create({
-            data: {
-              id: "cutover-d1-real-race-winner",
-              shoppingListId: SHOPPING_LIST_ID,
-              ingredientRefId: SHOPPING_FIRST_REF_ID,
-              unitId: SHOPPING_UNIT_ID,
-              quantity: 4,
-              sortIndex: 0,
-            },
-          });
-          try {
-            return await db.shoppingListItem.create({
+    let injected = false;
+    const create = db.shoppingListItem.create.bind(db.shoppingListItem);
+    const shoppingListItem = new Proxy(db.shoppingListItem, {
+      get(target, property) {
+        if (property !== "create") return Reflect.get(target, property, target);
+        return async (args: Parameters<typeof db.shoppingListItem.create>[0]) => {
+          if (!injected) {
+            injected = true;
+            await create({
               data: {
-                id: "cutover-d1-real-race-loser",
+                id: "cutover-d1-real-race-winner",
                 shoppingListId: SHOPPING_LIST_ID,
                 ingredientRefId: SHOPPING_FIRST_REF_ID,
                 unitId: SHOPPING_UNIT_ID,
-                quantity: 3,
-                sortIndex: 1,
+                quantity: 4,
+                sortIndex: 0,
               },
             });
+          }
+          try {
+            return await create(args);
           } catch (error) {
             observedConflict = error;
             throw error;
           }
-        },
-        update(existing) {
-          return db.shoppingListItem.update({
-            where: { id: existing.id },
-            data: { quantity: (existing.quantity ?? 0) + 3 },
-          });
-        },
-      });
+        };
+      },
+    });
+    const racingDb = new Proxy(db, {
+      get(target, property) {
+        if (property === "shoppingListItem") return shoppingListItem;
+        return Reflect.get(target, property, target);
+      },
+    });
+    const result = await expectD1AdapterError(
+      /ShoppingListItem_active_identity_key/,
+      () => provisionSeedShoppingListItem(racingDb, {
+        shoppingListId: SHOPPING_LIST_ID,
+        ingredientRefId: SHOPPING_FIRST_REF_ID,
+        unitId: SHOPPING_UNIT_ID,
+        quantity: 3,
+        checked: false,
+        checkedAt: null,
+        deletedAt: null,
+        categoryKey: null,
+        iconKey: null,
+        sortIndex: 1,
+      }),
+    );
 
-      expect(observedConflict).toMatchObject({
-        code: "P2002",
-        meta: { target: ["index 'ShoppingListItem_active_identity_key'"] },
-      });
-      expect(result).toMatchObject({
-        created: false,
-        item: { id: "cutover-d1-real-race-winner", quantity: 7 },
-      });
-      expect(await database().prepare(`
-        SELECT COUNT(*) AS "count"
-        FROM "ShoppingListItem"
-        WHERE "shoppingListId" = ?
-      `).bind(SHOPPING_LIST_ID).first<{ count: number }>()).toEqual({ count: 1 });
-    } finally {
-      await executeStatement('DROP INDEX IF EXISTS "ShoppingListItem_active_identity_key"');
-      await executeStatement(`
-        CREATE UNIQUE INDEX "ShoppingListItem_shoppingListId_unitId_ingredientRefId_key"
-        ON "ShoppingListItem" ("shoppingListId", "unitId", "ingredientRefId")
-      `);
-    }
+    expect(observedConflict).toMatchObject({
+      code: "P2002",
+      meta: { target: ["index 'ShoppingListItem_active_identity_key'"] },
+    });
+    expect(result).toMatchObject({
+      id: "cutover-d1-real-race-winner",
+      quantity: 3,
+      sortIndex: 1,
+    });
+    expect(await database().prepare(`
+      SELECT COUNT(*) AS "count"
+      FROM "ShoppingListItem"
+      WHERE "shoppingListId" = ?
+    `).bind(SHOPPING_LIST_ID).first<{ count: number }>()).toEqual({ count: 1 });
   });
 
   it("uses the same atomic native D1 recipe batch through MCP", async () => {

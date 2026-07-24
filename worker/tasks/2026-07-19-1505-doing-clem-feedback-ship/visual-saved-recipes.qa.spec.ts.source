@@ -1,0 +1,267 @@
+import { execFileSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import type { Locator, Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
+import { readLatestDisposableE2EUser } from "./support/disposable-auth";
+
+const EVIDENCE_DIR = path.resolve(
+  "worker/tasks/2026-07-19-1505-doing-clem-feedback-ship/unit-5.4-visual",
+);
+const SOURCE_USER_ID = "codex-saved-visual-source";
+const SOURCE_EMAIL = "codex-saved-visual-source@example.com";
+const SOURCE_USERNAME = "codex_saved_visual_source";
+
+type ViewportName = "desktop" | "mobile";
+
+type TargetMetric = {
+  name: string;
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+  focused: boolean;
+};
+
+type StateMetric = {
+  state: string;
+  viewport: ViewportName;
+  innerWidth: number;
+  innerHeight: number;
+  rootScrollWidth: number;
+  bodyScrollWidth: number;
+  targets: TargetMetric[];
+};
+
+const metrics: StateMetric[] = [];
+
+function sqlString(value: string) {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+function executeRunSql(sql: string) {
+  const runId = process.env.SPOONJOY_E2E_RUN_ID;
+  if (!runId) throw new Error("SPOONJOY_E2E_RUN_ID is required for visual QA seeding.");
+  const persistPath = path.resolve(".wrangler", "e2e-runs", runId, "state");
+  execFileSync(
+    "pnpm",
+    ["exec", "wrangler", "d1", "execute", "DB", "--local", "--persist-to", persistPath, "--command", sql],
+    { cwd: process.cwd(), encoding: "utf8", stdio: "pipe" },
+  );
+}
+
+function recipeId(index: number) {
+  return `codex-saved-visual-${String(index).padStart(2, "0")}`;
+}
+
+function seedRecipes() {
+  const recipeStatements = Array.from({ length: 25 }, (_, offset) => {
+    const index = offset + 1;
+    return `INSERT OR IGNORE INTO "Recipe" (
+      "id", "title", "description", "servings", "chefId", "course", "createdAt", "updatedAt"
+    ) VALUES (
+      ${sqlString(recipeId(index))},
+      ${sqlString(`Visual Pantry Recipe ${String(index).padStart(2, "0")}`)},
+      ${sqlString(`A bright weeknight recipe with crisp vegetables, herbs, and pantry staples. Plate ${String(index).padStart(2, "0")}.`)},
+      ${sqlString(`${(index % 4) + 2} servings`)},
+      ${sqlString(SOURCE_USER_ID)},
+      ${sqlString(index % 2 === 0 ? "side" : "main")},
+      CURRENT_TIMESTAMP,
+      CURRENT_TIMESTAMP
+    );`;
+  }).join("\n");
+
+  executeRunSql(`
+    INSERT OR IGNORE INTO "User" ("id", "email", "username", "createdAt", "updatedAt")
+    VALUES (
+      ${sqlString(SOURCE_USER_ID)},
+      ${sqlString(SOURCE_EMAIL)},
+      ${sqlString(SOURCE_USERNAME)},
+      CURRENT_TIMESTAMP,
+      CURRENT_TIMESTAMP
+    );
+    ${recipeStatements}
+  `);
+}
+
+function seedRemainingSaves(viewerEmail: string) {
+  const statements = Array.from({ length: 24 }, (_, offset) => {
+    const index = offset + 2;
+    const second = String(59 - offset).padStart(2, "0");
+    return `INSERT OR IGNORE INTO "SavedRecipe" ("userId", "recipeId", "savedAt")
+      SELECT "id", ${sqlString(recipeId(index))}, ${sqlString(`2026-07-22T12:00:${second}.000Z`)}
+      FROM "User" WHERE "email" = ${sqlString(viewerEmail)};`;
+  }).join("\n");
+  executeRunSql(statements);
+}
+
+async function setViewport(page: Page, viewport: ViewportName) {
+  await page.setViewportSize(viewport === "desktop"
+    ? { width: 1440, height: 900 }
+    : { width: 390, height: 844 });
+}
+
+async function focusWithKeyboard(page: Page, target: Locator) {
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    await page.keyboard.press("Tab");
+    if (await target.evaluate((element) => element === document.activeElement)) return;
+  }
+  throw new Error("Target was not reachable within 40 keyboard Tab presses.");
+}
+
+async function assertMinimumTarget(locator: Locator, name: string) {
+  const box = await locator.boundingBox();
+  expect(box, `${name} must have a rendered box`).not.toBeNull();
+  expect(box!.width, `${name} width`).toBeGreaterThanOrEqual(44);
+  expect(box!.height, `${name} height`).toBeGreaterThanOrEqual(44);
+}
+
+async function capture(
+  page: Page,
+  state: string,
+  viewport: ViewportName,
+  targets: Array<{ name: string; locator: Locator }> = [],
+) {
+  const pageMetric = await page.evaluate(() => ({
+    innerWidth: window.innerWidth,
+    innerHeight: window.innerHeight,
+    rootScrollWidth: document.documentElement.scrollWidth,
+    bodyScrollWidth: document.body.scrollWidth,
+  }));
+  expect(pageMetric.rootScrollWidth, `${state} root horizontal overflow`).toBeLessThanOrEqual(pageMetric.innerWidth);
+  expect(pageMetric.bodyScrollWidth, `${state} body horizontal overflow`).toBeLessThanOrEqual(pageMetric.innerWidth);
+
+  const targetMetrics: TargetMetric[] = [];
+  for (const target of targets) {
+    const box = await target.locator.boundingBox();
+    expect(box, `${target.name} must be visible`).not.toBeNull();
+    targetMetrics.push({
+      name: target.name,
+      width: box!.width,
+      height: box!.height,
+      x: box!.x,
+      y: box!.y,
+      focused: await target.locator.evaluate((element) => element === document.activeElement),
+    });
+  }
+
+  metrics.push({ state, viewport, ...pageMetric, targets: targetMetrics });
+  await page.screenshot({
+    path: path.join(EVIDENCE_DIR, `${state}-${viewport}.png`),
+    animations: "disabled",
+  });
+}
+
+test.describe.configure({ mode: "serial" });
+test.setTimeout(120_000);
+
+test("captures the saved-recipe experience at its required visual states", async ({ page }) => {
+  mkdirSync(EVIDENCE_DIR, { recursive: true });
+  seedRecipes();
+
+  await setViewport(page, "desktop");
+  await page.goto("/saved-recipes");
+  await expect(page.getByRole("heading", { name: "No saved recipes yet" })).toBeVisible();
+  await capture(page, "saved-empty", "desktop");
+
+  await setViewport(page, "mobile");
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "No saved recipes yet" })).toBeVisible();
+  await capture(page, "saved-empty", "mobile");
+
+  await setViewport(page, "desktop");
+  await page.goto(`/recipes/${recipeId(1)}`);
+  const headerSave = page.getByTestId("recipe-header-save-action");
+  const headerCookbook = page.getByTestId("recipe-header-cookbook-action");
+  await expect(headerSave).toHaveAccessibleName("Save recipe");
+  await expect(headerCookbook).toHaveAccessibleName("Add to cookbook");
+  expect(await headerSave.getAttribute("aria-label")).not.toBe(await headerCookbook.getAttribute("aria-label"));
+  await assertMinimumTarget(headerSave, "desktop recipe save");
+  await assertMinimumTarget(headerCookbook, "desktop cookbook");
+
+  await focusWithKeyboard(page, headerSave);
+  await expect(headerSave).toBeFocused();
+  await capture(page, "recipe-controls-save-focused", "desktop", [
+    { name: "header save", locator: headerSave },
+    { name: "header cookbook", locator: headerCookbook },
+  ]);
+  await page.keyboard.press("Enter");
+  await expect(headerSave).toHaveAccessibleName("Remove saved recipe");
+  await expect(headerSave).toHaveAttribute("aria-pressed", "true");
+
+  await focusWithKeyboard(page, headerCookbook);
+  await expect(headerCookbook).toBeFocused();
+  await capture(page, "recipe-controls-cookbook-focused", "desktop", [
+    { name: "header save", locator: headerSave },
+    { name: "header cookbook", locator: headerCookbook },
+  ]);
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Add to Cookbook" })).toBeVisible();
+  await capture(page, "recipe-cookbook-dialog", "desktop");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toBeHidden();
+
+  await setViewport(page, "mobile");
+  await page.reload();
+  const mobileHeaderSave = page.getByTestId("recipe-header-save-action");
+  const mobileHeaderCookbook = page.getByTestId("recipe-header-cookbook-action");
+  const dockSave = page.getByRole("button", { name: "Remove saved recipe" }).last();
+  await expect(mobileHeaderSave).toHaveAccessibleName("Remove saved recipe");
+  await expect(mobileHeaderCookbook).toHaveAccessibleName("Add to cookbook");
+  await expect(dockSave).toHaveAttribute("aria-pressed", "true");
+  await assertMinimumTarget(mobileHeaderSave, "mobile recipe save");
+  await assertMinimumTarget(mobileHeaderCookbook, "mobile cookbook");
+  await assertMinimumTarget(dockSave, "mobile dock save");
+  await focusWithKeyboard(page, mobileHeaderCookbook);
+  await expect(mobileHeaderCookbook).toBeFocused();
+  await capture(page, "recipe-controls-cookbook-focused", "mobile", [
+    { name: "header save", locator: mobileHeaderSave },
+    { name: "header cookbook", locator: mobileHeaderCookbook },
+    { name: "dock save", locator: dockSave },
+  ]);
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await capture(page, "recipe-cookbook-dialog", "mobile");
+  await page.keyboard.press("Escape");
+
+  seedRemainingSaves(readLatestDisposableE2EUser().email);
+
+  await setViewport(page, "desktop");
+  await page.goto("/saved-recipes");
+  await expect(page.getByRole("heading", { name: "Saved Recipes" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Visual Pantry Recipe 01/ })).toBeVisible();
+  const desktopNext = page.getByRole("link", { name: "Next" });
+  await expect(desktopNext).toBeVisible();
+  await capture(page, "saved-populated", "desktop");
+  await desktopNext.scrollIntoViewIfNeeded();
+  await capture(page, "saved-pagination", "desktop", [{ name: "next page", locator: desktopNext }]);
+
+  await setViewport(page, "mobile");
+  await page.goto("/saved-recipes");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(page.getByRole("heading", { name: "Saved Recipes" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Visual Pantry Recipe 01/ })).toBeVisible();
+  const mobileNext = page.getByRole("link", { name: "Next" });
+  await capture(page, "saved-populated", "mobile");
+  await mobileNext.scrollIntoViewIfNeeded();
+  await capture(page, "saved-pagination", "mobile", [{ name: "next page", locator: mobileNext }]);
+
+  await setViewport(page, "desktop");
+  await page.goto("/saved-recipes?q=Recipe%2007");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(page.getByRole("link", { name: /Visual Pantry Recipe 07/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Visual Pantry Recipe 08/ })).toHaveCount(0);
+  await capture(page, "saved-search", "desktop");
+
+  await setViewport(page, "mobile");
+  await page.goto("/saved-recipes?q=Recipe%2007");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(page.getByRole("link", { name: /Visual Pantry Recipe 07/ })).toBeVisible();
+  await capture(page, "saved-search", "mobile");
+
+  writeFileSync(path.join(EVIDENCE_DIR, "metrics.json"), `${JSON.stringify(metrics, null, 2)}\n`);
+});

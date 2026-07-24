@@ -9,6 +9,8 @@ export interface DockItemProps {
   ariaLabel?: string;
   href?: string;
   active?: boolean;
+  disabled?: boolean;
+  ariaPressed?: boolean;
   className?: string;
   iconClassName?: string;
   labelClassName?: string;
@@ -24,6 +26,8 @@ export function DockItem({
   ariaLabel,
   href,
   active = false,
+  disabled = false,
+  ariaPressed,
   className,
   iconClassName,
   labelClassName,
@@ -37,6 +41,7 @@ export function DockItem({
   const baseClassName = clsx(
     "min-h-[50px] rounded-full border-0 no-underline transition duration-150 active:scale-95",
     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)]",
+    "disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100",
     // Place item: label shown on wider phones; collapses to a centered
     // icon (min 48px touch target) at <=389px so the dock never crushes it
     // or spills the label on iPhone 13 mini / SE / 5 widths.
@@ -108,7 +113,15 @@ export function DockItem({
   }
 
   return (
-    <button type="button" onClick={onClick} className={baseClassName} aria-label={ariaLabel}>
+    <button
+      type="button"
+      onClick={onClick}
+      className={baseClassName}
+      aria-label={ariaLabel}
+      disabled={disabled}
+      aria-disabled={disabled ? true : undefined}
+      aria-pressed={ariaPressed}
+    >
       {content}
     </button>
   );

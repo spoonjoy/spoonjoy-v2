@@ -26,6 +26,8 @@ describe("API v1 recipe list query", () => {
         title: "Tiny-device pasta",
         description: "Summary-safe recipe",
         servings: "2",
+        course: null,
+        tags: [],
         sourceUrl: null,
         sourceRecipe: null,
         activeCover: null,
@@ -57,6 +59,8 @@ describe("API v1 recipe list query", () => {
           id: "recipe_1",
           title: "Tiny-device pasta",
           chef: { id: "chef_1", username: "ari" },
+          course: null,
+          tags: [],
         }],
       },
     });
@@ -66,6 +70,10 @@ describe("API v1 recipe list query", () => {
         title: true,
         description: true,
         servings: true,
+        course: true,
+        tags: {
+          select: { id: true, label: true, normalizedLabel: true },
+        },
         sourceUrl: true,
         createdAt: true,
         updatedAt: true,

@@ -136,6 +136,311 @@ describe("loadRecipeDetail sourceRecipe", () => {
   });
 });
 
+describe("recipe detail saved state and actions", () => {
+  beforeEach(async () => {
+    await cleanupDatabase();
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await cleanupDatabase();
+  });
+
+  it("loads owner-scoped saved state without personalizing guest or another user's view", async () => {
+    const chef = await makeUser();
+    const viewer = await makeUser();
+    const recipe = await db.recipe.create({
+      data: { title: "Scoped Saved Detail", chefId: chef.id },
+    });
+    await db.savedRecipe.create({
+      data: { userId: viewer.id, recipeId: recipe.id, savedAt: "2026-07-22T12:00:00.000Z" },
+    });
+
+    const viewerResult = await loadRecipeDetail({
+      request: await makeAuthedRequest(viewer.id, recipe.id) as unknown as Request,
+      params: { id: recipe.id },
+      context: { cloudflare: { env: null } } as any,
+    });
+    const chefResult = await loadRecipeDetail({
+      request: await makeAuthedRequest(chef.id, recipe.id) as unknown as Request,
+      params: { id: recipe.id },
+      context: { cloudflare: { env: null } } as any,
+    });
+    const guestResult = await loadRecipeDetail({
+      request: new UndiciRequest(`http://localhost/recipes/${recipe.id}`) as unknown as Request,
+      params: { id: recipe.id },
+      context: { cloudflare: { env: null } } as any,
+    });
+
+    expect(viewerResult.isSaved).toBe(true);
+    expect(chefResult.isSaved).toBe(false);
+    expect(guestResult.isSaved).toBe(false);
+  });
+
+  it("keeps saved rows and cookbook membership independent through idempotent web actions", async () => {
+    const chef = await makeUser();
+    const viewer = await makeUser();
+    const recipe = await db.recipe.create({
+      data: { title: "Independent Saved Detail", chefId: chef.id },
+    });
+    const cookbook = await db.cookbook.create({
+      data: { title: "Independent Cookbook", authorId: viewer.id },
+    });
+    await expect(db.recipeInCookbook.count({
+      where: { cookbookId: cookbook.id, recipeId: recipe.id },
+    })).resolves.toBe(0);
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-07-22T12:00:00.000Z"));
+
+    const saveForm = new UndiciFormData();
+    saveForm.append("intent", "saveRecipe");
+    const saved = await handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(viewer.id, recipe.id, saveForm) as unknown as Request,
+      params: { id: recipe.id },
+      context: { cloudflare: { env: null } } as any,
+    });
+    expect(saved).toEqual({
+      success: true,
+      intent: "saveRecipe",
+      saved: true,
+      savedAt: "2026-07-22T12:00:00.000Z",
+    });
+    await expect(db.savedRecipe.findUnique({
+      where: { userId_recipeId: { userId: viewer.id, recipeId: recipe.id } },
+      select: { userId: true, recipeId: true, savedAt: true },
+    })).resolves.toEqual({
+      userId: viewer.id,
+      recipeId: recipe.id,
+      savedAt: "2026-07-22T12:00:00.000Z",
+    });
+    await expect(db.savedRecipe.count({
+      where: { userId: viewer.id, recipeId: recipe.id },
+    })).resolves.toBe(1);
+    await expect(db.recipeInCookbook.count({
+      where: { cookbookId: cookbook.id, recipeId: recipe.id },
+    })).resolves.toBe(0);
+
+    const addToCookbookForm = new UndiciFormData();
+    addToCookbookForm.append("intent", "addToCookbook");
+    addToCookbookForm.append("cookbookId", cookbook.id);
+    await expect(handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(
+        viewer.id,
+        recipe.id,
+        addToCookbookForm,
+      ) as unknown as Request,
+      params: { id: recipe.id },
+      context: { cloudflare: { env: null } } as any,
+    })).resolves.toEqual({ success: true });
+    await expect(db.recipeInCookbook.count({
+      where: { cookbookId: cookbook.id, recipeId: recipe.id },
+    })).resolves.toBe(1);
+    await expect(db.savedRecipe.findUnique({
+      where: { userId_recipeId: { userId: viewer.id, recipeId: recipe.id } },
+      select: { savedAt: true },
+    })).resolves.toEqual({ savedAt: "2026-07-22T12:00:00.000Z" });
+
+    const removeFromCookbookForm = new UndiciFormData();
+    removeFromCookbookForm.append("intent", "removeFromCookbook");
+    removeFromCookbookForm.append("cookbookId", cookbook.id);
+    await expect(handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(
+        viewer.id,
+        recipe.id,
+        removeFromCookbookForm,
+      ) as unknown as Request,
+      params: { id: recipe.id },
+      context: { cloudflare: { env: null } } as any,
+    })).resolves.toEqual({ success: true });
+    await expect(db.recipeInCookbook.count({
+      where: { cookbookId: cookbook.id, recipeId: recipe.id },
+    })).resolves.toBe(0);
+    await expect(db.savedRecipe.findUnique({
+      where: { userId_recipeId: { userId: viewer.id, recipeId: recipe.id } },
+      select: { savedAt: true },
+    })).resolves.toEqual({ savedAt: "2026-07-22T12:00:00.000Z" });
+
+    vi.mocked(Date.now).mockReturnValue(Date.parse("2026-07-23T12:00:00.000Z"));
+    const repeatSaveForm = new UndiciFormData();
+    repeatSaveForm.append("intent", "saveRecipe");
+    await expect(handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(viewer.id, recipe.id, repeatSaveForm) as unknown as Request,
+      params: { id: recipe.id },
+      context: { cloudflare: { env: null } } as any,
+    })).resolves.toEqual({
+      success: true,
+      intent: "saveRecipe",
+      saved: true,
+      savedAt: "2026-07-22T12:00:00.000Z",
+    });
+    await expect(db.savedRecipe.findUnique({
+      where: { userId_recipeId: { userId: viewer.id, recipeId: recipe.id } },
+      select: { savedAt: true },
+    })).resolves.toEqual({ savedAt: "2026-07-22T12:00:00.000Z" });
+    await expect(db.savedRecipe.count({
+      where: { userId: viewer.id, recipeId: recipe.id },
+    })).resolves.toBe(1);
+    await expect(db.recipeInCookbook.count({
+      where: { cookbookId: cookbook.id, recipeId: recipe.id },
+    })).resolves.toBe(0);
+
+    const readdToCookbookForm = new UndiciFormData();
+    readdToCookbookForm.append("intent", "addToCookbook");
+    readdToCookbookForm.append("cookbookId", cookbook.id);
+    await expect(handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(
+        viewer.id,
+        recipe.id,
+        readdToCookbookForm,
+      ) as unknown as Request,
+      params: { id: recipe.id },
+      context: { cloudflare: { env: null } } as any,
+    })).resolves.toEqual({ success: true });
+    await expect(db.savedRecipe.findUnique({
+      where: { userId_recipeId: { userId: viewer.id, recipeId: recipe.id } },
+      select: { savedAt: true },
+    })).resolves.toEqual({ savedAt: "2026-07-22T12:00:00.000Z" });
+    await expect(db.recipeInCookbook.count({
+      where: { cookbookId: cookbook.id, recipeId: recipe.id },
+    })).resolves.toBe(1);
+
+    const unsaveForm = new UndiciFormData();
+    unsaveForm.append("intent", "unsaveRecipe");
+    await expect(handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(viewer.id, recipe.id, unsaveForm) as unknown as Request,
+      params: { id: recipe.id },
+      context: { cloudflare: { env: null } } as any,
+    })).resolves.toEqual({ success: true, intent: "unsaveRecipe", saved: false });
+    await expect(db.savedRecipe.count({
+      where: { userId: viewer.id, recipeId: recipe.id },
+    })).resolves.toBe(0);
+    await expect(db.recipeInCookbook.count({
+      where: { cookbookId: cookbook.id, recipeId: recipe.id },
+    })).resolves.toBe(1);
+
+    const repeatUnsaveForm = new UndiciFormData();
+    repeatUnsaveForm.append("intent", "unsaveRecipe");
+    await expect(handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(viewer.id, recipe.id, repeatUnsaveForm) as unknown as Request,
+      params: { id: recipe.id },
+      context: { cloudflare: { env: null } } as any,
+    })).resolves.toEqual({ success: true, intent: "unsaveRecipe", saved: false });
+    await expect(db.savedRecipe.count({
+      where: { userId: viewer.id, recipeId: recipe.id },
+    })).resolves.toBe(0);
+    await expect(db.recipeInCookbook.count({
+      where: { cookbookId: cookbook.id, recipeId: recipe.id },
+    })).resolves.toBe(1);
+  });
+
+  it("rejects saving a soft-deleted recipe but still lets the owner remove its saved row", async () => {
+    const chef = await makeUser();
+    const viewer = await makeUser();
+    const recipe = await db.recipe.create({
+      data: { title: "Deleted Saved Detail", chefId: chef.id },
+    });
+    await db.savedRecipe.create({
+      data: { userId: viewer.id, recipeId: recipe.id, savedAt: "2026-07-22T12:00:00.000Z" },
+    });
+    await db.recipe.update({
+      where: { id: recipe.id },
+      data: { deletedAt: new Date("2026-07-22T13:00:00.000Z") },
+    });
+
+    const saveForm = new UndiciFormData();
+    saveForm.append("intent", "saveRecipe");
+    await expect(handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(viewer.id, recipe.id, saveForm) as unknown as Request,
+      params: { id: recipe.id },
+      context: { cloudflare: { env: null } } as any,
+    })).rejects.toSatisfy((error: unknown) => {
+      expect(error).toBeInstanceOf(Response);
+      expect((error as Response).status).toBe(404);
+      return true;
+    });
+    await expect(db.savedRecipe.findUnique({
+      where: { userId_recipeId: { userId: viewer.id, recipeId: recipe.id } },
+      select: { savedAt: true },
+    })).resolves.toEqual({ savedAt: "2026-07-22T12:00:00.000Z" });
+
+    const unsaveForm = new UndiciFormData();
+    unsaveForm.append("intent", "unsaveRecipe");
+    await expect(handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(viewer.id, recipe.id, unsaveForm) as unknown as Request,
+      params: { id: recipe.id },
+      context: { cloudflare: { env: null } } as any,
+    })).resolves.toEqual({ success: true, intent: "unsaveRecipe", saved: false });
+    await expect(db.savedRecipe.findUnique({
+      where: { userId_recipeId: { userId: viewer.id, recipeId: recipe.id } },
+    })).resolves.toBeNull();
+  });
+
+  it("maps only the saved-recipe cutover failure while saving", async () => {
+    const viewer = await makeUser();
+    const cutoverError = new Error("D1_ERROR: saved_recipe_cutover_pending");
+    const ordinaryError = new Error("saved recipe write unavailable");
+    vi.spyOn(db, "$queryRawUnsafe")
+      .mockRejectedValueOnce(cutoverError)
+      .mockRejectedValueOnce(ordinaryError);
+
+    const cutoverForm = new UndiciFormData();
+    cutoverForm.append("intent", "saveRecipe");
+    await expect(handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(viewer.id, "recipe-cutover", cutoverForm) as unknown as Request,
+      params: { id: "recipe-cutover" },
+      context: { cloudflare: { env: null } } as any,
+    })).resolves.toMatchObject({
+      data: {
+        error: {
+          code: "product_activation_pending",
+          retryable: true,
+        },
+      },
+      init: { status: 503 },
+    });
+
+    const ordinaryForm = new UndiciFormData();
+    ordinaryForm.append("intent", "saveRecipe");
+    await expect(handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(viewer.id, "recipe-ordinary", ordinaryForm) as unknown as Request,
+      params: { id: "recipe-ordinary" },
+      context: { cloudflare: { env: null } } as any,
+    })).rejects.toBe(ordinaryError);
+  });
+
+  it("maps only the saved-recipe cutover failure while unsaving", async () => {
+    const viewer = await makeUser();
+    const cutoverError = new Error("D1_ERROR: saved_recipe_cutover_pending");
+    const ordinaryError = new Error("saved recipe delete unavailable");
+    vi.spyOn(db.savedRecipe, "deleteMany")
+      .mockRejectedValueOnce(cutoverError)
+      .mockRejectedValueOnce(ordinaryError);
+
+    const cutoverForm = new UndiciFormData();
+    cutoverForm.append("intent", "unsaveRecipe");
+    await expect(handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(viewer.id, "recipe-cutover", cutoverForm) as unknown as Request,
+      params: { id: "recipe-cutover" },
+      context: { cloudflare: { env: null } } as any,
+    })).resolves.toMatchObject({
+      data: {
+        error: {
+          code: "product_activation_pending",
+          retryable: true,
+        },
+      },
+      init: { status: 503 },
+    });
+
+    const ordinaryForm = new UndiciFormData();
+    ordinaryForm.append("intent", "unsaveRecipe");
+    await expect(handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(viewer.id, "recipe-ordinary", ordinaryForm) as unknown as Request,
+      params: { id: "recipe-ordinary" },
+      context: { cloudflare: { env: null } } as any,
+    })).rejects.toBe(ordinaryError);
+  });
+});
+
 describe("handleRecipeDetailAction cover generation actions", () => {
   beforeEach(async () => { await cleanupDatabase(); });
   afterEach(async () => { await cleanupDatabase(); });

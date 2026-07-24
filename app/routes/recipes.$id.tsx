@@ -30,8 +30,65 @@ import type { StepReference } from "~/components/recipe/StepOutputUseCallout";
 import { shareContent, useDockSuppressed, useRecipeDetailActions } from "~/components/navigation";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 
+function getSetCookieValues(source: Headers) {
+  const cookieHeaders = source as Headers & {
+    getSetCookie?: () => string[];
+    getAll?: (name: string) => string[];
+  };
+  if (typeof cookieHeaders.getSetCookie === "function") {
+    return cookieHeaders.getSetCookie();
+  }
+  if (typeof cookieHeaders.getAll === "function") {
+    return cookieHeaders.getAll("Set-Cookie");
+  }
+  const cookie = source.get("Set-Cookie");
+  return cookie ? [cookie] : [];
+}
+
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   return loadRecipeDetail({ request, params, context });
+}
+
+export function headers({
+  parentHeaders,
+  loaderHeaders,
+  actionHeaders,
+  errorHeaders,
+}: Route.HeadersArgs) {
+  const responseHeaders = new Headers();
+  const varyTokens: string[] = [];
+
+  for (const source of [parentHeaders, loaderHeaders, actionHeaders, errorHeaders]) {
+    if (!source) continue;
+
+    for (const [name, value] of source) {
+      const normalizedName = name.toLowerCase();
+      if (normalizedName === "set-cookie" || normalizedName === "vary") continue;
+      responseHeaders.set(name, value);
+    }
+    for (const cookie of getSetCookieValues(source)) {
+      responseHeaders.append("Set-Cookie", cookie);
+    }
+    for (const token of (source.get("Vary") ?? "").split(",")) {
+      const normalizedToken = token.trim();
+      if (
+        normalizedToken
+        && !varyTokens.some((existing) => existing.toLowerCase() === normalizedToken.toLowerCase())
+      ) {
+        varyTokens.push(normalizedToken);
+      }
+    }
+  }
+
+  responseHeaders.set("Cache-Control", "private, no-store");
+  for (const credentialHeader of ["Authorization", "Cookie"]) {
+    if (!varyTokens.some((token) => token.toLowerCase() === credentialHeader.toLowerCase())) {
+      varyTokens.push(credentialHeader);
+    }
+  }
+  responseHeaders.set("Vary", varyTokens.join(", "));
+
+  return responseHeaders;
 }
 
 export function meta({ data }: Route.MetaArgs) {
@@ -90,6 +147,17 @@ type RecipeDetailActionData = {
   success?: boolean;
   intent?: string;
   spoon?: { id?: string };
+};
+
+type RecipeSavedActionData = {
+  success?: boolean;
+  intent?: string;
+  saved?: boolean;
+  error?: string | {
+    code?: string;
+    message?: string;
+    retryable?: boolean;
+  };
 };
 
 const recipeMastheadLinkClass =
@@ -292,6 +360,7 @@ export default function RecipeDetail() {
   const submit = useSubmit();
   const revalidator = useRevalidator();
   const addToListFetcher = useFetcher();
+  const saveRecipeFetcher = useFetcher<RecipeSavedActionData>();
   const createCookbookFetcher = useFetcher<typeof action>();
   const posthog = usePostHog();
   const { showToast } = useToast();
@@ -322,6 +391,8 @@ export default function RecipeDetail() {
   const lastHandledCreatedCookbookId = useRef<string | null>(null);
   const addToListSubmissionCount = useRef(0);
   const lastHandledAddToListSubmissionCount = useRef(0);
+  const saveRecipeSubmissionCount = useRef(0);
+  const lastHandledSaveRecipeSubmissionCount = useRef(0);
   const pendingCookModeScroll = useRef(false);
   const lastHandledLoggedSpoonId = useRef<string | null>(null);
   const ingredientCount = recipe.steps.reduce((count, step) => count + step.ingredients.length, 0);
@@ -549,6 +620,12 @@ export default function RecipeDetail() {
   const [showOwnerTools, setShowOwnerTools] = useState(false);
   const [newCookbookTitle, setNewCookbookTitle] = useState("");
   const saveModalTitleRef = useRef<HTMLHeadingElement>(null);
+  const pendingSavedIntent = saveRecipeFetcher.formData?.get("intent")?.toString();
+  const isSavedMutationPending = saveRecipeFetcher.state !== "idle" &&
+    (pendingSavedIntent === "saveRecipe" || pendingSavedIntent === "unsaveRecipe");
+  const isRecipeSaved = isSavedMutationPending
+    ? pendingSavedIntent === "saveRecipe"
+    : (loaderData.isSaved ?? false);
 
   useEffect(() => {
     const loggedSpoonId = actionData?.success && actionData.intent === "createSpoon"
@@ -572,6 +649,22 @@ export default function RecipeDetail() {
 
     setIsSaveModalOpen(true);
   }, [isAuthenticated, loginRedirect]);
+
+  const handleToggleSaved = useCallback(() => {
+    if (!isAuthenticated) {
+      window.location.assign(loginRedirect);
+      return;
+    }
+    if (saveRecipeFetcher.state !== "idle") {
+      return;
+    }
+
+    saveRecipeSubmissionCount.current += 1;
+    saveRecipeFetcher.submit(
+      { intent: isRecipeSaved ? "unsaveRecipe" : "saveRecipe" },
+      { method: "post" },
+    );
+  }, [isAuthenticated, isRecipeSaved, loginRedirect, saveRecipeFetcher]);
 
   const handleAddToList = useCallback(() => {
     if (!isAuthenticated) {
@@ -650,11 +743,23 @@ export default function RecipeDetail() {
         </Link>
         <button
           type="button"
-          onClick={handleOpenSaveModal}
+          onClick={handleToggleSaved}
+          aria-label={isRecipeSaved ? "Remove saved recipe" : "Save recipe"}
+          aria-pressed={isRecipeSaved}
+          disabled={isSavedMutationPending}
           className={`${recipeMastheadActionClass} bg-transparent`}
           data-testid="recipe-header-save-action"
         >
-          Save
+          {isRecipeSaved ? "Saved" : "Save"}
+        </button>
+        <button
+          type="button"
+          onClick={handleOpenSaveModal}
+          aria-label="Add to cookbook"
+          className={`${recipeMastheadActionClass} bg-transparent`}
+          data-testid="recipe-header-cookbook-action"
+        >
+          Cookbook
         </button>
         <button
           type="button"
@@ -738,6 +843,29 @@ export default function RecipeDetail() {
     });
   }, [addToListFetcher.state, addToListFetcher.data, ingredientCount, scaleFactor, showToast]);
 
+  useEffect(() => {
+    if (
+      saveRecipeFetcher.state !== "idle" ||
+      !saveRecipeFetcher.data ||
+      saveRecipeSubmissionCount.current === lastHandledSaveRecipeSubmissionCount.current
+    ) {
+      return;
+    }
+
+    lastHandledSaveRecipeSubmissionCount.current = saveRecipeSubmissionCount.current;
+    const saveError = saveRecipeFetcher.data.error;
+    if (
+      saveRecipeFetcher.data.success === false ||
+      (typeof saveError === "object" && saveError !== null)
+    ) {
+      showToast({
+        message: typeof saveError === "string"
+          ? saveError
+          : saveError?.message ?? "Unable to update saved recipe. Please try again.",
+      });
+    }
+  }, [saveRecipeFetcher.state, saveRecipeFetcher.data, showToast]);
+
   // Register dock actions for this recipe detail page
   useRecipeDetailActions({
     recipeId: recipe.id,
@@ -745,7 +873,9 @@ export default function RecipeDetail() {
     chefProfileHref: `/users/${recipe.chef.username}`,
     isOwner,
     isInShoppingList: isAlreadyInList,
-    onSave: handleOpenSaveModal,
+    isSaved: isRecipeSaved,
+    isSavePending: isSavedMutationPending,
+    onSave: handleToggleSaved,
     onAddToList: handleAddToList,
     onShare: handleShare,
     onCook: enterCookMode,
@@ -980,7 +1110,7 @@ export default function RecipeDetail() {
         coverPromptMode={coverPromptMode}
       />
 
-      {/* Save to Cookbook Modal (Bottom Sheet) */}
+      {/* Cookbook membership modal (bottom sheet) */}
       <Dialog
         open={isSaveModalOpen}
         onClose={setIsSaveModalOpen}
@@ -990,7 +1120,9 @@ export default function RecipeDetail() {
         className="mb-24 max-h-[calc(100dvh-7.5rem)] overflow-hidden !rounded-[var(--sj-radius-surface)] !shadow-[var(--sj-shadow)] pb-[max(0.75rem,env(safe-area-inset-bottom))] data-enter:duration-200 data-enter:ease-out data-leave:duration-150 data-leave:ease-in data-closed:translate-y-4 data-enter:data-closed:translate-y-4 sm:mb-auto sm:max-h-[calc(100dvh-4rem)] sm:data-closed:translate-y-1"
       >
         <div className="flex max-h-full flex-col" data-testid="save-modal">
-          <DialogTitle ref={saveModalTitleRef} tabIndex={-1}>Save to Cookbook</DialogTitle>
+          <DialogTitle ref={saveModalTitleRef} tabIndex={-1} className="focus:outline-none">
+            Add to Cookbook
+          </DialogTitle>
           <DialogBody
             className="mt-4 min-h-0 flex-1 overflow-y-auto pb-3"
             data-testid="save-modal-body"
@@ -1060,7 +1192,7 @@ export default function RecipeDetail() {
                 disabled={newCookbookTitle.trim().length === 0 || createCookbookFetcher.state !== "idle"}
                 data-testid="create-cookbook-button"
               >
-                Create & Save
+                Create & Add
               </Button>
             </createCookbookFetcher.Form>
           </div>

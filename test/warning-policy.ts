@@ -1,10 +1,11 @@
 import { afterAll, afterEach } from "vitest";
 import { isDeepStrictEqual } from "node:util";
 
-type ConsoleMethod = "warn" | "error";
+type ConsoleMethod = "warn" | "error" | "info";
 
 type ExpectedConsoleDiagnostic = {
-  args: unknown[];
+  description: string;
+  matches: (args: unknown[]) => boolean;
   method: ConsoleMethod;
   observed: boolean;
 };
@@ -31,11 +32,28 @@ export function createWarningCollector() {
 
   return {
     expectConsole(method: ConsoleMethod, args: unknown[]) {
-      expectedConsoleDiagnostics.push({ method, args, observed: false });
+      expectedConsoleDiagnostics.push({
+        method,
+        description: args.map(formatValue).join(" "),
+        matches: (actual) => argsMatch(actual, args),
+        observed: false,
+      });
+    },
+    expectConsoleMatching(
+      method: ConsoleMethod,
+      description: string,
+      matches: (args: unknown[]) => boolean,
+    ) {
+      expectedConsoleDiagnostics.push({
+        method,
+        description,
+        matches,
+        observed: false,
+      });
     },
     captureConsole(method: ConsoleMethod, args: unknown[]) {
       const expected = expectedConsoleDiagnostics.find((candidate) =>
-        !candidate.observed && candidate.method === method && argsMatch(args, candidate.args)
+        !candidate.observed && candidate.method === method && candidate.matches(args)
       );
       if (expected) {
         expected.observed = true;
@@ -55,7 +73,7 @@ export function createWarningCollector() {
       for (const expected of expectedConsoleDiagnostics) {
         if (!expected.observed) {
           diagnostics.push(
-            `expected console.${expected.method} not observed: ${expected.args.map(formatValue).join(" ")}`,
+            `expected console.${expected.method} not observed: ${expected.description}`,
           );
         }
       }
@@ -69,6 +87,7 @@ export function createWarningCollector() {
 const collector = createWarningCollector();
 const originalWarn = console.warn;
 const originalError = console.error;
+const originalInfo = console.info;
 
 export function createConsoleDiagnosticWrapper(
   method: ConsoleMethod,
@@ -77,6 +96,20 @@ export function createConsoleDiagnosticWrapper(
 ) {
   return (...args: unknown[]) => {
     if (!capture(method, args)) Reflect.apply(original, console, args);
+  };
+}
+
+export function createPrismaWarningInfoWrapper(
+  capture: (method: "info", args: unknown[]) => boolean,
+  original: (...args: unknown[]) => void,
+) {
+  return (...args: unknown[]) => {
+    const message = args[0];
+    if (typeof message !== "string" || !message.includes("prisma:warn")) {
+      Reflect.apply(original, console, args);
+      return;
+    }
+    if (!capture("info", args)) Reflect.apply(original, console, args);
   };
 }
 
@@ -90,9 +123,14 @@ const errorWrapper: typeof console.error = createConsoleDiagnosticWrapper(
   collector.captureConsole,
   originalError,
 );
+const prismaWarningInfoWrapper: typeof console.info = createPrismaWarningInfoWrapper(
+  collector.captureConsole,
+  originalInfo,
+);
 
 console.warn = warningWrapper;
 console.error = errorWrapper;
+console.info = prismaWarningInfoWrapper;
 
 process.on("warning", collector.captureProcessWarning);
 
@@ -102,6 +140,13 @@ export function expectConsoleWarning(...expectedArgs: unknown[]) {
 
 export function expectConsoleError(...expectedArgs: unknown[]) {
   collector.expectConsole("error", expectedArgs);
+}
+
+export function expectConsoleErrorMatching(
+  description: string,
+  matches: (args: unknown[]) => boolean,
+) {
+  collector.expectConsoleMatching("error", description, matches);
 }
 
 function assertAndResetCollector() {

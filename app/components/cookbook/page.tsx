@@ -139,12 +139,14 @@ export function ObjectRow({
   title,
   subtitle,
   stamp,
+  allowSubtitleWrap = false,
 }: {
   href: string;
   imageUrl?: string | null;
   title: string;
   subtitle?: string | null;
   stamp?: string;
+  allowSubtitleWrap?: boolean;
 }) {
   return (
     <Link href={href} className="group grid min-h-17 grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-3 py-3 no-underline">
@@ -155,7 +157,16 @@ export function ObjectRow({
         <span className="line-clamp-2 font-sj-ui text-base/5 font-bold text-[var(--sj-ink)] group-hover:text-[var(--sj-tomato)]">
           {title}
         </span>
-        {subtitle ? <span className="mt-0.5 line-clamp-2 text-sm/5 text-[var(--sj-ink-soft)]">{subtitle}</span> : null}
+        {subtitle ? (
+          <span
+            className={clsx(
+              "mt-0.5 text-sm/5 text-[var(--sj-ink-soft)]",
+              allowSubtitleWrap ? null : "line-clamp-2",
+            )}
+          >
+            {subtitle}
+          </span>
+        ) : null}
       </div>
       {stamp ? (
         <span className="font-sj-ui text-xs font-bold uppercase tracking-[0.12em] text-[var(--sj-brass)]">{stamp}</span>

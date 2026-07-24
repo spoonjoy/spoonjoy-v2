@@ -119,6 +119,11 @@ describe("/developers/playground", () => {
       "DELETE /api/v1/cookbooks/{id}/recipes/{recipeId}",
     ]));
     expect(data.manifest.operations.map((operation) => operation.id)).toEqual(expect.arrayContaining([
+      "GET /api/v1/saved-recipes",
+      "PUT /api/v1/saved-recipes/{recipeId}",
+      "DELETE /api/v1/saved-recipes/{recipeId}",
+    ]));
+    expect(data.manifest.operations.map((operation) => operation.id)).toEqual(expect.arrayContaining([
       "POST /api/v1/recipes/{id}/steps",
       "PATCH /api/v1/recipes/{id}/steps/{stepId}",
       "DELETE /api/v1/recipes/{id}/steps/{stepId}",
@@ -164,6 +169,15 @@ describe("/developers/playground", () => {
     expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/recipes/import")?.profiles).toEqual(["full", "connector", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/cookbooks")?.profiles).toEqual(["full", "connector", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/cookbooks/{id}/recipes/{recipeId}")?.profiles).toEqual(["full", "connector", "sdk"]);
+    expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/saved-recipes")?.profiles).toEqual(["full", "connector", "sdk"]);
+    expect(data.manifest.operations.find((operation) => operation.id === "PUT /api/v1/saved-recipes/{recipeId}")?.profiles).toEqual(["full", "connector", "sdk"]);
+    expect(data.manifest.operations.find((operation) => operation.id === "DELETE /api/v1/saved-recipes/{recipeId}")?.profiles).toEqual(["full", "connector", "sdk"]);
+    expect(data.manifest.operations.find((operation) => operation.id === "DELETE /api/v1/saved-recipes/{recipeId}")?.requestBody).toMatchObject({
+      required: true,
+      contentType: "application/json",
+      fields: [],
+      example: '{\n  "clientMutationId": "device-uuid-saved-recipe-unsave"\n}',
+    });
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/me/sync")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "GET /api/v1/recipes/{id}/spoons")?.profiles).toEqual(["full", "sdk"]);
     expect(data.manifest.operations.find((operation) => operation.id === "POST /api/v1/recipes/{id}/spoons")?.profiles).toEqual(["full", "sdk"]);
@@ -193,7 +207,7 @@ describe("/developers/playground", () => {
         { name: "cookedAt", required: false, accept: "" },
       ],
     });
-    expect(data.manifest.operations.length).toBe(72);
+    expect(data.manifest.operations.length).toBe(75);
   });
 
   it("uses the configured public origin for playground OG URLs", async () => {
@@ -217,6 +231,7 @@ describe("/developers/playground", () => {
       "Recipe Spoons",
       "Recipe Covers",
       "Cookbooks",
+      "Saved Recipes",
       "Account",
       "Shopping List",
       "Tokens",

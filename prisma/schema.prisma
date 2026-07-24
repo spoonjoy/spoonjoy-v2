@@ -12,30 +12,31 @@ generator client {
 // to create migrations for them and apply to your dev DB.
 
 model User {
-  id                  String             @id @default(cuid())
-  email               String             @unique
-  username            String             @unique
+  id                   String                   @id @default(cuid())
+  email                String                   @unique
+  username             String                   @unique
   // this and salt are optional because we allow OAuth only users to not have a password
-  hashedPassword      String?
-  salt                String?
-  resetToken          String?
-  resetTokenExpiresAt DateTime?
-  webAuthnChallenge   String?            @unique
-  photoUrl            String?
-  credentials         UserCredential[]
-  OAuth               OAuth[]
-  recipes             Recipe[]
-  shoppingList        ShoppingList?
-  cookbooks           Cookbook[]
-  addedToCookbooks    RecipeInCookbook[]
-  apiCredentials      ApiCredential[]
-  apiIdempotencyKeys  ApiIdempotencyKey[]
+  hashedPassword       String?
+  salt                 String?
+  resetToken           String?
+  resetTokenExpiresAt  DateTime?
+  webAuthnChallenge    String?                  @unique
+  photoUrl             String?
+  credentials          UserCredential[]
+  OAuth                OAuth[]
+  recipes              Recipe[]
+  shoppingList         ShoppingList?
+  cookbooks            Cookbook[]
+  addedToCookbooks     RecipeInCookbook[]
+  apiCredentials       ApiCredential[]
+  apiIdempotencyKeys   ApiIdempotencyKey[]
   nativeSyncTombstones NativeSyncTombstone[]
-  agentConnections    AgentConnectionRequest[]
-  oauthAuthCodes      OAuthAuthCode[]
-  oauthRefreshTokens  OAuthRefreshToken[]
-  spoons              RecipeSpoon[]
-  imageGenLedger      ImageGenLedger[]
+  agentConnections     AgentConnectionRequest[]
+  oauthAuthCodes       OAuthAuthCode[]
+  oauthRefreshTokens   OAuthRefreshToken[]
+  spoons               RecipeSpoon[]
+  savedRecipes         SavedRecipe[]
+  imageGenLedger       ImageGenLedger[]
 
   pushSubscriptions      PushSubscription[]
   nativePushDevices      NativePushDevice[]
@@ -47,20 +48,20 @@ model User {
 }
 
 model ApiCredential {
-  id          String    @id @default(cuid())
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name        String
-  tokenHash   String    @unique
-  tokenPrefix String
-  scopes      String    @default("kitchen:read kitchen:write")
-  lastUsedAt  DateTime?
-  revokedAt   DateTime?
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  tokenHash     String    @unique
+  tokenPrefix   String
+  scopes        String    @default("kitchen:read kitchen:write")
+  lastUsedAt    DateTime?
+  revokedAt     DateTime?
   oauthClientId String?
   oauthResource String?
   // Optional expiry. Null = non-expiring (API tokens, agent-delegated tokens).
   // OAuth-connector access tokens set this so they roll over via refresh.
-  expiresAt   DateTime?
+  expiresAt     DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
@@ -75,11 +76,11 @@ model ApiCredential {
 }
 
 model ApiIdempotencyKey {
-  id             String         @id @default(cuid())
+  id             String                 @id @default(cuid())
   userId         String
-  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   credentialId   String?
-  credential     ApiCredential? @relation(fields: [credentialId], references: [id], onDelete: SetNull)
+  credential     ApiCredential?         @relation(fields: [credentialId], references: [id], onDelete: SetNull)
   clientKey      String
   key            String
   operation      String
@@ -133,12 +134,12 @@ model NativeSyncTombstone {
 }
 
 model AgentConnectionRequest {
-  id             String         @id @default(cuid())
-  deviceCodeHash String         @unique
-  userCode       String         @unique
+  id             String @id @default(cuid())
+  deviceCodeHash String @unique
+  userCode       String @unique
   agentName      String
-  scopes         String         @default("kitchen:read kitchen:write")
-  status         String         @default("pending")
+  scopes         String @default("kitchen:read kitchen:write")
+  status         String @default("pending")
 
   approvedById String?
   approvedBy   User?   @relation(fields: [approvedById], references: [id], onDelete: SetNull)
@@ -227,16 +228,16 @@ model OAuthAuthCode {
 // mints a new access token + new refresh token and marks the old one revoked,
 // so a replayed refresh token is rejected. Stored only as a SHA-256 hash.
 model OAuthRefreshToken {
-  id        String    @id @default(cuid())
-  tokenHash String    @unique
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  clientId  String
-  scope     String
-  resource  String?
+  id            String    @id @default(cuid())
+  tokenHash     String    @unique
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId      String
+  scope         String
+  resource      String?
   connectionKey String?
-  revokedAt DateTime?
-  createdAt DateTime  @default(now())
+  revokedAt     DateTime?
+  createdAt     DateTime  @default(now())
 
   @@index([userId])
   @@index([clientId])
@@ -244,21 +245,24 @@ model OAuthRefreshToken {
 }
 
 model Recipe {
-  id          String             @id @default(cuid())
-  title       String
-  description String?
-  servings    String?
-  chefId      String
-  chef        User               @relation(fields: [chefId], references: [id], onDelete: Cascade)
-  deletedAt   DateTime?
-  steps       RecipeStep[]
-  cookbooks   RecipeInCookbook[]
-  spoons      RecipeSpoon[]
-  covers      RecipeCover[]      @relation("RecipeCoverHistory")
+  id                 String             @id @default(cuid())
+  title              String
+  description        String?
+  servings           String?
+  chefId             String
+  chef               User               @relation(fields: [chefId], references: [id], onDelete: Cascade)
+  deletedAt          DateTime?
+  steps              RecipeStep[]
+  cookbooks          RecipeInCookbook[]
+  spoons             RecipeSpoon[]
+  savedBy            SavedRecipe[]
+  tags               RecipeTag[]
+  covers             RecipeCover[]      @relation("RecipeCoverHistory")
+  course             String?
   activeCoverId      String?
-  activeCover        RecipeCover? @relation("RecipeActiveCover", fields: [activeCoverId], references: [id], onDelete: SetNull)
+  activeCover        RecipeCover?       @relation("RecipeActiveCover", fields: [activeCoverId], references: [id], onDelete: SetNull)
   activeCoverVariant String?
-  coverMode          String       @default("auto")
+  coverMode          String             @default("auto")
 
   sourceRecipeId String?
   sourceRecipe   Recipe? @relation("SourceRecipe", fields: [sourceRecipeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -278,6 +282,32 @@ model Recipe {
   @@index([coverMode])
   @@index([deletedAt, updatedAt])
   @@index([chefId, deletedAt, updatedAt])
+  @@index([course, deletedAt, updatedAt])
+}
+
+model SavedRecipe {
+  userId   String
+  recipeId String
+  savedAt  String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe   Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@id([userId, recipeId])
+  @@index([userId, savedAt, recipeId])
+  @@index([recipeId])
+}
+
+model RecipeTag {
+  id              String   @id @default(cuid())
+  recipeId        String
+  label           String
+  normalizedLabel String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+  recipe          Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@unique([recipeId, normalizedLabel])
+  @@index([normalizedLabel, recipeId])
 }
 
 model RecipeStep {
@@ -286,7 +316,7 @@ model RecipeStep {
   recipe      Recipe          @relation(fields: [recipeId], references: [id], onDelete: Cascade)
   stepNum     Int
   stepTitle   String?
-  description String          
+  description String
   duration    Int?
   ingredients Ingredient[]
   usingSteps  StepOutputUse[] @relation("input")
@@ -354,7 +384,7 @@ model Unit {
 
 model Cookbook {
   id       String             @id @default(cuid())
-  title    String             
+  title    String
   authorId String
   author   User               @relation(fields: [authorId], references: [id], onDelete: Cascade)
   recipes  RecipeInCookbook[]
@@ -416,7 +446,6 @@ model ShoppingListItem {
 
   updatedAt DateTime @default(now()) @updatedAt
 
-  @@unique([shoppingListId, unitId, ingredientRefId])
   @@index([shoppingListId])
   @@index([shoppingListId, deletedAt, sortIndex])
   @@index([unitId])

@@ -37,11 +37,20 @@ import {
   type ParsedIngredient,
 } from "~/lib/ingredient-parse.server";
 import {
+  createRecipeDraft,
+  readCommittedRecipeGraph,
+  RecipeGraphTooLargeError,
+} from "~/lib/recipe-create.server";
+import type { CompatibleRecipeTagD1Database } from "~/lib/recipe-tags.server";
+import {
   captureLlmCallFailure,
   captureLlmCallSucceeded,
 } from "~/lib/llm-telemetry.server";
 import { tryConsumeImageGenQuota } from "~/lib/image-gen-ledger.server";
-import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
+import {
+  isActiveRecipeTitleConflictError,
+  validateActiveRecipeTitleUnique,
+} from "~/lib/recipe-title-uniqueness.server";
 import { createCover } from "~/lib/recipe-cover.server";
 import { captureImageGenerationException } from "~/lib/image-gen-telemetry.server";
 import {
@@ -63,8 +72,6 @@ import {
   type OEmbedMetadata,
 } from "~/lib/recipe-import-video.server";
 import { fetchSafeImageBytes } from "~/lib/safe-image-fetch.server";
-
-type Database = PrismaClient | Prisma.TransactionClient;
 
 export type ImportRecipeCode =
   | "bad-url"
@@ -139,6 +146,7 @@ export interface ImportRecipeFromSourceOptions {
 
 export interface ImportRecipeDeps {
   db: PrismaClient;
+  nativeDatabase?: CompatibleRecipeTagD1Database | null;
   env?: (RecipeLlmEnv & PostHogServerEnv) | null;
   bucket?: R2Bucket;
   waitUntil?: (promise: Promise<unknown>) => void;
@@ -193,26 +201,6 @@ const recipeInclude = {
     include: { ingredients: { include: { unit: true, ingredientRef: true } } },
   },
 } satisfies Prisma.RecipeInclude;
-
-function normalizeName(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-async function getOrCreateUnit(db: Database, name: string) {
-  const normalized = normalizeName(name);
-  const existing = await db.unit.findUnique({ where: { name: normalized } });
-  if (existing) return existing;
-  return db.unit.create({ data: { name: normalized } });
-}
-
-async function getOrCreateIngredientRef(db: Database, name: string) {
-  const normalized = normalizeName(name);
-  const existing = await db.ingredientRef.findUnique({
-    where: { name: normalized },
-  });
-  if (existing) return existing;
-  return db.ingredientRef.create({ data: { name: normalized } });
-}
 
 function jsonLdPartial(draft: JsonLdRecipeDraft): boolean {
   return draft.ingredients.length === 0 || draft.steps.length === 0;
@@ -591,14 +579,12 @@ function pad2(n: number): string {
   return n.toString().padStart(2, "0");
 }
 
-async function resolveTitleWithRetry(
-  db: PrismaClient,
-  chefId: string,
+function importTitleAttempts(
   baseTitle: string,
   now: () => Date,
-): Promise<string> {
+): string[] {
   const trimmed = baseTitle.trim();
-  const attempts = [
+  return [
     trimmed,
     `${trimmed} (imported)`,
     (() => {
@@ -606,14 +592,10 @@ async function resolveTitleWithRetry(
       return `${trimmed} (imported ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())})`;
     })(),
   ];
-  for (const candidate of attempts) {
-    const result = await validateActiveRecipeTitleUnique(db, {
-      chefId,
-      title: candidate,
-    });
-    if (result.valid) return candidate;
-  }
-  throw new ImportRecipeError(
+}
+
+function exhaustedImportTitleConflict(): ImportRecipeError {
+  return new ImportRecipeError(
     "title-conflict",
     409,
     "Title already in use after retry suffixes",
@@ -626,10 +608,11 @@ async function persistRecipe(
   draft: ImportRecipeDraftView,
   ingredientParser: NonNullable<ImportRecipeDeps["ingredientParser"]>,
   env: ImportRecipeDeps["env"],
+  nativeDatabase: CompatibleRecipeTagD1Database | null,
   now: () => Date,
   recipeId?: string,
 ): Promise<{ id: string; recipe: unknown; title: string }> {
-  const title = await resolveTitleWithRetry(db, chefId, draft.title, now);
+  const titleAttempts = importTitleAttempts(draft.title, now);
 
   // Parse ingredient strings up-front (outside the transaction).
   const allIngredients: ParsedIngredient[] = [];
@@ -637,47 +620,54 @@ async function persistRecipe(
     const parsed = await ingredientParser(ingredientText, env);
     for (const p of parsed) allIngredients.push(p);
   }
-
-  const id = recipeId ?? `recipe_import_${crypto.randomUUID()}`;
-  const ingredientRows = [];
-  for (const ingredient of allIngredients) {
-    const unit = await getOrCreateUnit(db, ingredient.unit);
-    const ref = await getOrCreateIngredientRef(db, ingredient.ingredientName);
-    ingredientRows.push({
-      recipeId: id,
-      stepNum: 1,
-      quantity: ingredient.quantity,
-      unitId: unit.id,
-      ingredientRefId: ref.id,
-    });
+  if (allIngredients.length > 0 && draft.steps.length === 0) {
+    throw new Error("Imported ingredients require at least one recipe step");
   }
 
-  const [created] = await db.$transaction([
-    db.recipe.create({
-      data: {
+  const id = recipeId ?? `recipe_import_${crypto.randomUUID()}`;
+  const steps = draft.steps.map((description, index) => ({
+    stepTitle: null,
+    description,
+    duration: null,
+    ingredients: index === 0 ? allIngredients : [],
+  }));
+
+  for (const title of titleAttempts) {
+    const available = await validateActiveRecipeTitleUnique(db, { chefId, title });
+    if (!available.valid) continue;
+    try {
+      const created = await createRecipeDraft(db, {
         id,
         title,
         description: draft.description,
         servings: draft.servings,
         sourceUrl: draft.sourceUrl,
         chefId,
-      },
-    }),
-    ...draft.steps.map((step, index) => db.recipeStep.create({
-      data: {
-        recipeId: id,
-        stepNum: index + 1,
-        description: step,
-      },
-    })),
-    ...ingredientRows.map((ingredient) => db.ingredient.create({ data: ingredient })),
-  ]);
+        steps,
+      }, { nativeDatabase });
 
-  const full = await db.recipe.findUniqueOrThrow({
-    where: { id: created.id },
-    include: recipeInclude,
-  });
-  return { id: created.id, recipe: full, title };
+      let full: unknown;
+      try {
+        full = await db.recipe.findUniqueOrThrow({
+          where: { id: created.id },
+          include: recipeInclude,
+        });
+      } catch (hydrationError) {
+        // The atomic create has already committed. A hydration read is useful
+        // for the legacy response, but must not turn that commit into a failed
+        // import that retries under a suffixed title.
+        full = await readCommittedRecipeGraph(db, created.id, { chefId, nativeDatabase });
+        if (!full) throw hydrationError;
+      }
+      return { id: created.id, recipe: full, title };
+    } catch (error) {
+      if (error instanceof RecipeGraphTooLargeError) {
+        throw new ImportRecipeError("no-content", 422, error.message);
+      }
+      if (!isActiveRecipeTitleConflictError(error)) throw error;
+    }
+  }
+  throw exhaustedImportTitleConflict();
 }
 
 async function uploadImportCover(
@@ -860,6 +850,7 @@ async function completeImportFromExtraction(input: {
     extraction.draft,
     ingredientParser,
     deps.env,
+    deps.nativeDatabase ?? null,
     deps.now ?? (() => new Date()),
     recipeId,
   );

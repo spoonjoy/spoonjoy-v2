@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
 import { renderHook } from '@testing-library/react'
+import { Suspense, startTransition } from 'react'
 import {
   configFromActions,
   DockContextProvider,
@@ -262,6 +263,112 @@ describe('DockContext', () => {
       )
       expect(screen.getByTestId('config-variant')).toHaveTextContent('none')
       expect(screen.getByTestId('legacy-action-count')).toHaveTextContent('0')
+    })
+
+    it('publishes disabled and pressed state changes as semantic config updates', () => {
+      function TestPage({ disabled, ariaPressed }: { disabled: boolean; ariaPressed: boolean }) {
+        useDockConfig({
+          left: { id: 'back', icon: ArrowLeft, label: 'Back', onAction: '/recipes' },
+          primary: { id: 'save', icon: Edit, label: 'Save', onAction: vi.fn() },
+          tools: [{
+            id: 'toggle',
+            icon: Share,
+            label: 'Toggle',
+            onAction: vi.fn(),
+            disabled,
+            ariaPressed,
+          }],
+          variant: 'context',
+        })
+        return null
+      }
+
+      function TestApp({ disabled, ariaPressed }: { disabled: boolean; ariaPressed: boolean }) {
+        const toggle = useDockContext().config?.tools[0]
+        return (
+          <>
+            <div data-testid="toggle-disabled">{String(toggle?.disabled)}</div>
+            <div data-testid="toggle-pressed">{String(toggle?.ariaPressed)}</div>
+            <TestPage disabled={disabled} ariaPressed={ariaPressed} />
+          </>
+        )
+      }
+
+      const { rerender } = render(
+        <DockContextProvider>
+          <TestApp disabled={false} ariaPressed={false} />
+        </DockContextProvider>,
+      )
+
+      expect(screen.getByTestId('toggle-disabled')).toHaveTextContent('false')
+      expect(screen.getByTestId('toggle-pressed')).toHaveTextContent('false')
+
+      rerender(
+        <DockContextProvider>
+          <TestApp disabled ariaPressed />
+        </DockContextProvider>,
+      )
+
+      expect(screen.getByTestId('toggle-disabled')).toHaveTextContent('true')
+      expect(screen.getByTestId('toggle-pressed')).toHaveTextContent('true')
+    })
+
+    it('keeps live handlers on the last committed config while a replacement render is suspended', () => {
+      const committedHandler = vi.fn()
+      const suspendedHandler = vi.fn()
+      const neverResolves = new Promise<never>(() => {})
+      let registeredAction: (() => void) | undefined
+
+      function Observer() {
+        const config = useDockContext().config
+        registeredAction = typeof config?.primary.onAction === 'function'
+          ? config.primary.onAction
+          : undefined
+        return null
+      }
+
+      function TestPage({
+        onSave,
+        suspend,
+      }: {
+        onSave: () => void
+        suspend: boolean
+      }) {
+        useDockConfig({
+          left: { id: 'back', icon: ArrowLeft, label: 'Back', onAction: '/recipes' },
+          primary: { id: 'save', icon: Edit, label: 'Save', onAction: onSave },
+          tools: [],
+          variant: 'context',
+        })
+        if (suspend) throw neverResolves
+        return <div>Recipe page</div>
+      }
+
+      function TestApp({ onSave, suspend }: { onSave: () => void; suspend: boolean }) {
+        return (
+          <DockContextProvider>
+            <Observer />
+            <Suspense fallback={<div>Pending page</div>}>
+              <TestPage onSave={onSave} suspend={suspend} />
+            </Suspense>
+          </DockContextProvider>
+        )
+      }
+
+      const { rerender } = render(<TestApp onSave={committedHandler} suspend={false} />)
+      const committedAction = registeredAction
+      expect(committedAction).toBeTypeOf('function')
+
+      act(() => {
+        startTransition(() => {
+          rerender(<TestApp onSave={suspendedHandler} suspend />)
+        })
+      })
+
+      expect(registeredAction).toBe(committedAction)
+      registeredAction?.()
+      expect(committedHandler).toHaveBeenCalledOnce()
+      expect(suspendedHandler).not.toHaveBeenCalled()
     })
 
     it('registers actions when component mounts', () => {

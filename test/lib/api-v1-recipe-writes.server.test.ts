@@ -14,6 +14,7 @@ import {
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser } from "../utils";
+import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "~/lib/recipe-title-uniqueness.server";
 
 type LocalDb = Awaited<ReturnType<typeof getLocalDb>>;
 
@@ -185,7 +186,7 @@ describe("API v1 recipe write helpers", () => {
       description: null,
       servings: null,
       steps: [{ stepTitle: null, description: "Cook.", duration: null, ingredients: [] }],
-    }, { recipeId: "recipe_helper_fixed" }));
+    }, { nativeDatabase: null, recipeId: "recipe_helper_fixed" }));
     expect(create.status).toBe(201);
     expect(create.data.recipeId).toBe("recipe_helper_fixed");
 
@@ -195,7 +196,7 @@ describe("API v1 recipe write helpers", () => {
       description: "Food",
       servings: "2",
       steps: [],
-    }));
+    }, { nativeDatabase: null }));
     expect(generated.data.recipeId).toEqual(expect.any(String));
 
     expectValidationFailure(await createNativeRecipe(db, chef.id, {
@@ -204,7 +205,192 @@ describe("API v1 recipe write helpers", () => {
       description: null,
       servings: null,
       steps: [],
+    }, { nativeDatabase: null }));
+  });
+
+  it("rejects oversized native recipe graphs as step validation before writing", async () => {
+    const chef = await createUser(db);
+    const ingredients = Array.from({ length: 300 }, (_, index) => ({
+      quantity: 1,
+      unit: `unit ${index}`,
+      ingredientName: `ingredient ${index}`,
     }));
+
+    expectValidationFailure(await createNativeRecipe(db, chef.id, {
+      clientMutationId: "oversized-native-create",
+      title: "Oversized Native Recipe",
+      description: null,
+      servings: null,
+      steps: [{ stepTitle: null, description: "Too much", duration: null, ingredients }],
+    }, { nativeDatabase: null }));
+    await expect(db.recipe.findFirst({
+      where: { chefId: chef.id, title: "Oversized Native Recipe" },
+    })).resolves.toBeNull();
+  });
+
+  it("maps create and update title races to the shared field error", async () => {
+    const chef = await createUser(db);
+    const recipe = await createRecipe(db, chef.id, "Race Source");
+    const originalTransaction = db.$transaction;
+    const conflict = Object.assign(new Error("Raw query failed"), {
+      code: "P2010",
+      meta: {
+        code: "2067",
+        message: "UNIQUE constraint failed: Recipe.chefId, Recipe.title",
+      },
+    });
+
+    try {
+      db.$transaction = vi.fn().mockRejectedValue(conflict) as typeof db.$transaction;
+      const createRace = await createNativeRecipe(db, chef.id, {
+        clientMutationId: "create-title-race",
+        title: "Concurrent Native Create",
+        description: null,
+        servings: null,
+        steps: [],
+      }, { nativeDatabase: null });
+      expect(createRace).toEqual({
+        ok: false,
+        code: "validation_error",
+        message: "Invalid recipe fields",
+        details: { fieldErrors: { title: ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } },
+      });
+      const updateRace = await updateNativeRecipe(db, chef.id, recipe.id, {
+        clientMutationId: "update-title-race",
+        fields: { title: "Concurrent Native Update" },
+      }, { nativeDatabase: null });
+      expect(updateRace).toEqual({
+        ok: false,
+        code: "validation_error",
+        message: "Invalid recipe fields",
+        details: { fieldErrors: { title: ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } },
+      });
+    } finally {
+      db.$transaction = originalTransaction;
+    }
+
+    await expect(db.recipe.findUniqueOrThrow({ where: { id: recipe.id } })).resolves.toMatchObject({
+      title: "Race Source",
+    });
+    await expect(db.recipe.count({ where: { chefId: chef.id } })).resolves.toBe(1);
+  });
+
+  it("classifies only a canonical native all-zero update as not found", async () => {
+    const chef = await createUser(db);
+    const recipe = await createRecipe(db, chef.id, "Native Envelope Source");
+    const nativeDatabase = (results: unknown) => {
+      const statements: Array<{ sql: string; values: unknown[]; bind(...values: unknown[]): unknown }> = [];
+      return {
+        statements,
+        database: {
+          prepare(sql: string) {
+            const statement = {
+              sql,
+              values: [] as unknown[],
+              bind(...values: unknown[]) {
+                statement.values = values;
+                return statement;
+              },
+            };
+            statements.push(statement);
+            return statement;
+          },
+          batch: vi.fn().mockResolvedValue(results),
+        },
+      };
+    };
+    const committed = [
+      { success: true, meta: { changes: 1 }, results: [{ id: recipe.id }] },
+      { success: true, meta: { changes: 0 }, results: [] },
+    ];
+    const successful = nativeDatabase(committed);
+    expectOk(await updateNativeRecipe(db, chef.id, recipe.id, {
+      clientMutationId: "native-envelope-success",
+      fields: { title: "Native Envelope Changed" },
+    }, { nativeDatabase: successful.database }));
+    expect(successful.statements).toHaveLength(2);
+    expect(successful.statements[0].values).toEqual([
+      "Native Envelope Changed",
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      recipe.id,
+      chef.id,
+    ]);
+    expect(successful.statements[1].values).toEqual([
+      successful.statements[0].values[1],
+      recipe.id,
+      recipe.id,
+      chef.id,
+    ]);
+
+    const allZero = nativeDatabase([
+      { success: true, meta: { changes: 0 }, results: [] },
+      { success: true, meta: { changes: 0 }, results: [] },
+    ]);
+    expectFailure(await updateNativeRecipe(db, chef.id, recipe.id, {
+      clientMutationId: "native-envelope-not-found",
+      fields: { description: "Raced deletion" },
+    }, { nativeDatabase: allZero.database }), "not_found");
+
+    for (const [index, results] of [
+      null,
+      [],
+      [null, {}],
+      [{ success: false, meta: { changes: 0 }, results: [] }, {}],
+      [{ success: true, meta: null, results: [] }, {}],
+      [{ success: true, meta: { changes: 0 }, results: null }, {}],
+      [{ success: true, meta: { changes: 0 }, results: [{}] }, {}],
+      [{ success: true, meta: { changes: 1 }, results: [] }, {}],
+    ].entries()) {
+      const malformed = nativeDatabase(results);
+      expectOk(await updateNativeRecipe(db, chef.id, recipe.id, {
+        clientMutationId: `native-envelope-malformed-${index}`,
+        fields: { servings: String(index + 1) },
+      }, { nativeDatabase: malformed.database }));
+    }
+
+    const unrelated = nativeDatabase(committed);
+    unrelated.database.batch.mockRejectedValueOnce(new Error("native update unavailable"));
+    await expect(updateNativeRecipe(db, chef.id, recipe.id, {
+      clientMutationId: "native-envelope-error",
+      fields: { description: "Unavailable" },
+    }, { nativeDatabase: unrelated.database })).rejects.toThrow("native update unavailable");
+  });
+
+  it("classifies a canonical local all-zero update as not found", async () => {
+    const chef = await createUser(db);
+    const recipe = await createRecipe(db, chef.id, "Local Envelope Source");
+    const originalTransaction = db.$transaction;
+    db.$transaction = vi.fn().mockResolvedValue([[], []]) as typeof db.$transaction;
+    try {
+      expectFailure(await updateNativeRecipe(db, chef.id, recipe.id, {
+        clientMutationId: "local-envelope-not-found",
+        fields: { description: "Raced deletion" },
+      }, { nativeDatabase: null }), "not_found");
+    } finally {
+      db.$transaction = originalTransaction;
+    }
+  });
+
+  it.each([
+    ["non-array", null],
+    ["wrong count", [[]]],
+    ["scalar recipe result", [null, []]],
+    ["nonempty recipe result", [[{ id: "recipe" }], []]],
+    ["scalar cookbook result", [[], null]],
+    ["nonempty cookbook result", [[], [{ id: "cookbook" }]]],
+  ])("does not report a false local 404 for a malformed committed %s", async (_label, results) => {
+    const chef = await createUser(db);
+    const recipe = await createRecipe(db, chef.id, `Local Malformed ${faker.string.alphanumeric(8)}`);
+    const originalTransaction = db.$transaction;
+    db.$transaction = vi.fn().mockResolvedValue(results) as typeof db.$transaction;
+    try {
+      expectOk(await updateNativeRecipe(db, chef.id, recipe.id, {
+        clientMutationId: `local-malformed-${faker.string.alphanumeric(8)}`,
+        fields: { description: "Committed diagnostics are malformed" },
+      }, { nativeDatabase: null }));
+    } finally {
+      db.$transaction = originalTransaction;
+    }
   });
 
   it("updates recipes across ownership, tombstone, no-op, duplicate, and success paths", async () => {
@@ -226,20 +412,20 @@ describe("API v1 recipe write helpers", () => {
     await db.recipe.update({ where: { id: deleted.id }, data: { deletedAt: new Date() } });
     await createRecipe(db, chef.id, "Patch Duplicate Helper");
 
-    expectFailure(await updateNativeRecipe(db, chef.id, "missing", { clientMutationId: "missing", fields: {} }), "not_found");
-    expectFailure(await updateNativeRecipe(db, chef.id, deleted.id, { clientMutationId: "deleted", fields: {} }), "not_found");
-    expectFailure(await updateNativeRecipe(db, other.id, recipe.id, { clientMutationId: "owner", fields: {} }), "insufficient_scope");
+    expectFailure(await updateNativeRecipe(db, chef.id, "missing", { clientMutationId: "missing", fields: {} }, { nativeDatabase: null }), "not_found");
+    expectFailure(await updateNativeRecipe(db, chef.id, deleted.id, { clientMutationId: "deleted", fields: {} }, { nativeDatabase: null }), "not_found");
+    expectFailure(await updateNativeRecipe(db, other.id, recipe.id, { clientMutationId: "owner", fields: {} }, { nativeDatabase: null }), "insufficient_scope");
     expectValidationFailure(await updateNativeRecipe(db, chef.id, recipe.id, {
       clientMutationId: "duplicate",
       fields: { title: "Patch Duplicate Helper" },
-    }));
+    }, { nativeDatabase: null }));
 
-    const noop = expectOk(await updateNativeRecipe(db, chef.id, recipe.id, { clientMutationId: "noop", fields: {} }));
+    const noop = expectOk(await updateNativeRecipe(db, chef.id, recipe.id, { clientMutationId: "noop", fields: {} }, { nativeDatabase: null }));
     expect(noop.data.updated).toBe(false);
     const updated = expectOk(await updateNativeRecipe(db, chef.id, recipe.id, {
       clientMutationId: "update",
       fields: { title: "Patch Changed", description: null, servings: "6" },
-    }));
+    }, { nativeDatabase: null }));
     expect(updated.data).toEqual({ recipeId: recipe.id, updated: true });
     const touchedCookbook = await db.cookbook.findUniqueOrThrow({
       where: { id: cookbook.id },

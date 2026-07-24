@@ -1,0 +1,236 @@
+{
+  "compatibility": {
+    "changedPaths": [],
+    "durableObjectBlobOid": "f3f8fad8aacea584fcc049fcccebb192724261a3",
+    "firstParentSha": null,
+    "mode": "atomic-bootstrap",
+    "protocolBoundaryBlobOid": null,
+    "runtimeFloorChangedPaths": null,
+    "sourceSha": "c855806379ea63966d25316c3a5594ef1fa32953",
+    "treeSha": "eb2ce783b901e3138acc52b2c60fd3976e0089e3",
+    "workerBlobOid": "1833a9752e03a0728cc20495c99e6ab659a66ad6"
+  },
+  "failedPostRestorationRepair": {
+    "changedPaths": [
+      "evidence/release-topology"
+    ],
+    "durableObjectBlobOid": "41e553a5f879d3f4c79fa01fb078a2bedda30c15",
+    "firstParentSha": "a01c5036a68f07b79ee93ce959126514e6928170",
+    "mode": "atomic-product-activation",
+    "protocolBoundaryBlobOid": "66cf0fccba638e3cc030d97bd1be0316c9f53b06",
+    "runtimeFloorChangedPaths": [
+      "evidence/release-topology",
+      "workers/app.ts"
+    ],
+    "sourceSha": "61e519a1dcf529268b168fb51b5f870888109bbd",
+    "treeSha": "40fea104938e5a4a517d7539cd5a4e69a4083e3e",
+    "workerBlobOid": "08c87900c3abdcbe44a990440d9437b119121b95"
+  },
+  "failedRestoration": {
+    "changedPaths": [
+      ".github/workflows/production-deploy.yml",
+      "evidence/release-topology",
+      "workers/app.ts",
+      "workers/cook-session.ts"
+    ],
+    "durableObjectBlobOid": "843f77e2dd425eb12636662a91d17e59eadbb748",
+    "firstParentSha": "0fa24f949ddb341543fd176d94e2d689f628f64c",
+    "mode": "protocol-v1-canary",
+    "protocolBoundaryBlobOid": "66cf0fccba638e3cc030d97bd1be0316c9f53b06",
+    "runtimeFloorChangedPaths": [
+      ".github/workflows/production-deploy.yml",
+      "evidence/release-topology",
+      "workers/app.ts",
+      "workers/cook-session.ts"
+    ],
+    "sourceSha": "7be95309be41c094baefd4bf324f93d11c18b6fb",
+    "treeSha": "5bef4f4be7164daa761626c8c9fefd48f0c5baff",
+    "workerBlobOid": "08c87900c3abdcbe44a990440d9437b119121b95"
+  },
+  "nextPostRestorationRepair": {
+    "changedPaths": [
+      "evidence/release-topology",
+      "workers/app.ts"
+    ],
+    "durableObjectBlobOid": "41e553a5f879d3f4c79fa01fb078a2bedda30c15",
+    "firstParentSha": "61e519a1dcf529268b168fb51b5f870888109bbd",
+    "mode": "atomic-product-activation",
+    "protocolBoundaryBlobOid": "66cf0fccba638e3cc030d97bd1be0316c9f53b06",
+    "runtimeFloorChangedPaths": [
+      "evidence/release-topology"
+    ],
+    "sourceSha": "8175ea135ab9b137435fd53af3bfd97136f93837",
+    "treeSha": "55d094aaed46a0afd94e36ccd46e3819ba44de35",
+    "workerBlobOid": "eef99ac6485935f762c58f4eb441fd1b83e64024"
+  },
+  "ordinaryBothRepair": {
+    "changedPaths": [
+      "workers/app.ts",
+      "workers/cook-session.ts"
+    ],
+    "durableObjectBlobOid": "843f77e2dd425eb12636662a91d17e59eadbb748",
+    "firstParentSha": "0fa24f949ddb341543fd176d94e2d689f628f64c",
+    "mode": "atomic-product-activation",
+    "protocolBoundaryBlobOid": "66cf0fccba638e3cc030d97bd1be0316c9f53b06",
+    "runtimeFloorChangedPaths": [
+      "workers/app.ts",
+      "workers/cook-session.ts"
+    ],
+    "sourceSha": "2f2f5598138f6884227e904ff8cb18e196f8885b",
+    "treeSha": "36ad6abc55865c9b32c71ee8b637d8e3187f685e",
+    "workerBlobOid": "08c87900c3abdcbe44a990440d9437b119121b95"
+  },
+  "ordinaryDoRepair": {
+    "changedPaths": [
+      "workers/cook-session.ts"
+    ],
+    "durableObjectBlobOid": "843f77e2dd425eb12636662a91d17e59eadbb748",
+    "firstParentSha": "0fa24f949ddb341543fd176d94e2d689f628f64c",
+    "mode": "atomic-product-activation",
+    "protocolBoundaryBlobOid": "66cf0fccba638e3cc030d97bd1be0316c9f53b06",
+    "runtimeFloorChangedPaths": [
+      "workers/cook-session.ts"
+    ],
+    "sourceSha": "0fe2a2956f4715692413ac7a555bff0b24816991",
+    "treeSha": "40737a21966bbcbac092ee3ee5cb9b8c79447ed4",
+    "workerBlobOid": "eef99ac6485935f762c58f4eb441fd1b83e64024"
+  },
+  "ordinaryWorkerRepair": {
+    "changedPaths": [
+      "workers/app.ts"
+    ],
+    "durableObjectBlobOid": "41e553a5f879d3f4c79fa01fb078a2bedda30c15",
+    "firstParentSha": "0fa24f949ddb341543fd176d94e2d689f628f64c",
+    "mode": "atomic-product-activation",
+    "protocolBoundaryBlobOid": "66cf0fccba638e3cc030d97bd1be0316c9f53b06",
+    "runtimeFloorChangedPaths": [
+      "workers/app.ts"
+    ],
+    "sourceSha": "534d9a5eabf2b0b48e3c9c2eb8c41e9fc5b1c3c2",
+    "treeSha": "a7ab6a21498a256b34f1651a754b617974de3a85",
+    "workerBlobOid": "08c87900c3abdcbe44a990440d9437b119121b95"
+  },
+  "postRestorationBothRepair": {
+    "changedPaths": [
+      ".github/workflows/production-deploy.yml",
+      "evidence/release-topology"
+    ],
+    "durableObjectBlobOid": "843f77e2dd425eb12636662a91d17e59eadbb748",
+    "firstParentSha": "7be95309be41c094baefd4bf324f93d11c18b6fb",
+    "mode": "atomic-product-activation",
+    "protocolBoundaryBlobOid": "66cf0fccba638e3cc030d97bd1be0316c9f53b06",
+    "runtimeFloorChangedPaths": [
+      "evidence/release-topology",
+      "workers/app.ts",
+      "workers/cook-session.ts"
+    ],
+    "sourceSha": "6459830ea8cc4fd0b005a950017fba645fe859ff",
+    "treeSha": "7956d5f803efae7de1914ae810dbdef26833b11f",
+    "workerBlobOid": "08c87900c3abdcbe44a990440d9437b119121b95"
+  },
+  "postRestorationRepair": {
+    "changedPaths": [
+      ".github/workflows/production-deploy.yml",
+      "evidence/release-topology",
+      "workers/cook-session.ts"
+    ],
+    "durableObjectBlobOid": "41e553a5f879d3f4c79fa01fb078a2bedda30c15",
+    "firstParentSha": "7be95309be41c094baefd4bf324f93d11c18b6fb",
+    "mode": "atomic-product-activation",
+    "protocolBoundaryBlobOid": "66cf0fccba638e3cc030d97bd1be0316c9f53b06",
+    "runtimeFloorChangedPaths": [
+      "evidence/release-topology",
+      "workers/app.ts"
+    ],
+    "sourceSha": "a01c5036a68f07b79ee93ce959126514e6928170",
+    "treeSha": "b7a77df400b51cb58d4ad30207e9d811ac3e6e8c",
+    "workerBlobOid": "08c87900c3abdcbe44a990440d9437b119121b95"
+  },
+  "postRestorationWorkerRepair": {
+    "changedPaths": [
+      ".github/workflows/production-deploy.yml",
+      "evidence/release-topology",
+      "workers/app.ts"
+    ],
+    "durableObjectBlobOid": "843f77e2dd425eb12636662a91d17e59eadbb748",
+    "firstParentSha": "7be95309be41c094baefd4bf324f93d11c18b6fb",
+    "mode": "atomic-product-activation",
+    "protocolBoundaryBlobOid": "66cf0fccba638e3cc030d97bd1be0316c9f53b06",
+    "runtimeFloorChangedPaths": [
+      "evidence/release-topology",
+      "workers/cook-session.ts"
+    ],
+    "sourceSha": "2b6a90cfc8155f74543a48f3ce036f4d6c56aea2",
+    "treeSha": "20cbe6d224f3d6a4a60266a00530ab179d584550",
+    "workerBlobOid": "eef99ac6485935f762c58f4eb441fd1b83e64024"
+  },
+  "protocolBoundary": {
+    "changedPaths": [
+      "evidence/release-topology",
+      "workers/app.ts",
+      "workers/cook-session-protocol-v1-boundary",
+      "workers/cook-session.ts"
+    ],
+    "durableObjectBlobOid": "41e553a5f879d3f4c79fa01fb078a2bedda30c15",
+    "firstParentSha": "7fb25b7ecb2286306205d9137d01c1539f3f635a",
+    "mode": "atomic-product-activation",
+    "protocolBoundaryBlobOid": "66cf0fccba638e3cc030d97bd1be0316c9f53b06",
+    "runtimeFloorChangedPaths": null,
+    "sourceSha": "091210f088a5eb750637c9631045d959f10d3cca",
+    "treeSha": "44200e945547307e3e70d95a46e1232c707b51ae",
+    "workerBlobOid": "eef99ac6485935f762c58f4eb441fd1b83e64024"
+  },
+  "productTarget": {
+    "changedPaths": [
+      ".github/workflows/production-deploy.yml",
+      "evidence/release-topology",
+      "workers/app.ts"
+    ],
+    "durableObjectBlobOid": "f3f8fad8aacea584fcc049fcccebb192724261a3",
+    "firstParentSha": "c855806379ea63966d25316c3a5594ef1fa32953",
+    "mode": "atomic-product-activation",
+    "protocolBoundaryBlobOid": null,
+    "runtimeFloorChangedPaths": null,
+    "sourceSha": "7fb25b7ecb2286306205d9137d01c1539f3f635a",
+    "treeSha": "d5cfd3a3538974823af7f24384c2a32b48c7814c",
+    "workerBlobOid": "6c3a117fa7dee32c7f09d25c4dfded5cb0eef6d4"
+  },
+  "qaAlias": {
+    "changedPaths": [],
+    "durableObjectBlobOid": "41e553a5f879d3f4c79fa01fb078a2bedda30c15",
+    "firstParentSha": "0fa24f949ddb341543fd176d94e2d689f628f64c",
+    "mode": "atomic-product-activation",
+    "protocolBoundaryBlobOid": "66cf0fccba638e3cc030d97bd1be0316c9f53b06",
+    "runtimeFloorChangedPaths": [],
+    "sourceSha": "643ef1b9220d3806fb441a46fb29332c2745b9ce",
+    "treeSha": "1abdfbd866f5f6a860aacccdb3460877f82422c5",
+    "workerBlobOid": "eef99ac6485935f762c58f4eb441fd1b83e64024"
+  },
+  "qaPostAlias": {
+    "changedPaths": [],
+    "durableObjectBlobOid": "41e553a5f879d3f4c79fa01fb078a2bedda30c15",
+    "firstParentSha": "61e519a1dcf529268b168fb51b5f870888109bbd",
+    "mode": "atomic-product-activation",
+    "protocolBoundaryBlobOid": "66cf0fccba638e3cc030d97bd1be0316c9f53b06",
+    "runtimeFloorChangedPaths": [
+      "evidence/release-topology",
+      "workers/app.ts"
+    ],
+    "sourceSha": "ca3b69d615323f14c7fd5edd9432aa03a99d637a",
+    "treeSha": "40fea104938e5a4a517d7539cd5a4e69a4083e3e",
+    "workerBlobOid": "08c87900c3abdcbe44a990440d9437b119121b95"
+  },
+  "runtimeFloor": {
+    "changedPaths": [
+      "evidence/release-topology"
+    ],
+    "durableObjectBlobOid": "41e553a5f879d3f4c79fa01fb078a2bedda30c15",
+    "firstParentSha": "091210f088a5eb750637c9631045d959f10d3cca",
+    "mode": "atomic-product-activation",
+    "protocolBoundaryBlobOid": "66cf0fccba638e3cc030d97bd1be0316c9f53b06",
+    "runtimeFloorChangedPaths": [],
+    "sourceSha": "0fa24f949ddb341543fd176d94e2d689f628f64c",
+    "treeSha": "1abdfbd866f5f6a860aacccdb3460877f82422c5",
+    "workerBlobOid": "eef99ac6485935f762c58f4eb441fd1b83e64024"
+  }
+}

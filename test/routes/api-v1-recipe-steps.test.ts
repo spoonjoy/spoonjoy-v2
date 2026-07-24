@@ -205,6 +205,17 @@ function expectRecipeGraphShape(recipe: Record<string, any>) {
   }
 }
 
+function expectRecipeReadGraphShape(recipe: Record<string, any>) {
+  expectExactKeys(recipe, [
+    "attribution", "canonicalUrl", "chef", "cookbooks", "course", "coverImageUrl",
+    "coverProvenanceLabel", "coverSourceType", "coverVariant", "createdAt", "description", "href", "id",
+    "servings", "steps", "tags", "title", "updatedAt",
+  ]);
+  expect(recipe.course === null || typeof recipe.course === "string").toBe(true);
+  expect(Array.isArray(recipe.tags)).toBe(true);
+  for (const step of recipe.steps) expectStepShape(step);
+}
+
 async function createRecipeStepFixture(db: LocalDb) {
   const chef = await db.user.create({ data: createTestUser() });
   const otherChef = await db.user.create({ data: createTestUser() });
@@ -217,6 +228,14 @@ async function createRecipeStepFixture(db: LocalDb) {
       title: `API Step Recipe ${faker.string.alphanumeric(8)}`,
       description: "Recipe for native step API tests",
       servings: "4",
+      course: "side",
+    },
+  });
+  await db.recipeTag.create({
+    data: {
+      recipeId: recipe.id,
+      label: "Step Mutation Boundary",
+      normalizedLabel: "step mutation boundary",
     },
   });
   const steps = await Promise.all([
@@ -397,6 +416,7 @@ describe("API v1 recipe step and dependency mutations", () => {
       step: { id: createPayload.data.step.id, stepNum: 4 },
       recipe: { id: fixture.recipe.id },
     });
+    expectRecipeGraphShape(replayPayload.data.recipe);
     expectMutationShape(replayPayload.data.mutation, "step-create", true);
     await expect(db.recipeStep.count({ where: { recipeId: fixture.recipe.id, stepTitle: "Finish sauce" } })).resolves.toBe(1);
 
@@ -425,6 +445,7 @@ describe("API v1 recipe step and dependency mutations", () => {
         usingSteps: [{ outputStepNum: 1 }],
       },
     });
+    expectRecipeGraphShape(updatePayload.data.recipe);
     expectMutationShape(updatePayload.data.mutation, "step-update", false);
 
     const replayedUpdate = await action(routeArgs(
@@ -439,6 +460,7 @@ describe("API v1 recipe step and dependency mutations", () => {
       step: { id: createdStepId, description: "Finish with herbs.", usingSteps: [{ outputStepNum: 1 }] },
       recipe: { id: fixture.recipe.id },
     });
+    expectRecipeGraphShape(replayUpdatePayload.data.recipe);
     expectMutationShape(replayUpdatePayload.data.mutation, "step-update", true);
     await expect(db.stepOutputUse.count({ where: { recipeId: fixture.recipe.id, inputStepNum: 4 } })).resolves.toBe(1);
 
@@ -456,6 +478,7 @@ describe("API v1 recipe step and dependency mutations", () => {
       step: { id: createdStepId },
       recipe: { id: fixture.recipe.id },
     });
+    expectRecipeGraphShape(deletePayload.data.recipe);
     expectMutationShape(deletePayload.data.mutation, "step-delete", false);
     await expect(db.recipeStep.findUnique({ where: { id: createdStepId } })).resolves.toBeNull();
 
@@ -473,6 +496,7 @@ describe("API v1 recipe step and dependency mutations", () => {
       step: { id: createdStepId },
       recipe: { id: fixture.recipe.id },
     });
+    expectRecipeGraphShape(replayDeletePayload.data.recipe);
     expectMutationShape(replayDeletePayload.data.mutation, "step-delete", true);
     await expect(db.recipeStep.findUnique({ where: { id: createdStepId } })).resolves.toBeNull();
   });
@@ -506,6 +530,7 @@ describe("API v1 recipe step and dependency mutations", () => {
       recipe: { id: fixture.recipe.id },
     });
     expectIngredientShape(addPayload.data.ingredient);
+    expectRecipeGraphShape(addPayload.data.recipe);
     expectMutationShape(addPayload.data.mutation, "ingredient-add", false);
 
     const ingredientId = addPayload.data.ingredient.id as string;
@@ -528,6 +553,7 @@ describe("API v1 recipe step and dependency mutations", () => {
       step: { id: fixture.steps[1].id },
       recipe: { id: fixture.recipe.id },
     });
+    expectRecipeGraphShape(replayAddPayload.data.recipe);
     expectMutationShape(replayAddPayload.data.mutation, "ingredient-add", true);
     await expect(db.ingredient.count({ where: { recipeId: fixture.recipe.id, stepNum: 2 } })).resolves.toBe(1);
 
@@ -550,6 +576,7 @@ describe("API v1 recipe step and dependency mutations", () => {
       step: { id: fixture.steps[1].id },
       recipe: { id: fixture.recipe.id },
     });
+    expectRecipeGraphShape(removePayload.data.recipe);
     expectMutationShape(removePayload.data.mutation, "ingredient-delete", false);
     await expect(db.ingredient.findUnique({ where: { id: ingredientId } })).resolves.toBeNull();
 
@@ -572,6 +599,7 @@ describe("API v1 recipe step and dependency mutations", () => {
       step: { id: fixture.steps[1].id },
       recipe: { id: fixture.recipe.id },
     });
+    expectRecipeGraphShape(replayRemovePayload.data.recipe);
     expectMutationShape(replayRemovePayload.data.mutation, "ingredient-delete", true);
     await expect(db.ingredient.findUnique({ where: { id: ingredientId } })).resolves.toBeNull();
   });
@@ -616,6 +644,7 @@ describe("API v1 recipe step and dependency mutations", () => {
       fixture.steps[2].id,
       fixture.steps[1].id,
     ]);
+    expectRecipeGraphShape(replayReorderPayload.data.recipe);
     expectMutationShape(replayReorderPayload.data.mutation, "step-reorder", true);
 
     const stepTwoAfterReorder = reorderPayload.data.recipe.steps[1];
@@ -659,6 +688,7 @@ describe("API v1 recipe step and dependency mutations", () => {
       },
       recipe: { id: fixture.recipe.id },
     });
+    expectRecipeGraphShape(replayReplacePayload.data.recipe);
     expectMutationShape(replayReplacePayload.data.mutation, "step-output-uses", true);
     await expect(db.stepOutputUse.count({ where: { recipeId: fixture.recipe.id, inputStepNum: 2 } })).resolves.toBe(1);
 
@@ -671,7 +701,8 @@ describe("API v1 recipe step and dependency mutations", () => {
     ));
     const detailPayload = await readJson(publicDetail);
     expect(publicDetail.status).toBe(200);
-    expectRecipeGraphShape(detailPayload.data.recipe);
+    expectRecipeReadGraphShape(detailPayload.data.recipe);
+    expect(detailPayload.data.recipe).toMatchObject({ course: "side", tags: ["Step Mutation Boundary"] });
     expect(detailPayload.data.recipe.steps[1].usingSteps).toEqual([
       expect.objectContaining({ outputStepNum: 1, outputOfStep: { stepNum: 1, stepTitle: "Prep" } }),
     ]);
@@ -900,6 +931,7 @@ describe("API v1 recipe step and dependency mutations", () => {
         usingSteps: [{ outputStepNum: 1 }, { outputStepNum: 2 }],
       },
     });
+    expectRecipeGraphShape(payload.data.recipe);
     expectMutationShape(payload.data.mutation, body.clientMutationId, true);
   });
 
@@ -1006,6 +1038,7 @@ describe("API v1 recipe step and dependency mutations", () => {
     expect(matching.status).toBe(201);
     expectSuccessEnvelope(matchingPayload, "req_step_create_step_num_recovery");
     expect(matchingPayload.data.step).toMatchObject({ id: matchingReservation.id, stepNum: matchingStepNum });
+    expectRecipeGraphShape(matchingPayload.data.recipe);
     expectMutationShape(matchingPayload.data.mutation, matchingBody.clientMutationId, true);
 
     await expectCreateRecoveryConflict({
@@ -1151,6 +1184,7 @@ describe("API v1 recipe step and dependency mutations", () => {
       step: { id: ingredientFixture.steps[0].id },
       recipe: { id: ingredientFixture.recipe.id },
     });
+    expectRecipeGraphShape(payload.data.recipe);
     expectMutationShape(payload.data.mutation, ingredientBody.clientMutationId, true);
   });
 
@@ -1180,10 +1214,12 @@ describe("API v1 recipe step and dependency mutations", () => {
     ));
     const updatePayload = await readJson(recoveredUpdate);
     expect(recoveredUpdate.status).toBe(200);
+    expectSuccessEnvelope(updatePayload, "req_step_update_recovery");
     expect(updatePayload.data).toMatchObject({
       updated: true,
       step: { id: updateFixture.steps[1].id, stepTitle: null, description: updateBody.description, duration: null },
     });
+    expectRecipeGraphShape(updatePayload.data.recipe);
     expectMutationShape(updatePayload.data.mutation, updateBody.clientMutationId, true);
 
     const deleteFixture = await createRecipeStepFixture(db);
@@ -1212,11 +1248,13 @@ describe("API v1 recipe step and dependency mutations", () => {
     ));
     const deletePayload = await readJson(recoveredDelete);
     expect(recoveredDelete.status).toBe(200);
+    expectSuccessEnvelope(deletePayload, "req_step_delete_recovery");
     expect(deletePayload.data).toMatchObject({
       deleted: true,
       step: { id: deleteFixture.steps[2].id },
       recipe: { id: deleteFixture.recipe.id },
     });
+    expectRecipeGraphShape(deletePayload.data.recipe);
     expectMutationShape(deletePayload.data.mutation, deleteBody.clientMutationId, true);
 
     const ingredientFixture = await createRecipeStepFixture(db);
@@ -1247,11 +1285,13 @@ describe("API v1 recipe step and dependency mutations", () => {
     ));
     const ingredientPayload = await readJson(recoveredIngredient);
     expect(recoveredIngredient.status).toBe(201);
+    expectSuccessEnvelope(ingredientPayload, "req_ingredient_create_recovery");
     expect(ingredientPayload.data).toMatchObject({
       created: true,
       ingredient: { id: ingredientReservation.id, quantity: 4, unit: "pinch", name: "sumac recovery" },
       step: { id: ingredientFixture.steps[1].id },
     });
+    expectRecipeGraphShape(ingredientPayload.data.recipe);
     expectMutationShape(ingredientPayload.data.mutation, ingredientBody.clientMutationId, true);
 
     const reorderFixture = await createRecipeStepFixture(db);
@@ -1291,10 +1331,12 @@ describe("API v1 recipe step and dependency mutations", () => {
     ));
     const reorderPayload = await readJson(recoveredReorder);
     expect(recoveredReorder.status).toBe(200);
+    expectSuccessEnvelope(reorderPayload, "req_step_reorder_recovery");
     expect(reorderPayload.data).toMatchObject({
       reordered: true,
       step: { id: reorderFixture.steps[2].id, stepNum: 2 },
     });
+    expectRecipeGraphShape(reorderPayload.data.recipe);
     expectMutationShape(reorderPayload.data.mutation, reorderBody.clientMutationId, true);
 
     const noOpReorderFixture = await createRecipeStepFixture(db);
@@ -1331,10 +1373,12 @@ describe("API v1 recipe step and dependency mutations", () => {
     ));
     const noOpReorderPayload = await readJson(recoveredNoOpReorder);
     expect(recoveredNoOpReorder.status).toBe(200);
+    expectSuccessEnvelope(noOpReorderPayload, "req_step_reorder_no_op_recovery");
     expect(noOpReorderPayload.data).toMatchObject({
       reordered: false,
       step: { id: noOpReorderFixture.steps[1].id, stepNum: 2 },
     });
+    expectRecipeGraphShape(noOpReorderPayload.data.recipe);
     expectMutationShape(noOpReorderPayload.data.mutation, noOpReorderBody.clientMutationId, true);
 
     const outputFixture = await createRecipeStepFixture(db);
@@ -1356,10 +1400,12 @@ describe("API v1 recipe step and dependency mutations", () => {
     ));
     const outputPayload = await readJson(recoveredOutput);
     expect(recoveredOutput.status).toBe(200);
+    expectSuccessEnvelope(outputPayload, "req_output_uses_recovery");
     expect(outputPayload.data).toMatchObject({
       replaced: true,
       step: { id: outputFixture.steps[1].id, usingSteps: [{ outputStepNum: 1 }] },
     });
+    expectRecipeGraphShape(outputPayload.data.recipe);
     expectMutationShape(outputPayload.data.mutation, outputBody.clientMutationId, true);
   });
 

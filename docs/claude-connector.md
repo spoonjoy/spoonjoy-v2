@@ -2,9 +2,11 @@
 
 Spoonjoy serves a remote [Model Context Protocol](https://modelcontextprotocol.io) endpoint so agents can use your kitchen for work that is too detailed for ordinary app clicks: creating and revising recipes, importing from messy sources, organizing cookbooks, and making shopping-list changes.
 
-The connector is the **same tool surface** as the [Ouroboros stdio MCP integration](./ouroboros-mcp.md) and the [HTTP API](./api.md): all three route through one shared operation layer (`app/lib/spoonjoy-api.server.ts`). The connector just exposes it over MCP's Streamable-HTTP transport.
+The connector exposes the same authenticated MCP tools as the [Ouroboros stdio MCP integration](./ouroboros-mcp.md). The legacy HTTP API has a broader operation registry; allowed operations still share their implementations through `app/lib/spoonjoy-api.server.ts`. The connector exposes its subset over MCP's Streamable-HTTP transport.
 
 For the broader developer platform, including REST API v1 and tiny-device/client guidance, start at [`/api`](https://spoonjoy.app/api) or the OpenAPI document at [`/api/v1/openapi.json`](https://spoonjoy.app/api/v1/openapi.json).
+
+The legacy agent/API operation `import_recipe_from_url` remains available to existing `/api` integrations. It is not an MCP tool: MCP clients keep import agentic by reading the source and calling recipe-authoring tools. Spoonjoy provides no first-party import UI.
 
 ## Endpoint
 

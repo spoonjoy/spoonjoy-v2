@@ -1,8 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 import { faker } from "@faker-js/faker";
 import { db } from "~/lib/db.server";
 import {
   normalizeSearchLimit,
+  normalizeSearchRecipeFilters,
   normalizeSearchScope,
   ensureSearchIndexFresh,
   rebuildSearchIndex,
@@ -10,6 +12,7 @@ import {
   tokenizeSearchQuery,
   toFtsQuery,
 } from "~/lib/search.server";
+import { RecipeTagValidationError } from "~/lib/recipe-tags.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
 
@@ -74,6 +77,22 @@ async function createShoppingItem(ownerId: string, name: string, checked: boolea
       iconKey: checked ? "bread" : "milk",
     },
   });
+}
+
+function sha256(value: string): string {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+async function sourceFingerprint() {
+  const rows = await db.$queryRawUnsafe<Array<{ sourceFingerprint: string }>>(
+    `SELECT "sourceFingerprint" FROM "SearchIndexMetadata" WHERE "id" = 'current' LIMIT 1`,
+  );
+  return JSON.parse(rows[0]!.sourceFingerprint) as Array<{
+    tableName: string;
+    rowCount: number;
+    latestAt: string | null;
+    contentHash: string | null;
+  }>;
 }
 
 describe("search.server", () => {
@@ -256,6 +275,300 @@ describe("search.server", () => {
     const results = await searchSpoonjoy(db, { query: "batchable", scope: "recipes", limit: 20 });
     expect(results).toHaveLength(12);
     expect(results.every((result) => result.type === "recipe")).toBe(true);
+  });
+
+  it("stores ordered neutral metadata only on active recipe search documents", async () => {
+    const chef = await createChef("metadatachef");
+    const recipe = await createSearchableRecipe(chef.id, "Metadata Citrus Noodles", "citrus");
+    await db.recipe.update({ where: { id: recipe.id }, data: { course: "side" } });
+    await db.recipeTag.createMany({
+      data: [
+        { id: "tag-search-accent", recipeId: recipe.id, label: "Accent Apple", normalizedLabel: "\u00e4pfel" },
+        { id: "tag-search-zebra", recipeId: recipe.id, label: "Zebra", normalizedLabel: "zebra" },
+      ],
+    });
+    const deleted = await db.recipe.create({
+      data: { title: "Deleted Metadata Noodles", chefId: chef.id, course: "dessert", deletedAt: new Date() },
+    });
+    await db.recipeTag.create({
+      data: { id: "tag-search-deleted", recipeId: deleted.id, label: "Deleted", normalizedLabel: "deleted" },
+    });
+
+    await rebuildSearchIndex(db);
+
+    const results = await searchSpoonjoy(db, { query: "metadata", scope: "all" });
+    const recipeResult = results.find((result) => result.type === "recipe");
+    expect(recipeResult).toBeDefined();
+    expect(Object.keys(recipeResult!.metadata).sort()).toEqual([
+      "chefUsername", "cookbookTitles", "course", "coverProvenanceLabel", "coverSourceType",
+      "coverVariant", "ingredientNames", "servings", "stepCount", "tags",
+    ].sort());
+    expect(recipeResult!.metadata).toMatchObject({ course: "side", tags: ["Zebra", "Accent Apple"] });
+
+    const rows = await db.$queryRawUnsafe<Array<{ entityId: string; metadata: string }>>(
+      `SELECT "entityId", "metadata" FROM "SearchDocument" WHERE "entityType" = 'recipe' ORDER BY "entityId" ASC`,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.entityId).toBe(recipe.id);
+    expect(JSON.parse(rows[0]!.metadata)).toEqual(recipeResult!.metadata);
+  });
+
+  it("stores null course and empty tags on recipe search documents", async () => {
+    const chef = await createChef("emptymetadatachef");
+    const recipe = await createSearchableRecipe(chef.id, "Empty Metadata Soup", "broth");
+
+    await rebuildSearchIndex(db);
+    const rows = await db.$queryRawUnsafe<Array<{ metadata: string }>>(
+      `SELECT "metadata" FROM "SearchDocument" WHERE "entityType" = 'recipe' AND "entityId" = ?`,
+      recipe.id,
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(JSON.parse(rows[0]!.metadata)).toMatchObject({ course: null, tags: [] });
+  });
+
+  it("fingerprints multiple active recipes and cross-recipe tags in canonical fixed-key order", async () => {
+    const fixedAt = new Date("2026-07-22T12:34:56.789Z");
+    const chef = await createChef("fingerprintchef");
+    const recipeZ = await db.recipe.create({
+      data: {
+        id: "recipe-z-fingerprint",
+        title: "Z Metadata Fingerprint Soup",
+        chefId: chef.id,
+        course: "main",
+        createdAt: fixedAt,
+        updatedAt: fixedAt,
+      },
+    });
+    const recipeA = await db.recipe.create({
+      data: {
+        id: "recipe-\u00e4-fingerprint",
+        title: "A Metadata Fingerprint Soup",
+        chefId: chef.id,
+        course: null,
+        createdAt: fixedAt,
+        updatedAt: fixedAt,
+      },
+    });
+    await db.recipeTag.createMany({
+      data: [
+        {
+          id: "tag-z-beta",
+          recipeId: recipeZ.id,
+          label: "Accent Apple",
+          normalizedLabel: "\u00e4pfel",
+          createdAt: fixedAt,
+          updatedAt: fixedAt,
+        },
+        {
+          id: "tag-a-zeta",
+          recipeId: recipeA.id,
+          label: "Zeta",
+          normalizedLabel: "zeta",
+          createdAt: fixedAt,
+          updatedAt: fixedAt,
+        },
+        {
+          id: "tag-a-alpha",
+          recipeId: recipeA.id,
+          label: "Alpha",
+          normalizedLabel: "alpha",
+          createdAt: fixedAt,
+          updatedAt: fixedAt,
+        },
+        {
+          id: "tag-z-alpha",
+          recipeId: recipeZ.id,
+          label: "Zebra",
+          normalizedLabel: "zebra",
+          createdAt: fixedAt,
+          updatedAt: fixedAt,
+        },
+      ],
+    });
+    const deleted = await db.recipe.create({
+      data: {
+        id: "recipe-metadata-deleted-fingerprint",
+        title: "Deleted Metadata Fingerprint",
+        chefId: chef.id,
+        course: "dessert",
+        deletedAt: fixedAt,
+        createdAt: fixedAt,
+        updatedAt: fixedAt,
+      },
+    });
+    await db.recipeTag.create({
+      data: {
+        id: "tag-fingerprint-deleted",
+        recipeId: deleted.id,
+        label: "Deleted",
+        normalizedLabel: "deleted",
+        createdAt: fixedAt,
+        updatedAt: fixedAt,
+      },
+    });
+
+    await rebuildSearchIndex(db);
+    const fingerprint = await sourceFingerprint();
+
+    expect(fingerprint.find((row) => row.tableName === "Recipe")?.contentHash).toBe(sha256(JSON.stringify([
+      { recipeId: recipeZ.id, course: "main" },
+      { recipeId: recipeA.id, course: null },
+    ])));
+    expect(fingerprint.find((row) => row.tableName === "RecipeTag")?.contentHash).toBe(sha256(JSON.stringify([
+      {
+        id: "tag-z-alpha",
+        recipeId: recipeZ.id,
+        label: "Zebra",
+        normalizedLabel: "zebra",
+        createdAt: fixedAt.toISOString(),
+        updatedAt: fixedAt.toISOString(),
+      },
+      {
+        id: "tag-z-beta",
+        recipeId: recipeZ.id,
+        label: "Accent Apple",
+        normalizedLabel: "\u00e4pfel",
+        createdAt: fixedAt.toISOString(),
+        updatedAt: fixedAt.toISOString(),
+      },
+      {
+        id: "tag-a-alpha",
+        recipeId: recipeA.id,
+        label: "Alpha",
+        normalizedLabel: "alpha",
+        createdAt: fixedAt.toISOString(),
+        updatedAt: fixedAt.toISOString(),
+      },
+      {
+        id: "tag-a-zeta",
+        recipeId: recipeA.id,
+        label: "Zeta",
+        normalizedLabel: "zeta",
+        createdAt: fixedAt.toISOString(),
+        updatedAt: fixedAt.toISOString(),
+      },
+    ])));
+  });
+
+  it("rebuilds after a same-timestamp course replacement", async () => {
+    const fixedAt = new Date("2026-07-22T13:00:00.000Z");
+    const chef = await createChef("substitutionchef");
+    const recipe = await db.recipe.create({
+      data: {
+        title: "Metadata Substitution Stew",
+        chefId: chef.id,
+        course: "main",
+        createdAt: fixedAt,
+        updatedAt: fixedAt,
+      },
+    });
+    await db.recipeTag.create({
+      data: {
+        recipeId: recipe.id,
+        label: "Weeknight",
+        normalizedLabel: "weeknight",
+        createdAt: fixedAt,
+        updatedAt: fixedAt,
+      },
+    });
+    await rebuildSearchIndex(db);
+
+    await db.$executeRawUnsafe(
+      `UPDATE "Recipe" SET "course" = 'side', "updatedAt" = ? WHERE "id" = ?`,
+      fixedAt,
+      recipe.id,
+    );
+    await ensureSearchIndexFresh(db);
+    await expect(searchSpoonjoy(db, { query: "metadata substitution", scope: "recipes" }))
+      .resolves.toMatchObject([{ id: recipe.id, metadata: { course: "side", tags: ["Weeknight"] } }]);
+  });
+
+  it("rebuilds after a same-timestamp display-label-only replacement", async () => {
+    const fixedAt = new Date("2026-07-22T13:10:00.000Z");
+    const chef = await createChef("labelsubstitutionchef");
+    const recipe = await db.recipe.create({
+      data: { title: "Display Label Substitution", chefId: chef.id, createdAt: fixedAt, updatedAt: fixedAt },
+    });
+    const tag = await db.recipeTag.create({
+      data: {
+        recipeId: recipe.id,
+        label: "Weeknight",
+        normalizedLabel: "weeknight",
+        createdAt: fixedAt,
+        updatedAt: fixedAt,
+      },
+    });
+    await rebuildSearchIndex(db);
+
+    await db.$executeRawUnsafe(
+      `UPDATE "RecipeTag" SET "label" = 'WEEKNIGHT', "updatedAt" = ? WHERE "id" = ?`,
+      fixedAt,
+      tag.id,
+    );
+    await ensureSearchIndexFresh(db);
+    await expect(searchSpoonjoy(db, { query: "display label substitution", scope: "recipes" }))
+      .resolves.toMatchObject([{ id: recipe.id, metadata: { tags: ["WEEKNIGHT"] } }]);
+  });
+
+  it("rebuilds after a same-timestamp normalized-label replacement", async () => {
+    const fixedAt = new Date("2026-07-22T13:20:00.000Z");
+    const chef = await createChef("normalizedsubstitutionchef");
+    const recipe = await db.recipe.create({
+      data: { title: "Normalized Label Substitution", chefId: chef.id, createdAt: fixedAt, updatedAt: fixedAt },
+    });
+    const target = await db.recipeTag.create({
+      data: {
+        recipeId: recipe.id,
+        label: "Beta Display",
+        normalizedLabel: "beta",
+        createdAt: fixedAt,
+        updatedAt: fixedAt,
+      },
+    });
+    await db.recipeTag.create({
+      data: {
+        recipeId: recipe.id,
+        label: "Alpha Display",
+        normalizedLabel: "alpha",
+        createdAt: fixedAt,
+        updatedAt: fixedAt,
+      },
+    });
+    await rebuildSearchIndex(db);
+
+    await db.$executeRawUnsafe(
+      `UPDATE "RecipeTag" SET "normalizedLabel" = 'aardvark', "updatedAt" = ? WHERE "id" = ?`,
+      fixedAt,
+      target.id,
+    );
+    await ensureSearchIndexFresh(db);
+    await expect(searchSpoonjoy(db, { query: "normalized label substitution", scope: "recipes" }))
+      .resolves.toMatchObject([{ id: recipe.id, metadata: { tags: ["Beta Display", "Alpha Display"] } }]);
+  });
+
+  it("rebuilds chef counts when an already-soft-deleted recipe is hard-deleted", async () => {
+    const chef = await createChef("harddeletechef");
+    await db.recipe.create({
+      data: { title: "Active Chef Count Recipe", chefId: chef.id },
+    });
+    const softDeleted = await db.recipe.create({
+      data: {
+        title: "Soft Deleted Chef Count Recipe",
+        chefId: chef.id,
+        deletedAt: new Date("2026-07-22T14:00:00.000Z"),
+      },
+    });
+    await rebuildSearchIndex(db);
+
+    await expect(searchSpoonjoy(db, { query: "harddeletechef", scope: "chefs" }))
+      .resolves.toMatchObject([{ id: chef.id, metadata: { recipeCount: 2 } }]);
+
+    await db.recipe.delete({ where: { id: softDeleted.id } });
+    await ensureSearchIndexFresh(db);
+
+    await expect(searchSpoonjoy(db, { query: "harddeletechef", scope: "chefs" }))
+      .resolves.toMatchObject([{ id: chef.id, metadata: { recipeCount: 1 } }]);
   });
 
   it("reuses a fresh search index and rebuilds after source data changes", async () => {
@@ -550,5 +863,214 @@ describe("search.server", () => {
     });
 
     await expect(searchSpoonjoy(db, { query: "oat milk", scope: "shopping-list" })).resolves.toEqual([]);
+  });
+
+  it("filters all-scope results through canonical recipe course and AND tags before the limit", async () => {
+    const chef = await createChef("canonical_filter");
+    const matching = await db.recipe.create({
+      data: {
+        title: "Canonical Filter Match",
+        description: "The only matching result",
+        chefId: chef.id,
+        course: "main",
+        updatedAt: new Date("2000-01-01T00:00:00.000Z"),
+      },
+    });
+    await db.recipeTag.createMany({
+      data: [
+        { recipeId: matching.id, label: "Quick Dinner", normalizedLabel: "quick dinner" },
+        { recipeId: matching.id, label: "Budget", normalizedLabel: "budget" },
+      ],
+    });
+    for (let index = 0; index < 31; index += 1) {
+      const recipe = await db.recipe.create({
+        data: {
+          title: `Canonical Filter Decoy ${index.toString().padStart(2, "0")}`,
+          chefId: chef.id,
+          course: index % 2 === 0 ? "side" : "main",
+          updatedAt: new Date(Date.UTC(2026, 0, index + 1)),
+        },
+      });
+      await db.recipeTag.create({
+        data: { recipeId: recipe.id, label: "Quick Dinner", normalizedLabel: "quick dinner" },
+      });
+    }
+    await db.cookbook.create({ data: { title: "Canonical Filter Cookbook", authorId: chef.id } });
+    await rebuildSearchIndex(db);
+    await db.$executeRawUnsafe(
+      `UPDATE "SearchDocument" SET "metadata" = ? WHERE "entityType" = 'recipe' AND "entityId" = ?`,
+      JSON.stringify({ course: "side", tags: ["display metadata is not authority"] }),
+      matching.id,
+    );
+    const options = {
+      query: "",
+      scope: "all" as const,
+      course: "main",
+      tags: [" Quick Dinner ", "ＢＵＤＧＥＴ"],
+      limit: 30,
+    } as Parameters<typeof searchSpoonjoy>[1] & { course: string; tags: string[] };
+
+    const querySpy = vi.spyOn(db, "$queryRawUnsafe");
+    const results = await searchSpoonjoy(db, options);
+    const searchCall = querySpy.mock.calls.find(([sql]) => (
+      typeof sql === "string" && sql.includes('INNER JOIN "Recipe" AS recipe')
+    ));
+    querySpy.mockRestore();
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ type: "recipe", id: matching.id });
+    expect(searchCall).toBeDefined();
+    const [sql, ...values] = searchCall!;
+    expect(sql).toMatch(/INNER JOIN "Recipe" AS recipe/);
+    expect(sql).toMatch(/recipe\."course" = \?/);
+    expect(sql.match(/FROM "RecipeTag" AS tag/g)).toHaveLength(2);
+    expect(sql.match(/tag\."normalizedLabel" = \?/g)).toHaveLength(2);
+    expect(sql).not.toMatch(/metadata.*(?:LIKE|=)/i);
+    expect(values).toContain("main");
+    expect(values.indexOf("quick dinner")).toBeLessThan(values.indexOf("budget"));
+  });
+
+  it("rejects more than ten raw global tag filters before normalization", async () => {
+    const options = {
+      scope: "recipes" as const,
+      tags: Array.from({ length: 11 }, () => "duplicate"),
+    } as Parameters<typeof searchSpoonjoy>[1] & { tags: string[] };
+
+    await expect(searchSpoonjoy(db, options)).rejects.toThrow("At most 10 tag filters are allowed");
+    let iteratorCalls = 0;
+    const deceptiveTags = {
+      length: 1,
+      *[Symbol.iterator]() {
+        iteratorCalls += 1;
+        yield "\t";
+        yield* Array.from({ length: 10 }, () => "duplicate");
+      },
+    } as unknown as readonly string[];
+    expect(() => normalizeSearchRecipeFilters(null, deceptiveTags))
+      .toThrow("At most 10 tag filters are allowed");
+    expect(iteratorCalls).toBe(1);
+    await expect(db.$queryRawUnsafe<Array<{ count: bigint }>>(
+      `SELECT COUNT(*) AS count FROM "SearchDocument"`,
+    )).resolves.toEqual([{ count: 0n }]);
+  });
+
+  it("rejects recipe filters on non-recipe service scopes before index work", async () => {
+    await expect(searchSpoonjoy(db, {
+      scope: "cookbooks",
+      tags: ["quick"],
+    })).rejects.toThrow("Recipe filters require all or recipes scope");
+    await expect(db.$queryRawUnsafe<Array<{ count: bigint }>>(
+      `SELECT COUNT(*) AS count FROM "SearchDocument"`,
+    )).resolves.toEqual([{ count: 0n }]);
+  });
+
+  it("does not disguise unexpected global normalizer failures as validation errors", () => {
+    const iteratorFailure = new Error("unexpected iterator failure");
+    const tags = new Proxy([], {
+      get(target, property, receiver) {
+        if (property === Symbol.iterator) return () => { throw iteratorFailure; };
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    let caught: unknown;
+    try {
+      normalizeSearchRecipeFilters(null, tags);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBe(iteratorFailure);
+
+    const validationFailure = new RecipeTagValidationError("tags.0", "iterator validation failure");
+    const validationTags = {
+      length: 0,
+      [Symbol.iterator]() {
+        throw validationFailure;
+      },
+    } as unknown as readonly string[];
+    try {
+      normalizeSearchRecipeFilters(null, validationTags);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBe(validationFailure);
+
+    const canonicalFailure = new Error("unexpected canonical failure");
+    const normalizeSpy = vi.spyOn(String.prototype, "normalize")
+      .mockImplementationOnce(() => { throw canonicalFailure; });
+    try {
+      normalizeSearchRecipeFilters(null, ["quick"]);
+    } catch (error) {
+      caught = error;
+    } finally {
+      normalizeSpy.mockRestore();
+    }
+    expect(caught).toBe(canonicalFailure);
+  });
+
+  it("accepts only immutable global filters created by the canonical factory", async () => {
+    const prepared = normalizeSearchRecipeFilters("main", ["H\u0331"]);
+    const forged = { course: "dessert" as const, tags: ["forged"], displayTags: ["forged"] };
+    let preparedReads = 0;
+    const accessorOptions = {
+      scope: "recipes" as const,
+      get normalizedFilters() {
+        preparedReads += 1;
+        return preparedReads === 1 ? prepared : forged;
+      },
+    };
+
+    expect(Object.isFrozen(prepared)).toBe(true);
+    expect(Object.isFrozen(prepared.tags)).toBe(true);
+    expect(prepared).toEqual({ course: "main", tags: ["h\u0331"], displayTags: ["H\u0331"] });
+    await expect(searchSpoonjoy(db, {
+      scope: "recipes",
+      normalizedFilters: { course: "main", tags: ["forged"], displayTags: ["forged"] },
+    })).rejects.toThrow("Prepared recipe filters are invalid");
+    await expect(searchSpoonjoy(db, {
+      scope: "recipes",
+      normalizedFilters: prepared,
+      tags: ["raw"],
+    })).rejects.toThrow("Prepared recipe filters are invalid");
+    await expect(searchSpoonjoy(db, accessorOptions)).resolves.toEqual([]);
+    expect(preparedReads).toBe(1);
+    await expect(db.$queryRawUnsafe<Array<{ count: bigint }>>(
+      `SELECT COUNT(*) AS count FROM "SearchDocument"`,
+    )).resolves.toEqual([{ count: 0n }]);
+  });
+
+  it("applies canonical filters to the FTS branch with the complete bind order", async () => {
+    const chef = await createChef("fts_filter");
+    const matching = await db.recipe.create({
+      data: { title: "Filtered FTS Noodles", chefId: chef.id, course: "main" },
+    });
+    await db.recipeTag.create({
+      data: { recipeId: matching.id, label: "Quick", normalizedLabel: "quick" },
+    });
+    await rebuildSearchIndex(db);
+    const querySpy = vi.spyOn(db, "$queryRawUnsafe");
+
+    const results = await searchSpoonjoy(db, {
+      query: "filtered noodles",
+      scope: "recipes",
+      course: "main",
+      tags: ["Quick"],
+      limit: 30,
+    });
+    const searchCall = querySpy.mock.calls.find(([sql]) => (
+      typeof sql === "string"
+      && sql.includes('"SearchDocument" MATCH ?')
+      && sql.includes('INNER JOIN "Recipe" AS recipe')
+    ));
+    querySpy.mockRestore();
+
+    expect(results.map((result) => result.id)).toEqual([matching.id]);
+    expect(searchCall).toBeDefined();
+    expect(searchCall!.slice(1)).toEqual([
+      "filtered* AND noodles*",
+      "recipe",
+      "main",
+      "quick",
+      30,
+    ]);
   });
 });

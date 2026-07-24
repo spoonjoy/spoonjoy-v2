@@ -129,6 +129,13 @@ describe("API v1 search", () => {
 
   it("returns native-friendly public search rows without leaking shopping-list items anonymously", async () => {
     const fixture = await createSearchFixture(db);
+    await db.recipe.update({ where: { id: fixture.recipe.id }, data: { course: "main" } });
+    await db.recipeTag.createMany({
+      data: [
+        { id: "tag-rest-search-zesty", recipeId: fixture.recipe.id, label: "Zesty", normalizedLabel: "zesty" },
+        { id: "tag-rest-search-dinner", recipeId: fixture.recipe.id, label: "Dinner", normalizedLabel: "dinner" },
+      ],
+    });
     const response = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/search?q=tomato&scope=all", {
       headers: { "X-Request-Id": "req_api_search_public" },
     }) as unknown as Request, "search"));
@@ -154,6 +161,10 @@ describe("API v1 search", () => {
     expect(payload.data.results.map((result: any) => result.id)).not.toContain(fixture.ownerItem.id);
     for (const result of payload.data.results) {
       expectSearchResultShape(result);
+      if (result.type !== "recipe") {
+        expect(result.metadata).not.toHaveProperty("course");
+        expect(result.metadata).not.toHaveProperty("tags");
+      }
     }
 
     const queryAlias = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/search?q=tomato&query=native&scope=all", {
@@ -176,6 +187,117 @@ describe("API v1 search", () => {
     });
     expect(emptyQueryPayload.data.results).toHaveLength(1);
     expect(emptyQueryPayload.data.results[0].type).toBe("chef");
+  });
+
+  it("adds neutral metadata to anonymous recipe search rows", async () => {
+    const fixture = await createSearchFixture(db);
+    await db.recipe.update({ where: { id: fixture.recipe.id }, data: { course: "main" } });
+    await db.recipeTag.createMany({
+      data: [
+        { id: `tag-rest-public-dinner-${faker.string.alphanumeric(8)}`, recipeId: fixture.recipe.id, label: "Dinner", normalizedLabel: "dinner" },
+        { id: `tag-rest-public-zesty-${faker.string.alphanumeric(8)}`, recipeId: fixture.recipe.id, label: "Zesty", normalizedLabel: "zesty" },
+      ],
+    });
+
+    const response = await loader(routeArgs(new UndiciRequest(
+      "http://localhost/api/v1/search?q=tomato&scope=recipes&limit=20",
+      { headers: { "X-Request-Id": "req_api_search_public_recipe_metadata" } },
+    ) as unknown as Request, "search"));
+    const payload = await readJson(response);
+    const recipe = payload.data.results.find((result: { type: string }) => result.type === "recipe");
+
+    expect(response.status).toBe(200);
+    expect(Object.keys(recipe.metadata).sort()).toEqual([
+      "chefUsername", "cookbookTitles", "course", "coverProvenanceLabel", "coverSourceType",
+      "coverVariant", "ingredientNames", "servings", "stepCount", "tags",
+    ].sort());
+    expect(recipe.metadata).toMatchObject({ course: "main", tags: ["Dinner", "Zesty"] });
+    expect(recipe.metadata).not.toHaveProperty("isSaved");
+  });
+
+  it("keeps authenticated saved-user non-recipe search rows byte-compatible", async () => {
+    const fixture = await createSearchFixture(db);
+    await db.recipe.update({ where: { id: fixture.recipe.id }, data: { course: "main" } });
+    await db.recipeTag.createMany({
+      data: [
+        {
+          id: `tag-rest-auth-dinner-${faker.string.alphanumeric(8)}`,
+          recipeId: fixture.recipe.id,
+          label: "Dinner",
+          normalizedLabel: "dinner",
+        },
+        {
+          id: `tag-rest-auth-zesty-${faker.string.alphanumeric(8)}`,
+          recipeId: fixture.recipe.id,
+          label: "Zesty",
+          normalizedLabel: "zesty",
+        },
+      ],
+    });
+    await db.savedRecipe.create({
+      data: {
+        userId: fixture.owner.id,
+        recipeId: fixture.recipe.id,
+        savedAt: "2026-07-22T18:00:00.000Z",
+      },
+    });
+
+    const response = await loader(routeArgs(new UndiciRequest(
+      "http://localhost/api/v1/search?q=tomato&scope=all&limit=20",
+      { headers: bearer(fixture.shoppingRead.token, "req_api_search_saved_private") },
+    ) as unknown as Request, "search"));
+    const payload = await readJson(response);
+    const byType = new Map(payload.data.results.map((result: { type: string }) => [result.type, result]));
+
+    expect(response.status).toBe(200);
+    expect(payload.data.isAuthenticated).toBe(true);
+    expect([...byType.keys()].sort()).toEqual(["chef", "cookbook", "recipe", "shopping-list-item"]);
+    for (const result of payload.data.results) {
+      expectSearchResultShape(result);
+    }
+    expect(Object.keys(byType.get("cookbook").metadata).sort()).toEqual([
+      "authorUsername", "recipeCount", "recipeTitles",
+    ].sort());
+    expect(Object.keys(byType.get("chef").metadata).sort()).toEqual([
+      "cookbookCount", "recipeCount", "username",
+    ].sort());
+    expect(Object.keys(byType.get("shopping-list-item").metadata).sort()).toEqual([
+      "categoryKey", "checked", "iconKey", "quantity", "sortIndex", "unit",
+    ].sort());
+    expect(JSON.stringify(payload.data.results)).not.toContain("isSaved");
+  });
+
+  it("adds neutral metadata without save state to authenticated recipe search rows", async () => {
+    const fixture = await createSearchFixture(db);
+    await db.recipe.update({ where: { id: fixture.recipe.id }, data: { course: "main" } });
+    await db.recipeTag.createMany({
+      data: [
+        { id: `tag-rest-saved-dinner-${faker.string.alphanumeric(8)}`, recipeId: fixture.recipe.id, label: "Dinner", normalizedLabel: "dinner" },
+        { id: `tag-rest-saved-zesty-${faker.string.alphanumeric(8)}`, recipeId: fixture.recipe.id, label: "Zesty", normalizedLabel: "zesty" },
+      ],
+    });
+    await db.savedRecipe.create({
+      data: {
+        userId: fixture.owner.id,
+        recipeId: fixture.recipe.id,
+        savedAt: "2026-07-22T18:00:00.000Z",
+      },
+    });
+
+    const response = await loader(routeArgs(new UndiciRequest(
+      "http://localhost/api/v1/search?q=tomato&scope=recipes&limit=20",
+      { headers: bearer(fixture.shoppingRead.token, "req_api_search_saved_recipe_metadata") },
+    ) as unknown as Request, "search"));
+    const payload = await readJson(response);
+    const recipe = payload.data.results.find((result: { type: string }) => result.type === "recipe");
+
+    expect(response.status).toBe(200);
+    expect(Object.keys(recipe.metadata).sort()).toEqual([
+      "chefUsername", "cookbookTitles", "course", "coverProvenanceLabel", "coverSourceType",
+      "coverVariant", "ingredientNames", "servings", "stepCount", "tags",
+    ].sort());
+    expect(recipe.metadata).toMatchObject({ course: "main", tags: ["Dinner", "Zesty"] });
+    expect(recipe.metadata).not.toHaveProperty("isSaved");
   });
 
   it("includes only the authenticated owner's shopping-list rows when the principal can read them", async () => {

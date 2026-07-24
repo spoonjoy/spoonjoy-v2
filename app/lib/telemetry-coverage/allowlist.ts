@@ -71,6 +71,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "Best-effort cover assignment fallback; failure leaves the recipe without an auto-assigned cover, which is a non-fatal degraded state.",
   },
   {
+    file: "app/lib/recipe-tags.server.ts",
+    category: "swallow",
+    reason:
+      "Malformed authoring JSON is mapped to an expected 4xx field error; after a strictly validated atomic write, a failed cookbook-membership diagnostic read is deliberately ignored so a committed mutation cannot become a false 500.",
+  },
+  {
     file: "app/lib/saved-recipe-cutover.server.ts",
     category: "swallow",
     reason:
@@ -109,10 +115,10 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "SSRF-guarded DI fetch wrapper (no PostHog config). Catches map fetch/timeout to a typed Error surfaced to instrumented callers: the import orchestrator captures it via captureImportCoverException, and image-gen wraps it into ImageGenError captured by the stylization caller.",
   },
   {
-    file: "app/lib/shopping-list-mutations.server.ts",
+    file: "app/lib/shopping-list-seed-compat.server.ts",
     category: "rethrow",
     reason:
-      "Catches recover only exact shopping-identity uniqueness races by one bounded reread or full-batch rebuild; all other failures rethrow to the instrumented adapter boundary.",
+      "Seed-only compatibility provisioning catches only exact shopping-identity uniqueness races, performs one bounded winner reread, and rethrows every other failure to the instrumented adapter boundary.",
   },
   {
     file: "app/lib/image-gen.server.ts",
@@ -127,6 +133,24 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     category: "expected-4xx",
     reason:
       "Validation/draft-parse catch maps to a 4xx form error returned to the user; not an unexpected server exception.",
+  },
+  {
+    file: "app/lib/my-recipes-search.server.ts",
+    category: "expected-4xx",
+    reason:
+      "Recipe course/tag normalization catches only RecipeTagValidationError and maps it to the route-specific validation error; unexpected failures rethrow unchanged and no server exception is swallowed.",
+  },
+  {
+    file: "app/lib/search.server.ts",
+    category: "expected-4xx",
+    reason:
+      "Global recipe-filter normalization catches only RecipeTagValidationError and maps it to the public search validation error; unexpected failures rethrow unchanged and no server exception is swallowed.",
+  },
+  {
+    file: "app/lib/saved-recipes.server.ts",
+    category: "expected-4xx",
+    reason:
+      "Cursor decode catches malformed base64url, UTF-8, or JSON supplied by the client and converts it to the typed cursor validation error handled by the REST boundary; no server failure is swallowed.",
   },
   {
     file: "app/lib/spoonjoy-api-request.server.ts",
@@ -145,6 +169,18 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     category: "expected-4xx",
     reason:
       "Ingredient-parse fallback inside a user action; failure degrades to unparsed text, surfaced as a normal action result rather than a server exception.",
+  },
+  {
+    file: "app/routes/my-recipes.tsx",
+    category: "expected-4xx",
+    reason:
+      "Loader catch maps only typed page/course/tag validation failures from client query parameters to HTTP 400; unexpected failures rethrow unchanged to the instrumented request boundary.",
+  },
+  {
+    file: "app/routes/search.tsx",
+    category: "expected-4xx",
+    reason:
+      "Loader catch maps only typed course/tag validation failures from client query parameters to HTTP 400; unexpected failures rethrow unchanged to the instrumented request boundary.",
   },
 
   // --- not on a user-facing request path ---
@@ -260,6 +296,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     category: "swallow",
     reason:
       "The only catches here are client-side cook-progress localStorage parse/read/write fallbacks (window-guarded); a corrupt or unavailable store degrades to a fresh session, no user-facing failure. The server action delegates to recipe-detail.server.ts, which owns mutation-failure capture.",
+  },
+  {
+    file: "app/routes/saved-recipes.tsx",
+    category: "expected-4xx",
+    reason:
+      "The loader catch maps only SavedRecipeValidationError fields q and cursor from client-supplied URL parameters to 400; persisted-row validation fields recipeId and savedAt, plus unexpected database or hydration failures, rethrow to the framework error boundary.",
   },
 
   // --- owned by the parallel LLM-telemetry workstream ---

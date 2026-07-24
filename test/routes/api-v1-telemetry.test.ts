@@ -744,6 +744,127 @@ describe("API v1 mutation and validation telemetry", () => {
     });
   });
 
+  it("captures saved-recipe list, save, and unsave operations without private values", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const recipe = await db.recipe.create({
+      data: {
+        ...createTestRecipe(user.id),
+        title: `Telemetry Saved Recipe ${faker.string.alphanumeric(8)}`,
+      },
+    });
+    const credential = await createApiCredential(db, user.id, "Telemetry Saved Recipe Client", {
+      scopes: ["kitchen:read", "kitchen:write"],
+    });
+    const auth = {
+      Authorization: `Bearer ${credential.token}`,
+      "User-Agent": "PostmanRuntime/7.39.0",
+    };
+
+    const listRequest = apiRequest(
+      "http://localhost/api/v1/saved-recipes",
+      "req_saved_telemetry_list",
+      auth,
+    );
+    const listResponse = await loader(routeArgs(listRequest, "saved-recipes").args);
+    expect(listResponse.status).toBe(200);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/saved-recipes",
+      requestId: "req_saved_telemetry_list",
+      operation: "saved-recipes.list",
+      status: 200,
+      authMode: "bearer",
+      requestBytes: 0,
+      forbidden: [credential.token, credential.credential.tokenPrefix, recipe.id, recipe.title],
+    });
+
+    const invalidListRequest = apiRequest(
+      "http://localhost/api/v1/saved-recipes?limit=0",
+      "req_saved_telemetry_list_invalid",
+      auth,
+    );
+    const invalidListResponse = await loader(routeArgs(invalidListRequest, "saved-recipes").args);
+    expect(invalidListResponse.status).toBe(400);
+    expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/saved-recipes",
+      requestId: "req_saved_telemetry_list_invalid",
+      operation: "saved-recipes.list",
+      status: 400,
+      errorCode: "validation_error",
+      authMode: "bearer",
+      forbidden: [credential.token, credential.credential.tokenPrefix, recipe.id, recipe.title],
+    });
+    expect((apiV1Event(
+      "/api/v1/saved-recipes",
+      "req_saved_telemetry_list_invalid",
+    )!.properties as Record<string, unknown>).idempotency_outcome).toBeUndefined();
+
+    const savePath = `saved-recipes/${recipe.id}`;
+    for (const [method, operation] of [
+      ["PUT", "saved-recipes.save"],
+      ["DELETE", "saved-recipes.unsave"],
+    ] as const) {
+      const requestId = `req_saved_telemetry_${method.toLowerCase()}_invalid`;
+      const invalidBody = {
+        clientMutationId: `raw-saved-recipe-${method.toLowerCase()}-invalid-mutation-id`,
+        privateExtra: `private-saved-recipe-${method.toLowerCase()}-value`,
+      };
+      const invalid = apiJsonRequest(method, savePath, requestId, auth, invalidBody);
+      const invalidResponse = await action(routeArgs(invalid.request, savePath).args);
+      expect(invalidResponse.status).toBe(400);
+      expectApiV1ErrorEvent({
+        routeTemplate: "/api/v1/saved-recipes/{recipeId}",
+        requestId,
+        operation,
+        status: 400,
+        errorCode: "validation_error",
+        authMode: "bearer",
+        forbidden: [
+          credential.token,
+          credential.credential.tokenPrefix,
+          recipe.id,
+          recipe.title,
+          invalidBody.clientMutationId,
+          invalidBody.privateExtra,
+          invalid.bodyText,
+        ],
+      });
+      expect((apiV1Event(
+        "/api/v1/saved-recipes/{recipeId}",
+        requestId,
+      )!.properties as Record<string, unknown>).idempotency_outcome).toBe("not_attempted");
+    }
+
+    const saveBody = { clientMutationId: "raw-saved-recipe-save-mutation-id" };
+    const save = apiJsonRequest("PUT", savePath, "req_saved_telemetry_save", auth, saveBody);
+    const saveResponse = await action(routeArgs(save.request, savePath).args);
+    expect(saveResponse.status).toBe(200);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/saved-recipes/{recipeId}",
+      requestId: "req_saved_telemetry_save",
+      operation: "saved-recipes.save",
+      status: 200,
+      authMode: "bearer",
+      requestBytes: save.bodyBytes,
+      idempotencyOutcome: "committed",
+      forbidden: [credential.token, credential.credential.tokenPrefix, recipe.id, recipe.title, saveBody.clientMutationId, save.bodyText],
+    });
+
+    const unsaveBody = { clientMutationId: "raw-saved-recipe-unsave-mutation-id" };
+    const unsave = apiJsonRequest("DELETE", savePath, "req_saved_telemetry_unsave", auth, unsaveBody);
+    const unsaveResponse = await action(routeArgs(unsave.request, savePath).args);
+    expect(unsaveResponse.status).toBe(200);
+    expectApiV1OperationEvent({
+      routeTemplate: "/api/v1/saved-recipes/{recipeId}",
+      requestId: "req_saved_telemetry_unsave",
+      operation: "saved-recipes.unsave",
+      status: 200,
+      authMode: "bearer",
+      requestBytes: unsave.bodyBytes,
+      idempotencyOutcome: "committed",
+      forbidden: [credential.token, credential.credential.tokenPrefix, recipe.id, recipe.title, unsaveBody.clientMutationId, unsave.bodyText],
+    });
+  });
+
   it("captures cookbook mutation operations without titles, route ids, mutation ids, or body values", async () => {
     const user = await db.user.create({ data: createTestUser() });
     const credential = await createApiCredential(db, user.id, "Telemetry Cookbook Writer", {

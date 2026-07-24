@@ -1,6 +1,7 @@
 import type { Route } from "./+types/search";
-import { Form, useLoaderData } from "react-router";
-import { BookOpen, ChefHat, Search as SearchIcon, ShoppingCart, Users } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import { Form, useLoaderData, useLocation } from "react-router";
+import { BookOpen, ChefHat, Search as SearchIcon, ShoppingCart, Users, X } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Heading, Subheading } from "~/components/ui/heading";
 import { Link } from "~/components/ui/link";
@@ -10,8 +11,9 @@ import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
 import {
-  normalizeSearchScope,
+  normalizeSearchRecipeFilters,
   searchSpoonjoy,
+  SearchValidationError,
   type SearchEntityType,
   type SearchResult,
   type SearchScope,
@@ -66,13 +68,32 @@ export function meta({}: Route.MetaArgs) {
 export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const query = url.searchParams.get("q") ?? "";
-  const scope = normalizeSearchScope(url.searchParams.get("scope"));
+  const rawScope = url.searchParams.get("scope");
+  if (rawScope !== null && rawScope !== "shopping" && !SEARCH_SCOPES.includes(rawScope as SearchScope)) {
+    throw new Response("Invalid search filters", { status: 400 });
+  }
+  const scope = (rawScope === "shopping" ? "shopping-list" : rawScope ?? "all") as SearchScope;
+  const rawCourse = url.searchParams.get("course");
+  const rawTags = url.searchParams.getAll("tag");
+  const hasRawRecipeFilters = url.searchParams.has("course") || rawTags.length > 0;
+  if (hasRawRecipeFilters && scope !== "all" && scope !== "recipes") {
+    throw new Response("Invalid search filters", { status: 400 });
+  }
+
+  let filters: ReturnType<typeof normalizeSearchRecipeFilters>;
+  try {
+    filters = normalizeSearchRecipeFilters(rawCourse, rawTags);
+  } catch (error) {
+    if (!(error instanceof SearchValidationError)) throw error;
+    throw new Response("Invalid search filters", { status: 400 });
+  }
   const userId = await getUserId(request, context.cloudflare?.env);
   const database = await getRequestDb(context);
 
   const results = await searchSpoonjoy(database, {
     query,
     scope,
+    normalizedFilters: filters,
     viewerId: userId,
     limit: 30,
   });
@@ -80,6 +101,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return {
     query,
     scope,
+    ...(scope === "all" || scope === "recipes"
+      ? { course: filters.course, tags: [...filters.displayTags] }
+      : {}),
     isAuthenticated: Boolean(userId),
     results,
   };
@@ -135,8 +159,14 @@ function ResultCard({ result }: { result: SearchResult }) {
 }
 
 export default function Search() {
-  const { query, scope, isAuthenticated, results } = useLoaderData<typeof loader>();
+  const data = useLoaderData<typeof loader>();
+  const { query, scope, isAuthenticated, results } = data;
+  const course = "course" in data ? data.course ?? null : null;
+  const tags = "tags" in data ? data.tags ?? [] : [];
   const hasQuery = query.trim().length > 0;
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [searchDraft, setSearchDraft] = useState(query);
+  const previousQuery = useRef(query);
   const showPrivatePrompt = scope === "shopping-list" && !isAuthenticated;
   const resultCounts = results.reduce<Record<SearchEntityType, number>>(
     (counts, result) => ({
@@ -145,6 +175,13 @@ export default function Search() {
     }),
     { recipe: 0, cookbook: 0, chef: 0, "shopping-list-item": 0 },
   );
+
+  useEffect(() => {
+    if (previousQuery.current === query) return;
+    previousQuery.current = query;
+    setSearchDraft(query);
+    searchInputRef.current?.focus();
+  }, [query]);
 
   return (
     <CookbookPage>
@@ -161,13 +198,15 @@ export default function Search() {
             <Form method="get" role="search" className="mt-8 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <input type="hidden" name="scope" value={scope} />
               <label className="sr-only" htmlFor="search-query">Search terms</label>
-              <div className="flex h-[4.5rem] items-center rounded-[var(--sj-radius-surface)] border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-5">
+              <div className="flex h-[4.5rem] min-w-0 items-center rounded-[var(--sj-radius-surface)] border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--sj-brass)]">
                 <SearchIcon className="mr-3 size-5 shrink-0 text-[var(--sj-ink-soft)]" aria-hidden="true" />
                 <input
+                  ref={searchInputRef}
                   id="search-query"
                   type="search"
                   name="q"
-                  defaultValue={query}
+                  value={searchDraft}
+                  onChange={(event) => setSearchDraft(event.currentTarget.value)}
                   placeholder="tomato basil"
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
@@ -175,11 +214,16 @@ export default function Search() {
                       event.currentTarget.form?.requestSubmit();
                     }
                   }}
-                  className="font-sj-display h-full w-full border-0 bg-transparent text-3xl/9 text-[var(--sj-ink)] outline-none placeholder:text-[var(--sj-ink-soft)]"
+                  className="font-sj-display h-full min-w-0 w-full border-0 bg-transparent text-3xl/9 text-[var(--sj-ink)] outline-none placeholder:text-[var(--sj-ink-soft)]"
                 />
               </div>
+              {course ? <input type="hidden" name="course" value={course} /> : null}
+              {tags.map((tag) => <input key={tag} type="hidden" name="tag" value={tag} />)}
               <Button type="submit" className="h-11">Search</Button>
             </Form>
+            {scope === "all" || scope === "recipes" ? (
+              <RecipeSearchFilters query={searchDraft} scope={scope} course={course} tags={tags} />
+            ) : null}
           </div>
 
           <aside className="sj-receipt p-5">
@@ -206,18 +250,15 @@ export default function Search() {
             <Text className="mt-2 font-sj-body text-sm/6 normal-case tracking-normal">{SCOPE_DESCRIPTIONS[scope]}</Text>
             <div className="mt-5 grid gap-0">
               {SEARCH_SCOPES.map((searchScope) => {
-                const params = new URLSearchParams();
-                params.set("scope", searchScope);
-                if (query.trim()) params.set("q", query.trim());
-
                 return (
                   <Link
                     key={searchScope}
-                    href={`/search?${params.toString()}`}
+                    href={searchHref(searchScope, searchDraft, course, tags)}
+                    aria-current={scope === searchScope ? "page" : undefined}
                     className={[
                       "flex justify-between border-b border-[var(--sj-border)] py-3 no-underline transition",
                       scope === searchScope
-                        ? "text-[var(--sj-ink)]"
+                        ? "font-extrabold text-[var(--sj-ink)]"
                         : "text-[var(--sj-ink-soft)] hover:text-[var(--sj-ink)]",
                     ].join(" ")}
                   >
@@ -235,7 +276,7 @@ export default function Search() {
           <section aria-label="Search results">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <Subheading level={2} className="text-2xl/8">{hasQuery ? `Results for "${query.trim()}"` : "Recently searchable"}</Subheading>
+                <Subheading level={2} className="text-2xl/8 [overflow-wrap:anywhere]">{hasQuery ? `Results for "${query.trim()}"` : "Recently searchable"}</Subheading>
                 <Text className="mt-1 text-sm">{resultCountLabel(results.length)}</Text>
               </div>
             </div>
@@ -271,5 +312,145 @@ export default function Search() {
         </div>
       </section>
     </CookbookPage>
+  );
+}
+
+function searchHref(
+  scope: SearchScope,
+  query: string,
+  course: string | null,
+  tags: string[],
+) {
+  const params = new URLSearchParams();
+  params.set("scope", scope);
+  if (query.trim()) params.set("q", query.trim());
+  if (scope === "all" || scope === "recipes") {
+    if (course) params.set("course", course);
+    for (const tag of tags) params.append("tag", tag);
+  }
+  return `/search?${params.toString()}`;
+}
+
+function RecipeSearchFilters({
+  query,
+  scope,
+  course,
+  tags,
+}: {
+  query: string;
+  scope: "all" | "recipes";
+  course: string | null;
+  tags: string[];
+}) {
+  const tagHelpId = useId();
+  const location = useLocation();
+  const filterPanelRef = useRef<HTMLDivElement>(null);
+  const filterState = `${course ?? ""}\u0000${tags.join("\u0000")}`;
+  const previousFilterState = useRef(filterState);
+
+  useEffect(() => {
+    if (previousFilterState.current === filterState) return;
+    previousFilterState.current = filterState;
+    filterPanelRef.current?.focus();
+  }, [filterState]);
+
+  return (
+    <div
+      ref={filterPanelRef}
+      role="region"
+      aria-label="Search filters"
+      tabIndex={-1}
+      className="mt-5 border-t border-[var(--sj-border)] pt-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]"
+    >
+      <div aria-live="polite" className="sr-only">
+        {course || tags.length > 0
+          ? `Search filters updated. Course ${course ?? "any"}. Tags ${tags.join(", ") || "none"}.`
+          : "Search filters cleared."}
+      </div>
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
+        <Form method="get" className="flex min-w-0 items-end gap-2">
+          <input type="hidden" name="scope" value={scope} />
+          {query.trim() ? <input type="hidden" name="q" value={query.trim()} /> : null}
+          <label className="min-w-0 flex-1 font-sj-ui text-sm font-semibold">
+            <span className="mb-1 block">Course</span>
+            <select
+              key={course ?? "no-course"}
+              name="course"
+              defaultValue={course ?? ""}
+              required
+              className="min-h-11 w-full border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-3 text-base text-[var(--sj-ink)]"
+            >
+              <option value="" disabled>Choose a course</option>
+              <option value="main">Main</option>
+              <option value="side">Side</option>
+              <option value="appetizer">Appetizer</option>
+              <option value="dessert">Dessert</option>
+            </select>
+          </label>
+          {tags.map((tag) => <input key={tag} type="hidden" name="tag" value={tag} />)}
+          <Button type="submit" plain>Apply</Button>
+          {course ? (
+            <Link
+              href={searchHref(scope, query, null, tags)}
+              className="font-sj-ui inline-flex min-h-11 items-center py-3 text-sm font-semibold"
+            >
+              Clear course
+            </Link>
+          ) : null}
+        </Form>
+
+        <Form method="get" className="flex min-w-0 items-end gap-2">
+          <input type="hidden" name="scope" value={scope} />
+          {query.trim() ? <input type="hidden" name="q" value={query.trim()} /> : null}
+          {course ? <input type="hidden" name="course" value={course} /> : null}
+          {tags.map((tag) => <input key={tag} type="hidden" name="tag" value={tag} />)}
+          <label className="min-w-0 flex-1 font-sj-ui text-sm font-semibold">
+            <span className="mb-1 block">Add tag filter</span>
+            <input
+              key={`${location.key}:${tags.join("\u0000")}`}
+              type="text"
+              name="tag"
+              required
+              disabled={tags.length >= 10}
+              aria-describedby={tags.length >= 10 ? tagHelpId : undefined}
+              className="min-h-11 w-full border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-3 text-base text-[var(--sj-ink)]"
+            />
+          </label>
+          <Button type="submit" plain disabled={tags.length >= 10}>Add</Button>
+          {tags.length >= 10 ? (
+            <span id={tagHelpId} role="status" className="font-sj-ui text-sm font-semibold text-[var(--sj-ink-soft)]">
+              10-tag limit reached. Remove a tag to add another.
+            </span>
+          ) : null}
+        </Form>
+
+        {course || tags.length > 0 ? (
+          <Link
+            href={searchHref(scope, query, null, [])}
+            className="font-sj-ui inline-flex min-h-11 items-center self-end py-3 text-sm font-semibold"
+          >
+            Clear filters
+          </Link>
+        ) : null}
+      </div>
+
+      {tags.length > 0 ? (
+        <ul aria-label="Active tag filters" className="mt-3 flex flex-wrap gap-2">
+          {tags.map((tag, index) => (
+            <li key={tag} className="flex max-w-full min-w-0 items-center gap-1 border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] pl-3 text-sm">
+              <span className="min-w-0 [overflow-wrap:anywhere]">{tag}</span>
+              <Link
+                href={searchHref(scope, query, course, tags.filter((_, tagIndex) => tagIndex !== index))}
+                aria-label={`Remove tag ${tag}`}
+                title={`Remove ${tag}`}
+                className="flex size-11 shrink-0 items-center justify-center text-[var(--sj-ink-soft)] hover:text-[var(--sj-ink)]"
+              >
+                <X className="size-4" aria-hidden="true" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
   );
 }

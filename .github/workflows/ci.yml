@@ -128,7 +128,9 @@ jobs:
         run: node scripts/warning-gate.ts -- pnpm db:seed
 
       - name: 🔍 Typecheck
-        run: pnpm run verify:clean:typecheck
+        run: |
+          pnpm run verify:clean:typecheck
+          pnpm run verify:clean:typecheck:scripts
 
       - name: 🔐 Verify generated API contract
         run: pnpm run verify:clean:generated-contract

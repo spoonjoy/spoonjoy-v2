@@ -11,7 +11,15 @@ import {
   validateDescription,
   validateServings,
 } from "~/lib/validation";
-import { createRecipeDraft, parseRecipeStepsJson } from "~/lib/recipe-create.server";
+import {
+  createRecipeDraft,
+  parseRecipeStepsJson,
+  RecipeGraphTooLargeError,
+} from "~/lib/recipe-create.server";
+import {
+  asCompatibleRecipeTagD1Database,
+  parseRecipeAuthoringMetadataForm,
+} from "~/lib/recipe-tags.server";
 import {
   deleteStoredImageWithCapture,
   hasUploadedImageFile,
@@ -21,8 +29,11 @@ import {
 } from "~/lib/image-storage.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { FOOD_IMAGE_ACCEPT, RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
-import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
-import { createCover, setActiveRecipeCover } from "~/lib/recipe-cover.server";
+import {
+  ACTIVE_RECIPE_TITLE_CONFLICT_ERROR,
+  isActiveRecipeTitleConflictError,
+  validateActiveRecipeTitleUnique,
+} from "~/lib/recipe-title-uniqueness.server";
 import { scheduleAiPlaceholderCover } from "~/lib/ai-placeholder-cover.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
 import {
@@ -38,6 +49,8 @@ interface ActionData {
     title?: string;
     description?: string;
     servings?: string;
+    course?: string;
+    tags?: string;
     image?: string;
     steps?: string;
     general?: string;
@@ -82,8 +95,14 @@ export async function action({ request, context }: Route.ActionArgs) {
   const imageEntry = formData.get("image");
   const imageFile = hasUploadedImageFile(imageEntry) ? imageEntry : null;
   const stepsJson = formData.get("steps")?.toString() || "[]";
+  const hasMetadataPayload = formData.has("course") || formData.has("tags");
+  const metadata = parseRecipeAuthoringMetadataForm(
+    formData.get("course")?.toString() ?? null,
+    formData.get("tags")?.toString() ?? null,
+  );
 
   const errors: ActionData["errors"] = {};
+  Object.assign(errors, metadata.errors);
 
   // Validation
   const titleResult = validateTitle(title);
@@ -138,7 +157,9 @@ export async function action({ request, context }: Route.ActionArgs) {
   const cloudflareEnv = getCloudflareEnv(context);
   const photosBucket = cloudflareEnv?.PHOTOS;
   const recipeId = crypto.randomUUID();
+  const coverId = crypto.randomUUID();
   let uploadedImageUrl = "";
+  let recipeCommitted = false;
 
   if (imageFile) {
     try {
@@ -164,29 +185,30 @@ export async function action({ request, context }: Route.ActionArgs) {
       description: trimmedDescription,
       servings: servings.trim() || null,
       chefId: userId,
+      ...(hasMetadataPayload ? {
+        course: metadata.course,
+        tags: metadata.tags,
+      } : {}),
       steps: recipeSteps,
+    }, {
+      coverMutation: uploadedImageUrl
+        ? {
+            kind: "uploaded",
+            coverId,
+            createdById: userId,
+            imageUrl: uploadedImageUrl,
+          }
+        : { kind: "placeholder", coverId, createdById: userId },
+      nativeDatabase: asCompatibleRecipeTagD1Database(cloudflareEnv?.DB),
     });
+    recipeCommitted = true;
 
     if (uploadedImageUrl) {
-      const uploadedCover = await createCover(database, {
-        recipeId: recipe.id,
-        imageUrl: uploadedImageUrl,
-        sourceType: "chef-upload",
-        status: "ready",
-        createdById: userId,
-        sourceImageUrl: uploadedImageUrl,
-        generationStatus: "none",
-      });
-      await setActiveRecipeCover(database, {
-        recipeId: recipe.id,
-        coverId: uploadedCover.id,
-        variant: "image",
-      });
       await scheduleSpoonCoverStylization({
         db: database,
         userId,
         recipeId: recipe.id,
-        coverId: uploadedCover.id,
+        coverId,
         rawPhotoUrl: uploadedImageUrl,
         recipeTitle: trimmedTitle,
         env: cloudflareEnv,
@@ -194,20 +216,12 @@ export async function action({ request, context }: Route.ActionArgs) {
         sourceType: "chef-upload",
       });
     } else {
-      const placeholderCover = await createCover(database, {
-        recipeId: recipe.id,
-        imageUrl: "",
-        sourceType: "ai-placeholder",
-        status: "processing",
-        createdById: userId,
-        generationStatus: "processing",
-      });
       const waitUntil = context.cloudflare?.ctx?.waitUntil;
       const task = scheduleAiPlaceholderCover({
         db: database,
         userId,
         recipeId: recipe.id,
-        coverId: placeholderCover.id,
+        coverId,
         title: trimmedTitle,
         description: trimmedDescription,
         env: cloudflareEnv,
@@ -222,6 +236,8 @@ export async function action({ request, context }: Route.ActionArgs) {
 
     return redirect(`/recipes/${recipe.id}`);
   } catch (error) {
+    const titleConflict = isActiveRecipeTitleConflictError(error);
+    const graphTooLarge = error instanceof RecipeGraphTooLargeError;
     // The recipe create failed after the image landed in R2. Record the real
     // failure first (it was previously discarded behind a generic 500), then
     // best-effort roll back the orphaned upload — capturing if that delete also
@@ -232,7 +248,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     const waitUntil = context.cloudflare?.ctx?.waitUntil
       ? context.cloudflare.ctx.waitUntil.bind(context.cloudflare.ctx)
       : undefined;
-    if (postHogConfig.enabled) {
+    if (postHogConfig.enabled && !titleConflict && !graphTooLarge) {
       const capture = captureException(postHogConfig, {
         error,
         distinctId: userId,
@@ -245,6 +261,9 @@ export async function action({ request, context }: Route.ActionArgs) {
         void capture;
       }
     }
+    if (recipeCommitted) {
+      return redirect(`/recipes/${recipeId}`);
+    }
     if (uploadedImageUrl) {
       await deleteStoredImageWithCapture({
         bucket: photosBucket,
@@ -255,6 +274,17 @@ export async function action({ request, context }: Route.ActionArgs) {
         distinctId: userId,
         extras: { surface: "recipe_create" },
       });
+    }
+
+    if (titleConflict) {
+      return data(
+        { errors: { title: ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } },
+        { status: 400 },
+      );
+    }
+
+    if (graphTooLarge) {
+      return data({ errors: { general: error.message } }, { status: 400 });
     }
 
     return data(
@@ -301,12 +331,16 @@ export default function NewRecipe() {
     const descriptionInput = form.querySelector('textarea[name="description"]') as HTMLTextAreaElement;
     const servingsInput = form.querySelector('input[name="servings"]') as HTMLInputElement;
     const stepsInput = form.querySelector('input[name="steps"]') as HTMLInputElement;
+    const courseInput = form.querySelector('input[name="course"]') as HTMLInputElement;
+    const tagsInput = form.querySelector('input[name="tags"]') as HTMLInputElement;
     const clearImageInput = form.querySelector('input[name="clearImage"]') as HTMLInputElement;
 
     if (titleInput) titleInput.value = recipeData.title;
     if (descriptionInput) descriptionInput.value = recipeData.description || "";
     if (servingsInput) servingsInput.value = recipeData.servings || "";
     if (stepsInput) stepsInput.value = JSON.stringify(recipeData.steps);
+    if (courseInput) courseInput.value = recipeData.course ?? "";
+    if (tagsInput) tagsInput.value = JSON.stringify(recipeData.tags);
     if (clearImageInput) clearImageInput.value = recipeData.clearImage ? "true" : "";
 
     // Handle image file
@@ -338,6 +372,8 @@ export default function NewRecipe() {
         <textarea name="description" className="hidden" />
         <input type="hidden" name="servings" />
         <input type="hidden" name="steps" />
+        <input type="hidden" name="course" />
+        <input type="hidden" name="tags" />
         <input type="hidden" name="clearImage" />
         <input ref={fileInputRef} type="file" name="image" accept={FOOD_IMAGE_ACCEPT} />
       </Form>

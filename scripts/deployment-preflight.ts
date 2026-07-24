@@ -123,10 +123,12 @@ const REQUIRED_SCRIPT_COVERAGE_INCLUDES = [
   "scripts/qa-preflight.ts",
   "scripts/deployment-preflight.ts",
   "scripts/deploy-production-canary.ts",
+  "scripts/product-cutover.ts",
   "scripts/production-readiness.ts",
   "scripts/posthog-build-metadata.ts",
   "scripts/react-router-build-runner.ts",
   "scripts/warning-gate.ts",
+  "scripts/validate-release-artifact.ts",
   "scripts/workflow-security.mjs",
 ] as const;
 
@@ -134,12 +136,14 @@ const REQUIRED_SCRIPT_TYPECHECK_INCLUDES = [
   "scripts/build-output-hygiene.ts",
   "scripts/deployment-preflight.ts",
   "scripts/deploy-production-canary.ts",
+  "scripts/product-cutover.ts",
   "scripts/production-readiness.ts",
   "scripts/posthog-build-metadata.ts",
   "scripts/qa-preflight.ts",
   "scripts/react-router-build.ts",
   "scripts/react-router-build-runner.ts",
   "scripts/warning-gate.ts",
+  "scripts/validate-release-artifact.ts",
   "scripts/workflow-security.mjs",
 ] as const;
 const CSP_REPORT_ONLY_BREAK_GLASS_ACK = "ACK_REPORT_ONLY_CSP_ROLLBACK";
@@ -168,18 +172,32 @@ const EXPECTED_PRODUCTION_DEPLOY_STEP_NAMES = [
   "Checkout approved source SHA",
   "Checkout trusted rollback tooling",
   "Validate release source",
+  "Find prior product cutover artifact",
+  "Download prior product cutover artifact",
   "Setup Node.js",
   "Activate pnpm",
   "Install dependencies",
   "Generate Prisma client",
+  "Restore prior product cutover state",
   "Install Playwright Chromium",
   "Deploy staged release to Cloudflare Workers",
   "Record release source",
   "Ensure release artifact exists",
+  "Validate complete release and durable cutover state",
+  "Validate durable product cutover state for continuity",
   "Upload MCP OAuth canary artifacts",
+  "Upload durable product cutover state",
 ] as const;
 const EXPECTED_RELEASE_SOURCE_RUN_SHA256 = "b73376c1b0ebc718ca769836147b43c33b0f39ec514fb795947a17ba201955fd";
-const EXPECTED_RELEASE_ARTIFACT_RUN_SHA256 = "326e6083c0e31a4d14c941569f5ecf22632a31c146c00ee5e02f0c949b6fb4b5";
+const EXPECTED_PRIOR_CUTOVER_LOOKUP_RUN_SHA256 =
+  "674fa69de2f8ba7193e04b40d351cc888fbd29aedb085e6716a79089ea5bcfd0";
+const EXPECTED_PRIOR_CUTOVER_RESTORE_RUN_SHA256 =
+  "8f59ec5a9d35e3165f395e07fb1e763d613f05647bb4bee64aec8ece77f0d332";
+const EXPECTED_CUTOVER_STATE_VALIDATION_RUN_SHA256 =
+  "96819e5d1e3cc422f3f2806a36631a13ebb9dfb57179772e32c623e4e4c3d74d";
+const EXPECTED_RELEASE_ARTIFACT_RUN_SHA256 = "364147ec4dac0d937a311996cf0b9c6f7ba9f2f5e4e84ac574b14ed05b093b97";
+const EXPECTED_RELEASE_VALIDATION_RUN_SHA256 =
+  "ebba8a17185dcde0a04f6ed7687332860c4158a980aad02327ffcff3d6a34e3d";
 const REQUIRED_IGNORED_BUILD_PACKAGES = [
   "@prisma/client",
   "@prisma/engines",
@@ -502,7 +520,10 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
       `${WARNING_GATE_COMMAND_PREFIX}pnpm exec wrangler d1 execute DB --local --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"`,
     ),
     commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm db:seed`),
-    commandStepSignature("pnpm run verify:clean:typecheck"),
+    commandStepSignature(
+      "pnpm run verify:clean:typecheck",
+      "pnpm run verify:clean:typecheck:scripts",
+    ),
     commandStepSignature("pnpm run verify:clean:generated-contract"),
     commandStepSignature("pnpm run verify:clean:test:coverage"),
     commandStepSignature("pnpm run verify:clean:build"),
@@ -789,6 +810,25 @@ const PRODUCTION_DEPLOY_STEPS: readonly Record<string, unknown>[] = [
     run: PRODUCTION_VALIDATION_COMMAND,
   },
   {
+    name: "Find prior product cutover artifact",
+    id: "prior-product-cutover",
+    if: "env.ROLLBACK_VERSION_ID == '' && env.SPOONJOY_RELEASE_MODE == 'atomic-product-activation'",
+    env: { GH_TOKEN: "${{ github.token }}" },
+    run: "",
+  },
+  {
+    name: "Download prior product cutover artifact",
+    if: "steps.prior-product-cutover.outputs.run_id != '' && steps.prior-product-cutover.outputs.artifact_id != ''",
+    uses: PINNED_DOWNLOAD_ARTIFACT_ACTION,
+    with: {
+      "artifact-ids": "${{ steps.prior-product-cutover.outputs.artifact_id }}",
+      path: "prior-product-cutover-artifact",
+      "github-token": "${{ github.token }}",
+      repository: "${{ github.repository }}",
+      "run-id": "${{ steps.prior-product-cutover.outputs.run_id }}",
+    },
+  },
+  {
     name: "Setup Node.js",
     uses: PINNED_SETUP_NODE_ACTION,
     with: { "node-version": "22" },
@@ -799,6 +839,11 @@ const PRODUCTION_DEPLOY_STEPS: readonly Record<string, unknown>[] = [
   },
   { name: "Install dependencies", run: "pnpm install --frozen-lockfile" },
   { name: "Generate Prisma client", run: "pnpm prisma:generate" },
+  {
+    name: "Restore prior product cutover state",
+    if: "steps.prior-product-cutover.outputs.run_id != '' && steps.prior-product-cutover.outputs.artifact_id != ''",
+    run: "",
+  },
   { name: "Install Playwright Chromium", run: "pnpm exec playwright install --with-deps chromium" },
   {
     name: "Deploy staged release to Cloudflare Workers",
@@ -823,14 +868,37 @@ const PRODUCTION_DEPLOY_STEPS: readonly Record<string, unknown>[] = [
     run: "set -euo pipefail\numask 077\nmkdir -p mcp-oauth-canary-artifacts\nif [ ! -f mcp-oauth-canary-artifacts/production-release.json ]; then\n  jq -n --arg source_sha \"$SOURCE_SHA\" \\\n    '{status: \"failed_before_stage\", sourceSha: $source_sha, phase: \"validate\", reviewedMigrations: [], migrationApply: \"not_started\", databaseRollbackSupported: false, failure: \"Release workflow failed before the orchestrator wrote an artifact.\"}' \\\n    > mcp-oauth-canary-artifacts/production-release.json\nfi\n",
   },
   {
+    name: "Validate complete release and durable cutover state",
+    id: "release-artifact-validation",
+    if: "always()",
+    run: "",
+  },
+  {
+    name: "Validate durable product cutover state for continuity",
+    id: "cutover-state-validation",
+    if: "always() && env.SPOONJOY_RELEASE_MODE == 'atomic-product-activation' && hashFiles('mcp-oauth-canary-artifacts/production-product-cutover-state.json') != ''",
+    run: "",
+  },
+  {
     name: "Upload MCP OAuth canary artifacts",
     if: "always()",
     uses: PINNED_UPLOAD_ARTIFACT_ACTION,
     with: {
-      name: "mcp-oauth-canary-artifacts",
+      name: "mcp-oauth-canary-artifacts-${{ github.run_attempt }}",
       path: "mcp-oauth-canary-artifacts/",
       "if-no-files-found": "error",
       "retention-days": 14,
+    },
+  },
+  {
+    name: "Upload durable product cutover state",
+    if: "always() && steps.cutover-state-validation.outcome == 'success'",
+    uses: PINNED_UPLOAD_ARTIFACT_ACTION,
+    with: {
+      name: "product-cutover-state-${{ github.run_id }}-${{ github.run_attempt }}",
+      path: "mcp-oauth-canary-artifacts/production-product-cutover-state.json",
+      "if-no-files-found": "error",
+      "retention-days": 90,
     },
   },
 ];
@@ -858,7 +926,7 @@ const PRODUCTION_REPORT_STEPS: readonly Record<string, unknown>[] = [
     uses: PINNED_DOWNLOAD_ARTIFACT_ACTION,
     "continue-on-error": true,
     with: {
-      name: "mcp-oauth-canary-artifacts",
+      name: "mcp-oauth-canary-artifacts-${{ github.run_attempt }}",
       path: "mcp-oauth-canary-artifacts",
     },
   },
@@ -903,7 +971,51 @@ function productionDeployStepsAreCanonical(
     !runHasExecutableFragment(validation.run, PRODUCTION_VALIDATION_COMMAND)
   ) return false;
 
-  const artifact = steps[10];
+  const priorLookup = steps[3];
+  if (
+    !exactObjectKeys(priorLookup, ["name", "id", "if", "env", "run"]) ||
+    priorLookup.id !== "prior-product-cutover" ||
+    priorLookup.if !==
+      "env.ROLLBACK_VERSION_ID == '' && env.SPOONJOY_RELEASE_MODE == 'atomic-product-activation'" ||
+    !exactWorkflowRecord(priorLookup.env, { GH_TOKEN: "${{ github.token }}" }) ||
+    typeof priorLookup.run !== "string" ||
+    runBodySha256(priorLookup.run) !== EXPECTED_PRIOR_CUTOVER_LOOKUP_RUN_SHA256 ||
+    !runHasExecutableFragment(priorLookup.run, "gh api --paginate") ||
+    !runHasExecutableFragment(priorLookup.run, "product-cutover-state")
+  ) return false;
+
+  const priorRestore = steps[9];
+  if (
+    !exactObjectKeys(priorRestore, ["name", "if", "run"]) ||
+    priorRestore.if !==
+      "steps.prior-product-cutover.outputs.run_id != '' && steps.prior-product-cutover.outputs.artifact_id != ''" ||
+    typeof priorRestore.run !== "string" ||
+    runBodySha256(priorRestore.run) !== EXPECTED_PRIOR_CUTOVER_RESTORE_RUN_SHA256 ||
+    !runHasExecutableFragment(
+      priorRestore.run,
+      "pnpm exec tsx scripts/validate-release-artifact.ts",
+    ) ||
+    !runHasExecutableFragment(priorRestore.run, "--kind product-cutover-state") ||
+    !runHasExecutableFragment(priorRestore.run, "install -m 600")
+  ) return false;
+
+  const cutoverStateValidation = steps[15];
+  if (
+    !exactObjectKeys(cutoverStateValidation, ["name", "id", "if", "run"]) ||
+    cutoverStateValidation.id !== "cutover-state-validation" ||
+    cutoverStateValidation.if !==
+      "always() && env.SPOONJOY_RELEASE_MODE == 'atomic-product-activation' && hashFiles('mcp-oauth-canary-artifacts/production-product-cutover-state.json') != ''" ||
+    typeof cutoverStateValidation.run !== "string" ||
+    runBodySha256(cutoverStateValidation.run) !==
+      EXPECTED_CUTOVER_STATE_VALIDATION_RUN_SHA256 ||
+    !runHasExecutableFragment(
+      cutoverStateValidation.run,
+      "pnpm exec tsx scripts/validate-release-artifact.ts",
+    ) ||
+    !runHasExecutableFragment(cutoverStateValidation.run, "--kind product-cutover-state")
+  ) return false;
+
+  const artifact = steps[13];
   if (
     !exactObjectKeys(artifact, ["name", "if", "env", "run"]) ||
     artifact.if !== "always()" ||
@@ -918,9 +1030,31 @@ function productionDeployStepsAreCanonical(
     !runHasExecutableFragment(artifact.run, "artifact_valid=1")
   ) return false;
 
+  const artifactValidation = steps[14];
+  if (
+    !exactObjectKeys(artifactValidation, ["name", "id", "if", "run"]) ||
+    artifactValidation.id !== "release-artifact-validation" ||
+    artifactValidation.if !== "always()" ||
+    typeof artifactValidation.run !== "string" ||
+    runHasStaticallyDeadGuard(artifactValidation.run) ||
+    runBodySha256(artifactValidation.run) !== EXPECTED_RELEASE_VALIDATION_RUN_SHA256 ||
+    !runHasExecutableFragment(
+      artifactValidation.run,
+      "pnpm exec tsx scripts/validate-release-artifact.ts",
+    ) ||
+    !runHasExecutableFragment(
+      artifactValidation.run,
+      "production-product-cutover-state.json",
+    )
+  ) return false;
+
   return steps.every((step, index) => (
     index === 2 ||
-    index === 10 ||
+    index === 3 ||
+    index === 9 ||
+    index === 13 ||
+    index === 14 ||
+    index === 15 ||
     JSON.stringify(step) === JSON.stringify(PRODUCTION_DEPLOY_STEPS[index])
   ));
 }
@@ -1699,8 +1833,10 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     check(
       "script typecheck",
       scripts["typecheck:scripts"] === "tsc -p tsconfig.scripts.json" &&
+        scripts["verify:clean:typecheck:scripts"] ===
+          "node scripts/run-with-warning-policy.mjs -- pnpm run typecheck:scripts" &&
         REQUIRED_SCRIPT_TYPECHECK_INCLUDES.every((file) => inputs.tsconfigScripts.includes(file)),
-      "package.json must expose typecheck:scripts and tsconfig.scripts.json must include modified TypeScript scripts."
+      "package.json and CI must execute typecheck:scripts through the clean-output gate, and tsconfig.scripts.json must include every modified TypeScript script."
     ),
     check(
       "deploy script",

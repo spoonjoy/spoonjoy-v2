@@ -8,6 +8,8 @@ export interface UseRecipeDetailActionsOptions {
   chefProfileHref?: string;
   isOwner: boolean;
   isInShoppingList?: boolean;
+  isSaved?: boolean;
+  isSavePending?: boolean;
   onSave?: () => void;
   onAddToList?: () => void;
   onShare?: () => void;
@@ -28,6 +30,8 @@ export function useRecipeDetailActions({
   recipeId,
   isOwner,
   isInShoppingList = false,
+  isSaved = false,
+  isSavePending = false,
   onSave,
   onAddToList,
   onShare,
@@ -50,7 +54,15 @@ export function useRecipeDetailActions({
     const saveAction = {
       id: "save",
       icon: Bookmark,
-      label: "Save",
+      label: isSaved ? "Saved" : "Save",
+      ariaLabel: isSavePending
+        ? "Updating saved recipe"
+        : isSaved
+          ? "Remove saved recipe"
+          : "Save recipe",
+      active: isSaved,
+      disabled: isSavePending,
+      ariaPressed: isSaved,
       onAction: onSave || (() => {}),
     };
 
@@ -85,7 +97,7 @@ export function useRecipeDetailActions({
       },
       tools: isOwner ? [listAction, shareAction, editAction] : [listAction, saveAction, shareAction],
     };
-  }, [recipeId, isOwner, isInShoppingList, onSave, onAddToList, onShare, onCook, disabled]);
+  }, [recipeId, isOwner, isInShoppingList, isSaved, isSavePending, onSave, onAddToList, onShare, onCook, disabled]);
 
   useDockConfig(config);
 }

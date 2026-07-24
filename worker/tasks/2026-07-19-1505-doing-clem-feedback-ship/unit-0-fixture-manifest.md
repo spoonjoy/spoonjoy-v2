@@ -30,4 +30,4 @@ The numeric migration set was applied to a new SQLite database, then `test/fixtu
 - Shopping quantities: 2, 1, null
 - Shopping checked flags: 1, 0, 0; all optional metadata is null
 
-Migration `0024` must later yield four SavedRecipe rows, use Jan 3 for user-a/recipe-r1, retain `item-b` as the active survivor with quantity 3 at sort 1 and unchecked, and tombstone `item-a`/`item-c`.
+Migration `0025` must later yield four SavedRecipe rows, use Jan 3 for user-a/recipe-r1, retain `item-b` as the active survivor with quantity 3 at sort 1 and unchecked, and tombstone `item-a`/`item-c`.

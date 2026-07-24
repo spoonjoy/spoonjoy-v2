@@ -1,11 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { Request as UndiciRequest } from "undici";
 import { loader } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { getLocalDb } from "~/lib/db.server";
+import * as recipeScale from "~/lib/recipe-scale";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createCookbookTitle, createTestRecipe, createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
+import { expectConsoleError } from "../warning-policy";
 
 function routeArgs(request: Request, splat: string) {
   return { request, params: { "*": splat }, context: { cloudflare: { env: null } } } as any;
@@ -13,6 +15,31 @@ function routeArgs(request: Request, splat: string) {
 
 async function readJson(response: Response) {
   return await response.json() as any;
+}
+
+const RECIPE_SUMMARY_KEYS = [
+  "attribution",
+  "canonicalUrl",
+  "chef",
+  "course",
+  "coverImageUrl",
+  "coverProvenanceLabel",
+  "coverSourceType",
+  "coverVariant",
+  "createdAt",
+  "description",
+  "href",
+  "id",
+  "servings",
+  "tags",
+  "title",
+  "updatedAt",
+] as const;
+
+const RECIPE_DETAIL_KEYS = [...RECIPE_SUMMARY_KEYS, "cookbooks", "steps"] as const;
+
+function expectExactKeys(value: Record<string, unknown>, keys: readonly string[]) {
+  expect(Object.keys(value).sort()).toEqual([...keys].sort());
 }
 
 function listCursor(value: unknown) {
@@ -529,6 +556,269 @@ describe("API v1 public recipe reads", () => {
     });
   });
 
+  it("scales recipe-detail ingredient quantities without changing servings, identity, or storage", async () => {
+    const fixture = await createRecipeFixture(db, "Api V1 Scaled Detail");
+    const ingredient = await db.ingredient.findFirstOrThrow({
+      where: { recipeId: fixture.recipe.id },
+    });
+    await db.ingredient.update({
+      where: { id: ingredient.id },
+      data: { quantity: 1.23456789 },
+    });
+    const secondStep = await db.recipeStep.create({
+      data: {
+        recipeId: fixture.recipe.id,
+        stepNum: 2,
+        stepTitle: "Finish",
+        description: "Finish the dish.",
+        duration: 2,
+      },
+    });
+    const secondIngredientRef = await getOrCreateIngredientRef(db, `zest ${faker.string.alphanumeric(6)}`);
+    const secondUnit = await getOrCreateUnit(db, "tbsp");
+    const secondIngredient = await db.ingredient.create({
+      data: {
+        recipeId: fixture.recipe.id,
+        stepNum: secondStep.stepNum,
+        quantity: 0.5,
+        unitId: secondUnit.id,
+        ingredientRefId: secondIngredientRef.id,
+      },
+    });
+
+    const unscaledResponse = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}`,
+      { headers: { "X-Request-Id": "req_recipe_unscaled_contract" } },
+    ) as unknown as Request, `recipes/${fixture.recipe.id}`));
+    const unscaledPayload = await readJson(unscaledResponse);
+    const scaledResponse = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}?scale=1e%2B1`,
+      { headers: { "X-Request-Id": "req_recipe_scaled_contract" } },
+    ) as unknown as Request, `recipes/${fixture.recipe.id}`));
+    const scaledPayload = await readJson(scaledResponse);
+
+    expect(unscaledResponse.status).toBe(200);
+    expectExactKeys(unscaledPayload.data.recipe, RECIPE_DETAIL_KEYS);
+    expect(unscaledPayload.data.recipe).not.toHaveProperty("scale");
+    expect(scaledResponse.status).toBe(200);
+    expectExactKeys(scaledPayload.data.recipe, [...RECIPE_DETAIL_KEYS, "scale"]);
+    expect(scaledPayload.data.recipe).toEqual({
+      ...unscaledPayload.data.recipe,
+      steps: unscaledPayload.data.recipe.steps.map((step: Record<string, any>) => ({
+        ...step,
+        ingredients: step.ingredients.map((item: Record<string, any>) => ({
+          ...item,
+          quantity: item.id === ingredient.id ? 12.345679 : 5,
+        })),
+      })),
+      scale: {
+        factor: 10,
+        appliedTo: "ingredient_quantities",
+        decimalPlaces: 6,
+      },
+    });
+    expect(scaledPayload.data.recipe.servings).toBe("4");
+    expect(JSON.stringify(scaledPayload.data.recipe)).toContain(secondIngredient.id);
+    await expect(db.ingredient.findUniqueOrThrow({ where: { id: ingredient.id } }))
+      .resolves.toMatchObject({ quantity: 1.23456789 });
+    await expect(db.ingredient.findUniqueOrThrow({ where: { id: secondIngredient.id } }))
+      .resolves.toMatchObject({ quantity: 0.5 });
+  });
+
+  it.each([
+    ["0.1", 0.1],
+    ["1", 1],
+    ["100", 100],
+    ["1e2", 100],
+    ["1E-1", 0.1],
+    ["1e+1", 10],
+  ])("accepts REST detail scale grammar %s", async (raw, factor) => {
+    const fixture = await createRecipeFixture(db, `Api V1 Scale Grammar ${raw}`);
+    const response = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}?scale=${encodeURIComponent(raw)}`,
+      { headers: { "X-Request-Id": `req_recipe_scale_valid_${factor}` } },
+    ) as unknown as Request, `recipes/${fixture.recipe.id}`));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expect(payload.data.recipe.scale.factor).toBe(factor);
+  });
+
+  it.each([
+    "",
+    "+1",
+    "0x1",
+    " 1 ",
+    "01",
+    ".5",
+    "1.",
+    "NaN",
+    "Infinity",
+    "null",
+    "-0.1",
+    "0.099999",
+    "100.000001",
+  ])("rejects invalid REST detail scale %j with field metadata", async (raw) => {
+    const fixture = await createRecipeFixture(db, "Api V1 Invalid Scale");
+    const response = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}?scale=${encodeURIComponent(raw)}`,
+      { headers: { "X-Request-Id": "req_recipe_scale_invalid" } },
+    ) as unknown as Request, `recipes/${fixture.recipe.id}`));
+
+    expect(response.status).toBe(400);
+    await expect(readJson(response)).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "validation_error",
+        status: 400,
+        details: { field: "scale" },
+      },
+    });
+  });
+
+  it("rejects repeated REST detail scales", async () => {
+    const fixture = await createRecipeFixture(db, "Api V1 Repeated Scale");
+    const response = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}?scale=1&scale=2`,
+      { headers: { "X-Request-Id": "req_recipe_scale_repeated" } },
+    ) as unknown as Request, `recipes/${fixture.recipe.id}`));
+
+    expect(response.status).toBe(400);
+    await expect(readJson(response)).resolves.toMatchObject({
+      error: { code: "validation_error", details: { field: "scale" } },
+    });
+
+    const duplicateResponse = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}?scale=1&scale=1`,
+      { headers: { "X-Request-Id": "req_recipe_scale_repeated_same" } },
+    ) as unknown as Request, `recipes/${fixture.recipe.id}`));
+    expect(duplicateResponse.status).toBe(400);
+    await expect(readJson(duplicateResponse)).resolves.toMatchObject({
+      error: { code: "validation_error", details: { field: "scale" } },
+    });
+  });
+
+  it("rejects recipe-detail multiplication overflow as an all-or-nothing validation error", async () => {
+    const fixture = await createRecipeFixture(db, "Api V1 Scale Overflow");
+    const ingredient = await db.ingredient.findFirstOrThrow({ where: { recipeId: fixture.recipe.id } });
+    await db.ingredient.update({ where: { id: ingredient.id }, data: { quantity: 1e308 } });
+
+    const response = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}?scale=100`,
+      { headers: { "X-Request-Id": "req_recipe_scale_overflow" } },
+    ) as unknown as Request, `recipes/${fixture.recipe.id}`));
+
+    expect(response.status).toBe(400);
+    await expect(readJson(response)).resolves.toMatchObject({
+      error: { code: "validation_error", details: { field: "scale" } },
+    });
+    await expect(db.ingredient.findUniqueOrThrow({ where: { id: ingredient.id } }))
+      .resolves.toMatchObject({ quantity: 1e308 });
+  });
+
+  it.each([
+    ["", "unscaled"],
+    ["?scale=2", "scaled"],
+  ])("keeps unrelated %s recipe serialization failures out of scale validation", async (query, requestLabel) => {
+    const fixture = await createRecipeFixture(db, "Api V1 Serializer Failure");
+    const originalToISOString = Date.prototype.toISOString;
+    const recipeCreatedAt = fixture.recipe.createdAt.getTime();
+    const serializationError = new Error("serializer internals must stay private");
+    const toISOString = vi.spyOn(Date.prototype, "toISOString").mockImplementation(function () {
+      if (this.getTime() === recipeCreatedAt) throw serializationError;
+      return originalToISOString.call(this);
+    });
+
+    try {
+      expectConsoleError("[api-v1] internal_error", {
+        requestId: `req_recipe_serializer_${requestLabel}`,
+        method: "GET",
+        path: `/api/v1/recipes/${fixture.recipe.id}`,
+        error: {
+          name: serializationError.name,
+          message: serializationError.message,
+          stack: serializationError.stack,
+        },
+      });
+      const response = await loader(routeArgs(new UndiciRequest(
+        `http://localhost/api/v1/recipes/${fixture.recipe.id}${query}`,
+        { headers: { "X-Request-Id": `req_recipe_serializer_${requestLabel}` } },
+      ) as unknown as Request, `recipes/${fixture.recipe.id}`));
+
+      expect(response.status).toBe(500);
+      await expect(readJson(response)).resolves.toEqual({
+        ok: false,
+        requestId: `req_recipe_serializer_${requestLabel}`,
+        error: {
+          code: "internal_error",
+          message: "Internal error",
+          status: 500,
+        },
+      });
+    } finally {
+      toISOString.mockRestore();
+    }
+  });
+
+  it("keeps unexpected scale-parser failures out of validation responses", async () => {
+    const parserError = new Error("unexpected scale parser failure");
+    vi.spyOn(recipeScale, "parseRestRecipeScale").mockImplementationOnce(() => {
+      throw parserError;
+    });
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_recipe_scale_parser_internal",
+      method: "GET",
+      path: "/api/v1/recipes/parser-fixture",
+      error: {
+        name: parserError.name,
+        message: parserError.message,
+        stack: parserError.stack,
+      },
+    });
+
+    const response = await loader(routeArgs(new UndiciRequest(
+      "http://localhost/api/v1/recipes/parser-fixture?scale=2",
+      { headers: { "X-Request-Id": "req_recipe_scale_parser_internal" } },
+    ) as unknown as Request, "recipes/parser-fixture"));
+
+    expect(response.status).toBe(500);
+    await expect(readJson(response)).resolves.toEqual({
+      ok: false,
+      requestId: "req_recipe_scale_parser_internal",
+      error: { code: "internal_error", message: "Internal error", status: 500 },
+    });
+  });
+
+  it("keeps unexpected scaling-adapter failures out of validation responses", async () => {
+    const fixture = await createRecipeFixture(db, "Api V1 Scale Adapter Failure");
+    const scalerError = new Error("unexpected scaling adapter failure");
+    vi.spyOn(recipeScale, "applyRecipeScale").mockImplementationOnce(() => {
+      throw scalerError;
+    });
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_recipe_scaler_internal",
+      method: "GET",
+      path: `/api/v1/recipes/${fixture.recipe.id}`,
+      error: {
+        name: scalerError.name,
+        message: scalerError.message,
+        stack: scalerError.stack,
+      },
+    });
+
+    const response = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}?scale=2`,
+      { headers: { "X-Request-Id": "req_recipe_scaler_internal" } },
+    ) as unknown as Request, `recipes/${fixture.recipe.id}`));
+
+    expect(response.status).toBe(500);
+    await expect(readJson(response)).resolves.toEqual({
+      ok: false,
+      requestId: "req_recipe_scaler_internal",
+      error: { code: "internal_error", message: "Internal error", status: 500 },
+    });
+  });
+
   it("excludes deleted recipes and returns missing/deleted recipes as not_found", async () => {
     const active = await createRecipeFixture(db, "Api V1 Active");
     const deleted = await createRecipeFixture(db, "Api V1 Deleted");
@@ -603,6 +893,137 @@ describe("API v1 public recipe reads", () => {
       canonicalUrl: null,
       deleted: true,
     });
+  });
+
+  it("returns neutral course and UTF-16 ordered tags on recipe list reads without personalized save state", async () => {
+    const fixture = await createRecipeFixture(db, "Api V1 Neutral Metadata");
+    await db.recipe.update({
+      where: { id: fixture.recipe.id },
+      data: { course: "dessert" },
+    });
+    await db.recipeTag.createMany({
+      data: [
+        {
+          id: `tag-neutral-accent-${faker.string.alphanumeric(8)}`,
+          recipeId: fixture.recipe.id,
+          label: "Accent Apple",
+          normalizedLabel: "\u00e4pfel",
+        },
+        {
+          id: `tag-neutral-zebra-${faker.string.alphanumeric(8)}`,
+          recipeId: fixture.recipe.id,
+          label: "Zebra",
+          normalizedLabel: "zebra",
+        },
+      ],
+    });
+    const reader = await db.user.create({ data: createTestUser() });
+    await db.savedRecipe.create({
+      data: {
+        userId: reader.id,
+        recipeId: fixture.recipe.id,
+        savedAt: "2026-07-22T18:00:00.000Z",
+      },
+    });
+    const credential = await createApiCredential(db, reader.id, "Neutral recipe reader", {
+      scopes: ["recipes:read"],
+    });
+    const headers = {
+      Authorization: `Bearer ${credential.token}`,
+      "X-Request-Id": "req_recipe_neutral_metadata",
+    };
+
+    const list = await loader(routeArgs(new UndiciRequest(
+      "http://localhost/api/v1/recipes?query=Neutral%20Metadata",
+      { headers },
+    ) as unknown as Request, "recipes"));
+    const listPayload = await readJson(list);
+    const summary = listPayload.data.recipes.find((recipe: { id: string }) => recipe.id === fixture.recipe.id);
+
+    expect(list.status).toBe(200);
+    expectExactKeys(summary, RECIPE_SUMMARY_KEYS);
+    expect(summary).toMatchObject({ id: fixture.recipe.id, course: "dessert", tags: ["Zebra", "Accent Apple"] });
+  });
+
+  it("returns neutral course and ordered tags on recipe detail reads without personalized save state", async () => {
+    const fixture = await createRecipeFixture(db, "Api V1 Neutral Detail Metadata");
+    await db.recipe.update({
+      where: { id: fixture.recipe.id },
+      data: { course: "appetizer" },
+    });
+    await db.recipeTag.createMany({
+      data: [
+        {
+          id: `tag-neutral-detail-weeknight-${faker.string.alphanumeric(8)}`,
+          recipeId: fixture.recipe.id,
+          label: "Weeknight",
+          normalizedLabel: "weeknight",
+        },
+        {
+          id: `tag-neutral-detail-comfort-${faker.string.alphanumeric(8)}`,
+          recipeId: fixture.recipe.id,
+          label: "Comfort Food",
+          normalizedLabel: "comfort food",
+        },
+      ],
+    });
+    const reader = await db.user.create({ data: createTestUser() });
+    await db.savedRecipe.create({
+      data: {
+        userId: reader.id,
+        recipeId: fixture.recipe.id,
+        savedAt: "2026-07-22T18:00:00.000Z",
+      },
+    });
+    const credential = await createApiCredential(db, reader.id, "Neutral recipe detail reader", {
+      scopes: ["recipes:read"],
+    });
+
+    const detail = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}`,
+      {
+        headers: {
+          Authorization: `Bearer ${credential.token}`,
+          "X-Request-Id": "req_recipe_neutral_metadata_detail",
+        },
+      },
+    ) as unknown as Request, `recipes/${fixture.recipe.id}`));
+    const detailPayload = await readJson(detail);
+
+    expect(detail.status).toBe(200);
+    expectExactKeys(detailPayload.data.recipe, RECIPE_DETAIL_KEYS);
+    expect(detailPayload.data.recipe).toMatchObject({
+      id: fixture.recipe.id,
+      course: "appetizer",
+      tags: ["Comfort Food", "Weeknight"],
+    });
+  });
+
+  it("returns course null and empty tags on recipe list reads", async () => {
+    const fixture = await createRecipeFixture(db, "Api V1 Empty List Metadata");
+    const response = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes?query=${encodeURIComponent(fixture.recipe.title)}`,
+      { headers: { "X-Request-Id": "req_recipe_empty_metadata_list" } },
+    ) as unknown as Request, "recipes"));
+    const payload = await readJson(response);
+    const summary = payload.data.recipes.find((recipe: { id: string }) => recipe.id === fixture.recipe.id);
+
+    expect(response.status).toBe(200);
+    expectExactKeys(summary, RECIPE_SUMMARY_KEYS);
+    expect(summary).toMatchObject({ course: null, tags: [] });
+  });
+
+  it("returns course null and empty tags on recipe detail reads", async () => {
+    const fixture = await createRecipeFixture(db, "Api V1 Empty Detail Metadata");
+    const response = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}`,
+      { headers: { "X-Request-Id": "req_recipe_empty_metadata_detail" } },
+    ) as unknown as Request, `recipes/${fixture.recipe.id}`));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expectExactKeys(payload.data.recipe, RECIPE_DETAIL_KEYS);
+    expect(payload.data.recipe).toMatchObject({ course: null, tags: [] });
   });
 
   it("validates limit and rejects bearer tokens without recipes:read", async () => {

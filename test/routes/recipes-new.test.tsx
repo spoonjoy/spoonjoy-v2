@@ -15,6 +15,7 @@ import * as ingredientParseModule from "~/lib/ingredient-parse.server";
 import { IngredientParseError } from "~/lib/ingredient-parse.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
+import * as aiPlaceholderCoverModule from "~/lib/ai-placeholder-cover.server";
 
 // Helper to extract data from React Router's data() response
 function extractResponseData(response: any): { data: any; status: number } {
@@ -150,6 +151,34 @@ describe("Recipes New Route", () => {
       });
     }
 
+    it("rejects an oversized recipe graph before any authoring row is written", async () => {
+      const steps = [{
+        stepTitle: null,
+        description: "Too much",
+        duration: null,
+        ingredients: Array.from({ length: 300 }, (_, index) => ({
+          quantity: 1,
+          unit: `unit ${index}`,
+          ingredientName: `ingredient ${index}`,
+        })),
+      }];
+      const response = await action({
+        request: await createFormRequest({
+          title: "Oversized Web Recipe",
+          steps: JSON.stringify(steps),
+        }, testUserId),
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(400);
+      expect(data.errors.general).toBe("Recipe contains too many steps or ingredients");
+      await expect(db.recipe.findFirst({
+        where: { chefId: testUserId, title: "Oversized Web Recipe" },
+      })).resolves.toBeNull();
+    });
+
     async function createMultipartRequest(
       formData: UndiciFormData,
       userId: string,
@@ -188,7 +217,13 @@ describe("Recipes New Route", () => {
 
     it("should create recipe and redirect on success", async () => {
       const request = await createFormRequest(
-        { title: "My New Recipe", description: "A delicious recipe", servings: "4" },
+        {
+          title: "My New Recipe",
+          description: "A delicious recipe",
+          servings: "4",
+          course: "main",
+          tags: JSON.stringify(["  Weeknight  ", "Quick"]),
+        },
         testUserId
       );
 
@@ -210,7 +245,57 @@ describe("Recipes New Route", () => {
       expect(recipes[0].title).toBe("My New Recipe");
       expect(recipes[0].description).toBe("A delicious recipe");
       expect(recipes[0].servings).toBe("4");
+      expect(recipes[0].course).toBe("main");
+      await expect(db.recipeTag.findMany({
+        where: { recipeId: recipes[0].id },
+        orderBy: { normalizedLabel: "asc" },
+      })).resolves.toEqual([
+        expect.objectContaining({ label: "Quick", normalizedLabel: "quick" }),
+        expect.objectContaining({ label: "Weeknight", normalizedLabel: "weeknight" }),
+      ]);
       await expectAwaitingPlaceholderCover(recipes[0].id, testUserId);
+    });
+
+    it("returns field errors for an unsupported course and malformed tag payload", async () => {
+      const request = await createFormRequest(
+        {
+          title: "Invalid Metadata Recipe",
+          course: "breakfast",
+          tags: "not-json",
+        },
+        testUserId,
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(400);
+      expect(data.errors).toMatchObject({
+        course: "Choose a supported course",
+        tags: "Tags must be valid JSON",
+      });
+      await expect(db.recipe.count({ where: { chefId: testUserId } })).resolves.toBe(0);
+
+      const semanticResponse = await action({
+        request: await createFormRequest(
+          {
+            title: "Too Many Tags",
+            course: "main",
+            tags: JSON.stringify(Array.from({ length: 11 }, (_, index) => `Tag ${index}`)),
+          },
+          testUserId,
+        ),
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+      const semanticResult = extractResponseData(semanticResponse);
+      expect(semanticResult.status).toBe(400);
+      expect(semanticResult.data.errors.tags).toBe("Add no more than 10 tags");
+      await expect(db.recipe.count({ where: { chefId: testUserId } })).resolves.toBe(0);
     });
 
     it("should parse ingredients for the unsaved new recipe builder", async () => {
@@ -342,6 +427,42 @@ describe("Recipes New Route", () => {
       await expect(db.recipe.count({ where: { chefId: testUserId } })).resolves.toBe(1);
     });
 
+    it("should map a create-time active-title race to the title field", async () => {
+      const originalTransaction = db.$transaction;
+      db.$transaction = vi.fn().mockRejectedValue(
+        Object.assign(new Error("Raw query failed"), {
+          code: "P2010",
+          meta: {
+            code: "2067",
+            message: "UNIQUE constraint failed: Recipe.chefId, Recipe.title",
+          },
+        }),
+      ) as typeof db.$transaction;
+
+      try {
+        const request = await createFormRequest(
+          { title: "Concurrent Dinner" },
+          testUserId,
+        );
+        const response = await action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any);
+
+        const { data, status } = extractResponseData(response);
+        expect(status).toBe(400);
+        expect(data.errors).toEqual({
+          title: ACTIVE_RECIPE_TITLE_CONFLICT_ERROR,
+        });
+        await expect(
+          db.recipe.count({ where: { chefId: testUserId } }),
+        ).resolves.toBe(0);
+      } finally {
+        db.$transaction = originalTransaction;
+      }
+    });
+
     it("should allow duplicate active recipe titles for different chefs", async () => {
       const otherUser = await createUser(
         db,
@@ -459,12 +580,10 @@ describe("Recipes New Route", () => {
     });
 
     it("should return generic error for database errors", async () => {
-      // createRecipeDraft now writes sequentially against the top-level client
-      // (Cloudflare D1 doesn't support interactive `$transaction(async ...)`).
-      // Force the first DB write — recipe.create — to throw to exercise the
-      // catch in the route action.
-      const originalCreate = db.recipe.create;
-      db.recipe.create = vi.fn().mockRejectedValue(new Error("Database connection failed")) as any;
+      const originalTransaction = db.$transaction;
+      db.$transaction = vi.fn().mockRejectedValue(
+        new Error("Database connection failed"),
+      ) as typeof db.$transaction;
 
       try {
         const request = await createFormRequest({ title: "My Recipe" }, testUserId);
@@ -479,8 +598,7 @@ describe("Recipes New Route", () => {
         expect(status).toBe(500);
         expect(data.errors.general).toBe("Failed to create recipe. Please try again.");
       } finally {
-        // Restore original function
-        db.recipe.create = originalCreate;
+        db.$transaction = originalTransaction;
       }
     });
 
@@ -490,8 +608,10 @@ describe("Recipes New Route", () => {
         phCalls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
         return new Response(null, { status: 200 });
       });
-      const originalCreate = db.recipe.create;
-      db.recipe.create = vi.fn().mockRejectedValue(new Error("Database connection failed")) as any;
+      const originalTransaction = db.$transaction;
+      db.$transaction = vi.fn().mockRejectedValue(
+        new Error("Database connection failed"),
+      ) as typeof db.$transaction;
 
       try {
         const request = await createFormRequest({ title: "No WaitUntil Recipe" }, testUserId);
@@ -508,7 +628,7 @@ describe("Recipes New Route", () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(phCalls.some((c) => c.event === "$exception")).toBe(true);
       } finally {
-        db.recipe.create = originalCreate;
+        db.$transaction = originalTransaction;
         fetchMock.mockRestore();
       }
     });
@@ -823,16 +943,45 @@ describe("Recipes New Route", () => {
       await Promise.all(captured);
     });
 
+    it("redirects to the committed recipe when placeholder scheduling throws", async () => {
+      const scheduling = vi.spyOn(
+        aiPlaceholderCoverModule,
+        "scheduleAiPlaceholderCover",
+      ).mockRejectedValueOnce(new Error("placeholder scheduler unavailable"));
+      const request = await createFormRequest(
+        { title: "Committed Placeholder Schedule Failure" },
+        testUserId,
+      );
+
+      try {
+        const response = await action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any);
+
+        expect(response).toBeInstanceOf(Response);
+        expect(response.status).toBe(302);
+        const recipe = await db.recipe.findFirstOrThrow({
+          where: { chefId: testUserId, title: "Committed Placeholder Schedule Failure" },
+          include: { covers: true },
+        });
+        expect(response.headers.get("Location")).toBe(`/recipes/${recipe.id}`);
+        expect(recipe.covers).toHaveLength(1);
+      } finally {
+        scheduling.mockRestore();
+      }
+    });
+
     it("should delete uploaded recipe image when database creation fails", async () => {
       const mockR2Bucket = {
         put: vi.fn().mockResolvedValue(undefined),
         delete: vi.fn().mockResolvedValue(undefined),
       };
-      // See "should return generic error for database errors" above — D1 has
-      // no interactive transaction support, so the failure-injection point is
-      // recipe.create, the first write in the sequence.
-      const originalCreate = db.recipe.create;
-      db.recipe.create = vi.fn().mockRejectedValue(new Error("Database connection failed")) as any;
+      const originalTransaction = db.$transaction;
+      db.$transaction = vi.fn().mockRejectedValue(
+        new Error("Database connection failed"),
+      ) as typeof db.$transaction;
 
       try {
         const formData = new UndiciFormData();
@@ -853,7 +1002,45 @@ describe("Recipes New Route", () => {
         const uploadedKey = mockR2Bucket.put.mock.calls[0][0];
         expect(mockR2Bucket.delete).toHaveBeenCalledWith(uploadedKey);
       } finally {
-        db.recipe.create = originalCreate;
+        db.$transaction = originalTransaction;
+      }
+    });
+
+    it("rolls back the recipe graph when uploaded-cover insertion fails", async () => {
+      const trigger = "RecipeCover_test_create_atomic_abort";
+      const mockR2Bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn().mockResolvedValue(undefined),
+      };
+      await db.$executeRawUnsafe(`
+        CREATE TRIGGER "${trigger}"
+        BEFORE INSERT ON "RecipeCover"
+        WHEN NEW."sourceType" = 'chef-upload'
+        BEGIN
+          SELECT RAISE(ABORT, 'create_cover_atomic_failure');
+        END
+      `);
+
+      try {
+        const formData = new UndiciFormData();
+        formData.append("title", "Atomic Cover Failure Recipe");
+        formData.append("image", validImageFile("recipe.webp", "image/webp"));
+        const request = await createMultipartRequest(formData, testUserId);
+
+        const response = await action({
+          request,
+          context: { cloudflare: { env: { PHOTOS: mockR2Bucket } } },
+          params: {},
+        } as any);
+
+        const { data, status } = extractResponseData(response);
+        expect(status).toBe(500);
+        expect(data.errors.general).toBe("Failed to create recipe. Please try again.");
+        expect(mockR2Bucket.delete).toHaveBeenCalledWith(mockR2Bucket.put.mock.calls[0][0]);
+        await expect(db.recipe.count({ where: { chefId: testUserId } })).resolves.toBe(0);
+        await expect(db.recipeCover.count()).resolves.toBe(0);
+      } finally {
+        await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${trigger}"`);
       }
     });
 
@@ -872,8 +1059,10 @@ describe("Recipes New Route", () => {
       const waitUntil = vi.fn((promise: Promise<unknown>) => {
         scheduled.push(promise);
       });
-      const originalCreate = db.recipe.create;
-      db.recipe.create = vi.fn().mockRejectedValue(new Error("Database connection failed")) as any;
+      const originalTransaction = db.$transaction;
+      db.$transaction = vi.fn().mockRejectedValue(
+        new Error("Database connection failed"),
+      ) as typeof db.$transaction;
 
       try {
         const formData = new UndiciFormData();
@@ -904,7 +1093,7 @@ describe("Recipes New Route", () => {
         expect(exceptionMessages).toContain("R2 delete unavailable");
         expect(phCalls.some((c) => c.event === "spoonjoy.storage.orphan_cleanup_failed")).toBe(true);
       } finally {
-        db.recipe.create = originalCreate;
+        db.$transaction = originalTransaction;
         fetchMock.mockRestore();
       }
     });
@@ -1381,6 +1570,9 @@ describe("Recipes New Route", () => {
       await user.clear(servingsInput);
       await user.type(servingsInput, "4");
 
+      await user.selectOptions(screen.getByRole("combobox", { name: "Course" }), "dessert");
+      await user.type(screen.getByLabelText(/^Tags$/), "Celebration{Enter}");
+
       // Click Create Recipe button (triggers RecipeBuilder.handleSave → onSave → handleSave)
       const submitButton = screen.getByRole("button", { name: "Create Recipe" });
       await user.click(submitButton);
@@ -1390,6 +1582,8 @@ describe("Recipes New Route", () => {
       });
       expect(actionFormData.description).toBe("A test description");
       expect(actionFormData.servings).toBe("4");
+      expect(actionFormData.course).toBe("dessert");
+      expect(JSON.parse(actionFormData.tags)).toEqual(["Celebration"]);
     });
 
     it("should handle image upload in handleSave", async () => {
@@ -1480,7 +1674,7 @@ describe("Recipes New Route", () => {
       await waitFor(() => {
         expect(actionCalls).toBe(1);
       });
-      expect(screen.getByRole("status")).toHaveTextContent(/uploading image/i);
+      expect(screen.getByText(/uploading image/i).closest('[role="status"]')).toBeInTheDocument();
       expect(submitButton).toBeDisabled();
 
       await act(async () => {
@@ -1669,6 +1863,41 @@ describe("Recipes New Route", () => {
         expect(screen.getByText("Recipe Detail")).toBeInTheDocument();
       });
       expect(formDataReceived.steps).toBeUndefined();
+    });
+
+    it("should handle missing course and tags inputs in handleSave", async () => {
+      const user = userEvent.setup();
+      let formDataReceived: Record<string, string> = {};
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/new",
+          Component: NewRecipe,
+          loader: () => null,
+          action: async ({ request }: { request: Request }) => {
+            const formData = await request.formData();
+            formDataReceived = Object.fromEntries(formData.entries());
+            return redirect("/recipes/test-id");
+          },
+        },
+        {
+          path: "/recipes/:id",
+          Component: () => <div>Recipe Detail</div>,
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/new"]} />);
+
+      await user.type(await screen.findByLabelText(/Title/), "Legacy Hidden Inputs");
+      document.querySelector('form.hidden input[name="course"]')?.remove();
+      document.querySelector('form.hidden input[name="tags"]')?.remove();
+      await user.click(screen.getByRole("button", { name: "Create Recipe" }));
+
+      await waitFor(() => {
+        expect(screen.getByText("Recipe Detail")).toBeInTheDocument();
+      });
+      expect(formDataReceived.course).toBeUndefined();
+      expect(formDataReceived.tags).toBeUndefined();
     });
 
     it("should handle missing clearImage input in handleSave", async () => {

@@ -1,7 +1,6 @@
 import type {
   Prisma,
   PrismaClient as PrismaClientType,
-  ShoppingListItem,
 } from "@prisma/client";
 import {
   ApiAuthError,
@@ -22,7 +21,19 @@ import {
   pollAgentConnection,
   startAgentConnection,
 } from "~/lib/agent-connection.server";
-import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
+import {
+  ACTIVE_RECIPE_TITLE_CONFLICT_ERROR,
+  isActiveRecipeTitleConflictError,
+  validateActiveRecipeTitleUnique,
+} from "~/lib/recipe-title-uniqueness.server";
+import {
+  createRecipeDraft,
+  readCommittedRecipeGraph,
+  RecipeDraftNotFoundError,
+  updateRecipeDraft,
+} from "~/lib/recipe-create.server";
+import { asCompatibleRecipeTagD1Database } from "~/lib/recipe-tags.server";
+import { applyRecipeScale, parseMcpRecipeScale } from "~/lib/recipe-scale";
 import {
   archiveRecipeCover,
   clearActiveRecipeCover,
@@ -48,7 +59,6 @@ import {
   SpoonNotFoundError,
 } from "~/lib/recipe-spoon.server";
 import {
-  activateRecipeCoverWithBestAvailableVariant,
   sanitizeRecipeCoverPromptAddition,
   scheduleRecipeCoverStylization,
   scheduleRecipePlaceholderGeneration,
@@ -75,11 +85,8 @@ import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import {
   asCompatibleD1Database,
   coalesceShoppingRecipeIngredients,
-  createCompatibleShoppingListD1Batch,
-  findCompatibleShoppingListItem,
-  mutateCompatibleShoppingListItem,
-  runCompatibleShoppingListBatch,
-  type ShoppingListItemWritePlan,
+  mutateAtomicShoppingListItem,
+  runAtomicShoppingListBatch,
 } from "~/lib/shopping-list-mutations.server";
 
 export interface SpoonjoyApiContext {
@@ -144,6 +151,16 @@ type RecipeWithDetails = Prisma.RecipeGetPayload<{
     };
   };
 }>;
+
+type RecipeReadTag = {
+  id: string;
+  label: string;
+  normalizedLabel: string;
+};
+
+type RecipeReadWithDetails = RecipeWithDetails & {
+  tags: RecipeReadTag[];
+};
 
 type ShoppingListWithItems = Prisma.ShoppingListGetPayload<{
   include: {
@@ -223,6 +240,139 @@ const cookbookSummaryRecipeInclude = {
 
 function json(value: unknown): unknown {
   return value;
+}
+
+const LEGACY_IMPORT_PERSISTED_RECIPE_FIELDS = [
+  "id",
+  "title",
+  "description",
+  "servings",
+  "chefId",
+  "deletedAt",
+  "activeCoverId",
+  "activeCoverVariant",
+  "coverMode",
+  "sourceRecipeId",
+  "sourceUrl",
+  "createdAt",
+  "updatedAt",
+  "chef",
+  "covers",
+  "steps",
+] as const;
+
+const LEGACY_IMPORT_DRAFT_FIELDS = [
+  "title",
+  "description",
+  "servings",
+  "ingredients",
+  "steps",
+  "imageUrl",
+  "sourceUrl",
+] as const;
+
+const LEGACY_IMPORT_CHEF_FIELDS = ["id", "email", "username"] as const;
+
+const LEGACY_IMPORT_COVER_FIELDS = [
+  "id",
+  "recipeId",
+  "imageUrl",
+  "stylizedImageUrl",
+  "sourceType",
+  "sourceSpoonId",
+  "status",
+  "createdById",
+  "sourceImageUrl",
+  "generationStatus",
+  "failureReason",
+  "promptVersion",
+  "styleVersion",
+  "promptAddition",
+  "parentCoverId",
+  "archivedAt",
+  "createdAt",
+] as const;
+
+const LEGACY_IMPORT_STEP_FIELDS = [
+  "id",
+  "recipeId",
+  "stepNum",
+  "stepTitle",
+  "description",
+  "duration",
+  "updatedAt",
+  "ingredients",
+] as const;
+
+const LEGACY_IMPORT_INGREDIENT_FIELDS = [
+  "id",
+  "recipeId",
+  "stepNum",
+  "quantity",
+  "unitId",
+  "ingredientRefId",
+  "updatedAt",
+  "unit",
+  "ingredientRef",
+] as const;
+
+const LEGACY_IMPORT_REFERENCE_FIELDS = ["id", "name", "updatedAt"] as const;
+
+function projectKnownFields(
+  value: unknown,
+  fields: readonly string[],
+): Record<string, unknown> {
+  const source = value as Record<string, unknown>;
+  return Object.fromEntries(
+    fields
+      .filter((field) => Object.prototype.hasOwnProperty.call(source, field))
+      .map((field) => [field, source[field]]),
+  );
+}
+
+function projectLegacyImportIngredient(value: unknown): Record<string, unknown> {
+  const source = value as Record<string, unknown>;
+  const projected = projectKnownFields(value, LEGACY_IMPORT_INGREDIENT_FIELDS);
+  projected.unit = projectKnownFields(source.unit, LEGACY_IMPORT_REFERENCE_FIELDS);
+  projected.ingredientRef = projectKnownFields(
+    source.ingredientRef,
+    LEGACY_IMPORT_REFERENCE_FIELDS,
+  );
+  return projected;
+}
+
+function projectLegacyImportStep(value: unknown): Record<string, unknown> {
+  const source = value as Record<string, unknown>;
+  const projected = projectKnownFields(value, LEGACY_IMPORT_STEP_FIELDS);
+  projected.ingredients = (source.ingredients as unknown[]).map(
+    projectLegacyImportIngredient,
+  );
+  return projected;
+}
+
+function projectLegacyImportRecipe(
+  recipe: unknown,
+  dryRun: boolean,
+): Record<string, unknown> {
+  const source = recipe as Record<string, unknown>;
+  const fields = dryRun
+    ? LEGACY_IMPORT_DRAFT_FIELDS
+    : LEGACY_IMPORT_PERSISTED_RECIPE_FIELDS;
+  const projected = projectKnownFields(source, fields);
+
+  if (Object.prototype.hasOwnProperty.call(source, "chef")) {
+    projected.chef = projectKnownFields(source.chef, LEGACY_IMPORT_CHEF_FIELDS);
+  }
+  if (Object.prototype.hasOwnProperty.call(source, "covers")) {
+    projected.covers = (source.covers as unknown[]).map((cover) =>
+      projectKnownFields(cover, LEGACY_IMPORT_COVER_FIELDS),
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(source, "steps") && !dryRun) {
+    projected.steps = (source.steps as unknown[]).map(projectLegacyImportStep);
+  }
+
+  return projected;
 }
 
 function optionalString(value: unknown): string | undefined {
@@ -860,6 +1010,31 @@ function formatRecipeSummary(recipe: RecipeWithDetails) {
   };
 }
 
+function formatRecipeReadMetadata(recipe: RecipeReadWithDetails) {
+  const tagBySortKey = new Map(recipe.tags.map((tag) => [
+    `${tag.normalizedLabel}\u0000${tag.id}`,
+    tag,
+  ]));
+  return {
+    course: recipe.course,
+    tags: [...tagBySortKey.keys()].sort().map((sortKey) => tagBySortKey.get(sortKey)!.label),
+  };
+}
+
+function formatRecipeRead(recipe: RecipeReadWithDetails) {
+  return {
+    ...formatRecipe(recipe),
+    ...formatRecipeReadMetadata(recipe),
+  };
+}
+
+function formatRecipeReadSummary(recipe: RecipeReadWithDetails) {
+  return {
+    ...formatRecipeSummary(recipe),
+    ...formatRecipeReadMetadata(recipe),
+  };
+}
+
 function formatShoppingList(list: ShoppingListWithItems) {
   return {
     id: list.id,
@@ -1013,6 +1188,7 @@ async function findRecipeByIdOrTitle(db: PrismaClientType, args: Record<string, 
     include: {
       chef: { select: { id: true, email: true, username: true } },
       covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
+      tags: { select: { id: true, label: true, normalizedLabel: true } },
       steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
     },
   });
@@ -1092,67 +1268,6 @@ function normalizeCreateApiTokenScopes(value: unknown, principal: ApiPrincipal |
   }
 
   return storedScopes;
-}
-
-async function replaceRecipeSteps(db: PrismaClientType, recipeId: string, steps: ReturnType<typeof parseSteps>) {
-  // Pre-resolve all unit + ingredientRef ids OUTSIDE the swap. They're
-  // idempotent getOrCreates and don't need to be atomic with the recipe's
-  // step replacement; they just need their ids ready.
-  const unitNames = new Set<string>();
-  const ingredientNames = new Set<string>();
-  for (const step of steps) {
-    for (const ingredient of step.ingredients) {
-      unitNames.add(normalizeName(ingredient.unit));
-      ingredientNames.add(normalizeName(ingredient.name));
-    }
-  }
-  const unitIds = new Map<string, string>();
-  for (const name of unitNames) {
-    unitIds.set(name, (await getOrCreateUnit(db, name)).id);
-  }
-  const ingredientRefIds = new Map<string, string>();
-  for (const name of ingredientNames) {
-    ingredientRefIds.set(name, (await getOrCreateIngredientRef(db, name)).id);
-  }
-
-  // Atomic swap as a single D1 batch: clear-then-rebuild as one transaction so
-  // a mid-sequence failure rolls back the deletes instead of permanently
-  // gutting the recipe. D1 doesn't support Prisma's interactive
-  // `$transaction(async tx => ...)` form, but it does support the batched
-  // PrismaPromise[] form, which is what we use here.
-  const ops: Prisma.PrismaPromise<unknown>[] = [
-    db.stepOutputUse.deleteMany({ where: { recipeId } }),
-    db.ingredient.deleteMany({ where: { recipeId } }),
-    db.recipeStep.deleteMany({ where: { recipeId } }),
-  ];
-  for (const [index, step] of steps.entries()) {
-    const stepNum = index + 1;
-    ops.push(
-      db.recipeStep.create({
-        data: {
-          recipeId,
-          stepNum,
-          stepTitle: step.title ?? null,
-          description: step.description,
-          duration: step.duration ?? null,
-        },
-      }),
-    );
-    for (const ingredient of step.ingredients) {
-      ops.push(
-        db.ingredient.create({
-          data: {
-            recipeId,
-            stepNum,
-            quantity: ingredient.quantity,
-            unitId: unitIds.get(normalizeName(ingredient.unit))!,
-            ingredientRefId: ingredientRefIds.get(normalizeName(ingredient.name))!,
-          },
-        }),
-      );
-    }
-  }
-  await db.$transaction(ops);
 }
 
 const healthTool: SpoonjoyApiOperation = {
@@ -1403,6 +1518,7 @@ const searchRecipesTool: SpoonjoyApiOperation = {
           include: {
             chef: { select: { id: true, email: true, username: true } },
             covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
+            tags: { select: { id: true, label: true, normalizedLabel: true } },
             steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
           },
         })
@@ -1410,7 +1526,7 @@ const searchRecipesTool: SpoonjoyApiOperation = {
 
     recipes.sort((a, b) => (resultOrder.get(a.id) as number) - (resultOrder.get(b.id) as number));
 
-    return json({ recipes: recipes.map(formatRecipeSummary) });
+    return json({ recipes: recipes.map(formatRecipeReadSummary) });
   },
 };
 
@@ -1493,12 +1609,19 @@ const getRecipeTool: SpoonjoyApiOperation = {
     properties: {
       id: { type: "string" },
       title: { type: "string" },
+      scale: {
+        type: "number",
+        minimum: 0.1,
+        maximum: 100,
+        description: "Scale ingredient quantities in this read without changing stored values or servings.",
+      },
     },
     additionalProperties: false,
   },
   async handle(args, context) {
+    const scale = parseMcpRecipeScale(args);
     const recipe = await findRecipeByIdOrTitle(context.db, args);
-    return json({ recipe: recipe ? formatRecipe(recipe) : null });
+    return json({ recipe: recipe ? applyRecipeScale(formatRecipeRead(recipe), scale) : null });
   },
 };
 
@@ -2308,6 +2431,9 @@ const createRecipeTool: SpoonjoyApiOperation = {
   async handle(args, context) {
     const email = requireOwnerEmail(args, context);
     const title = requiredString(args, "title");
+    const description = optionalString(args.description) ?? null;
+    const servings = optionalString(args.servings) ?? null;
+    const sourceUrl = optionalString(args.sourceUrl) ?? null;
     const imageUrl = optionalString(args.imageUrl);
     const steps = parseSteps(args.steps);
 
@@ -2326,45 +2452,81 @@ const createRecipeTool: SpoonjoyApiOperation = {
       });
     }
 
-    const created = await context.db.recipe.create({
-      data: {
+    const recipeId = crypto.randomUUID();
+    const coverId = imageUrl ? crypto.randomUUID() : null;
+    let created;
+    try {
+      created = await createRecipeDraft(context.db, {
+        id: recipeId,
         title,
-        description: optionalString(args.description) ?? null,
-        servings: optionalString(args.servings) ?? null,
-        sourceUrl: optionalString(args.sourceUrl) ?? null,
+        description,
+        servings,
+        sourceUrl,
         chefId: owner.id,
-      },
-    });
-
-    await replaceRecipeSteps(context.db, created.id, steps);
-    if (imageUrl) {
-      const cover = await createCover(context.db, {
-        recipeId: created.id,
-        imageUrl,
-        sourceType: "chef-upload",
+        steps: steps.map((step) => ({
+          stepTitle: step.title ?? null,
+          description: step.description,
+          duration: step.duration ?? null,
+          ingredients: step.ingredients.map((ingredient) => ({
+            ingredientName: ingredient.name,
+            quantity: ingredient.quantity,
+            unit: ingredient.unit,
+          })),
+        })),
+      }, {
+        nativeDatabase: asCompatibleRecipeTagD1Database(context.env?.DB),
+        coverMutation: imageUrl && coverId
+          ? { kind: "uploaded", coverId, createdById: owner.id, imageUrl }
+          : null,
       });
-      await scheduleRecipeCoverStylization(context, {
-        userId: owner.id,
-        recipeId: created.id,
-        coverId: cover.id,
-        rawPhotoUrl: imageUrl,
-        recipeTitle: title,
-        sourceType: "chef-upload",
-      });
-      await activateRecipeCoverWithBestAvailableVariant(context.db, {
-        recipeId: created.id,
-        coverId: cover.id,
-      });
+    } catch (error) {
+      if (isActiveRecipeTitleConflictError(error)) {
+        throw new Error(ACTIVE_RECIPE_TITLE_CONFLICT_ERROR);
+      }
+      throw error;
     }
 
-    const recipe = await context.db.recipe.findUniqueOrThrow({
-      where: { id: created.id },
-      include: {
-        chef: { select: { id: true, email: true, username: true } },
-        covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
-        steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
-      },
-    });
+    if (imageUrl && coverId) {
+      try {
+        await scheduleRecipeCoverStylization(context, {
+          userId: owner.id,
+          recipeId: created.id,
+          coverId,
+          rawPhotoUrl: imageUrl,
+          recipeTitle: title,
+          sourceType: "chef-upload",
+          activateWhenReady: true,
+          suppressAutoActivation: true,
+          activationGuard: {
+            activeCoverId: coverId,
+            activeCoverVariant: "image",
+            coverMode: "manual",
+          },
+        });
+      } catch (error) {
+        (context.logger ?? console).error("MCP recipe cover postcommit processing failed", error);
+      }
+    }
+
+    let recipe: RecipeWithDetails;
+    try {
+      recipe = await context.db.recipe.findUniqueOrThrow({
+        where: { id: created.id },
+        include: {
+          chef: { select: { id: true, email: true, username: true } },
+          covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
+          steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
+        },
+      });
+    } catch (error) {
+      (context.logger ?? console).error("MCP recipe postcommit hydration failed", error);
+      const committed = await readCommittedRecipeGraph(context.db, created.id, {
+        chefId: owner.id,
+        nativeDatabase: asCompatibleRecipeTagD1Database(context.env?.DB),
+      });
+      if (!committed) throw error;
+      return json({ recipe: formatRecipe(committed) });
+    }
 
     return json({ recipe: formatRecipe(recipe) });
   },
@@ -2428,11 +2590,14 @@ const updateRecipeTool: SpoonjoyApiOperation = {
     const owner = await getOrCreateOwner(context.db, email);
     const existing = await context.db.recipe.findFirst({
       where: { id, chefId: owner.id, deletedAt: null },
-      select: { id: true, title: true },
+      include: {
+        chef: { select: { id: true, email: true, username: true } },
+        covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
+        steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
+      },
     });
     if (!existing) throw new Error("Recipe not found");
 
-    const data: Prisma.RecipeUpdateInput = {};
     if (title !== undefined) {
       const titleUniqueness = await validateActiveRecipeTitleUnique(context.db, {
         chefId: owner.id,
@@ -2440,11 +2605,7 @@ const updateRecipeTool: SpoonjoyApiOperation = {
         excludeRecipeId: existing.id,
       });
       if (!titleUniqueness.valid) throw new Error(titleUniqueness.error);
-      data.title = title;
     }
-    if (description !== undefined) data.description = description;
-    if (servings !== undefined) data.servings = servings;
-    if (sourceUrl !== undefined) data.sourceUrl = sourceUrl;
 
     if (imageUrl) {
       await validateRecipeCoverImageSource({
@@ -2455,42 +2616,88 @@ const updateRecipeTool: SpoonjoyApiOperation = {
       });
     }
 
-    if (Object.keys(data).length > 0) {
-      await context.db.recipe.update({ where: { id: existing.id }, data });
+    const shouldMutate = title !== undefined
+      || description !== undefined
+      || servings !== undefined
+      || sourceUrl !== undefined
+      || steps !== undefined
+      || Boolean(imageUrl);
+    if (!shouldMutate) return json({ recipe: formatRecipe(existing) });
+
+    const coverId = imageUrl ? crypto.randomUUID() : null;
+    try {
+      await updateRecipeDraft(context.db, {
+        id: existing.id,
+        chefId: owner.id,
+        title,
+        description,
+        servings,
+        sourceUrl,
+        steps: steps?.map((step) => ({
+          stepTitle: step.title ?? null,
+          description: step.description,
+          duration: step.duration ?? null,
+          ingredients: step.ingredients.map((ingredient) => ({
+            ingredientName: ingredient.name,
+            quantity: ingredient.quantity,
+            unit: ingredient.unit,
+          })),
+        })),
+      }, {
+        nativeDatabase: asCompatibleRecipeTagD1Database(context.env?.DB),
+        coverMutation: imageUrl && coverId
+          ? { kind: "uploaded", coverId, createdById: owner.id, imageUrl }
+          : null,
+      });
+    } catch (error) {
+      if (error instanceof RecipeDraftNotFoundError) throw new Error("Recipe not found");
+      if (isActiveRecipeTitleConflictError(error)) {
+        throw new Error(ACTIVE_RECIPE_TITLE_CONFLICT_ERROR);
+      }
+      throw error;
     }
 
-    if (steps) {
-      await replaceRecipeSteps(context.db, existing.id, steps);
-      await context.db.recipe.update({ where: { id: existing.id }, data: { updatedAt: new Date() } });
-    }
-    if (imageUrl) {
-      const cover = await createCover(context.db, {
-        recipeId: existing.id,
-        imageUrl,
-        sourceType: "chef-upload",
-      });
+    if (imageUrl && coverId) {
+      try {
       await scheduleRecipeCoverStylization(context, {
         userId: owner.id,
         recipeId: existing.id,
-        coverId: cover.id,
+        coverId,
         rawPhotoUrl: imageUrl,
         recipeTitle: title ?? existing.title,
         sourceType: "chef-upload",
+        activateWhenReady: true,
+        suppressAutoActivation: true,
+        activationGuard: {
+          activeCoverId: coverId,
+          activeCoverVariant: "image",
+          coverMode: "manual",
+        },
       });
-      await activateRecipeCoverWithBestAvailableVariant(context.db, {
-        recipeId: existing.id,
-        coverId: cover.id,
-      });
+      } catch (error) {
+        (context.logger ?? console).error("MCP recipe cover postcommit processing failed", error);
+      }
     }
 
-    const recipe = await context.db.recipe.findUniqueOrThrow({
-      where: { id: existing.id },
-      include: {
-        chef: { select: { id: true, email: true, username: true } },
-        covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
-        steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
-      },
-    });
+    let recipe: RecipeWithDetails;
+    try {
+      recipe = await context.db.recipe.findFirstOrThrow({
+        where: { id: existing.id, chefId: owner.id, deletedAt: null },
+        include: {
+          chef: { select: { id: true, email: true, username: true } },
+          covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
+          steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
+        },
+      });
+    } catch (error) {
+      (context.logger ?? console).error("MCP recipe update postcommit hydration failed", error);
+      const committed = await readCommittedRecipeGraph(context.db, existing.id, {
+        chefId: owner.id,
+        nativeDatabase: asCompatibleRecipeTagD1Database(context.env?.DB),
+      });
+      if (!committed) throw error;
+      return json({ recipe: formatRecipe(committed) });
+    }
 
     return json({ recipe: formatRecipe(recipe) });
   },
@@ -2638,102 +2845,25 @@ const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
     );
     const nativeD1 = asCompatibleD1Database(context.env?.DB);
 
-    const batch = await runCompatibleShoppingListBatch(context.db, async () => {
-      const existingItems: Array<ShoppingListItem | null> = [];
-      for (const row of coalesced) {
-        existingItems.push(await findCompatibleShoppingListItem(context.db, {
-          shoppingListId: shoppingList.id,
-          ingredientRefId: row.ingredientRefId,
-          unitId: row.unitId,
-        }));
-      }
-
-      let nextSort = await nextSortIndex(context.db, shoppingList.id);
-      let created = 0;
-      let updated = 0;
-      const operations: Array<Prisma.PrismaPromise<ShoppingListItem>> = [];
-      const writePlans: ShoppingListItemWritePlan[] = [];
-      for (const [index, row] of coalesced.entries()) {
-        const existing = existingItems[index];
-        if (existing) {
-          updated += 1;
-          const shouldMoveToEnd = Boolean(existing.checked || existing.checkedAt || existing.deletedAt);
-          const sortIndex = shouldMoveToEnd ? nextSort++ : existing.sortIndex;
-          const quantity = (existing.quantity ?? 0) + row.quantity;
-          const categoryKey = row.categoryKey ?? existing.categoryKey;
-          const iconKey = row.iconKey ?? existing.iconKey;
-          operations.push(context.db.shoppingListItem.update({
-            where: { id: existing.id },
-            data: {
-              quantity,
-              checked: false,
-              checkedAt: null,
-              deletedAt: null,
-              sortIndex,
-              categoryKey,
-              iconKey,
-            },
-          }));
-          writePlans.push({
-            mode: "update",
-            id: existing.id,
-            shoppingListId: shoppingList.id,
-            ingredientRefId: row.ingredientRefId,
-            unitId: row.unitId,
-            quantity,
-            checked: false,
-            checkedAt: null,
-            deletedAt: null,
-            sortIndex,
-            categoryKey,
-            iconKey,
-            updatedAt: new Date(),
-          });
-          continue;
-        }
-
-        created += 1;
-        const id = crypto.randomUUID();
-        const sortIndex = nextSort++;
-        operations.push(context.db.shoppingListItem.create({
-          data: {
-            id,
-            shoppingListId: shoppingList.id,
-            quantity: row.quantity,
-            unitId: row.unitId,
-            ingredientRefId: row.ingredientRefId,
-            sortIndex,
-            categoryKey: row.categoryKey,
-            iconKey: row.iconKey,
-          },
-        }));
-        writePlans.push({
-          mode: "create",
-          id,
-          shoppingListId: shoppingList.id,
-          ingredientRefId: row.ingredientRefId,
-          unitId: row.unitId,
-          quantity: row.quantity,
-          checked: false,
-          checkedAt: null,
-          deletedAt: null,
-          sortIndex,
-          categoryKey: row.categoryKey,
-          iconKey: row.iconKey,
-          updatedAt: new Date(),
-        });
-      }
-
-      return {
-        operations,
-        metadata: { created, updated },
-        native: createCompatibleShoppingListD1Batch(nativeD1, writePlans, []),
-      };
+    const boundNowMs = Date.now();
+    const batch = await runAtomicShoppingListBatch({
+      database: context.db,
+      nativeDatabase: nativeD1,
+      mutations: coalesced.map((row) => ({
+        id: crypto.randomUUID(),
+        shoppingListId: shoppingList.id,
+        quantity: row.quantity,
+        unitId: row.unitId,
+        ingredientRefId: row.ingredientRefId,
+        categoryKey: row.categoryKey,
+        iconKey: row.iconKey,
+        boundNowMs,
+      })),
     });
 
     const result = {
-      created: batch.metadata.created,
-      updated: batch.metadata.updated,
+      created: batch.created,
+      updated: batch.updated,
       shoppingList: await reloadShoppingList(context.db, shoppingList.id),
     };
 
@@ -3018,38 +3148,19 @@ const addShoppingListItemTool: SpoonjoyApiOperation = {
     const shoppingList = await getOrCreateShoppingList(context.db, owner.id);
     const ingredientRef = await getOrCreateIngredientRef(context.db, name);
     const unit = unitName ? await getOrCreateUnit(context.db, unitName) : null;
-    const identity = {
-      shoppingListId: shoppingList.id,
-      ingredientRefId: ingredientRef.id,
-      unitId: unit?.id ?? null,
-    };
-    const mutation = await mutateCompatibleShoppingListItem({
+    const mutation = await mutateAtomicShoppingListItem({
       database: context.db,
-      identity,
-      update: async (existing) => {
-        const shouldMoveToEnd = Boolean(existing.checked || existing.checkedAt || existing.deletedAt);
-        return context.db.shoppingListItem.update({
-          where: { id: existing.id },
-          data: {
-            quantity: quantity === null ? existing.quantity : (existing.quantity ?? 0) + quantity,
-            checked: false,
-            checkedAt: null,
-            deletedAt: null,
-            sortIndex: shouldMoveToEnd ? await nextSortIndex(context.db, shoppingList.id) : existing.sortIndex,
-            categoryKey: categoryKey ?? existing.categoryKey,
-            iconKey: iconKey ?? existing.iconKey,
-          },
-        });
+      nativeDatabase: asCompatibleD1Database(context.env?.DB),
+      mutation: {
+        id: crypto.randomUUID(),
+        shoppingListId: shoppingList.id,
+        ingredientRefId: ingredientRef.id,
+        unitId: unit?.id ?? null,
+        quantity,
+        categoryKey,
+        iconKey,
+        boundNowMs: Date.now(),
       },
-      create: async () => context.db.shoppingListItem.create({
-        data: {
-          ...identity,
-          quantity,
-          sortIndex: await nextSortIndex(context.db, shoppingList.id),
-          categoryKey,
-          iconKey,
-        },
-      }),
     });
     const result = {
       created: mutation.created ? 1 : 0,
@@ -3539,6 +3650,7 @@ const importRecipeFromUrlTool: SpoonjoyApiOperation = {
       {
         db: context.db,
         env: context.env ?? undefined,
+        nativeDatabase: asCompatibleRecipeTagD1Database(context.env?.DB),
         bucket: context.bucket,
         waitUntil: context.waitUntil,
         imageGenRunner: context.imageGenRunner,
@@ -3546,7 +3658,7 @@ const importRecipeFromUrlTool: SpoonjoyApiOperation = {
       },
     );
     return json({
-      recipe: result.recipe,
+      recipe: projectLegacyImportRecipe(result.recipe, dryRun),
       recipeId: result.recipeId,
       confidence: result.confidence,
       source: result.source,

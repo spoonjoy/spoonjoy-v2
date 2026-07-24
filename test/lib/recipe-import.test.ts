@@ -2158,6 +2158,36 @@ describe("importRecipeFromUrl — extraction paths", () => {
       expect(recipe?.title).toBe("Pasta al Limone (imported)");
     });
 
+    it("retries the next suffix when the database wins a title race", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+      const originalTransaction = db.$transaction;
+      const conflict = Object.assign(new Error("Raw query failed"), {
+        code: "P2010",
+        meta: {
+          code: "2067",
+          message: "UNIQUE constraint failed: Recipe.chefId, Recipe.title",
+        },
+      });
+      const transaction = vi.fn()
+        .mockRejectedValueOnce(conflict)
+        .mockImplementation((...args: unknown[]) => originalTransaction.apply(db, args as never));
+      db.$transaction = transaction as typeof db.$transaction;
+
+      try {
+        const result = await importRecipeFromUrl(
+          { url: "https://example.com/r", chefId: chef.id },
+          baseDeps({ fetchImpl: makeFetchImpl(fixture) }),
+        );
+        await expect(db.recipe.findUniqueOrThrow({
+          where: { id: result.recipeId! },
+        })).resolves.toMatchObject({ title: "Pasta al Limone (imported)" });
+        expect(transaction).toHaveBeenCalledTimes(2);
+      } finally {
+        db.$transaction = originalTransaction;
+      }
+    });
+
     it("second-collision appends ' (imported HH:MM)' suffix with zero-padded UTC time", async () => {
       const fixture = await loadFixture("nyt-style-jsonld.html");
       const chef = await makeChef();
@@ -2251,6 +2281,126 @@ describe("importRecipeFromSource — native capture inputs", () => {
     await expect(db.ingredient.count({ where: { recipeId: result.recipeId! } })).resolves.toBe(2);
   });
 
+  it("returns the committed native import when postcommit hydration fails", async () => {
+    const chef = await makeChef();
+    const llmRunner = makeLlmRunner({
+      title: "Hydration Recovery Stew",
+      description: "The committed graph remains authoritative",
+      servings: "4",
+      ingredients: ["2 carrots"],
+      steps: ["Simmer until tender."],
+    });
+    const hydration = vi.spyOn(db.recipe, "findUniqueOrThrow")
+      .mockRejectedValueOnce(new Error("import hydration unavailable"));
+
+    let result;
+    try {
+      result = await importRecipeFromSource({
+        chefId: chef.id,
+        source: {
+          type: "text",
+          text: "Hydration Recovery Stew\n2 carrots\nSimmer until tender.",
+        },
+      }, baseDeps({ llmRunner }));
+    } finally {
+      hydration.mockRestore();
+    }
+
+    expect(result.recipeId).toEqual(expect.any(String));
+    expect(result.recipe).toMatchObject({
+      id: result.recipeId,
+      title: "Hydration Recovery Stew",
+      description: "The committed graph remains authoritative",
+      servings: "4",
+      covers: [],
+      steps: [{
+        stepNum: 1,
+        stepTitle: null,
+        description: "Simmer until tender.",
+        duration: null,
+        ingredients: [{
+          quantity: 1,
+          unit: { name: "whole" },
+          ingredientRef: { name: "2 carrots" },
+        }],
+      }],
+    });
+    await expect(db.recipe.findMany({
+      where: { chefId: chef.id, title: { startsWith: "Hydration Recovery Stew" } },
+    })).resolves.toHaveLength(1);
+    await expect(db.recipeStep.count({ where: { recipeId: result.recipeId! } })).resolves.toBe(1);
+    await expect(db.ingredient.count({ where: { recipeId: result.recipeId! } })).resolves.toBe(1);
+    const persisted = await db.recipe.findUniqueOrThrow({
+      where: { id: result.recipeId! },
+      include: {
+        chef: { select: { id: true, email: true, username: true } },
+        covers: true,
+        steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
+      },
+    });
+    expect((result.recipe as typeof persisted).chef).toEqual(persisted.chef);
+    expect((result.recipe as typeof persisted).steps[0].id).toBe(persisted.steps[0].id);
+    expect((result.recipe as typeof persisted).steps[0].ingredients[0]).toMatchObject({
+      id: persisted.steps[0].ingredients[0].id,
+      recipeId: result.recipeId,
+      stepNum: 1,
+      unitId: persisted.steps[0].ingredients[0].unitId,
+      ingredientRefId: persisted.steps[0].ingredients[0].ingredientRefId,
+    });
+  });
+
+  it("propagates hydration failure when committed import recovery is unavailable", async () => {
+    const chef = await makeChef();
+    const hydrationError = new Error("import hydration and recovery unavailable");
+    const hydration = vi.spyOn(db.recipe, "findUniqueOrThrow")
+      .mockRejectedValueOnce(hydrationError);
+    const originalTransaction = db.$transaction;
+    let transactionCalls = 0;
+    db.$transaction = vi.fn(async (...args: Parameters<typeof db.$transaction>) => {
+      transactionCalls += 1;
+      if (transactionCalls === 2) return [[], [], [], []] as never;
+      return originalTransaction.apply(db, args);
+    }) as typeof db.$transaction;
+
+    try {
+      await expect(importRecipeFromSource({
+        chefId: chef.id,
+        source: { type: "text", text: "Unavailable import recovery" },
+      }, baseDeps({
+        llmRunner: makeLlmRunner({
+          title: "Unavailable Import Recovery",
+          steps: ["Persist before hydration fails."],
+        }),
+      }))).rejects.toBe(hydrationError);
+    } finally {
+      db.$transaction = originalTransaction;
+      hydration.mockRestore();
+    }
+
+    expect(transactionCalls).toBe(2);
+    await expect(db.recipe.findFirst({
+      where: { chefId: chef.id, title: "Unavailable Import Recovery" },
+    })).resolves.not.toBeNull();
+  });
+
+  it("rejects parsed imported ingredients when extraction contains no steps", async () => {
+    const chef = await makeChef();
+
+    await expect(importRecipeFromSource({
+      chefId: chef.id,
+      source: { type: "text", text: "Ingredient without a step" },
+    }, baseDeps({
+      llmRunner: makeLlmRunner({
+        title: "Ingredient Without Step",
+        ingredients: ["1 onion"],
+        steps: [],
+      }),
+    }))).rejects.toThrow("Imported ingredients require at least one recipe step");
+    await expect(db.recipe.findFirst({
+      where: { chefId: chef.id, title: "Ingredient Without Step" },
+    })).resolves.toBeNull();
+  });
+
   it("persists native text imports with a caller supplied recovery recipe id", async () => {
     const chef = await makeChef();
     const llmRunner = makeLlmRunner({
@@ -2276,24 +2426,107 @@ describe("importRecipeFromSource — native capture inputs", () => {
     });
   });
 
+  it("passes the native D1 binding to the shared atomic recipe graph", async () => {
+    const chef = await makeChef();
+    const llmRunner = makeLlmRunner({
+      title: "Native Binding Card",
+      ingredients: ["1 cup stock"],
+      steps: ["Warm gently."],
+    });
+    const statements: Array<{ sql: string; values: unknown[]; bind(...values: unknown[]): unknown }> = [];
+    const failure = new Error("native import batch sentinel");
+    const batch = vi.fn().mockRejectedValue(failure);
+    const nativeDatabase = {
+      prepare(sql: string) {
+        const statement = {
+          sql,
+          values: [] as unknown[],
+          bind(...values: unknown[]) {
+            statement.values = values;
+            return statement;
+          },
+        };
+        statements.push(statement);
+        return statement;
+      },
+      batch,
+    };
+
+    await expect(importRecipeFromSource({
+      chefId: chef.id,
+      source: {
+        type: "text",
+        text: "Native Binding Card\n1 cup stock\nWarm gently.",
+      },
+    }, baseDeps({ llmRunner, nativeDatabase }))).rejects.toBe(failure);
+
+    expect(batch).toHaveBeenCalledOnce();
+    expect(statements.map(({ sql }) => sql.replace(/\s+/g, " ").trim())).toEqual([
+      expect.stringMatching(/^INSERT INTO "Recipe"/),
+      expect.stringMatching(/^INSERT INTO "RecipeStep"/),
+      expect.stringMatching(/^INSERT INTO "Unit"/),
+      expect.stringMatching(/^INSERT INTO "IngredientRef"/),
+      expect.stringMatching(/^INSERT INTO "Ingredient"/),
+    ]);
+    await expect(db.recipe.findFirst({
+      where: { chefId: chef.id, title: "Native Binding Card" },
+    })).resolves.toBeNull();
+  });
+
   it("rolls back caller supplied recovery recipe ids when child rows fail", async () => {
     const chef = await makeChef();
     const llmRunner = makeLlmRunner({
       title: "Partial Native Card",
       ingredients: ["1 cup stock"],
-      steps: [],
+      steps: ["Warm gently."],
     });
     const recipeId = `recipe_partial_${faker.string.alphanumeric(8).toLowerCase()}`;
+    await db.$executeRawUnsafe(`
+      CREATE TRIGGER "Ingredient_import_recovery_abort"
+      BEFORE INSERT ON "Ingredient"
+      WHEN NEW."recipeId" = '${recipeId}'
+      BEGIN
+        SELECT RAISE(ABORT, 'import recovery ingredient failure');
+      END
+    `);
+
+    try {
+      await expect(importRecipeFromSource({
+        chefId: chef.id,
+        recipeId,
+        source: {
+          type: "text",
+          text: "Partial Native Card\n1 cup stock\nWarm gently.",
+        },
+      }, baseDeps({ llmRunner }))).rejects.toThrow("import recovery ingredient failure");
+    } finally {
+      await db.$executeRawUnsafe('DROP TRIGGER IF EXISTS "Ingredient_import_recovery_abort"');
+    }
+    await expect(db.recipe.findUnique({ where: { id: recipeId } })).resolves.toBeNull();
+    await expect(db.unit.count({ where: { name: "whole" } })).resolves.toBe(0);
+    await expect(db.ingredientRef.count({ where: { name: "1 cup stock" } })).resolves.toBe(0);
+  });
+
+  it("rejects oversized imported graphs before writing a partial recipe", async () => {
+    const chef = await makeChef();
+    const ingredients = Array.from({ length: 450 }, (_, index) => `ingredient ${index}`);
+    const llmRunner = makeLlmRunner({
+      title: "Oversized Imported Recipe",
+      ingredients,
+      steps: ["Combine everything."],
+    });
 
     await expect(importRecipeFromSource({
       chefId: chef.id,
-      recipeId,
-      source: {
-        type: "text",
-        text: "Partial Native Card\n1 cup stock",
-      },
-    }, baseDeps({ llmRunner }))).rejects.toBeTruthy();
-    await expect(db.recipe.findUnique({ where: { id: recipeId } })).resolves.toBeNull();
+      source: { type: "text", text: "Oversized Imported Recipe" },
+    }, baseDeps({ llmRunner }))).rejects.toMatchObject({
+      code: "no-content",
+      status: 422,
+      message: "Recipe contains too many steps or ingredients",
+    });
+    await expect(db.recipe.findFirst({
+      where: { chefId: chef.id, title: "Oversized Imported Recipe" },
+    })).resolves.toBeNull();
   });
 
   it("delegates native URL and video-url sources through the URL importer", async () => {

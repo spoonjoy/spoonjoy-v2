@@ -41,6 +41,7 @@ import {
   type SearchResult,
   type SearchScope,
 } from "~/lib/search.server";
+import { applyRecipeScale, parseRestRecipeScale, RecipeScaleError } from "~/lib/recipe-scale";
 import {
   createNativeRecipe,
   deleteNativeRecipe,
@@ -52,6 +53,7 @@ import {
   updateNativeRecipe,
   type ApiV1RecipeWriteResult,
 } from "~/lib/api-v1-recipe-writes.server";
+import { asCompatibleRecipeTagD1Database } from "~/lib/recipe-tags.server";
 import {
   createNativeRecipeStep,
   createNativeRecipeStepIngredient,
@@ -104,17 +106,21 @@ import {
 import {
   asCompatibleD1Database,
   coalesceShoppingRecipeIngredients,
-  createCompatibleShoppingListD1Batch,
-  findCompatibleShoppingListItem,
-  mutateCompatibleShoppingListItem,
-  runCompatibleShoppingListBatch,
-  type ShoppingListItemWritePlan,
+  mutateAtomicShoppingListItem,
+  runAtomicShoppingListBatch,
 } from "~/lib/shopping-list-mutations.server";
 import {
   isSavedRecipeCutoverPendingError,
   PRODUCT_ACTIVATION_PENDING_CODE,
   PRODUCT_ACTIVATION_PENDING_MESSAGE,
 } from "~/lib/saved-recipe-cutover.server";
+import {
+  listSavedRecipes,
+  saveRecipe,
+  SavedRecipeNotFoundError,
+  SavedRecipeValidationError,
+  unsaveRecipe,
+} from "~/lib/saved-recipes.server";
 import {
   deleteStoredImageWithCapture,
   hasUploadedImageFile,
@@ -283,6 +289,7 @@ function apiV1PrivateHeaders(requestId: string): Headers {
   const headers = apiV1Headers(requestId);
   headers.set("Cache-Control", "private, no-store");
   headers.set("Pragma", "no-cache");
+  headers.set("Vary", "Authorization, Cookie");
   return headers;
 }
 
@@ -593,6 +600,12 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "cookbooks.recipes.add";
     case "DELETE cookbook-recipes":
       return "cookbooks.recipes.remove";
+    case "GET saved-recipes":
+      return "saved-recipes.list";
+    case "PUT saved-recipe":
+      return "saved-recipes.save";
+    case "DELETE saved-recipe":
+      return "saved-recipes.unsave";
     case "GET me":
       return "account.read";
     case "PATCH me":
@@ -671,6 +684,8 @@ function defaultIdempotencyOutcome(operation: string | undefined, errorCode: Api
     !operation.startsWith("recipes.spoons.") &&
     !operation.startsWith("recipes.covers.") &&
     !operation.startsWith("cookbooks.") &&
+    operation !== "saved-recipes.save" &&
+    operation !== "saved-recipes.unsave" &&
     !isIdempotentAccountOperation(operation)
   ) {
     return undefined;
@@ -1243,6 +1258,17 @@ type RecipeSummaryRow = {
   coverVariant: RecipeCoverVariant | null;
 };
 
+type RecipeReadTagRow = {
+  id: string;
+  label: string;
+  normalizedLabel: string;
+};
+
+type RecipeReadMetadataRow = {
+  course: string | null;
+  tags: RecipeReadTagRow[];
+};
+
 type RecipeCoverFieldsInput = {
   id: string;
   title: string;
@@ -1298,6 +1324,24 @@ function recipeSummary(recipe: RecipeSummaryRow, origin: string) {
   };
 }
 
+function recipeReadMetadata(recipe: RecipeReadMetadataRow) {
+  const tagBySortKey = new Map(recipe.tags.map((tag) => [
+    `${tag.normalizedLabel}\u0000${tag.id}`,
+    tag,
+  ]));
+  return {
+    course: recipe.course,
+    tags: [...tagBySortKey.keys()].sort().map((sortKey) => tagBySortKey.get(sortKey)!.label),
+  };
+}
+
+function recipeReadSummary(recipe: RecipeSummaryRow & RecipeReadMetadataRow, origin: string) {
+  return {
+    ...recipeSummary(recipe, origin),
+    ...recipeReadMetadata(recipe),
+  };
+}
+
 function recipeDetail(recipe: RecipeRow, origin: string) {
   return {
     ...recipeSummary({ ...recipe, ...recipeCoverApiFields(recipe, origin) }, origin),
@@ -1335,6 +1379,13 @@ function recipeDetail(recipe: RecipeRow, origin: string) {
       href: `/cookbooks/${entry.cookbook.id}`,
       canonicalUrl: canonicalUrl(origin, `/cookbooks/${entry.cookbook.id}`),
     })),
+  };
+}
+
+function recipeReadDetail(recipe: RecipeReadRow, origin: string) {
+  return {
+    ...recipeDetail(recipe, origin),
+    ...recipeReadMetadata(recipe),
   };
 }
 
@@ -1643,64 +1694,109 @@ async function queueApiRecipePlaceholderGeneration(
   });
 }
 
+const RECIPE_READ_SUMMARY_SELECT = {
+  id: true,
+  title: true,
+  description: true,
+  servings: true,
+  course: true,
+  sourceUrl: true,
+  activeCoverId: true,
+  activeCoverVariant: true,
+  coverMode: true,
+  createdAt: true,
+  updatedAt: true,
+  chef: { select: { id: true, username: true } },
+  sourceRecipe: {
+    select: {
+      id: true,
+      title: true,
+      deletedAt: true,
+      chef: { select: { id: true, username: true } },
+    },
+  },
+  activeCover: { select: RECIPE_COVER_DISPLAY_SELECT },
+  tags: {
+    select: { id: true, label: true, normalizedLabel: true },
+  },
+} satisfies Prisma.RecipeSelect;
+
+const RECIPE_DETAIL_SELECT = {
+  id: true,
+  title: true,
+  description: true,
+  servings: true,
+  sourceUrl: true,
+  activeCoverId: true,
+  activeCoverVariant: true,
+  coverMode: true,
+  createdAt: true,
+  updatedAt: true,
+  chef: { select: { id: true, username: true } },
+  sourceRecipe: {
+    select: {
+      id: true,
+      title: true,
+      deletedAt: true,
+      chef: { select: { id: true, username: true } },
+    },
+  },
+  activeCover: { select: RECIPE_COVER_DISPLAY_SELECT },
+  steps: {
+    select: {
+      id: true,
+      stepNum: true,
+      stepTitle: true,
+      description: true,
+      duration: true,
+      ingredients: {
+        select: {
+          id: true,
+          quantity: true,
+          ingredientRef: { select: { name: true } },
+          unit: { select: { name: true } },
+        },
+      },
+      usingSteps: {
+        select: {
+          id: true,
+          inputStepNum: true,
+          outputStepNum: true,
+          outputOfStep: { select: { stepNum: true, stepTitle: true } },
+        },
+        orderBy: { outputStepNum: "asc" },
+      },
+    },
+  },
+  cookbooks: {
+    select: { cookbook: { select: { id: true, title: true } } },
+    orderBy: { createdAt: "asc" },
+  },
+} satisfies Prisma.RecipeSelect;
+
+const RECIPE_READ_DETAIL_SELECT = {
+  ...RECIPE_DETAIL_SELECT,
+  course: true,
+  tags: {
+    select: { id: true, label: true, normalizedLabel: true },
+  },
+} satisfies Prisma.RecipeSelect;
+
 type RecipeRow = NonNullable<Awaited<ReturnType<typeof loadRecipeById>>>;
+type RecipeReadRow = NonNullable<Awaited<ReturnType<typeof loadRecipeReadById>>>;
 type CookbookRow = NonNullable<Awaited<ReturnType<typeof loadCookbookById>>>;
 
 async function loadRecipeById(db: Awaited<ReturnType<typeof getRequestDb>>, id: string) {
   return db.recipe.findFirst({
     where: { id, deletedAt: null },
-    select: {
-      id: true,
-      title: true,
-      description: true,
-      servings: true,
-      sourceUrl: true,
-      activeCoverId: true,
-      activeCoverVariant: true,
-      coverMode: true,
-      createdAt: true,
-      updatedAt: true,
-      chef: { select: { id: true, username: true } },
-      sourceRecipe: {
-        select: {
-          id: true,
-          title: true,
-          deletedAt: true,
-          chef: { select: { id: true, username: true } },
-        },
-      },
-      activeCover: { select: RECIPE_COVER_DISPLAY_SELECT },
-      steps: {
-        select: {
-          id: true,
-          stepNum: true,
-          stepTitle: true,
-          description: true,
-          duration: true,
-          ingredients: {
-            select: {
-              id: true,
-              quantity: true,
-              ingredientRef: { select: { name: true } },
-              unit: { select: { name: true } },
-            },
-          },
-          usingSteps: {
-            select: {
-              id: true,
-              inputStepNum: true,
-              outputStepNum: true,
-              outputOfStep: { select: { stepNum: true, stepTitle: true } },
-            },
-            orderBy: { outputStepNum: "asc" },
-          },
-        },
-      },
-      cookbooks: {
-        select: { cookbook: { select: { id: true, title: true } } },
-        orderBy: { createdAt: "asc" },
-      },
-    },
+    select: RECIPE_DETAIL_SELECT,
+  });
+}
+
+async function loadRecipeReadById(db: Awaited<ReturnType<typeof getRequestDb>>, id: string) {
+  return db.recipe.findFirst({
+    where: { id, deletedAt: null },
+    select: RECIPE_READ_DETAIL_SELECT,
   });
 }
 
@@ -1725,28 +1821,7 @@ async function handleRecipeList(args: ApiV1RouteArgs, requestId: string, princip
       deletedAt: null,
       AND: [cursorWhere, queryWhere],
     },
-    select: {
-      id: true,
-      title: true,
-      description: true,
-      servings: true,
-      sourceUrl: true,
-      activeCoverId: true,
-      activeCoverVariant: true,
-      coverMode: true,
-      createdAt: true,
-      updatedAt: true,
-      chef: { select: { id: true, username: true } },
-      sourceRecipe: {
-        select: {
-          id: true,
-          title: true,
-          deletedAt: true,
-          chef: { select: { id: true, username: true } },
-        },
-      },
-      activeCover: { select: RECIPE_COVER_DISPLAY_SELECT },
-    },
+    select: RECIPE_READ_SUMMARY_SELECT,
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     take: limit + 1,
   });
@@ -1760,19 +1835,39 @@ async function handleRecipeList(args: ApiV1RouteArgs, requestId: string, princip
     cursor: cursor?.raw ?? null,
     nextCursor,
     hasMore,
-    recipes: page.map((recipe) => recipeSummary({ ...recipe, ...recipeCoverApiFields(recipe, origin) }, origin)),
+    recipes: page.map((recipe) => recipeReadSummary({ ...recipe, ...recipeCoverApiFields(recipe, origin) }, origin)),
   }, 200, principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders());
 }
 
 async function handleRecipeDetail(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal | null, id: string) {
   const db = await getRequestDb(args.context);
+  const url = new URL(args.request.url);
   const origin = publicContentOrigin(args);
-  const recipe = await loadRecipeById(db, id);
+  let scale: number | undefined;
+  try {
+    scale = parseRestRecipeScale(url.searchParams);
+  } catch (error) {
+    if (error instanceof RecipeScaleError) {
+      throw new ApiV1Error("validation_error", error.message, { field: "scale" });
+    }
+    throw error;
+  }
+  const recipe = await loadRecipeReadById(db, id);
   if (!recipe) {
     throw new ApiV1Error("not_found", "Recipe not found");
   }
 
-  return apiV1Success(requestId, { recipe: recipeDetail(recipe, origin) }, 200, principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders());
+  const formattedRecipe = recipeReadDetail(recipe, origin);
+  let scaledRecipe;
+  try {
+    scaledRecipe = applyRecipeScale(formattedRecipe, scale);
+  } catch (error) {
+    if (error instanceof RecipeScaleError) {
+      throw new ApiV1Error("validation_error", error.message, { field: "scale" });
+    }
+    throw error;
+  }
+  return apiV1Success(requestId, { recipe: scaledRecipe }, 200, principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders());
 }
 
 function objectBody(value: unknown, field: string): Record<string, unknown> {
@@ -1780,6 +1875,214 @@ function objectBody(value: unknown, field: string): Record<string, unknown> {
     throw new ApiV1Error("validation_error", `${field} must be an object`);
   }
   return value as Record<string, unknown>;
+}
+
+function savedRecipeApiError(error: unknown): ApiV1Error | null {
+  if (error instanceof SavedRecipeValidationError) {
+    return new ApiV1Error("validation_error", error.message, { field: error.field });
+  }
+  if (error instanceof SavedRecipeNotFoundError) {
+    return new ApiV1Error("not_found", error.message, {
+      resource: "recipe",
+      recipeId: error.recipeId,
+    });
+  }
+  return null;
+}
+
+function parseSavedRecipeLimit(url: URL): number | undefined {
+  const raw = url.searchParams.get("limit");
+  if (raw === null || raw.trim() === "") return undefined;
+  const limit = Number(raw);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 24) {
+    throw new ApiV1Error("validation_error", "limit must be an integer between 1 and 24", {
+      field: "limit",
+    });
+  }
+  return limit;
+}
+
+async function handleSavedRecipeList(
+  args: ApiV1RouteArgs,
+  requestId: string,
+  principal: ApiPrincipal,
+) {
+  const db = await getRequestDb(args.context);
+  const url = new URL(args.request.url);
+  const origin = publicContentOrigin(args);
+  let page: Awaited<ReturnType<typeof listSavedRecipes>>;
+  try {
+    page = await listSavedRecipes(db, {
+      userId: principal.id,
+      query: url.searchParams.get("q"),
+      limit: parseSavedRecipeLimit(url),
+      cursor: url.searchParams.get("cursor"),
+    });
+  } catch (error) {
+    throw savedRecipeApiError(error) ?? error;
+  }
+
+  const recipes = await db.recipe.findMany({
+    where: {
+      id: { in: page.items.map((item) => item.recipeId) },
+      deletedAt: null,
+    },
+    select: RECIPE_READ_SUMMARY_SELECT,
+  });
+  const recipeById = new Map(recipes.map((recipe) => [recipe.id, recipe]));
+  const savedRecipes = page.items.flatMap((item) => {
+    const recipe = recipeById.get(item.recipeId);
+    return recipe
+      ? [{
+          ...recipeReadSummary({ ...recipe, ...recipeCoverApiFields(recipe, origin) }, origin),
+          savedAt: item.savedAt,
+        }]
+      : [];
+  });
+
+  return apiV1PrivateSuccess(requestId, {
+    recipes: savedRecipes,
+    nextCursor: page.nextCursor,
+  });
+}
+
+async function savedRecipeState(
+  db: ApiV1WriteDb,
+  userId: string,
+  recipeId: string,
+) {
+  return db.savedRecipe.findUnique({
+    where: { userId_recipeId: { userId, recipeId } },
+    select: { savedAt: true },
+  });
+}
+
+async function activeSavedRecipeState(
+  db: ApiV1WriteDb,
+  userId: string,
+  recipeId: string,
+) {
+  return db.savedRecipe.findFirst({
+    where: { userId, recipeId, recipe: { deletedAt: null } },
+    select: { savedAt: true },
+  });
+}
+
+async function recoverSavedRecipeSave(
+  db: ApiV1WriteDb,
+  input: { clientMutationId: string; recipeId: string; userId: string },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const saved = await savedRecipeState(db, input.userId, input.recipeId);
+  if (!saved) return null;
+  return {
+    status: 200,
+    data: {
+      saved: true,
+      recipeId: input.recipeId,
+      savedAt: saved.savedAt,
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function recoverSavedRecipeUnsave(
+  db: ApiV1WriteDb,
+  input: { clientMutationId: string; recipeId: string; userId: string },
+): Promise<ApiV1IdempotentMutationResult | null> {
+  const saved = await savedRecipeState(db, input.userId, input.recipeId);
+  if (saved) return null;
+  return {
+    status: 200,
+    data: {
+      saved: false,
+      recipeId: input.recipeId,
+      mutation: { clientMutationId: input.clientMutationId, replayed: false },
+    },
+  };
+}
+
+async function handleSavedRecipeSave(
+  args: ApiV1RouteArgs,
+  requestId: string,
+  principal: ApiPrincipal,
+  recipeId: string,
+) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId"]);
+  const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
+  const recoveryInput = { clientMutationId, recipeId, userId: principal.id };
+
+  return runIdempotentApiV1Mutation(
+    args,
+    requestId,
+    principal,
+    body,
+    clientMutationId,
+    "saved-recipes.save",
+    async (db) => {
+      let saved: Awaited<ReturnType<typeof saveRecipe>>;
+      try {
+        saved = await saveRecipe(db, {
+          userId: principal.id,
+          recipeId,
+          nowMs: Date.now(),
+        });
+      } catch (error) {
+        throw savedRecipeApiError(error) ?? error;
+      }
+      return {
+        status: 200,
+        data: {
+          saved: true,
+          recipeId: saved.recipeId,
+          savedAt: saved.savedAt,
+          mutation: { clientMutationId, replayed: false },
+        },
+      };
+    },
+    {
+      deleteReservationOnWriteError: false,
+      hasRecoverableWrite: async (db) => Boolean(await activeSavedRecipeState(db, principal.id, recipeId)),
+      recoverInFlight: async (db) => recoverSavedRecipeSave(db, recoveryInput),
+    },
+  );
+}
+
+async function handleSavedRecipeUnsave(
+  args: ApiV1RouteArgs,
+  requestId: string,
+  principal: ApiPrincipal,
+  recipeId: string,
+) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["clientMutationId"]);
+  const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
+  const recoveryInput = { clientMutationId, recipeId, userId: principal.id };
+
+  return runIdempotentApiV1Mutation(
+    args,
+    requestId,
+    principal,
+    body,
+    clientMutationId,
+    "saved-recipes.unsave",
+    async (db) => {
+      await unsaveRecipe(db, { userId: principal.id, recipeId });
+      return {
+        status: 200,
+        data: {
+          saved: false,
+          recipeId,
+          mutation: { clientMutationId, replayed: false },
+        },
+      };
+    },
+    {
+      deleteReservationOnWriteError: false,
+      hasRecoverableWrite: async (db) => !(await savedRecipeState(db, principal.id, recipeId)),
+      recoverInFlight: async (db) => recoverSavedRecipeUnsave(db, recoveryInput),
+    },
+  );
 }
 
 function importText(value: unknown, field: string): string {
@@ -1962,6 +2265,7 @@ async function handleRecipeImport(args: ApiV1RouteArgs, requestId: string, princ
       const deps: ImportRecipeDeps = {
         db,
         env,
+        nativeDatabase: asCompatibleRecipeTagD1Database(rawEnv.DB),
         bucket: (rawEnv as { PHOTOS?: R2Bucket }).PHOTOS,
         waitUntil: apiV1WaitUntilFor(args),
         imageGenRunner: (args.context as { imageGenRunner?: ImportRecipeDeps["imageGenRunner"] }).imageGenRunner,
@@ -3918,10 +4222,19 @@ async function completeRecoveredIdempotencyKey(
   requestId: string,
   result: ApiV1IdempotentMutationResult,
 ) {
-  await completeIdempotencyKey(db, reservation.id, {
+  const completion = {
     status: result.status,
     body: idempotentMutationBody(requestId, result.data),
-  });
+  };
+  try {
+    await completeIdempotencyKey(db, reservation.id, completion);
+  } catch {
+    try {
+      await completeIdempotencyKey(db, reservation.id, completion);
+    } catch {
+      // The domain result is authoritative; leave the reservation recoverable for a later retry.
+    }
+  }
 }
 
 function normalizeApiV1IdempotentMutationOptions(
@@ -4047,46 +4360,27 @@ async function handleShoppingItemCreate(args: ApiV1RouteArgs, requestId: string,
     const list = await loadShoppingListForUser(db, principal.id);
     const ingredientRef = await getOrCreateApiV1IngredientRef(db, name);
     const unit = unitName ? await getOrCreateApiV1Unit(db, unitName) : null;
-    const identity = {
-      shoppingListId: list.id,
-      ingredientRefId: ingredientRef.id,
-      unitId: unit?.id ?? null,
-    };
-    const result = await mutateCompatibleShoppingListItem({
+    const result = await mutateAtomicShoppingListItem({
       database: db,
-      identity,
-      update: async (existing) => db.shoppingListItem.update({
-        where: { id: existing.id },
-        data: {
-          quantity: quantity === null ? existing.quantity : (existing.quantity ?? 0) + quantity,
-          checked: false,
-          checkedAt: null,
-          deletedAt: null,
-          sortIndex: existing.checked || existing.checkedAt || existing.deletedAt
-            ? await nextShoppingSortIndex(db, list.id)
-            : existing.sortIndex,
-          categoryKey: categoryKey ?? existing.categoryKey,
-          iconKey: iconKey ?? existing.iconKey,
-        },
-        include: { unit: true, ingredientRef: true },
-      }),
-      create: async () => db.shoppingListItem.create({
-        data: {
-          ...identity,
-          quantity,
-          sortIndex: await nextShoppingSortIndex(db, list.id),
-          categoryKey,
-          iconKey,
-        },
-        include: { unit: true, ingredientRef: true },
-      }),
+      nativeDatabase: asCompatibleD1Database(apiV1CloudflareFor(args)?.env?.DB),
+      mutation: {
+        id: crypto.randomUUID(),
+        shoppingListId: list.id,
+        ingredientRefId: ingredientRef.id,
+        unitId: unit?.id ?? null,
+        quantity,
+        categoryKey,
+        iconKey,
+        boundNowMs: Date.now(),
+      },
     });
+    const item: ShoppingItemRow = { ...result.item, ingredientRef, unit };
     return {
       status: result.created ? 201 : 200,
       data: {
         created: result.created,
         updated: !result.created,
-        item: shoppingItem(result.item),
+        item: shoppingItem(item),
         mutation: { clientMutationId, replayed: false },
       },
     };
@@ -4221,128 +4515,35 @@ async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: stri
       ]),
     );
 
-    const batch = await runCompatibleShoppingListBatch(db, async () => {
-      const existingRows = [];
-      for (const requested of requestedRows) {
-        existingRows.push(await findCompatibleShoppingListItem(db, {
-          shoppingListId: list.id,
-          ingredientRefId: requested.ingredientRefId,
-          unitId: requested.unitId,
-        }));
-      }
-
-      let nextSortIndexValue = await nextShoppingSortIndex(db, list.id);
-      let created = 0;
-      let updated = 0;
-      const operations: Prisma.PrismaPromise<ShoppingItemRow>[] = [];
-      const writePlans: ShoppingListItemWritePlan[] = [];
-
-      for (const [index, requested] of requestedRows.entries()) {
-        const existing = existingRows[index];
-        if (existing) {
-          const sortIndex = existing.deletedAt || existing.checkedAt || existing.checked
-            ? nextSortIndexValue++
-            : existing.sortIndex;
-          const quantity = (existing.quantity ?? 0) + requested.quantity;
-          const categoryKey = existing.categoryKey ?? requested.categoryKey;
-          const iconKey = existing.iconKey ?? requested.iconKey;
-          operations.push(db.shoppingListItem.update({
-            where: { id: existing.id },
-            data: {
-              quantity,
-              checked: false,
-              checkedAt: null,
-              deletedAt: null,
-              sortIndex,
-              categoryKey,
-              iconKey,
-            },
-            include: { unit: true, ingredientRef: true },
-          }));
-          writePlans.push({
-            mode: "update",
-            id: existing.id,
-            shoppingListId: list.id,
-            ingredientRefId: requested.ingredientRefId,
-            unitId: requested.unitId,
-            quantity,
-            checked: false,
-            checkedAt: null,
-            deletedAt: null,
-            sortIndex,
-            categoryKey,
-            iconKey,
-            updatedAt: new Date(),
-          });
-          updated += 1;
-        } else {
-          const id = crypto.randomUUID();
-          const sortIndex = nextSortIndexValue++;
-          operations.push(db.shoppingListItem.create({
-            data: {
-              id,
-              shoppingListId: list.id,
-              quantity: requested.quantity,
-              unitId: requested.unitId,
-              ingredientRefId: requested.ingredientRefId,
-              sortIndex,
-              categoryKey: requested.categoryKey,
-              iconKey: requested.iconKey,
-            },
-            include: { unit: true, ingredientRef: true },
-          }));
-          writePlans.push({
-            mode: "create",
-            id,
-            shoppingListId: list.id,
-            ingredientRefId: requested.ingredientRefId,
-            unitId: requested.unitId,
-            quantity: requested.quantity,
-            checked: false,
-            checkedAt: null,
-            deletedAt: null,
-            sortIndex,
-            categoryKey: requested.categoryKey,
-            iconKey: requested.iconKey,
-            updatedAt: new Date(),
-          });
-          created += 1;
-        }
-      }
-
-      const plannedItems = writePlans.map((plan) => ({
-        id: plan.id,
-        shoppingListId: plan.shoppingListId,
-        ingredientRefId: plan.ingredientRefId,
-        unitId: plan.unitId,
-        quantity: plan.quantity,
-        checked: plan.checked,
-        checkedAt: plan.checkedAt,
-        deletedAt: plan.deletedAt,
-        sortIndex: plan.sortIndex,
-        categoryKey: plan.categoryKey,
-        iconKey: plan.iconKey,
-        updatedAt: plan.updatedAt,
-        ...relationsByIdentity.get(JSON.stringify([
-          plan.ingredientRefId,
-          plan.unitId,
-        ]))!,
-      }));
-
-      return {
-        operations,
-        metadata: { created, updated },
-        native: createCompatibleShoppingListD1Batch(nativeD1, writePlans, plannedItems),
-      };
+    const boundNowMs = Date.now();
+    const batch = await runAtomicShoppingListBatch({
+      database: db,
+      nativeDatabase: nativeD1,
+      mutations: requestedRows.map((requested) => ({
+        id: crypto.randomUUID(),
+        shoppingListId: list.id,
+        ingredientRefId: requested.ingredientRefId,
+        unitId: requested.unitId,
+        quantity: requested.quantity,
+        categoryKey: requested.categoryKey,
+        iconKey: requested.iconKey,
+        boundNowMs,
+      })),
     });
 
     return {
       status: 200,
       data: {
         recipe: { id: recipe.id, title: recipe.title },
-        created: batch.metadata.created,
-        updated: batch.metadata.updated,
-        items: batch.items.map(shoppingItem),
+        created: batch.created,
+        updated: batch.updated,
+        items: batch.items.map(({ item }) => shoppingItem({
+          ...item,
+          ...relationsByIdentity.get(JSON.stringify([
+            item.ingredientRefId,
+            item.unitId,
+          ]))!,
+        })),
         mutation: { clientMutationId, replayed: false },
       },
     };
@@ -5564,7 +5765,10 @@ async function handleRecipeCreate(args: ApiV1RouteArgs, requestId: string, princ
   const origin = publicContentOrigin(args);
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.create", async (db, reservation) => {
-    const created = recipeWriteResultOrThrow(await createNativeRecipe(db, principal.id, parsed.data, { recipeId: reservation.id }));
+    const created = recipeWriteResultOrThrow(await createNativeRecipe(db, principal.id, parsed.data, {
+      nativeDatabase: asCompatibleRecipeTagD1Database(args.context.cloudflare?.env?.DB),
+      recipeId: reservation.id,
+    }));
     const recipe = await serializedRecipeOrThrow(db, created.data.recipeId, origin);
     return {
       status: created.status,
@@ -5591,7 +5795,13 @@ async function handleRecipeUpdate(args: ApiV1RouteArgs, requestId: string, princ
   const updated = Object.keys(parsed.data.fields).length > 0;
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.update", async (db) => {
-    const updated = recipeWriteResultOrThrow(await updateNativeRecipe(db, principal.id, recipeId, parsed.data));
+    const updated = recipeWriteResultOrThrow(await updateNativeRecipe(
+      db,
+      principal.id,
+      recipeId,
+      parsed.data,
+      { nativeDatabase: asCompatibleRecipeTagD1Database(args.context.cloudflare?.env?.DB) },
+    ));
     const recipe = await serializedRecipeOrThrow(db, updated.data.recipeId, origin);
     return {
       status: updated.status,
@@ -6887,6 +7097,24 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "DELETE" && segments[0] === "cookbooks" && segments[2] === "recipes" && segments.length === 4) {
       const principal = await authorize(path) as ApiPrincipal;
       const response = await handleCookbookRecipeRemove(args, requestId, principal, segments[1], segments[3]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && path === "saved-recipes") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleSavedRecipeList(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "PUT" && segments[0] === "saved-recipes" && segments.length === 2) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleSavedRecipeSave(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "saved-recipes" && segments.length === 2) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleSavedRecipeUnsave(args, requestId, principal, segments[1]);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 

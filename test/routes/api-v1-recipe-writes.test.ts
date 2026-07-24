@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { Request as UndiciRequest } from "undici";
 import { action } from "~/routes/api.v1.$";
@@ -12,6 +12,8 @@ import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "~/lib/recipe-title-uniquenes
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
+import * as routePlatformModule from "~/lib/route-platform.server";
+import { expectConsoleError } from "../warning-policy";
 
 type LocalDb = Awaited<ReturnType<typeof getLocalDb>>;
 type MutationMethod = "POST" | "PATCH" | "DELETE";
@@ -28,6 +30,32 @@ function routeArgs(request: Request, splat: string, context: Record<string, unkn
     params: { "*": splat },
     context: { cloudflare: { env: null, ...context } },
   } as never;
+}
+
+function throwingNativeDatabase(message: string) {
+  const statements: Array<{ sql: string; values: unknown[]; bind(...values: unknown[]): unknown }> = [];
+  const error = new Error(message);
+  const batch = vi.fn().mockRejectedValue(error);
+  return {
+    batch,
+    error,
+    statements,
+    database: {
+      prepare(sql: string) {
+        const statement = {
+          sql,
+          values: [] as unknown[],
+          bind(...values: unknown[]) {
+            statement.values = values;
+            return statement;
+          },
+        };
+        statements.push(statement);
+        return statement;
+      },
+      batch,
+    },
+  };
 }
 
 function mutationRequest(
@@ -192,6 +220,14 @@ async function createRecipeGraph(
       servings: options.servings ?? "4",
       deletedAt: options.deletedAt ?? null,
       sourceUrl: options.sourceUrl ?? null,
+      course: "main",
+    },
+  });
+  await db.recipeTag.create({
+    data: {
+      recipeId: recipe.id,
+      label: "Mutation Boundary",
+      normalizedLabel: "mutation boundary",
     },
   });
   const firstStep = await db.recipeStep.create({
@@ -370,6 +406,93 @@ describe("API v1 recipe write mutations", () => {
     expect(replay.status).toBe(201);
     expectPrivateEnvelopeHeaders(replay, "req_recipe_create_replay");
     expect(replayPayload).toEqual(expectedReplay);
+  });
+
+  it("passes the request D1 binding through REST create and update adapters", async () => {
+    const fixture = await createRecipeWriteFixture(db);
+    const requestDb = vi.spyOn(routePlatformModule, "getRequestDb").mockResolvedValue(db);
+    const createNative = throwingNativeDatabase("REST create native binding sentinel");
+    try {
+      expectConsoleError("[api-v1] internal_error", {
+        requestId: "req_recipe_create_native_binding",
+        method: "POST",
+        path: "/api/v1/recipes",
+        error: {
+          name: createNative.error.name,
+          message: createNative.error.message,
+          stack: createNative.error.stack,
+        },
+      });
+      const create = await action(routeArgs(
+        mutationRequest("POST", "recipes", fixture.writer.token, "req_recipe_create_native_binding", {
+          clientMutationId: "recipe-create-native-binding",
+          title: "REST Native Binding Create",
+        }),
+        "recipes",
+        { env: { DB: createNative.database } },
+      ));
+      expect(create.status).toBe(500);
+      expectErrorEnvelope(
+        await readJson(create),
+        "req_recipe_create_native_binding",
+        "internal_error",
+        500,
+      );
+      expect(createNative.batch).toHaveBeenCalledOnce();
+      expect(createNative.statements[0].sql).toMatch(/INSERT INTO "Recipe"/);
+      await expect(db.recipe.findFirst({
+        where: { chefId: fixture.chef.id, title: "REST Native Binding Create" },
+      })).resolves.toBeNull();
+
+      const recipe = await createRecipeGraph(db, fixture.chef.id, {
+        title: "REST Native Binding Update Source",
+      });
+      const updateNative = throwingNativeDatabase("REST update native binding sentinel");
+      expectConsoleError("[api-v1] internal_error", {
+        requestId: "req_recipe_update_native_binding",
+        method: "PATCH",
+        path: `/api/v1/recipes/${recipe.id}`,
+        error: {
+          name: updateNative.error.name,
+          message: updateNative.error.message,
+          stack: updateNative.error.stack,
+        },
+      });
+      const update = await action(routeArgs(
+        mutationRequest(
+          "PATCH",
+          `recipes/${recipe.id}`,
+          fixture.writer.token,
+          "req_recipe_update_native_binding",
+          {
+            clientMutationId: "recipe-update-native-binding",
+            description: "Must use request binding",
+          },
+        ),
+        `recipes/${recipe.id}`,
+        { env: { DB: updateNative.database } },
+      ));
+      expect(update.status).toBe(500);
+      expectErrorEnvelope(
+        await readJson(update),
+        "req_recipe_update_native_binding",
+        "internal_error",
+        500,
+      );
+      expect(updateNative.batch).toHaveBeenCalledOnce();
+      expect(updateNative.statements.map(({ sql }) => sql)).toEqual([
+        expect.stringMatching(/UPDATE "Recipe"/),
+        expect.stringMatching(/UPDATE "Cookbook"/),
+      ]);
+      expect(updateNative.statements[0].sql).toMatch(/"description" = \?/);
+      expect(updateNative.statements[0].sql).not.toMatch(/"title" = \?|"servings" = \?/);
+      await expect(db.recipe.findUniqueOrThrow({ where: { id: recipe.id } })).resolves.toMatchObject({
+        title: "REST Native Binding Update Source",
+        description: "Existing recipe for API mutation tests",
+      });
+    } finally {
+      requestDb.mockRestore();
+    }
   });
 
   it("updates owned recipe metadata and rejects duplicate or cross-owner updates", async () => {
@@ -730,7 +853,14 @@ describe("API v1 recipe write mutations", () => {
       userId: fixture.chef.id,
     });
     await db.recipe.create({
-      data: { id: createReservation.id, chefId: fixture.chef.id, title: createBody.title },
+      data: { id: createReservation.id, chefId: fixture.chef.id, title: createBody.title, course: "side" },
+    });
+    await db.recipeTag.create({
+      data: {
+        recipeId: createReservation.id,
+        label: "Recovered Create",
+        normalizedLabel: "recovered create",
+      },
     });
     const recoveredCreate = await action(routeArgs(
       mutationRequest("POST", "recipes", fixture.writer.token, "req_recover_route_create", createBody),
@@ -738,6 +868,10 @@ describe("API v1 recipe write mutations", () => {
     ));
     const createPayload = await readJson(recoveredCreate);
     expect(recoveredCreate.status).toBe(201);
+    expectSuccessEnvelope(createPayload, "req_recover_route_create");
+    expectExactKeys(createPayload.data, ["created", "mutation", "recipe"]);
+    expectRecipeDetailShape(createPayload.data.recipe);
+    expectMutationShape(createPayload.data.mutation, createBody.clientMutationId, true);
     expect(createPayload.data).toMatchObject({
       created: true,
       recipe: { id: createReservation.id, title: createBody.title },
@@ -769,6 +903,10 @@ describe("API v1 recipe write mutations", () => {
     ));
     const updatePayload = await readJson(recoveredUpdate);
     expect(recoveredUpdate.status).toBe(200);
+    expectSuccessEnvelope(updatePayload, "req_recover_route_update");
+    expectExactKeys(updatePayload.data, ["mutation", "recipe", "updated"]);
+    expectRecipeDetailShape(updatePayload.data.recipe);
+    expectMutationShape(updatePayload.data.mutation, updateBody.clientMutationId, true);
     expect(updatePayload.data).toMatchObject({
       updated: true,
       recipe: { id: updateRecipe.id, title: updateBody.title, description: null, servings: "8" },
@@ -878,6 +1016,10 @@ describe("API v1 recipe write mutations", () => {
     ));
     const deletePayload = await readJson(recoveredDelete);
     expect(recoveredDelete.status).toBe(200);
+    expectSuccessEnvelope(deletePayload, "req_recover_route_delete");
+    expectExactKeys(deletePayload.data, ["deleted", "mutation", "recipe"]);
+    expectExactKeys(deletePayload.data.recipe, ["deletedAt", "id", "updatedAt"]);
+    expectMutationShape(deletePayload.data.mutation, deleteBody.clientMutationId, true);
     expect(deletePayload.data).toMatchObject({
       deleted: true,
       recipe: { id: deleteRecipe.id, deletedAt: expect.any(String), updatedAt: expect.any(String) },
@@ -900,6 +1042,14 @@ describe("API v1 recipe write mutations", () => {
         chefId: fixture.chef.id,
         sourceRecipeId: source.id,
         title: forkBody.title,
+        course: "dessert",
+      },
+    });
+    await db.recipeTag.create({
+      data: {
+        recipeId: forkReservation.id,
+        label: "Recovered Fork",
+        normalizedLabel: "recovered fork",
       },
     });
     const recoveredFork = await action(routeArgs(
@@ -908,6 +1058,10 @@ describe("API v1 recipe write mutations", () => {
     ));
     const forkPayload = await readJson(recoveredFork);
     expect(recoveredFork.status).toBe(201);
+    expectSuccessEnvelope(forkPayload, "req_recover_route_fork");
+    expectExactKeys(forkPayload.data, ["fork", "mutation", "recipe"]);
+    expectRecipeDetailShape(forkPayload.data.recipe);
+    expectMutationShape(forkPayload.data.mutation, forkBody.clientMutationId, true);
     expect(forkPayload.data).toMatchObject({
       fork: {
         appliedTitle: forkBody.title,
@@ -934,6 +1088,14 @@ describe("API v1 recipe write mutations", () => {
         chefId: fixture.chef.id,
         sourceRecipeId: source.id,
         title: source.title,
+        course: "appetizer",
+      },
+    });
+    await db.recipeTag.create({
+      data: {
+        recipeId: sourceTitleForkReservation.id,
+        label: "Recovered Source Title Fork",
+        normalizedLabel: "recovered source title fork",
       },
     });
     const recoveredSourceTitleFork = await action(routeArgs(
@@ -948,6 +1110,10 @@ describe("API v1 recipe write mutations", () => {
     ));
     const sourceTitleForkPayload = await readJson(recoveredSourceTitleFork);
     expect(recoveredSourceTitleFork.status).toBe(201);
+    expectSuccessEnvelope(sourceTitleForkPayload, "req_recover_route_fork_source_title");
+    expectExactKeys(sourceTitleForkPayload.data, ["fork", "mutation", "recipe"]);
+    expectRecipeDetailShape(sourceTitleForkPayload.data.recipe);
+    expectMutationShape(sourceTitleForkPayload.data.mutation, sourceTitleForkBody.clientMutationId, true);
     expect(sourceTitleForkPayload.data).toMatchObject({
       fork: { appliedTitle: source.title, titleWasSuffixed: false },
       recipe: { id: sourceTitleForkReservation.id, title: source.title },

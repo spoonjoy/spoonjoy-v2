@@ -22,11 +22,20 @@ import {
 } from "~/lib/image-storage.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { FOOD_IMAGE_ACCEPT, RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
-import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
-import { createCover, getRecipeCoverImageUrl, setActiveRecipeCover } from "~/lib/recipe-cover.server";
+import {
+  ACTIVE_RECIPE_TITLE_CONFLICT_ERROR,
+  isActiveRecipeTitleConflictError,
+  validateActiveRecipeTitleUnique,
+} from "~/lib/recipe-title-uniqueness.server";
+import { getRecipeCoverImageUrl } from "~/lib/recipe-cover.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
 import {
-  touchNativeSyncCookbooksForRecipeOperation,
+  asCompatibleRecipeTagD1Database,
+  parseRecipeAuthoringMetadataForm,
+  RecipeTagNotFoundError,
+  updateRecipeAuthoringMetadata,
+} from "~/lib/recipe-tags.server";
+import {
   touchNativeSyncRecipeOperation,
 } from "~/lib/native-sync-invalidation.server";
 import { Button } from "~/components/ui/button";
@@ -38,6 +47,8 @@ interface ActionData {
     title?: string;
     description?: string;
     servings?: string;
+    course?: string;
+    tags?: string;
     image?: string;
     general?: string;
     reorder?: string;
@@ -70,6 +81,9 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
             },
           },
         },
+      },
+      tags: {
+        orderBy: [{ normalizedLabel: "asc" }, { id: "asc" }],
       },
     },
   });
@@ -115,6 +129,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     select: {
       chefId: true,
       deletedAt: true,
+      course: true,
+      tags: {
+        orderBy: [{ normalizedLabel: "asc" }, { id: "asc" }],
+        select: { label: true },
+      },
     },
   });
 
@@ -220,8 +239,21 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const imageEntry = formData.get("image");
   const imageFile = hasUploadedImageFile(imageEntry) ? imageEntry : null;
   const clearImage = formData.get("clearImage")?.toString() === "true";
+  const hasCourse = formData.has("course");
+  const hasTags = formData.has("tags");
+  const replaceMetadata = hasCourse && hasTags;
+  const metadata = replaceMetadata
+    ? parseRecipeAuthoringMetadataForm(
+        formData.get("course")!.toString(),
+        formData.get("tags")!.toString(),
+      )
+    : { course: null, tags: [], errors: {} };
 
   const errors: ActionData["errors"] = {};
+  Object.assign(errors, metadata.errors);
+  if (hasCourse !== hasTags) {
+    errors.general = "Course and tags must be submitted together";
+  }
 
   // Validation
   const titleResult = validateTitle(title);
@@ -275,6 +307,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     servings: servings.trim() || null,
   };
   let uploadedImageUrl: string | null = null;
+  let coverId: string | null = null;
+  let recipeCommitted = false;
 
   if (imageFile) {
     try {
@@ -283,6 +317,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         file: imageFile,
         namespace: `recipes/${userId}/${id}`,
       });
+      coverId = crypto.randomUUID();
     } catch {
       return data(
         { errors: { image: "Failed to upload image. Please try again." } },
@@ -292,59 +327,45 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 
   try {
-    const updatedAt = new Date();
-    await database.$transaction([
-      database.recipe.update({
-        where: { id },
-        data: { ...updateData, updatedAt },
-      }),
-      touchNativeSyncCookbooksForRecipeOperation(database, id, updatedAt),
-    ]);
+    await updateRecipeAuthoringMetadata({
+      database,
+      nativeDatabase: asCompatibleRecipeTagD1Database(cloudflareEnv?.DB),
+      userId,
+      recipeId: id,
+      ...updateData,
+      course: metadata.course,
+      tags: metadata.tags,
+      replaceMetadata,
+      coverMutation: uploadedImageUrl && coverId
+        ? {
+            kind: "uploaded",
+            coverId,
+            createdById: userId,
+            imageUrl: uploadedImageUrl,
+          }
+        : clearImage
+          ? { kind: "clear" }
+          : null,
+    });
+    recipeCommitted = true;
 
-    if (uploadedImageUrl) {
-      const uploadedCover = await createCover(database, {
-        recipeId: id,
-        imageUrl: uploadedImageUrl,
-        sourceType: "chef-upload",
-        status: "ready",
-        createdById: userId,
-        sourceImageUrl: uploadedImageUrl,
-        generationStatus: "none",
-      });
-      await setActiveRecipeCover(database, {
-        recipeId: id,
-        coverId: uploadedCover.id,
-        variant: "image",
-      });
+    if (uploadedImageUrl && coverId) {
       await scheduleSpoonCoverStylization({
         db: database,
         userId,
         recipeId: id,
-        coverId: uploadedCover.id,
+        coverId,
         rawPhotoUrl: uploadedImageUrl,
         recipeTitle: updateData.title,
         env: cloudflareEnv,
         bucket: photosBucket,
         sourceType: "chef-upload",
       });
-    } else if (clearImage) {
-      const updatedAt = new Date();
-      await database.$transaction([
-        database.recipe.update({
-          where: { id },
-          data: {
-            activeCoverId: null,
-            activeCoverVariant: null,
-            coverMode: "none",
-            updatedAt,
-          },
-        }),
-        touchNativeSyncCookbooksForRecipeOperation(database, id, updatedAt),
-      ]);
     }
 
     return redirect(`/recipes/${id}`);
   } catch (error) {
+    const titleConflict = isActiveRecipeTitleConflictError(error);
     // The recipe update failed after a replacement image landed in R2. Capture
     // the real failure (previously discarded), then best-effort delete the
     // orphaned upload — capturing if that delete also throws.
@@ -354,7 +375,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     const waitUntil = context.cloudflare?.ctx?.waitUntil
       ? context.cloudflare.ctx.waitUntil.bind(context.cloudflare.ctx)
       : undefined;
-    if (postHogConfig.enabled) {
+    if (
+      postHogConfig.enabled
+      && !titleConflict
+      && !(error instanceof RecipeTagNotFoundError)
+    ) {
       const capture = captureException(postHogConfig, {
         error,
         distinctId: userId,
@@ -367,6 +392,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         void capture;
       }
     }
+    if (recipeCommitted) {
+      return redirect(`/recipes/${id}`);
+    }
     if (uploadedImageUrl) {
       await deleteStoredImageWithCapture({
         bucket: photosBucket,
@@ -377,6 +405,17 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         distinctId: userId,
         extras: { surface: "recipe_edit" },
       });
+    }
+
+    if (error instanceof RecipeTagNotFoundError) {
+      return data({ errors: { general: "Recipe not found" } }, { status: 404 });
+    }
+
+    if (titleConflict) {
+      return data(
+        { errors: { title: ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } },
+        { status: 400 },
+      );
     }
 
     return data(
@@ -427,6 +466,8 @@ export default function EditRecipe() {
     const descriptionInput = form.querySelector('textarea[name="description"]') as HTMLTextAreaElement;
     const servingsInput = form.querySelector('input[name="servings"]') as HTMLInputElement;
     const stepsInput = form.querySelector('input[name="steps"]') as HTMLInputElement;
+    const courseInput = form.querySelector('input[name="course"]') as HTMLInputElement;
+    const tagsInput = form.querySelector('input[name="tags"]') as HTMLInputElement;
     const clearImageInput = form.querySelector('input[name="clearImage"]') as HTMLInputElement;
 
     /* istanbul ignore else -- @preserve form elements always exist in rendered DOM */
@@ -437,6 +478,10 @@ export default function EditRecipe() {
     if (servingsInput) servingsInput.value = recipeData.servings || "";
     /* istanbul ignore else -- @preserve */
     if (stepsInput) stepsInput.value = JSON.stringify(recipeData.steps);
+    /* istanbul ignore else -- @preserve */
+    if (courseInput) courseInput.value = recipeData.course ?? "";
+    /* istanbul ignore else -- @preserve */
+    if (tagsInput) tagsInput.value = JSON.stringify(recipeData.tags);
     /* istanbul ignore else -- @preserve */
     if (clearImageInput) clearImageInput.value = recipeData.clearImage ? "true" : "";
 
@@ -475,6 +520,8 @@ export default function EditRecipe() {
           <textarea name="description" className="hidden" />
           <input type="hidden" name="servings" />
           <input type="hidden" name="steps" />
+          <input type="hidden" name="course" />
+          <input type="hidden" name="tags" />
           <input type="hidden" name="clearImage" />
           <input ref={fileInputRef} type="file" name="image" accept={FOOD_IMAGE_ACCEPT} />
           <button type="submit">Save Recipe</button>
@@ -494,6 +541,8 @@ export default function EditRecipe() {
             title: recipe.title,
             description: recipe.description,
             servings: recipe.servings,
+            course: recipe.course as RecipeBuilderData["course"],
+            tags: (recipe.tags ?? []).map((tag) => tag.label),
             coverImageUrl,
             steps: formattedSteps,
           }}

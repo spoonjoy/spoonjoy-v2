@@ -1,11 +1,31 @@
 import type { Route } from "./+types/saved-recipes";
 import { useLoaderData } from "react-router";
 import { Button } from "~/components/ui/button";
+import { Pagination, PaginationNext } from "~/components/ui/pagination";
 import { Text } from "~/components/ui/text";
 import { CookbookHeader, CookbookPage, ObjectRow, RuledEmptyState } from "~/components/cookbook/page";
 import { getRequestDb } from "~/lib/route-platform.server";
+import {
+  listSavedRecipes,
+  SavedRecipeValidationError,
+} from "~/lib/saved-recipes.server";
 import { requireUserId } from "~/lib/session.server";
 import { DrawerSearch } from "./my-recipes";
+
+function getSetCookieValues(source: Headers) {
+  const cookieHeaders = source as Headers & {
+    getSetCookie?: () => string[];
+    getAll?: (name: string) => string[];
+  };
+  if (typeof cookieHeaders.getSetCookie === "function") {
+    return cookieHeaders.getSetCookie();
+  }
+  if (typeof cookieHeaders.getAll === "function") {
+    return cookieHeaders.getAll("Set-Cookie");
+  }
+  const cookie = source.get("Set-Cookie");
+  return cookie ? [cookie] : [];
+}
 
 type SavedRecipe = {
   id: string;
@@ -16,86 +36,103 @@ type SavedRecipe = {
     id: string;
     username: string;
   };
-  savedCookbookTitles: string[];
+  savedAt: string;
 };
 
-function normalizedQuery(request: Request) {
-  return (new URL(request.url).searchParams.get("q") ?? "").trim();
-}
+export function headers({
+  parentHeaders,
+  loaderHeaders,
+  actionHeaders,
+  errorHeaders,
+}: Route.HeadersArgs) {
+  const responseHeaders = new Headers();
+  const varyTokens: string[] = [];
 
-function matchesSavedRecipeQuery(recipe: SavedRecipe, query: string) {
-  if (!query) return true;
-  const needle = query.toLowerCase();
-  return [
-    recipe.title,
-    recipe.description,
-    recipe.servings,
-    recipe.chef.username,
-    ...recipe.savedCookbookTitles,
-  ].some((value) => value?.toLowerCase().includes(needle));
+  for (const source of [parentHeaders, loaderHeaders, actionHeaders, errorHeaders]) {
+    if (!source) continue;
+
+    for (const [name, value] of source) {
+      const normalizedName = name.toLowerCase();
+      if (normalizedName === "set-cookie" || normalizedName === "vary") continue;
+      responseHeaders.set(name, value);
+    }
+    for (const cookie of getSetCookieValues(source)) {
+      responseHeaders.append("Set-Cookie", cookie);
+    }
+    for (const token of (source.get("Vary") ?? "").split(",")) {
+      const normalizedToken = token.trim();
+      if (
+        normalizedToken
+        && !varyTokens.some((existing) => existing.toLowerCase() === normalizedToken.toLowerCase())
+      ) {
+        varyTokens.push(normalizedToken);
+      }
+    }
+  }
+
+  responseHeaders.set("Cache-Control", "private, no-store");
+  for (const credentialHeader of ["Authorization", "Cookie"]) {
+    if (!varyTokens.some((token) => token.toLowerCase() === credentialHeader.toLowerCase())) {
+      varyTokens.push(credentialHeader);
+    }
+  }
+  responseHeaders.set("Vary", varyTokens.join(", "));
+
+  return responseHeaders;
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
-  const query = normalizedQuery(request);
+  const url = new URL(request.url);
   const database = await getRequestDb(context);
 
-  const memberships = await database.recipeInCookbook.findMany({
-    where: {
-      cookbook: { authorId: userId },
-      recipe: { deletedAt: null },
-    },
-    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-    include: {
-      cookbook: {
-        select: { title: true },
-      },
-      recipe: {
-        include: {
-          chef: {
-            select: { id: true, username: true },
-          },
-        },
-      },
-    },
-  });
-
-  const byRecipeId = new Map<string, SavedRecipe>();
-  for (const membership of memberships) {
-    const existing = byRecipeId.get(membership.recipeId);
-    if (existing) {
-      existing.savedCookbookTitles.push(membership.cookbook.title);
-      continue;
-    }
-
-    byRecipeId.set(membership.recipeId, {
-      id: membership.recipe.id,
-      title: membership.recipe.title,
-      description: membership.recipe.description,
-      servings: membership.recipe.servings,
-      chef: membership.recipe.chef,
-      savedCookbookTitles: [membership.cookbook.title],
+  try {
+    const page = await listSavedRecipes(database, {
+      userId,
+      query: url.searchParams.get("q"),
+      cursor: url.searchParams.get("cursor"),
     });
-  }
+    const recipeIds = page.items.map((item) => item.recipeId);
+    const hydrated = recipeIds.length > 0
+      ? await database.recipe.findMany({
+          where: { id: { in: recipeIds }, deletedAt: null },
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            servings: true,
+            chef: { select: { id: true, username: true } },
+          },
+        })
+      : [];
+    const hydratedById = new Map(hydrated.map((recipe) => [recipe.id, recipe]));
+    const recipes = page.items.flatMap((item) => {
+      const recipe = hydratedById.get(item.recipeId);
+      return recipe ? [{ ...recipe, savedAt: item.savedAt } satisfies SavedRecipe] : [];
+    });
 
-  return {
-    query,
-    recipes: Array.from(byRecipeId.values()).filter((recipe) =>
-      matchesSavedRecipeQuery(recipe, query),
-    ),
-  };
+    return { query: page.query, recipes, nextCursor: page.nextCursor };
+  } catch (error) {
+    if (
+      error instanceof SavedRecipeValidationError
+      && (error.field === "q" || error.field === "cursor")
+    ) {
+      throw new Response(error.message, { status: 400 });
+    }
+    throw error;
+  }
 }
 
 export default function SavedRecipes() {
-  const { query, recipes } = useLoaderData<typeof loader>();
+  const { query, recipes, nextCursor = null } = useLoaderData<typeof loader>();
 
   return (
     <CookbookPage>
       <CookbookHeader eyebrow="My Kitchen" title="Saved Recipes">
-        Recipes you saved into your cookbooks.
+        Recipes you saved for later.
       </CookbookHeader>
 
-      <DrawerSearch label="Search saved recipes" query={query} placeholder="cookbook, chef, ingredient" />
+      <DrawerSearch label="Search saved recipes" query={query} placeholder="title, chef, course, tag" />
 
       {recipes.length > 0 ? (
         <section aria-label="Saved recipes" className="mt-6 divide-y divide-[var(--sj-border)]">
@@ -104,8 +141,9 @@ export default function SavedRecipes() {
               key={recipe.id}
               href={`/recipes/${recipe.id}`}
               title={recipe.title}
-              subtitle={`By ${recipe.chef.username} - ${recipe.savedCookbookTitles.join(", ")}`}
+              subtitle={recipe.description ?? `By ${recipe.chef.username}`}
               stamp={recipe.servings ?? undefined}
+              allowSubtitleWrap
             />
           ))}
         </section>
@@ -115,17 +153,44 @@ export default function SavedRecipes() {
           action={(
             <div className="flex flex-wrap gap-2">
               <Button href="/recipes">Explore Recipes</Button>
-              <Button href="/cookbooks/new" plain>New Cookbook</Button>
             </div>
           )}
         >
           <Text>
             {query
-              ? "Try a different cookbook, chef, or recipe term."
-              : "Save recipes by adding them to one of your cookbooks."}
+              ? "Try a different title, description, chef, course, or tag."
+              : "Save a recipe to keep it close at hand."}
           </Text>
         </RuledEmptyState>
       )}
+
+      {nextCursor ? (
+        <Pagination className="mt-6" aria-label="Saved recipes pagination">
+          <PaginationNext href={savedRecipesPageHref(query, nextCursor)} />
+        </Pagination>
+      ) : null}
+    </CookbookPage>
+  );
+}
+
+function savedRecipesPageHref(query: string, cursor: string) {
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  params.set("cursor", cursor);
+  return `/saved-recipes?${params.toString()}`;
+}
+
+export function ErrorBoundary() {
+  return (
+    <CookbookPage>
+      <div role="alert" className="sj-rule-block border-l-2 border-[var(--sj-tomato)] pl-4">
+        <CookbookHeader eyebrow="My Kitchen" title="Saved Recipes unavailable">
+          We could not load your saved recipes. Please try again.
+        </CookbookHeader>
+        <div className="mt-4">
+          <Button href="/saved-recipes">Reset saved recipes view</Button>
+        </div>
+      </div>
     </CookbookPage>
   );
 }

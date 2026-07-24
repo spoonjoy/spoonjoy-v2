@@ -1,6 +1,6 @@
 import { execFile as nodeExecFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolvePostHogBuildHost } from "../app/lib/security-headers.server";
 import { validateCspHeaderSet } from "./production-readiness";
@@ -12,6 +12,35 @@ import {
   readPostHogClientBundleSources as readDefaultPostHogClientBundleSources,
 } from "./posthog-build-metadata";
 import { findUnexpectedWarnings } from "./warning-gate";
+import {
+  PRODUCT_COMPATIBILITY_SOURCE_SHA,
+  PRODUCT_COMPATIBILITY_VERSION_ID,
+  PRODUCT_MIGRATION_NAME,
+  PRODUCT_MIGRATION_SHA256,
+  PRODUCT_PROTOCOL_BOUNDARY_SHA,
+  PRODUCT_QA_COMPATIBILITY_SOURCE_SHA,
+  PRODUCT_QA_COMPATIBILITY_VERSION_ID,
+  assertProductCutoverArtifact,
+  assertReviewedMigrationSql,
+  readD1RecoveryBookmark,
+  readExecutedSkewReceiptFile,
+  readForwardRepairSkewReceiptFile,
+  readPostRestorationApprovalFile,
+  readPostRestorationChainStateFile,
+  readProductCutoverSourceRecord as rebuildProductCutoverSourceRecord,
+  productRuntimeBundleDigests,
+  runProductCutover as executeProductCutover,
+  writeProductCutoverArtifactFile,
+  type CutoverAttempt,
+  type CutoverDeploymentRecord,
+  type CutoverEnvironment,
+  type CutoverPredecessorRecord,
+  type CutoverSourceRecord,
+  type ProductCutoverArtifact,
+  type ProductCutoverEffects,
+} from "./product-cutover";
+
+export * from "./product-cutover";
 
 const RELEASE_SHA_PATTERN = /^[0-9a-f]{40}$/;
 const TREE_HASH_PATTERN = /^[0-9a-f]{40}$/;
@@ -29,8 +58,10 @@ const RELEASE_ARTIFACT_NAME = "production-release.json";
 const CSP_REPORT_ONLY_BREAK_GLASS_ACK = "ACK_REPORT_ONLY_CSP_ROLLBACK";
 const DEFAULT_VERIFICATION_ATTEMPTS = 60;
 const VERIFICATION_DELAY_MS = 1_000;
+const PUBLIC_OBSERVATION_TIMEOUT_MS = 10_000;
 const PROTOCOL_V1_BOUNDARY_MARKER = "workers/cook-session-protocol-v1-boundary";
 const GENERATED_WORKER_CONFIG_PATH = "build/server/wrangler.json";
+const DEFAULT_PRODUCT_CUTOVER_EVIDENCE_DIR = "product-cutover-evidence";
 const CLOUDFLARE_SECRET_ENV_NAMES = [
   "CF_API_KEY",
   "CF_API_TOKEN",
@@ -116,11 +147,15 @@ export interface ReleaseArtifact {
   candidateVersionId?: string;
   failure?: string;
   rollbackFailure?: string;
+  cutover?: ProductCutoverArtifact;
 }
 
-interface RunProductionCanaryReleaseDeps {
+interface RunProductionCanaryReleaseDeps extends Partial<
+  Omit<ProductCutoverEffects, "runCommand" | "commandEnv">
+> {
   artifactDir: string;
   d1Fetch?: typeof fetch;
+  workerFetch?: typeof fetch;
   env?: NodeJS.ProcessEnv;
   postHogHost: string;
   readBootstrapProbe?: (
@@ -139,6 +174,13 @@ interface RunProductionCanaryReleaseDeps {
   sleep: (milliseconds: number) => Promise<void>;
   verificationAttempts?: number;
   writeReleaseArtifact: (artifact: ReleaseArtifact) => Promise<void>;
+  readProductCutoverSourceRecord?: (
+    environment: CutoverEnvironment,
+    sourceSha: string,
+    versionId: string | null,
+  ) => Promise<CutoverSourceRecord>;
+  resolveProductCutoverAttempt?: () => Promise<CutoverAttempt>;
+  runProductCutover?: typeof executeProductCutover;
 }
 
 interface RunProductionRollbackDeps {
@@ -287,6 +329,22 @@ export async function readPublicWorkerVersion(
   return requireWorkerVersionId(response.headers.get(headerName), "Public release verification");
 }
 
+async function boundedPublicObservation<T>(read: () => Promise<T>): Promise<T> {
+  let timeout!: ReturnType<typeof setTimeout>;
+  try {
+    return await Promise.race([
+      read(),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error("Public Worker observation timed out."));
+        }, PUBLIC_OBSERVATION_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function readBootstrapProbe(
   baseUrl: string,
   _expectedVersionId: string,
@@ -301,6 +359,7 @@ async function readBootstrapProbe(
     },
     method: "POST",
     redirect: "error",
+    signal: AbortSignal.timeout(PUBLIC_OBSERVATION_TIMEOUT_MS),
   });
   let body: unknown;
   try {
@@ -330,6 +389,7 @@ export async function readCandidateCspHeaders(
       "Cloudflare-Workers-Version-Overrides": buildWorkerVersionOverride("spoonjoy-v2", candidateVersionId),
     },
     redirect: "error",
+    signal: AbortSignal.timeout(PUBLIC_OBSERVATION_TIMEOUT_MS),
   });
   if (!response.ok) {
     throw new Error(`Candidate CSP verification failed with HTTP ${response.status}.`);
@@ -422,6 +482,17 @@ async function validateProductionPostHogArtifacts(
       `Generated client bundle does not contain exactly one PostHog host matching ${contract.postHogHost}.`,
     );
   }
+}
+
+async function validateConfiguredPostHogArtifacts(deps: Pick<
+  RunProductionCanaryReleaseDeps,
+  "readGeneratedWorkerConfig" | "readClientBuildMetadata" | "readClientBundleSources"
+>): Promise<void> {
+  return validateProductionPostHogArtifacts(
+    deps.readGeneratedWorkerConfig ?? readDefaultGeneratedWorkerConfig,
+    deps.readClientBuildMetadata ?? readDefaultClientBuildMetadata,
+    deps.readClientBundleSources ?? readDefaultPostHogClientBundleSources,
+  );
 }
 
 export function parsePendingMigrationNames(payload: string): string[] {
@@ -1036,7 +1107,10 @@ async function readImmutableMigration(
   return (await deps.runCommand("git", ["show", `HEAD:migrations/${name}`], { env })).stdout;
 }
 
-function requireProductionD1Config(payload: string): ProductionD1Config {
+function requireD1Config(
+  payload: string,
+  environment: CutoverEnvironment,
+): ProductionD1Config {
   let parsed: unknown;
   try {
     parsed = JSON.parse(payload) as unknown;
@@ -1046,9 +1120,15 @@ function requireProductionD1Config(payload: string): ProductionD1Config {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("Immutable Wrangler configuration was not an object.");
   }
-  const databases = (parsed as Record<string, unknown>).d1_databases;
+  const root = parsed as Record<string, unknown>;
+  let config: Record<string, unknown> = root;
+  if (environment === "qa") {
+    const environments = objectRecord(root.env, "Immutable Wrangler QA environments");
+    config = objectRecord(environments.qa, "Immutable Wrangler QA configuration");
+  }
+  const databases = config.d1_databases;
   if (!Array.isArray(databases)) {
-    throw new Error("Immutable Wrangler configuration did not declare production D1 bindings.");
+    throw new Error(`Immutable Wrangler configuration did not declare ${environment} D1 bindings.`);
   }
   const productionBindings = databases.filter((entry) => (
     entry &&
@@ -1057,12 +1137,12 @@ function requireProductionD1Config(payload: string): ProductionD1Config {
     (entry as Record<string, unknown>).binding === "DB"
   ));
   if (productionBindings.length !== 1) {
-    throw new Error("Immutable Wrangler configuration must declare exactly one production DB binding.");
+    throw new Error(`Immutable Wrangler configuration must declare exactly one ${environment} DB binding.`);
   }
   const binding = productionBindings[0] as Record<string, unknown>;
   const databaseId = binding.database_id;
   if (typeof databaseId !== "string" || !WORKER_VERSION_PATTERN.test(databaseId)) {
-    throw new Error("Immutable Wrangler configuration contained an invalid production D1 database UUID.");
+    throw new Error(`Immutable Wrangler configuration contained an invalid ${environment} D1 database UUID.`);
   }
   const migrationsTable = binding.migrations_table ?? "d1_migrations";
   if (typeof migrationsTable !== "string" || !D1_MIGRATIONS_TABLE_PATTERN.test(migrationsTable)) {
@@ -1071,12 +1151,25 @@ function requireProductionD1Config(payload: string): ProductionD1Config {
   return { databaseId, migrationsTable };
 }
 
+function requireProductionD1Config(payload: string): ProductionD1Config {
+  return requireD1Config(payload, "production");
+}
+
 async function readImmutableProductionD1Config(
   deps: Pick<RunProductionCanaryReleaseDeps, "runCommand">,
   env: NodeJS.ProcessEnv,
 ): Promise<ProductionD1Config> {
   const result = await deps.runCommand("git", ["show", "HEAD:wrangler.json"], { env });
   return requireProductionD1Config(result.stdout);
+}
+
+async function readImmutableD1Config(
+  deps: Pick<RunProductionCanaryReleaseDeps, "runCommand">,
+  env: NodeJS.ProcessEnv,
+  environment: CutoverEnvironment,
+): Promise<ProductionD1Config> {
+  const result = await deps.runCommand("git", ["show", "HEAD:wrangler.json"], { env });
+  return requireD1Config(result.stdout, environment);
 }
 
 function requireProductionD1Credentials(env: NodeJS.ProcessEnv): {
@@ -1232,7 +1325,10 @@ async function waitForBootstrapProbe(
     let lastError: unknown;
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       try {
-        assertBootstrapProbe(await probe(baseUrl, expectedVersionId), expectedVersionId);
+        assertBootstrapProbe(
+          await boundedPublicObservation(() => probe(baseUrl, expectedVersionId)),
+          expectedVersionId,
+        );
         observationVerified = true;
         break;
       } catch (error) {
@@ -1414,7 +1510,7 @@ async function waitForProductionDeployment(
       }
     }
     try {
-      publicVersion = await deps.readPublicWorkerVersion(baseUrl);
+      publicVersion = await boundedPublicObservation(() => deps.readPublicWorkerVersion(baseUrl));
       publicProbeSucceeded = true;
     } catch {
       publicVersion = null;
@@ -1483,7 +1579,9 @@ async function waitForCandidateCspHeaders(
   );
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      const headers = await deps.readCandidateCspHeaders(baseUrl, candidateVersionId);
+      const headers = await boundedPublicObservation(() => (
+        deps.readCandidateCspHeaders(baseUrl, candidateVersionId)
+      ));
       const observedVersion = headers.get("X-Spoonjoy-Worker-Version");
       if (observedVersion?.toLowerCase() === candidateVersionId.toLowerCase()) return headers;
       lastError = new Error(
@@ -1848,6 +1946,842 @@ export async function runProductionRollback(
   }
 }
 
+async function readPersistedProductCutover(
+  artifactDir: string,
+  environment: CutoverEnvironment,
+): Promise<ProductCutoverArtifact | null> {
+  const filename = environment === "production"
+    ? "production-product-cutover-state.json"
+    : "qa-product-release.json";
+  try {
+    const envelope = objectRecord(
+      JSON.parse(await readFile(path.join(artifactDir, filename), "utf8")),
+      "Product cutover artifact",
+    );
+    if (envelope.cutover === undefined) return null;
+    const artifact = envelope.cutover as ProductCutoverArtifact;
+    assertProductCutoverArtifact(artifact);
+    return artifact;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+export async function readProductProtocolBoundarySha(
+  deps: Pick<RunProductionCanaryReleaseDeps, "runCommand">,
+  env: NodeJS.ProcessEnv,
+): Promise<string> {
+  const result = await deps.runCommand("git", [
+    "log", "--diff-filter=A", "--format=%H", "--reverse", "--", PROTOCOL_V1_BOUNDARY_MARKER,
+  ], { env });
+  const lines = result.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length === 0) return PRODUCT_PROTOCOL_BOUNDARY_SHA;
+  if (lines.length !== 1) {
+    throw new Error("Git did not return one exact product protocol boundary commit.");
+  }
+  return requireReleaseSha(lines[0]);
+}
+
+function exactPredecessor(source: CutoverSourceRecord): CutoverPredecessorRecord {
+  return {
+    relationship: "exact",
+    canonicalSourceSha: source.sourceSha,
+    canonicalTreeSha: source.treeSha,
+    canonicalWorkerBundleSha256: source.workerBundleSha256,
+    canonicalDurableObjectBundleSha256: source.durableObjectBundleSha256,
+    lineageParentSourceSha: source.sourceSha,
+    runtimeFloorSourceSha: null,
+    originalFailedRestorationSourceSha: null,
+  };
+}
+
+export function productCutoverEvidenceDir(env: NodeJS.ProcessEnv): string {
+  const configured = env.SPOONJOY_PRODUCT_CUTOVER_EVIDENCE_DIR ??
+    DEFAULT_PRODUCT_CUTOVER_EVIDENCE_DIR;
+  if (configured.trim() === "" || configured.includes("\0")) {
+    throw new Error("Product cutover evidence directory is invalid.");
+  }
+  return path.resolve(configured);
+}
+
+async function readWorkerScriptName(
+  deps: Pick<RunProductionCanaryReleaseDeps, "runCommand">,
+  environment: CutoverEnvironment,
+  env: NodeJS.ProcessEnv,
+): Promise<string> {
+  const result = await deps.runCommand("git", ["show", "HEAD:wrangler.json"], { env });
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(result.stdout);
+  } catch {
+    throw new Error("Immutable Wrangler configuration was not valid JSON.");
+  }
+  const root = jsonObject(parsed, "Immutable Wrangler configuration");
+  const rootName = root.name;
+  if (typeof rootName !== "string" || !WORKER_NAME_PATTERN.test(rootName)) {
+    throw new Error("Immutable Wrangler configuration contained an invalid Worker name.");
+  }
+  if (environment === "production") return rootName;
+  const environments = objectRecord(root.env, "Immutable Wrangler environments");
+  const qa = objectRecord(environments.qa, "Immutable Wrangler QA configuration");
+  const qaName = qa.name ?? `${rootName}-qa`;
+  if (typeof qaName !== "string" || !WORKER_NAME_PATTERN.test(qaName)) {
+    throw new Error("Immutable Wrangler configuration contained an invalid QA Worker name.");
+  }
+  return qaName;
+}
+
+async function readDeployedProductRuntimeIdentity(
+  deps: Pick<RunProductionCanaryReleaseDeps, "runCommand" | "workerFetch">,
+  environment: CutoverEnvironment,
+  versionId: string,
+  cleanEnv: NodeJS.ProcessEnv,
+  workersEnv: NodeJS.ProcessEnv,
+): Promise<{ workerBundleSha256: string; durableObjectBundleSha256: string }> {
+  const accountId = workersEnv.CLOUDFLARE_ACCOUNT_ID;
+  const token = workersEnv.CLOUDFLARE_API_TOKEN;
+  if (!accountId || !CLOUDFLARE_ACCOUNT_ID_PATTERN.test(accountId) ||
+      !token || !CLOUDFLARE_API_TOKEN_PATTERN.test(token)) {
+    throw new Error("Worker runtime provenance requires valid scoped Cloudflare credentials.");
+  }
+  const scriptName = await readWorkerScriptName(deps, environment, cleanEnv);
+  let response: Response;
+  try {
+    response = await (deps.workerFetch ?? fetch)(
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/` +
+      `${encodeURIComponent(scriptName)}/content/v2?version=${encodeURIComponent(versionId)}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+  } catch {
+    throw new Error("Cloudflare Worker runtime provenance request failed.");
+  }
+  if (!response.ok) {
+    throw new Error(`Cloudflare Worker runtime provenance failed with HTTP ${response.status}.`);
+  }
+  if (!response.headers.get("content-type")?.startsWith("multipart/form-data")) {
+    throw new Error("Cloudflare Worker runtime provenance was not a module upload.");
+  }
+  const entrypoint = response.headers.get("cf-entrypoint");
+  if (!entrypoint) throw new Error("Cloudflare Worker runtime provenance omitted its entrypoint.");
+  let form: FormData;
+  try {
+    form = await response.formData();
+  } catch {
+    throw new Error("Cloudflare Worker runtime provenance multipart body was invalid.");
+  }
+  const modules: { name: string; bytes: Uint8Array }[] = [];
+  for (const [name, value] of form.entries()) {
+    if (typeof value === "string") {
+      throw new Error("Cloudflare Worker runtime provenance contained a text field.");
+    }
+    if (value.type === "application/source-map") continue;
+    modules.push({ name, bytes: new Uint8Array(await value.arrayBuffer()) });
+  }
+  return productRuntimeBundleDigests(entrypoint, modules);
+}
+
+async function readLiveProductSourceRecord(
+  deps: Omit<RunProductionCanaryReleaseDeps, "writeReleaseArtifact">,
+  environment: CutoverEnvironment,
+  versionId: string,
+  cleanEnv: NodeJS.ProcessEnv,
+  workersEnv: NodeJS.ProcessEnv,
+): Promise<CutoverSourceRecord> {
+  const environmentArgs = environment === "qa" ? ["--env", "qa"] : [];
+  const activeVersion = await deps.runCommand(
+    "pnpm",
+    ["exec", "wrangler", "versions", "view", versionId, ...environmentArgs, "--json"],
+    { env: workersEnv },
+  );
+  const sourceSha = selectExactVersionSourceSha(activeVersion.stdout, versionId);
+  const runtimeIdentity = await readDeployedProductRuntimeIdentity(
+    deps,
+    environment,
+    versionId,
+    cleanEnv,
+    workersEnv,
+  );
+  return rebuildProductCutoverSourceRecord(
+    environment,
+    sourceSha,
+    versionId,
+    deps.runCommand,
+    cleanEnv,
+    runtimeIdentity,
+  );
+}
+
+export async function resolveDefaultProductCutoverAttempt(
+  deps: Omit<RunProductionCanaryReleaseDeps, "writeReleaseArtifact">,
+  environment: CutoverEnvironment,
+  sourceSha: string,
+  previousVersionId: string,
+  reviewedMigrationState: readonly ReviewedMigration[],
+  cleanEnv: NodeJS.ProcessEnv,
+  workersEnv: NodeJS.ProcessEnv,
+  evidenceDir: string,
+): Promise<CutoverAttempt> {
+  const readLocalSourceRecord = deps.readProductCutoverSourceRecord ?? (
+    (environment: CutoverEnvironment, exactSourceSha: string, versionId: string | null) => (
+      rebuildProductCutoverSourceRecord(
+        environment,
+        exactSourceSha,
+        versionId,
+        deps.runCommand,
+        cleanEnv,
+      )
+    )
+  );
+  const activeBefore = deps.readProductCutoverSourceRecord
+    ? await deps.readProductCutoverSourceRecord(environment, (
+        selectExactVersionSourceSha((await deps.runCommand(
+          "pnpm",
+          [
+            "exec", "wrangler", "versions", "view", previousVersionId,
+            ...(environment === "qa" ? ["--env", "qa"] : []),
+            "--json",
+          ],
+          { env: workersEnv },
+        )).stdout, previousVersionId)
+      ), previousVersionId)
+    : await readLiveProductSourceRecord(
+        deps,
+        environment,
+        previousVersionId,
+        cleanEnv,
+        workersEnv,
+      );
+  const activeSourceSha = activeBefore.sourceSha;
+  const target = activeSourceSha === sourceSha
+    ? activeBefore
+    : await readLocalSourceRecord(environment, sourceSha, null);
+  const compatibilitySourceSha = environment === "production"
+    ? PRODUCT_COMPATIBILITY_SOURCE_SHA
+    : PRODUCT_QA_COMPATIBILITY_SOURCE_SHA;
+  const compatibilityVersionId = environment === "production"
+    ? PRODUCT_COMPATIBILITY_VERSION_ID
+    : PRODUCT_QA_COMPATIBILITY_VERSION_ID;
+  const isInitial = activeBefore.sourceSha === compatibilitySourceSha;
+  let liveCanonicalPredecessor = exactPredecessor(activeBefore);
+  if (environment === "qa" && !isInitial && activeBefore.sourceSha !== sourceSha &&
+      !deps.loadPredecessorBinding) {
+    const productionPayload = await deps.runCommand(
+      "pnpm",
+      ["exec", "wrangler", "deployments", "list", "--json"],
+      { env: workersEnv },
+    );
+    const productionDeployment = parseCurrentProductionDeployment(productionPayload.stdout);
+    if (productionDeployment.versions.length !== 1 ||
+        productionDeployment.versions[0].percentage !== 100) {
+      throw new Error("QA product repair requires one exact production predecessor version.");
+    }
+    const canonical = await readLiveProductSourceRecord(
+      deps,
+      "production",
+      productionDeployment.versions[0].versionId,
+      cleanEnv,
+      workersEnv,
+    );
+    liveCanonicalPredecessor = {
+      relationship: canonical.sourceSha === activeBefore.sourceSha
+        ? "exact"
+        : "same-build-alias",
+      canonicalSourceSha: canonical.sourceSha,
+      canonicalTreeSha: canonical.treeSha,
+      canonicalWorkerBundleSha256: canonical.workerBundleSha256,
+      canonicalDurableObjectBundleSha256: canonical.durableObjectBundleSha256,
+      lineageParentSourceSha: canonical.sourceSha,
+      runtimeFloorSourceSha: null,
+      originalFailedRestorationSourceSha: null,
+    };
+  }
+  const persisted = await readPersistedProductCutover(deps.artifactDir, environment);
+  const persistedPostRestorationFailure = persisted?.transition ===
+    "post-restoration-product-repair" && persisted.status === "failed"
+    ? persisted
+    : null;
+  const persistedTargetActive = persistedPostRestorationFailure?.failure?.classification ===
+    "canonical_health_failed" ||
+    (persistedPostRestorationFailure?.deployment.trafficPercent ?? 0) > 0;
+  const checkedInChain = !isInitial && activeBefore.sourceSha !== sourceSha &&
+      target.baseSourceSha !==
+      liveCanonicalPredecessor.canonicalSourceSha && !deps.loadPostRestorationChainState
+    ? await readPostRestorationChainStateFile(evidenceDir, environment)
+    : null;
+  const checkedInLatest = checkedInChain?.latestFailedRepairArtifact ?? null;
+  const durablePredecessor = deps.loadPredecessorBinding
+    ? await deps.loadPredecessorBinding(environment)
+    : checkedInChain
+      ? {
+          ...liveCanonicalPredecessor,
+          lineageParentSourceSha: checkedInLatest?.target.sourceSha ??
+            checkedInChain.originalFailedRestorationSourceSha,
+          runtimeFloorSourceSha: checkedInChain.runtimeFloorSourceSha,
+          originalFailedRestorationSourceSha:
+            checkedInChain.originalFailedRestorationSourceSha,
+        }
+    : persistedPostRestorationFailure && !persistedTargetActive
+      ? {
+          ...exactPredecessor(activeBefore),
+          lineageParentSourceSha: persistedPostRestorationFailure.target.sourceSha,
+          runtimeFloorSourceSha:
+            persistedPostRestorationFailure.predecessor.runtimeFloorSourceSha,
+          originalFailedRestorationSourceSha:
+            persistedPostRestorationFailure.predecessor.originalFailedRestorationSourceSha,
+        }
+    : persisted && persisted.target.sourceSha === activeBefore.sourceSha
+      ? exactPredecessor(persisted.target)
+      : liveCanonicalPredecessor;
+  const chain = deps.loadPostRestorationChainState
+    ? await deps.loadPostRestorationChainState(environment)
+    : checkedInChain ??
+      {
+        runtimeFloorSourceSha: durablePredecessor.runtimeFloorSourceSha ?? activeBefore.sourceSha,
+        originalFailedRestorationSourceSha:
+          durablePredecessor.originalFailedRestorationSourceSha ?? activeBefore.sourceSha,
+        latestFailedRepairArtifact: persistedPostRestorationFailure,
+      };
+  const latest = chain.latestFailedRepairArtifact;
+  const latestTargetActive = latest?.failure?.classification === "canonical_health_failed" ||
+    (latest?.deployment.trafficPercent ?? 0) > 0;
+  const transition: CutoverAttempt["transition"] = isInitial
+    ? "initial"
+    : activeBefore.sourceSha === sourceSha
+      ? "same-target-reconcile"
+      : latestTargetActive
+        ? "forward-repair"
+        : durablePredecessor.runtimeFloorSourceSha !== null || latest !== null
+          ? "post-restoration-product-repair"
+          : "forward-repair";
+  const predecessor = !deps.loadPredecessorBinding && transition === "same-target-reconcile"
+    ? { ...durablePredecessor, lineageParentSourceSha: activeBefore.baseSourceSha }
+    : durablePredecessor;
+  const reviewedMigration = reviewedMigrationState.find(
+    ({ name }) => name === PRODUCT_MIGRATION_NAME,
+  );
+  const migrationSql = reviewedMigration?.sql ?? await readImmutableMigration(
+    deps,
+    PRODUCT_MIGRATION_NAME,
+    cleanEnv,
+  );
+  assertReviewedMigrationSql(PRODUCT_MIGRATION_NAME, migrationSql);
+  return {
+    environment,
+    transition,
+    activeBefore,
+    target: transition === "same-target-reconcile"
+      ? target
+      : { ...target, versionId: null },
+    predecessor,
+    protocolBoundarySha: await readProductProtocolBoundarySha(deps, cleanEnv),
+    compatibilitySourceSha,
+    compatibilityVersionId,
+    migrationName: PRODUCT_MIGRATION_NAME,
+    migrationSha256: PRODUCT_MIGRATION_SHA256,
+    migrationSql,
+  };
+}
+
+export const PRODUCT_CUTOVER_PREFLIGHT_SQL = `WITH "normalized_memberships" AS (
+  SELECT
+    "Cookbook"."authorId" AS "userId",
+    "RecipeInCookbook"."recipeId" AS "recipeId",
+    CASE
+      WHEN typeof("RecipeInCookbook"."createdAt") = 'integer'
+        AND "RecipeInCookbook"."createdAt" BETWEEN -62167219200000 AND 253402300799999
+      THEN strftime('%Y-%m-%dT%H:%M:%fZ', "RecipeInCookbook"."createdAt" / 1000.0, 'unixepoch')
+      WHEN typeof("RecipeInCookbook"."createdAt") = 'real'
+        AND round("RecipeInCookbook"."createdAt") BETWEEN -62167219200000 AND 253402300799999
+      THEN strftime('%Y-%m-%dT%H:%M:%fZ', round("RecipeInCookbook"."createdAt") / 1000.0, 'unixepoch')
+      WHEN typeof("RecipeInCookbook"."createdAt") = 'text'
+        AND length("RecipeInCookbook"."createdAt") IN (19, 20, 24, 25, 29)
+        AND length(CAST("RecipeInCookbook"."createdAt" AS BLOB)) = length("RecipeInCookbook"."createdAt")
+        AND substr("RecipeInCookbook"."createdAt", 5, 1) = '-'
+        AND substr("RecipeInCookbook"."createdAt", 8, 1) = '-'
+        AND substr("RecipeInCookbook"."createdAt", 14, 1) = ':'
+        AND substr("RecipeInCookbook"."createdAt", 17, 1) = ':'
+        AND substr("RecipeInCookbook"."createdAt", 1, 4) NOT GLOB '*[^0-9]*'
+        AND substr("RecipeInCookbook"."createdAt", 6, 2) NOT GLOB '*[^0-9]*'
+        AND substr("RecipeInCookbook"."createdAt", 9, 2) NOT GLOB '*[^0-9]*'
+        AND substr("RecipeInCookbook"."createdAt", 12, 2) NOT GLOB '*[^0-9]*'
+        AND substr("RecipeInCookbook"."createdAt", 15, 2) NOT GLOB '*[^0-9]*'
+        AND substr("RecipeInCookbook"."createdAt", 18, 2) NOT GLOB '*[^0-9]*'
+        AND date(substr("RecipeInCookbook"."createdAt", 1, 10)) = substr("RecipeInCookbook"."createdAt", 1, 10)
+        AND substr("RecipeInCookbook"."createdAt", 12, 2) BETWEEN '00' AND '23'
+        AND substr("RecipeInCookbook"."createdAt", 15, 2) BETWEEN '00' AND '59'
+        AND substr("RecipeInCookbook"."createdAt", 18, 2) BETWEEN '00' AND '59'
+        AND (
+          (length("RecipeInCookbook"."createdAt") = 19 AND substr("RecipeInCookbook"."createdAt", 11, 1) = ' ')
+          OR (length("RecipeInCookbook"."createdAt") = 20
+            AND substr("RecipeInCookbook"."createdAt", 11, 1) = 'T'
+            AND substr("RecipeInCookbook"."createdAt", 20, 1) = 'Z')
+          OR (length("RecipeInCookbook"."createdAt") = 24
+            AND substr("RecipeInCookbook"."createdAt", 11, 1) = 'T'
+            AND substr("RecipeInCookbook"."createdAt", 20, 1) = '.'
+            AND substr("RecipeInCookbook"."createdAt", 21, 3) NOT GLOB '*[^0-9]*'
+            AND substr("RecipeInCookbook"."createdAt", 24, 1) = 'Z')
+          OR (length("RecipeInCookbook"."createdAt") = 25
+            AND substr("RecipeInCookbook"."createdAt", 11, 1) = 'T'
+            AND substr("RecipeInCookbook"."createdAt", 20, 1) IN ('+', '-')
+            AND substr("RecipeInCookbook"."createdAt", 21, 2) NOT GLOB '*[^0-9]*'
+            AND substr("RecipeInCookbook"."createdAt", 23, 1) = ':'
+            AND substr("RecipeInCookbook"."createdAt", 24, 2) NOT GLOB '*[^0-9]*'
+            AND substr("RecipeInCookbook"."createdAt", 24, 2) BETWEEN '00' AND '59'
+            AND (substr("RecipeInCookbook"."createdAt", 21, 2) BETWEEN '00' AND '13'
+              OR (substr("RecipeInCookbook"."createdAt", 21, 2) = '14'
+                AND substr("RecipeInCookbook"."createdAt", 24, 2) = '00')))
+          OR (length("RecipeInCookbook"."createdAt") = 29
+            AND substr("RecipeInCookbook"."createdAt", 11, 1) = 'T'
+            AND substr("RecipeInCookbook"."createdAt", 20, 1) = '.'
+            AND substr("RecipeInCookbook"."createdAt", 21, 3) NOT GLOB '*[^0-9]*'
+            AND substr("RecipeInCookbook"."createdAt", 24, 1) IN ('+', '-')
+            AND substr("RecipeInCookbook"."createdAt", 25, 2) NOT GLOB '*[^0-9]*'
+            AND substr("RecipeInCookbook"."createdAt", 27, 1) = ':'
+            AND substr("RecipeInCookbook"."createdAt", 28, 2) NOT GLOB '*[^0-9]*'
+            AND substr("RecipeInCookbook"."createdAt", 28, 2) BETWEEN '00' AND '59'
+            AND (substr("RecipeInCookbook"."createdAt", 25, 2) BETWEEN '00' AND '13'
+              OR (substr("RecipeInCookbook"."createdAt", 25, 2) = '14'
+                AND substr("RecipeInCookbook"."createdAt", 28, 2) = '00')))
+        )
+        AND julianday("RecipeInCookbook"."createdAt") IS NOT NULL
+      THEN strftime('%Y-%m-%dT%H:%M:%fZ', "RecipeInCookbook"."createdAt")
+      ELSE NULL
+    END AS "savedAt"
+  FROM "RecipeInCookbook"
+  INNER JOIN "Cookbook" ON "Cookbook"."id" = "RecipeInCookbook"."cookbookId"
+),
+"latest_memberships" AS (
+  SELECT "userId", "recipeId",
+    CASE WHEN COUNT("savedAt") = COUNT(*) THEN MAX("savedAt") ELSE NULL END AS "savedAt"
+  FROM "normalized_memberships"
+  GROUP BY "userId", "recipeId"
+)
+SELECT
+  0 AS duplicateSavedRecipePairs,
+  (SELECT COUNT(*) FROM "latest_memberships" WHERE "savedAt" IS NULL) AS invalidSavedRecipeBackfillRows,
+  (SELECT COUNT(*) FROM sqlite_master
+    WHERE type = 'table' AND name = 'SavedRecipe') AS savedRecipeTableCount,
+  (SELECT COUNT(*) FROM sqlite_master
+    WHERE type = 'table' AND name IN ('CookSession', 'CookSessionParticipant', 'CookState')) AS cookStateTableCount;`;
+
+const PRODUCT_CUTOVER_SAVED_RECIPE_PREFLIGHT_SQL = `SELECT COUNT(*) AS duplicateSavedRecipePairs
+FROM (
+  SELECT "userId", "recipeId"
+  FROM "SavedRecipe"
+  GROUP BY "userId", "recipeId"
+  HAVING COUNT(*) > 1
+);`;
+
+async function executeProductD1Query(
+  sql: string,
+  config: ProductionD1Config,
+  credentials: { accountId: string; token: string },
+  fetchImpl: typeof fetch,
+): Promise<Record<string, unknown>[]> {
+  const url = `https://api.cloudflare.com/client/v4/accounts/${credentials.accountId}/d1/database/${config.databaseId}/query`;
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${credentials.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ sql }),
+    });
+  } catch {
+    throw new Error("Cloudflare D1 product cutover query request failed.");
+  }
+  if (!response.ok) {
+    throw new Error(`Cloudflare D1 product cutover query failed with HTTP ${response.status}.`);
+  }
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new Error("Cloudflare D1 product cutover query returned malformed JSON.");
+  }
+  const root = objectRecord(payload, "Cloudflare D1 product cutover response");
+  if (root.success !== true || !Array.isArray(root.result) || root.result.length === 0) {
+    throw new Error("Cloudflare D1 product cutover query failed.");
+  }
+  const rows: Record<string, unknown>[] = [];
+  for (const entry of root.result) {
+    const result = objectRecord(entry, "Cloudflare D1 product cutover result");
+    if (result.success !== true || !Array.isArray(result.results)) {
+      throw new Error("Cloudflare D1 product cutover query failed.");
+    }
+    rows.push(...result.results.map((row) => (
+      objectRecord(row, "Cloudflare D1 product cutover row")
+    )));
+  }
+  return rows;
+}
+
+function requireNonnegativeInteger(value: unknown, context: string): number {
+  if (!Number.isInteger(value) || Number(value) < 0) {
+    throw new Error(`Product cutover ${context} is invalid.`);
+  }
+  return Number(value);
+}
+
+export async function runReviewedProductCutover(
+  deps: Omit<RunProductionCanaryReleaseDeps, "writeReleaseArtifact">,
+  context: {
+    environment: CutoverEnvironment;
+    sourceSha: string;
+    treeHash: string;
+    previousVersionId: string;
+    previousDeploymentId: string;
+    versionsBefore: string;
+    reviewedMigrationState: readonly ReviewedMigration[];
+    cleanEnv: NodeJS.ProcessEnv;
+    d1Env: NodeJS.ProcessEnv;
+    workersEnv: NodeJS.ProcessEnv;
+  },
+): Promise<ProductCutoverArtifact> {
+  const evidenceDir = productCutoverEvidenceDir(deps.env ?? process.env);
+  const attempt = deps.resolveProductCutoverAttempt
+    ? await deps.resolveProductCutoverAttempt()
+    : await resolveDefaultProductCutoverAttempt(
+        deps,
+        context.environment,
+        context.sourceSha,
+        context.previousVersionId,
+        context.reviewedMigrationState,
+        context.cleanEnv,
+        context.workersEnv,
+        evidenceDir,
+      );
+  if (attempt.environment !== context.environment ||
+      attempt.target.sourceSha !== context.sourceSha ||
+      attempt.target.treeSha !== context.treeHash) {
+    throw new Error("Product cutover attempt does not match the release environment or source.");
+  }
+  const defaultPredecessor = attempt.predecessor;
+  let d1Context: Promise<{
+    config: ProductionD1Config;
+    credentials: { accountId: string; token: string };
+  }> | undefined;
+  const readD1Context = () => {
+    d1Context ??= Promise.all([
+      readImmutableD1Config(deps, context.cleanEnv, context.environment),
+      Promise.resolve(requireProductionD1Credentials(context.d1Env)),
+    ]).then(([config, credentials]) => ({ config, credentials }));
+    return d1Context;
+  };
+  let candidateVersionId: string | null = null;
+  let ownedDeploymentId = context.previousDeploymentId;
+  const defaultObserveDeployment = async (): Promise<CutoverDeploymentRecord> => {
+    const payload = await deps.runCommand(
+      "pnpm",
+      [
+        "exec", "wrangler", "deployments", "list",
+        ...(context.environment === "qa" ? ["--env", "qa"] : []),
+        "--json",
+      ],
+      { env: context.workersEnv },
+    );
+    const deployment = parseCurrentProductionDeployment(payload.stdout);
+    const selected = candidateVersionId
+      ? deployment.versions.find(({ versionId }) => versionId === candidateVersionId) ??
+        deployment.versions[0]
+      : deployment.versions.find(({ versionId }) => versionId === context.previousVersionId) ??
+        deployment.versions[0];
+    const record = {
+      deploymentId: deployment.id,
+      versionId: selected.versionId,
+      sourceSha: selected.versionId === candidateVersionId
+        ? attempt.target.sourceSha
+        : attempt.activeBefore.sourceSha,
+      trafficPercent: selected.percentage,
+    };
+    if (candidateVersionId !== null && selected.versionId === candidateVersionId &&
+        selected.percentage === 100) {
+      ownedDeploymentId = deployment.id;
+    }
+    return record;
+  };
+  const effects: ProductCutoverEffects = {
+    runCommand: deps.runCommand,
+    commandEnv: context.cleanEnv,
+    readEvidence: () => readPersistedProductCutover(
+      deps.artifactDir,
+      context.environment,
+    ),
+    loadPredecessorBinding: deps.loadPredecessorBinding ?? (async () => defaultPredecessor),
+    loadPostRestorationChainState: deps.loadPostRestorationChainState ?? (async () => {
+      if (attempt.transition === "post-restoration-product-repair") {
+        const checkedInPath = path.join(
+          evidenceDir,
+          "product-repair-chain",
+          `${context.environment}.json`,
+        );
+        try {
+          await stat(checkedInPath);
+          return await readPostRestorationChainStateFile(
+            evidenceDir,
+            context.environment,
+          );
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        }
+      }
+      const persisted = await readPersistedProductCutover(
+        deps.artifactDir,
+        context.environment,
+      );
+      const latest = persisted?.transition === "post-restoration-product-repair" &&
+        persisted.status === "failed" ? persisted : null;
+      return {
+        runtimeFloorSourceSha: attempt.predecessor.runtimeFloorSourceSha ??
+          latest?.predecessor.runtimeFloorSourceSha ?? attempt.activeBefore.sourceSha,
+        originalFailedRestorationSourceSha:
+          attempt.predecessor.originalFailedRestorationSourceSha ??
+          latest?.predecessor.originalFailedRestorationSourceSha ??
+          attempt.activeBefore.sourceSha,
+        latestFailedRepairArtifact: latest,
+      };
+    }),
+    loadPostRestorationApproval: deps.loadPostRestorationApproval ?? ((environment, lineageParentSha) => (
+      readPostRestorationApprovalFile(evidenceDir, environment, lineageParentSha)
+    )),
+    loadForwardRepairSkewReceipt: deps.loadForwardRepairSkewReceipt ?? ((environment, lineageParentSha) => (
+      readForwardRepairSkewReceiptFile(evidenceDir, environment, lineageParentSha)
+    )),
+    loadExecutedSkewReceipt: deps.loadExecutedSkewReceipt ?? ((digest) => (
+      readExecutedSkewReceiptFile(evidenceDir, digest)
+    )),
+    readPreflight: deps.readPreflight ?? (async () => {
+      const { config, credentials } = await readD1Context();
+      const rows = await executeProductD1Query(
+        PRODUCT_CUTOVER_PREFLIGHT_SQL,
+        config,
+        credentials,
+        deps.d1Fetch ?? fetch,
+      );
+      if (rows.length !== 1) throw new Error("Product cutover preflight is invalid.");
+      const row = rows[0];
+      const savedRecipeTableCount = requireNonnegativeInteger(
+        row.savedRecipeTableCount,
+        "SavedRecipe table preflight",
+      );
+      if (savedRecipeTableCount > 1) {
+        throw new Error("Product cutover SavedRecipe table preflight is invalid.");
+      }
+      let duplicateSavedRecipePairs = requireNonnegativeInteger(
+        row.duplicateSavedRecipePairs,
+        "duplicate preflight",
+      );
+      if (savedRecipeTableCount === 1) {
+        const duplicateRows = await executeProductD1Query(
+          PRODUCT_CUTOVER_SAVED_RECIPE_PREFLIGHT_SQL,
+          config,
+          credentials,
+          deps.d1Fetch ?? fetch,
+        );
+        if (duplicateRows.length !== 1) {
+          throw new Error("Product cutover SavedRecipe duplicate preflight is invalid.");
+        }
+        duplicateSavedRecipePairs = requireNonnegativeInteger(
+          duplicateRows[0].duplicateSavedRecipePairs,
+          "duplicate preflight",
+        );
+      }
+      const cookStateTableCount = requireNonnegativeInteger(
+        row.cookStateTableCount,
+        "cook-state preflight",
+      );
+      return {
+        duplicateSavedRecipePairs,
+        invalidSavedRecipeBackfillRows: requireNonnegativeInteger(
+          row.invalidSavedRecipeBackfillRows,
+          "backfill preflight",
+        ),
+        cookStateTables: cookStateTableCount === 0 ? [] : ["unexpected-cook-state-table"],
+      };
+    }),
+    readPendingMigrationNames: deps.readPendingMigrationNames ?? (async () => {
+      const result = await deps.runCommand("pnpm", [
+        "exec", "wrangler", "d1", "migrations", "list", "DB", "--remote",
+        ...(context.environment === "qa" ? ["--env", "qa"] : []),
+      ], { env: context.d1Env });
+      return parsePendingMigrationNames(result.stdout);
+    }),
+    createRecoveryBookmark: deps.createRecoveryBookmark ?? (() => (
+      readD1RecoveryBookmark(context.environment, deps.runCommand, context.d1Env)
+    )),
+    applyMigration: deps.applyMigration ?? (async (_environment, migration) => {
+      const { config, credentials } = await readD1Context();
+      await applyReviewedMigrations([migration], config, credentials, deps.d1Fetch ?? fetch);
+    }),
+    readTriggerInventory: deps.readTriggerInventory ?? (async () => {
+      const { config, credentials } = await readD1Context();
+      const rows = await executeProductD1Query([
+        "SELECT name FROM sqlite_master",
+        "WHERE type = 'trigger' AND name GLOB 'SavedRecipe_cutover_*' ORDER BY name;",
+      ].join("\n"), config, credentials, deps.d1Fetch ?? fetch);
+      return rows.map(({ name }) => {
+        if (typeof name !== "string") throw new Error("Product cutover trigger row is invalid.");
+        return name;
+      });
+    }),
+    resolveTargetVersion: deps.resolveTargetVersion ?? (async (_environment, targetSha) => {
+      if (attempt.transition === "same-target-reconcile") {
+        candidateVersionId = attempt.target.versionId;
+        if (!candidateVersionId) throw new Error("Product cutover target version is missing.");
+        return candidateVersionId;
+      }
+      const versions = await deps.runCommand(
+        "pnpm",
+        [
+          "exec", "wrangler", "versions", "list",
+          ...(context.environment === "qa" ? ["--env", "qa"] : []),
+          "--json",
+        ],
+        { env: context.workersEnv },
+      );
+      candidateVersionId = selectUploadedVersion(context.versionsBefore, versions.stdout, targetSha);
+      return candidateVersionId;
+    }),
+    observeDeployment: deps.observeDeployment ?? defaultObserveDeployment,
+    assertDeploymentOwnership: deps.assertDeploymentOwnership ?? (async (_environment, expected) => {
+      if (expected.versionId === null) {
+        throw new Error("Product cutover deployment ownership expected a concrete version.");
+      }
+      const assertOwnedTopology = async () => {
+        const payload = await deps.runCommand(
+          "pnpm",
+          [
+            "exec", "wrangler", "deployments", "list",
+            ...(context.environment === "qa" ? ["--env", "qa"] : []),
+            "--json",
+          ],
+          { env: context.workersEnv },
+        );
+        const deployment = parseCurrentProductionDeployment(payload.stdout);
+        if (deployment.id !== ownedDeploymentId || deployment.versions.length !== 1 ||
+            deployment.versions[0].versionId !== expected.versionId ||
+            deployment.versions[0].percentage !== 100) {
+          throw new Error(
+            `Product cutover deployment ownership changed: expected ${ownedDeploymentId}/` +
+            `${expected.versionId}, observed ${deployment.id}/` +
+            `${deployment.versions.map(({ versionId, percentage }) => (
+              `${versionId}@${percentage}`
+            )).join(",")}.`,
+          );
+        }
+      };
+      await assertOwnedTopology();
+      if (expected.sourceSha === attempt.target.sourceSha) {
+        const liveTarget = await readLiveProductSourceRecord(
+          deps,
+          context.environment,
+          expected.versionId,
+          context.cleanEnv,
+          context.workersEnv,
+        );
+        if (liveTarget.sourceSha !== expected.sourceSha ||
+            liveTarget.treeSha !== expected.treeSha ||
+            liveTarget.workerBundleSha256 !== expected.workerBundleSha256 ||
+            liveTarget.durableObjectBundleSha256 !== expected.durableObjectBundleSha256 ||
+            liveTarget.versionId !== expected.versionId) {
+          throw new Error("Product cutover deployed target runtime does not match reviewed bytes.");
+        }
+      }
+      await assertOwnedTopology();
+    }),
+    deployTarget: deps.deployTarget ?? (async (_environment, target) => {
+      await deps.runCommand("pnpm", [
+        "exec", "wrangler", "deploy", "--tag", target.sourceSha,
+        "--message", `Spoonjoy atomic-product-activation ${target.sourceSha}`,
+        ...(context.environment === "qa" ? ["--env", "qa"] : []),
+      ], { env: context.workersEnv });
+      return {
+        deploymentId: null,
+        versionId: null,
+        sourceSha: target.sourceSha,
+        trafficPercent: null,
+      };
+    }),
+    verifyCanonicalHealth: deps.verifyCanonicalHealth ?? (async (_environment, deployment) => {
+      const baseUrl = context.environment === "qa"
+        ? deps.env?.SPOONJOY_QA_BASE_URL ??
+          "https://spoonjoy-v2-qa.mendelow-studio.workers.dev"
+        : deps.env?.SPOONJOY_MCP_CANARY_BASE_URL ?? "https://spoonjoy.app";
+      if (deployment.versionId === null) return false;
+      const attempts = requireVerificationAttempts(deps.verificationAttempts);
+      for (let observation = 1; observation <= attempts; observation += 1) {
+        try {
+          if (await boundedPublicObservation(() => deps.readPublicWorkerVersion(baseUrl)) ===
+              deployment.versionId) return true;
+        } catch {
+          // Edge propagation and transient probe failures are retried within the bounded window.
+        }
+        if (observation < attempts) await deps.sleep(VERIFICATION_DELAY_MS);
+      }
+      return false;
+    }),
+    applyUnlock: deps.applyUnlock ?? (async (_environment, statements) => {
+      const { config, credentials } = await readD1Context();
+      await executeProductD1Query(
+        statements.join("\n"),
+        config,
+        credentials,
+        deps.d1Fetch ?? fetch,
+      );
+    }),
+    readQaActiveSource: deps.readQaActiveSource ?? (async () => {
+      const payload = await deps.runCommand(
+        "pnpm",
+        ["exec", "wrangler", "deployments", "list", "--env", "qa", "--json"],
+        { env: context.workersEnv },
+      );
+      const qaDeployment = parseCurrentProductionDeployment(payload.stdout);
+      if (qaDeployment.versions.length !== 1 || qaDeployment.versions[0].percentage !== 100) {
+        throw new Error("Product cutover QA deployment is not one exact 100% version.");
+      }
+      const qaSource = await readLiveProductSourceRecord(
+        deps,
+        "qa",
+        qaDeployment.versions[0].versionId,
+        context.cleanEnv,
+        context.workersEnv,
+      );
+      const qaBaseUrl = deps.env?.SPOONJOY_QA_BASE_URL ??
+        "https://spoonjoy-v2-qa.mendelow-studio.workers.dev";
+      const attempts = requireVerificationAttempts(deps.verificationAttempts);
+      for (let observation = 1; observation <= attempts; observation += 1) {
+        try {
+          if (await boundedPublicObservation(() => deps.readPublicWorkerVersion(qaBaseUrl)) ===
+              qaSource.versionId) {
+            return qaSource;
+          }
+        } catch {
+          // The exact live version must converge within the bounded observation window.
+        }
+        if (observation < attempts) await deps.sleep(VERIFICATION_DELAY_MS);
+      }
+      throw new Error("Product cutover QA canonical health did not match its live version.");
+    }),
+    recordQaBinding: deps.recordQaBinding ?? (async (activeQaSource, predecessor) => {
+      await mkdir(deps.artifactDir, { recursive: true });
+      await writeFile(
+        path.join(deps.artifactDir, "qa-product-binding.json"),
+        `${JSON.stringify({ activeQaSource, predecessor }, null, 2)}\n`,
+        { encoding: "utf8", mode: 0o600 },
+      );
+    }),
+    writeEvidence: deps.writeEvidence ?? ((artifact) => (
+      writeProductCutoverArtifactFile(deps.artifactDir, artifact)
+    )),
+  };
+  const result = await (deps.runProductCutover ?? executeProductCutover)(attempt, effects);
+  assertProductCutoverArtifact(result);
+  return result;
+}
+
 export async function runProductionCanaryRelease(
   deps: RunProductionCanaryReleaseDeps,
 ): Promise<ReleaseArtifact> {
@@ -1871,6 +2805,7 @@ export async function runProductionCanaryRelease(
   let staged = false;
   let rollbackRefusal: string | undefined;
   let atomicMutationAttempted = false;
+  let delegatedProductCutover = false;
   const baseEnv = { ...(deps.env ?? process.env) };
   const sanitize = (error: unknown) => sanitizedFailure(error, cloudflareCredentialValues(baseEnv));
   const cleanEnv = withoutCloudflareSecrets(baseEnv);
@@ -1908,11 +2843,7 @@ export async function runProductionCanaryRelease(
     phase = "build";
     await deps.runCommand("pnpm", ["run", "build"], { env: cleanEnv });
     phase = "post_build_posthog";
-    await validateProductionPostHogArtifacts(
-      deps.readGeneratedWorkerConfig ?? readDefaultGeneratedWorkerConfig,
-      deps.readClientBuildMetadata ?? readDefaultClientBuildMetadata,
-      deps.readClientBundleSources ?? readDefaultPostHogClientBundleSources,
-    );
+    await validateConfiguredPostHogArtifacts(deps);
     phase = "post_build_provenance";
     const postBuildStatus = await deps.runCommand(
       "git",
@@ -1931,7 +2862,11 @@ export async function runProductionCanaryRelease(
     phase = "migration_review";
     for (const migration of reviewedMigrations) {
       const sql = await readImmutableMigration(deps, migration, cleanEnv);
-      assertAdditiveMigrationSql(migration, sql);
+      if (migration === PRODUCT_MIGRATION_NAME) {
+        assertReviewedMigrationSql(migration, sql);
+      } else {
+        assertAdditiveMigrationSql(migration, sql);
+      }
       reviewedMigrationState.push({ name: migration, sha256: migrationContentHash(sql), sql });
     }
 
@@ -1950,6 +2885,68 @@ export async function runProductionCanaryRelease(
       ["exec", "wrangler", "versions", "list", "--json"],
       { env: workersEnv },
     );
+
+    let targetSourceHasReviewedProductMigration = false;
+    const productCutoverInjected = deps.resolveProductCutoverAttempt !== undefined ||
+      deps.readProductCutoverSourceRecord !== undefined ||
+      deps.runProductCutover !== undefined;
+    if (releaseMode === "atomic-product-activation" &&
+        !reviewedMigrations.includes(PRODUCT_MIGRATION_NAME) &&
+        !productCutoverInjected) {
+      const targetMigration = await deps.runCommand(
+        "git",
+        ["show", `${sourceSha}:migrations/${PRODUCT_MIGRATION_NAME}`],
+        { env: cleanEnv },
+      );
+      if (targetMigration.stdout.length > 0) {
+        assertReviewedMigrationSql(PRODUCT_MIGRATION_NAME, targetMigration.stdout);
+        targetSourceHasReviewedProductMigration = true;
+      }
+    }
+    const shouldDelegateProductCutover = releaseMode === "atomic-product-activation" && (
+      reviewedMigrations.includes(PRODUCT_MIGRATION_NAME) ||
+      productCutoverInjected ||
+      targetSourceHasReviewedProductMigration
+    );
+    if (shouldDelegateProductCutover) {
+      delegatedProductCutover = true;
+      const cutover = await runReviewedProductCutover(deps, {
+        environment: "production",
+        sourceSha,
+        treeHash,
+        previousVersionId,
+        previousDeploymentId: previousDeployment.id,
+        versionsBefore: versionsBefore.stdout,
+        reviewedMigrationState,
+        cleanEnv,
+        d1Env,
+        workersEnv,
+      });
+      if (cutover.target.sourceSha !== sourceSha ||
+          cutover.activeBefore.versionId !== previousVersionId ||
+          cutover.target.versionId === null) {
+        throw new Error("Product cutover returned a mismatched release identity.");
+      }
+      candidateVersionId = cutover.target.versionId;
+      reviewedMigrations = cutover.transition === "initial" ? [PRODUCT_MIGRATION_NAME] : [];
+      migrationApply = cutover.transition === "initial" ? "succeeded" : "not_needed";
+      const result: ReleaseArtifact = {
+        status: "promoted",
+        sourceSha,
+        ...metadata,
+        phase: "complete",
+        treeHash,
+        reviewedMigrations,
+        migrationApply,
+        databaseRollbackSupported: false,
+        previousVersionId,
+        candidateVersionId,
+        cutover,
+      };
+      phase = "artifact";
+      await deps.writeReleaseArtifact(result);
+      return result;
+    }
 
     if (releaseMode === "protocol-v1-canary") {
       phase = "active_version_mapping";
@@ -2123,9 +3120,11 @@ export async function runProductionCanaryRelease(
 
       phase = "candidate_csp";
       const baseUrl = deps.env?.SPOONJOY_MCP_CANARY_BASE_URL ?? "https://spoonjoy.app";
-      const candidateCspHeaders = await (
-        deps.readCandidateCspHeaders ?? readCandidateCspHeaders
-      )(baseUrl, candidateVersionId);
+      const candidateCspVersionId = candidateVersionId;
+      const candidateCspReader = deps.readCandidateCspHeaders ?? readCandidateCspHeaders;
+      const candidateCspHeaders = await boundedPublicObservation(() => (
+        candidateCspReader(baseUrl, candidateCspVersionId)
+      ));
       const cspFailures = validateCspHeaderSet(candidateCspHeaders, {
         expectedWorkerVersionId: candidateVersionId,
         postHogHost: deps.postHogHost,
@@ -2234,6 +3233,37 @@ export async function runProductionCanaryRelease(
     }
     const failurePhase = phase;
     const failure = sanitize(error);
+
+    if (delegatedProductCutover) {
+      const cutover = await readPersistedProductCutover(deps.artifactDir, "production");
+      if (cutover?.status === "failed" && treeHash && previousVersionId) {
+        const initialMigration = cutover.transition === "initial";
+        const cutoverMigrationApply: ReleaseArtifact["migrationApply"] = !initialMigration
+          ? "not_needed"
+          : cutover.migration.applyState === "failed"
+            ? "failed"
+            : cutover.migration.applyState === "not_started"
+              ? "not_started"
+              : "succeeded";
+        await deps.writeReleaseArtifact({
+          status: "forward_repair_required",
+          sourceSha,
+          ...metadata,
+          phase: "artifact",
+          treeHash,
+          reviewedMigrations: initialMigration ? [PRODUCT_MIGRATION_NAME] : [],
+          migrationApply: cutoverMigrationApply,
+          databaseRollbackSupported: false,
+          previousVersionId,
+          ...(cutover.target.versionId
+            ? { candidateVersionId: cutover.target.versionId }
+            : {}),
+          failure,
+          cutover,
+        });
+      }
+      throw new Error(failure);
+    }
 
     if (staged && previousVersionId && candidateVersionId && previousDeployment) {
       if (!rollbackRefusal) {
@@ -2394,6 +3424,7 @@ export function createReleaseCommandRunner(
   execFileImpl: ExecFileLike = nodeExecFile as unknown as ExecFileLike,
 ): ReleaseCommandRunner {
   return (command, args, options) => new Promise((resolve, reject) => {
+    const credentialValues = cloudflareCredentialValues(options?.env ?? {});
     let flushStdout: () => void = () => undefined;
     let flushStderr: () => void = () => undefined;
     const child = execFileImpl(command, args, {
@@ -2417,17 +3448,17 @@ export function createReleaseCommandRunner(
     if (child && typeof child === "object") {
       flushStdout = streamCommandOutput(
         (child as { stdout?: unknown }).stdout,
-        (chunk) => process.stdout.write(chunk),
+        (chunk) => process.stdout.write(redactSensitiveText(chunk, credentialValues)),
       );
       flushStderr = streamCommandOutput(
         (child as { stderr?: unknown }).stderr,
-        (chunk) => process.stderr.write(chunk),
+        (chunk) => process.stderr.write(redactSensitiveText(chunk, credentialValues)),
       );
     }
   });
 }
 
-function assertReleaseArtifactLifecycle(artifact: ReleaseArtifact): void {
+export function assertReleaseArtifactLifecycle(artifact: ReleaseArtifact): void {
   const value = artifact as unknown as Record<string, unknown>;
   const present = (key: string): boolean => value[key] !== undefined;
   const phase = value.phase;
@@ -2436,7 +3467,9 @@ function assertReleaseArtifactLifecycle(artifact: ReleaseArtifact): void {
   const reviewedMigrationValue = value.reviewedMigrations;
   const migrationApply = value.migrationApply;
   const fail = (): never => {
-    throw new Error("Release artifact lifecycle is invalid.");
+    throw new Error(present("cutover")
+      ? "Release cutover artifact is invalid."
+      : "Release artifact lifecycle is invalid.");
   };
   const inSet = (candidate: unknown, options: readonly string[]): boolean => (
     typeof candidate === "string" && options.includes(candidate)
@@ -2473,7 +3506,43 @@ function assertReleaseArtifactLifecycle(artifact: ReleaseArtifact): void {
   }
   if (present("previousVersionId") && present("candidateVersionId")) {
     const equal = value.previousVersionId === value.candidateVersionId;
-    if ((phase === "rollback_already_active") !== equal) fail();
+    const sameTargetCutover = present("cutover") &&
+      (value.cutover as { transition?: unknown }).transition === "same-target-reconcile";
+    if (!sameTargetCutover && (phase === "rollback_already_active") !== equal) fail();
+  }
+  if (releaseMode === "atomic-product-activation" && status === "promoted" &&
+      phase === "complete" && !present("cutover")) fail();
+  if (present("cutover")) {
+    if (releaseMode !== "atomic-product-activation") fail();
+    try {
+      assertProductCutoverArtifact(value.cutover as ProductCutoverArtifact);
+    } catch {
+      fail();
+    }
+    const cutover = value.cutover as ProductCutoverArtifact;
+    if (cutover.environment !== "production" || cutover.target.sourceSha !== value.sourceSha ||
+        cutover.target.treeSha !== value.treeHash ||
+        cutover.activeBefore.versionId !== value.previousVersionId) fail();
+    if (cutover.target.versionId === null) {
+      if (present("candidateVersionId")) fail();
+    } else if (cutover.target.versionId !== value.candidateVersionId) fail();
+    const initialMigration = cutover.transition === "initial";
+    if (initialMigration) {
+      if (reviewedMigrations.length !== 1 || reviewedMigrations[0] !== PRODUCT_MIGRATION_NAME) fail();
+      const expectedMigrationApply = cutover.migration.applyState === "failed"
+        ? "failed"
+        : cutover.migration.applyState === "not_started"
+          ? "not_started"
+          : "succeeded";
+      if (migrationApply !== expectedMigrationApply) fail();
+    } else if (reviewedMigrations.length !== 0 || migrationApply !== "not_needed") fail();
+    if (cutover.status === "failed") {
+      if (status !== "forward_repair_required" || phase !== "artifact" ||
+          !present("failure") || present("rollbackFailure")) fail();
+      return;
+    }
+    if (cutover.phase !== "verified" || cutover.status !== "succeeded" ||
+        status !== "promoted" || phase !== "complete") fail();
   }
 
   const preDiscoveryPhases = [
@@ -2654,6 +3723,7 @@ export async function writeReleaseArtifactFile(
     ...(artifact.candidateVersionId ? { candidateVersionId: artifact.candidateVersionId } : {}),
     ...(artifact.failure ? { failure: sanitizedFailure(artifact.failure) } : {}),
     ...(artifact.rollbackFailure ? { rollbackFailure: sanitizedFailure(artifact.rollbackFailure) } : {}),
+    ...(artifact.cutover ? { cutover: structuredClone(artifact.cutover) } : {}),
   };
   assertReleaseArtifactLifecycle(sanitized);
   await mkdir(artifactDir, { recursive: true });
@@ -2734,6 +3804,154 @@ interface ReleaseCliDeps {
   writeReleaseArtifact?: (artifactDir: string, artifact: ReleaseArtifact) => Promise<void>;
 }
 
+interface QaProductCutoverCliOptions {
+  artifactDir: string;
+  releaseSha: string | null;
+}
+
+export function parseQaProductCutoverCliOptions(
+  argv: readonly string[],
+  env: NodeJS.ProcessEnv,
+): QaProductCutoverCliOptions {
+  let artifactDir = "qa-product-cutover-artifacts";
+  let releaseSha = env.SOURCE_SHA ?? env.GITHUB_SHA ?? null;
+  let sawEnvironment = false;
+  for (let index = 0; index < argv.length; index += 1) {
+    const option = argv[index];
+    const value = argv[index + 1];
+    if (option === "--environment" || option === "--source-sha" ||
+        option === "--artifact-dir") {
+      if (!value || value.startsWith("--")) throw new Error(`${option} requires a value.`);
+      if (option === "--environment") {
+        if (value !== "qa") throw new Error("The product cutover QA entrypoint only accepts QA.");
+        sawEnvironment = true;
+      } else if (option === "--source-sha") {
+        releaseSha = requireReleaseSha(value);
+      } else {
+        artifactDir = value;
+      }
+      index += 1;
+      continue;
+    }
+    throw new Error(`Unknown QA product cutover option: ${option}`);
+  }
+  if (!sawEnvironment) throw new Error("The product cutover QA entrypoint requires --environment qa.");
+  if (releaseSha !== null) requireReleaseSha(releaseSha);
+  return { artifactDir, releaseSha };
+}
+
+interface QaProductCutoverCliDeps extends ReleaseCliDeps, Partial<
+  Omit<RunProductionCanaryReleaseDeps,
+    "artifactDir" | "env" | "postHogHost" | "readPublicWorkerVersion" | "releaseSha" |
+    "releaseMode" | "runCommand" | "sleep" | "writeReleaseArtifact">
+> {}
+
+export async function runQaProductCutoverCli(
+  deps: QaProductCutoverCliDeps = {},
+): Promise<ProductCutoverArtifact> {
+  const env = deps.env ?? process.env;
+  const options = parseQaProductCutoverCliOptions(deps.argv ?? [], env);
+  const runCommand = deps.runCommand ?? createReleaseCommandRunner(deps.execFileImpl);
+  const cleanEnv = withoutCloudflareSecrets(env);
+  delete cleanEnv.CLOUDFLARE_ACCOUNT_ID;
+  const d1Env = cloudflareCommandEnv(env, "d1");
+  const workersEnv = cloudflareCommandEnv(env, "workers");
+  const head = requireReleaseSha((await runCommand(
+    "git",
+    ["rev-parse", "HEAD"],
+    { env: cleanEnv },
+  )).stdout.trim());
+  if (options.releaseSha !== null && options.releaseSha !== head) {
+    throw new Error("Checked-out HEAD does not match QA release SHA.");
+  }
+  const status = await runCommand(
+    "git",
+    ["status", "--porcelain", "--untracked-files=no"],
+    { env: cleanEnv },
+  );
+  if (status.stdout.trim()) throw new Error("QA release checkout has tracked changes.");
+  const treeHash = requireTreeHash((await runCommand(
+    "git",
+    ["rev-parse", "HEAD^{tree}"],
+    { env: cleanEnv },
+  )).stdout.trim());
+
+  await runCommand("pnpm", ["run", "qa:preflight"], {
+    env: { ...cleanEnv, SPOONJOY_PREFLIGHT_SKIP_REMOTE: "1" },
+  });
+  await runCommand("pnpm", ["run", "build"], {
+    env: { ...cleanEnv, CLOUDFLARE_ENV: "qa" },
+  });
+  const wrangler = await (
+    deps.readWranglerConfig ?? (async () => JSON.parse(
+      await readFile("wrangler.json", "utf8"),
+    ) as Record<string, unknown>)
+  )();
+  await validateConfiguredPostHogArtifacts(deps);
+  const postBuildStatus = await runCommand(
+    "git",
+    ["status", "--porcelain", "--untracked-files=no"],
+    { env: cleanEnv },
+  );
+  if (postBuildStatus.stdout.trim()) throw new Error("QA build changed tracked files.");
+
+  const migrationList = await runCommand("pnpm", [
+    "exec", "wrangler", "d1", "migrations", "list", "DB", "--remote", "--env", "qa",
+  ], { env: d1Env });
+  const pendingMigrations = parsePendingMigrationNames(migrationList.stdout);
+  if (pendingMigrations.length > 1 ||
+      (pendingMigrations.length === 1 && pendingMigrations[0] !== PRODUCT_MIGRATION_NAME)) {
+    throw new Error("QA product cutover has unreviewed pending migrations.");
+  }
+  const migrationSql = await readImmutableMigration(
+    { runCommand },
+    PRODUCT_MIGRATION_NAME,
+    cleanEnv,
+  );
+  assertReviewedMigrationSql(PRODUCT_MIGRATION_NAME, migrationSql);
+  const reviewedMigrationState: ReviewedMigration[] = [{
+    name: PRODUCT_MIGRATION_NAME,
+    sha256: migrationContentHash(migrationSql),
+    sql: migrationSql,
+  }];
+
+  const deployments = await runCommand(
+    "pnpm",
+    ["exec", "wrangler", "deployments", "list", "--env", "qa", "--json"],
+    { env: workersEnv },
+  );
+  const previousDeployment = parseCurrentProductionDeployment(deployments.stdout);
+  const previousVersionId = selectCurrentProductionVersion(deployments.stdout);
+  const versionsBefore = await runCommand(
+    "pnpm",
+    ["exec", "wrangler", "versions", "list", "--env", "qa", "--json"],
+    { env: workersEnv },
+  );
+  const cutoverDeps: Omit<RunProductionCanaryReleaseDeps, "writeReleaseArtifact"> = {
+    ...deps,
+    artifactDir: options.artifactDir,
+    env,
+    postHogHost: resolvePostHogBuildHost(wrangler, "qa"),
+    readPublicWorkerVersion: deps.readPublicWorkerVersion ?? readPublicWorkerVersion,
+    releaseSha: head,
+    releaseMode: "atomic-product-activation",
+    runCommand,
+    sleep: deps.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))),
+  };
+  return runReviewedProductCutover(cutoverDeps, {
+    environment: "qa",
+    sourceSha: head,
+    treeHash,
+    previousVersionId,
+    previousDeploymentId: previousDeployment.id,
+    versionsBefore: versionsBefore.stdout,
+    reviewedMigrationState,
+    cleanEnv,
+    d1Env,
+    workersEnv,
+  });
+}
+
 export async function runProductionReleaseCli(deps: ReleaseCliDeps): Promise<ReleaseArtifact> {
   const env = deps.env ?? process.env;
   const options = parseReleaseCliOptions(deps.argv ?? [], env);
@@ -2775,7 +3993,11 @@ export async function runProductionReleaseCli(deps: ReleaseCliDeps): Promise<Rel
 
 /* istanbul ignore if -- @preserve the CLI boundary delegates to the fully tested function above. */
 if (import.meta.url === `file://${process.argv[1]}`) {
-  runProductionReleaseCli({ argv: process.argv.slice(2) }).catch((error) => {
+  const argv = process.argv.slice(2);
+  const command = argv.includes("--environment")
+    ? runQaProductCutoverCli({ argv })
+    : runProductionReleaseCli({ argv });
+  command.catch((error) => {
     console.error(sanitizedFailure(error, cloudflareCredentialValues(process.env)));
     process.exitCode = 1;
   });

@@ -3,10 +3,12 @@ import { faker } from "@faker-js/faker";
 import { db } from "~/lib/db.server";
 import {
   MY_RECIPES_PAGE_SIZE,
+  normalizeMyRecipesFilters,
   normalizeMyRecipesPage,
   normalizeMyRecipesQuery,
   searchMyRecipes,
 } from "~/lib/my-recipes-search.server";
+import { RecipeTagValidationError } from "~/lib/recipe-tags.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
 
@@ -68,6 +70,16 @@ async function addIngredient(recipeId: string, ingredientName: string) {
       quantity: 1,
       unitId: unit.id,
       ingredientRefId: ingredientRef.id,
+    },
+  });
+}
+
+async function addTag(recipeId: string, label: string, normalizedLabel = label.toLowerCase()) {
+  return db.recipeTag.create({
+    data: {
+      recipeId,
+      label,
+      normalizedLabel,
     },
   });
 }
@@ -294,6 +306,175 @@ describe("my-recipes-search.server", () => {
     expect(params).toContain(MY_RECIPES_PAGE_SIZE * 2);
     expect(result.recipes).toHaveLength(MY_RECIPES_PAGE_SIZE);
     expect(result.hasNextPage).toBe(true);
+  });
+
+  it("applies direct course and canonical AND tag predicates before pagination", async () => {
+    const owner = await createChef("filtered_owner");
+    const matching = await createRecipe({
+      chefId: owner.id,
+      title: "Older Matching Supper",
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+    await db.recipe.update({ where: { id: matching.id }, data: { course: "main" } });
+    await addTag(matching.id, "Quick", "quick");
+    await addTag(matching.id, "Budget", "budget");
+
+    const wrongCourse = await createRecipe({
+      chefId: owner.id,
+      title: "Newer Wrong Course",
+      updatedAt: new Date("2026-03-03T00:00:00.000Z"),
+    });
+    await db.recipe.update({ where: { id: wrongCourse.id }, data: { course: "side" } });
+    await addTag(wrongCourse.id, "Quick", "quick");
+    await addTag(wrongCourse.id, "Budget", "budget");
+
+    const missingTag = await createRecipe({
+      chefId: owner.id,
+      title: "Newer Missing Tag",
+      updatedAt: new Date("2026-03-02T00:00:00.000Z"),
+    });
+    await db.recipe.update({ where: { id: missingTag.id }, data: { course: "main" } });
+    await addTag(missingTag.id, "Quick", "quick");
+
+    const options = {
+      ownerId: owner.id,
+      ownerUsername: owner.username,
+      course: "main",
+      tags: [" QUICK ", "ＢＵＤＧＥＴ"],
+      pageSize: 1,
+    } as Parameters<typeof searchMyRecipes>[1] & { course: string; tags: string[] };
+    const result = await searchMyRecipes(db, options);
+
+    expect(result).toMatchObject({
+      course: "main",
+      tags: ["quick", "budget"],
+      hasNextPage: false,
+    });
+    expect(result.recipes.map((recipe) => recipe.id)).toEqual([matching.id]);
+  });
+
+  it("normalizes and deduplicates tag filters in first-occurrence order for outgoing SQL", async () => {
+    const database = { $queryRawUnsafe: vi.fn(async () => []) };
+    const options = {
+      ownerId: "owner_filters",
+      ownerUsername: "filter_owner",
+      query: "beans",
+      course: "dessert",
+      tags: [" Quick Dinner ", "quick dinner", "ＢＵＤＧＥＴ"],
+    } as Parameters<typeof searchMyRecipes>[1] & { course: string; tags: string[] };
+
+    const result = await searchMyRecipes(database, options);
+
+    const [sql, ...values] = database.$queryRawUnsafe.mock.calls[0]!;
+    expect(result).toMatchObject({ course: "dessert", tags: ["quick dinner", "budget"] });
+    expect(sql).toMatch(/recipe\."course" = \?/);
+    expect(sql.match(/"normalizedLabel" = \?/g)).toHaveLength(2);
+    expect(values).toContain("dessert");
+    expect(values.indexOf("quick dinner")).toBeLessThan(values.indexOf("budget"));
+  });
+
+  it("rejects more than ten raw tag filters before deduplication", async () => {
+    const database = { $queryRawUnsafe: vi.fn(async () => []) };
+    const options = {
+      ownerId: "owner_too_many",
+      ownerUsername: "too_many",
+      tags: Array.from({ length: 11 }, () => "duplicate"),
+    } as Parameters<typeof searchMyRecipes>[1] & { tags: string[] };
+
+    await expect(searchMyRecipes(database, options)).rejects.toThrow("At most 10 tag filters are allowed");
+    let iteratorCalls = 0;
+    const deceptiveTags = {
+      length: 1,
+      *[Symbol.iterator]() {
+        iteratorCalls += 1;
+        yield "\t";
+        yield* Array.from({ length: 10 }, () => "duplicate");
+      },
+    } as unknown as readonly string[];
+    expect(() => normalizeMyRecipesFilters(null, deceptiveTags))
+      .toThrow("At most 10 tag filters are allowed");
+    expect(iteratorCalls).toBe(1);
+    expect(database.$queryRawUnsafe).not.toHaveBeenCalled();
+  });
+
+  it("rejects service-only unsafe offsets before issuing SQL", async () => {
+    const database = { $queryRawUnsafe: vi.fn(async () => []) };
+
+    await expect(searchMyRecipes(database, {
+      ownerId: "unsafe_page_owner",
+      ownerUsername: "unsafe_page_owner",
+      page: Number.MAX_SAFE_INTEGER,
+    })).rejects.toThrow("Page offset must be a safe integer");
+    expect(database.$queryRawUnsafe).not.toHaveBeenCalled();
+  });
+
+  it("does not disguise unexpected canonical-normalizer failures as validation errors", () => {
+    const iteratorFailure = new Error("unexpected iterator failure");
+    const tags = new Proxy([], {
+      get(target, property, receiver) {
+        if (property === Symbol.iterator) return () => { throw iteratorFailure; };
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    let caught: unknown;
+    try {
+      normalizeMyRecipesFilters(null, tags);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBe(iteratorFailure);
+
+    const validationFailure = new RecipeTagValidationError("tags.0", "iterator validation failure");
+    const validationTags = {
+      length: 0,
+      [Symbol.iterator]() {
+        throw validationFailure;
+      },
+    } as unknown as readonly string[];
+    try {
+      normalizeMyRecipesFilters(null, validationTags);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBe(validationFailure);
+
+    const canonicalFailure = new Error("unexpected canonical failure");
+    const normalizeSpy = vi.spyOn(String.prototype, "normalize")
+      .mockImplementationOnce(() => { throw canonicalFailure; });
+    try {
+      normalizeMyRecipesFilters(null, ["quick"]);
+    } catch (error) {
+      caught = error;
+    } finally {
+      normalizeSpy.mockRestore();
+    }
+    expect(caught).toBe(canonicalFailure);
+  });
+
+  it("rejects an explicitly empty course while accepting an absent course", () => {
+    expect(() => normalizeMyRecipesFilters("", [])).toThrow("course must be null or a supported value");
+    expect(normalizeMyRecipesFilters(null, [])).toEqual({ course: null, tags: [], displayTags: [] });
+  });
+
+  it("accepts only immutable prepared filters created by the canonical factory", async () => {
+    const database = { $queryRawUnsafe: vi.fn(async () => []) };
+    const prepared = normalizeMyRecipesFilters("main", ["H\u0331"]);
+
+    expect(Object.isFrozen(prepared)).toBe(true);
+    expect(Object.isFrozen(prepared.tags)).toBe(true);
+    expect(prepared).toEqual({ course: "main", tags: ["h\u0331"], displayTags: ["H\u0331"] });
+    await expect(searchMyRecipes(database, {
+      ownerId: "prepared_owner",
+      ownerUsername: "prepared_owner",
+      normalizedFilters: { course: "main", tags: ["forged"], displayTags: ["forged"] },
+    })).rejects.toThrow("Prepared recipe filters are invalid");
+    await expect(searchMyRecipes(database, {
+      ownerId: "mixed_owner",
+      ownerUsername: "mixed_owner",
+      normalizedFilters: prepared,
+      tags: ["raw"],
+    })).rejects.toThrow("Prepared recipe filters are invalid");
+    expect(database.$queryRawUnsafe).not.toHaveBeenCalled();
   });
 
   it("clamps service-only page sizes while keeping SQL row reads bounded", async () => {

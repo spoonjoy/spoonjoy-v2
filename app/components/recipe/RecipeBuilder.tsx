@@ -20,22 +20,31 @@ import { useState, useEffect, useId, useRef } from 'react'
 import { Button } from '~/components/ui/button'
 import { Fieldset, Field, Label, ErrorMessage } from '~/components/ui/fieldset'
 import { Input } from '~/components/ui/input'
+import { Select } from '~/components/ui/select'
 import { Textarea } from '~/components/ui/textarea'
 import { StepList } from './StepList'
 import { RecipeImageUpload } from './RecipeImageUpload'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Plus, X } from 'lucide-react'
 import type { StepData } from './StepEditorCard'
 import {
   TITLE_MAX_LENGTH,
   DESCRIPTION_MAX_LENGTH,
   SERVINGS_MAX_LENGTH,
 } from '~/lib/validation'
+import {
+  MAX_RECIPE_TAG_CODE_POINTS,
+  MAX_RECIPE_TAGS,
+  normalizeRecipeTagIdentity,
+  normalizeRecipeTagLabel,
+} from '~/lib/recipe-tags'
 
 export interface RecipeBuilderData {
   id?: string
   title: string
   description: string | null
   servings: string | null
+  course: 'main' | 'side' | 'appetizer' | 'dessert' | null
+  tags: string[]
   coverImageUrl: string | null
   imageFile?: File | null
   clearImage?: boolean
@@ -53,11 +62,17 @@ export interface RecipeBuilderProps {
     title?: string
     description?: string
     servings?: string
+    course?: string
+    tags?: string
     image?: string
     steps?: string
     general?: string
   }
   showSteps?: boolean
+}
+
+function normalizePendingTag(value: string): string {
+  return normalizeRecipeTagLabel(value)
 }
 
 export function RecipeBuilder({
@@ -74,6 +89,10 @@ export function RecipeBuilder({
   const titleErrorId = useId()
   const descriptionErrorId = useId()
   const servingsErrorId = useId()
+  const courseErrorId = useId()
+  const tagsErrorId = useId()
+  const tagsHelpId = useId()
+  const tagsInputId = useId()
 
   // Combine disabled and loading for isDisabled
   const isDisabled = disabled || loading
@@ -82,6 +101,14 @@ export function RecipeBuilder({
   const [title, setTitle] = useState(recipe?.title ?? '')
   const [description, setDescription] = useState(recipe?.description ?? '')
   const [servings, setServings] = useState(recipe?.servings ?? '')
+  const [course, setCourse] = useState<RecipeBuilderData['course']>(recipe?.course ?? null)
+  const [tags, setTags] = useState<string[]>(recipe?.tags ?? [])
+  const [tagInput, setTagInput] = useState('')
+  const [tagClientError, setTagClientError] = useState<string | null>(null)
+  const [tagAnnouncement, setTagAnnouncement] = useState('')
+  const tagsInputRef = useRef<HTMLInputElement>(null)
+  const tagRemoveButtonRefs = useRef(new Map<string, HTMLButtonElement>())
+  const pendingTagFocus = useRef<string | null>(null)
 
   // Image state
   const [imageFile, setImageFile] = useState<File | null>(null)
@@ -91,6 +118,19 @@ export function RecipeBuilder({
   // Steps state
   const [steps, setSteps] = useState<StepData[]>(recipe?.steps ?? [])
   const lastSaveRequestSignal = useRef(saveRequestSignal)
+
+  const pendingTag = normalizePendingTag(tagInput)
+  const pendingTagIsDuplicate = tags.some(
+    (tag) => normalizeRecipeTagIdentity(tag) === normalizeRecipeTagIdentity(pendingTag),
+  )
+  const pendingTagIsTooLong = Array.from(pendingTag.normalize('NFKC')).length > MAX_RECIPE_TAG_CODE_POINTS
+  const pendingTagExceedsCount = Boolean(pendingTag) && !pendingTagIsDuplicate && tags.length >= MAX_RECIPE_TAGS
+  const pendingTagError = pendingTagIsTooLong
+    ? `Tags must be ${MAX_RECIPE_TAG_CODE_POINTS} characters or fewer`
+    : pendingTagExceedsCount
+      ? `Add no more than ${MAX_RECIPE_TAGS} tags`
+      : null
+  const effectiveTagError = tagClientError ?? pendingTagError ?? errors?.tags
 
   // Cleanup preview URL on unmount
   useEffect(() => {
@@ -111,11 +151,23 @@ export function RecipeBuilder({
     /* istanbul ignore next -- @preserve defensive guard; save button is disabled for these states */
     if (isDisabled || !title.trim()) return
 
+    if (pendingTagError) {
+      setTagClientError(pendingTagError)
+      tagsInputRef.current?.focus()
+      return
+    }
+    const savedTags = pendingTag && !tags.some(
+      (tag) => normalizeRecipeTagIdentity(tag) === normalizeRecipeTagIdentity(pendingTag),
+    )
+      ? [...tags, pendingTag]
+      : tags
     const data: RecipeBuilderData = {
       id: recipe?.id,
       title,
       description: description || null,
       servings: servings || null,
+      course,
+      tags: savedTags,
       coverImageUrl: recipe?.coverImageUrl ?? '',
       imageFile,
       clearImage: clearImage || undefined,
@@ -130,12 +182,55 @@ export function RecipeBuilder({
     handleSave()
   }, [saveRequestSignal])
 
+  useEffect(() => {
+    const focusTarget = pendingTagFocus.current
+    if (focusTarget === null) return
+    pendingTagFocus.current = null
+    if (focusTarget) {
+      tagRemoveButtonRefs.current.get(focusTarget)?.focus()
+    } else {
+      tagsInputRef.current?.focus()
+    }
+  }, [tags])
+
   const handleCancel = () => {
     onCancel?.()
   }
 
   const handleStepsChange = (newSteps: StepData[]) => {
     setSteps(newSteps)
+  }
+
+  const addPendingTag = () => {
+    const label = pendingTag
+    if (!label) return
+    if (pendingTagError) {
+      setTagClientError(pendingTagError)
+      return
+    }
+    if (!pendingTagIsDuplicate) {
+      setTags((current) => [...current, label])
+      setTagAnnouncement(`${label} tag added`)
+    }
+    setTagClientError(null)
+    setTagInput('')
+  }
+
+  const handleTagKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
+    event.preventDefault()
+    addPendingTag()
+  }
+
+  const removeTag = (tagToRemove: string) => {
+    const index = tags.indexOf(tagToRemove)
+    pendingTagFocus.current = tags[index + 1] ?? tags[index - 1] ?? ''
+    setTags((current) => current.filter((tag) => tag !== tagToRemove))
+    if (normalizeRecipeTagIdentity(tagInput) === normalizeRecipeTagIdentity(tagToRemove)) {
+      setTagInput('')
+    }
+    setTagClientError(null)
+    setTagAnnouncement(`${tagToRemove} tag removed`)
   }
 
   const handleImageSelect = (file: File) => {
@@ -245,6 +340,91 @@ export function RecipeBuilder({
               aria-describedby={errors?.servings ? servingsErrorId : undefined}
             />
             {errors?.servings && <ErrorMessage id={servingsErrorId}>{errors.servings}</ErrorMessage>}
+          </Field>
+
+          <Field>
+            <Label>Course</Label>
+            <Select
+              value={course ?? ''}
+              onChange={(event) => setCourse((event.target.value || null) as RecipeBuilderData['course'])}
+              disabled={isDisabled}
+              data-invalid={errors?.course ? true : undefined}
+              aria-invalid={errors?.course ? true : undefined}
+              aria-describedby={errors?.course ? courseErrorId : undefined}
+            >
+              <option value="">No course</option>
+              <option value="main">Main</option>
+              <option value="side">Side</option>
+              <option value="appetizer">Appetizer</option>
+              <option value="dessert">Dessert</option>
+            </Select>
+            {errors?.course && <ErrorMessage id={courseErrorId}>{errors.course}</ErrorMessage>}
+          </Field>
+
+          <Field>
+            <Label htmlFor={tagsInputId}>Tags</Label>
+            <div data-slot="control" className="flex gap-2">
+              <input
+                ref={tagsInputRef}
+                id={tagsInputId}
+                type="text"
+                value={tagInput}
+                onChange={(event) => {
+                  setTagInput(event.target.value)
+                  setTagClientError(null)
+                }}
+                onKeyDown={handleTagKeyDown}
+                placeholder="Add a tag"
+                disabled={isDisabled}
+                data-invalid={effectiveTagError ? true : undefined}
+                aria-invalid={effectiveTagError ? true : undefined}
+                aria-describedby={effectiveTagError ? `${tagsHelpId} ${tagsErrorId}` : tagsHelpId}
+                className="font-sj-ui min-h-11 min-w-0 flex-1 rounded-[var(--sj-radius-small)] border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-3.5 py-2.5 text-base/6 text-[var(--sj-ink)] outline-none placeholder:text-[var(--sj-ink-soft)] hover:border-[var(--sj-brass)] focus-visible:ring-2 focus-visible:ring-[var(--sj-brass)] disabled:border-[var(--sj-border)] disabled:opacity-50 data-[invalid]:border-[var(--sj-tomato)] sm:px-3 sm:py-1.5 sm:text-sm/6"
+              />
+              <button
+                type="button"
+                onClick={addPendingTag}
+                disabled={isDisabled || !pendingTag || pendingTagIsTooLong || tags.length >= MAX_RECIPE_TAGS}
+                aria-label="Add tag"
+                title="Add tag"
+                className="inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--sj-radius-small)] border border-[var(--sj-border-strong)] bg-[var(--sj-field)] text-[var(--sj-ink-soft)] hover:border-[var(--sj-brass)] hover:text-[var(--sj-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)] disabled:opacity-50"
+              >
+                <Plus className="size-4" aria-hidden="true" />
+              </button>
+            </div>
+            <p id={tagsHelpId} className="mt-2 text-sm/6 text-[var(--sj-ink-soft)]">
+              Up to {MAX_RECIPE_TAGS} tags, {MAX_RECIPE_TAG_CODE_POINTS} characters each.
+            </p>
+            {tags.length > 0 && (
+              <div className="flex flex-wrap gap-2" aria-label="Recipe tags">
+                {tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex min-h-11 min-w-0 max-w-full items-center gap-1 rounded-[var(--sj-radius-small)] border border-[var(--sj-border)] bg-[var(--sj-field)] py-1 pl-3 pr-1 text-sm text-[var(--sj-ink)]"
+                  >
+                    <span className="min-w-0 break-all">{tag}</span>
+                    <button
+                      ref={(element) => {
+                        if (element) tagRemoveButtonRefs.current.set(tag, element)
+                        else tagRemoveButtonRefs.current.delete(tag)
+                      }}
+                      type="button"
+                      onClick={() => removeTag(tag)}
+                      disabled={isDisabled}
+                      aria-label={`Remove ${tag} tag`}
+                      title={`Remove ${tag} tag`}
+                      className="inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--sj-radius-small)] text-[var(--sj-ink-soft)] hover:text-[var(--sj-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)] disabled:opacity-50"
+                    >
+                      <X className="size-4" aria-hidden="true" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {effectiveTagError && <ErrorMessage id={tagsErrorId}>{effectiveTagError}</ErrorMessage>}
+            <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+              {tagAnnouncement}
+            </p>
           </Field>
 
           <Field>

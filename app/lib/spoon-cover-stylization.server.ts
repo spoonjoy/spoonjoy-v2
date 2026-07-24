@@ -221,7 +221,11 @@ async function captureSkipped(
 
 async function currentCoverForLifecycle(input: ScheduleSpoonStylizationInput) {
   return input.db.recipeCover.findFirst({
-    where: { id: input.coverId, recipeId: input.recipeId },
+    where: {
+      id: input.coverId,
+      recipeId: input.recipeId,
+      recipe: { deletedAt: null },
+    },
     select: {
       id: true,
       imageUrl: true,
@@ -239,6 +243,7 @@ async function markStylizationProcessing(input: ScheduleSpoonStylizationInput): 
     where: {
       id: input.coverId,
       recipeId: input.recipeId,
+      recipe: { deletedAt: null },
       status: { not: "archived" },
       archivedAt: null,
     },
@@ -271,6 +276,7 @@ async function markStylizationSucceeded(
     where: {
       id: input.coverId,
       recipeId: input.recipeId,
+      recipe: { deletedAt: null },
       status: { not: "archived" },
       archivedAt: null,
     },
@@ -456,6 +462,7 @@ async function activateStylizedCoverIfStillRequested(input: ScheduleSpoonStyliza
   const result = await input.db.recipe.updateMany({
     where: {
       id: input.recipeId,
+      deletedAt: null,
       activeCoverId: input.activationGuard?.activeCoverId,
       activeCoverVariant: input.activationGuard?.activeCoverVariant,
       coverMode: input.activationGuard?.coverMode,
