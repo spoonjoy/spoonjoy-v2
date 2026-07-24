@@ -7,7 +7,7 @@
  *
  * The SW file is plain JS (no bundler); it's served as-is.
  */
-import { describe, it, expect, vi, beforeAll } from "vitest";
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -170,6 +170,61 @@ describe("public/sw.js", () => {
       });
       await storedTask;
       expect(fresh.clients.openWindow).toHaveBeenCalledWith("/");
+    });
+  });
+
+  // Regression guard for the OAuth-login P0. Spoonjoy's SW controls every client
+  // via clients.claim(); a controlled client ABORTS a top-level navigation whose
+  // response is a cross-origin redirect (net::ERR_ABORTED) — exactly what OAuth
+  // start returns (302 to the provider). The fix relies on this exact contract:
+  // the SW resolves GET navigations in-worker (respondWith(fetch(...))) so the
+  // provider redirect is followed, and it must NOT intercept non-GET navigations
+  // or non-navigation requests. If someone makes the SW intercept POST
+  // navigations, or stop intercepting GET navigations, OAuth silently breaks
+  // again — one of these fails first.
+  describe("fetch event (OAuth cross-origin redirect guard)", () => {
+    beforeEach(() => {
+      // fetch(event.request) is evaluated when respondWith's argument is built;
+      // stub it so the GET-navigation guard test performs no real network call.
+      vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true })));
+    });
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    function fetchHandler() {
+      const scope = makeScope();
+      evaluateSw(scope);
+      const handlers = scope.__handlers.get("fetch") ?? [];
+      expect(handlers.length).toBeGreaterThan(0);
+      return handlers[0];
+    }
+
+    it("intercepts top-level GET navigations (resolves the provider redirect in-worker)", () => {
+      const respondWith = vi.fn();
+      fetchHandler()({
+        request: { mode: "navigate", method: "GET", url: "https://spoonjoy.app/auth/apple" },
+        respondWith,
+      });
+      expect(respondWith).toHaveBeenCalledTimes(1);
+    });
+
+    it("does NOT intercept non-GET navigations — an OAuth POST must pass through natively", () => {
+      const respondWith = vi.fn();
+      fetchHandler()({
+        request: { mode: "navigate", method: "POST", url: "https://spoonjoy.app/auth/apple" },
+        respondWith,
+      });
+      expect(respondWith).not.toHaveBeenCalled();
+    });
+
+    it("does NOT intercept non-navigation requests (assets / API calls pass through)", () => {
+      const respondWith = vi.fn();
+      fetchHandler()({
+        request: { mode: "cors", method: "GET", url: "https://spoonjoy.app/api/recipes" },
+        respondWith,
+      });
+      expect(respondWith).not.toHaveBeenCalled();
     });
   });
 });
