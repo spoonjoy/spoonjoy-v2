@@ -862,4 +862,81 @@ describe("search.server", () => {
 
     await expect(searchSpoonjoy(db, { query: "oat milk", scope: "shopping-list" })).resolves.toEqual([]);
   });
+
+  it("filters all-scope results through canonical recipe course and AND tags before the limit", async () => {
+    const chef = await createChef("canonical_filter");
+    const matching = await db.recipe.create({
+      data: {
+        title: "Canonical Filter Match",
+        description: "The only matching result",
+        chefId: chef.id,
+        course: "main",
+        updatedAt: new Date("2000-01-01T00:00:00.000Z"),
+      },
+    });
+    await db.recipeTag.createMany({
+      data: [
+        { recipeId: matching.id, label: "Quick Dinner", normalizedLabel: "quick dinner" },
+        { recipeId: matching.id, label: "Budget", normalizedLabel: "budget" },
+      ],
+    });
+    for (let index = 0; index < 31; index += 1) {
+      const recipe = await db.recipe.create({
+        data: {
+          title: `Canonical Filter Decoy ${index.toString().padStart(2, "0")}`,
+          chefId: chef.id,
+          course: index % 2 === 0 ? "side" : "main",
+          updatedAt: new Date(Date.UTC(2026, 0, index + 1)),
+        },
+      });
+      await db.recipeTag.create({
+        data: { recipeId: recipe.id, label: "Quick Dinner", normalizedLabel: "quick dinner" },
+      });
+    }
+    await db.cookbook.create({ data: { title: "Canonical Filter Cookbook", authorId: chef.id } });
+    await rebuildSearchIndex(db);
+    await db.$executeRawUnsafe(
+      `UPDATE "SearchDocument" SET "metadata" = ? WHERE "entityType" = 'recipe' AND "entityId" = ?`,
+      JSON.stringify({ course: "side", tags: ["display metadata is not authority"] }),
+      matching.id,
+    );
+    const options = {
+      query: "",
+      scope: "all" as const,
+      course: "main",
+      tags: [" Quick Dinner ", "ＢＵＤＧＥＴ"],
+      limit: 30,
+    } as Parameters<typeof searchSpoonjoy>[1] & { course: string; tags: string[] };
+
+    const querySpy = vi.spyOn(db, "$queryRawUnsafe");
+    const results = await searchSpoonjoy(db, options);
+    const searchCall = querySpy.mock.calls.find(([sql]) => (
+      typeof sql === "string" && sql.includes('FROM "SearchDocument"')
+    ));
+    querySpy.mockRestore();
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ type: "recipe", id: matching.id });
+    expect(searchCall).toBeDefined();
+    const [sql, ...values] = searchCall!;
+    expect(sql).toMatch(/INNER JOIN "Recipe" AS recipe/);
+    expect(sql).toMatch(/recipe\."course" = \?/);
+    expect(sql.match(/FROM "RecipeTag" AS tag/g)).toHaveLength(2);
+    expect(sql.match(/tag\."normalizedLabel" = \?/g)).toHaveLength(2);
+    expect(sql).not.toMatch(/metadata.*(?:LIKE|=)/i);
+    expect(values).toContain("main");
+    expect(values.indexOf("quick dinner")).toBeLessThan(values.indexOf("budget"));
+  });
+
+  it("rejects more than ten raw global tag filters before normalization", async () => {
+    const options = {
+      scope: "recipes" as const,
+      tags: Array.from({ length: 11 }, () => "duplicate"),
+    } as Parameters<typeof searchSpoonjoy>[1] & { tags: string[] };
+
+    await expect(searchSpoonjoy(db, options)).rejects.toThrow("At most 10 tag filters are allowed");
+    await expect(db.$queryRawUnsafe<Array<{ count: bigint }>>(
+      `SELECT COUNT(*) AS count FROM "SearchDocument"`,
+    )).resolves.toEqual([{ count: 0n }]);
+  });
 });

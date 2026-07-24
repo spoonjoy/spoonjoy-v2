@@ -8,6 +8,7 @@ import {
   loader,
 } from "~/routes/my-recipes";
 import MyRecipes from "~/routes/my-recipes";
+import { db } from "~/lib/db.server";
 import { createTestRoutesStub } from "../utils";
 import {
   addIngredientToRecipe,
@@ -125,6 +126,87 @@ describe("My Recipes drawer route", () => {
       newer.id,
       older.id,
     ]);
+  });
+
+  it("treats plus and percent-encoded tag spaces equivalently and filters before loading", async () => {
+    const viewer = await createDrawerUser("my-recipes-tag-space");
+    const matching = await createDrawerRecipe({
+      chefId: viewer.id,
+      title: "Matching Tag Space",
+      updatedAt: new Date("2026-01-01T00:00:00Z"),
+    });
+    await db.recipe.update({ where: { id: matching.id }, data: { course: "main" } });
+    await db.recipeTag.create({
+      data: { recipeId: matching.id, label: "Quick Dinner", normalizedLabel: "quick dinner" },
+    });
+    await createDrawerRecipe({
+      chefId: viewer.id,
+      title: "Newer Unfiltered Recipe",
+      updatedAt: new Date("2026-03-01T00:00:00Z"),
+    });
+    const headers = await sessionHeaders(viewer.id);
+
+    const percentEncoded = await loader({
+      request: new UndiciRequest(
+        "http://localhost:3000/my-recipes?q=&course=main&tag=Quick%20Dinner",
+        { headers },
+      ),
+      context: { cloudflare: { env: null } },
+      params: {},
+    } as any);
+    const plusEncoded = await loader({
+      request: new UndiciRequest(
+        "http://localhost:3000/my-recipes?q=&course=main&tag=Quick+Dinner",
+        { headers },
+      ),
+      context: { cloudflare: { env: null } },
+      params: {},
+    } as any);
+
+    expect(percentEncoded).toMatchObject({ course: "main", tags: ["quick dinner"] });
+    expect(plusEncoded).toMatchObject({ course: "main", tags: ["quick dinner"] });
+    expect(percentEncoded.recipes.map((recipe: { id: string }) => recipe.id)).toEqual([matching.id]);
+    expect(plusEncoded.recipes.map((recipe: { id: string }) => recipe.id)).toEqual([matching.id]);
+  });
+
+  it.each([
+    ["invalid course", "course=breakfast"],
+    ["invalid tag", "tag=%09"],
+    ["nonnumeric page", "page=not-a-page"],
+    ["zero page", "page=0"],
+    ["negative page", "page=-1"],
+    ["fractional page", "page=1.5"],
+    ["unsafe page", `page=${Number.MAX_SAFE_INTEGER + 1}`],
+    ["too many raw tags", Array.from({ length: 11 }, () => "tag=duplicate").join("&")],
+  ])("returns 400 for %s", async (_label, queryString) => {
+    const viewer = await createDrawerUser("my-recipes-invalid-filter");
+
+    await expect(loader({
+      request: new UndiciRequest(`http://localhost:3000/my-recipes?${queryString}`, {
+        headers: await sessionHeaders(viewer.id),
+      }),
+      context: { cloudflare: { env: null } },
+      params: {},
+    } as any)).rejects.toSatisfy((error: unknown) => {
+      expect(error).toBeInstanceOf(Response);
+      expect((error as Response).status).toBe(400);
+      return true;
+    });
+  });
+
+  it("normalizes a valid zero-padded page before issuing the bounded query", async () => {
+    const viewer = await createDrawerUser("my-recipes-normalized-page");
+
+    const result = await loader({
+      request: new UndiciRequest("http://localhost:3000/my-recipes?page=002", {
+        headers: await sessionHeaders(viewer.id),
+      }),
+      context: { cloudflare: { env: null } },
+      params: {},
+    } as any);
+
+    expect(result.page).toBe(2);
+    expect(result.hasPreviousPage).toBe(true);
   });
 
   it("returns one bounded page of owned recipes while preserving updated order", async () => {
@@ -384,6 +466,51 @@ describe("My Recipes drawer route", () => {
     expect(screen.getByRole("link", { name: "Next page" })).toHaveAttribute(
       "href",
       "/my-recipes-paged-first-page?page=2",
+    );
+  });
+
+  it("renders accessible filters and serializes q, course, tags, then page", async () => {
+    const Stub = createTestRoutesStub([
+      {
+        path: "/my-recipes-filter-controls",
+        Component: MyRecipes,
+        loader: () => ({
+          query: "tomato soup",
+          course: "main",
+          tags: ["quick dinner", "budget"],
+          page: 2,
+          pageSize: 50,
+          hasPreviousPage: true,
+          hasNextPage: true,
+          recipes: [{
+            id: "filtered-recipe",
+            title: "Filtered Tomato Soup",
+            description: null,
+            servings: null,
+            chef: { id: "chef-1", username: "ari" },
+            ingredientNames: [],
+          }],
+        }),
+      },
+    ]);
+
+    render(<Stub initialEntries={["/my-recipes-filter-controls?q=tomato+soup&course=main&tag=quick+dinner&tag=budget&page=2"]} />);
+
+    expect(await screen.findByRole("combobox", { name: "Course" })).toHaveValue("main");
+    expect(screen.getByRole("textbox", { name: "Add tag filter" })).toBeInTheDocument();
+    expect(screen.getByText("quick dinner")).toBeInTheDocument();
+    expect(screen.getByText("budget")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Clear filters" })).toHaveAttribute(
+      "href",
+      "/my-recipes-filter-controls?q=tomato+soup",
+    );
+    expect(screen.getByRole("link", { name: "Previous page" })).toHaveAttribute(
+      "href",
+      "/my-recipes-filter-controls?q=tomato+soup&course=main&tag=quick+dinner&tag=budget",
+    );
+    expect(screen.getByRole("link", { name: "Next page" })).toHaveAttribute(
+      "href",
+      "/my-recipes-filter-controls?q=tomato+soup&course=main&tag=quick+dinner&tag=budget&page=3",
     );
   });
 });

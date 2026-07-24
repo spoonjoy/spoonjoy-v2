@@ -95,6 +95,59 @@ describe("Search Route", () => {
         isAuthenticated: false,
       });
     });
+
+    it("treats plus and percent-encoded tag spaces equivalently", async () => {
+      const user = await createSearchUser("global_tag_space");
+      const matching = await db.recipe.create({
+        data: { title: "Global Matching Recipe", chefId: user.id, course: "main" },
+      });
+      await db.recipeTag.create({
+        data: { recipeId: matching.id, label: "Quick Dinner", normalizedLabel: "quick dinner" },
+      });
+      await db.recipe.create({
+        data: { title: "Global Unfiltered Recipe", chefId: user.id, course: "side" },
+      });
+
+      const percentEncoded = await loader({
+        request: new UndiciRequest(
+          "http://localhost:3000/search?scope=recipes&q=&course=main&tag=Quick%20Dinner",
+        ),
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+      const plusEncoded = await loader({
+        request: new UndiciRequest(
+          "http://localhost:3000/search?scope=recipes&q=&course=main&tag=Quick+Dinner",
+        ),
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      expect(percentEncoded).toMatchObject({ scope: "recipes", course: "main", tags: ["quick dinner"] });
+      expect(plusEncoded).toMatchObject({ scope: "recipes", course: "main", tags: ["quick dinner"] });
+      expect(percentEncoded.results.map((result) => result.id)).toEqual([matching.id]);
+      expect(plusEncoded.results.map((result) => result.id)).toEqual([matching.id]);
+    });
+
+    it.each([
+      ["invalid scope", "scope=unknown"],
+      ["invalid course", "scope=recipes&course=breakfast"],
+      ["invalid tag", "scope=recipes&tag=%09"],
+      ["recipe filters on cookbook scope", "scope=cookbooks&tag=quick"],
+      ["recipe filters on chef scope", "scope=chefs&course=main"],
+      ["recipe filters on shopping scope", "scope=shopping-list&tag=quick"],
+      ["too many raw tags", `scope=recipes&${Array.from({ length: 11 }, () => "tag=duplicate").join("&")}`],
+    ])("returns 400 for %s", async (_label, queryString) => {
+      await expect(loader({
+        request: new UndiciRequest(`http://localhost:3000/search?${queryString}`),
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any)).rejects.toSatisfy((error: unknown) => {
+        expect(error).toBeInstanceOf(Response);
+        expect((error as Response).status).toBe(400);
+        return true;
+      });
+    });
   });
 
   describe("meta", () => {
@@ -299,6 +352,77 @@ describe("Search Route", () => {
 
       expect(await screen.findByText("1 result")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /Chef chef-one/i })).toHaveAttribute("href", "/users/chef-one");
+    });
+
+    it("preserves recipe filters between all and recipes while clearing them for other scopes", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/search",
+          Component: Search,
+          loader: () => ({
+            query: "tomato soup",
+            scope: "all",
+            course: "main",
+            tags: ["quick dinner", "budget"],
+            isAuthenticated: false,
+            results: [],
+          }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/search?scope=all&q=tomato+soup&course=main&tag=quick+dinner&tag=budget"]} />);
+
+      expect(await screen.findByRole("combobox", { name: "Course" })).toHaveValue("main");
+      expect(screen.getByRole("textbox", { name: "Add tag filter" })).toBeInTheDocument();
+      expect(screen.getByText("quick dinner")).toBeInTheDocument();
+      expect(screen.getByText("budget")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Everything" })).toHaveAttribute(
+        "href",
+        "/search?scope=all&q=tomato+soup&course=main&tag=quick+dinner&tag=budget",
+      );
+      expect(screen.getByRole("link", { name: "Recipes" })).toHaveAttribute(
+        "href",
+        "/search?scope=recipes&q=tomato+soup&course=main&tag=quick+dinner&tag=budget",
+      );
+      expect(screen.getByRole("link", { name: "Cookbooks" })).toHaveAttribute(
+        "href",
+        "/search?scope=cookbooks&q=tomato+soup",
+      );
+      expect(screen.getByRole("link", { name: "Chefs" })).toHaveAttribute(
+        "href",
+        "/search?scope=chefs&q=tomato+soup",
+      );
+      expect(screen.getByRole("link", { name: "Shopping List" })).toHaveAttribute(
+        "href",
+        "/search?scope=shopping-list&q=tomato+soup",
+      );
+      expect(screen.getByRole("link", { name: "Clear filters" })).toHaveAttribute(
+        "href",
+        "/search?scope=all&q=tomato+soup",
+      );
+    });
+
+    it("does not render recipe filter controls for non-recipe scopes", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/search",
+          Component: Search,
+          loader: () => ({
+            query: "tomato soup",
+            scope: "cookbooks",
+            course: null,
+            tags: [],
+            isAuthenticated: false,
+            results: [],
+          }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/search?scope=cookbooks&q=tomato+soup"]} />);
+
+      expect(await screen.findByRole("heading", { name: "Cookbooks" })).toBeInTheDocument();
+      expect(screen.queryByRole("combobox", { name: "Course" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("textbox", { name: "Add tag filter" })).not.toBeInTheDocument();
     });
   });
 });
