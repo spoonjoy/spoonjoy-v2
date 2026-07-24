@@ -342,7 +342,9 @@ describe("RecipeBuilder", () => {
       expect(screen.getByText("Weeknight")).toBeInTheDocument();
       expect(screen.getByText("Quick")).toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: "Remove Weeknight tag" }));
+      const removeWeeknight = screen.getByRole("button", { name: "Remove Weeknight tag" });
+      removeWeeknight.focus();
+      await user.keyboard("{Enter}");
       await user.click(screen.getByRole("button", { name: /create recipe/i }));
 
       expect(onSave).toHaveBeenCalledWith(
@@ -959,12 +961,12 @@ describe("RecipeBuilder", () => {
       });
       render(<Wrapper initialEntries={["/recipes/new"]} />);
 
-      expect(screen.getByRole("combobox", { name: "Course" })).toHaveAccessibleDescription(
-        "Choose a supported course",
-      );
-      expect(screen.getByLabelText(/^tags$/i)).toHaveAccessibleDescription(
-        "Add no more than 10 tags",
-      );
+      const course = screen.getByRole("combobox", { name: "Course" });
+      const tags = screen.getByLabelText(/^tags$/i);
+      expect(course).toHaveAttribute("aria-invalid", "true");
+      expect(course).toHaveAccessibleDescription("Choose a supported course");
+      expect(tags).toHaveAttribute("aria-invalid", "true");
+      expect(tags).toHaveAccessibleDescription("Add no more than 10 tags");
     });
 
     it("displays steps validation error when errors prop contains steps error", () => {

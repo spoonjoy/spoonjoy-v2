@@ -4,38 +4,26 @@ Verified 2026-07-23.
 
 The authoring contract is frozen across five deliberately red test surfaces without changing production code:
 
-- `RecipeBuilder` exposes the exact nullable course choices, keyboard-first custom-tag entry and removal, edit prepopulation, save payload, disabled state, and accessible field errors.
-- `createRecipeDraft` receives authenticated ownership, course, normalized tags, one timestamp, a native D1 binding, and deterministic IDs. A real local trigger on the second tag proves the initial Recipe must roll back with its tags.
-- New/edit actions validate course and tag JSON, persist normalized metadata, and populate hidden browser payloads. Edit loading includes ordered display tags.
-- The local edit path freezes one operation set for authoring fields, guarded metadata replacement, Recipe and containing-Cookbook timestamps, and unchanged `SearchDocument`/`SearchIndexMetadata` authority. A real later-tag trigger must preserve every original row and timestamp.
-- The isolated Workerd path records every prepared statement and bind. Native create must issue one three-statement `DB.batch()`; the real edit action must receive the request DB binding and issue one guarded five-statement batch with no search-table write. Real D1 triggers force create/edit rollback.
+- `RecipeBuilder` exposes the exact nullable course choices, keyboard-first custom-tag entry and Enter-key removal, edit prepopulation, save payload, disabled state, and `aria-invalid` plus described field errors.
+- `createRecipeDraft` receives authenticated ownership, course, normalized tags, exactly one clock read, a native D1 binding, and deterministic IDs. The local executor must construct the exact three raw Prisma promises and pass that complete ordered array to one `$transaction`; a real trigger on the second tag proves the initial Recipe must roll back with its tags.
+- New/edit actions validate malformed JSON and valid-JSON semantic tag failures, persist normalized metadata, and populate hidden browser payloads. Edit loading proves service ordering independently of insertion order. Non-owner, absent, and deleted edit requests snapshot Recipe, RecipeTag, and containing-Cookbook rows and require exact no-mutation equality.
+- The local edit path freezes one operation set for authoring fields, guarded metadata replacement, Recipe and every containing-Cookbook timestamp while preserving an unrelated cookbook. It must construct the exact four query promises plus one delete promise and pass those five operations in order to one Prisma array `$transaction`. Its final-Cookbook trigger aborts only after it observes all earlier authoring and tag mutations in transient state. Full search rows remain byte-for-byte unchanged until `ensureSearchIndexFresh` detects the canonical fingerprint change and rebuilds searchable tag content.
+- The isolated Workerd path invokes the authenticated new/edit actions with the request DB binding, spies on both service calls to prove that exact binding is passed as `nativeDatabase`, records every prepared statement and bind, and requires exact ordered SQL and values. Native create must issue one three-statement `DB.batch()`; edit must issue one guarded five-statement batch; all core authoring writes must be members of that batch and no recorded statement may touch search tables. Independent service calls use a Prisma proxy whose `$transaction` always throws while the native binding remains usable. Exhaustive create and edit malformed-envelope matrices corrupt every statement's success flag, affected-count contract, returned-row count, and each returned identity/ownership/authoring/timestamp field without mutation; only a complete all-zero edit envelope maps to raced not-found.
 
 ## Red Runs
 
 ```text
-pnpm exec vitest run test/components/recipe/RecipeBuilder.test.tsx --coverage=false
+pnpm vitest run test/components/recipe/RecipeBuilder.test.tsx test/lib/recipe-create.server.test.ts test/routes/recipes-new.test.tsx test/routes/recipes-id-edit.test.tsx --maxWorkers=1 --no-file-parallelism
 ```
 
-Result: 35 passed, 6 expected failures, all caused by the absent course/tag controls and component data fields.
+Result: 170 passed, 16 expected failures across 186 tests. Every failure is at an absent course/tag control, loader, validation, atomic persistence, rollback, hidden-payload, or single-timestamp boundary.
 
 ```text
-pnpm exec vitest run test/lib/recipe-create.server.test.ts --coverage=false
+pnpm vitest run --config vitest.workers.config.ts test/workers/recipe-tags-d1.test.ts --maxWorkers=1 --no-isolate
 ```
 
-Result: 11 passed, 2 expected failures. The current helper ignores course/tags/dependencies, so the fixed timestamp is absent and the later-tag trigger is never reached.
-
-```text
-pnpm exec vitest run test/routes/recipes-new.test.tsx test/routes/recipes-id-edit.test.tsx --coverage=false --maxWorkers=1
-```
-
-Result: 124 passed, 8 expected failures, all at the absent loader, validation, persistence, rollback, or hidden-payload boundary.
-
-```text
-pnpm exec vitest run --config vitest.workers.config.ts --maxWorkers=1 --no-isolate test/workers/recipe-tags-d1.test.ts --coverage=false
-```
-
-Result: 2 existing atomicity tests passed and 3 authoring tests failed as intended: create made zero native batches, create did not reach the forced tag failure, and edit redirected after taking the legacy Prisma D1 transaction path. The test owns and asserts that exact legacy warning during red execution, so no diagnostic escapes the warning gate; green execution requires no warning.
+Result: 2 existing atomicity tests passed and 73 authoring contracts failed as intended across 75 tests: authenticated create omitted the route's native option, create did not reach the forced tag failure, all exhaustive create-result interceptors remained unreached, edit omitted its native service, and all exhaustive edit-result plus all-zero interceptors remained unreached. Both missing and trailing native result envelopes are rejected. Legacy Prisma warnings are captured only around the deliberately red calls, so no diagnostic escapes the warning gate; green execution requires no warning.
 
 ## Boundary
 
-The exact-content change allowlist was advanced only for these five reviewed test files. The normative product and protocol authorities are unchanged. No import UI, provider-specific behavior, or navigation redesign is introduced.
+Five harsh reviews found and blocked route-composition and executor ambiguity, weak SQL inspection, vacuous rollback timing, incomplete cookbook/search scope, a self-fulfilling loader order, incomplete accessibility semantics, selective create/edit result validation, contradictory not-found handling, missing row-level or attempted-ID no-mutation proofs, and an under-specified local executor shape. Every finding is now represented by an executable assertion, and the final reviewer returned `CONVERGED` with no blocker or major findings. The exact-content change allowlist was advanced only for these five reviewed test files; normative product and protocol authorities remain unchanged. No import UI, provider-specific behavior, or navigation redesign is introduced.

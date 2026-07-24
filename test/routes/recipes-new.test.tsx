@@ -250,6 +250,23 @@ describe("Recipes New Route", () => {
         tags: "Tags must be valid JSON",
       });
       await expect(db.recipe.count({ where: { chefId: testUserId } })).resolves.toBe(0);
+
+      const semanticResponse = await action({
+        request: await createFormRequest(
+          {
+            title: "Too Many Tags",
+            course: "main",
+            tags: JSON.stringify(Array.from({ length: 11 }, (_, index) => `Tag ${index}`)),
+          },
+          testUserId,
+        ),
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+      const semanticResult = extractResponseData(semanticResponse);
+      expect(semanticResult.status).toBe(400);
+      expect(semanticResult.data.errors.tags).toBe("Add no more than 10 tags");
+      await expect(db.recipe.count({ where: { chefId: testUserId } })).resolves.toBe(0);
     });
 
     it("should parse ingredients for the unsaved new recipe builder", async () => {

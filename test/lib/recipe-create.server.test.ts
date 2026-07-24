@@ -1,9 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { createRecipeDraft, parseRecipeStepsJson } from "~/lib/recipe-create.server";
 import { createUser } from "~/lib/auth.server";
 import { db } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { ensureSearchIndexFresh, rebuildSearchIndex, searchSpoonjoy } from "~/lib/search.server";
+
+function compactSql(sql: unknown): string {
+  return String(sql).replace(/\s+/g, " ").trim();
+}
 
 function expectInvalidSteps(payload: unknown, expectedError: string) {
   const result = parseRecipeStepsJson(typeof payload === "string" ? payload : JSON.stringify(payload));
@@ -269,26 +274,78 @@ describe("recipe create helpers", () => {
     it("atomically creates the authenticated chef's recipe, course, and normalized tags with one timestamp", async () => {
       const timestamp = new Date("2026-07-23T12:34:56.000Z");
       const tagIds = ["tag-weeknight", "tag-quick"];
-
-      const recipe = await createRecipeDraft(
-        db,
-        {
-          id: "recipe-atomic-metadata",
-          title: "Atomic Metadata Supper",
-          description: null,
-          servings: "2",
-          chefId: testUserId,
-          course: "main",
-          tags: ["  Weeknight  ", "Quick"],
-          steps: [],
-        },
-        {
-          nativeDatabase: null,
-          now: () => timestamp,
-          randomId: () => tagIds.shift() ?? "unexpected-tag-id",
-        },
+      const now = vi.fn()
+        .mockReturnValueOnce(timestamp)
+        .mockImplementation(() => {
+          throw new Error("creation timestamp requested more than once");
+        });
+      await rebuildSearchIndex(db);
+      const searchDocumentsBefore = await db.$queryRawUnsafe<Record<string, unknown>[]>(
+        `SELECT * FROM "SearchDocument" ORDER BY "entityType", "entityId"`,
+      );
+      const searchMetadataBefore = await db.$queryRawUnsafe<Record<string, unknown>[]>(
+        `SELECT * FROM "SearchIndexMetadata" ORDER BY "id"`,
       );
 
+      const transactionSpy = vi.spyOn(db, "$transaction");
+      const rawSpy = vi.spyOn(db, "$queryRawUnsafe");
+      let recipe!: Awaited<ReturnType<typeof createRecipeDraft>>;
+      let transactionCalls = 0;
+      let transactionInput: unknown;
+      let rawCalls: unknown[][] = [];
+      let rawPromises: unknown[] = [];
+      try {
+        recipe = await createRecipeDraft(
+          db,
+          {
+            id: "recipe-atomic-metadata",
+            title: "Atomic Metadata Supper",
+            description: null,
+            servings: "2",
+            chefId: testUserId,
+            course: "main",
+            tags: ["  Weeknight  ", "Quick"],
+            steps: [],
+          },
+          {
+            nativeDatabase: null,
+            now,
+            randomId: () => tagIds.shift() ?? "unexpected-tag-id",
+          },
+        );
+        transactionCalls = transactionSpy.mock.calls.length;
+        transactionInput = transactionSpy.mock.calls[0]?.[0];
+        rawCalls = rawSpy.mock.calls.map((call) => [...call]);
+        rawPromises = rawSpy.mock.results.map((result) => result.value);
+      } finally {
+        transactionSpy.mockRestore();
+        rawSpy.mockRestore();
+      }
+
+      expect(transactionCalls).toBe(1);
+      expect(Array.isArray(transactionInput)).toBe(true);
+      expect(transactionInput).toHaveLength(3);
+      expect((transactionInput as unknown[]).every((operation, index) => (
+        operation === rawPromises[index]
+      ))).toBe(true);
+      expect(rawCalls.map(([sql, ...values]) => [compactSql(sql), ...values])).toEqual([
+        [
+          'INSERT INTO "Recipe" ("id", "title", "description", "servings", "chefId", "course", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING "id", "title", "description", "servings", "chefId", "course", "createdAt", "updatedAt"',
+          "recipe-atomic-metadata", "Atomic Metadata Supper", null, "2", testUserId, "main",
+          timestamp.toISOString(), timestamp.toISOString(),
+        ],
+        [
+          'INSERT INTO "RecipeTag" ("id", "recipeId", "label", "normalizedLabel", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?) RETURNING "recipeId", "id" AS "tagId", "label", "normalizedLabel", "createdAt", "updatedAt"',
+          "tag-weeknight", "recipe-atomic-metadata", "Weeknight", "weeknight",
+          timestamp.toISOString(), timestamp.toISOString(),
+        ],
+        [
+          'INSERT INTO "RecipeTag" ("id", "recipeId", "label", "normalizedLabel", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?) RETURNING "recipeId", "id" AS "tagId", "label", "normalizedLabel", "createdAt", "updatedAt"',
+          "tag-quick", "recipe-atomic-metadata", "Quick", "quick",
+          timestamp.toISOString(), timestamp.toISOString(),
+        ],
+      ]);
+      expect(now).toHaveBeenCalledTimes(1);
       expect(recipe).toMatchObject({
         id: "recipe-atomic-metadata",
         chefId: testUserId,
@@ -317,6 +374,18 @@ describe("recipe create helpers", () => {
           updatedAt: timestamp,
         }),
       ]);
+      await expect(db.$queryRawUnsafe(
+        `SELECT * FROM "SearchDocument" ORDER BY "entityType", "entityId"`,
+      )).resolves.toEqual(searchDocumentsBefore);
+      await expect(db.$queryRawUnsafe(
+        `SELECT * FROM "SearchIndexMetadata" ORDER BY "id"`,
+      )).resolves.toEqual(searchMetadataBefore);
+      await expect(ensureSearchIndexFresh(db)).resolves.toBeGreaterThan(searchDocumentsBefore.length);
+      await expect(searchSpoonjoy(db, {
+        query: "weeknight",
+        scope: "recipes",
+        viewerId: testUserId,
+      })).resolves.toMatchObject([{ id: recipe.id, title: recipe.title }]);
     });
 
     it("rolls back the initial recipe when a later tag insertion fails", async () => {

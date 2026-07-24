@@ -12,6 +12,11 @@ import { sessionStorage } from "~/lib/session.server";
 import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "~/lib/recipe-title-uniqueness.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
+import { ensureSearchIndexFresh, rebuildSearchIndex, searchSpoonjoy } from "~/lib/search.server";
+
+function compactSql(sql: unknown): string {
+  return String(sql).replace(/\s+/g, " ").trim();
+}
 
 // Helper to extract data from React Router's data() response
 function extractResponseData(response: any): { data: any; status: number } {
@@ -83,6 +88,61 @@ describe("Recipes $id Edit Route", () => {
     await cleanupDatabase();
   });
 
+  async function seedAuthoringNoMutationSentinels() {
+    const recipeTimestamp = new Date("2002-01-01T00:00:00.000Z");
+    const cookbookTimestamp = new Date("2002-01-02T00:00:00.000Z");
+    await db.recipe.update({
+      where: { id: recipeId },
+      data: { course: "side", updatedAt: recipeTimestamp },
+    });
+    await db.recipeTag.create({
+      data: {
+        id: `no-mutation-tag-${recipeId}`,
+        recipeId,
+        label: "Preserve",
+        normalizedLabel: "preserve",
+        createdAt: recipeTimestamp,
+        updatedAt: recipeTimestamp,
+      },
+    });
+    const cookbook = await db.cookbook.create({
+      data: {
+        title: `No Mutation ${recipeId}`,
+        authorId: testUserId,
+        updatedAt: cookbookTimestamp,
+      },
+    });
+    await db.recipeInCookbook.create({
+      data: { cookbookId: cookbook.id, recipeId, addedById: testUserId },
+    });
+  }
+
+  async function readAuthoringNoMutationState() {
+    return {
+      recipe: await db.recipe.findUnique({
+        where: { id: recipeId },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          servings: true,
+          course: true,
+          deletedAt: true,
+          updatedAt: true,
+        },
+      }),
+      tags: await db.recipeTag.findMany({
+        where: { recipeId },
+        orderBy: [{ normalizedLabel: "asc" }, { id: "asc" }],
+      }),
+      cookbooks: await db.cookbook.findMany({
+        where: { recipes: { some: { recipeId } } },
+        orderBy: { id: "asc" },
+        select: { id: true, title: true, updatedAt: true },
+      }),
+    };
+  }
+
   describe("loader", () => {
     it("should redirect when not logged in", async () => {
       const request = new UndiciRequest(`http://localhost:3000/recipes/${recipeId}/edit`);
@@ -108,8 +168,8 @@ describe("Recipes $id Edit Route", () => {
       });
       await db.recipeTag.createMany({
         data: [
-          { recipeId, label: "Quick", normalizedLabel: "quick" },
           { recipeId, label: "Weeknight", normalizedLabel: "weeknight" },
+          { recipeId, label: "Quick", normalizedLabel: "quick" },
         ],
       });
       const session = await sessionStorage.getSession();
@@ -358,6 +418,8 @@ describe("Recipes $id Edit Route", () => {
     });
 
     it("should throw 403 when non-owner tries to update", async () => {
+      await seedAuthoringNoMutationSentinels();
+      const before = await readAuthoringNoMutationState();
       const request = await createFormRequest({ title: "New Title" }, otherUserId);
 
       await expect(
@@ -371,9 +433,12 @@ describe("Recipes $id Edit Route", () => {
         expect(error.status).toBe(403);
         return true;
       });
+      await expect(readAuthoringNoMutationState()).resolves.toEqual(before);
     });
 
     it("should throw 404 for non-existent recipe", async () => {
+      await seedAuthoringNoMutationSentinels();
+      const before = await readAuthoringNoMutationState();
       const request = await createFormRequest({ title: "New Title" }, testUserId);
 
       await expect(
@@ -387,6 +452,14 @@ describe("Recipes $id Edit Route", () => {
         expect(error.status).toBe(404);
         return true;
       });
+      await expect(readAuthoringNoMutationState()).resolves.toEqual(before);
+      await expect(db.recipe.findUnique({ where: { id: "nonexistent-id" } })).resolves.toBeNull();
+      await expect(db.recipeTag.count({
+        where: { recipeId: "nonexistent-id" },
+      })).resolves.toBe(0);
+      await expect(db.recipeInCookbook.count({
+        where: { recipeId: "nonexistent-id" },
+      })).resolves.toBe(0);
     });
 
     it("should return validation error when title is empty", async () => {
@@ -429,23 +502,46 @@ describe("Recipes $id Edit Route", () => {
         course: null,
       });
       await expect(db.recipeTag.count({ where: { recipeId } })).resolves.toBe(0);
+
+      const semanticResponse = await action({
+        request: await createFormRequest(
+          {
+            title: "Too Many Tags",
+            course: "main",
+            tags: JSON.stringify(Array.from({ length: 11 }, (_, index) => `Tag ${index}`)),
+          },
+          testUserId,
+        ),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+      const semanticResult = extractResponseData(semanticResponse);
+      expect(semanticResult.status).toBe(400);
+      expect(semanticResult.data.errors.tags).toBe("Add no more than 10 tags");
+      await expect(db.recipeTag.count({ where: { recipeId } })).resolves.toBe(0);
     });
 
     it("should successfully update recipe and redirect", async () => {
       const cookbook = await db.cookbook.create({
         data: { title: "Metadata Edit Sync Box", authorId: testUserId },
       });
-      await db.recipeInCookbook.create({
-        data: {
-          cookbookId: cookbook.id,
+      const secondCookbook = await db.cookbook.create({
+        data: { title: "Second Metadata Edit Sync Box", authorId: testUserId },
+      });
+      const unrelatedCookbook = await db.cookbook.create({
+        data: { title: "Unrelated Metadata Box", authorId: testUserId },
+      });
+      await db.recipeInCookbook.createMany({
+        data: [cookbook, secondCookbook].map((containingCookbook) => ({
+          cookbookId: containingCookbook.id,
           recipeId,
           addedById: testUserId,
-        },
+        })),
       });
       const oldCookbookUpdatedAt = new Date("2000-01-01T00:00:00.000Z");
       const oldRecipeUpdatedAt = new Date("2000-01-02T00:00:00.000Z");
-      await db.cookbook.update({
-        where: { id: cookbook.id },
+      await db.cookbook.updateMany({
+        where: { id: { in: [cookbook.id, secondCookbook.id, unrelatedCookbook.id] } },
         data: { updatedAt: oldCookbookUpdatedAt },
       });
       await db.recipe.update({
@@ -462,31 +558,12 @@ describe("Recipes $id Edit Route", () => {
           updatedAt: oldRecipeUpdatedAt,
         },
       });
-      await db.$executeRawUnsafe(
-        `INSERT INTO "SearchDocument" (
-          "entityType", "entityId", "ownerId", "ownerUsername", "sortAt",
-          "title", "subtitle", "body", "href", "imageUrl", "metadata"
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        "recipe",
-        recipeId,
-        testUserId,
-        "owner",
-        oldRecipeUpdatedAt.toISOString(),
-        "Indexed Before Edit",
-        "",
-        "old body",
-        `/recipes/${recipeId}`,
-        null,
-        "old metadata",
+      await rebuildSearchIndex(db);
+      const searchDocumentsBefore = await db.$queryRawUnsafe<Record<string, unknown>[]>(
+        `SELECT * FROM "SearchDocument" ORDER BY "entityType", "entityId"`,
       );
-      await db.$executeRawUnsafe(
-        `INSERT INTO "SearchIndexMetadata" (
-          "id", "sourceFingerprint", "documentCount", "rebuiltAt"
-        ) VALUES (?, ?, ?, ?)`,
-        "current",
-        "fingerprint-before-edit",
-        1,
-        oldRecipeUpdatedAt.toISOString(),
+      const searchMetadataBefore = await db.$queryRawUnsafe<Record<string, unknown>[]>(
+        `SELECT * FROM "SearchIndexMetadata" ORDER BY "id"`,
       );
       const request = await createFormRequest(
         {
@@ -499,12 +576,70 @@ describe("Recipes $id Edit Route", () => {
         testUserId
       );
 
-      const response = await action({
-        request,
-        context: { cloudflare: { env: null } },
-        params: { id: recipeId },
-      } as any);
+      const transactionSpy = vi.spyOn(db, "$transaction");
+      const queryRawSpy = vi.spyOn(db, "$queryRawUnsafe");
+      const executeRawSpy = vi.spyOn(db, "$executeRawUnsafe");
+      let response!: Awaited<ReturnType<typeof action>>;
+      let transactionCalls = 0;
+      let transactionInput: unknown;
+      let queryRawCalls: unknown[][] = [];
+      let executeRawCalls: unknown[][] = [];
+      let queryRawPromises: unknown[] = [];
+      let executeRawPromises: unknown[] = [];
+      try {
+        response = await action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: { id: recipeId },
+        } as any);
+        transactionCalls = transactionSpy.mock.calls.length;
+        transactionInput = transactionSpy.mock.calls[0]?.[0];
+        queryRawCalls = queryRawSpy.mock.calls.map((call) => [...call]);
+        executeRawCalls = executeRawSpy.mock.calls.map((call) => [...call]);
+        queryRawPromises = queryRawSpy.mock.results.map((result) => result.value);
+        executeRawPromises = executeRawSpy.mock.results.map((result) => result.value);
+      } finally {
+        transactionSpy.mockRestore();
+        queryRawSpy.mockRestore();
+        executeRawSpy.mockRestore();
+      }
 
+      expect(transactionCalls).toBe(1);
+      expect(Array.isArray(transactionInput)).toBe(true);
+      expect(transactionInput).toHaveLength(5);
+      expect(transactionInput).toEqual([
+        queryRawPromises[0],
+        executeRawPromises[0],
+        queryRawPromises[1],
+        queryRawPromises[2],
+        queryRawPromises[3],
+      ]);
+      const timestamp = queryRawCalls[0]?.[5];
+      expect(timestamp).toEqual(expect.stringMatching(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+      ));
+      expect(queryRawCalls.map(([sql, ...values]) => [compactSql(sql), ...values])).toEqual([
+        [
+          'UPDATE "Recipe" SET "title" = ?, "description" = ?, "servings" = ?, "course" = ?, "updatedAt" = ? WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL RETURNING "id" AS "recipeId", "title", "description", "servings", "course", "updatedAt"',
+          "Updated Title", "Updated Description", "6", "main", timestamp, recipeId, testUserId,
+        ],
+        [
+          'INSERT INTO "RecipeTag" ("id", "recipeId", "label", "normalizedLabel", "createdAt", "updatedAt") SELECT ?, "id", ?, ?, ?, ? FROM "Recipe" WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL RETURNING "recipeId" AS "recipeId", "id" AS "tagId", "label" AS "label", "normalizedLabel" AS "normalizedLabel", "createdAt" AS "createdAt", "updatedAt" AS "updatedAt"',
+          expect.any(String), "Weeknight", "weeknight", timestamp, timestamp, recipeId, testUserId,
+        ],
+        [
+          'INSERT INTO "RecipeTag" ("id", "recipeId", "label", "normalizedLabel", "createdAt", "updatedAt") SELECT ?, "id", ?, ?, ?, ? FROM "Recipe" WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL RETURNING "recipeId" AS "recipeId", "id" AS "tagId", "label" AS "label", "normalizedLabel" AS "normalizedLabel", "createdAt" AS "createdAt", "updatedAt" AS "updatedAt"',
+          expect.any(String), "Quick", "quick", timestamp, timestamp, recipeId, testUserId,
+        ],
+        [
+          'UPDATE "Cookbook" SET "updatedAt" = ? WHERE "id" IN (SELECT "cookbookId" FROM "RecipeInCookbook" WHERE "recipeId" = ? AND EXISTS (SELECT 1 FROM "Recipe" WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL)) RETURNING "id" AS "cookbookId", "updatedAt" AS "updatedAt"',
+          timestamp, recipeId, recipeId, testUserId,
+        ],
+      ]);
+      expect(executeRawCalls.map(([sql, ...values]) => [compactSql(sql), ...values])).toEqual([[
+        'DELETE FROM "RecipeTag" WHERE "recipeId" = ? AND EXISTS (SELECT 1 FROM "Recipe" WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL)',
+        recipeId, recipeId, testUserId,
+      ]]);
       expect(response).toBeInstanceOf(Response);
       expect(response.status).toBe(302);
       expect(response.headers.get("Location")).toBe(`/recipes/${recipeId}`);
@@ -515,12 +650,16 @@ describe("Recipes $id Edit Route", () => {
       expect(recipe?.description).toBe("Updated Description");
       expect(recipe?.servings).toBe("6");
       expect(recipe?.course).toBe("main");
-      const touchedCookbook = await db.cookbook.findUniqueOrThrow({
-        where: { id: cookbook.id },
-        select: { updatedAt: true },
+      const cookbookTimestamps = await db.cookbook.findMany({
+        where: { id: { in: [cookbook.id, secondCookbook.id, unrelatedCookbook.id] } },
+        select: { id: true, updatedAt: true },
       });
       expect(recipe!.updatedAt.getTime()).toBeGreaterThan(oldRecipeUpdatedAt.getTime());
-      expect(touchedCookbook.updatedAt).toEqual(recipe!.updatedAt);
+      expect(cookbookTimestamps).toEqual(expect.arrayContaining([
+        { id: cookbook.id, updatedAt: recipe!.updatedAt },
+        { id: secondCookbook.id, updatedAt: recipe!.updatedAt },
+        { id: unrelatedCookbook.id, updatedAt: oldCookbookUpdatedAt },
+      ]));
       const replacementTags = await db.recipeTag.findMany({
         where: { recipeId },
         orderBy: { normalizedLabel: "asc" },
@@ -537,16 +676,25 @@ describe("Recipes $id Edit Route", () => {
           && tag.updatedAt.getTime() === recipe!.updatedAt.getTime()
       ))).toBe(true);
       await expect(db.$queryRawUnsafe(
-        `SELECT "title", "body", "metadata" FROM "SearchDocument" WHERE "entityId" = ?`,
-        recipeId,
-      )).resolves.toEqual([{ title: "Indexed Before Edit", body: "old body", metadata: "old metadata" }]);
+        `SELECT * FROM "SearchDocument" ORDER BY "entityType", "entityId"`,
+      )).resolves.toEqual(searchDocumentsBefore);
       await expect(db.$queryRawUnsafe(
-        `SELECT "sourceFingerprint", "documentCount" FROM "SearchIndexMetadata" WHERE "id" = ?`,
-        "current",
-      )).resolves.toEqual([{ sourceFingerprint: "fingerprint-before-edit", documentCount: 1n }]);
+        `SELECT * FROM "SearchIndexMetadata" ORDER BY "id"`,
+      )).resolves.toEqual(searchMetadataBefore);
+      await expect(ensureSearchIndexFresh(db)).resolves.toBe(searchDocumentsBefore.length);
+      const searchMetadataAfterRefresh = await db.$queryRawUnsafe<Array<{
+        sourceFingerprint: string;
+      }>>(`SELECT "sourceFingerprint" FROM "SearchIndexMetadata" WHERE "id" = ?`, "current");
+      expect(searchMetadataAfterRefresh[0].sourceFingerprint)
+        .not.toBe(searchMetadataBefore[0].sourceFingerprint);
+      await expect(searchSpoonjoy(db, {
+        query: "weeknight",
+        scope: "recipes",
+        viewerId: testUserId,
+      })).resolves.toMatchObject([{ id: recipeId, title: "Updated Title" }]);
     });
 
-    it("rolls back authoring fields, tags, recipe and cookbook timestamps, and search authority after a later tag failure", async () => {
+    it("rolls back authoring fields, tags, recipe and cookbook timestamps, and search authority after a verified final mutation failure", async () => {
       const originalRecipeUpdatedAt = new Date("2001-01-01T00:00:00.000Z");
       const originalCookbookUpdatedAt = new Date("2001-01-02T00:00:00.000Z");
       const cookbook = await db.cookbook.create({
@@ -599,12 +747,26 @@ describe("Recipes $id Edit Route", () => {
         1,
         originalRecipeUpdatedAt.toISOString(),
       );
+      const searchDocumentsBefore = await db.$queryRawUnsafe<Record<string, unknown>[]>(
+        `SELECT * FROM "SearchDocument" ORDER BY "entityType", "entityId"`,
+      );
+      const searchMetadataBefore = await db.$queryRawUnsafe<Record<string, unknown>[]>(
+        `SELECT * FROM "SearchIndexMetadata" ORDER BY "id"`,
+      );
       await db.$executeRawUnsafe(`
         CREATE TRIGGER "RecipeTag_edit_abort"
-        BEFORE INSERT ON "RecipeTag"
-        WHEN NEW."normalizedLabel" = 'quick'
+        BEFORE UPDATE OF "updatedAt" ON "Cookbook"
+        WHEN OLD."id" = '${cookbook.id}'
         BEGIN
-          SELECT RAISE(ABORT, 'recipe edit tag failure');
+          SELECT CASE WHEN
+            (SELECT "title" FROM "Recipe" WHERE "id" = '${recipeId}') = 'Must Roll Back'
+            AND (SELECT COUNT(*) FROM "RecipeTag"
+              WHERE "recipeId" = '${recipeId}'
+                AND "normalizedLabel" IN ('quick', 'weeknight')) = 2
+            AND (SELECT COUNT(*) FROM "RecipeTag"
+              WHERE "recipeId" = '${recipeId}' AND "normalizedLabel" = 'preserved') = 0
+          THEN RAISE(ABORT, 'recipe edit late failure')
+          ELSE RAISE(IGNORE) END;
         END
       `);
 
@@ -646,15 +808,11 @@ describe("Recipes $id Edit Route", () => {
           }),
         ]);
         await expect(db.$queryRawUnsafe(
-          `SELECT "title", "body", "metadata" FROM "SearchDocument" WHERE "entityId" = ?`,
-          recipeId,
-        )).resolves.toEqual([
-          { title: "Rollback Search Sentinel", body: "preserve me", metadata: "sentinel metadata" },
-        ]);
+          `SELECT * FROM "SearchDocument" ORDER BY "entityType", "entityId"`,
+        )).resolves.toEqual(searchDocumentsBefore);
         await expect(db.$queryRawUnsafe(
-          `SELECT "sourceFingerprint", "documentCount" FROM "SearchIndexMetadata" WHERE "id" = ?`,
-          "current",
-        )).resolves.toEqual([{ sourceFingerprint: "rollback-fingerprint", documentCount: 1n }]);
+          `SELECT * FROM "SearchIndexMetadata" ORDER BY "id"`,
+        )).resolves.toEqual(searchMetadataBefore);
       } finally {
         await db.$executeRawUnsafe('DROP TRIGGER IF EXISTS "RecipeTag_edit_abort"');
       }
@@ -1113,11 +1271,12 @@ describe("Recipes $id Edit Route", () => {
     });
 
     it("should throw 404 for soft-deleted recipe in action", async () => {
-      // Soft delete the recipe
+      await seedAuthoringNoMutationSentinels();
       await db.recipe.update({
         where: { id: recipeId },
         data: { deletedAt: new Date() },
       });
+      const before = await readAuthoringNoMutationState();
 
       const request = await createFormRequest({ title: "New Title" }, testUserId);
 
@@ -1132,6 +1291,7 @@ describe("Recipes $id Edit Route", () => {
         expect(error.status).toBe(404);
         return true;
       });
+      await expect(readAuthoringNoMutationState()).resolves.toEqual(before);
     });
 
     it("should set empty description and servings to null", async () => {

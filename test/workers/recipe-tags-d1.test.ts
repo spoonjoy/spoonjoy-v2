@@ -7,9 +7,12 @@ vi.mock("~/components/recipe/RecipeBuilder", () => ({
 
 import { getDb } from "../../app/lib/db.server";
 import { createRecipeDraft } from "../../app/lib/recipe-create.server";
+import * as recipeCreateModule from "../../app/lib/recipe-create.server";
 import { replaceRecipeTagMetadata } from "../../app/lib/recipe-tags.server";
+import * as recipeTagsModule from "../../app/lib/recipe-tags.server";
 import { createUserSessionCookie } from "../../app/lib/session.server";
 import { action as editRecipeAction } from "../../app/routes/recipes.$id.edit";
+import { action as newRecipeAction } from "../../app/routes/recipes.new";
 
 interface TestD1Result<T = unknown> {
   meta: { changes: number };
@@ -35,6 +38,13 @@ interface RecordedStatement {
 interface RecordingD1Database extends TestD1Database {
   batchCalls: RecordedStatement[][];
   records: RecordedStatement[];
+}
+
+interface RecordingDatabaseOptions {
+  interceptBatch?: (
+    records: RecordedStatement[],
+    runRealBatch: () => Promise<TestD1Result[]>,
+  ) => Promise<TestD1Result[]>;
 }
 
 interface TestD1Database {
@@ -80,6 +90,7 @@ const createdSchema = {
   addedServings: false,
   cookbook: false,
   recipe: false,
+  recipeCover: false,
   recipeInCookbook: false,
   recipeTag: false,
   user: false,
@@ -89,7 +100,7 @@ function database(): TestD1Database {
   return (env as unknown as { DB: TestD1Database }).DB;
 }
 
-function recordingDatabase(): RecordingD1Database {
+function recordingDatabase(options: RecordingDatabaseOptions = {}): RecordingD1Database {
   const realDatabase = database();
   const records: RecordedStatement[] = [];
   const batchCalls: RecordedStatement[][] = [];
@@ -117,13 +128,234 @@ function recordingDatabase(): RecordingD1Database {
       return wrap(realDatabase.prepare(sql), record);
     },
     async batch(statements) {
-      batchCalls.push(statements.map((statement) => {
+      const batchRecords = statements.map((statement) => {
         if (!statement.__record) throw new Error("Missing recorded D1 statement");
         return statement.__record;
-      }));
-      return realDatabase.batch(statements.map((statement) => statement.__real ?? statement));
+      });
+      batchCalls.push(batchRecords);
+      const runRealBatch = () => realDatabase.batch(
+        statements.map((statement) => statement.__real ?? statement),
+      );
+      return options.interceptBatch
+        ? options.interceptBatch(batchRecords, runRealBatch)
+        : runRealBatch();
     },
   };
+}
+
+function normalizeSql(sql: string): string {
+  return sql.replace(/\s+/g, " ").trim();
+}
+
+function isCoreAuthoringMutation(statement: RecordedStatement): boolean {
+  return /^(?:INSERT INTO|UPDATE|DELETE FROM)\s+"(?:Recipe|RecipeTag|Cookbook)"/i
+    .test(normalizeSql(statement.sql));
+}
+
+function rejectPrismaTransactions<T extends object>(prisma: T): T {
+  return new Proxy(prisma, {
+    get(target, property) {
+      if (property === "$transaction") {
+        return () => {
+          throw new Error("native authoring must not call Prisma $transaction");
+        };
+      }
+      return Reflect.get(target, property, target);
+    },
+  });
+}
+
+function validCreateResultEnvelopes(records: RecordedStatement[]): TestD1Result[] {
+  const recipeValues = records[0].values;
+  const result = (results: unknown[]): TestD1Result => ({
+    meta: { changes: 1 },
+    results,
+    success: true,
+  });
+  return [
+    result([{
+      id: recipeValues[0],
+      title: recipeValues[1],
+      description: recipeValues[2],
+      servings: recipeValues[3],
+      chefId: recipeValues[4],
+      course: recipeValues[5],
+      createdAt: recipeValues[6],
+      updatedAt: recipeValues[7],
+    }]),
+    ...records.slice(1).map((record) => result([{
+      recipeId: record.values[1],
+      tagId: record.values[0],
+      label: record.values[2],
+      normalizedLabel: record.values[3],
+      createdAt: record.values[4],
+      updatedAt: record.values[5],
+    }])),
+  ];
+}
+
+function validEditResultEnvelopes(records: RecordedStatement[]): TestD1Result[] {
+  const timestamp = records[0].values[4] as string;
+  const result = (changes: number, results: unknown[]): TestD1Result => ({
+    meta: { changes },
+    results,
+    success: true,
+  });
+  return [
+    result(1, [{
+      recipeId: RECIPE_ID,
+      title: records[0].values[0],
+      description: records[0].values[1],
+      servings: records[0].values[2],
+      course: records[0].values[3],
+      updatedAt: timestamp,
+    }]),
+    result(1, []),
+    ...records.slice(2, -1).map((record) => result(1, [{
+      recipeId: RECIPE_ID,
+      tagId: record.values[0],
+      label: record.values[1],
+      normalizedLabel: record.values[2],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }])),
+    result(1, [{ cookbookId: COOKBOOK_ID, updatedAt: timestamp }]),
+  ];
+}
+
+interface EnvelopeDefect {
+  defect: string;
+  mutate: (results: TestD1Result[]) => TestD1Result[];
+}
+
+function setReturnedField(
+  results: TestD1Result[],
+  operation: number,
+  field: string,
+): TestD1Result[] {
+  const row = results[operation].results[0] as Record<string, unknown>;
+  results[operation] = {
+    ...results[operation],
+    results: [{ ...row, [field]: `unexpected-${field}` }],
+  };
+  return results;
+}
+
+function createEnvelopeDefects(): EnvelopeDefect[] {
+  const operations = ["recipe", "first tag", "second tag"];
+  const defects: EnvelopeDefect[] = [{
+    defect: "missing operation count",
+    mutate: (results) => results.slice(0, -1),
+  }, {
+    defect: "extra operation count",
+    mutate: (results) => [...results, { meta: { changes: 0 }, results: [], success: true }],
+  }];
+  operations.forEach((name, operation) => {
+    defects.push({
+      defect: `${name} success flag`,
+      mutate(results) {
+        results[operation] = { ...results[operation], success: false };
+        return results;
+      },
+    }, {
+      defect: `${name} affected count`,
+      mutate(results) {
+        results[operation] = { ...results[operation], meta: { changes: 0 } };
+        return results;
+      },
+    }, {
+      defect: `${name} returned row count`,
+      mutate(results) {
+        results[operation] = { ...results[operation], results: [] };
+        return results;
+      },
+    });
+  });
+  [
+    [0, ["id", "title", "description", "servings", "chefId", "course", "createdAt", "updatedAt"]],
+    [1, ["recipeId", "tagId", "label", "normalizedLabel", "createdAt", "updatedAt"]],
+    [2, ["recipeId", "tagId", "label", "normalizedLabel", "createdAt", "updatedAt"]],
+  ].forEach(([operation, fields]) => {
+    (fields as string[]).forEach((field) => {
+      defects.push({
+        defect: `${operations[operation as number]} returned ${field}`,
+        mutate: (results) => setReturnedField(results, operation as number, field),
+      });
+    });
+  });
+  return defects;
+}
+
+function editEnvelopeDefects(): EnvelopeDefect[] {
+  const operations = ["recipe", "tag deletion", "first tag", "second tag", "cookbook"];
+  const defects: EnvelopeDefect[] = [{
+    defect: "missing operation count",
+    mutate: (results) => results.slice(0, -1),
+  }, {
+    defect: "extra operation count",
+    mutate: (results) => [...results, { meta: { changes: 0 }, results: [], success: true }],
+  }];
+  operations.forEach((name, operation) => {
+    defects.push({
+      defect: `${name} success flag`,
+      mutate(results) {
+        results[operation] = { ...results[operation], success: false };
+        return results;
+      },
+    });
+  });
+  [0, 2, 3].forEach((operation) => {
+    defects.push({
+      defect: `${operations[operation]} affected count`,
+      mutate(results) {
+        results[operation] = { ...results[operation], meta: { changes: 0 } };
+        return results;
+      },
+    });
+  });
+  defects.push({
+    defect: "tag deletion affected count",
+    mutate(results) {
+      results[1] = { ...results[1], meta: { changes: -1 } };
+      return results;
+    },
+  }, {
+    defect: "cookbook affected count",
+    mutate(results) {
+      results[4] = { ...results[4], meta: { changes: 2 } };
+      return results;
+    },
+  });
+  [0, 2, 3, 4].forEach((operation) => {
+    defects.push({
+      defect: `${operations[operation]} returned row count`,
+      mutate(results) {
+        results[operation] = { ...results[operation], results: [] };
+        return results;
+      },
+    });
+  });
+  defects.push({
+    defect: "tag deletion returned row count",
+    mutate(results) {
+      results[1] = { ...results[1], results: [{ unexpected: true }] };
+      return results;
+    },
+  });
+  [
+    [0, ["recipeId", "title", "description", "servings", "course", "updatedAt"]],
+    [2, ["recipeId", "tagId", "label", "normalizedLabel", "createdAt", "updatedAt"]],
+    [3, ["recipeId", "tagId", "label", "normalizedLabel", "createdAt", "updatedAt"]],
+    [4, ["cookbookId", "updatedAt"]],
+  ].forEach(([operation, fields]) => {
+    (fields as string[]).forEach((field) => {
+      defects.push({
+        defect: `${operations[operation as number]} returned ${field}`,
+        mutate: (results) => setReturnedField(results, operation as number, field),
+      });
+    });
+  });
+  return defects;
 }
 
 async function execute(sql: string, ...values: unknown[]) {
@@ -224,6 +456,32 @@ async function ensureSchema() {
     createdSchema.recipeTag = true;
   }
 
+  if (!(await tableExists("RecipeCover"))) {
+    await execute(`
+      CREATE TABLE "RecipeCover" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "recipeId" TEXT NOT NULL,
+        "imageUrl" TEXT NOT NULL,
+        "stylizedImageUrl" TEXT,
+        "sourceType" TEXT NOT NULL,
+        "sourceSpoonId" TEXT,
+        "status" TEXT NOT NULL DEFAULT 'ready',
+        "createdById" TEXT,
+        "sourceImageUrl" TEXT,
+        "generationStatus" TEXT NOT NULL DEFAULT 'none',
+        "failureReason" TEXT,
+        "promptVersion" TEXT,
+        "styleVersion" TEXT,
+        "promptAddition" TEXT,
+        "parentCoverId" TEXT,
+        "archivedAt" DATETIME,
+        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY ("recipeId") REFERENCES "Recipe"("id") ON DELETE CASCADE
+      )
+    `);
+    createdSchema.recipeCover = true;
+  }
+
   if (!(await tableExists("Cookbook"))) {
     await execute(`
       CREATE TABLE "Cookbook" (
@@ -268,6 +526,9 @@ async function cleanupFixture() {
   }
   if (await tableExists("RecipeTag")) {
     await execute(`DELETE FROM "RecipeTag" WHERE "recipeId" IN (?, ?)`, RECIPE_ID, CREATE_RECIPE_ID);
+  }
+  if (await tableExists("RecipeCover")) {
+    await execute(`DELETE FROM "RecipeCover" WHERE "recipeId" IN (?, ?)`, RECIPE_ID, CREATE_RECIPE_ID);
   }
   if (await tableExists("Recipe")) {
     await execute(`DELETE FROM "Recipe" WHERE "id" IN (?, ?)`, RECIPE_ID, CREATE_RECIPE_ID);
@@ -360,6 +621,7 @@ describe("recipe tag native D1 atomicity", () => {
       await database().exec(`DROP TABLE IF EXISTS "RecipeInCookbook"`);
     }
     if (createdSchema.cookbook) await database().exec(`DROP TABLE IF EXISTS "Cookbook"`);
+    if (createdSchema.recipeCover) await database().exec(`DROP TABLE IF EXISTS "RecipeCover"`);
     if (createdSchema.recipeTag) await database().exec(`DROP TABLE IF EXISTS "RecipeTag"`);
     if (createdSchema.addedCourse) {
       await database().exec(`ALTER TABLE "Recipe" DROP COLUMN "course"`);
@@ -376,39 +638,68 @@ describe("recipe tag native D1 atomicity", () => {
 
   it("creates the authenticated recipe and requested tags in one inspected native D1 batch", async () => {
     const nativeDatabase = recordingDatabase();
-    const prisma = await getDb({ DB: nativeDatabase as unknown as D1Database });
-    const timestamp = "2026-07-23T18:04:00.000Z";
-
+    const routeEnv = {
+      ...(env as unknown as Record<string, unknown>),
+      DB: nativeDatabase,
+      NODE_ENV: "test",
+      SESSION_SECRET: "unit-6-2-session-secret-at-least-32-characters",
+      SPOONJOY_BASE_URL: "https://spoonjoy.app",
+    };
+    const cookie = await createUserSessionCookie(
+      USER_ID,
+      routeEnv,
+      new Request("https://spoonjoy.app/recipes/new"),
+    );
+    const formData = new FormData();
+    formData.set("title", "Unit 6.2 Native Create");
+    formData.set("description", "One native operation set");
+    formData.set("servings", "2");
+    formData.set("course", "main");
+    formData.set("tags", JSON.stringify(["Weeknight", "Quick"]));
+    formData.set("steps", "[]");
+    const generatedIds = [
+      CREATE_RECIPE_ID,
+      "unit-6-2-create-weeknight",
+      "unit-6-2-create-quick",
+    ];
+    const nextRandomUuid = (() => (
+      generatedIds.shift() ?? "unit-6-2-unexpected-generated-id"
+    )) as typeof crypto.randomUUID;
+    const randomUuid = vi.spyOn(crypto, "randomUUID").mockImplementation(nextRandomUuid);
+    const createSpy = vi.spyOn(recipeCreateModule, "createRecipeDraft");
+    let createCallCount = 0;
+    let createCallOptions: unknown;
+    let result: Awaited<ReturnType<typeof newRecipeAction>>;
     try {
-      await createRecipeDraft(
-        prisma,
-        {
-          id: CREATE_RECIPE_ID,
-          title: "Unit 6.2 Native Create",
-          description: "One native operation set",
-          servings: "2",
-          chefId: USER_ID,
-          course: "main",
-          tags: ["Weeknight", "Quick"],
-          steps: [],
-        },
-        {
-          nativeDatabase,
-          now: () => new Date(timestamp),
-          randomId: (() => {
-            const ids = ["unit-6-2-create-weeknight", "unit-6-2-create-quick"];
-            return () => ids.shift() ?? "unexpected-create-tag-id";
-          })(),
-        },
-      );
+      result = await newRecipeAction({
+        request: new Request("https://spoonjoy.app/recipes/new", {
+          method: "POST",
+          headers: { Cookie: cookie },
+          body: formData,
+        }),
+        params: {},
+        context: { cloudflare: { env: routeEnv } },
+      } as any);
+      createCallCount = createSpy.mock.calls.length;
+      createCallOptions = createSpy.mock.calls[0]?.[2];
     } finally {
-      await prisma.$disconnect();
+      randomUuid.mockRestore();
+      createSpy.mockRestore();
     }
 
+    expect(result).toBeInstanceOf(Response);
+    expect((result as Response).status).toBe(302);
+    expect((result as Response).headers.get("Location")).toBe(`/recipes/${CREATE_RECIPE_ID}`);
+    expect(createCallCount).toBe(1);
+    expect(createCallOptions).toMatchObject({ nativeDatabase });
     expect(nativeDatabase.batchCalls).toHaveLength(1);
     const [recipeInsert, ...tagInserts] = nativeDatabase.batchCalls[0];
     expect(nativeDatabase.batchCalls[0]).toHaveLength(3);
-    expect(recipeInsert.sql).toMatch(/INSERT INTO\s+"Recipe"/i);
+    const timestamp = recipeInsert.values[6];
+    expect(timestamp).toEqual(expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/));
+    expect(normalizeSql(recipeInsert.sql)).toBe(
+      'INSERT INTO "Recipe" ("id", "title", "description", "servings", "chefId", "course", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING "id", "title", "description", "servings", "chefId", "course", "createdAt", "updatedAt"',
+    );
     expect(recipeInsert.values).toEqual([
       CREATE_RECIPE_ID,
       "Unit 6.2 Native Create",
@@ -424,7 +715,7 @@ describe("recipe tag native D1 atomicity", () => {
       values: statement.values,
     }))).toEqual([
       {
-        sql: expect.stringMatching(/INSERT INTO\s+"RecipeTag"/i),
+        sql: expect.any(String),
         values: [
           "unit-6-2-create-weeknight",
           CREATE_RECIPE_ID,
@@ -435,7 +726,7 @@ describe("recipe tag native D1 atomicity", () => {
         ],
       },
       {
-        sql: expect.stringMatching(/INSERT INTO\s+"RecipeTag"/i),
+        sql: expect.any(String),
         values: [
           "unit-6-2-create-quick",
           CREATE_RECIPE_ID,
@@ -446,6 +737,16 @@ describe("recipe tag native D1 atomicity", () => {
         ],
       },
     ]);
+    expect(tagInserts.map((statement) => normalizeSql(statement.sql))).toEqual([
+      'INSERT INTO "RecipeTag" ("id", "recipeId", "label", "normalizedLabel", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?) RETURNING "recipeId", "id" AS "tagId", "label", "normalizedLabel", "createdAt", "updatedAt"',
+      'INSERT INTO "RecipeTag" ("id", "recipeId", "label", "normalizedLabel", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?) RETURNING "recipeId", "id" AS "tagId", "label", "normalizedLabel", "createdAt", "updatedAt"',
+    ]);
+    const batchSet = new Set(nativeDatabase.batchCalls[0]);
+    expect(nativeDatabase.records.filter(isCoreAuthoringMutation).every((statement) => (
+      batchSet.has(statement)
+    ))).toBe(true);
+    expect(nativeDatabase.records.map((statement) => statement.sql).join("\n"))
+      .not.toMatch(/SearchDocument|SearchIndexMetadata/i);
     await expect(database().prepare(`
       SELECT "title", "description", "servings", "chefId", "course", "createdAt", "updatedAt"
       FROM "Recipe" WHERE "id" = ?
@@ -479,11 +780,12 @@ describe("recipe tag native D1 atomicity", () => {
       END
     `);
     const nativeDatabase = recordingDatabase();
-    const prisma = await getDb({ DB: nativeDatabase as unknown as D1Database });
+    const prisma = await getDb({ DB: database() as unknown as D1Database });
+    const prismaWithoutTransactions = rejectPrismaTransactions(prisma);
 
     try {
       await expect(createRecipeDraft(
-        prisma,
+        prismaWithoutTransactions,
         {
           id: CREATE_RECIPE_ID,
           title: "Unit 6.2 Native Create Rollback",
@@ -516,13 +818,74 @@ describe("recipe tag native D1 atomicity", () => {
     ).bind(CREATE_RECIPE_ID).first()).resolves.toEqual({ count: 0 });
   });
 
+  it.each(createEnvelopeDefects())(
+    "rejects a malformed native create $defect envelope without mutation",
+    async ({ mutate }) => {
+    let intercepted = false;
+    const nativeDatabase = recordingDatabase({
+      async interceptBatch(records, runRealBatch) {
+        if (records.length !== 3 || !/^INSERT INTO\s+"Recipe"/i.test(normalizeSql(records[0].sql))) {
+          return runRealBatch();
+        }
+        intercepted = true;
+        const validResults = validCreateResultEnvelopes(records);
+        return mutate(validResults);
+      },
+    });
+    const prisma = await getDb({ DB: database() as unknown as D1Database });
+    const prismaWithoutTransactions = rejectPrismaTransactions(prisma);
+
+    try {
+      await expect(createRecipeDraft(
+        prismaWithoutTransactions,
+        {
+          id: CREATE_RECIPE_ID,
+          title: "Malformed Native Create",
+          description: null,
+          servings: "3",
+          chefId: USER_ID,
+          course: "side",
+          tags: ["First", "Second"],
+          steps: [],
+        },
+        {
+          nativeDatabase,
+          now: () => new Date(FAILURE_TIMESTAMP),
+          randomId: (() => {
+            const ids = ["malformed-create-first", "malformed-create-second"];
+            return () => ids.shift() ?? "unexpected-malformed-create-id";
+          })(),
+        },
+      )).rejects.toThrow();
+    } finally {
+      await prisma.$disconnect();
+    }
+
+    expect(intercepted).toBe(true);
+    await expect(database().prepare(
+      `SELECT COUNT(*) AS "count" FROM "Recipe" WHERE "id" = ?`,
+    ).bind(CREATE_RECIPE_ID).first()).resolves.toEqual({ count: 0 });
+    await expect(database().prepare(
+      `SELECT COUNT(*) AS "count" FROM "RecipeTag" WHERE "recipeId" = ?`,
+    ).bind(CREATE_RECIPE_ID).first()).resolves.toEqual({ count: 0 });
+    },
+  );
+
   it("passes the request DB binding into one guarded edit batch and rolls every edit back", async () => {
     await execute(`
       CREATE TRIGGER "${EDIT_ABORT_TRIGGER}"
-      BEFORE INSERT ON "RecipeTag"
-      WHEN NEW."recipeId" = '${RECIPE_ID}' AND NEW."normalizedLabel" = 'explode'
+      BEFORE UPDATE OF "updatedAt" ON "Cookbook"
+      WHEN OLD."id" = '${COOKBOOK_ID}'
       BEGIN
-        SELECT RAISE(ABORT, 'unit_6_2_recipe_edit_failure');
+        SELECT CASE WHEN
+          (SELECT "title" FROM "Recipe" WHERE "id" = '${RECIPE_ID}') = 'Must Roll Back'
+          AND (SELECT COUNT(*) FROM "RecipeTag"
+            WHERE "recipeId" = '${RECIPE_ID}'
+              AND "normalizedLabel" IN ('explode', 'first')) = 2
+          AND (SELECT COUNT(*) FROM "RecipeTag"
+            WHERE "recipeId" = '${RECIPE_ID}' AND "normalizedLabel" = 'original') = 0
+        THEN RAISE(ABORT, 'unit_6_2_recipe_edit_late_failure')
+        ELSE RAISE(IGNORE) END;
       END
     `);
     const nativeDatabase = recordingDatabase();
@@ -549,6 +912,173 @@ describe("recipe tag native D1 atomicity", () => {
     const info = vi.spyOn(console, "info").mockImplementation((...args) => {
       prismaWarnings.push(args);
     });
+    const exportedUpdate = (recipeTagsModule as unknown as {
+      updateRecipeAuthoringMetadata?: (...args: unknown[]) => Promise<unknown>;
+    }).updateRecipeAuthoringMetadata;
+    const updateSpy = exportedUpdate
+      ? vi.spyOn(recipeTagsModule as never, "updateRecipeAuthoringMetadata" as never)
+      : null;
+    let updateCallInput: unknown;
+    let result: Awaited<ReturnType<typeof editRecipeAction>>;
+    try {
+      result = await editRecipeAction({
+        request: new Request(`https://spoonjoy.app/recipes/${RECIPE_ID}/edit`, {
+          method: "POST",
+          headers: { Cookie: cookie },
+          body: formData,
+        }),
+        params: { id: RECIPE_ID },
+        context: { cloudflare: { env: routeEnv } },
+      } as any);
+      updateCallInput = updateSpy?.mock.calls[0]?.[0];
+    } finally {
+      info.mockRestore();
+      updateSpy?.mockRestore();
+    }
+
+    const status = result instanceof Response
+      ? result.status
+      : (result as { init?: { status?: number } }).init?.status;
+    expect(updateSpy).not.toBeNull();
+    expect(updateCallInput).toMatchObject({ nativeDatabase });
+    expect(status).toBe(500);
+    expect(prismaWarnings).toEqual([]);
+    expect(nativeDatabase.batchCalls).toHaveLength(1);
+    const batch = nativeDatabase.batchCalls[0];
+    expect(batch).toHaveLength(5);
+    const timestamp = batch[0].values[4];
+    expect(timestamp).toEqual(expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/));
+    expect(batch.map((statement) => normalizeSql(statement.sql))).toEqual([
+      'UPDATE "Recipe" SET "title" = ?, "description" = ?, "servings" = ?, "course" = ?, "updatedAt" = ? WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL RETURNING "id" AS "recipeId", "title", "description", "servings", "course", "updatedAt"',
+      'DELETE FROM "RecipeTag" WHERE "recipeId" = ? AND EXISTS (SELECT 1 FROM "Recipe" WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL)',
+      'INSERT INTO "RecipeTag" ("id", "recipeId", "label", "normalizedLabel", "createdAt", "updatedAt") SELECT ?, "id", ?, ?, ?, ? FROM "Recipe" WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL RETURNING "recipeId" AS "recipeId", "id" AS "tagId", "label" AS "label", "normalizedLabel" AS "normalizedLabel", "createdAt" AS "createdAt", "updatedAt" AS "updatedAt"',
+      'INSERT INTO "RecipeTag" ("id", "recipeId", "label", "normalizedLabel", "createdAt", "updatedAt") SELECT ?, "id", ?, ?, ?, ? FROM "Recipe" WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL RETURNING "recipeId" AS "recipeId", "id" AS "tagId", "label" AS "label", "normalizedLabel" AS "normalizedLabel", "createdAt" AS "createdAt", "updatedAt" AS "updatedAt"',
+      'UPDATE "Cookbook" SET "updatedAt" = ? WHERE "id" IN (SELECT "cookbookId" FROM "RecipeInCookbook" WHERE "recipeId" = ? AND EXISTS (SELECT 1 FROM "Recipe" WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL)) RETURNING "id" AS "cookbookId", "updatedAt" AS "updatedAt"',
+    ]);
+    expect(batch.map((statement) => statement.values)).toEqual([
+      ["Must Roll Back", "Must also roll back", "99", "dessert", timestamp, RECIPE_ID, USER_ID],
+      [RECIPE_ID, RECIPE_ID, USER_ID],
+      [expect.any(String), "First", "first", timestamp, timestamp, RECIPE_ID, USER_ID],
+      [expect.any(String), "Explode", "explode", timestamp, timestamp, RECIPE_ID, USER_ID],
+      [timestamp, RECIPE_ID, RECIPE_ID, USER_ID],
+    ]);
+    const batchSet = new Set(batch);
+    expect(nativeDatabase.records.filter(isCoreAuthoringMutation).every((statement) => (
+      batchSet.has(statement)
+    ))).toBe(true);
+    expect(nativeDatabase.records.map((statement) => statement.sql).join("\n"))
+      .not.toMatch(/SearchDocument|SearchIndexMetadata/i);
+
+    await expect(database().prepare(`
+      SELECT "title", "description", "servings", "course", "updatedAt"
+      FROM "Recipe" WHERE "id" = ?
+    `).bind(RECIPE_ID).first()).resolves.toEqual({
+      title: "Unit 6.1 D1 Recipe",
+      description: null,
+      servings: null,
+      course: null,
+      updatedAt: ORIGINAL_TIMESTAMP,
+    });
+    await expect(readMetadataState()).resolves.toEqual({
+      course: null,
+      labels: ["original"],
+      recipeUpdatedAt: ORIGINAL_TIMESTAMP,
+      tagTimestamps: [{ createdAt: ORIGINAL_TIMESTAMP, updatedAt: ORIGINAL_TIMESTAMP }],
+    });
+    await expect(database().prepare(
+      `SELECT "updatedAt" FROM "Cookbook" WHERE "id" = ?`,
+    ).bind(COOKBOOK_ID).first()).resolves.toEqual({ updatedAt: ORIGINAL_TIMESTAMP });
+  });
+
+  it("uses the native edit executor even when Prisma transactions are unusable", async () => {
+    const exportedUpdate = (recipeTagsModule as unknown as {
+      updateRecipeAuthoringMetadata?: (
+        input: Record<string, unknown>,
+        dependencies?: Record<string, unknown>,
+      ) => Promise<unknown>;
+    }).updateRecipeAuthoringMetadata;
+    const updateRecipeAuthoringMetadata = exportedUpdate ?? (async () => undefined);
+
+    const nativeDatabase = recordingDatabase();
+    const prisma = await getDb({ DB: database() as unknown as D1Database });
+    const prismaWithoutTransactions = rejectPrismaTransactions(prisma);
+    try {
+      await expect(updateRecipeAuthoringMetadata({
+        database: prismaWithoutTransactions,
+        nativeDatabase,
+        userId: USER_ID,
+        recipeId: RECIPE_ID,
+        title: "Native Discriminator",
+        description: "No Prisma transaction",
+        servings: "5",
+        course: "main",
+        tags: ["Direct", "Native"],
+      }, {
+        now: () => new Date(WRITER_A_TIMESTAMP),
+        randomId: (() => {
+          const ids = ["native-discriminator-direct", "native-discriminator-native"];
+          return () => ids.shift() ?? "unexpected-native-discriminator-id";
+        })(),
+      })).resolves.toMatchObject({
+        recipeId: RECIPE_ID,
+        title: "Native Discriminator",
+        course: "main",
+        boundTimestamp: WRITER_A_TIMESTAMP,
+      });
+    } finally {
+      await prisma.$disconnect();
+    }
+
+    expect(nativeDatabase.batchCalls).toHaveLength(1);
+    await expect(database().prepare(`
+      SELECT "title", "description", "servings", "course", "updatedAt"
+      FROM "Recipe" WHERE "id" = ?
+    `).bind(RECIPE_ID).first()).resolves.toEqual({
+      title: "Native Discriminator",
+      description: "No Prisma transaction",
+      servings: "5",
+      course: "main",
+      updatedAt: WRITER_A_TIMESTAMP,
+    });
+  });
+
+  it.each(editEnvelopeDefects())(
+    "rejects a malformed native edit $defect envelope without mutation",
+    async ({ mutate }) => {
+    let intercepted = false;
+    const nativeDatabase = recordingDatabase({
+      async interceptBatch(records, runRealBatch) {
+        if (records.length !== 5 || !/^UPDATE\s+"Recipe"/i.test(normalizeSql(records[0].sql))) {
+          return runRealBatch();
+        }
+        intercepted = true;
+        const validResults = validEditResultEnvelopes(records);
+        return mutate(validResults);
+      },
+    });
+    const routeEnv = {
+      ...(env as unknown as Record<string, unknown>),
+      DB: nativeDatabase,
+      NODE_ENV: "test",
+      SESSION_SECRET: "unit-6-2-session-secret-at-least-32-characters",
+      SPOONJOY_BASE_URL: "https://spoonjoy.app",
+    };
+    const cookie = await createUserSessionCookie(
+      USER_ID,
+      routeEnv,
+      new Request(`https://spoonjoy.app/recipes/${RECIPE_ID}/edit`),
+    );
+    const formData = new FormData();
+    formData.set("title", "Envelope Check");
+    formData.set("description", "Must not persist");
+    formData.set("servings", "8");
+    formData.set("course", "appetizer");
+    formData.set("tags", JSON.stringify(["First", "Second"]));
+
+    const prismaWarnings: unknown[][] = [];
+    const info = vi.spyOn(console, "info").mockImplementation((...args) => {
+      prismaWarnings.push(args);
+    });
     let result: Awaited<ReturnType<typeof editRecipeAction>>;
     try {
       result = await editRecipeAction({
@@ -567,29 +1097,9 @@ describe("recipe tag native D1 atomicity", () => {
     const status = result instanceof Response
       ? result.status
       : (result as { init?: { status?: number } }).init?.status;
+    expect(intercepted).toBe(true);
+    expect(prismaWarnings).toEqual([]);
     expect(status).toBe(500);
-    if (nativeDatabase.batchCalls.length === 0) {
-      expect(prismaWarnings).toEqual([
-        [expect.stringContaining("Cloudflare D1 does not support transactions yet")],
-      ]);
-    } else {
-      expect(prismaWarnings).toEqual([]);
-    }
-    expect(nativeDatabase.batchCalls).toHaveLength(1);
-    const batch = nativeDatabase.batchCalls[0];
-    expect(batch).toHaveLength(5);
-    const outgoingSql = batch.map((statement) => statement.sql).join("\n");
-    expect(outgoingSql).toMatch(/UPDATE\s+"Recipe"/i);
-    expect(outgoingSql).toMatch(/DELETE FROM\s+"RecipeTag"/i);
-    expect(outgoingSql.match(/INSERT INTO\s+"RecipeTag"/gi)).toHaveLength(2);
-    expect(outgoingSql).toMatch(/UPDATE\s+"Cookbook"/i);
-    expect(outgoingSql).not.toMatch(/SearchDocument|SearchIndexMetadata/i);
-    for (const statement of batch) {
-      const guardedShape = `${statement.sql}\n${JSON.stringify(statement.values)}`;
-      expect(guardedShape).toContain(RECIPE_ID);
-      expect(guardedShape).toContain(USER_ID);
-    }
-
     await expect(database().prepare(`
       SELECT "title", "description", "servings", "course", "updatedAt"
       FROM "Recipe" WHERE "id" = ?
@@ -600,6 +1110,70 @@ describe("recipe tag native D1 atomicity", () => {
       course: null,
       updatedAt: ORIGINAL_TIMESTAMP,
     });
+    await expect(readMetadataState()).resolves.toEqual({
+      course: null,
+      labels: ["original"],
+      recipeUpdatedAt: ORIGINAL_TIMESTAMP,
+      tagTimestamps: [{ createdAt: ORIGINAL_TIMESTAMP, updatedAt: ORIGINAL_TIMESTAMP }],
+    });
+    await expect(database().prepare(
+      `SELECT "updatedAt" FROM "Cookbook" WHERE "id" = ?`,
+    ).bind(COOKBOOK_ID).first()).resolves.toEqual({ updatedAt: ORIGINAL_TIMESTAMP });
+    },
+  );
+
+  it("treats a complete all-zero native edit envelope as a raced not-found without mutation", async () => {
+    let intercepted = false;
+    const nativeDatabase = recordingDatabase({
+      async interceptBatch(records, runRealBatch) {
+        if (records.length !== 5 || !/^UPDATE\s+"Recipe"/i.test(normalizeSql(records[0].sql))) {
+          return runRealBatch();
+        }
+        intercepted = true;
+        return records.map(() => ({ meta: { changes: 0 }, results: [], success: true }));
+      },
+    });
+    const routeEnv = {
+      ...(env as unknown as Record<string, unknown>),
+      DB: nativeDatabase,
+      NODE_ENV: "test",
+      SESSION_SECRET: "unit-6-2-session-secret-at-least-32-characters",
+      SPOONJOY_BASE_URL: "https://spoonjoy.app",
+    };
+    const cookie = await createUserSessionCookie(
+      USER_ID,
+      routeEnv,
+      new Request(`https://spoonjoy.app/recipes/${RECIPE_ID}/edit`),
+    );
+    const formData = new FormData();
+    formData.set("title", "Raced Away");
+    formData.set("course", "main");
+    formData.set("tags", JSON.stringify(["Never Persisted"]));
+    const prismaWarnings: unknown[][] = [];
+    const info = vi.spyOn(console, "info").mockImplementation((...args) => {
+      prismaWarnings.push(args);
+    });
+    let result: Awaited<ReturnType<typeof editRecipeAction>>;
+    try {
+      result = await editRecipeAction({
+        request: new Request(`https://spoonjoy.app/recipes/${RECIPE_ID}/edit`, {
+          method: "POST",
+          headers: { Cookie: cookie },
+          body: formData,
+        }),
+        params: { id: RECIPE_ID },
+        context: { cloudflare: { env: routeEnv } },
+      } as any);
+    } finally {
+      info.mockRestore();
+    }
+
+    const status = result instanceof Response
+      ? result.status
+      : (result as { init?: { status?: number } }).init?.status;
+    expect(intercepted).toBe(true);
+    expect(prismaWarnings).toEqual([]);
+    expect(status).toBe(404);
     await expect(readMetadataState()).resolves.toEqual({
       course: null,
       labels: ["original"],
