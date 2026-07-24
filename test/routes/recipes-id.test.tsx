@@ -538,7 +538,7 @@ describe("Recipes $id Route", () => {
         course: "dessert",
         tags: ["After Dinner", "Zesty"],
       });
-      expect(result.recipe.tags).toEqual(expect.arrayOf(expect.any(String)));
+      expect(result.recipe.tags.every((tag) => typeof tag === "string")).toBe(true);
       expect(result.recipe).not.toHaveProperty("isSaved");
       expect(result.recipe).not.toHaveProperty("categorySource");
       expect(result.recipe).not.toHaveProperty("categorizedBy");
