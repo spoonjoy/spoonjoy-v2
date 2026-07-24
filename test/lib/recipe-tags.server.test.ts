@@ -10,8 +10,10 @@ import {
   getRecipeTagMetadata,
   normalizeRecipeCourse,
   normalizeRecipeTags,
+  parseRecipeAuthoringMetadataForm,
   prepareRecipeTagMetadataReplacement,
   replaceRecipeTagMetadata,
+  updateRecipeAuthoringMetadata,
 } from "~/lib/recipe-tags.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser } from "../utils";
@@ -363,6 +365,192 @@ const NATIVE_RESULT_CASES: NativeResultCase[] = [
     patchFirstRow(rows, { updatedAt: "2026-07-23T18:19:20.124Z" })),
 ];
 
+interface AuthoringRunOptions {
+  tags?: string[];
+  tagIds?: string[];
+  cookbookReads?: Array<string[] | Error>;
+  returnedCookbookIds?: string[];
+  executorFailure?: Error;
+  mutateResults?: (
+    results: unknown[],
+    statements: CapturedD1Statement[],
+  ) => unknown;
+}
+
+function cookbookFindMany(reads: Array<string[] | Error> = [[]]) {
+  const findMany = vi.fn();
+  for (const read of reads) {
+    if (read instanceof Error) {
+      findMany.mockRejectedValueOnce(read);
+    } else {
+      findMany.mockResolvedValueOnce(read.map((cookbookId) => ({ cookbookId })));
+    }
+  }
+  return findMany;
+}
+
+function authoringInput(
+  database: PrismaClient,
+  nativeDatabase: ReturnType<typeof captureNativeDatabase>["database"] | null,
+  tags: string[],
+) {
+  return {
+    database,
+    nativeDatabase,
+    userId: "owner_1",
+    recipeId: "recipe_1",
+    title: "Updated recipe",
+    description: "Updated description",
+    servings: "4",
+    course: "side" as const,
+    tags,
+  };
+}
+
+function authoringUpdateRow(statement: CapturedD1Statement) {
+  return {
+    recipeId: statement.values[5],
+    title: statement.values[0],
+    description: statement.values[1],
+    servings: statement.values[2],
+    course: statement.values[3],
+    updatedAt: statement.values[4],
+  };
+}
+
+function authoringInsertRow(statement: CapturedD1Statement) {
+  return {
+    recipeId: statement.values[5],
+    tagId: statement.values[0],
+    label: statement.values[1],
+    normalizedLabel: statement.values[2],
+    createdAt: statement.values[3],
+    updatedAt: statement.values[4],
+  };
+}
+
+function authoringCookbookRows(
+  statement: CapturedD1Statement,
+  cookbookIds: string[],
+) {
+  return cookbookIds.map((cookbookId) => ({
+    cookbookId,
+    updatedAt: statement.values[0],
+  }));
+}
+
+function successfulAuthoringNativeResults(
+  statements: CapturedD1Statement[],
+  cookbookIds: string[] = [],
+) {
+  return statements.map((statement) => {
+    const sql = normalizedSql(statement.sql);
+    if (sql.startsWith(`UPDATE "Recipe"`)) {
+      return nativeResult([authoringUpdateRow(statement)], 1);
+    }
+    if (sql.startsWith(`DELETE FROM "RecipeTag"`)) return nativeResult([], 0);
+    if (sql.startsWith(`INSERT INTO "RecipeTag"`)) {
+      return nativeResult([authoringInsertRow(statement)], 1);
+    }
+    if (sql.startsWith(`SELECT "id" AS "recipeId" FROM "Recipe" WHERE 0`)) {
+      return nativeResult([], 0);
+    }
+    if (sql.startsWith(`UPDATE "Cookbook"`)) {
+      const rows = authoringCookbookRows(statement, cookbookIds);
+      return nativeResult(rows, rows.length);
+    }
+    throw new Error(`Unexpected authoring statement: ${sql}`);
+  });
+}
+
+function successfulAuthoringLocalResults(
+  statements: CapturedD1Statement[],
+  cookbookIds: string[] = [],
+) {
+  return statements.map((statement) => {
+    const sql = normalizedSql(statement.sql);
+    if (sql.startsWith(`UPDATE "Recipe"`)) return [authoringUpdateRow(statement)];
+    if (sql.startsWith(`DELETE FROM "RecipeTag"`)) return 0;
+    if (sql.startsWith(`INSERT INTO "RecipeTag"`)) return [authoringInsertRow(statement)];
+    if (sql.startsWith(`SELECT "id" AS "recipeId" FROM "Recipe" WHERE 0`)) return [];
+    if (sql.startsWith(`UPDATE "Cookbook"`)) {
+      return authoringCookbookRows(statement, cookbookIds);
+    }
+    throw new Error(`Unexpected authoring statement: ${sql}`);
+  });
+}
+
+function runNativeAuthoring(options: AuthoringRunOptions = {}) {
+  const native = captureNativeDatabase();
+  const findMany = cookbookFindMany(options.cookbookReads);
+  const database = {
+    recipeInCookbook: { findMany },
+    $queryRawUnsafe: vi.fn(),
+    $executeRawUnsafe: vi.fn(),
+    $transaction: vi.fn(),
+  } as unknown as PrismaClient;
+  native.batch.mockImplementation(async (statements: CapturedD1Statement[]) => {
+    if (options.executorFailure) throw options.executorFailure;
+    const results = successfulAuthoringNativeResults(
+      statements,
+      options.returnedCookbookIds,
+    );
+    return options.mutateResults
+      ? options.mutateResults(results, statements)
+      : results;
+  });
+  const ids = [...(options.tagIds ?? ["authoring_tag_1", "authoring_tag_2"])];
+  const result = updateRecipeAuthoringMetadata(
+    authoringInput(database, native.database, options.tags ?? ["Quick"]),
+    {
+      now: () => BOUND_NOW,
+      randomId: () => ids.shift() ?? "unexpected_authoring_tag",
+    },
+  );
+  return { ...native, database, findMany, result };
+}
+
+function runLocalAuthoring(options: AuthoringRunOptions = {}) {
+  const statements: CapturedD1Statement[] = [];
+  const capture = (sql: unknown, values: unknown[]) => {
+    const statement: CapturedD1Statement = {
+      sql: String(sql),
+      values,
+      bind: vi.fn() as never,
+    };
+    statements.push(statement);
+    return statement;
+  };
+  const query = vi.fn((sql: unknown, ...values: unknown[]) => capture(sql, values));
+  const execute = vi.fn((sql: unknown, ...values: unknown[]) => capture(sql, values));
+  const findMany = cookbookFindMany(options.cookbookReads);
+  const transaction = vi.fn(async () => {
+    if (options.executorFailure) throw options.executorFailure;
+    const results = successfulAuthoringLocalResults(
+      statements,
+      options.returnedCookbookIds,
+    );
+    return options.mutateResults
+      ? options.mutateResults(results, statements)
+      : results;
+  });
+  const database = {
+    recipeInCookbook: { findMany },
+    $queryRawUnsafe: query,
+    $executeRawUnsafe: execute,
+    $transaction: transaction,
+  } as unknown as PrismaClient;
+  const ids = [...(options.tagIds ?? ["authoring_tag_1", "authoring_tag_2"])];
+  const result = updateRecipeAuthoringMetadata(
+    authoringInput(database, null, options.tags ?? ["Quick"]),
+    {
+      now: () => BOUND_NOW,
+      randomId: () => ids.shift() ?? "unexpected_authoring_tag",
+    },
+  );
+  return { database, execute, findMany, query, result, statements, transaction };
+}
+
 describe("recipe-tags.server", () => {
   beforeEach(async () => {
     await cleanupDatabase();
@@ -547,6 +735,88 @@ describe("recipe-tags.server", () => {
 
     it("accepts an empty tag collection", () => {
       expect(normalizeRecipeTags([])).toEqual([]);
+    });
+  });
+
+  describe("authoring metadata form parsing", () => {
+    it("parses the nullable course and normalized tag payload", () => {
+      expect(parseRecipeAuthoringMetadataForm("side", JSON.stringify([
+        " Quick ",
+        "ＱＵＩＣＫ",
+        "Weeknight",
+      ]))).toEqual({
+        course: "side",
+        tags: ["Quick", "Weeknight"],
+        errors: {},
+      });
+      expect(parseRecipeAuthoringMetadataForm(null, null)).toEqual({
+        course: null,
+        tags: [],
+        errors: {},
+      });
+    });
+
+    it("reports malformed JSON and an unsupported course independently", () => {
+      expect(parseRecipeAuthoringMetadataForm("breakfast", "not-json")).toEqual({
+        course: null,
+        tags: [],
+        errors: {
+          course: "Choose a supported course",
+          tags: "Tags must be valid JSON",
+        },
+      });
+    });
+
+    it.each([
+      ["non-array JSON", JSON.stringify({ tag: "Quick" }), "Tags must be an array"],
+      ["non-string member", JSON.stringify([1]), "Tags must contain only text"],
+      ["control character", JSON.stringify(["bad\ttag"]), "Tags contain unsupported characters"],
+      ["empty tag", JSON.stringify(["\u2003"]), "Tags cannot be empty"],
+      ["overlong tag", JSON.stringify(["x".repeat(41)]), "Tags must be 40 characters or fewer"],
+      [
+        "too many unique tags",
+        JSON.stringify(Array.from({ length: 11 }, (_, index) => `Tag ${index}`)),
+        "Add no more than 10 tags",
+      ],
+    ])("maps the %s validation error to its field message", (_, payload, message) => {
+      expect(parseRecipeAuthoringMetadataForm(null, payload)).toEqual({
+        course: null,
+        tags: [],
+        errors: { tags: message },
+      });
+    });
+
+    it("uses the generic tag message for an unmapped validation failure", () => {
+      vi.spyOn(String.prototype, "normalize").mockImplementation(() => {
+        throw new RecipeTagValidationError("tags.0", "unmapped tag failure");
+      });
+
+      expect(parseRecipeAuthoringMetadataForm(null, JSON.stringify(["Quick"]))).toEqual({
+        course: null,
+        tags: [],
+        errors: { tags: "Tags are invalid" },
+      });
+    });
+
+    it("rethrows unexpected course and tag normalization failures", () => {
+      const courseFailure = new Error("course normalization failed");
+      const courseIncludes = vi.spyOn(
+        RECIPE_COURSES as unknown as { includes(value: string): boolean },
+        "includes",
+      ).mockImplementation(() => {
+        throw courseFailure;
+      });
+      expect(() => parseRecipeAuthoringMetadataForm("side", null)).toThrow(courseFailure);
+      courseIncludes.mockRestore();
+
+      const tagFailure = new Error("tag normalization failed");
+      vi.spyOn(String.prototype, "normalize").mockImplementation(() => {
+        throw tagFailure;
+      });
+      expect(() => parseRecipeAuthoringMetadataForm(
+        null,
+        JSON.stringify(["Quick"]),
+      )).toThrow(tagFailure);
     });
   });
 
@@ -1405,6 +1675,536 @@ describe("recipe-tags.server", () => {
       expect(() => prepared.finalizeResults([[updateRow, updateRow], 0, [insertRow]]))
         .toThrow();
       expect(() => prepared.finalizeResults([[updateRow], 0, []])).toThrow();
+    });
+  });
+
+  describe("atomic authoring updates", () => {
+    it("sends one exact native D1 authoring batch and validates its complete result", async () => {
+      const run = runNativeAuthoring({
+        tags: ["Zulu", "Alpha"],
+        tagIds: ["tag_z", "tag_a"],
+        cookbookReads: [["cookbook_a"]],
+        returnedCookbookIds: ["cookbook_a"],
+      });
+
+      await expect(run.result).resolves.toEqual({
+        recipeId: "recipe_1",
+        title: "Updated recipe",
+        description: "Updated description",
+        servings: "4",
+        course: "side",
+        tags: [
+          { id: "tag_a", label: "Alpha", normalizedLabel: "alpha" },
+          { id: "tag_z", label: "Zulu", normalizedLabel: "zulu" },
+        ],
+        boundTimestamp: BOUND_NOW_TEXT,
+      });
+
+      expect(run.batch).toHaveBeenCalledOnce();
+      expect(run.batch).toHaveBeenCalledWith(run.statements);
+      expect(run.statements.map((statement) => normalizedSql(statement.sql))).toEqual([
+        expect.stringMatching(/^UPDATE "Recipe"/),
+        expect.stringMatching(/^DELETE FROM "RecipeTag"/),
+        expect.stringMatching(/^INSERT INTO "RecipeTag"/),
+        expect.stringMatching(/^INSERT INTO "RecipeTag"/),
+        expect.stringMatching(/^UPDATE "Cookbook"/),
+      ]);
+      expect(run.statements[0].values).toEqual([
+        "Updated recipe",
+        "Updated description",
+        "4",
+        "side",
+        BOUND_NOW_TEXT,
+        "recipe_1",
+        "owner_1",
+      ]);
+      expect(run.statements.slice(2, 4).map((statement) => statement.values)).toEqual([
+        [
+          "tag_z",
+          "Zulu",
+          "zulu",
+          BOUND_NOW_TEXT,
+          BOUND_NOW_TEXT,
+          "recipe_1",
+          "owner_1",
+        ],
+        [
+          "tag_a",
+          "Alpha",
+          "alpha",
+          BOUND_NOW_TEXT,
+          BOUND_NOW_TEXT,
+          "recipe_1",
+          "owner_1",
+        ],
+      ]);
+      expect(run.statements[4].values).toEqual([
+        BOUND_NOW_TEXT,
+        "recipe_1",
+        "recipe_1",
+        "owner_1",
+      ]);
+      expect(run.findMany).toHaveBeenCalledOnce();
+      expect(run.database.$queryRawUnsafe).not.toHaveBeenCalled();
+      expect(run.database.$executeRawUnsafe).not.toHaveBeenCalled();
+      expect(run.database.$transaction).not.toHaveBeenCalled();
+      assertMutationOnlySql(run.statements);
+    });
+
+    it("builds the equivalent local transaction with an empty result slot", async () => {
+      const run = runLocalAuthoring();
+
+      await expect(run.result).resolves.toEqual({
+        recipeId: "recipe_1",
+        title: "Updated recipe",
+        description: "Updated description",
+        servings: "4",
+        course: "side",
+        tags: [{ id: "authoring_tag_1", label: "Quick", normalizedLabel: "quick" }],
+        boundTimestamp: BOUND_NOW_TEXT,
+      });
+
+      expect(run.transaction).toHaveBeenCalledOnce();
+      expect(run.transaction).toHaveBeenCalledWith(run.statements);
+      expect(run.statements.map((statement) => normalizedSql(statement.sql))).toEqual([
+        expect.stringMatching(/^UPDATE "Recipe"/),
+        expect.stringMatching(/^DELETE FROM "RecipeTag"/),
+        expect.stringMatching(/^INSERT INTO "RecipeTag"/),
+        `SELECT "id" AS "recipeId" FROM "Recipe" WHERE 0`,
+        expect.stringMatching(/^UPDATE "Cookbook"/),
+      ]);
+      expect(run.query).toHaveBeenCalledTimes(4);
+      expect(run.execute).toHaveBeenCalledOnce();
+      expect(run.findMany).toHaveBeenCalledOnce();
+      assertMutationOnlySql(run.statements);
+    });
+
+    it("pads a native batch to five validated envelopes when no tags are present", async () => {
+      const run = runNativeAuthoring({ tags: [] });
+
+      await expect(run.result).resolves.toMatchObject({ tags: [] });
+      expect(run.statements).toHaveLength(5);
+      expect(run.statements.filter((statement) => (
+        normalizedSql(statement.sql)
+          === `SELECT "id" AS "recipeId" FROM "Recipe" WHERE 0`
+      ))).toHaveLength(2);
+    });
+
+    it("propagates native and local executor failures without fallback or retry", async () => {
+      const nativeFailure = new Error("native batch rolled back");
+      const native = runNativeAuthoring({ executorFailure: nativeFailure });
+      await expect(native.result).rejects.toBe(nativeFailure);
+      expect(native.batch).toHaveBeenCalledOnce();
+      expect(native.database.$transaction).not.toHaveBeenCalled();
+
+      const localFailure = new Error("local transaction rolled back");
+      const local = runLocalAuthoring({ executorFailure: localFailure });
+      await expect(local.result).rejects.toBe(localFailure);
+      expect(local.transaction).toHaveBeenCalledOnce();
+    });
+
+    it.each([null, {}, "invalid", []])(
+      "rejects a malformed native authoring batch envelope %#",
+      async (results) => {
+        const run = runNativeAuthoring({ mutateResults: () => results });
+        await expect(run.result).rejects.toThrow("Invalid recipe tag batch result");
+      },
+    );
+
+    it("uses tag IDs as a defensive tie-break for equal normalized labels", async () => {
+      const lowercase = vi.spyOn(String.prototype, "toLowerCase")
+        .mockReturnValueOnce(new String("shared") as unknown as string)
+        .mockReturnValueOnce(new String("shared") as unknown as string);
+      const run = runNativeAuthoring({
+        tags: ["Zulu", "Alpha"],
+        tagIds: ["tag_z", "tag_a"],
+      });
+      lowercase.mockRestore();
+
+      const result = await run.result;
+      expect(result.tags.map((tag) => tag.id)).toEqual(["tag_a", "tag_z"]);
+    });
+
+    it("classifies only a completely all-zero native batch as not found", async () => {
+      const allZero = runNativeAuthoring({
+        mutateResults: (_, statements) => statements.map(() => nativeResult([], 0)),
+      });
+      await expect(allZero.result).rejects.toBeInstanceOf(RecipeTagNotFoundError);
+
+      const partialMutations = [
+        {
+          label: "update row",
+          mutate(statements: CapturedD1Statement[], results: unknown[]) {
+            const index = statementIndex(statements, `UPDATE "Recipe"`);
+            return replaceResultAt(
+              results,
+              index,
+              nativeResult([authoringUpdateRow(statements[index])], 0),
+            );
+          },
+        },
+        {
+          label: "delete change",
+          mutate(statements: CapturedD1Statement[], results: unknown[]) {
+            return replaceResultAt(
+              results,
+              statementIndex(statements, `DELETE FROM "RecipeTag"`),
+              nativeResult([], 1),
+            );
+          },
+        },
+        {
+          label: "delete row",
+          mutate(statements: CapturedD1Statement[], results: unknown[]) {
+            return replaceResultAt(
+              results,
+              statementIndex(statements, `DELETE FROM "RecipeTag"`),
+              nativeResult([{ recipeId: "recipe_1" }], 0),
+            );
+          },
+        },
+        {
+          label: "insert change",
+          mutate(statements: CapturedD1Statement[], results: unknown[]) {
+            const index = statementIndex(statements, `INSERT INTO "RecipeTag"`);
+            return replaceResultAt(
+              results,
+              index,
+              nativeResult([authoringInsertRow(statements[index])], 1),
+            );
+          },
+        },
+        {
+          label: "insert row without a change",
+          mutate(statements: CapturedD1Statement[], results: unknown[]) {
+            const index = statementIndex(statements, `INSERT INTO "RecipeTag"`);
+            return replaceResultAt(
+              results,
+              index,
+              nativeResult([authoringInsertRow(statements[index])], 0),
+            );
+          },
+        },
+        {
+          label: "cookbook change",
+          mutate(statements: CapturedD1Statement[], results: unknown[]) {
+            return replaceResultAt(
+              results,
+              statementIndex(statements, `UPDATE "Cookbook"`),
+              nativeResult([], 1),
+            );
+          },
+        },
+        {
+          label: "cookbook row without a change",
+          mutate(statements: CapturedD1Statement[], results: unknown[]) {
+            const index = statementIndex(statements, `UPDATE "Cookbook"`);
+            return replaceResultAt(results, index, nativeResult([{
+              cookbookId: "cookbook_1",
+              updatedAt: statements[index].values[0],
+            }], 0));
+          },
+        },
+      ];
+
+      for (const { label, mutate } of partialMutations) {
+        const run = runNativeAuthoring({
+          mutateResults(_, statements) {
+            return mutate(statements, statements.map(() => nativeResult([], 0)));
+          },
+        });
+        const error = await run.result.catch((failure: unknown) => failure);
+        expect(error, label).toBeInstanceOf(Error);
+        expect(error, label).not.toBeInstanceOf(RecipeTagNotFoundError);
+      }
+    });
+
+    it("rejects either nonempty native padding-envelope signal", async () => {
+      const cases = [
+        nativeResult([], 1),
+        nativeResult([{ recipeId: "unexpected" }], 0),
+      ];
+      for (const replacement of cases) {
+        const run = runNativeAuthoring({
+          mutateResults(results, statements) {
+            return replaceResultAt(
+              results,
+              statementIndex(
+                statements,
+                `SELECT "id" AS "recipeId" FROM "Recipe" WHERE 0`,
+              ),
+              replacement,
+            );
+          },
+        });
+        await expect(run.result).rejects.toThrow("Invalid recipe authoring empty-slot result");
+      }
+    });
+
+    it("rejects every mismatched native authoring update field", async () => {
+      const patches = [
+        { recipeId: "other_recipe" },
+        { title: "Other title" },
+        { description: null },
+        { servings: null },
+        { course: "main" },
+        { updatedAt: "2026-07-23T18:19:20.124Z" },
+      ];
+      for (const patch of patches) {
+        const run = runNativeAuthoring({
+          mutateResults(results, statements) {
+            return mutateReturnedRows(
+              results,
+              statementIndex(statements, `UPDATE "Recipe"`),
+              (rows) => patchFirstRow(rows, patch),
+            );
+          },
+        });
+        await expect(run.result).rejects.toThrow("Invalid recipe authoring update result");
+      }
+    });
+
+    it("rejects malformed native update, delete, insert, and cookbook result shapes", async () => {
+      const cases = [
+        {
+          label: "update changed without a returned row",
+          prefix: `UPDATE "Recipe"`,
+          result: nativeResult([], 1),
+          message: "Invalid recipe authoring update result",
+        },
+        {
+          label: "delete returned a row",
+          prefix: `DELETE FROM "RecipeTag"`,
+          result: nativeResult([{ recipeId: "recipe_1" }], 0),
+          message: "Invalid recipe authoring delete result",
+        },
+        {
+          label: "insert returned a row without a change",
+          prefix: `INSERT INTO "RecipeTag"`,
+          result: "insert-row-without-change",
+          message: "Invalid recipe authoring tag result",
+        },
+        {
+          label: "insert changed without a returned row",
+          prefix: `INSERT INTO "RecipeTag"`,
+          result: nativeResult([], 1),
+          message: "Invalid recipe authoring tag result",
+        },
+        {
+          label: "cookbook change count disagrees with returned rows",
+          prefix: `UPDATE "Cookbook"`,
+          result: nativeResult([], 1),
+          message: "Invalid recipe authoring cookbook result",
+        },
+      ];
+
+      for (const testCase of cases) {
+        const run = runNativeAuthoring({
+          mutateResults(results, statements) {
+            const index = statementIndex(statements, testCase.prefix);
+            const replacement = testCase.result === "insert-row-without-change"
+              ? nativeResult([authoringInsertRow(statements[index])], 0)
+              : testCase.result;
+            return replaceResultAt(results, index, replacement);
+          },
+        });
+        await expect(run.result, testCase.label).rejects.toThrow(testCase.message);
+      }
+    });
+
+    it("rejects malformed or contradictory native cookbook rows", async () => {
+      const rowCases = [
+        [{ cookbookId: 1, updatedAt: BOUND_NOW_TEXT }],
+        [
+          { cookbookId: "duplicate", updatedAt: BOUND_NOW_TEXT },
+          { cookbookId: "duplicate", updatedAt: BOUND_NOW_TEXT },
+        ],
+        [{ cookbookId: "cookbook_1", updatedAt: "2026-07-23T18:19:20.124Z" }],
+      ];
+
+      for (const rows of rowCases) {
+        const run = runNativeAuthoring({
+          mutateResults(results, statements) {
+            return replaceResultAt(
+              results,
+              statementIndex(statements, `UPDATE "Cookbook"`),
+              nativeResult(rows, rows.length),
+            );
+          },
+        });
+        await expect(run.result).rejects.toThrow("Invalid recipe authoring cookbook result");
+      }
+    });
+
+    it("classifies only a completely all-zero local transaction as not found", async () => {
+      const zeroResults = (statements: CapturedD1Statement[]) => statements.map((statement) => (
+        normalizedSql(statement.sql).startsWith(`DELETE FROM "RecipeTag"`) ? 0 : []
+      ));
+      const allZero = runLocalAuthoring({
+        mutateResults: (_, statements) => zeroResults(statements),
+      });
+      await expect(allZero.result).rejects.toBeInstanceOf(RecipeTagNotFoundError);
+
+      const partialMutations = [
+        {
+          label: "delete count",
+          mutate(statements: CapturedD1Statement[], results: unknown[]) {
+            return replaceResultAt(
+              results,
+              statementIndex(statements, `DELETE FROM "RecipeTag"`),
+              1,
+            );
+          },
+        },
+        {
+          label: "insert row",
+          mutate(statements: CapturedD1Statement[], results: unknown[]) {
+            const index = statementIndex(statements, `INSERT INTO "RecipeTag"`);
+            return replaceResultAt(results, index, [authoringInsertRow(statements[index])]);
+          },
+        },
+        {
+          label: "cookbook row",
+          mutate(statements: CapturedD1Statement[], results: unknown[]) {
+            const index = statementIndex(statements, `UPDATE "Cookbook"`);
+            return replaceResultAt(results, index, [{
+              cookbookId: "cookbook_1",
+              updatedAt: statements[index].values[0],
+            }]);
+          },
+        },
+      ];
+
+      for (const { label, mutate } of partialMutations) {
+        const run = runLocalAuthoring({
+          mutateResults(_, statements) {
+            return mutate(statements, zeroResults(statements));
+          },
+        });
+        const error = await run.result.catch((failure: unknown) => failure);
+        expect(error, label).toBeInstanceOf(Error);
+        expect(error, label).not.toBeInstanceOf(RecipeTagNotFoundError);
+      }
+    });
+
+    it.each([null, -1, 1.5])(
+      "rejects malformed local delete count %#",
+      async (deleted) => {
+        const run = runLocalAuthoring({
+          mutateResults(results, statements) {
+            return replaceResultAt(
+              results,
+              statementIndex(statements, `DELETE FROM "RecipeTag"`),
+              deleted,
+            );
+          },
+        });
+        await expect(run.result).rejects.toThrow("Invalid recipe authoring delete result");
+      },
+    );
+
+    it("rejects a nonempty local padding result", async () => {
+      const run = runLocalAuthoring({
+        mutateResults(results, statements) {
+          return replaceResultAt(
+            results,
+            statementIndex(
+              statements,
+              `SELECT "id" AS "recipeId" FROM "Recipe" WHERE 0`,
+            ),
+            [{ recipeId: "unexpected" }],
+          );
+        },
+      });
+      await expect(run.result).rejects.toThrow("Invalid recipe authoring empty-slot result");
+    });
+
+    it("rejects malformed local update and insertion row counts", async () => {
+      const cases = [
+        {
+          label: "extra update row",
+          prefix: `UPDATE "Recipe"`,
+          mutate(rows: unknown[], statement: CapturedD1Statement) {
+            return [...rows, authoringUpdateRow(statement)];
+          },
+          message: "Invalid recipe authoring update result",
+        },
+        {
+          label: "missing insertion row",
+          prefix: `INSERT INTO "RecipeTag"`,
+          mutate: () => [],
+          message: "Invalid recipe authoring tag result",
+        },
+        {
+          label: "extra insertion row",
+          prefix: `INSERT INTO "RecipeTag"`,
+          mutate(rows: unknown[], statement: CapturedD1Statement) {
+            return [...rows, authoringInsertRow(statement)];
+          },
+          message: "Invalid recipe authoring tag result",
+        },
+      ];
+
+      for (const testCase of cases) {
+        const run = runLocalAuthoring({
+          mutateResults(results, statements) {
+            const index = statementIndex(statements, testCase.prefix);
+            return replaceResultAt(
+              results,
+              index,
+              testCase.mutate(results[index] as unknown[], statements[index]),
+            );
+          },
+        });
+        await expect(run.result, testCase.label).rejects.toThrow(testCase.message);
+      }
+    });
+
+    it("accepts a cookbook membership race when the diagnostic read matches the batch", async () => {
+      const run = runNativeAuthoring({
+        cookbookReads: [
+          ["stable", "removed"],
+          ["added", "stable"],
+        ],
+        returnedCookbookIds: ["added", "stable"],
+      });
+
+      await expect(run.result).resolves.toMatchObject({ recipeId: "recipe_1" });
+      expect(run.findMany).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not turn a committed authoring batch into a failure when reconciliation read fails", async () => {
+      const readFailure = new Error("diagnostic read unavailable");
+      const run = runNativeAuthoring({
+        cookbookReads: [["removed"], readFailure],
+        returnedCookbookIds: [],
+      });
+
+      await expect(run.result).resolves.toMatchObject({ recipeId: "recipe_1" });
+      expect(run.findMany).toHaveBeenCalledTimes(2);
+    });
+
+    it("rejects a local result that omits a cookbook membership stable across the race", async () => {
+      const run = runLocalAuthoring({
+        cookbookReads: [["stable"], ["stable"]],
+        returnedCookbookIds: [],
+      });
+
+      await expect(run.result).rejects.toThrow("Invalid recipe authoring cookbook result");
+      expect(run.findMany).toHaveBeenCalledTimes(2);
+    });
+
+    it("accepts transient cookbook rows while retaining every stable membership", async () => {
+      const run = runLocalAuthoring({
+        cookbookReads: [
+          ["removed", "stable"],
+          ["stable"],
+        ],
+        returnedCookbookIds: ["added", "stable"],
+      });
+
+      await expect(run.result).resolves.toMatchObject({ recipeId: "recipe_1" });
+      expect(run.findMany).toHaveBeenCalledTimes(2);
     });
   });
 });
