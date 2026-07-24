@@ -1,10 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { faker } from "@faker-js/faker";
-import { createRecipeDraft, parseRecipeStepsJson } from "~/lib/recipe-create.server";
+import {
+  createRecipeDraft,
+  parseRecipeStepsJson,
+  type CreateRecipeDraftInput,
+} from "~/lib/recipe-create.server";
 import { createUser } from "~/lib/auth.server";
 import { db } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { ensureSearchIndexFresh, rebuildSearchIndex, searchSpoonjoy } from "~/lib/search.server";
+import type {
+  CompatibleRecipeTagD1Database,
+  CompatibleRecipeTagD1PreparedStatement,
+} from "~/lib/recipe-tags.server";
 
 function compactSql(sql: unknown): string {
   return String(sql).replace(/\s+/g, " ").trim();
@@ -13,6 +21,145 @@ function compactSql(sql: unknown): string {
 function expectInvalidSteps(payload: unknown, expectedError: string) {
   const result = parseRecipeStepsJson(typeof payload === "string" ? payload : JSON.stringify(payload));
   expect(result).toEqual({ valid: false, error: expectedError });
+}
+
+type RecipeCreationDatabase = Parameters<typeof createRecipeDraft>[0];
+
+interface CapturedCreationStatement extends CompatibleRecipeTagD1PreparedStatement {
+  sql: string;
+  values: unknown[];
+}
+
+interface CreationResultCase {
+  label: string;
+  expectedError: string;
+  mutate(results: unknown[]): unknown;
+}
+
+const CREATION_TIMESTAMP = new Date("2026-07-23T12:34:56.000Z");
+const CREATION_TIMESTAMP_TEXT = CREATION_TIMESTAMP.toISOString();
+
+function recipeCreationInput(
+  chefId: string,
+  overrides: Partial<CreateRecipeDraftInput> = {},
+): CreateRecipeDraftInput {
+  return {
+    id: "recipe-result-validation",
+    title: "Result Validation Supper",
+    description: null,
+    servings: "2",
+    chefId,
+    course: "main",
+    tags: ["Quick"],
+    steps: [],
+    ...overrides,
+  };
+}
+
+function recipeCreationRow(
+  input: CreateRecipeDraftInput,
+  course: CreateRecipeDraftInput["course"] = input.course,
+) {
+  return {
+    id: input.id,
+    title: input.title,
+    description: input.description,
+    servings: input.servings,
+    chefId: input.chefId,
+    course: course ?? null,
+    createdAt: CREATION_TIMESTAMP_TEXT,
+    updatedAt: CREATION_TIMESTAMP_TEXT,
+  };
+}
+
+function tagCreationRow(input: CreateRecipeDraftInput) {
+  return {
+    recipeId: input.id,
+    tagId: "tag-result-validation",
+    label: "Quick",
+    normalizedLabel: "quick",
+    createdAt: CREATION_TIMESTAMP_TEXT,
+    updatedAt: CREATION_TIMESTAMP_TEXT,
+  };
+}
+
+function nativeCreationResult(
+  results: unknown,
+  options: { success?: boolean; changes?: number; meta?: unknown } = {},
+) {
+  return {
+    success: options.success ?? true,
+    results,
+    meta: options.meta ?? { changes: options.changes ?? 1 },
+  };
+}
+
+function successfulNativeCreationResults(statements: CapturedCreationStatement[]) {
+  return statements.map((statement) => {
+    if (compactSql(statement.sql).startsWith('INSERT INTO "RecipeTag"')) {
+      return nativeCreationResult([{
+        recipeId: statement.values[1],
+        tagId: statement.values[0],
+        label: statement.values[2],
+        normalizedLabel: statement.values[3],
+        createdAt: statement.values[4],
+        updatedAt: statement.values[5],
+      }]);
+    }
+    return nativeCreationResult([{
+      id: statement.values[0],
+      title: statement.values[1],
+      description: statement.values[2],
+      servings: statement.values[3],
+      chefId: statement.values[4],
+      course: statement.values[5],
+      createdAt: statement.values[6],
+      updatedAt: statement.values[7],
+    }]);
+  });
+}
+
+function captureNativeCreationDatabase(
+  results: (statements: CapturedCreationStatement[]) => unknown,
+) {
+  const statements: CapturedCreationStatement[] = [];
+  const batch = vi.fn(async () => results(statements));
+  const database: CompatibleRecipeTagD1Database = {
+    prepare(sql: string) {
+      const statement: CapturedCreationStatement = {
+        sql,
+        values: [],
+        bind(...values: unknown[]) {
+          statement.values = values;
+          return statement;
+        },
+      };
+      statements.push(statement);
+      return statement;
+    },
+    batch,
+  };
+  return { database, statements, batch };
+}
+
+function localCreationDatabase(results: unknown) {
+  const queryRaw = vi.fn(async () => []);
+  const transaction = vi.fn(async () => results);
+  const database = {
+    $queryRawUnsafe: queryRaw,
+    $transaction: transaction,
+  } as unknown as RecipeCreationDatabase;
+  return { database, queryRaw, transaction };
+}
+
+function nativeFallbackDatabase() {
+  const queryRaw = vi.fn();
+  const transaction = vi.fn();
+  const database = {
+    $queryRawUnsafe: queryRaw,
+    $transaction: transaction,
+  } as unknown as RecipeCreationDatabase;
+  return { database, queryRaw, transaction };
 }
 
 describe("recipe create helpers", () => {
@@ -386,6 +533,273 @@ describe("recipe create helpers", () => {
         scope: "recipes",
         viewerId: testUserId,
       })).resolves.toMatchObject([{ id: recipe.id, title: recipe.title }]);
+    });
+
+    it("applies empty metadata defaults and validates the native recipe envelope", async () => {
+      const input = recipeCreationInput(testUserId, {
+        id: "recipe-native-defaults",
+        course: undefined,
+        tags: undefined,
+      });
+      const native = captureNativeCreationDatabase(successfulNativeCreationResults);
+      const fallback = nativeFallbackDatabase();
+
+      await expect(createRecipeDraft(fallback.database, input, {
+        nativeDatabase: native.database,
+        now: () => CREATION_TIMESTAMP,
+      })).resolves.toMatchObject({
+        id: input.id,
+        course: null,
+        createdAt: CREATION_TIMESTAMP,
+        updatedAt: CREATION_TIMESTAMP,
+      });
+
+      expect(native.batch).toHaveBeenCalledOnce();
+      expect(native.statements).toHaveLength(1);
+      expect(native.statements[0].values).toEqual([
+        input.id,
+        input.title,
+        input.description,
+        input.servings,
+        input.chefId,
+        null,
+        CREATION_TIMESTAMP_TEXT,
+        CREATION_TIMESTAMP_TEXT,
+      ]);
+      expect(fallback.queryRaw).not.toHaveBeenCalled();
+      expect(fallback.transaction).not.toHaveBeenCalled();
+    });
+
+    it("prepares and validates every tagged native creation statement", async () => {
+      const input = recipeCreationInput(testUserId, { id: "recipe-native-tagged" });
+      const native = captureNativeCreationDatabase(successfulNativeCreationResults);
+      const fallback = nativeFallbackDatabase();
+
+      await expect(createRecipeDraft(fallback.database, input, {
+        nativeDatabase: native.database,
+        now: () => CREATION_TIMESTAMP,
+        randomId: () => "tag-result-validation",
+      })).resolves.toMatchObject({ id: input.id, course: "main" });
+
+      expect(native.batch).toHaveBeenCalledOnce();
+      expect(native.statements).toHaveLength(2);
+      expect(compactSql(native.statements[1].sql)).toContain('INSERT INTO "RecipeTag"');
+      expect(native.statements[1].values).toEqual([
+        "tag-result-validation",
+        input.id,
+        "Quick",
+        "quick",
+        CREATION_TIMESTAMP_TEXT,
+        CREATION_TIMESTAMP_TEXT,
+      ]);
+      expect(fallback.queryRaw).not.toHaveBeenCalled();
+      expect(fallback.transaction).not.toHaveBeenCalled();
+    });
+
+    it("uses the production clock and UUID generator for local metadata creation", async () => {
+      const input = recipeCreationInput(testUserId, {
+        id: "recipe-local-default-dependencies",
+      });
+
+      const recipe = await createRecipeDraft(db, input);
+
+      expect(recipe).toMatchObject({
+        id: input.id,
+        course: "main",
+      });
+      expect(recipe.createdAt).toBeInstanceOf(Date);
+      const tags = await db.recipeTag.findMany({ where: { recipeId: input.id } });
+      expect(tags).toHaveLength(1);
+      expect(tags[0]).toMatchObject({
+        label: "Quick",
+        normalizedLabel: "quick",
+      });
+      expect(tags[0].id).toMatch(/^[0-9a-f-]{36}$/i);
+    });
+
+    it.each<CreationResultCase>([
+      {
+        label: "non-array result list",
+        expectedError: "Invalid recipe creation result",
+        mutate: () => null,
+      },
+      {
+        label: "wrong result count",
+        expectedError: "Invalid recipe creation result",
+        mutate: () => [],
+      },
+      {
+        label: "non-array recipe rows",
+        expectedError: "Invalid recipe creation result",
+        mutate: (results: unknown[]) => [null, results[1]],
+      },
+      {
+        label: "wrong recipe row count",
+        expectedError: "Invalid recipe creation result",
+        mutate: (results: unknown[]) => [[], results[1]],
+      },
+      {
+        label: "malformed recipe row",
+        expectedError: "Invalid recipe creation row",
+        mutate: (results: unknown[]) => [[{
+          ...((results[0] as unknown[])[0] as Record<string, unknown>),
+          title: "Wrong title",
+        }], results[1]],
+      },
+      {
+        label: "non-array tag rows",
+        expectedError: "Invalid recipe creation result",
+        mutate: (results: unknown[]) => [results[0], null],
+      },
+      {
+        label: "wrong tag row count",
+        expectedError: "Invalid recipe tag creation result",
+        mutate: (results: unknown[]) => [results[0], []],
+      },
+      {
+        label: "malformed tag row",
+        expectedError: "Invalid recipe tag creation row",
+        mutate: (results: unknown[]) => [results[0], [{
+          ...((results[1] as unknown[])[0] as Record<string, unknown>),
+          normalizedLabel: "wrong",
+        }]],
+      },
+    ])("rejects local $label", async ({ mutate, expectedError }) => {
+      const input = recipeCreationInput(testUserId);
+      const successfulResults = [
+        [recipeCreationRow(input)],
+        [tagCreationRow(input)],
+      ];
+      const local = localCreationDatabase(mutate(successfulResults));
+
+      await expect(createRecipeDraft(local.database, input, {
+        nativeDatabase: null,
+        now: () => CREATION_TIMESTAMP,
+        randomId: () => "tag-result-validation",
+      })).rejects.toThrow(expectedError);
+
+      expect(local.queryRaw).toHaveBeenCalledTimes(2);
+      expect(local.transaction).toHaveBeenCalledOnce();
+    });
+
+    it.each<CreationResultCase>([
+      {
+        label: "non-array result list",
+        expectedError: "Invalid recipe creation result",
+        mutate: () => null,
+      },
+      {
+        label: "wrong result count",
+        expectedError: "Invalid recipe creation result",
+        mutate: () => [],
+      },
+      {
+        label: "non-object recipe statement",
+        expectedError: "Invalid recipe creation result",
+        mutate: (results: unknown[]) => [null, results[1]],
+      },
+      {
+        label: "unsuccessful recipe statement",
+        expectedError: "Recipe creation batch statement failed",
+        mutate: (results: unknown[]) => [{
+          ...(results[0] as Record<string, unknown>),
+          success: false,
+        }, results[1]],
+      },
+      {
+        label: "non-object recipe metadata",
+        expectedError: "Invalid recipe creation result",
+        mutate: (results: unknown[]) => [{
+          ...(results[0] as Record<string, unknown>),
+          meta: null,
+        }, results[1]],
+      },
+      {
+        label: "wrong recipe change count",
+        expectedError: "Invalid recipe creation result",
+        mutate: (results: unknown[]) => [{
+          ...(results[0] as Record<string, unknown>),
+          meta: { changes: 0 },
+        }, results[1]],
+      },
+      {
+        label: "non-array recipe rows",
+        expectedError: "Invalid recipe creation result",
+        mutate: (results: unknown[]) => [{
+          ...(results[0] as Record<string, unknown>),
+          results: null,
+        }, results[1]],
+      },
+      {
+        label: "wrong recipe row count",
+        expectedError: "Invalid recipe creation result",
+        mutate: (results: unknown[]) => [{
+          ...(results[0] as Record<string, unknown>),
+          results: [],
+        }, results[1]],
+      },
+      {
+        label: "malformed recipe row",
+        expectedError: "Invalid recipe creation row",
+        mutate: (results: unknown[]) => [{
+          ...(results[0] as Record<string, unknown>),
+          results: [{
+            ...(((results[0] as Record<string, unknown>).results as unknown[])[0] as Record<string, unknown>),
+            chefId: "wrong-chef",
+          }],
+        }, results[1]],
+      },
+      {
+        label: "unsuccessful tag statement",
+        expectedError: "Recipe creation batch statement failed",
+        mutate: (results: unknown[]) => [results[0], {
+          ...(results[1] as Record<string, unknown>),
+          success: false,
+        }],
+      },
+      {
+        label: "non-array tag rows",
+        expectedError: "Invalid recipe creation result",
+        mutate: (results: unknown[]) => [results[0], {
+          ...(results[1] as Record<string, unknown>),
+          results: null,
+        }],
+      },
+      {
+        label: "wrong tag row count",
+        expectedError: "Invalid recipe tag creation result",
+        mutate: (results: unknown[]) => [results[0], {
+          ...(results[1] as Record<string, unknown>),
+          results: [],
+        }],
+      },
+      {
+        label: "malformed tag row",
+        expectedError: "Invalid recipe tag creation row",
+        mutate: (results: unknown[]) => [results[0], {
+          ...(results[1] as Record<string, unknown>),
+          results: [{
+            ...(((results[1] as Record<string, unknown>).results as unknown[])[0] as Record<string, unknown>),
+            tagId: "wrong-tag",
+          }],
+        }],
+      },
+    ])("rejects native $label without Prisma fallback", async ({ mutate, expectedError }) => {
+      const input = recipeCreationInput(testUserId);
+      const native = captureNativeCreationDatabase((statements) =>
+        mutate(successfulNativeCreationResults(statements))
+      );
+      const fallback = nativeFallbackDatabase();
+
+      await expect(createRecipeDraft(fallback.database, input, {
+        nativeDatabase: native.database,
+        now: () => CREATION_TIMESTAMP,
+        randomId: () => "tag-result-validation",
+      })).rejects.toThrow(expectedError);
+
+      expect(native.batch).toHaveBeenCalledOnce();
+      expect(fallback.queryRaw).not.toHaveBeenCalled();
+      expect(fallback.transaction).not.toHaveBeenCalled();
     });
 
     it("rolls back the initial recipe when a later tag insertion fails", async () => {

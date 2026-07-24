@@ -238,10 +238,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const clearImage = formData.get("clearImage")?.toString() === "true";
   const metadata = parseRecipeAuthoringMetadataForm(
     formData.has("course")
-      ? formData.get("course")?.toString() ?? null
+      ? formData.get("course")!.toString()
       : recipe.course,
     formData.has("tags")
-      ? formData.get("tags")?.toString() ?? null
+      ? formData.get("tags")!.toString()
       : JSON.stringify(recipe.tags.map((tag) => tag.label)),
   );
 

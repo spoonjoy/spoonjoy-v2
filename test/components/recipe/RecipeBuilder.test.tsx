@@ -355,6 +355,71 @@ describe("RecipeBuilder", () => {
       );
     });
 
+    it("includes an uncommitted tag on save", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      const Wrapper = createTestWrapper({ onSave });
+      render(<Wrapper initialEntries={["/recipes/new"]} />);
+
+      await user.type(screen.getByLabelText(/title/i), "Pending Tag Recipe");
+      await user.type(screen.getByLabelText(/^tags$/i), "  Weeknight  ");
+      await user.click(screen.getByRole("button", { name: /create recipe/i }));
+
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ tags: ["Weeknight"] }),
+      );
+    });
+
+    it("does not duplicate an existing tag from pending input", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      const Wrapper = createTestWrapper({
+        onSave,
+        recipe: createTestRecipe({ tags: ["Quick"] }),
+      });
+      render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
+
+      await user.type(screen.getByLabelText(/^tags$/i), "quick");
+      await user.click(screen.getByRole("button", { name: /save recipe/i }));
+
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ tags: ["Quick"] }),
+      );
+    });
+
+    it("ignores blank and duplicate tags entered with the keyboard", async () => {
+      const user = userEvent.setup();
+      const Wrapper = createTestWrapper({
+        recipe: createTestRecipe({ tags: ["Quick"] }),
+      });
+      render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
+
+      const tagsInput = screen.getByLabelText(/^tags$/i);
+      await user.type(tagsInput, "   {Enter}");
+      await user.clear(tagsInput);
+      await user.type(tagsInput, "quick{Enter}");
+
+      expect(screen.getAllByText("Quick")).toHaveLength(1);
+      expect(screen.getByRole("button", { name: "Remove Quick tag" })).toBeInTheDocument();
+    });
+
+    it("maps the empty course choice back to null", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      const Wrapper = createTestWrapper({
+        onSave,
+        recipe: createTestRecipe({ course: "main" }),
+      });
+      render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
+
+      await user.selectOptions(screen.getByRole("combobox", { name: "Course" }), "");
+      await user.click(screen.getByRole("button", { name: /save recipe/i }));
+
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ course: null }),
+      );
+    });
+
     it("save button disabled when title is empty (validation)", () => {
       const Wrapper = createTestWrapper();
       render(<Wrapper initialEntries={["/recipes/new"]} />);

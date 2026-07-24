@@ -13,6 +13,7 @@ import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "~/lib/recipe-title-uniquenes
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
 import { ensureSearchIndexFresh, rebuildSearchIndex, searchSpoonjoy } from "~/lib/search.server";
+import { RecipeTagNotFoundError } from "~/lib/recipe-tags.server";
 
 function compactSql(sql: unknown): string {
   return String(sql).replace(/\s+/g, " ").trim();
@@ -519,6 +520,54 @@ describe("Recipes $id Edit Route", () => {
       expect(semanticResult.status).toBe(400);
       expect(semanticResult.data.errors.tags).toBe("Add no more than 10 tags");
       await expect(db.recipeTag.count({ where: { recipeId } })).resolves.toBe(0);
+    });
+
+    it("preserves course and tags when a legacy edit omits metadata fields", async () => {
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { course: "side" },
+      });
+      await db.recipeTag.create({
+        data: {
+          id: `legacy-tag-${recipeId}`,
+          recipeId,
+          label: "Weeknight",
+          normalizedLabel: "weeknight",
+        },
+      });
+
+      const response = await action({
+        request: await createFormRequest({ title: "Legacy Metadata Edit" }, testUserId),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(response).toBeInstanceOf(Response);
+      expect(response.status).toBe(302);
+      await expect(db.recipe.findUniqueOrThrow({ where: { id: recipeId } })).resolves.toMatchObject({
+        course: "side",
+      });
+      const tags = await db.recipeTag.findMany({ where: { recipeId } });
+      expect(tags.map((tag) => tag.label)).toEqual(["Weeknight"]);
+    });
+
+    it("returns not found when the recipe disappears during the authoring transaction", async () => {
+      const originalTransaction = db.$transaction;
+      db.$transaction = vi.fn().mockRejectedValue(new RecipeTagNotFoundError(recipeId));
+
+      try {
+        const response = await action({
+          request: await createFormRequest({ title: "Raced Recipe" }, testUserId),
+          context: { cloudflare: { env: null } },
+          params: { id: recipeId },
+        } as any);
+
+        const { data, status } = extractResponseData(response);
+        expect(status).toBe(404);
+        expect(data.errors.general).toBe("Recipe not found");
+      } finally {
+        db.$transaction = originalTransaction;
+      }
     });
 
     it("should successfully update recipe and redirect", async () => {

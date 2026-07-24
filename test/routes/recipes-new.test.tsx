@@ -1732,6 +1732,41 @@ describe("Recipes New Route", () => {
       expect(formDataReceived.steps).toBeUndefined();
     });
 
+    it("should handle missing course and tags inputs in handleSave", async () => {
+      const user = userEvent.setup();
+      let formDataReceived: Record<string, string> = {};
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/new",
+          Component: NewRecipe,
+          loader: () => null,
+          action: async ({ request }: { request: Request }) => {
+            const formData = await request.formData();
+            formDataReceived = Object.fromEntries(formData.entries());
+            return redirect("/recipes/test-id");
+          },
+        },
+        {
+          path: "/recipes/:id",
+          Component: () => <div>Recipe Detail</div>,
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/new"]} />);
+
+      await user.type(await screen.findByLabelText(/Title/), "Legacy Hidden Inputs");
+      document.querySelector('form.hidden input[name="course"]')?.remove();
+      document.querySelector('form.hidden input[name="tags"]')?.remove();
+      await user.click(screen.getByRole("button", { name: "Create Recipe" }));
+
+      await waitFor(() => {
+        expect(screen.getByText("Recipe Detail")).toBeInTheDocument();
+      });
+      expect(formDataReceived.course).toBeUndefined();
+      expect(formDataReceived.tags).toBeUndefined();
+    });
+
     it("should handle missing clearImage input in handleSave", async () => {
       const user = userEvent.setup();
       let formDataReceived: Record<string, string> = {};
