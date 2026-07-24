@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useLocation } from "react-router";
 import { faker } from "@faker-js/faker";
 import { db } from "~/lib/db.server";
@@ -68,6 +68,100 @@ describe("Search Route", () => {
         type: "shopping-list-item",
         title: "tomato paste",
       });
+    });
+
+    it("renders persisted neutral metadata only on global recipe cards", async () => {
+      const user = await createSearchUser("global_card_metadata");
+      const recipe = await db.recipe.create({
+        data: {
+          title: "Card Metadata Noodles",
+          description: "A uniquely searchable metadata card",
+          chefId: user.id,
+          course: "main",
+        },
+      });
+      await db.recipeTag.createMany({
+        data: [
+          { recipeId: recipe.id, label: "Weeknight", normalizedLabel: "weeknight" },
+          { recipeId: recipe.id, label: "Budget", normalizedLabel: "budget" },
+        ],
+      });
+      await db.savedRecipe.create({
+        data: {
+          userId: user.id,
+          recipeId: recipe.id,
+          savedAt: "2026-07-24T00:00:00.000Z",
+        },
+      });
+      const cookbook = await db.cookbook.create({
+        data: { title: "Card Metadata Collection", authorId: user.id },
+      });
+      const decoy = await db.recipe.create({
+        data: {
+          title: "Card Metadata Decoy",
+          chefId: user.id,
+          course: "side",
+        },
+      });
+      await db.recipeTag.create({
+        data: {
+          recipeId: decoy.id,
+          label: "Decoy Tag",
+          normalizedLabel: "decoy tag",
+        },
+      });
+
+      const request = new UndiciRequest("http://localhost:3000/search?q=card+metadata&scope=all", {
+        headers: new Headers({ Cookie: await createSessionCookie(user.id) }),
+      });
+      const result = await loader({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+      const recipeResult = result.results.find((item) => item.id === recipe.id)!;
+      const decoyResult = result.results.find((item) => item.id === decoy.id)!;
+      const cookbookResult = result.results.find((item) => item.id === cookbook.id)!;
+
+      expect(recipeResult.metadata).toMatchObject({
+        course: "main",
+        tags: ["Budget", "Weeknight"],
+      });
+      expect(recipeResult.metadata).not.toHaveProperty("isSaved");
+      expect(recipeResult.metadata).not.toHaveProperty("categorySource");
+      expect(recipeResult.metadata).not.toHaveProperty("categorizedBy");
+      expect(decoyResult.metadata).toMatchObject({
+        course: "side",
+        tags: ["Decoy Tag"],
+      });
+      expect(cookbookResult.metadata).not.toHaveProperty("course");
+      expect(cookbookResult.metadata).not.toHaveProperty("tags");
+
+      const Stub = createTestRoutesStub([{
+        path: "/search",
+        Component: Search,
+        loader: () => result,
+      }]);
+      render(<Stub initialEntries={["/search?q=card+metadata&scope=all"]} />);
+
+      const recipeCard = await screen.findByRole("link", { name: /Recipe Card Metadata Noodles/i });
+      const metadata = within(recipeCard).getByRole("group", { name: "Recipe metadata" });
+      expect(within(metadata).getByText("Main")).toBeInTheDocument();
+      const tagList = within(metadata).getByRole("list", { name: "Recipe tags" });
+      expect(within(tagList).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+        "Budget",
+        "Weeknight",
+      ]);
+      expect(within(recipeCard).queryByText("Decoy Tag")).not.toBeInTheDocument();
+
+      const decoyCard = screen.getByRole("link", { name: /Recipe Card Metadata Decoy/i });
+      const decoyMetadata = within(decoyCard).getByRole("group", { name: "Recipe metadata" });
+      expect(within(decoyMetadata).getByText("Side")).toBeInTheDocument();
+      expect(within(decoyMetadata).getByRole("list", { name: "Recipe tags" })).toHaveTextContent("Decoy Tag");
+      expect(within(decoyMetadata).queryByText("Budget")).not.toBeInTheDocument();
+
+      const cookbookCard = screen.getByRole("link", { name: /Cookbook Card Metadata Collection/i });
+      expect(within(cookbookCard).queryByRole("group", { name: "Recipe metadata" })).not.toBeInTheDocument();
     });
 
     it("normalizes unauthenticated shopping-list searches to an empty private result set", async () => {

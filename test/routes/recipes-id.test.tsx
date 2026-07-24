@@ -495,6 +495,92 @@ describe("Recipes $id Route", () => {
       expect(result.coverImageUrl).toBeNull();
     });
 
+    it("returns and renders persisted neutral recipe metadata in deterministic order", async () => {
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { course: "dessert" },
+      });
+      await db.recipeTag.createMany({
+        data: [
+          { recipeId, label: "Zesty", normalizedLabel: "zesty" },
+          { recipeId, label: "After Dinner", normalizedLabel: "after dinner" },
+        ],
+      });
+      await db.savedRecipe.create({
+        data: {
+          userId: otherUserId,
+          recipeId,
+          savedAt: "2026-07-24T00:00:00.000Z",
+        },
+      });
+      const decoy = await db.recipe.create({
+        data: {
+          title: "Metadata Decoy Recipe",
+          chefId: otherUserId,
+          course: "side",
+        },
+      });
+      await db.recipeTag.create({
+        data: {
+          recipeId: decoy.id,
+          label: "Decoy Tag",
+          normalizedLabel: "decoy tag",
+        },
+      });
+
+      const result = await loader({
+        request: new UndiciRequest(`http://localhost:3000/recipes/${recipeId}`),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(result.recipe).toMatchObject({
+        course: "dessert",
+        tags: ["After Dinner", "Zesty"],
+      });
+      expect(result.recipe.tags).toEqual(expect.arrayOf(expect.any(String)));
+      expect(result.recipe).not.toHaveProperty("isSaved");
+      expect(result.recipe).not.toHaveProperty("categorySource");
+      expect(result.recipe).not.toHaveProperty("categorizedBy");
+      expect(result.recipe.tags).not.toContain("Decoy Tag");
+
+      const decoyResult = await loader({
+        request: new UndiciRequest(`http://localhost:3000/recipes/${decoy.id}`),
+        context: { cloudflare: { env: null } },
+        params: { id: decoy.id },
+      } as any);
+      expect(decoyResult.recipe).toMatchObject({
+        course: "side",
+        tags: ["Decoy Tag"],
+      });
+      expect(decoyResult.recipe.tags).not.toContain("After Dinner");
+      expect(decoyResult.recipe.tags).not.toContain("Zesty");
+
+      const Stub = createTestRoutesStub([{
+        path: "/recipes/:id",
+        Component: RecipeDetail,
+        loader: ({ params }: { params: { id?: string } }) => (
+          params.id === decoy.id ? decoyResult : result
+        ),
+      }]);
+      const { unmount } = render(<Stub initialEntries={[`/recipes/${recipeId}`]} />);
+
+      const metadata = await screen.findByRole("group", { name: "Recipe metadata" });
+      expect(within(metadata).getByText("Dessert")).toBeInTheDocument();
+      const tagList = within(metadata).getByRole("list", { name: "Recipe tags" });
+      expect(within(tagList).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+        "After Dinner",
+        "Zesty",
+      ]);
+
+      unmount();
+      render(<Stub initialEntries={[`/recipes/${decoy.id}`]} />);
+      const decoyMetadata = await screen.findByRole("group", { name: "Recipe metadata" });
+      expect(within(decoyMetadata).getByText("Side")).toBeInTheDocument();
+      expect(within(decoyMetadata).getByRole("list", { name: "Recipe tags" })).toHaveTextContent("Decoy Tag");
+      expect(within(decoyMetadata).queryByText("After Dinner")).not.toBeInTheDocument();
+    });
+
     it("returns explicit active cover display data with provenance", async () => {
       const activeCover = await db.recipeCover.create({
         data: {

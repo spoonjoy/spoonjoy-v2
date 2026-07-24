@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useLocation } from "react-router";
 import { cleanupDatabase } from "../helpers/cleanup";
 import {
@@ -86,6 +86,90 @@ describe("My Recipes drawer route", () => {
       title: "Weeknight Lentils",
       chef: { id: viewer.id, username: viewer.username },
     });
+  });
+
+  it("returns and renders persisted neutral metadata on My Recipes cards", async () => {
+    const viewer = await createDrawerUser("my-recipes-metadata");
+    const recipe = await createDrawerRecipe({
+      chefId: viewer.id,
+      title: "Metadata Card Supper",
+      description: "A card with neutral metadata",
+      updatedAt: new Date("2026-07-24T00:00:00.000Z"),
+    });
+    await db.recipe.update({ where: { id: recipe.id }, data: { course: "main" } });
+    await db.recipeTag.createMany({
+      data: [
+        { recipeId: recipe.id, label: "Weeknight", normalizedLabel: "weeknight" },
+        { recipeId: recipe.id, label: "Budget", normalizedLabel: "budget" },
+      ],
+    });
+    await db.savedRecipe.create({
+      data: {
+        userId: viewer.id,
+        recipeId: recipe.id,
+        savedAt: "2026-07-24T00:00:00.000Z",
+      },
+    });
+    const decoy = await createDrawerRecipe({
+      chefId: viewer.id,
+      title: "Metadata Card Decoy",
+      updatedAt: new Date("2026-07-23T00:00:00.000Z"),
+    });
+    await db.recipe.update({ where: { id: decoy.id }, data: { course: "side" } });
+    await db.recipeTag.create({
+      data: {
+        recipeId: decoy.id,
+        label: "Decoy Tag",
+        normalizedLabel: "decoy tag",
+      },
+    });
+
+    const result = await loader({
+      request: new UndiciRequest("http://localhost:3000/my-recipes", {
+        headers: await sessionHeaders(viewer.id),
+      }),
+      context: { cloudflare: { env: null } },
+      params: {},
+    } as any);
+
+    expect(result.recipes).toHaveLength(2);
+    expect(result.recipes.find((item) => item.id === recipe.id)).toEqual({
+      id: recipe.id,
+      title: "Metadata Card Supper",
+      description: "A card with neutral metadata",
+      servings: null,
+      course: "main",
+      tags: ["Budget", "Weeknight"],
+      chef: { id: viewer.id, username: viewer.username },
+      ingredientNames: [],
+    });
+    expect(result.recipes.find((item) => item.id === decoy.id)).toMatchObject({
+      course: "side",
+      tags: ["Decoy Tag"],
+    });
+
+    const Stub = createTestRoutesStub([{
+      path: "/my-recipes",
+      Component: MyRecipes,
+      loader: () => result,
+    }]);
+    render(<Stub initialEntries={["/my-recipes"]} />);
+
+    const card = await screen.findByRole("link", { name: /Metadata Card Supper/i });
+    const metadata = within(card).getByRole("group", { name: "Recipe metadata" });
+    expect(within(metadata).getByText("Main")).toBeInTheDocument();
+    const tagList = within(metadata).getByRole("list", { name: "Recipe tags" });
+    expect(within(tagList).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "Budget",
+      "Weeknight",
+    ]);
+    expect(within(card).queryByText("Decoy Tag")).not.toBeInTheDocument();
+
+    const decoyCard = screen.getByRole("link", { name: /Metadata Card Decoy/i });
+    const decoyMetadata = within(decoyCard).getByRole("group", { name: "Recipe metadata" });
+    expect(within(decoyMetadata).getByText("Side")).toBeInTheDocument();
+    expect(within(decoyMetadata).getByRole("list", { name: "Recipe tags" })).toHaveTextContent("Decoy Tag");
+    expect(within(decoyMetadata).queryByText("Budget")).not.toBeInTheDocument();
   });
 
   it("returns an empty drawer for a signed-in chef without recipes", async () => {
