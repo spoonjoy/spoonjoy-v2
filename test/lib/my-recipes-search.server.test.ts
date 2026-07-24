@@ -3,10 +3,12 @@ import { faker } from "@faker-js/faker";
 import { db } from "~/lib/db.server";
 import {
   MY_RECIPES_PAGE_SIZE,
+  normalizeMyRecipesFilters,
   normalizeMyRecipesPage,
   normalizeMyRecipesQuery,
   searchMyRecipes,
 } from "~/lib/my-recipes-search.server";
+import { RecipeTagValidationError } from "~/lib/recipe-tags.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
 
@@ -380,6 +382,98 @@ describe("my-recipes-search.server", () => {
     } as Parameters<typeof searchMyRecipes>[1] & { tags: string[] };
 
     await expect(searchMyRecipes(database, options)).rejects.toThrow("At most 10 tag filters are allowed");
+    let iteratorCalls = 0;
+    const deceptiveTags = {
+      length: 1,
+      *[Symbol.iterator]() {
+        iteratorCalls += 1;
+        yield "\t";
+        yield* Array.from({ length: 10 }, () => "duplicate");
+      },
+    } as unknown as readonly string[];
+    expect(() => normalizeMyRecipesFilters(null, deceptiveTags))
+      .toThrow("At most 10 tag filters are allowed");
+    expect(iteratorCalls).toBe(1);
+    expect(database.$queryRawUnsafe).not.toHaveBeenCalled();
+  });
+
+  it("rejects service-only unsafe offsets before issuing SQL", async () => {
+    const database = { $queryRawUnsafe: vi.fn(async () => []) };
+
+    await expect(searchMyRecipes(database, {
+      ownerId: "unsafe_page_owner",
+      ownerUsername: "unsafe_page_owner",
+      page: Number.MAX_SAFE_INTEGER,
+    })).rejects.toThrow("Page offset must be a safe integer");
+    expect(database.$queryRawUnsafe).not.toHaveBeenCalled();
+  });
+
+  it("does not disguise unexpected canonical-normalizer failures as validation errors", () => {
+    const iteratorFailure = new Error("unexpected iterator failure");
+    const tags = new Proxy([], {
+      get(target, property, receiver) {
+        if (property === Symbol.iterator) return () => { throw iteratorFailure; };
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    let caught: unknown;
+    try {
+      normalizeMyRecipesFilters(null, tags);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBe(iteratorFailure);
+
+    const validationFailure = new RecipeTagValidationError("tags.0", "iterator validation failure");
+    const validationTags = {
+      length: 0,
+      [Symbol.iterator]() {
+        throw validationFailure;
+      },
+    } as unknown as readonly string[];
+    try {
+      normalizeMyRecipesFilters(null, validationTags);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBe(validationFailure);
+
+    const canonicalFailure = new Error("unexpected canonical failure");
+    const normalizeSpy = vi.spyOn(String.prototype, "normalize")
+      .mockImplementationOnce(() => { throw canonicalFailure; });
+    try {
+      normalizeMyRecipesFilters(null, ["quick"]);
+    } catch (error) {
+      caught = error;
+    } finally {
+      normalizeSpy.mockRestore();
+    }
+    expect(caught).toBe(canonicalFailure);
+  });
+
+  it("rejects an explicitly empty course while accepting an absent course", () => {
+    expect(() => normalizeMyRecipesFilters("", [])).toThrow("course must be null or a supported value");
+    expect(normalizeMyRecipesFilters(null, [])).toEqual({ course: null, tags: [], displayTags: [] });
+  });
+
+  it("accepts only immutable prepared filters created by the canonical factory", async () => {
+    const database = { $queryRawUnsafe: vi.fn(async () => []) };
+    const prepared = normalizeMyRecipesFilters("main", ["H\u0331"]);
+
+    expect(Object.isFrozen(prepared)).toBe(true);
+    expect(Object.isFrozen(prepared.tags)).toBe(true);
+    expect(prepared).toEqual({ course: "main", tags: ["h\u0331"], displayTags: ["H\u0331"] });
+    await expect(searchMyRecipes(database, {
+      ownerId: "prepared_owner",
+      ownerUsername: "prepared_owner",
+      normalizedFilters: { course: "main", tags: ["forged"], displayTags: ["forged"] },
+    })).rejects.toThrow("Prepared recipe filters are invalid");
+    await expect(searchMyRecipes(database, {
+      ownerId: "mixed_owner",
+      ownerUsername: "mixed_owner",
+      normalizedFilters: prepared,
+      tags: ["raw"],
+    })).rejects.toThrow("Prepared recipe filters are invalid");
     expect(database.$queryRawUnsafe).not.toHaveBeenCalled();
   });
 

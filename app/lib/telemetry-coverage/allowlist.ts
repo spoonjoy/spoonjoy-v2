@@ -135,6 +135,18 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "Validation/draft-parse catch maps to a 4xx form error returned to the user; not an unexpected server exception.",
   },
   {
+    file: "app/lib/my-recipes-search.server.ts",
+    category: "expected-4xx",
+    reason:
+      "Recipe course/tag normalization catches only RecipeTagValidationError and maps it to the route-specific validation error; unexpected failures rethrow unchanged and no server exception is swallowed.",
+  },
+  {
+    file: "app/lib/search.server.ts",
+    category: "expected-4xx",
+    reason:
+      "Global recipe-filter normalization catches only RecipeTagValidationError and maps it to the public search validation error; unexpected failures rethrow unchanged and no server exception is swallowed.",
+  },
+  {
     file: "app/lib/saved-recipes.server.ts",
     category: "expected-4xx",
     reason:
@@ -157,6 +169,18 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     category: "expected-4xx",
     reason:
       "Ingredient-parse fallback inside a user action; failure degrades to unparsed text, surfaced as a normal action result rather than a server exception.",
+  },
+  {
+    file: "app/routes/my-recipes.tsx",
+    category: "expected-4xx",
+    reason:
+      "Loader catch maps only typed page/course/tag validation failures from client query parameters to HTTP 400; unexpected failures rethrow unchanged to the instrumented request boundary.",
+  },
+  {
+    file: "app/routes/search.tsx",
+    category: "expected-4xx",
+    reason:
+      "Loader catch maps only typed course/tag validation failures from client query parameters to HTTP 400; unexpected failures rethrow unchanged to the instrumented request boundary.",
   },
 
   // --- not on a user-facing request path ---

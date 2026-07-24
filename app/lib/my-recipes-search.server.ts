@@ -38,6 +38,14 @@ export type MyRecipesSearchResult = {
   recipes: MyRecipesSearchRecipe[];
 };
 
+export type NormalizedMyRecipesFilters = {
+  course: RecipeCourse | null;
+  tags: readonly string[];
+  displayTags: readonly string[];
+};
+
+const PREPARED_MY_RECIPES_FILTERS = new WeakSet<object>();
+
 export function normalizeMyRecipesQuery(value: string | null | undefined) {
   return (value ?? "").trim();
 }
@@ -74,20 +82,28 @@ export function parseMyRecipesPage(value: string | null | undefined) {
 export function normalizeMyRecipesFilters(
   courseValue: string | null | undefined,
   rawTags: readonly string[],
-) {
-  if (rawTags.length > 10) {
+): NormalizedMyRecipesFilters {
+  const tagSnapshot = [...rawTags];
+  if (tagSnapshot.length > 10) {
     throw new MyRecipesSearchValidationError("tags", "At most 10 tag filters are allowed");
   }
-
+  let course: RecipeCourse | null;
+  let normalizedTags: ReturnType<typeof normalizeRecipeTags>;
   try {
-    const course = normalizeRecipeCourse(courseValue ? courseValue : null);
-    const tags = normalizeRecipeTags([...rawTags]).map((tag) => tag.normalizedLabel);
-    return { course, tags };
+    course = normalizeRecipeCourse(courseValue ?? null);
+    normalizedTags = normalizeRecipeTags(tagSnapshot);
   } catch (error) {
     if (!(error instanceof RecipeTagValidationError)) throw error;
     const field = error.field === "course" ? "course" : "tags";
     throw new MyRecipesSearchValidationError(field, error.message);
   }
+  const filters = Object.freeze({
+    course,
+    tags: Object.freeze(normalizedTags.map((tag) => tag.normalizedLabel)),
+    displayTags: Object.freeze(normalizedTags.map((tag) => tag.label)),
+  });
+  PREPARED_MY_RECIPES_FILTERS.add(filters);
+  return filters;
 }
 
 function normalizePageSize(value: number | null | undefined) {
@@ -111,26 +127,42 @@ function mapRowsToRecipes(
 
 export async function searchMyRecipes(
   database: MyRecipesSearchDb,
-  {
-    ownerId,
-    ownerUsername,
-    query: rawQuery = "",
-    course: rawCourse = null,
-    tags: rawTags = [],
-    page: rawPage = 1,
-    pageSize: rawPageSize = MY_RECIPES_PAGE_SIZE,
-  }: {
+  options: {
     ownerId: string;
     ownerUsername: string;
     query?: string | null;
     course?: string | null;
     tags?: string[];
+    normalizedFilters?: NormalizedMyRecipesFilters;
     page?: number | null;
     pageSize?: number | null;
   },
 ): Promise<MyRecipesSearchResult> {
+  const {
+    ownerId,
+    ownerUsername,
+    query: rawQuery = "",
+    course: rawCourse = null,
+    tags: rawTags = [],
+    normalizedFilters,
+    page: rawPage = 1,
+    pageSize: rawPageSize = MY_RECIPES_PAGE_SIZE,
+  } = options;
   const query = normalizeMyRecipesQuery(rawQuery);
-  const { course, tags } = normalizeMyRecipesFilters(rawCourse, rawTags);
+  let filters: NormalizedMyRecipesFilters;
+  if (normalizedFilters) {
+    if (
+      !PREPARED_MY_RECIPES_FILTERS.has(normalizedFilters)
+      || Object.prototype.hasOwnProperty.call(options, "course")
+      || Object.prototype.hasOwnProperty.call(options, "tags")
+    ) {
+      throw new MyRecipesSearchValidationError("tags", "Prepared recipe filters are invalid");
+    }
+    filters = normalizedFilters;
+  } else {
+    filters = normalizeMyRecipesFilters(rawCourse, rawTags);
+  }
+  const { course, tags } = filters;
   const page = normalizeMyRecipesPage(String(rawPage));
   const pageSize = normalizePageSize(rawPageSize);
   const limit = pageSize + 1;
@@ -156,7 +188,7 @@ export async function searchMyRecipes(
   return {
     query,
     course,
-    tags,
+    tags: [...tags],
     page,
     pageSize,
     hasPreviousPage: page > 1,
@@ -165,7 +197,7 @@ export async function searchMyRecipes(
   };
 }
 
-function canonicalRecipeFilterSql(course: RecipeCourse | null, tags: string[]) {
+function canonicalRecipeFilterSql(course: RecipeCourse | null, tags: readonly string[]) {
   const conditions: string[] = [];
   const values: string[] = [];
 
@@ -200,7 +232,7 @@ async function searchUnfilteredRecipes(
   }: {
     ownerId: string;
     course: RecipeCourse | null;
-    tags: string[];
+    tags: readonly string[];
     limit: number;
     offset: number;
   },
@@ -242,7 +274,7 @@ async function searchFilteredRecipes(
     ownerUsername: string;
     query: string;
     course: RecipeCourse | null;
-    tags: string[];
+    tags: readonly string[];
     limit: number;
     offset: number;
   },

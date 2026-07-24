@@ -1,9 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { faker } from "@faker-js/faker";
 import { db } from "~/lib/db.server";
 import {
   normalizeSearchLimit,
+  normalizeSearchRecipeFilters,
   normalizeSearchScope,
   ensureSearchIndexFresh,
   rebuildSearchIndex,
@@ -11,6 +12,7 @@ import {
   tokenizeSearchQuery,
   toFtsQuery,
 } from "~/lib/search.server";
+import { RecipeTagValidationError } from "~/lib/recipe-tags.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
 
@@ -935,8 +937,140 @@ describe("search.server", () => {
     } as Parameters<typeof searchSpoonjoy>[1] & { tags: string[] };
 
     await expect(searchSpoonjoy(db, options)).rejects.toThrow("At most 10 tag filters are allowed");
+    let iteratorCalls = 0;
+    const deceptiveTags = {
+      length: 1,
+      *[Symbol.iterator]() {
+        iteratorCalls += 1;
+        yield "\t";
+        yield* Array.from({ length: 10 }, () => "duplicate");
+      },
+    } as unknown as readonly string[];
+    expect(() => normalizeSearchRecipeFilters(null, deceptiveTags))
+      .toThrow("At most 10 tag filters are allowed");
+    expect(iteratorCalls).toBe(1);
     await expect(db.$queryRawUnsafe<Array<{ count: bigint }>>(
       `SELECT COUNT(*) AS count FROM "SearchDocument"`,
     )).resolves.toEqual([{ count: 0n }]);
+  });
+
+  it("rejects recipe filters on non-recipe service scopes before index work", async () => {
+    await expect(searchSpoonjoy(db, {
+      scope: "cookbooks",
+      tags: ["quick"],
+    })).rejects.toThrow("Recipe filters require all or recipes scope");
+    await expect(db.$queryRawUnsafe<Array<{ count: bigint }>>(
+      `SELECT COUNT(*) AS count FROM "SearchDocument"`,
+    )).resolves.toEqual([{ count: 0n }]);
+  });
+
+  it("does not disguise unexpected global normalizer failures as validation errors", () => {
+    const iteratorFailure = new Error("unexpected iterator failure");
+    const tags = new Proxy([], {
+      get(target, property, receiver) {
+        if (property === Symbol.iterator) return () => { throw iteratorFailure; };
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    let caught: unknown;
+    try {
+      normalizeSearchRecipeFilters(null, tags);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBe(iteratorFailure);
+
+    const validationFailure = new RecipeTagValidationError("tags.0", "iterator validation failure");
+    const validationTags = {
+      length: 0,
+      [Symbol.iterator]() {
+        throw validationFailure;
+      },
+    } as unknown as readonly string[];
+    try {
+      normalizeSearchRecipeFilters(null, validationTags);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBe(validationFailure);
+
+    const canonicalFailure = new Error("unexpected canonical failure");
+    const normalizeSpy = vi.spyOn(String.prototype, "normalize")
+      .mockImplementationOnce(() => { throw canonicalFailure; });
+    try {
+      normalizeSearchRecipeFilters(null, ["quick"]);
+    } catch (error) {
+      caught = error;
+    } finally {
+      normalizeSpy.mockRestore();
+    }
+    expect(caught).toBe(canonicalFailure);
+  });
+
+  it("accepts only immutable global filters created by the canonical factory", async () => {
+    const prepared = normalizeSearchRecipeFilters("main", ["H\u0331"]);
+    const forged = { course: "dessert" as const, tags: ["forged"], displayTags: ["forged"] };
+    let preparedReads = 0;
+    const accessorOptions = {
+      scope: "recipes" as const,
+      get normalizedFilters() {
+        preparedReads += 1;
+        return preparedReads === 1 ? prepared : forged;
+      },
+    };
+
+    expect(Object.isFrozen(prepared)).toBe(true);
+    expect(Object.isFrozen(prepared.tags)).toBe(true);
+    expect(prepared).toEqual({ course: "main", tags: ["h\u0331"], displayTags: ["H\u0331"] });
+    await expect(searchSpoonjoy(db, {
+      scope: "recipes",
+      normalizedFilters: { course: "main", tags: ["forged"], displayTags: ["forged"] },
+    })).rejects.toThrow("Prepared recipe filters are invalid");
+    await expect(searchSpoonjoy(db, {
+      scope: "recipes",
+      normalizedFilters: prepared,
+      tags: ["raw"],
+    })).rejects.toThrow("Prepared recipe filters are invalid");
+    await expect(searchSpoonjoy(db, accessorOptions)).resolves.toEqual([]);
+    expect(preparedReads).toBe(1);
+    await expect(db.$queryRawUnsafe<Array<{ count: bigint }>>(
+      `SELECT COUNT(*) AS count FROM "SearchDocument"`,
+    )).resolves.toEqual([{ count: 0n }]);
+  });
+
+  it("applies canonical filters to the FTS branch with the complete bind order", async () => {
+    const chef = await createChef("fts_filter");
+    const matching = await db.recipe.create({
+      data: { title: "Filtered FTS Noodles", chefId: chef.id, course: "main" },
+    });
+    await db.recipeTag.create({
+      data: { recipeId: matching.id, label: "Quick", normalizedLabel: "quick" },
+    });
+    await rebuildSearchIndex(db);
+    const querySpy = vi.spyOn(db, "$queryRawUnsafe");
+
+    const results = await searchSpoonjoy(db, {
+      query: "filtered noodles",
+      scope: "recipes",
+      course: "main",
+      tags: ["Quick"],
+      limit: 30,
+    });
+    const searchCall = querySpy.mock.calls.find(([sql]) => (
+      typeof sql === "string"
+      && sql.includes('"SearchDocument" MATCH ?')
+      && sql.includes('INNER JOIN "Recipe" AS recipe')
+    ));
+    querySpy.mockRestore();
+
+    expect(results.map((result) => result.id)).toEqual([matching.id]);
+    expect(searchCall).toBeDefined();
+    expect(searchCall!.slice(1)).toEqual([
+      "filtered* AND noodles*",
+      "recipe",
+      "main",
+      "quick",
+      30,
+    ]);
   });
 });

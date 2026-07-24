@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useLocation } from "react-router";
 import { cleanupDatabase } from "../helpers/cleanup";
 import {
   INGREDIENT_LOOKUP_BATCH_SIZE,
@@ -9,6 +10,7 @@ import {
 } from "~/routes/my-recipes";
 import MyRecipes from "~/routes/my-recipes";
 import { db } from "~/lib/db.server";
+import * as myRecipesSearch from "~/lib/my-recipes-search.server";
 import { createTestRoutesStub } from "../utils";
 import {
   addIngredientToRecipe,
@@ -163,14 +165,50 @@ describe("My Recipes drawer route", () => {
       params: {},
     } as any);
 
-    expect(percentEncoded).toMatchObject({ course: "main", tags: ["quick dinner"] });
-    expect(plusEncoded).toMatchObject({ course: "main", tags: ["quick dinner"] });
+    expect(percentEncoded).toMatchObject({ course: "main", tags: ["Quick Dinner"] });
+    expect(plusEncoded).toMatchObject({ course: "main", tags: ["Quick Dinner"] });
     expect(percentEncoded.recipes.map((recipe: { id: string }) => recipe.id)).toEqual([matching.id]);
     expect(plusEncoded.recipes.map((recipe: { id: string }) => recipe.id)).toEqual([matching.id]);
   });
 
+  it("uses exactly one normalization pass for composition-sensitive tag identities", async () => {
+    const viewer = await createDrawerUser("my-recipes-single-normalization");
+    const matching = await createDrawerRecipe({
+      chefId: viewer.id,
+      title: "Single Normalization Match",
+      updatedAt: new Date("2026-01-01T00:00:00Z"),
+    });
+    await db.recipeTag.create({
+      data: { recipeId: matching.id, label: "H\u0331", normalizedLabel: "h\u0331" },
+    });
+
+    const headers = await sessionHeaders(viewer.id);
+    const result = await loader({
+      request: new UndiciRequest("http://localhost:3000/my-recipes?tag=H%CC%B1", {
+        headers,
+      }),
+      context: { cloudflare: { env: null } },
+      params: {},
+    } as any);
+
+    expect(result.tags).toEqual(["H\u0331"]);
+    expect(result.recipes.map((recipe: { id: string }) => recipe.id)).toEqual([matching.id]);
+
+    const nextParams = new URLSearchParams();
+    for (const tag of result.tags) nextParams.append("tag", tag);
+    nextParams.set("q", "Single Normalization");
+    const nextResult = await loader({
+      request: new UndiciRequest(`http://localhost:3000/my-recipes?${nextParams.toString()}`, { headers }),
+      context: { cloudflare: { env: null } },
+      params: {},
+    } as any);
+    expect(nextResult.tags).toEqual(["H\u0331"]);
+    expect(nextResult.recipes.map((recipe: { id: string }) => recipe.id)).toEqual([matching.id]);
+  });
+
   it.each([
     ["invalid course", "course=breakfast"],
+    ["empty course", "course="],
     ["invalid tag", "tag=%09"],
     ["nonnumeric page", "page=not-a-page"],
     ["zero page", "page=0"],
@@ -192,6 +230,22 @@ describe("My Recipes drawer route", () => {
       expect((error as Response).status).toBe(400);
       return true;
     });
+  });
+
+  it("does not convert unexpected filter-normalizer failures to 400", async () => {
+    const viewer = await createDrawerUser("my-recipes-unexpected-filter-error");
+    const failure = new Error("unexpected filter failure");
+    const normalizeSpy = vi.spyOn(myRecipesSearch, "normalizeMyRecipesFilters")
+      .mockImplementation(() => { throw failure; });
+
+    await expect(loader({
+      request: new UndiciRequest("http://localhost:3000/my-recipes", {
+        headers: await sessionHeaders(viewer.id),
+      }),
+      context: { cloudflare: { env: null } },
+      params: {},
+    } as any)).rejects.toBe(failure);
+    normalizeSpy.mockRestore();
   });
 
   it("normalizes a valid zero-padded page before issuing the bounded query", async () => {
@@ -504,6 +558,14 @@ describe("My Recipes drawer route", () => {
       "href",
       "/my-recipes-filter-controls?q=tomato+soup",
     );
+    expect(screen.getByRole("link", { name: "Clear course" })).toHaveAttribute(
+      "href",
+      "/my-recipes-filter-controls?q=tomato+soup&tag=quick+dinner&tag=budget",
+    );
+    expect(screen.getByRole("link", { name: "Remove tag quick dinner" })).toHaveAttribute(
+      "href",
+      "/my-recipes-filter-controls?q=tomato+soup&course=main&tag=budget",
+    );
     expect(screen.getByRole("link", { name: "Previous page" })).toHaveAttribute(
       "href",
       "/my-recipes-filter-controls?q=tomato+soup&course=main&tag=quick+dinner&tag=budget",
@@ -512,5 +574,183 @@ describe("My Recipes drawer route", () => {
       "href",
       "/my-recipes-filter-controls?q=tomato+soup&course=main&tag=quick+dinner&tag=budget&page=3",
     );
+  });
+
+  it("submits canonical filter order, synchronizes fields, and restores filter focus", async () => {
+    function LocationProbe() {
+      const location = useLocation();
+      return <output data-testid="location">{location.pathname}{location.search}</output>;
+    }
+    function FilterHarness() {
+      return <><MyRecipes /><LocationProbe /></>;
+    }
+    const Stub = createTestRoutesStub([
+      {
+        path: "/my-recipes-form-state",
+        Component: FilterHarness,
+        loader: ({ request }: { request: Request }) => {
+          const url = new URL(request.url);
+          const page = Number(url.searchParams.get("page") ?? "1");
+          return {
+            query: url.searchParams.get("q") ?? "",
+            course: url.searchParams.get("course"),
+            tags: url.searchParams.getAll("tag"),
+            page,
+            pageSize: 50,
+            hasPreviousPage: page > 1,
+            hasNextPage: page < 2,
+            recipes: [],
+          };
+        },
+      },
+    ]);
+
+    render(<Stub initialEntries={["/my-recipes-form-state?q=tomato+soup&course=main&tag=quick+dinner&tag=budget"]} />);
+
+    const queryInput = await screen.findByRole("searchbox", { name: "Search my recipes" });
+    fireEvent.change(queryInput, { target: { value: "  bean stew  " } });
+    expect(screen.getByRole("link", { name: "Next page" })).toHaveAttribute(
+      "href",
+      "/my-recipes-form-state?q=bean+stew&course=main&tag=quick+dinner&tag=budget&page=2",
+    );
+    fireEvent.click(screen.getByRole("link", { name: "Next page" }));
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe(
+      "/my-recipes-form-state?q=bean+stew&course=main&tag=quick+dinner&tag=budget&page=2",
+    ));
+    await waitFor(() => {
+      expect(screen.getByRole("searchbox", { name: "Search my recipes" })).toHaveValue("bean stew");
+    });
+    expect(screen.getByRole("link", { name: "Previous page" })).toHaveAttribute(
+      "href",
+      "/my-recipes-form-state?q=bean+stew&course=main&tag=quick+dinner&tag=budget",
+    );
+
+    fireEvent.submit(screen.getByRole("search"));
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe(
+      "/my-recipes-form-state?q=bean+stew&course=main&tag=quick+dinner&tag=budget",
+    ));
+    expect(screen.getByRole("searchbox", { name: "Search my recipes" })).toHaveFocus();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search my recipes" }), {
+      target: { value: "lentil pot" },
+    });
+    expect(screen.getByRole("link", { name: "Clear course" })).toHaveAttribute(
+      "href",
+      "/my-recipes-form-state?q=lentil+pot&tag=quick+dinner&tag=budget",
+    );
+    const courseSelect = screen.getByRole("combobox", { name: "Course" });
+    fireEvent.change(courseSelect, { target: { value: "dessert" } });
+    fireEvent.submit(courseSelect.closest("form")!);
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe(
+      "/my-recipes-form-state?q=lentil+pot&course=dessert&tag=quick+dinner&tag=budget",
+    ));
+
+    const tagInput = screen.getByRole("textbox", { name: "Add tag filter" });
+    fireEvent.change(tagInput, { target: { value: "late night" } });
+    fireEvent.submit(tagInput.closest("form")!);
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe(
+      "/my-recipes-form-state?q=lentil+pot&course=dessert&tag=quick+dinner&tag=budget&tag=late+night",
+    ));
+
+    fireEvent.click(screen.getByRole("link", { name: "Remove tag quick dinner" }));
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe(
+      "/my-recipes-form-state?q=lentil+pot&course=dessert&tag=budget&tag=late+night",
+    ));
+    expect(screen.getByRole("region", { name: "Recipe filters" })).toHaveFocus();
+
+    fireEvent.click(screen.getByRole("link", { name: "Clear course" }));
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe(
+      "/my-recipes-form-state?q=lentil+pot&tag=budget&tag=late+night",
+    ));
+    expect(screen.getByRole("combobox", { name: "Course" })).toHaveValue("");
+
+    fireEvent.click(screen.getByRole("link", { name: "Clear filters" }));
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe(
+      "/my-recipes-form-state?q=lentil+pot",
+    ));
+    expect(screen.getByRole("region", { name: "Recipe filters" })).toHaveFocus();
+
+    fireEvent.click(screen.getByRole("link", { name: "Clear" }));
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/my-recipes-form-state"));
+    await waitFor(() => {
+      expect(screen.getByRole("searchbox", { name: "Search my recipes" })).toHaveValue("");
+      expect(screen.getByRole("searchbox", { name: "Search my recipes" })).toHaveFocus();
+    });
+  });
+
+  it("clears a duplicate tag draft even when canonical filters do not change", async () => {
+    const Stub = createTestRoutesStub([{
+      path: "/my-recipes-duplicate-tag",
+      Component: MyRecipes,
+      loader: ({ request }: { request: Request }) => {
+        const url = new URL(request.url);
+        return {
+          query: "",
+          course: null,
+          tags: [...new Set(url.searchParams.getAll("tag").map((tag) => tag.toLowerCase()))],
+          page: 1,
+          pageSize: 50,
+          hasPreviousPage: false,
+          hasNextPage: false,
+          recipes: [],
+        };
+      },
+    }]);
+    render(<Stub initialEntries={["/my-recipes-duplicate-tag?tag=quick"]} />);
+
+    const input = await screen.findByRole("textbox", { name: "Add tag filter" });
+    fireEvent.change(input, { target: { value: "QUICK" } });
+    fireEvent.submit(input.closest("form")!);
+
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Add tag filter" })).toHaveValue(""));
+    expect(screen.getAllByText("quick")).toHaveLength(1);
+  });
+
+  it("disables tag addition at the ten-filter limit", async () => {
+    const Stub = createTestRoutesStub([
+      {
+        path: "/my-recipes-tag-limit",
+        Component: MyRecipes,
+        loader: () => ({
+          query: "",
+          course: null,
+          tags: Array.from({ length: 10 }, (_, index) => `tag-${index}`),
+          page: 1,
+          pageSize: 50,
+          hasPreviousPage: false,
+          hasNextPage: false,
+          recipes: [],
+        }),
+      },
+    ]);
+
+    render(<Stub initialEntries={["/my-recipes-tag-limit"]} />);
+
+    expect(await screen.findByRole("textbox", { name: "Add tag filter" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("10-tag limit reached. Remove a tag to add another.");
+  });
+
+  it("announces a course-only filter without inventing tag state", async () => {
+    const Stub = createTestRoutesStub([
+      {
+        path: "/my-recipes-course-only",
+        Component: MyRecipes,
+        loader: () => ({
+          query: "",
+          course: "main",
+          tags: [],
+          page: 1,
+          pageSize: 50,
+          hasPreviousPage: false,
+          hasNextPage: false,
+          recipes: [],
+        }),
+      },
+    ]);
+
+    render(<Stub initialEntries={["/my-recipes-course-only?course=main"]} />);
+
+    expect(await screen.findByText("Recipe filters updated. Course main. Tags none.")).toBeInTheDocument();
   });
 });

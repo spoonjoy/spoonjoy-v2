@@ -45,6 +45,7 @@ export interface SearchOptions {
   scope?: SearchScope;
   course?: string | null;
   tags?: string[];
+  normalizedFilters?: NormalizedSearchRecipeFilters;
   viewerId?: string | null;
   ownerId?: string | null;
   limit?: number;
@@ -218,23 +219,39 @@ export class SearchValidationError extends Error {
   }
 }
 
+export type NormalizedSearchRecipeFilters = {
+  course: RecipeCourse | null;
+  tags: readonly string[];
+  displayTags: readonly string[];
+};
+
+const PREPARED_SEARCH_RECIPE_FILTERS = new WeakSet<object>();
+
 export function normalizeSearchRecipeFilters(
   courseValue: string | null | undefined,
   rawTags: readonly string[],
-): { course: RecipeCourse | null; tags: string[] } {
-  if (rawTags.length > 10) {
+): NormalizedSearchRecipeFilters {
+  const tagSnapshot = [...rawTags];
+  if (tagSnapshot.length > 10) {
     throw new SearchValidationError("tags", "At most 10 tag filters are allowed");
   }
-
+  let course: RecipeCourse | null;
+  let normalizedTags: ReturnType<typeof normalizeRecipeTags>;
   try {
-    const course = normalizeRecipeCourse(courseValue ? courseValue : null);
-    const tags = normalizeRecipeTags([...rawTags]).map((tag) => tag.normalizedLabel);
-    return { course, tags };
+    course = normalizeRecipeCourse(courseValue ?? null);
+    normalizedTags = normalizeRecipeTags(tagSnapshot);
   } catch (error) {
     if (!(error instanceof RecipeTagValidationError)) throw error;
     const field = error.field === "course" ? "course" : "tags";
     throw new SearchValidationError(field, error.message);
   }
+  const filters = Object.freeze({
+    course,
+    tags: Object.freeze(normalizedTags.map((tag) => tag.normalizedLabel)),
+    displayTags: Object.freeze(normalizedTags.map((tag) => tag.label)),
+  });
+  PREPARED_SEARCH_RECIPE_FILTERS.add(filters);
+  return filters;
 }
 
 export function normalizeSearchLimit(value: number | null | undefined): number {
@@ -299,7 +316,7 @@ function buildWhereClause(
   entityTypes: SearchEntityType[],
   ownerId: string | null | undefined,
   viewerId: string | null | undefined,
-  filters: { course: RecipeCourse | null; tags: string[] },
+  filters: { course: RecipeCourse | null; tags: readonly string[] },
 ) {
   const values: Array<string | number> = [...entityTypes];
   const placeholders = entityTypes.map(() => "?").join(", ");
@@ -818,7 +835,20 @@ export async function ensureSearchIndexFresh(database: PrismaClient): Promise<nu
 export async function searchSpoonjoy(database: PrismaClient, options: SearchOptions = {}): Promise<SearchResult[]> {
   const scope = options.scope ?? "all";
   const query = options.query?.trim() ?? "";
-  const filters = normalizeSearchRecipeFilters(options.course, options.tags ?? []);
+  const normalizedFilters = options.normalizedFilters;
+  let filters: NormalizedSearchRecipeFilters;
+  if (normalizedFilters) {
+    if (
+      !PREPARED_SEARCH_RECIPE_FILTERS.has(normalizedFilters)
+      || Object.prototype.hasOwnProperty.call(options, "course")
+      || Object.prototype.hasOwnProperty.call(options, "tags")
+    ) {
+      throw new SearchValidationError("tags", "Prepared recipe filters are invalid");
+    }
+    filters = normalizedFilters;
+  } else {
+    filters = normalizeSearchRecipeFilters(options.course, options.tags ?? []);
+  }
   const hasRecipeFilters = Boolean(filters.course || filters.tags.length > 0);
   if (hasRecipeFilters && scope !== "all" && scope !== "recipes") {
     throw new SearchValidationError("scope", "Recipe filters require all or recipes scope");
