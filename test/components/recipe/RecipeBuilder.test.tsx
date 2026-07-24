@@ -16,7 +16,7 @@
  * - Character limits on inputs
  */
 
-import { render, screen, within, act } from "@testing-library/react";
+import { render, screen, within, act, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { createRoutesStub } from "react-router";
@@ -401,6 +401,96 @@ describe("RecipeBuilder", () => {
 
       expect(screen.getAllByText("Quick")).toHaveLength(1);
       expect(screen.getByRole("button", { name: "Remove Quick tag" })).toBeInTheDocument();
+    });
+
+    it("does not commit a tag while an input method editor is composing", async () => {
+      const user = userEvent.setup();
+      const Wrapper = createTestWrapper();
+      render(<Wrapper initialEntries={["/recipes/new"]} />);
+
+      const tagsInput = screen.getByLabelText(/^tags$/i);
+      await user.type(tagsInput, "\u6599\u7406");
+      fireEvent.keyDown(tagsInput, { key: "Enter", isComposing: true });
+
+      expect(screen.queryByRole("button", { name: "Remove \u6599\u7406 tag" })).not.toBeInTheDocument();
+      expect(tagsInput).toHaveValue("\u6599\u7406");
+    });
+
+    it("moves focus after tag removal and announces the change", async () => {
+      const user = userEvent.setup();
+      const Wrapper = createTestWrapper({
+        recipe: createTestRecipe({ tags: ["First", "Second"] }),
+      });
+      render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
+
+      await user.click(screen.getByRole("button", { name: "Remove First tag" }));
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Remove Second tag" })).toHaveFocus();
+      });
+      expect(screen.getByRole("status")).toHaveTextContent("First tag removed");
+
+      await user.click(screen.getByRole("button", { name: "Remove Second tag" }));
+      await waitFor(() => {
+        expect(screen.getByLabelText(/^tags$/i)).toHaveFocus();
+      });
+      expect(screen.getByRole("status")).toHaveTextContent("Second tag removed");
+    });
+
+    it("exposes and enforces the shared tag count and code-point limits", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      const tenTags = Array.from({ length: 10 }, (_, index) => `Tag ${index}`);
+      const Wrapper = createTestWrapper({
+        onSave,
+        recipe: createTestRecipe({ tags: tenTags }),
+      });
+      render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
+
+      const tagsInput = screen.getByLabelText(/^tags$/i);
+      expect(tagsInput).toHaveAccessibleDescription("Up to 10 tags, 40 characters each.");
+      await user.type(tagsInput, "One too many");
+      expect(screen.getByRole("button", { name: "Add tag" })).toBeDisabled();
+      await user.click(screen.getByRole("button", { name: /save recipe/i }));
+      expect(onSave).not.toHaveBeenCalled();
+      expect(screen.getByText("Add no more than 10 tags")).toBeInTheDocument();
+    });
+
+    it("counts tag length by Unicode code point before saving", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      const Wrapper = createTestWrapper({ onSave });
+      render(<Wrapper initialEntries={["/recipes/new"]} />);
+
+      await user.type(screen.getByLabelText(/title/i), "Long Tag Recipe");
+      const tagsInput = screen.getByLabelText(/^tags$/i);
+      await user.type(tagsInput, "\ud83c\udf7d\ufe0f".repeat(21));
+      expect(screen.getByRole("button", { name: "Add tag" })).toBeDisabled();
+      fireEvent.keyDown(tagsInput, { key: "Enter" });
+      expect(tagsInput).toHaveValue("\ud83c\udf7d\ufe0f".repeat(21));
+      await user.click(screen.getByRole("button", { name: /create recipe/i }));
+
+      expect(onSave).not.toHaveBeenCalled();
+      expect(screen.getByText("Tags must be 40 characters or fewer")).toBeInTheDocument();
+    });
+
+    it("renders 44-pixel tag removal targets", () => {
+      const Wrapper = createTestWrapper({
+        recipe: createTestRecipe({ tags: ["Quick"] }),
+      });
+      render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
+
+      expect(screen.getByRole("button", { name: "Remove Quick tag" })).toHaveClass("size-11");
+    });
+
+    it("allows a valid unbroken tag label to wrap without displacing its remove button", () => {
+      const longTag = "x".repeat(40);
+      const Wrapper = createTestWrapper({
+        recipe: createTestRecipe({ tags: [longTag] }),
+      });
+      render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
+
+      expect(screen.getByText(longTag)).toHaveClass("min-w-0", "break-all");
+      expect(screen.getByRole("button", { name: `Remove ${longTag} tag` })).toHaveClass("shrink-0");
     });
 
     it("maps the empty course choice back to null", async () => {
@@ -871,6 +961,17 @@ describe("RecipeBuilder", () => {
       await userEvent.tab();
       expect(screen.getByLabelText(/servings/i)).toHaveFocus();
 
+      await userEvent.tab();
+      expect(screen.getByRole("combobox", { name: "Course" })).toHaveFocus();
+
+      await userEvent.tab();
+      const tagsInput = screen.getByLabelText(/^tags$/i);
+      expect(tagsInput).toHaveFocus();
+      await userEvent.type(tagsInput, "Quick");
+
+      await userEvent.tab();
+      expect(screen.getByRole("button", { name: "Add tag" })).toHaveFocus();
+
       // Image upload area has variable number of tabbable elements
       // Skip through to find Add Step button
       const addStepButton = screen.getByRole("button", { name: /add step/i });
@@ -1031,7 +1132,9 @@ describe("RecipeBuilder", () => {
       expect(course).toHaveAttribute("aria-invalid", "true");
       expect(course).toHaveAccessibleDescription("Choose a supported course");
       expect(tags).toHaveAttribute("aria-invalid", "true");
-      expect(tags).toHaveAccessibleDescription("Add no more than 10 tags");
+      expect(tags).toHaveAccessibleDescription(
+        "Up to 10 tags, 40 characters each. Add no more than 10 tags",
+      );
     });
 
     it("displays steps validation error when errors prop contains steps error", () => {

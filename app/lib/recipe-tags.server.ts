@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { MAX_RECIPE_TAG_CODE_POINTS, MAX_RECIPE_TAGS } from "~/lib/recipe-tags";
 
 export const RECIPE_COURSES = ["main", "side", "appetizer", "dessert"] as const;
 
@@ -110,8 +111,6 @@ interface RawMetadataRow {
 
 const CATEGORY_C = /\p{C}/u;
 const UNICODE_WHITESPACE = /\p{White_Space}+/gu;
-const MAX_TAG_CODE_POINTS = 40;
-const MAX_UNIQUE_TAGS = 10;
 
 const READ_METADATA_SQL = `
   SELECT
@@ -225,7 +224,7 @@ export function normalizeRecipeTags(value: unknown): NormalizedRecipeTag[] {
     if (!label) {
       validationError(field, "tag must not be empty");
     }
-    if (Array.from(label).length > MAX_TAG_CODE_POINTS) {
+    if (Array.from(label).length > MAX_RECIPE_TAG_CODE_POINTS) {
       validationError(field, "tag must contain at most 40 code points");
     }
 
@@ -235,7 +234,7 @@ export function normalizeRecipeTags(value: unknown): NormalizedRecipeTag[] {
     }
   }
 
-  if (unique.size > MAX_UNIQUE_TAGS) {
+  if (unique.size > MAX_RECIPE_TAGS) {
     validationError("tags", "tags must contain at most 10 unique values");
   }
   return [...unique.values()];
