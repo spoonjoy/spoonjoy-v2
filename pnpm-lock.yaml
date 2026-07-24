@@ -21,6 +21,9 @@ patchedDependencies:
   '@prisma/adapter-d1@6.19.2':
     hash: e9689cdfdb869cc4ca76e29b717fb6b6456f71d7a7e74498da910497aa434879
     path: patches/@prisma__adapter-d1@6.19.2.patch
+  react-router@7.18.1:
+    hash: dff846a48735bd8bb5fc9038233468143a05eaa85d6ab1bd9d1e56c6ed1cd52d
+    path: patches/react-router@7.18.1.patch
 
 importers:
 
@@ -49,13 +52,13 @@ importers:
         version: 6.19.2(prisma@6.19.2(typescript@5.9.3))(typescript@5.9.3)
       '@react-router/cloudflare':
         specifier: ^7.18.1
-        version: 7.18.1(@cloudflare/workers-types@4.20260507.1)(react-router@7.18.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(typescript@5.9.3)
+        version: 7.18.1(@cloudflare/workers-types@4.20260507.1)(react-router@7.18.1(patch_hash=dff846a48735bd8bb5fc9038233468143a05eaa85d6ab1bd9d1e56c6ed1cd52d)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(typescript@5.9.3)
       '@react-router/dev':
         specifier: ^7.18.1
-        version: 7.18.1(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(react-router@7.18.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(tsx@4.21.0)(typescript@5.9.3)(vite@7.3.1(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))(wrangler@4.90.0(@cloudflare/workers-types@4.20260507.1)(@types/node@22.19.21))(yaml@2.9.0)
+        version: 7.18.1(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(react-router@7.18.1(patch_hash=dff846a48735bd8bb5fc9038233468143a05eaa85d6ab1bd9d1e56c6ed1cd52d)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(tsx@4.21.0)(typescript@5.9.3)(vite@7.3.1(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))(wrangler@4.90.0(@cloudflare/workers-types@4.20260507.1)(@types/node@22.19.21))(yaml@2.9.0)
       '@react-router/node':
         specifier: ^7.18.1
-        version: 7.18.1(react-router@7.18.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(typescript@5.9.3)
+        version: 7.18.1(react-router@7.18.1(patch_hash=dff846a48735bd8bb5fc9038233468143a05eaa85d6ab1bd9d1e56c6ed1cd52d)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(typescript@5.9.3)
       '@simplewebauthn/browser':
         specifier: ^13.3.0
         version: 13.3.0
@@ -100,7 +103,7 @@ importers:
         version: 19.2.4(react@19.2.4)
       react-router:
         specifier: ^7.18.1
-        version: 7.18.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+        version: 7.18.1(patch_hash=dff846a48735bd8bb5fc9038233468143a05eaa85d6ab1bd9d1e56c6ed1cd52d)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -6564,14 +6567,14 @@ snapshots:
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
 
-  '@react-router/cloudflare@7.18.1(@cloudflare/workers-types@4.20260507.1)(react-router@7.18.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(typescript@5.9.3)':
+  '@react-router/cloudflare@7.18.1(@cloudflare/workers-types@4.20260507.1)(react-router@7.18.1(patch_hash=dff846a48735bd8bb5fc9038233468143a05eaa85d6ab1bd9d1e56c6ed1cd52d)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(typescript@5.9.3)':
     dependencies:
       '@cloudflare/workers-types': 4.20260507.1
-      react-router: 7.18.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      react-router: 7.18.1(patch_hash=dff846a48735bd8bb5fc9038233468143a05eaa85d6ab1bd9d1e56c6ed1cd52d)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
     optionalDependencies:
       typescript: 5.9.3
 
-  '@react-router/dev@7.18.1(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(react-router@7.18.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(tsx@4.21.0)(typescript@5.9.3)(vite@7.3.1(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))(wrangler@4.90.0(@cloudflare/workers-types@4.20260507.1)(@types/node@22.19.21))(yaml@2.9.0)':
+  '@react-router/dev@7.18.1(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(react-router@7.18.1(patch_hash=dff846a48735bd8bb5fc9038233468143a05eaa85d6ab1bd9d1e56c6ed1cd52d)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(tsx@4.21.0)(typescript@5.9.3)(vite@7.3.1(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))(wrangler@4.90.0(@cloudflare/workers-types@4.20260507.1)(@types/node@22.19.21))(yaml@2.9.0)':
     dependencies:
       '@babel/core': 7.29.7
       '@babel/generator': 7.29.7
@@ -6580,7 +6583,7 @@ snapshots:
       '@babel/preset-typescript': 7.28.5(@babel/core@7.29.7)
       '@babel/traverse': 7.29.7
       '@babel/types': 7.29.7
-      '@react-router/node': 7.18.1(react-router@7.18.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(typescript@5.9.3)
+      '@react-router/node': 7.18.1(react-router@7.18.1(patch_hash=dff846a48735bd8bb5fc9038233468143a05eaa85d6ab1bd9d1e56c6ed1cd52d)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(typescript@5.9.3)
       '@remix-run/node-fetch-server': 0.13.0
       arg: 5.0.2
       babel-dead-code-elimination: 1.0.12
@@ -6597,7 +6600,7 @@ snapshots:
       pkg-types: 2.3.0
       prettier: 3.8.1
       react-refresh: 0.14.2
-      react-router: 7.18.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      react-router: 7.18.1(patch_hash=dff846a48735bd8bb5fc9038233468143a05eaa85d6ab1bd9d1e56c6ed1cd52d)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       semver: 7.8.5
       tinyglobby: 0.2.15
       valibot: 1.4.2(typescript@5.9.3)
@@ -6621,10 +6624,10 @@ snapshots:
       - tsx
       - yaml
 
-  '@react-router/node@7.18.1(react-router@7.18.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(typescript@5.9.3)':
+  '@react-router/node@7.18.1(react-router@7.18.1(patch_hash=dff846a48735bd8bb5fc9038233468143a05eaa85d6ab1bd9d1e56c6ed1cd52d)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(typescript@5.9.3)':
     dependencies:
       '@mjackson/node-fetch-server': 0.2.0
-      react-router: 7.18.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      react-router: 7.18.1(patch_hash=dff846a48735bd8bb5fc9038233468143a05eaa85d6ab1bd9d1e56c6ed1cd52d)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
     optionalDependencies:
       typescript: 5.9.3
 
@@ -9342,7 +9345,7 @@ snapshots:
 
   react-refresh@0.18.0: {}
 
-  react-router@7.18.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
+  react-router@7.18.1(patch_hash=dff846a48735bd8bb5fc9038233468143a05eaa85d6ab1bd9d1e56c6ed1cd52d)(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
     dependencies:
       cookie: 1.1.1
       react: 19.2.4
