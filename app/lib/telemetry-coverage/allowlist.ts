@@ -71,6 +71,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "Best-effort cover assignment fallback; failure leaves the recipe without an auto-assigned cover, which is a non-fatal degraded state.",
   },
   {
+    file: "app/lib/recipe-tags.server.ts",
+    category: "swallow",
+    reason:
+      "Malformed authoring JSON is mapped to an expected 4xx field error; after a strictly validated atomic write, a failed cookbook-membership diagnostic read is deliberately ignored so a committed mutation cannot become a false 500.",
+  },
+  {
     file: "app/lib/saved-recipe-cutover.server.ts",
     category: "swallow",
     reason:

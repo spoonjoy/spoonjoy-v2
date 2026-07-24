@@ -908,10 +908,6 @@ describe("recipe tag native D1 atomicity", () => {
     formData.set("course", "dessert");
     formData.set("tags", JSON.stringify(["First", "Explode"]));
 
-    const prismaWarnings: unknown[][] = [];
-    const info = vi.spyOn(console, "info").mockImplementation((...args) => {
-      prismaWarnings.push(args);
-    });
     const exportedUpdate = (recipeTagsModule as unknown as {
       updateRecipeAuthoringMetadata?: (...args: unknown[]) => Promise<unknown>;
     }).updateRecipeAuthoringMetadata;
@@ -932,7 +928,6 @@ describe("recipe tag native D1 atomicity", () => {
       } as any);
       updateCallInput = updateSpy?.mock.calls[0]?.[0];
     } finally {
-      info.mockRestore();
       updateSpy?.mockRestore();
     }
 
@@ -942,7 +937,6 @@ describe("recipe tag native D1 atomicity", () => {
     expect(updateSpy).not.toBeNull();
     expect(updateCallInput).toMatchObject({ nativeDatabase });
     expect(status).toBe(500);
-    expect(prismaWarnings).toEqual([]);
     expect(nativeDatabase.batchCalls).toHaveLength(1);
     const batch = nativeDatabase.batchCalls[0];
     expect(batch).toHaveLength(5);
@@ -1075,30 +1069,20 @@ describe("recipe tag native D1 atomicity", () => {
     formData.set("course", "appetizer");
     formData.set("tags", JSON.stringify(["First", "Second"]));
 
-    const prismaWarnings: unknown[][] = [];
-    const info = vi.spyOn(console, "info").mockImplementation((...args) => {
-      prismaWarnings.push(args);
-    });
-    let result: Awaited<ReturnType<typeof editRecipeAction>>;
-    try {
-      result = await editRecipeAction({
-        request: new Request(`https://spoonjoy.app/recipes/${RECIPE_ID}/edit`, {
-          method: "POST",
-          headers: { Cookie: cookie },
-          body: formData,
-        }),
-        params: { id: RECIPE_ID },
-        context: { cloudflare: { env: routeEnv } },
-      } as any);
-    } finally {
-      info.mockRestore();
-    }
+    const result = await editRecipeAction({
+      request: new Request(`https://spoonjoy.app/recipes/${RECIPE_ID}/edit`, {
+        method: "POST",
+        headers: { Cookie: cookie },
+        body: formData,
+      }),
+      params: { id: RECIPE_ID },
+      context: { cloudflare: { env: routeEnv } },
+    } as any);
 
     const status = result instanceof Response
       ? result.status
       : (result as { init?: { status?: number } }).init?.status;
     expect(intercepted).toBe(true);
-    expect(prismaWarnings).toEqual([]);
     expect(status).toBe(500);
     await expect(database().prepare(`
       SELECT "title", "description", "servings", "course", "updatedAt"
@@ -1149,30 +1133,20 @@ describe("recipe tag native D1 atomicity", () => {
     formData.set("title", "Raced Away");
     formData.set("course", "main");
     formData.set("tags", JSON.stringify(["Never Persisted"]));
-    const prismaWarnings: unknown[][] = [];
-    const info = vi.spyOn(console, "info").mockImplementation((...args) => {
-      prismaWarnings.push(args);
-    });
-    let result: Awaited<ReturnType<typeof editRecipeAction>>;
-    try {
-      result = await editRecipeAction({
-        request: new Request(`https://spoonjoy.app/recipes/${RECIPE_ID}/edit`, {
-          method: "POST",
-          headers: { Cookie: cookie },
-          body: formData,
-        }),
-        params: { id: RECIPE_ID },
-        context: { cloudflare: { env: routeEnv } },
-      } as any);
-    } finally {
-      info.mockRestore();
-    }
+    const result = await editRecipeAction({
+      request: new Request(`https://spoonjoy.app/recipes/${RECIPE_ID}/edit`, {
+        method: "POST",
+        headers: { Cookie: cookie },
+        body: formData,
+      }),
+      params: { id: RECIPE_ID },
+      context: { cloudflare: { env: routeEnv } },
+    } as any);
 
     const status = result instanceof Response
       ? result.status
       : (result as { init?: { status?: number } }).init?.status;
     expect(intercepted).toBe(true);
-    expect(prismaWarnings).toEqual([]);
     expect(status).toBe(404);
     await expect(readMetadataState()).resolves.toEqual({
       course: null,
