@@ -553,7 +553,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"ok\": true,\n    \"version\": \"v1\",\n    \"authenticated\": true,\n    \"principal\": {\n      \"id\": \"chef_1\",\n      \"username\": \"ari\",\n      \"source\": \"bearer\"\n    },\n    \"scopes\": [\n      \"recipes:read\"\n    ]\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"ok\": true,\n    \"version\": \"v1\",\n    \"sourceSha\": \"1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d\",\n    \"deployment\": {\n      \"id\": \"c0ffee00-1234-4a5b-8c9d-000000000000\",\n      \"tag\": \"\",\n      \"timestamp\": \"2026-01-01T00:00:00.000Z\"\n    },\n    \"authenticated\": true,\n    \"principal\": {\n      \"id\": \"chef_1\",\n      \"username\": \"ari\",\n      \"source\": \"bearer\"\n    },\n    \"scopes\": [\n      \"recipes:read\"\n    ]\n  }\n}"
         },
         {
           "status": "400",
