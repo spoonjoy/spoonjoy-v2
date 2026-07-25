@@ -103,11 +103,47 @@ describe("/api/v1 shell", () => {
       data: {
         ok: true,
         version: "v1",
+        sourceSha: "unknown",
+        deployment: null,
         authenticated: false,
         principal: null,
         scopes: [],
       },
     });
+  });
+
+  it("surfaces the build source SHA and Cloudflare deployment metadata on health", async () => {
+    const versionMetadata = {
+      id: "cf-version-abc123",
+      tag: "prod",
+      timestamp: "2026-07-24T00:00:00.000Z",
+    };
+    const response = await loader({
+      request: new UndiciRequest("http://localhost/api/v1/health", {
+        headers: { "X-Request-Id": "req_health_build_info" },
+      }) as unknown as Request,
+      params: { "*": "health" },
+      context: { cloudflare: { env: { CF_VERSION_METADATA: versionMetadata } } },
+    } as unknown as ApiV1RouteArgs);
+
+    expect(response.status).toBe(200);
+    const body = await readJson(response);
+    // Deployed-identity proof: the git SHA the Worker was built from (the
+    // `define` is unset under vitest, so the sentinel is expected here) plus the
+    // Cloudflare version metadata read from the CF_VERSION_METADATA binding.
+    expect(body.data.sourceSha).toMatch(/^([0-9a-f]{40}|unknown)$/);
+    expect(body.data.deployment).toEqual(versionMetadata);
+
+    // When the Cloudflare platform context is absent, deployment metadata is
+    // simply null; the source-SHA proof still reports.
+    const withoutPlatform = await loader({
+      request: new UndiciRequest("http://localhost/api/v1/health") as unknown as Request,
+      params: { "*": "health" },
+      context: {},
+    } as unknown as ApiV1RouteArgs);
+    const withoutPlatformBody = await readJson(withoutPlatform);
+    expect(withoutPlatformBody.data.deployment).toBeNull();
+    expect(withoutPlatformBody.data.sourceSha).toMatch(/^([0-9a-f]{40}|unknown)$/);
   });
 
   it("types Workers waitUntil context for future API v1 telemetry scheduling", async () => {

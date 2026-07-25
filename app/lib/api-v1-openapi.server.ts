@@ -911,9 +911,23 @@ const schemas = {
     resources: arrayOf({ type: "object" }),
     auth: { type: "object" },
   }),
-  HealthData: objectSchema(["ok", "version", "authenticated", "principal", "scopes"], {
+  BuildDeployment: objectSchema(["id", "tag", "timestamp"], {
+    id: { type: "string", description: "Cloudflare Worker version id for the running deployment." },
+    tag: { type: "string", description: "Deploy tag Cloudflare attached to the version; empty string when none." },
+    timestamp: { type: "string", description: "ISO timestamp Cloudflare recorded for the version; empty string when none." },
+  }),
+  HealthData: objectSchema(["ok", "version", "sourceSha", "deployment", "authenticated", "principal", "scopes"], {
     ok: { const: true },
     version: { const: "v1" },
+    sourceSha: {
+      type: "string",
+      description:
+        'The 40-char git commit SHA the running Worker was built from, or "unknown" outside a build. Deployed-identity proof for the web surface: a caller can assert it matches the change it expects to be live.',
+    },
+    deployment: {
+      oneOf: [ref("BuildDeployment"), { type: "null" }],
+      description: "Cloudflare version metadata for the running Worker, or null when the CF_VERSION_METADATA binding is unavailable.",
+    },
     authenticated: { type: "boolean" },
     principal: { oneOf: [ref("ApiPrincipalSummary"), { type: "null" }] },
     scopes: arrayOf({ type: "string" }),
@@ -1924,6 +1938,12 @@ const responseExamples: Record<string, unknown> = {
     data: {
       ok: true,
       version: "v1",
+      sourceSha: "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d",
+      deployment: {
+        id: "c0ffee00-1234-4a5b-8c9d-000000000000",
+        tag: "",
+        timestamp: "2026-01-01T00:00:00.000Z",
+      },
       authenticated: true,
       principal: examplePrincipal,
       scopes: ["recipes:read"],

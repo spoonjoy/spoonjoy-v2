@@ -82,6 +82,7 @@ import {
   NativePasswordAuthError,
 } from "~/lib/native-password-auth.server";
 import { notifyForkOfMyRecipe } from "~/lib/notification-triggers.server";
+import { buildSourceSha, deploymentMetadataFromEnv } from "~/lib/build-info.server";
 import { DEFAULT_RETRY_AFTER_SECONDS, enforceAuthRateLimit, enforceRateLimit } from "~/lib/rate-limit.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import {
@@ -6613,6 +6614,8 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
       const health = {
         ok: true,
         version: "v1",
+        sourceSha: buildSourceSha(),
+        deployment: deploymentMetadataFromEnv(args.context.cloudflare?.env),
         authenticated: Boolean(principal),
         principal: principalSummary(principal),
         scopes: principal?.scopes ?? [],

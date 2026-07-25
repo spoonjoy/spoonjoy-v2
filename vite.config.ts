@@ -1,5 +1,6 @@
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { reactRouter } from "@react-router/dev/vite";
+import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Readable } from "node:stream";
@@ -190,7 +191,32 @@ function mcpPostDevMiddleware(): Plugin {
   };
 }
 
+// Baked into the bundle as `__SPOONJOY_SOURCE_SHA__` so the running Worker can
+// report the exact git commit it was built from on `/api/v1/health`. Prefer a
+// CI/deploy-provided commit ref, fall back to the local checkout's HEAD, and
+// degrade to "unknown" (the server normalizes anything non-40-hex to "unknown").
+function resolveSourceSha(): string {
+  const fromEnv =
+    process.env.SPOONJOY_SOURCE_SHA ??
+    process.env.WORKERS_CI_COMMIT_SHA ??
+    process.env.CF_PAGES_COMMIT_SHA ??
+    process.env.GITHUB_SHA;
+  if (fromEnv && /^[0-9a-f]{40}$/i.test(fromEnv.trim())) {
+    return fromEnv.trim().toLowerCase();
+  }
+  try {
+    return execSync("git rev-parse HEAD", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
+      .trim()
+      .toLowerCase();
+  } catch {
+    return "unknown";
+  }
+}
+
 export default defineConfig(({ command }) => ({
+  define: {
+    __SPOONJOY_SOURCE_SHA__: JSON.stringify(resolveSourceSha()),
+  },
   plugins: [
     cloudflare({ viteEnvironment: { name: "ssr" } }),
     mcpPostDevMiddleware(),
