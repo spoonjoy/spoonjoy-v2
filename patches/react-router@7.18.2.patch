@@ -1,5 +1,5 @@
 diff --git a/dist/development/chunk-62JRHF6Z.mjs b/dist/development/chunk-62JRHF6Z.mjs
-index 43c3c5eae20fb44356130bd8b37ecc277ffdb62a..1b6f3a59605e9c1f544f1447eb6dee2b0243ea75 100644
+index 43c3c5eae20fb44356130bd8b37ecc277ffdb62a..933d1140ab54a7ec85493e1478e062ab16b4bb83 100644
 --- a/dist/development/chunk-62JRHF6Z.mjs
 +++ b/dist/development/chunk-62JRHF6Z.mjs
 @@ -9721,7 +9721,8 @@ function Links({ nonce, crossOrigin }) {
@@ -22,8 +22,18 @@ index 43c3c5eae20fb44356130bd8b37ecc277ffdb62a..1b6f3a59605e9c1f544f1447eb6dee2b
        }
      ) : /* @__PURE__ */ React8.createElement(
        "link",
+@@ -9738,7 +9740,8 @@ function Links({ nonce, crossOrigin }) {
+         key,
+         nonce,
+         ...link,
+-        crossOrigin: link.crossOrigin ?? crossOrigin
++        crossOrigin: link.crossOrigin ?? crossOrigin,
++        suppressHydrationWarning: true
+       }
+     )
+   ));
 diff --git a/dist/production/chunk-YBLPXYCV.mjs b/dist/production/chunk-YBLPXYCV.mjs
-index e9c83c3123c4ac53a21256629fd2b965aa8a2fd7..57156341592a1393441061fa173c5e22cb377c34 100644
+index e9c83c3123c4ac53a21256629fd2b965aa8a2fd7..cdcd9399ef1c7de02eb36dc18c961f6d3fa89bf6 100644
 --- a/dist/production/chunk-YBLPXYCV.mjs
 +++ b/dist/production/chunk-YBLPXYCV.mjs
 @@ -9721,7 +9721,8 @@ function Links({ nonce, crossOrigin }) {
@@ -46,3 +56,13 @@ index e9c83c3123c4ac53a21256629fd2b965aa8a2fd7..57156341592a1393441061fa173c5e22
        }
      ) : /* @__PURE__ */ React8.createElement(
        "link",
+@@ -9738,7 +9740,8 @@ function Links({ nonce, crossOrigin }) {
+         key,
+         nonce,
+         ...link,
+-        crossOrigin: link.crossOrigin ?? crossOrigin
++        crossOrigin: link.crossOrigin ?? crossOrigin,
++        suppressHydrationWarning: true
+       }
+     )
+   ));

@@ -54,6 +54,8 @@ describe("dependency advisory refresh contract", () => {
       "patches/react-router@7.18.2.patch",
     );
     expect(existsSync(join(projectRoot, "patches/react-router@7.18.2.patch"))).toBe(true);
+    const reactRouterPatch = readFileSync(join(projectRoot, "patches/react-router@7.18.2.patch"), "utf8");
+    expect(reactRouterPatch.match(/\+\s+suppressHydrationWarning: true/g)).toHaveLength(6);
     expect(packageJson.pnpm.patchedDependencies).not.toHaveProperty("react-router@7.18.1");
   });
 
