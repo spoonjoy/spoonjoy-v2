@@ -58,6 +58,7 @@ Restore reliable production web OAuth initiation, including Sign in with Apple, 
 - Do not implement the fix as `Button href={...}` without an explicit full-document contract: `app/components/ui/button.tsx` delegates internal hrefs to `app/components/ui/link.tsx`, whose default is React Router client navigation. The implementation must use and test `reloadDocument` or a deliberately native anchor so the request is a browser navigation rather than a router data fetch.
 - Treat Apple as the operator-visible symptom but fix and test the shared OAuth initiation component for all configured providers.
 - Do not perform provider credential entry during smoke testing. Success for this repair is the authenticated Spoonjoy initiation redirect reaching Apple's authorization surface with the correct public parameters; token exchange is covered by existing callback tests unless evidence implicates it.
+- Keep production deployment/version mutations inside the locked release workflow. Local production smoke may receive only the least-privilege D1 cleanup/read authority needed to delete and verify its own disposable user; that authority must not permit Workers Scripts/version mutation and must be stripped from the browser process.
 - Use the dedicated `worker/web-apple-sign-in-production-repair` worktree and leave the dirty Clem worktree and PR #298 untouched.
 
 ## Context / References
