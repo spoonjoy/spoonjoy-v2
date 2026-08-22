@@ -1,0 +1,7 @@
+
+Running 1 test using 1 worker
+
+SPOONJOY_OAUTH_EVIDENCE={"provider":"google","appOrigin":"http://localhost:5197","controllerPath":"/sw.js","documentPath":"/auth/google","providerHost":"accounts.google.com","clientIdMatches":true,"redirectUriMatches":true,"responseModeMatches":true,"redirectToPreserved":true,"publicSignInMarkerPresent":true,"publicErrorSentinelAbsent":true,"cspViolations":[]}
+  ✓  1 [oauth-navigation] › e2e/flows/oauth-navigation.spec.ts:5:1 › service-worker-controlled OAuth link performs a full Google document handoff (968ms)
+
+  1 passed (16.9s)

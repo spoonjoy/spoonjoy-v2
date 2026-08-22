@@ -1,0 +1,12 @@
+
+> spoonjoy-v2@1.0.0 verify:clean:migrations /Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair
+> node scripts/run-with-warning-policy.mjs -- pnpm exec wrangler d1 migrations apply DB --local
+
+
+ ⛅️ wrangler 4.90.0 (update available 4.125.0)
+──────────────────────────────────────────────
+Resource location: local 
+
+Use --remote if you want to access the remote instance.
+
+✅ No migrations to apply!

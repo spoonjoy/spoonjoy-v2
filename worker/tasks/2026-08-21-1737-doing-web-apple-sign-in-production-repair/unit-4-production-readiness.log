@@ -1,0 +1,9 @@
+
+> spoonjoy-v2@1.0.0 production:readiness /Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair
+> tsx scripts/production-readiness.ts
+
+PASS required runtime secrets: all required runtime secrets are present
+PASS optional feature secrets: configured Google OAuth, GitHub OAuth, Apple OAuth, OpenAI AI features
+PASS PWA assets: manifest, service worker, and icons exist
+PASS production cutover runbook: runbook covers migration, DNS, OAuth, smoke, and rollback
+PASS remote User.photoUrl schema: remote User table includes photoUrl

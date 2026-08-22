@@ -1,0 +1,36 @@
+
+> spoonjoy-v2@1.0.0 verify:clean:test:coverage /Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair
+> node scripts/run-with-warning-policy.mjs -- pnpm run test:coverage
+
+
+> spoonjoy-v2@1.0.0 test:coverage /Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair
+> tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then pnpm exec vitest run --coverage --fileParallelism=false
+
+
+> spoonjoy-v2@1.0.0 api:playground:generate /Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair
+> tsx scripts/generate-api-playground.ts
+
+Generated app/lib/generated/api-v1-playground.ts
+
+ RUN  v4.1.10 /Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair
+      Coverage enabled with istanbul
+
+direct clean child
+
+ Test Files  381 passed (381)
+      Tests  8317 passed (8317)
+   Start at  20:00:24
+   Duration  517.07s (transform 22.39s, setup 21.70s, import 87.09s, tests 299.43s, environment 57.05s)
+
+ % Coverage report from istanbul
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+-------------------|---------|----------|---------|---------|-------------------
+
+=============================== Coverage summary ===============================
+Statements   : 100% ( 19697/19697 )
+Branches     : 100% ( 15569/15569 )
+Functions    : 100% ( 3903/3903 )
+Lines        : 100% ( 18095/18095 )
+================================================================================
