@@ -1,6 +1,6 @@
 # Planning: Web Apple Sign-in Production Repair
 
-**Status**: NEEDS_REVIEW
+**Status**: approved
 **Created**: 2026-08-21 17:38
 
 ## Goal
@@ -84,3 +84,4 @@ The previous assumption that production predated PR #297 was incorrect. Current 
 - 2026-08-21 17:39 Tinfoil-hat pass confirmed provider breadth, CSP non-regression, active-service-worker evidence, exact-SHA deployment, and cleanup requirements
 - 2026-08-21 17:43 Addressed Round 1 reviewer findings by requiring direct CSP-violation evidence, an explicit service-worker control assertion/control case, and a forced full-document anchor contract
 - 2026-08-21 17:45 Grounded the form-redirect hypothesis in the CSP Level 3 navigation response-check specification
+- 2026-08-21 17:51 Approved after Round 2 cold reviewer convergence (`PASS`)
