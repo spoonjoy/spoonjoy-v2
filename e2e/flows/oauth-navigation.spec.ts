@@ -27,4 +27,5 @@ test("service-worker-controlled OAuth link performs a full Google document hando
   expect(evidence.redirectToPreserved).toBe(true);
   expect(evidence.cspViolations).toEqual([]);
   expect(JSON.parse(serializeOAuthNavigationEvidence(evidence))).toEqual(evidence);
+  console.log(`SPOONJOY_OAUTH_EVIDENCE=${JSON.stringify(evidence)}`);
 });
