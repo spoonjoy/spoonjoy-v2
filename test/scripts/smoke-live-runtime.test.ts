@@ -43,7 +43,7 @@ describe("live smoke runtime authority", () => {
         },
       ]);
     }
-    expect(JSON.stringify(chromium.mock.calls)).not.toContain("d1-token");
+    expect(JSON.stringify(chromium.launch.mock.calls)).not.toContain("d1-token");
     expect(JSON.stringify(execFile.mock.calls)).not.toContain("workers-token");
     expect(JSON.stringify(execFile.mock.calls)).not.toContain("deploy-token");
   });

@@ -62,6 +62,20 @@ export default defineConfig({
       testMatch: [/oauth-authorize\.spec\.ts/],
       dependencies: ['setup'],
     },
+    // Provider handoff canary — fresh context, pinned locale, and no raw OAuth
+    // URLs in Playwright traces, videos, or screenshots.
+    {
+      name: 'oauth-navigation',
+      use: {
+        ...devices['Desktop Chrome'],
+        locale: 'en-US',
+        extraHTTPHeaders: { 'Accept-Language': 'en-US,en;q=0.9' },
+        trace: 'off',
+        video: 'off',
+        screenshot: 'off',
+      },
+      testMatch: [/oauth-navigation\.spec\.ts/],
+    },
   ],
   webServer: {
     command: `pnpm run verify:clean:build && node e2e/support/start-ephemeral-wrangler.mjs --run-id ${e2eRunId}`,

@@ -58,6 +58,10 @@ export function createWranglerLauncher({
         paths.persistPath,
         "--var",
         "SESSION_SECRET:spoonjoy-playwright-local-session-secret",
+        "--var",
+        "GOOGLE_CLIENT_ID:spoonjoy-playwright-google-client",
+        "--var",
+        "GOOGLE_CLIENT_SECRET:spoonjoy-playwright-google-secret",
       ], {
         env: environment,
         spawn(command, args, options) {

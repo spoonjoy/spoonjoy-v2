@@ -120,6 +120,8 @@ const REQUIRED_SCRIPT_COVERAGE_INCLUDES = [
   "scripts/script-environment.mjs",
   "scripts/cleanup-local-qa-data.mjs",
   "scripts/smoke-api-live.mjs",
+  "scripts/smoke-live-oauth.mjs",
+  "scripts/smoke-live-runtime.mjs",
   "scripts/qa-preflight.ts",
   "scripts/deployment-preflight.ts",
   "scripts/deploy-production-canary.ts",
