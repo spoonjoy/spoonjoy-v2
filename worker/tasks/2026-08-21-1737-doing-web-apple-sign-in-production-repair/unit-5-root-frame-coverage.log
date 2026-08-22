@@ -1,0 +1,22 @@
+
+ RUN  v4.1.10 /Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair
+      Coverage enabled with istanbul
+
+
+ Test Files  2 passed (2)
+      Tests  90 passed (90)
+   Start at  20:33:39
+   Duration  1.72s (transform 489ms, setup 257ms, import 447ms, tests 332ms, environment 391ms)
+
+ % Coverage report from istanbul
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+-------------------|---------|----------|---------|---------|-------------------
+
+=============================== Coverage summary ===============================
+Statements   : 100% ( 409/409 )
+Branches     : 100% ( 329/329 )
+Functions    : 100% ( 110/110 )
+Lines        : 100% ( 362/362 )
+================================================================================

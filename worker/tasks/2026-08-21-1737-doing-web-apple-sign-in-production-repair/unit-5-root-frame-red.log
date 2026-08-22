@@ -1,0 +1,47 @@
+
+ RUN  v4.1.10 /Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair
+
+ ❯ test/scripts/smoke-live-helpers.test.ts (87 tests | 1 failed) 324ms
+     × rejects a matching child-frame document request without a matching root-frame request 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects a matching child-frame document request without a matching root-frame request
+AssertionError: promise resolved "{ provider: 'apple', …(11) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "appOrigin": "https://spoonjoy.app",
++   "clientIdMatches": true,
++   "controllerPath": "/sw.js",
++   "cspViolations": [],
++   "documentPath": "/auth/apple",
++   "provider": "apple",
++   "providerHost": "appleid.apple.com",
++   "publicErrorSentinelAbsent": true,
++   "publicSignInMarkerPresent": true,
++   "redirectToPreserved": true,
++   "redirectUriMatches": true,
++   "responseModeMatches": true,
+  }
+
+ ❯ test/scripts/smoke-live-helpers.test.ts:237:84
+    235|     const harness = createOAuthPageHarness({ documentRequestFrameId: "…
+    236|     try {
+    237|       await expect(runOAuthNavigationCanary({ ...appleCanary, page: ha…
+       |                                                                                    ^
+    238|         .rejects.toThrow(/document navigation.*\/auth\/apple/i);
+    239|     } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 89 passed (90)
+   Start at  20:33:10
+   Duration  1.26s (transform 114ms, setup 203ms, import 83ms, tests 354ms, environment 369ms)
+

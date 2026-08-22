@@ -104,6 +104,7 @@ describe("smoke-live helpers", () => {
     href = successfulAppleObservation.documentUrl,
     captureDocumentRequest = true,
     documentRequestUrl = successfulAppleObservation.documentUrl,
+    documentRequestFrameId = "root-frame",
     markerResult = true,
     sentinelResult = false,
     title = "",
@@ -123,15 +124,17 @@ describe("smoke-live helpers", () => {
 
     let securityPolicyHandler: ((event: Record<string, string>) => void) | undefined;
     const exposedBindings: string[] = [];
-    let documentRequestHandler: ((event: { type: string; request: { url: string } }) => void) | undefined;
+    let documentRequestHandler: ((event: { type: string; frameId: string; request: { url: string } }) => void) | undefined;
     const cdp = {
-      send: vi.fn(async () => undefined),
+      send: vi.fn(async (method: string) => method === "Page.getFrameTree"
+        ? { frameTree: { frame: { id: "root-frame" } } }
+        : undefined),
       on: vi.fn((_name: string, handler: typeof documentRequestHandler) => {
         documentRequestHandler = handler;
-        handler?.({ type: "Fetch", request: { url: documentRequestUrl } });
-        handler?.({ type: "Document", request: { url: "https://spoonjoy.app/not-apple" } });
+        handler?.({ type: "Fetch", frameId: "root-frame", request: { url: documentRequestUrl } });
+        handler?.({ type: "Document", frameId: "root-frame", request: { url: "https://spoonjoy.app/not-apple" } });
         if (captureDocumentRequest) {
-          handler?.({ type: "Document", request: { url: documentRequestUrl } });
+          handler?.({ type: "Document", frameId: documentRequestFrameId, request: { url: documentRequestUrl } });
         }
       }),
       off: vi.fn(),
@@ -220,6 +223,16 @@ describe("smoke-live helpers", () => {
 
   it("rejects a provider handoff when no matching top-level document request was observed", async () => {
     const harness = createOAuthPageHarness({ captureDocumentRequest: false });
+    try {
+      await expect(runOAuthNavigationCanary({ ...appleCanary, page: harness.page }))
+        .rejects.toThrow(/document navigation.*\/auth\/apple/i);
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it("rejects a matching child-frame document request without a matching root-frame request", async () => {
+    const harness = createOAuthPageHarness({ documentRequestFrameId: "child-frame" });
     try {
       await expect(runOAuthNavigationCanary({ ...appleCanary, page: harness.page }))
         .rejects.toThrow(/document navigation.*\/auth\/apple/i);

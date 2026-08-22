@@ -512,9 +512,12 @@ async function observeOAuthNavigationWithPage(input) {
   });
   let documentUrl = null;
   const cdp = await page.context().newCDPSession(page);
+  const frameTree = await cdp.send("Page.getFrameTree");
+  const rootFrameId = frameTree.frameTree.frame.id;
   const onDocumentRequest = (event) => {
     if (
       event.type === "Document"
+      && event.frameId === rootFrameId
       && safeOrigin(event.request?.url) === new URL(appOrigin).origin
       && safePath(event.request?.url) === `/auth/${provider}`
     ) {

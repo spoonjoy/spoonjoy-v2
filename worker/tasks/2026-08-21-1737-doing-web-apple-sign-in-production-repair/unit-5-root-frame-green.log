@@ -1,0 +1,9 @@
+
+ RUN  v4.1.10 /Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair
+
+
+ Test Files  2 passed (2)
+      Tests  90 passed (90)
+   Start at  20:33:25
+   Duration  848ms (transform 101ms, setup 135ms, import 77ms, tests 108ms, environment 287ms)
+
