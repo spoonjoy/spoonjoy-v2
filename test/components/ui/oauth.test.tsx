@@ -1,10 +1,16 @@
 import { render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
 import { OAuthButtonGroup } from "~/components/ui/oauth";
 
+function renderOAuth(ui: ReactNode) {
+  return render(<MemoryRouter>{ui}</MemoryRouter>);
+}
+
 describe("OAuthButtonGroup", () => {
   it("renders all providers by default", () => {
-    render(<OAuthButtonGroup />);
+    renderOAuth(<OAuthButtonGroup />);
 
     expect(screen.getByRole("link", { name: "Continue with Google" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Continue with GitHub" })).toBeInTheDocument();
@@ -12,13 +18,13 @@ describe("OAuthButtonGroup", () => {
   });
 
   it("renders nothing when no providers are configured", () => {
-    const { container } = render(<OAuthButtonGroup providers={[]} />);
+    const { container } = renderOAuth(<OAuthButtonGroup providers={[]} />);
 
     expect(container).toBeEmptyDOMElement();
   });
 
   it("targets the bare provider route when no redirectTo is given", () => {
-    render(<OAuthButtonGroup providers={["apple"]} />);
+    renderOAuth(<OAuthButtonGroup providers={["apple"]} />);
 
     expect(screen.getByRole("link", { name: "Continue with Apple" })).toHaveAttribute(
       "href",
@@ -27,7 +33,7 @@ describe("OAuthButtonGroup", () => {
   });
 
   it("renders every provider as a forced full-document navigation", () => {
-    render(<OAuthButtonGroup providers={["google", "github", "apple"]} />);
+    renderOAuth(<OAuthButtonGroup providers={["google", "github", "apple"]} />);
 
     for (const [name, provider] of [
       ["Continue with Google", "google"],
@@ -42,7 +48,9 @@ describe("OAuthButtonGroup", () => {
 
   it("encodes redirectTo exactly once into every provider href", () => {
     const returnTo = "/oauth/authorize?client_id=abc&response_type=code";
-    render(<OAuthButtonGroup providers={["google", "github", "apple"]} redirectTo={returnTo} />);
+    renderOAuth(
+      <OAuthButtonGroup providers={["google", "github", "apple"]} redirectTo={returnTo} />,
+    );
 
     for (const [name, provider] of [
       ["Continue with Google", "google"],
@@ -57,7 +65,7 @@ describe("OAuthButtonGroup", () => {
   });
 
   it.each([undefined, ""])("uses a bare provider href for redirectTo=%p", (redirectTo) => {
-    render(<OAuthButtonGroup providers={["apple"]} redirectTo={redirectTo} />);
+    renderOAuth(<OAuthButtonGroup providers={["apple"]} redirectTo={redirectTo} />);
 
     expect(screen.getByRole("link", { name: "Continue with Apple" })).toHaveAttribute(
       "href",

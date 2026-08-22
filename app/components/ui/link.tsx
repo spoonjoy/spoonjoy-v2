@@ -46,10 +46,11 @@ function isInternalUrl(href: string | undefined): boolean {
 
 export interface LinkProps extends React.ComponentPropsWithoutRef<'a'> {
   href: string
+  reloadDocument?: boolean
 }
 
 export const Link = forwardRef(function Link(
-  { href, target, rel, ...props }: LinkProps,
+  { href, target, rel, reloadDocument, ...props }: LinkProps,
   ref: React.ForwardedRef<HTMLAnchorElement>
 ) {
   const isExternal = isExternalUrl(href)
@@ -71,6 +72,7 @@ export const Link = forwardRef(function Link(
         <RouterLink
           to={href}
           ref={ref}
+          reloadDocument={reloadDocument}
           {...externalProps}
           {...props}
         />
