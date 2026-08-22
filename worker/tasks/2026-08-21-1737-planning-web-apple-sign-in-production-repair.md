@@ -72,6 +72,7 @@ Restore reliable production web OAuth initiation, including Sign in with Apple, 
 - `test/routes/login.test.tsx`
 - `test/routes/signup.test.tsx`
 - `test/lib/service-worker.test.ts`
+- CSP Level 3 navigation response checks: https://www.w3.org/TR/CSP/#directive-form-action
 - Merged PR #297: `86c58120925c38ffef387aebbc85071696091f71`
 - Production evidence at investigation start: Worker `61caff11-8e88-4337-ad14-39f610fa89fe`, source `851d9566c955d8db4bcead1b44300ed279b9d5f2`.
 
@@ -82,3 +83,4 @@ The previous assumption that production predated PR #297 was incorrect. Current 
 - 2026-08-21 17:38 Created after live reproduction and source/deployment provenance checks
 - 2026-08-21 17:39 Tinfoil-hat pass confirmed provider breadth, CSP non-regression, active-service-worker evidence, exact-SHA deployment, and cleanup requirements
 - 2026-08-21 17:43 Addressed Round 1 reviewer findings by requiring direct CSP-violation evidence, an explicit service-worker control assertion/control case, and a forced full-document anchor contract
+- 2026-08-21 17:45 Grounded the form-redirect hypothesis in the CSP Level 3 navigation response-check specification
