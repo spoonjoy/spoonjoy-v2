@@ -1,0 +1,185 @@
+
+ RUN  v4.1.10 /Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair
+
+ ❯ test/scripts/deployment-preflight.test.ts (421 tests | 2 failed) 22391ms
+     × requires full-suite coverage instrumentation for scripts/smoke-live-oauth.mjs 12ms
+     × requires full-suite coverage instrumentation for scripts/smoke-live-runtime.mjs 4ms
+ ❯ test/scripts/smoke-live-helpers.test.ts (76 tests | 14 failed) 106ms
+     × runs a provider-parameterized observable OAuth navigation canary 4ms
+     × serializes only the exact privacy-safe OAuth evidence allowlist 1ms
+     × rejects the OAuth canary when missing controller 0ms
+     × rejects the OAuth canary when wrong controller 0ms
+     × rejects the OAuth canary when wrong document path 0ms
+     × rejects the OAuth canary when wrong provider 0ms
+     × rejects the OAuth canary when wrong client 0ms
+     × rejects the OAuth canary when wrong callback 0ms
+     × rejects the OAuth canary when wrong response mode 0ms
+     × rejects the OAuth canary when redirectTo lost 0ms
+     × rejects the OAuth canary when marker missing 0ms
+     × rejects the OAuth canary when error sentinel present 0ms
+     × rejects the OAuth canary when scoped CSP failure 0ms
+     × captures the current red baseline through the injected observer 0ms
+ ❯ test/scripts/e2e-run-cleanup.test.ts (21 tests | 1 failed) 178ms
+     × exports testable global teardown and ephemeral server CLI boundaries 22ms
+ ❯ test/scripts/smoke-live-runtime.test.ts (0 test)
+ ❯ test/scripts/smoke-live-oauth.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 2 ⎯⎯⎯⎯⎯⎯⎯
+
+warning-policy: rejected diagnostic output
+ FAIL  test/scripts/smoke-live-oauth.test.ts [ test/scripts/smoke-live-oauth.test.ts ]
+Error: Failed to resolve import "../../scripts/smoke-live-oauth.mjs" from "test/scripts/smoke-live-oauth.test.ts". Does the file exist?
+  Plugin: vite:import-analysis
+  File: /Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair/test/scripts/smoke-live-oauth.test.ts:3:45
+  1  |  import { describe, expect, it, vi } from "vitest";
+  2  |  import { runAppleOAuthNavigationCheck } from "../../scripts/smoke-live-oauth.mjs";
+     |                                                ^
+  3  |  const safeResult = {
+  4  |    provider: "apple",
+ ❯ TransformPluginContext._formatLog node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:28999:43
+ ❯ TransformPluginContext.error node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:28996:14
+ ❯ normalizeUrl node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:27119:18
+ ❯ node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:27177:32
+ ❯ TransformPluginContext.transform node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:27145:4
+ ❯ EnvironmentPluginContainer.transform node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:28797:14
+ ❯ loadAndTransform node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:22670:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/19]⎯
+
+ FAIL  test/scripts/smoke-live-runtime.test.ts [ test/scripts/smoke-live-runtime.test.ts ]
+Error: Failed to resolve import "../../scripts/smoke-live-runtime.mjs" from "test/scripts/smoke-live-runtime.test.ts". Does the file exist?
+  Plugin: vite:import-analysis
+  File: /Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair/test/scripts/smoke-live-runtime.test.ts:3:39
+  1  |  import { describe, expect, it, vi } from "vitest";
+  2  |  import { createSmokeLiveRuntime } from "../../scripts/smoke-live-runtime.mjs";
+     |                                          ^
+  3  |  const hostileEnv = {
+  4  |    PATH: "/test/bin",
+ ❯ TransformPluginContext._formatLog node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:28999:43
+ ❯ TransformPluginContext.error node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:28996:14
+ ❯ normalizeUrl node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:27119:18
+ ❯ node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:27177:32
+ ❯ TransformPluginContext.transform node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:27145:4
+ ❯ EnvironmentPluginContainer.transform node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:28797:14
+ ❯ loadAndTransform node_modules/.pnpm/vite@7.3.1_@types+node@22.19.21_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:22670:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/19]⎯
+
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 17 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/scripts/deployment-preflight.test.ts > deployment preflight > requires full-suite coverage instrumentation for scripts/smoke-live-oauth.mjs
+ FAIL  test/scripts/deployment-preflight.test.ts > deployment preflight > requires full-suite coverage instrumentation for scripts/smoke-live-runtime.mjs
+AssertionError: expected [] to include 'script coverage instrumentation'
+ ❯ test/scripts/deployment-preflight.test.ts:3720:80
+    3718|       inputs.vitestConfig = inputs.vitestConfig.replace(requiredModule…
+    3719|
+    3720|       expect(validateDeploymentConfig(inputs).errors.map((item) => ite…
+       |                                                                                ^
+    3721|         "script coverage instrumentation",
+    3722|       );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/19]⎯
+
+ FAIL  test/scripts/e2e-run-cleanup.test.ts > ephemeral Playwright run ownership > exports testable global teardown and ephemeral server CLI boundaries
+AssertionError: promise rejected "AssertionError: expected [ '--', 'pnpm', … { …(4) }" instead of resolving
+ ❯ test/scripts/e2e-run-cleanup.test.ts:849:59
+    847|     });
+    848|     const launch = starter.createWranglerLauncher({ processLike, spawn…
+    849|     await expect(launch({ persistPath: "/tmp/e2e-state" })).resolves.t…
+       |                                                           ^
+    850|     expect(spawnChild).toHaveBeenCalledOnce();
+    851|
+
+Caused by: AssertionError: expected [ '--', 'pnpm', 'exec', …(12) ] to deeply equal ArrayContaining{…}
+
+- Expected
++ Received
+
+- ArrayContaining [
+-   "GOOGLE_CLIENT_ID:spoonjoy-playwright-google-client",
+-   "GOOGLE_CLIENT_SECRET:spoonjoy-playwright-google-secret",
++ [
++   "--",
++   "pnpm",
++   "exec",
++   "wrangler",
++   "dev",
++   "--config",
++   "build/server/wrangler.json",
++   "--port",
++   "5197",
++   "--log-level",
++   "error",
++   "--persist-to",
++   "/tmp/e2e-state",
++   "--var",
++   "SESSION_SECRET:spoonjoy-playwright-local-session-secret",
+  ]
+
+ ❯ test/scripts/e2e-run-cleanup.test.ts:839:20
+ ❯ launchWrangler e2e/support/start-ephemeral-wrangler.mjs:45:28
+ ❯ test/scripts/e2e-run-cleanup.test.ts:849:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/19]⎯
+
+ FAIL  test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > runs a provider-parameterized observable OAuth navigation canary
+TypeError: runOAuthNavigationCanary is not a function
+ ❯ test/scripts/smoke-live-helpers.test.ts:78:18
+     76|     const observe = vi.fn(async () => successfulAppleObservation);
+     77|
+     78|     await expect(runOAuthNavigationCanary({ ...appleCanary, observe })…
+       |                  ^
+     79|       provider: "apple",
+     80|       appOrigin: "https://spoonjoy.app",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/19]⎯
+
+ FAIL  test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > serializes only the exact privacy-safe OAuth evidence allowlist
+TypeError: serializeOAuthNavigationEvidence is not a function
+ ❯ test/scripts/smoke-live-helpers.test.ts:131:24
+    129|     };
+    130|
+    131|     const serialized = serializeOAuthNavigationEvidence(projected);
+       |                        ^
+    132|     const parsed = JSON.parse(serialized);
+    133|     expect(Object.keys(parsed)).toEqual([
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/19]⎯
+
+ FAIL  test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when missing controller
+ FAIL  test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when wrong controller
+ FAIL  test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when wrong document path
+ FAIL  test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when wrong provider
+ FAIL  test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when wrong client
+ FAIL  test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when wrong callback
+ FAIL  test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when wrong response mode
+ FAIL  test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when redirectTo lost
+ FAIL  test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when marker missing
+ FAIL  test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when error sentinel present
+ FAIL  test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when scoped CSP failure
+TypeError: runOAuthNavigationCanary is not a function
+ ❯ test/scripts/smoke-live-helpers.test.ts:181:18
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/19]⎯
+
+ FAIL  test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > captures the current red baseline through the injected observer
+TypeError: runOAuthNavigationCanary is not a function
+ ❯ test/scripts/smoke-live-helpers.test.ts:188:18
+    186|
+    187|   it("captures the current red baseline through the injected observer"…
+    188|     await expect(runOAuthNavigationCanary({
+       |                  ^
+    189|       ...appleCanary,
+    190|       observe: async () => ({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/19]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  17 failed | 501 passed (518)
+   Start at  19:05:13
+   Duration  25.47s (transform 389ms, setup 413ms, import 635ms, tests 22.67s, environment 959ms)
+
+[vitest-pool]: Timeout terminating forks worker for test files /Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair/test/scripts/smoke-live-oauth.test.ts.

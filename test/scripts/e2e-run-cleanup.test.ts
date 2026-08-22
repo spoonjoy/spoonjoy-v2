@@ -836,6 +836,10 @@ describe("ephemeral Playwright run ownership", () => {
     const spawnChild = vi.fn(() => child);
     const runPolicy = vi.fn(async (argv: string[], runtime: { spawn: Function; env: Record<string, string> }) => {
       expect(argv).toEqual(expect.arrayContaining(["--log-level", "error"]));
+      expect(argv).toEqual(expect.arrayContaining([
+        "GOOGLE_CLIENT_ID:spoonjoy-playwright-google-client",
+        "GOOGLE_CLIENT_SECRET:spoonjoy-playwright-google-secret",
+      ]));
       runtime.spawn("pnpm", [], {});
       expect(runtime.env.NO_COLOR).toBeUndefined();
       expect(runtime.env.KEEP).toBe("yes");

@@ -1,0 +1,5 @@
+Error: Project(s) "oauth-navigation" not found. Available projects: "setup", "chromium", "chromium-no-auth", "webauthn", "oauth"
+    at filterProjects (/Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair/node_modules/.pnpm/playwright@1.58.1/node_modules/playwright/lib/runner/projectUtils.js:80:11)
+    at runTests (/Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair/node_modules/.pnpm/playwright@1.58.1/node_modules/playwright/lib/program.js:208:42)
+    at i.<anonymous> (/Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair/node_modules/.pnpm/playwright@1.58.1/node_modules/playwright/lib/program.js:70:7)
+warning-policy: rejected diagnostic output
