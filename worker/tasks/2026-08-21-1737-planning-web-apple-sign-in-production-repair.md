@@ -78,3 +78,4 @@ The previous assumption that production predated PR #297 was incorrect. Current 
 
 ## Progress Log
 - 2026-08-21 17:38 Created after live reproduction and source/deployment provenance checks
+- 2026-08-21 17:39 Tinfoil-hat pass confirmed provider breadth, CSP non-regression, active-service-worker evidence, exact-SHA deployment, and cleanup requirements
