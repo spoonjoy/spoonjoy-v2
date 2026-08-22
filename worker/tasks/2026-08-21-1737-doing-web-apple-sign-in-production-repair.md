@@ -101,7 +101,7 @@ Restore reliable production web OAuth initiation, including Sign in with Apple, 
 **Acceptance**: Production reports the exact merged SHA; service worker is active/current; the rendered Apple link reaches Apple's accepted authorization page with `client_id=app.spoonjoy.client`, the registered Spoonjoy callback, and no CSP violation; no Apple credential entry is required.
 
 ### ⬜ Unit 6: Cleanup and Durable Closure
-**What**: Remove disposable smoke data/artifacts that are not durable evidence, clean the task-owned remote branch/local branch/worktree after confirming merge/deploy state, update planning/doing checklists and statuses, update the Desk task to terminal state with PR/deployment evidence, commit/push all durable Desk changes, and notify Slugger only after every terminal gate passes.
+**What**: Remove disposable smoke data/artifacts that are not durable evidence; update and push the planning/doing checklists and statuses while the worktree still exists; then remove the task-owned remote branch/local branch/worktree after confirming merge/deploy state. Finally update the Desk task to terminal state with PR/deployment evidence, commit/push all durable Desk changes, and notify Slugger only after every terminal gate passes.
 **Output**: Clean repositories and worktree inventory; planning/doing/task cards accurately closed; completion notification sent.
 **Acceptance**: No task-owned branch/worktree/temp residue remains; unrelated dirty Clem/PR #298 work is untouched; Desk and product remotes contain all durable evidence; task is not reported complete before production smoke passes.
 
@@ -116,3 +116,4 @@ Restore reliable production web OAuth initiation, including Sign in with Apple, 
 
 ## Progress Log
 - 2026-08-21 17:52 Created from approved planning doc
+- 2026-08-21 17:54 Conversion audit made cleanup ordering executable: repository docs are pushed before their worktree is removed, then Desk state closes
