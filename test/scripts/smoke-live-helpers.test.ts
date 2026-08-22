@@ -53,6 +53,7 @@ describe("smoke-live helpers", () => {
     provider: "apple",
     appOrigin: "https://spoonjoy.app",
     expectedProviderHost: "appleid.apple.com",
+    expectedProviderPath: "/auth/authorize",
     expectedClientId: "app.spoonjoy.client",
     expectedRedirectUri: "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple",
     expectedResponseMode: "form_post",
@@ -101,12 +102,14 @@ describe("smoke-live helpers", () => {
     controllerInitially = true,
     hasServiceWorker = true,
     href = successfulAppleObservation.documentUrl,
-    captureDocumentRequest = false,
+    captureDocumentRequest = true,
     documentRequestUrl = successfulAppleObservation.documentUrl,
     markerResult = true,
     sentinelResult = false,
     title = "",
     missingCspState = false,
+    initialCspEvents = [],
+    replacePageCspStateAfterClick = false,
   } = {}) {
     const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
     const controller = { scriptURL: "https://spoonjoy.app/sw.js" };
@@ -119,32 +122,43 @@ describe("smoke-live helpers", () => {
     });
 
     let securityPolicyHandler: ((event: Record<string, string>) => void) | undefined;
+    const exposedBindings: string[] = [];
+    let documentRequestHandler: ((event: { type: string; request: { url: string } }) => void) | undefined;
+    const cdp = {
+      send: vi.fn(async () => undefined),
+      on: vi.fn((_name: string, handler: typeof documentRequestHandler) => {
+        documentRequestHandler = handler;
+        handler?.({ type: "Fetch", request: { url: documentRequestUrl } });
+        handler?.({ type: "Document", request: { url: "https://spoonjoy.app/not-apple" } });
+        if (captureDocumentRequest) {
+          handler?.({ type: "Document", request: { url: documentRequestUrl } });
+        }
+      }),
+      off: vi.fn(),
+      detach: vi.fn(async () => undefined),
+    };
     const link = {
       getAttribute: vi.fn(async () => href),
-      click: vi.fn(async () => undefined),
+      click: vi.fn(async () => {
+        if (replacePageCspStateAfterClick) {
+          globalThis.__spoonjoyOAuthCanary = { cspViolations: [], phase: "login-load" };
+        }
+      }),
     };
     const page = {
-      addInitScript: vi.fn(async (callback: () => void) => {
+      exposeFunction: vi.fn(async (name: string, callback: (...args: unknown[]) => unknown) => {
+        exposedBindings.push(name);
+        Object.defineProperty(globalThis, name, { configurable: true, value: callback });
+      }),
+      addInitScript: vi.fn(async (callback: (binding: string) => void, binding: string) => {
         const originalAddEventListener = globalThis.addEventListener;
         globalThis.addEventListener = ((name: string, handler: (event: Record<string, string>) => void) => {
           expect(name).toBe("securitypolicyviolation");
           securityPolicyHandler = handler;
         }) as typeof globalThis.addEventListener;
-        callback();
+        callback(binding);
         globalThis.addEventListener = originalAddEventListener;
-        securityPolicyHandler?.({
-          effectiveDirective: "form-action",
-          violatedDirective: "unused",
-          documentURI: "https://spoonjoy.app/login",
-          blockedURI: "https://spoonjoy.app/auth/apple",
-        });
-        securityPolicyHandler?.({
-          effectiveDirective: "",
-          violatedDirective: "script-src",
-          documentURI: "https://spoonjoy.app/login",
-          blockedURI: "https://cdn.example.test/file.js",
-        });
-        globalThis.__spoonjoyOAuthCanary.cspViolations = [];
+        for (const event of initialCspEvents) securityPolicyHandler?.(event);
       }),
       goto: vi.fn(async () => undefined),
       evaluate: vi.fn(async (callback: () => unknown) => {
@@ -162,18 +176,8 @@ describe("smoke-live helpers", () => {
       reload: vi.fn(async () => {
         if ("serviceWorker" in fakeNavigator) fakeNavigator.serviceWorker.controller = controller;
       }),
+      context: vi.fn(() => ({ newCDPSession: vi.fn(async () => cdp) })),
       getByRole: vi.fn(() => link),
-      on: vi.fn((_name: string, handler: (request: { isNavigationRequest(): boolean; url(): string }) => void) => {
-        handler({ isNavigationRequest: () => false, url: () => "https://spoonjoy.app/auth/apple" });
-        handler({ isNavigationRequest: () => true, url: () => "https://spoonjoy.app/not-apple" });
-        if (captureDocumentRequest) {
-          handler({
-            isNavigationRequest: () => true,
-            url: () => documentRequestUrl,
-          });
-        }
-      }),
-      off: vi.fn(),
       waitForURL: vi.fn(async (predicate: (url: URL) => boolean) => {
         expect(predicate(new URL("https://spoonjoy.app/login"))).toBe(false);
         expect(predicate(new URL(successfulAppleObservation.providerUrl))).toBe(true);
@@ -194,6 +198,7 @@ describe("smoke-live helpers", () => {
       page,
       restore() {
         delete globalThis.__spoonjoyOAuthCanary;
+        for (const name of exposedBindings) delete globalThis[name];
         if (originalNavigator) Object.defineProperty(globalThis, "navigator", originalNavigator);
       },
     };
@@ -208,6 +213,51 @@ describe("smoke-live helpers", () => {
         redirectToPreserved: true,
       });
       expect(harness.page.reload).not.toHaveBeenCalled();
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it("rejects a provider handoff when no matching top-level document request was observed", async () => {
+    const harness = createOAuthPageHarness({ captureDocumentRequest: false });
+    try {
+      await expect(runOAuthNavigationCanary({ ...appleCanary, page: harness.page }))
+        .rejects.toThrow(/document navigation.*\/auth\/apple/i);
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it("retains a pre-handoff Spoonjoy CSP violation across provider document replacement", async () => {
+    const harness = createOAuthPageHarness({
+      replacePageCspStateAfterClick: true,
+      initialCspEvents: [{
+        effectiveDirective: "form-action",
+        violatedDirective: "unused",
+        documentURI: "https://spoonjoy.app/login",
+        blockedURI: "https://spoonjoy.app/auth/apple",
+      }],
+    });
+    try {
+      await expect(runOAuthNavigationCanary({ ...appleCanary, page: harness.page }))
+        .rejects.toThrow(/CSP violation/i);
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it("ignores CSP violations emitted by the provider document", async () => {
+    const harness = createOAuthPageHarness({
+      initialCspEvents: [{
+        effectiveDirective: "",
+        violatedDirective: "script-src",
+        documentURI: "https://appleid.apple.com/auth/authorize",
+        blockedURI: "https://provider-cdn.example/file.js",
+      }],
+    });
+    try {
+      await expect(runOAuthNavigationCanary({ ...appleCanary, page: harness.page }))
+        .resolves.toMatchObject({ cspViolations: [] });
     } finally {
       harness.restore();
     }
@@ -371,6 +421,7 @@ describe("smoke-live helpers", () => {
     ["wrong controller", { controllerUrl: "https://spoonjoy.app/not-sw.js" }, /controller.*\/sw\.js/i],
     ["wrong document path", { documentUrl: "https://spoonjoy.app/login" }, /document navigation.*\/auth\/apple/i],
     ["wrong provider", { providerUrl: "https://example.com/auth/authorize" }, /provider host/i],
+    ["wrong provider path", { providerUrl: successfulAppleObservation.providerUrl.replace("/auth/authorize", "/unexpected") }, /provider path/i],
     ["wrong client", { providerUrl: successfulAppleObservation.providerUrl.replace("app.spoonjoy.client", "wrong-client") }, /client ID/i],
     ["wrong callback", { providerUrl: successfulAppleObservation.providerUrl.replace("method%3DloginWithApple", "method%3Dwrong") }, /redirect URI/i],
     ["wrong response mode", { providerUrl: successfulAppleObservation.providerUrl.replace("form_post", "query") }, /response mode/i],

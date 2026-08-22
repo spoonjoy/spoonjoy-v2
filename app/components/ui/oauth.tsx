@@ -20,7 +20,7 @@ interface OAuthButtonProps {
   className?: string
   /**
    * Where to return after sign-in (e.g. the connector's /oauth/authorize URL).
-   * Carried explicitly in the form action so it survives even when the Referer
+   * Carried explicitly in the link href so it survives even when the Referer
    * header is stripped (in-app browsers, strict referrer policies) — relying on
    * the Referer dropped users on /recipes instead of back where they started.
    */

@@ -469,17 +469,29 @@ export function serializeOAuthNavigationEvidence(evidence) {
 
 async function observeOAuthNavigationWithPage(input) {
   const { page, appOrigin, provider, publicSignInMarker, publicErrorSentinel, redirectTo } = input;
-  await page.addInitScript(() => {
-    globalThis.__spoonjoyOAuthCanary = { cspViolations: [], phase: "login-load" };
+  const cspViolations = [];
+  const cspBinding = "__spoonjoyReportOAuthCspViolation";
+  await page.exposeFunction(cspBinding, (violation) => {
+    const documentOrigin = safeOrigin(violation?.documentUrl);
+    if (
+      documentOrigin === new URL(appOrigin).origin
+      && OAUTH_CSP_PHASES.has(violation?.phase)
+      && violation.phase !== "provider-handoff"
+    ) {
+      cspViolations.push(violation);
+    }
+  });
+  await page.addInitScript((reportBinding) => {
+    globalThis.__spoonjoyOAuthCanary = { phase: "login-load" };
     globalThis.addEventListener("securitypolicyviolation", (event) => {
-      globalThis.__spoonjoyOAuthCanary.cspViolations.push({
+      globalThis[reportBinding]?.({
         effectiveDirective: event.effectiveDirective || event.violatedDirective,
         documentUrl: event.documentURI,
         blockedUrl: event.blockedURI,
         phase: globalThis.__spoonjoyOAuthCanary.phase,
       });
     });
-  });
+  }, cspBinding);
 
   const login = new URL("/login", appOrigin);
   if (redirectTo) login.searchParams.set("redirectTo", redirectTo);
@@ -498,15 +510,19 @@ async function observeOAuthNavigationWithPage(input) {
   const link = page.getByRole("link", {
     name: `Continue with ${provider[0].toUpperCase()}${provider.slice(1)}`,
   });
-  const href = await link.getAttribute("href");
-  const renderedDocumentUrl = href === null ? appOrigin : new URL(href, appOrigin).toString();
   let documentUrl = null;
-  const onRequest = (request) => {
-    if (request.isNavigationRequest() && safePath(request.url()) === `/auth/${provider}`) {
-      documentUrl = request.url();
+  const cdp = await page.context().newCDPSession(page);
+  const onDocumentRequest = (event) => {
+    if (
+      event.type === "Document"
+      && safeOrigin(event.request?.url) === new URL(appOrigin).origin
+      && safePath(event.request?.url) === `/auth/${provider}`
+    ) {
+      documentUrl = event.request.url;
     }
   };
-  page.on("request", onRequest);
+  await cdp.send("Network.enable");
+  cdp.on("Network.requestWillBeSent", onDocumentRequest);
   await page.evaluate(() => {
     globalThis.__spoonjoyOAuthCanary.phase = "provider-click";
   });
@@ -516,7 +532,8 @@ async function observeOAuthNavigationWithPage(input) {
       link.click(),
     ]);
   } finally {
-    page.off("request", onRequest);
+    cdp.off("Network.requestWillBeSent", onDocumentRequest);
+    await cdp.detach();
   }
 
   await page.evaluate(() => {
@@ -525,11 +542,10 @@ async function observeOAuthNavigationWithPage(input) {
   const markerByText = await page.getByText(publicSignInMarker, { exact: false }).first().isVisible().catch(() => false);
   const title = await page.title();
   const sentinelByText = await page.getByText(publicErrorSentinel, { exact: false }).first().isVisible().catch(() => false);
-  const cspViolations = await page.evaluate(() => globalThis.__spoonjoyOAuthCanary?.cspViolations ?? []);
 
   return {
     controllerUrl,
-    documentUrl: documentUrl ?? renderedDocumentUrl,
+    documentUrl,
     providerUrl: page.url(),
     publicSignInMarkerPresent: markerByText || title.includes(publicSignInMarker),
     publicErrorSentinelPresent: sentinelByText || title.includes(publicErrorSentinel),
@@ -542,6 +558,7 @@ export async function runOAuthNavigationCanary({
   provider,
   appOrigin,
   expectedProviderHost,
+  expectedProviderPath,
   expectedClientId,
   expectedRedirectUri,
   expectedResponseMode,
@@ -559,6 +576,7 @@ export async function runOAuthNavigationCanary({
     controllerPath,
     documentPath,
     expectedProviderHost,
+    expectedProviderPath,
     expectedClientId,
     expectedRedirectUri,
     expectedResponseMode,
@@ -575,6 +593,9 @@ export async function runOAuthNavigationCanary({
     throw new Error("OAuth navigation controller did not use the expected /sw.js script.");
   }
 
+  if (!observation?.documentUrl) {
+    throw new Error(`OAuth document navigation did not request ${documentPath}.`);
+  }
   const document = new URL(observation.documentUrl);
   if (document.origin !== new URL(appOrigin).origin || document.pathname !== documentPath) {
     throw new Error(`OAuth document navigation did not request ${documentPath}.`);
@@ -591,6 +612,7 @@ export async function runOAuthNavigationCanary({
   const redirectUriMatches = providerUrl.searchParams.get("redirect_uri") === expectedRedirectUri;
   const responseModeMatches = providerUrl.searchParams.get("response_mode") === expectedResponseMode;
   if (providerUrl.host !== expectedProviderHost) throw new Error("OAuth provider host did not match the expected handoff.");
+  if (providerUrl.pathname !== expectedProviderPath) throw new Error("OAuth provider path did not match the expected handoff.");
   if (!clientIdMatches) throw new Error("OAuth provider handoff used an unexpected client ID.");
   if (!redirectUriMatches) throw new Error("OAuth provider handoff used an unexpected redirect URI.");
   if (!responseModeMatches) throw new Error("OAuth provider handoff used an unexpected response mode.");

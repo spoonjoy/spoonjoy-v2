@@ -16,6 +16,7 @@ test("service-worker-controlled OAuth link performs a full Google document hando
     provider: "google",
     appOrigin: "http://localhost:5197",
     expectedProviderHost: "accounts.google.com",
+    expectedProviderPath: "/o/oauth2/v2/auth",
     expectedClientId: "spoonjoy-playwright-google-client",
     expectedRedirectUri: "http://localhost:5197/auth/google/callback",
     expectedResponseMode: null,

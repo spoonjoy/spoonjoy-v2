@@ -37,6 +37,7 @@ describe("live Apple OAuth orchestrator", () => {
       provider: "apple",
       appOrigin: "https://spoonjoy.app",
       expectedProviderHost: "appleid.apple.com",
+      expectedProviderPath: "/auth/authorize",
       expectedClientId: "app.spoonjoy.client",
       expectedRedirectUri: "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple",
       expectedResponseMode: "form_post",
