@@ -1,6 +1,6 @@
 # Planning: Web Apple Sign-in Production Repair
 
-**Status**: NEEDS_REVIEW
+**Status**: approved
 **Created**: 2026-08-21 17:38
 
 ## Goal
@@ -28,8 +28,8 @@ Restore reliable production web OAuth initiation, including Sign in with Apple, 
 - Unrelated authentication, shopping-list, PWA-install, or service-worker behavior.
 
 ## Completion Criteria
-- [ ] A recorded red browser reproduction shows the current rendered OAuth interaction remaining on `/login`, while direct `/auth/apple` navigation reaches Apple's authorization page.
-- [ ] The exact root cause is supported by a red browser probe that asserts an active service-worker controller, captures the blocked form's `securitypolicyviolation` naming `form-action`, binds the event to the rendered same-origin `/auth/apple` GET action, and pairs it with a same-session direct-document-navigation control that reaches Apple. Chromium reports the form action—not the redirect target—as `blockedURI`, so Apple origin is proven by the paired control rather than required from the event.
+- [x] A recorded red browser reproduction shows the current rendered OAuth interaction remaining on `/login`, while direct `/auth/apple` navigation reaches Apple's authorization page.
+- [x] The exact root cause is supported by a red browser probe that asserts an active service-worker controller, captures the blocked form's `securitypolicyviolation` naming `form-action`, binds the event to the rendered same-origin `/auth/apple` GET action, and pairs it with a same-session direct-document-navigation control that reaches Apple. Chromium reports the form action—not the redirect target—as `blockedURI`, so Apple origin is proven by the paired control rather than required from the event.
 - [ ] Login and signup expose provider initiation as navigation that is compatible with both `form-action 'self'` and the active service worker.
 - [ ] `redirectTo` is URL-encoded once and preserved byte-for-byte through the initiation URL.
 - [ ] Targeted unit/integration/browser tests cover every provider, absent/present `redirectTo`, the forced full-document navigation contract, and the active-service-worker navigation path.

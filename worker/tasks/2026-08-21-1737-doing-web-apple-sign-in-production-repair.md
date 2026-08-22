@@ -1,6 +1,6 @@
 # Doing: Web Apple Sign-in Production Repair
 
-**Status**: NEEDS_REVIEW
+**Status**: in-progress
 **Execution Mode**: direct
 **Created**: 2026-08-21 17:52
 **Planning**: ./2026-08-21-1737-planning-web-apple-sign-in-production-repair.md
@@ -17,8 +17,8 @@ Restore reliable production web OAuth initiation, including Sign in with Apple, 
 - None
 
 ## Completion Criteria
-- [ ] A recorded red browser reproduction shows the current rendered OAuth interaction remaining on `/login`, while direct `/auth/apple` navigation reaches Apple's authorization page.
-- [ ] The exact root cause is supported by a red browser probe that asserts an active service-worker controller and captures the blocked form's `securitypolicyviolation`/CSP report naming `form-action`, plus a same-session direct-document-navigation control that reaches Apple.
+- [x] A recorded red browser reproduction shows the current rendered OAuth interaction remaining on `/login`, while direct `/auth/apple` navigation reaches Apple's authorization page.
+- [x] The exact root cause is supported by a red browser probe that asserts an active service-worker controller and captures the blocked form's `securitypolicyviolation`/CSP report naming `form-action`, plus a same-session direct-document-navigation control that reaches Apple.
 - [ ] Login and signup expose provider initiation as navigation that is compatible with both `form-action 'self'` and the active service worker.
 - [ ] `redirectTo` is URL-encoded once and preserved byte-for-byte through the initiation URL.
 - [ ] Targeted unit/integration/browser tests cover every provider, absent/present `redirectTo`, the forced full-document navigation contract, and the active-service-worker navigation path.
@@ -50,7 +50,7 @@ Restore reliable production web OAuth initiation, including Sign in with Apple, 
 ### Legend
 ⬜ Not started · 🔄 In progress · ✅ Done · ❌ Blocked
 
-### ❌ Unit 0: Causal Production Baseline
+### ✅ Unit 0: Causal Production Baseline
 **What**: Run a disposable Chromium probe against canonical browser origin `https://spoonjoy.app` before code changes. Install a pre-navigation `securitypolicyviolation` listener, load `/login`, await service-worker readiness, reload, assert `navigator.serviceWorker.controller.scriptURL` is live `/sw.js`, click the rendered Apple GET form, and record URL/violation data. Accept events only while `location.origin === "https://spoonjoy.app"` and before provider handoff; require `effectiveDirective` or `violatedDirective` to equal `form-action` and `documentURI` to be the Spoonjoy login document. Bind the event to the independently inspected rendered GET action `/auth/apple`; persist its blocked origin as observed without requiring it to expose the eventual redirect target. Remove the listener/snapshot evidence before inspecting the provider page. In the same browser context, directly navigate to `/auth/apple` as the control and record only Apple's public authorization parameters; this paired control proves the rendered action's provider target. Record current `/api/v1/health`, live `/sw.js` digest, source ancestry, and CSP header. Health/provenance may additionally query the Worker origin `https://spoonjoy-v2.mendelow-studio.workers.dev`, but browser reproduction and handoff always use `https://spoonjoy.app`; require both health observations to report the same active Worker version/source.
 **Output**: `./2026-08-21-1737-doing-web-apple-sign-in-production-repair/unit-0-production-red.json` and `unit-0-production-red.md` containing privacy-safe causal evidence; no Apple credentials or private page values.
 **Acceptance**: Evidence proves the page is service-worker controlled; the rendered GET action is `/auth/apple`; the form click stays on `/login`; a scoped `form-action` violation identifies the `/login` document and records the observed blocked origin; paired direct navigation reaches `appleid.apple.com/auth/authorize` with `client_id=app.spoonjoy.client`, `redirect_uri=https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple`, and `response_mode=form_post`; the freshly observed production source SHA is recorded and tested for ancestry of fix #297 (`86c58120`); live `/sw.js` is compared with the same observed source tree rather than a hard-coded deployment assumption. If a controller cannot be established after one readiness/reload retry, the scoped violation is absent, or the direct-navigation control does not reach Apple with those parameters, stop before Unit 1: mark Unit 0 blocked/falsified, update the planning doc's Decisions/Open Questions with the evidence, and obtain a revised diagnosis/plan review rather than implementing this plan.
