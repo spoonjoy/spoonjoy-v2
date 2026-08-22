@@ -1,6 +1,6 @@
 # Planning: Web Apple Sign-in Production Repair
 
-**Status**: approved
+**Status**: NEEDS_REVIEW
 **Created**: 2026-08-21 17:38
 
 ## Goal
@@ -29,7 +29,7 @@ Restore reliable production web OAuth initiation, including Sign in with Apple, 
 
 ## Completion Criteria
 - [ ] A recorded red browser reproduction shows the current rendered OAuth interaction remaining on `/login`, while direct `/auth/apple` navigation reaches Apple's authorization page.
-- [ ] The exact root cause is supported by a red browser probe that asserts an active service-worker controller and captures the blocked form's `securitypolicyviolation`/CSP report naming `form-action`, plus a same-session direct-document-navigation control that reaches Apple.
+- [ ] The exact root cause is supported by a red browser probe that asserts an active service-worker controller, captures the blocked form's `securitypolicyviolation` naming `form-action`, binds the event to the rendered same-origin `/auth/apple` GET action, and pairs it with a same-session direct-document-navigation control that reaches Apple. Chromium reports the form action—not the redirect target—as `blockedURI`, so Apple origin is proven by the paired control rather than required from the event.
 - [ ] Login and signup expose provider initiation as navigation that is compatible with both `form-action 'self'` and the active service worker.
 - [ ] `redirectTo` is URL-encoded once and preserved byte-for-byte through the initiation URL.
 - [ ] Targeted unit/integration/browser tests cover every provider, absent/present `redirectTo`, the forced full-document navigation contract, and the active-service-worker navigation path.
@@ -51,6 +51,7 @@ Restore reliable production web OAuth initiation, including Sign in with Apple, 
 - [x] Is production missing merged fix #297? No. `851d9566` contains `86c58120`.
 - [x] Is the live service-worker asset stale? No. Production `/sw.js` is byte-identical to `public/sw.js` at `origin/main`.
 - [x] Does Apple reject Spoonjoy's initiation configuration? No evidence of that: direct `/auth/apple` reaches Apple's accepted authorization screen with `client_id=app.spoonjoy.client` and the production callback.
+- [x] Does Chromium expose Apple's origin as the `securitypolicyviolation.blockedURI`? No. The controlled rendered click emits `form-action` while staying on `/login`, but reports the same-origin `/auth/apple` action origin; paired direct navigation proves that action redirects to Apple with the accepted public parameters.
 - [ ] Does replacing the GET form with a same-origin anchor forced through native full-document navigation (`reloadDocument` or a deliberately native `<a>`) eliminate the silent failure under active service-worker control while retaining `redirectTo`? The browser canary must answer this before the implementation is accepted.
 
 ## Decisions Made
@@ -59,6 +60,7 @@ Restore reliable production web OAuth initiation, including Sign in with Apple, 
 - Treat Apple as the operator-visible symptom but fix and test the shared OAuth initiation component for all configured providers.
 - Do not perform provider credential entry during smoke testing. Success for this repair is the authenticated Spoonjoy initiation redirect reaching Apple's authorization surface with the correct public parameters; token exchange is covered by existing callback tests unless evidence implicates it.
 - Keep production deployment/version mutations inside the locked release workflow. Local production smoke may receive only the least-privilege D1 cleanup/read authority needed to delete and verify its own disposable user; tests must prove an import-safe runtime wrapper strips all Cloudflare authority from Chromium and supplies only normalized D1 authority to cleanup/read subprocesses on success and failure paths.
+- Treat the rendered action path plus paired direct-navigation control as the redirect-target binding. Do not require `securitypolicyviolation.blockedURI` to reveal the eventual Apple redirect target; Chromium reports the submitted same-origin action.
 - Use the dedicated `worker/web-apple-sign-in-production-repair` worktree and leave the dirty Clem worktree and PR #298 untouched.
 
 ## Context / References
@@ -86,3 +88,4 @@ The previous assumption that production predated PR #297 was incorrect. Current 
 - 2026-08-21 17:43 Addressed Round 1 reviewer findings by requiring direct CSP-violation evidence, an explicit service-worker control assertion/control case, and a forced full-document anchor contract
 - 2026-08-21 17:45 Grounded the form-redirect hypothesis in the CSP Level 3 navigation response-check specification
 - 2026-08-21 17:51 Approved after Round 2 cold reviewer convergence (`PASS`)
+- 2026-08-21 18:49 Unit 0 falsified the Apple blocked-origin assumption; retained the causal `form-action` evidence and paired control, and returned the plan to review before implementation
