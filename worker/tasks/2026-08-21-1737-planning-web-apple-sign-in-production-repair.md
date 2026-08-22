@@ -1,7 +1,7 @@
 # Planning: Web Apple Sign-in Production Repair
 
 **Status**: NEEDS_REVIEW
-**Created**: 2026-08-21 17:37
+**Created**: 2026-08-21 17:38
 
 ## Goal
 Restore reliable production web OAuth initiation, including Sign in with Apple, and prove a real service-worker-controlled browser click reaches the intended provider without weakening Spoonjoy's CSP.
@@ -77,4 +77,4 @@ Restore reliable production web OAuth initiation, including Sign in with Apple, 
 The previous assumption that production predated PR #297 was incorrect. Current evidence instead isolates the failure to the rendered form-click path: the live form is GET and silently stays on `/login`, while direct navigation reaches Apple. Production also enforces `form-action 'self'`, making a same-origin link the leading minimal fix, subject to a real service-worker-controlled red/green canary.
 
 ## Progress Log
-- 2026-08-21 17:37 Created after live reproduction and source/deployment provenance checks
+- 2026-08-21 17:38 Created after live reproduction and source/deployment provenance checks
