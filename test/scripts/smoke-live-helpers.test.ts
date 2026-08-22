@@ -73,7 +73,7 @@ describe("smoke-live helpers", () => {
   };
 
   it("runs a provider-parameterized observable OAuth navigation canary", async () => {
-    const observe = vi.fn(async () => successfulAppleObservation);
+    const observe = vi.fn(async () => ({ ...successfulAppleObservation, cspViolations: null }));
 
     await expect(runOAuthNavigationCanary({ ...appleCanary, observe })).resolves.toEqual({
       provider: "apple",
@@ -95,6 +95,169 @@ describe("smoke-live helpers", () => {
       documentPath: "/auth/apple",
       controllerPath: "/sw.js",
     }));
+  });
+
+  function createOAuthPageHarness({
+    controllerInitially = true,
+    hasServiceWorker = true,
+    href = successfulAppleObservation.documentUrl,
+    captureDocumentRequest = false,
+    documentRequestUrl = successfulAppleObservation.documentUrl,
+    markerResult = true,
+    sentinelResult = false,
+    title = "",
+    missingCspState = false,
+  } = {}) {
+    const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+    const controller = { scriptURL: "https://spoonjoy.app/sw.js" };
+    const fakeNavigator = hasServiceWorker
+      ? { serviceWorker: { ready: Promise.resolve(), controller: controllerInitially ? controller : null } }
+      : {};
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: fakeNavigator,
+    });
+
+    let securityPolicyHandler: ((event: Record<string, string>) => void) | undefined;
+    const link = {
+      getAttribute: vi.fn(async () => href),
+      click: vi.fn(async () => undefined),
+    };
+    const page = {
+      addInitScript: vi.fn(async (callback: () => void) => {
+        const originalAddEventListener = globalThis.addEventListener;
+        globalThis.addEventListener = ((name: string, handler: (event: Record<string, string>) => void) => {
+          expect(name).toBe("securitypolicyviolation");
+          securityPolicyHandler = handler;
+        }) as typeof globalThis.addEventListener;
+        callback();
+        globalThis.addEventListener = originalAddEventListener;
+        securityPolicyHandler?.({
+          effectiveDirective: "form-action",
+          violatedDirective: "unused",
+          documentURI: "https://spoonjoy.app/login",
+          blockedURI: "https://spoonjoy.app/auth/apple",
+        });
+        securityPolicyHandler?.({
+          effectiveDirective: "",
+          violatedDirective: "script-src",
+          documentURI: "https://spoonjoy.app/login",
+          blockedURI: "https://cdn.example.test/file.js",
+        });
+        globalThis.__spoonjoyOAuthCanary.cspViolations = [];
+      }),
+      goto: vi.fn(async () => undefined),
+      evaluate: vi.fn(async (callback: () => unknown) => {
+        if (
+          missingCspState
+          && (
+            callback.toString().includes("?.cspViolations")
+            || callback.toString().includes("cspViolations ??")
+          )
+        ) {
+          delete globalThis.__spoonjoyOAuthCanary;
+        }
+        return await callback();
+      }),
+      reload: vi.fn(async () => {
+        if ("serviceWorker" in fakeNavigator) fakeNavigator.serviceWorker.controller = controller;
+      }),
+      getByRole: vi.fn(() => link),
+      on: vi.fn((_name: string, handler: (request: { isNavigationRequest(): boolean; url(): string }) => void) => {
+        handler({ isNavigationRequest: () => false, url: () => "https://spoonjoy.app/auth/apple" });
+        handler({ isNavigationRequest: () => true, url: () => "https://spoonjoy.app/not-apple" });
+        if (captureDocumentRequest) {
+          handler({
+            isNavigationRequest: () => true,
+            url: () => documentRequestUrl,
+          });
+        }
+      }),
+      off: vi.fn(),
+      waitForURL: vi.fn(async (predicate: (url: URL) => boolean) => {
+        expect(predicate(new URL("https://spoonjoy.app/login"))).toBe(false);
+        expect(predicate(new URL(successfulAppleObservation.providerUrl))).toBe(true);
+      }),
+      getByText: vi.fn((text: string) => ({
+        first: () => ({
+          isVisible: () => {
+            const result = text === appleCanary.publicSignInMarker ? markerResult : sentinelResult;
+            return result === "reject" ? Promise.reject(new Error("not found")) : Promise.resolve(result);
+          },
+        }),
+      })),
+      title: vi.fn(async () => title),
+      url: vi.fn(() => successfulAppleObservation.providerUrl),
+    };
+
+    return {
+      page,
+      restore() {
+        delete globalThis.__spoonjoyOAuthCanary;
+        if (originalNavigator) Object.defineProperty(globalThis, "navigator", originalNavigator);
+      },
+    };
+  }
+
+  it("observes the real page adapter with an already-controlled rendered link", async () => {
+    const harness = createOAuthPageHarness();
+    try {
+      await expect(runOAuthNavigationCanary({ ...appleCanary, page: harness.page })).resolves.toMatchObject({
+        controllerPath: "/sw.js",
+        documentPath: "/auth/apple",
+        redirectToPreserved: true,
+      });
+      expect(harness.page.reload).not.toHaveBeenCalled();
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it("covers controller reload, request capture, absent redirect, and title/catch fallbacks", async () => {
+    const harness = createOAuthPageHarness({
+      controllerInitially: false,
+      href: null,
+      captureDocumentRequest: true,
+      documentRequestUrl: "https://spoonjoy.app/auth/apple",
+      markerResult: "reject",
+      sentinelResult: "reject",
+      title: appleCanary.publicSignInMarker,
+      missingCspState: true,
+    });
+    try {
+      const { redirectTo: _redirectTo, ...withoutRedirect } = appleCanary;
+      await expect(runOAuthNavigationCanary({ ...withoutRedirect, page: harness.page })).resolves.toMatchObject({
+        redirectToPreserved: true,
+        publicSignInMarkerPresent: true,
+        publicErrorSentinelAbsent: true,
+      });
+      expect(harness.page.reload).toHaveBeenCalledOnce();
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it("covers the page adapter's missing-service-worker failure", async () => {
+    const harness = createOAuthPageHarness({ hasServiceWorker: false });
+    try {
+      await expect(runOAuthNavigationCanary({ ...appleCanary, page: harness.page }))
+        .rejects.toThrow(/service-worker controller/i);
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it.each([
+    [false, false, "", /public sign-in marker/i],
+    [true, true, "", /public error sentinel/i],
+  ])("covers real-page marker and sentinel rejection branches", async (markerResult, sentinelResult, title, expected) => {
+    const harness = createOAuthPageHarness({ markerResult, sentinelResult, title });
+    try {
+      await expect(runOAuthNavigationCanary({ ...appleCanary, page: harness.page }))
+        .rejects.toThrow(expected as RegExp);
+    } finally {
+      harness.restore();
+    }
   });
 
   it("serializes only the exact privacy-safe OAuth evidence allowlist", () => {
@@ -163,6 +326,44 @@ describe("smoke-live helpers", () => {
     ]) {
       expect(serialized).not.toContain(secret);
     }
+  });
+
+  it("projects malformed and missing evidence to fixed non-secret sentinels", () => {
+    const unstringifiable = Symbol("must-not-survive");
+    const parsed = JSON.parse(serializeOAuthNavigationEvidence({
+      provider: "private-provider",
+      appOrigin: unstringifiable,
+      controllerPath: unstringifiable,
+      documentPath: unstringifiable,
+      providerHost: "private/host",
+      cspViolations: [{
+        directive: "private-directive",
+        documentPath: unstringifiable,
+        blockedOrigin: unstringifiable,
+        phase: "private-phase",
+      }],
+    }));
+
+    expect(parsed).toEqual({
+      provider: "unknown",
+      appOrigin: "invalid",
+      controllerPath: "/invalid",
+      documentPath: "/invalid",
+      providerHost: "invalid",
+      clientIdMatches: false,
+      redirectUriMatches: false,
+      responseModeMatches: false,
+      redirectToPreserved: false,
+      publicSignInMarkerPresent: false,
+      publicErrorSentinelAbsent: false,
+      cspViolations: [{
+        directive: "unknown",
+        documentPath: "/invalid",
+        blockedOrigin: "invalid",
+        phase: "unknown",
+      }],
+    });
+    expect(JSON.parse(serializeOAuthNavigationEvidence(null)).cspViolations).toEqual([]);
   });
 
   it.each([

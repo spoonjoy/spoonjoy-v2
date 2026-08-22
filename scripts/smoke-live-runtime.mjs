@@ -3,7 +3,7 @@ import {
   buildD1CommandEnvironment,
 } from "./smoke-live-helpers.mjs";
 
-export function createSmokeLiveRuntime({ chromium, execFile, env = process.env }) {
+export function createSmokeLiveRuntime({ chromium, execFile, env }) {
   return {
     launchBrowser(options) {
       return chromium.launch({ ...options, env: buildBrowserEnvironment(env) });

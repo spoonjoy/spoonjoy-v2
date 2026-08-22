@@ -24,6 +24,7 @@ import {
   parseD1CountOutput,
   parseSmokeArgs,
   readGitMetadata,
+  runOAuthNavigationCanary,
   shouldRunAppleOAuthCheck,
 } from './smoke-live-helpers.mjs'
 import { runAppleOAuthNavigationCheck } from './smoke-live-oauth.mjs'
@@ -271,7 +272,7 @@ async function main() {
     expect(pushResponse.ok() || (isLocalhost && pushResponse.status() === 500)).toBe(true)
 
     if (shouldRunAppleOAuthCheck(targetEnv)) {
-      report.apple = await runAppleOAuthNavigationCheck({ browser })
+      report.apple = await runAppleOAuthNavigationCheck({ browser, runCanary: runOAuthNavigationCanary })
     } else {
       report.apple = { skipped: true, reason: `${targetEnv} smoke does not run production Apple OAuth guard` }
     }

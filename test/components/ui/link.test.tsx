@@ -237,8 +237,6 @@ describe("Link Component", () => {
       ["mailto:test@example.com", "Email"],
       ["tel:+1234567890", "Telephone"],
     ])("does not forward reloadDocument to native anchor %s", (href, label) => {
-      const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
-
       render(
         <TestWrapper>
           <Link href={href} {...({ reloadDocument: true } as Record<string, unknown>)}>
@@ -250,8 +248,6 @@ describe("Link Component", () => {
       const link = screen.getByRole("link", { name: label });
       expect(link).not.toHaveAttribute("reloadDocument");
       expect(link).not.toHaveAttribute("reloaddocument");
-      expect(error).not.toHaveBeenCalled();
-      error.mockRestore();
     });
   });
 

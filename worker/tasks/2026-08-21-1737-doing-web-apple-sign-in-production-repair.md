@@ -21,10 +21,10 @@ Restore reliable production web OAuth initiation, including Sign in with Apple, 
 - [x] The exact root cause is supported by a red browser probe that asserts an active service-worker controller and captures the blocked form's `securitypolicyviolation`/CSP report naming `form-action`, plus a same-session direct-document-navigation control that reaches Apple.
 - [x] Login and signup expose provider initiation as navigation that is compatible with both `form-action 'self'` and the active service worker.
 - [x] `redirectTo` is URL-encoded once and preserved byte-for-byte through the initiation URL.
-- [ ] Targeted unit/integration/browser tests cover every provider, absent/present `redirectTo`, the forced full-document navigation contract, and the active-service-worker navigation path.
-- [ ] 100% test coverage on all new code
-- [ ] All tests pass
-- [ ] No warnings
+- [x] Targeted unit/integration/browser tests cover every provider, absent/present `redirectTo`, the forced full-document navigation contract, and the active-service-worker navigation path.
+- [x] 100% test coverage on all new code
+- [x] All tests pass
+- [x] No warnings
 - [ ] The reviewed merge SHA is the SHA deployed to production and reported by `/api/v1/health`.
 - [ ] A fresh production browser profile is controlled by the live `/sw.js`, and clicking Continue with Apple reaches `appleid.apple.com/auth/authorize` with Spoonjoy's registered client ID and callback.
 - [ ] The terminal SHA is the latest successful original-or-forward-repair merge, and every task-lineage remote branch, local branch, task/exact-merge worktree, and disposable smoke artifact is removed after verification.
@@ -81,7 +81,7 @@ Here, “only account ID plus the D1 token” describes Cloudflare authority; or
 **Output**: Reusable exact interaction canary integrated into production `smoke:live` results.
 **Acceptance**: Both exact Unit 2a commands pass unchanged; the canary has no credential entry or private artifact values; existing launcher cleanup remains green; `pnpm run verify:clean:build` passes with zero warnings.
 
-### ⬜ Unit 2c: Service-worker OAuth Live Canary — Coverage & Refactor
+### ✅ Unit 2c: Service-worker OAuth Live Canary — Coverage & Refactor
 **What**: Run `node scripts/run-with-warning-policy.mjs -- pnpm exec vitest run test/scripts/smoke-live-helpers.test.ts test/scripts/smoke-live-oauth.test.ts test/scripts/smoke-live-runtime.test.ts test/scripts/e2e-run-cleanup.test.ts test/scripts/deployment-preflight.test.ts --coverage --coverage.include=scripts/smoke-live-helpers.mjs --coverage.include=scripts/smoke-live-oauth.mjs --coverage.include=scripts/smoke-live-runtime.mjs --coverage.include=e2e/support/start-ephemeral-wrangler.mjs --coverage.thresholds.statements=100 --coverage.thresholds.branches=100 --coverage.thresholds.functions=100 --coverage.thresholds.lines=100` for every new helper/orchestrator/runtime-authority/launcher branch/error path, add missing cases, refactor green, rerun the exact Unit 2a browser command and `pnpm run verify:clean:build`, then run `pnpm run verify:clean:test:coverage` to prove both new smoke modules remain in the full 100% gate.
 **Output**: `unit-2c-coverage.log`, `unit-2c-tests.log`, and `unit-2c-build.log`.
 **Acceptance**: New helper code is 100% covered, all browser evidence validation paths are tested, build stays green, and logs contain zero warnings.
@@ -158,3 +158,4 @@ Here, “only account ID plus the D1 token” describes Cloudflare authority; or
 - 2026-08-21 19:02 Unit 1c complete: modified OAuth/Link code is 100% covered across 35 statements, 33 branches, 8 functions, and 27 lines; 186 focused/adjacent tests and the clean build remain green
 - 2026-08-21 19:05 Unit 2a complete: 17 intended Vitest failures plus the absent Playwright project prove the shared canary, privacy projection, runtime authority wrapper, coverage guard, launcher wiring, and observable browser lane are all red; 501 adjacent tests pass
 - 2026-08-21 19:21 Unit 2b complete: the shared provider canary, exact privacy projection, fresh Apple context, least-authority runtime, production smoke integration, and artifact-disabled Google browser project are green; 525 exact tests, the real service-worker browser handoff, and clean build pass
+- 2026-08-21 19:42 Unit 2c complete: required helper/orchestrator/runtime/launcher coverage is 100% (436 statements, 342 branches, 122 functions, 385 lines); repo-wide coverage is 100% with 8,316 tests green, and warning ownership, browser canary, and clean build all pass

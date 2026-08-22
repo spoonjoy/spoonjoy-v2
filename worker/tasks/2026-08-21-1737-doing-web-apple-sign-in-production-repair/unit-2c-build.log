@@ -1,0 +1,185 @@
+
+> spoonjoy-v2@1.0.0 verify:clean:build /Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair
+> node scripts/run-with-warning-policy.mjs -- pnpm run build
+
+
+> spoonjoy-v2@1.0.0 build /Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair
+> pnpm run api:playground:generate && tsx scripts/react-router-build.ts
+
+
+> spoonjoy-v2@1.0.0 api:playground:generate /Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair
+> tsx scripts/generate-api-playground.ts
+
+Generated app/lib/generated/api-v1-playground.ts
+Using Vite Environment API (experimental)
+vite v7.3.1 building client environment for production...
+transforming...
+✓ 2583 modules transformed.
+rendering chunks...
+computing gzip size...
+build/client/.vite/manifest.json                                          53.42 kB │ gzip:  5.20 kB
+build/client/assets/root-Chy79OGv.css                                    150.92 kB │ gzip: 22.22 kB
+build/client/assets/auth.webauthn.register.options-l0sNRNKZ.js             0.00 kB │ gzip:  0.02 kB
+build/client/assets/auth.webauthn.register.verify-l0sNRNKZ.js              0.00 kB │ gzip:  0.02 kB
+build/client/assets/auth.webauthn.authenticate.options-l0sNRNKZ.js         0.00 kB │ gzip:  0.02 kB
+build/client/assets/auth.webauthn.authenticate.verify-l0sNRNKZ.js          0.00 kB │ gzip:  0.02 kB
+build/client/assets/sitemap.xml-l0sNRNKZ.js                                0.00 kB │ gzip:  0.02 kB
+build/client/assets/robots.txt-l0sNRNKZ.js                                 0.00 kB │ gzip:  0.02 kB
+build/client/assets/og.pages._slug.png-l0sNRNKZ.js                         0.00 kB │ gzip:  0.02 kB
+build/client/assets/og.recipes._id.png-l0sNRNKZ.js                         0.00 kB │ gzip:  0.02 kB
+build/client/assets/og.cookbooks._id.png-l0sNRNKZ.js                       0.00 kB │ gzip:  0.02 kB
+build/client/assets/recipes._id.fork-l0sNRNKZ.js                           0.00 kB │ gzip:  0.02 kB
+build/client/assets/api.docs-l0sNRNKZ.js                                   0.00 kB │ gzip:  0.02 kB
+build/client/assets/api.docs._-l0sNRNKZ.js                                 0.00 kB │ gzip:  0.02 kB
+build/client/assets/api.developer-l0sNRNKZ.js                              0.00 kB │ gzip:  0.02 kB
+build/client/assets/api.developer._-l0sNRNKZ.js                            0.00 kB │ gzip:  0.02 kB
+build/client/assets/api.developers-l0sNRNKZ.js                             0.00 kB │ gzip:  0.02 kB
+build/client/assets/api.developers._-l0sNRNKZ.js                           0.00 kB │ gzip:  0.02 kB
+build/client/assets/api.openapi-l0sNRNKZ.js                                0.00 kB │ gzip:  0.02 kB
+build/client/assets/api.openapi-json-l0sNRNKZ.js                           0.00 kB │ gzip:  0.02 kB
+build/client/assets/api.openapi-spec-l0sNRNKZ.js                           0.00 kB │ gzip:  0.02 kB
+build/client/assets/api.push.public-key-l0sNRNKZ.js                        0.00 kB │ gzip:  0.02 kB
+build/client/assets/api.push.subscriptions-l0sNRNKZ.js                     0.00 kB │ gzip:  0.02 kB
+build/client/assets/api.push.preferences-l0sNRNKZ.js                       0.00 kB │ gzip:  0.02 kB
+build/client/assets/api.v1._-l0sNRNKZ.js                                   0.00 kB │ gzip:  0.02 kB
+build/client/assets/api._-l0sNRNKZ.js                                      0.00 kB │ gzip:  0.02 kB
+build/client/assets/csp-report-l0sNRNKZ.js                                 0.00 kB │ gzip:  0.02 kB
+build/client/assets/health-l0sNRNKZ.js                                     0.00 kB │ gzip:  0.02 kB
+build/client/assets/oauth.register-l0sNRNKZ.js                             0.00 kB │ gzip:  0.02 kB
+build/client/assets/oauth.token-l0sNRNKZ.js                                0.00 kB │ gzip:  0.02 kB
+build/client/assets/oauth.revoke-l0sNRNKZ.js                               0.00 kB │ gzip:  0.02 kB
+build/client/assets/well-known.oauth-authorization-server-l0sNRNKZ.js      0.00 kB │ gzip:  0.02 kB
+build/client/assets/well-known.oauth-protected-resource-l0sNRNKZ.js        0.00 kB │ gzip:  0.02 kB
+build/client/assets/well-known.oauth-protected-resource.mcp-l0sNRNKZ.js    0.00 kB │ gzip:  0.02 kB
+build/client/assets/well-known.apple-app-site-association-l0sNRNKZ.js      0.00 kB │ gzip:  0.02 kB
+build/client/assets/photos._-l0sNRNKZ.js                                   0.00 kB │ gzip:  0.02 kB
+build/client/assets/logout-DtkSs5nm.js                                     0.11 kB │ gzip:  0.12 kB
+build/client/assets/auth.google-BXmZOH1B.js                                0.11 kB │ gzip:  0.12 kB
+build/client/assets/auth.google.callback-9CstOvVH.js                       0.11 kB │ gzip:  0.12 kB
+build/client/assets/auth.github-BrjJ0lTN.js                                0.11 kB │ gzip:  0.12 kB
+build/client/assets/auth.github.callback-Cxw38naf.js                       0.11 kB │ gzip:  0.12 kB
+build/client/assets/auth.apple-CZ6swFmM.js                                 0.11 kB │ gzip:  0.12 kB
+build/client/assets/auth.apple.callback-N1OQdk_e.js                        0.11 kB │ gzip:  0.12 kB
+build/client/assets/redwood-functions-auth-oauth-BrjJ0lTN.js               0.11 kB │ gzip:  0.12 kB
+build/client/assets/devtools-well-known-BuP9LK-y.js                        0.11 kB │ gzip:  0.12 kB
+build/client/assets/plus-D47a-ZIH.js                                       0.17 kB │ gzip:  0.16 kB
+build/client/assets/recipes-CjcDoDmQ.js                                    0.17 kB │ gzip:  0.16 kB
+build/client/assets/cookbooks-BPUR-Po2.js                                  0.17 kB │ gzip:  0.16 kB
+build/client/assets/terminal-C9HlMJqY.js                                   0.17 kB │ gzip:  0.17 kB
+build/client/assets/arrow-right-BR13ACWC.js                                0.18 kB │ gzip:  0.17 kB
+build/client/assets/search-DWquScxX.js                                     0.18 kB │ gzip:  0.17 kB
+build/client/assets/bookmark-pTnv3ZbU.js                                   0.24 kB │ gzip:  0.21 kB
+build/client/assets/well-known.spoonjoy-release-readiness-DzFl5iqV.js      0.28 kB │ gzip:  0.23 kB
+build/client/assets/book-open-hU9x2YF9.js                                  0.29 kB │ gzip:  0.22 kB
+build/client/assets/use-resolve-button-type-Bq4DAspG.js                    0.30 kB │ gzip:  0.25 kB
+build/client/assets/users-Cg8XiTXz.js                                      0.32 kB │ gzip:  0.23 kB
+build/client/assets/chef-hat-DUA0Tlqa.js                                   0.32 kB │ gzip:  0.25 kB
+build/client/assets/shield-check-OjICYMpJ.js                               0.33 kB │ gzip:  0.26 kB
+build/client/assets/refresh-cw-DGEd1anp.js                                 0.33 kB │ gzip:  0.23 kB
+build/client/assets/bugs-D8H-Iz_w.js                                       0.34 kB │ gzip:  0.24 kB
+build/client/assets/my-recipes-DyH9AJUR.js                                 0.34 kB │ gzip:  0.23 kB
+build/client/assets/share-2-2wM4Fopw.js                                    0.36 kB │ gzip:  0.24 kB
+build/client/assets/quick-actions-npdzVnVn.js                              0.45 kB │ gzip:  0.23 kB
+build/client/assets/heading-DXcG-mf8.js                                    0.46 kB │ gzip:  0.25 kB
+build/client/assets/recipe-image-BmmBjz9f.js                               0.46 kB │ gzip:  0.31 kB
+build/client/assets/shopping-bag-SeXhr1ce.js                               0.47 kB │ gzip:  0.30 kB
+build/client/assets/jsx-runtime-u17CrQMm.js                                0.48 kB │ gzip:  0.31 kB
+build/client/assets/settings-CKGBEfCv.js                                   0.49 kB │ gzip:  0.26 kB
+build/client/assets/sparkles-lp8Wv2Yd.js                                   0.51 kB │ gzip:  0.29 kB
+build/client/assets/api-B31s4iBI.js                                        0.54 kB │ gzip:  0.33 kB
+build/client/assets/api.playground-CAvGDESy.js                             0.54 kB │ gzip:  0.33 kB
+build/client/assets/api.try-CAvGDESy.js                                    0.54 kB │ gzip:  0.33 kB
+build/client/assets/confirmation-dialog-Cqbaz-vE.js                        0.56 kB │ gzip:  0.34 kB
+build/client/assets/hidden-CfAn2ABQ.js                                     0.60 kB │ gzip:  0.43 kB
+build/client/assets/validation-error-IJnX5jqy.js                           0.64 kB │ gzip:  0.41 kB
+build/client/assets/_-oB2xphNR.js                                          0.69 kB │ gzip:  0.43 kB
+build/client/assets/CoverProvenanceBadge-mBWXeGmU.js                       0.76 kB │ gzip:  0.49 kB
+build/client/assets/use-default-value-BY5x3FXv.js                          0.80 kB │ gzip:  0.41 kB
+build/client/assets/text-DtXexSnI.js                                       0.91 kB │ gzip:  0.42 kB
+build/client/assets/createLucideIcon-8ra4Rp0D.js                           1.21 kB │ gzip:  0.70 kB
+build/client/assets/oauth.callback-CIFoRVC6.js                             1.24 kB │ gzip:  0.67 kB
+build/client/assets/spoonjoy-logo-jZikgbyi.js                              1.30 kB │ gzip:  0.73 kB
+build/client/assets/dock-context-DPK45Jd8.js                               1.33 kB │ gzip:  0.67 kB
+build/client/assets/saved-recipes-BK_IOM5G.js                              1.38 kB │ gzip:  0.76 kB
+build/client/assets/FellowChefList-CMrjNP0o.js                             1.39 kB │ gzip:  0.72 kB
+build/client/assets/agent.connect-92Aop9Yo.js                              1.41 kB │ gzip:  0.73 kB
+build/client/assets/cookbooks._index-HvuFbRnc.js                           1.43 kB │ gzip:  0.77 kB
+build/client/assets/cookbooks.new-BLdRhujM.js                              1.72 kB │ gzip:  0.89 kB
+build/client/assets/chef-avatar-C1vizsCt.js                                1.76 kB │ gzip:  0.89 kB
+build/client/assets/auth-layout-B8i2eXxi.js                                1.82 kB │ gzip:  0.79 kB
+build/client/assets/toast-Dt2DqKV9.js                                      1.83 kB │ gzip:  0.93 kB
+build/client/assets/users._identifier.fellow-chefs-DSTTJGql.js             1.91 kB │ gzip:  0.98 kB
+build/client/assets/users._identifier.kitchen-visitors-D_5Nihpm.js         1.91 kB │ gzip:  0.98 kB
+build/client/assets/analytics-CJYUghuz.js                                  2.09 kB │ gzip:  0.97 kB
+build/client/assets/checklist-row-DOjkv3nY.js                              2.19 kB │ gzip:  0.94 kB
+build/client/assets/textarea-BBPX9Fe2.js                                   2.36 kB │ gzip:  1.12 kB
+build/client/assets/badge-DSs41B4B.js                                      2.37 kB │ gzip:  0.99 kB
+build/client/assets/oauth-DRDrRc3p.js                                      2.41 kB │ gzip:  1.08 kB
+build/client/assets/chefs-Cb-2B1YG.js                                      2.44 kB │ gzip:  1.03 kB
+build/client/assets/signup-cOMTjwN3.js                                     2.56 kB │ gzip:  1.05 kB
+build/client/assets/push-client-DWmDZ8-h.js                                2.58 kB │ gzip:  1.08 kB
+build/client/assets/recipes.new-BzzGM6_U.js                                2.62 kB │ gzip:  1.28 kB
+build/client/assets/CookbookCoverArt-DRciU7-t.js                           2.78 kB │ gzip:  1.09 kB
+build/client/assets/page-KBZCep40.js                                       2.81 kB │ gzip:  0.97 kB
+build/client/assets/login-DyVmtTAx.js                                      2.83 kB │ gzip:  1.34 kB
+build/client/assets/input-DrwTlF7f.js                                      2.84 kB │ gzip:  1.20 kB
+build/client/assets/select-CawK4uji.js                                     3.01 kB │ gzip:  1.31 kB
+build/client/assets/button-DKz4dZmS.js                                     3.22 kB │ gzip:  1.33 kB
+build/client/assets/agent.connect._requestId-C4AddKXf.js                   3.38 kB │ gzip:  1.36 kB
+build/client/assets/my-recipes-CrA5eE2Z.js                                 3.53 kB │ gzip:  1.50 kB
+build/client/assets/index-BQyBv9qX.js                                      3.68 kB │ gzip:  1.40 kB
+build/client/assets/ingredient-affordances-D-oHe1jF.js                     3.72 kB │ gzip:  1.66 kB
+build/client/assets/SpoonsStrip-B5UdB0xo.js                                3.77 kB │ gzip:  1.35 kB
+build/client/assets/terms-D-cqIUi2.js                                      3.94 kB │ gzip:  1.71 kB
+build/client/assets/label-DVpX9CMW.js                                      4.37 kB │ gzip:  1.89 kB
+build/client/assets/fieldset-CZiaZnyf.js                                   4.46 kB │ gzip:  1.85 kB
+build/client/assets/oauth.authorize-DJz-Kldm.js                            4.59 kB │ gzip:  1.53 kB
+build/client/assets/recipes._id.steps.new-C841VXnZ.js                      5.20 kB │ gzip:  2.08 kB
+build/client/assets/privacy-ueassBJU.js                                    5.53 kB │ gzip:  2.14 kB
+build/client/assets/recipes._index-D4UlQ-BM.js                             5.63 kB │ gzip:  2.20 kB
+build/client/assets/recipes._id.edit-CGi2LpS6.js                           5.75 kB │ gzip:  2.26 kB
+build/client/assets/recipes._id.steps._stepId.edit-BqZ08sfj.js             5.93 kB │ gzip:  2.45 kB
+build/client/assets/switch-P-FNEVtV.js                                     6.54 kB │ gzip:  2.48 kB
+build/client/assets/search-Dl6zrszG.js                                     7.77 kB │ gzip:  2.93 kB
+build/client/assets/quantity-w7WDhb5Z.js                                   7.99 kB │ gzip:  3.02 kB
+build/client/assets/cookbooks._id-BHiWJXG9.js                              9.40 kB │ gzip:  3.10 kB
+build/client/assets/users._identifier-BiDNWnMl.js                          9.65 kB │ gzip:  3.25 kB
+build/client/assets/webauthn-client-CwUEosbT.js                           10.02 kB │ gzip:  3.27 kB
+build/client/assets/mcp-CKO3AvEu.js                                       12.18 kB │ gzip:  4.12 kB
+build/client/assets/ParsedIngredientList-BAaSNLXh.js                      12.96 kB │ gzip:  4.48 kB
+build/client/assets/shopping-list-Cf9wcnvk.js                             13.30 kB │ gzip:  5.10 kB
+build/client/assets/_index-B3yAY_-J.js                                    14.97 kB │ gzip:  4.49 kB
+build/client/assets/dialog-xB09BeBt.js                                    19.52 kB │ gzip:  7.32 kB
+build/client/assets/link-gPZ4qjBa.js                                      19.58 kB │ gzip:  7.21 kB
+build/client/assets/portal-ClPsyutC.js                                    19.63 kB │ gzip:  7.72 kB
+build/client/assets/RecipeBuilder-Cv03JBkJ.js                             19.91 kB │ gzip:  7.18 kB
+build/client/assets/listbox-BR0cD8WL.js                                   22.54 kB │ gzip:  7.72 kB
+build/client/assets/account.settings-BvUj3Ld3.js                          23.09 kB │ gzip:  6.65 kB
+build/client/assets/use-text-value-AaGLc6Ze.js                            34.53 kB │ gzip: 13.26 kB
+build/client/assets/root-BDXW8vnk.js                                      37.59 kB │ gzip: 12.28 kB
+build/client/assets/developers.playground-CV_3je6l.js                     44.78 kB │ gzip: 11.85 kB
+build/client/assets/developers-1DLYK0Qg.js                                50.74 kB │ gzip: 14.68 kB
+build/client/assets/recipes._id-C318_gjd.js                               65.21 kB │ gzip: 17.67 kB
+build/client/assets/proxy-CvQrdq7G.js                                    115.78 kB │ gzip: 37.98 kB
+build/client/assets/chunk-KS7C4IRE-C3SJEiWy.js                           129.79 kB │ gzip: 43.77 kB
+build/client/assets/index-DuZl8pg9.js                                    175.88 kB │ gzip: 57.86 kB
+build/client/assets/entry.client-EAD4go0V.js                             186.79 kB │ gzip: 59.05 kB
+build/client/assets/og-metadata-CUCt0OUj.js                              400.39 kB │ gzip: 28.06 kB
+✓ built in 6.50s
+vite v7.3.1 building ssr environment for production...
+transforming...
+✓ 3222 modules transformed.
+rendering chunks...
+build/server/wrangler.json                              2.08 kB
+build/server/.vite/manifest.json                        2.13 kB
+build/server/assets/query_engine_bg-BB05z0i1.wasm   2,171.30 kB
+build/server/assets/server-build-Chy79OGv.css         150.92 kB
+build/server/assets/wasm-worker-loader-BRtQh8vu.js      0.11 kB
+build/server/_worker.js                                 0.18 kB
+build/server/assets/index-B-5gFbEg.js                  80.86 kB
+build/server/assets/default-CxrUb3Wi.js               266.50 kB
+build/server/assets/worker-entry-BXpPt7Sw.js        1,132.06 kB
+build/server/assets/server-build-DtC3HwwU.js        4,180.37 kB
+✓ 1 asset copied from React Router server build to client assets.
+build/client/assets/server-build-Chy79OGv.css
+✓ built in 8.85s

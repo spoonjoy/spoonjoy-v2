@@ -13,7 +13,7 @@ const APPLE_OAUTH_CANARY = {
 
 export async function runAppleOAuthNavigationCheck({
   browser,
-  runCanary = runOAuthNavigationCanary,
+  runCanary,
 }) {
   const context = await browser.newContext({
     locale: "en-US",
