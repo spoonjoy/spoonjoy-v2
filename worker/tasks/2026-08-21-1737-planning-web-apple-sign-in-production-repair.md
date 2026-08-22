@@ -14,7 +14,7 @@ Restore reliable production web OAuth initiation, including Sign in with Apple, 
 ### In Scope
 - Replace the falsified deployment-drift diagnosis with evidence from current `origin/main` and production.
 - Reproduce the live OAuth-button failure and distinguish form navigation, CSP, service-worker, provider configuration, callback, and asset/version causes.
-- Add a regression canary that exercises the rendered OAuth interaction in a real browser with an active Spoonjoy service worker.
+- Add a regression canary that exercises the rendered OAuth interaction in a real browser with an active Spoonjoy service worker, records `securitypolicyviolation` events before navigation, and includes a direct-document-navigation control.
 - Make the smallest code change needed for OAuth initiation to survive both service-worker control and production `form-action 'self'` enforcement.
 - Preserve `redirectTo` exactly across OAuth initiation.
 - Cover login, signup, and shared OAuth-button rendering contracts for Google, GitHub, and Apple because they use the same component and failure mode.
@@ -29,10 +29,10 @@ Restore reliable production web OAuth initiation, including Sign in with Apple, 
 
 ## Completion Criteria
 - [ ] A recorded red browser reproduction shows the current rendered OAuth interaction remaining on `/login`, while direct `/auth/apple` navigation reaches Apple's authorization page.
-- [ ] The exact root cause is supported by a red/green service-worker-controlled browser canary rather than inference alone.
+- [ ] The exact root cause is supported by a red browser probe that asserts an active service-worker controller and captures the blocked form's `securitypolicyviolation`/CSP report naming `form-action`, plus a same-session direct-document-navigation control that reaches Apple.
 - [ ] Login and signup expose provider initiation as navigation that is compatible with both `form-action 'self'` and the active service worker.
 - [ ] `redirectTo` is URL-encoded once and preserved byte-for-byte through the initiation URL.
-- [ ] Targeted unit/integration/browser tests cover every provider, absent/present `redirectTo`, and the active-service-worker navigation path.
+- [ ] Targeted unit/integration/browser tests cover every provider, absent/present `redirectTo`, the forced full-document navigation contract, and the active-service-worker navigation path.
 - [ ] 100% test coverage on all new code
 - [ ] All tests pass
 - [ ] No warnings
@@ -51,10 +51,11 @@ Restore reliable production web OAuth initiation, including Sign in with Apple, 
 - [x] Is production missing merged fix #297? No. `851d9566` contains `86c58120`.
 - [x] Is the live service-worker asset stale? No. Production `/sw.js` is byte-identical to `public/sw.js` at `origin/main`.
 - [x] Does Apple reject Spoonjoy's initiation configuration? No evidence of that: direct `/auth/apple` reaches Apple's accepted authorization screen with `client_id=app.spoonjoy.client` and the production callback.
-- [ ] Does replacing the GET form with a real same-origin link eliminate the silent failure under active service-worker control while retaining `redirectTo`? The browser canary must answer this before the implementation is accepted.
+- [ ] Does replacing the GET form with a same-origin anchor forced through native full-document navigation (`reloadDocument` or a deliberately native `<a>`) eliminate the silent failure under active service-worker control while retaining `redirectTo`? The browser canary must answer this before the implementation is accepted.
 
 ## Decisions Made
 - Keep the production CSP lockdown. A navigation primitive should not require expanding `form-action` to three external identity providers.
+- Do not implement the fix as `Button href={...}` without an explicit full-document contract: `app/components/ui/button.tsx` delegates internal hrefs to `app/components/ui/link.tsx`, whose default is React Router client navigation. The implementation must use and test `reloadDocument` or a deliberately native anchor so the request is a browser navigation rather than a router data fetch.
 - Treat Apple as the operator-visible symptom but fix and test the shared OAuth initiation component for all configured providers.
 - Do not perform provider credential entry during smoke testing. Success for this repair is the authenticated Spoonjoy initiation redirect reaching Apple's authorization surface with the correct public parameters; token exchange is covered by existing callback tests unless evidence implicates it.
 - Use the dedicated `worker/web-apple-sign-in-production-repair` worktree and leave the dirty Clem worktree and PR #298 untouched.
@@ -63,6 +64,7 @@ Restore reliable production web OAuth initiation, including Sign in with Apple, 
 - `/Users/arimendelow/desk/spoonjoy/web-apple-sign-in-production-repair/task.md`
 - `app/components/ui/oauth.tsx`
 - `app/components/ui/button.tsx`
+- `app/components/ui/link.tsx`
 - `app/routes/auth.apple.tsx`
 - `app/lib/security-headers.server.ts`
 - `public/sw.js`
@@ -74,8 +76,9 @@ Restore reliable production web OAuth initiation, including Sign in with Apple, 
 - Production evidence at investigation start: Worker `61caff11-8e88-4337-ad14-39f610fa89fe`, source `851d9566c955d8db4bcead1b44300ed279b9d5f2`.
 
 ## Notes
-The previous assumption that production predated PR #297 was incorrect. Current evidence instead isolates the failure to the rendered form-click path: the live form is GET and silently stays on `/login`, while direct navigation reaches Apple. Production also enforces `form-action 'self'`, making a same-origin link the leading minimal fix, subject to a real service-worker-controlled red/green canary.
+The previous assumption that production predated PR #297 was incorrect. Current evidence instead isolates the failure to the rendered form-click path: the live form is GET and silently stays on `/login`, while direct navigation reaches Apple. Production also enforces `form-action 'self'`, making a forced full-document same-origin anchor the leading minimal fix. That causal attribution is not accepted until the red probe captures a `form-action` violation under an asserted service-worker controller and the paired control succeeds.
 
 ## Progress Log
 - 2026-08-21 17:38 Created after live reproduction and source/deployment provenance checks
 - 2026-08-21 17:39 Tinfoil-hat pass confirmed provider breadth, CSP non-regression, active-service-worker evidence, exact-SHA deployment, and cleanup requirements
+- 2026-08-21 17:43 Addressed Round 1 reviewer findings by requiring direct CSP-violation evidence, an explicit service-worker control assertion/control case, and a forced full-document anchor contract
