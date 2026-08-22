@@ -1,0 +1,68 @@
+diff --git a/dist/development/chunk-62JRHF6Z.mjs b/dist/development/chunk-62JRHF6Z.mjs
+index 43c3c5eae20fb44356130bd8b37ecc277ffdb62a..933d1140ab54a7ec85493e1478e062ab16b4bb83 100644
+--- a/dist/development/chunk-62JRHF6Z.mjs
++++ b/dist/development/chunk-62JRHF6Z.mjs
+@@ -9721,7 +9721,8 @@ function Links({ nonce, crossOrigin }) {
+       rel: "stylesheet",
+       href: criticalCss.href,
+       nonce,
+-      crossOrigin
++      crossOrigin,
++      suppressHydrationWarning: true
+     }
+   ) : null, keyedLinks.map(
+     ({ key, link }) => isPageLinkDescriptor(link) ? /* @__PURE__ */ React8.createElement(
+@@ -9730,7 +9731,8 @@ function Links({ nonce, crossOrigin }) {
+         key,
+         nonce,
+         ...link,
+-        crossOrigin: link.crossOrigin ?? crossOrigin
++        crossOrigin: link.crossOrigin ?? crossOrigin,
++        suppressHydrationWarning: true
+       }
+     ) : /* @__PURE__ */ React8.createElement(
+       "link",
+@@ -9738,7 +9740,8 @@ function Links({ nonce, crossOrigin }) {
+         key,
+         nonce,
+         ...link,
+-        crossOrigin: link.crossOrigin ?? crossOrigin
++        crossOrigin: link.crossOrigin ?? crossOrigin,
++        suppressHydrationWarning: true
+       }
+     )
+   ));
+diff --git a/dist/production/chunk-YBLPXYCV.mjs b/dist/production/chunk-YBLPXYCV.mjs
+index e9c83c3123c4ac53a21256629fd2b965aa8a2fd7..cdcd9399ef1c7de02eb36dc18c961f6d3fa89bf6 100644
+--- a/dist/production/chunk-YBLPXYCV.mjs
++++ b/dist/production/chunk-YBLPXYCV.mjs
+@@ -9721,7 +9721,8 @@ function Links({ nonce, crossOrigin }) {
+       rel: "stylesheet",
+       href: criticalCss.href,
+       nonce,
+-      crossOrigin
++      crossOrigin,
++      suppressHydrationWarning: true
+     }
+   ) : null, keyedLinks.map(
+     ({ key, link }) => isPageLinkDescriptor(link) ? /* @__PURE__ */ React8.createElement(
+@@ -9730,7 +9731,8 @@ function Links({ nonce, crossOrigin }) {
+         key,
+         nonce,
+         ...link,
+-        crossOrigin: link.crossOrigin ?? crossOrigin
++        crossOrigin: link.crossOrigin ?? crossOrigin,
++        suppressHydrationWarning: true
+       }
+     ) : /* @__PURE__ */ React8.createElement(
+       "link",
+@@ -9738,7 +9740,8 @@ function Links({ nonce, crossOrigin }) {
+         key,
+         nonce,
+         ...link,
+-        crossOrigin: link.crossOrigin ?? crossOrigin
++        crossOrigin: link.crossOrigin ?? crossOrigin,
++        suppressHydrationWarning: true
+       }
+     )
+   ));
