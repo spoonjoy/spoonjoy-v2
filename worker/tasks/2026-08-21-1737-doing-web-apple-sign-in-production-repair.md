@@ -96,7 +96,7 @@ Here, “only account ID plus the D1 token” describes Cloudflare authority; or
 **Output**: Rebase evidence and complete validation logs under the artifacts directory.
 **Acceptance**: Branch is based on current `origin/main`; all named suites/checks pass with 100% new-code coverage and zero warnings; tree contains only intentional task files; rebased branch is pushed with lease.
 
-### ⬜ Unit 5: Cold Branch Review
+### ✅ Unit 5: Cold Branch Review
 **What**: Dispatch a fresh cold reviewer over the exact rebased diff, Unit 0 causal evidence, Unit 3 branch-browser evidence, targeted/full tests, coverage, and build output. Address every BLOCKER/MAJOR finding through strict TDD; resolve every actionable MINOR or record the cold reviewer's explicit acceptance/rationale, then re-review to convergence.
 **Output**: Reviewer verdicts, any fix commits, and final converged review record under the artifacts directory.
 **Acceptance**: Cold review converges with no BLOCKER/MAJOR and no unaddressed actionable MINOR; every accepted MINOR has reviewer-authored rationale; any changed code is covered by new red/green evidence; branch remains fully green and pushed.
@@ -166,3 +166,4 @@ Here, “only account ID plus the D1 token” describes Cloudflare authority; or
 - 2026-08-21 20:34 Unit 5 convergence review retained one MAJOR: `Document` also covers child frames. A strict red test proved the false positive; the canary now obtains Chromium's root frame ID with `Page.getFrameTree` and accepts the exact OAuth-start `Document` request only for that frame. The focused suite is 90/90 at exact 100% and the real service-worker browser proof passes; final convergence review remains pending.
 - 2026-08-21 20:44 Final root-frame remediation head passes repo-wide coverage with 8,322 tests and exact 100% across 19,708 statements, 15,574 branches, 3,903 functions, and 18,106 lines; final convergence review remains pending.
 - 2026-08-21 20:48 Final root-frame remediation head also passes the complete 64-test E2E matrix, including the root-frame service-worker OAuth proof; final convergence review remains pending.
+- 2026-08-21 20:54 Unit 5 complete: final cold convergence verdict on exact implementation/evidence head `23aac750` is `WEB IMPLEMENTATION 23aac750 CLEAN`; no BLOCKER, MAJOR, or actionable MINOR remains.
