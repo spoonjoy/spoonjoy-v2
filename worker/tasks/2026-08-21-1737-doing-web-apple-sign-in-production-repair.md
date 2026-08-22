@@ -101,12 +101,12 @@ Here, “only account ID plus the D1 token” describes Cloudflare authority; or
 **Output**: Reviewer verdicts, any fix commits, and final converged review record under the artifacts directory.
 **Acceptance**: Cold review converges with no BLOCKER/MAJOR and no unaddressed actionable MINOR; every accepted MINOR has reviewer-authored rationale; any changed code is covered by new red/green evidence; branch remains fully green and pushed.
 
-### ⬜ Unit 6: PR and Required Checks
+### ✅ Unit 6: PR and Required Checks
 **What**: Open a focused PR against current `main` with the falsified-diagnosis correction and causal red/green evidence. Monitor every required check to completion and audit review-thread state without merging.
 **Output**: PR URL/number, exact reviewed head SHA, required-check matrix, and review-thread inventory recorded under artifacts.
 **Acceptance**: Every required check is green for the exact reviewed head; no merge conflict exists; all review findings are classified; PR remains ready for the feedback/merge unit.
 
-### ⬜ Unit 7: CI/Review Feedback and Merge
+### 🔄 Unit 7: CI/Review Feedback and Merge
 **What**: Resolve every actionable CI/review finding through strict TDD, including actionable MINORs unless the cold reviewer explicitly accepts one with rationale; rerun affected/full checks and obtain convergence. Before merge, make the product planning/doing files immutable execution snapshots: record Units 0–7 evidence/status, retain doing status `in-progress`, and point all post-merge release/smoke/cleanup terminal truth to the Desk task/artifacts. Commit/push that final reviewed head, then merge using an enabled repository strategy; do not modify these product docs after merge except through a separate reviewed PR.
 **Output**: Final reviewed head, resolved-thread evidence, merge method, and merge SHA recorded under artifacts.
 **Acceptance**: PR is merged rather than merely open; merge SHA is on `origin/main`; no unresolved review thread or failing required check remains.
@@ -143,6 +143,8 @@ Here, “only account ID plus the D1 token” describes Cloudflare authority; or
 - 2026-08-21 18:01 Self-audit made the tested canary explicitly reusable against both the branch fixture and production, so Unit 3 adds no unplanned post-implementation test code
 - 2026-08-21 18:07 Granularity Pass 2 converged (`PASS`)
 - 2026-08-21 18:12 Addressed Validation Pass 3 source-fidelity findings: executable tests-first Playwright branch harness, exact coverage/validation commands, exact-SHA workflow dispatch/artifact validation, and release-mode-correct failure handling
+- 2026-08-21 22:21 Unit 6 complete: PR #302 was rebased onto prerequisite main `565ca622`, audited CLEAN at `22b431f7`, and all exact-head required checks passed (advisory, Storybook, full coverage, Workers coverage, E2E); no reviews, comments, unresolved threads, or merge conflicts exist.
+- 2026-08-21 22:21 Unit 7 pre-merge snapshot frozen: Units 0–6 are complete; Unit 7 awaits only required checks on this docs-only snapshot and repository merge. Post-merge deployment, live Apple handoff, lineage, and terminal cleanup truth moves exclusively to the Desk task/artifacts per Units 8–10.
 - 2026-08-21 18:14 Validation self-audit made the separate OAuth Playwright lane explicit in full validation and pinned run selection to workflow/event/branch/commit/timestamp uniqueness
 - 2026-08-21 18:24 Addressed ambiguity review: causal stop/replan gate, real-loader fixture ownership, canonical encoding/session contract, canonical-vs-Worker origins, privacy-scoped CSP capture, explicit forward-repair loop, internal-only `reloadDocument`, and authoritative predeploy version snapshot
 - 2026-08-21 18:31 Addressed quality/scope review: automatic release discovery precedes conditional dispatch, locked workflow/public health replace local production credentials and duplicate validation, existing E2E launcher/project is extended, one observable provider canary is shared, and Link behavior remains a narrow conventional regression-tested change
