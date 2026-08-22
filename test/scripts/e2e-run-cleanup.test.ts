@@ -959,4 +959,14 @@ describe("Playwright data-ownership wiring", () => {
     expect(config).toContain("start-ephemeral-wrangler");
     expect(config).not.toContain(".dev.vars");
   });
+
+  it("keeps the OAuth navigation canary isolated to its fresh no-artifact project", () => {
+    const config = readFileSync(join(projectRoot, "playwright.config.ts"), "utf8");
+    const chromiumProject = config.slice(
+      config.indexOf("name: 'chromium'"),
+      config.indexOf("name: 'chromium-no-auth'"),
+    );
+
+    expect(chromiumProject).toContain("/oauth-navigation\\.spec\\.ts/");
+  });
 });

@@ -1,0 +1,45 @@
+
+ RUN  v4.1.10 /Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair
+
+ ❯ test/scripts/e2e-run-cleanup.test.ts (22 tests | 1 failed) 139ms
+     × keeps the OAuth navigation canary isolated to its fresh no-artifact project 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+warning-policy: rejected diagnostic output
+ FAIL  test/scripts/e2e-run-cleanup.test.ts > Playwright data-ownership wiring > keeps the OAuth navigation canary isolated to its fresh no-artifact project
+AssertionError: expected 'name: \'chromium\',\n      use: {\n  …' to contain '/oauth-navigation\.spec\.ts/'
+
+- Expected
++ Received
+
+- /oauth-navigation\.spec\.ts/
++ name: 'chromium',
++       use: {
++         ...devices['Desktop Chrome'],
++         storageState: authFile,
++       },
++       dependencies: ['setup'],
++       testIgnore: [/.*\.setup\.ts/, /auth\.spec\.ts/, /example\.spec\.ts/, /passkey\.spec\.ts/, /oauth-authorize\.spec\.ts/],
++     },
++     // Tests that don't need authentication (auth flow tests + example)
++     {
++       
+
+ ❯ test/scripts/e2e-run-cleanup.test.ts:970:29
+    968|     );
+    969|
+    970|     expect(chromiumProject).toContain("/oauth-navigation\\.spec\\.ts/"…
+       |                             ^
+    971|   });
+    972| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 21 passed (22)
+   Start at  19:59:05
+   Duration  542ms (transform 91ms, setup 85ms, import 49ms, tests 139ms, environment 148ms)
+
+[vitest-pool]: Timeout terminating forks worker for test files /Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair/test/scripts/e2e-run-cleanup.test.ts.
