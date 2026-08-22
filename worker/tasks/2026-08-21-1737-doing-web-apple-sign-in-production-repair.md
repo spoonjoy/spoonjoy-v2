@@ -19,8 +19,8 @@ Restore reliable production web OAuth initiation, including Sign in with Apple, 
 ## Completion Criteria
 - [x] A recorded red browser reproduction shows the current rendered OAuth interaction remaining on `/login`, while direct `/auth/apple` navigation reaches Apple's authorization page.
 - [x] The exact root cause is supported by a red browser probe that asserts an active service-worker controller and captures the blocked form's `securitypolicyviolation`/CSP report naming `form-action`, plus a same-session direct-document-navigation control that reaches Apple.
-- [ ] Login and signup expose provider initiation as navigation that is compatible with both `form-action 'self'` and the active service worker.
-- [ ] `redirectTo` is URL-encoded once and preserved byte-for-byte through the initiation URL.
+- [x] Login and signup expose provider initiation as navigation that is compatible with both `form-action 'self'` and the active service worker.
+- [x] `redirectTo` is URL-encoded once and preserved byte-for-byte through the initiation URL.
 - [ ] Targeted unit/integration/browser tests cover every provider, absent/present `redirectTo`, the forced full-document navigation contract, and the active-service-worker navigation path.
 - [ ] 100% test coverage on all new code
 - [ ] All tests pass
@@ -65,7 +65,7 @@ Restore reliable production web OAuth initiation, including Sign in with Apple, 
 **Output**: Shared OAuth controls are anchors that initiate a browser document request to `/auth/{provider}`; `redirectTo` is encoded into the href once.
 **Acceptance**: Unit 1a tests pass without modifying their assertions; rendered links retain existing styling/accessibility; no form remains around OAuth controls; no CSP directive is broadened; the exact Unit 1a command and `pnpm run verify:clean:build` pass with zero warnings.
 
-### ⬜ Unit 1c: Full-document OAuth Initiation — Coverage & Refactor
+### ✅ Unit 1c: Full-document OAuth Initiation — Coverage & Refactor
 **What**: Run `node scripts/run-with-warning-policy.mjs -- pnpm exec vitest run test/components/ui/oauth.test.tsx test/components/ui/link.test.tsx test/routes/login.test.tsx test/routes/signup.test.tsx test/routes/auth-google.test.ts --coverage --coverage.include=app/components/ui/oauth.tsx --coverage.include=app/components/ui/link.tsx --coverage.thresholds.statements=100 --coverage.thresholds.branches=100 --coverage.thresholds.functions=100 --coverage.thresholds.lines=100`, add only missing null/empty/query/encoding cases, refactor duplication without behavior changes, and rerun `pnpm run verify:clean:build`.
 **Output**: `unit-1c-coverage.log`, `unit-1c-tests.log`, and `unit-1c-build.log`.
 **Acceptance**: New/modified branches are 100% covered; every provider and redirect edge is green; build is green; all logs contain zero warnings.
@@ -155,3 +155,4 @@ Here, “only account ID plus the D1 token” describes Cloudflare authority; or
 - 2026-08-21 18:53 Unit 0 complete after revised-plan review (`WEB REVISED UNIT0 PASS`): privacy-safe causal production evidence, active service worker, matching source provenance, and paired Apple control recorded
 - 2026-08-21 18:58 Unit 1a complete: 23 focused failures prove the current form/button semantics and native-anchor `reloadDocument` leak; 112 adjacent tests pass with no unrelated failure
 - 2026-08-21 19:01 Unit 1b complete: OAuth controls now use internal `reloadDocument` links, preserve exact redirect encoding, omit router-only props from native anchors, pass 186 focused/adjacent tests, and build cleanly without warnings
+- 2026-08-21 19:02 Unit 1c complete: modified OAuth/Link code is 100% covered across 35 statements, 33 branches, 8 functions, and 27 lines; 186 focused/adjacent tests and the clean build remain green
