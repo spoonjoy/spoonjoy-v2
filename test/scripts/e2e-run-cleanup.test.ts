@@ -836,6 +836,10 @@ describe("ephemeral Playwright run ownership", () => {
     const spawnChild = vi.fn(() => child);
     const runPolicy = vi.fn(async (argv: string[], runtime: { spawn: Function; env: Record<string, string> }) => {
       expect(argv).toEqual(expect.arrayContaining(["--log-level", "error"]));
+      expect(argv).toEqual(expect.arrayContaining([
+        "GOOGLE_CLIENT_ID:spoonjoy-playwright-google-client",
+        "GOOGLE_CLIENT_SECRET:spoonjoy-playwright-google-secret",
+      ]));
       runtime.spawn("pnpm", [], {});
       expect(runtime.env.NO_COLOR).toBeUndefined();
       expect(runtime.env.KEEP).toBe("yes");
@@ -954,5 +958,15 @@ describe("Playwright data-ownership wiring", () => {
     expect(config).not.toContain("'./e2e/global-teardown.ts'");
     expect(config).toContain("start-ephemeral-wrangler");
     expect(config).not.toContain(".dev.vars");
+  });
+
+  it("keeps the OAuth navigation canary isolated to its fresh no-artifact project", () => {
+    const config = readFileSync(join(projectRoot, "playwright.config.ts"), "utf8");
+    const chromiumProject = config.slice(
+      config.indexOf("name: 'chromium'"),
+      config.indexOf("name: 'chromium-no-auth'"),
+    );
+
+    expect(chromiumProject).toContain("/oauth-navigation\\.spec\\.ts/");
   });
 });

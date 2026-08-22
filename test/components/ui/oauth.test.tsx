@@ -1,55 +1,75 @@
 import { render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
 import { OAuthButtonGroup } from "~/components/ui/oauth";
 
+function renderOAuth(ui: ReactNode) {
+  return render(<MemoryRouter>{ui}</MemoryRouter>);
+}
+
 describe("OAuthButtonGroup", () => {
   it("renders all providers by default", () => {
-    render(<OAuthButtonGroup />);
+    renderOAuth(<OAuthButtonGroup />);
 
-    expect(screen.getByRole("button", { name: "Continue with Google" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Continue with GitHub" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Continue with Apple" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Continue with Google" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Continue with GitHub" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Continue with Apple" })).toBeInTheDocument();
   });
 
   it("renders nothing when no providers are configured", () => {
-    const { container } = render(<OAuthButtonGroup providers={[]} />);
+    const { container } = renderOAuth(<OAuthButtonGroup providers={[]} />);
 
     expect(container).toBeEmptyDOMElement();
   });
 
   it("targets the bare provider route when no redirectTo is given", () => {
-    render(<OAuthButtonGroup providers={["apple"]} />);
+    renderOAuth(<OAuthButtonGroup providers={["apple"]} />);
 
-    const form = screen.getByRole("button", { name: "Continue with Apple" }).closest("form");
-    expect(form).toHaveAttribute("action", "/auth/apple");
+    expect(screen.getByRole("link", { name: "Continue with Apple" })).toHaveAttribute(
+      "href",
+      "/auth/apple",
+    );
   });
 
-  // Regression guard for the P0 where every OAuth login silently did nothing.
-  // Spoonjoy's service worker (public/sw.js) controls every client via
-  // clients.claim(); a controlled client ABORTS a top-level navigation whose
-  // response is a cross-origin redirect — exactly what OAuth start returns (a 302
-  // to the provider). The SW resolves GET navigations in-worker but bypasses
-  // POST, so a POST form aborted with net::ERR_ABORTED and the user stayed on the
-  // login page. The OAuth form MUST submit as GET. Do not change this back to POST.
-  it("submits OAuth start as a GET navigation so the service worker doesn't abort the provider redirect", () => {
-    render(<OAuthButtonGroup providers={["google", "github", "apple"]} />);
+  it("renders every provider as a forced full-document navigation", () => {
+    renderOAuth(<OAuthButtonGroup providers={["google", "github", "apple"]} />);
 
-    for (const name of ["Continue with Google", "Continue with GitHub", "Continue with Apple"]) {
-      const form = screen.getByRole("button", { name }).closest("form");
-      expect(form).toHaveAttribute("method", "get");
+    for (const [name, provider] of [
+      ["Continue with Google", "google"],
+      ["Continue with GitHub", "github"],
+      ["Continue with Apple", "apple"],
+    ] as const) {
+      const link = screen.getByRole("link", { name });
+      expect(link).toHaveAttribute("href", `/auth/${provider}`);
+      expect(link.closest("form")).toBeNull();
     }
   });
 
-  it("carries redirectTo as a query param so login returns to the connector", () => {
+  it("encodes redirectTo exactly once into every provider href", () => {
     const returnTo = "/oauth/authorize?client_id=abc&response_type=code";
-    render(<OAuthButtonGroup providers={["apple"]} redirectTo={returnTo} />);
+    renderOAuth(
+      <OAuthButtonGroup providers={["google", "github", "apple"]} redirectTo={returnTo} />,
+    );
 
-    const form = screen.getByRole("button", { name: "Continue with Apple" }).closest("form");
-    // GET form: the action stays bare and redirectTo rides as a hidden input that
-    // the browser serializes into the query string (?redirectTo=...), which the
-    // route loader reads exactly as the old POST action did.
-    expect(form).toHaveAttribute("action", "/auth/apple");
-    const hidden = form?.querySelector('input[name="redirectTo"]');
-    expect(hidden).toHaveAttribute("value", returnTo);
+    for (const [name, provider] of [
+      ["Continue with Google", "google"],
+      ["Continue with GitHub", "github"],
+      ["Continue with Apple", "apple"],
+    ] as const) {
+      expect(screen.getByRole("link", { name })).toHaveAttribute(
+        "href",
+        `/auth/${provider}?redirectTo=${encodeURIComponent(returnTo)}`,
+      );
+    }
+  });
+
+  it.each([undefined, ""])("uses a bare provider href for redirectTo=%p", (redirectTo) => {
+    renderOAuth(<OAuthButtonGroup providers={["apple"]} redirectTo={redirectTo} />);
+
+    expect(screen.getByRole("link", { name: "Continue with Apple" })).toHaveAttribute(
+      "href",
+      "/auth/apple",
+    );
   });
 });

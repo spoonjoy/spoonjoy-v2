@@ -1,0 +1,6 @@
+
+Running 1 test using 1 worker
+
+  ✓  1 [oauth-navigation] › e2e/flows/oauth-navigation.spec.ts:5:1 › service-worker-controlled OAuth link performs a full Google document handoff (943ms)
+
+  1 passed (24.5s)

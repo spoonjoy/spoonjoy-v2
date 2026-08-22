@@ -20,7 +20,7 @@ interface OAuthButtonProps {
   className?: string
   /**
    * Where to return after sign-in (e.g. the connector's /oauth/authorize URL).
-   * Carried explicitly in the form action so it survives even when the Referer
+   * Carried explicitly in the link href so it survives even when the Referer
    * header is stripped (in-app browsers, strict referrer policies) — relying on
    * the Referer dropped users on /recipes instead of back where they started.
    */
@@ -29,24 +29,18 @@ interface OAuthButtonProps {
 
 export function OAuthButton({ provider, className, redirectTo }: OAuthButtonProps) {
   const { label } = providerStyles[provider]
+  const href = redirectTo
+    ? `/auth/${provider}?redirectTo=${encodeURIComponent(redirectTo)}`
+    : `/auth/${provider}`
 
-  // Native GET navigation — deliberately NOT POST. Spoonjoy's service worker
-  // (public/sw.js) calls clients.claim(), so it controls every open page. A
-  // controlled client aborts a top-level navigation whose response is a
-  // *cross-origin* redirect (net::ERR_ABORTED) — which is exactly what OAuth
-  // start returns (302 to appleid.apple.com / accounts.google.com / github.com).
-  // The SW resolves GET navigations in-worker via respondWith(fetch(...)), so a
-  // GET reaches the provider; a POST was bypassed by the SW and hit the native
-  // path that aborts. redirectTo rides as a query param (serialized from the
-  // hidden input, so it survives Referer stripping) and the route's loader reads
-  // it from the query exactly as the old POST action did.
+  // Force a browser document request for the same-origin OAuth start route.
+  // Client-side routing treats the provider redirect as a data navigation, while
+  // a GET form subjects its redirected response to `form-action 'self'`. A
+  // reloadDocument link avoids both paths without weakening the CSP.
   return (
-    <form action={`/auth/${provider}`} method="get">
-      {redirectTo ? <input type="hidden" name="redirectTo" value={redirectTo} /> : null}
-      <Button type="submit" className={clsx('w-full', className)}>
-        {label}
-      </Button>
-    </form>
+    <Button href={href} reloadDocument className={clsx('w-full', className)}>
+      {label}
+    </Button>
   )
 }
 

@@ -37,7 +37,7 @@ export default defineConfig({
         storageState: authFile,
       },
       dependencies: ['setup'],
-      testIgnore: [/.*\.setup\.ts/, /auth\.spec\.ts/, /example\.spec\.ts/, /passkey\.spec\.ts/, /oauth-authorize\.spec\.ts/],
+      testIgnore: [/.*\.setup\.ts/, /auth\.spec\.ts/, /example\.spec\.ts/, /passkey\.spec\.ts/, /oauth-authorize\.spec\.ts/, /oauth-navigation\.spec\.ts/],
     },
     // Tests that don't need authentication (auth flow tests + example)
     {
@@ -61,6 +61,20 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
       testMatch: [/oauth-authorize\.spec\.ts/],
       dependencies: ['setup'],
+    },
+    // Provider handoff canary — fresh context, pinned locale, and no raw OAuth
+    // URLs in Playwright traces, videos, or screenshots.
+    {
+      name: 'oauth-navigation',
+      use: {
+        ...devices['Desktop Chrome'],
+        locale: 'en-US',
+        extraHTTPHeaders: { 'Accept-Language': 'en-US,en;q=0.9' },
+        trace: 'off',
+        video: 'off',
+        screenshot: 'off',
+      },
+      testMatch: [/oauth-navigation\.spec\.ts/],
     },
   ],
   webServer: {

@@ -24,8 +24,11 @@ import {
   parseD1CountOutput,
   parseSmokeArgs,
   readGitMetadata,
+  runOAuthNavigationCanary,
   shouldRunAppleOAuthCheck,
 } from './smoke-live-helpers.mjs'
+import { runAppleOAuthNavigationCheck } from './smoke-live-oauth.mjs'
+import { createSmokeLiveRuntime } from './smoke-live-runtime.mjs'
 
 const execFileAsync = promisify(execFile)
 const requireFromCwd = createRequire(join(process.cwd(), 'package.json'))
@@ -50,56 +53,15 @@ async function replaceControlledText(locator, value) {
   await locator.pressSequentially(value)
 }
 
-/**
- * Apple OAuth regression guard. Apple validates `redirect_uri` against the
- * Return URLs registered on the Service ID and rejects a mismatch with
- * `invalid_request` on its OWN sign-in screen — invisible to server-side tests.
- * This hits production's /auth/apple and then Apple's real authorize endpoint to
- * assert (a) we send the registered legacy path and (b) Apple actually accepts
- * it (renders the sign-in form, no invalid_request). Always targets the
- * registered public host so it stays meaningful regardless of --base-url.
- */
-async function checkAppleOAuth(page, report) {
-  const PROD = 'https://spoonjoy.app'
-  const start = await page.request.get(`${PROD}/auth/apple`, { maxRedirects: 0 })
-  const location = start.headers()['location'] ?? ''
-  const authorize = new URL(location)
-  const redirectUri = authorize.searchParams.get('redirect_uri') ?? ''
-  report.apple = {
-    authorizeHost: authorize.host,
-    redirectUri,
-    scope: authorize.searchParams.get('scope'),
-    responseMode: authorize.searchParams.get('response_mode'),
-  }
-  // (a) We must send the registered RedwoodJS dbAuth-oauth Return URL.
-  expect(authorize.host).toBe('appleid.apple.com')
-  expect(redirectUri).toBe('https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple')
-  expect(authorize.searchParams.get('response_mode')).toBe('form_post')
-  // (b) Apple must actually accept it (renders the sign-in form, not an error).
-  const apple = await page.request.get(location)
-  const body = await apple.text()
-  report.apple.appleAccepts = !body.includes('invalid_request') && body.includes('Sign in to Apple')
-  expect(body.includes('invalid_request')).toBe(false)
-  expect(body.includes('Sign in to Apple')).toBe(true)
-}
-
-async function cleanupD1(email, { targetEnv }) {
+async function cleanupD1(email, { targetEnv, runtime }) {
   const args = buildCleanupD1Args(email, { targetEnv })
-  const { stdout, stderr } = await execFileAsync(
-    'pnpm',
-    args,
-    { encoding: 'utf8', maxBuffer: 1024 * 1024 * 4 }
-  )
+  const { stdout, stderr } = await runtime.executeD1(args)
   return { target: `${targetEnv} D1`, stdout, stderr }
 }
 
-async function verifyUserDeleted(email, { targetEnv }) {
+async function verifyUserDeleted(email, { targetEnv, runtime }) {
   const args = buildUserCountD1Args(email, { targetEnv })
-  const { stdout, stderr } = await execFileAsync(
-    'pnpm',
-    args,
-    { encoding: 'utf8', maxBuffer: 1024 * 1024 * 4 }
-  )
+  const { stdout, stderr } = await runtime.executeD1(args)
   const remaining = parseD1CountOutput(stdout)
   return { target: `${targetEnv} D1`, remaining, stdout, stderr }
 }
@@ -201,6 +163,7 @@ async function verifyQaR2ObjectDeleted(key) {
 
 async function main() {
   const { baseUrl, includeImageCoverSmoke, outDir, shouldCleanup, targetEnv, target } = parseSmokeArgs(process.argv.slice(2), process.env)
+  const runtime = createSmokeLiveRuntime({ chromium, execFile: execFileAsync, env: process.env })
   const stamp = Date.now().toString(36)
   const email = `codex-smoke-${stamp}@example.com`
   const username = `codex_smoke_${stamp}`
@@ -223,7 +186,7 @@ async function main() {
 
   mkdirSync(outDir, { recursive: true })
 
-  const browser = await chromium.launch({ headless: true })
+  const browser = await runtime.launchBrowser({ headless: true })
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
@@ -309,8 +272,7 @@ async function main() {
     expect(pushResponse.ok() || (isLocalhost && pushResponse.status() === 500)).toBe(true)
 
     if (shouldRunAppleOAuthCheck(targetEnv)) {
-      // Sign in with Apple regression guard (hits Apple's real authorize endpoint).
-      await checkAppleOAuth(page, report)
+      report.apple = await runAppleOAuthNavigationCheck({ browser, runCanary: runOAuthNavigationCanary })
     } else {
       report.apple = { skipped: true, reason: `${targetEnv} smoke does not run production Apple OAuth guard` }
     }
@@ -343,8 +305,8 @@ async function main() {
 
     if (shouldCleanup) {
       try {
-        report.cleanup = await cleanupD1(email, { targetEnv })
-        report.cleanupVerification = await verifyUserDeleted(email, { targetEnv })
+        report.cleanup = await cleanupD1(email, { targetEnv, runtime })
+        report.cleanupVerification = await verifyUserDeleted(email, { targetEnv, runtime })
       } catch (error) {
         report.cleanup = {
           error: error instanceof Error ? error.message : String(error),

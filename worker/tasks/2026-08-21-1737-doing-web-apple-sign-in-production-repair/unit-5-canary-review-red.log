@@ -1,0 +1,277 @@
+
+ RUN  v4.1.10 /Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair
+
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > runs a provider-parameterized observable OAuth navigation canary 3ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > observes the real page adapter with an already-controlled rendered link 2ms
+ × test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects a provider handoff when no matching top-level document request was observed 7ms
+   → promise resolved "{ provider: 'apple', …(11) }" instead of rejecting
+ × test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > retains a pre-handoff Spoonjoy CSP violation across provider document replacement 1ms
+   → promise resolved "{ provider: 'apple', …(11) }" instead of rejecting
+ × test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > ignores CSP violations emitted by the provider document 2ms
+   → promise rejected "Error: OAuth navigation observed a scoped…" instead of resolving
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > covers controller reload, request capture, absent redirect, and title/catch fallbacks 1ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > covers the page adapter's missing-service-worker failure 1ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > covers real-page marker and sentinel rejection branches 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > covers real-page marker and sentinel rejection branches 1ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > serializes only the exact privacy-safe OAuth evidence allowlist 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > projects malformed and missing evidence to fixed non-secret sentinels 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when missing controller 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when wrong controller 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when wrong document path 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when wrong provider 0ms
+ × test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when wrong provider path 1ms
+   → promise resolved "{ provider: 'apple', …(11) }" instead of rejecting
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when wrong client 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when wrong callback 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when wrong response mode 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when redirectTo lost 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when marker missing 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when error sentinel present 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when scoped CSP failure 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > captures the current red baseline through the injected observer 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > recognizes React Router action responses at canonical and data URLs 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > isolates the D1 token from Chromium and the Workers token from D1 commands 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > detects local D1 targets from localhost base URLs 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > builds local cleanup args for local smoke targets 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > builds QA cleanup args with --env qa 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > builds explicit production cleanup args by database name 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > builds QA user-count verification args with --env qa 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > builds generic D1 command args for the target environment 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > builds MCP canary D1 lookup, legacy insert, resource query, and cleanup args 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > only runs the production Apple OAuth guard for production smoke 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > requires explicit target env for remote smoke URLs 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > uses process argv defaults when no args are provided 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > allows local smoke URLs to infer local target env 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > parses explicit QA smoke args 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > parses MCP canary args with live-smoke target safeguards 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > normalizes valid Worker version UUIDs and rejects ambiguous or malformed values 1ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > builds an exact Cloudflare structured Worker-version override header 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > requires every labeled Spoonjoy response to prove the exact candidate Worker version 1ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > adds the override only to same-origin requests and strips it everywhere else 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > routes every Chromium request through redirect-safe Worker-version interception 1ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > fails closed and reports Chromium interception errors 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > waits through Cloudflare override propagation before declaring the candidate ready 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > uses the bounded real timer when no sleep dependency is supplied 2ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > bounds Worker override readiness and reports the last observed version 1ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > allows a full minute for default Worker override propagation 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > proves readiness on the browser path and caps navigation at the remaining budget 1ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects candidate browser responses at or after the readiness deadline 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > requires stable candidate readiness across navigation, API, and browser mutation channels 1ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > enforces the readiness deadline around probes that never settle 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > skips readiness without a candidate and rejects invalid polling configuration 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > tracks every same-origin browser response between flow checkpoints 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > requires Worker proof from application responses while ignoring static asset binding responses 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > requires browser phases to observe responses and validates tracker checkpoints 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > keeps the candidate ID while redacting the persisted MCP canary report 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > wires pre-mutation readiness, exhaustive response proof, scoped overrides, and sanitized reporting into the live canary 1ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > uses process defaults for omitted MCP canary args 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > redacts MCP canary artifacts and detects leaked OAuth secrets 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > renders MCP canary step summaries without secrets 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > decides MCP canary issue actions for failures and recoveries 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > renders MCP canary issue bodies with safe diagnostics 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > renders MCP canary fallback summaries when optional artifact data is missing 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > parses the QA-only image-cover smoke flag 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > refuses image-cover smoke outside QA 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > builds QA R2 object get and delete args 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > only treats known Wrangler R2 missing-key errors as deleted-object proof 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > allows explicit production smoke args for the production Worker URL 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > allows explicit production smoke args for the production custom domain 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > refuses mismatched QA target env and production URL 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > refuses mismatched production target env and QA URL 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > refuses mismatched local target env and remote URL 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > refuses unknown target envs 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > parses D1 count output variants and rejects malformed output 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > parses D1 result rows and rejects malformed row output 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > parses MCP OAuth audit args with production safeguards 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > uses process defaults for omitted MCP OAuth audit args 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > builds a readonly MCP OAuth invariant audit D1 command 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > normalizes MCP OAuth invariant rows and detects failures 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > renders MCP OAuth audit summaries 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects unsupported target envs for D1 arg builders 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > reads git metadata with unknown fallbacks 34ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > builds live smoke artifact metadata with empty R2 arrays for normal smoke 0ms
+ ✓ test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > mirrors image-cover R2 arrays into the top-level live smoke artifact 0ms
+ × test/scripts/smoke-live-oauth.test.ts > live Apple OAuth orchestrator > uses a fresh pinned-English context and returns only canary evidence 6ms
+   → expected "vi.fn()" to be called with arguments: [ ObjectContaining{…} ]
+
+Received:
+
+  1st vi.fn() call:
+
+@@ -1,11 +1,10 @@
+  [
+-   ObjectContaining {
++   {
+      "appOrigin": "https://spoonjoy.app",
+      "expectedClientId": "app.spoonjoy.client",
+      "expectedProviderHost": "appleid.apple.com",
+-     "expectedProviderPath": "/auth/authorize",
+      "expectedRedirectUri": "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple",
+      "expectedResponseMode": "form_post",
+      "page": {
+        "id": "fresh-page",
+      },
+
+
+Number of calls: 1
+
+ ✓ test/scripts/smoke-live-oauth.test.ts > live Apple OAuth orchestrator > closes the fresh context and propagates canary failures 1ms
+ ✓ test/scripts/smoke-live-oauth.test.ts > live Apple OAuth orchestrator > propagates context creation failures without attempting work 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects a provider handoff when no matching top-level document request was observed
+AssertionError: promise resolved "{ provider: 'apple', …(11) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "appOrigin": "https://spoonjoy.app",
++   "clientIdMatches": true,
++   "controllerPath": "/sw.js",
++   "cspViolations": [],
++   "documentPath": "/auth/apple",
++   "provider": "apple",
++   "providerHost": "appleid.apple.com",
++   "publicErrorSentinelAbsent": true,
++   "publicSignInMarkerPresent": true,
++   "redirectToPreserved": true,
++   "redirectUriMatches": true,
++   "responseModeMatches": true,
+  }
+
+ ❯ test/scripts/smoke-live-helpers.test.ts:220:84
+    218|     const harness = createOAuthPageHarness({ captureDocumentRequest: f…
+    219|     try {
+    220|       await expect(runOAuthNavigationCanary({ ...appleCanary, page: ha…
+       |                                                                                    ^
+    221|         .rejects.toThrow(/document navigation.*\/auth\/apple/i);
+    222|     } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > retains a pre-handoff Spoonjoy CSP violation across provider document replacement
+AssertionError: promise resolved "{ provider: 'apple', …(11) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "appOrigin": "https://spoonjoy.app",
++   "clientIdMatches": true,
++   "controllerPath": "/sw.js",
++   "cspViolations": [],
++   "documentPath": "/auth/apple",
++   "provider": "apple",
++   "providerHost": "appleid.apple.com",
++   "publicErrorSentinelAbsent": true,
++   "publicSignInMarkerPresent": true,
++   "redirectToPreserved": true,
++   "redirectUriMatches": true,
++   "responseModeMatches": true,
+  }
+
+ ❯ test/scripts/smoke-live-helpers.test.ts:238:84
+    236|     });
+    237|     try {
+    238|       await expect(runOAuthNavigationCanary({ ...appleCanary, page: ha…
+       |                                                                                    ^
+    239|         .rejects.toThrow(/CSP violation/i);
+    240|     } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > ignores CSP violations emitted by the provider document
+AssertionError: promise rejected "Error: OAuth navigation observed a scoped…" instead of resolving
+ ❯ test/scripts/smoke-live-helpers.test.ts:255:84
+    253|     });
+    254|     try {
+    255|       await expect(runOAuthNavigationCanary({ ...appleCanary, page: ha…
+       |                                                                                    ^
+    256|         .resolves.toMatchObject({ cspViolations: [] });
+    257|     } finally {
+
+Caused by: Error: OAuth navigation observed a scoped CSP violation.
+ ❯ runOAuthNavigationCanary scripts/smoke-live-helpers.mjs:603:39
+ ❯ test/scripts/smoke-live-helpers.test.ts:255:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  test/scripts/smoke-live-helpers.test.ts > smoke-live helpers > rejects the OAuth canary when wrong provider path
+AssertionError: promise resolved "{ provider: 'apple', …(11) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "appOrigin": "https://spoonjoy.app",
++   "clientIdMatches": true,
++   "controllerPath": "/sw.js",
++   "cspViolations": [],
++   "documentPath": "/auth/apple",
++   "provider": "apple",
++   "providerHost": "appleid.apple.com",
++   "publicErrorSentinelAbsent": true,
++   "publicSignInMarkerPresent": true,
++   "redirectToPreserved": true,
++   "redirectUriMatches": true,
++   "responseModeMatches": true,
+  }
+
+ ❯ test/scripts/smoke-live-helpers.test.ts:432:7
+    430|       ...appleCanary,
+    431|       observe: async () => ({ ...successfulAppleObservation, ...overri…
+    432|     })).rejects.toThrow(expected as RegExp);
+       |       ^
+    433|   });
+    434|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  test/scripts/smoke-live-oauth.test.ts > live Apple OAuth orchestrator > uses a fresh pinned-English context and returns only canary evidence
+AssertionError: expected "vi.fn()" to be called with arguments: [ ObjectContaining{…} ]
+
+Received:
+
+  1st vi.fn() call:
+
+@@ -1,11 +1,10 @@
+  [
+-   ObjectContaining {
++   {
+      "appOrigin": "https://spoonjoy.app",
+      "expectedClientId": "app.spoonjoy.client",
+      "expectedProviderHost": "appleid.apple.com",
+-     "expectedProviderPath": "/auth/authorize",
+      "expectedRedirectUri": "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple",
+      "expectedResponseMode": "form_post",
+      "page": {
+        "id": "fresh-page",
+      },
+
+
+Number of calls: 1
+
+ ❯ test/scripts/smoke-live-oauth.test.ts:35:23
+     33|       extraHTTPHeaders: { "Accept-Language": "en-US,en;q=0.9" },
+     34|     });
+     35|     expect(runCanary).toHaveBeenCalledWith(expect.objectContaining({
+       |                       ^
+     36|       page,
+     37|       provider: "apple",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  5 failed | 84 passed (89)
+   Start at  20:14:36
+   Duration  1.40s (transform 117ms, setup 230ms, import 82ms, tests 372ms, environment 433ms)
+

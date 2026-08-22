@@ -1,0 +1,44 @@
+
+> spoonjoy-v2@1.0.0 deploy:preflight /Users/arimendelow/Projects/spoonjoy-v2-web-apple-sign-in-production-repair
+> tsx scripts/deployment-preflight.ts
+
+PASS wrangler app entry: wrangler.json must define app name, Worker entrypoint, and built asset directory.
+PASS node compatibility: wrangler.json must keep nodejs_compat enabled for Prisma, OAuth, and MCP runtime compatibility.
+PASS D1 binding: wrangler.json must bind Cloudflare D1 as DB with database_name and database_id.
+PASS R2 photos binding: wrangler.json must bind the recipe/profile photo bucket as PHOTOS.
+PASS Worker version metadata: wrangler.json must bind Worker version metadata as CF_VERSION_METADATA for exact-version canary verification.
+PASS QA Worker version metadata: wrangler.json env.qa must bind Worker version metadata as CF_VERSION_METADATA for exact-version QA canary verification.
+PASS QA environment: wrangler.json must define env.qa with DB, PHOTOS, rate limits, NODE_ENV=production, and the QA Worker base URL.
+PASS CSP enforcement config: wrangler.json must set SPOONJOY_CSP_MODE=enforce for production and QA; report-only requires SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS=ACK_REPORT_ONLY_CSP_ROLLBACK.
+PASS CSP report-only break-glass: report-only CSP rollback is break-glass acknowledged with ACK_REPORT_ONLY_CSP_ROLLBACK; restore SPOONJOY_CSP_MODE=enforce after the rollback.
+PASS PostHog CSP host config: wrangler.json production/QA vars must set the same origin-only HTTPS VITE_POSTHOG_HOST; QA preflight validates the generated Worker config and structured client build metadata after each build.
+PASS React Router build contract: scripts/react-router-build.ts must invoke only the checked runner, which must derive one immutable PostHog host contract for the child build environment and metadata.
+PASS QA resource isolation: wrangler.json env.qa must use separate D1, R2, and rate-limit namespaces from production.
+PASS production node env: wrangler.json vars should set NODE_ENV=production for deploy builds.
+PASS package scripts: package.json must include scripts: build, deploy, deploy:auto, deploy:preflight, typecheck, test:coverage, test:e2e, smoke:api, db:seed.
+PASS QA package scripts: package.json must include QA scripts: qa:preflight, qa:migrate, qa:seed, deploy:qa, smoke:qa, smoke:qa:image-cover.
+PASS cleanup package scripts: package.json must expose explicit local, QA, and production cleanup scripts with --target-env; cleanup:qa must remain a local alias.
+PASS script typecheck: package.json must expose typecheck:scripts and tsconfig.scripts.json must include modified TypeScript scripts.
+PASS deploy script: package.json deploy script must build first and deploy with wrangler. Use pnpm run deploy; bare pnpm deploy is pnpm's workspace deploy command.
+PASS deploy:auto script: package.json deploy:auto must run the staged production canary orchestrator.
+PASS output gate scripts: package.json test:coverage and test:e2e must run through scripts/warning-gate.ts so unexpected output fails CI.
+PASS preflight script: package.json must expose deploy:preflight for local and CI production-readiness checks.
+PASS CI workflow: .github/workflows/ci.yml must validate pushes and pull requests to main with checkout output suppression, Corepack pnpm activation, and output-gated seed/typecheck/build/test paths.
+PASS production deploy workflow: .github/workflows/production-deploy.yml must deploy only an exact successful main-branch CI SHA, validate exact-SHA manual dispatches, pin every action, run deploy:auto with Cloudflare credentials, and record the released SHA.
+PASS QA image-cover smoke workflow: .github/workflows/qa-image-cover-smoke.yml must run only on schedule/manual dispatch, guard Cloudflare and QA image-provider credentials, suppress checkout setup diagnostics, use Corepack pnpm activation, and run the QA-only image-cover smoke without deploy commands.
+PASS Storybook deploy workflow: .github/workflows/storybook.yml must build Storybook and deploy main-branch Pages from a clean generated deploy directory through cloudflare/wrangler-action@v4 with npm package manager, commit metadata, dirty-state intent, Cloudflare credentials, deployments: write, and GITHUB_TOKEN wiring.
+PASS Storybook generated deploy ignore: .gitignore must ignore the generated storybook-pages-deploy/ directory used for Storybook Pages deploys.
+PASS pnpm build script policy: pnpm-workspace.yaml must set allowBuilds false for intentionally ignored dependency build scripts: @prisma/client, @prisma/engines, @swc/core, core-js, esbuild, prisma, protobufjs, sharp, unrs-resolver, workerd.
+PASS Cloudflare Env typing: app/cloudflare-env.d.ts must type all Cloudflare bindings and documented secrets.
+PASS secret documentation: README/deployment docs must mention every secret: SESSION_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, APPLE_CLIENT_ID, APPLE_NATIVE_CLIENT_IDS, APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY, OPENAI_API_KEY, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT.
+PASS deployment commands: Deployment docs must include preflight, exact-SHA production workflow, R2 bucket, and secret commands.
+PASS telemetry env typing: app/cloudflare-env.d.ts must type optional telemetry runtime env: POSTHOG_KEY, POSTHOG_HOST, POSTHOG_DISABLED.
+PASS telemetry documentation: README/deployment docs must explain optional PostHog client and server lifecycle telemetry setup.
+PASS telemetry deployment commands: Deployment docs must show how to enable or intentionally disable PostHog without printing secret values.
+PASS CSP rollback documentation: README/deployment docs must document CSP enforcement and the report-only break-glass rollback.
+PASS cleanup documentation: README/deployment docs must document explicit cleanup target scripts and production broad-cleanup refusal.
+PASS image provider documentation: README/deployment docs must explain image provider fallback env and Gemini setup.
+PASS script coverage instrumentation: vitest.config.ts coverage include must cover script harness files: workers/app.ts, scripts/script-environment.mjs, scripts/cleanup-local-qa-data.mjs, scripts/smoke-api-live.mjs, scripts/smoke-live-oauth.mjs, scripts/smoke-live-runtime.mjs, scripts/qa-preflight.ts, scripts/deployment-preflight.ts, scripts/deploy-production-canary.ts, scripts/production-readiness.ts, scripts/posthog-build-metadata.ts, scripts/react-router-build-runner.ts, scripts/warning-gate.ts, scripts/workflow-security.mjs.
+PASS migration files: migrations/ must contain numbered SQL migrations before production deploy.
+PASS remote D1 migrations: Remote D1 is up to date — no pending migrations.
+Deployment preflight passed.

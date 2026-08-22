@@ -1,0 +1,14 @@
+{
+  "provider": "google",
+  "appOrigin": "http://localhost:5197",
+  "controllerPath": "/sw.js",
+  "documentPath": "/auth/google",
+  "providerHost": "accounts.google.com",
+  "clientIdMatches": true,
+  "redirectUriMatches": true,
+  "responseModeMatches": true,
+  "redirectToPreserved": true,
+  "publicSignInMarkerPresent": true,
+  "publicErrorSentinelAbsent": true,
+  "cspViolations": []
+}

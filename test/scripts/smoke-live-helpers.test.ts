@@ -36,6 +36,8 @@ import {
   parseSmokeArgs,
   readGitMetadata,
   redactMcpCanaryText,
+  runOAuthNavigationCanary,
+  serializeOAuthNavigationEvidence,
   serializeSanitizedMcpCanaryReport,
   shouldRunAppleOAuthCheck,
   usesLocalD1,
@@ -47,6 +49,424 @@ import {
 const CANDIDATE_VERSION = "22222222-2222-4222-8222-222222222222";
 
 describe("smoke-live helpers", () => {
+  const appleCanary = {
+    provider: "apple",
+    appOrigin: "https://spoonjoy.app",
+    expectedProviderHost: "appleid.apple.com",
+    expectedProviderPath: "/auth/authorize",
+    expectedClientId: "app.spoonjoy.client",
+    expectedRedirectUri: "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple",
+    expectedResponseMode: "form_post",
+    redirectTo: "/oauth/authorize?client_id=abc&response_type=code",
+    publicSignInMarker: "Sign in to Apple",
+    publicErrorSentinel: "invalid_request",
+  };
+
+  const successfulAppleObservation = {
+    controllerUrl: "https://spoonjoy.app/sw.js?raw-secret=never-persist",
+    documentUrl: `https://spoonjoy.app/auth/apple?redirectTo=${encodeURIComponent(appleCanary.redirectTo)}`,
+    providerUrl: "https://appleid.apple.com/auth/authorize?client_id=app.spoonjoy.client&redirect_uri=https%3A%2F%2Fspoonjoy.app%2F.redwood%2Ffunctions%2Fauth%2Foauth%3Fmethod%3DloginWithApple&response_mode=form_post&state=private-state&nonce=private-nonce&code_challenge=private-pkce",
+    publicSignInMarkerPresent: true,
+    publicErrorSentinelPresent: false,
+    cspViolations: [],
+    cookies: "session=private-cookie",
+    providerText: "Sign in to Apple private provider DOM",
+  };
+
+  it("runs a provider-parameterized observable OAuth navigation canary", async () => {
+    const observe = vi.fn(async () => ({ ...successfulAppleObservation, cspViolations: null }));
+
+    await expect(runOAuthNavigationCanary({ ...appleCanary, observe })).resolves.toEqual({
+      provider: "apple",
+      appOrigin: "https://spoonjoy.app",
+      controllerPath: "/sw.js",
+      documentPath: "/auth/apple",
+      providerHost: "appleid.apple.com",
+      clientIdMatches: true,
+      redirectUriMatches: true,
+      responseModeMatches: true,
+      redirectToPreserved: true,
+      publicSignInMarkerPresent: true,
+      publicErrorSentinelAbsent: true,
+      cspViolations: [],
+    });
+    expect(observe).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "apple",
+      appOrigin: "https://spoonjoy.app",
+      documentPath: "/auth/apple",
+      controllerPath: "/sw.js",
+    }));
+  });
+
+  function createOAuthPageHarness({
+    controllerInitially = true,
+    hasServiceWorker = true,
+    href = successfulAppleObservation.documentUrl,
+    captureDocumentRequest = true,
+    documentRequestUrl = successfulAppleObservation.documentUrl,
+    documentRequestFrameId = "root-frame",
+    markerResult = true,
+    sentinelResult = false,
+    title = "",
+    missingCspState = false,
+    initialCspEvents = [],
+    replacePageCspStateAfterClick = false,
+  } = {}) {
+    const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+    const controller = { scriptURL: "https://spoonjoy.app/sw.js" };
+    const fakeNavigator = hasServiceWorker
+      ? { serviceWorker: { ready: Promise.resolve(), controller: controllerInitially ? controller : null } }
+      : {};
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: fakeNavigator,
+    });
+
+    let securityPolicyHandler: ((event: Record<string, string>) => void) | undefined;
+    const exposedBindings: string[] = [];
+    let documentRequestHandler: ((event: { type: string; frameId: string; request: { url: string } }) => void) | undefined;
+    const cdp = {
+      send: vi.fn(async (method: string) => method === "Page.getFrameTree"
+        ? { frameTree: { frame: { id: "root-frame" } } }
+        : undefined),
+      on: vi.fn((_name: string, handler: typeof documentRequestHandler) => {
+        documentRequestHandler = handler;
+        handler?.({ type: "Fetch", frameId: "root-frame", request: { url: documentRequestUrl } });
+        handler?.({ type: "Document", frameId: "root-frame", request: { url: "https://spoonjoy.app/not-apple" } });
+        if (captureDocumentRequest) {
+          handler?.({ type: "Document", frameId: documentRequestFrameId, request: { url: documentRequestUrl } });
+        }
+      }),
+      off: vi.fn(),
+      detach: vi.fn(async () => undefined),
+    };
+    const link = {
+      getAttribute: vi.fn(async () => href),
+      click: vi.fn(async () => {
+        if (replacePageCspStateAfterClick) {
+          globalThis.__spoonjoyOAuthCanary = { cspViolations: [], phase: "login-load" };
+        }
+      }),
+    };
+    const page = {
+      exposeFunction: vi.fn(async (name: string, callback: (...args: unknown[]) => unknown) => {
+        exposedBindings.push(name);
+        Object.defineProperty(globalThis, name, { configurable: true, value: callback });
+      }),
+      addInitScript: vi.fn(async (callback: (binding: string) => void, binding: string) => {
+        const originalAddEventListener = globalThis.addEventListener;
+        globalThis.addEventListener = ((name: string, handler: (event: Record<string, string>) => void) => {
+          expect(name).toBe("securitypolicyviolation");
+          securityPolicyHandler = handler;
+        }) as typeof globalThis.addEventListener;
+        callback(binding);
+        globalThis.addEventListener = originalAddEventListener;
+        for (const event of initialCspEvents) securityPolicyHandler?.(event);
+      }),
+      goto: vi.fn(async () => undefined),
+      evaluate: vi.fn(async (callback: () => unknown) => {
+        if (
+          missingCspState
+          && (
+            callback.toString().includes("?.cspViolations")
+            || callback.toString().includes("cspViolations ??")
+          )
+        ) {
+          delete globalThis.__spoonjoyOAuthCanary;
+        }
+        return await callback();
+      }),
+      reload: vi.fn(async () => {
+        if ("serviceWorker" in fakeNavigator) fakeNavigator.serviceWorker.controller = controller;
+      }),
+      context: vi.fn(() => ({ newCDPSession: vi.fn(async () => cdp) })),
+      getByRole: vi.fn(() => link),
+      waitForURL: vi.fn(async (predicate: (url: URL) => boolean) => {
+        expect(predicate(new URL("https://spoonjoy.app/login"))).toBe(false);
+        expect(predicate(new URL(successfulAppleObservation.providerUrl))).toBe(true);
+      }),
+      getByText: vi.fn((text: string) => ({
+        first: () => ({
+          isVisible: () => {
+            const result = text === appleCanary.publicSignInMarker ? markerResult : sentinelResult;
+            return result === "reject" ? Promise.reject(new Error("not found")) : Promise.resolve(result);
+          },
+        }),
+      })),
+      title: vi.fn(async () => title),
+      url: vi.fn(() => successfulAppleObservation.providerUrl),
+    };
+
+    return {
+      page,
+      restore() {
+        delete globalThis.__spoonjoyOAuthCanary;
+        for (const name of exposedBindings) delete globalThis[name];
+        if (originalNavigator) Object.defineProperty(globalThis, "navigator", originalNavigator);
+      },
+    };
+  }
+
+  it("observes the real page adapter with an already-controlled rendered link", async () => {
+    const harness = createOAuthPageHarness();
+    try {
+      await expect(runOAuthNavigationCanary({ ...appleCanary, page: harness.page })).resolves.toMatchObject({
+        controllerPath: "/sw.js",
+        documentPath: "/auth/apple",
+        redirectToPreserved: true,
+      });
+      expect(harness.page.reload).not.toHaveBeenCalled();
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it("rejects a provider handoff when no matching top-level document request was observed", async () => {
+    const harness = createOAuthPageHarness({ captureDocumentRequest: false });
+    try {
+      await expect(runOAuthNavigationCanary({ ...appleCanary, page: harness.page }))
+        .rejects.toThrow(/document navigation.*\/auth\/apple/i);
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it("rejects a matching child-frame document request without a matching root-frame request", async () => {
+    const harness = createOAuthPageHarness({ documentRequestFrameId: "child-frame" });
+    try {
+      await expect(runOAuthNavigationCanary({ ...appleCanary, page: harness.page }))
+        .rejects.toThrow(/document navigation.*\/auth\/apple/i);
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it("retains a pre-handoff Spoonjoy CSP violation across provider document replacement", async () => {
+    const harness = createOAuthPageHarness({
+      replacePageCspStateAfterClick: true,
+      initialCspEvents: [{
+        effectiveDirective: "form-action",
+        violatedDirective: "unused",
+        documentURI: "https://spoonjoy.app/login",
+        blockedURI: "https://spoonjoy.app/auth/apple",
+      }],
+    });
+    try {
+      await expect(runOAuthNavigationCanary({ ...appleCanary, page: harness.page }))
+        .rejects.toThrow(/CSP violation/i);
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it("ignores CSP violations emitted by the provider document", async () => {
+    const harness = createOAuthPageHarness({
+      initialCspEvents: [{
+        effectiveDirective: "",
+        violatedDirective: "script-src",
+        documentURI: "https://appleid.apple.com/auth/authorize",
+        blockedURI: "https://provider-cdn.example/file.js",
+      }],
+    });
+    try {
+      await expect(runOAuthNavigationCanary({ ...appleCanary, page: harness.page }))
+        .resolves.toMatchObject({ cspViolations: [] });
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it("covers controller reload, request capture, absent redirect, and title/catch fallbacks", async () => {
+    const harness = createOAuthPageHarness({
+      controllerInitially: false,
+      href: null,
+      captureDocumentRequest: true,
+      documentRequestUrl: "https://spoonjoy.app/auth/apple",
+      markerResult: "reject",
+      sentinelResult: "reject",
+      title: appleCanary.publicSignInMarker,
+      missingCspState: true,
+    });
+    try {
+      const { redirectTo: _redirectTo, ...withoutRedirect } = appleCanary;
+      await expect(runOAuthNavigationCanary({ ...withoutRedirect, page: harness.page })).resolves.toMatchObject({
+        redirectToPreserved: true,
+        publicSignInMarkerPresent: true,
+        publicErrorSentinelAbsent: true,
+      });
+      expect(harness.page.reload).toHaveBeenCalledOnce();
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it("covers the page adapter's missing-service-worker failure", async () => {
+    const harness = createOAuthPageHarness({ hasServiceWorker: false });
+    try {
+      await expect(runOAuthNavigationCanary({ ...appleCanary, page: harness.page }))
+        .rejects.toThrow(/service-worker controller/i);
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it.each([
+    [false, false, "", /public sign-in marker/i],
+    [true, true, "", /public error sentinel/i],
+  ])("covers real-page marker and sentinel rejection branches", async (markerResult, sentinelResult, title, expected) => {
+    const harness = createOAuthPageHarness({ markerResult, sentinelResult, title });
+    try {
+      await expect(runOAuthNavigationCanary({ ...appleCanary, page: harness.page }))
+        .rejects.toThrow(expected as RegExp);
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it("serializes only the exact privacy-safe OAuth evidence allowlist", () => {
+    const projected = {
+      provider: "apple",
+      appOrigin: "https://spoonjoy.app",
+      controllerPath: "/sw.js",
+      documentPath: "/auth/apple",
+      providerHost: "appleid.apple.com",
+      clientIdMatches: true,
+      redirectUriMatches: true,
+      responseModeMatches: true,
+      redirectToPreserved: true,
+      publicSignInMarkerPresent: true,
+      publicErrorSentinelAbsent: true,
+      cspViolations: [{
+        directive: "form-action",
+        documentPath: "/login",
+        blockedOrigin: "https://spoonjoy.app",
+        phase: "provider-click",
+        state: "must-not-survive",
+      }],
+      state: "private-state",
+      codeVerifier: "private-verifier",
+      codeChallenge: "private-challenge",
+      nonce: "private-nonce",
+      cookie: "private-cookie",
+      providerUrl: successfulAppleObservation.providerUrl,
+      documentUrl: successfulAppleObservation.documentUrl,
+      providerText: successfulAppleObservation.providerText,
+      unexpected: { nested: "private" },
+    };
+
+    const serialized = serializeOAuthNavigationEvidence(projected);
+    const parsed = JSON.parse(serialized);
+    expect(Object.keys(parsed)).toEqual([
+      "provider",
+      "appOrigin",
+      "controllerPath",
+      "documentPath",
+      "providerHost",
+      "clientIdMatches",
+      "redirectUriMatches",
+      "responseModeMatches",
+      "redirectToPreserved",
+      "publicSignInMarkerPresent",
+      "publicErrorSentinelAbsent",
+      "cspViolations",
+    ]);
+    expect(parsed.cspViolations).toEqual([{
+      directive: "form-action",
+      documentPath: "/login",
+      blockedOrigin: "https://spoonjoy.app",
+      phase: "provider-click",
+    }]);
+    for (const secret of [
+      "private-state",
+      "private-verifier",
+      "private-challenge",
+      "private-nonce",
+      "private-cookie",
+      "Sign in to Apple private provider DOM",
+      "redirect_uri=",
+      "state=",
+      "unexpected",
+    ]) {
+      expect(serialized).not.toContain(secret);
+    }
+  });
+
+  it("projects malformed and missing evidence to fixed non-secret sentinels", () => {
+    const unstringifiable = Symbol("must-not-survive");
+    const parsed = JSON.parse(serializeOAuthNavigationEvidence({
+      provider: "private-provider",
+      appOrigin: unstringifiable,
+      controllerPath: unstringifiable,
+      documentPath: unstringifiable,
+      providerHost: "private/host",
+      cspViolations: [{
+        directive: "private-directive",
+        documentPath: unstringifiable,
+        blockedOrigin: unstringifiable,
+        phase: "private-phase",
+      }],
+    }));
+
+    expect(parsed).toEqual({
+      provider: "unknown",
+      appOrigin: "invalid",
+      controllerPath: "/invalid",
+      documentPath: "/invalid",
+      providerHost: "invalid",
+      clientIdMatches: false,
+      redirectUriMatches: false,
+      responseModeMatches: false,
+      redirectToPreserved: false,
+      publicSignInMarkerPresent: false,
+      publicErrorSentinelAbsent: false,
+      cspViolations: [{
+        directive: "unknown",
+        documentPath: "/invalid",
+        blockedOrigin: "invalid",
+        phase: "unknown",
+      }],
+    });
+    expect(JSON.parse(serializeOAuthNavigationEvidence(null)).cspViolations).toEqual([]);
+  });
+
+  it.each([
+    ["missing controller", { controllerUrl: null }, /service-worker controller/i],
+    ["wrong controller", { controllerUrl: "https://spoonjoy.app/not-sw.js" }, /controller.*\/sw\.js/i],
+    ["wrong document path", { documentUrl: "https://spoonjoy.app/login" }, /document navigation.*\/auth\/apple/i],
+    ["wrong provider", { providerUrl: "https://example.com/auth/authorize" }, /provider host/i],
+    ["wrong provider path", { providerUrl: successfulAppleObservation.providerUrl.replace("/auth/authorize", "/unexpected") }, /provider path/i],
+    ["wrong client", { providerUrl: successfulAppleObservation.providerUrl.replace("app.spoonjoy.client", "wrong-client") }, /client ID/i],
+    ["wrong callback", { providerUrl: successfulAppleObservation.providerUrl.replace("method%3DloginWithApple", "method%3Dwrong") }, /redirect URI/i],
+    ["wrong response mode", { providerUrl: successfulAppleObservation.providerUrl.replace("form_post", "query") }, /response mode/i],
+    ["redirectTo lost", { documentUrl: "https://spoonjoy.app/auth/apple" }, /redirectTo/i],
+    ["marker missing", { publicSignInMarkerPresent: false }, /public sign-in marker/i],
+    ["error sentinel present", { publicErrorSentinelPresent: true }, /public error sentinel/i],
+    ["scoped CSP failure", { cspViolations: [{ effectiveDirective: "form-action", documentUrl: "https://spoonjoy.app/login?private=yes", blockedUrl: "https://appleid.apple.com/private", phase: "provider-click" }] }, /CSP violation/i],
+  ])("rejects the OAuth canary when %s", async (_label, override, expected) => {
+    await expect(runOAuthNavigationCanary({
+      ...appleCanary,
+      observe: async () => ({ ...successfulAppleObservation, ...override }),
+    })).rejects.toThrow(expected as RegExp);
+  });
+
+  it("captures the current red baseline through the injected observer", async () => {
+    await expect(runOAuthNavigationCanary({
+      ...appleCanary,
+      observe: async () => ({
+        ...successfulAppleObservation,
+        documentUrl: "https://spoonjoy.app/login",
+        providerUrl: "https://spoonjoy.app/login",
+        publicSignInMarkerPresent: false,
+        cspViolations: [{
+          effectiveDirective: "form-action",
+          documentUrl: "https://spoonjoy.app/login",
+          blockedUrl: "https://spoonjoy.app/auth/apple",
+          phase: "provider-click",
+        }],
+      }),
+    })).rejects.toThrow();
+  });
+
   it("recognizes React Router action responses at canonical and data URLs", () => {
     const input = {
       baseUrl: "https://spoonjoy.app",

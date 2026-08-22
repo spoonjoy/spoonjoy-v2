@@ -1,0 +1,35 @@
+{
+  "observedAt": "2026-08-22T01:49:10Z",
+  "appOrigin": "https://spoonjoy.app",
+  "controllerPath": "/sw.js",
+  "renderedForm": {
+    "method": "get",
+    "actionPath": "/auth/apple"
+  },
+  "clickPath": "/login",
+  "cspViolations": [
+    {
+      "directive": "form-action",
+      "documentPath": "/login",
+      "blockedOrigin": "https://spoonjoy.app",
+      "phase": "pre-handoff"
+    }
+  ],
+  "directNavigation": {
+    "providerHost": "appleid.apple.com",
+    "providerPath": "/auth/authorize",
+    "clientId": "app.spoonjoy.client",
+    "redirectUri": "https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple",
+    "responseMode": "form_post"
+  },
+  "production": {
+    "canonicalSourceSha": "851d9566c955d8db4bcead1b44300ed279b9d5f2",
+    "workerSourceSha": "851d9566c955d8db4bcead1b44300ed279b9d5f2",
+    "workerVersionId": "61caff11-8e88-4337-ad14-39f610fa89fe",
+    "cspFormAction": "'self'",
+    "liveServiceWorkerSha256": "de4541deef70d177ec02bd05ecae5e79eb02e6c87a65dd8041f3ac58e1a39d63",
+    "sourceServiceWorkerSha256": "de4541deef70d177ec02bd05ecae5e79eb02e6c87a65dd8041f3ac58e1a39d63",
+    "fix297IsAncestor": true
+  },
+  "approvedCriterionFalsified": "The browser reports the same-origin rendered form action as blockedURI; it does not expose Apple's origin in this event."
+}

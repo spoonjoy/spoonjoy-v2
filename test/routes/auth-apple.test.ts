@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { sessionStorage } from "~/lib/session.server";
-import { commitOAuthStartSession } from "~/lib/oauth-route.server";
+import { commitOAuthStartSession, readOAuthStartSession } from "~/lib/oauth-route.server";
 
 const mocks = vi.hoisted(() => ({
   createAppleAuthorizationURL: vi.fn(() => new URL("https://appleid.apple.com/auth/authorize?state=mock-state")),
@@ -76,6 +76,25 @@ describe("Apple OAuth routes", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("Location")).toContain("appleid.apple.com");
+  });
+
+  it.each([
+    ["absent", "https://spoonjoy.app/auth/apple"],
+    ["explicit empty", "https://spoonjoy.app/auth/apple?redirectTo="],
+  ])("defaults an %s redirectTo to /recipes in the signed session", async (_label, url) => {
+    const response = await loader({
+      request: new Request(url),
+      context: { cloudflare: { env: appleEnv } },
+      params: {},
+    } as any);
+    const stored = await readOAuthStartSession(
+      new Request("https://spoonjoy.app/auth/apple/callback", {
+        headers: { Cookie: cookieHeader(response.headers.get("Set-Cookie") ?? "") },
+      }),
+      "apple",
+    );
+
+    expect(stored?.redirectTo).toBe("/recipes");
   });
 
   it("redirects to OAuth error when Apple env is missing", async () => {

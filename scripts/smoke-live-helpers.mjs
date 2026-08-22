@@ -369,6 +369,280 @@ export function shouldRunAppleOAuthCheck(targetEnv) {
   return targetEnv === "production";
 }
 
+const OAUTH_EVIDENCE_KEYS = [
+  "provider",
+  "appOrigin",
+  "controllerPath",
+  "documentPath",
+  "providerHost",
+  "clientIdMatches",
+  "redirectUriMatches",
+  "responseModeMatches",
+  "redirectToPreserved",
+  "publicSignInMarkerPresent",
+  "publicErrorSentinelAbsent",
+  "cspViolations",
+];
+const OAUTH_PROVIDERS = new Set(["apple", "github", "google"]);
+const CSP_DIRECTIVES = new Set([
+  "base-uri",
+  "child-src",
+  "connect-src",
+  "default-src",
+  "font-src",
+  "form-action",
+  "frame-ancestors",
+  "frame-src",
+  "img-src",
+  "manifest-src",
+  "media-src",
+  "object-src",
+  "script-src",
+  "script-src-attr",
+  "script-src-elem",
+  "style-src",
+  "style-src-attr",
+  "style-src-elem",
+  "worker-src",
+]);
+const OAUTH_CSP_PHASES = new Set([
+  "login-load",
+  "service-worker-control",
+  "provider-click",
+  "provider-handoff",
+]);
+
+function safeOrigin(value) {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return "invalid";
+  }
+}
+
+function safePath(value) {
+  try {
+    return new URL(value, "https://projection.invalid").pathname;
+  } catch {
+    return "/invalid";
+  }
+}
+
+function projectOAuthCspViolation(violation) {
+  const rawDirective = violation?.directive ?? violation?.effectiveDirective;
+  const rawDocument = violation?.documentPath ?? violation?.documentUrl;
+  const rawBlocked = violation?.blockedOrigin ?? violation?.blockedUrl;
+  const rawPhase = violation?.phase;
+  return {
+    directive: CSP_DIRECTIVES.has(rawDirective) ? rawDirective : "unknown",
+    documentPath: safePath(rawDocument),
+    blockedOrigin: safeOrigin(rawBlocked),
+    phase: OAUTH_CSP_PHASES.has(rawPhase) ? rawPhase : "unknown",
+  };
+}
+
+function projectOAuthNavigationEvidence(evidence) {
+  const projection = {
+    provider: OAUTH_PROVIDERS.has(evidence?.provider) ? evidence.provider : "unknown",
+    appOrigin: safeOrigin(evidence?.appOrigin),
+    controllerPath: safePath(evidence?.controllerPath),
+    documentPath: safePath(evidence?.documentPath),
+    providerHost: typeof evidence?.providerHost === "string" && /^[a-z0-9.-]+$/i.test(evidence.providerHost)
+      ? evidence.providerHost.toLowerCase()
+      : "invalid",
+    clientIdMatches: evidence?.clientIdMatches === true,
+    redirectUriMatches: evidence?.redirectUriMatches === true,
+    responseModeMatches: evidence?.responseModeMatches === true,
+    redirectToPreserved: evidence?.redirectToPreserved === true,
+    publicSignInMarkerPresent: evidence?.publicSignInMarkerPresent === true,
+    publicErrorSentinelAbsent: evidence?.publicErrorSentinelAbsent === true,
+    cspViolations: Array.isArray(evidence?.cspViolations)
+      ? evidence.cspViolations.map(projectOAuthCspViolation)
+      : [],
+  };
+  return Object.fromEntries(OAUTH_EVIDENCE_KEYS.map((key) => [key, projection[key]]));
+}
+
+export function serializeOAuthNavigationEvidence(evidence) {
+  return JSON.stringify(projectOAuthNavigationEvidence(evidence), null, 2);
+}
+
+async function observeOAuthNavigationWithPage(input) {
+  const { page, appOrigin, provider, publicSignInMarker, publicErrorSentinel, redirectTo } = input;
+  const cspViolations = [];
+  const cspBinding = "__spoonjoyReportOAuthCspViolation";
+  await page.exposeFunction(cspBinding, (violation) => {
+    const documentOrigin = safeOrigin(violation?.documentUrl);
+    if (
+      documentOrigin === new URL(appOrigin).origin
+      && OAUTH_CSP_PHASES.has(violation?.phase)
+      && violation.phase !== "provider-handoff"
+    ) {
+      cspViolations.push(violation);
+    }
+  });
+  await page.addInitScript((reportBinding) => {
+    globalThis.__spoonjoyOAuthCanary = { phase: "login-load" };
+    globalThis.addEventListener("securitypolicyviolation", (event) => {
+      globalThis[reportBinding]?.({
+        effectiveDirective: event.effectiveDirective || event.violatedDirective,
+        documentUrl: event.documentURI,
+        blockedUrl: event.blockedURI,
+        phase: globalThis.__spoonjoyOAuthCanary.phase,
+      });
+    });
+  }, cspBinding);
+
+  const login = new URL("/login", appOrigin);
+  if (redirectTo) login.searchParams.set("redirectTo", redirectTo);
+  await page.goto(login.toString(), { waitUntil: "load" });
+  await page.evaluate(async () => {
+    if (!("serviceWorker" in navigator)) return;
+    globalThis.__spoonjoyOAuthCanary.phase = "service-worker-control";
+    await navigator.serviceWorker.ready;
+  });
+  let controllerUrl = await page.evaluate(() => navigator.serviceWorker?.controller?.scriptURL ?? null);
+  if (controllerUrl === null) {
+    await page.reload({ waitUntil: "load" });
+    controllerUrl = await page.evaluate(() => navigator.serviceWorker?.controller?.scriptURL ?? null);
+  }
+
+  const link = page.getByRole("link", {
+    name: `Continue with ${provider[0].toUpperCase()}${provider.slice(1)}`,
+  });
+  let documentUrl = null;
+  const cdp = await page.context().newCDPSession(page);
+  const frameTree = await cdp.send("Page.getFrameTree");
+  const rootFrameId = frameTree.frameTree.frame.id;
+  const onDocumentRequest = (event) => {
+    if (
+      event.type === "Document"
+      && event.frameId === rootFrameId
+      && safeOrigin(event.request?.url) === new URL(appOrigin).origin
+      && safePath(event.request?.url) === `/auth/${provider}`
+    ) {
+      documentUrl = event.request.url;
+    }
+  };
+  await cdp.send("Network.enable");
+  cdp.on("Network.requestWillBeSent", onDocumentRequest);
+  await page.evaluate(() => {
+    globalThis.__spoonjoyOAuthCanary.phase = "provider-click";
+  });
+  try {
+    await Promise.all([
+      page.waitForURL((url) => url.origin !== appOrigin, { timeout: 15_000 }),
+      link.click(),
+    ]);
+  } finally {
+    cdp.off("Network.requestWillBeSent", onDocumentRequest);
+    await cdp.detach();
+  }
+
+  await page.evaluate(() => {
+    globalThis.__spoonjoyOAuthCanary.phase = "provider-handoff";
+  });
+  const markerByText = await page.getByText(publicSignInMarker, { exact: false }).first().isVisible().catch(() => false);
+  const title = await page.title();
+  const sentinelByText = await page.getByText(publicErrorSentinel, { exact: false }).first().isVisible().catch(() => false);
+
+  return {
+    controllerUrl,
+    documentUrl,
+    providerUrl: page.url(),
+    publicSignInMarkerPresent: markerByText || title.includes(publicSignInMarker),
+    publicErrorSentinelPresent: sentinelByText || title.includes(publicErrorSentinel),
+    cspViolations,
+  };
+}
+
+export async function runOAuthNavigationCanary({
+  page,
+  provider,
+  appOrigin,
+  expectedProviderHost,
+  expectedProviderPath,
+  expectedClientId,
+  expectedRedirectUri,
+  expectedResponseMode,
+  redirectTo = null,
+  publicSignInMarker,
+  publicErrorSentinel,
+  observe = observeOAuthNavigationWithPage,
+}) {
+  const controllerPath = "/sw.js";
+  const documentPath = `/auth/${provider}`;
+  const observation = await observe({
+    page,
+    provider,
+    appOrigin,
+    controllerPath,
+    documentPath,
+    expectedProviderHost,
+    expectedProviderPath,
+    expectedClientId,
+    expectedRedirectUri,
+    expectedResponseMode,
+    redirectTo,
+    publicSignInMarker,
+    publicErrorSentinel,
+  });
+
+  if (!observation?.controllerUrl) {
+    throw new Error("OAuth navigation did not establish a service-worker controller.");
+  }
+  const controller = new URL(observation.controllerUrl);
+  if (controller.origin !== new URL(appOrigin).origin || controller.pathname !== controllerPath) {
+    throw new Error("OAuth navigation controller did not use the expected /sw.js script.");
+  }
+
+  if (!observation?.documentUrl) {
+    throw new Error(`OAuth document navigation did not request ${documentPath}.`);
+  }
+  const document = new URL(observation.documentUrl);
+  if (document.origin !== new URL(appOrigin).origin || document.pathname !== documentPath) {
+    throw new Error(`OAuth document navigation did not request ${documentPath}.`);
+  }
+  const redirectToPreserved = redirectTo
+    ? document.searchParams.get("redirectTo") === redirectTo
+    : !document.searchParams.has("redirectTo");
+  if (!redirectToPreserved) {
+    throw new Error("OAuth document navigation did not preserve redirectTo exactly once.");
+  }
+
+  const providerUrl = new URL(observation.providerUrl);
+  const clientIdMatches = providerUrl.searchParams.get("client_id") === expectedClientId;
+  const redirectUriMatches = providerUrl.searchParams.get("redirect_uri") === expectedRedirectUri;
+  const responseModeMatches = providerUrl.searchParams.get("response_mode") === expectedResponseMode;
+  if (providerUrl.host !== expectedProviderHost) throw new Error("OAuth provider host did not match the expected handoff.");
+  if (providerUrl.pathname !== expectedProviderPath) throw new Error("OAuth provider path did not match the expected handoff.");
+  if (!clientIdMatches) throw new Error("OAuth provider handoff used an unexpected client ID.");
+  if (!redirectUriMatches) throw new Error("OAuth provider handoff used an unexpected redirect URI.");
+  if (!responseModeMatches) throw new Error("OAuth provider handoff used an unexpected response mode.");
+  if (observation.publicSignInMarkerPresent !== true) throw new Error("OAuth provider public sign-in marker was absent.");
+  if (observation.publicErrorSentinelPresent === true) throw new Error("OAuth provider public error sentinel was present.");
+
+  const cspViolations = Array.isArray(observation.cspViolations)
+    ? observation.cspViolations.map(projectOAuthCspViolation)
+    : [];
+  if (cspViolations.length > 0) throw new Error("OAuth navigation observed a scoped CSP violation.");
+
+  return projectOAuthNavigationEvidence({
+    provider,
+    appOrigin,
+    controllerPath: controller.pathname,
+    documentPath: document.pathname,
+    providerHost: providerUrl.host,
+    clientIdMatches,
+    redirectUriMatches,
+    responseModeMatches,
+    redirectToPreserved,
+    publicSignInMarkerPresent: true,
+    publicErrorSentinelAbsent: true,
+    cspViolations,
+  });
+}
+
 export function parseSmokeArgs(argv = process.argv.slice(2), env = process.env) {
   const target = resolveScriptTarget({
     argv,

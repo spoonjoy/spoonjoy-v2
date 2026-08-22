@@ -318,7 +318,7 @@ function validInputs(): DeploymentPreflightInputs {
     readme: "pnpm run deploy:preflight gh workflow run production-deploy.yml --ref main -f source_sha=\"$(git rev-parse HEAD)\" wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_NATIVE_CLIENT_IDS APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY GOOGLE_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT GEMINI_API_KEY GEMINI_IMAGE_MODEL GEMINI_IMAGE_TIMEOUT_MS gemini-3.1-flash-image IMAGE_PROVIDER_PRIMARY IMAGE_PROVIDER_FALLBACKS SPOONJOY_CSP_MODE Content-Security-Policy-Report-Only one-commit rollback SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS ACK_REPORT_ONLY_CSP_ROLLBACK VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry docs/analytics-privacy.md cleanup:local cleanup:local:apply cleanup:remote:qa cleanup:remote:qa:apply cleanup:production target-env local target-env qa target-env production broad production cleanup is read-only warning-gate.ts",
     deploymentDoc: "pnpm run deploy:preflight smoke:api gh workflow run production-deploy.yml --ref main -f source_sha=\"$(git rev-parse HEAD)\" wrangler d1 migrations apply DB --remote wrangler r2 bucket create spoonjoy-photos wrangler secret put SESSION_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET APPLE_CLIENT_ID APPLE_NATIVE_CLIENT_IDS APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY OPENAI_API_KEY GOOGLE_API_KEY VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT GEMINI_API_KEY GEMINI_IMAGE_MODEL GEMINI_IMAGE_TIMEOUT_MS gemini-3.1-flash-image IMAGE_PROVIDER_PRIMARY IMAGE_PROVIDER_FALLBACKS SPOONJOY_CSP_MODE Content-Security-Policy-Report-Only one-commit rollback SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS ACK_REPORT_ONLY_CSP_ROLLBACK wrangler secret put POSTHOG_KEY VITE_POSTHOG_KEY VITE_POSTHOG_HOST VITE_POSTHOG_DISABLED POSTHOG_KEY POSTHOG_HOST POSTHOG_DISABLED server lifecycle telemetry cleanup:local cleanup:local:apply cleanup:remote:qa cleanup:remote:qa:apply cleanup:production target-env local target-env qa target-env production broad production cleanup is read-only warning-gate.ts",
     migrationFiles: ["0000_init.sql"],
-    vitestConfig: "workers/app.ts scripts/script-environment.mjs scripts/cleanup-local-qa-data.mjs scripts/smoke-api-live.mjs scripts/qa-preflight.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts scripts/production-readiness.ts scripts/posthog-build-metadata.ts scripts/react-router-build-runner.ts scripts/warning-gate.ts scripts/workflow-security.mjs",
+    vitestConfig: "workers/app.ts scripts/script-environment.mjs scripts/cleanup-local-qa-data.mjs scripts/smoke-api-live.mjs scripts/smoke-live-oauth.mjs scripts/smoke-live-runtime.mjs scripts/qa-preflight.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts scripts/production-readiness.ts scripts/posthog-build-metadata.ts scripts/react-router-build-runner.ts scripts/warning-gate.ts scripts/workflow-security.mjs",
     tsconfigScripts:
       "scripts/build-output-hygiene.ts scripts/deployment-preflight.ts scripts/deploy-production-canary.ts scripts/production-readiness.ts scripts/posthog-build-metadata.ts scripts/qa-preflight.ts scripts/react-router-build.ts scripts/react-router-build-runner.ts scripts/warning-gate.ts scripts/workflow-security.mjs",
   };
@@ -3710,6 +3710,18 @@ describe("deployment preflight", () => {
     );
     expect(validateDeploymentConfig(missingScriptTypecheck).errors.map((item) => item.name)).toContain("script typecheck");
   });
+
+  it.each(["scripts/smoke-live-oauth.mjs", "scripts/smoke-live-runtime.mjs"])(
+    "requires full-suite coverage instrumentation for %s",
+    (requiredModule) => {
+      const inputs = validInputs();
+      inputs.vitestConfig = inputs.vitestConfig.replace(requiredModule, "");
+
+      expect(validateDeploymentConfig(inputs).errors.map((item) => item.name)).toContain(
+        "script coverage instrumentation",
+      );
+    },
+  );
 
   it("requires coverage and e2e package scripts to run through the warning gate", () => {
     const inputs = validInputs();
