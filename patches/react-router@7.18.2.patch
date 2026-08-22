@@ -1,7 +1,7 @@
-diff --git a/dist/development/chunk-KS7C4IRE.mjs b/dist/development/chunk-KS7C4IRE.mjs
-index db270c5d80a2e2a122159a6845f548f2db3cad83..2d79cca7800c31a9e693c7be36a70a35c8a2baa6 100644
---- a/dist/development/chunk-KS7C4IRE.mjs
-+++ b/dist/development/chunk-KS7C4IRE.mjs
+diff --git a/dist/development/chunk-62JRHF6Z.mjs b/dist/development/chunk-62JRHF6Z.mjs
+index 43c3c5eae20fb44356130bd8b37ecc277ffdb62a..1b6f3a59605e9c1f544f1447eb6dee2b0243ea75 100644
+--- a/dist/development/chunk-62JRHF6Z.mjs
++++ b/dist/development/chunk-62JRHF6Z.mjs
 @@ -9721,7 +9721,8 @@ function Links({ nonce, crossOrigin }) {
        rel: "stylesheet",
        href: criticalCss.href,
@@ -12,7 +12,7 @@ index db270c5d80a2e2a122159a6845f548f2db3cad83..2d79cca7800c31a9e693c7be36a70a35
      }
    ) : null, keyedLinks.map(
      ({ key, link }) => isPageLinkDescriptor(link) ? /* @__PURE__ */ React8.createElement(
-@@ -9738,7 +9739,8 @@ function Links({ nonce, crossOrigin }) {
+@@ -9730,7 +9731,8 @@ function Links({ nonce, crossOrigin }) {
          key,
          nonce,
          ...link,
@@ -20,12 +20,12 @@ index db270c5d80a2e2a122159a6845f548f2db3cad83..2d79cca7800c31a9e693c7be36a70a35
 +        crossOrigin: link.crossOrigin ?? crossOrigin,
 +        suppressHydrationWarning: true
        }
-     )
-   ));
-diff --git a/dist/production/chunk-3WDNQUW5.mjs b/dist/production/chunk-3WDNQUW5.mjs
-index 211c18cd3b21bc394d4023c659c91a194e5e7cb4..473a013ec692aa6239100d1e237a966d27017977 100644
---- a/dist/production/chunk-3WDNQUW5.mjs
-+++ b/dist/production/chunk-3WDNQUW5.mjs
+     ) : /* @__PURE__ */ React8.createElement(
+       "link",
+diff --git a/dist/production/chunk-YBLPXYCV.mjs b/dist/production/chunk-YBLPXYCV.mjs
+index e9c83c3123c4ac53a21256629fd2b965aa8a2fd7..57156341592a1393441061fa173c5e22cb377c34 100644
+--- a/dist/production/chunk-YBLPXYCV.mjs
++++ b/dist/production/chunk-YBLPXYCV.mjs
 @@ -9721,7 +9721,8 @@ function Links({ nonce, crossOrigin }) {
        rel: "stylesheet",
        href: criticalCss.href,
@@ -36,7 +36,7 @@ index 211c18cd3b21bc394d4023c659c91a194e5e7cb4..473a013ec692aa6239100d1e237a966d
      }
    ) : null, keyedLinks.map(
      ({ key, link }) => isPageLinkDescriptor(link) ? /* @__PURE__ */ React8.createElement(
-@@ -9738,7 +9739,8 @@ function Links({ nonce, crossOrigin }) {
+@@ -9730,7 +9731,8 @@ function Links({ nonce, crossOrigin }) {
          key,
          nonce,
          ...link,
@@ -44,5 +44,5 @@ index 211c18cd3b21bc394d4023c659c91a194e5e7cb4..473a013ec692aa6239100d1e237a966d
 +        crossOrigin: link.crossOrigin ?? crossOrigin,
 +        suppressHydrationWarning: true
        }
-     )
-   ));
+     ) : /* @__PURE__ */ React8.createElement(
+       "link",
