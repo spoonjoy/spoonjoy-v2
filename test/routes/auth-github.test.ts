@@ -65,6 +65,25 @@ describe("GitHub OAuth routes", () => {
     expect(response.headers.get("Location")).toContain("github.com");
   });
 
+  it.each([
+    ["absent", "https://spoonjoy.app/auth/github"],
+    ["explicit empty", "https://spoonjoy.app/auth/github?redirectTo="],
+  ])("defaults an %s redirectTo to /recipes in the signed session", async (_label, url) => {
+    const response = await loader({
+      request: new Request(url),
+      context: { cloudflare: { env: githubEnv } },
+      params: {},
+    } as any);
+    const stored = await readOAuthStartSession(
+      new Request("https://spoonjoy.app/auth/github/callback", {
+        headers: { Cookie: cookieHeader(response.headers.get("Set-Cookie") ?? "") },
+      }),
+      "github",
+    );
+
+    expect(stored?.redirectTo).toBe("/recipes");
+  });
+
   it("preserves a provider-hinted authorize handoff in the signed GitHub state session", async () => {
     const returnTo = "/oauth/authorize?client_id=cm_native&state=state_0123456789abcdef&provider=github";
     const failureRedirect = `/login?redirectTo=${encodeURIComponent(returnTo)}`;

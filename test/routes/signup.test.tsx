@@ -534,7 +534,7 @@ describe("Signup Route", () => {
         render(<Stub initialEntries={["/signup"]} />);
 
         await screen.findByRole("heading", { name: "Sign Up" });
-        expect(screen.getByRole("button", { name: /continue with google/i })).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: /continue with google/i })).toBeInTheDocument();
       });
 
       it("should render Apple sign-up button", async () => {
@@ -549,7 +549,7 @@ describe("Signup Route", () => {
         render(<Stub initialEntries={["/signup"]} />);
 
         await screen.findByRole("heading", { name: "Sign Up" });
-        expect(screen.getByRole("button", { name: /continue with apple/i })).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: /continue with apple/i })).toBeInTheDocument();
       });
 
       it("should render GitHub sign-up button", async () => {
@@ -564,7 +564,7 @@ describe("Signup Route", () => {
         render(<Stub initialEntries={["/signup"]} />);
 
         await screen.findByRole("heading", { name: "Sign Up" });
-        expect(screen.getByRole("button", { name: /continue with github/i })).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: /continue with github/i })).toBeInTheDocument();
       });
 
       it("should have Google button that links to Google OAuth initiation route", async () => {
@@ -579,12 +579,9 @@ describe("Signup Route", () => {
         render(<Stub initialEntries={["/signup"]} />);
 
         await screen.findByRole("heading", { name: "Sign Up" });
-        const googleButton = screen.getByRole("button", { name: /continue with google/i });
-        // The button submits a GET navigation to the OAuth initiation route. GET is
-        // required: the service worker aborts cross-origin POST redirects (see oauth.tsx).
-        const form = googleButton.closest("form");
-        expect(form).toHaveAttribute("action", "/auth/google");
-        expect(form).toHaveAttribute("method", "get");
+        const googleLink = screen.getByRole("link", { name: /continue with google/i });
+        expect(googleLink).toHaveAttribute("href", "/auth/google");
+        expect(googleLink.closest("form")).toBeNull();
       });
 
       it("should have Apple button that links to Apple OAuth initiation route", async () => {
@@ -599,12 +596,9 @@ describe("Signup Route", () => {
         render(<Stub initialEntries={["/signup"]} />);
 
         await screen.findByRole("heading", { name: "Sign Up" });
-        const appleButton = screen.getByRole("button", { name: /continue with apple/i });
-        // The button submits a GET navigation to the OAuth initiation route. GET is
-        // required: the service worker aborts cross-origin POST redirects (see oauth.tsx).
-        const form = appleButton.closest("form");
-        expect(form).toHaveAttribute("action", "/auth/apple");
-        expect(form).toHaveAttribute("method", "get");
+        const appleLink = screen.getByRole("link", { name: /continue with apple/i });
+        expect(appleLink).toHaveAttribute("href", "/auth/apple");
+        expect(appleLink.closest("form")).toBeNull();
       });
 
       it("should have GitHub button that links to GitHub OAuth initiation route", async () => {
@@ -619,13 +613,12 @@ describe("Signup Route", () => {
         render(<Stub initialEntries={["/signup"]} />);
 
         await screen.findByRole("heading", { name: "Sign Up" });
-        const githubButton = screen.getByRole("button", { name: /continue with github/i });
-        const form = githubButton.closest("form");
-        expect(form).toHaveAttribute("action", "/auth/github");
-        expect(form).toHaveAttribute("method", "get");
+        const githubLink = screen.getByRole("link", { name: /continue with github/i });
+        expect(githubLink).toHaveAttribute("href", "/auth/github");
+        expect(githubLink.closest("form")).toBeNull();
       });
 
-      it("carries redirectTo into the OAuth form so signup returns to the connector", async () => {
+      it("carries redirectTo in the OAuth link so signup returns to the connector", async () => {
         const returnTo = "/oauth/authorize?client_id=abc&response_type=code";
         const Stub = createTestRoutesStub([
           {
@@ -638,12 +631,27 @@ describe("Signup Route", () => {
         render(<Stub initialEntries={[`/signup?redirectTo=${encodeURIComponent(returnTo)}`]} />);
 
         await screen.findByRole("heading", { name: "Sign Up" });
-        const form = screen.getByRole("button", { name: /continue with apple/i }).closest("form");
-        // GET form: action stays bare and redirectTo rides as a hidden input serialized
-        // into the query string, read by the loader exactly as before.
-        expect(form).toHaveAttribute("action", "/auth/apple");
-        const hidden = form?.querySelector('input[name="redirectTo"]');
-        expect(hidden).toHaveAttribute("value", returnTo);
+        expect(screen.getByRole("link", { name: /continue with apple/i })).toHaveAttribute(
+          "href",
+          `/auth/apple?redirectTo=${encodeURIComponent(returnTo)}`,
+        );
+      });
+
+      it("treats an explicit empty redirectTo like an absent value", async () => {
+        const Stub = createTestRoutesStub([
+          {
+            path: "/signup",
+            Component: Signup,
+            loader: () => ({ oauthProviders: ["google", "github", "apple"] }),
+          },
+        ]);
+
+        render(<Stub initialEntries={["/signup?redirectTo="]} />);
+
+        await screen.findByRole("heading", { name: "Sign Up" });
+        expect(screen.getByRole("link", { name: /continue with google/i })).toHaveAttribute("href", "/auth/google");
+        expect(screen.getByRole("link", { name: /continue with github/i })).toHaveAttribute("href", "/auth/github");
+        expect(screen.getByRole("link", { name: /continue with apple/i })).toHaveAttribute("href", "/auth/apple");
       });
 
       it("should display OAuth separator between password form and OAuth buttons", async () => {
@@ -675,8 +683,8 @@ describe("Signup Route", () => {
 
         await screen.findByRole("heading", { name: "Sign Up" });
         expect(screen.queryByTestId("oauth-separator")).not.toBeInTheDocument();
-        expect(screen.queryByRole("button", { name: /continue with google/i })).not.toBeInTheDocument();
-        expect(screen.queryByRole("button", { name: /continue with apple/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole("link", { name: /continue with google/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole("link", { name: /continue with apple/i })).not.toBeInTheDocument();
       });
     });
 

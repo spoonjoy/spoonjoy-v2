@@ -69,6 +69,25 @@ describe("Google OAuth routes", () => {
     expect(response.headers.get("Location")).toContain("accounts.google.com");
   });
 
+  it.each([
+    ["absent", "https://spoonjoy.app/auth/google"],
+    ["explicit empty", "https://spoonjoy.app/auth/google?redirectTo="],
+  ])("defaults an %s redirectTo to /recipes in the signed session", async (_label, url) => {
+    const response = await loader({
+      request: new Request(url),
+      context: { cloudflare: { env: googleEnv } },
+      params: {},
+    } as any);
+    const stored = await readOAuthStartSession(
+      new Request("https://spoonjoy.app/auth/google/callback", {
+        headers: { Cookie: cookieHeader(response.headers.get("Set-Cookie") ?? "") },
+      }),
+      "google",
+    );
+
+    expect(stored?.redirectTo).toBe("/recipes");
+  });
+
   it("preserves a provider-hinted authorize handoff in the signed Google state and PKCE session", async () => {
     const returnTo = "/oauth/authorize?client_id=cm_native&state=state_0123456789abcdef&provider=google";
     const failureRedirect = `/login?redirectTo=${encodeURIComponent(returnTo)}`;

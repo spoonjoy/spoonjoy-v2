@@ -75,6 +75,22 @@ describe("Link Component", () => {
   });
 
   describe("internal links (React Router navigation)", () => {
+    it("allows an internal link to opt into native full-document navigation", () => {
+      render(
+        <TestWrapper>
+          <Link href="/auth/apple" {...({ reloadDocument: true } as Record<string, unknown>)}>
+            Continue with Apple
+          </Link>
+        </TestWrapper>
+      );
+
+      const link = screen.getByRole("link", { name: "Continue with Apple" });
+      const click = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
+      link.dispatchEvent(click);
+
+      expect(click.defaultPrevented).toBe(false);
+    });
+
     it("should render internal links using React Router Link", () => {
       render(
         <TestWrapper>
@@ -211,6 +227,31 @@ describe("Link Component", () => {
       const link = screen.getByRole("link", { name: "Call Us" });
       expect(link).toHaveAttribute("href", "tel:+1234567890");
       expect(link).not.toHaveAttribute("target", "_blank");
+    });
+  });
+
+  describe("full-document option boundaries", () => {
+    it.each([
+      ["https://example.com", "HTTPS"],
+      ["//cdn.example.com/resource", "Protocol relative"],
+      ["mailto:test@example.com", "Email"],
+      ["tel:+1234567890", "Telephone"],
+    ])("does not forward reloadDocument to native anchor %s", (href, label) => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+      render(
+        <TestWrapper>
+          <Link href={href} {...({ reloadDocument: true } as Record<string, unknown>)}>
+            {label}
+          </Link>
+        </TestWrapper>
+      );
+
+      const link = screen.getByRole("link", { name: label });
+      expect(link).not.toHaveAttribute("reloadDocument");
+      expect(link).not.toHaveAttribute("reloaddocument");
+      expect(error).not.toHaveBeenCalled();
+      error.mockRestore();
     });
   });
 
