@@ -8,7 +8,9 @@ export default {
   routeDiscovery: {
     mode: "initial",
   },
-  allowedActionOrigins: ["appleid.apple.com"],
+  // Cloudflare can preserve the internal Worker host in request.url while the
+  // browser correctly posts from Spoonjoy's canonical public origin.
+  allowedActionOrigins: ["appleid.apple.com", "spoonjoy.app"],
   future: {
     v8_viteEnvironmentApi: true,
   },

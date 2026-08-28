@@ -18,6 +18,7 @@ import {
   buildUserCountD1Args,
   buildWorkerVersionRequestHeaders,
   createWorkerVersionResponseTracker,
+  completeConsentSubmission,
   installWorkerVersionBrowserRouting,
   isRouteActionResponse,
   parseD1CountOutput,
@@ -96,7 +97,7 @@ async function waitForCandidateWorker(page, mutationPage, request, { baseUrl, wo
       },
       async ({ timeoutMs }) => {
         const startedAt = Date.now();
-        const navigation = await mutationPage.goto(mutationUrl, { waitUntil: "load", timeout: timeoutMs });
+        const navigation = await mutationPage.goto(mutationUrl, { waitUntil: "commit", timeout: timeoutMs });
         if (navigation === null) return null;
         if (navigation.status() !== 200) {
           return { status: navigation.status(), headers: navigation.headers() };
@@ -133,7 +134,6 @@ async function readProtectedResource(request, baseUrl, workerVersionId) {
 }
 
 async function screenshot(page, outDir, name) {
-  await page.waitForLoadState("load").catch(() => null);
   await page.waitForTimeout(250);
   const path = join(outDir, `${name}.png`);
   await page.screenshot({ path, fullPage: true });
@@ -160,7 +160,7 @@ async function runWranglerD1(args) {
 
 async function signupDisposableUser(page, { baseUrl, email, username, password, responseTracker }) {
   const pageCheckpoint = responseTracker.checkpoint();
-  await page.goto(new URL("/signup", baseUrl).toString(), { waitUntil: "load" });
+  await page.goto(new URL("/signup", baseUrl).toString(), { waitUntil: "commit" });
   responseTracker.assertSince(pageCheckpoint, "signup page load");
   await expect(page.getByRole("heading", { name: /sign up/i })).toBeVisible({ timeout: 15_000 });
   await page.locator('input[name="email"]:visible').fill(email);
@@ -177,7 +177,7 @@ async function signupDisposableUser(page, { baseUrl, email, username, password, 
   await page.getByRole("button", { name: /sign up/i }).first().click();
   await signupResponse;
   await page.waitForURL((url) => !url.pathname.startsWith("/signup"), { timeout: 20_000 });
-  await page.waitForLoadState("load");
+  await page.waitForLoadState("domcontentloaded");
   responseTracker.assertSince(submitCheckpoint, "signup submission");
 }
 
@@ -222,7 +222,7 @@ async function approveConsent(page, { baseUrl, clientId, codeChallenge, resource
 
   await page.setViewportSize({ width: 1440, height: 900 });
   const pageCheckpoint = responseTracker.checkpoint();
-  await page.goto(authorizeUrl.toString(), { waitUntil: "load" });
+  await page.goto(authorizeUrl.toString(), { waitUntil: "commit" });
   responseTracker.assertSince(pageCheckpoint, "authorization page load");
   await expect(page.getByRole("heading", { name: /connect claude to spoonjoy/i })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(/read recipes, cookbooks, and your shopping list/i)).toBeVisible();
@@ -252,8 +252,11 @@ async function approveConsent(page, { baseUrl, clientId, codeChallenge, resource
     routePath: "/oauth/authorize",
     requestMethod: response.request().method(),
   }), { timeout: 20_000 });
-  await allow.click();
-  const [callbackRequestValue] = await Promise.all([callbackRequest, consentResponse]);
+  const { callbackRequestValue } = await completeConsentSubmission({
+    callbackRequest,
+    consentResponse,
+    submit: () => allow.click(),
+  });
   responseTracker.assertSince(consentCheckpoint, "authorization consent submission");
   const callback = new URL(callbackRequestValue.url());
   assert.equal(callback.searchParams.get("state"), authorizeUrl.searchParams.get("state"));
