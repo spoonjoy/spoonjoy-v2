@@ -127,7 +127,7 @@ describe("Account Settings Route", () => {
       });
       const client = await db.oAuthClient.create({
         data: {
-          clientName: "Grocery helper",
+          clientName: "Grocery\u202e\u0000 helper",
           redirectUris: JSON.stringify(["https://example.com/callback"]),
         },
       });
@@ -181,6 +181,18 @@ describe("Account Settings Route", () => {
           tokenHash: `refresh-${faker.string.alphanumeric(12)}`,
           userId: testUserId,
           clientId: "no-access-client-id",
+          scope: "recipes:read",
+          resource: null,
+        },
+      });
+      const unnamedClient = await db.oAuthClient.create({
+        data: { clientName: null, redirectUris: "https://unnamed.example/callback" },
+      });
+      await db.oAuthRefreshToken.create({
+        data: {
+          tokenHash: `refresh-${faker.string.alphanumeric(12)}`,
+          userId: testUserId,
+          clientId: unnamedClient.id,
           scope: "recipes:read",
           resource: null,
         },
@@ -245,6 +257,11 @@ describe("Account Settings Route", () => {
           scopes: ["recipes:read"],
           refreshTokenCount: 1,
           accessTokenCount: 0,
+        }),
+        expect.objectContaining({
+          clientId: unnamedClient.id,
+          clientName: null,
+          scopes: ["recipes:read"],
         }),
       ]));
     });

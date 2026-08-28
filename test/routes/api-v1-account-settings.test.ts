@@ -813,7 +813,7 @@ describe("API v1 native account settings", () => {
     const token = await createApiCredential(db, userId, "Native token admin", { scopes: ["tokens:read", "tokens:write"] });
     const client = await db.oAuthClient.create({
       data: {
-        clientName: "Meal planner",
+        clientName: "Meal\u202e\u0000 planner",
         redirectUris: JSON.stringify(["https://client.example/callback"]),
       },
     });
@@ -834,6 +834,16 @@ describe("API v1 native account settings", () => {
       oauthResource: null,
       expiresAt: new Date(Date.now() + 60_000),
     });
+    const unnamedClient = await db.oAuthClient.create({
+      data: { clientName: null, redirectUris: "https://unnamed.example/callback" },
+    });
+    await oauthConnectionFixture(
+      userId,
+      unnamedClient.id,
+      null,
+      "recipes:read",
+      new Date("2026-06-19T10:00:00.000Z"),
+    );
 
     const response = await apiGet("me/connections", {
       Authorization: `Bearer ${token.token}`,
@@ -858,6 +868,13 @@ describe("API v1 native account settings", () => {
       scopes: ["account:read"],
       refreshTokenCount: 1,
       accessTokenCount: 1,
+    }), expect.objectContaining({
+      clientId: unnamedClient.id,
+      clientName: unnamedClient.id,
+      resource: null,
+      scopes: ["recipes:read"],
+      refreshTokenCount: 1,
+      accessTokenCount: 0,
     })]);
 
     type NativeConnectionSummary = {

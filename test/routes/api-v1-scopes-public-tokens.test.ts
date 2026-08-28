@@ -92,6 +92,13 @@ describe("API v1 public/token scope matrix", () => {
 
   it("rejects OAuth access tokens bound to the MCP protected resource on REST API v1", async () => {
     const user = await db.user.create({ data: createTestUser() });
+    await db.oAuthClient.create({
+      data: {
+        id: "oauth_client_rest_boundary",
+        clientName: "REST boundary test client",
+        redirectUris: "https://client.example/oauth/callback",
+      },
+    });
     const mcpBound = await createApiCredential(db, user.id, "MCP OAuth access token", {
       scopes: ["shopping_list:read"],
       oauthClientId: "oauth_client_rest_boundary",

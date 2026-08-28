@@ -211,6 +211,20 @@ describe("/mcp route", () => {
 
   it("accepts OAuth tokens bound to /mcp and rejects tokens bound elsewhere", async () => {
     const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    await db.oAuthClient.createMany({
+      data: [
+        {
+          id: "oauth_client_mcp_match",
+          clientName: "Matching MCP test client",
+          redirectUris: "https://client.example/oauth/matching-callback",
+        },
+        {
+          id: "oauth_client_mcp_mismatch",
+          clientName: "Mismatched MCP test client",
+          redirectUris: "https://client.example/oauth/mismatched-callback",
+        },
+      ],
+    });
     const matching = await createApiCredential(db, user.id, "MCP OAuth token", {
       scopes: ["kitchen:read", "kitchen:write"],
       oauthClientId: "oauth_client_mcp_match",

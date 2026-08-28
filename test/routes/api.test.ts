@@ -169,6 +169,13 @@ describe("Spoonjoy REST API route", () => {
 
   it("rejects MCP audience-bound OAuth tokens on the legacy REST surface", async () => {
     const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    await db.oAuthClient.create({
+      data: {
+        id: "oauth_client_mcp",
+        clientName: "Legacy REST MCP test client",
+        redirectUris: "https://client.example/oauth/callback",
+      },
+    });
     const { token } = await createApiCredential(db, user.id, "MCP-bound OAuth token", {
       scopes: ["kitchen:read"],
       oauthClientId: "oauth_client_mcp",
@@ -762,6 +769,13 @@ describe("Spoonjoy REST API route", () => {
       ],
     });
 
+    await db.oAuthClient.create({
+      data: {
+        id: "legacy-oauth-client",
+        clientName: "Legacy OAuth telemetry test client",
+        redirectUris: "https://client.example/oauth/callback",
+      },
+    });
     const oauthCredential = await createApiCredential(db, user.id, "Legacy OAuth Client Reader", {
       scopes: ["kitchen:read"],
       oauthClientId: "legacy-oauth-client",

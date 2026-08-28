@@ -31,6 +31,7 @@ import { Heading } from "~/components/ui/heading";
 import { Button } from "~/components/ui/button";
 import { Text } from "~/components/ui/text";
 import { OAUTH_FORM_ACTION_ORIGIN_HEADER } from "~/lib/security-headers.server";
+import { safeOAuthClientDisplayName } from "~/lib/oauth-client-metadata";
 
 // Per-IP throttle on the OAuth 2.1 authorize endpoint — applied to both the
 // loader (consent screen / login-gate redirect) and the action (Allow/Deny).
@@ -270,7 +271,7 @@ export default function OAuthAuthorize() {
     );
   }
 
-  const appName = view.clientName || "This app";
+  const appName = safeOAuthClientDisplayName(view.clientName);
   const redirectOrigin = new URL(view.params.redirectUri).origin;
   const resourceLabel = view.params.resource || "REST API";
   const broadScopes = view.scope.split(" ").filter((scope) => scope === "kitchen:read" || scope === "kitchen:write");
@@ -280,6 +281,13 @@ export default function OAuthAuthorize() {
       <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
         Kitchen connection
       </p>
+      <div className="mt-4 border-y border-[var(--sj-border)] py-4" role="alert">
+        <p className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">Unverified app</p>
+        <Text className="mt-1">
+          Sends you back to <span className="break-all font-semibold text-[var(--sj-ink)]">{redirectOrigin}</span>.
+          Approve only if you recognize this site and started the connection.
+        </Text>
+      </div>
       <Heading className="mt-3">Connect {appName} to Spoonjoy</Heading>
       <Text className="mt-4 text-base/7">
         {appName} wants access to your Spoonjoy kitchen.

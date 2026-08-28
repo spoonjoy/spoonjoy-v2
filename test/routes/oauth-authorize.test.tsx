@@ -4,7 +4,6 @@ import { render, screen } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
 import OAuthAuthorize, { action, headers as authorizeHeaders, loader } from "~/routes/oauth.authorize";
 import type { AuthorizeView } from "~/lib/oauth-routes.server";
-import { registerOAuthClient } from "~/lib/oauth-server.server";
 import { db } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -58,12 +57,15 @@ describe("oauth.authorize route", () => {
   } = {}) {
     const user = await db.user.create({ data: createTestUser() });
     const requestedRedirectUri = options.redirectUri ?? redirectUri;
-    const client = await registerOAuthClient(db, {
-      clientName: options.clientName ?? "Claude",
-      redirectUris: options.redirectUris ?? [requestedRedirectUri],
+    const redirectUris = options.redirectUris ?? [requestedRedirectUri];
+    const client = await db.oAuthClient.create({
+      data: {
+        clientName: options.clientName ?? "Example App",
+        redirectUris: redirectUris.join(" "),
+      },
     });
     const query = new URLSearchParams({
-      client_id: client.clientId,
+      client_id: client.id,
       redirect_uri: requestedRedirectUri,
       response_type: "code",
       code_challenge: await challengeFor(VERIFIER),
@@ -72,7 +74,7 @@ describe("oauth.authorize route", () => {
       state: "state_0123456789abcdef",
       resource: "https://spoonjoy.app/mcp",
     });
-    return { userId: user.id, clientId: client.clientId, query };
+    return { userId: user.id, clientId: client.id, query };
   }
 
   async function thrownResponse(request: Request): Promise<Response> {
@@ -329,6 +331,8 @@ describe("oauth.authorize route", () => {
       },
     });
     expect(await screen.findByRole("heading", { name: /connect claude to spoonjoy/i })).toBeInTheDocument();
+    expect(screen.getByText("Unverified app")).toBeVisible();
+    expect(screen.getAllByText("https://claude.ai")).toHaveLength(2);
     expect(screen.getByText(/read recipes, cookbooks, and your shopping list/i)).toBeInTheDocument();
     expect(screen.getByText(/add, edit, and remove kitchen data/i)).toBeInTheDocument();
     expect(screen.getByText(/stays active until you disconnect/i)).toBeInTheDocument();
@@ -342,6 +346,9 @@ describe("oauth.authorize route", () => {
     expect(screen.queryByText("Bring your kitchen with you.")).not.toBeInTheDocument();
     expect(screen.getByText("Kitchen connection")).toBeInTheDocument();
     expect(screen.queryByText("Kitchen sign-in")).not.toBeInTheDocument();
+    const visibleCopy = rendered.container.textContent ?? "";
+    expect(visibleCopy.indexOf("Unverified app")).toBeLessThan(visibleCopy.indexOf("Claude"));
+    expect(visibleCopy.indexOf("https://claude.ai")).toBeLessThan(visibleCopy.indexOf("Claude"));
   });
 
   it("renders an unnamed client and an unknown scope verbatim", async () => {
@@ -361,7 +368,33 @@ describe("oauth.authorize route", () => {
       },
     });
     expect(await screen.findByRole("heading", { name: /connect this app to spoonjoy/i })).toBeInTheDocument();
+    expect(screen.getByText("Unverified app")).toBeVisible();
     expect(screen.getByText(/kitchen:future/)).toBeInTheDocument();
+  });
+
+  it("sanitizes and truncates a legacy stored client name by Unicode code point", async () => {
+    const legacyName = `${"😀".repeat(79)}safe\u202eevil-tail`;
+    const rendered = renderView({
+      kind: "consent",
+      clientName: legacyName,
+      scope: "recipes:read",
+      params: {
+        clientId: "legacy",
+        redirectUri: "https://example.com/callback",
+        responseType: "code",
+        state: "state_0123456789abcdef",
+        scope: "recipes:read",
+        codeChallenge: "cc",
+        codeChallengeMethod: "S256",
+        resource: "",
+      },
+    });
+
+    await screen.findByRole("heading", { level: 1 });
+    expect(rendered.container.textContent).not.toContain("\u202e");
+    expect(rendered.container.textContent).not.toContain("evil-tail");
+    expect(rendered.container.textContent).toContain(`${"😀".repeat(79)}s`);
+    expect(screen.getByText("Unverified app")).toBeVisible();
   });
 
   it("omits the broad-scope warning for narrow scopes", async () => {

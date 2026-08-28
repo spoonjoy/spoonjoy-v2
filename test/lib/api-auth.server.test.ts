@@ -160,6 +160,46 @@ describe("API authentication helpers", () => {
     await expect(authenticateApiToken(db, expired.token)).rejects.toMatchObject({ status: 401 });
   });
 
+  it("rejects an OAuth-backed credential after its client is revoked", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    const client = await db.oAuthClient.create({
+      data: { clientName: "Example App", redirectUris: "https://example.com/cb" },
+    });
+    const created = await createApiCredential(db, user.id, "OAuth token", {
+      oauthClientId: client.id,
+      scopes: ["kitchen:read"],
+    });
+
+    await expect(authenticateApiToken(db, created.token)).resolves.toMatchObject({ id: user.id });
+    await db.apiCredential.update({ where: { id: created.credential.id }, data: { lastUsedAt: null } });
+    await db.oAuthClient.update({ where: { id: client.id }, data: { revokedAt: new Date() } });
+    await expect(authenticateApiToken(db, created.token)).rejects.toMatchObject({ status: 401 });
+    await expect(db.apiCredential.findUniqueOrThrow({ where: { id: created.credential.id } }))
+      .resolves.toMatchObject({ lastUsedAt: null });
+
+    const lateCredential = await createApiCredential(db, user.id, "Late OAuth token", {
+      oauthClientId: client.id,
+      scopes: ["kitchen:read"],
+    });
+    await expect(authenticateApiToken(db, lateCredential.token)).rejects.toMatchObject({ status: 401 });
+    await expect(db.apiCredential.findUniqueOrThrow({ where: { id: lateCredential.credential.id } }))
+      .resolves.toMatchObject({ lastUsedAt: null });
+  });
+
+  it("rejects an OAuth-backed credential whose client row is missing", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    const client = await db.oAuthClient.create({
+      data: { clientName: "Example App", redirectUris: "https://example.com/cb" },
+    });
+    const created = await createApiCredential(db, user.id, "Orphaned OAuth token", {
+      oauthClientId: client.id,
+      scopes: ["kitchen:read"],
+    });
+    await db.oAuthClient.delete({ where: { id: client.id } });
+
+    await expect(authenticateApiToken(db, created.token)).rejects.toMatchObject({ status: 401 });
+  });
+
   it("authenticates bearer requests, session requests, and lowercased environment users", async () => {
     const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
     const created = await createApiCredential(db, user.id, "REST client");

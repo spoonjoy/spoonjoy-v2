@@ -227,6 +227,13 @@ describe("handleMcpHttpRequest", () => {
 
   async function mintOAuthCredential(options: { oauthResource?: string | null } = {}) {
     const user = await db.user.create({ data: { email: uniqueEmail("oauth-mcp"), username: faker.internet.username() } });
+    await db.oAuthClient.create({
+      data: {
+        id: "oauth_client_1",
+        clientName: "OAuth MCP test client",
+        redirectUris: "https://client.example/oauth/callback",
+      },
+    });
     const created = await createApiCredential(db, user.id, "oauth mcp token", {
       scopes: ["kitchen:read", "kitchen:write"],
       oauthClientId: "oauth_client_1",
@@ -446,6 +453,36 @@ describe("handleMcpHttpRequest", () => {
     expect(response.status).toBe(200);
     const body = await response.json() as { result: { tools: { name: string }[] } };
     expect(body.result.tools.map((tool) => tool.name)).toContain("get_shopping_list");
+  });
+
+  it("does not treat a legacy mixed-callback Claude row as the canonical MCP client", async () => {
+    const legacyClientId = "legacy_mixed_claude_mcp_client";
+    await db.oAuthClient.create({
+      data: {
+        id: legacyClientId,
+        clientName: "Claude",
+        redirectUris: `${CLAUDE_MCP_REDIRECT_URI} https://attacker.example/cb`,
+      },
+    });
+    const user = await db.user.create({
+      data: { email: uniqueEmail("mixed-claude"), username: faker.internet.username() },
+    });
+    const created = await createApiCredential(db, user.id, "mixed legacy Claude MCP token", {
+      scopes: ["kitchen:read", "kitchen:write"],
+      oauthClientId: legacyClientId,
+      oauthResource: null,
+    });
+
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(init(73, "tools/list"), bearer(created.token)),
+      db,
+    });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: "invalid_token",
+      message: "OAuth access token is not audience-bound to this MCP resource.",
+    });
   });
 
   it("returns a JSON-RPC parse error for an invalid (authenticated) body", async () => {

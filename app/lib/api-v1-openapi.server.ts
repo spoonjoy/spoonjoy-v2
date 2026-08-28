@@ -209,8 +209,12 @@ const schemas = {
     "x-connector-profile": { type: "object", additionalProperties: true },
   }, { additionalProperties: true }),
   OAuthRegisterRequest: objectSchema(["redirect_uris"], {
-    client_name: { type: "string" },
-    redirect_uris: arrayOf(redirectUriSchema),
+    client_name: {
+      type: "string",
+      maxLength: 80,
+      description: "At most 80 Unicode code points. Control and bidirectional formatting characters are rejected. Dynamically registered client names are self-asserted and displayed as unverified.",
+    },
+    redirect_uris: { ...arrayOf(redirectUriSchema), uniqueItems: true },
     token_endpoint_auth_method: { const: "none" },
     grant_types: arrayOf({ type: "string", enum: ["authorization_code", "refresh_token"] }),
     response_types: arrayOf({ type: "string", enum: ["code"] }),

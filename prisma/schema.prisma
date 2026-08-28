@@ -200,6 +200,8 @@ model OAuthClient {
   clientName   String?
   // Space-separated list of allowed redirect URIs (validated at authorize/token).
   redirectUris String
+  // Retained tombstone: revoked clients cannot authorize, mint, rotate, or authenticate.
+  revokedAt    DateTime?
   createdAt    DateTime @default(now())
 }
 

@@ -5,6 +5,7 @@ import {
   createAuthorizationCode,
   DEFAULT_SCOPE,
   getOAuthClient,
+  isCanonicalOAuthClientRegistration,
   isValidRedirectUri,
   issueConnectorTokens,
   normalizeScope,
@@ -95,10 +96,10 @@ describe("OAuth client registration", () => {
 
   it("registers a client and reads it back", async () => {
     const registered = await registerOAuthClient(db, {
-      clientName: "  Claude  ",
+      clientName: "  Example App  ",
       redirectUris: ["https://claude.ai/cb", " https://claude.ai/cb2 "],
     });
-    expect(registered.clientName).toBe("Claude");
+    expect(registered.clientName).toBe("Example App");
     expect(registered.redirectUris).toEqual(["https://claude.ai/cb", "https://claude.ai/cb2"]);
 
     const fetched = await getOAuthClient(db, registered.clientId);
@@ -127,6 +128,88 @@ describe("OAuth client registration", () => {
     ).rejects.toMatchObject({ code: "invalid_redirect_uri" });
   });
 
+  it.each([
+    [" Claude ", "https://claude.ai/api/mcp/auth_callback"],
+    ["claude", "https://claude.ai/api/mcp/auth_callback"],
+    [" Spoonjoy Apple ", "https://spoonjoy.app/oauth/callback"],
+    ["spoonjoy apple", "https://spoonjoy.app/oauth/callback"],
+  ])("accepts the canonical reserved registration for %s", async (clientName, redirectUri) => {
+    await expect(registerOAuthClient(db, { clientName, redirectUris: [redirectUri] }))
+      .resolves.toMatchObject({ clientName: clientName.trim(), redirectUris: [redirectUri] });
+  });
+
+  it.each([
+    ["Claude", ["https://attacker.example/cb"]],
+    ["Claude", ["https://claude.ai/api/mcp/auth_callback", "https://attacker.example/cb"]],
+    ["Claude", ["https://attacker.example/cb", "https://claude.ai/api/mcp/auth_callback"]],
+    ["Spoonjoy Apple", ["https://attacker.example/cb"]],
+    ["Spoonjoy Apple", ["https://spoonjoy.app/oauth/callback", "https://attacker.example/cb"]],
+  ])("rejects reserved name %s with a noncanonical redirect set", async (clientName, redirectUris) => {
+    await expect(registerOAuthClient(db, { clientName, redirectUris }))
+      .rejects.toMatchObject({ code: "invalid_client_metadata" });
+  });
+
+  it("rejects duplicate redirect URIs, including a duplicated canonical callback", async () => {
+    await expect(registerOAuthClient(db, {
+      clientName: "Claude",
+      redirectUris: [
+        "https://claude.ai/api/mcp/auth_callback",
+        "https://claude.ai/api/mcp/auth_callback",
+      ],
+    })).rejects.toMatchObject({ code: "invalid_client_metadata" });
+  });
+
+  it("enforces the 80 Unicode-code-point client-name boundary without splitting emoji", async () => {
+    await expect(registerOAuthClient(db, {
+      clientName: "🧑‍🍳".repeat(26) + "ab",
+      redirectUris: ["https://example.com/cb"],
+    })).resolves.toBeTruthy();
+    await expect(registerOAuthClient(db, {
+      clientName: "😀".repeat(81),
+      redirectUris: ["https://example.com/cb"],
+    })).rejects.toMatchObject({ code: "invalid_client_metadata" });
+  });
+
+  it.each(["\u0000", "\u001f", "\u007f", "\u009f", "\u061c", "\u200e", "\u200f", "\u202a", "\u202e", "\u2066", "\u2069"])(
+    "rejects client names containing prohibited control or bidi character %#",
+    async (prohibited) => {
+      await expect(registerOAuthClient(db, {
+        clientName: `Meal${prohibited}Planner`,
+        redirectUris: ["https://example.com/cb"],
+      })).rejects.toMatchObject({ code: "invalid_client_metadata" });
+    },
+  );
+
+  it("allows useful format characters outside the prohibited set", async () => {
+    await expect(registerOAuthClient(db, {
+      clientName: "Cooking 👩‍🍳",
+      redirectUris: ["https://example.com/cb"],
+    })).resolves.toMatchObject({ clientName: "Cooking 👩‍🍳" });
+  });
+
+  it("recognizes only exact singleton compatibility registrations", () => {
+    const canonical = {
+      clientId: "canonical",
+      clientName: " Claude ",
+      redirectUris: ["https://claude.ai/api/mcp/auth_callback"],
+    };
+    expect(isCanonicalOAuthClientRegistration(
+      canonical,
+      "Claude",
+      "https://claude.ai/api/mcp/auth_callback",
+    )).toBe(true);
+    expect(isCanonicalOAuthClientRegistration(
+      { ...canonical, redirectUris: [...canonical.redirectUris, "https://attacker.example/cb"] },
+      "Claude",
+      "https://claude.ai/api/mcp/auth_callback",
+    )).toBe(false);
+    expect(isCanonicalOAuthClientRegistration(
+      { ...canonical, clientName: "Claudette" },
+      "Claude",
+      "https://claude.ai/api/mcp/auth_callback",
+    )).toBe(false);
+  });
+
   it("returns null for a missing or empty client id", async () => {
     expect(await getOAuthClient(db, "")).toBeNull();
     expect(await getOAuthClient(db, "nope")).toBeNull();
@@ -144,6 +227,9 @@ describe("authorization code lifecycle", () => {
     db = await getLocalDb();
     const user = await db.user.create({ data: createTestUser() });
     userId = user.id;
+    await db.oAuthClient.create({
+      data: { id: clientId, clientName: "Example App", redirectUris: redirectUri },
+    });
   });
   afterEach(async () => {
     await cleanupDatabase();
@@ -211,8 +297,17 @@ describe("authorization code lifecycle", () => {
 
   it("rejects a different client", async () => {
     const code = await mintCode();
+    const otherClient = await registerOAuthClient(db, {
+      clientName: "Other client",
+      redirectUris: ["https://other.example/cb"],
+    });
     await expect(
-      consumeAuthorizationCode(db, { code, clientId: "other", redirectUri, codeVerifier: VERIFIER }),
+      consumeAuthorizationCode(db, {
+        code,
+        clientId: otherClient.clientId,
+        redirectUri,
+        codeVerifier: VERIFIER,
+      }),
     ).rejects.toMatchObject({ code: "invalid_grant" });
   });
 
@@ -233,6 +328,9 @@ describe("authorization code lifecycle", () => {
   it("treats a lost burn race as already-used", async () => {
     const challenge = await challengeFor(VERIFIER);
     const stub = {
+      oAuthClient: {
+        findFirst: async () => ({ id: clientId, clientName: "Example App", redirectUris: redirectUri }),
+      },
       oAuthAuthCode: {
         findUnique: async () => ({
           id: "race",
@@ -263,6 +361,9 @@ describe("connector token issuance + rotation", () => {
     await cleanupDatabase();
     db = await getLocalDb();
     userId = (await db.user.create({ data: createTestUser() })).id;
+    await db.oAuthClient.create({
+      data: { id: clientId, clientName: "Example App", redirectUris: "https://example.com/cb" },
+    });
   });
   afterEach(async () => {
     await cleanupDatabase();
@@ -292,6 +393,15 @@ describe("connector token issuance + rotation", () => {
     expect(credential?.oauthResource).toBeNull();
   });
 
+  it("uses a neutral credential name for an unnamed OAuth client", async () => {
+    await db.oAuthClient.update({ where: { id: clientId }, data: { clientName: null } });
+
+    await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read", resource: null });
+
+    await expect(db.apiCredential.findFirstOrThrow({ where: { userId } }))
+      .resolves.toMatchObject({ name: "OAuth client (OAuth)" });
+  });
+
   it("does not grant durable access for malformed resource values", async () => {
     const tokens = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read", resource: "not a url" });
     expect(tokens.expiresIn).toBeGreaterThan(0);
@@ -299,6 +409,19 @@ describe("connector token issuance + rotation", () => {
     const credential = await db.apiCredential.findFirst({ where: { userId } });
     expect(credential?.expiresAt).toBeInstanceOf(Date);
     expect(credential?.oauthResource).toBe("not a url");
+  });
+
+  it("refuses to issue or rotate tokens for a revoked OAuth client", async () => {
+    const first = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read" });
+    await db.oAuthClient.update({ where: { id: clientId }, data: { revokedAt: new Date() } });
+
+    await expect(getOAuthClient(db, clientId)).resolves.toBeNull();
+    await expect(issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read" }))
+      .rejects.toMatchObject({ code: "invalid_client" });
+    await expect(rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId }))
+      .rejects.toMatchObject({ code: "invalid_client" });
+    await expect(db.oAuthRefreshToken.findFirstOrThrow({ where: { userId, clientId } }))
+      .resolves.toMatchObject({ revokedAt: null });
   });
 
   it("rotates a refresh token, revoking the old one", async () => {
@@ -384,6 +507,9 @@ describe("connector token issuance + rotation", () => {
 
   it("treats a lost rotation race as already-used", async () => {
     const stub = {
+      oAuthClient: {
+        findFirst: async () => ({ id: clientId, clientName: "Example App", redirectUris: "https://example.com/cb" }),
+      },
       oAuthRefreshToken: {
         findUnique: async () => ({ id: "race", revokedAt: null, clientId, userId, scope: "kitchen:read", resource: null }),
         updateMany: async () => ({ count: 0 }),
