@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import * as smokeHelpers from "../../scripts/smoke-live-helpers.mjs";
 import {
+  assertConsentActionRedirect,
   assertWorkerVersionResponse,
   buildWorkerVersionRequestHeaders,
   buildD1CommandArgs,
@@ -22,6 +23,7 @@ import {
   buildBrowserEnvironment,
   buildD1CommandEnvironment,
   createWorkerVersionResponseTracker,
+  completeConsentSubmission,
   decideMcpCanaryIssueAction,
   findMcpCanarySecretLeaks,
   isRouteActionResponse,
@@ -72,6 +74,68 @@ describe("smoke-live helpers", () => {
     cookies: "session=private-cookie",
     providerText: "Sign in to Apple private provider DOM",
   };
+
+  it("accepts an OAuth consent redirect without touching its body or callback fallback", async () => {
+    const response = { status: vi.fn(() => 302), text: vi.fn() };
+
+    await expect(assertConsentActionRedirect(response)).resolves.toBeUndefined();
+
+    expect(response.text).not.toHaveBeenCalled();
+  });
+
+  it("fails consent immediately with the action status and bounded response body", async () => {
+    const response = {
+      status: vi.fn(() => 400),
+      text: vi.fn(async () => {
+        return `${"x".repeat(200)}private-tail`;
+      }),
+    };
+
+    const error: unknown = await assertConsentActionRedirect(response).catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(Error);
+    if (!(error instanceof Error)) throw new Error("expected redirect assertion to throw");
+    expect(error.message).toBe(`Consent action failed with 400: ${"x".repeat(200)}`);
+    expect(error.message).not.toContain("private-tail");
+  });
+
+  it("reports an unavailable consent error body without masking the action status", async () => {
+    const response = {
+      status: vi.fn(() => 503),
+      text: vi.fn(async () => {
+        throw new Error("body stream failed");
+      }),
+    };
+
+    await expect(assertConsentActionRedirect(response)).rejects.toThrow(
+      "Consent action failed with 503: <response body unavailable>",
+    );
+  });
+
+  it("observes both consent waiters before submission and returns their successful values", async () => {
+    const callbackRequestValue = { url: () => "https://claude.ai/api/mcp/auth_callback?code=ok" };
+    const consentActionResponse = { status: () => 302, text: vi.fn() };
+    const submit = vi.fn(async () => undefined);
+
+    await expect(completeConsentSubmission({
+      callbackRequest: Promise.resolve(callbackRequestValue),
+      consentResponse: Promise.resolve(consentActionResponse),
+      submit,
+    })).resolves.toEqual({ callbackRequestValue, consentActionResponse });
+
+    expect(submit).toHaveBeenCalledOnce();
+  });
+
+  it("settles a concurrent callback rejection when the consent waiter fails", async () => {
+    const callbackFailure = new Error("callback waiter timed out");
+    const consentFailure = new Error("consent waiter timed out");
+
+    await expect(completeConsentSubmission({
+      callbackRequest: Promise.reject(callbackFailure),
+      consentResponse: Promise.reject(consentFailure),
+      submit: async () => undefined,
+    })).rejects.toBe(consentFailure);
+  });
 
   it("runs a provider-parameterized observable OAuth navigation canary", async () => {
     const observe = vi.fn(async () => ({ ...successfulAppleObservation, cspViolations: null }));
@@ -1388,6 +1452,11 @@ describe("smoke-live helpers", () => {
     expect(source).toContain('serviceWorkers: "block"');
     expect(source).toContain("env: buildBrowserEnvironment(process.env)");
     expect(source).toContain("env: buildD1CommandEnvironment(process.env)");
+    expect(source).toContain('new URL("/signup", baseUrl).toString(), { waitUntil: "commit" }');
+    expect(source).toContain('await page.goto(authorizeUrl.toString(), { waitUntil: "commit" })');
+    expect(source).toContain("completeConsentSubmission({");
+    const screenshotSource = source.match(/async function screenshot\([\s\S]*?\n}\n/)?.[0] ?? "";
+    expect(screenshotSource).not.toContain("waitForLoadState");
     expect(source.indexOf('check("candidate Worker override readiness"')).toBeLessThan(
       source.indexOf("canaryMutationStarted = true"),
     );

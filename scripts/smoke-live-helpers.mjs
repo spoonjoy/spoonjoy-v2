@@ -40,6 +40,39 @@ const CLOUDFLARE_SECRET_ENV_NAMES = [
   "CLOUDFLARE_WORKERS_API_TOKEN",
 ];
 
+export async function assertConsentActionRedirect(response) {
+  const status = response.status();
+  if (status === 302) return;
+
+  const responseText = await response.text().catch(() => "<response body unavailable>");
+  throw new Error(`Consent action failed with ${status}: ${responseText.slice(0, 200)}`);
+}
+
+function observePromise(promise) {
+  return promise.then(
+    (value) => ({ fulfilled: true, value }),
+    (error) => ({ fulfilled: false, error }),
+  );
+}
+
+function unwrapObservedPromise(outcome) {
+  if (!outcome.fulfilled) throw outcome.error;
+  return outcome.value;
+}
+
+export async function completeConsentSubmission({ callbackRequest, consentResponse, submit }) {
+  // Observe both Playwright waiters before clicking so simultaneous timeouts
+  // cannot surface as unhandled rejections outside the canary cleanup path.
+  const callbackOutcome = observePromise(callbackRequest);
+  const consentOutcome = observePromise(consentResponse);
+
+  await submit();
+  const consentActionResponse = unwrapObservedPromise(await consentOutcome);
+  await assertConsentActionRedirect(consentActionResponse);
+  const callbackRequestValue = unwrapObservedPromise(await callbackOutcome);
+  return { callbackRequestValue, consentActionResponse };
+}
+
 function withoutCloudflareSecrets(env) {
   const sanitized = { ...env };
   for (const name of CLOUDFLARE_SECRET_ENV_NAMES) delete sanitized[name];
