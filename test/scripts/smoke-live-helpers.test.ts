@@ -1743,7 +1743,12 @@ describe("smoke-live helpers", () => {
     expect(command).toContain("canary_user_residue");
     expect(command).toContain("canary_refresh_residue");
     expect(command).toContain("claude_redirect_client_count");
-    expect(command).toContain(`oc_missing.clientName = 'Claude'`);
+    expect(command).toContain(`lower(trim(oc_missing.clientName)) = 'claude'`);
+    expect(command).toContain(`oc_missing.redirectUris = 'https://claude.ai/api/mcp/auth_callback'`);
+    expect(command).toContain(`oc_missing.revokedAt IS NULL`);
+    expect(command).toContain(`lower(trim(clientName)) = 'claude'`);
+    expect(command).toContain(`redirectUris = 'https://claude.ai/api/mcp/auth_callback'`);
+    expect(command).not.toContain("redirectUris LIKE");
     expect(command).toContain("https://claude.ai/api/mcp/auth_callback");
     expect(command).toContain(`datetime(ac.expiresAt) > datetime('now')`);
     expect(command).toContain("NOT EXISTS");

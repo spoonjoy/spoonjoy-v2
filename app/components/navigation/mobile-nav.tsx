@@ -36,6 +36,10 @@ function hasExplicitChefSearch(search: string) {
 }
 
 function shouldHideDock(pathname: string, isAuthenticated: boolean) {
+  if (pathname === "/oauth/authorize") {
+    return true;
+  }
+
   if (!isAuthenticated) {
     return pathname === "/login" || pathname === "/signup";
   }

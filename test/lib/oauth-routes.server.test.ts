@@ -106,11 +106,26 @@ describe("handleOAuthRegister", () => {
 
   it("echoes the client name when provided", async () => {
     const res = await handleOAuthRegister(
-      jsonPost({ client_name: "Claude", redirect_uris: ["https://claude.ai/cb"] }),
+      jsonPost({ client_name: "Example App", redirect_uris: ["https://example.com/cb"] }),
       db,
     );
     expect(res.status).toBe(201);
-    await expect(res.json()).resolves.toMatchObject({ client_name: "Claude" });
+    await expect(res.json()).resolves.toMatchObject({ client_name: "Example App" });
+  });
+
+  it.each([
+    { client_name: "Claude", redirect_uris: ["https://attacker.example/cb"] },
+    { client_name: "Spoonjoy Apple", redirect_uris: ["https://attacker.example/cb"] },
+    { client_name: "Example App", redirect_uris: ["https://example.com/cb", "https://example.com/cb"] },
+    { client_name: "x".repeat(81), redirect_uris: ["https://example.com/cb"] },
+    { client_name: "safe\u202ename", redirect_uris: ["https://example.com/cb"] },
+  ])("rejects unsafe client metadata without persisting a row", async (metadata) => {
+    const before = await db.oAuthClient.count();
+    const res = await handleOAuthRegister(jsonPost(metadata), db);
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error: "invalid_client_metadata" });
+    expect(await db.oAuthClient.count()).toBe(before);
   });
 
   it("maps an invalid redirect URI to an OAuth error", async () => {
@@ -162,8 +177,8 @@ describe("handleOAuthRegister", () => {
 
   it("accepts and ignores standard RFC 7591 metadata Spoonjoy does not store", async () => {
     const res = await handleOAuthRegister(jsonPost({
-      redirect_uris: ["https://claude.ai/cb"],
-      client_name: "Claude",
+      redirect_uris: ["https://example.com/cb"],
+      client_name: "Example App",
       application_type: "web",
       client_uri: "https://claude.ai",
       logo_uri: "https://claude.ai/logo.png",
@@ -179,8 +194,8 @@ describe("handleOAuthRegister", () => {
 
     expect(res.status).toBe(201);
     await expect(res.json()).resolves.toMatchObject({
-      client_name: "Claude",
-      redirect_uris: ["https://claude.ai/cb"],
+      client_name: "Example App",
+      redirect_uris: ["https://example.com/cb"],
       token_endpoint_auth_method: "none",
     });
   });
@@ -195,6 +210,9 @@ describe("handleOAuthToken", () => {
     await cleanupDatabase();
     db = await getLocalDb();
     userId = (await db.user.create({ data: createTestUser() })).id;
+    await db.oAuthClient.create({
+      data: { id: clientId, clientName: "Example App", redirectUris: redirectUri },
+    });
   });
   afterEach(async () => { await cleanupDatabase(); });
 
@@ -254,7 +272,7 @@ describe("handleOAuthToken", () => {
     expect(body.scope).toBe("kitchen:read kitchen:write");
     await expect(db.apiCredential.findFirstOrThrow({ where: { userId } }))
       .resolves.toMatchObject({
-        name: "OAuth client (OAuth)",
+        name: "Example App (OAuth)",
         oauthClientId: clientId,
         oauthResource: "https://spoonjoy.app/mcp",
         expiresAt: null,
@@ -262,6 +280,25 @@ describe("handleOAuthToken", () => {
     // the access token is a real ApiCredential, plus one refresh token
     expect(await db.apiCredential.count({ where: { userId } })).toBe(1);
     expect(await db.oAuthRefreshToken.count({ where: { userId } })).toBe(1);
+  });
+
+  it("returns invalid_client when a client is revoked before code exchange", async () => {
+    const code = await mintCode();
+    await db.oAuthClient.update({ where: { id: clientId }, data: { revokedAt: new Date() } });
+    const res = await handleOAuthToken(
+      formPost("https://spoonjoy.app/oauth/token", {
+        grant_type: "authorization_code",
+        code,
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        code_verifier: VERIFIER,
+      }),
+      db,
+      null,
+    );
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error: "invalid_client" });
   });
 
   it("exchanges and refreshes tokens without a resource indicator", async () => {
@@ -347,6 +384,56 @@ describe("handleOAuthToken", () => {
     await expect(db.oAuthRefreshToken.findFirstOrThrow({
       where: { userId, clientId: claudeClient.clientId, revokedAt: null },
     })).resolves.toMatchObject({ resource: "https://spoonjoy.app/mcp" });
+  });
+
+  it("does not promote a legacy mixed-callback Claude refresh token", async () => {
+    const mixedClient = await db.oAuthClient.create({
+      data: {
+        clientName: "Claude",
+        redirectUris: `${CLAUDE_MCP_REDIRECT_URI} https://attacker.example/cb`,
+      },
+    });
+    const code = await createAuthorizationCode(db, {
+      clientId: mixedClient.id,
+      userId,
+      redirectUri: CLAUDE_MCP_REDIRECT_URI,
+      codeChallenge: await challengeFor(VERIFIER),
+      scope: "kitchen:read kitchen:write",
+      resource: null,
+    });
+    const first = await handleOAuthToken(
+      formPost("https://spoonjoy.app/oauth/token", {
+        grant_type: "authorization_code",
+        code,
+        client_id: mixedClient.id,
+        redirect_uri: CLAUDE_MCP_REDIRECT_URI,
+        code_verifier: VERIFIER,
+      }),
+      db,
+      { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    );
+    const firstBody = await first.json() as { refresh_token: string };
+
+    const refresh = await handleOAuthToken(
+      formPost("https://spoonjoy.app/oauth/token", {
+        grant_type: "refresh_token",
+        refresh_token: firstBody.refresh_token,
+        client_id: mixedClient.id,
+      }),
+      db,
+      { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    );
+
+    expect(first.status).toBe(200);
+    expect(refresh.status).toBe(200);
+    await expect(refresh.json()).resolves.toMatchObject({ expires_in: expect.any(Number) });
+    await expect(db.apiCredential.findFirstOrThrow({
+      where: { userId, oauthClientId: mixedClient.id },
+      orderBy: { createdAt: "desc" },
+    })).resolves.toMatchObject({ oauthResource: null, expiresAt: expect.any(Date) });
+    await expect(db.oAuthRefreshToken.findFirstOrThrow({
+      where: { userId, clientId: mixedClient.id, revokedAt: null },
+    })).resolves.toMatchObject({ resource: null });
   });
 
   it("exchanges a refresh token for a rotated pair and rejects the old one", async () => {
@@ -554,6 +641,37 @@ describe("loadOAuthAuthorize", () => {
     const cookie = await authedCookie(userId);
     const result = await loadOAuthAuthorize(await authorizeGet(await validQuery(), cookie), db, null);
     expect(result).toMatchObject({ kind: "consent", scope: "kitchen:read" });
+  });
+
+  it("treats a revoked client as unknown", async () => {
+    await db.oAuthClient.update({ where: { id: clientId }, data: { revokedAt: new Date() } });
+    const result = await loadOAuthAuthorize(await authorizeGet(await validQuery()), db, null);
+
+    expect(result).toMatchObject({ kind: "error", message: "Unknown OAuth client." });
+  });
+
+  it("rejects the reported corrected-path request with short state and no PKCE", async () => {
+    const reportClientId = "cmt723pe00000tx0nap6unplp";
+    const reportRedirect = "https://attacker.evil-test.example/cb";
+    await db.oAuthClient.create({
+      data: {
+        id: reportClientId,
+        clientName: "security-research-test",
+        redirectUris: reportRedirect,
+      },
+    });
+    const result = await loadOAuthAuthorize(await authorizeGet({
+      client_id: reportClientId,
+      redirect_uri: reportRedirect,
+      response_type: "code",
+      state: "randomstate123",
+    }), db, null) as Response;
+    const location = new URL(result.headers.get("Location") ?? "");
+
+    expect(result.status).toBe(302);
+    expect(location.origin + location.pathname).toBe(reportRedirect);
+    expect(location.searchParams.get("error")).toBe("invalid_request");
+    expect(location.searchParams.get("state")).toBe("randomstate123");
   });
 });
 

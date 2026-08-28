@@ -1,0 +1,1 @@
+ALTER TABLE "OAuthClient" ADD COLUMN "revokedAt" DATETIME;

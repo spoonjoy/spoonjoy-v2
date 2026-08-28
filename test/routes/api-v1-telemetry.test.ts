@@ -2061,6 +2061,13 @@ describe("API v1 authenticated telemetry", () => {
 
   it("captures OAuth bearer sync reads with delegated client metadata and safe resource class", async () => {
     const user = await db.user.create({ data: createTestUser() });
+    await db.oAuthClient.create({
+      data: {
+        id: "oauth_client_telemetry_sync",
+        clientName: "Telemetry sync test client",
+        redirectUris: "https://client.example/oauth/callback",
+      },
+    });
     const credential = await createApiCredential(db, user.id, "Delegated Sync Reader", {
       scopes: ["shopping_list:read"],
       oauthClientId: "oauth_client_telemetry_sync",

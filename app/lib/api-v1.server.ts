@@ -33,6 +33,7 @@ import {
   buildApiV1OpenApiDocument,
   buildApiV1SdkOpenApiDocument,
 } from "~/lib/api-v1-openapi.server";
+import { safeOAuthClientDisplayName } from "~/lib/oauth-client-metadata";
 import {
   normalizeSearchLimit,
   normalizeSearchScope,
@@ -5173,7 +5174,12 @@ async function oauthConnectionSummaries(db: ApiV1Db, userId: string) {
         select: { id: true, clientName: true },
       })
     : [];
-  const clientNames = new Map(oauthClients.map((client) => [client.id, client.clientName]));
+  const clientNames = new Map(
+    oauthClients.map((client) => [
+      client.id,
+      client.clientName === null ? null : safeOAuthClientDisplayName(client.clientName),
+    ]),
+  );
   const accessCredentialCounts = await db.apiCredential.groupBy({
     by: ["oauthClientId", "oauthResource"],
     where: {

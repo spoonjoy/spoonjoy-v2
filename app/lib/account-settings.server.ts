@@ -13,6 +13,7 @@ import {
 } from "~/lib/image-storage.server";
 import { resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { PROFILE_IMAGE_TYPES } from "~/lib/recipe-image";
+import { safeOAuthClientDisplayName } from "~/lib/oauth-client-metadata";
 
 export interface NotificationPreferenceFlags {
   notifySpoonOnMyRecipe: boolean;
@@ -201,7 +202,12 @@ export async function loadAccountSettings({
         select: { id: true, clientName: true },
       })
     : [];
-  const clientNames = new Map(oauthClients.map((client) => [client.id, client.clientName]));
+  const clientNames = new Map(
+    oauthClients.map((client) => [
+      client.id,
+      client.clientName === null ? null : safeOAuthClientDisplayName(client.clientName),
+    ]),
+  );
   const accessCredentialCounts = await database.apiCredential.groupBy({
     by: ["oauthClientId", "oauthResource"],
     where: {

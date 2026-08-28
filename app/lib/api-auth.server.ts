@@ -232,6 +232,16 @@ export async function authenticateApiToken(db: PrismaClientType, token: string):
     throw new ApiAuthError("Invalid API token", 401);
   }
 
+  if (
+    credential.oauthClientId
+    && !await db.oAuthClient.findFirst({
+      where: { id: credential.oauthClientId, revokedAt: null },
+      select: { id: true },
+    })
+  ) {
+    throw new ApiAuthError("Invalid API token", 401);
+  }
+
   await db.apiCredential.update({
     where: { id: credential.id },
     data: { lastUsedAt: new Date() },

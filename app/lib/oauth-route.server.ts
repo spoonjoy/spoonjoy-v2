@@ -8,6 +8,11 @@ import type {
   OAuthEnv,
 } from "~/lib/env.server";
 import type { RegisteredOAuthClient } from "~/lib/oauth-server.server";
+import {
+  isCanonicalOAuthClientRegistration,
+  SPOONJOY_APPLE_OAUTH_CLIENT_NAME,
+  SPOONJOY_APPLE_OAUTH_REDIRECT_URI,
+} from "~/lib/oauth-server.server";
 import { getCloudflareEnv } from "~/lib/route-platform.server";
 import { getOAuthSessionStorage, getUserId, sanitizeSessionRedirect, type SessionEnv } from "~/lib/session.server";
 
@@ -25,8 +30,6 @@ export interface OAuthStartSessionData {
 }
 
 const OAUTH_SESSION_PREFIX = "oauth";
-const FIRST_PARTY_OAUTH_CLIENT_NAME = "Spoonjoy Apple";
-const FIRST_PARTY_OAUTH_REDIRECT_URI = "https://spoonjoy.app/oauth/callback";
 const CALLBACK_PATHS: Record<OAuthProvider, string> = {
   apple: "/auth/apple/callback",
   github: "/auth/github/callback",
@@ -135,9 +138,12 @@ export function resolveOAuthProviderHintStartPath(
   if (!provider) return null;
   if (
     !client
-    || client.clientName !== FIRST_PARTY_OAUTH_CLIENT_NAME
-    || !client.redirectUris.includes(FIRST_PARTY_OAUTH_REDIRECT_URI)
-    || url.searchParams.get("redirect_uri") !== FIRST_PARTY_OAUTH_REDIRECT_URI
+    || !isCanonicalOAuthClientRegistration(
+      client,
+      SPOONJOY_APPLE_OAUTH_CLIENT_NAME,
+      SPOONJOY_APPLE_OAUTH_REDIRECT_URI,
+    )
+    || url.searchParams.get("redirect_uri") !== SPOONJOY_APPLE_OAUTH_REDIRECT_URI
   ) {
     return null;
   }

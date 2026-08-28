@@ -685,6 +685,12 @@ describe("API v1 OpenAPI document", () => {
     ]));
     expect(document.components.schemas.OAuthRegisterRequest.properties.redirect_uris.items.description)
       .toContain("custom schemes");
+    expect(document.components.schemas.OAuthRegisterRequest.properties.redirect_uris.uniqueItems).toBe(true);
+    expect(document.components.schemas.OAuthRegisterRequest.properties.client_name).toMatchObject({
+      type: "string",
+      maxLength: 80,
+      description: expect.stringContaining("Unicode code points"),
+    });
   });
 
   it("uses response examples whose status and envelope shape match each response", () => {

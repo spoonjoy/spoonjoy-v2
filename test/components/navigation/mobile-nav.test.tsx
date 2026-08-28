@@ -125,6 +125,16 @@ describe("MobileNav", () => {
   });
 
   describe("route-aware docks", () => {
+    it("stays out of the OAuth consent flow", () => {
+      render(
+        <MemoryRouter initialEntries={["/oauth/authorize?client_id=client-1"]}>
+          <MobileNav />
+        </MemoryRouter>,
+      );
+
+      expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
+    });
+
     it("stays out of write-heavy recipe and cookbook forms while allowing recipe detail navigation", () => {
       const { rerender } = render(
         <MemoryRouter initialEntries={["/recipes/new"]}>

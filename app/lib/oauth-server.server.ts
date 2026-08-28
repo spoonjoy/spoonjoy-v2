@@ -15,6 +15,10 @@
 
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import { createApiCredential } from "~/lib/api-auth.server";
+import {
+  hasProhibitedOAuthClientNameCharacters,
+  MAX_OAUTH_CLIENT_NAME_CODE_POINTS,
+} from "~/lib/oauth-client-metadata";
 
 type Database = PrismaClientType;
 
@@ -114,11 +118,23 @@ export interface RegisteredOAuthClient {
   redirectUris: string[];
 }
 
+export const CLAUDE_MCP_CLIENT_NAME = "Claude";
 export const CLAUDE_MCP_REDIRECT_URI = "https://claude.ai/api/mcp/auth_callback";
+export const SPOONJOY_APPLE_OAUTH_CLIENT_NAME = "Spoonjoy Apple";
+export const SPOONJOY_APPLE_OAUTH_REDIRECT_URI = "https://spoonjoy.app/oauth/callback";
+
+export function isCanonicalOAuthClientRegistration(
+  client: RegisteredOAuthClient | null | undefined,
+  clientName: string,
+  redirectUri: string,
+): boolean {
+  return client?.clientName?.trim().toLowerCase() === clientName.toLowerCase()
+    && client.redirectUris.length === 1
+    && client.redirectUris[0] === redirectUri;
+}
 
 export function isClaudeMcpOAuthClient(client: RegisteredOAuthClient | null | undefined): boolean {
-  return client?.clientName?.trim().toLowerCase() === "claude" &&
-    client.redirectUris.includes(CLAUDE_MCP_REDIRECT_URI);
+  return isCanonicalOAuthClientRegistration(client, CLAUDE_MCP_CLIENT_NAME, CLAUDE_MCP_REDIRECT_URI);
 }
 
 /**
@@ -138,8 +154,35 @@ export async function registerOAuthClient(
       throw new OAuthError("invalid_redirect_uri", `Invalid redirect_uri: ${uri}`);
     }
   }
+  if (new Set(redirectUris).size !== redirectUris.length) {
+    throw new OAuthError("invalid_client_metadata", "redirect_uris must not contain duplicates");
+  }
 
   const clientName = input.clientName?.trim() || null;
+  if (clientName) {
+    if (
+      Array.from(clientName).length > MAX_OAUTH_CLIENT_NAME_CODE_POINTS
+      || hasProhibitedOAuthClientNameCharacters(clientName)
+    ) {
+      throw new OAuthError(
+        "invalid_client_metadata",
+        `client_name must be at most ${MAX_OAUTH_CLIENT_NAME_CODE_POINTS} Unicode code points and contain no control or bidirectional formatting characters`,
+      );
+    }
+    const reservedRegistration = [
+      [CLAUDE_MCP_CLIENT_NAME, CLAUDE_MCP_REDIRECT_URI],
+      [SPOONJOY_APPLE_OAUTH_CLIENT_NAME, SPOONJOY_APPLE_OAUTH_REDIRECT_URI],
+    ].find(([reservedName]) => clientName.toLowerCase() === reservedName.toLowerCase());
+    if (
+      reservedRegistration
+      && (redirectUris.length !== 1 || redirectUris[0] !== reservedRegistration[1])
+    ) {
+      throw new OAuthError(
+        "invalid_client_metadata",
+        `${reservedRegistration[0]} must use its canonical redirect_uri`,
+      );
+    }
+  }
   const client = await db.oAuthClient.create({
     data: { clientName, redirectUris: redirectUris.join(" ") },
   });
@@ -153,7 +196,7 @@ export async function getOAuthClient(
   clientId: string,
 ): Promise<RegisteredOAuthClient | null> {
   if (!clientId) return null;
-  const client = await db.oAuthClient.findUnique({ where: { id: clientId } });
+  const client = await db.oAuthClient.findFirst({ where: { id: clientId, revokedAt: null } });
   if (!client) return null;
   return {
     clientId: client.id,
@@ -230,6 +273,9 @@ export async function consumeAuthorizationCode(
 ): Promise<ConsumedAuthorizationCode> {
   const now = input.now ?? new Date();
   if (!input.code) throw new OAuthError("invalid_grant", "Missing authorization code");
+  if (!await getOAuthClient(db, input.clientId)) {
+    throw new OAuthError("invalid_client", "Unknown or revoked OAuth client");
+  }
 
   const record = await db.oAuthAuthCode.findUnique({
     where: { codeHash: await sha256Hex(input.code) },
@@ -269,7 +315,7 @@ export interface IssuedConnectorTokens {
   resource: string | null;
 }
 
-function oauthCredentialName(clientName: string | null | undefined): string {
+function oauthCredentialName(clientName: string | null): string {
   return `${clientName?.trim() || "OAuth client"} (OAuth)`;
 }
 
@@ -293,13 +339,14 @@ export async function issueConnectorTokens(
 ): Promise<IssuedConnectorTokens> {
   const now = input.now ?? new Date();
   const client = await getOAuthClient(db, input.clientId);
+  if (!client) throw new OAuthError("invalid_client", "Unknown or revoked OAuth client");
   const connectionKey = input.connectionKey ?? randomToken("ocn_", 16);
   const persistentAccessToken = isMcpProtectedResource(input.resource ?? null);
   const expiresIn = persistentAccessToken ? null : OAUTH_ACCESS_TOKEN_TTL_SECONDS;
   const { token: accessToken } = await createApiCredential(
     db,
     input.userId,
-    oauthCredentialName(client?.clientName),
+    oauthCredentialName(client.clientName),
     {
       expiresAt: expiresIn === null ? null : new Date(now.getTime() + expiresIn * 1000),
       scopes: input.scope,
@@ -385,6 +432,8 @@ export async function rotateConnectorTokens(
   if (record.clientId !== input.clientId) {
     throw new OAuthError("invalid_grant", "Refresh token was issued to a different client");
   }
+  const client = await getOAuthClient(db, record.clientId);
+  if (!client) throw new OAuthError("invalid_client", "Unknown or revoked OAuth client");
 
   const revoked = await db.oAuthRefreshToken.updateMany({
     where: { id: record.id, revokedAt: null },
@@ -394,7 +443,6 @@ export async function rotateConnectorTokens(
     throw new OAuthError("invalid_grant", "Refresh token already used");
   }
 
-  const client = await getOAuthClient(db, record.clientId);
   const resource = !record.resource && input.legacyMcpResource && isClaudeMcpOAuthClient(client)
     ? input.legacyMcpResource
     : record.resource;
