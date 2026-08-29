@@ -8,9 +8,10 @@ export const MCP_PROTOCOL_FIXTURE_METADATA = Object.freeze([
   Object.freeze({
     version: "2026-07-28",
     sources: Object.freeze([
-      "https://modelcontextprotocol.io/specification/draft/basic/transports/streamable-http",
-      "https://modelcontextprotocol.io/specification/draft/server/discover",
-      "https://modelcontextprotocol.io/specification/draft/basic/versioning",
+      "https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http",
+      "https://modelcontextprotocol.io/specification/2026-07-28/server/discover",
+      "https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning",
+      "https://modelcontextprotocol.io/specification/2026-07-28/schema",
     ]),
   }),
 ]);

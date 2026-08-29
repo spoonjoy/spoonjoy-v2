@@ -23,9 +23,13 @@ export interface JsonRpcFailure {
 
 export type JsonRpcResponse = JsonRpcSuccess | JsonRpcFailure;
 
+export type ParsedJsonRpcLine =
+  | { ok: true; value: unknown }
+  | { ok: false; error: JsonRpcFailure };
+
 export interface JsonRpcToolRouter {
-  listTools(): unknown;
-  callTool(name: string, args: Record<string, unknown>): Promise<unknown>;
+  listTools(): { tools: unknown[] };
+  callTool(name: string, args: Record<string, unknown>): Promise<{ content: unknown[] }>;
 }
 
 const PARSE_ERROR = -32700;
@@ -33,6 +37,11 @@ const INVALID_REQUEST = -32600;
 const METHOD_NOT_FOUND = -32601;
 const INVALID_PARAMS = -32602;
 const INTERNAL_ERROR = -32603;
+export const MCP_MODERN_PROTOCOL_VERSION = "2026-07-28";
+export const MCP_LEGACY_PROTOCOL_VERSION = "2025-06-18";
+const MCP_SERVER_INFO_META = {
+  "io.modelcontextprotocol/serverInfo": { name: "spoonjoy", version: "1.0.0" },
+};
 
 export class JsonRpcError extends Error {
   readonly code: number;
@@ -84,12 +93,15 @@ const DEFAULT_PROTOCOL_VERSION = "2024-11-05";
 export interface HandleJsonRpcOptions {
   /** Protocol version to advertise when the client doesn't request one. */
   defaultProtocolVersion?: string;
+  /** Exact version already selected by the HTTP transport. */
+  protocolVersion?: string;
   /**
    * Called with the raw Error before it's collapsed into a JSON-RPC failure.
    * Lets the transport (e.g. /mcp) report unexpected exceptions to its
    * observability sink without losing the original stack to the wire format.
    */
   onError?: (error: unknown) => void;
+  era?: "legacy" | "modern";
 }
 
 /**
@@ -122,6 +134,28 @@ export async function handleJsonRpcMessage(
   }
 
   const id = requestId(parsed.id);
+  if (options.era === "modern") {
+    if (parsed.method === "server/discover" && parsed.id !== undefined) {
+      return {
+        jsonrpc: "2.0",
+        id,
+        result: {
+          resultType: "complete",
+          supportedVersions: [MCP_MODERN_PROTOCOL_VERSION, MCP_LEGACY_PROTOCOL_VERSION],
+          capabilities: { tools: {} },
+          _meta: {
+            ...MCP_SERVER_INFO_META,
+          },
+          instructions: "Use Spoonjoy tools for authorized kitchen work.",
+          ttlMs: 3_600_000,
+          cacheScope: "public",
+        },
+      };
+    }
+    if (parsed.method !== "tools/list" && parsed.method !== "tools/call") {
+      return failure(id, METHOD_NOT_FOUND, `Method not found: ${parsed.method}`);
+    }
+  }
   if (parsed.id === undefined) return null;
 
   try {
@@ -132,18 +166,37 @@ export async function handleJsonRpcMessage(
           id,
           result: {
             protocolVersion: negotiateProtocolVersion(
-              parsed.params,
-              options.defaultProtocolVersion ?? DEFAULT_PROTOCOL_VERSION,
+              options.protocolVersion === undefined ? parsed.params : undefined,
+              options.protocolVersion ?? options.defaultProtocolVersion ?? DEFAULT_PROTOCOL_VERSION,
             ),
             serverInfo: { name: "spoonjoy", version: "1.0.0" },
             capabilities: { tools: {} },
           },
         };
       case "tools/list":
-        return { jsonrpc: "2.0", id, result: router.listTools() };
+        return {
+          jsonrpc: "2.0",
+          id,
+          result: options.era === "modern"
+            ? {
+              resultType: "complete",
+              ...router.listTools(),
+              ttlMs: 300_000,
+              cacheScope: "private",
+              _meta: MCP_SERVER_INFO_META,
+            }
+            : router.listTools(),
+        };
       case "tools/call": {
         const call = parseCallParams(parsed.params);
-        return { jsonrpc: "2.0", id, result: await router.callTool(call.name, call.args) };
+        const result = await router.callTool(call.name, call.args);
+        return {
+          jsonrpc: "2.0",
+          id,
+          result: options.era === "modern"
+            ? { resultType: "complete", ...result, isError: false, _meta: MCP_SERVER_INFO_META }
+            : result,
+        };
       }
       default:
         return failure(id, METHOD_NOT_FOUND, `Method not found: ${parsed.method}`);
@@ -164,11 +217,15 @@ export async function handleJsonRpcLine(
   router: JsonRpcToolRouter,
   options: HandleJsonRpcOptions = {},
 ): Promise<JsonRpcResponse | null> {
-  let parsed: unknown;
+  const parsed = parseJsonRpcLine(line);
+  if (!parsed.ok) return parsed.error;
+  return handleJsonRpcMessage(parsed.value, router, options);
+}
+
+export function parseJsonRpcLine(line: string): ParsedJsonRpcLine {
   try {
-    parsed = JSON.parse(line);
+    return { ok: true, value: JSON.parse(line) as unknown };
   } catch {
-    return failure(null, PARSE_ERROR, "Parse error");
+    return { ok: false, error: failure(null, PARSE_ERROR, "Parse error") };
   }
-  return handleJsonRpcMessage(parsed, router, options);
 }

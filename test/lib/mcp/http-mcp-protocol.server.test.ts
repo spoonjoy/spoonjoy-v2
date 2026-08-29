@@ -4,6 +4,7 @@ import {
   MCP_LEGACY_VERSION,
   MCP_MODERN_VERSION,
   classifyMcpTransportRequest,
+  validateModernMcpRequest,
   type McpTransportDecision,
 } from "~/lib/mcp/http-mcp-protocol.server";
 import {
@@ -27,6 +28,45 @@ function expectProtocol(decision: McpTransportDecision) {
   expect(decision.kind).toBe("protocol");
   if (decision.kind !== "protocol") throw new Error("Expected protocol decision.");
   return decision;
+}
+
+function modernMessage(
+  id: number | string | null = "discover-1",
+  method = "server/discover",
+  params: Record<string, unknown> = {},
+) {
+  return {
+    jsonrpc: "2.0" as const,
+    id,
+    method,
+    params: {
+      ...params,
+      _meta: {
+        "io.modelcontextprotocol/protocolVersion": MCP_MODERN_VERSION,
+        "io.modelcontextprotocol/clientInfo": { name: "fixture-client", version: "1.0.0" },
+        "io.modelcontextprotocol/clientCapabilities": {},
+      },
+    },
+  };
+}
+
+function modernHeaders(method = "server/discover", name?: string) {
+  return new Headers({
+    "MCP-Protocol-Version": MCP_MODERN_VERSION,
+    "Mcp-Method": method,
+    ...(name === undefined ? {} : { "Mcp-Name": name }),
+  });
+}
+
+function expectModernError(
+  result: ReturnType<typeof validateModernMcpRequest>,
+  code: number,
+  id: number | string | null,
+) {
+  expect(result.ok).toBe(false);
+  if (result.ok) throw new Error("Expected modern validation error.");
+  expect(result.status).toBe(400);
+  expect(result.error).toMatchObject({ jsonrpc: "2.0", id, error: { code } });
 }
 
 async function expectJsonResponse(
@@ -56,9 +96,10 @@ describe("MCP HTTP protocol boundary fixtures", () => {
       {
         version: "2026-07-28",
         sources: [
-          "https://modelcontextprotocol.io/specification/draft/basic/transports/streamable-http",
-          "https://modelcontextprotocol.io/specification/draft/server/discover",
-          "https://modelcontextprotocol.io/specification/draft/basic/versioning",
+          "https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http",
+          "https://modelcontextprotocol.io/specification/2026-07-28/server/discover",
+          "https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning",
+          "https://modelcontextprotocol.io/specification/2026-07-28/schema",
         ],
       },
     ]);
@@ -143,20 +184,147 @@ describe("MCP HTTP protocol boundary fixtures", () => {
   });
 
   it.each(MCP_UNSUPPORTED_VERSION_CASES)("rejects unsupported protocol version %s", async (version) => {
-    await expectJsonResponse(classify("POST", {
+    expect(classify("POST", {
       Accept: "application/json, text/event-stream",
       "MCP-Protocol-Version": version,
-    }), {
-      status: 400,
-      body: {
-        jsonrpc: "2.0",
-        id: null,
-        error: {
-          code: -32022,
-          message: "Unsupported protocol version",
-          data: { supported: [MCP_MODERN_VERSION, MCP_LEGACY_VERSION], requested: version },
-        },
-      },
+    })).toEqual({ kind: "unsupported", requested: version });
+  });
+});
+
+describe("modern MCP request metadata validation", () => {
+  it("accepts exact metadata and case-insensitive header names", () => {
+    const parsed = modernMessage();
+    const result = validateModernMcpRequest({ headers: new Headers({
+      "mcp-protocol-version": MCP_MODERN_VERSION,
+      "mcp-method": "server/discover",
+    }) }, parsed);
+
+    expect(result).toEqual({ ok: true, message: parsed });
+  });
+
+  it.each([
+    ["missing method", modernHeaders(), modernMessage(1), "Mcp-Method"],
+    ["method mismatch", modernHeaders("Tools/List"), modernMessage("method-id"), "Mcp-Method"],
+    ["missing protocol metadata", modernHeaders(), modernMessage(3), "MCP-Protocol-Version"],
+    ["protocol mismatch", modernHeaders(), modernMessage(4), "MCP-Protocol-Version"],
+    ["missing protocol header", new Headers({ "Mcp-Method": "server/discover" }), modernMessage(41), "MCP-Protocol-Version"],
+    ["protocol header mismatch", new Headers({ "MCP-Protocol-Version": MCP_LEGACY_VERSION, "Mcp-Method": "server/discover" }), modernMessage(42), "MCP-Protocol-Version"],
+    ["missing tool name", modernHeaders("tools/call"), modernMessage(5, "tools/call", { name: "search_spoonjoy" }), "Mcp-Name"],
+    ["tool name mismatch", modernHeaders("tools/call", "get_shopping_list"), modernMessage(6, "tools/call", { name: "search_spoonjoy" }), "Mcp-Name"],
+    ["non-string tool name", modernHeaders("tools/call", "get_shopping_list"), modernMessage(61, "tools/call", { name: 123 }), "Mcp-Name"],
+    ["non-string resource URI", modernHeaders("resources/read", "file:///recipe"), modernMessage(62, "resources/read", { uri: false }), "Mcp-Name"],
+  ])("rejects %s with HeaderMismatch while preserving the request ID", (_label, headers, message, expectedHeader) => {
+    if (_label === "missing method") headers.delete("Mcp-Method");
+    if (_label === "missing protocol metadata") {
+      delete ((message.params as Record<string, unknown>)._meta as Record<string, unknown>)[
+        "io.modelcontextprotocol/protocolVersion"
+      ];
+    }
+    if (_label === "protocol mismatch") {
+      ((message.params as Record<string, unknown>)._meta as Record<string, unknown>)[
+        "io.modelcontextprotocol/protocolVersion"
+      ] = MCP_LEGACY_VERSION;
+    }
+
+    const result = validateModernMcpRequest({ headers }, message);
+
+    expectModernError(result, -32020, message.id);
+    if (!result.ok) expect(result.error.error.message).toContain(expectedHeader);
+  });
+
+  it.each([
+    ["missing params", (message: ReturnType<typeof modernMessage>) => {
+      delete (message as { params?: unknown }).params;
+    }],
+    ["missing metadata", (message: ReturnType<typeof modernMessage>) => {
+      delete (message.params as { _meta?: unknown })._meta;
+    }],
+    ["missing capabilities", (message: ReturnType<typeof modernMessage>) => {
+      delete ((message.params as Record<string, unknown>)._meta as Record<string, unknown>)[
+        "io.modelcontextprotocol/clientCapabilities"
+      ];
+    }],
+    ["malformed client info", (message: ReturnType<typeof modernMessage>) => {
+      ((message.params as Record<string, unknown>)._meta as Record<string, unknown>)[
+        "io.modelcontextprotocol/clientInfo"
+      ] = { name: "fixture-client" };
+    }],
+  ])("rejects %s as invalid params while preserving a string ID", (_label, mutate) => {
+    const message = modernMessage("metadata-id");
+    mutate(message);
+
+    expectModernError(validateModernMcpRequest({ headers: modernHeaders() }, message), -32602, "metadata-id");
+  });
+
+  it("accepts omitted optional clientInfo but still requires client capabilities", () => {
+    const message = modernMessage("anonymous-client-info");
+    delete (message.params._meta as Record<string, unknown>)["io.modelcontextprotocol/clientInfo"];
+
+    expect(validateModernMcpRequest({ headers: modernHeaders() }, message)).toEqual({
+      ok: true,
+      message,
     });
+  });
+
+  it("rejects a client-sent response as an invalid request with its ID", () => {
+    expectModernError(validateModernMcpRequest(
+      { headers: modernHeaders("server/discover") },
+      { jsonrpc: "2.0", id: "response-id", result: {} },
+    ), -32600, "response-id");
+  });
+
+  it("rejects a no-id call to a supported modern request method", () => {
+    const message = modernMessage(12, "tools/call", { name: "get_shopping_list" });
+    delete (message as { id?: number | string | null }).id;
+
+    expectModernError(validateModernMcpRequest({
+      headers: modernHeaders("tools/call", "get_shopping_list"),
+    }, message), -32600, null);
+  });
+
+  it.each([null, true, { nested: "id" }, ["id"]])(
+    "rejects invalid modern request id %j before dispatch",
+    (id) => {
+      expectModernError(validateModernMcpRequest(
+        { headers: modernHeaders() },
+        modernMessage(id as never),
+      ), -32600, null);
+    },
+  );
+
+  it("decodes a Base64-sentinel Mcp-Name before comparing a resource URI", () => {
+    const message = modernMessage("resource-id", "resources/read", { uri: "file:///café.txt" });
+    const result = validateModernMcpRequest({
+      headers: modernHeaders("resources/read", "=?base64?ZmlsZTovLy9jYWbDqS50eHQ=?="),
+    }, message);
+
+    expect(result).toEqual({ ok: true, message });
+  });
+
+  it.each([
+    "=?base64?not_base64!?=",
+    "=?base64?/w==?=",
+  ])("rejects malformed or invalid UTF-8 Mcp-Name sentinel %s", (name) => {
+    const message = modernMessage(90, "prompts/get", { name: "weekly-menu" });
+    expectModernError(validateModernMcpRequest({
+      headers: modernHeaders("prompts/get", name),
+    }, message), -32020, 90);
+  });
+
+  it("rejects a matching raw non-ASCII Mcp-Name that should use Base64", () => {
+    const message = modernMessage(91, "resources/read", { uri: "file:///café.txt" });
+    expectModernError(validateModernMcpRequest({
+      headers: modernHeaders("resources/read", "file:///café.txt"),
+    }, message), -32020, 91);
+  });
+
+  it.each([
+    ["discover extras", modernMessage(92, "server/discover", { unexpected: true })],
+    ["string cursor", modernMessage(93, "tools/list", { cursor: "next-page" })],
+    ["non-string cursor", modernMessage(94, "tools/list", { cursor: 2 })],
+  ])("rejects unsupported modern params for %s", (_label, message) => {
+    expectModernError(validateModernMcpRequest({
+      headers: modernHeaders(message.method),
+    }, message), -32602, message.id);
   });
 });

@@ -35,6 +35,8 @@ const { chromium, expect } = requireFromCwd("@playwright/test");
 
 const CLAUDE_MCP_REDIRECT_URI = "https://claude.ai/api/mcp/auth_callback";
 const MCP_PROTOCOL_VERSION = "2025-06-18";
+const MCP_MODERN_PROTOCOL_VERSION = "2026-07-28";
+const MCP_CANARY_CLIENT_INFO = Object.freeze({ name: "spoonjoy-live-canary", version: "1.0.0" });
 
 function base64Url(bytes) {
   return Buffer.from(bytes).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
@@ -336,7 +338,25 @@ async function expectRefreshReplayRejected(request, { baseUrl, clientId, refresh
   assert.equal(body.error, "invalid_grant");
 }
 
-async function mcpRpc(request, { baseUrl, accessToken, id, method, params, workerVersionId }) {
+async function mcpRpc(request, {
+  baseUrl,
+  accessToken,
+  id,
+  method,
+  params,
+  workerVersionId,
+  modern = false,
+}) {
+  const requestParams = modern
+    ? {
+        ...(params ?? {}),
+        _meta: {
+          "io.modelcontextprotocol/protocolVersion": MCP_MODERN_PROTOCOL_VERSION,
+          "io.modelcontextprotocol/clientInfo": MCP_CANARY_CLIENT_INFO,
+          "io.modelcontextprotocol/clientCapabilities": {},
+        },
+      }
+    : params;
   const response = await spoonjoyRequest(request, {
     baseUrl,
     workerVersionId,
@@ -347,12 +367,19 @@ async function mcpRpc(request, { baseUrl, accessToken, id, method, params, worke
       headers: {
         Accept: "application/json, text/event-stream",
         Authorization: `Bearer ${accessToken}`,
+        ...(modern
+          ? {
+              "MCP-Protocol-Version": MCP_MODERN_PROTOCOL_VERSION,
+              "Mcp-Method": method,
+              ...(method === "tools/call" ? { "Mcp-Name": params.name } : {}),
+            }
+          : {}),
       },
       data: {
         jsonrpc: "2.0",
         id,
         method,
-        ...(params === undefined ? {} : { params }),
+        ...(requestParams === undefined ? {} : { params: requestParams }),
       },
     },
   });
@@ -384,6 +411,59 @@ async function expectMcpReady(request, { baseUrl, accessToken, workerVersionId }
   const names = tools.tools.map((tool) => tool.name);
   assert.ok(names.includes("search_spoonjoy"), "MCP tools/list omitted search_spoonjoy");
   assert.ok(names.includes("get_shopping_list"), "MCP tools/list omitted get_shopping_list");
+
+  const discovery = await mcpRpc(request, {
+    baseUrl,
+    accessToken,
+    id: "modern-discover",
+    method: "server/discover",
+    workerVersionId,
+    modern: true,
+  });
+  assert.equal(discovery.resultType, "complete");
+  assert.deepEqual(discovery.supportedVersions, [MCP_MODERN_PROTOCOL_VERSION, MCP_PROTOCOL_VERSION]);
+  assert.equal(discovery.cacheScope, "public");
+  assert.ok(discovery.ttlMs > 0, "Modern MCP discovery omitted a positive ttlMs");
+  assert.deepEqual(discovery._meta?.["io.modelcontextprotocol/serverInfo"], {
+    name: "spoonjoy",
+    version: "1.0.0",
+  });
+
+  const modernTools = await mcpRpc(request, {
+    baseUrl,
+    accessToken,
+    id: "modern-tools-list",
+    method: "tools/list",
+    workerVersionId,
+    modern: true,
+  });
+  assert.equal(modernTools.resultType, "complete");
+  assert.equal(modernTools.cacheScope, "private");
+  assert.ok(modernTools.ttlMs > 0, "Modern MCP tools/list omitted a positive ttlMs");
+  assert.deepEqual(modernTools._meta?.["io.modelcontextprotocol/serverInfo"], {
+    name: "spoonjoy",
+    version: "1.0.0",
+  });
+  const modernNames = modernTools.tools.map((tool) => tool.name);
+  assert.ok(modernNames.includes("search_spoonjoy"), "Modern MCP tools/list omitted search_spoonjoy");
+  assert.ok(modernNames.includes("get_shopping_list"), "Modern MCP tools/list omitted get_shopping_list");
+
+  const modernCall = await mcpRpc(request, {
+    baseUrl,
+    accessToken,
+    id: "modern-tools-call",
+    method: "tools/call",
+    params: { name: "get_shopping_list", arguments: {} },
+    workerVersionId,
+    modern: true,
+  });
+  assert.equal(modernCall.resultType, "complete");
+  assert.equal(modernCall.isError, false);
+  assert.ok(Array.isArray(modernCall.content), "Modern MCP tools/call omitted content");
+  assert.deepEqual(modernCall._meta?.["io.modelcontextprotocol/serverInfo"], {
+    name: "spoonjoy",
+    version: "1.0.0",
+  });
 }
 
 async function lookupCanaryUserId(email, { targetEnv }) {

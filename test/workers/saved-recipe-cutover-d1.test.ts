@@ -583,6 +583,50 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
     expect(await membershipCount(MCP_RECIPE_ID)).toBe(0);
   });
 
+  it("serves authenticated modern MCP discovery through the real Worker and D1 adapter", async () => {
+    const response = await SELF.fetch(new Request(`${TEST_ORIGIN}/mcp`, {
+      method: "POST",
+      headers: bearerHeaders({
+        Accept: "application/json, text/event-stream",
+        "Content-Type": "application/json",
+        "MCP-Protocol-Version": "2026-07-28",
+        "Mcp-Method": "server/discover",
+      }),
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "worker-modern-discover",
+        method: "server/discover",
+        params: {
+          _meta: {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientInfo": {
+              name: "spoonjoy-worker-integration-test",
+              version: "1.0.0",
+            },
+            "io.modelcontextprotocol/clientCapabilities": {},
+          },
+        },
+      }),
+    }));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      jsonrpc: "2.0",
+      id: "worker-modern-discover",
+      result: {
+        resultType: "complete",
+        supportedVersions: ["2026-07-28", "2025-06-18"],
+        capabilities: { tools: {} },
+        _meta: {
+          "io.modelcontextprotocol/serverInfo": { name: "spoonjoy", version: "1.0.0" },
+        },
+        instructions: "Use Spoonjoy tools for authorized kitchen work.",
+        ttlMs: 3_600_000,
+        cacheScope: "public",
+      },
+    });
+  });
+
   it("recognizes the exact token through the real D1 error wrapper", async () => {
     await installProbeTrigger(CUTOVER_TOKEN);
     const error = await executeFencedProbeInsert();

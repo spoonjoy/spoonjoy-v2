@@ -27,6 +27,29 @@ function rpc(body: unknown, headers: Record<string, string> = {}) {
   }) as unknown as Request;
 }
 
+function modernRpc(
+  id: number | string,
+  method: string,
+  headers: Record<string, string> = {},
+) {
+  return rpc({
+    jsonrpc: "2.0",
+    id,
+    method,
+    params: {
+      _meta: {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": { name: "route-fixture", version: "1.0.0" },
+        "io.modelcontextprotocol/clientCapabilities": {},
+      },
+    },
+  }, {
+    "MCP-Protocol-Version": "2026-07-28",
+    "Mcp-Method": method,
+    ...headers,
+  });
+}
+
 describe("/mcp route", () => {
   let db: Awaited<ReturnType<typeof getLocalDb>>;
 
@@ -90,6 +113,26 @@ describe("/mcp route", () => {
     const response = await action(routeArgs(rpc({ jsonrpc: "2.0", id: 1, method: "initialize" })));
     expect(response.status).toBe(401);
     expect(response.headers.get("WWW-Authenticate")).toContain("resource_metadata=");
+  });
+
+  it("routes authenticated modern discovery without a legacy initialize handshake", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail("modern-route"), username: faker.internet.username() } });
+    const { token } = await createApiCredential(db, user.id, "modern route token");
+
+    const response = await action(routeArgs(modernRpc("discover-route", "server/discover", {
+      Authorization: `Bearer ${token}`,
+    })));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      jsonrpc: "2.0",
+      id: "discover-route",
+      result: {
+        resultType: "complete",
+        supportedVersions: ["2026-07-28", "2025-06-18"],
+        capabilities: { tools: {} },
+      },
+    });
   });
 
   it("handles initialize + tools/list + a tools/call end to end when authenticated", async () => {

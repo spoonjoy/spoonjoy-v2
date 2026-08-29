@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   handleJsonRpcLine,
   handleJsonRpcMessage,
+  parseJsonRpcLine,
   type JsonRpcToolRouter,
 } from "~/lib/mcp/json-rpc.server";
 
@@ -12,6 +13,39 @@ function router(overrides: Partial<JsonRpcToolRouter> = {}): JsonRpcToolRouter {
     ...overrides,
   };
 }
+
+describe("parseJsonRpcLine", () => {
+  it.each([
+    { jsonrpc: "2.0", id: 7, method: "tools/list" },
+    { jsonrpc: "2.0", id: "request-id", method: "tools/list" },
+    { jsonrpc: "2.0", id: null, method: "tools/list" },
+  ])("parses one JSON-RPC message without changing its request id: $id", (message) => {
+    expect(parseJsonRpcLine(JSON.stringify(message))).toEqual({
+      ok: true,
+      value: message,
+    });
+  });
+
+  it("keeps a valid JSON batch available for message-shape validation", () => {
+    const batch = [{ jsonrpc: "2.0", id: 1, method: "tools/list" }];
+
+    expect(parseJsonRpcLine(JSON.stringify(batch))).toEqual({
+      ok: true,
+      value: batch,
+    });
+  });
+
+  it("returns the canonical parse error for malformed JSON", () => {
+    expect(parseJsonRpcLine("{")).toEqual({
+      ok: false,
+      error: {
+        jsonrpc: "2.0",
+        id: null,
+        error: { code: -32700, message: "Parse error" },
+      },
+    });
+  });
+});
 
 describe("json-rpc MCP server", () => {
   it("returns parse and invalid request errors", async () => {
@@ -116,6 +150,88 @@ describe("json-rpc MCP server", () => {
     });
   });
 
+  it("returns deterministic modern server discovery with the exact string ID", async () => {
+    await expect(handleJsonRpcMessage(
+      { jsonrpc: "2.0", id: "discover-1", method: "server/discover", params: {} },
+      router(),
+      { era: "modern" },
+    )).resolves.toEqual({
+      jsonrpc: "2.0",
+      id: "discover-1",
+      result: {
+        resultType: "complete",
+        supportedVersions: ["2026-07-28", "2025-06-18"],
+        capabilities: { tools: {} },
+        _meta: {
+          "io.modelcontextprotocol/serverInfo": { name: "spoonjoy", version: "1.0.0" },
+        },
+        instructions: "Use Spoonjoy tools for authorized kitchen work.",
+        ttlMs: 3_600_000,
+        cacheScope: "public",
+      },
+    });
+  });
+
+  it.each([
+    { jsonrpc: "2.0", id: 20, method: "initialize" },
+    { jsonrpc: "2.0", method: "notifications/initialized" },
+    { jsonrpc: "2.0", id: "unknown", method: "recipes/list" },
+  ])("does not inherit a legacy handler for modern method $method", async (message) => {
+    await expect(handleJsonRpcMessage(message, router(), { era: "modern" })).resolves.toEqual({
+      jsonrpc: "2.0",
+      id: "id" in message ? message.id : null,
+      error: { code: -32601, message: `Method not found: ${message.method}` },
+    });
+  });
+
+  it("adds deterministic private caching hints to a modern tool list", async () => {
+    const testRouter = router();
+    await expect(handleJsonRpcMessage(
+      { jsonrpc: "2.0", id: "tools-modern", method: "tools/list", params: {} },
+      testRouter,
+      { era: "modern" },
+    )).resolves.toEqual({
+      jsonrpc: "2.0",
+      id: "tools-modern",
+      result: {
+        resultType: "complete",
+        tools: [{ name: "health" }],
+        ttlMs: 300_000,
+        cacheScope: "private",
+        _meta: {
+          "io.modelcontextprotocol/serverInfo": { name: "spoonjoy", version: "1.0.0" },
+        },
+      },
+    });
+    expect(testRouter.listTools).toHaveBeenCalledOnce();
+  });
+
+  it("marks a modern tool call result complete without changing its content", async () => {
+    const testRouter = router();
+    await expect(handleJsonRpcMessage(
+      {
+        jsonrpc: "2.0",
+        id: 21,
+        method: "tools/call",
+        params: { name: "health", arguments: { verbose: true } },
+      },
+      testRouter,
+      { era: "modern" },
+    )).resolves.toEqual({
+      jsonrpc: "2.0",
+      id: 21,
+      result: {
+        resultType: "complete",
+        content: [{ type: "text", text: JSON.stringify({ verbose: true }) }],
+        isError: false,
+        _meta: {
+          "io.modelcontextprotocol/serverInfo": { name: "spoonjoy", version: "1.0.0" },
+        },
+      },
+    });
+    expect(testRouter.callTool).toHaveBeenCalledWith("health", { verbose: true });
+  });
+
   it("invokes onError with the raw exception before collapsing it to JSON-RPC", async () => {
     // The transport (e.g. /mcp) uses this to report unexpected exceptions to
     // its observability sink — the wire only carries the message+code, so the
@@ -205,6 +321,15 @@ describe("handleJsonRpcMessage (transport-agnostic core)", () => {
   });
 
   describe("initialize protocol-version negotiation", () => {
+    it("uses a transport-pinned version instead of falsely advertising a future request", async () => {
+      const response = await handleJsonRpcMessage(
+        { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2099-01-01" } },
+        router(),
+        { protocolVersion: "2025-06-18" },
+      );
+      expect(response).toMatchObject({ result: { protocolVersion: "2025-06-18" } });
+    });
+
     it("echoes the client's requested protocolVersion when it is a non-empty string", async () => {
       const response = await handleJsonRpcMessage(
         { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } },

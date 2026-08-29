@@ -322,6 +322,17 @@ describe("handleMcpHttpRequest", () => {
     expect(body.result.serverInfo.name).toBe("spoonjoy");
   });
 
+  it("does not advertise an unsupported future version during legacy initialize", async () => {
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(init(1, "initialize", { protocolVersion: "2099-01-01" }), bearer(await mintToken())),
+      db,
+    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      result: { protocolVersion: "2025-06-18" },
+    });
+  });
+
   it("lists tools for an authenticated request", async () => {
     const response = await handleMcpHttpRequest({
       request: rpcRequest(init(2, "tools/list"), bearer(await mintToken())),
@@ -493,6 +504,23 @@ describe("handleMcpHttpRequest", () => {
     expect(response.status).toBe(200);
     const body = await response.json() as { error: { code: number; message: string } };
     expect(body.error.code).toBe(-32700);
+  });
+
+  it.each([
+    ["batch", [{ jsonrpc: "2.0", id: 70, method: "tools/list" }], null],
+    ["client response", { jsonrpc: "2.0", id: "legacy-response", result: {} }, "legacy-response"],
+  ])("preserves legacy HTTP semantics for an invalid JSON-RPC %s", async (_label, body, id) => {
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(body, bearer(await mintToken())),
+      db,
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      jsonrpc: "2.0",
+      id,
+      error: { code: -32600, message: "Invalid request" },
+    });
   });
 
   it("rejects oversized Content-Length before JSON-RPC dispatch", async () => {
@@ -832,16 +860,20 @@ describe("handleMcpHttpRequest", () => {
   });
 
   it("normalizes MCP JSON-RPC telemetry helper edge cases without leaking unknown values", () => {
-    expect(mcpJsonRpcTelemetry("not json")).toEqual({});
-    expect(mcpJsonRpcTelemetry("[]")).toEqual({});
-    expect(mcpJsonRpcTelemetry(JSON.stringify({ jsonrpc: "2.0", id: 61, method: 42 }))).toEqual({});
-    expect(mcpJsonRpcTelemetry(JSON.stringify({ jsonrpc: "2.0", id: 62, method: "resources/read" }))).toEqual({});
-    expect(mcpJsonRpcTelemetry(JSON.stringify({
+    expect(mcpJsonRpcTelemetry("not an object")).toEqual({});
+    expect(mcpJsonRpcTelemetry([])).toEqual({});
+    expect(mcpJsonRpcTelemetry({ jsonrpc: "2.0", id: 61, method: 42 })).toEqual({});
+    expect(mcpJsonRpcTelemetry({ jsonrpc: "2.0", id: 62, method: "resources/read" })).toEqual({});
+    expect(mcpJsonRpcTelemetry({ jsonrpc: "2.0", id: 62, method: "server/discover" })).toEqual({
+      jsonRpcMethod: "server/discover",
+      toolName: undefined,
+    });
+    expect(mcpJsonRpcTelemetry({
       jsonrpc: "2.0",
       id: 63,
       method: "tools/call",
       params: { name: "raw_secret_tool_name" },
-    }))).toEqual({ jsonRpcMethod: "tools/call", toolName: undefined });
+    })).toEqual({ jsonRpcMethod: "tools/call", toolName: undefined });
 
     expect(jsonRpcErrorCode(null)).toBeUndefined();
     expect(jsonRpcErrorCode({ error: null })).toBeUndefined();
