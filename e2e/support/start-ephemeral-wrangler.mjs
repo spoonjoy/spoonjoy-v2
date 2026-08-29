@@ -1,10 +1,90 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import { pathToFileURL } from "node:url";
+import { stripVTControlCharacters } from "node:util";
 
 import { runEphemeralE2eServer } from "../../scripts/e2e-run-cleanup.mjs";
 import { runWithWarningPolicy } from "../../scripts/run-with-warning-policy.mjs";
+
+const WORKERD_PEER_RESET_LINE =
+  "✘ [ERROR] kj::getCaughtExceptionAsKj() = kj/async-io-unix.c++:186: disconnected: "
+  + "::write(fd, buffer.begin(), buffer.size()): Connection reset by peer";
+const WORKERD_STACK_TOKEN =
+  String.raw`\/\S*\/node_modules\/@cloudflare\/workerd-[A-Za-z0-9_-]+\/bin\/workerd@[0-9a-f]+`;
+const WORKERD_STACK_LINE = new RegExp(`^stack: ${WORKERD_STACK_TOKEN}(?: ${WORKERD_STACK_TOKEN})*$`);
+
+function outputLines(value) {
+  return value.match(/[^\n]*\n|[^\n]+$/g) ?? [];
+}
+
+function normalizedLine(value) {
+  return stripVTControlCharacters(value).trim();
+}
+
+function isWorkerdPeerResetLine(value) {
+  return normalizedLine(value) === WORKERD_PEER_RESET_LINE;
+}
+
+function isWorkerdStackLine(value) {
+  return WORKERD_STACK_LINE.test(normalizedLine(value));
+}
+
+export function filterExpectedWranglerPeerResetDiagnostic({ stdout, stderr, final }) {
+  const lines = outputLines(stderr);
+  const normalized = lines.map(normalizedLine);
+  const omitted = new Set();
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!isWorkerdPeerResetLine(lines[index])) continue;
+    let stackIndex = index + 1;
+    while (stackIndex < lines.length && normalized[stackIndex] === "") stackIndex += 1;
+    if (stackIndex < lines.length && isWorkerdStackLine(lines[stackIndex])) {
+      for (let omittedIndex = index; omittedIndex <= stackIndex; omittedIndex += 1) {
+        omitted.add(omittedIndex);
+      }
+      while (stackIndex + 1 < lines.length && normalized[stackIndex + 1] === "") {
+        stackIndex += 1;
+        omitted.add(stackIndex);
+      }
+      index = stackIndex;
+      continue;
+    }
+    if (!final && normalized.slice(index + 1).every((line) => line === "")) {
+      for (let omittedIndex = index; omittedIndex < lines.length; omittedIndex += 1) {
+        omitted.add(omittedIndex);
+      }
+    }
+  }
+
+  return {
+    stdout,
+    stderr: lines.filter((_, index) => !omitted.has(index)).join(""),
+  };
+}
+
+export function createWranglerDiagnosticFilterStream(destination) {
+  const decoder = new StringDecoder("utf8");
+  let stderr = "";
+
+  return {
+    write(chunk) {
+      stderr += typeof chunk === "string" ? chunk : decoder.write(chunk);
+      return true;
+    },
+    flush() {
+      stderr += decoder.end();
+      const filtered = filterExpectedWranglerPeerResetDiagnostic({
+        stdout: "",
+        stderr,
+        final: true,
+      });
+      if (filtered.stderr !== "") destination.write(filtered.stderr);
+      stderr = "";
+    },
+  };
+}
 
 export function requiredArg(argv, name) {
   const index = argv.indexOf(name);
@@ -22,6 +102,7 @@ export function createWranglerLauncher({
     let commandChild;
     let interruptedSignal;
     const environment = { ...processLike.env };
+    const diagnosticStderr = createWranglerDiagnosticFilterStream(processLike.stderr);
     delete environment.NO_COLOR;
 
     const stop = (signal) => {
@@ -63,7 +144,9 @@ export function createWranglerLauncher({
         "--var",
         "GOOGLE_CLIENT_SECRET:spoonjoy-playwright-google-secret",
       ], {
+        diagnosticFilter: filterExpectedWranglerPeerResetDiagnostic,
         env: environment,
+        stderr: diagnosticStderr,
         spawn(command, args, options) {
           commandChild = spawnChild(command, args, options);
           return commandChild;
@@ -73,6 +156,7 @@ export function createWranglerLauncher({
         throw new Error(`Ephemeral Wrangler server exited with status ${status}.`);
       }
     } finally {
+      diagnosticStderr.flush();
       processLike.off("SIGINT", onSigInt);
       processLike.off("SIGTERM", onSigTerm);
     }

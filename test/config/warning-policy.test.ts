@@ -317,6 +317,33 @@ describe("warning command policy", () => {
     await expect(stderrRun.result).resolves.toBe(1);
     expect(stderrChild.kill).toHaveBeenCalledWith("SIGTERM");
 
+    const filteredChild = new FakeChild();
+    const diagnosticFilter = vi.fn(({ stdout, stderr }: { stdout: string; stderr: string }) => ({
+      stdout,
+      stderr: stderr.replace("expected tool diagnostic\n", ""),
+    }));
+    const filtered = runFake(filteredChild, { diagnosticFilter, platform: "win32" });
+    filteredChild.stderr!.emit("data", "expected tool diagnostic\n");
+    filteredChild.emit("close", 0);
+    await expect(filtered.result).resolves.toBe(0);
+    expect(diagnosticFilter).toHaveBeenCalledWith({
+      final: false,
+      stderr: "expected tool diagnostic\n",
+      stdout: "",
+    });
+    expect(diagnosticFilter).toHaveBeenLastCalledWith({
+      final: true,
+      stderr: "expected tool diagnostic\n",
+      stdout: "",
+    });
+
+    const filteredNearMissChild = new FakeChild();
+    const filteredNearMiss = runFake(filteredNearMissChild, { diagnosticFilter, platform: "win32" });
+    filteredNearMissChild.stderr!.emit("data", "unexpected tool diagnostic\n");
+    filteredNearMissChild.emit("close", 0);
+    await expect(filteredNearMiss.result).resolves.toBe(1);
+    expect(filteredNearMissChild.kill).toHaveBeenCalledWith("SIGTERM");
+
     const signaledChild = new FakeChild();
     signaledChild.pid = 777;
     const signalSource = new EventEmitter();

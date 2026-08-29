@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import { pathToFileURL } from "node:url";
 import { findUnexpectedDiagnosticOutput } from "./warning-gate.ts";
 
@@ -17,6 +18,7 @@ export function runWithWarningPolicy(argv, runtime = {}) {
   const environment = runtime.env ?? process.env;
   const killProcess = runtime.killProcess ?? process.kill;
   const signalSource = runtime.signalSource ?? process;
+  const diagnosticFilter = runtime.diagnosticFilter ?? ((streams) => streams);
 
   if (argv[0] !== "--" || argv.length < 2) {
     stderr.write(`${usage}\n`);
@@ -32,6 +34,8 @@ export function runWithWarningPolicy(argv, runtime = {}) {
   let stderrOutput = "";
   let diagnosticDetected = false;
   let forwardedSignal;
+  const stdoutDecoder = new StringDecoder("utf8");
+  const stderrDecoder = new StringDecoder("utf8");
 
   const terminateChild = (signal = "SIGTERM") => {
     if (typeof child.pid === "number" && platform !== "win32") {
@@ -48,12 +52,19 @@ export function runWithWarningPolicy(argv, runtime = {}) {
     const completedOutputEnd = Math.max(output.lastIndexOf("\n"), output.lastIndexOf("\r"));
     return completedOutputEnd === -1 ? "" : output.slice(0, completedOutputEnd + 1);
   };
+  const filteredDiagnosticOutput = ({ final, stdout, stderr }) => diagnosticFilter({
+    final,
+    stdout,
+    stderr,
+  });
   const rejectCompletedDiagnostic = () => {
     if (diagnosticDetected) return;
-    if (findUnexpectedDiagnosticOutput(
-      completedLines(stdoutOutput),
-      completedLines(stderrOutput),
-    ).length === 0) {
+    const filtered = filteredDiagnosticOutput({
+      final: false,
+      stdout: completedLines(stdoutOutput),
+      stderr: completedLines(stderrOutput),
+    });
+    if (findUnexpectedDiagnosticOutput(filtered.stdout, filtered.stderr).length === 0) {
       return;
     }
     diagnosticDetected = true;
@@ -62,13 +73,13 @@ export function runWithWarningPolicy(argv, runtime = {}) {
   };
 
   child.stdout?.on("data", (chunk) => {
-    const text = String(chunk);
+    const text = typeof chunk === "string" ? chunk : stdoutDecoder.write(chunk);
     stdoutOutput += text;
     stdout.write(chunk);
     rejectCompletedDiagnostic();
   });
   child.stderr?.on("data", (chunk) => {
-    const text = String(chunk);
+    const text = typeof chunk === "string" ? chunk : stderrDecoder.write(chunk);
     stderrOutput += text;
     stderr.write(chunk);
     rejectCompletedDiagnostic();
@@ -101,6 +112,8 @@ export function runWithWarningPolicy(argv, runtime = {}) {
       settle(1);
     });
     child.on("close", (code) => {
+      stdoutOutput += stdoutDecoder.end();
+      stderrOutput += stderrDecoder.end();
       if (forwardedSignal) {
         settle(signalExitCode[forwardedSignal]);
         return;
@@ -113,7 +126,12 @@ export function runWithWarningPolicy(argv, runtime = {}) {
         settle(code ?? 1);
         return;
       }
-      if (findUnexpectedDiagnosticOutput(stdoutOutput, stderrOutput).length > 0) {
+      const filtered = filteredDiagnosticOutput({
+        final: true,
+        stdout: stdoutOutput,
+        stderr: stderrOutput,
+      });
+      if (findUnexpectedDiagnosticOutput(filtered.stdout, filtered.stderr).length > 0) {
         stderr.write("warning-policy: rejected diagnostic output\n");
         settle(1);
         return;
