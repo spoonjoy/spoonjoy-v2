@@ -818,23 +818,175 @@ describe("ephemeral Playwright run ownership", () => {
     expect(removeFailedRunAuth).toHaveBeenCalledOnce();
 
     expect(typeof starter.requiredArg).toBe("function");
+    expect(typeof starter.filterExpectedWranglerPeerResetDiagnostic).toBe("function");
     expect(() => starter.requiredArg([], "--run-id")).toThrow(/Missing --run-id/);
     expect(() => starter.requiredArg(["--run-id", "--bad"], "--run-id"))
       .toThrow(/Missing --run-id/);
     expect(starter.requiredArg(["--run-id", "run-value"], "--run-id")).toBe("run-value");
 
+    const peerResetLine =
+      "\u001b[31m✘ \u001b[41;31m[\u001b[41;97mERROR\u001b[41;31m]\u001b[0m "
+      + "\u001b[1mkj::getCaughtExceptionAsKj() = kj/async-io-unix.c++:186: disconnected: "
+      + "::write(fd, buffer.begin(), buffer.size()): Connection reset by peer\u001b[0m\n";
+    const workerdStack =
+      "  stack: /repo/node_modules/.pnpm/@cloudflare+workerd-linux-64@1.20260507.1/"
+      + "node_modules/@cloudflare/workerd-linux-64/bin/workerd@5295881 "
+      + "/repo/node_modules/.pnpm/@cloudflare+workerd-linux-64@1.20260507.1/"
+      + "node_modules/@cloudflare/workerd-linux-64/bin/workerd@2011f47\n";
+    const exactPeerReset = `${peerResetLine}\n${workerdStack}\n`;
+    expect(starter.filterExpectedWranglerPeerResetDiagnostic({
+      stdout: "clean\n",
+      stderr: exactPeerReset,
+      final: true,
+    })).toEqual({ stdout: "clean\n", stderr: "" });
+    expect(starter.filterExpectedWranglerPeerResetDiagnostic({
+      stdout: "",
+      stderr: peerResetLine,
+      final: false,
+    })).toEqual({ stdout: "", stderr: "" });
+    expect(starter.filterExpectedWranglerPeerResetDiagnostic({
+      stdout: "",
+      stderr: peerResetLine,
+      final: true,
+    }).stderr).toBe(peerResetLine);
+
+    for (const nearMiss of [
+      exactPeerReset.replace("::write(fd, buffer.begin(), buffer.size())", "::read(fd, buffer.begin(), buffer.size())"),
+      exactPeerReset.replace("async-io-unix.c++:186", "async-io-unix.c++:187"),
+      exactPeerReset.replace("Connection reset by peer", "Broken pipe"),
+      exactPeerReset.replace("bin/workerd@2011f47", "bin/not-workerd@2011f47"),
+    ]) {
+      expect(starter.filterExpectedWranglerPeerResetDiagnostic({
+        stdout: "",
+        stderr: nearMiss,
+        final: true,
+      }).stderr).toBe(nearMiss);
+    }
+    expect(starter.filterExpectedWranglerPeerResetDiagnostic({
+      stdout: "",
+      stderr: `${exactPeerReset}application error\n`,
+      final: true,
+    }).stderr).toBe("application error\n");
+
+    const warningPolicy = await import("../../scripts/run-with-warning-policy.mjs");
+    class PolicyChild extends EventEmitter {
+      stdout = new EventEmitter();
+      stderr = new EventEmitter();
+      kill = vi.fn();
+    }
+    const runPolicyChild = (child: PolicyChild, diagnosticFilter?: Function) => warningPolicy.runWithWarningPolicy(
+      ["--", "fake-wrangler"],
+      {
+        diagnosticFilter,
+        platform: "win32",
+        signalSource: new EventEmitter(),
+        spawn: () => child,
+        stderr: { write: () => undefined },
+        stdout: { write: () => undefined },
+      },
+    );
+    const splitPeerResetChild = new PolicyChild();
+    const splitPeerResetRun = runPolicyChild(
+      splitPeerResetChild,
+      starter.filterExpectedWranglerPeerResetDiagnostic,
+    );
+    splitPeerResetChild.stderr.emit("data", peerResetLine.slice(0, 80));
+    splitPeerResetChild.stderr.emit("data", peerResetLine.slice(80));
+    splitPeerResetChild.stderr.emit("data", `\n${workerdStack.slice(0, 64)}`);
+    splitPeerResetChild.stderr.emit("data", `${workerdStack.slice(64)}\n`);
+    splitPeerResetChild.emit("close", 0);
+    await expect(splitPeerResetRun).resolves.toBe(0);
+    expect(splitPeerResetChild.kill).not.toHaveBeenCalled();
+
+    const genericPolicyChild = new PolicyChild();
+    const genericPolicyRun = runPolicyChild(genericPolicyChild);
+    genericPolicyChild.stderr.emit("data", exactPeerReset);
+    genericPolicyChild.emit("close", 0);
+    await expect(genericPolicyRun).resolves.toBe(1);
+    expect(genericPolicyChild.kill).toHaveBeenCalledWith("SIGTERM");
+
     class FakeProcess extends EventEmitter {
       env: Record<string, string> = { NO_COLOR: "1", KEEP: "yes" };
       platform = "darwin";
       killed: Array<[number, string]> = [];
+      stderrChunks: string[] = [];
+      stderr = { write: (chunk: unknown) => this.stderrChunks.push(String(chunk)) };
       kill(pid: number, signal: string) {
         this.killed.push([pid, signal]);
       }
     }
+
+    const composedProcess = new FakeProcess();
+    composedProcess.platform = "win32";
+    const composedChild = new PolicyChild();
+    const composedLaunch = starter.createWranglerLauncher({
+      processLike: composedProcess,
+      spawnChild: () => composedChild,
+      runPolicy: warningPolicy.runWithWarningPolicy,
+    });
+    const composedRun = composedLaunch({ persistPath: "/tmp/e2e-state" });
+    const peerResetBytes = Buffer.from(peerResetLine);
+    const glyphStart = peerResetBytes.indexOf(Buffer.from("✘"));
+    composedChild.stderr.emit("data", peerResetBytes.subarray(0, glyphStart + 1));
+    composedChild.stderr.emit("data", peerResetBytes.subarray(glyphStart + 1));
+    const stackBytes = Buffer.from(`\n${workerdStack}\n`);
+    composedChild.stderr.emit("data", stackBytes.subarray(0, 64));
+    composedChild.stderr.emit("data", stackBytes.subarray(64));
+    composedChild.emit("close", 0);
+    await expect(composedRun).resolves.toBeUndefined();
+    expect(composedProcess.stderrChunks).toEqual([]);
+
+    const nearMissProcess = new FakeProcess();
+    nearMissProcess.platform = "win32";
+    const nearMissChild = new PolicyChild();
+    const nearMissLaunch = starter.createWranglerLauncher({
+      processLike: nearMissProcess,
+      spawnChild: () => nearMissChild,
+      runPolicy: warningPolicy.runWithWarningPolicy,
+    });
+    const nearMissRun = nearMissLaunch({ persistPath: "/tmp/e2e-state" });
+    nearMissChild.stderr.emit("data", exactPeerReset.replace(
+      "::write(fd, buffer.begin(), buffer.size())",
+      "::read(fd, buffer.begin(), buffer.size())",
+    ));
+    nearMissChild.emit("close", 0);
+    await expect(nearMissRun).rejects.toThrow(/status 1/);
+    expect(nearMissProcess.stderrChunks.join("")).toContain("::read(fd");
+
+    const incompleteProcess = new FakeProcess();
+    incompleteProcess.platform = "win32";
+    const incompleteChild = new PolicyChild();
+    const incompleteLaunch = starter.createWranglerLauncher({
+      processLike: incompleteProcess,
+      spawnChild: () => incompleteChild,
+      runPolicy: warningPolicy.runWithWarningPolicy,
+    });
+    const incompleteRun = incompleteLaunch({ persistPath: "/tmp/e2e-state" });
+    incompleteChild.stderr.emit("data", peerResetLine);
+    incompleteChild.emit("close", 0);
+    await expect(incompleteRun).rejects.toThrow(/status 1/);
+    expect(incompleteProcess.stderrChunks.join("")).toContain(peerResetLine);
+    expect(incompleteProcess.stderrChunks.join("")).toContain("warning-policy: rejected diagnostic output");
+
+    const partialChunks: string[] = [];
+    const partialStream = starter.createWranglerDiagnosticFilterStream({
+      write: (chunk: unknown) => partialChunks.push(String(chunk)),
+    });
+    partialStream.write("unterminated application error");
+    partialStream.flush();
+    expect(partialChunks).toEqual(["unterminated application error"]);
     const processLike = new FakeProcess();
     const child = Object.assign(new EventEmitter(), { pid: 321, kill: vi.fn() });
     const spawnChild = vi.fn(() => child);
-    const runPolicy = vi.fn(async (argv: string[], runtime: { spawn: Function; env: Record<string, string> }) => {
+    const runPolicy = vi.fn(async (
+      argv: string[],
+      runtime: {
+        diagnosticFilter: Function;
+        env: Record<string, string>;
+        spawn: Function;
+        stderr: { write: Function };
+      },
+    ) => {
       expect(argv).toEqual(expect.arrayContaining(["--log-level", "error"]));
       expect(argv).toEqual(expect.arrayContaining([
         "GOOGLE_CLIENT_ID:spoonjoy-playwright-google-client",
@@ -843,11 +995,14 @@ describe("ephemeral Playwright run ownership", () => {
       runtime.spawn("pnpm", [], {});
       expect(runtime.env.NO_COLOR).toBeUndefined();
       expect(runtime.env.KEEP).toBe("yes");
+      expect(runtime.diagnosticFilter).toBe(starter.filterExpectedWranglerPeerResetDiagnostic);
+      runtime.stderr.write(exactPeerReset);
       return 0;
     });
     const launch = starter.createWranglerLauncher({ processLike, spawnChild, runPolicy });
     await expect(launch({ persistPath: "/tmp/e2e-state" })).resolves.toBeUndefined();
     expect(spawnChild).toHaveBeenCalledOnce();
+    expect(processLike.stderrChunks).toEqual([]);
 
     const interruptedProcess = new FakeProcess();
     const interruptedChild = Object.assign(new EventEmitter(), { pid: 654, kill: vi.fn() });

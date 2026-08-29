@@ -6,7 +6,7 @@ Source: `origin/main@b0a5967e3e5547bbc741dd83992587442d75b45c`
 Planning doc: `root/tasks/2026-08-29-0956-planning-service-client-reliability-hardening.md`
 Review: Tinfoil Hat READY; Stranger With Candy READY
 
-Progress: PR 1 / Unit 1.1 implementation and review complete on `root/service-client-reliability-plan`; merge/deploy/smoke pending.
+Progress: PR 1 / Unit 1.1 merged as PR #309 and production-verified. A discovered E2E infrastructure race is being hardened on `root/e2e-workerd-peer-reset-hardening` before PR 2 begins.
 
 ## Unit 1.1 TDD evidence
 
@@ -15,6 +15,15 @@ Progress: PR 1 / Unit 1.1 implementation and review complete on `root/service-cl
 - Reporter intended red: `pnpm exec vitest run test/scripts/report-mcp-oauth-canary.test.ts test/release-workflow-security.test.ts --fileParallelism=false` — 4 failures. Missing/incomplete evidence exited zero, malformed evidence produced no summary, and the workflow still derived recovery from `needs.deploy.result`.
 - Reviewer regression red: the synthetic lifecycle test proved an atomic `forward_repair_required` artifact at phase `canary` was overwritten with `phase: unknown`; the reporter raw-result leak test proved the reporter sanitized before scanning; direct issue-management import failed because no test seam/export existed.
 - Green evidence: 1,026 affected tests; changed release/validation scripts at 100% statements/branches/functions/lines; repository-wide `pnpm run test:coverage` at 8,404 tests and 100% across 19,800 statements, 15,665 branches, 3,916 functions, and 18,180 lines; zero warnings. `typecheck`, `typecheck:scripts`, production build, Prisma validation, and `git diff --check` pass. Correctness, test, and Ponytail re-reviews are READY.
+- Merge/release evidence: PR #309 merged as `b684794b4dc3ed3b3b17e4718cde3cea23815636`; rerun attempt 2 of main CI run `33270302296` passed every required job. Production deploy `33271165071` promoted Worker `93344dcd-6890-435e-9115-2051b21b8217`; the live health header, release artifact, and canary artifact agree on that Worker and source SHA. All ten ordered OAuth/MCP checks passed, refresh replay was rejected, legacy credentials were promoted, cleanup residue was zero, and artifact leak count was zero.
+
+## Discovered infrastructure hardening before PR 2
+
+- Main CI attempt 1 was aborted after four passing Playwright tests when local workerd emitted its known asynchronous server-write `Connection reset by peer` diagnostic. The identical reviewed tree had passed all 64 tests minutes earlier and passed all 64 again on rerun; this was not an application regression.
+- Intended red after test-database setup: focused warning-policy/E2E tests failed because the generic policy had no scoped filter seam and the launcher had no exact workerd peer-reset filter.
+- Minimum green: add a generic opt-in diagnostic-filter seam while keeping its default fail-closed; install only an E2E-launcher filter that requires the exact workerd exception/source/write/reset signature plus a workerd-only stack. Exact split chunks pass; incomplete bundles, read/broken-pipe/source-line/stack near-misses, adjacent application errors, and the generic unfiltered policy remain fatal.
+- Green/review evidence: the composed launcher/policy regression splits raw UTF-8 bytes inside the `✘` glyph and across the stack, proving the exact bundle never reaches Playwright's outer warning gate. Incomplete and near-match bundles replay and fail. Focused tests pass 74/74; both changed production files have 100% statement/branch/function coverage. Repository-wide coverage passes 8,404 tests at 100% across 19,855 statements, 15,691 branches, 3,928 functions, and 18,226 lines with zero warnings. Script/full typechecks and the production build pass. Correctness/security and test/Ponytail re-reviews are READY.
+- Follow-up evidence to retain: production artifact download emitted a third-party `Buffer()` deprecation warning outside the repository warning gate. Evaluate the pinned artifact action/runtime separately; do not weaken the warning policy to hide it.
 
 ## Execution rules
 
