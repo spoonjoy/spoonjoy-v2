@@ -344,7 +344,10 @@ async function mcpRpc(request, { baseUrl, accessToken, id, method, params, worke
     url: new URL("/mcp", baseUrl).toString(),
     label: `MCP ${method} response`,
     options: {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: {
+        Accept: "application/json, text/event-stream",
+        Authorization: `Bearer ${accessToken}`,
+      },
       data: {
         jsonrpc: "2.0",
         id,

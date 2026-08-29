@@ -18,7 +18,11 @@ function routeArgs(request: Request) {
 function rpc(body: unknown, headers: Record<string, string> = {}) {
   return new UndiciRequest("https://spoonjoy.app/mcp", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...headers },
+    headers: {
+      Accept: "application/json, text/event-stream",
+      "Content-Type": "application/json",
+      ...headers,
+    },
     body: JSON.stringify(body),
   }) as unknown as Request;
 }
@@ -49,6 +53,36 @@ describe("/mcp route", () => {
     await expect(loader(routeArgs(request))).resolves.toEqual({
       endpoint: "https://spoonjoy.app/mcp",
       protectedResourceMetadataUrl: "https://spoonjoy.app/.well-known/oauth-protected-resource/mcp",
+    });
+  });
+
+  it("returns explicit JSON instead of landing HTML for protocol GET", async () => {
+    const request = new UndiciRequest("https://spoonjoy.app/mcp", {
+      method: "GET",
+      headers: { Accept: "text/event-stream" },
+    }) as unknown as Request;
+    const response = await loader(routeArgs(request));
+
+    expect(response).toBeInstanceOf(Response);
+    if (!(response instanceof Response)) throw new Error("Expected protocol edge response.");
+    expect(response.status).toBe(405);
+    expect(response.headers.get("Content-Type")).toBe("application/json");
+    expect((await response.text()).toLowerCase()).not.toContain("<html");
+  });
+
+  it("rejects a hostile Origin before rendering landing data", async () => {
+    const request = new UndiciRequest("https://spoonjoy.app/mcp", {
+      method: "GET",
+      headers: { Origin: "https://evil.example" },
+    }) as unknown as Request;
+    const response = await loader(routeArgs(request));
+
+    expect(response).toBeInstanceOf(Response);
+    if (!(response instanceof Response)) throw new Error("Expected Origin edge response.");
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: "invalid_origin",
+      message: "Origin is not allowed.",
     });
   });
 

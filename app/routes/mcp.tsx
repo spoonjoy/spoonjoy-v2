@@ -14,19 +14,20 @@ import {
   Sparkles,
   Terminal,
 } from "lucide-react";
-import { handleMcpPostRouteRequest } from "~/lib/mcp/http-mcp-route.server";
+import { classifyMcpTransportRequest } from "~/lib/mcp/http-mcp-protocol.server";
+import { handleMcpRouteRequest } from "~/lib/mcp/http-mcp-route.server";
+import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { Badge } from "~/components/ui/badge";
 import { CookbookHeader, CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
 
 /**
  * Remote MCP connector endpoint (Streamable HTTP, `application/json`).
  *
- * POST remains a thin shell over `handleMcpHttpRequest` so the real protocol
- * logic stays in the coverage-measured lib. GET renders the human-facing
- * connector landing page below.
+ * The loader preserves a content-negotiated human guide. Protocol edge
+ * validation and POST dispatch remain in coverage-measured server libraries.
  */
-async function handleMcpPost({ request, context }: Route.ActionArgs) {
-  return handleMcpPostRouteRequest(request, context);
+async function handleMcpAction({ request, context }: Route.ActionArgs) {
+  return handleMcpRouteRequest(request, context);
 }
 
 type McpLandingData = {
@@ -52,12 +53,19 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-export async function loader({ request }: Route.LoaderArgs) {
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const decision = classifyMcpTransportRequest(request, {
+    canonicalOrigin: resolveIssuerOrigin(
+      request.url,
+      context.cloudflare?.env?.SPOONJOY_BASE_URL,
+    ),
+  });
+  if (decision.kind === "response") return decision.response;
   return landingData(request.url);
 }
 
 export async function action(args: Route.ActionArgs) {
-  return handleMcpPost(args);
+  return handleMcpAction(args);
 }
 
 const protocolFacts = [

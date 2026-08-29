@@ -366,6 +366,7 @@ describe("smoke image-cover helpers", () => {
     expect(request.url).toBe(`${QA_BASE_URL}/mcp`);
     expect(request.options).toEqual({
       headers: {
+        Accept: "application/json, text/event-stream",
         Authorization: "Bearer sj_secret_token",
         "Content-Type": "application/json",
       },
@@ -387,6 +388,7 @@ describe("smoke image-cover helpers", () => {
     expect(request.url).toBe(`${QA_BASE_URL}/mcp`);
     expect(request.options).toEqual({
       headers: {
+        Accept: "application/json, text/event-stream",
         Authorization: "Bearer sj_secret_token",
         "Content-Type": "application/json",
       },

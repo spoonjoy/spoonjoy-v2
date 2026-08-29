@@ -2,7 +2,7 @@ import { createRequestHandler } from "react-router";
 import { canonicalizeRequestUrlForHost } from "../app/lib/canonical-host.server";
 import { ApiAuthError, authenticateApiRequest } from "../app/lib/api-auth.server";
 import { getDb } from "../app/lib/db.server";
-import { handleMcpPostRouteRequest } from "../app/lib/mcp/http-mcp-route.server";
+import { handleMcpRouteRequest } from "../app/lib/mcp/http-mcp-route.server";
 import { oauthCorsPreflightResponse } from "../app/lib/oauth-cors.server";
 import { generateNonce, withSecurityHeaders } from "../app/lib/security-headers.server";
 import {
@@ -267,7 +267,7 @@ export default {
       }
 
       if (request.method === "POST" && new URL(request.url).pathname === "/mcp") {
-        const response = await handleMcpPostRouteRequest(request, {
+        const response = await handleMcpRouteRequest(request, {
           cloudflare: { env, ctx },
         });
         return finalizeResponse(response, env);

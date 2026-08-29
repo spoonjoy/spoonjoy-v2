@@ -6,7 +6,7 @@ Source: `origin/main@b0a5967e3e5547bbc741dd83992587442d75b45c`
 Planning doc: `root/tasks/2026-08-29-0956-planning-service-client-reliability-hardening.md`
 Review: Tinfoil Hat READY; Stranger With Candy READY
 
-Progress: PR 1 / Unit 1.1 merged as PR #309 and production-verified. A discovered E2E infrastructure race is being hardened on `root/e2e-workerd-peer-reset-hardening` before PR 2 begins.
+Progress: PR 1 / Unit 1.1 and the discovered E2E infrastructure hardening are merged and production-verified. PR 2 / Unit 2.1 is processing on `root/mcp-protocol-boundary`.
 
 ## Unit 1.1 TDD evidence
 
@@ -23,7 +23,15 @@ Progress: PR 1 / Unit 1.1 merged as PR #309 and production-verified. A discovere
 - Intended red after test-database setup: focused warning-policy/E2E tests failed because the generic policy had no scoped filter seam and the launcher had no exact workerd peer-reset filter.
 - Minimum green: add a generic opt-in diagnostic-filter seam while keeping its default fail-closed; install only an E2E-launcher filter that requires the exact workerd exception/source/write/reset signature plus a workerd-only stack. Exact split chunks pass; incomplete bundles, read/broken-pipe/source-line/stack near-misses, adjacent application errors, and the generic unfiltered policy remain fatal.
 - Green/review evidence: the composed launcher/policy regression splits raw UTF-8 bytes inside the `✘` glyph and across the stack, proving the exact bundle never reaches Playwright's outer warning gate. Incomplete and near-match bundles replay and fail. Focused tests pass 74/74; both changed production files have 100% statement/branch/function coverage. Repository-wide coverage passes 8,404 tests at 100% across 19,855 statements, 15,691 branches, 3,928 functions, and 18,226 lines with zero warnings. Script/full typechecks and the production build pass. Correctness/security and test/Ponytail re-reviews are READY.
+- Merge/release evidence: PR #310 merged as `e15f23b151710fe5292f29d9bb10d35bb7e06589`; main CI run `33273339073` passed every required job, including E2E. Production deploy `33274032881` promoted Worker `119de200-5031-4a85-9ffa-e88b94386067`; live headers and release-bound canary evidence agree on source/Worker identity, all ten checks passed, cleanup residue was zero, and artifact leak count was zero.
 - Follow-up evidence to retain: production artifact download emitted a third-party `Buffer()` deprecation warning outside the repository warning gate. Evaluate the pinned artifact action/runtime separately; do not weaken the warning policy to hide it.
+
+## Unit 2.1 TDD evidence
+
+- Header-classifier intended red: the new dated fixture matrix could not import `http-mcp-protocol.server.ts`; after the pure classifier existed, route integration produced seven failures because protocol GETs still rendered route data and actions had no strict adapter.
+- Canary-contract red: the widened affected run failed two exact smoke-helper request-shape assertions after the MCP builders began sending the required dual-media `Accept` value. The expectations now pin that header, and the release-bound OAuth/MCP canary sends it too.
+- Negotiation regression red: `application/json;q=1;q=0, text/event-stream` incorrectly passed because the parser trusted the first duplicate quality parameter. Duplicate quality parameters now fail closed while unrelated media parameters remain compatible.
+- Header-slice green: 163 affected route, Worker, smoke-helper, and protocol tests pass; the separate Workers/D1 saved-recipe cutover suite passes 13/13. The new protocol and route server modules have complete statement/function coverage, with the unreachable destructuring default removed to preserve full branch coverage. Application and script typechecks pass with zero warnings.
 
 ## Execution rules
 

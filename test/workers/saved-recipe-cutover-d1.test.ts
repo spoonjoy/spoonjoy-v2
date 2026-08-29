@@ -550,7 +550,10 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
 
     const response = await SELF.fetch(new Request(`${TEST_ORIGIN}/mcp`, {
       method: "POST",
-      headers: bearerHeaders({ "Content-Type": "application/json" }),
+      headers: bearerHeaders({
+        Accept: "application/json, text/event-stream",
+        "Content-Type": "application/json",
+      }),
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: 91,
@@ -799,7 +802,10 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
     `);
     const request = (id: number) => new Request(`${TEST_ORIGIN}/mcp`, {
       method: "POST",
-      headers: bearerHeaders({ "Content-Type": "application/json" }),
+      headers: bearerHeaders({
+        Accept: "application/json, text/event-stream",
+        "Content-Type": "application/json",
+      }),
       body: JSON.stringify({
         jsonrpc: "2.0",
         id,

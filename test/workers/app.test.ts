@@ -37,7 +37,7 @@ vi.mock("react-router", async (importOriginal) => {
 });
 
 vi.mock("../../app/lib/mcp/http-mcp-route.server", () => ({
-  handleMcpPostRouteRequest: mcpPostRoute,
+  handleMcpRouteRequest: mcpPostRoute,
 }));
 
 vi.mock("../../app/lib/analytics-server", () => ({
@@ -252,7 +252,10 @@ describe("Cloudflare worker app", () => {
     const ctx = context();
     const request = new Request("https://spoonjoy.app/mcp", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        Accept: "application/json, text/event-stream",
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize" }),
     });
 

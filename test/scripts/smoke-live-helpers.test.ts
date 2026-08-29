@@ -1474,6 +1474,8 @@ describe("smoke-live helpers", () => {
       )?.[0] ?? "";
       expect(functionSource, `${functionName} must use the verified request wrapper`).toContain("spoonjoyRequest(request");
     }
+    const mcpRpcSource = source.match(/async function mcpRpc\([\s\S]*?\n}\n/)?.[0] ?? "";
+    expect(mcpRpcSource).toContain('Accept: "application/json, text/event-stream"');
     expect(source).toContain("workerVersionId,");
     expect(source).toContain("serializeSanitizedMcpCanaryReport(report)");
     expect(wrangler.version_metadata).toEqual({ binding: "CF_VERSION_METADATA" });

@@ -346,7 +346,10 @@ describe("route shell coverage", () => {
     const response = await action(routeArgs(
       new Request("https://spoonjoy.app/mcp", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          Accept: "application/json, text/event-stream",
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize" }),
       }),
       { context: { cloudflare: { env: { POSTHOG_KEY: "ph_test" }, ctx: { waitUntil } } } },

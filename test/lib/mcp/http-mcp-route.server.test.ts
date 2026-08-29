@@ -15,9 +15,9 @@ vi.mock("~/lib/mcp/http-mcp.server", () => ({
   handleMcpHttpRequest: mocks.handleMcpHttpRequest,
 }));
 
-const { handleMcpPostRouteRequest } = await import("~/lib/mcp/http-mcp-route.server");
+const { handleMcpRouteRequest } = await import("~/lib/mcp/http-mcp-route.server");
 
-describe("handleMcpPostRouteRequest", () => {
+describe("handleMcpRouteRequest", () => {
   beforeEach(() => {
     mocks.getRequestDb.mockResolvedValue(mocks.db);
     mocks.handleMcpHttpRequest.mockResolvedValue(Response.json({ ok: true }));
@@ -25,7 +25,10 @@ describe("handleMcpPostRouteRequest", () => {
   });
 
   it("binds Workers context and forwards MCP environment bindings", async () => {
-    const request = new Request("https://spoonjoy.app/mcp", { method: "POST" });
+    const request = new Request("https://spoonjoy.app/mcp", {
+      method: "POST",
+      headers: { Accept: "application/json, text/event-stream" },
+    });
     const waitUntil = vi.fn();
     const env = {
       SPOONJOY_BASE_URL: "https://spoonjoy.app",
@@ -34,7 +37,7 @@ describe("handleMcpPostRouteRequest", () => {
     } as unknown as Env;
     const ctx = { waitUntil, passThroughOnException: vi.fn() };
 
-    const response = await handleMcpPostRouteRequest(request, {
+    const response = await handleMcpRouteRequest(request, {
       cloudflare: { env, ctx },
     });
 
@@ -56,10 +59,13 @@ describe("handleMcpPostRouteRequest", () => {
   });
 
   it("falls back to local DB behavior when no Cloudflare context exists", async () => {
-    const request = new Request("http://localhost:5173/mcp", { method: "POST" });
+    const request = new Request("http://localhost:5173/mcp", {
+      method: "POST",
+      headers: { Accept: "application/json, text/event-stream" },
+    });
     const context = {};
 
-    await handleMcpPostRouteRequest(request, context);
+    await handleMcpRouteRequest(request, context);
 
     expect(mocks.getRequestDb).toHaveBeenCalledWith(context);
     expect(mocks.handleMcpHttpRequest).toHaveBeenCalledWith({
@@ -70,5 +76,30 @@ describe("handleMcpPostRouteRequest", () => {
       tokenLimiter: undefined,
       ipLimiter: undefined,
     });
+  });
+
+  it.each([
+    ["DELETE", {}, 405],
+    ["OPTIONS", { Origin: "https://spoonjoy.app" }, 204],
+    ["POST", {}, 406],
+  ])("returns a %s edge response before resolving DB", async (method, headers, status) => {
+    const response = await handleMcpRouteRequest(new Request("https://spoonjoy.app/mcp", {
+      method,
+      headers,
+    }), { cloudflare: { env: { SPOONJOY_BASE_URL: "https://spoonjoy.app" } as Env } });
+
+    expect(response.status).toBe(status);
+    expect(mocks.getRequestDb).not.toHaveBeenCalled();
+    expect(mocks.handleMcpHttpRequest).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the action helper receives a human landing request", async () => {
+    await expect(handleMcpRouteRequest(
+      new Request("https://spoonjoy.app/mcp", { method: "GET" }),
+      { cloudflare: { env: { SPOONJOY_BASE_URL: "https://spoonjoy.app" } as Env } },
+    )).rejects.toThrow("MCP landing requests must be handled by the route loader.");
+
+    expect(mocks.getRequestDb).not.toHaveBeenCalled();
+    expect(mocks.handleMcpHttpRequest).not.toHaveBeenCalled();
   });
 });
