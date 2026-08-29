@@ -152,7 +152,16 @@ describe("production release provenance", () => {
       production,
       "Ensure release artifact exists",
       "Upload MCP OAuth canary artifacts",
-    ))).toBe("e647c68063dedcd49146a31cc4a18ef3a5062c5600a086bf15d9b7a8004125ce");
+    ))).toBe("423dc428551eb442cb323cdaa53269363ad71f8dc0419685f24a6a77d84425f4");
+  });
+
+  it("derives release recovery only from required canary evidence", () => {
+    const reportJob = production.slice(production.indexOf("  report-canary:"));
+
+    expect(reportJob).not.toContain("MCP_CANARY_STATUS: ${{ needs.deploy.result }}");
+    expect(reportJob).not.toContain("continue-on-error: true");
+    expect(reportJob).toContain("--require-release-evidence");
+    expect(reportJob).not.toContain("--allow-recovery");
   });
 
   it("pins the bootstrap lifecycle phase in source and refuses cross-boundary rollback", () => {

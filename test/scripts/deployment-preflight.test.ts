@@ -1930,7 +1930,7 @@ describe("deployment preflight", () => {
           "migration_list", "migration_review", "current_deployment", "version_snapshot",
         ] as const;
         const forwardPhases = [
-          "atomic_deploy", "version_lookup", "verify_promotion", "artifact",
+          "atomic_deploy", "version_lookup", "verify_promotion", "canary", "artifact",
           ...(releaseMode === "atomic-bootstrap" ? ["bootstrap_probe" as const] : []),
         ];
         return [
@@ -2028,7 +2028,7 @@ describe("deployment preflight", () => {
             reviewedMigrations: migrationApply === "succeeded" ? [migration] : [],
             migrationApply,
             previousVersionId,
-            ...(["verify_promotion", "bootstrap_probe", "artifact"].includes(phase)
+            ...(["verify_promotion", "bootstrap_probe", "canary", "artifact"].includes(phase)
               ? { candidateVersionId }
               : {}),
             failure: `${phase} failed`,
@@ -2341,9 +2341,9 @@ describe("deployment preflight", () => {
       "          ref: ${{ env.SOURCE_SHA }}",
     ],
     [
-      "failure-tolerant artifact download",
-      "        continue-on-error: true",
-      "        continue-on-error: false",
+      "required release-bound recovery evidence",
+      "--require-release-evidence --workflow-run-url",
+      "--workflow-run-url",
     ],
     [
       "an always-running report step",

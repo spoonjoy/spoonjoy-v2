@@ -874,12 +874,62 @@ export function readGitMetadata(runCommand = execFileSync) {
   };
   return {
     branch: read(["rev-parse", "--abbrev-ref", "HEAD"]),
-    commit: read(["rev-parse", "--short=12", "HEAD"]),
+    commit: read(["rev-parse", "HEAD"]),
   };
 }
 
 export const MCP_CANARY_ISSUE_TITLE = "MCP OAuth canary failing";
 export const MCP_CANARY_ISSUE_LABEL = "mcp-oauth-canary";
+const MCP_CANARY_PRODUCTION_BASE_URL = "https://spoonjoy.app";
+const MCP_CANARY_SOURCE_SHA_PATTERN = /^[0-9a-f]{40}$/;
+const MCP_CANARY_WORKER_VERSION_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+export const MCP_CANARY_REQUIRED_CHECK_NAMES = [
+  "candidate Worker override readiness",
+  "signup disposable user",
+  "protected-resource metadata",
+  "dynamic client registration",
+  "authorize consent UI and approve redirect",
+  "authorization_code token exchange",
+  "mcp initialize and tools/list with issued access token",
+  "refresh rotation and replay rejection",
+  "mcp initialize and tools/list with refreshed access token",
+  "legacy Claude refresh token promotion",
+];
+
+export function validateMcpCanaryRecoveryEvidence(report, expected) {
+  const fail = (error) => ({ ok: false, error });
+  if (!report || typeof report !== "object" || Array.isArray(report)) return fail("Canary report must be an object.");
+  if (report.schemaVersion !== 1) return fail("Canary report schemaVersion must be 1.");
+  if (report.targetEnv !== "production") return fail("Canary report target must be production.");
+  if (report.baseUrl !== MCP_CANARY_PRODUCTION_BASE_URL) return fail("Canary report base URL is not canonical production.");
+  if (report.resource !== `${MCP_CANARY_PRODUCTION_BASE_URL}/mcp`) return fail("Canary report resource is not canonical production MCP.");
+  if (!expected || typeof expected !== "object" || Array.isArray(expected)) return fail("Expected release identity is required.");
+  if (!MCP_CANARY_SOURCE_SHA_PATTERN.test(expected.sourceSha) || !MCP_CANARY_SOURCE_SHA_PATTERN.test(report.git?.commit)) {
+    return fail("Canary source SHA must be an exact lowercase Git SHA.");
+  }
+  if (!MCP_CANARY_WORKER_VERSION_PATTERN.test(expected.workerVersionId) || !MCP_CANARY_WORKER_VERSION_PATTERN.test(report.workerVersionId)) {
+    return fail("Canary Worker version must be an exact UUID.");
+  }
+  if (report.git.commit !== expected.sourceSha) return fail("Canary source SHA does not match the release.");
+  if (report.workerVersionId !== expected.workerVersionId) return fail("Canary Worker version does not match the release.");
+  if (report.failure !== undefined && report.failure !== null) return fail("Canary report contains a failure.");
+  if (!Array.isArray(report.checks)) return fail("Canary checks must be an array.");
+  if (report.checks.length !== MCP_CANARY_REQUIRED_CHECK_NAMES.length) return fail("Canary check count is incomplete.");
+  for (let index = 0; index < MCP_CANARY_REQUIRED_CHECK_NAMES.length; index += 1) {
+    const check = report.checks[index];
+    if (!check || check.name !== MCP_CANARY_REQUIRED_CHECK_NAMES[index]) return fail("Canary checks do not match the required sequence.");
+    if (typeof check.elapsedMs !== "number" || !Number.isFinite(check.elapsedMs) || check.elapsedMs < 0) return fail("Canary check timing is invalid.");
+  }
+  const cleanup = report.cleanup;
+  if (!cleanup || typeof cleanup !== "object" || cleanup.skipped || cleanup.error || cleanup.remaining !== 0) {
+    return fail("Canary cleanup did not prove zero residue.");
+  }
+  if (report.legacyProbe?.promotedResource !== `${MCP_CANARY_PRODUCTION_BASE_URL}/mcp`) {
+    return fail("Canary legacy promotion proof is missing.");
+  }
+  return { ok: true };
+}
 
 const MCP_CANARY_SECRET_PATTERNS = [
   {

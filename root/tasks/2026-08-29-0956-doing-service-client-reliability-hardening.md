@@ -1,10 +1,20 @@
 # Service and client reliability hardening — execution contract
 
-Status: READY
+Status: PROCESSING
 Owner: root
 Source: `origin/main@b0a5967e3e5547bbc741dd83992587442d75b45c`
 Planning doc: `root/tasks/2026-08-29-0956-planning-service-client-reliability-hardening.md`
 Review: Tinfoil Hat READY; Stranger With Candy READY
+
+Progress: PR 1 / Unit 1.1 implementation and review complete on `root/service-client-reliability-plan`; merge/deploy/smoke pending.
+
+## Unit 1.1 TDD evidence
+
+- Initial infrastructure run failed before test collection because the disposable `test.db` schema was stale (`NotificationPreference` missing). Rebuilt the local test schema; this was not counted as the unit red.
+- First intended red: `pnpm exec vitest run test/scripts/smoke-live-helpers.test.ts test/scripts/deploy-production-canary.test.ts --fileParallelism=false` — 6 failures. Both atomic modes resolved `promoted` instead of invoking the injected full-canary failure; both command sequences lacked `smoke:mcp:oauth`; `validateMcpCanaryRecoveryEvidence` did not exist; Git metadata was only 12 characters.
+- Reporter intended red: `pnpm exec vitest run test/scripts/report-mcp-oauth-canary.test.ts test/release-workflow-security.test.ts --fileParallelism=false` — 4 failures. Missing/incomplete evidence exited zero, malformed evidence produced no summary, and the workflow still derived recovery from `needs.deploy.result`.
+- Reviewer regression red: the synthetic lifecycle test proved an atomic `forward_repair_required` artifact at phase `canary` was overwritten with `phase: unknown`; the reporter raw-result leak test proved the reporter sanitized before scanning; direct issue-management import failed because no test seam/export existed.
+- Green evidence: 1,026 affected tests; changed release/validation scripts at 100% statements/branches/functions/lines; repository-wide `pnpm run test:coverage` at 8,404 tests and 100% across 19,800 statements, 15,665 branches, 3,916 functions, and 18,180 lines; zero warnings. `typecheck`, `typecheck:scripts`, production build, Prisma validation, and `git diff --check` pass. Correctness, test, and Ponytail re-reviews are READY.
 
 ## Execution rules
 

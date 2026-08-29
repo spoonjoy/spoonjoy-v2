@@ -2210,6 +2210,11 @@ export async function runProductionCanaryRelease(
         const baseUrl = deps.env?.SPOONJOY_MCP_CANARY_BASE_URL ?? "https://spoonjoy.app";
         await waitForBootstrapProbe(deps, baseUrl, candidateVersionId);
       }
+
+      phase = "canary";
+      await deps.runCommand("pnpm", [
+        "run", "smoke:mcp:oauth", "--", "--out", deps.artifactDir, "--worker-version-id", candidateVersionId,
+      ], { env: d1Env });
     }
 
     const result: ReleaseArtifact = {

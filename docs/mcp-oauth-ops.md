@@ -16,7 +16,9 @@ The canonical GitHub issue title is **MCP OAuth canary failing**. The scheduled 
 - write a GitHub job summary
 - scan text artifacts for leaked `sj_`, `ort_`, `oac_`, `Bearer`, `Authorization`, `code=`, and `client_secret` values
 - open or comment on the canonical failure issue
-- close/comment recovery when a later run succeeds
+- close/comment recovery only when a production deploy supplies a validated `production-release.json` and a matching complete canary result
+
+Scheduled canaries may open or update the failure issue, but they do not close it. They do not yet carry an independently observed deployed source-SHA/Worker-version tuple, so treating scheduled success as recovery would recreate the false-green path this gate prevents. A later exact-SHA production deploy with matching canary evidence is the current recovery authority.
 
 Start with the workflow run linked in the issue body. The summary tells which check failed, cleanup status, target environment, resource URL, and commit SHA.
 

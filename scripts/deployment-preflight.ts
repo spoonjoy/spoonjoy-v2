@@ -181,7 +181,7 @@ const EXPECTED_PRODUCTION_DEPLOY_STEP_NAMES = [
   "Upload MCP OAuth canary artifacts",
 ] as const;
 const EXPECTED_RELEASE_SOURCE_RUN_SHA256 = "b73376c1b0ebc718ca769836147b43c33b0f39ec514fb795947a17ba201955fd";
-const EXPECTED_RELEASE_ARTIFACT_RUN_SHA256 = "326e6083c0e31a4d14c941569f5ecf22632a31c146c00ee5e02f0c949b6fb4b5";
+const EXPECTED_RELEASE_ARTIFACT_RUN_SHA256 = "8ceec45a4b60cdeb24f003c3235f3fee27bf95eb28e5ee6a8f3dc53adb60c5d9";
 const REQUIRED_IGNORED_BUILD_PACKAGES = [
   "@prisma/client",
   "@prisma/engines",
@@ -858,7 +858,6 @@ const PRODUCTION_REPORT_STEPS: readonly Record<string, unknown>[] = [
   {
     name: "Download MCP OAuth canary artifacts",
     uses: PINNED_DOWNLOAD_ARTIFACT_ACTION,
-    "continue-on-error": true,
     with: {
       name: "mcp-oauth-canary-artifacts",
       path: "mcp-oauth-canary-artifacts",
@@ -869,13 +868,12 @@ const PRODUCTION_REPORT_STEPS: readonly Record<string, unknown>[] = [
     if: "always()",
     env: {
       GITHUB_TOKEN: "${{ github.token }}",
-      MCP_CANARY_STATUS: "${{ needs.deploy.result }}",
       MCP_CANARY_WORKFLOW_RUN_URL:
         "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
       MCP_CANARY_ARTIFACT_URL:
         "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts",
     },
-    run: "node scripts/report-mcp-oauth-canary.mjs --artifact-dir mcp-oauth-canary-artifacts --status \"$MCP_CANARY_STATUS\" --workflow-run-url \"$MCP_CANARY_WORKFLOW_RUN_URL\" --artifact-url \"$MCP_CANARY_ARTIFACT_URL\" --manage-issue",
+    run: "node scripts/report-mcp-oauth-canary.mjs --artifact-dir mcp-oauth-canary-artifacts --require-release-evidence --workflow-run-url \"$MCP_CANARY_WORKFLOW_RUN_URL\" --artifact-url \"$MCP_CANARY_ARTIFACT_URL\" --manage-issue",
   },
 ];
 
