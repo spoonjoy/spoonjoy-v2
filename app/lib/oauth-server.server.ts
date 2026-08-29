@@ -319,15 +319,6 @@ function oauthCredentialName(clientName: string | null): string {
   return `${clientName?.trim() || "OAuth client"} (OAuth)`;
 }
 
-function isMcpProtectedResource(resource: string | null | undefined): boolean {
-  if (!resource) return false;
-  try {
-    return new URL(resource).pathname === "/mcp";
-  } catch {
-    return false;
-  }
-}
-
 /**
  * Mint a fresh access token plus a refresh token bound to the same
  * user/client/scope. Used by both the authorization_code grant and refresh
@@ -335,13 +326,25 @@ function isMcpProtectedResource(resource: string | null | undefined): boolean {
  */
 export async function issueConnectorTokens(
   db: Database,
-  input: { userId: string; clientId: string; scope: string; resource?: string | null; now?: Date; connectionKey?: string | null },
+  input: {
+    userId: string;
+    clientId: string;
+    scope: string;
+    resource?: string | null;
+    persistentMcpResource?: string | null;
+    now?: Date;
+    connectionKey?: string | null;
+  },
 ): Promise<IssuedConnectorTokens> {
   const now = input.now ?? new Date();
   const client = await getOAuthClient(db, input.clientId);
   if (!client) throw new OAuthError("invalid_client", "Unknown or revoked OAuth client");
   const connectionKey = input.connectionKey ?? randomToken("ocn_", 16);
-  const persistentAccessToken = isMcpProtectedResource(input.resource ?? null);
+  const persistentAccessToken = Boolean(
+    input.resource &&
+    input.persistentMcpResource &&
+    input.resource === input.persistentMcpResource,
+  );
   const expiresIn = persistentAccessToken ? null : OAUTH_ACCESS_TOKEN_TTL_SECONDS;
   const { token: accessToken } = await createApiCredential(
     db,
@@ -452,6 +455,7 @@ export async function rotateConnectorTokens(
     clientId: record.clientId,
     scope: record.scope,
     resource,
+    persistentMcpResource: input.legacyMcpResource,
     now,
     connectionKey: record.connectionKey ?? record.id,
   });

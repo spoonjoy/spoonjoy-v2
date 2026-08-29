@@ -146,7 +146,17 @@ describe("MCP HTTP protocol boundary fixtures", () => {
     });
   });
 
-  it.each(["https://evil.example", "null", "://malformed"])(
+  it.each([
+    "https://evil.example",
+    "null",
+    "://malformed",
+    "https://SPOONJOY.APP",
+    "https://spoonjoy.app:443",
+    "https://spoonjoy.app.",
+    "https://spoonjoy.app/path",
+    "https://user@spoonjoy.app",
+    "https://spoonjoy.app, https://evil.example",
+  ])(
     "rejects present invalid Origin %s before other classification",
     async (origin) => {
       await expectJsonResponse(classify("DELETE", { Origin: origin }), {

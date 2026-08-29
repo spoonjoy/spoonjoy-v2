@@ -297,13 +297,17 @@ describe("handleMcpHttpRequest", () => {
   it("points the challenge at SPOONJOY_BASE_URL, not the worker's own host", async () => {
     const request = new UndiciRequest("https://spoonjoy-v2.mendelow-studio.workers.dev/mcp", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Forwarded-Host": "evil.example:8443",
+        "X-Forwarded-Proto": "http",
+      },
       body: JSON.stringify(init(4, "initialize", {})),
     }) as unknown as Request;
     const response = await handleMcpHttpRequest({
       request,
       db,
-      cloudflareEnv: { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+      cloudflareEnv: { SPOONJOY_BASE_URL: "HTTPS://SPOONJOY.APP.:443/config/path" },
     });
     expect(response.status).toBe(401);
     expect(response.headers.get("WWW-Authenticate")).toContain(
@@ -438,6 +442,26 @@ describe("handleMcpHttpRequest", () => {
       error: "invalid_token",
       message: "OAuth access token is not audience-bound to this MCP resource.",
     });
+  });
+
+  it.each([
+    "https://SPOONJOY.APP/mcp",
+    "https://spoonjoy.app:443/mcp",
+    "https://spoonjoy.app./mcp",
+    "https://spoonjoy.app:8443/mcp",
+    "http://spoonjoy.app/mcp",
+    "https://spoonjoy.app/mcp/",
+    "https://spoonjoy.app/%6dcp",
+    "https://spoonjoy.app/mcp?query=1",
+    "https://spoonjoy.app/mcp#fragment",
+  ])("rejects a bearer bound to non-canonical audience %s", async (oauthResource) => {
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(init(6, "tools/list"), bearer(await mintOAuthToken({ oauthResource }))),
+      db,
+      cloudflareEnv: { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    });
+
+    expect(response.status).toBe(403);
   });
 
   it("allows legacy Claude MCP OAuth tokens that predate resource binding", async () => {

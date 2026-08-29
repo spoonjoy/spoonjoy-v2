@@ -23,7 +23,12 @@ import {
   rotateConnectorTokens,
   type IssuedConnectorTokens,
 } from "~/lib/oauth-server.server";
-import { mcpResourceUrl, resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
+import {
+  isCanonicalMcpResource,
+  mcpResourceUrl,
+  parseSerializedHttpOrigin,
+  resolveIssuerOrigin,
+} from "~/lib/oauth-metadata.server";
 
 type Database = PrismaClientType;
 
@@ -129,11 +134,8 @@ function trustedConsentOrigins(request: Request, env: OAuthEnv | null | undefine
 function crossOriginConsentResponse(request: Request, env: OAuthEnv | null | undefined): Response | null {
   const origin = request.headers.get("Origin");
   if (!origin) return null;
-  try {
-    if (trustedConsentOrigins(request, env).has(new URL(origin).origin)) return null;
-  } catch {
-    // Treat malformed Origin as hostile instead of guessing.
-  }
+  const parsedOrigin = parseSerializedHttpOrigin(origin);
+  if (parsedOrigin && trustedConsentOrigins(request, env).has(parsedOrigin)) return null;
   return Response.json(
     { error: "invalid_request", error_description: "OAuth consent must be submitted from Spoonjoy." },
     { status: 403 },
@@ -389,6 +391,9 @@ export async function handleOAuthToken(
 
   try {
     if (grantType === "authorization_code") {
+      const persistentMcpResource = mcpResourceUrl(
+        resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL),
+      );
       const grant = await consumeAuthorizationCode(db, {
         code: field("code"),
         clientId: field("client_id"),
@@ -400,6 +405,7 @@ export async function handleOAuthToken(
         clientId: field("client_id"),
         scope: grant.scope,
         resource: grant.resource,
+        persistentMcpResource,
       });
       return withOAuthTokenTelemetry(
         tokenResponse(tokens),
@@ -728,8 +734,8 @@ function validS256CodeChallenge(value: string) {
 
 function normalizeAuthorizeResource(request: Request, env: OAuthEnv | null | undefined, resource: string) {
   if (!resource) return null;
-  const expected = mcpResourceUrl(resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL));
-  return resource === expected ? resource : "";
+  const origin = resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL);
+  return isCanonicalMcpResource(resource, origin) ? resource : "";
 }
 
 async function validateAuthorizeRequest(

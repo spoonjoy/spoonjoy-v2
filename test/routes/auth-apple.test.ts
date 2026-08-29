@@ -78,6 +78,32 @@ describe("Apple OAuth routes", () => {
     expect(response.headers.get("Location")).toContain("appleid.apple.com");
   });
 
+  it("pins Apple redirect_uri to the configured origin behind hostile forwarding", async () => {
+    const request = new Request("https://spoonjoy-v2.workers.dev/auth/apple", {
+      headers: {
+        "X-Forwarded-Host": "evil.example:8443",
+        "X-Forwarded-Proto": "http",
+      },
+    });
+    const response = await loader({
+      request,
+      context: {
+        cloudflare: {
+          env: { ...appleEnv, SPOONJOY_BASE_URL: "HTTPS://SPOONJOY.APP.:443/config/path" },
+        },
+      },
+      params: {},
+    } as any);
+
+    expect(response.status).toBe(302);
+    expect(mocks.createAppleAuthorizationURL).toHaveBeenCalledWith(
+      expect.anything(),
+      legacyAppleRedirectUri,
+      expect.any(String),
+      [legacyAppleRedirectUri],
+    );
+  });
+
   it.each([
     ["absent", "https://spoonjoy.app/auth/apple"],
     ["explicit empty", "https://spoonjoy.app/auth/apple?redirectTo="],
@@ -105,6 +131,19 @@ describe("Apple OAuth routes", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("Location")).toBe("/signup?oauthError=oauth_unconfigured");
+  });
+
+  it("fails closed when the configured Apple callback origin is invalid", async () => {
+    const response = await loader({
+      request: new Request("https://spoonjoy.app/auth/apple"),
+      context: {
+        cloudflare: { env: { ...appleEnv, SPOONJOY_BASE_URL: "javascript:alert(1)" } },
+      },
+      params: {},
+    } as any);
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe("/login?oauthError=oauth_unconfigured");
   });
 
   it("redirects to OAuth error when the Apple private key PEM is malformed", async () => {
@@ -520,13 +559,23 @@ describe("Apple OAuth routes", () => {
     });
     const formData = new FormData();
     formData.set("state", "state");
-    const request = new Request("https://spoonjoy.app/auth/apple/callback", {
+    const request = new Request("https://spoonjoy-v2.workers.dev/auth/apple/callback", {
       method: "POST",
       body: formData,
-      headers: { Cookie: cookieHeader(cookie) },
+      headers: {
+        Cookie: cookieHeader(cookie),
+        "X-Forwarded-Host": "evil.example",
+        "X-Forwarded-Proto": "http",
+      },
     });
 
-    await callbackAction({ request, context: { cloudflare: { env: appleEnv } }, params: {} } as any);
+    await callbackAction({
+      request,
+      context: {
+        cloudflare: { env: { ...appleEnv, SPOONJOY_BASE_URL: "https://spoonjoy.app" } },
+      },
+      params: {},
+    } as any);
     expect(mocks.verifyAppleCallback).toHaveBeenCalledWith(
       {
         clientId: "apple-client",
@@ -538,6 +587,32 @@ describe("Apple OAuth routes", () => {
       { code: "", state: "state", user: undefined },
       expect.any(Function)
     );
+  });
+
+  it("fails a legacy Apple callback closed when its configured fallback origin is invalid", async () => {
+    const cookie = await commitOAuthStartSession(new Request("https://spoonjoy.app/auth/apple"), "apple", {
+      state: "state",
+      redirectTo: "/recipes",
+      failureRedirect: "/login",
+      linking: false,
+    });
+    const request = new Request("https://spoonjoy-v2.workers.dev/auth/apple/callback", {
+      method: "POST",
+      body: new URLSearchParams({ state: "state", code: "code" }),
+      headers: { Cookie: cookieHeader(cookie) },
+    });
+
+    const response = await callbackAction({
+      request,
+      context: {
+        cloudflare: { env: { ...appleEnv, SPOONJOY_BASE_URL: "javascript:alert(1)" } },
+      },
+      params: {},
+    } as any);
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe("/login?oauthError=oauth_unconfigured");
+    expect(mocks.verifyAppleCallback).not.toHaveBeenCalled();
   });
 
   it("redirects when Apple verification succeeds without a user payload", async () => {

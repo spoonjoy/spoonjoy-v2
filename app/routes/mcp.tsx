@@ -16,7 +16,11 @@ import {
 } from "lucide-react";
 import { classifyMcpTransportRequest } from "~/lib/mcp/http-mcp-protocol.server";
 import { handleMcpRouteRequest } from "~/lib/mcp/http-mcp-route.server";
-import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
+import {
+  mcpResourceUrl,
+  protectedResourceMetadataUrl,
+  resolveIssuerOrigin,
+} from "~/lib/oauth-metadata.server";
 import { Badge } from "~/components/ui/badge";
 import { CookbookHeader, CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
 
@@ -35,11 +39,10 @@ type McpLandingData = {
   protectedResourceMetadataUrl: string;
 };
 
-function landingData(requestUrl: string): McpLandingData {
-  const origin = new URL(requestUrl).origin;
+function landingData(origin: string): McpLandingData {
   return {
-    endpoint: `${origin}/mcp`,
-    protectedResourceMetadataUrl: `${origin}/.well-known/oauth-protected-resource/mcp`,
+    endpoint: mcpResourceUrl(origin),
+    protectedResourceMetadataUrl: protectedResourceMetadataUrl(origin),
   };
 }
 
@@ -54,14 +57,15 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
+  const canonicalOrigin = resolveIssuerOrigin(
+    request.url,
+    context.cloudflare?.env?.SPOONJOY_BASE_URL,
+  );
   const decision = classifyMcpTransportRequest(request, {
-    canonicalOrigin: resolveIssuerOrigin(
-      request.url,
-      context.cloudflare?.env?.SPOONJOY_BASE_URL,
-    ),
+    canonicalOrigin,
   });
   if (decision.kind === "response") return decision.response;
-  return landingData(request.url);
+  return landingData(canonicalOrigin);
 }
 
 export async function action(args: Route.ActionArgs) {

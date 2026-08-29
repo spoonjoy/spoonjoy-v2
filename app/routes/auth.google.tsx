@@ -30,9 +30,15 @@ async function initiateGoogleOAuth({ request, context }: Route.LoaderArgs | Rout
     return redirect(appendOAuthError(sessionData.failureRedirect, "oauth_unconfigured"));
   }
 
-  const redirectUri = buildOAuthCallbackUrl(request, "google");
-  sessionData.redirectUri = redirectUri;
-  const authorizationUrl = createGoogleAuthorizationURL(config, redirectUri, state, codeVerifier);
+  let authorizationUrl;
+  try {
+    const redirectUri = buildOAuthCallbackUrl(request, "google", env?.SPOONJOY_BASE_URL);
+    sessionData.redirectUri = redirectUri;
+    authorizationUrl = createGoogleAuthorizationURL(config, redirectUri, state, codeVerifier);
+  } catch (error) {
+    authTelemetryFromContext(context).captureException(error, { provider: "google", phase: "initiate" });
+    return redirect(appendOAuthError(sessionData.failureRedirect, "oauth_unconfigured"));
+  }
   const cookie = await commitOAuthStartSession(request, "google", sessionData, env);
 
   return redirectTo(authorizationUrl.toString(), { "Set-Cookie": cookie });

@@ -41,7 +41,11 @@ import {
   extractBearerToken,
   type ApiPrincipal,
 } from "~/lib/api-auth.server";
-import { mcpResourceUrl, protectedResourceMetadataUrl, resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
+import {
+  isCanonicalMcpResource,
+  protectedResourceMetadataUrl,
+  resolveIssuerOrigin,
+} from "~/lib/oauth-metadata.server";
 import { getOAuthClient, isClaudeMcpOAuthClient } from "~/lib/oauth-server.server";
 import {
   enforceRateLimit,
@@ -243,10 +247,12 @@ function observeMcpResponse(
 async function mcpOAuthResourceAllowed(
   db: PrismaClientType,
   principal: ApiPrincipal,
-  expectedResource: string,
+  expectedOrigin: string,
 ): Promise<{ allowed: boolean; legacyAllowed: boolean }> {
   if (!principal.oauthClientId) return { allowed: true, legacyAllowed: false };
-  if (principal.oauthResource === expectedResource) return { allowed: true, legacyAllowed: false };
+  if (isCanonicalMcpResource(principal.oauthResource, expectedOrigin)) {
+    return { allowed: true, legacyAllowed: false };
+  }
   if (principal.oauthResource) return { allowed: false, legacyAllowed: false };
 
   const client = await getOAuthClient(db, principal.oauthClientId);
@@ -376,8 +382,8 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
       resourceMetadataUrl: authChallengeMetadataUrl(request, cloudflareEnv),
     });
   }
-  const expectedResource = mcpResourceUrl(resolveIssuerOrigin(request.url, cloudflareEnv?.SPOONJOY_BASE_URL));
-  const resourceAllowed = await mcpOAuthResourceAllowed(db, principal, expectedResource);
+  const expectedOrigin = resolveIssuerOrigin(request.url, cloudflareEnv?.SPOONJOY_BASE_URL);
+  const resourceAllowed = await mcpOAuthResourceAllowed(db, principal, expectedOrigin);
   if (!resourceAllowed.allowed) {
     const response = jsonResponse(
       { error: "invalid_token", message: "OAuth access token is not audience-bound to this MCP resource." },

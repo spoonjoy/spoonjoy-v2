@@ -7,7 +7,12 @@ import {
   handleOAuthToken,
   loadOAuthAuthorize,
 } from "~/lib/oauth-routes.server";
-import { CLAUDE_MCP_REDIRECT_URI, createAuthorizationCode, registerOAuthClient } from "~/lib/oauth-server.server";
+import {
+  CLAUDE_MCP_REDIRECT_URI,
+  createAuthorizationCode,
+  issueConnectorTokens,
+  registerOAuthClient,
+} from "~/lib/oauth-server.server";
 import { getLocalDb } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -386,6 +391,40 @@ describe("handleOAuthToken", () => {
     })).resolves.toMatchObject({ resource: "https://spoonjoy.app/mcp" });
   });
 
+  it.each([
+    "https://evil.example/mcp",
+    "https://spoonjoy.app./mcp",
+    "https://spoonjoy.app/mcp?query=1",
+  ])("keeps a rotated non-canonical resource %s expiring", async (resource) => {
+    const issued = await issueConnectorTokens(db, {
+      userId,
+      clientId,
+      scope: "kitchen:read",
+      resource,
+      persistentMcpResource: "https://spoonjoy.app/mcp",
+    });
+
+    const response = await handleOAuthToken(
+      formPost("https://spoonjoy.app/oauth/token", {
+        grant_type: "refresh_token",
+        refresh_token: issued.refreshToken,
+        client_id: clientId,
+      }),
+      db,
+      { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ expires_in: expect.any(Number) });
+    await expect(db.apiCredential.findFirstOrThrow({
+      where: { userId, oauthClientId: clientId },
+      orderBy: { createdAt: "desc" },
+    })).resolves.toMatchObject({ oauthResource: resource, expiresAt: expect.any(Date) });
+    await expect(db.oAuthRefreshToken.findFirstOrThrow({
+      where: { userId, clientId, revokedAt: null },
+    })).resolves.toMatchObject({ resource });
+  });
+
   it("does not promote a legacy mixed-callback Claude refresh token", async () => {
     const mixedClient = await db.oAuthClient.create({
       data: {
@@ -622,6 +661,28 @@ describe("loadOAuthAuthorize", () => {
     expect(result.headers.get("Location")).toContain("error=invalid_target");
   });
 
+  it.each([
+    "https://SPOONJOY.APP/mcp",
+    "https://spoonjoy.app:443/mcp",
+    "https://spoonjoy.app./mcp",
+    "https://spoonjoy.app:8443/mcp",
+    "http://spoonjoy.app/mcp",
+    "https://spoonjoy.app/mcp/",
+    "https://spoonjoy.app/%6dcp",
+    "https://spoonjoy.app/mcp?query=1",
+    "https://spoonjoy.app/mcp#fragment",
+  ])("requires the exact configured protected resource instead of %s", async (resource) => {
+    const query = await validQuery();
+    query.resource = resource;
+    const result = await loadOAuthAuthorize(
+      await authorizeGet(query),
+      db,
+      { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    ) as Response;
+
+    expect(result.headers.get("Location")).toContain("error=invalid_target");
+  });
+
   it("accepts a blank resource indicator as no resource", async () => {
     const cookie = await authedCookie(userId);
     const q = await validQuery();
@@ -760,6 +821,28 @@ describe("handleOAuthAuthorizeAction", () => {
       error: "invalid_request",
       error_description: "OAuth consent must be submitted from Spoonjoy.",
     });
+  });
+
+  it.each([
+    "https://spoonjoy.app/%2f%2fevil.example",
+    "https://spoonjoy.app/path",
+    "https://spoonjoy.app?next=https://evil.example",
+    "https://user@spoonjoy.app",
+    "https://spoonjoy.app\\@evil.example",
+    "https://%73poonjoy.app",
+  ])("rejects a non-serialized consent Origin %s", async (origin) => {
+    const cookie = await authedCookie(userId);
+    const response = await handleOAuthAuthorizeAction(
+      new Request("https://spoonjoy.app/oauth/authorize", {
+        method: "POST",
+        headers: { Cookie: cookie, Origin: origin },
+        body: new URLSearchParams(await fields()),
+      }),
+      db,
+      { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    );
+
+    expect(response.status).toBe(403);
   });
 
   it("allows same-origin consent POSTs through the origin guard", async () => {

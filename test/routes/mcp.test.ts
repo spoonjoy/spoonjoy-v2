@@ -79,6 +79,24 @@ describe("/mcp route", () => {
     });
   });
 
+  it("uses the configured canonical origin for landing data behind the Worker host", async () => {
+    const request = new UndiciRequest("https://spoonjoy-v2.workers.dev/mcp", {
+      method: "GET",
+    }) as unknown as Request;
+    const args = {
+      request,
+      params: {},
+      context: {
+        cloudflare: { env: { SPOONJOY_BASE_URL: "HTTPS://SPOONJOY.APP.:443/path" } },
+      },
+    } as never;
+
+    await expect(loader(args)).resolves.toEqual({
+      endpoint: "https://spoonjoy.app/mcp",
+      protectedResourceMetadataUrl: "https://spoonjoy.app/.well-known/oauth-protected-resource/mcp",
+    });
+  });
+
   it("returns explicit JSON instead of landing HTML for protocol GET", async () => {
     const request = new UndiciRequest("https://spoonjoy.app/mcp", {
       method: "GET",

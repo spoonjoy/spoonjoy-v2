@@ -370,7 +370,13 @@ describe("connector token issuance + rotation", () => {
   });
 
   it("issues a persistent MCP access token plus a refresh token", async () => {
-    const tokens = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read", resource: "https://spoonjoy.app/mcp" });
+    const tokens = await issueConnectorTokens(db, {
+      userId,
+      clientId,
+      scope: "kitchen:read",
+      resource: "https://spoonjoy.app/mcp",
+      persistentMcpResource: "https://spoonjoy.app/mcp",
+    });
     expect(tokens.accessToken).toMatch(/^/);
     expect(tokens.refreshToken).toMatch(/^ort_/);
     expect(tokens.expiresIn).toBeNull();
@@ -382,6 +388,31 @@ describe("connector token issuance + rotation", () => {
     expect(credential?.oauthClientId).toBe(clientId);
     expect(credential?.oauthResource).toBe("https://spoonjoy.app/mcp");
     expect(await db.oAuthRefreshToken.count({ where: { userId, resource: "https://spoonjoy.app/mcp" } })).toBe(1);
+  });
+
+  it.each([
+    "https://evil.example/mcp",
+    "https://spoonjoy.app./mcp",
+    "https://spoonjoy.app:8443/mcp",
+    "http://spoonjoy.app/mcp",
+    "https://spoonjoy.app/mcp?query=1",
+    "https://spoonjoy.app/mcp#fragment",
+    "https://spoonjoy.app/MCP",
+    "https://spoonjoy.app/mcp/",
+    "https://spoonjoy.app/%6dcp",
+    "https://spoonjoy.app/mcp%2f",
+  ])("keeps non-canonical MCP-like resource %s expiring", async (resource) => {
+    const tokens = await issueConnectorTokens(db, {
+      userId,
+      clientId,
+      scope: "kitchen:read",
+      resource,
+      persistentMcpResource: "https://spoonjoy.app/mcp",
+    });
+
+    expect(tokens.expiresIn).toBeGreaterThan(0);
+    await expect(db.apiCredential.findFirstOrThrow({ where: { userId } }))
+      .resolves.toMatchObject({ expiresAt: expect.any(Date), oauthResource: resource });
   });
 
   it("keeps non-MCP OAuth access tokens expiring", async () => {
