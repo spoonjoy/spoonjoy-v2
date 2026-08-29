@@ -449,7 +449,9 @@ async function main() {
   const username = `codex_mcp_${stamp}`;
   const password = `Mcp-Canary-${stamp}-1234`;
   let resource = mcpResourceForTarget({ baseUrl, targetEnv });
+  const git = readGitMetadata();
   const report = {
+    schemaVersion: 1,
     baseUrl,
     generatedAt: new Date().toISOString(),
     targetEnv,
@@ -460,7 +462,7 @@ async function main() {
       r2Target: target.r2Target,
       destructiveScope: target.destructiveScope,
     },
-    git: readGitMetadata(),
+    git,
     email,
     username,
     redirectUri: CLAUDE_MCP_REDIRECT_URI,

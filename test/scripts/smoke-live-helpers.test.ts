@@ -43,6 +43,7 @@ import {
   serializeSanitizedMcpCanaryReport,
   shouldRunAppleOAuthCheck,
   usesLocalD1,
+  validateMcpCanaryRecoveryEvidence,
   waitForBrowserWorkerVersionReady,
   waitForWorkerChannelsReady,
   waitForWorkerVersionReady,
@@ -1562,6 +1563,90 @@ describe("smoke-live helpers", () => {
     expect(decideMcpCanaryIssueAction({ status: "success", openIssueNumber: null })).toEqual({ action: "none" });
   });
 
+  it("accepts recovery only from the exact versioned production canary evidence", () => {
+    const sourceSha = "a".repeat(40);
+    const workerVersionId = CANDIDATE_VERSION;
+    const checks = [
+      "candidate Worker override readiness",
+      "signup disposable user",
+      "protected-resource metadata",
+      "dynamic client registration",
+      "authorize consent UI and approve redirect",
+      "authorization_code token exchange",
+      "mcp initialize and tools/list with issued access token",
+      "refresh rotation and replay rejection",
+      "mcp initialize and tools/list with refreshed access token",
+      "legacy Claude refresh token promotion",
+    ].map((name) => ({ name, elapsedMs: 1 }));
+    const report = {
+      schemaVersion: 1,
+      git: { branch: "main", commit: sourceSha },
+      workerVersionId,
+      targetEnv: "production",
+      baseUrl: "https://spoonjoy.app",
+      resource: "https://spoonjoy.app/mcp",
+      checks,
+      cleanup: { target: "production D1", remaining: 0 },
+      legacyProbe: { promotedResource: "https://spoonjoy.app/mcp" },
+    };
+    const expected = { sourceSha, workerVersionId };
+
+    expect(validateMcpCanaryRecoveryEvidence(report, expected)).toEqual({ ok: true });
+    expect(validateMcpCanaryRecoveryEvidence(
+      { ...report, git: { branch: "main", commit: "main" } },
+      { ...expected, sourceSha: "main" },
+    )).toEqual({ ok: false, error: expect.any(String) });
+    expect(validateMcpCanaryRecoveryEvidence(
+      { ...report, workerVersionId: "latest" },
+      { ...expected, workerVersionId: "latest" },
+    )).toEqual({ ok: false, error: expect.any(String) });
+    const uppercaseWorker = "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA";
+    expect(validateMcpCanaryRecoveryEvidence(
+      { ...report, workerVersionId: uppercaseWorker },
+      { ...expected, workerVersionId: uppercaseWorker },
+    )).toEqual({ ok: false, error: expect.any(String) });
+
+    const invalidCases = [
+      ["missing report", null],
+      ["array report", []],
+      ["unknown schema", { ...report, schemaVersion: 2 }],
+      ["wrong target", { ...report, targetEnv: "qa" }],
+      ["wrong base URL", { ...report, baseUrl: "https://example.com" }],
+      ["wrong resource", { ...report, resource: "https://spoonjoy.app/not-mcp" }],
+      ["wrong source", { ...report, git: { branch: "main", commit: "b".repeat(40) } }],
+      ["wrong worker", { ...report, workerVersionId: "33333333-3333-4333-8333-333333333333" }],
+      ["non-array checks", { ...report, checks: null }],
+      ["missing check", { ...report, checks: checks.slice(0, -1) }],
+      ["duplicate check", { ...report, checks: [...checks.slice(0, -1), checks[0]] }],
+      ["extra check", { ...report, checks: [...checks, { name: "extra", elapsedMs: 1 }] }],
+      ["invalid timing", { ...report, checks: checks.map((check, index) => index === 0 ? { ...check, elapsedMs: -1 } : check) }],
+      ["reported failure", { ...report, failure: { message: "failed" } }],
+      ["skipped cleanup", { ...report, cleanup: { skipped: true } }],
+      ["cleanup error", { ...report, cleanup: { remaining: 0, error: "failed" } }],
+      ["cleanup residue", { ...report, cleanup: { remaining: 1 } }],
+      ["missing legacy proof", { ...report, legacyProbe: { skipped: true } }],
+    ] as const;
+
+    for (const [label, invalidReport] of invalidCases) {
+      expect(validateMcpCanaryRecoveryEvidence(invalidReport, expected), label).toEqual({
+        ok: false,
+        error: expect.any(String),
+      });
+    }
+    expect(validateMcpCanaryRecoveryEvidence(report, null)).toEqual({ ok: false, error: expect.any(String) });
+    expect(validateMcpCanaryRecoveryEvidence(report, [])).toEqual({ ok: false, error: expect.any(String) });
+  });
+
+  it("keeps the live canary producer aligned with the recovery evidence contract", () => {
+    const source = readFileSync("scripts/smoke-mcp-oauth-live.mjs", "utf8");
+    const emittedChecks = [...source.matchAll(/await check\("([^"]+)"/g)].map((match) => match[1]);
+
+    expect(source).toContain("schemaVersion: 1");
+    expect(source).toContain("const git = readGitMetadata()");
+    expect(source).toContain("\n    git,\n");
+    expect(emittedChecks).toEqual(smokeHelpers.MCP_CANARY_REQUIRED_CHECK_NAMES);
+  });
+
   it("renders MCP canary issue bodies with safe diagnostics", () => {
     const body = buildMcpCanaryIssueBody({
       report: {
@@ -1869,7 +1954,7 @@ describe("smoke-live helpers", () => {
   it("reads git metadata with unknown fallbacks", () => {
     expect(readGitMetadata()).toEqual({
       branch: expect.stringMatching(/\S/),
-      commit: expect.stringMatching(/^[0-9a-f]{12}$/),
+      commit: expect.stringMatching(/^[0-9a-f]{40}$/),
     });
     expect(readGitMetadata(() => "")).toEqual({ branch: "unknown", commit: "unknown" });
 

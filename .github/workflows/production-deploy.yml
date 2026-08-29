@@ -238,11 +238,11 @@ jobs:
                         has("failure") and has("rollbackFailure") and
                         (.migrationApply | IN("not_needed", "succeeded")))
                     else
-                      ((.phase | IN("migration_apply", "full_preflight", "deployment_revalidation", "version_upload", "version_lookup", "stage_revalidation", "atomic_deploy", "verify_promotion", "bootstrap_probe", "artifact")) and
+                      ((.phase | IN("migration_apply", "full_preflight", "deployment_revalidation", "version_upload", "version_lookup", "stage_revalidation", "atomic_deploy", "verify_promotion", "bootstrap_probe", "canary", "artifact")) and
                         has("treeHash") and has("previousVersionId") and has("failure") and
                         (has("rollbackFailure") | not) and
                         (if $release_mode == "protocol-v1-canary" and .phase == "stage_revalidation" then has("candidateVersionId")
-                        elif $release_mode != "protocol-v1-canary" and (.phase | IN("verify_promotion", "bootstrap_probe", "artifact")) then has("candidateVersionId")
+                        elif $release_mode != "protocol-v1-canary" and (.phase | IN("verify_promotion", "bootstrap_probe", "canary", "artifact")) then has("candidateVersionId")
                         else (has("candidateVersionId") | not)
                         end) and
                         (if .phase == "migration_apply" then .migrationApply == "failed"
@@ -311,7 +311,6 @@ jobs:
 
       - name: Download MCP OAuth canary artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        continue-on-error: true
         with:
           name: mcp-oauth-canary-artifacts
           path: mcp-oauth-canary-artifacts
@@ -320,7 +319,6 @@ jobs:
         if: always()
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          MCP_CANARY_STATUS: ${{ needs.deploy.result }}
           MCP_CANARY_WORKFLOW_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           MCP_CANARY_ARTIFACT_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts
-        run: node scripts/report-mcp-oauth-canary.mjs --artifact-dir mcp-oauth-canary-artifacts --status "$MCP_CANARY_STATUS" --workflow-run-url "$MCP_CANARY_WORKFLOW_RUN_URL" --artifact-url "$MCP_CANARY_ARTIFACT_URL" --manage-issue
+        run: node scripts/report-mcp-oauth-canary.mjs --artifact-dir mcp-oauth-canary-artifacts --require-release-evidence --workflow-run-url "$MCP_CANARY_WORKFLOW_RUN_URL" --artifact-url "$MCP_CANARY_ARTIFACT_URL" --manage-issue

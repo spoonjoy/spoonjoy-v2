@@ -6943,6 +6943,7 @@ describe("release artifact and CLI boundary", () => {
         atomicDeployCommand(mode),
         "pnpm exec wrangler versions list --json",
         "pnpm exec wrangler deployments list --json",
+        `pnpm run smoke:mcp:oauth -- --out mcp-oauth-canary-artifacts --worker-version-id ${CANDIDATE_VERSION}`,
       ];
     }
 
@@ -6980,6 +6981,29 @@ describe("release artifact and CLI boundary", () => {
         expect(deps.writeReleaseArtifact).toHaveBeenCalledTimes(1);
         expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(result);
         expect(readBootstrapProbe).toHaveBeenCalledTimes(mode === "atomic-bootstrap" ? 2 : 0);
+      },
+    );
+
+    it.each(["atomic-bootstrap", "atomic-product-activation"] as const)(
+      "fails %s forward when the full production canary fails after promotion",
+      async (mode) => {
+        const smokeCommand = `pnpm run smoke:mcp:oauth -- --out mcp-oauth-canary-artifacts --worker-version-id ${CANDIDATE_VERSION}`;
+        const runCommand = successfulRunner({
+          [atomicDeployCommand(mode)]: "",
+          [smokeCommand]: new Error("full canary failed"),
+        });
+        const deps = {
+          ...atomicReleaseDeps(runCommand, mode),
+          readBootstrapProbe: vi.fn(async () => validProbeResult),
+        };
+
+        await expect(runProductionCanaryRelease(deps)).rejects.toThrow("full canary failed");
+        expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(expect.objectContaining({
+          status: "forward_repair_required",
+          phase: "canary",
+          candidateVersionId: CANDIDATE_VERSION,
+          failure: "full canary failed",
+        }));
       },
     );
 
