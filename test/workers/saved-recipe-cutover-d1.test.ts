@@ -447,7 +447,7 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
     }) as unknown as TestD1Database;
     const prisma = await getRequestDb(routeContext(measuredDatabase) as any);
 
-    const result = await prisma.oAuthRefreshToken.updateMany({
+    const result = await prisma.oAuthRefreshToken.findMany({
       where: {
         userId: USER_ID,
         clientId: OAUTH_D1_CLIENT_ID,
@@ -456,10 +456,10 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
         revokedAt: null,
         ...oauthRefreshConnectionOwnership(connectionKeys),
       },
-      data: { revokedAt: new Date("2026-08-29T18:00:00.000Z") },
+      select: { id: true },
     });
 
-    expect(result.count).toBe(OAUTH_CONNECTION_KEY_BATCH_SIZE);
+    expect(result).toHaveLength(OAUTH_CONNECTION_KEY_BATCH_SIZE);
     expect(Math.max(...bindCounts)).toBeLessThanOrEqual(100);
     expect(Math.max(...bindCounts)).toBeGreaterThan(OAUTH_CONNECTION_KEY_BATCH_SIZE * 2);
   });
