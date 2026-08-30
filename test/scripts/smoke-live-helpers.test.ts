@@ -700,6 +700,7 @@ describe("smoke-live helpers", () => {
       clientId: "client_1",
       connectionKey: "connection_1",
     }, { targetEnv: "production" }).at(-1)).toBe([
+      `DELETE FROM "OAuthGrant" WHERE connectionKey = 'connection_1';`,
       `DELETE FROM "OAuthRefreshToken" WHERE connectionKey = 'connection_1';`,
       `DELETE FROM "OAuthClient" WHERE id = 'client_1';`,
       `DELETE FROM "User" WHERE email = 'canary@example.com';`,
@@ -710,6 +711,7 @@ describe("smoke-live helpers", () => {
       clientId: null,
       connectionKey: "connection_1",
     }, { targetEnv: "production" }).at(-1)).toBe([
+      `DELETE FROM "OAuthGrant" WHERE connectionKey = 'connection_1';`,
       `DELETE FROM "OAuthRefreshToken" WHERE connectionKey = 'connection_1';`,
       `DELETE FROM "User" WHERE email = 'canary@example.com';`,
     ].join(" "));

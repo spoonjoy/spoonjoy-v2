@@ -901,6 +901,11 @@ DELETE FROM ApiIdempotencyKey
 WHERE userId IN (SELECT id FROM disposable_users)
    OR credentialId IN (SELECT id FROM disposable_credentials);
 
+-- Durable grant deletion cascades issuance and lineage before their retained
+-- source/output rows are removed below.
+DELETE FROM OAuthGrant
+WHERE userId IN (SELECT id FROM disposable_users);
+
 DELETE FROM ApiCredential
 WHERE id IN (SELECT id FROM disposable_credentials);
 
@@ -1012,6 +1017,11 @@ WHERE id IN (SELECT id FROM __e2e_exact_connections);
 DELETE FROM ApiIdempotencyKey
 WHERE id IN (SELECT id FROM __e2e_exact_idempotency_keys);
 
+-- Grant deletion cascades through issuance and refresh lineage first. Their
+-- retained source/output FKs intentionally prevent deleting tokens earlier.
+DELETE FROM OAuthGrant
+WHERE clientId IN (${exactIds});
+
 DELETE FROM ApiCredential
 WHERE id IN (SELECT id FROM __e2e_exact_credentials);
 
@@ -1026,6 +1036,7 @@ WHERE id IN (${exactIds});
 
 SELECT
   (SELECT COUNT(*) FROM OAuthClient WHERE id IN (${exactIds}))
+  + (SELECT COUNT(*) FROM OAuthGrant WHERE clientId IN (${exactIds}))
   + (SELECT COUNT(*) FROM OAuthAuthCode WHERE clientId IN (${exactIds}))
   + (SELECT COUNT(*) FROM OAuthRefreshToken WHERE clientId IN (${exactIds}))
   + (SELECT COUNT(*) FROM ApiCredential WHERE oauthClientId IN (${exactIds}))

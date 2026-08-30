@@ -242,6 +242,57 @@ describe("OAuth concurrency baseline through independent PrismaD1 clients", () =
     expect(prismaTransactionWarnings).toEqual(process.platform === "linux" ? [PRISMA_D1_TRANSACTION_WARNING] : []);
   });
 
+  it("keeps legacy issue, rotation, and disconnect compatible with the expanded grant schema", async () => {
+    const original = await issueTokens();
+    const originalRefreshHash = await hashOAuthOpaqueToken(original.refreshToken);
+    const originalAccessHash = await hashApiToken(original.accessToken);
+
+    await replaceEveryClient();
+    const rotated = await rotateConnectorTokens(clients[0], {
+      refreshToken: original.refreshToken,
+      clientId: CLIENT_ID,
+      issuer: ISSUER,
+      now: NOW,
+    });
+    const rotatedRefreshHash = await hashOAuthOpaqueToken(rotated.refreshToken);
+    const rotatedAccessHash = await hashApiToken(rotated.accessToken);
+
+    await replaceEveryClient();
+    await expect(revokeConnectorRefreshToken(clients[0], {
+      refreshToken: rotated.refreshToken,
+      clientId: CLIENT_ID,
+      issuer: ISSUER,
+      now: NOW,
+    })).resolves.toBe(true);
+
+    await replaceEveryClient();
+    await expect(revokeConnectorRefreshToken(clients[0], {
+      refreshToken: rotated.refreshToken,
+      clientId: CLIENT_ID,
+      issuer: ISSUER,
+      now: NOW,
+    })).resolves.toBe(false);
+
+    for (const tokenHash of [originalRefreshHash, rotatedRefreshHash]) {
+      await expect(database().prepare(`
+        SELECT "grantId", "revokedAt" IS NOT NULL AS "revoked"
+        FROM "OAuthRefreshToken" WHERE "tokenHash" = ?
+      `).bind(tokenHash).first()).resolves.toEqual({ grantId: null, revoked: 1 });
+    }
+    for (const tokenHash of [originalAccessHash, rotatedAccessHash]) {
+      await expect(database().prepare(`
+        SELECT "oauthGrantId", "revokedAt" IS NOT NULL AS "revoked"
+        FROM "ApiCredential" WHERE "tokenHash" = ?
+      `).bind(tokenHash).first()).resolves.toEqual({ oauthGrantId: null, revoked: 1 });
+    }
+
+    for (const table of ["OAuthGrant", "OAuthTokenIssuance", "OAuthRefreshLineage"]) {
+      await expect(database().prepare(`SELECT COUNT(*) AS count FROM "${table}"`).first<{ count: number }>())
+        .resolves.toEqual({ count: 0 });
+    }
+    await expect(database().prepare("PRAGMA foreign_key_check").first()).resolves.toBeNull();
+  });
+
   it.each(["before", "after"] as const)(
     "reproduces the D1 state %s authorization-code consumption",
     async (timing) => {

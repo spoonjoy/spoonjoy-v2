@@ -789,6 +789,7 @@ export function buildMcpCanaryConnectionResourceD1Args(input, { targetEnv }) {
 
 export function buildMcpCanaryCleanupD1Args(input, { targetEnv }) {
   const commands = [
+    `DELETE FROM "OAuthGrant" WHERE connectionKey = ${sqlString(input.connectionKey)};`,
     `DELETE FROM "OAuthRefreshToken" WHERE connectionKey = ${sqlString(input.connectionKey)};`,
   ];
   if (input.clientId) {
