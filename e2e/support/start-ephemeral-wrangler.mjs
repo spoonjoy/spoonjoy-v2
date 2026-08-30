@@ -140,6 +140,8 @@ export function createWranglerLauncher({
         "--var",
         "SESSION_SECRET:spoonjoy-playwright-local-session-secret",
         "--var",
+        "SPOONJOY_BASE_URL:http://localhost:5197",
+        "--var",
         "GOOGLE_CLIENT_ID:spoonjoy-playwright-google-client",
         "--var",
         "GOOGLE_CLIENT_SECRET:spoonjoy-playwright-google-secret",

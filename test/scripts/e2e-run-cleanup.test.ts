@@ -989,6 +989,7 @@ describe("ephemeral Playwright run ownership", () => {
     ) => {
       expect(argv).toEqual(expect.arrayContaining(["--log-level", "error"]));
       expect(argv).toEqual(expect.arrayContaining([
+        "SPOONJOY_BASE_URL:http://localhost:5197",
         "GOOGLE_CLIENT_ID:spoonjoy-playwright-google-client",
         "GOOGLE_CLIENT_SECRET:spoonjoy-playwright-google-secret",
       ]));
