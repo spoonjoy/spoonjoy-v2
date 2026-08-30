@@ -660,6 +660,7 @@ describe("cleanup-local-qa-data", () => {
       "INSERT INTO disposable_credentials",
       "DELETE FROM AgentConnectionRequest",
       "DELETE FROM ApiIdempotencyKey",
+      "DELETE FROM OAuthGrant",
       "DELETE FROM ApiCredential",
       "DELETE FROM NativePushDevice",
       "DELETE FROM RecipeCover",

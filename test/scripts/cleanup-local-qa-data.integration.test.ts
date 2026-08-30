@@ -35,6 +35,7 @@ function createCleanupDatabase(path = ":memory:") {
     CREATE TABLE OAuthClient (id TEXT PRIMARY KEY, clientName TEXT, redirectUris TEXT NOT NULL);
     CREATE TABLE OAuthGrant (
       id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL REFERENCES User(id) ON DELETE CASCADE,
       clientId TEXT NOT NULL REFERENCES OAuthClient(id) ON DELETE CASCADE,
       connectionKey TEXT NOT NULL
     );
@@ -138,26 +139,37 @@ describe("cleanup-local-qa-data executable ownership boundaries", () => {
     tempRoot = undefined;
   });
 
-  it("leaves lookalike OAuth graphs untouched and no scratch schema after broad cleanup", () => {
+  it("deletes populated disposable-user lineage while leaving lookalike OAuth graphs untouched", () => {
     db = createCleanupDatabase();
     db.exec(`
       INSERT INTO User VALUES ('seed-user', 'demo@example.com', 'demo', NULL);
+      INSERT INTO User VALUES ('codex-user', 'codex-broad-cleanup@example.com', 'codex_broad_cleanup', NULL);
       INSERT INTO OAuthClient VALUES ('lookalike-client', 'E2E OAuth Client', 'http://localhost:5197/privacy');
-      INSERT INTO OAuthGrant VALUES ('lookalike-grant', 'lookalike-client', 'lookalike-connection');
+      INSERT INTO OAuthClient VALUES ('disposable-client', 'E2E OAuth Client', 'http://localhost:5197/privacy');
+      INSERT INTO OAuthGrant VALUES ('lookalike-grant', 'seed-user', 'lookalike-client', 'lookalike-connection');
+      INSERT INTO OAuthGrant VALUES ('disposable-grant', 'codex-user', 'disposable-client', 'disposable-connection');
       INSERT INTO ApiCredential VALUES ('lookalike-credential', 'seed-user', 'lookalike-client');
+      INSERT INTO ApiCredential VALUES ('disposable-credential', 'codex-user', 'disposable-client');
       INSERT INTO OAuthAuthCode VALUES ('lookalike-code', 'lookalike-client', 'seed-user');
+      INSERT INTO OAuthAuthCode VALUES ('disposable-code', 'disposable-client', 'codex-user');
       INSERT INTO OAuthRefreshToken VALUES ('lookalike-refresh', 'lookalike-client', 'seed-user', 'lookalike-connection');
+      INSERT INTO OAuthRefreshToken VALUES ('disposable-refresh', 'disposable-client', 'codex-user', 'disposable-connection');
+      INSERT INTO OAuthTokenIssuance VALUES ('disposable-issuance', 'disposable-grant', 'disposable-code', 'disposable-credential', 'disposable-refresh');
+      INSERT INTO OAuthRefreshLineage VALUES ('disposable-refresh', 'disposable-grant', 'disposable-issuance');
     `);
 
     expect(blockerRows(db)).toEqual([]);
     db.exec(buildApplySql());
 
     expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
-    expect(ids(db, "OAuthClient")).toEqual(["lookalike-client"]);
+    expect(ids(db, "User")).toEqual(["seed-user"]);
+    expect(ids(db, "OAuthClient")).toEqual(["disposable-client", "lookalike-client"]);
     expect(ids(db, "OAuthGrant")).toEqual(["lookalike-grant"]);
     expect(ids(db, "ApiCredential")).toEqual(["lookalike-credential"]);
     expect(ids(db, "OAuthAuthCode")).toEqual(["lookalike-code"]);
     expect(ids(db, "OAuthRefreshToken")).toEqual(["lookalike-refresh"]);
+    expect(rowCount(db, "OAuthTokenIssuance")).toBe(0);
+    expect(rowCount(db, "OAuthRefreshLineage")).toBe(0);
     expect(scratchSchemaRows(db)).toEqual([]);
   });
 
@@ -167,8 +179,8 @@ describe("cleanup-local-qa-data executable ownership boundaries", () => {
       INSERT INTO User VALUES ('seed-user', 'demo@example.com', 'demo', NULL);
       INSERT INTO OAuthClient VALUES ('captured-client', 'E2E OAuth Client [run-owned]', 'http://localhost:5197/privacy');
       INSERT INTO OAuthClient VALUES ('lookalike-client', 'E2E OAuth Client [run-owned]', 'http://localhost:5197/privacy');
-      INSERT INTO OAuthGrant VALUES ('captured-grant', 'captured-client', 'captured-connection');
-      INSERT INTO OAuthGrant VALUES ('lookalike-grant', 'lookalike-client', 'lookalike-connection');
+      INSERT INTO OAuthGrant VALUES ('captured-grant', 'seed-user', 'captured-client', 'captured-connection');
+      INSERT INTO OAuthGrant VALUES ('lookalike-grant', 'seed-user', 'lookalike-client', 'lookalike-connection');
       INSERT INTO ApiCredential VALUES ('captured-credential', 'seed-user', 'captured-client');
       INSERT INTO ApiCredential VALUES ('lookalike-credential', 'seed-user', 'lookalike-client');
       INSERT INTO AgentConnectionRequest VALUES ('captured-connection', 'seed-user', 'captured-credential');
@@ -209,7 +221,7 @@ describe("cleanup-local-qa-data executable ownership boundaries", () => {
     db.exec(`
       INSERT INTO User VALUES ('canary-user', 'canary@example.com', 'canary', NULL);
       INSERT INTO OAuthClient VALUES ('canary-client', 'Claude', 'https://claude.ai/api/mcp/auth_callback');
-      INSERT INTO OAuthGrant VALUES ('canary-grant', 'canary-client', 'canary-connection');
+      INSERT INTO OAuthGrant VALUES ('canary-grant', 'canary-user', 'canary-client', 'canary-connection');
       INSERT INTO ApiCredential VALUES ('canary-credential', 'canary-user', 'canary-client');
       INSERT INTO OAuthAuthCode VALUES ('canary-code', 'canary-client', 'canary-user');
       INSERT INTO OAuthRefreshToken VALUES ('canary-refresh', 'canary-client', 'canary-user', 'canary-connection');

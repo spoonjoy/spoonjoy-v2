@@ -901,6 +901,11 @@ DELETE FROM ApiIdempotencyKey
 WHERE userId IN (SELECT id FROM disposable_users)
    OR credentialId IN (SELECT id FROM disposable_credentials);
 
+-- Durable grant deletion cascades issuance and lineage before their retained
+-- source/output rows are removed below.
+DELETE FROM OAuthGrant
+WHERE userId IN (SELECT id FROM disposable_users);
+
 DELETE FROM ApiCredential
 WHERE id IN (SELECT id FROM disposable_credentials);
 
