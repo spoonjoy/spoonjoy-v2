@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import {
   handleOAuthAuthorizeAction,
@@ -107,6 +107,36 @@ describe("handleOAuthRegister", () => {
     expect(body.redirect_uris).toEqual(["https://claude.ai/cb"]);
     expect(body.token_endpoint_auth_method).toBe("none");
     expect(body.grant_types).toEqual(["authorization_code", "refresh_token"]);
+    expect(body.application_type).toBe("web");
+  });
+
+  it("binds a dynamically registered client to the configured issuer", async () => {
+    const registration = await handleOAuthRegister(
+      jsonPost({ redirect_uris: ["https://example.com/cb"] }),
+      db,
+      { SPOONJOY_BASE_URL: "https://issuer-a.example" },
+    );
+    const { client_id: registeredClientId } = await registration.json() as { client_id: string };
+    const challenge = await challengeFor(VERIFIER);
+    const authorizeUrl = new URL("https://worker.example/oauth/authorize");
+    for (const [key, value] of Object.entries({
+      client_id: registeredClientId,
+      redirect_uri: "https://example.com/cb",
+      response_type: "code",
+      code_challenge: challenge,
+      code_challenge_method: "S256",
+      scope: "kitchen:read",
+      state: "state_0123456789abcdef",
+      resource: "",
+    })) authorizeUrl.searchParams.set(key, value);
+
+    const result = await loadOAuthAuthorize(
+      new Request(authorizeUrl),
+      db,
+      { SPOONJOY_BASE_URL: "https://issuer-b.example" },
+    );
+
+    expect(result).toMatchObject({ kind: "error", message: "Unknown OAuth client." });
   });
 
   it("echoes the client name when provided", async () => {
@@ -144,6 +174,31 @@ describe("handleOAuthRegister", () => {
     expect(res.status).toBe(400);
   });
 
+  it.each([
+    ["a null redirect URI", ["https://example.com/cb", null]],
+    ["a numeric redirect URI", ["https://example.com/cb", 42]],
+    ["an object redirect URI", ["https://example.com/cb", { uri: "https://other.example/cb" }]],
+  ])("rejects redirect_uris containing %s without filtering the malformed member", async (_description, redirectUris) => {
+    const before = await db.oAuthClient.count();
+    const res = await handleOAuthRegister(jsonPost({ redirect_uris: redirectUris }), db);
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error: "invalid_client_metadata" });
+    expect(await db.oAuthClient.count()).toBe(before);
+  });
+
+  it.each([null, 42, {}, ["Example App"]])("rejects non-string client_name %# without coercing it to null", async (clientName) => {
+    const before = await db.oAuthClient.count();
+    const res = await handleOAuthRegister(jsonPost({
+      client_name: clientName,
+      redirect_uris: ["https://example.com/cb"],
+    }), db);
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error: "invalid_client_metadata" });
+    expect(await db.oAuthClient.count()).toBe(before);
+  });
+
   it("rejects unsupported dynamic-registration metadata", async () => {
     const res = await handleOAuthRegister(jsonPost({
       redirect_uris: ["https://claude.ai/cb"],
@@ -178,6 +233,40 @@ describe("handleOAuthRegister", () => {
       scope: "shopping_list:read shopping_list:write",
     }), db);
     expect(res.status).toBe(201);
+  });
+
+  it.each(["web", "native"])("validates and echoes application_type %s", async (applicationType) => {
+    const res = await handleOAuthRegister(jsonPost({
+      redirect_uris: [applicationType === "native" ? "http://127.0.0.1:3210/callback" : "https://example.com/cb"],
+      application_type: applicationType,
+    }), db);
+
+    expect(res.status).toBe(201);
+    await expect(res.json()).resolves.toMatchObject({ application_type: applicationType });
+  });
+
+  it("rejects an invalid application_type without persisting a client", async () => {
+    const before = await db.oAuthClient.count();
+    const res = await handleOAuthRegister(jsonPost({
+      redirect_uris: ["https://example.com/cb"],
+      application_type: "desktop",
+    }), db);
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error: "invalid_client_metadata" });
+    expect(await db.oAuthClient.count()).toBe(before);
+  });
+
+  it.each([null, 42, {}, ["native"]])("rejects non-string application_type %#", async (applicationType) => {
+    const before = await db.oAuthClient.count();
+    const res = await handleOAuthRegister(jsonPost({
+      redirect_uris: ["https://example.com/cb"],
+      application_type: applicationType,
+    }), db);
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error: "invalid_client_metadata" });
+    expect(await db.oAuthClient.count()).toBe(before);
   });
 
   it("accepts and ignores standard RFC 7591 metadata Spoonjoy does not store", async () => {
@@ -279,9 +368,14 @@ describe("handleOAuthToken", () => {
       .resolves.toMatchObject({
         name: "Example App (OAuth)",
         oauthClientId: clientId,
+        oauthIssuer: "https://spoonjoy.app",
         oauthResource: "https://spoonjoy.app/mcp",
         expiresAt: null,
       });
+    await expect(db.oAuthRefreshToken.findFirstOrThrow({ where: { userId } }))
+      .resolves.toMatchObject({ issuer: "https://spoonjoy.app" });
+    await expect(db.oAuthClient.findUniqueOrThrow({ where: { id: clientId } }))
+      .resolves.toMatchObject({ issuer: "https://spoonjoy.app" });
     // the access token is a real ApiCredential, plus one refresh token
     expect(await db.apiCredential.count({ where: { userId } })).toBe(1);
     expect(await db.oAuthRefreshToken.count({ where: { userId } })).toBe(1);
@@ -336,6 +430,13 @@ describe("handleOAuthToken", () => {
 
     expect(refresh.status).toBe(200);
     await expect(refresh.json()).resolves.toMatchObject({ scope: "kitchen:read", expires_in: expect.any(Number) });
+    await expect(db.apiCredential.findFirstOrThrow({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+    })).resolves.toMatchObject({ oauthIssuer: "https://spoonjoy.app" });
+    await expect(db.oAuthRefreshToken.findFirstOrThrow({
+      where: { userId, revokedAt: null },
+    })).resolves.toMatchObject({ issuer: "https://spoonjoy.app" });
   });
 
   it("promotes legacy Claude MCP refresh tokens to the protected resource", async () => {
@@ -534,7 +635,7 @@ describe("handleOAuthToken", () => {
       }),
       db,
     );
-    expect(revoke.status).toBe(204);
+    expect(revoke.status).toBe(200);
     await expect(db.apiCredential.findFirstOrThrow({ where: { userId } }))
       .resolves.toMatchObject({ revokedAt: expect.any(Date) });
 
@@ -551,7 +652,7 @@ describe("handleOAuthToken", () => {
       formPost("https://spoonjoy.app/oauth/revoke", { token: first.refresh_token, client_id: clientId }),
       db,
     );
-    expect(repeat.status).toBe(204);
+    expect(repeat.status).toBe(200);
 
     const empty = await handleOAuthRevoke(formPost("https://spoonjoy.app/oauth/revoke", {}), db);
     expect(empty.status).toBe(400);
@@ -577,6 +678,76 @@ describe("handleOAuthToken", () => {
     expect(res.status).toBe(400);
     await expect(res.json()).resolves.toMatchObject({ error: "invalid_grant" });
   });
+
+  it("does not consume an authorization code at a different issuer", async () => {
+    const issuerA = "https://issuer-a.example";
+    const issuerB = "https://issuer-b.example";
+    const boundClient = await registerOAuthClient(db, {
+      redirectUris: [redirectUri],
+      issuer: issuerA,
+    });
+    const code = await createAuthorizationCode(db, {
+      clientId: boundClient.clientId,
+      userId,
+      redirectUri,
+      codeChallenge: await challengeFor(VERIFIER),
+      scope: "kitchen:read",
+      resource: null,
+      issuer: issuerA,
+    });
+    const res = await handleOAuthToken(
+      formPost("https://worker.example/oauth/token", {
+        grant_type: "authorization_code",
+        code,
+        client_id: boundClient.clientId,
+        redirect_uri: redirectUri,
+        code_verifier: VERIFIER,
+      }),
+      db,
+      { SPOONJOY_BASE_URL: issuerB },
+    );
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error: "invalid_grant" });
+    await expect(db.oAuthAuthCode.findFirstOrThrow({ where: { clientId: boundClient.clientId } }))
+      .resolves.toMatchObject({ consumedAt: null });
+  });
+
+  it("does not rotate or revoke a refresh token at a different issuer", async () => {
+    const issuerA = "https://issuer-a.example";
+    const issuerB = "https://issuer-b.example";
+    const boundClient = await registerOAuthClient(db, { redirectUris: [redirectUri], issuer: issuerA });
+    const issued = await issueConnectorTokens(db, {
+      userId,
+      clientId: boundClient.clientId,
+      scope: "kitchen:read",
+      issuer: issuerA,
+    });
+
+    const rotation = await handleOAuthToken(
+      formPost("https://worker.example/oauth/token", {
+        grant_type: "refresh_token",
+        refresh_token: issued.refreshToken,
+        client_id: boundClient.clientId,
+      }),
+      db,
+      { SPOONJOY_BASE_URL: issuerB },
+    );
+    const revocation = await handleOAuthRevoke(
+      formPost("https://worker.example/oauth/revoke", {
+        token: issued.refreshToken,
+        client_id: boundClient.clientId,
+      }),
+      db,
+      { SPOONJOY_BASE_URL: issuerB },
+    );
+
+    expect(rotation.status).toBe(400);
+    await expect(rotation.json()).resolves.toMatchObject({ error: "invalid_grant" });
+    expect(revocation.status).toBe(200);
+    await expect(db.oAuthRefreshToken.findFirstOrThrow({ where: { clientId: boundClient.clientId } }))
+      .resolves.toMatchObject({ issuer: issuerA, revokedAt: null });
+  });
 });
 
 describe("loadOAuthAuthorize", () => {
@@ -592,8 +763,12 @@ describe("loadOAuthAuthorize", () => {
   });
   afterEach(async () => { await cleanupDatabase(); });
 
-  async function authorizeGet(query: Record<string, string>, cookie?: string): Promise<Request> {
-    const url = new URL("https://spoonjoy.app/oauth/authorize");
+  async function authorizeGet(
+    query: Record<string, string>,
+    cookie?: string,
+    requestUrl = "https://spoonjoy.app/oauth/authorize",
+  ): Promise<Request> {
+    const url = new URL(requestUrl);
     for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
     const headers = new Headers();
     if (cookie) headers.set("Cookie", cookie);
@@ -623,42 +798,25 @@ describe("loadOAuthAuthorize", () => {
     expect(result).toMatchObject({ kind: "error" });
   });
 
-  it("redirects back with unsupported_response_type", async () => {
-    const q = await validQuery();
-    q.response_type = "token";
-    const result = await loadOAuthAuthorize(await authorizeGet(q), db, null) as Response;
+  it.each([
+    ["unsupported response type", { response_type: "token" }, "unsupported_response_type", true],
+    ["missing state", { state: "" }, "invalid_request", false],
+    ["invalid PKCE method", { code_challenge_method: "plain" }, "invalid_request", true],
+    ["unsupported scope", { scope: "kitchen:admin" }, "invalid_scope", true],
+    ["unexpected resource", { resource: "https://evil.example/mcp" }, "invalid_target", true],
+  ] as const)("redirects %s with the exact issuer and safe state handling", async (_name, overrides, error, preservesState) => {
+    const query = { ...await validQuery(), ...overrides };
+    const result = await loadOAuthAuthorize(
+      await authorizeGet(query, undefined, "https://internal.workers.dev/oauth/authorize"),
+      db,
+      { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    ) as Response;
+    const location = new URL(result.headers.get("Location") ?? "");
+
     expect(result.status).toBe(302);
-    expect(result.headers.get("Location")).toContain("error=unsupported_response_type");
-  });
-
-  it("redirects back with invalid_request when state is missing", async () => {
-    const q = await validQuery();
-    q.state = "";
-    const result = await loadOAuthAuthorize(await authorizeGet(q), db, null) as Response;
-    const location = result.headers.get("Location") ?? "";
-    expect(location).toContain("error=invalid_request");
-    expect(location).not.toContain("state=");
-  });
-
-  it("redirects back with invalid_request when PKCE is missing", async () => {
-    const q = await validQuery();
-    q.code_challenge_method = "plain";
-    const result = await loadOAuthAuthorize(await authorizeGet(q), db, null) as Response;
-    expect(result.headers.get("Location")).toContain("error=invalid_request");
-  });
-
-  it("redirects back with invalid_scope", async () => {
-    const q = await validQuery();
-    q.scope = "kitchen:admin";
-    const result = await loadOAuthAuthorize(await authorizeGet(q), db, null) as Response;
-    expect(result.headers.get("Location")).toContain("error=invalid_scope");
-  });
-
-  it("redirects back with invalid_target for an unexpected resource indicator", async () => {
-    const q = await validQuery();
-    q.resource = "https://evil.example/mcp";
-    const result = await loadOAuthAuthorize(await authorizeGet(q), db, null) as Response;
-    expect(result.headers.get("Location")).toContain("error=invalid_target");
+    expect(location.searchParams.get("error")).toBe(error);
+    expect(location.searchParams.get("iss")).toBe("https://spoonjoy.app");
+    expect(location.searchParams.get("state")).toBe(preservesState ? "state_0123456789abcdef" : null);
   });
 
   it.each([
@@ -680,7 +838,10 @@ describe("loadOAuthAuthorize", () => {
       { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
     ) as Response;
 
-    expect(result.headers.get("Location")).toContain("error=invalid_target");
+    const location = new URL(result.headers.get("Location") ?? "");
+    expect(location.searchParams.get("error")).toBe("invalid_target");
+    expect(location.searchParams.get("iss")).toBe("https://spoonjoy.app");
+    expect(location.searchParams.get("state")).toBe("state_0123456789abcdef");
   });
 
   it("accepts a blank resource indicator as no resource", async () => {
@@ -692,7 +853,7 @@ describe("loadOAuthAuthorize", () => {
     expect(result).not.toHaveProperty("resource");
   });
 
-  it("redirects to login when not authenticated", async () => {
+  it("rejects a consent POST when the session is no longer authenticated", async () => {
     const result = await loadOAuthAuthorize(await authorizeGet(await validQuery()), db, null) as Response;
     expect(result.status).toBe(302);
     expect(result.headers.get("Location")).toContain("/login?redirectTo=");
@@ -702,6 +863,56 @@ describe("loadOAuthAuthorize", () => {
     const cookie = await authedCookie(userId);
     const result = await loadOAuthAuthorize(await authorizeGet(await validQuery(), cookie), db, null);
     expect(result).toMatchObject({ kind: "consent", scope: "kitchen:read" });
+    expect((result as { consentToken: string }).consentToken).toMatch(/^oct_[A-Za-z0-9_-]{43}$/);
+    await expect(db.oAuthConsentTransaction.findFirstOrThrow({ where: { userId } })).resolves.toMatchObject({
+      issuer: "https://spoonjoy.app",
+      clientId,
+      scope: "kitchen:read",
+      resource: "https://spoonjoy.app/mcp",
+    });
+    expect((await db.oAuthConsentTransaction.findFirstOrThrow({ where: { userId } })).tokenHash)
+      .not.toContain((result as { consentToken: string }).consentToken);
+  });
+
+  it("does not create a consent transaction before authentication", async () => {
+    await loadOAuthAuthorize(await authorizeGet(await validQuery()), db, null);
+    expect(await db.oAuthConsentTransaction.count()).toBe(0);
+  });
+
+  it("removes expired consent transactions before creating a replacement", async () => {
+    await db.oAuthConsentTransaction.create({
+      data: {
+        tokenHash: "expired-consent",
+        userId,
+        issuer: "https://spoonjoy.app",
+        clientId,
+        redirectUri,
+        state: "state_expired_0123456789",
+        scope: "kitchen:read",
+        codeChallenge: await challengeFor(VERIFIER),
+        expiresAt: new Date(Date.now() - 1),
+      },
+    });
+    const cookie = await authedCookie(userId);
+
+    await loadOAuthAuthorize(await authorizeGet(await validQuery(), cookie), db, null);
+
+    expect(await db.oAuthConsentTransaction.count({ where: { tokenHash: "expired-consent" } })).toBe(0);
+    expect(await db.oAuthConsentTransaction.count({ where: { userId } })).toBe(1);
+  });
+
+  it("does not fetch or advertise unsupported Client ID Metadata Documents", async () => {
+    const q = await validQuery();
+    q.client_id = "https://client.example/oauth/client.json";
+    const fetchImpl = vi.fn();
+    vi.stubGlobal("fetch", fetchImpl);
+    try {
+      const result = await loadOAuthAuthorize(await authorizeGet(q), db, null);
+      expect(result).toMatchObject({ kind: "error", message: "Unknown OAuth client." });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("treats a revoked client as unknown", async () => {
@@ -764,6 +975,23 @@ describe("handleOAuthAuthorizeAction", () => {
     };
   }
 
+  async function consentTokenFor(
+    requestedFields: Record<string, string>,
+    cookie: string,
+  ): Promise<string> {
+    const url = new URL("https://spoonjoy.app/oauth/authorize");
+    for (const [key, value] of Object.entries(requestedFields)) {
+      if (key !== "decision") url.searchParams.set(key, value);
+    }
+    const result = await loadOAuthAuthorize(
+      new Request(url, { headers: { Cookie: cookie } }),
+      db,
+      null,
+    );
+    expect(result).toMatchObject({ kind: "consent" });
+    return (result as { consentToken: string }).consentToken;
+  }
+
   it("400s on an invalid client/redirect", async () => {
     const res = await handleOAuthAuthorizeAction(
       formPost("https://spoonjoy.app/oauth/authorize", await fields({ client_id: "nope" })),
@@ -777,29 +1005,49 @@ describe("handleOAuthAuthorizeAction", () => {
       formPost("https://spoonjoy.app/oauth/authorize", await fields()),
       db, null,
     );
-    expect(res.status).toBe(302);
-    expect(res.headers.get("Location")).toContain("/login?redirectTo=");
+    expect(res.status).toBe(400);
   });
 
-  it("redirects invalid authorize requests back before login", async () => {
+  it("does not trust reposted authorize parameters before login", async () => {
     const res = await handleOAuthAuthorizeAction(
       formPost("https://spoonjoy.app/oauth/authorize", await fields({ scope: "kitchen:admin" })),
       db, null,
     );
 
-    expect(res.status).toBe(302);
-    expect(res.headers.get("Location")).toContain("error=invalid_scope");
-    expect(res.headers.get("Location")).toContain("state=state_0123456789abcdef");
+    expect(res.status).toBe(400);
   });
 
   it("redirects back with access_denied on deny", async () => {
     const cookie = await authedCookie(userId);
+    const requested = await fields();
+    const consentToken = await consentTokenFor(requested, cookie);
     const res = await handleOAuthAuthorizeAction(
-      formPost("https://spoonjoy.app/oauth/authorize", await fields({ decision: "deny" }), cookie),
+      formPost("https://spoonjoy.app/oauth/authorize", { decision: "deny", consent_token: consentToken }, cookie),
       db, null,
     );
     expect(res.headers.get("Location")).toContain("error=access_denied");
     expect(res.headers.get("Location")).toContain("state=state_0123456789abcdef");
+    expect(new URL(res.headers.get("Location") ?? "").searchParams.get("iss")).toBe("https://spoonjoy.app");
+  });
+
+  it("rejects a deny replay that loses the one-time consent race", async () => {
+    const cookie = await authedCookie(userId);
+    const consentToken = await consentTokenFor(await fields(), cookie);
+    const consumeSpy = vi.spyOn(db.oAuthConsentTransaction, "deleteMany")
+      .mockResolvedValueOnce({ count: 0 });
+
+    const res = await handleOAuthAuthorizeAction(
+      formPost("https://spoonjoy.app/oauth/authorize", { decision: "deny", consent_token: consentToken }, cookie),
+      db,
+      null,
+    );
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      error: "invalid_request",
+      error_description: "The consent transaction is invalid or expired.",
+    });
+    consumeSpy.mockRestore();
   });
 
   it("rejects cross-origin consent POSTs even when a session cookie is present", async () => {
@@ -847,6 +1095,7 @@ describe("handleOAuthAuthorizeAction", () => {
 
   it("allows same-origin consent POSTs through the origin guard", async () => {
     const cookie = await authedCookie(userId);
+    const consentToken = await consentTokenFor(await fields(), cookie);
     const headers = new Headers();
     headers.set("Cookie", cookie);
     headers.set("Origin", "https://spoonjoy.app");
@@ -854,17 +1103,18 @@ describe("handleOAuthAuthorizeAction", () => {
       new Request("https://spoonjoy.app/oauth/authorize", {
         method: "POST",
         headers,
-        body: new URLSearchParams(await fields({ scope: "kitchen:admin" })),
+        body: new URLSearchParams({ decision: "deny", consent_token: consentToken }),
       }),
       db, null,
     );
 
     expect(res.status).toBe(302);
-    expect(res.headers.get("Location")).toContain("error=invalid_scope");
+    expect(res.headers.get("Location")).toContain("error=access_denied");
   });
 
   it("allows public-origin consent POSTs when the worker request URL is internal", async () => {
     const cookie = await authedCookie(userId);
+    const consentToken = await consentTokenFor(await fields(), cookie);
     const headers = new Headers();
     headers.set("Cookie", cookie);
     headers.set("Origin", "https://spoonjoy.app");
@@ -872,18 +1122,19 @@ describe("handleOAuthAuthorizeAction", () => {
       new Request("https://spoonjoy-v2.workers.dev/oauth/authorize", {
         method: "POST",
         headers,
-        body: new URLSearchParams(await fields({ scope: "kitchen:admin" })),
+        body: new URLSearchParams({ decision: "deny", consent_token: consentToken }),
       }),
       db,
       { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
     );
 
     expect(res.status).toBe(302);
-    expect(res.headers.get("Location")).toContain("error=invalid_scope");
+    expect(res.headers.get("Location")).toContain("error=access_denied");
   });
 
   it("allows localhost consent POSTs in local dev even when a public issuer is configured", async () => {
     const cookie = await authedCookie(userId);
+    const consentToken = await consentTokenFor(await fields({ resource: "" }), cookie);
     const headers = new Headers();
     headers.set("Cookie", cookie);
     headers.set("Origin", "http://localhost:5173");
@@ -891,18 +1142,19 @@ describe("handleOAuthAuthorizeAction", () => {
       new Request("http://localhost:5173/oauth/authorize", {
         method: "POST",
         headers,
-        body: new URLSearchParams(await fields({ scope: "kitchen:admin", resource: "" })),
+        body: new URLSearchParams({ decision: "deny", consent_token: consentToken }),
       }),
       db,
       { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
     );
 
     expect(res.status).toBe(302);
-    expect(res.headers.get("Location")).toContain("error=invalid_scope");
+    expect(res.headers.get("Location")).toContain("error=access_denied");
   });
 
   it("allows bracketed IPv6 localhost consent POSTs in local dev", async () => {
     const cookie = await authedCookie(userId);
+    const consentToken = await consentTokenFor(await fields({ resource: "" }), cookie);
     const headers = new Headers();
     headers.set("Cookie", cookie);
     headers.set("Origin", "http://[::1]:5173");
@@ -910,14 +1162,14 @@ describe("handleOAuthAuthorizeAction", () => {
       new Request("http://[::1]:5173/oauth/authorize", {
         method: "POST",
         headers,
-        body: new URLSearchParams(await fields({ scope: "kitchen:admin", resource: "" })),
+        body: new URLSearchParams({ decision: "deny", consent_token: consentToken }),
       }),
       db,
       { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
     );
 
     expect(res.status).toBe(302);
-    expect(res.headers.get("Location")).toContain("error=invalid_scope");
+    expect(res.headers.get("Location")).toContain("error=access_denied");
   });
 
   it("rejects internal-origin consent POSTs when a public issuer is configured", async () => {
@@ -942,16 +1194,16 @@ describe("handleOAuthAuthorizeAction", () => {
     });
   });
 
-  it("redirects back with invalid_scope on a bad scope", async () => {
+  it("rejects a bad scope repost without trusting its redirect", async () => {
     const cookie = await authedCookie(userId);
     const res = await handleOAuthAuthorizeAction(
       formPost("https://spoonjoy.app/oauth/authorize", await fields({ scope: "kitchen:admin" }), cookie),
       db, null,
     );
-    expect(res.headers.get("Location")).toContain("error=invalid_scope");
+    expect(res.status).toBe(400);
   });
 
-  it("treats a missing decision as denial", async () => {
+  it("rejects a missing decision", async () => {
     const cookie = await authedCookie(userId);
     const fieldsNoDecision = await fields();
     delete fieldsNoDecision.decision;
@@ -959,20 +1211,189 @@ describe("handleOAuthAuthorizeAction", () => {
       formPost("https://spoonjoy.app/oauth/authorize", fieldsNoDecision, cookie),
       db, null,
     );
-    expect(res.headers.get("Location")).toContain("error=access_denied");
+    expect(res.status).toBe(400);
   });
 
   it("mints a code and redirects back on approve", async () => {
     const cookie = await authedCookie(userId);
+    const approvedFields = await fields();
+    approvedFields.consent_token = await consentTokenFor(approvedFields, cookie);
     const res = await handleOAuthAuthorizeAction(
-      formPost("https://spoonjoy.app/oauth/authorize", await fields(), cookie),
+      formPost("https://spoonjoy.app/oauth/authorize", approvedFields, cookie),
       db, null,
     );
     expect(res.status).toBe(302);
     const location = res.headers.get("Location") ?? "";
     expect(location).toContain(`${redirectUri}?code=`);
     expect(location).toContain("state=state_0123456789abcdef");
+    expect(new URL(location).searchParams.get("iss")).toBe("https://spoonjoy.app");
     expect(await db.oAuthAuthCode.count({ where: { userId } })).toBe(1);
+  });
+
+  it("preserves an approved consent transaction when code persistence fails", async () => {
+    const cookie = await authedCookie(userId);
+    const consentToken = await consentTokenFor(await fields(), cookie);
+    const createSpy = vi.spyOn(db.oAuthAuthCode, "create").mockRejectedValueOnce(new Error("code write failed"));
+
+    await expect(handleOAuthAuthorizeAction(
+      formPost("https://spoonjoy.app/oauth/authorize", { decision: "approve", consent_token: consentToken }, cookie),
+      db,
+      null,
+    )).rejects.toThrow("code write failed");
+
+    expect(await db.oAuthConsentTransaction.count({ where: { userId } })).toBe(1);
+    createSpy.mockRestore();
+  });
+
+  it("removes an unpublished code when consent consumption fails", async () => {
+    const cookie = await authedCookie(userId);
+    const consentToken = await consentTokenFor(await fields(), cookie);
+    const consumeSpy = vi.spyOn(db.oAuthConsentTransaction, "deleteMany")
+      .mockRejectedValueOnce(new Error("consent write failed"));
+
+    await expect(handleOAuthAuthorizeAction(
+      formPost("https://spoonjoy.app/oauth/authorize", { decision: "approve", consent_token: consentToken }, cookie),
+      db,
+      null,
+    )).rejects.toThrow("consent write failed");
+
+    expect(await db.oAuthAuthCode.count({ where: { userId } })).toBe(0);
+    expect(await db.oAuthConsentTransaction.count({ where: { userId } })).toBe(1);
+    consumeSpy.mockRestore();
+  });
+
+  it("uses the one-time server-side consent snapshot instead of reposted OAuth parameters", async () => {
+    const cookie = await authedCookie(userId);
+    const requestedFields = await fields();
+    const consentToken = await consentTokenFor(requestedFields, cookie);
+
+    const res = await handleOAuthAuthorizeAction(
+      formPost("https://spoonjoy.app/oauth/authorize", { decision: "approve", consent_token: consentToken }, cookie),
+      db,
+      null,
+    );
+
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get("Location") ?? "");
+    expect(location.origin + location.pathname).toBe(redirectUri);
+    expect(location.searchParams.get("state")).toBe(requestedFields.state);
+    expect(location.searchParams.has("code")).toBe(true);
+  });
+
+  it("consumes a consent transaction exactly once", async () => {
+    const cookie = await authedCookie(userId);
+    const requestedFields = await fields();
+    const consentToken = await consentTokenFor(requestedFields, cookie);
+    const body = { decision: "approve", consent_token: consentToken };
+
+    const first = await handleOAuthAuthorizeAction(formPost("https://spoonjoy.app/oauth/authorize", body, cookie), db, null);
+    const replay = await handleOAuthAuthorizeAction(formPost("https://spoonjoy.app/oauth/authorize", body, cookie), db, null);
+
+    expect(first.status).toBe(302);
+    expect(replay.status).toBe(400);
+    await expect(replay.json()).resolves.toMatchObject({ error: "invalid_request" });
+    expect(await db.oAuthAuthCode.count({ where: { userId } })).toBe(1);
+  });
+
+  it("allows only one of two concurrent approvals to consume the transaction", async () => {
+    const cookie = await authedCookie(userId);
+    const consentToken = await consentTokenFor(await fields(), cookie);
+    const responses = await Promise.all([
+      handleOAuthAuthorizeAction(formPost("https://spoonjoy.app/oauth/authorize", { decision: "approve", consent_token: consentToken }, cookie), db, null),
+      handleOAuthAuthorizeAction(formPost("https://spoonjoy.app/oauth/authorize", { decision: "approve", consent_token: consentToken }, cookie), db, null),
+    ]);
+
+    expect(responses.map((response) => response.status).sort()).toEqual([302, 400]);
+    expect(await db.oAuthAuthCode.count({ where: { userId } })).toBe(1);
+  });
+
+  it("consumes a denial exactly once without minting a code", async () => {
+    const cookie = await authedCookie(userId);
+    const consentToken = await consentTokenFor(await fields(), cookie);
+    const body = { decision: "deny", consent_token: consentToken };
+
+    const first = await handleOAuthAuthorizeAction(formPost("https://spoonjoy.app/oauth/authorize", body, cookie), db, null);
+    const replay = await handleOAuthAuthorizeAction(formPost("https://spoonjoy.app/oauth/authorize", body, cookie), db, null);
+
+    expect(new URL(first.headers.get("Location") ?? "").searchParams.get("error")).toBe("access_denied");
+    expect(replay.status).toBe(400);
+    expect(await db.oAuthAuthCode.count({ where: { userId } })).toBe(0);
+  });
+
+  it("rejects expired, cross-user, and cross-issuer consent transactions locally", async () => {
+    const cookie = await authedCookie(userId);
+    const requested = await fields();
+
+    const expiredToken = await consentTokenFor(requested, cookie);
+    await db.oAuthConsentTransaction.updateMany({ data: { expiresAt: new Date(Date.now() - 1) } });
+    const expired = await handleOAuthAuthorizeAction(
+      formPost("https://spoonjoy.app/oauth/authorize", { decision: "approve", consent_token: expiredToken }, cookie), db, null,
+    );
+
+    await db.oAuthConsentTransaction.deleteMany();
+    const crossUserToken = await consentTokenFor(requested, cookie);
+    const otherUser = await db.user.create({ data: createTestUser() });
+    const otherCookie = await authedCookie(otherUser.id);
+    const crossUser = await handleOAuthAuthorizeAction(
+      formPost("https://spoonjoy.app/oauth/authorize", { decision: "approve", consent_token: crossUserToken }, otherCookie), db, null,
+    );
+    const crossIssuer = await handleOAuthAuthorizeAction(
+      formPost("https://issuer-b.example/oauth/authorize", { decision: "approve", consent_token: crossUserToken }, cookie),
+      db,
+      { SPOONJOY_BASE_URL: "https://issuer-b.example" },
+    );
+
+    expect([expired.status, crossUser.status, crossIssuer.status]).toEqual([400, 400, 400]);
+    expect(await db.oAuthAuthCode.count()).toBe(0);
+  });
+
+  it("requires the one-time consent token for denial", async () => {
+    const cookie = await authedCookie(userId);
+    const res = await handleOAuthAuthorizeAction(
+      formPost("https://spoonjoy.app/oauth/authorize", { decision: "deny" }, cookie),
+      db,
+      null,
+    );
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error: "invalid_request" });
+  });
+
+  it.each([
+    { field: "scope", before: "shopping_list:read", after: "kitchen:write" },
+    { field: "resource", before: "", after: "https://spoonjoy.app/mcp" },
+  ])("ignores reposted consent $field after the user saw the approval screen", async ({ field, before, after }) => {
+    const cookie = await authedCookie(userId);
+    const approvedFields = await fields({ [field]: before });
+    approvedFields.consent_token = await consentTokenFor(approvedFields, cookie);
+    approvedFields[field] = after;
+
+    const res = await handleOAuthAuthorizeAction(
+      formPost("https://spoonjoy.app/oauth/authorize", approvedFields, cookie),
+      db,
+      null,
+    );
+
+    expect(res.status).toBe(302);
+    expect(new URL(res.headers.get("Location") ?? "").searchParams.has("code")).toBe(true);
+    await expect(db.oAuthAuthCode.findFirstOrThrow({ where: { userId } })).resolves.toMatchObject({
+      ...(field === "scope" ? { scope: before } : { resource: null }),
+    });
+  });
+
+  it("uses the configured issuer in authorization responses from an internal worker URL", async () => {
+    const cookie = await authedCookie(userId);
+    const approvedFields = await fields();
+    approvedFields.consent_token = await consentTokenFor(approvedFields, cookie);
+    const res = await handleOAuthAuthorizeAction(
+      formPost("https://spoonjoy-v2.workers.dev/oauth/authorize", approvedFields, cookie),
+      db,
+      { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    );
+
+    const location = new URL(res.headers.get("Location") ?? "");
+    expect(location.searchParams.get("iss")).toBe("https://spoonjoy.app");
+    expect(location.searchParams.has("code")).toBe(true);
   });
 
   it("rejects a missing state before minting a code", async () => {
@@ -981,10 +1402,7 @@ describe("handleOAuthAuthorizeAction", () => {
       formPost("https://spoonjoy.app/oauth/authorize", await fields({ state: "", resource: "" }), cookie),
       db, null,
     );
-    expect(res.status).toBe(302);
-    const location = res.headers.get("Location") ?? "";
-    expect(location).toContain("error=invalid_request");
-    expect(location).not.toContain("state=");
+    expect(res.status).toBe(400);
     expect(await db.oAuthAuthCode.count({ where: { userId } })).toBe(0);
   });
 });

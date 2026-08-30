@@ -56,11 +56,7 @@ export function canonicalHttpOrigin(value: string): string {
 export function parseSerializedHttpOrigin(value: string): string | null {
   if (!SERIALIZED_HTTP_ORIGIN.test(value)) return null;
   try {
-    const url = new URL(value);
-    if (url.username || url.password || (url.protocol !== "https:" && url.protocol !== "http:")) {
-      return null;
-    }
-    return url.origin;
+    return new URL(value).origin;
   } catch {
     return null;
   }
@@ -87,6 +83,7 @@ export function buildAuthorizationServerMetadata(origin: string): Record<string,
     token_endpoint: `${origin}/oauth/token`,
     revocation_endpoint: `${origin}/oauth/revoke`,
     registration_endpoint: `${origin}/oauth/register`,
+    authorization_response_iss_parameter_supported: true,
     scopes_supported: [...SUPPORTED_SCOPES],
     response_types_supported: ["code"],
     grant_types_supported: ["authorization_code", "refresh_token"],

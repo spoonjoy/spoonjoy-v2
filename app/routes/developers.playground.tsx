@@ -614,7 +614,8 @@ function rovingRadioKeyDown<T extends string>(
 }
 
 export default function DeveloperPlayground() {
-  const { manifest, viewer } = useLoaderData<typeof loader>();
+  const { manifest, viewer, canonicalUrl } = useLoaderData<typeof loader>();
+  const oauthIssuer = new URL(canonicalUrl).origin;
   const posthog = usePostHog();
   const isAuthenticated = viewer.isAuthenticated;
   const operations: readonly ApiV1PlaygroundOperation[] = manifest.operations;
@@ -836,6 +837,7 @@ export default function DeveloperPlayground() {
           code_challenge: params.code_challenge,
           client_id: params.client_id,
           redirect_uri: params.redirect_uri,
+          issuer: oauthIssuer,
         }));
       }
       window.open(path, "_blank", "noopener,noreferrer");
@@ -890,6 +892,7 @@ export default function DeveloperPlayground() {
         code_challenge: challenge,
         client_id: params.client_id,
         redirect_uri: params.redirect_uri,
+        issuer: oauthIssuer,
       }));
     }
 
@@ -900,6 +903,7 @@ export default function DeveloperPlayground() {
       const parsedCallback = new URL(callbackInput.startsWith("?") ? callbackInput : callbackInput.includes("://") ? callbackInput : `?${callbackInput}`, window.location.origin);
       const code = parsedCallback.searchParams.get("code")?.trim();
       const callbackState = parsedCallback.searchParams.get("state")?.trim();
+      const callbackIssuer = parsedCallback.searchParams.get("iss")?.trim();
       const storedRaw = window.sessionStorage?.getItem(PKCE_SESSION_STORAGE_KEY);
       const stored = storedRaw ? JSON.parse(storedRaw) as Record<string, string> : {};
       /* istanbul ignore next -- @preserve generated OAuth params include these values before exchange preparation. */
@@ -915,6 +919,11 @@ export default function DeveloperPlayground() {
       }
       if (!callbackState || callbackState !== expectedState) {
         setOauthCallbackStatus("Callback state does not match the stored PKCE state.");
+        return;
+      }
+      const expectedIssuer = stored.issuer || oauthIssuer;
+      if (!callbackIssuer || callbackIssuer !== expectedIssuer) {
+        setOauthCallbackStatus("Callback issuer is missing or does not match the stored authorization server.");
         return;
       }
       if (!codeVerifier || !clientId || !redirectUri) {

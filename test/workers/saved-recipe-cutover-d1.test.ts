@@ -6,6 +6,10 @@ import { action as apiV1Action } from "../../app/routes/api.v1.$";
 import { handleRecipeDetailAction } from "../../app/lib/recipe-detail.server";
 import { handleShoppingListAction } from "../../app/lib/shopping-list.server";
 import { getRequestDb } from "../../app/lib/route-platform.server";
+import {
+  OAUTH_CONNECTION_KEY_BATCH_SIZE,
+  oauthRefreshConnectionOwnership,
+} from "../../app/lib/oauth-server.server";
 import { mutateCompatibleShoppingListItem } from "../../app/lib/shopping-list-mutations.server";
 import { createUserSessionCookie } from "../../app/lib/session.server";
 import { expectConsoleError } from "../warning-policy";
@@ -50,6 +54,7 @@ const SHOPPING_FIRST_REF_ID = "cutover-d1-shopping-first-ref";
 const SHOPPING_SECOND_REF_ID = "cutover-d1-shopping-second-ref";
 const SHOPPING_ABORT_TRIGGER = "ShoppingListItem_atomic_batch_abort";
 const COOKBOOK_ABORT_TRIGGER = "Cookbook_compatibility_batch_abort";
+const OAUTH_D1_CLIENT_ID = "oauth-disconnect-d1-client";
 
 const webActivationPendingBody = {
   error: {
@@ -359,6 +364,8 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
     await dropShoppingAbortTrigger();
     await dropCookbookAbortTrigger();
     await executeStatement(`DELETE FROM "ShoppingListItem" WHERE "shoppingListId" = '${SHOPPING_LIST_ID}'`);
+    await database().prepare(`DELETE FROM "OAuthRefreshToken" WHERE "clientId" = ?`)
+      .bind(OAUTH_D1_CLIENT_ID).run();
     await executeStatement(`DROP TRIGGER IF EXISTS "${PROBE_TRIGGER}"`);
     await executeStatement(`DROP TABLE IF EXISTS "${PROBE_TABLE}"`);
   });
@@ -391,6 +398,70 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
     expect(await cookbookUpdatedAt()).toBe(beforeUpdatedAt);
     expect(await tombstoneCount()).toBe(0);
     expect(await idempotencyReservationCount(clientMutationId)).toBe(0);
+  });
+
+  it("keeps a maximum OAuth ownership batch below D1's 100-bound-parameter limit", async () => {
+    const connectionKeys = Array.from(
+      { length: OAUTH_CONNECTION_KEY_BATCH_SIZE },
+      (_, index) => `ocn_d1_${String(index).padStart(2, "0")}`,
+    );
+    await database().batch(connectionKeys.map((connectionKey, index) => database().prepare(`
+      INSERT INTO "OAuthRefreshToken" (
+        "id", "tokenHash", "userId", "clientId", "issuer", "scope", "connectionKey"
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      `refresh-d1-${index}`,
+      `refresh-d1-hash-${index}`,
+      USER_ID,
+      OAUTH_D1_CLIENT_ID,
+      TEST_ORIGIN,
+      "shopping_list:read",
+      connectionKey,
+    )));
+
+    const bindCounts: number[] = [];
+    const realDatabase = database();
+    const measuredDatabase = new Proxy(realDatabase, {
+      get(target, property) {
+        if (property === "prepare") {
+          return (sql: string) => {
+            const statement = target.prepare(sql);
+            return new Proxy(statement, {
+              get(statementTarget, statementProperty) {
+                if (statementProperty === "bind") {
+                  return (...values: unknown[]) => {
+                    bindCounts.push(values.length);
+                    if (values.length > 100) throw new Error(`D1 bind limit exceeded: ${values.length}`);
+                    return statementTarget.bind(...values);
+                  };
+                }
+                const value = Reflect.get(statementTarget, statementProperty);
+                return typeof value === "function" ? value.bind(statementTarget) : value;
+              },
+            });
+          };
+        }
+        const value = Reflect.get(target, property);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    }) as unknown as TestD1Database;
+    const prisma = await getRequestDb(routeContext(measuredDatabase) as any);
+
+    const result = await prisma.oAuthRefreshToken.updateMany({
+      where: {
+        userId: USER_ID,
+        clientId: OAUTH_D1_CLIENT_ID,
+        issuer: TEST_ORIGIN,
+        resource: null,
+        revokedAt: null,
+        ...oauthRefreshConnectionOwnership(connectionKeys),
+      },
+      data: { revokedAt: new Date("2026-08-29T18:00:00.000Z") },
+    });
+
+    expect(result.count).toBe(OAUTH_CONNECTION_KEY_BATCH_SIZE);
+    expect(Math.max(...bindCounts)).toBeLessThanOrEqual(100);
+    expect(Math.max(...bindCounts)).toBeGreaterThan(OAUTH_CONNECTION_KEY_BATCH_SIZE * 2);
   });
 
   it("rolls back a newly created cookbook when its native D1 membership fails second", async () => {
@@ -615,7 +686,7 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
       id: "worker-modern-discover",
       result: {
         resultType: "complete",
-        supportedVersions: ["2026-07-28", "2025-06-18"],
+        supportedVersions: ["2026-07-28"],
         capabilities: { tools: {} },
         _meta: {
           "io.modelcontextprotocol/serverInfo": { name: "spoonjoy", version: "1.0.0" },

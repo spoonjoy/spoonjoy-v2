@@ -6,6 +6,7 @@ import {
   NativeAppleAuthError,
   verifyNativeAppleIdentityToken,
 } from "~/lib/apple-native-auth.server";
+import { handleOAuthToken } from "~/lib/oauth-routes.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { expectConsoleError } from "../warning-policy";
 
@@ -175,6 +176,49 @@ describe("native Sign in with Apple API", () => {
 
     expect(loginResponse.status).toBe(201);
     expect(loginJson.data).toMatchObject({ action: "user_logged_in" });
+  });
+
+  it("issues refreshable native Apple credentials for two exact issuers", async () => {
+    const fixture = await nativeAppleTokenFixture();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify(fixture.jwks), {
+      headers: { "Content-Type": "application/json" },
+    }));
+    const issuerA = "https://spoonjoy.app";
+    const issuerB = "https://preview.example";
+
+    const signIn = async (issuer: string, requestId: string) => {
+      const response = await action(routeArgs(new UndiciRequest(`${issuer}/api/v1/auth/apple/native`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Request-Id": requestId },
+        body: JSON.stringify({ identityToken: fixture.identityToken, rawNonce: fixture.rawNonce }),
+      }) as unknown as Request, "auth/apple/native", { SPOONJOY_BASE_URL: issuer }));
+      expect(response.status).toBe(201);
+      return await response.json() as any;
+    };
+    const first = await signIn(issuerA, "req_native_apple_issuer_a");
+    const second = await signIn(issuerB, "req_native_apple_issuer_b");
+
+    expect(first.data.client_id).toBe("spoonjoy-apple-native");
+    expect(second.data.client_id).toMatch(/^spoonjoy-apple-native:/);
+    expect(second.data.client_id).not.toBe(first.data.client_id);
+    await expect(db.oAuthClient.findMany({
+      where: { id: { in: [first.data.client_id, second.data.client_id] } },
+      orderBy: { issuer: "asc" },
+    })).resolves.toMatchObject([
+      { id: second.data.client_id, issuer: issuerB },
+      { id: first.data.client_id, issuer: issuerA },
+    ]);
+
+    const refresh = await handleOAuthToken(new UndiciRequest(`${issuerB}/oauth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        client_id: second.data.client_id,
+        refresh_token: second.data.refresh_token,
+      }),
+    }) as unknown as Request, db, { SPOONJOY_BASE_URL: issuerB });
+    expect(refresh.status).toBe(200);
   });
 
   it("does not publish permissive browser CORS preflight headers for the native Apple token surface", async () => {

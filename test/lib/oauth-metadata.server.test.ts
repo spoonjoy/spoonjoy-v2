@@ -60,6 +60,7 @@ describe("resolveIssuerOrigin", () => {
     expect(parseSerializedHttpOrigin("https://spoonjoy.app\\@evil.example")).toBeNull();
     expect(parseSerializedHttpOrigin("https://%73poonjoy.app")).toBeNull();
     expect(parseSerializedHttpOrigin("https://spoonjoy。app")).toBeNull();
+    expect(parseSerializedHttpOrigin("https://spoonjoy.app:99999")).toBeNull();
   });
 });
 
@@ -81,6 +82,7 @@ describe("oauth metadata builders", () => {
       token_endpoint: "https://spoonjoy.app/oauth/token",
       revocation_endpoint: "https://spoonjoy.app/oauth/revoke",
       registration_endpoint: "https://spoonjoy.app/oauth/register",
+      authorization_response_iss_parameter_supported: true,
       scopes_supported: [
         "account:read",
         "account:write",

@@ -1442,6 +1442,8 @@ describe("smoke-live helpers", () => {
     expect(readinessSource).toContain('const mutationPath = "/.well-known/spoonjoy-release-readiness"');
     expect(readinessSource).toContain("timeout: timeoutMs");
     expect(source).toContain("waitForCandidateWorker(page, mutationPage, page.request, { baseUrl, workerVersionId })");
+    expect(source).toContain('assert.equal(body.application_type, "web")');
+    expect(source).toContain('assert.equal(callback.searchParams.get("iss"), new URL(baseUrl).origin)');
     expect(source.indexOf('check("candidate Worker override readiness"')).toBeLessThan(
       source.indexOf('check("signup disposable user"'),
     );

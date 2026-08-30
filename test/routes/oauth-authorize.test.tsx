@@ -87,6 +87,19 @@ describe("oauth.authorize route", () => {
     throw new Error("Expected the authorize loader to throw a Response");
   }
 
+  async function consentFor(userId: string, query: URLSearchParams) {
+    const cookie = await authedCookie(userId);
+    const result = await loader({
+      request: new Request(`https://spoonjoy.app/oauth/authorize?${query}`, {
+        headers: { Cookie: cookie },
+      }),
+      context: { cloudflare: { env: null } },
+      params: {},
+    } as any) as { data: { consentToken?: string } };
+    expect(result.data.consentToken).toBeTruthy();
+    return { cookie, consentToken: result.data.consentToken! };
+  }
+
   function providerStartLocation(response: Response, provider: "google" | "github", returnTo: string) {
     expect(response.status).toBe(302);
     const location = new URL(response.headers.get("Location") ?? "", "https://spoonjoy.app");
@@ -270,11 +283,13 @@ describe("oauth.authorize route", () => {
 
   it("action mints a code and redirects back on approve", async () => {
     const { userId, clientId, query } = await setup();
+    const consent = await consentFor(userId, query);
     const headers = new Headers();
-    headers.set("Cookie", await authedCookie(userId));
+    headers.set("Cookie", consent.cookie);
     headers.set("Content-Type", "application/x-www-form-urlencoded");
     const body = new URLSearchParams(query);
     body.set("decision", "approve");
+    body.set("consent_token", consent.consentToken);
     const request = new Request("https://spoonjoy.app/oauth/authorize", { method: "POST", headers, body });
     const response = await action({ request, context: { cloudflare: { env: null } }, params: {} } as any);
     expect(response.status).toBe(302);
@@ -288,11 +303,13 @@ describe("oauth.authorize route", () => {
   ])("keeps first-party consent $decision independent of the provider hint", async ({ decision, expectedError }) => {
     const { userId, query } = await setup({ clientName: "Spoonjoy Apple", redirectUri: nativeRedirectUri });
     query.set("provider", "github");
+    const consent = await consentFor(userId, query);
     const headers = new Headers();
-    headers.set("Cookie", await authedCookie(userId));
+    headers.set("Cookie", consent.cookie);
     headers.set("Content-Type", "application/x-www-form-urlencoded");
     const body = new URLSearchParams(query);
     body.set("decision", decision);
+    body.set("consent_token", consent.consentToken);
     const response = await action({
       request: new Request("https://spoonjoy.app/oauth/authorize", { method: "POST", headers, body }),
       context: { cloudflare: { env: null } },
@@ -319,6 +336,7 @@ describe("oauth.authorize route", () => {
       kind: "consent",
       clientName: "Claude",
       scope: "kitchen:read kitchen:write",
+      consentToken: "oct_test_consent",
       params: {
         clientId: "c",
         redirectUri,
@@ -343,6 +361,12 @@ describe("oauth.authorize route", () => {
     expect(forms).toHaveLength(2);
     expect(forms.every((form) => form.getAttribute("method") === "post")).toBe(true);
     expect(forms.every((form) => !form.hasAttribute("data-discover"))).toBe(true);
+    expect(forms.every((form) => {
+      const inputs = Array.from(form.querySelectorAll("input"));
+      return inputs.length === 1
+        && inputs[0]?.getAttribute("name") === "consent_token"
+        && inputs[0]?.getAttribute("value") === "oct_test_consent";
+    })).toBe(true);
     expect(screen.queryByText("Bring your kitchen with you.")).not.toBeInTheDocument();
     expect(screen.getByText("Kitchen connection")).toBeInTheDocument();
     expect(screen.queryByText("Kitchen sign-in")).not.toBeInTheDocument();
@@ -356,6 +380,7 @@ describe("oauth.authorize route", () => {
       kind: "consent",
       clientName: null,
       scope: "kitchen:read kitchen:future",
+      consentToken: "oct_test_consent",
       params: {
         clientId: "c",
         redirectUri,
@@ -378,6 +403,7 @@ describe("oauth.authorize route", () => {
       kind: "consent",
       clientName: legacyName,
       scope: "recipes:read",
+      consentToken: "oct_test_consent",
       params: {
         clientId: "legacy",
         redirectUri: "https://example.com/callback",
@@ -402,6 +428,7 @@ describe("oauth.authorize route", () => {
       kind: "consent",
       clientName: "Tiny client",
       scope: "recipes:read",
+      consentToken: "oct_test_consent",
       params: {
         clientId: "c",
         redirectUri,

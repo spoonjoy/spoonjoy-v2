@@ -273,11 +273,12 @@ describe("CookSession lifecycle bootstrap", () => {
   beforeAll(async () => {
     const { DB } = testEnvironment();
     await execStatements(DB, [
-      "PRAGMA foreign_keys = ON",
+      "PRAGMA foreign_keys = OFF",
       "DROP TABLE IF EXISTS ApiCredential",
       "DROP TABLE IF EXISTS User",
       "CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, username TEXT NOT NULL UNIQUE)",
-      "CREATE TABLE ApiCredential (id TEXT PRIMARY KEY, userId TEXT NOT NULL, name TEXT NOT NULL, tokenHash TEXT NOT NULL UNIQUE, tokenPrefix TEXT NOT NULL, scopes TEXT NOT NULL, lastUsedAt DATETIME, revokedAt DATETIME, oauthClientId TEXT, oauthResource TEXT, expiresAt DATETIME, createdAt DATETIME NOT NULL, updatedAt DATETIME NOT NULL, FOREIGN KEY (userId) REFERENCES User(id) ON DELETE CASCADE)",
+      "CREATE TABLE ApiCredential (id TEXT PRIMARY KEY, userId TEXT NOT NULL, name TEXT NOT NULL, tokenHash TEXT NOT NULL UNIQUE, tokenPrefix TEXT NOT NULL, scopes TEXT NOT NULL, lastUsedAt DATETIME, revokedAt DATETIME, oauthClientId TEXT, oauthIssuer TEXT, oauthResource TEXT, oauthConnectionKey TEXT, expiresAt DATETIME, createdAt DATETIME NOT NULL, updatedAt DATETIME NOT NULL, FOREIGN KEY (userId) REFERENCES User(id) ON DELETE CASCADE)",
+      "PRAGMA foreign_keys = ON",
       "INSERT INTO User (id, email, username) VALUES ('cook-session-user', 'cook-session@example.com', 'cook_session_user')",
     ]);
     await insertCredential("cook-read", READ_TOKEN, "kitchen:read");
@@ -337,8 +338,10 @@ describe("CookSession lifecycle bootstrap", () => {
 
   afterAll(async () => {
     await execStatements(testEnvironment().DB, [
+      "PRAGMA foreign_keys = OFF",
       "DROP TABLE IF EXISTS ApiCredential",
       "DROP TABLE IF EXISTS User",
+      "PRAGMA foreign_keys = ON",
     ]);
   });
 

@@ -121,7 +121,7 @@ describe("modern MCP HTTP requests", () => {
       id: "discover-1",
       result: {
         resultType: "complete",
-        supportedVersions: [MCP_MODERN_VERSION, "2025-06-18"],
+        supportedVersions: [MCP_MODERN_VERSION],
         capabilities: { tools: {} },
         _meta: {
           "io.modelcontextprotocol/serverInfo": { name: "spoonjoy", version: "1.0.0" },

@@ -92,7 +92,9 @@ const MCP_SAFE_JSONRPC_METHODS = new Set([
   "tools/call",
   "tools/list",
 ]);
-const MCP_TOOL_NAMES = new Set(listSpoonjoyMcpTools().map((tool) => tool.name));
+const MCP_TOOLS = listSpoonjoyMcpTools();
+const MCP_TOOL_NAMES = new Set(MCP_TOOLS.map((tool) => tool.name));
+const MCP_TOOL_SCOPES = new Map(MCP_TOOLS.map((tool) => [tool.name, tool.requiredScopes ?? []]));
 const PRODUCT_ACTIVATION_PENDING_JSON_RPC_CODE = -32001;
 const PRODUCT_ACTIVATION_RETRY_AFTER_SECONDS = 1;
 
@@ -166,6 +168,25 @@ function authChallengeMetadataUrl(
 ): string {
   const origin = resolveIssuerOrigin(request.url, cloudflareEnv?.SPOONJOY_BASE_URL);
   return protectedResourceMetadataUrl(origin);
+}
+
+function insufficientScopeResponse(
+  request: Request,
+  cloudflareEnv: CloudflareEnvLike | null | undefined,
+  requiredScopes: readonly string[],
+): Response {
+  const resourceMetadataUrl = authChallengeMetadataUrl(request, cloudflareEnv);
+  return new Response(JSON.stringify({
+    error: "insufficient_scope",
+    message: "Additional authorization is required for this tool.",
+    required_scopes: requiredScopes,
+  }), {
+    status: 403,
+    headers: {
+      "Content-Type": "application/json",
+      "WWW-Authenticate": `Bearer error="insufficient_scope", scope="${requiredScopes.join(" ")}", resource_metadata="${resourceMetadataUrl}"`,
+    },
+  });
 }
 
 function mcpAuthMode(principal: ApiPrincipal | null): string {
@@ -255,7 +276,7 @@ async function mcpOAuthResourceAllowed(
   }
   if (principal.oauthResource) return { allowed: false, legacyAllowed: false };
 
-  const client = await getOAuthClient(db, principal.oauthClientId);
+  const client = await getOAuthClient(db, principal.oauthClientId, expectedOrigin);
   const legacyAllowed = isClaudeMcpOAuthClient(client);
   return { allowed: legacyAllowed, legacyAllowed };
 }
@@ -372,7 +393,11 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
         resourceMetadataUrl: authChallengeMetadataUrl(request, cloudflareEnv),
       });
     }
-    principal = await authenticateApiToken(db, bearerToken);
+    principal = await authenticateApiToken(
+      db,
+      bearerToken,
+      resolveIssuerOrigin(request.url, cloudflareEnv?.SPOONJOY_BASE_URL),
+    );
   } catch (error) {
     const response = authChallengeResponse(request, cloudflareEnv);
     return observeMcpResponse(params, {
@@ -451,6 +476,21 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
     else parsedError = parsed.error;
   }
   const jsonRpcTelemetry = mcpJsonRpcTelemetry(parsedMessage);
+  if (jsonRpcTelemetry.toolName) {
+    const grantedScopes = new Set(principal.scopes);
+    const missingScopes = MCP_TOOL_SCOPES.get(jsonRpcTelemetry.toolName)!
+      .filter((scope) => !grantedScopes.has(scope));
+    if (missingScopes.length) {
+      return observeMcpResponse(params, {
+        response: insufficientScopeResponse(request, cloudflareEnv, missingScopes),
+        startedAt,
+        principal,
+        legacyOAuthResourceAllowed: resourceAllowed.legacyAllowed,
+        ...jsonRpcTelemetry,
+        errorCode: "insufficient_scope",
+      });
+    }
+  }
   const response = parsedError ?? await handleJsonRpcMessage(
     parsedMessage,
     router,

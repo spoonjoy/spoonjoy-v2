@@ -196,6 +196,43 @@ describe("Spoonjoy REST API route", () => {
     });
   });
 
+  it("accepts a null-resource OAuth token only at its exact issuer on legacy REST", async () => {
+    const issuer = "https://issuer-a.example";
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    await db.oAuthClient.create({
+      data: {
+        id: "oauth_client_legacy_issuer_boundary",
+        clientName: "Legacy issuer boundary test client",
+        redirectUris: "https://client.example/oauth/callback",
+        issuer,
+      },
+    });
+    const credential = await createApiCredential(db, user.id, "Issuer-bound legacy REST token", {
+      scopes: ["shopping_list:read"],
+      oauthClientId: "oauth_client_legacy_issuer_boundary",
+      oauthIssuer: issuer,
+      oauthResource: null,
+    });
+
+    const wrongIssuer = await loader(routeArgs(new UndiciRequest("https://internal.workers.dev/api/shopping-list", {
+      headers: { Authorization: `Bearer ${credential.token}` },
+    }), "shopping-list", { SPOONJOY_BASE_URL: "https://issuer-b.example" }));
+
+    expect(wrongIssuer.status).toBe(401);
+    await expect(readJson(wrongIssuer)).resolves.toMatchObject({
+      ok: false,
+      error: { message: "Invalid API token", status: 401 },
+    });
+    await expect(db.apiCredential.findUniqueOrThrow({ where: { id: credential.credential.id } }))
+      .resolves.toMatchObject({ lastUsedAt: null });
+
+    const matching = await loader(routeArgs(new UndiciRequest("https://internal.workers.dev/api/shopping-list", {
+      headers: { Authorization: `Bearer ${credential.token}` },
+    }), "shopping-list", { SPOONJOY_BASE_URL: issuer }));
+
+    expect(matching.status).toBe(200);
+  });
+
   it("rejects oversized legacy tool Content-Length before operation dispatch", async () => {
     const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
     const { token } = await createApiCredential(db, user.id, "Legacy upload token", { scopes: ["kitchen:write"] });

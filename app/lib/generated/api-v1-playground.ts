@@ -126,7 +126,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "shopping_list:write"
       ],
       "notes": [
-        "Dynamic client registration is public and returns token_endpoint_auth_method: none.",
+        "Dynamic client registration remains available for compatibility and returns token_endpoint_auth_method: none.",
         "Redirect URIs must be HTTPS; HTTP is accepted only for localhost and 127.0.0.1.",
         "PKCE is required: use a 43-128 character code_verifier and S256 code_challenge.",
         "Authorization codes are single-use and expire after 60 seconds.",
@@ -1081,7 +1081,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"action\": \"user_logged_in\",\n    \"userId\": \"chef_1\",\n    \"access_token\": \"sj_secret\",\n    \"refresh_token\": \"ort_secret\",\n    \"token_type\": \"Bearer\",\n    \"expires_in\": 900,\n    \"scope\": \"kitchen:read kitchen:write shopping_list:read shopping_list:write account:read account:write\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"action\": \"user_logged_in\",\n    \"userId\": \"chef_1\",\n    \"client_id\": \"spoonjoy-apple-native\",\n    \"access_token\": \"sj_secret\",\n    \"refresh_token\": \"ort_secret\",\n    \"token_type\": \"Bearer\",\n    \"expires_in\": 900,\n    \"scope\": \"kitchen:read kitchen:write shopping_list:read shopping_list:write account:read account:write\"\n  }\n}"
         },
         {
           "status": "400",
@@ -1228,7 +1228,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "201",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"action\": \"user_logged_in\",\n    \"userId\": \"chef_1\",\n    \"access_token\": \"sj_secret\",\n    \"refresh_token\": \"ort_secret\",\n    \"token_type\": \"Bearer\",\n    \"expires_in\": 900,\n    \"scope\": \"kitchen:read kitchen:write shopping_list:read shopping_list:write account:read account:write\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"action\": \"user_logged_in\",\n    \"userId\": \"chef_1\",\n    \"client_id\": \"spoonjoy-apple-native\",\n    \"access_token\": \"sj_secret\",\n    \"refresh_token\": \"ort_secret\",\n    \"token_type\": \"Bearer\",\n    \"expires_in\": 900,\n    \"scope\": \"kitchen:read kitchen:write shopping_list:read shopping_list:write account:read account:write\"\n  }\n}"
         },
         {
           "status": "400",
@@ -10395,7 +10395,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"connections\": [\n      {\n        \"id\": \"conn_eyJjbGllbnRJZCI6ImNtXzEiLCJyZXNvdXJjZSI6bnVsbCwiY29ubmVjdGlvbktleSI6Im9jbl9leGFtcGxlIn0\",\n        \"clientId\": \"cm_1\",\n        \"clientName\": \"Meal planner\",\n        \"resource\": null,\n        \"scopes\": [\n          \"shopping_list:read\",\n          \"shopping_list:write\"\n        ],\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n        \"refreshTokenCount\": 1,\n        \"accessTokenCount\": 1\n      }\n    ]\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"connections\": [\n      {\n        \"id\": \"conn_eyJjbGllbnRJZCI6ImNtXzEiLCJpc3N1ZXIiOiJodHRwczovL3Nwb29uam95LmFwcCIsInJlc291cmNlIjpudWxsLCJjb25uZWN0aW9uS2V5cyI6WyJvY25fZXhhbXBsZSJdfQ\",\n        \"clientId\": \"cm_1\",\n        \"clientName\": \"Meal planner\",\n        \"issuer\": \"https://spoonjoy.app\",\n        \"resource\": null,\n        \"scopes\": [\n          \"shopping_list:read\",\n          \"shopping_list:write\"\n        ],\n        \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n        \"refreshTokenCount\": 1,\n        \"accessTokenCount\": 1\n      }\n    ]\n  }\n}"
         },
         {
           "status": "400",
@@ -10560,7 +10560,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"disconnected\": true,\n    \"connectionId\": \"conn_eyJjbGllbnRJZCI6ImNtXzEiLCJyZXNvdXJjZSI6bnVsbCwiY29ubmVjdGlvbktleSI6Im9jbl9leGFtcGxlIn0\",\n    \"clientId\": \"cm_1\",\n    \"resource\": null,\n    \"revokedRefreshTokens\": 1,\n    \"revokedAccessTokens\": 1\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"disconnected\": true,\n    \"connectionId\": \"conn_eyJjbGllbnRJZCI6ImNtXzEiLCJpc3N1ZXIiOiJodHRwczovL3Nwb29uam95LmFwcCIsInJlc291cmNlIjpudWxsLCJjb25uZWN0aW9uS2V5cyI6WyJvY25fZXhhbXBsZSJdfQ\",\n    \"clientId\": \"cm_1\",\n    \"issuer\": \"https://spoonjoy.app\",\n    \"resource\": null,\n    \"revokedRefreshTokens\": 1,\n    \"revokedAccessTokens\": 1\n  }\n}"
         },
         {
           "status": "400",
@@ -12950,13 +12950,13 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         ]
       },
       "responseStatuses": [
-        "204",
+        "200",
         "400",
         "429"
       ],
       "responseSummaries": [
         {
-          "status": "204",
+          "status": "200",
           "description": "Refresh token revoked or already unusable."
         },
         {

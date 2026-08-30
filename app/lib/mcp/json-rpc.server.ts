@@ -141,7 +141,7 @@ export async function handleJsonRpcMessage(
         id,
         result: {
           resultType: "complete",
-          supportedVersions: [MCP_MODERN_PROTOCOL_VERSION, MCP_LEGACY_PROTOCOL_VERSION],
+          supportedVersions: [MCP_MODERN_PROTOCOL_VERSION],
           capabilities: { tools: {} },
           _meta: {
             ...MCP_SERVER_INFO_META,

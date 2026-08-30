@@ -147,7 +147,7 @@ describe("/mcp route", () => {
       id: "discover-route",
       result: {
         resultType: "complete",
-        supportedVersions: ["2026-07-28", "2025-06-18"],
+        supportedVersions: ["2026-07-28"],
         capabilities: { tools: {} },
       },
     });
@@ -323,11 +323,13 @@ describe("/mcp route", () => {
     const matching = await createApiCredential(db, user.id, "MCP OAuth token", {
       scopes: ["kitchen:read", "kitchen:write"],
       oauthClientId: "oauth_client_mcp_match",
+      oauthIssuer: "https://spoonjoy.app",
       oauthResource: "https://spoonjoy.app/mcp",
     });
     const mismatched = await createApiCredential(db, user.id, "Other OAuth token", {
       scopes: ["kitchen:read", "kitchen:write"],
       oauthClientId: "oauth_client_mcp_mismatch",
+      oauthIssuer: "https://spoonjoy.app",
       oauthResource: "https://elsewhere.example/mcp",
     });
 

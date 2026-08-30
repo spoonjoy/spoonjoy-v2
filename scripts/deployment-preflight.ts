@@ -162,6 +162,7 @@ const STORYBOOK_REQUIRED_JOB_NAME =
 const REQUIRED_PNPM_PACKAGE_MANAGER = "pnpm@10.28.1";
 const PINNED_CHECKOUT_ACTION = "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10";
 const PINNED_SETUP_NODE_ACTION = "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38";
+const PINNED_SETUP_PYTHON_ACTION = "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1";
 const PINNED_UPLOAD_ARTIFACT_ACTION = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
 const PINNED_DOWNLOAD_ARTIFACT_ACTION = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c";
 const PINNED_WRANGLER_ACTION = "cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0";
@@ -484,6 +485,7 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
     actionStepSignature(PINNED_CHECKOUT_ACTION),
     actionStepSignature(PINNED_SETUP_NODE_ACTION),
     commandStepSignature(CI_INVOCATION_VALIDATION_COMMAND),
+    actionStepSignature(PINNED_SETUP_PYTHON_ACTION),
     commandStepSignature(
       `${WARNING_GATE_COMMAND_PREFIX}corepack enable`,
       `${WARNING_GATE_COMMAND_PREFIX}corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`,
@@ -507,6 +509,7 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
     commandStepSignature("pnpm run verify:clean:typecheck"),
     commandStepSignature("pnpm run verify:clean:generated-contract"),
     commandStepSignature("pnpm run verify:clean:test:coverage"),
+    commandStepSignature("pnpm run verify:clean:test:mcp-sdk-python"),
     commandStepSignature("pnpm run verify:clean:build"),
     commandStepSignature(CI_DISPOSABLE_CLEANUP_COMMAND),
   ]],
@@ -676,6 +679,12 @@ function parsedCiWorkflowIsCanonical(workflow: string): boolean {
             !exactObjectKeys(step, ["name", "uses", "with"]) ||
             typeof step.name !== "string" ||
             !exactWorkflowRecord(withValues, { "node-version": "22" })
+          ) return false;
+        } else if (step.uses === PINNED_SETUP_PYTHON_ACTION) {
+          if (
+            !exactObjectKeys(step, ["name", "uses", "with"]) ||
+            step.name !== "🐍 Setup Python" ||
+            !exactWorkflowRecord(withValues, { "python-version": "3.13" })
           ) return false;
         } else {
           if (

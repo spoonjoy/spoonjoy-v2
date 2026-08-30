@@ -216,6 +216,7 @@ describe("API v1 OpenAPI document", () => {
     expect(preview.components.securitySchemes.oauth2.flows.authorizationCode.tokenUrl)
       .toBe("https://preview.example/oauth/token");
     expect(preview["x-oauth-discovery"].dynamicRegistrationUrl).toBe("https://preview.example/oauth/register");
+    expect(preview["x-oauth-discovery"].clientIdMetadataDocumentSupport).toBeUndefined();
     expect(preview["x-public-data-policy"].termsUrl).toBe("https://preview.example/terms");
     expect(document.security).toEqual([]);
     expect(Object.keys(document.paths).sort()).toEqual([...AUTH_PATHS, ...RESOURCE_PATHS].sort());
@@ -601,8 +602,14 @@ describe("API v1 OpenAPI document", () => {
 	        devices: [expect.objectContaining({ deviceId: "ios-simulator-1" })],
 	        mutation: { clientMutationId: "device-uuid-apns-revoke", replayed: false },
 	      });
-    expect(responseExample(document, "/api/v1/me/connections", "GET", "200").data.connections[0])
-      .toMatchObject({ id: expect.stringMatching(/^conn_/), clientName: "Meal planner" });
+    const connectionExample = responseExample(document, "/api/v1/me/connections", "GET", "200").data.connections[0];
+    expect(connectionExample).toMatchObject({ id: expect.stringMatching(/^conn_/), clientName: "Meal planner" });
+    expect(JSON.parse(Buffer.from(connectionExample.id.slice("conn_".length), "base64url").toString("utf8"))).toEqual({
+      clientId: connectionExample.clientId,
+      issuer: connectionExample.issuer,
+      resource: connectionExample.resource,
+      connectionKeys: ["ocn_example"],
+    });
     expect(responseExample(document, "/api/v1/me/connections/{connectionId}", "DELETE", "200").data)
       .toMatchObject({ disconnected: true, revokedRefreshTokens: 1, revokedAccessTokens: 1 });
     expect(responseExample(document, "/api/v1/tokens", "GET", "200").data.tokens[0].scopes).toEqual(["recipes:read", "shopping_list:read", "shopping_list:write"]);
@@ -643,6 +650,10 @@ describe("API v1 OpenAPI document", () => {
       ]));
     expect(operation(document, "/oauth/revoke", "POST").requestBody.content["application/x-www-form-urlencoded"].examples.refresh_token.value)
       .toMatchObject({ token: "ort_...", client_id: "cm_client_id_from_register" });
+    expect(operation(document, "/oauth/revoke", "POST").responses).toMatchObject({
+      "200": { description: "Refresh token revoked or already unusable." },
+    });
+    expect(operation(document, "/oauth/revoke", "POST").responses).not.toHaveProperty("204");
     expect(operation(document, "/api/v1/shopping-list/items", "POST").requestBody.content["application/json"].examples.example.value)
       .toEqual({
         clientMutationId: "device-uuid-1",
@@ -691,6 +702,9 @@ describe("API v1 OpenAPI document", () => {
       maxLength: 80,
       description: expect.stringContaining("Unicode code points"),
     });
+    expect(document.components.schemas.OAuthRegisterRequest.properties.application_type.description)
+      .toContain("echoed in the registration response");
+    expect(document["x-auth-flows"][0].notes[0]).toContain("Dynamic client registration remains available for compatibility");
   });
 
   it("uses response examples whose status and envelope shape match each response", () => {
@@ -998,6 +1012,12 @@ describe("API v1 OpenAPI document", () => {
       required: ["ok", "requestId", "data"],
       properties: { ok: { const: true } },
     });
+    for (const schemaName of ["NativeAppleSignInTokenData", "NativePasswordSignInTokenData"]) {
+      expect(components.schemas[schemaName]).toMatchObject({
+        required: expect.arrayContaining(["client_id"]),
+        properties: { client_id: { type: "string", minLength: 1 } },
+      });
+    }
     expect(components.schemas.NativeTelemetryRequest).toMatchObject({
       additionalProperties: false,
       required: ["event"],

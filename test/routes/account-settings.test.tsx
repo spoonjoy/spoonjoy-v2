@@ -233,36 +233,68 @@ describe("Account Settings Route", () => {
           expiresAt: null,
         }),
       ]));
+      expect(result.user.oauthConnections).toHaveLength(2);
       expect(result.user.oauthConnections).toEqual(expect.arrayContaining([
         expect.objectContaining({
           clientId: client.id,
           clientName: "Grocery helper",
+          issuer: "http://localhost:3000",
           scopes: ["cookbooks:read", "recipes:read", "shopping_list:read", "shopping_list:write"],
           createdAt: "2026-06-01T10:00:00.000Z",
           refreshTokenCount: 3,
           accessTokenCount: 1,
         }),
         expect.objectContaining({
-          clientId: "missing-client-id",
-          clientName: null,
-          resource: "https://spoonjoy.app/mcp",
-          scopes: [],
-          refreshTokenCount: 1,
-          accessTokenCount: 1,
-        }),
-        expect.objectContaining({
-          clientId: "no-access-client-id",
-          clientName: null,
-          resource: null,
-          scopes: ["recipes:read"],
-          refreshTokenCount: 1,
-          accessTokenCount: 0,
-        }),
-        expect.objectContaining({
           clientId: unnamedClient.id,
           clientName: null,
+          issuer: "http://localhost:3000",
           scopes: ["recipes:read"],
         }),
+      ]));
+    });
+
+    it("keeps identical OAuth connections separate by issuer", async () => {
+      const client = await db.oAuthClient.create({
+        data: {
+          clientName: "Kitchen bridge",
+          redirectUris: "https://client.example/callback",
+          issuer: "http://localhost:3000",
+        },
+      });
+      for (const issuer of ["http://localhost:3000", "https://other.example"]) {
+        await db.oAuthRefreshToken.create({
+          data: {
+            tokenHash: `refresh-${faker.string.alphanumeric(12)}`,
+            userId: testUserId,
+            clientId: client.id,
+            issuer,
+            scope: "recipes:read",
+            resource: "https://spoonjoy.app/mcp",
+          },
+        });
+        await createApiCredential(db, testUserId, `Kitchen bridge ${issuer}`, {
+          scopes: ["recipes:read"],
+          oauthClientId: client.id,
+          oauthIssuer: issuer,
+          oauthResource: "https://spoonjoy.app/mcp",
+        });
+      }
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const cookieValue = (await sessionStorage.commitSession(session)).split(";")[0];
+
+      const result = await loader({
+        request: new UndiciRequest("http://localhost:3000/account/settings", {
+          headers: { Cookie: cookieValue },
+        }),
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      expect(result.user.oauthConnections).toHaveLength(2);
+      expect(result.user.oauthConnections).toEqual(expect.arrayContaining([
+        expect.objectContaining({ clientId: client.id, issuer: "http://localhost:3000", refreshTokenCount: 1, accessTokenCount: 1 }),
+        expect.objectContaining({ clientId: client.id, issuer: "https://other.example", refreshTokenCount: 1, accessTokenCount: 1 }),
       ]));
     });
 
@@ -437,11 +469,13 @@ describe("Account Settings Route", () => {
           oauthConnections: [{
             clientId: "client-1",
             clientName: "Grocery helper",
+            issuer: "https://spoonjoy.app",
             resource: null,
             scopes: ["shopping_list:read"],
             createdAt: "2026-06-01T00:00:00.000Z",
             refreshTokenCount: 1,
             accessTokenCount: 1,
+            connectionKeys: ["ocn_client_1"],
           }],
         },
         notifications: { pushSubscribed: false },
@@ -460,8 +494,11 @@ describe("Account Settings Route", () => {
       const section = await screen.findByTestId("api-access-section");
       expect(section).toHaveTextContent("Kitchen CLI");
       expect(section).toHaveTextContent("Grocery helper");
+      expect(section).toHaveTextContent("Issued by https://spoonjoy.app");
       expect(screen.getByRole("button", { name: /revoke kitchen cli/i })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /disconnect grocery helper/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", {
+        name: "Disconnect Grocery helper from https://spoonjoy.app",
+      })).toBeInTheDocument();
     });
 
     it("should render user info section", async () => {
@@ -1459,10 +1496,23 @@ describe("Account Settings Route", () => {
     });
 
     it("disconnects an OAuth app by revoking refresh and live access credentials", async () => {
+      const issuer = "http://localhost:3000";
+      const otherIssuer = "https://other.example";
       const client = await db.oAuthClient.create({
         data: {
           clientName: "Grocery helper",
           redirectUris: JSON.stringify(["https://example.com/callback"]),
+          issuer,
+        },
+      });
+      const originalRefresh = await db.oAuthRefreshToken.create({
+        data: {
+          tokenHash: `refresh-${faker.string.alphanumeric(12)}`,
+          userId: testUserId,
+          clientId: client.id,
+          issuer,
+          scope: "shopping_list:read",
+          resource: null,
         },
       });
       await db.oAuthRefreshToken.create({
@@ -1470,6 +1520,7 @@ describe("Account Settings Route", () => {
           tokenHash: `refresh-${faker.string.alphanumeric(12)}`,
           userId: testUserId,
           clientId: client.id,
+          issuer: otherIssuer,
           scope: "shopping_list:read",
           resource: null,
         },
@@ -1477,21 +1528,117 @@ describe("Account Settings Route", () => {
       const access = await createApiCredential(db, testUserId, "Grocery helper (OAuth)", {
         scopes: ["shopping_list:read"],
         oauthClientId: client.id,
+        oauthIssuer: issuer,
+        oauthResource: null,
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+      const otherAccess = await createApiCredential(db, testUserId, "Grocery helper other issuer", {
+        scopes: ["shopping_list:read"],
+        oauthClientId: client.id,
+        oauthIssuer: otherIssuer,
         oauthResource: null,
         expiresAt: new Date(Date.now() + 60_000),
       });
       const formData = new FormData();
       formData.append("intent", "disconnectOAuthClient");
       formData.append("clientId", client.id);
+      formData.append("issuer", issuer);
       formData.append("resource", "");
+      formData.append("connectionKey", originalRefresh.id);
+
+      const accessRevoke = vi.spyOn(db.apiCredential, "updateMany")
+        .mockRejectedValueOnce(new Error("access revoke failed"));
+      await expect(authenticatedPost(formData)).rejects.toThrow("access revoke failed");
+      const revokedRefresh = await db.oAuthRefreshToken.findFirstOrThrow({ where: { clientId: client.id, issuer } });
+      expect(revokedRefresh.revokedAt).toBeInstanceOf(Date);
+      await expect(db.apiCredential.findUniqueOrThrow({ where: { id: access.credential.id } }))
+        .resolves.toMatchObject({ revokedAt: null });
+      const laterConnectionKey = `ocn_${faker.string.alphanumeric(16)}`;
+      const laterRefresh = await db.oAuthRefreshToken.create({
+        data: {
+          tokenHash: `refresh-${faker.string.alphanumeric(12)}`,
+          userId: testUserId,
+          clientId: client.id,
+          issuer,
+          scope: "shopping_list:read",
+          resource: null,
+          connectionKey: laterConnectionKey,
+        },
+      });
+      const laterAccess = await createApiCredential(db, testUserId, "Grocery helper reconnect", {
+        scopes: ["shopping_list:read"],
+        oauthClientId: client.id,
+        oauthIssuer: issuer,
+        oauthResource: null,
+        oauthConnectionKey: laterConnectionKey,
+      });
+      const sameSecond = new Date(Math.floor(revokedRefresh.revokedAt!.getTime() / 1_000) * 1_000);
+      await db.apiCredential.update({
+        where: { id: laterAccess.credential.id },
+        data: { createdAt: sameSecond },
+      });
+      accessRevoke.mockRestore();
 
       const result = await authenticatedPost(formData);
 
       expect(result).toMatchObject({ success: true });
-      await expect(db.oAuthRefreshToken.findFirstOrThrow({ where: { clientId: client.id } }))
+      await expect(authenticatedPost(formData)).resolves.toMatchObject({ success: true });
+      await expect(db.oAuthRefreshToken.findFirstOrThrow({ where: { clientId: client.id, issuer } }))
         .resolves.toMatchObject({ revokedAt: expect.any(Date) });
       await expect(db.apiCredential.findUniqueOrThrow({ where: { id: access.credential.id } }))
         .resolves.toMatchObject({ revokedAt: expect.any(Date) });
+      await expect(db.apiCredential.findUniqueOrThrow({ where: { id: laterAccess.credential.id } }))
+        .resolves.toMatchObject({ revokedAt: null });
+      await expect(db.oAuthRefreshToken.findUniqueOrThrow({ where: { id: laterRefresh.id } }))
+        .resolves.toMatchObject({ revokedAt: null });
+      await expect(db.oAuthRefreshToken.findFirstOrThrow({ where: { clientId: client.id, issuer: otherIssuer } }))
+        .resolves.toMatchObject({ revokedAt: null });
+      await expect(db.apiCredential.findUniqueOrThrow({ where: { id: otherAccess.credential.id } }))
+        .resolves.toMatchObject({ revokedAt: null });
+    });
+
+    it("partitions and disconnects OAuth groups larger than one safe query batch", async () => {
+      const issuer = "http://localhost:3000";
+      const client = await db.oAuthClient.create({
+        data: {
+          clientName: "Many grants",
+          redirectUris: JSON.stringify(["https://example.com/callback"]),
+          issuer,
+        },
+      });
+      await db.oAuthRefreshToken.createMany({
+        data: Array.from({ length: 101 }, (_, index) => ({
+          tokenHash: `refresh-batch-${index}-${faker.string.alphanumeric(8)}`,
+          userId: testUserId,
+          clientId: client.id,
+          issuer,
+          scope: "shopping_list:read",
+          resource: null,
+          connectionKey: `ocn_batch_${String(index).padStart(3, "0")}`,
+        })),
+      });
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const cookieValue = (await sessionStorage.commitSession(session)).split(";")[0];
+      const loaded = await loader({
+        request: new UndiciRequest("http://localhost:3000/account/settings", { headers: { Cookie: cookieValue } }),
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+      const batches = loaded.user.oauthConnections!.filter((connection) => connection.clientId === client.id);
+
+      expect(batches.map((batch) => batch.connectionKeys.length)).toEqual([32, 32, 32, 5]);
+      for (const batch of batches) {
+        const formData = new FormData();
+        formData.append("intent", "disconnectOAuthClient");
+        formData.append("clientId", batch.clientId);
+        formData.append("issuer", batch.issuer);
+        formData.append("resource", batch.resource ?? "");
+        for (const connectionKey of batch.connectionKeys) formData.append("connectionKey", connectionKey);
+        await expect(authenticatedPost(formData)).resolves.toMatchObject({ success: true });
+      }
+      await expect(db.oAuthRefreshToken.count({ where: { userId: testUserId, clientId: client.id, revokedAt: null } }))
+        .resolves.toBe(0);
     });
 
     it("rejects missing or unknown OAuth app disconnects", async () => {
@@ -1500,7 +1647,19 @@ describe("Account Settings Route", () => {
       const unknownForm = new FormData();
       unknownForm.append("intent", "disconnectOAuthClient");
       unknownForm.append("clientId", "client_missing");
+      unknownForm.append("issuer", "http://localhost:3000");
       unknownForm.append("resource", "");
+      unknownForm.append("connectionKey", "ocn_missing");
+      const malformedForm = new FormData();
+      malformedForm.append("intent", "disconnectOAuthClient");
+      malformedForm.append("clientId", "client_missing");
+      malformedForm.append("issuer", "http://localhost:3000");
+      malformedForm.append("connectionKey", "not a key");
+      const oversizedForm = new FormData();
+      oversizedForm.append("intent", "disconnectOAuthClient");
+      oversizedForm.append("clientId", "client_missing");
+      oversizedForm.append("issuer", "http://localhost:3000");
+      for (let index = 0; index < 33; index += 1) oversizedForm.append("connectionKey", `ocn_${index}`);
 
       await expect(authenticatedPost(missingForm)).resolves.toMatchObject({
         success: false,
@@ -1511,6 +1670,16 @@ describe("Account Settings Route", () => {
         success: false,
         error: "oauth_connection_not_found",
         message: "OAuth connection not found or already disconnected",
+      });
+      await expect(authenticatedPost(malformedForm)).resolves.toMatchObject({
+        success: false,
+        error: "oauth_connection_not_found",
+        message: "OAuth connection not found",
+      });
+      await expect(authenticatedPost(oversizedForm)).resolves.toMatchObject({
+        success: false,
+        error: "oauth_connection_not_found",
+        message: "OAuth connection not found",
       });
     });
   });
@@ -1541,20 +1710,24 @@ describe("Account Settings Route", () => {
             {
               clientId: "client_fallback",
               clientName: null,
+              issuer: "https://spoonjoy.app",
               resource: null,
               scopes: [],
               createdAt: "2026-06-03T00:00:00.000Z",
               refreshTokenCount: 1,
               accessTokenCount: 1,
+              connectionKeys: ["ocn_fallback"],
             },
             {
               clientId: "client_plural",
               clientName: "Plural app",
+              issuer: "https://spoonjoy.app",
               resource: "https://spoonjoy.app/mcp",
               scopes: ["kitchen:read"],
               createdAt: "2026-06-04T00:00:00.000Z",
               refreshTokenCount: 2,
               accessTokenCount: 3,
+              connectionKeys: ["ocn_plural_a", "ocn_plural_b"],
             },
           ],
         },

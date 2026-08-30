@@ -4,16 +4,17 @@ import { action } from "~/routes/api.v1.$";
 import { db, getLocalDb } from "~/lib/db.server";
 import { createUser } from "~/lib/auth.server";
 import { NativePasswordAuthError } from "~/lib/native-password-auth.server";
+import { handleOAuthToken } from "~/lib/oauth-routes.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { expectConsoleError } from "../warning-policy";
 
-function routeArgs(request: Request, splat = "auth/password/native") {
+function routeArgs(request: Request, splat = "auth/password/native", env: Record<string, unknown> = {}) {
   return {
     request,
     params: { "*": splat },
     context: {
       cloudflare: {
-        env: {},
+        env,
       },
     },
   } as any;
@@ -70,8 +71,9 @@ describe("native username/password sign-in API", () => {
     });
     expect(json.data.access_token).toMatch(/^sj_/);
     expect(json.data.refresh_token).toMatch(/^ort_/);
-    await expect(db.oAuthClient.findUnique({ where: { id: "spoonjoy-apple-native" } }))
-      .resolves.toMatchObject({ clientName: "Spoonjoy Apple" });
+    expect(json.data.client_id).toMatch(/^spoonjoy-apple-native:/);
+    await expect(db.oAuthClient.findUnique({ where: { id: json.data.client_id } }))
+      .resolves.toMatchObject({ clientName: "Spoonjoy Apple", issuer: "http://localhost" });
   });
 
   it("accepts username/password credentials for local native dogfooding", async () => {
@@ -89,6 +91,45 @@ describe("native username/password sign-in API", () => {
       userId: created.id,
       token_type: "Bearer",
     });
+  });
+
+  it("issues refreshable first-party credentials for two exact issuers", async () => {
+    await createUser(db, "multi-issuer@example.com", "multi_issuer_chef", "correctHorseBatteryStaple");
+    const issuerA = "https://spoonjoy.app";
+    const issuerB = "https://preview.example";
+
+    const signIn = async (issuer: string, requestId: string) => {
+      const response = await action(routeArgs(jsonRequest({
+        emailOrUsername: "multi_issuer_chef",
+        password: "correctHorseBatteryStaple",
+      }, requestId), "auth/password/native", { SPOONJOY_BASE_URL: issuer }));
+      expect(response.status).toBe(201);
+      return await response.json() as any;
+    };
+    const first = await signIn(issuerA, "req_native_password_issuer_a");
+    const second = await signIn(issuerB, "req_native_password_issuer_b");
+
+    expect(first.data.client_id).toBe("spoonjoy-apple-native");
+    expect(second.data.client_id).toMatch(/^spoonjoy-apple-native:/);
+    expect(second.data.client_id).not.toBe(first.data.client_id);
+    await expect(db.oAuthClient.findMany({
+      where: { id: { in: [first.data.client_id, second.data.client_id] } },
+      orderBy: { issuer: "asc" },
+    })).resolves.toMatchObject([
+      { id: second.data.client_id, issuer: issuerB },
+      { id: first.data.client_id, issuer: issuerA },
+    ]);
+
+    const refresh = await handleOAuthToken(new UndiciRequest(`${issuerB}/oauth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        client_id: second.data.client_id,
+        refresh_token: second.data.refresh_token,
+      }),
+    }) as unknown as Request, db, { SPOONJOY_BASE_URL: issuerB });
+    expect(refresh.status).toBe(200);
   });
 
   it("rejects invalid credentials without revealing whether the account exists", async () => {

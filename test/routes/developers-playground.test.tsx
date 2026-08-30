@@ -972,6 +972,7 @@ describe("/developers/playground", () => {
       code_challenge: codeChallenge,
       client_id: "cm_e2e_client",
       redirect_uri: "https://client.example/callback",
+      issuer: "https://spoonjoy.app",
     }));
     expect(state).toMatch(/^state_/);
 
@@ -981,8 +982,9 @@ describe("/developers/playground", () => {
     fireEvent.click(screen.getByRole("button", { name: "Prepare token exchange" }));
     expect(await screen.findByText("Callback URL is not a valid URL or query string.")).toBeInTheDocument();
 
-    fireEvent.change(callbackInput, { target: { value: `?code=oac_123&state=${state}` } });
-    await waitFor(() => expect(callbackInput).toHaveValue(`?code=oac_123&state=${state}`));
+    const callbackValue = `?code=oac_123&state=${state}&iss=https%3A%2F%2Fspoonjoy.app`;
+    fireEvent.change(callbackInput, { target: { value: callbackValue } });
+    await waitFor(() => expect(callbackInput).toHaveValue(callbackValue));
     fireEvent.click(screen.getByRole("button", { name: "Prepare token exchange" }));
     expect(await screen.findByRole("button", { name: /Exchange or refresh an OAuth token/i })).toHaveAttribute("aria-pressed", "true");
     await waitFor(() => expect((screen.getByLabelText("Form body") as HTMLTextAreaElement).value).toContain(
@@ -1262,12 +1264,36 @@ describe("/developers/playground", () => {
     expect(await screen.findByText("Callback state does not match the stored PKCE state.")).toBeInTheDocument();
 
     window.sessionStorage.setItem("spoonjoy.playground.pkce", JSON.stringify({
+      state: "state_issuer",
+      issuer: "https://spoonjoy.app",
+      code_verifier: "verifier_ok",
+      client_id: "cm_client",
+      redirect_uri: "https://client.example/callback",
+    }));
+    fireEvent.change(callbackInput, { target: { value: "?code=oac_123&state=state_issuer" } });
+    fireEvent.click(screen.getByRole("button", { name: "Prepare token exchange" }));
+    expect(await screen.findByText("Callback issuer is missing or does not match the stored authorization server.")).toBeInTheDocument();
+
+    fireEvent.change(callbackInput, {
+      target: { value: "?code=oac_123&state=state_issuer&iss=https%3A%2F%2FSPOONJOY.APP" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Prepare token exchange" }));
+    expect(await screen.findByText("Callback issuer is missing or does not match the stored authorization server.")).toBeInTheDocument();
+
+    fireEvent.change(callbackInput, {
+      target: { value: "?code=oac_123&state=state_issuer&iss=https%3A%2F%2Fissuer-b.example" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Prepare token exchange" }));
+    expect(await screen.findByText("Callback issuer is missing or does not match the stored authorization server.")).toBeInTheDocument();
+
+    window.sessionStorage.setItem("spoonjoy.playground.pkce", JSON.stringify({
       state: "state_ok",
+      issuer: "https://spoonjoy.app",
       code_verifier: "",
       client_id: "cm_client",
       redirect_uri: "https://client.example/callback",
     }));
-    fireEvent.change(callbackInput, { target: { value: "?code=oac_123&state=state_ok" } });
+    fireEvent.change(callbackInput, { target: { value: "?code=oac_123&state=state_ok&iss=https%3A%2F%2Fspoonjoy.app" } });
     fireEvent.click(screen.getByRole("button", { name: "Prepare token exchange" }));
     expect(await screen.findByText("Missing code_verifier, client_id, or redirect_uri. Generate PKCE and fill the authorize fields first.")).toBeInTheDocument();
 
@@ -1293,7 +1319,7 @@ describe("/developers/playground", () => {
     const state = bundle.textContent?.match(/state=(.+)\n/)?.[1] ?? "";
     window.sessionStorage.removeItem("spoonjoy.playground.pkce");
     fireEvent.change(callbackInput, {
-      target: { value: `https://client.example/callback?code=oac_456&state=${state}` },
+      target: { value: `https://client.example/callback?code=oac_456&state=${state}&iss=https%3A%2F%2Fspoonjoy.app` },
     });
     fireEvent.click(screen.getByRole("button", { name: "Prepare token exchange" }));
     expect(await screen.findByRole("button", { name: /Exchange or refresh an OAuth token/i })).toHaveAttribute("aria-pressed", "true");
@@ -1315,12 +1341,13 @@ describe("/developers/playground", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Redirect the chef through OAuth consent/i }));
     window.sessionStorage.setItem("spoonjoy.playground.pkce", JSON.stringify({
       state: "state_ok",
+      issuer: "https://spoonjoy.app",
       code_verifier: "verifier_ok",
       client_id: "cm_client",
       redirect_uri: "https://client.example/callback",
     }));
     fireEvent.change(screen.getByLabelText("OAuth callback URL"), {
-      target: { value: "?code=oac_123&state=state_ok" },
+      target: { value: "?code=oac_123&state=state_ok&iss=https%3A%2F%2Fspoonjoy.app" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Prepare token exchange" }));
 

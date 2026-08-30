@@ -135,6 +135,22 @@ async function readProtectedResource(request, baseUrl, workerVersionId) {
   return body.resource;
 }
 
+async function assertAuthorizationServerMetadata(request, baseUrl, workerVersionId) {
+  const response = await spoonjoyRequest(request, {
+    baseUrl,
+    workerVersionId,
+    method: "get",
+    url: new URL("/.well-known/oauth-authorization-server", baseUrl).toString(),
+    label: "authorization-server metadata response",
+  });
+  assert.equal(response.status(), 200, `authorization-server metadata failed with ${response.status()}`);
+  const body = await responseJson(response, "authorization-server metadata");
+  assert.equal(body.issuer, new URL(baseUrl).origin);
+  assert.equal(body.authorization_response_iss_parameter_supported, true);
+  assert.equal(body.registration_endpoint, new URL("/oauth/register", baseUrl).toString());
+  assert.equal(Object.hasOwn(body, "client_id_metadata_document_supported"), false);
+}
+
 async function screenshot(page, outDir, name) {
   await page.waitForTimeout(250);
   const path = join(outDir, `${name}.png`);
@@ -197,6 +213,7 @@ async function registerClaudeClient(request, baseUrl, workerVersionId) {
         grant_types: ["authorization_code", "refresh_token"],
         response_types: ["code"],
         token_endpoint_auth_method: "none",
+        application_type: "web",
         scope: "kitchen:read kitchen:write",
       },
     },
@@ -205,6 +222,7 @@ async function registerClaudeClient(request, baseUrl, workerVersionId) {
   const body = await responseJson(response, "OAuth dynamic registration");
   assert.equal(body.client_name, "Claude");
   assert.equal(body.redirect_uris?.[0], CLAUDE_MCP_REDIRECT_URI);
+  assert.equal(body.application_type, "web");
   assert.ok(body.client_id, "OAuth dynamic registration did not return client_id");
   return body.client_id;
 }
@@ -262,6 +280,7 @@ async function approveConsent(page, { baseUrl, clientId, codeChallenge, resource
   responseTracker.assertSince(consentCheckpoint, "authorization consent submission");
   const callback = new URL(callbackRequestValue.url());
   assert.equal(callback.searchParams.get("state"), authorizeUrl.searchParams.get("state"));
+  assert.equal(callback.searchParams.get("iss"), new URL(baseUrl).origin);
   const code = callback.searchParams.get("code");
   assert.ok(code, "Approve did not redirect back with an authorization code");
   return code;
@@ -421,7 +440,7 @@ async function expectMcpReady(request, { baseUrl, accessToken, workerVersionId }
     modern: true,
   });
   assert.equal(discovery.resultType, "complete");
-  assert.deepEqual(discovery.supportedVersions, [MCP_MODERN_PROTOCOL_VERSION, MCP_PROTOCOL_VERSION]);
+  assert.deepEqual(discovery.supportedVersions, [MCP_MODERN_PROTOCOL_VERSION]);
   assert.equal(discovery.cacheScope, "public");
   assert.ok(discovery.ttlMs > 0, "Modern MCP discovery omitted a positive ttlMs");
   assert.deepEqual(discovery._meta?.["io.modelcontextprotocol/serverInfo"], {
@@ -628,6 +647,7 @@ async function main() {
     });
 
     await check("protected-resource metadata", async () => {
+      await assertAuthorizationServerMetadata(page.request, baseUrl, workerVersionId);
       resource = await readProtectedResource(page.request, baseUrl, workerVersionId);
       report.resource = resource;
     });

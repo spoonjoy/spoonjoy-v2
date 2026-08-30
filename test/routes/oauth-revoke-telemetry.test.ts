@@ -129,6 +129,7 @@ function expectOAuthRevokeEvent(input: {
     candidate.event === "spoonjoy.oauth.revoke" &&
     candidate.properties?.status === input.status &&
     candidate.properties?.outcome === input.outcome &&
+    candidate.properties?.token_type_hint === (input.tokenTypeHint ?? "unknown") &&
     (
       input.errorCode === undefined
         ? candidate.properties?.error_code === undefined
@@ -194,9 +195,9 @@ describe("OAuth revoke telemetry", () => {
       Cookie: "session=raw_revoke_cookie",
     });
     const successResponse = await invokeAction(success.request);
-    expect(successResponse.response.status).toBe(204);
+    expect(successResponse.response.status).toBe(200);
     expectOAuthRevokeEvent({
-      status: 204,
+      status: 200,
       outcome: "revoked",
       clientId: client.clientId,
       tokenTypeHint: "refresh_token",
@@ -217,9 +218,9 @@ describe("OAuth revoke telemetry", () => {
       token_type_hint: "refresh_token",
     });
     const unknownResponse = await invokeAction(unknown.request);
-    expect(unknownResponse.response.status).toBe(204);
+    expect(unknownResponse.response.status).toBe(200);
     expectOAuthRevokeEvent({
-      status: 204,
+      status: 200,
       outcome: "not_found",
       tokenTypeHint: "refresh_token",
       forbidden: ["ort_raw_unknown_secret", unknown.bodyText, "ort_"],
@@ -237,11 +238,10 @@ describe("OAuth revoke telemetry", () => {
       token_type_hint: "access_token",
     });
     const mismatchResponse = await invokeAction(mismatched.request);
-    expect(mismatchResponse.response.status).toBe(400);
+    expect(mismatchResponse.response.status).toBe(200);
     expectOAuthRevokeEvent({
-      status: 400,
-      outcome: "error",
-      errorCode: "invalid_grant",
+      status: 200,
+      outcome: "not_found",
       tokenTypeHint: "unsupported",
       forbidden: [mismatchedRefreshToken, mismatched.bodyText, otherClient.clientId, "ort_"],
     });

@@ -7,7 +7,7 @@ import {
   ApiAuthError,
   assertCanUseOwnerEmail,
   authenticateApiRequest,
-  authenticateApiToken,
+  authenticateApiToken as authenticateApiTokenRaw,
   createApiCredential,
   expandCredentialScopes,
   extractBearerToken,
@@ -19,6 +19,10 @@ import {
   requireApiPrincipal,
 } from "~/lib/api-auth.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+
+const authenticateApiToken = (db: any, token: string, issuer = "https://spoonjoy.app") => (
+  authenticateApiTokenRaw(db, token, issuer)
+);
 
 function uniqueEmail(prefix = "api-auth") {
   return `${prefix}-${faker.string.alphanumeric(8).toLowerCase()}@example.com`;
@@ -198,6 +202,93 @@ describe("API authentication helpers", () => {
     await db.oAuthClient.delete({ where: { id: client.id } });
 
     await expect(authenticateApiToken(db, created.token)).rejects.toMatchObject({ status: 401 });
+  });
+
+  it("binds legacy OAuth credentials once and rejects a different issuer before usage mutation", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    const client = await db.oAuthClient.create({
+      data: { clientName: "Legacy App", redirectUris: "https://example.com/cb", issuer: null },
+    });
+    const legacy = await createApiCredential(db, user.id, "Legacy OAuth token", {
+      oauthClientId: client.id,
+      oauthIssuer: null,
+      scopes: ["kitchen:read"],
+    });
+
+    await expect(authenticateApiToken(db, legacy.token, "https://issuer-a.example"))
+      .resolves.toMatchObject({ oauthIssuer: "https://issuer-a.example" });
+    await expect(db.oAuthClient.findUniqueOrThrow({ where: { id: client.id } }))
+      .resolves.toMatchObject({ issuer: "https://issuer-a.example" });
+    await expect(db.apiCredential.findUniqueOrThrow({ where: { id: legacy.credential.id } }))
+      .resolves.toMatchObject({ oauthIssuer: "https://issuer-a.example" });
+
+    await db.apiCredential.update({ where: { id: legacy.credential.id }, data: { lastUsedAt: null } });
+    await expect(authenticateApiToken(db, legacy.token, "https://issuer-b.example"))
+      .rejects.toMatchObject({ status: 401 });
+    await expect(db.apiCredential.findUniqueOrThrow({ where: { id: legacy.credential.id } }))
+      .resolves.toMatchObject({ lastUsedAt: null, oauthIssuer: "https://issuer-a.example" });
+  });
+
+  it("does not poison a legacy client when its issuer-bound credential reaches the wrong issuer", async () => {
+    const issuer = "https://issuer-a.example";
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    const client = await db.oAuthClient.create({
+      data: { clientName: "Partially migrated app", redirectUris: "https://example.com/cb", issuer: null },
+    });
+    const credential = await createApiCredential(db, user.id, "Partially migrated token", {
+      oauthClientId: client.id,
+      oauthIssuer: issuer,
+      scopes: ["kitchen:read"],
+    });
+
+    await expect(authenticateApiToken(db, credential.token, "https://issuer-b.example"))
+      .rejects.toMatchObject({ status: 401 });
+    await expect(db.oAuthClient.findUniqueOrThrow({ where: { id: client.id } }))
+      .resolves.toMatchObject({ issuer: null });
+    await expect(db.apiCredential.findUniqueOrThrow({ where: { id: credential.credential.id } }))
+      .resolves.toMatchObject({ lastUsedAt: null, oauthIssuer: issuer });
+
+    await expect(authenticateApiToken(db, credential.token, issuer))
+      .resolves.toMatchObject({ oauthIssuer: issuer });
+  });
+
+  it("rejects a competing issuer that wins legacy credential promotion", async () => {
+    const updateLastUsed = vi.fn();
+    const stub = {
+      apiCredential: {
+        findUnique: async () => ({
+          id: "credential-race",
+          revokedAt: null,
+          expiresAt: null,
+          oauthClientId: "client-race",
+          oauthIssuer: null,
+          oauthResource: null,
+          scopes: "kitchen:read",
+          user: { id: "user-race", email: "race@example.com", username: "race" },
+        }),
+        updateMany: async () => ({ count: 0 }),
+        findUniqueOrThrow: async () => ({ oauthIssuer: "https://issuer-b.example" }),
+        update: updateLastUsed,
+      },
+      oAuthClient: {
+        updateMany: async () => ({ count: 1 }),
+        findFirst: async () => ({ id: "client-race" }),
+      },
+    } as never;
+
+    await expect(authenticateApiTokenRaw(stub, "sj_race", "https://issuer-a.example"))
+      .rejects.toMatchObject({ status: 401 });
+    expect(updateLastUsed).not.toHaveBeenCalled();
+  });
+
+  it("rejects issuer metadata on a credential that has no OAuth client", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    const inconsistent = await createApiCredential(db, user.id, "Inconsistent token", {
+      oauthIssuer: "https://issuer-a.example",
+    });
+
+    await expect(authenticateApiToken(db, inconsistent.token, "https://issuer-a.example"))
+      .rejects.toMatchObject({ status: 401 });
   });
 
   it("authenticates bearer requests, session requests, and lowercased environment users", async () => {

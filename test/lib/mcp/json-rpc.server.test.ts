@@ -160,7 +160,7 @@ describe("json-rpc MCP server", () => {
       id: "discover-1",
       result: {
         resultType: "complete",
-        supportedVersions: ["2026-07-28", "2025-06-18"],
+        supportedVersions: ["2026-07-28"],
         capabilities: { tools: {} },
         _meta: {
           "io.modelcontextprotocol/serverInfo": { name: "spoonjoy", version: "1.0.0" },

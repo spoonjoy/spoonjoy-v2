@@ -41,6 +41,28 @@ const AUTH_CODE_TTL_SECONDS = 60;
 
 /** Generic OAuth access tokens are short-lived. MCP credentials are durable. */
 export const OAUTH_ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
+// Each refresh ownership query binds every key twice (connectionKey + legacy id).
+// D1 allows 100 bound parameters, so 32 leaves headroom for fixed predicates,
+// mutation values, and adapter-added pagination bindings.
+export const OAUTH_CONNECTION_KEY_BATCH_SIZE = 32;
+
+export function oauthRefreshConnectionOwnership(connectionKeys: string[]) {
+  return {
+    OR: [
+      { connectionKey: { in: connectionKeys } },
+      { connectionKey: null, id: { in: connectionKeys } },
+    ],
+  };
+}
+
+export function oauthAccessConnectionOwnership(connectionKeys: string[], legacyCutoff: Date) {
+  return {
+    OR: [
+      { oauthConnectionKey: { in: connectionKeys } },
+      { oauthConnectionKey: null, createdAt: { lte: legacyCutoff } },
+    ],
+  };
+}
 
 /** OAuth 2.1 error, carrying an RFC 6749 error code for the wire response. */
 export class OAuthError extends Error {
@@ -59,7 +81,7 @@ function base64UrlEncode(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-function randomToken(prefix: string, byteLength = 32): string {
+export function createOAuthOpaqueToken(prefix: string, byteLength = 32): string {
   const bytes = new Uint8Array(byteLength);
   crypto.getRandomValues(bytes);
   return `${prefix}${base64UrlEncode(bytes)}`;
@@ -70,7 +92,7 @@ async function sha256Base64Url(input: string): Promise<string> {
   return base64UrlEncode(new Uint8Array(digest));
 }
 
-async function sha256Hex(input: string): Promise<string> {
+export async function hashOAuthOpaqueToken(input: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
 }
@@ -116,6 +138,7 @@ export interface RegisteredOAuthClient {
   clientId: string;
   clientName: string | null;
   redirectUris: string[];
+  issuer: string;
 }
 
 export const CLAUDE_MCP_CLIENT_NAME = "Claude";
@@ -137,14 +160,10 @@ export function isClaudeMcpOAuthClient(client: RegisteredOAuthClient | null | un
   return isCanonicalOAuthClientRegistration(client, CLAUDE_MCP_CLIENT_NAME, CLAUDE_MCP_REDIRECT_URI);
 }
 
-/**
- * Dynamic Client Registration. Validates that at least one well-formed
- * redirect URI is supplied, then persists the client and returns its id.
- */
-export async function registerOAuthClient(
-  db: Database,
-  input: { clientName?: string | null; redirectUris: string[] },
-): Promise<RegisteredOAuthClient> {
+export function validateOAuthClientRegistration(input: {
+  clientName?: string | null;
+  redirectUris: string[];
+}): { clientName: string | null; redirectUris: string[] } {
   const redirectUris = input.redirectUris.map((uri) => uri.trim()).filter(Boolean);
   if (redirectUris.length === 0) {
     throw new OAuthError("invalid_redirect_uri", "At least one redirect_uri is required");
@@ -183,26 +202,96 @@ export async function registerOAuthClient(
       );
     }
   }
+  return { clientName, redirectUris };
+}
+
+/**
+ * Dynamic Client Registration. Validates that at least one well-formed
+ * redirect URI is supplied, then persists the client and returns its id.
+ */
+export async function registerOAuthClient(
+  db: Database,
+  input: { clientName?: string | null; redirectUris: string[]; issuer: string },
+): Promise<RegisteredOAuthClient> {
+  const { clientName, redirectUris } = validateOAuthClientRegistration(input);
   const client = await db.oAuthClient.create({
-    data: { clientName, redirectUris: redirectUris.join(" ") },
+    data: {
+      clientName,
+      redirectUris: redirectUris.join(" "),
+      issuer: input.issuer,
+    },
   });
 
-  return { clientId: client.id, clientName: client.clientName, redirectUris };
+  return { clientId: client.id, clientName: client.clientName, redirectUris, issuer: input.issuer };
 }
 
 /** Look up a registered client and its allowed redirect URIs. */
 export async function getOAuthClient(
   db: Database,
   clientId: string,
+  issuer: string,
 ): Promise<RegisteredOAuthClient | null> {
   if (!clientId) return null;
-  const client = await db.oAuthClient.findFirst({ where: { id: clientId, revokedAt: null } });
+  let client = await db.oAuthClient.findFirst({
+    where: { id: clientId, issuer, revokedAt: null },
+  });
+  if (!client) {
+    await db.oAuthClient.updateMany({
+      where: { id: clientId, issuer: null, revokedAt: null },
+      data: { issuer },
+    });
+    client = await db.oAuthClient.findFirst({
+      where: { id: clientId, issuer, revokedAt: null },
+    });
+  }
   if (!client) return null;
   return {
     clientId: client.id,
     clientName: client.clientName,
     redirectUris: client.redirectUris.split(/\s+/).filter(Boolean),
+    issuer,
   };
+}
+
+/** Bind pre-issuer connector rows to this deployment's configured issuer once. */
+export async function promoteLegacyOAuthIssuerForUser(
+  db: Database,
+  userId: string,
+  issuer: string,
+): Promise<void> {
+  const [refreshRows, credentialRows] = await Promise.all([
+    db.oAuthRefreshToken.findMany({ where: { userId, issuer: null }, select: { clientId: true } }),
+    db.apiCredential.findMany({
+      where: { userId, oauthClientId: { not: null }, oauthIssuer: null },
+      select: { oauthClientId: true },
+    }),
+  ]);
+  const clientIds = [...new Set([
+    ...refreshRows.map((row) => row.clientId),
+    ...credentialRows.map((row) => row.oauthClientId!),
+  ])];
+  if (clientIds.length === 0) return;
+
+  await db.oAuthClient.updateMany({
+    where: { id: { in: clientIds }, issuer: null },
+    data: { issuer },
+  });
+  const boundClientIds = (await db.oAuthClient.findMany({
+    where: { id: { in: clientIds }, issuer },
+    select: { id: true },
+  })).map((client) => client.id);
+  if (boundClientIds.length === 0) return;
+
+  await Promise.all([
+    db.oAuthRefreshToken.updateMany({
+      where: { userId, clientId: { in: boundClientIds }, issuer: null },
+      data: { issuer },
+    }),
+    db.apiCredential.updateMany({
+      where: { userId, oauthClientId: { in: boundClientIds }, oauthIssuer: null },
+      data: { oauthIssuer: issuer },
+    }),
+  ]);
 }
 
 /** Whether `redirectUri` exactly matches one the client registered. */
@@ -217,6 +306,7 @@ export interface CreateAuthorizationCodeInput {
   codeChallenge: string;
   scope: string;
   resource?: string | null;
+  issuer: string;
   ttlSeconds?: number;
   now?: Date;
 }
@@ -231,11 +321,12 @@ export async function createAuthorizationCode(
 ): Promise<string> {
   const now = input.now ?? new Date();
   const ttl = input.ttlSeconds ?? AUTH_CODE_TTL_SECONDS;
-  const code = randomToken("oac_");
+  const code = createOAuthOpaqueToken("oac_");
   await db.oAuthAuthCode.create({
     data: {
-      codeHash: await sha256Hex(code),
+      codeHash: await hashOAuthOpaqueToken(code),
       clientId: input.clientId,
+      issuer: input.issuer,
       userId: input.userId,
       redirectUri: input.redirectUri,
       codeChallenge: input.codeChallenge,
@@ -252,6 +343,7 @@ export interface ConsumeAuthorizationCodeInput {
   clientId: string;
   redirectUri: string;
   codeVerifier: string;
+  issuer: string;
   now?: Date;
 }
 
@@ -273,12 +365,8 @@ export async function consumeAuthorizationCode(
 ): Promise<ConsumedAuthorizationCode> {
   const now = input.now ?? new Date();
   if (!input.code) throw new OAuthError("invalid_grant", "Missing authorization code");
-  if (!await getOAuthClient(db, input.clientId)) {
-    throw new OAuthError("invalid_client", "Unknown or revoked OAuth client");
-  }
-
-  const record = await db.oAuthAuthCode.findUnique({
-    where: { codeHash: await sha256Hex(input.code) },
+  let record = await db.oAuthAuthCode.findUnique({
+    where: { codeHash: await hashOAuthOpaqueToken(input.code) },
   });
   if (!record) throw new OAuthError("invalid_grant", "Unknown authorization code");
   if (record.consumedAt) throw new OAuthError("invalid_grant", "Authorization code already used");
@@ -287,6 +375,20 @@ export async function consumeAuthorizationCode(
   }
   if (record.clientId !== input.clientId) {
     throw new OAuthError("invalid_grant", "Authorization code was issued to a different client");
+  }
+  if (record.issuer !== null && record.issuer !== input.issuer) {
+    throw new OAuthError("invalid_grant", "Authorization code was issued by a different issuer");
+  }
+  if (!await getOAuthClient(db, input.clientId, input.issuer)) {
+    throw new OAuthError("invalid_client", "Unknown or revoked OAuth client");
+  }
+  if (record.issuer === null) {
+    await db.oAuthAuthCode.updateMany({ where: { id: record.id, issuer: null }, data: { issuer: input.issuer } });
+    record = await db.oAuthAuthCode.findUniqueOrThrow({ where: { id: record.id } });
+  }
+  /* istanbul ignore if -- @preserve issuer promotion above must converge; retain a fail-closed guard for concurrent corruption. */
+  if (record.issuer !== input.issuer) {
+    throw new OAuthError("invalid_grant", "Authorization code was issued by a different issuer");
   }
   if (record.redirectUri !== input.redirectUri) {
     throw new OAuthError("invalid_grant", "redirect_uri does not match the authorization request");
@@ -332,37 +434,36 @@ export async function issueConnectorTokens(
     scope: string;
     resource?: string | null;
     persistentMcpResource?: string | null;
+    issuer: string;
     now?: Date;
     connectionKey?: string | null;
   },
 ): Promise<IssuedConnectorTokens> {
   const now = input.now ?? new Date();
-  const client = await getOAuthClient(db, input.clientId);
+  const client = await getOAuthClient(db, input.clientId, input.issuer);
   if (!client) throw new OAuthError("invalid_client", "Unknown or revoked OAuth client");
-  const connectionKey = input.connectionKey ?? randomToken("ocn_", 16);
+  const connectionKey = input.connectionKey ?? createOAuthOpaqueToken("ocn_", 16);
   const persistentAccessToken = Boolean(
     input.resource &&
     input.persistentMcpResource &&
     input.resource === input.persistentMcpResource,
   );
   const expiresIn = persistentAccessToken ? null : OAUTH_ACCESS_TOKEN_TTL_SECONDS;
-  const { token: accessToken } = await createApiCredential(
-    db,
-    input.userId,
-    oauthCredentialName(client.clientName),
-    {
-      expiresAt: expiresIn === null ? null : new Date(now.getTime() + expiresIn * 1000),
-      scopes: input.scope,
-      oauthClientId: input.clientId,
-      oauthResource: input.resource ?? null,
-    },
-  );
-  const refreshToken = randomToken("ort_");
+  const { token: accessToken } = await createApiCredential(db, input.userId, oauthCredentialName(client.clientName), {
+    expiresAt: expiresIn === null ? null : new Date(now.getTime() + expiresIn * 1000),
+    scopes: input.scope,
+    oauthClientId: input.clientId,
+    oauthIssuer: client.issuer,
+    oauthResource: input.resource ?? null,
+    oauthConnectionKey: connectionKey,
+  });
+  const refreshToken = createOAuthOpaqueToken("ort_");
   await db.oAuthRefreshToken.create({
     data: {
-      tokenHash: await sha256Hex(refreshToken),
+      tokenHash: await hashOAuthOpaqueToken(refreshToken),
       userId: input.userId,
       clientId: input.clientId,
+      issuer: client.issuer,
       scope: input.scope,
       resource: input.resource ?? null,
       connectionKey,
@@ -380,54 +481,75 @@ export async function issueConnectorTokens(
 /** Revoke one rotating OAuth refresh token for native/extension disconnect flows. */
 export async function revokeConnectorRefreshToken(
   db: Database,
-  input: { refreshToken: string; clientId?: string; now?: Date },
+  input: { refreshToken: string; clientId?: string; issuer: string; now?: Date },
 ): Promise<boolean> {
   const now = input.now ?? new Date();
   if (!input.refreshToken) throw new OAuthError("invalid_request", "Missing refresh token");
 
-  const record = await db.oAuthRefreshToken.findUnique({
-    where: { tokenHash: await sha256Hex(input.refreshToken) },
+  let record = await db.oAuthRefreshToken.findUnique({
+    where: { tokenHash: await hashOAuthOpaqueToken(input.refreshToken) },
   });
   if (!record) return false;
   if (input.clientId && record.clientId !== input.clientId) {
-    throw new OAuthError("invalid_grant", "Refresh token was issued to a different client");
+    return false;
   }
-  if (record.revokedAt) return false;
+  if (record.issuer !== null && record.issuer !== input.issuer) return false;
+  const client = await getOAuthClient(db, record.clientId, input.issuer);
+  if (!client) return false;
+  if (record.issuer === null) {
+    await db.oAuthRefreshToken.updateMany({ where: { id: record.id, issuer: null }, data: { issuer: input.issuer } });
+    record = await db.oAuthRefreshToken.findUniqueOrThrow({ where: { id: record.id } });
+  }
+  /* istanbul ignore if -- @preserve issuer promotion above must converge; retain a fail-closed guard for concurrent corruption. */
+  if (record.issuer !== input.issuer) {
+    return false;
+  }
+  const wasActive = record.revokedAt === null;
 
-  await db.oAuthRefreshToken.update({
-    where: { id: record.id },
+  await db.apiCredential.updateMany({
+    where: { userId: record.userId, oauthClientId: record.clientId, oauthIssuer: null },
+    data: { oauthIssuer: input.issuer },
+  });
+
+  await db.oAuthRefreshToken.updateMany({
+    where: { id: record.id, revokedAt: null },
     data: { revokedAt: now },
   });
   await db.apiCredential.updateMany({
     where: {
       userId: record.userId,
       oauthClientId: record.clientId,
+      oauthIssuer: record.issuer,
       oauthResource: record.resource,
       revokedAt: null,
       OR: [
+        ...(record.connectionKey ? [{ oauthConnectionKey: record.connectionKey }] : []),
+        { oauthConnectionKey: null, createdAt: { lte: record.revokedAt ?? now } },
+      ],
+      AND: [{ OR: [
         { expiresAt: null },
         { expiresAt: { gt: now } },
-      ],
+      ] }],
     },
     data: { revokedAt: now },
   });
-  return true;
+  return wasActive;
 }
 
 /**
  * Exchange a refresh token for a new token pair (RFC 6749 §6) with rotation:
- * the presented token is atomically revoked and a new pair issued, so a
- * replayed refresh token is rejected.
+ * the presented token is revoked before a new pair is issued, so a replayed
+ * refresh token is rejected. Native D1 transaction hardening is tracked in PR5.
  */
 export async function rotateConnectorTokens(
   db: Database,
-  input: { refreshToken: string; clientId: string; now?: Date; legacyMcpResource?: string | null },
+  input: { refreshToken: string; clientId: string; issuer: string; now?: Date; legacyMcpResource?: string | null },
 ): Promise<IssuedConnectorTokens> {
   const now = input.now ?? new Date();
   if (!input.refreshToken) throw new OAuthError("invalid_grant", "Missing refresh token");
 
-  const record = await db.oAuthRefreshToken.findUnique({
-    where: { tokenHash: await sha256Hex(input.refreshToken) },
+  let record = await db.oAuthRefreshToken.findUnique({
+    where: { tokenHash: await hashOAuthOpaqueToken(input.refreshToken) },
   });
   if (!record || record.revokedAt) {
     throw new OAuthError("invalid_grant", "Unknown or revoked refresh token");
@@ -435,9 +557,22 @@ export async function rotateConnectorTokens(
   if (record.clientId !== input.clientId) {
     throw new OAuthError("invalid_grant", "Refresh token was issued to a different client");
   }
-  const client = await getOAuthClient(db, record.clientId);
+  if (record.issuer !== null && record.issuer !== input.issuer) {
+    throw new OAuthError("invalid_grant", "Refresh token was issued by a different issuer");
+  }
+  const client = await getOAuthClient(db, record.clientId, input.issuer);
   if (!client) throw new OAuthError("invalid_client", "Unknown or revoked OAuth client");
-
+  if (record.issuer === null) {
+    await db.oAuthRefreshToken.updateMany({ where: { id: record.id, issuer: null }, data: { issuer: input.issuer } });
+    record = await db.oAuthRefreshToken.findUniqueOrThrow({ where: { id: record.id } });
+  }
+  /* istanbul ignore if -- @preserve issuer promotion above must converge; retain a fail-closed guard for concurrent corruption. */
+  if (record.issuer !== input.issuer) {
+    throw new OAuthError("invalid_grant", "Refresh token was issued by a different issuer");
+  }
+  const resource = !record.resource && input.legacyMcpResource && isClaudeMcpOAuthClient(client)
+    ? input.legacyMcpResource
+    : record.resource;
   const revoked = await db.oAuthRefreshToken.updateMany({
     where: { id: record.id, revokedAt: null },
     data: { revokedAt: now },
@@ -445,17 +580,13 @@ export async function rotateConnectorTokens(
   if (revoked.count !== 1) {
     throw new OAuthError("invalid_grant", "Refresh token already used");
   }
-
-  const resource = !record.resource && input.legacyMcpResource && isClaudeMcpOAuthClient(client)
-    ? input.legacyMcpResource
-    : record.resource;
-
   return issueConnectorTokens(db, {
     userId: record.userId,
     clientId: record.clientId,
     scope: record.scope,
     resource,
     persistentMcpResource: input.legacyMcpResource,
+    issuer: input.issuer,
     now,
     connectionKey: record.connectionKey ?? record.id,
   });

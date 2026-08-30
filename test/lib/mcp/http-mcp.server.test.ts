@@ -237,6 +237,7 @@ describe("handleMcpHttpRequest", () => {
     const created = await createApiCredential(db, user.id, "oauth mcp token", {
       scopes: ["kitchen:read", "kitchen:write"],
       oauthClientId: "oauth_client_1",
+      oauthIssuer: "https://spoonjoy.app",
       oauthResource: options.oauthResource ?? null,
     });
     return { user, token: created.token, credential: created.credential };
@@ -464,6 +465,63 @@ describe("handleMcpHttpRequest", () => {
     expect(response.status).toBe(403);
   });
 
+  it("rejects a bearer issued by a different authorization-server issuer", async () => {
+    const oauth = await mintOAuthCredential({ oauthResource: "https://spoonjoy.app/mcp" });
+    await db.apiCredential.update({
+      where: { id: oauth.credential.id },
+      data: { oauthIssuer: "https://issuer-a.example" },
+    });
+
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(init(74, "tools/list"), bearer(oauth.token)),
+      db,
+      cloudflareEnv: { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("WWW-Authenticate")).toContain("Bearer");
+  });
+
+  it("returns an RFC 6750 step-up challenge with every missing tool scope", async () => {
+    const limited = await mintCredential({ scopes: ["recipes:read"] });
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(init(75, "tools/call", {
+        name: "create_recipe",
+        arguments: {},
+      }), bearer(limited.token)),
+      db,
+      cloudflareEnv: { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.headers.get("WWW-Authenticate")).toBe(
+      'Bearer error="insufficient_scope", scope="kitchen:write", resource_metadata="https://spoonjoy.app/.well-known/oauth-protected-resource/mcp"',
+    );
+    await expect(response.json()).resolves.toEqual({
+      error: "insufficient_scope",
+      message: "Additional authorization is required for this tool.",
+      required_scopes: ["kitchen:write"],
+    });
+  });
+
+  it("omits already granted scopes from a multi-scope step-up challenge", async () => {
+    const limited = await mintCredential({ scopes: ["recipes:read"] });
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(init(76, "tools/call", {
+        name: "search_spoonjoy",
+        arguments: { query: "soup" },
+      }), bearer(limited.token)),
+      db,
+      cloudflareEnv: { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "insufficient_scope",
+      required_scopes: ["cookbooks:read", "shopping_list:read"],
+    });
+  });
+
   it("allows legacy Claude MCP OAuth tokens that predate resource binding", async () => {
     const legacyClientId = "legacy_claude_mcp_client";
     await db.oAuthClient.create({
@@ -477,6 +535,7 @@ describe("handleMcpHttpRequest", () => {
     const created = await createApiCredential(db, user.id, "legacy Claude MCP token", {
       scopes: ["kitchen:read", "kitchen:write"],
       oauthClientId: legacyClientId,
+      oauthIssuer: "https://spoonjoy.app",
       oauthResource: null,
     });
 
@@ -505,6 +564,7 @@ describe("handleMcpHttpRequest", () => {
     const created = await createApiCredential(db, user.id, "mixed legacy Claude MCP token", {
       scopes: ["kitchen:read", "kitchen:write"],
       oauthClientId: legacyClientId,
+      oauthIssuer: "https://spoonjoy.app",
       oauthResource: null,
     });
 
