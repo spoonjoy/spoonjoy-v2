@@ -66,6 +66,7 @@ test.describe('Passkey lifecycle', () => {
     // --- sign in with the passkey through an OAuth continuation. This must
     // replace the login document so the consent page receives its callback CSP.
     const redirectUri = 'https://client.example/oauth/passkey-e2e-callback';
+    const resource = new URL('/mcp', page.url()).toString();
     const runId = process.env.SPOONJOY_E2E_RUN_ID;
     expect(runId, 'Playwright must provide an isolated E2E run ID').toBeTruthy();
     const clientName = e2eOauthClientName(runId!);
@@ -87,7 +88,7 @@ test.describe('Passkey lifecycle', () => {
       code_challenge_method: 'S256',
       scope: 'kitchen:read',
       state: 'passkey-oauth-e2e-state',
-      resource: 'https://spoonjoy.app/mcp',
+      resource,
     });
     await page.goto(`/oauth/authorize?${authorizeParams}`);
     await expect(page).toHaveURL(/\/login\?redirectTo=/);
