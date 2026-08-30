@@ -59,6 +59,7 @@ describe("UI audit tooling", () => {
     expect(existsSync("scripts/smoke-mcp-oauth-live.mjs")).toBe(true);
     expect(existsSync("scripts/report-mcp-oauth-canary.mjs")).toBe(true);
     expect(existsSync("scripts/audit-mcp-oauth-d1.mjs")).toBe(true);
+    expect(existsSync("scripts/backfill-oauth-grants.mjs")).toBe(true);
     expect(existsSync("scripts/cleanup-local-qa-data.mjs")).toBe(true);
     expect(existsSync("scripts/seed-demo-kitchen.mjs")).toBe(false);
   });
@@ -81,6 +82,9 @@ describe("UI audit tooling", () => {
     expect(packageJson.scripts?.["audit:mcp:oauth"]).toBe(
       "node scripts/audit-mcp-oauth-d1.mjs --target-env production --base-url https://spoonjoy.app",
     );
+    expect(packageJson.scripts?.["backfill:oauth:grants"]).toBe(
+      "node scripts/backfill-oauth-grants.mjs --target-env local --base-url http://localhost",
+    );
     expect(parsedProductionDeploy.jobs.deploy.steps).toContainEqual(
       expect.objectContaining({ run: "node scripts/workflow-security.mjs run-production-deploy" }),
     );
@@ -96,6 +100,15 @@ describe("UI audit tooling", () => {
     expect(auditWorkflow).toContain("schedule:");
     expect(auditWorkflow).toContain("pnpm run audit:mcp:oauth -- --out mcp-oauth-d1-audit-artifacts");
     expect(auditWorkflow).toContain("path: mcp-oauth-d1-audit-artifacts/");
+    expect(auditWorkflow).toContain("apply_oauth_grant_backfill:");
+    expect(auditWorkflow).toContain("environment: production");
+    expect(auditWorkflow).toContain('if [ "$GITHUB_REF" != "refs/heads/main" ]');
+    expect(auditWorkflow).toContain("  guard:");
+    expect(auditWorkflow).toContain("  apply:");
+    expect(auditWorkflow).toContain("needs: [guard, audit]");
+    expect(auditWorkflow).toContain("github.event_name == 'workflow_dispatch' && inputs.apply_oauth_grant_backfill");
+    expect(auditWorkflow).toContain("--expect-plan-sha256");
+    expect(auditWorkflow).toContain("path: oauth-grant-backfill-report.json");
   });
 
   it("documents MCP OAuth operations and real-Claude verification", () => {

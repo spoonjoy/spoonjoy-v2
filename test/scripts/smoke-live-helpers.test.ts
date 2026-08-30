@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import Database from "better-sqlite3";
 import { describe, expect, it, vi } from "vitest";
 
 import * as smokeHelpers from "../../scripts/smoke-live-helpers.mjs";
@@ -1923,6 +1924,15 @@ describe("smoke-live helpers", () => {
     expect(command).toContain("access_refresh_resource_mismatch");
     expect(command).toContain("canary_user_residue");
     expect(command).toContain("canary_refresh_residue");
+    expect(command).toContain("foreign_key_violations");
+    expect(command).toContain("active_refresh_without_grant");
+    expect(command).toContain("active_grant_without_active_refresh");
+    expect(command).toContain("grant_identity_mismatch");
+    expect(command).toContain("oauth_grant_count");
+    expect(command).toContain("pragma_foreign_key_check");
+    expect(command).toContain("NOT (rt_identity.issuer IS g_refresh.issuer)");
+    expect(command).toContain("json_each");
+    expect(command).toContain("EXCEPT SELECT DISTINCT value");
     expect(command).toContain("claude_redirect_client_count");
     expect(command).toContain(`lower(trim(oc_missing.clientName)) = 'claude'`);
     expect(command).toContain(`oc_missing.redirectUris = 'https://claude.ai/api/mcp/auth_callback'`);
@@ -1936,6 +1946,37 @@ describe("smoke-live helpers", () => {
     expect(command).toContain("SELECT");
     expect(command).not.toMatch(/\b(?:DELETE|UPDATE|INSERT|DROP|ALTER)\b/i);
     expect(command).not.toContain("clientId IS NOT NULL AND resource IS NULL");
+  });
+
+  it("executes the full invariant audit and detects null and semantic grant identity corruption", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE "User" (id TEXT PRIMARY KEY, email TEXT NOT NULL);
+      CREATE TABLE "OAuthClient" (id TEXT PRIMARY KEY, clientName TEXT, redirectUris TEXT NOT NULL, revokedAt DATETIME);
+      CREATE TABLE "OAuthGrant" (id TEXT PRIMARY KEY, userId TEXT NOT NULL, clientId TEXT NOT NULL, issuer TEXT NOT NULL, resource TEXT, scope TEXT NOT NULL, connectionKey TEXT NOT NULL, status TEXT NOT NULL);
+      CREATE TABLE "OAuthRefreshToken" (id TEXT PRIMARY KEY, userId TEXT NOT NULL, clientId TEXT NOT NULL, issuer TEXT, resource TEXT, scope TEXT NOT NULL, connectionKey TEXT, revokedAt DATETIME, grantId TEXT);
+      CREATE TABLE "ApiCredential" (id TEXT PRIMARY KEY, userId TEXT NOT NULL, oauthClientId TEXT, oauthIssuer TEXT, oauthResource TEXT, scopes TEXT NOT NULL, oauthConnectionKey TEXT, oauthGrantId TEXT, revokedAt DATETIME, expiresAt DATETIME);
+      INSERT INTO "User" VALUES ('user-1', 'person@example.com');
+      INSERT INTO "OAuthClient" VALUES ('client-1', 'Not Claude', 'https://client.example/callback', NULL);
+      INSERT INTO "OAuthGrant" VALUES ('grant-1', 'user-1', 'client-1', 'https://issuer.example', NULL, 'account:read kitchen:read', 'connection-1', 'active');
+      INSERT INTO "OAuthRefreshToken" VALUES
+        ('refresh-good', 'user-1', 'client-1', 'https://issuer.example', NULL, 'kitchen:read account:read', 'connection-1', NULL, 'grant-1'),
+        ('refresh-null-issuer', 'user-1', 'client-1', NULL, NULL, 'account:read kitchen:read', 'connection-1', NULL, 'grant-1'),
+        ('refresh-null-key', 'user-1', 'client-1', 'https://issuer.example', NULL, 'account:read kitchen:read', NULL, NULL, 'grant-1'),
+        ('refresh-wrong-scope', 'user-1', 'client-1', 'https://issuer.example', NULL, 'kitchen:read', 'connection-1', NULL, 'grant-1');
+      INSERT INTO "ApiCredential" VALUES
+        ('access-null-issuer', 'user-1', 'client-1', NULL, NULL, 'account:read kitchen:read', 'connection-1', 'grant-1', NULL, NULL),
+        ('access-null-key', 'user-1', 'client-1', 'https://issuer.example', NULL, 'account:read kitchen:read', NULL, 'grant-1', NULL, NULL);
+    `);
+
+    const command = buildMcpOAuthInvariantAuditD1Args({ targetEnv: "local" }).at(-1)!;
+    const rows = db.prepare(command).all() as Array<{ invariant: string; count: number }>;
+    const counts = Object.fromEntries(rows.map((row) => [row.invariant, row.count]));
+
+    expect(counts.grant_identity_mismatch).toBe(5);
+    expect(counts.foreign_key_violations).toBe(0);
+    expect(counts.active_refresh_without_grant).toBe(0);
+    db.close();
   });
 
   it("normalizes MCP OAuth invariant rows and detects failures", () => {

@@ -6,6 +6,7 @@ import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import { createUser } from "~/lib/auth.server";
 import { createApiCredential } from "~/lib/api-auth.server";
+import { issueConnectorTokens } from "~/lib/oauth-server.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
@@ -1594,6 +1595,48 @@ describe("Account Settings Route", () => {
       await expect(db.oAuthRefreshToken.findFirstOrThrow({ where: { clientId: client.id, issuer: otherIssuer } }))
         .resolves.toMatchObject({ revokedAt: null });
       await expect(db.apiCredential.findUniqueOrThrow({ where: { id: otherAccess.credential.id } }))
+        .resolves.toMatchObject({ revokedAt: null });
+    });
+
+    it("persists web-form disconnects on only the selected durable OAuth grant", async () => {
+      const issuer = "http://localhost:3000";
+      const client = await db.oAuthClient.create({
+        data: { clientName: "Durable web connector", redirectUris: "https://example.com/callback", issuer },
+      });
+      await issueConnectorTokens(db, {
+        userId: testUserId,
+        clientId: client.id,
+        issuer,
+        scope: "kitchen:read",
+        resource: null,
+      });
+      await issueConnectorTokens(db, {
+        userId: testUserId,
+        clientId: client.id,
+        issuer,
+        scope: "account:read",
+        resource: null,
+      });
+      const selected = await db.oAuthRefreshToken.findFirstOrThrow({
+        where: { userId: testUserId, clientId: client.id, scope: "kitchen:read" },
+      });
+      const unrelated = await db.oAuthRefreshToken.findFirstOrThrow({
+        where: { userId: testUserId, clientId: client.id, scope: "account:read" },
+      });
+      const formData = new FormData();
+      formData.append("intent", "disconnectOAuthClient");
+      formData.append("clientId", client.id);
+      formData.append("issuer", issuer);
+      formData.append("resource", "");
+      formData.append("connectionKey", selected.connectionKey!);
+
+      await expect(authenticatedPost(formData)).resolves.toMatchObject({ success: true });
+
+      await expect(db.oAuthGrant.findUniqueOrThrow({ where: { id: selected.grantId! } }))
+        .resolves.toMatchObject({ status: "revoked", statusReason: "disconnect" });
+      await expect(db.oAuthGrant.findUniqueOrThrow({ where: { id: unrelated.grantId! } }))
+        .resolves.toMatchObject({ status: "active", statusReason: null });
+      await expect(db.oAuthRefreshToken.findUniqueOrThrow({ where: { id: unrelated.id } }))
         .resolves.toMatchObject({ revokedAt: null });
     });
 

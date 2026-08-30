@@ -40,6 +40,8 @@ import {
   OAUTH_CONNECTION_KEY_BATCH_SIZE,
   oauthRefreshConnectionOwnership,
   promoteLegacyOAuthIssuerForUser,
+  revokeConnectorGrantsByConnectionKeys,
+  validateConnectorGrantConnectionKeys,
 } from "~/lib/oauth-server.server";
 import {
   normalizeSearchLimit,
@@ -5300,6 +5302,13 @@ async function handleOAuthConnectionDisconnect(
   const db = await getRequestDb(args.context);
   const now = new Date();
   const ownership = oauthRefreshConnectionOwnership(connection.connectionKeys);
+  await validateConnectorGrantConnectionKeys(db, {
+    userId: principal.id,
+    clientId: connection.clientId,
+    issuer: connection.issuer,
+    resource: connection.resource,
+    connectionKeys: connection.connectionKeys,
+  });
   const refresh = await db.oAuthRefreshToken.updateMany({
     where: {
       userId: principal.id,
@@ -5336,6 +5345,14 @@ async function handleOAuthConnectionDisconnect(
       ...oauthAccessConnectionOwnership(connection.connectionKeys, cleanupCutoff),
     },
     data: { revokedAt: now },
+  });
+  await revokeConnectorGrantsByConnectionKeys(db, {
+    userId: principal.id,
+    clientId: connection.clientId,
+    issuer: connection.issuer,
+    resource: connection.resource,
+    connectionKeys: connection.connectionKeys,
+    now,
   });
   return withApiV1Telemetry(
     apiV1PrivateSuccess(requestId, {

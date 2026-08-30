@@ -20,6 +20,9 @@ interface ObservedProcessResult {
   client: Record<string, unknown>;
   refreshRows: Array<Record<string, unknown>>;
   accessRows: Array<Record<string, unknown>>;
+  grants: Array<Record<string, unknown>>;
+  issuanceCount: number;
+  lineageCount: number;
 }
 
 function sanitizeDiagnostic(value: string): string {
@@ -27,9 +30,10 @@ function sanitizeDiagnostic(value: string): string {
 }
 
 async function runRestartProcess<T>(
-  mode: "issue" | "rotate" | "observe",
+  mode: "issue" | "issue-legacy" | "rotate" | "rotate-legacy" | "rotate-crash" | "observe",
   persistencePath: string,
   input: Record<string, unknown> = {},
+  expectedExitCode = 0,
 ): Promise<T> {
   const executable = resolve("node_modules/.bin/tsx");
   const fixture = resolve("test/fixtures/oauth-d1-restart-process.ts");
@@ -63,9 +67,10 @@ async function runRestartProcess<T>(
     clearTimeout(terminationTimer);
   }
   if (timedOut) throw new Error(`OAuth D1 restart process timed out (${mode})`);
-  if (exitCode !== 0) {
+  if (exitCode !== expectedExitCode) {
     throw new Error(`OAuth D1 restart process failed (${mode}, ${exitCode}): ${sanitizeDiagnostic(stderr)}`);
   }
+  if (expectedExitCode !== 0) return undefined as T;
   const resultLine = stdout.split(/\r?\n/).find((line) => line.startsWith(RESULT_PREFIX));
   if (!resultLine) throw new Error(`OAuth D1 restart process omitted its result (${mode})`);
   return JSON.parse(resultLine.slice(RESULT_PREFIX.length)) as T;
@@ -107,6 +112,17 @@ describe("OAuth persistence across complete local server-process restarts", () =
       const child = observed.refreshRows.find((row) => row.tokenHash === childRefreshHash);
       const originalAccess = observed.accessRows.find((row) => row.tokenHash === originalAccessHash);
       const childAccess = observed.accessRows.find((row) => row.tokenHash === childAccessHash);
+      expect(observed.grants).toHaveLength(1);
+      const grant = observed.grants[0];
+      expect(grant).toMatchObject({
+        userId: "oauth-process-restart-user",
+        clientId: "oauth-process-restart-client",
+        issuer: "https://spoonjoy.test",
+        resource: "https://spoonjoy.test/mcp",
+        scope: "kitchen:read",
+        status: "active",
+        statusReason: null,
+      });
       expect(parent).toMatchObject({
         userId: "oauth-process-restart-user",
         clientId: "oauth-process-restart-client",
@@ -115,6 +131,7 @@ describe("OAuth persistence across complete local server-process restarts", () =
         resource: "https://spoonjoy.test/mcp",
         revokedAt: NOW,
         connectionKey: child?.connectionKey,
+        grantId: grant?.id,
       });
       expect(child).toMatchObject({
         userId: "oauth-process-restart-user",
@@ -123,6 +140,7 @@ describe("OAuth persistence across complete local server-process restarts", () =
         scope: "kitchen:read",
         resource: "https://spoonjoy.test/mcp",
         revokedAt: null,
+        grantId: grant?.id,
       });
       expect(originalAccess).toMatchObject({
         userId: "oauth-process-restart-user",
@@ -133,6 +151,7 @@ describe("OAuth persistence across complete local server-process restarts", () =
         oauthConnectionKey: child?.connectionKey,
         revokedAt: null,
         expiresAt: null,
+        oauthGrantId: grant?.id,
       });
       expect(childAccess).toMatchObject({
         userId: "oauth-process-restart-user",
@@ -143,7 +162,45 @@ describe("OAuth persistence across complete local server-process restarts", () =
         oauthConnectionKey: child?.connectionKey,
         revokedAt: null,
         expiresAt: "2026-08-29T19:15:00.000Z",
+        oauthGrantId: grant?.id,
       });
+      expect(observed).toMatchObject({ issuanceCount: 0, lineageCount: 0 });
+    } finally {
+      await rm(persistencePath, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it.each([
+    "legacy_resource_refresh",
+    "legacy_resource_access",
+    "legacy_resource_grant",
+  ])("repairs durable legacy promotion after process death at %s", async (crashStage) => {
+    const persistencePath = await mkdtemp(resolve(tmpdir(), "spoonjoy-oauth-d1-promotion-restart-"));
+    try {
+      const issued = await runRestartProcess<TokenProcessResult>("issue-legacy", persistencePath);
+      await runRestartProcess("rotate-crash", persistencePath, {
+        refreshToken: issued.refreshToken,
+        crashStage,
+      }, 86);
+
+      await expect(runRestartProcess<TokenProcessResult>("rotate-legacy", persistencePath, {
+        refreshToken: issued.refreshToken,
+      })).resolves.toMatchObject({ resource: "https://spoonjoy.test/mcp" });
+      const observed = await runRestartProcess<ObservedProcessResult>("observe", persistencePath);
+      const promotedGrants = observed.grants.filter((grant) => grant.scope === "kitchen:read");
+      const unrelatedGrants = observed.grants.filter((grant) => grant.scope === "account:read");
+      expect(promotedGrants).toHaveLength(1);
+      expect(promotedGrants[0]).toMatchObject({ resource: "https://spoonjoy.test/mcp", status: "active" });
+      expect(unrelatedGrants).toHaveLength(1);
+      expect(unrelatedGrants[0]).toMatchObject({ resource: null, status: "active" });
+      expect(observed.refreshRows.filter((row) => row.grantId === promotedGrants[0].id))
+        .toSatisfy((rows: Array<Record<string, unknown>>) => rows.every((row) => row.resource === "https://spoonjoy.test/mcp"));
+      expect(observed.accessRows.filter((row) => row.oauthGrantId === promotedGrants[0].id))
+        .toSatisfy((rows: Array<Record<string, unknown>>) => rows.every((row) => row.oauthResource === "https://spoonjoy.test/mcp"));
+      expect(observed.refreshRows.filter((row) => row.grantId === unrelatedGrants[0].id))
+        .toSatisfy((rows: Array<Record<string, unknown>>) => rows.every((row) => row.resource === null));
+      expect(observed.accessRows.filter((row) => row.oauthGrantId === unrelatedGrants[0].id))
+        .toSatisfy((rows: Array<Record<string, unknown>>) => rows.every((row) => row.oauthResource === null));
     } finally {
       await rm(persistencePath, { recursive: true, force: true });
     }

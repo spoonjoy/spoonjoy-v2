@@ -2,6 +2,16 @@ name: MCP OAuth D1 Audit
 
 on:
   workflow_dispatch:
+    inputs:
+      apply_oauth_grant_backfill:
+        description: Apply the exact reviewed OAuth grant backfill plan
+        required: false
+        default: false
+        type: boolean
+      oauth_grant_plan_sha256:
+        description: Required exact dry-run digest when apply is enabled
+        required: false
+        type: string
   schedule:
     - cron: "41 * * * *"
 
@@ -18,47 +28,60 @@ env:
   GIT_CONFIG_VALUE_0: main
 
 jobs:
+  guard:
+    name: require trusted main
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Reject non-main workflow code
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Production D1 credentials are restricted to refs/heads/main."
+            exit 1
+          fi
+
   audit:
-    name: audit
+    name: readonly audit
+    needs: guard
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    environment: production
 
     steps:
-      - name: Check GitHub Cloudflare credentials
-        id: cloudflare
+      - name: Require GitHub Cloudflare credentials
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping MCP OAuth D1 audit because Cloudflare GitHub secrets are not configured."
-            exit 0
+            echo "Cloudflare GitHub secrets are required for the MCP OAuth D1 audit."
+            exit 1
           fi
-          echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-        if: steps.cloudflare.outputs.ready == 'true'
+        with:
+          ref: ${{ github.sha }}
 
       - name: Setup Node.js
-        if: steps.cloudflare.outputs.ready == 'true'
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "22"
 
       - name: Activate pnpm
-        if: steps.cloudflare.outputs.ready == 'true'
         run: |
           corepack enable
           corepack prepare pnpm@10.28.1 --activate
 
       - name: Install dependencies
-        if: steps.cloudflare.outputs.ready == 'true'
         run: pnpm install --frozen-lockfile
 
+      - name: Dry-run OAuth grant backfill
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/backfill-oauth-grants.mjs --target-env production --base-url https://spoonjoy.app --out oauth-grant-backfill-report.json
+
       - name: Run MCP OAuth D1 audit
-        id: mcp-oauth-d1-audit
-        if: steps.cloudflare.outputs.ready == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -66,9 +89,89 @@ jobs:
         run: pnpm run audit:mcp:oauth -- --out mcp-oauth-d1-audit-artifacts
 
       - name: Upload MCP OAuth D1 audit artifacts
-        if: always() && steps.cloudflare.outputs.ready == 'true'
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: mcp-oauth-d1-audit-artifacts
           path: mcp-oauth-d1-audit-artifacts/
+          retention-days: 14
+
+      - name: Upload OAuth grant backfill artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: oauth-grant-backfill-report
+          path: oauth-grant-backfill-report.json
+          retention-days: 14
+
+  apply:
+    name: protected exact-plan apply
+    needs: [guard, audit]
+    if: github.event_name == 'workflow_dispatch' && inputs.apply_oauth_grant_backfill
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+
+    steps:
+      - name: Require reviewed plan digest and Cloudflare credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          OAUTH_GRANT_PLAN_SHA256: ${{ inputs.oauth_grant_plan_sha256 }}
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo "Cloudflare GitHub secrets are required for the OAuth grant backfill."
+            exit 1
+          fi
+          if ! printf '%s' "$OAUTH_GRANT_PLAN_SHA256" | grep -Eq '^[0-9a-f]{64}$'; then
+            echo "A reviewed 64-character lowercase plan digest is required."
+            exit 1
+          fi
+
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+
+      - name: Activate pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.28.1 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply exact reviewed OAuth grant backfill plan
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          OAUTH_GRANT_PLAN_SHA256: ${{ inputs.oauth_grant_plan_sha256 }}
+        run: |
+          node scripts/backfill-oauth-grants.mjs \
+            --target-env production \
+            --base-url https://spoonjoy.app \
+            --out oauth-grant-backfill-apply-report.json \
+            --apply \
+            --expect-plan-sha256 "$OAUTH_GRANT_PLAN_SHA256" \
+            --confirm-production-apply
+
+      - name: Verify post-apply D1 invariants
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          MCP_OAUTH_AUDIT_WORKFLOW_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: pnpm run audit:mcp:oauth -- --out mcp-oauth-d1-post-apply-artifacts
+
+      - name: Upload protected apply evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: oauth-grant-backfill-apply-evidence
+          path: |
+            oauth-grant-backfill-apply-report.json
+            mcp-oauth-d1-post-apply-artifacts/
           retention-days: 14

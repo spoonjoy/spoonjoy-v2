@@ -3,6 +3,7 @@ import { faker } from "@faker-js/faker";
 import { FormData as UndiciFormData, Request as UndiciRequest } from "undici";
 import { action, loader } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
+import { issueConnectorTokens } from "~/lib/oauth-server.server";
 import { createUser } from "~/lib/auth.server";
 import { db } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
@@ -107,6 +108,33 @@ describe("API v1 native account settings", () => {
     username = `${faker.internet.username()}_${faker.string.alphanumeric(8)}`;
     const user = await createUser(db, email, username, "testPassword123");
     userId = user.id;
+  });
+
+  it("persists an explicit disconnect on the durable OAuth grant", async () => {
+    const issuer = "http://localhost";
+    const admin = await createApiCredential(db, userId, "Connection admin", { scopes: ["tokens:read", "tokens:write"] });
+    const client = await db.oAuthClient.create({
+      data: { clientName: "Durable connector", redirectUris: "https://client.example/callback", issuer },
+    });
+    await issueConnectorTokens(db, {
+      userId,
+      clientId: client.id,
+      issuer,
+      scope: "kitchen:read",
+      resource: "https://spoonjoy.app/mcp",
+      persistentMcpResource: "https://spoonjoy.app/mcp",
+    });
+    const listed = await apiGet("me/connections", { Authorization: `Bearer ${admin.token}` }, "req_durable_connection_list");
+    const listedPayload = await readJson(listed);
+    const connectionId = listedPayload.data.connections[0].id as string;
+
+    const response = await apiDelete(`me/connections/${connectionId}`, {
+      Authorization: `Bearer ${admin.token}`,
+    }, "req_durable_connection_disconnect");
+
+    expect(response.status).toBe(200);
+    await expect(db.oAuthGrant.findFirstOrThrow({ where: { userId, clientId: client.id } }))
+      .resolves.toMatchObject({ status: "revoked", statusReason: "disconnect" });
   });
 
   afterEach(async () => {

@@ -503,6 +503,7 @@ describe("handleOAuthToken", () => {
       scope: "kitchen:read",
       resource,
       persistentMcpResource: "https://spoonjoy.app/mcp",
+      issuer: "https://spoonjoy.app",
     });
 
     const response = await handleOAuthToken(

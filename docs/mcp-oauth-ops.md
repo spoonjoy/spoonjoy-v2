@@ -6,7 +6,7 @@ Spoonjoy's Claude connector depends on the remote MCP endpoint at `https://spoon
 
 - **Post-deploy gate**: `.github/workflows/production-deploy.yml` deploys to Cloudflare, then runs the MCP OAuth canary before the deploy workflow can finish green.
 - **Scheduled canary**: `.github/workflows/mcp-oauth-canary.yml` runs the live canary hourly and writes `mcp-oauth-canary-results.json` plus screenshots.
-- **D1 invariant audit**: `.github/workflows/mcp-oauth-d1-audit.yml` runs a readonly D1 audit and writes `mcp-oauth-d1-audit-results.json`.
+- **D1 invariant audit**: `.github/workflows/mcp-oauth-d1-audit.yml` dry-runs the grant backfill, runs the readonly D1 audit, and writes both `oauth-grant-backfill-report.json` and `mcp-oauth-d1-audit-results.json`.
 - **Telemetry**: PostHog events `spoonjoy.oauth.authorize`, `spoonjoy.oauth.token`, and `spoonjoy.mcp.request` expose status/error, client/resource metadata, and latency buckets without raw tokens or request bodies.
 
 ## Canary Failure Issue
@@ -56,9 +56,18 @@ Claude may show support references such as `ofid_...` when connector authorizati
 - `access_refresh_resource_mismatch`: live OAuth access credentials with no active refresh token for the same user/client/resource. Expired access credentials are ignored.
 - `canary_user_residue`: disposable canary users left behind.
 - `canary_refresh_residue`: disposable canary refresh-token rows left behind.
+- `foreign_key_violations`: rows reported by SQLite/D1 `foreign_key_check`.
+- `active_refresh_without_grant`: active refresh tokens that are not linked to an existing durable grant.
+- `active_grant_without_active_refresh`: active grants without an active linked refresh token.
+- `grant_identity_mismatch`: linked refresh/access rows whose user, client, issuer, resource, connection, or canonical access scope disagrees with the grant.
+- `oauth_grant_count`: informational count of durable grants.
 - `claude_redirect_client_count`: informational count of registered Claude redirect clients.
 
-The audit is readonly. Do not use broad production cleanup. Any production cleanup must be exact, reviewed against the artifact, and limited to disposable canary identifiers.
+The audit script and scheduled workflow are readonly. The workflow's manual `apply_oauth_grant_backfill` input is the only mutation path: first run a dry-run, review its stable issue categories and counts, then rerun with the exact `planSha256` as `oauth_grant_plan_sha256`. The command re-reads D1, refuses a changed digest, uses guarded idempotent writes, and requires a post-apply scan with zero remaining planned mutations. Ambiguous connections remain visible and unmodified. Never guess lineage or ownership from timestamps.
+
+Connector issue, rotation, promotion, and disconnect state is authoritative only after its D1 write completes; no Worker memory, cache, or queue is a persistence boundary. Legacy resource promotion recognizes only its exact null-to-canonical intermediate states, so a new Worker process can safely retry after any individual committed write. Any other grant/token identity mismatch fails closed and must be investigated through the invariant audit.
+
+Do not use broad production cleanup. Any production cleanup must be exact, reviewed against the artifact, and limited to disposable canary identifiers.
 
 ## PostHog Monitor Guidance
 
@@ -91,5 +100,6 @@ Capture screenshots of the connector state and Spoonjoy consent page when filing
 ```bash
 pnpm run smoke:mcp:oauth -- --out mcp-oauth-canary-artifacts
 pnpm run audit:mcp:oauth -- --out mcp-oauth-d1-audit-artifacts
+pnpm run backfill:oauth:grants -- --out oauth-grant-backfill-report.json
 node scripts/report-mcp-oauth-canary.mjs --artifact-dir mcp-oauth-canary-artifacts --status failure
 ```
