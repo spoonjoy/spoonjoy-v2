@@ -22,6 +22,24 @@ import {
 
 type Database = PrismaClientType;
 
+export type OAuthPersistenceStage =
+  | "code_consumption"
+  | "access_insert"
+  | "refresh_insert"
+  | "parent_revoke"
+  | "replacement_insert"
+  | "disconnect_refresh_revoke"
+  | "disconnect_access_revoke";
+
+export type OAuthPersistenceTiming = "before" | "after";
+
+export interface OAuthPersistenceDependencies {
+  onPersistenceMutation?: (
+    stage: OAuthPersistenceStage,
+    timing: OAuthPersistenceTiming,
+  ) => void | Promise<void>;
+}
+
 /** Scopes Spoonjoy understands for delegated OAuth consent. */
 export const SUPPORTED_SCOPES = [
   "account:read",
@@ -362,6 +380,7 @@ export interface ConsumedAuthorizationCode {
 export async function consumeAuthorizationCode(
   db: Database,
   input: ConsumeAuthorizationCodeInput,
+  dependencies: OAuthPersistenceDependencies = {},
 ): Promise<ConsumedAuthorizationCode> {
   const now = input.now ?? new Date();
   if (!input.code) throw new OAuthError("invalid_grant", "Missing authorization code");
@@ -398,12 +417,18 @@ export async function consumeAuthorizationCode(
   }
 
   // Burn the code; the guard makes a concurrent second exchange a no-op.
+  if (dependencies.onPersistenceMutation) {
+    await dependencies.onPersistenceMutation("code_consumption", "before");
+  }
   const burned = await db.oAuthAuthCode.updateMany({
     where: { id: record.id, consumedAt: null },
     data: { consumedAt: now },
   });
   if (burned.count !== 1) {
     throw new OAuthError("invalid_grant", "Authorization code already used");
+  }
+  if (dependencies.onPersistenceMutation) {
+    await dependencies.onPersistenceMutation("code_consumption", "after");
   }
 
   return { userId: record.userId, scope: record.scope, resource: record.resource };
@@ -438,6 +463,7 @@ export async function issueConnectorTokens(
     now?: Date;
     connectionKey?: string | null;
   },
+  dependencies: OAuthPersistenceDependencies = {},
 ): Promise<IssuedConnectorTokens> {
   const now = input.now ?? new Date();
   const client = await getOAuthClient(db, input.clientId, input.issuer);
@@ -449,6 +475,9 @@ export async function issueConnectorTokens(
     input.resource === input.persistentMcpResource,
   );
   const expiresIn = persistentAccessToken ? null : OAUTH_ACCESS_TOKEN_TTL_SECONDS;
+  if (dependencies.onPersistenceMutation) {
+    await dependencies.onPersistenceMutation("access_insert", "before");
+  }
   const { token: accessToken } = await createApiCredential(db, input.userId, oauthCredentialName(client.clientName), {
     expiresAt: expiresIn === null ? null : new Date(now.getTime() + expiresIn * 1000),
     scopes: input.scope,
@@ -457,7 +486,13 @@ export async function issueConnectorTokens(
     oauthResource: input.resource ?? null,
     oauthConnectionKey: connectionKey,
   });
+  if (dependencies.onPersistenceMutation) {
+    await dependencies.onPersistenceMutation("access_insert", "after");
+  }
   const refreshToken = createOAuthOpaqueToken("ort_");
+  if (dependencies.onPersistenceMutation) {
+    await dependencies.onPersistenceMutation("refresh_insert", "before");
+  }
   await db.oAuthRefreshToken.create({
     data: {
       tokenHash: await hashOAuthOpaqueToken(refreshToken),
@@ -469,6 +504,9 @@ export async function issueConnectorTokens(
       connectionKey,
     },
   });
+  if (dependencies.onPersistenceMutation) {
+    await dependencies.onPersistenceMutation("refresh_insert", "after");
+  }
   return {
     accessToken,
     refreshToken,
@@ -482,6 +520,7 @@ export async function issueConnectorTokens(
 export async function revokeConnectorRefreshToken(
   db: Database,
   input: { refreshToken: string; clientId?: string; issuer: string; now?: Date },
+  dependencies: OAuthPersistenceDependencies = {},
 ): Promise<boolean> {
   const now = input.now ?? new Date();
   if (!input.refreshToken) throw new OAuthError("invalid_request", "Missing refresh token");
@@ -511,10 +550,17 @@ export async function revokeConnectorRefreshToken(
     data: { oauthIssuer: input.issuer },
   });
 
+  if (dependencies.onPersistenceMutation) {
+    await dependencies.onPersistenceMutation("disconnect_refresh_revoke", "before");
+  }
   await db.oAuthRefreshToken.updateMany({
     where: { id: record.id, revokedAt: null },
     data: { revokedAt: now },
   });
+  if (dependencies.onPersistenceMutation) {
+    await dependencies.onPersistenceMutation("disconnect_refresh_revoke", "after");
+    await dependencies.onPersistenceMutation("disconnect_access_revoke", "before");
+  }
   await db.apiCredential.updateMany({
     where: {
       userId: record.userId,
@@ -533,6 +579,9 @@ export async function revokeConnectorRefreshToken(
     },
     data: { revokedAt: now },
   });
+  if (dependencies.onPersistenceMutation) {
+    await dependencies.onPersistenceMutation("disconnect_access_revoke", "after");
+  }
   return wasActive;
 }
 
@@ -544,6 +593,7 @@ export async function revokeConnectorRefreshToken(
 export async function rotateConnectorTokens(
   db: Database,
   input: { refreshToken: string; clientId: string; issuer: string; now?: Date; legacyMcpResource?: string | null },
+  dependencies: OAuthPersistenceDependencies = {},
 ): Promise<IssuedConnectorTokens> {
   const now = input.now ?? new Date();
   if (!input.refreshToken) throw new OAuthError("invalid_grant", "Missing refresh token");
@@ -573,6 +623,9 @@ export async function rotateConnectorTokens(
   const resource = !record.resource && input.legacyMcpResource && isClaudeMcpOAuthClient(client)
     ? input.legacyMcpResource
     : record.resource;
+  if (dependencies.onPersistenceMutation) {
+    await dependencies.onPersistenceMutation("parent_revoke", "before");
+  }
   const revoked = await db.oAuthRefreshToken.updateMany({
     where: { id: record.id, revokedAt: null },
     data: { revokedAt: now },
@@ -580,7 +633,11 @@ export async function rotateConnectorTokens(
   if (revoked.count !== 1) {
     throw new OAuthError("invalid_grant", "Refresh token already used");
   }
-  return issueConnectorTokens(db, {
+  if (dependencies.onPersistenceMutation) {
+    await dependencies.onPersistenceMutation("parent_revoke", "after");
+    await dependencies.onPersistenceMutation("replacement_insert", "before");
+  }
+  const replacement = await issueConnectorTokens(db, {
     userId: record.userId,
     clientId: record.clientId,
     scope: record.scope,
@@ -589,5 +646,9 @@ export async function rotateConnectorTokens(
     issuer: input.issuer,
     now,
     connectionKey: record.connectionKey ?? record.id,
-  });
+  }, dependencies);
+  if (dependencies.onPersistenceMutation) {
+    await dependencies.onPersistenceMutation("replacement_insert", "after");
+  }
+  return replacement;
 }
