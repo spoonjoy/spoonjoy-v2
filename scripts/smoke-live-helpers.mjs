@@ -807,6 +807,12 @@ export function buildMcpOAuthInvariantAuditD1Args({ targetEnv }) {
     `('access_refresh_resource_mismatch', (SELECT COUNT(*) FROM "ApiCredential" ac WHERE ac.revokedAt IS NULL AND ac.oauthClientId IS NOT NULL AND (ac.expiresAt IS NULL OR datetime(ac.expiresAt) > datetime('now')) AND NOT EXISTS (SELECT 1 FROM "OAuthRefreshToken" rt WHERE rt.userId = ac.userId AND rt.clientId = ac.oauthClientId AND rt.revokedAt IS NULL AND COALESCE(rt.resource, '') = COALESCE(ac.oauthResource, '')))),`,
     `('canary_user_residue', (SELECT COUNT(*) FROM "User" WHERE email LIKE 'codex-mcp-canary-%@example.com')),`,
     `('canary_refresh_residue', (SELECT COUNT(*) FROM "OAuthRefreshToken" WHERE connectionKey LIKE 'mcp_canary_connection_%')),`,
+    `('foreign_key_violations', (SELECT COUNT(*) FROM pragma_foreign_key_check)),`,
+    `('active_refresh_without_grant', (SELECT COUNT(*) FROM "OAuthRefreshToken" rt_unlinked WHERE rt_unlinked.revokedAt IS NULL AND (rt_unlinked.grantId IS NULL OR NOT EXISTS (SELECT 1 FROM "OAuthGrant" g_unlinked WHERE g_unlinked.id = rt_unlinked.grantId)))),`,
+    `('active_access_without_grant', (SELECT COUNT(*) FROM "ApiCredential" ac_unlinked WHERE ac_unlinked.revokedAt IS NULL AND ac_unlinked.oauthClientId IS NOT NULL AND (ac_unlinked.expiresAt IS NULL OR datetime(ac_unlinked.expiresAt) > datetime('now')) AND (ac_unlinked.oauthGrantId IS NULL OR NOT EXISTS (SELECT 1 FROM "OAuthGrant" g_unlinked WHERE g_unlinked.id = ac_unlinked.oauthGrantId)))),`,
+    `('active_grant_without_active_refresh', (SELECT COUNT(*) FROM "OAuthGrant" g_empty WHERE g_empty.status = 'active' AND NOT EXISTS (SELECT 1 FROM "OAuthRefreshToken" rt_empty WHERE rt_empty.grantId = g_empty.id AND rt_empty.revokedAt IS NULL))),`,
+    `('grant_identity_mismatch', (SELECT (SELECT COUNT(*) FROM "OAuthRefreshToken" rt_identity JOIN "OAuthGrant" g_refresh ON g_refresh.id = rt_identity.grantId WHERE NOT (rt_identity.userId IS g_refresh.userId) OR NOT (rt_identity.clientId IS g_refresh.clientId) OR NOT (rt_identity.issuer IS g_refresh.issuer) OR NOT (rt_identity.resource IS g_refresh.resource) OR NOT (rt_identity.connectionKey IS g_refresh.connectionKey) OR EXISTS (SELECT DISTINCT value FROM json_each('["' || replace(rt_identity.scope, ' ', '","') || '"]') WHERE value <> '' EXCEPT SELECT DISTINCT value FROM json_each('["' || replace(g_refresh.scope, ' ', '","') || '"]') WHERE value <> '') OR EXISTS (SELECT DISTINCT value FROM json_each('["' || replace(g_refresh.scope, ' ', '","') || '"]') WHERE value <> '' EXCEPT SELECT DISTINCT value FROM json_each('["' || replace(rt_identity.scope, ' ', '","') || '"]') WHERE value <> '')) + (SELECT COUNT(*) FROM "ApiCredential" ac_identity JOIN "OAuthGrant" g_access ON g_access.id = ac_identity.oauthGrantId WHERE NOT (ac_identity.userId IS g_access.userId) OR NOT (ac_identity.oauthClientId IS g_access.clientId) OR NOT (ac_identity.oauthIssuer IS g_access.issuer) OR NOT (ac_identity.oauthResource IS g_access.resource) OR NOT (ac_identity.scopes IS g_access.scope) OR NOT (ac_identity.oauthConnectionKey IS g_access.connectionKey)))),`,
+    `('oauth_grant_count', (SELECT COUNT(*) FROM "OAuthGrant")),`,
     `('claude_redirect_client_count', (SELECT COUNT(*) FROM "OAuthClient" WHERE revokedAt IS NULL AND lower(trim(clientName)) = 'claude' AND redirectUris = 'https://claude.ai/api/mcp/auth_callback'))`,
     `) SELECT invariant, count FROM audit;`,
   ].join(" "), { targetEnv });
@@ -1067,7 +1073,7 @@ export function decideMcpCanaryIssueAction({ status, openIssueNumber }) {
   return { action: "none" };
 }
 
-const MCP_OAUTH_AUDIT_INFO_INVARIANTS = new Set(["claude_redirect_client_count"]);
+const MCP_OAUTH_AUDIT_INFO_INVARIANTS = new Set(["claude_redirect_client_count", "oauth_grant_count"]);
 
 export function normalizeMcpOAuthAuditRows(rows) {
   return rows.map((row) => {

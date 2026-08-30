@@ -201,7 +201,7 @@ export async function createApiCredential(
   db: PrismaClientType,
   userId: string,
   name: string,
-  options: { expiresAt?: Date | null; scopes?: string | string[] | null; oauthClientId?: string | null; oauthIssuer?: string | null; oauthResource?: string | null; oauthConnectionKey?: string | null } = {}
+  options: { expiresAt?: Date | null; scopes?: string | string[] | null; oauthClientId?: string | null; oauthIssuer?: string | null; oauthResource?: string | null; oauthConnectionKey?: string | null; oauthGrantId?: string | null } = {}
 ): Promise<CreatedApiCredential> {
   const token = generateApiToken();
   const tokenHash = await hashApiToken(token);
@@ -216,6 +216,7 @@ export async function createApiCredential(
       oauthIssuer: options.oauthIssuer ?? null,
       oauthResource: options.oauthResource ?? null,
       oauthConnectionKey: options.oauthConnectionKey ?? null,
+      oauthGrantId: options.oauthGrantId ?? null,
       expiresAt: options.expiresAt ?? null,
     },
   });

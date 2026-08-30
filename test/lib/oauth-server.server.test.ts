@@ -12,6 +12,8 @@ import {
   OAuthError,
   promoteLegacyOAuthIssuerForUser,
   registerOAuthClient as registerOAuthClientRaw,
+  revokeConnectorGrantsByConnectionKeys,
+  validateConnectorGrantConnectionKeys,
   rotateConnectorTokens as rotateConnectorTokensRaw,
   verifyPkceS256,
 } from "~/lib/oauth-server.server";
@@ -575,8 +577,21 @@ describe("connector token issuance + rotation", () => {
     expect(credential?.oauthClientId).toBe(clientId);
     expect(credential?.oauthIssuer).toBe(ISSUER);
     expect(credential?.oauthResource).toBe("https://spoonjoy.app/mcp");
-    await expect(db.oAuthRefreshToken.findFirstOrThrow({ where: { userId, resource: "https://spoonjoy.app/mcp" } }))
-      .resolves.toMatchObject({ issuer: ISSUER });
+    const refresh = await db.oAuthRefreshToken.findFirstOrThrow({ where: { userId, resource: "https://spoonjoy.app/mcp" } });
+    const grant = await db.oAuthGrant.findUniqueOrThrow({ where: { connectionKey: refresh.connectionKey! } });
+    expect(grant).toMatchObject({
+      userId,
+      clientId,
+      issuer: ISSUER,
+      resource: "https://spoonjoy.app/mcp",
+      scope: "kitchen:read",
+      status: "active",
+      statusReason: null,
+    });
+    expect(refresh).toMatchObject({ issuer: ISSUER, grantId: grant.id });
+    expect(credential).toMatchObject({ oauthGrantId: grant.id });
+    await expect(db.oAuthTokenIssuance.count()).resolves.toBe(0);
+    await expect(db.oAuthRefreshLineage.count()).resolves.toBe(0);
   });
 
   it.each([
@@ -662,7 +677,9 @@ describe("connector token issuance + rotation", () => {
 
   it("promotes a legacy refresh token before rotating it", async () => {
     const first = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read" });
-    await db.oAuthRefreshToken.updateMany({ where: { userId, clientId }, data: { issuer: null } });
+    await db.oAuthRefreshToken.updateMany({ where: { userId, clientId }, data: { issuer: null, grantId: null } });
+    await db.apiCredential.updateMany({ where: { userId, oauthClientId: clientId }, data: { oauthGrantId: null } });
+    await db.oAuthGrant.deleteMany({ where: { userId, clientId } });
 
     await expect(rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId }))
       .resolves.toMatchObject({ scope: "kitchen:read" });
@@ -680,8 +697,9 @@ describe("connector token issuance + rotation", () => {
       scope: "kitchen:read",
       issuer: issuerA,
     });
-    await db.oAuthRefreshToken.updateMany({ where: { userId, clientId }, data: { issuer: null } });
-    await db.apiCredential.updateMany({ where: { userId, oauthClientId: clientId }, data: { oauthIssuer: null } });
+    await db.oAuthRefreshToken.updateMany({ where: { userId, clientId }, data: { issuer: null, grantId: null } });
+    await db.apiCredential.updateMany({ where: { userId, oauthClientId: clientId }, data: { oauthIssuer: null, oauthGrantId: null } });
+    await db.oAuthGrant.deleteMany({ where: { userId, clientId } });
 
     await expect(rotateConnectorTokensRaw(db, {
       refreshToken: first.refreshToken,
@@ -757,6 +775,189 @@ describe("connector token issuance + rotation", () => {
     expect(rotated.id).not.toBe(original.id);
     expect(rotated.connectionKey).toBe(original.connectionKey);
     expect(rotated.connectionKey).toMatch(/^ocn_/);
+    expect(rotated.grantId).toBe(original.grantId);
+    await expect(db.apiCredential.findFirstOrThrow({
+      where: { userId, oauthConnectionKey: rotated.connectionKey },
+      orderBy: { createdAt: "desc" },
+    })).resolves.toMatchObject({ oauthGrantId: original.grantId });
+  });
+
+  it("rejects a refresh token cross-linked to another grant before revoking anything", async () => {
+    const { revokeConnectorRefreshToken } = await import("~/lib/oauth-server.server");
+    const first = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read" });
+    await issueConnectorTokens(db, { userId, clientId, scope: "account:read" });
+    const refreshes = await db.oAuthRefreshToken.findMany({
+      where: { userId, clientId },
+      orderBy: { createdAt: "asc" },
+    });
+    const [firstRefresh, secondRefresh] = refreshes;
+    await db.oAuthRefreshToken.update({
+      where: { id: firstRefresh.id },
+      data: { grantId: secondRefresh.grantId },
+    });
+
+    await expect(revokeConnectorRefreshToken(db, {
+      refreshToken: first.refreshToken,
+      clientId,
+      issuer: ISSUER,
+    })).rejects.toMatchObject({ code: "invalid_grant" });
+
+    await expect(db.oAuthRefreshToken.findUniqueOrThrow({ where: { id: firstRefresh.id } }))
+      .resolves.toMatchObject({ revokedAt: null, grantId: secondRefresh.grantId });
+    await expect(db.apiCredential.count({ where: { userId, revokedAt: { not: null } } }))
+      .resolves.toBe(0);
+    await expect(db.oAuthGrant.count({ where: { userId, status: { not: "active" } } }))
+      .resolves.toBe(0);
+  });
+
+  it("rejects a disconnect batch whose connection key belongs to another identity", async () => {
+    await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read", resource: null });
+    const grant = await db.oAuthGrant.findFirstOrThrow({ where: { userId, clientId } });
+
+    await expect(revokeConnectorGrantsByConnectionKeys(db, {
+      userId,
+      clientId,
+      issuer: ISSUER,
+      resource: `${ISSUER}/mcp`,
+      connectionKeys: [grant.connectionKey],
+      now: new Date(),
+    })).rejects.toMatchObject({ code: "invalid_grant" });
+    await expect(db.oAuthGrant.findUniqueOrThrow({ where: { id: grant.id } }))
+      .resolves.toMatchObject({ status: "active", statusReason: null });
+    await expect(revokeConnectorGrantsByConnectionKeys(db, {
+      userId,
+      clientId,
+      issuer: ISSUER,
+      resource: null,
+      connectionKeys: [],
+      now: new Date(),
+    })).resolves.toBe(0);
+    await expect(validateConnectorGrantConnectionKeys(db, {
+      userId,
+      clientId,
+      issuer: ISSUER,
+      resource: null,
+      connectionKeys: [],
+    })).resolves.toBeUndefined();
+  });
+
+  it("rejects a legacy resource promotion cross-linked to another grant before mutating anything", async () => {
+    const first = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read" });
+    await issueConnectorTokens(db, { userId, clientId, scope: "account:read" });
+    const refreshes = await db.oAuthRefreshToken.findMany({
+      where: { userId, clientId },
+      orderBy: { createdAt: "asc" },
+    });
+    const [firstRefresh, secondRefresh] = refreshes;
+    await db.oAuthRefreshToken.update({
+      where: { id: firstRefresh.id },
+      data: { grantId: secondRefresh.grantId },
+    });
+
+    await expect(rotateConnectorTokens(db, {
+      refreshToken: first.refreshToken,
+      clientId,
+      legacyMcpResource: `${ISSUER}/mcp`,
+    })).rejects.toMatchObject({ code: "invalid_grant" });
+
+    await expect(db.oAuthRefreshToken.findUniqueOrThrow({ where: { id: firstRefresh.id } }))
+      .resolves.toMatchObject({ revokedAt: null, resource: null, grantId: secondRefresh.grantId });
+    await expect(db.apiCredential.count({ where: { userId, oauthResource: { not: null } } }))
+      .resolves.toBe(0);
+    await expect(db.oAuthGrant.count({ where: { userId, resource: { not: null } } }))
+      .resolves.toBe(0);
+  });
+
+  it("rejects incomplete and unexpected linked identities during legacy resource promotion", async () => {
+    await db.oAuthClient.update({
+      where: { id: clientId },
+      data: { clientName: "Claude", redirectUris: "https://claude.ai/api/mcp/auth_callback" },
+    });
+    const first = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read", resource: null });
+    const refresh = await db.oAuthRefreshToken.findFirstOrThrow({ where: { userId, clientId } });
+    await db.oAuthRefreshToken.update({ where: { id: refresh.id }, data: { issuer: null } });
+    await expect(rotateConnectorTokens(db, {
+      refreshToken: first.refreshToken,
+      clientId,
+      legacyMcpResource: `${ISSUER}/mcp`,
+    })).rejects.toMatchObject({ code: "invalid_grant" });
+
+    await db.oAuthRefreshToken.update({ where: { id: refresh.id }, data: { issuer: ISSUER } });
+    await db.oAuthGrant.update({ where: { id: refresh.grantId! }, data: { scope: "account:read" } });
+    await expect(rotateConnectorTokens(db, {
+      refreshToken: first.refreshToken,
+      clientId,
+      legacyMcpResource: `${ISSUER}/mcp`,
+    })).rejects.toMatchObject({ code: "invalid_grant" });
+  });
+
+  it("rejects an incomplete linked identity before ordinary rotation", async () => {
+    const first = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read", resource: null });
+    await db.oAuthRefreshToken.updateMany({ where: { userId, clientId }, data: { connectionKey: null } });
+
+    await expect(rotateConnectorTokens(db, {
+      refreshToken: first.refreshToken,
+      clientId,
+    })).rejects.toMatchObject({ code: "invalid_grant" });
+  });
+
+  it.each([
+    ["refresh", "oAuthRefreshToken"],
+    ["grant", "oAuthGrant"],
+  ] as const)("fails closed when legacy %s resource promotion loses its guarded write", async (_label, model) => {
+    await db.oAuthClient.update({
+      where: { id: clientId },
+      data: { clientName: "Claude", redirectUris: "https://claude.ai/api/mcp/auth_callback" },
+    });
+    const first = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read", resource: null });
+    vi.spyOn(db[model], "updateMany").mockResolvedValueOnce({ count: 0 });
+
+    await expect(rotateConnectorTokens(db, {
+      refreshToken: first.refreshToken,
+      clientId,
+      legacyMcpResource: `${ISSUER}/mcp`,
+    })).rejects.toMatchObject({ code: "invalid_grant" });
+  });
+
+  it("fails closed when access resource promotion does not converge", async () => {
+    await db.oAuthClient.update({
+      where: { id: clientId },
+      data: { clientName: "Claude", redirectUris: "https://claude.ai/api/mcp/auth_callback" },
+    });
+    const first = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read", resource: null });
+    vi.spyOn(db.apiCredential, "findFirst").mockResolvedValueOnce({ id: "still-unconverged" } as never);
+
+    await expect(rotateConnectorTokens(db, {
+      refreshToken: first.refreshToken,
+      clientId,
+      legacyMcpResource: `${ISSUER}/mcp`,
+    })).rejects.toMatchObject({ code: "invalid_grant" });
+  });
+
+  it("rejects issuance against an existing grant with a different identity", async () => {
+    await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read", resource: null });
+    const refresh = await db.oAuthRefreshToken.findFirstOrThrow({ where: { userId, clientId } });
+
+    await expect(issueConnectorTokens(db, {
+      userId,
+      clientId,
+      scope: "account:read",
+      resource: null,
+      connectionKey: refresh.connectionKey,
+      grantId: refresh.grantId,
+    })).rejects.toMatchObject({ code: "invalid_grant" });
+  });
+
+  it("fails closed when a validated active grant loses the disconnect write", async () => {
+    const { revokeConnectorRefreshToken } = await import("~/lib/oauth-server.server");
+    const first = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read" });
+    vi.spyOn(db.oAuthGrant, "updateMany").mockResolvedValueOnce({ count: 0 });
+
+    await expect(revokeConnectorRefreshToken(db, {
+      refreshToken: first.refreshToken,
+      clientId,
+      issuer: ISSUER,
+    })).rejects.toMatchObject({ code: "invalid_grant" });
   });
 
   it("derives a stable connection key for legacy refresh tokens during rotation", async () => {
@@ -766,16 +967,26 @@ describe("connector token issuance + rotation", () => {
     });
     await db.oAuthRefreshToken.update({
       where: { id: legacy.id },
-      data: { connectionKey: null },
+      data: { connectionKey: null, grantId: null },
     });
 
-    await rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId });
+    await db.oAuthClient.update({
+      where: { id: clientId },
+      data: { clientName: "Claude", redirectUris: "https://claude.ai/api/mcp/auth_callback" },
+    });
+    await rotateConnectorTokens(db, {
+      refreshToken: first.refreshToken,
+      clientId,
+      legacyMcpResource: `${ISSUER}/mcp`,
+    });
 
     const rotated = await db.oAuthRefreshToken.findFirstOrThrow({
       where: { userId, clientId, revokedAt: null },
     });
     expect(rotated.id).not.toBe(legacy.id);
     expect(rotated.connectionKey).toBe(legacy.id);
+    expect(rotated.grantId).toBeNull();
+    expect(rotated.resource).toBe(`${ISSUER}/mcp`);
   });
 
   it("rejects an empty refresh token", async () => {
@@ -795,11 +1006,15 @@ describe("connector token issuance + rotation", () => {
   it("promotes a legacy refresh token and matching access credential during revocation", async () => {
     const { revokeConnectorRefreshToken } = await import("~/lib/oauth-server.server");
     const first = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read" });
-    await db.oAuthRefreshToken.updateMany({ where: { userId, clientId }, data: { issuer: null, connectionKey: null } });
+    await db.oAuthRefreshToken.updateMany({
+      where: { userId, clientId },
+      data: { issuer: null, connectionKey: null, grantId: null },
+    });
     await db.apiCredential.updateMany({
       where: { userId, oauthClientId: clientId },
-      data: { oauthIssuer: null, oauthConnectionKey: null },
+      data: { oauthIssuer: null, oauthConnectionKey: null, oauthGrantId: null },
     });
+    await db.oAuthGrant.deleteMany({ where: { userId, clientId } });
 
     await expect(revokeConnectorRefreshToken(db, {
       refreshToken: first.refreshToken,
@@ -810,6 +1025,7 @@ describe("connector token issuance + rotation", () => {
       .resolves.toMatchObject({ issuer: ISSUER, revokedAt: expect.any(Date) });
     await expect(db.apiCredential.findFirstOrThrow({ where: { userId, oauthClientId: clientId } }))
       .resolves.toMatchObject({ oauthIssuer: ISSUER, revokedAt: expect.any(Date) });
+    await expect(db.oAuthGrant.count({ where: { userId, clientId } })).resolves.toBe(0);
   });
 
   it("retries access cleanup after refresh revocation already committed", async () => {
@@ -872,8 +1088,9 @@ describe("connector token issuance + rotation", () => {
       scope: "kitchen:read",
       issuer: issuerA,
     });
-    await db.oAuthRefreshToken.updateMany({ where: { userId, clientId }, data: { issuer: null } });
-    await db.apiCredential.updateMany({ where: { userId, oauthClientId: clientId }, data: { oauthIssuer: null } });
+    await db.oAuthRefreshToken.updateMany({ where: { userId, clientId }, data: { issuer: null, grantId: null } });
+    await db.apiCredential.updateMany({ where: { userId, oauthClientId: clientId }, data: { oauthIssuer: null, oauthGrantId: null } });
+    await db.oAuthGrant.deleteMany({ where: { userId, clientId } });
 
     await expect(revokeConnectorRefreshToken(db, {
       refreshToken: first.refreshToken,

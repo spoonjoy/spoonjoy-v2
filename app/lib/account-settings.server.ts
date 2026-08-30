@@ -20,6 +20,8 @@ import {
   OAUTH_CONNECTION_KEY_BATCH_SIZE,
   oauthRefreshConnectionOwnership,
   promoteLegacyOAuthIssuerForUser,
+  revokeConnectorGrantsByConnectionKeys,
+  validateConnectorGrantConnectionKeys,
 } from "~/lib/oauth-server.server";
 
 export interface NotificationPreferenceFlags {
@@ -606,6 +608,13 @@ export async function handleAccountSettingsAction({
 
     const ownership = oauthRefreshConnectionOwnership(connectionKeys);
     const now = new Date();
+    await validateConnectorGrantConnectionKeys(database, {
+      userId,
+      clientId,
+      issuer,
+      resource,
+      connectionKeys,
+    });
     const refresh = await database.oAuthRefreshToken.updateMany({
       where: { userId, clientId, issuer, resource, revokedAt: null, ...ownership },
       data: { revokedAt: now },
@@ -632,6 +641,14 @@ export async function handleAccountSettingsAction({
         ...oauthAccessConnectionOwnership(connectionKeys, cleanupCutoff),
       },
       data: { revokedAt: now },
+    });
+    await revokeConnectorGrantsByConnectionKeys(database, {
+      userId,
+      clientId,
+      issuer,
+      resource,
+      connectionKeys,
+      now,
     });
 
     return {

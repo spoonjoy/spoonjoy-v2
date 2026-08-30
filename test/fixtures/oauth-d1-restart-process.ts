@@ -85,7 +85,7 @@ async function main() {
 
   try {
     let result: Record<string, unknown>;
-    if (mode === "issue") {
+    if (mode === "issue" || mode === "issue-legacy") {
       await applyRepositoryMigrations(platform.env.DB as unknown as LocalD1Database);
       await database.user.create({
         data: {
@@ -97,8 +97,8 @@ async function main() {
       await database.oAuthClient.create({
         data: {
           id: CLIENT_ID,
-          clientName: "Process restart connector",
-          redirectUris: REDIRECT_URI,
+          clientName: mode === "issue-legacy" ? "Claude" : "Process restart connector",
+          redirectUris: mode === "issue-legacy" ? "https://claude.ai/api/mcp/auth_callback" : REDIRECT_URI,
           issuer: ISSUER,
         },
       });
@@ -106,19 +106,35 @@ async function main() {
         userId: USER_ID,
         clientId: CLIENT_ID,
         scope: "kitchen:read",
-        resource: "https://spoonjoy.test/mcp",
-        persistentMcpResource: "https://spoonjoy.test/mcp",
+        resource: mode === "issue-legacy" ? null : "https://spoonjoy.test/mcp",
+        persistentMcpResource: mode === "issue-legacy" ? undefined : "https://spoonjoy.test/mcp",
         issuer: ISSUER,
         now: NOW,
       });
+      if (mode === "issue-legacy") {
+        await issueConnectorTokens(database, {
+          userId: USER_ID,
+          clientId: CLIENT_ID,
+          scope: "account:read",
+          resource: null,
+          issuer: ISSUER,
+          now: NOW,
+        });
+      }
       result = tokens;
-    } else if (mode === "rotate") {
+    } else if (mode === "rotate" || mode === "rotate-legacy" || mode === "rotate-crash") {
+      const crashStage = mode === "rotate-crash" ? requiredString(input, "crashStage") : null;
       const tokens = await rotateConnectorTokens(database, {
         refreshToken: requiredString(input, "refreshToken"),
         clientId: CLIENT_ID,
         issuer: ISSUER,
         now: NOW,
-      });
+        legacyMcpResource: mode === "rotate" ? undefined : `${ISSUER}/mcp`,
+      }, crashStage ? {
+        onPersistenceMutation(stage, timing) {
+          if (stage === crashStage && timing === "after") process.exit(86);
+        },
+      } : undefined);
       result = tokens;
     } else if (mode === "observe") {
       result = {
@@ -132,6 +148,12 @@ async function main() {
           where: { userId: USER_ID, oauthClientId: CLIENT_ID },
           orderBy: { tokenHash: "asc" },
         }),
+        grants: await database.oAuthGrant.findMany({
+          where: { userId: USER_ID, clientId: CLIENT_ID },
+          orderBy: { id: "asc" },
+        }),
+        issuanceCount: await database.oAuthTokenIssuance.count(),
+        lineageCount: await database.oAuthRefreshLineage.count(),
       };
     } else {
       throw new Error("Unknown restart-process mode");

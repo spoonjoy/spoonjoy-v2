@@ -13,8 +13,8 @@
  * valid until the user disconnects the connection.
  */
 
-import type { PrismaClient as PrismaClientType } from "@prisma/client";
-import { createApiCredential } from "~/lib/api-auth.server";
+import type { OAuthRefreshToken as OAuthRefreshTokenRecord, PrismaClient as PrismaClientType } from "@prisma/client";
+import { createApiCredential, normalizeCredentialScopes } from "~/lib/api-auth.server";
 import {
   hasProhibitedOAuthClientNameCharacters,
   MAX_OAUTH_CLIENT_NAME_CODE_POINTS,
@@ -28,6 +28,9 @@ export type OAuthPersistenceStage =
   | "refresh_insert"
   | "parent_revoke"
   | "replacement_insert"
+  | "legacy_resource_refresh"
+  | "legacy_resource_access"
+  | "legacy_resource_grant"
   | "disconnect_refresh_revoke"
   | "disconnect_access_revoke";
 
@@ -80,6 +83,56 @@ export function oauthAccessConnectionOwnership(connectionKeys: string[], legacyC
       { oauthConnectionKey: null, createdAt: { lte: legacyCutoff } },
     ],
   };
+}
+
+interface ConnectorGrantConnectionIdentity {
+  userId: string;
+  clientId: string;
+  issuer: string;
+  resource: string | null;
+  connectionKeys: string[];
+}
+
+export async function validateConnectorGrantConnectionKeys(
+  db: Database,
+  input: ConnectorGrantConnectionIdentity,
+): Promise<void> {
+  if (input.connectionKeys.length === 0) return;
+  const linkedGrants = await db.oAuthGrant.findMany({
+    where: { connectionKey: { in: input.connectionKeys } },
+  });
+  if (linkedGrants.some((grant) => grant.userId !== input.userId
+    || grant.clientId !== input.clientId
+    || grant.issuer !== input.issuer
+    || grant.resource !== input.resource)) {
+    throw new OAuthError("invalid_grant", "OAuth grant identity does not match the connector");
+  }
+}
+
+export async function revokeConnectorGrantsByConnectionKeys(
+  db: Database,
+  input: ConnectorGrantConnectionIdentity & {
+    now: Date;
+  },
+): Promise<number> {
+  if (input.connectionKeys.length === 0) return 0;
+  await validateConnectorGrantConnectionKeys(db, input);
+  const result = await db.oAuthGrant.updateMany({
+    where: {
+      userId: input.userId,
+      clientId: input.clientId,
+      issuer: input.issuer,
+      resource: input.resource,
+      connectionKey: { in: input.connectionKeys },
+      status: "active",
+    },
+    data: {
+      status: "revoked",
+      statusReason: "disconnect",
+      statusChangedAt: input.now,
+    },
+  });
+  return result.count;
 }
 
 /** OAuth 2.1 error, carrying an RFC 6749 error code for the wire response. */
@@ -442,6 +495,228 @@ export interface IssuedConnectorTokens {
   resource: string | null;
 }
 
+function grantIdentityMatches(
+  grant: {
+    userId: string;
+    clientId: string;
+    issuer: string;
+    resource: string | null;
+    scope: string;
+    connectionKey: string;
+  },
+  input: {
+    userId: string;
+    clientId: string;
+    issuer: string;
+    resource: string | null;
+    scope: string;
+    connectionKey: string;
+  },
+): boolean {
+  return grant.userId === input.userId
+    && grant.clientId === input.clientId
+    && grant.issuer === input.issuer
+    && grant.resource === input.resource
+    && grant.scope === input.scope
+    && grant.connectionKey === input.connectionKey;
+}
+
+function grantMatches(
+  grant: Parameters<typeof grantIdentityMatches>[0] & { status: string },
+  input: Parameters<typeof grantIdentityMatches>[1],
+): boolean {
+  return grantIdentityMatches(grant, input) && grant.status === "active";
+}
+
+async function requireLinkedConnectorGrant(
+  db: Database,
+  record: {
+    grantId: string | null;
+    userId: string;
+    clientId: string;
+    issuer: string | null;
+    resource: string | null;
+    scope: string;
+    connectionKey: string | null;
+  },
+  allowDisconnected = false,
+) {
+  if (!record.grantId) return null;
+  if (!record.issuer || !record.connectionKey) {
+    throw new OAuthError("invalid_grant", "Linked OAuth token identity is incomplete");
+  }
+  const grant = await db.oAuthGrant.findUnique({ where: { id: record.grantId } });
+  const expected = {
+    userId: record.userId,
+    clientId: record.clientId,
+    issuer: record.issuer,
+    resource: record.resource,
+    scope: normalizeCredentialScopes(record.scope),
+    connectionKey: record.connectionKey,
+  };
+  const permittedStatus = grant?.status === "active"
+    || (allowDisconnected && grant?.status === "revoked" && grant.statusReason === "disconnect");
+  if (!grant || !grantIdentityMatches(grant, expected) || !permittedStatus) {
+    throw new OAuthError("invalid_grant", "OAuth grant identity does not match the connector");
+  }
+  return grant;
+}
+
+async function convergeLinkedLegacyMcpResource(
+  db: Database,
+  record: OAuthRefreshTokenRecord,
+  grantId: string,
+  resource: string,
+  dependencies: OAuthPersistenceDependencies,
+): Promise<OAuthRefreshTokenRecord> {
+  if (!record.issuer || !record.connectionKey) {
+    throw new OAuthError("invalid_grant", "Linked OAuth token identity is incomplete");
+  }
+  const canonicalScope = normalizeCredentialScopes(record.scope);
+  const [grant, credentials] = await Promise.all([
+    db.oAuthGrant.findUnique({ where: { id: grantId } }),
+    db.apiCredential.findMany({ where: { oauthGrantId: grantId } }),
+  ]);
+  const allowedResources = new Set([null, resource]);
+  const grantMatchesExceptResource = grant
+    && grant.userId === record.userId
+    && grant.clientId === record.clientId
+    && grant.issuer === record.issuer
+    && grant.scope === canonicalScope
+    && grant.connectionKey === record.connectionKey
+    && grant.status === "active";
+  const credentialsMatchExceptResource = credentials.every((credential) =>
+    credential.userId === record.userId
+    && credential.oauthClientId === record.clientId
+    && credential.oauthIssuer === record.issuer
+    && credential.scopes === canonicalScope
+    && credential.oauthConnectionKey === record.connectionKey
+    && allowedResources.has(credential.oauthResource));
+  if (!grantMatchesExceptResource
+    || !allowedResources.has(record.resource)
+    || !allowedResources.has(grant.resource)
+    || !credentialsMatchExceptResource) {
+    throw new OAuthError("invalid_grant", "OAuth grant identity does not match the connector");
+  }
+
+  if (record.resource === null) {
+    await dependencies.onPersistenceMutation?.("legacy_resource_refresh", "before");
+    const promoted = await db.oAuthRefreshToken.updateMany({
+      where: {
+        id: record.id,
+        userId: record.userId,
+        clientId: record.clientId,
+        issuer: record.issuer,
+        resource: null,
+        scope: record.scope,
+        connectionKey: record.connectionKey,
+        grantId,
+        revokedAt: null,
+      },
+      data: { resource },
+    });
+    if (promoted.count !== 1) {
+      throw new OAuthError("invalid_grant", "OAuth refresh resource promotion did not converge");
+    }
+    await dependencies.onPersistenceMutation?.("legacy_resource_refresh", "after");
+  }
+
+  if (credentials.some((credential) => credential.oauthResource === null)) {
+    await dependencies.onPersistenceMutation?.("legacy_resource_access", "before");
+    await db.apiCredential.updateMany({
+      where: {
+        userId: record.userId,
+        oauthClientId: record.clientId,
+        oauthIssuer: record.issuer,
+        oauthConnectionKey: record.connectionKey,
+        oauthGrantId: grantId,
+        oauthResource: null,
+      },
+      data: { oauthResource: resource },
+    });
+    await dependencies.onPersistenceMutation?.("legacy_resource_access", "after");
+  }
+
+  if (grant.resource === null) {
+    await dependencies.onPersistenceMutation?.("legacy_resource_grant", "before");
+    const promoted = await db.oAuthGrant.updateMany({
+      where: {
+        id: grantId,
+        userId: record.userId,
+        clientId: record.clientId,
+        issuer: record.issuer,
+        resource: null,
+        scope: canonicalScope,
+        connectionKey: record.connectionKey,
+        status: "active",
+      },
+      data: { resource },
+    });
+    if (promoted.count !== 1) {
+      throw new OAuthError("invalid_grant", "OAuth grant resource promotion did not converge");
+    }
+    await dependencies.onPersistenceMutation?.("legacy_resource_grant", "after");
+  }
+
+  const converged = await db.oAuthRefreshToken.findUniqueOrThrow({ where: { id: record.id } });
+  await requireLinkedConnectorGrant(db, converged);
+  const unconvergedCredential = await db.apiCredential.findFirst({
+    where: {
+      oauthGrantId: grantId,
+      OR: [
+        { oauthResource: null },
+        { oauthResource: { not: resource } },
+      ],
+    },
+    select: { id: true },
+  });
+  if (unconvergedCredential) {
+    throw new OAuthError("invalid_grant", "OAuth access resource promotion did not converge");
+  }
+  return converged;
+}
+
+async function resolveConnectorGrant(
+  db: Database,
+  input: {
+    userId: string;
+    clientId: string;
+    issuer: string;
+    resource: string | null;
+    scope: string;
+    connectionKey: string;
+    grantId?: string | null;
+    createGrant: boolean;
+    now: Date;
+  },
+): Promise<string | null> {
+  const existing = input.grantId
+    ? await db.oAuthGrant.findUnique({ where: { id: input.grantId } })
+    : await db.oAuthGrant.findUnique({ where: { connectionKey: input.connectionKey } });
+  if (existing) {
+    if (!grantMatches(existing, input)) {
+      throw new OAuthError("invalid_grant", "OAuth grant identity does not match the connector");
+    }
+    return existing.id;
+  }
+  if (input.grantId || !input.createGrant) return null;
+  const created = await db.oAuthGrant.create({
+    data: {
+      userId: input.userId,
+      clientId: input.clientId,
+      issuer: input.issuer,
+      resource: input.resource,
+      scope: input.scope,
+      connectionKey: input.connectionKey,
+      status: "active",
+      statusChangedAt: input.now,
+      createdAt: input.now,
+      updatedAt: input.now,
+    },
+  });
+  return created.id;
+}
+
 function oauthCredentialName(clientName: string | null): string {
   return `${clientName?.trim() || "OAuth client"} (OAuth)`;
 }
@@ -462,6 +737,8 @@ export async function issueConnectorTokens(
     issuer: string;
     now?: Date;
     connectionKey?: string | null;
+    grantId?: string | null;
+    createGrant?: boolean;
   },
   dependencies: OAuthPersistenceDependencies = {},
 ): Promise<IssuedConnectorTokens> {
@@ -469,6 +746,18 @@ export async function issueConnectorTokens(
   const client = await getOAuthClient(db, input.clientId, input.issuer);
   if (!client) throw new OAuthError("invalid_client", "Unknown or revoked OAuth client");
   const connectionKey = input.connectionKey ?? createOAuthOpaqueToken("ocn_", 16);
+  const canonicalScope = normalizeCredentialScopes(input.scope);
+  const grantId = await resolveConnectorGrant(db, {
+    userId: input.userId,
+    clientId: input.clientId,
+    issuer: input.issuer,
+    resource: input.resource ?? null,
+    scope: canonicalScope,
+    connectionKey,
+    grantId: input.grantId,
+    createGrant: input.createGrant ?? true,
+    now,
+  });
   const persistentAccessToken = Boolean(
     input.resource &&
     input.persistentMcpResource &&
@@ -480,11 +769,12 @@ export async function issueConnectorTokens(
   }
   const { token: accessToken } = await createApiCredential(db, input.userId, oauthCredentialName(client.clientName), {
     expiresAt: expiresIn === null ? null : new Date(now.getTime() + expiresIn * 1000),
-    scopes: input.scope,
+    scopes: canonicalScope,
     oauthClientId: input.clientId,
     oauthIssuer: client.issuer,
     oauthResource: input.resource ?? null,
     oauthConnectionKey: connectionKey,
+    oauthGrantId: grantId,
   });
   if (dependencies.onPersistenceMutation) {
     await dependencies.onPersistenceMutation("access_insert", "after");
@@ -502,6 +792,7 @@ export async function issueConnectorTokens(
       scope: input.scope,
       resource: input.resource ?? null,
       connectionKey,
+      grantId,
     },
   });
   if (dependencies.onPersistenceMutation) {
@@ -535,6 +826,7 @@ export async function revokeConnectorRefreshToken(
   if (record.issuer !== null && record.issuer !== input.issuer) return false;
   const client = await getOAuthClient(db, record.clientId, input.issuer);
   if (!client) return false;
+  const linkedGrant = await requireLinkedConnectorGrant(db, record, true);
   if (record.issuer === null) {
     await db.oAuthRefreshToken.updateMany({ where: { id: record.id, issuer: null }, data: { issuer: input.issuer } });
     record = await db.oAuthRefreshToken.findUniqueOrThrow({ where: { id: record.id } });
@@ -549,7 +841,6 @@ export async function revokeConnectorRefreshToken(
     where: { userId: record.userId, oauthClientId: record.clientId, oauthIssuer: null },
     data: { oauthIssuer: input.issuer },
   });
-
   if (dependencies.onPersistenceMutation) {
     await dependencies.onPersistenceMutation("disconnect_refresh_revoke", "before");
   }
@@ -579,6 +870,24 @@ export async function revokeConnectorRefreshToken(
     },
     data: { revokedAt: now },
   });
+  if (record.grantId) {
+    const revokedGrant = await db.oAuthGrant.updateMany({
+      where: {
+        id: record.grantId,
+        userId: record.userId,
+        clientId: record.clientId,
+        issuer: record.issuer,
+        resource: record.resource,
+        scope: normalizeCredentialScopes(record.scope),
+        connectionKey: record.connectionKey!,
+        status: "active",
+      },
+      data: { status: "revoked", statusReason: "disconnect", statusChangedAt: now },
+    });
+    if (linkedGrant?.status === "active" && revokedGrant.count !== 1) {
+      throw new OAuthError("invalid_grant", "OAuth grant disconnect did not converge");
+    }
+  }
   if (dependencies.onPersistenceMutation) {
     await dependencies.onPersistenceMutation("disconnect_access_revoke", "after");
   }
@@ -612,6 +921,20 @@ export async function rotateConnectorTokens(
   }
   const client = await getOAuthClient(db, record.clientId, input.issuer);
   if (!client) throw new OAuthError("invalid_client", "Unknown or revoked OAuth client");
+  if (record.grantId
+    && input.legacyMcpResource
+    && isClaudeMcpOAuthClient(client)
+    && (record.resource === null || record.resource === input.legacyMcpResource)) {
+    record = await convergeLinkedLegacyMcpResource(
+      db,
+      record,
+      record.grantId,
+      input.legacyMcpResource,
+      dependencies,
+    );
+  } else {
+    await requireLinkedConnectorGrant(db, record);
+  }
   if (record.issuer === null) {
     await db.oAuthRefreshToken.updateMany({ where: { id: record.id, issuer: null }, data: { issuer: input.issuer } });
     record = await db.oAuthRefreshToken.findUniqueOrThrow({ where: { id: record.id } });
@@ -646,6 +969,8 @@ export async function rotateConnectorTokens(
     issuer: input.issuer,
     now,
     connectionKey: record.connectionKey ?? record.id,
+    grantId: record.grantId,
+    createGrant: record.grantId !== null,
   }, dependencies);
   if (dependencies.onPersistenceMutation) {
     await dependencies.onPersistenceMutation("replacement_insert", "after");

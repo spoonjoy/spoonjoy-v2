@@ -223,6 +223,47 @@ describe("OAuth persistence failpoints", () => {
     },
   );
 
+  it.each([
+    "legacy_resource_refresh",
+    "legacy_resource_access",
+    "legacy_resource_grant",
+  ] as const)("retries and converges after %s commits before process loss", async (stage) => {
+    await db.oAuthClient.update({
+      where: { id: CLIENT_ID },
+      data: { clientName: "Claude", redirectUris: "https://claude.ai/api/mcp/auth_callback" },
+    });
+    const original = await issueConnectorTokens(db, {
+      userId,
+      clientId: CLIENT_ID,
+      scope: "kitchen:read",
+      resource: null,
+      issuer: ISSUER,
+      now: NOW,
+    });
+
+    await expect(rotateConnectorTokens(db, {
+      refreshToken: original.refreshToken,
+      clientId: CLIENT_ID,
+      issuer: ISSUER,
+      legacyMcpResource: `${ISSUER}/mcp`,
+      now: NOW,
+    }, failAt(stage, "after"))).rejects.toThrow(`oauth-failpoint:${stage}:after`);
+
+    await expect(rotateConnectorTokens(db, {
+      refreshToken: original.refreshToken,
+      clientId: CLIENT_ID,
+      issuer: ISSUER,
+      legacyMcpResource: `${ISSUER}/mcp`,
+      now: NOW,
+    })).resolves.toMatchObject({ resource: `${ISSUER}/mcp` });
+    expect(await db.oAuthRefreshToken.findMany({ where: { userId }, select: { resource: true } }))
+      .toSatisfy((rows: Array<{ resource: string | null }>) => rows.every((row) => row.resource === `${ISSUER}/mcp`));
+    expect(await db.apiCredential.findMany({ where: { userId }, select: { oauthResource: true } }))
+      .toSatisfy((rows: Array<{ oauthResource: string | null }>) => rows.every((row) => row.oauthResource === `${ISSUER}/mcp`));
+    await expect(db.oAuthGrant.findFirstOrThrow({ where: { userId } }))
+      .resolves.toMatchObject({ resource: `${ISSUER}/mcp`, status: "active" });
+  });
+
   it.each(["before", "after"] as const)(
     "fails %s disconnect refresh revocation",
     async (timing) => {
