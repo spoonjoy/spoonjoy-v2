@@ -686,10 +686,9 @@ async function resolveConnectorGrant(
     scope: string;
     connectionKey: string;
     grantId?: string | null;
-    createGrant: boolean;
     now: Date;
   },
-): Promise<string | null> {
+): Promise<string> {
   const existing = input.grantId
     ? await db.oAuthGrant.findUnique({ where: { id: input.grantId } })
     : await db.oAuthGrant.findUnique({ where: { connectionKey: input.connectionKey } });
@@ -699,7 +698,9 @@ async function resolveConnectorGrant(
     }
     return existing.id;
   }
-  if (input.grantId || !input.createGrant) return null;
+  if (input.grantId) {
+    throw new OAuthError("invalid_grant", "OAuth grant no longer exists");
+  }
   const created = await db.oAuthGrant.create({
     data: {
       userId: input.userId,
@@ -738,7 +739,6 @@ export async function issueConnectorTokens(
     now?: Date;
     connectionKey?: string | null;
     grantId?: string | null;
-    createGrant?: boolean;
   },
   dependencies: OAuthPersistenceDependencies = {},
 ): Promise<IssuedConnectorTokens> {
@@ -755,7 +755,6 @@ export async function issueConnectorTokens(
     scope: canonicalScope,
     connectionKey,
     grantId: input.grantId,
-    createGrant: input.createGrant ?? true,
     now,
   });
   const persistentAccessToken = Boolean(
@@ -970,7 +969,6 @@ export async function rotateConnectorTokens(
     now,
     connectionKey: record.connectionKey ?? record.id,
     grantId: record.grantId,
-    createGrant: record.grantId !== null,
   }, dependencies);
   if (dependencies.onPersistenceMutation) {
     await dependencies.onPersistenceMutation("replacement_insert", "after");

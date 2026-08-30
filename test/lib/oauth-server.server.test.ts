@@ -948,6 +948,17 @@ describe("connector token issuance + rotation", () => {
     })).rejects.toMatchObject({ code: "invalid_grant" });
   });
 
+  it("rejects issuance when an asserted grant no longer exists", async () => {
+    await expect(issueConnectorTokens(db, {
+      userId,
+      clientId,
+      scope: "account:read",
+      grantId: "missing-grant",
+    })).rejects.toMatchObject({ code: "invalid_grant" });
+    await expect(db.oAuthRefreshToken.count({ where: { userId, clientId } })).resolves.toBe(0);
+    await expect(db.apiCredential.count({ where: { userId, oauthClientId: clientId } })).resolves.toBe(0);
+  });
+
   it("fails closed when a validated active grant loses the disconnect write", async () => {
     const { revokeConnectorRefreshToken } = await import("~/lib/oauth-server.server");
     const first = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read" });
@@ -960,7 +971,7 @@ describe("connector token issuance + rotation", () => {
     })).rejects.toMatchObject({ code: "invalid_grant" });
   });
 
-  it("derives a stable connection key for legacy refresh tokens during rotation", async () => {
+  it("moves a legacy refresh token onto a durable grant during rotation", async () => {
     const first = await issueConnectorTokens(db, { userId, clientId, scope: "account:read" });
     const legacy = await db.oAuthRefreshToken.findFirstOrThrow({
       where: { userId, clientId, revokedAt: null },
@@ -969,6 +980,11 @@ describe("connector token issuance + rotation", () => {
       where: { id: legacy.id },
       data: { connectionKey: null, grantId: null },
     });
+    await db.apiCredential.updateMany({
+      where: { userId, oauthClientId: clientId },
+      data: { oauthConnectionKey: null, oauthGrantId: null },
+    });
+    await db.oAuthGrant.deleteMany({ where: { userId, clientId } });
 
     await db.oAuthClient.update({
       where: { id: clientId },
@@ -985,8 +1001,15 @@ describe("connector token issuance + rotation", () => {
     });
     expect(rotated.id).not.toBe(legacy.id);
     expect(rotated.connectionKey).toBe(legacy.id);
-    expect(rotated.grantId).toBeNull();
+    expect(rotated.grantId).toMatch(/^c/);
     expect(rotated.resource).toBe(`${ISSUER}/mcp`);
+    await expect(db.oAuthGrant.findUnique({ where: { id: rotated.grantId! } })).resolves.toMatchObject({
+      connectionKey: legacy.id,
+      status: "active",
+    });
+    await expect(db.oAuthGrant.count({ where: { userId, clientId } })).resolves.toBe(1);
+    await expect(db.apiCredential.count({ where: { userId, oauthClientId: clientId, oauthGrantId: rotated.grantId } })).resolves.toBe(1);
+    await expect(db.apiCredential.count({ where: { userId, oauthClientId: clientId, oauthGrantId: null } })).resolves.toBe(1);
   });
 
   it("rejects an empty refresh token", async () => {
