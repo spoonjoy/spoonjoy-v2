@@ -8,9 +8,12 @@ import { stripVTControlCharacters } from "node:util";
 import { runEphemeralE2eServer } from "../../scripts/e2e-run-cleanup.mjs";
 import { runWithWarningPolicy } from "../../scripts/run-with-warning-policy.mjs";
 
-const WORKERD_PEER_RESET_LINE =
+const WORKERD_WRITE_CLOSE_LINES = new Set([
   "✘ [ERROR] kj::getCaughtExceptionAsKj() = kj/async-io-unix.c++:186: disconnected: "
-  + "::write(fd, buffer.begin(), buffer.size()): Connection reset by peer";
+  + "::write(fd, buffer.begin(), buffer.size()): Connection reset by peer",
+  "✘ [ERROR] kj::getCaughtExceptionAsKj() = kj/async-io-unix.c++:186: disconnected: "
+  + "::write(fd, buffer.begin(), buffer.size()): Broken pipe",
+]);
 const WORKERD_STACK_TOKEN =
   String.raw`\/\S*\/node_modules\/@cloudflare\/workerd-[A-Za-z0-9_-]+\/bin\/workerd@[0-9a-f]+`;
 const WORKERD_STACK_LINE = new RegExp(`^stack: ${WORKERD_STACK_TOKEN}(?: ${WORKERD_STACK_TOKEN})*$`);
@@ -24,7 +27,7 @@ function normalizedLine(value) {
 }
 
 function isWorkerdPeerResetLine(value) {
-  return normalizedLine(value) === WORKERD_PEER_RESET_LINE;
+  return WORKERD_WRITE_CLOSE_LINES.has(normalizedLine(value));
 }
 
 function isWorkerdStackLine(value) {
