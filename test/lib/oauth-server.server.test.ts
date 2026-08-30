@@ -502,6 +502,7 @@ describe("authorization code lifecycle", () => {
 
   it("treats a lost burn race as already-used", async () => {
     const challenge = await challengeFor(VERIFIER);
+    const observedMutations: string[] = [];
     const stub = {
       oAuthClient: {
         findFirst: async () => ({ id: clientId, clientName: "Example App", redirectUris: redirectUri }),
@@ -523,8 +524,17 @@ describe("authorization code lifecycle", () => {
     } as never;
 
     await expect(
-      consumeAuthorizationCode(stub, { code: "oac_race", clientId, redirectUri, codeVerifier: VERIFIER }),
+      consumeAuthorizationCodeRaw(
+        stub,
+        { code: "oac_race", clientId, redirectUri, codeVerifier: VERIFIER, issuer: ISSUER },
+        {
+          onPersistenceMutation: (stage, timing) => {
+            observedMutations.push(`${stage}:${timing}`);
+          },
+        },
+      ),
     ).rejects.toMatchObject({ code: "invalid_grant" });
+    expect(observedMutations).toEqual(["code_consumption:before"]);
   });
 });
 
@@ -926,6 +936,7 @@ describe("connector token issuance + rotation", () => {
   });
 
   it("treats a lost rotation race as already-used", async () => {
+    const observedMutations: string[] = [];
     const stub = {
       oAuthClient: {
         findFirst: async () => ({ id: clientId, clientName: "Example App", redirectUris: "https://example.com/cb" }),
@@ -936,8 +947,17 @@ describe("connector token issuance + rotation", () => {
       },
     } as never;
     await expect(
-      rotateConnectorTokens(stub, { refreshToken: "ort_race", clientId }),
+      rotateConnectorTokensRaw(
+        stub,
+        { refreshToken: "ort_race", clientId, issuer: ISSUER },
+        {
+          onPersistenceMutation: (stage, timing) => {
+            observedMutations.push(`${stage}:${timing}`);
+          },
+        },
+      ),
     ).rejects.toMatchObject({ code: "invalid_grant" });
+    expect(observedMutations).toEqual(["parent_revoke:before"]);
   });
 });
 

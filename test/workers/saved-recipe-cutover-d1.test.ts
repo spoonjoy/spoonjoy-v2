@@ -13,6 +13,10 @@ import {
 import { mutateCompatibleShoppingListItem } from "../../app/lib/shopping-list-mutations.server";
 import { createUserSessionCookie } from "../../app/lib/session.server";
 import { expectConsoleError } from "../warning-policy";
+// This suite deliberately runs through the same full-schema D1 owner. Keeping
+// it here preserves the established --no-isolate CookSession → repository-schema lifecycle.
+import "./helpers/oauth-concurrency-d1-suite";
+import { applyRepositoryMigrations } from "./helpers/repository-migrations";
 
 interface TestD1Statement {
   bind(...values: unknown[]): TestD1Statement;
@@ -25,12 +29,6 @@ interface TestD1Database {
   exec(sql: string): Promise<unknown>;
   prepare(sql: string): TestD1Statement;
 }
-
-const migrations = import.meta.glob("../../migrations/*.sql", {
-  eager: true,
-  import: "default",
-  query: "?raw",
-}) as Record<string, string>;
 
 const TEST_ORIGIN = "https://spoonjoy.test";
 const USER_ID = "cutover-d1-user";
@@ -71,38 +69,6 @@ function database() {
 async function hashToken(token: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-async function applyRepositoryMigrations() {
-  for (const [, sql] of Object.entries(migrations).sort(([left], [right]) => left.localeCompare(right))) {
-    for (const statement of splitMigrationStatements(sql)) {
-      await database().prepare(statement).run();
-    }
-  }
-}
-
-function splitMigrationStatements(sql: string): string[] {
-  const statements: string[] = [];
-  let buffer = "";
-  let inTrigger = false;
-
-  for (const sourceLine of sql.split(/\r?\n/)) {
-    if (/^\s*--/.test(sourceLine) || !sourceLine.trim()) continue;
-    buffer += `${sourceLine}\n`;
-    if (/^\s*CREATE\s+TRIGGER\b/i.test(buffer)) inTrigger = true;
-
-    const statementComplete = inTrigger
-      ? /^\s*END;\s*$/i.test(sourceLine)
-      : /;\s*$/.test(sourceLine);
-    if (!statementComplete) continue;
-
-    statements.push(buffer.trim());
-    buffer = "";
-    inTrigger = false;
-  }
-
-  if (buffer.trim()) throw new Error("Repository migration ended with incomplete SQL");
-  return statements;
 }
 
 async function executeStatement(sql: string) {
@@ -355,7 +321,7 @@ async function executeFencedProbeInsert(): Promise<unknown> {
 
 describe("saved recipe cutover through the deployed Worker and Wrangler D1", () => {
   beforeAll(async () => {
-    await applyRepositoryMigrations();
+    await applyRepositoryMigrations(database());
     await seedAdapterFixture();
   });
 
