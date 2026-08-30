@@ -146,6 +146,9 @@ beforeAll(async () => {
   await db.nativeSyncTombstone.deleteMany({});
   await db.apiMutationTombstone.deleteMany({});
   await db.apiIdempotencyKey.deleteMany({});
+  await db.oAuthRefreshLineage.deleteMany({});
+  await db.oAuthTokenIssuance.deleteMany({});
+  await db.oAuthGrant.deleteMany({});
   await db.apiCredential.deleteMany({});
   await db.imageGenLedger.deleteMany({});
   await db.oAuthAuthCode.deleteMany({});

@@ -34,6 +34,7 @@ model User {
   agentConnections         AgentConnectionRequest[]
   oauthAuthCodes           OAuthAuthCode[]
   oauthConsentTransactions OAuthConsentTransaction[]
+  oauthGrants              OAuthGrant[]
   oauthRefreshTokens       OAuthRefreshToken[]
   spoons                   RecipeSpoon[]
   imageGenLedger           ImageGenLedger[]
@@ -61,6 +62,8 @@ model ApiCredential {
   oauthIssuer        String?
   oauthResource      String?
   oauthConnectionKey String?
+  // Expand-phase compatibility hint only. OAuthGrant-owned sidecars are authoritative.
+  oauthGrantId       String?
   // Optional expiry. Null = non-expiring (API tokens, agent-delegated tokens).
   // OAuth-connector access tokens set this so they roll over via refresh.
   expiresAt          DateTime?
@@ -68,13 +71,15 @@ model ApiCredential {
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
-  agentConnections AgentConnectionRequest[]
-  idempotencyKeys  ApiIdempotencyKey[]
+  agentConnections   AgentConnectionRequest[]
+  idempotencyKeys    ApiIdempotencyKey[]
+  oauthTokenIssuance OAuthTokenIssuance?      @relation("OAuthIssuanceAccess")
 
   @@index([userId])
   @@index([tokenPrefix])
   @@index([oauthClientId])
   @@index([oauthConnectionKey])
+  @@index([oauthGrantId])
   @@index([oauthResource])
 }
 
@@ -208,16 +213,18 @@ model OAuthClient {
   // Retained tombstone: revoked clients cannot authorize, mint, rotate, or authenticate.
   revokedAt    DateTime?
   createdAt    DateTime  @default(now())
+
+  grants OAuthGrant[]
 }
 
 // Short-lived, single-use authorization codes for the PKCE auth-code grant.
 model OAuthAuthCode {
-  id            String    @id @default(cuid())
-  codeHash      String    @unique
+  id            String              @id @default(cuid())
+  codeHash      String              @unique
   clientId      String
   issuer        String?
   userId        String
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   redirectUri   String
   // PKCE S256 code_challenge; verified against the code_verifier at token time.
   codeChallenge String
@@ -226,9 +233,13 @@ model OAuthAuthCode {
   resource      String?
   expiresAt     DateTime
   consumedAt    DateTime?
-  createdAt     DateTime  @default(now())
+  createdAt     DateTime            @default(now())
+  // Expand-phase compatibility hint only. OAuthTokenIssuance is authoritative.
+  grantId       String?
+  tokenIssuance OAuthTokenIssuance? @relation("OAuthIssuanceAuthorizationCode")
 
   @@index([userId])
+  @@index([grantId])
 }
 
 // Short-lived, single-use server-side snapshot of the authorization request
@@ -265,10 +276,98 @@ model OAuthRefreshToken {
   connectionKey String?
   revokedAt     DateTime?
   createdAt     DateTime  @default(now())
+  // Expand-phase compatibility hint only. OAuthGrant-owned sidecars are authoritative.
+  grantId       String?
+
+  issuanceAsParent OAuthTokenIssuance?  @relation("OAuthIssuanceParentRefresh")
+  issuanceAsOutput OAuthTokenIssuance?  @relation("OAuthIssuanceRefreshOutput")
+  lineage          OAuthRefreshLineage? @relation("OAuthRefreshLineageToken")
 
   @@index([userId])
   @@index([clientId])
   @@index([connectionKey])
+  @@index([grantId])
+}
+
+// Durable connector ownership. Raw migration SQL additionally enforces the
+// status/reason state machine; Prisma cannot represent CHECK constraints.
+model OAuthGrant {
+  id              String      @id @default(cuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  clientId        String
+  client          OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  issuer          String
+  resource        String?
+  scope           String
+  connectionKey   String      @unique
+  status          String
+  statusReason    String?
+  statusChangedAt DateTime
+  expiresAt       DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @default(now()) @updatedAt
+
+  issuances OAuthTokenIssuance[]
+  lineage   OAuthRefreshLineage[]
+
+  @@index([userId, clientId, issuer, status])
+  @@index([clientId])
+  @@index([status, statusChangedAt])
+  @@index([status, expiresAt])
+}
+
+// One durable record binds an eligible source to the complete output pair.
+// Raw migration SQL enforces the authorization-code/refresh-source XOR.
+model OAuthTokenIssuance {
+  id                   String             @id @default(cuid())
+  grantId              String
+  grant                OAuthGrant         @relation(fields: [grantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  kind                 String
+  authorizationCodeId  String?            @unique
+  authorizationCode    OAuthAuthCode?     @relation("OAuthIssuanceAuthorizationCode", fields: [authorizationCodeId], references: [id], onDelete: NoAction, onUpdate: Cascade)
+  parentRefreshTokenId String?            @unique
+  parentRefreshToken   OAuthRefreshToken? @relation("OAuthIssuanceParentRefresh", fields: [parentRefreshTokenId], references: [id], onDelete: NoAction, onUpdate: Cascade)
+  accessCredentialId   String             @unique
+  accessCredential     ApiCredential      @relation("OAuthIssuanceAccess", fields: [accessCredentialId], references: [id], onDelete: NoAction, onUpdate: Cascade)
+  refreshTokenId       String             @unique
+  refreshToken         OAuthRefreshToken  @relation("OAuthIssuanceRefreshOutput", fields: [refreshTokenId], references: [id], onDelete: NoAction, onUpdate: Cascade)
+  createdAt            DateTime           @default(now())
+
+  identityLineage OAuthRefreshLineage[] @relation("OAuthLineageIssuanceIdentity")
+  parentLineage   OAuthRefreshLineage[] @relation("OAuthLineageIssuanceParent")
+
+  @@unique([id, grantId, refreshTokenId, kind])
+  @@unique([id, parentRefreshTokenId])
+  @@index([grantId, createdAt])
+}
+
+// A composite self-reference plus the raw generation CHECK makes lineage
+// contiguous, grant-local, acyclic, and non-branching. The raw migration also
+// owns the partial unique index permitting one unretired generation per grant.
+model OAuthRefreshLineage {
+  refreshTokenId       String                @id
+  refreshToken         OAuthRefreshToken     @relation("OAuthRefreshLineageToken", fields: [refreshTokenId], references: [id], onDelete: NoAction, onUpdate: Cascade)
+  grantId              String
+  grant                OAuthGrant            @relation(fields: [grantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  issuanceId           String                @unique
+  issuanceKind         String
+  issuance             OAuthTokenIssuance    @relation("OAuthLineageIssuanceIdentity", fields: [issuanceId, grantId, refreshTokenId, issuanceKind], references: [id, grantId, refreshTokenId, kind], onDelete: NoAction, onUpdate: Cascade)
+  generation           Int
+  parentRefreshTokenId String?               @unique
+  parentGeneration     Int?
+  parentIssuance       OAuthTokenIssuance?   @relation("OAuthLineageIssuanceParent", fields: [issuanceId, parentRefreshTokenId], references: [id, parentRefreshTokenId], onDelete: NoAction, onUpdate: Cascade)
+  parent               OAuthRefreshLineage?  @relation("OAuthRefreshLineageParent", fields: [parentRefreshTokenId, parentGeneration, grantId], references: [refreshTokenId, generation, grantId], onDelete: NoAction, onUpdate: Cascade)
+  children             OAuthRefreshLineage[] @relation("OAuthRefreshLineageParent")
+  retiredAt            DateTime?
+  retirementReason     String?
+  expiresAt            DateTime
+  createdAt            DateTime              @default(now())
+
+  @@unique([grantId, generation])
+  @@unique([refreshTokenId, generation, grantId])
+  @@index([expiresAt])
+  @@index([retiredAt])
 }
 
 model Recipe {

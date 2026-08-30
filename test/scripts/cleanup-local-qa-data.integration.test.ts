@@ -11,6 +11,7 @@ import {
   buildExactOauthClientCleanupSql,
   buildScratchCleanupSql,
 } from "../../scripts/cleanup-local-qa-data.mjs";
+import { buildMcpCanaryCleanupD1Args } from "../../scripts/smoke-live-helpers.mjs";
 
 
 const SCRATCH_TABLES = [
@@ -32,6 +33,11 @@ function createCleanupDatabase(path = ":memory:") {
     CREATE TABLE Recipe (id TEXT PRIMARY KEY, title TEXT NOT NULL, chefId TEXT NOT NULL, sourceRecipeId TEXT, activeCoverId TEXT, deletedAt TEXT);
     CREATE TABLE RecipeSpoon (id TEXT PRIMARY KEY, chefId TEXT NOT NULL, recipeId TEXT NOT NULL, note TEXT, photoUrl TEXT);
     CREATE TABLE OAuthClient (id TEXT PRIMARY KEY, clientName TEXT, redirectUris TEXT NOT NULL);
+    CREATE TABLE OAuthGrant (
+      id TEXT PRIMARY KEY,
+      clientId TEXT NOT NULL REFERENCES OAuthClient(id) ON DELETE CASCADE,
+      connectionKey TEXT NOT NULL
+    );
     CREATE TABLE ApiCredential (
       id TEXT PRIMARY KEY,
       userId TEXT NOT NULL REFERENCES User(id) ON DELETE CASCADE,
@@ -68,7 +74,20 @@ function createCleanupDatabase(path = ":memory:") {
     CREATE TABLE OAuthRefreshToken (
       id TEXT PRIMARY KEY,
       clientId TEXT NOT NULL,
-      userId TEXT NOT NULL REFERENCES User(id) ON DELETE CASCADE
+      userId TEXT NOT NULL REFERENCES User(id) ON DELETE CASCADE,
+      connectionKey TEXT
+    );
+    CREATE TABLE OAuthTokenIssuance (
+      id TEXT PRIMARY KEY,
+      grantId TEXT NOT NULL REFERENCES OAuthGrant(id) ON DELETE CASCADE,
+      authorizationCodeId TEXT REFERENCES OAuthAuthCode(id) ON DELETE NO ACTION,
+      accessCredentialId TEXT NOT NULL REFERENCES ApiCredential(id) ON DELETE NO ACTION,
+      refreshTokenId TEXT NOT NULL REFERENCES OAuthRefreshToken(id) ON DELETE NO ACTION
+    );
+    CREATE TABLE OAuthRefreshLineage (
+      refreshTokenId TEXT PRIMARY KEY REFERENCES OAuthRefreshToken(id) ON DELETE NO ACTION,
+      grantId TEXT NOT NULL REFERENCES OAuthGrant(id) ON DELETE CASCADE,
+      issuanceId TEXT NOT NULL REFERENCES OAuthTokenIssuance(id) ON DELETE NO ACTION
     );
     CREATE TABLE NotificationEvent (id TEXT PRIMARY KEY, recipientId TEXT NOT NULL, payload TEXT NOT NULL);
     CREATE TABLE Cookbook (id TEXT PRIMARY KEY, authorId TEXT NOT NULL);
@@ -92,6 +111,10 @@ function blockerRows(db: DatabaseSyncType) {
 function ids(db: DatabaseSyncType, table: string) {
   return (db.prepare(`SELECT id FROM ${table} ORDER BY id`).all() as Array<{ id: string }>)
     .map((row) => row.id);
+}
+
+function rowCount(db: DatabaseSyncType, table: string) {
+  return (db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number }).count;
 }
 
 function scratchSchemaRows(db: DatabaseSyncType) {
@@ -120,9 +143,10 @@ describe("cleanup-local-qa-data executable ownership boundaries", () => {
     db.exec(`
       INSERT INTO User VALUES ('seed-user', 'demo@example.com', 'demo', NULL);
       INSERT INTO OAuthClient VALUES ('lookalike-client', 'E2E OAuth Client', 'http://localhost:5197/privacy');
+      INSERT INTO OAuthGrant VALUES ('lookalike-grant', 'lookalike-client', 'lookalike-connection');
       INSERT INTO ApiCredential VALUES ('lookalike-credential', 'seed-user', 'lookalike-client');
       INSERT INTO OAuthAuthCode VALUES ('lookalike-code', 'lookalike-client', 'seed-user');
-      INSERT INTO OAuthRefreshToken VALUES ('lookalike-refresh', 'lookalike-client', 'seed-user');
+      INSERT INTO OAuthRefreshToken VALUES ('lookalike-refresh', 'lookalike-client', 'seed-user', 'lookalike-connection');
     `);
 
     expect(blockerRows(db)).toEqual([]);
@@ -130,6 +154,7 @@ describe("cleanup-local-qa-data executable ownership boundaries", () => {
 
     expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
     expect(ids(db, "OAuthClient")).toEqual(["lookalike-client"]);
+    expect(ids(db, "OAuthGrant")).toEqual(["lookalike-grant"]);
     expect(ids(db, "ApiCredential")).toEqual(["lookalike-credential"]);
     expect(ids(db, "OAuthAuthCode")).toEqual(["lookalike-code"]);
     expect(ids(db, "OAuthRefreshToken")).toEqual(["lookalike-refresh"]);
@@ -142,6 +167,8 @@ describe("cleanup-local-qa-data executable ownership boundaries", () => {
       INSERT INTO User VALUES ('seed-user', 'demo@example.com', 'demo', NULL);
       INSERT INTO OAuthClient VALUES ('captured-client', 'E2E OAuth Client [run-owned]', 'http://localhost:5197/privacy');
       INSERT INTO OAuthClient VALUES ('lookalike-client', 'E2E OAuth Client [run-owned]', 'http://localhost:5197/privacy');
+      INSERT INTO OAuthGrant VALUES ('captured-grant', 'captured-client', 'captured-connection');
+      INSERT INTO OAuthGrant VALUES ('lookalike-grant', 'lookalike-client', 'lookalike-connection');
       INSERT INTO ApiCredential VALUES ('captured-credential', 'seed-user', 'captured-client');
       INSERT INTO ApiCredential VALUES ('lookalike-credential', 'seed-user', 'lookalike-client');
       INSERT INTO AgentConnectionRequest VALUES ('captured-connection', 'seed-user', 'captured-credential');
@@ -152,8 +179,12 @@ describe("cleanup-local-qa-data executable ownership boundaries", () => {
       INSERT INTO ApiMutationTombstone VALUES ('lookalike-tombstone', 'lookalike-idempotency');
       INSERT INTO OAuthAuthCode VALUES ('captured-code', 'captured-client', 'seed-user');
       INSERT INTO OAuthAuthCode VALUES ('lookalike-code', 'lookalike-client', 'seed-user');
-      INSERT INTO OAuthRefreshToken VALUES ('captured-refresh', 'captured-client', 'seed-user');
-      INSERT INTO OAuthRefreshToken VALUES ('lookalike-refresh', 'lookalike-client', 'seed-user');
+      INSERT INTO OAuthRefreshToken VALUES ('captured-refresh', 'captured-client', 'seed-user', 'captured-connection');
+      INSERT INTO OAuthRefreshToken VALUES ('lookalike-refresh', 'lookalike-client', 'seed-user', 'lookalike-connection');
+      INSERT INTO OAuthTokenIssuance VALUES ('captured-issuance', 'captured-grant', 'captured-code', 'captured-credential', 'captured-refresh');
+      INSERT INTO OAuthTokenIssuance VALUES ('lookalike-issuance', 'lookalike-grant', 'lookalike-code', 'lookalike-credential', 'lookalike-refresh');
+      INSERT INTO OAuthRefreshLineage VALUES ('captured-refresh', 'captured-grant', 'captured-issuance');
+      INSERT INTO OAuthRefreshLineage VALUES ('lookalike-refresh', 'lookalike-grant', 'lookalike-issuance');
     `);
 
     db.exec(buildExactOauthClientCleanupSql(["captured-client"]));
@@ -161,13 +192,52 @@ describe("cleanup-local-qa-data executable ownership boundaries", () => {
     expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
     expect(ids(db, "User")).toEqual(["seed-user"]);
     expect(ids(db, "OAuthClient")).toEqual(["lookalike-client"]);
+    expect(ids(db, "OAuthGrant")).toEqual(["lookalike-grant"]);
     expect(ids(db, "ApiCredential")).toEqual(["lookalike-credential"]);
     expect(ids(db, "AgentConnectionRequest")).toEqual(["lookalike-connection"]);
     expect(ids(db, "ApiIdempotencyKey")).toEqual(["lookalike-idempotency"]);
     expect(ids(db, "ApiMutationTombstone")).toEqual(["lookalike-tombstone"]);
     expect(ids(db, "OAuthAuthCode")).toEqual(["lookalike-code"]);
     expect(ids(db, "OAuthRefreshToken")).toEqual(["lookalike-refresh"]);
+    expect(ids(db, "OAuthTokenIssuance")).toEqual(["lookalike-issuance"]);
+    expect(rowCount(db, "OAuthRefreshLineage")).toBe(1);
     expect(scratchSchemaRows(db)).toEqual([]);
+  });
+
+  it("executes MCP canary cleanup against a populated issuance lineage", () => {
+    db = createCleanupDatabase();
+    db.exec(`
+      INSERT INTO User VALUES ('canary-user', 'canary@example.com', 'canary', NULL);
+      INSERT INTO OAuthClient VALUES ('canary-client', 'Claude', 'https://claude.ai/api/mcp/auth_callback');
+      INSERT INTO OAuthGrant VALUES ('canary-grant', 'canary-client', 'canary-connection');
+      INSERT INTO ApiCredential VALUES ('canary-credential', 'canary-user', 'canary-client');
+      INSERT INTO OAuthAuthCode VALUES ('canary-code', 'canary-client', 'canary-user');
+      INSERT INTO OAuthRefreshToken VALUES ('canary-refresh', 'canary-client', 'canary-user', 'canary-connection');
+      INSERT INTO OAuthTokenIssuance VALUES ('canary-issuance', 'canary-grant', 'canary-code', 'canary-credential', 'canary-refresh');
+      INSERT INTO OAuthRefreshLineage VALUES ('canary-refresh', 'canary-grant', 'canary-issuance');
+    `);
+
+    const command = buildMcpCanaryCleanupD1Args({
+      email: "canary@example.com",
+      clientId: "canary-client",
+      connectionKey: "canary-connection",
+    }, { targetEnv: "production" }).at(-1);
+    expect(typeof command).toBe("string");
+    db.exec(command as string);
+
+    expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+    for (const table of [
+      "User",
+      "OAuthClient",
+      "OAuthGrant",
+      "ApiCredential",
+      "OAuthAuthCode",
+      "OAuthRefreshToken",
+      "OAuthTokenIssuance",
+      "OAuthRefreshLineage",
+    ]) {
+      expect(rowCount(db, table)).toBe(0);
+    }
   });
 
   it("persists no scratch schema when a blocker aborts cleanup", () => {

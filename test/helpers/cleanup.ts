@@ -83,6 +83,9 @@ export async function cleanupDatabase() {
   await db.nativeSyncTombstone.deleteMany({});
   await db.apiMutationTombstone.deleteMany({});
   await db.apiIdempotencyKey.deleteMany({});
+  await db.oAuthRefreshLineage.deleteMany({});
+  await db.oAuthTokenIssuance.deleteMany({});
+  await db.oAuthGrant.deleteMany({});
   await db.apiCredential.deleteMany({});
   await db.nativePushDevice.deleteMany({});
   await db.notificationPreference.deleteMany({});

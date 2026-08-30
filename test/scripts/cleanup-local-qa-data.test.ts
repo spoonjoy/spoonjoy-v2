@@ -625,6 +625,7 @@ describe("cleanup-local-qa-data", () => {
       "DELETE FROM ApiMutationTombstone",
       "DELETE FROM AgentConnectionRequest",
       "DELETE FROM ApiIdempotencyKey",
+      "DELETE FROM OAuthGrant",
       "DELETE FROM ApiCredential",
       "DELETE FROM OAuthAuthCode",
       "DELETE FROM OAuthRefreshToken",
@@ -633,7 +634,15 @@ describe("cleanup-local-qa-data", () => {
       "SELECT COUNT(*) FROM AgentConnectionRequest",
       "SELECT COUNT(*) FROM ApiIdempotencyKey",
       "SELECT COUNT(*) FROM ApiMutationTombstone",
+      "SELECT COUNT(*) FROM OAuthGrant",
       "DROP TABLE IF EXISTS main.__e2e_exact_credentials",
+    ]);
+    expectInOrder(exactSql, [
+      "DELETE FROM OAuthGrant",
+      "DELETE FROM ApiCredential",
+      "DELETE FROM OAuthAuthCode",
+      "DELETE FROM OAuthRefreshToken",
+      "DELETE FROM OAuthClient",
     ]);
     expect(exactSql).not.toContain("clientName");
     expect(exactSql).not.toContain("redirectUris");
