@@ -58,6 +58,7 @@ Claude may show support references such as `ofid_...` when connector authorizati
 - `canary_refresh_residue`: disposable canary refresh-token rows left behind.
 - `foreign_key_violations`: rows reported by SQLite/D1 `foreign_key_check`.
 - `active_refresh_without_grant`: active refresh tokens that are not linked to an existing durable grant.
+- `active_access_without_grant`: live OAuth access credentials that are not linked to an existing durable grant.
 - `active_grant_without_active_refresh`: active grants without an active linked refresh token.
 - `grant_identity_mismatch`: linked refresh/access rows whose user, client, issuer, resource, connection, or canonical access scope disagrees with the grant.
 - `oauth_grant_count`: informational count of durable grants.

@@ -1926,6 +1926,7 @@ describe("smoke-live helpers", () => {
     expect(command).toContain("canary_refresh_residue");
     expect(command).toContain("foreign_key_violations");
     expect(command).toContain("active_refresh_without_grant");
+    expect(command).toContain("active_access_without_grant");
     expect(command).toContain("active_grant_without_active_refresh");
     expect(command).toContain("grant_identity_mismatch");
     expect(command).toContain("oauth_grant_count");
@@ -1966,7 +1967,8 @@ describe("smoke-live helpers", () => {
         ('refresh-wrong-scope', 'user-1', 'client-1', 'https://issuer.example', NULL, 'kitchen:read', 'connection-1', NULL, 'grant-1');
       INSERT INTO "ApiCredential" VALUES
         ('access-null-issuer', 'user-1', 'client-1', NULL, NULL, 'account:read kitchen:read', 'connection-1', 'grant-1', NULL, NULL),
-        ('access-null-key', 'user-1', 'client-1', 'https://issuer.example', NULL, 'account:read kitchen:read', NULL, 'grant-1', NULL, NULL);
+        ('access-null-key', 'user-1', 'client-1', 'https://issuer.example', NULL, 'account:read kitchen:read', NULL, 'grant-1', NULL, NULL),
+        ('access-missing-grant', 'user-1', 'client-1', 'https://issuer.example', NULL, 'account:read kitchen:read', 'connection-1', NULL, NULL, NULL);
     `);
 
     const command = buildMcpOAuthInvariantAuditD1Args({ targetEnv: "local" }).at(-1)!;
@@ -1976,6 +1978,7 @@ describe("smoke-live helpers", () => {
     expect(counts.grant_identity_mismatch).toBe(5);
     expect(counts.foreign_key_violations).toBe(0);
     expect(counts.active_refresh_without_grant).toBe(0);
+    expect(counts.active_access_without_grant).toBe(1);
     db.close();
   });
 
