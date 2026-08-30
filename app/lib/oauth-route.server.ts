@@ -2,6 +2,7 @@ import type { AppLoadContext } from "react-router";
 import { redirect } from "react-router";
 import { generateState } from "arctic";
 import { requestCanonicalOrigin } from "~/lib/canonical-host.server";
+import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import type {
   AppleOAuthCallbackConfig,
   AppleOAuthCallbackMode,
@@ -48,8 +49,16 @@ export function getOAuthEnv(context: AppLoadContext): OAuthEnv {
   return (getCloudflareEnv(context) ?? process.env) as OAuthEnv;
 }
 
-export function buildOAuthCallbackUrl(request: Request, provider: OAuthProvider): string {
-  return `${requestCanonicalOrigin(request)}${CALLBACK_PATHS[provider]}`;
+function oauthCallbackOrigin(request: Request, baseUrl?: string | null): string {
+  return baseUrl ? resolveIssuerOrigin(request.url, baseUrl) : requestCanonicalOrigin(request);
+}
+
+export function buildOAuthCallbackUrl(
+  request: Request,
+  provider: OAuthProvider,
+  baseUrl?: string | null,
+): string {
+  return `${oauthCallbackOrigin(request, baseUrl)}${CALLBACK_PATHS[provider]}`;
 }
 
 /**
@@ -85,9 +94,10 @@ export const APPLE_REGISTERED_RETURN_PATH = APPLE_LEGACY_RETURN_PATH;
 export function buildAppleReturnUrl(
   request: Request,
   method: "loginWithApple" | "linkAppleAccount",
-  mode: AppleOAuthCallbackMode = "legacy"
+  mode: AppleOAuthCallbackMode = "legacy",
+  baseUrl?: string | null,
 ): string {
-  const origin = requestCanonicalOrigin(request);
+  const origin = oauthCallbackOrigin(request, baseUrl);
   if (mode === "clean") {
     return `${origin}${APPLE_CLEAN_RETURN_PATH}`;
   }
@@ -98,11 +108,12 @@ export function buildAppleReturnUrl(
 export function buildRegisteredAppleReturnUrls(
   request: Request,
   method: "loginWithApple" | "linkAppleAccount",
-  config: AppleOAuthCallbackConfig
+  config: AppleOAuthCallbackConfig,
+  baseUrl?: string | null,
 ): string[] {
-  const registered = [buildAppleReturnUrl(request, method, "legacy")];
+  const registered = [buildAppleReturnUrl(request, method, "legacy", baseUrl)];
   if (config.cleanCallbackRegistered) {
-    registered.push(buildAppleReturnUrl(request, method, "clean"));
+    registered.push(buildAppleReturnUrl(request, method, "clean", baseUrl));
   }
   return registered;
 }

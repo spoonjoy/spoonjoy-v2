@@ -12,9 +12,19 @@ export class RequestBodyTooLargeError extends Error {
   }
 }
 
+export class RequestBodyInvalidUtf8Error extends Error {
+  readonly status = 400;
+
+  constructor() {
+    super("Request body is not valid UTF-8.");
+    this.name = "RequestBodyInvalidUtf8Error";
+  }
+}
+
 export async function readLimitedTextBody(
   request: Request,
   maxBytes: number = IMAGE_UPLOAD_JSON_BODY_MAX_BYTES,
+  options: { fatalUtf8?: boolean } = {},
 ): Promise<string> {
   const declaredLength = Number(request.headers.get("Content-Length") ?? "0");
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
@@ -45,5 +55,10 @@ export async function readLimitedTextBody(
     offset += chunk.byteLength;
   }
 
-  return new TextDecoder().decode(body);
+  if (!options.fatalUtf8) return new TextDecoder().decode(body);
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(body);
+  } catch {
+    throw new RequestBodyInvalidUtf8Error();
+  }
 }

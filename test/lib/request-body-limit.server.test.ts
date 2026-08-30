@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  RequestBodyInvalidUtf8Error,
   RequestBodyTooLargeError,
   readLimitedTextBody,
 } from "~/lib/request-body-limit.server";
@@ -44,5 +45,16 @@ describe("readLimitedTextBody", () => {
   it("rejects streaming bodies once they cross the byte limit", async () => {
     await expect(readLimitedTextBody(streamRequest("hello"), 4))
       .rejects.toBeInstanceOf(RequestBodyTooLargeError);
+  });
+
+  it("can reject malformed UTF-8 without changing the default decoder", async () => {
+    const request = new Request("https://spoonjoy.app/upload", {
+      method: "POST",
+      body: new Uint8Array([0xc3, 0x28]),
+    });
+
+    await expect(readLimitedTextBody(request.clone())).resolves.toBe("�(");
+    await expect(readLimitedTextBody(request, undefined, { fatalUtf8: true }))
+      .rejects.toBeInstanceOf(RequestBodyInvalidUtf8Error);
   });
 });

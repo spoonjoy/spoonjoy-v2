@@ -160,15 +160,20 @@ export async function handleAppleCallback(request: Request, context: AppLoadCont
   }
 
   let config;
+  let redirectUri: string;
   try {
     config = getAppleOAuthConfig(getOAuthEnv(context));
+    redirectUri = stored.redirectUri ?? buildAppleReturnUrl(
+      request,
+      stored.linking ? "linkAppleAccount" : "loginWithApple",
+      "legacy",
+      env?.SPOONJOY_BASE_URL,
+    );
   } catch (error) {
     telemetry.captureException(error, { provider: "apple", phase: "config" });
     return redirectWithCapturedOAuthError(telemetry, request, "apple", failureRedirect, "oauth_unconfigured", "config", env);
   }
 
-  const redirectUri =
-    stored.redirectUri ?? buildAppleReturnUrl(request, stored.linking ? "linkAppleAccount" : "loginWithApple");
   let verifyResult;
   try {
     verifyResult = await verifyAppleCallback(
@@ -238,14 +243,19 @@ export async function handleGitHubCallback(request: Request, context: AppLoadCon
   }
 
   let config;
+  let redirectUri: string;
   try {
     config = getGitHubOAuthConfig(getOAuthEnv(context));
+    redirectUri = stored.redirectUri ?? buildOAuthCallbackUrl(
+      request,
+      "github",
+      env?.SPOONJOY_BASE_URL,
+    );
   } catch (error) {
     telemetry.captureException(error, { provider: "github", phase: "config" });
     return redirectWithCapturedOAuthError(telemetry, request, "github", failureRedirect, "oauth_unconfigured", "config", env);
   }
 
-  const redirectUri = stored.redirectUri ?? buildOAuthCallbackUrl(request, "github");
   let verifyResult;
   try {
     verifyResult = await verifyGitHubCallback(
@@ -336,14 +346,19 @@ export async function handleGoogleCallback(request: Request, context: AppLoadCon
   }
 
   let config;
+  let redirectUri: string;
   try {
     config = getGoogleOAuthConfig(getOAuthEnv(context));
+    redirectUri = stored.redirectUri ?? buildOAuthCallbackUrl(
+      request,
+      "google",
+      env?.SPOONJOY_BASE_URL,
+    );
   } catch (error) {
     telemetry.captureException(error, { provider: "google", phase: "config" });
     return redirectWithCapturedOAuthError(telemetry, request, "google", failureRedirect, "oauth_unconfigured", "config", env);
   }
 
-  const redirectUri = stored.redirectUri ?? buildOAuthCallbackUrl(request, "google");
   let verifyResult;
   try {
     verifyResult = await verifyGoogleCallback(

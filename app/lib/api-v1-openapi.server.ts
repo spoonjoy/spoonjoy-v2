@@ -219,7 +219,7 @@ const schemas = {
     grant_types: arrayOf({ type: "string", enum: ["authorization_code", "refresh_token"] }),
     response_types: arrayOf({ type: "string", enum: ["code"] }),
     scope: { type: "string", examples: ["kitchen:read", "account:read account:write", "shopping_list:read shopping_list:write"] },
-    application_type: { type: "string", enum: ["web", "native"], description: "Accepted RFC 7591/OIDC client metadata. Spoonjoy stores redirect URIs and client_name; this field is accepted but not used." },
+    application_type: { type: "string", enum: ["web", "native"], description: "Optional RFC 7591/OIDC application type. Omitted values default to web; valid values are echoed in the registration response." },
     client_uri: { ...uriSchema, description: "Accepted RFC 7591 metadata; not used by Spoonjoy." },
     logo_uri: { ...uriSchema, description: "Accepted RFC 7591 metadata; not used by Spoonjoy." },
     policy_uri: { ...uriSchema, description: "Accepted RFC 7591 metadata; not used by Spoonjoy." },
@@ -329,9 +329,10 @@ const schemas = {
   NativeTelemetryData: objectSchema(["accepted"], {
     accepted: { type: "boolean" },
   }),
-  NativeAppleSignInTokenData: objectSchema(["action", "userId", "access_token", "refresh_token", "token_type", "expires_in", "scope"], {
+  NativeAppleSignInTokenData: objectSchema(["action", "userId", "client_id", "access_token", "refresh_token", "token_type", "expires_in", "scope"], {
     action: { type: "string", enum: ["user_created", "user_logged_in"] },
     userId: idSchema,
+    client_id: idSchema,
     access_token: { type: "string", pattern: "^sj_" },
     refresh_token: { type: "string", pattern: "^ort_" },
     token_type: { const: "Bearer" },
@@ -343,9 +344,10 @@ const schemas = {
     requestId: idSchema,
     data: ref("NativeAppleSignInTokenData"),
   }),
-  NativePasswordSignInTokenData: objectSchema(["action", "userId", "access_token", "refresh_token", "token_type", "expires_in", "scope"], {
+  NativePasswordSignInTokenData: objectSchema(["action", "userId", "client_id", "access_token", "refresh_token", "token_type", "expires_in", "scope"], {
     action: { type: "string", enum: ["user_logged_in"] },
     userId: idSchema,
+    client_id: idSchema,
     access_token: { type: "string", pattern: "^sj_" },
     refresh_token: { type: "string", pattern: "^ort_" },
     token_type: { const: "Bearer" },
@@ -716,10 +718,11 @@ const schemas = {
     devices: arrayOf(ref("ApnsDevice")),
     mutation: ref("MutationMetadata"),
   }),
-  OAuthConnectionSummary: objectSchema(["id", "clientId", "clientName", "resource", "scopes", "createdAt", "refreshTokenCount", "accessTokenCount"], {
+  OAuthConnectionSummary: objectSchema(["id", "clientId", "clientName", "issuer", "resource", "scopes", "createdAt", "refreshTokenCount", "accessTokenCount"], {
     id: { type: "string", pattern: "^conn_" },
     clientId: idSchema,
     clientName: { type: "string" },
+    issuer: uriSchema,
     resource: nullableStringSchema,
     scopes: arrayOf({ type: "string" }),
     createdAt: dateTimeSchema,
@@ -1186,10 +1189,11 @@ const schemas = {
   OAuthConnectionListData: objectSchema(["connections"], {
     connections: arrayOf(ref("OAuthConnectionSummary")),
   }),
-  DisconnectOAuthConnectionData: objectSchema(["disconnected", "connectionId", "clientId", "resource", "revokedRefreshTokens", "revokedAccessTokens"], {
+  DisconnectOAuthConnectionData: objectSchema(["disconnected", "connectionId", "clientId", "issuer", "resource", "revokedRefreshTokens", "revokedAccessTokens"], {
     disconnected: { type: "boolean" },
     connectionId: { type: "string", pattern: "^conn_" },
     clientId: idSchema,
+    issuer: uriSchema,
     resource: nullableStringSchema,
     revokedRefreshTokens: { type: "integer", minimum: 0 },
     revokedAccessTokens: { type: "integer", minimum: 0 },
@@ -1808,9 +1812,10 @@ const exampleApnsDevice = {
   updatedAt: exampleTimestamp,
 };
 const exampleOAuthConnection = {
-  id: "conn_eyJjbGllbnRJZCI6ImNtXzEiLCJyZXNvdXJjZSI6bnVsbCwiY29ubmVjdGlvbktleSI6Im9jbl9leGFtcGxlIn0",
+  id: "conn_eyJjbGllbnRJZCI6ImNtXzEiLCJpc3N1ZXIiOiJodHRwczovL3Nwb29uam95LmFwcCIsInJlc291cmNlIjpudWxsLCJjb25uZWN0aW9uS2V5cyI6WyJvY25fZXhhbXBsZSJdfQ",
   clientId: "cm_1",
   clientName: "Meal planner",
+  issuer: "https://spoonjoy.app",
   resource: null,
   scopes: ["shopping_list:read", "shopping_list:write"],
   createdAt: exampleTimestamp,
@@ -2265,6 +2270,7 @@ const responseExamples: Record<string, unknown> = {
       disconnected: true,
       connectionId: exampleOAuthConnection.id,
       clientId: exampleOAuthConnection.clientId,
+      issuer: exampleOAuthConnection.issuer,
       resource: exampleOAuthConnection.resource,
       revokedRefreshTokens: 1,
       revokedAccessTokens: 1,
@@ -2276,6 +2282,7 @@ const responseExamples: Record<string, unknown> = {
     data: {
       action: "user_logged_in",
       userId: "chef_1",
+      client_id: "spoonjoy-apple-native",
       access_token: "sj_secret",
       refresh_token: "ort_secret",
       token_type: "Bearer",
@@ -2289,6 +2296,7 @@ const responseExamples: Record<string, unknown> = {
     data: {
       action: "user_logged_in",
       userId: "chef_1",
+      client_id: "spoonjoy-apple-native",
       access_token: "sj_secret",
       refresh_token: "ort_secret",
       token_type: "Bearer",
@@ -3409,7 +3417,7 @@ function authOperationPaths() {
           }),
         },
         responses: {
-          204: { description: "Refresh token revoked or already unusable." },
+          200: { description: "Refresh token revoked or already unusable." },
           400: { description: "OAuth error", content: jsonContent(ref("OAuthErrorResponse"), oauthErrorExample) },
           429: oauthRateLimitResponse(),
         },
@@ -3650,7 +3658,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         endpoints: ["/.well-known/oauth-authorization-server", "/oauth/register", "/oauth/authorize", "/oauth/token", "/oauth/revoke"],
         scopes: ["account:read", "account:write", "kitchen:read", "kitchen:write", "shopping_list:read", "shopping_list:write"],
         notes: [
-          "Dynamic client registration is public and returns token_endpoint_auth_method: none.",
+          "Dynamic client registration remains available for compatibility and returns token_endpoint_auth_method: none.",
           "Redirect URIs must be HTTPS; HTTP is accepted only for localhost and 127.0.0.1.",
           "PKCE is required: use a 43-128 character code_verifier and S256 code_challenge.",
           "Authorization codes are single-use and expire after 60 seconds.",

@@ -34,6 +34,13 @@ import {
   buildApiV1SdkOpenApiDocument,
 } from "~/lib/api-v1-openapi.server";
 import { safeOAuthClientDisplayName } from "~/lib/oauth-client-metadata";
+import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
+import {
+  oauthAccessConnectionOwnership,
+  OAUTH_CONNECTION_KEY_BATCH_SIZE,
+  oauthRefreshConnectionOwnership,
+  promoteLegacyOAuthIssuerForUser,
+} from "~/lib/oauth-server.server";
 import {
   normalizeSearchLimit,
   normalizeSearchScope,
@@ -5122,11 +5129,11 @@ async function handleApnsDeviceRevoke(args: ApiV1RouteArgs, requestId: string, p
   });
 }
 
-function accountConnectionId(clientId: string, resource: string | null, connectionKey: string): string {
-  return `conn_${base64UrlEncodeText(JSON.stringify({ clientId, resource, connectionKey }))}`;
+function accountConnectionId(clientId: string, issuer: string, resource: string | null, connectionKeys: string[]): string {
+  return `conn_${base64UrlEncodeText(JSON.stringify({ clientId, issuer, resource, connectionKeys }))}`;
 }
 
-function parseAccountConnectionId(connectionId: string): { clientId: string; resource: string | null; connectionKey: string } {
+function parseAccountConnectionId(connectionId: string): { clientId: string; issuer: string; resource: string | null; connectionKeys: string[] } {
   if (!connectionId.startsWith("conn_")) {
     throw new ApiV1Error("not_found", "OAuth connection not found");
   }
@@ -5137,14 +5144,25 @@ function parseAccountConnectionId(connectionId: string): { clientId: string; res
       typeof parsed === "object" &&
       !Array.isArray(parsed) &&
       typeof (parsed as { clientId?: unknown }).clientId === "string" &&
-      typeof (parsed as { connectionKey?: unknown }).connectionKey === "string"
+      typeof (parsed as { issuer?: unknown }).issuer === "string"
     ) {
       const resource = (parsed as { resource?: unknown }).resource;
-      if (resource === null || typeof resource === "string") {
+      const rawConnectionKeys = (parsed as { connectionKeys?: unknown; connectionKey?: unknown }).connectionKeys;
+      const legacyConnectionKey = (parsed as { connectionKey?: unknown }).connectionKey;
+      const connectionKeys = Array.isArray(rawConnectionKeys)
+        ? rawConnectionKeys
+        : typeof legacyConnectionKey === "string" ? [legacyConnectionKey] : [];
+      if (
+        (resource === null || typeof resource === "string") &&
+        connectionKeys.length > 0 &&
+        connectionKeys.length <= OAUTH_CONNECTION_KEY_BATCH_SIZE &&
+        connectionKeys.every((key) => typeof key === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(key))
+      ) {
         return {
           clientId: (parsed as { clientId: string }).clientId,
+          issuer: (parsed as { issuer: string }).issuer,
           resource,
-          connectionKey: (parsed as { connectionKey: string }).connectionKey,
+          connectionKeys: [...new Set(connectionKeys)].sort(),
         };
       }
     }
@@ -5154,13 +5172,15 @@ function parseAccountConnectionId(connectionId: string): { clientId: string; res
   throw new ApiV1Error("not_found", "OAuth connection not found");
 }
 
-async function oauthConnectionSummaries(db: ApiV1Db, userId: string) {
+async function oauthConnectionSummaries(db: ApiV1Db, userId: string, issuer: string) {
+  await promoteLegacyOAuthIssuerForUser(db as never, userId, issuer);
   const activeRefreshTokens = await db.oAuthRefreshToken.findMany({
     where: { userId, revokedAt: null },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: {
       id: true,
       clientId: true,
+      issuer: true,
       resource: true,
       scope: true,
       connectionKey: true,
@@ -5181,7 +5201,7 @@ async function oauthConnectionSummaries(db: ApiV1Db, userId: string) {
     ]),
   );
   const accessCredentialCounts = await db.apiCredential.groupBy({
-    by: ["oauthClientId", "oauthResource"],
+    by: ["oauthClientId", "oauthIssuer", "oauthResource", "oauthConnectionKey"],
     where: {
       userId,
       revokedAt: null,
@@ -5191,61 +5211,81 @@ async function oauthConnectionSummaries(db: ApiV1Db, userId: string) {
   });
   const accessCounts = new Map(
     accessCredentialCounts.map((row) => [
-      `${row.oauthClientId!}\u0000${row.oauthResource ?? ""}`,
+      `${row.oauthClientId!}\u0000${row.oauthIssuer ?? ""}\u0000${row.oauthResource ?? ""}\u0000${row.oauthConnectionKey ?? ""}`,
       row._count._all,
     ]),
   );
   const groups = new Map<string, {
     clientId: string;
     clientName: string;
+    issuer: string;
     resource: string | null;
-    connectionKey: string;
-    scopes: Set<string>;
-    createdAt: Date;
-    refreshTokenCount: number;
-    accessTokenCount: number;
+    connectionKeys: Set<string>;
+    tokens: typeof activeRefreshTokens;
   }>();
   for (const token of activeRefreshTokens) {
-    const key = `${token.clientId}\u0000${token.resource ?? ""}`;
+    if (!token.issuer) continue;
+    const key = `${token.clientId}\u0000${token.issuer}\u0000${token.resource ?? ""}`;
     const connectionKey = token.connectionKey ?? token.id;
     const existing = groups.get(key);
     if (existing) {
-      for (const scope of token.scope.trim().split(/\s+/).filter(Boolean)) existing.scopes.add(scope);
-      if (token.createdAt < existing.createdAt) {
-        existing.createdAt = token.createdAt;
-        existing.connectionKey = connectionKey;
-      }
-      existing.refreshTokenCount += 1;
+      existing.connectionKeys.add(connectionKey);
+      existing.tokens.push(token);
       continue;
     }
     groups.set(key, {
       clientId: token.clientId,
       clientName: clientNames.get(token.clientId) ?? token.clientId,
+      issuer: token.issuer,
       resource: token.resource,
-      connectionKey,
-      scopes: new Set(token.scope.trim().split(/\s+/).filter(Boolean)),
-      createdAt: token.createdAt,
-      refreshTokenCount: 1,
-      accessTokenCount: accessCounts.get(key) ?? 0,
+      connectionKeys: new Set([connectionKey]),
+      tokens: [token],
     });
   }
 
-  return Array.from(groups.values()).map((connection) => ({
-    id: accountConnectionId(connection.clientId, connection.resource, connection.connectionKey),
-    clientId: connection.clientId,
-    clientName: connection.clientName,
-    resource: connection.resource,
-    scopes: Array.from(connection.scopes).sort(),
-    createdAt: connection.createdAt.toISOString(),
-    refreshTokenCount: connection.refreshTokenCount,
-    accessTokenCount: connection.accessTokenCount,
-  }));
+  return Array.from(groups.values()).flatMap((connection) => {
+    const keys = Array.from(connection.connectionKeys).sort();
+    const batches = Array.from(
+      { length: Math.ceil(keys.length / OAUTH_CONNECTION_KEY_BATCH_SIZE) },
+      (_, index) => keys.slice(index * OAUTH_CONNECTION_KEY_BATCH_SIZE, (index + 1) * OAUTH_CONNECTION_KEY_BATCH_SIZE),
+    );
+    return batches.map((connectionKeys, index) => {
+      const tokens = connection.tokens.filter((token) => connectionKeys.includes(token.connectionKey ?? token.id));
+      const scopes = new Set(tokens.flatMap((token) => token.scope.trim().split(/\s+/).filter(Boolean)));
+      const createdAt = tokens.reduce(
+        (earliest, token) => token.createdAt < earliest ? token.createdAt : earliest,
+        tokens[0]!.createdAt,
+      );
+      const tuple = `${connection.clientId}\u0000${connection.issuer}\u0000${connection.resource ?? ""}\u0000`;
+      const accessTokenCount = connectionKeys.reduce(
+        (count, connectionKey) => count + (accessCounts.get(`${tuple}${connectionKey}`) ?? 0),
+        index === 0 ? (accessCounts.get(tuple) ?? 0) : 0,
+      );
+      return {
+        id: accountConnectionId(connection.clientId, connection.issuer, connection.resource, connectionKeys),
+        clientId: connection.clientId,
+        clientName: connection.clientName,
+        issuer: connection.issuer,
+        resource: connection.resource,
+        scopes: Array.from(scopes).sort(),
+        createdAt: createdAt.toISOString(),
+        refreshTokenCount: tokens.length,
+        accessTokenCount,
+      };
+    });
+  });
 }
 
 async function handleOAuthConnectionList(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
   const db = await getRequestDb(args.context);
   return withApiV1Telemetry(
-    apiV1PrivateSuccess(requestId, { connections: await oauthConnectionSummaries(db, principal.id) }),
+    apiV1PrivateSuccess(requestId, {
+      connections: await oauthConnectionSummaries(
+        db,
+        principal.id,
+        resolveIssuerOrigin(args.request.url, args.context.cloudflare?.env?.SPOONJOY_BASE_URL),
+      ),
+    }),
     { idempotencyOutcome: "none" },
   );
 }
@@ -5256,33 +5296,53 @@ async function handleOAuthConnectionDisconnect(
   principal: ApiPrincipal,
   connectionId: string,
 ) {
-  parseAccountConnectionId(connectionId);
+  const connection = parseAccountConnectionId(connectionId);
   const db = await getRequestDb(args.context);
-  const connection = (await oauthConnectionSummaries(db, principal.id))
-    .find((candidate) => candidate.id === connectionId);
-  if (!connection) {
-    throw new ApiV1Error("not_found", "OAuth connection not found or already disconnected");
-  }
   const now = new Date();
+  const ownership = oauthRefreshConnectionOwnership(connection.connectionKeys);
   const refresh = await db.oAuthRefreshToken.updateMany({
-    where: { userId: principal.id, clientId: connection.clientId, resource: connection.resource, revokedAt: null },
+    where: {
+      userId: principal.id,
+      clientId: connection.clientId,
+      issuer: connection.issuer,
+      resource: connection.resource,
+      revokedAt: null,
+      ...ownership,
+    },
     data: { revokedAt: now },
   });
-  const access = await db.apiCredential.updateMany({
-    where: { userId: principal.id, oauthClientId: connection.clientId, oauthResource: connection.resource, revokedAt: null },
-    data: { revokedAt: now },
-  });
-  const revokedConnectionCount = refresh.count + access.count;
-  /* istanbul ignore if -- @preserve the connection summary guarantees an active row; both zero only under a post-summary revoke race. */
-  if (revokedConnectionCount === 0) {
+  const cleanupCutoff = (await db.oAuthRefreshToken.findFirst({
+        where: {
+          userId: principal.id,
+          clientId: connection.clientId,
+          issuer: connection.issuer,
+          resource: connection.resource,
+          revokedAt: { not: null },
+          ...ownership,
+        },
+        orderBy: { revokedAt: "desc" },
+        select: { revokedAt: true },
+      }))?.revokedAt;
+  if (!cleanupCutoff) {
     throw new ApiV1Error("not_found", "OAuth connection not found or already disconnected");
   }
-
+  const access = await db.apiCredential.updateMany({
+    where: {
+      userId: principal.id,
+      oauthClientId: connection.clientId,
+      oauthIssuer: connection.issuer,
+      oauthResource: connection.resource,
+      revokedAt: null,
+      ...oauthAccessConnectionOwnership(connection.connectionKeys, cleanupCutoff),
+    },
+    data: { revokedAt: now },
+  });
   return withApiV1Telemetry(
     apiV1PrivateSuccess(requestId, {
       disconnected: true,
       connectionId,
       clientId: connection.clientId,
+      issuer: connection.issuer,
       resource: connection.resource,
       revokedRefreshTokens: refresh.count,
       revokedAccessTokens: access.count,
@@ -6246,8 +6306,12 @@ function optionalNativeAppleText(body: Record<string, unknown>, field: string, m
   return trimmed;
 }
 
-function nativeSignInTokenPayload(tokens: Awaited<ReturnType<typeof handleNativeAppleSignIn>>["tokens"]) {
+function nativeSignInTokenPayload(
+  clientId: string,
+  tokens: Awaited<ReturnType<typeof handleNativeAppleSignIn>>["tokens"],
+) {
   return {
+    client_id: clientId,
     access_token: tokens.accessToken,
     refresh_token: tokens.refreshToken,
     token_type: "Bearer",
@@ -6285,12 +6349,13 @@ async function handleNativeAppleSignInRequest(args: ApiV1RouteArgs, requestId: s
       db,
       { identityToken, rawNonce, email, fullName },
       getAppleNativeAuthConfig((args.context.cloudflare?.env ?? {}) as OAuthEnv),
+      { issuer: resolveIssuerOrigin(args.request.url, args.context.cloudflare?.env?.SPOONJOY_BASE_URL) },
     );
     return withApiV1Telemetry(
       apiV1SamePartyPrivateSuccess(requestId, {
         action: result.action,
         userId: result.userId,
-        ...nativeSignInTokenPayload(result.tokens),
+        ...nativeSignInTokenPayload(result.clientId, result.tokens),
       }, 201, TOKEN_RESPONSE_HEADERS),
       { idempotencyOutcome: "none" },
     );
@@ -6332,12 +6397,13 @@ async function handleNativePasswordSignInRequest(args: ApiV1RouteArgs, requestId
     const result = await handleNativePasswordSignIn(
       db,
       { emailOrUsername, password },
+      { issuer: resolveIssuerOrigin(args.request.url, args.context.cloudflare?.env?.SPOONJOY_BASE_URL) },
     );
     return withApiV1Telemetry(
       apiV1SamePartyPrivateSuccess(requestId, {
         action: result.action,
         userId: result.userId,
-        ...nativeSignInTokenPayload(result.tokens),
+        ...nativeSignInTokenPayload(result.clientId, result.tokens),
       }, 201, TOKEN_RESPONSE_HEADERS),
       { idempotencyOutcome: "none" },
     );

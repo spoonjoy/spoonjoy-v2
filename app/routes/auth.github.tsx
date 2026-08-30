@@ -29,9 +29,15 @@ async function initiateGitHubOAuth({ request, context }: Route.LoaderArgs | Rout
     return redirect(appendOAuthError(sessionData.failureRedirect, "oauth_unconfigured"));
   }
 
-  const redirectUri = buildOAuthCallbackUrl(request, "github");
-  sessionData.redirectUri = redirectUri;
-  const authorizationUrl = createGitHubAuthorizationURL(config, redirectUri, state);
+  let authorizationUrl;
+  try {
+    const redirectUri = buildOAuthCallbackUrl(request, "github", env?.SPOONJOY_BASE_URL);
+    sessionData.redirectUri = redirectUri;
+    authorizationUrl = createGitHubAuthorizationURL(config, redirectUri, state);
+  } catch (error) {
+    authTelemetryFromContext(context).captureException(error, { provider: "github", phase: "initiate" });
+    return redirect(appendOAuthError(sessionData.failureRedirect, "oauth_unconfigured"));
+  }
   const cookie = await commitOAuthStartSession(request, "github", sessionData, env);
 
   return redirectTo(authorizationUrl.toString(), { "Set-Cookie": cookie });

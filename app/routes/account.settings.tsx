@@ -318,7 +318,7 @@ export default function AccountSettings() {
                   const appName = connection.clientName || connection.clientId;
                   return (
                     <div
-                      key={`${connection.clientId}:${connection.resource ?? ""}`}
+                      key={`${connection.clientId}:${connection.issuer}:${connection.resource ?? ""}:${connection.connectionKeys.join(",")}`}
                       className="flex flex-col gap-3 border-b border-[var(--sj-border)] py-4 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="min-w-0">
@@ -326,6 +326,7 @@ export default function AccountSettings() {
                         <Text className="break-words text-sm">
                           {connection.resource || "REST API"} · {connection.scopes.join(", ") || "No scopes"}
                         </Text>
+                        <Text className="break-words text-xs">Issued by {connection.issuer}</Text>
                         <Text className="text-xs">
                           Connected {formatPasskeyDate(connection.createdAt)} · {connection.refreshTokenCount} refresh token{connection.refreshTokenCount === 1 ? "" : "s"} · {connection.accessTokenCount} live access token{connection.accessTokenCount === 1 ? "" : "s"}
                         </Text>
@@ -333,8 +334,12 @@ export default function AccountSettings() {
                       <Form method="post">
                         <input type="hidden" name="intent" value="disconnectOAuthClient" />
                         <input type="hidden" name="clientId" value={connection.clientId} />
+                        <input type="hidden" name="issuer" value={connection.issuer} />
                         <input type="hidden" name="resource" value={connection.resource ?? ""} />
-                        <Button type="submit" variant="destructive" aria-label={`Disconnect ${appName}`}>
+                        {connection.connectionKeys.map((connectionKey) => (
+                          <input key={connectionKey} type="hidden" name="connectionKey" value={connectionKey} />
+                        ))}
+                        <Button type="submit" variant="destructive" aria-label={`Disconnect ${appName} from ${connection.issuer}`}>
                           Disconnect
                         </Button>
                       </Form>

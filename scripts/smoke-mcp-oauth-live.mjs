@@ -35,6 +35,8 @@ const { chromium, expect } = requireFromCwd("@playwright/test");
 
 const CLAUDE_MCP_REDIRECT_URI = "https://claude.ai/api/mcp/auth_callback";
 const MCP_PROTOCOL_VERSION = "2025-06-18";
+const MCP_MODERN_PROTOCOL_VERSION = "2026-07-28";
+const MCP_CANARY_CLIENT_INFO = Object.freeze({ name: "spoonjoy-live-canary", version: "1.0.0" });
 
 function base64Url(bytes) {
   return Buffer.from(bytes).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
@@ -133,6 +135,22 @@ async function readProtectedResource(request, baseUrl, workerVersionId) {
   return body.resource;
 }
 
+async function assertAuthorizationServerMetadata(request, baseUrl, workerVersionId) {
+  const response = await spoonjoyRequest(request, {
+    baseUrl,
+    workerVersionId,
+    method: "get",
+    url: new URL("/.well-known/oauth-authorization-server", baseUrl).toString(),
+    label: "authorization-server metadata response",
+  });
+  assert.equal(response.status(), 200, `authorization-server metadata failed with ${response.status()}`);
+  const body = await responseJson(response, "authorization-server metadata");
+  assert.equal(body.issuer, new URL(baseUrl).origin);
+  assert.equal(body.authorization_response_iss_parameter_supported, true);
+  assert.equal(body.registration_endpoint, new URL("/oauth/register", baseUrl).toString());
+  assert.equal(Object.hasOwn(body, "client_id_metadata_document_supported"), false);
+}
+
 async function screenshot(page, outDir, name) {
   await page.waitForTimeout(250);
   const path = join(outDir, `${name}.png`);
@@ -195,6 +213,7 @@ async function registerClaudeClient(request, baseUrl, workerVersionId) {
         grant_types: ["authorization_code", "refresh_token"],
         response_types: ["code"],
         token_endpoint_auth_method: "none",
+        application_type: "web",
         scope: "kitchen:read kitchen:write",
       },
     },
@@ -203,6 +222,7 @@ async function registerClaudeClient(request, baseUrl, workerVersionId) {
   const body = await responseJson(response, "OAuth dynamic registration");
   assert.equal(body.client_name, "Claude");
   assert.equal(body.redirect_uris?.[0], CLAUDE_MCP_REDIRECT_URI);
+  assert.equal(body.application_type, "web");
   assert.ok(body.client_id, "OAuth dynamic registration did not return client_id");
   return body.client_id;
 }
@@ -260,6 +280,7 @@ async function approveConsent(page, { baseUrl, clientId, codeChallenge, resource
   responseTracker.assertSince(consentCheckpoint, "authorization consent submission");
   const callback = new URL(callbackRequestValue.url());
   assert.equal(callback.searchParams.get("state"), authorizeUrl.searchParams.get("state"));
+  assert.equal(callback.searchParams.get("iss"), new URL(baseUrl).origin);
   const code = callback.searchParams.get("code");
   assert.ok(code, "Approve did not redirect back with an authorization code");
   return code;
@@ -336,7 +357,25 @@ async function expectRefreshReplayRejected(request, { baseUrl, clientId, refresh
   assert.equal(body.error, "invalid_grant");
 }
 
-async function mcpRpc(request, { baseUrl, accessToken, id, method, params, workerVersionId }) {
+async function mcpRpc(request, {
+  baseUrl,
+  accessToken,
+  id,
+  method,
+  params,
+  workerVersionId,
+  modern = false,
+}) {
+  const requestParams = modern
+    ? {
+        ...(params ?? {}),
+        _meta: {
+          "io.modelcontextprotocol/protocolVersion": MCP_MODERN_PROTOCOL_VERSION,
+          "io.modelcontextprotocol/clientInfo": MCP_CANARY_CLIENT_INFO,
+          "io.modelcontextprotocol/clientCapabilities": {},
+        },
+      }
+    : params;
   const response = await spoonjoyRequest(request, {
     baseUrl,
     workerVersionId,
@@ -344,12 +383,22 @@ async function mcpRpc(request, { baseUrl, accessToken, id, method, params, worke
     url: new URL("/mcp", baseUrl).toString(),
     label: `MCP ${method} response`,
     options: {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: {
+        Accept: "application/json, text/event-stream",
+        Authorization: `Bearer ${accessToken}`,
+        ...(modern
+          ? {
+              "MCP-Protocol-Version": MCP_MODERN_PROTOCOL_VERSION,
+              "Mcp-Method": method,
+              ...(method === "tools/call" ? { "Mcp-Name": params.name } : {}),
+            }
+          : {}),
+      },
       data: {
         jsonrpc: "2.0",
         id,
         method,
-        ...(params === undefined ? {} : { params }),
+        ...(requestParams === undefined ? {} : { params: requestParams }),
       },
     },
   });
@@ -381,6 +430,59 @@ async function expectMcpReady(request, { baseUrl, accessToken, workerVersionId }
   const names = tools.tools.map((tool) => tool.name);
   assert.ok(names.includes("search_spoonjoy"), "MCP tools/list omitted search_spoonjoy");
   assert.ok(names.includes("get_shopping_list"), "MCP tools/list omitted get_shopping_list");
+
+  const discovery = await mcpRpc(request, {
+    baseUrl,
+    accessToken,
+    id: "modern-discover",
+    method: "server/discover",
+    workerVersionId,
+    modern: true,
+  });
+  assert.equal(discovery.resultType, "complete");
+  assert.deepEqual(discovery.supportedVersions, [MCP_MODERN_PROTOCOL_VERSION]);
+  assert.equal(discovery.cacheScope, "public");
+  assert.ok(discovery.ttlMs > 0, "Modern MCP discovery omitted a positive ttlMs");
+  assert.deepEqual(discovery._meta?.["io.modelcontextprotocol/serverInfo"], {
+    name: "spoonjoy",
+    version: "1.0.0",
+  });
+
+  const modernTools = await mcpRpc(request, {
+    baseUrl,
+    accessToken,
+    id: "modern-tools-list",
+    method: "tools/list",
+    workerVersionId,
+    modern: true,
+  });
+  assert.equal(modernTools.resultType, "complete");
+  assert.equal(modernTools.cacheScope, "private");
+  assert.ok(modernTools.ttlMs > 0, "Modern MCP tools/list omitted a positive ttlMs");
+  assert.deepEqual(modernTools._meta?.["io.modelcontextprotocol/serverInfo"], {
+    name: "spoonjoy",
+    version: "1.0.0",
+  });
+  const modernNames = modernTools.tools.map((tool) => tool.name);
+  assert.ok(modernNames.includes("search_spoonjoy"), "Modern MCP tools/list omitted search_spoonjoy");
+  assert.ok(modernNames.includes("get_shopping_list"), "Modern MCP tools/list omitted get_shopping_list");
+
+  const modernCall = await mcpRpc(request, {
+    baseUrl,
+    accessToken,
+    id: "modern-tools-call",
+    method: "tools/call",
+    params: { name: "get_shopping_list", arguments: {} },
+    workerVersionId,
+    modern: true,
+  });
+  assert.equal(modernCall.resultType, "complete");
+  assert.equal(modernCall.isError, false);
+  assert.ok(Array.isArray(modernCall.content), "Modern MCP tools/call omitted content");
+  assert.deepEqual(modernCall._meta?.["io.modelcontextprotocol/serverInfo"], {
+    name: "spoonjoy",
+    version: "1.0.0",
+  });
 }
 
 async function lookupCanaryUserId(email, { targetEnv }) {
@@ -545,6 +647,7 @@ async function main() {
     });
 
     await check("protected-resource metadata", async () => {
+      await assertAuthorizationServerMetadata(page.request, baseUrl, workerVersionId);
       resource = await readProtectedResource(page.request, baseUrl, workerVersionId);
       report.resource = resource;
     });

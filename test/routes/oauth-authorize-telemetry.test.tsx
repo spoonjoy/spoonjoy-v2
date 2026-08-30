@@ -74,6 +74,15 @@ function oauthAuthorizeInputs() {
   return vi.mocked(captureEvent).mock.calls.map(([, input]) => input);
 }
 
+async function consentTokenFor(query: URLSearchParams, headers: Headers): Promise<string> {
+  const result = await loader(routeArgs(new Request(
+    `https://spoonjoy.app/oauth/authorize?${query}`,
+    { headers },
+  ))) as { data: { consentToken?: string } };
+  expect(result.data.consentToken).toBeTruthy();
+  return result.data.consentToken!;
+}
+
 function expectCaptureScheduled(args: AuthorizeRouteArgs) {
   const captureResult = vi.mocked(captureEvent).mock.results.at(-1);
   expect(captureResult?.type).toBe("return");
@@ -296,8 +305,10 @@ describe("OAuth authorize telemetry", () => {
       "Content-Type": "application/x-www-form-urlencoded",
     });
 
-    const approveBody = new URLSearchParams(query);
-    approveBody.set("decision", "approve");
+    const approveBody = new URLSearchParams({
+      decision: "approve",
+      consent_token: await consentTokenFor(query, headers),
+    });
     const approveArgs = routeArgs(new Request("https://spoonjoy.app/oauth/authorize", {
       method: "POST",
       headers,
@@ -320,8 +331,10 @@ describe("OAuth authorize telemetry", () => {
     });
     expectCaptureScheduled(approveArgs);
 
-    const denyBody = new URLSearchParams(query);
-    denyBody.set("decision", "deny");
+    const denyBody = new URLSearchParams({
+      decision: "deny",
+      consent_token: await consentTokenFor(query, headers),
+    });
     const denyArgs = routeArgs(new Request("https://spoonjoy.app/oauth/authorize", {
       method: "POST",
       headers,
@@ -345,25 +358,30 @@ describe("OAuth authorize telemetry", () => {
     });
     expectCaptureScheduled(denyArgs);
 
-    const invalidScopeBody = new URLSearchParams(query);
-    invalidScopeBody.set("decision", "approve");
-    invalidScopeBody.set("scope", "recipes:delete");
+    const invalidScopeBody = new URLSearchParams({
+      decision: "approve",
+      consent_token: await consentTokenFor(query, headers),
+    });
+    await db.oAuthConsentTransaction.updateMany({
+      where: { userId: user.id },
+      data: { scope: "recipes:delete" },
+    });
     const invalidScopeArgs = routeArgs(new Request("https://spoonjoy.app/oauth/authorize", {
       method: "POST",
       headers,
       body: invalidScopeBody,
     }));
     const invalidScope = await action(invalidScopeArgs);
-    expect(invalidScope.status).toBe(302);
+    expect(invalidScope.status).toBe(400);
     expectOAuthAuthorizeEvent({
       phase: "action",
-      status: 302,
-      outcome: "redirect_error",
+      status: 400,
+      outcome: "error",
       clientId: client.clientId,
       principalId: user.id,
-      errorCode: "invalid_scope",
+      decision: "approve",
+      errorCode: "invalid_request",
       stateClass: "present",
-      resource: "https://spoonjoy.app/mcp",
       forbidden: [REDIRECT_URI, codeChallenge, "recipes:delete", invalidScopeBody.toString()],
     });
     expectCaptureScheduled(invalidScopeArgs);

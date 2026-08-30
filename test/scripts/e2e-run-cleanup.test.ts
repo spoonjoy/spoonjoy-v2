@@ -834,9 +834,16 @@ describe("ephemeral Playwright run ownership", () => {
       + "/repo/node_modules/.pnpm/@cloudflare+workerd-linux-64@1.20260507.1/"
       + "node_modules/@cloudflare/workerd-linux-64/bin/workerd@2011f47\n";
     const exactPeerReset = `${peerResetLine}\n${workerdStack}\n`;
+    const brokenPipeLine = peerResetLine.replace("Connection reset by peer", "Broken pipe");
+    const exactBrokenPipe = `${brokenPipeLine}\n${workerdStack}\n`;
     expect(starter.filterExpectedWranglerPeerResetDiagnostic({
       stdout: "clean\n",
       stderr: exactPeerReset,
+      final: true,
+    })).toEqual({ stdout: "clean\n", stderr: "" });
+    expect(starter.filterExpectedWranglerPeerResetDiagnostic({
+      stdout: "clean\n",
+      stderr: exactBrokenPipe,
       final: true,
     })).toEqual({ stdout: "clean\n", stderr: "" });
     expect(starter.filterExpectedWranglerPeerResetDiagnostic({
@@ -853,7 +860,7 @@ describe("ephemeral Playwright run ownership", () => {
     for (const nearMiss of [
       exactPeerReset.replace("::write(fd, buffer.begin(), buffer.size())", "::read(fd, buffer.begin(), buffer.size())"),
       exactPeerReset.replace("async-io-unix.c++:186", "async-io-unix.c++:187"),
-      exactPeerReset.replace("Connection reset by peer", "Broken pipe"),
+      exactPeerReset.replace("Connection reset by peer", "Connection aborted"),
       exactPeerReset.replace("bin/workerd@2011f47", "bin/not-workerd@2011f47"),
     ]) {
       expect(starter.filterExpectedWranglerPeerResetDiagnostic({
@@ -989,6 +996,7 @@ describe("ephemeral Playwright run ownership", () => {
     ) => {
       expect(argv).toEqual(expect.arrayContaining(["--log-level", "error"]));
       expect(argv).toEqual(expect.arrayContaining([
+        "SPOONJOY_BASE_URL:http://localhost:5197",
         "GOOGLE_CLIENT_ID:spoonjoy-playwright-google-client",
         "GOOGLE_CLIENT_SECRET:spoonjoy-playwright-google-secret",
       ]));

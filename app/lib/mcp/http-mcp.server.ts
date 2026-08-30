@@ -17,10 +17,17 @@
 
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import {
-  handleJsonRpcLine,
+  handleJsonRpcMessage,
   JsonRpcError,
+  parseJsonRpcLine,
+  type JsonRpcFailure,
   type JsonRpcToolRouter,
 } from "~/lib/mcp/json-rpc.server";
+import {
+  MCP_LEGACY_VERSION,
+  validateModernMcpRequest,
+  type McpProtocolContext,
+} from "~/lib/mcp/http-mcp-protocol.server";
 import {
   callSpoonjoyMcpTool,
   listSpoonjoyMcpTools,
@@ -34,7 +41,11 @@ import {
   extractBearerToken,
   type ApiPrincipal,
 } from "~/lib/api-auth.server";
-import { mcpResourceUrl, protectedResourceMetadataUrl, resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
+import {
+  isCanonicalMcpResource,
+  protectedResourceMetadataUrl,
+  resolveIssuerOrigin,
+} from "~/lib/oauth-metadata.server";
 import { getOAuthClient, isClaudeMcpOAuthClient } from "~/lib/oauth-server.server";
 import {
   enforceRateLimit,
@@ -50,7 +61,11 @@ import {
   safeHeaderHost,
   userAgentFamily,
 } from "~/lib/analytics-server";
-import { RequestBodyTooLargeError, readLimitedTextBody } from "~/lib/request-body-limit.server";
+import {
+  RequestBodyInvalidUtf8Error,
+  RequestBodyTooLargeError,
+  readLimitedTextBody,
+} from "~/lib/request-body-limit.server";
 import type { ImageGenEnv } from "~/lib/image-gen.server";
 import {
   PRODUCT_ACTIVATION_PENDING_CODE,
@@ -71,12 +86,15 @@ interface CloudflareEnvLike extends ImageGenEnv {
 }
 
 const MCP_SAFE_JSONRPC_METHODS = new Set([
+  "server/discover",
   "initialize",
   "notifications/initialized",
   "tools/call",
   "tools/list",
 ]);
-const MCP_TOOL_NAMES = new Set(listSpoonjoyMcpTools().map((tool) => tool.name));
+const MCP_TOOLS = listSpoonjoyMcpTools();
+const MCP_TOOL_NAMES = new Set(MCP_TOOLS.map((tool) => tool.name));
+const MCP_TOOL_SCOPES = new Map(MCP_TOOLS.map((tool) => [tool.name, tool.requiredScopes ?? []]));
 const PRODUCT_ACTIVATION_PENDING_JSON_RPC_CODE = -32001;
 const PRODUCT_ACTIVATION_RETRY_AFTER_SECONDS = 1;
 
@@ -97,6 +115,7 @@ export interface HandleMcpHttpRequestParams {
   waitUntil?: (promise: Promise<unknown>) => void;
   tokenLimiter?: RateLimiterBinding;
   ipLimiter?: RateLimiterBinding;
+  transport?: McpProtocolContext;
 }
 
 type McpTelemetryInput = {
@@ -113,7 +132,7 @@ type McpTelemetryInput = {
   rateLimitScope?: RateLimitScope;
 };
 
-function jsonResponse(payload: unknown, status = 200): Response {
+function jsonResponse(payload: unknown, status: number): Response {
   return new Response(JSON.stringify(payload), {
     status,
     headers: { "Content-Type": "application/json" },
@@ -151,6 +170,25 @@ function authChallengeMetadataUrl(
   return protectedResourceMetadataUrl(origin);
 }
 
+function insufficientScopeResponse(
+  request: Request,
+  cloudflareEnv: CloudflareEnvLike | null | undefined,
+  requiredScopes: readonly string[],
+): Response {
+  const resourceMetadataUrl = authChallengeMetadataUrl(request, cloudflareEnv);
+  return new Response(JSON.stringify({
+    error: "insufficient_scope",
+    message: "Additional authorization is required for this tool.",
+    required_scopes: requiredScopes,
+  }), {
+    status: 403,
+    headers: {
+      "Content-Type": "application/json",
+      "WWW-Authenticate": `Bearer error="insufficient_scope", scope="${requiredScopes.join(" ")}", resource_metadata="${resourceMetadataUrl}"`,
+    },
+  });
+}
+
 function mcpAuthMode(principal: ApiPrincipal | null): string {
   if (!principal) return "anonymous";
   return principal.oauthClientId ? "oauth_bearer" : principal.source;
@@ -160,24 +198,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-export function mcpJsonRpcTelemetry(body: string): Pick<McpTelemetryInput, "jsonRpcMethod" | "toolName"> {
-  try {
-    const parsed = JSON.parse(body) as unknown;
-    if (!isRecord(parsed)) return {};
+export function mcpJsonRpcTelemetry(parsed: unknown): Pick<McpTelemetryInput, "jsonRpcMethod" | "toolName"> {
+  if (!isRecord(parsed)) return {};
 
-    const method = typeof parsed.method === "string" && MCP_SAFE_JSONRPC_METHODS.has(parsed.method)
-      ? parsed.method
-      : undefined;
-    if (!method) return {};
+  const method = typeof parsed.method === "string" && MCP_SAFE_JSONRPC_METHODS.has(parsed.method)
+    ? parsed.method
+    : undefined;
+  if (!method) return {};
 
-    const params = parsed.params;
-    const toolName = method === "tools/call" && isRecord(params) && typeof params.name === "string" && MCP_TOOL_NAMES.has(params.name)
-      ? params.name
-      : undefined;
-    return { jsonRpcMethod: method, toolName };
-  } catch {
-    return {};
-  }
+  const params = parsed.params;
+  const toolName = method === "tools/call" && isRecord(params) && typeof params.name === "string" && MCP_TOOL_NAMES.has(params.name)
+    ? params.name
+    : undefined;
+  return { jsonRpcMethod: method, toolName };
 }
 
 function isJsonRpcSuccessResponse(response: unknown): boolean {
@@ -235,20 +268,63 @@ function observeMcpResponse(
 async function mcpOAuthResourceAllowed(
   db: PrismaClientType,
   principal: ApiPrincipal,
-  expectedResource: string,
+  expectedOrigin: string,
 ): Promise<{ allowed: boolean; legacyAllowed: boolean }> {
   if (!principal.oauthClientId) return { allowed: true, legacyAllowed: false };
-  if (principal.oauthResource === expectedResource) return { allowed: true, legacyAllowed: false };
+  if (isCanonicalMcpResource(principal.oauthResource, expectedOrigin)) {
+    return { allowed: true, legacyAllowed: false };
+  }
   if (principal.oauthResource) return { allowed: false, legacyAllowed: false };
 
-  const client = await getOAuthClient(db, principal.oauthClientId);
+  const client = await getOAuthClient(db, principal.oauthClientId, expectedOrigin);
   const legacyAllowed = isClaudeMcpOAuthClient(client);
   return { allowed: legacyAllowed, legacyAllowed };
 }
 
 export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): Promise<Response> {
   const { request, db, cloudflareEnv, waitUntil, tokenLimiter, ipLimiter } = params;
+  const transport = params.transport ?? { era: "legacy", protocolVersion: null };
   const startedAt = Date.now();
+
+  async function readBody(principal?: ApiPrincipal): Promise<{ body: string } | { response: Response }> {
+    try {
+      return {
+        body: await readLimitedTextBody(request, undefined, {
+          fatalUtf8: transport.era === "modern",
+        }),
+      };
+    } catch (error) {
+      if (error instanceof RequestBodyInvalidUtf8Error) {
+        const response = jsonResponse({
+          jsonrpc: "2.0",
+          id: null,
+          error: { code: -32700, message: "Parse error" },
+        }, error.status);
+        return {
+          response: observeMcpResponse(params, {
+            response,
+            startedAt,
+            principal,
+            errorCode: "jsonrpc_error",
+            jsonRpcErrorCode: -32700,
+          }),
+        };
+      }
+      if (!(error instanceof RequestBodyTooLargeError)) throw error;
+      const response = jsonResponse(
+        { error: "request_too_large", message: error.message },
+        error.status,
+      );
+      return {
+        response: observeMcpResponse(params, {
+          response,
+          startedAt,
+          principal,
+          errorCode: "request_too_large",
+        }),
+      };
+    }
+  }
 
   if (request.method !== "POST") {
     const response = jsonResponse(
@@ -274,6 +350,37 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
     });
   }
 
+  let body: string | undefined;
+  let parsedMessage: unknown;
+  let parsedError: JsonRpcFailure | undefined;
+  if (transport.era === "modern") {
+    const bodyResult = await readBody();
+    if ("response" in bodyResult) return bodyResult.response;
+    body = bodyResult.body;
+    const parsed = parseJsonRpcLine(body);
+    if (!parsed.ok) {
+      const response = jsonResponse(parsed.error, 400);
+      return observeMcpResponse(params, {
+        response,
+        startedAt,
+        errorCode: "jsonrpc_error",
+        jsonRpcErrorCode: parsed.error.error.code,
+      });
+    }
+    const validated = validateModernMcpRequest(request, parsed.value);
+    if (!validated.ok) {
+      const response = jsonResponse(validated.error, validated.status);
+      return observeMcpResponse(params, {
+        response,
+        startedAt,
+        ...mcpJsonRpcTelemetry(parsed.value),
+        errorCode: "jsonrpc_error",
+        jsonRpcErrorCode: validated.error.error.code,
+      });
+    }
+    parsedMessage = validated.message;
+  }
+
   let principal: ApiPrincipal;
   try {
     const bearerToken = extractBearerToken(request);
@@ -286,7 +393,11 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
         resourceMetadataUrl: authChallengeMetadataUrl(request, cloudflareEnv),
       });
     }
-    principal = await authenticateApiToken(db, bearerToken);
+    principal = await authenticateApiToken(
+      db,
+      bearerToken,
+      resolveIssuerOrigin(request.url, cloudflareEnv?.SPOONJOY_BASE_URL),
+    );
   } catch (error) {
     const response = authChallengeResponse(request, cloudflareEnv);
     return observeMcpResponse(params, {
@@ -296,8 +407,8 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
       resourceMetadataUrl: authChallengeMetadataUrl(request, cloudflareEnv),
     });
   }
-  const expectedResource = mcpResourceUrl(resolveIssuerOrigin(request.url, cloudflareEnv?.SPOONJOY_BASE_URL));
-  const resourceAllowed = await mcpOAuthResourceAllowed(db, principal, expectedResource);
+  const expectedOrigin = resolveIssuerOrigin(request.url, cloudflareEnv?.SPOONJOY_BASE_URL);
+  const resourceAllowed = await mcpOAuthResourceAllowed(db, principal, expectedOrigin);
   if (!resourceAllowed.allowed) {
     const response = jsonResponse(
       { error: "invalid_token", message: "OAuth access token is not audience-bound to this MCP resource." },
@@ -356,26 +467,39 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
     );
   };
 
-  let body: string;
-  try {
-    body = await readLimitedTextBody(request);
-  } catch (error) {
-    if (error instanceof RequestBodyTooLargeError) {
-      const response = jsonResponse(
-        { error: "request_too_large", message: error.message },
-        error.status,
-      );
+  if (body === undefined) {
+    const bodyResult = await readBody(principal);
+    if ("response" in bodyResult) return bodyResult.response;
+    body = bodyResult.body;
+    const parsed = parseJsonRpcLine(body);
+    if (parsed.ok) parsedMessage = parsed.value;
+    else parsedError = parsed.error;
+  }
+  const jsonRpcTelemetry = mcpJsonRpcTelemetry(parsedMessage);
+  if (jsonRpcTelemetry.toolName) {
+    const grantedScopes = new Set(principal.scopes);
+    const missingScopes = MCP_TOOL_SCOPES.get(jsonRpcTelemetry.toolName)!
+      .filter((scope) => !grantedScopes.has(scope));
+    if (missingScopes.length) {
       return observeMcpResponse(params, {
-        response,
+        response: insufficientScopeResponse(request, cloudflareEnv, missingScopes),
         startedAt,
         principal,
-        errorCode: "request_too_large",
+        legacyOAuthResourceAllowed: resourceAllowed.legacyAllowed,
+        ...jsonRpcTelemetry,
+        errorCode: "insufficient_scope",
       });
     }
-    throw error;
   }
-  const jsonRpcTelemetry = mcpJsonRpcTelemetry(body);
-  const response = await handleJsonRpcLine(body, router, { onError });
+  const response = parsedError ?? await handleJsonRpcMessage(
+    parsedMessage,
+    router,
+    {
+      onError,
+      era: transport.era,
+      protocolVersion: transport.era === "legacy" ? MCP_LEGACY_VERSION : transport.protocolVersion,
+    },
+  );
 
   // Notifications (no id) produce no JSON-RPC response — ack with 202.
   if (response === null) {
@@ -389,7 +513,8 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
     });
   }
 
-  const httpResponse = jsonResponse(response);
+  const httpStatus = transport.era === "modern" && jsonRpcErrorCode(response) === -32601 ? 404 : 200;
+  const httpResponse = jsonResponse(response, httpStatus);
   if (productActivationPending) {
     httpResponse.headers.set("Retry-After", String(PRODUCT_ACTIVATION_RETRY_AFTER_SECONDS));
     httpResponse.headers.set("Cache-Control", "private, no-store");

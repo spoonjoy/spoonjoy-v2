@@ -18,9 +18,36 @@ function routeArgs(request: Request) {
 function rpc(body: unknown, headers: Record<string, string> = {}) {
   return new UndiciRequest("https://spoonjoy.app/mcp", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...headers },
+    headers: {
+      Accept: "application/json, text/event-stream",
+      "Content-Type": "application/json",
+      ...headers,
+    },
     body: JSON.stringify(body),
   }) as unknown as Request;
+}
+
+function modernRpc(
+  id: number | string,
+  method: string,
+  headers: Record<string, string> = {},
+) {
+  return rpc({
+    jsonrpc: "2.0",
+    id,
+    method,
+    params: {
+      _meta: {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": { name: "route-fixture", version: "1.0.0" },
+        "io.modelcontextprotocol/clientCapabilities": {},
+      },
+    },
+  }, {
+    "MCP-Protocol-Version": "2026-07-28",
+    "Mcp-Method": method,
+    ...headers,
+  });
 }
 
 describe("/mcp route", () => {
@@ -52,10 +79,78 @@ describe("/mcp route", () => {
     });
   });
 
+  it("uses the configured canonical origin for landing data behind the Worker host", async () => {
+    const request = new UndiciRequest("https://spoonjoy-v2.workers.dev/mcp", {
+      method: "GET",
+    }) as unknown as Request;
+    const args = {
+      request,
+      params: {},
+      context: {
+        cloudflare: { env: { SPOONJOY_BASE_URL: "HTTPS://SPOONJOY.APP.:443/path" } },
+      },
+    } as never;
+
+    await expect(loader(args)).resolves.toEqual({
+      endpoint: "https://spoonjoy.app/mcp",
+      protectedResourceMetadataUrl: "https://spoonjoy.app/.well-known/oauth-protected-resource/mcp",
+    });
+  });
+
+  it("returns explicit JSON instead of landing HTML for protocol GET", async () => {
+    const request = new UndiciRequest("https://spoonjoy.app/mcp", {
+      method: "GET",
+      headers: { Accept: "text/event-stream" },
+    }) as unknown as Request;
+    const response = await loader(routeArgs(request));
+
+    expect(response).toBeInstanceOf(Response);
+    if (!(response instanceof Response)) throw new Error("Expected protocol edge response.");
+    expect(response.status).toBe(405);
+    expect(response.headers.get("Content-Type")).toBe("application/json");
+    expect((await response.text()).toLowerCase()).not.toContain("<html");
+  });
+
+  it("rejects a hostile Origin before rendering landing data", async () => {
+    const request = new UndiciRequest("https://spoonjoy.app/mcp", {
+      method: "GET",
+      headers: { Origin: "https://evil.example" },
+    }) as unknown as Request;
+    const response = await loader(routeArgs(request));
+
+    expect(response).toBeInstanceOf(Response);
+    if (!(response instanceof Response)) throw new Error("Expected Origin edge response.");
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: "invalid_origin",
+      message: "Origin is not allowed.",
+    });
+  });
+
   it("challenges an unauthenticated request via the action", async () => {
     const response = await action(routeArgs(rpc({ jsonrpc: "2.0", id: 1, method: "initialize" })));
     expect(response.status).toBe(401);
     expect(response.headers.get("WWW-Authenticate")).toContain("resource_metadata=");
+  });
+
+  it("routes authenticated modern discovery without a legacy initialize handshake", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail("modern-route"), username: faker.internet.username() } });
+    const { token } = await createApiCredential(db, user.id, "modern route token");
+
+    const response = await action(routeArgs(modernRpc("discover-route", "server/discover", {
+      Authorization: `Bearer ${token}`,
+    })));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      jsonrpc: "2.0",
+      id: "discover-route",
+      result: {
+        resultType: "complete",
+        supportedVersions: ["2026-07-28"],
+        capabilities: { tools: {} },
+      },
+    });
   });
 
   it("handles initialize + tools/list + a tools/call end to end when authenticated", async () => {
@@ -228,11 +323,13 @@ describe("/mcp route", () => {
     const matching = await createApiCredential(db, user.id, "MCP OAuth token", {
       scopes: ["kitchen:read", "kitchen:write"],
       oauthClientId: "oauth_client_mcp_match",
+      oauthIssuer: "https://spoonjoy.app",
       oauthResource: "https://spoonjoy.app/mcp",
     });
     const mismatched = await createApiCredential(db, user.id, "Other OAuth token", {
       scopes: ["kitchen:read", "kitchen:write"],
       oauthClientId: "oauth_client_mcp_mismatch",
+      oauthIssuer: "https://spoonjoy.app",
       oauthResource: "https://elsewhere.example/mcp",
     });
 

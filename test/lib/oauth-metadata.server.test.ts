@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildAuthorizationServerMetadata,
   buildProtectedResourceMetadata,
+  isCanonicalMcpResource,
   mcpResourceUrl,
+  parseSerializedHttpOrigin,
   protectedResourceMetadataUrl,
   resolveIssuerOrigin,
 } from "~/lib/oauth-metadata.server";
@@ -21,6 +23,45 @@ describe("resolveIssuerOrigin", () => {
     expect(resolveIssuerOrigin("http://localhost:5173/x", undefined)).toBe("http://localhost:5173");
     expect(resolveIssuerOrigin("http://localhost:5173/x", "")).toBe("http://localhost:5173");
   });
+
+  it("canonicalizes case, a trailing DNS dot, default ports, and configured paths", () => {
+    expect(resolveIssuerOrigin(
+      "https://internal.workers.dev/path",
+      "HTTPS://SPOONJOY.APP.:443/ignored/%2Fmcp?query=1#fragment",
+    )).toBe("https://spoonjoy.app");
+    expect(resolveIssuerOrigin("HTTP://LOCALHOST:80/path", undefined)).toBe("http://localhost");
+    expect(resolveIssuerOrigin("https://spoonjoy.app:8443/path", undefined)).toBe(
+      "https://spoonjoy.app:8443",
+    );
+  });
+
+  it.each([
+    "javascript:alert(1)",
+    "data:text/plain,spoonjoy",
+    "https://user:password@spoonjoy.app",
+    "https://spoonjoy.app\\@evil.example",
+  ])("rejects a non-origin issuer input %s", (baseUrl) => {
+    expect(() => resolveIssuerOrigin("https://internal.workers.dev/path", baseUrl)).toThrow(
+      "canonical HTTP(S) origin",
+    );
+  });
+
+  it("rejects an invalid multi-dot fully-qualified host", () => {
+    expect(() => resolveIssuerOrigin("https://internal.workers.dev", "https://spoonjoy.app.."))
+      .toThrow("canonical HTTP(S) origin");
+  });
+
+  it("parses only serialized HTTP origins", () => {
+    expect(parseSerializedHttpOrigin("HTTPS://SPOONJOY.APP:443")).toBe("https://spoonjoy.app");
+    expect(parseSerializedHttpOrigin("ftp://spoonjoy.app")).toBeNull();
+    expect(parseSerializedHttpOrigin("https://user@spoonjoy.app")).toBeNull();
+    expect(parseSerializedHttpOrigin("https://%")).toBeNull();
+    expect(parseSerializedHttpOrigin("https://spoonjoy.app/path")).toBeNull();
+    expect(parseSerializedHttpOrigin("https://spoonjoy.app\\@evil.example")).toBeNull();
+    expect(parseSerializedHttpOrigin("https://%73poonjoy.app")).toBeNull();
+    expect(parseSerializedHttpOrigin("https://spoonjoy。app")).toBeNull();
+    expect(parseSerializedHttpOrigin("https://spoonjoy.app:99999")).toBeNull();
+  });
 });
 
 describe("oauth metadata builders", () => {
@@ -29,6 +70,9 @@ describe("oauth metadata builders", () => {
     expect(protectedResourceMetadataUrl(ORIGIN)).toBe(
       "https://spoonjoy.app/.well-known/oauth-protected-resource/mcp",
     );
+    expect(isCanonicalMcpResource("https://spoonjoy.app/mcp", ORIGIN)).toBe(true);
+    expect(isCanonicalMcpResource("https://spoonjoy.app./mcp", ORIGIN)).toBe(false);
+    expect(isCanonicalMcpResource(null, ORIGIN)).toBe(false);
   });
 
   it("builds RFC 8414 authorization server metadata", () => {
@@ -38,6 +82,7 @@ describe("oauth metadata builders", () => {
       token_endpoint: "https://spoonjoy.app/oauth/token",
       revocation_endpoint: "https://spoonjoy.app/oauth/revoke",
       registration_endpoint: "https://spoonjoy.app/oauth/register",
+      authorization_response_iss_parameter_supported: true,
       scopes_supported: [
         "account:read",
         "account:write",

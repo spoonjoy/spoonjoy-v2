@@ -1,8 +1,14 @@
 import type { AppLoadContext } from "react-router";
+import {
+  classifyMcpTransportRequest,
+  resolveUnsupportedMcpVersionRequest,
+} from "~/lib/mcp/http-mcp-protocol.server";
 import { handleMcpHttpRequest } from "~/lib/mcp/http-mcp.server";
+import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
+import { enforceRateLimit, rateLimitedResponse } from "~/lib/rate-limit.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 
-export async function handleMcpPostRouteRequest(
+export async function handleMcpRouteRequest(
   request: Request,
   context: AppLoadContext,
 ): Promise<Response> {
@@ -10,6 +16,23 @@ export async function handleMcpPostRouteRequest(
   const ctx = cloudflare?.ctx;
   const waitUntil = ctx?.waitUntil ? ctx.waitUntil.bind(ctx) : undefined;
   const cloudflareEnv = cloudflare?.env;
+  const decision = classifyMcpTransportRequest(request, {
+    canonicalOrigin: resolveIssuerOrigin(request.url, cloudflareEnv?.SPOONJOY_BASE_URL),
+  });
+  if (decision.kind === "response") return decision.response;
+  if (decision.kind === "unsupported") {
+    const rateLimit = await enforceRateLimit({
+      authorization: request.headers.get("Authorization"),
+      ip: request.headers.get("CF-Connecting-IP"),
+      tokenLimiter: cloudflareEnv?.API_TOKEN_RATE_LIMITER,
+      ipLimiter: cloudflareEnv?.API_IP_RATE_LIMITER,
+    });
+    if (!rateLimit.allowed) return rateLimitedResponse(rateLimit.retryAfterSeconds);
+    return resolveUnsupportedMcpVersionRequest(request, decision.requested);
+  }
+  if (decision.kind === "landing") {
+    throw new Error("MCP landing requests must be handled by the route loader.");
+  }
   const db = await getRequestDb(context);
 
   return handleMcpHttpRequest({
@@ -19,5 +42,6 @@ export async function handleMcpPostRouteRequest(
     waitUntil,
     tokenLimiter: cloudflareEnv?.API_TOKEN_RATE_LIMITER,
     ipLimiter: cloudflareEnv?.API_IP_RATE_LIMITER,
+    transport: decision,
   });
 }

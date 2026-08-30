@@ -177,7 +177,10 @@ export function buildMcpToolRequest(baseUrl, bearerToken, id, name, args) {
   return {
     url: smokeUrl(baseUrl, "/mcp"),
     options: {
-      headers: jsonHeaders(bearerToken),
+      headers: {
+        ...jsonHeaders(bearerToken),
+        Accept: "application/json, text/event-stream",
+      },
       data: {
         jsonrpc: "2.0",
         id,
@@ -192,7 +195,10 @@ export function buildMcpToolsListRequest(baseUrl, bearerToken, id) {
   return {
     url: smokeUrl(baseUrl, "/mcp"),
     options: {
-      headers: jsonHeaders(bearerToken),
+      headers: {
+        ...jsonHeaders(bearerToken),
+        Accept: "application/json, text/event-stream",
+      },
       data: {
         jsonrpc: "2.0",
         id,

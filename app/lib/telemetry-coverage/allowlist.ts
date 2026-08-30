@@ -135,6 +135,24 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "Sole catch is in resolveApiPrincipal: it swallows an expected 401 (ApiAuthError) only for public bootstrap ops and rethrows any other auth error so protected ops fail closed; the surfaced error is captured at the api.$.ts / http-mcp.server.ts route boundary. No transport catch exists.",
   },
   {
+    file: "app/lib/mcp/http-mcp-protocol.server.ts",
+    category: "expected-4xx",
+    reason:
+      "Pure MCP framing and validation: catches reject malformed encoded headers/UTF-8 or recover a bounded JSON-RPC id before returning deterministic protocol 4xx responses; the HTTP MCP entrypoint owns request telemetry.",
+  },
+  {
+    file: "app/lib/oauth-metadata.server.ts",
+    category: "expected-4xx",
+    reason:
+      "Pure canonical-origin parser: the catch maps an unparseable serialized client value to null so the caller rejects it as invalid metadata; no unexpected server failure is swallowed.",
+  },
+  {
+    file: "app/lib/request-body-limit.server.ts",
+    category: "expected-4xx",
+    reason:
+      "Shared bounded-body decoder: its only catch converts client-supplied invalid UTF-8 into a typed 400 error that the owning HTTP route reports and instruments.",
+  },
+  {
     file: "app/lib/api-v1-recipe-writes.server.ts",
     category: "expected-4xx",
     reason:

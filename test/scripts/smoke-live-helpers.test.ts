@@ -1442,6 +1442,8 @@ describe("smoke-live helpers", () => {
     expect(readinessSource).toContain('const mutationPath = "/.well-known/spoonjoy-release-readiness"');
     expect(readinessSource).toContain("timeout: timeoutMs");
     expect(source).toContain("waitForCandidateWorker(page, mutationPage, page.request, { baseUrl, workerVersionId })");
+    expect(source).toContain('assert.equal(body.application_type, "web")');
+    expect(source).toContain('assert.equal(callback.searchParams.get("iss"), new URL(baseUrl).origin)');
     expect(source.indexOf('check("candidate Worker override readiness"')).toBeLessThan(
       source.indexOf('check("signup disposable user"'),
     );
@@ -1474,6 +1476,29 @@ describe("smoke-live helpers", () => {
       )?.[0] ?? "";
       expect(functionSource, `${functionName} must use the verified request wrapper`).toContain("spoonjoyRequest(request");
     }
+    const mcpRpcSource = source.match(/async function mcpRpc\([\s\S]*?\n}\n/)?.[0] ?? "";
+    expect(mcpRpcSource).toContain('Accept: "application/json, text/event-stream"');
+    expect(mcpRpcSource).toContain('"MCP-Protocol-Version": MCP_MODERN_PROTOCOL_VERSION');
+    expect(mcpRpcSource).toContain('"Mcp-Method": method');
+    expect(mcpRpcSource).toContain('"Mcp-Name": params.name');
+    expect(mcpRpcSource).toContain(
+      '"io.modelcontextprotocol/protocolVersion": MCP_MODERN_PROTOCOL_VERSION',
+    );
+    expect(mcpRpcSource).toContain('"io.modelcontextprotocol/clientInfo": MCP_CANARY_CLIENT_INFO');
+    expect(mcpRpcSource).toContain('"io.modelcontextprotocol/clientCapabilities": {}');
+    const expectMcpReadySource = source.match(
+      /async function expectMcpReady\([\s\S]*?\n}\n/,
+    )?.[0] ?? "";
+    expect(expectMcpReadySource).toContain('method: "server/discover"');
+    expect(expectMcpReadySource).toContain('method: "tools/list"');
+    expect(expectMcpReadySource).toContain('method: "tools/call"');
+    expect(expectMcpReadySource).toContain('name: "get_shopping_list"');
+    expect(expectMcpReadySource.match(/modern: true/g)).toHaveLength(3);
+    expect(expectMcpReadySource).toContain('resultType, "complete"');
+    expect(expectMcpReadySource).toContain('cacheScope, "public"');
+    expect(expectMcpReadySource).toContain('cacheScope, "private"');
+    expect(expectMcpReadySource).toContain('isError, false');
+    expect(expectMcpReadySource).toContain('"io.modelcontextprotocol/serverInfo"');
     expect(source).toContain("workerVersionId,");
     expect(source).toContain("serializeSanitizedMcpCanaryReport(report)");
     expect(wrangler.version_metadata).toEqual({ binding: "CF_VERSION_METADATA" });

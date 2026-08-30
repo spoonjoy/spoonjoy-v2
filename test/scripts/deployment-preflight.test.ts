@@ -23,6 +23,7 @@ import { findUnexpectedWarnings } from "../../scripts/warning-gate";
 
 const CHECKOUT_ACTION = "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10";
 const SETUP_NODE_ACTION = "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38";
+const SETUP_PYTHON_ACTION = "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1";
 const UPLOAD_ARTIFACT_ACTION = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
 const DOWNLOAD_ARTIFACT_ACTION = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c";
 const execFile = promisify(nodeExecFile);
@@ -2761,6 +2762,26 @@ describe("deployment preflight", () => {
       "          node-version: '20'",
     ],
     [
+      "missing Python setup action",
+      `      - name: 🐍 Setup Python\n        uses: ${SETUP_PYTHON_ACTION} # v6\n        with:\n          python-version: '3.13'\n`,
+      "",
+    ],
+    [
+      "wrong Python setup action pin",
+      `        uses: ${SETUP_PYTHON_ACTION} # v6`,
+      "        uses: actions/setup-python@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa # v6",
+    ],
+    [
+      "wrong setup Python version",
+      "          python-version: '3.13'",
+      "          python-version: '3.12'",
+    ],
+    [
+      "missing official Python MCP SDK conformance",
+      "      - name: 🐍 Official Python MCP SDK conformance\n        run: pnpm run verify:clean:test:mcp-sdk-python\n",
+      "",
+    ],
+    [
       "missing invocation validator",
       "      - name: 🔐 Validate CI invocation\n        run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation\n",
       "",
@@ -2845,6 +2866,16 @@ describe("deployment preflight", () => {
       "required step soft failure",
       "      - name: 🧪 Test & Coverage\n        run: pnpm run verify:clean:test:coverage",
       "      - name: 🧪 Test & Coverage\n        run: pnpm run verify:clean:test:coverage\n        continue-on-error: true",
+    ],
+    [
+      "Python SDK conformance step if false",
+      "      - name: 🐍 Official Python MCP SDK conformance\n        run: pnpm run verify:clean:test:mcp-sdk-python",
+      "      - name: 🐍 Official Python MCP SDK conformance\n        run: pnpm run verify:clean:test:mcp-sdk-python\n        if: false",
+    ],
+    [
+      "Python SDK conformance soft failure",
+      "      - name: 🐍 Official Python MCP SDK conformance\n        run: pnpm run verify:clean:test:mcp-sdk-python",
+      "      - name: 🐍 Official Python MCP SDK conformance\n        run: pnpm run verify:clean:test:mcp-sdk-python\n        continue-on-error: true",
     ],
     [
       "inline-map BASH_ENV",
@@ -5887,12 +5918,18 @@ describe("runCliIfEntry", () => {
       const resolved = "/tmp/fake-preflight-cli-entry.ts";
       const url = `file://${resolved}`;
       const result = runCliIfEntry({ argv1: resolved, moduleUrl: url });
-      // Let async main() resolve after reading the live repository fixtures.
-      for (let attempt = 0; attempt < 20 && logSpy.mock.calls.length === 0; attempt += 1) {
-        await new Promise((r) => setTimeout(r, 25));
-      }
       expect(result).toBe(true);
-      expect(logSpy).toHaveBeenCalled();
+      // Wait for main()'s terminal summary, not its first check line. Restoring
+      // process.env or the console spies while main() is still running lets its
+      // eventual result escape into the next test (and real stderr).
+      await vi.waitFor(
+        () => {
+          expect(logSpy).toHaveBeenCalledWith(
+            expect.stringMatching(/^Deployment preflight passed(?: with \d+ warning\(s\))?\.$/),
+          );
+        },
+        { timeout: 5_000 },
+      );
       // Should NOT have exited (skip flag → all PASS/WARN, no failure).
       expect(exitSpy).not.toHaveBeenCalled();
     } finally {

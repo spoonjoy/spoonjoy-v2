@@ -78,7 +78,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const db = await getRequestDb(context);
-  const response = await handleOAuthRegister(request, db);
+  const response = await handleOAuthRegister(request, db, cfEnv);
   return observeOAuthRegisterResponse({ request, context }, {
     response: applyOAuthCorsHeaders(response),
     startedAt,

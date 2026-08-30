@@ -14,6 +14,13 @@ import {
 import { resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { PROFILE_IMAGE_TYPES } from "~/lib/recipe-image";
 import { safeOAuthClientDisplayName } from "~/lib/oauth-client-metadata";
+import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
+import {
+  oauthAccessConnectionOwnership,
+  OAUTH_CONNECTION_KEY_BATCH_SIZE,
+  oauthRefreshConnectionOwnership,
+  promoteLegacyOAuthIssuerForUser,
+} from "~/lib/oauth-server.server";
 
 export interface NotificationPreferenceFlags {
   notifySpoonOnMyRecipe: boolean;
@@ -58,11 +65,13 @@ export interface AccountSettingsLoaderData {
     oauthConnections?: Array<{
       clientId: string;
       clientName: string | null;
+      issuer: string;
       resource: string | null;
       scopes: string[];
       createdAt: string;
       refreshTokenCount: number;
       accessTokenCount: number;
+      connectionKeys: string[];
     }>;
   };
   notifications: {
@@ -132,6 +141,11 @@ export async function loadAccountSettings({
   const oauthError = url.searchParams.get("oauthError") ?? undefined;
 
   const database = await getRequestDb(context);
+  await promoteLegacyOAuthIssuerForUser(
+    database,
+    userId,
+    resolveIssuerOrigin(request.url, getCloudflareEnv(context)?.SPOONJOY_BASE_URL),
+  );
 
   const user = await database.user.findUnique({
     where: { id: userId },
@@ -190,9 +204,12 @@ export async function loadAccountSettings({
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: {
       clientId: true,
+      id: true,
+      issuer: true,
       resource: true,
       scope: true,
       createdAt: true,
+      connectionKey: true,
     },
   });
   const oauthClientIds = [...new Set(activeRefreshTokens.map((token) => token.clientId))];
@@ -209,7 +226,7 @@ export async function loadAccountSettings({
     ]),
   );
   const accessCredentialCounts = await database.apiCredential.groupBy({
-    by: ["oauthClientId", "oauthResource"],
+    by: ["oauthClientId", "oauthIssuer", "oauthResource", "oauthConnectionKey"],
     where: {
       userId,
       revokedAt: null,
@@ -219,36 +236,35 @@ export async function loadAccountSettings({
   });
   const accessCounts = new Map(
     accessCredentialCounts.map((row) => [
-      `${row.oauthClientId!}\u0000${row.oauthResource ?? ""}`,
+      `${row.oauthClientId!}\u0000${row.oauthIssuer ?? ""}\u0000${row.oauthResource ?? ""}\u0000${row.oauthConnectionKey ?? ""}`,
       row._count._all,
     ]),
   );
   const oauthConnectionGroups = new Map<string, {
     clientId: string;
     clientName: string | null;
+    issuer: string;
     resource: string | null;
-    scopes: Set<string>;
-    createdAt: Date;
-    refreshTokenCount: number;
-    accessTokenCount: number;
+    connectionKeys: Set<string>;
+    tokens: typeof activeRefreshTokens;
   }>();
   for (const token of activeRefreshTokens) {
-    const key = `${token.clientId}\u0000${token.resource ?? ""}`;
+    if (!token.issuer) continue;
+    const key = `${token.clientId}\u0000${token.issuer}\u0000${token.resource ?? ""}`;
+    const connectionKey = token.connectionKey ?? token.id;
     const existing = oauthConnectionGroups.get(key);
     if (existing) {
-      for (const scope of token.scope.trim().split(/\s+/).filter(Boolean)) existing.scopes.add(scope);
-      if (token.createdAt < existing.createdAt) existing.createdAt = token.createdAt;
-      existing.refreshTokenCount += 1;
+      existing.connectionKeys.add(connectionKey);
+      existing.tokens.push(token);
       continue;
     }
     oauthConnectionGroups.set(key, {
       clientId: token.clientId,
       clientName: clientNames.get(token.clientId) ?? null,
+      issuer: token.issuer,
       resource: token.resource,
-      scopes: new Set(token.scope.trim().split(/\s+/).filter(Boolean)),
-      createdAt: token.createdAt,
-      refreshTokenCount: 1,
-      accessTokenCount: accessCounts.get(key) ?? 0,
+      connectionKeys: new Set([connectionKey]),
+      tokens: [token],
     });
   }
 
@@ -275,15 +291,37 @@ export async function loadAccountSettings({
         lastUsedAt: credential.lastUsedAt ? credential.lastUsedAt.toISOString() : null,
         expiresAt: credential.expiresAt ? credential.expiresAt.toISOString() : null,
       })),
-      oauthConnections: Array.from(oauthConnectionGroups.values()).map((connection) => ({
-        clientId: connection.clientId,
-        clientName: connection.clientName,
-        resource: connection.resource,
-        scopes: Array.from(connection.scopes).sort(),
-        createdAt: connection.createdAt.toISOString(),
-        refreshTokenCount: connection.refreshTokenCount,
-        accessTokenCount: connection.accessTokenCount,
-      })),
+      oauthConnections: Array.from(oauthConnectionGroups.values()).flatMap((connection) => {
+        const keys = Array.from(connection.connectionKeys).sort();
+        const batches = Array.from(
+          { length: Math.ceil(keys.length / OAUTH_CONNECTION_KEY_BATCH_SIZE) },
+          (_, index) => keys.slice(index * OAUTH_CONNECTION_KEY_BATCH_SIZE, (index + 1) * OAUTH_CONNECTION_KEY_BATCH_SIZE),
+        );
+        return batches.map((connectionKeys, index) => {
+          const tokens = connection.tokens.filter((token) => connectionKeys.includes(token.connectionKey ?? token.id));
+          const scopes = new Set(tokens.flatMap((token) => token.scope.trim().split(/\s+/).filter(Boolean)));
+          const createdAt = tokens.reduce(
+            (earliest, token) => token.createdAt < earliest ? token.createdAt : earliest,
+            tokens[0]!.createdAt,
+          );
+          const tuple = `${connection.clientId}\u0000${connection.issuer}\u0000${connection.resource ?? ""}\u0000`;
+          const accessTokenCount = connectionKeys.reduce(
+            (count, connectionKey) => count + (accessCounts.get(`${tuple}${connectionKey}`) ?? 0),
+            index === 0 ? (accessCounts.get(tuple) ?? 0) : 0,
+          );
+          return {
+            clientId: connection.clientId,
+            clientName: connection.clientName,
+            issuer: connection.issuer,
+            resource: connection.resource,
+            scopes: Array.from(scopes).sort(),
+            createdAt: createdAt.toISOString(),
+            refreshTokenCount: tokens.length,
+            accessTokenCount,
+            connectionKeys,
+          };
+        });
+      }),
     },
     notifications: {
       pushSubscribed: pushCount > 0,
@@ -300,6 +338,11 @@ export async function handleAccountSettingsAction({
   const userId = await requireUserId(request, "/login", getCloudflareEnv(context));
 
   const database = await getRequestDb(context);
+  await promoteLegacyOAuthIssuerForUser(
+    database,
+    userId,
+    resolveIssuerOrigin(request.url, getCloudflareEnv(context)?.SPOONJOY_BASE_URL),
+  );
 
   const formData = await request.formData();
   const intent = formData.get("intent");
@@ -542,9 +585,18 @@ export async function handleAccountSettingsAction({
 
   if (intent === "disconnectOAuthClient") {
     const clientId = formData.get("clientId")?.toString() || "";
+    const issuer = formData.get("issuer")?.toString() || "";
     const resourceValue = formData.get("resource")?.toString() || "";
     const resource = resourceValue || null;
-    if (!clientId) {
+    const submittedConnectionKeys = formData.getAll("connectionKey").map((value) => value.toString());
+    const connectionKeys = [...new Set(submittedConnectionKeys)];
+    if (
+      !clientId ||
+      !issuer ||
+      connectionKeys.length === 0 ||
+      connectionKeys.length > OAUTH_CONNECTION_KEY_BATCH_SIZE ||
+      connectionKeys.some((key) => !/^[A-Za-z0-9_-]{1,128}$/.test(key))
+    ) {
       return {
         success: false,
         error: "oauth_connection_not_found",
@@ -552,23 +604,35 @@ export async function handleAccountSettingsAction({
       };
     }
 
+    const ownership = oauthRefreshConnectionOwnership(connectionKeys);
     const now = new Date();
     const refresh = await database.oAuthRefreshToken.updateMany({
-      where: { userId, clientId, resource, revokedAt: null },
+      where: { userId, clientId, issuer, resource, revokedAt: null, ...ownership },
       data: { revokedAt: now },
     });
-    const access = await database.apiCredential.updateMany({
-      where: { userId, oauthClientId: clientId, oauthResource: resource, revokedAt: null },
-      data: { revokedAt: now },
-    });
-
-    if (refresh.count === 0 && access.count === 0) {
+    const cleanupCutoff = (await database.oAuthRefreshToken.findFirst({
+      where: { userId, clientId, issuer, resource, revokedAt: { not: null }, ...ownership },
+      orderBy: { revokedAt: "desc" },
+      select: { revokedAt: true },
+    }))?.revokedAt;
+    if (!cleanupCutoff) {
       return {
         success: false,
         error: "oauth_connection_not_found",
         message: "OAuth connection not found or already disconnected",
       };
     }
+    const access = await database.apiCredential.updateMany({
+      where: {
+        userId,
+        oauthClientId: clientId,
+        oauthIssuer: issuer,
+        oauthResource: resource,
+        revokedAt: null,
+        ...oauthAccessConnectionOwnership(connectionKeys, cleanupCutoff),
+      },
+      data: { revokedAt: now },
+    });
 
     return {
       success: true,

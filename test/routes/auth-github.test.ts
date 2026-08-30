@@ -65,6 +65,27 @@ describe("GitHub OAuth routes", () => {
     expect(response.headers.get("Location")).toContain("github.com");
   });
 
+  it("ignores hostile forwarding when a GitHub callback origin is configured", async () => {
+    const request = new Request("https://spoonjoy-v2.workers.dev/auth/github", {
+      headers: { "X-Forwarded-Host": "evil.example", "X-Forwarded-Proto": "http" },
+    });
+    await loader({
+      request,
+      context: {
+        cloudflare: {
+          env: { ...githubEnv, SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+        },
+      },
+      params: {},
+    } as any);
+
+    expect(mocks.createGitHubAuthorizationURL).toHaveBeenCalledWith(
+      expect.anything(),
+      "https://spoonjoy.app/auth/github/callback",
+      expect.any(String),
+    );
+  });
+
   it.each([
     ["absent", "https://spoonjoy.app/auth/github"],
     ["explicit empty", "https://spoonjoy.app/auth/github?redirectTo="],
@@ -117,6 +138,19 @@ describe("GitHub OAuth routes", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("Location")).toBe("/signup?oauthError=oauth_unconfigured");
+  });
+
+  it("fails closed when the configured GitHub callback origin is invalid", async () => {
+    const response = await loader({
+      request: new Request("https://spoonjoy.app/auth/github"),
+      context: {
+        cloudflare: { env: { ...githubEnv, SPOONJOY_BASE_URL: "javascript:alert(1)" } },
+      },
+      params: {},
+    } as any);
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe("/login?oauthError=oauth_unconfigured");
   });
 
   it("requires login before starting a linking flow", async () => {
@@ -236,17 +270,51 @@ describe("GitHub OAuth routes", () => {
       failureRedirect: "/login",
       linking: false,
     });
-    const request = new Request("https://spoonjoy.app/auth/github/callback?state=state", {
-      headers: { Cookie: cookieHeader(cookie) },
+    const request = new Request("https://spoonjoy-v2.workers.dev/auth/github/callback?state=state", {
+      headers: {
+        Cookie: cookieHeader(cookie),
+        "X-Forwarded-Host": "evil.example",
+        "X-Forwarded-Proto": "http",
+      },
     });
 
-    await callbackLoader({ request, context: { cloudflare: { env: githubEnv } }, params: {} } as any);
+    await callbackLoader({
+      request,
+      context: {
+        cloudflare: { env: { ...githubEnv, SPOONJOY_BASE_URL: "https://spoonjoy.app" } },
+      },
+      params: {},
+    } as any);
     expect(mocks.verifyGitHubCallback).toHaveBeenCalledWith(
       { clientId: "github-client", clientSecret: "github-secret" },
       "https://spoonjoy.app/auth/github/callback",
       { code: "", state: "state" },
       expect.any(Function)
     );
+  });
+
+  it("fails a legacy GitHub callback closed when its configured fallback origin is invalid", async () => {
+    const cookie = await commitOAuthStartSession(new Request("https://spoonjoy.app/auth/github"), "github", {
+      state: "state",
+      redirectTo: "/recipes",
+      failureRedirect: "/login",
+      linking: false,
+    });
+    const request = new Request("https://spoonjoy-v2.workers.dev/auth/github/callback?state=state&code=code", {
+      headers: { Cookie: cookieHeader(cookie) },
+    });
+
+    const response = await callbackLoader({
+      request,
+      context: {
+        cloudflare: { env: { ...githubEnv, SPOONJOY_BASE_URL: "javascript:alert(1)" } },
+      },
+      params: {},
+    } as any);
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe("/login?oauthError=oauth_unconfigured");
+    expect(mocks.verifyGitHubCallback).not.toHaveBeenCalled();
   });
 
   it("redirects when GitHub verification succeeds without a user payload", async () => {

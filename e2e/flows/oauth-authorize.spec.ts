@@ -150,7 +150,10 @@ async function expectRefreshReplayRejected(
 
 async function expectMcpReady(request: APIRequestContext, accessToken: string): Promise<void> {
   const initialize = await request.post('/mcp', {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: {
+      Accept: 'application/json, text/event-stream',
+      Authorization: `Bearer ${accessToken}`,
+    },
     data: { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } },
   });
   expect(initialize.status()).toBe(200);
@@ -159,7 +162,10 @@ async function expectMcpReady(request: APIRequestContext, accessToken: string): 
   });
 
   const tools = await request.post('/mcp', {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: {
+      Accept: 'application/json, text/event-stream',
+      Authorization: `Bearer ${accessToken}`,
+    },
     data: { jsonrpc: '2.0', id: 2, method: 'tools/list' },
   });
   expect(tools.status()).toBe(200);

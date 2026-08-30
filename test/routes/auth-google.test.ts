@@ -69,6 +69,28 @@ describe("Google OAuth routes", () => {
     expect(response.headers.get("Location")).toContain("accounts.google.com");
   });
 
+  it("ignores hostile forwarding when a Google callback origin is configured", async () => {
+    const request = new Request("https://spoonjoy-v2.workers.dev/auth/google", {
+      headers: { "X-Forwarded-Host": "evil.example", "X-Forwarded-Proto": "http" },
+    });
+    await loader({
+      request,
+      context: {
+        cloudflare: {
+          env: { ...googleEnv, SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+        },
+      },
+      params: {},
+    } as any);
+
+    expect(mocks.createGoogleAuthorizationURL).toHaveBeenCalledWith(
+      expect.anything(),
+      "https://spoonjoy.app/auth/google/callback",
+      expect.any(String),
+      "mock-code-verifier",
+    );
+  });
+
   it.each([
     ["absent", "https://spoonjoy.app/auth/google"],
     ["explicit empty", "https://spoonjoy.app/auth/google?redirectTo="],
@@ -123,6 +145,19 @@ describe("Google OAuth routes", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("Location")).toBe("/signup?oauthError=oauth_unconfigured");
+  });
+
+  it("fails closed when the configured Google callback origin is invalid", async () => {
+    const response = await loader({
+      request: new Request("https://spoonjoy.app/auth/google"),
+      context: {
+        cloudflare: { env: { ...googleEnv, SPOONJOY_BASE_URL: "javascript:alert(1)" } },
+      },
+      params: {},
+    } as any);
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe("/login?oauthError=oauth_unconfigured");
   });
 
   it("requires login before starting a linking flow", async () => {
@@ -263,17 +298,52 @@ describe("Google OAuth routes", () => {
       failureRedirect: "/login",
       linking: false,
     });
-    const request = new Request("https://spoonjoy.app/auth/google/callback?state=state", {
-      headers: { Cookie: cookieHeader(cookie) },
+    const request = new Request("https://spoonjoy-v2.workers.dev/auth/google/callback?state=state", {
+      headers: {
+        Cookie: cookieHeader(cookie),
+        "X-Forwarded-Host": "evil.example",
+        "X-Forwarded-Proto": "http",
+      },
     });
 
-    await callbackLoader({ request, context: { cloudflare: { env: googleEnv } }, params: {} } as any);
+    await callbackLoader({
+      request,
+      context: {
+        cloudflare: { env: { ...googleEnv, SPOONJOY_BASE_URL: "https://spoonjoy.app" } },
+      },
+      params: {},
+    } as any);
     expect(mocks.verifyGoogleCallback).toHaveBeenCalledWith(
       { clientId: "google-client", clientSecret: "google-secret" },
       "https://spoonjoy.app/auth/google/callback",
       { code: "", state: "state", codeVerifier: "verifier" },
       expect.any(Function)
     );
+  });
+
+  it("fails a legacy Google callback closed when its configured fallback origin is invalid", async () => {
+    const cookie = await commitOAuthStartSession(new Request("https://spoonjoy.app/auth/google"), "google", {
+      state: "state",
+      codeVerifier: "verifier",
+      redirectTo: "/recipes",
+      failureRedirect: "/login",
+      linking: false,
+    });
+    const request = new Request("https://spoonjoy-v2.workers.dev/auth/google/callback?state=state&code=code", {
+      headers: { Cookie: cookieHeader(cookie) },
+    });
+
+    const response = await callbackLoader({
+      request,
+      context: {
+        cloudflare: { env: { ...googleEnv, SPOONJOY_BASE_URL: "javascript:alert(1)" } },
+      },
+      params: {},
+    } as any);
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe("/login?oauthError=oauth_unconfigured");
+    expect(mocks.verifyGoogleCallback).not.toHaveBeenCalled();
   });
 
   it("redirects when Google verification succeeds without a user payload", async () => {

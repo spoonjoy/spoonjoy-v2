@@ -17,17 +17,58 @@
 
 import { SUPPORTED_SCOPES } from "~/lib/oauth-server.server";
 
+const DNS_NAME = "(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+const IPV6_HOST = "\\[[0-9a-f:.]+\\]";
+const SERIALIZED_HTTP_ORIGIN = new RegExp(
+  `^https?://(?:${DNS_NAME}|${IPV6_HOST})(?::\\d{1,5})?$`,
+  "i",
+);
+
 /**
  * Resolve the public issuer origin: the configured base URL when present,
  * otherwise the request's own origin (local dev).
  */
 export function resolveIssuerOrigin(requestUrl: string, baseUrl?: string | null): string {
-  return new URL(baseUrl || requestUrl).origin;
+  return canonicalHttpOrigin(baseUrl || requestUrl);
+}
+
+export function canonicalHttpOrigin(value: string): string {
+  if (/[\u0000-\u001f\u007f\\]/.test(value)) {
+    throw new Error("OAuth issuer must be a canonical HTTP(S) origin.");
+  }
+  const url = new URL(value);
+  if (
+    (url.protocol !== "https:" && url.protocol !== "http:") ||
+    url.username ||
+    url.password ||
+    !url.hostname
+  ) {
+    throw new Error("OAuth issuer must be a canonical HTTP(S) origin.");
+  }
+  const trailingDots = url.hostname.match(/\.+$/)?.[0] ?? "";
+  if (trailingDots.length > 1) {
+    throw new Error("OAuth issuer must be a canonical HTTP(S) origin.");
+  }
+  if (trailingDots) url.hostname = url.hostname.slice(0, -1);
+  return url.origin;
+}
+
+export function parseSerializedHttpOrigin(value: string): string | null {
+  if (!SERIALIZED_HTTP_ORIGIN.test(value)) return null;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
 }
 
 /** The MCP endpoint these tokens are bound to (the protected resource). */
 export function mcpResourceUrl(origin: string): string {
   return `${origin}/mcp`;
+}
+
+export function isCanonicalMcpResource(resource: string | null | undefined, origin: string): boolean {
+  return resource === mcpResourceUrl(origin);
 }
 
 /** URL of the protected-resource metadata, for the `WWW-Authenticate` hint. */
@@ -42,6 +83,7 @@ export function buildAuthorizationServerMetadata(origin: string): Record<string,
     token_endpoint: `${origin}/oauth/token`,
     revocation_endpoint: `${origin}/oauth/revoke`,
     registration_endpoint: `${origin}/oauth/register`,
+    authorization_response_iss_parameter_supported: true,
     scopes_supported: [...SUPPORTED_SCOPES],
     response_types_supported: ["code"],
     grant_types_supported: ["authorization_code", "refresh_token"],

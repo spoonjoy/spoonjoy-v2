@@ -94,6 +94,11 @@ jobs:
       - name: 🔐 Validate CI invocation
         run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation
 
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+
       - name: 📦 Activate pnpm
         run: |
           node scripts/warning-gate.ts -- corepack enable
@@ -135,6 +140,9 @@ jobs:
 
       - name: 🧪 Test & Coverage
         run: pnpm run verify:clean:test:coverage
+
+      - name: 🐍 Official Python MCP SDK conformance
+        run: pnpm run verify:clean:test:mcp-sdk-python
 
       - name: 🏗️ Build
         run: pnpm run verify:clean:build

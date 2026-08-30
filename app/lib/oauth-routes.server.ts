@@ -13,8 +13,10 @@ import { getUserId } from "~/lib/session.server";
 import {
   clientAllowsRedirect,
   consumeAuthorizationCode,
+  createOAuthOpaqueToken,
   createAuthorizationCode,
   getOAuthClient,
+  hashOAuthOpaqueToken,
   issueConnectorTokens,
   normalizeScope,
   OAuthError,
@@ -23,7 +25,12 @@ import {
   rotateConnectorTokens,
   type IssuedConnectorTokens,
 } from "~/lib/oauth-server.server";
-import { mcpResourceUrl, resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
+import {
+  isCanonicalMcpResource,
+  mcpResourceUrl,
+  parseSerializedHttpOrigin,
+  resolveIssuerOrigin,
+} from "~/lib/oauth-metadata.server";
 
 type Database = PrismaClientType;
 
@@ -93,6 +100,10 @@ async function readLimitedJsonBody(request: Request): Promise<RegisterBody> {
 }
 
 function isRegisterBody(value: unknown): value is RegisterBody {
+  return isJsonObject(value);
+}
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -129,11 +140,8 @@ function trustedConsentOrigins(request: Request, env: OAuthEnv | null | undefine
 function crossOriginConsentResponse(request: Request, env: OAuthEnv | null | undefined): Response | null {
   const origin = request.headers.get("Origin");
   if (!origin) return null;
-  try {
-    if (trustedConsentOrigins(request, env).has(new URL(origin).origin)) return null;
-  } catch {
-    // Treat malformed Origin as hostile instead of guessing.
-  }
+  const parsedOrigin = parseSerializedHttpOrigin(origin);
+  if (parsedOrigin && trustedConsentOrigins(request, env).has(parsedOrigin)) return null;
   return Response.json(
     { error: "invalid_request", error_description: "OAuth consent must be submitted from Spoonjoy." },
     { status: 403 },
@@ -231,11 +239,24 @@ function validateRegisterMetadata(body: RegisterBody): void {
     }
   }
 
+  validateStringArray(body.redirect_uris, "redirect_uris");
+  if (body.client_name !== undefined && typeof body.client_name !== "string") {
+    rejectInvalidClientMetadata("client_name must be a string");
+  }
+
   if (
     body.token_endpoint_auth_method !== undefined
     && body.token_endpoint_auth_method !== "none"
   ) {
     rejectInvalidClientMetadata("Only token_endpoint_auth_method: none is supported");
+  }
+
+  if (
+    body.application_type !== undefined
+    && body.application_type !== "web"
+    && body.application_type !== "native"
+  ) {
+    rejectInvalidClientMetadata('application_type must be "web" or "native"');
   }
 
   const grantTypes = validateStringArray(body.grant_types, "grant_types");
@@ -269,7 +290,11 @@ function registerTelemetryForBody(body: RegisterBody): OAuthRegisterTelemetryMet
 }
 
 /** RFC 7591 Dynamic Client Registration. */
-export async function handleOAuthRegister(request: Request, db: Database): Promise<Response> {
+export async function handleOAuthRegister(
+  request: Request,
+  db: Database,
+  env?: OAuthEnv | null,
+): Promise<Response> {
   if (request.method !== "POST") {
     return withOAuthRegisterTelemetry(
       Response.json({ error: "invalid_request", error_description: "POST required" }, { status: 405 }),
@@ -296,15 +321,17 @@ export async function handleOAuthRegister(request: Request, db: Database): Promi
     );
   }
 
-  const redirectUris = Array.isArray(body.redirect_uris)
-    ? body.redirect_uris.filter((u): u is string => typeof u === "string")
-    : [];
-  const clientName = typeof body.client_name === "string" ? body.client_name : null;
   const telemetry = registerTelemetryForBody(body);
 
   try {
     validateRegisterMetadata(body);
-    const client = await registerOAuthClient(db, { clientName, redirectUris });
+    const redirectUris = body.redirect_uris as string[];
+    const clientName = (body.client_name as string | undefined) ?? null;
+    const client = await registerOAuthClient(db, {
+      clientName,
+      redirectUris,
+      issuer: resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL),
+    });
     return withOAuthRegisterTelemetry(
       Response.json(
         {
@@ -314,6 +341,7 @@ export async function handleOAuthRegister(request: Request, db: Database): Promi
           token_endpoint_auth_method: "none",
           grant_types: ["authorization_code", "refresh_token"],
           response_types: ["code"],
+          application_type: typeof body.application_type === "string" ? body.application_type : "web",
         },
         { status: 201 },
       ),
@@ -386,20 +414,25 @@ export async function handleOAuthToken(
   const grantType = field("grant_type");
   const safeGrantType = oauthTokenGrantType(grantType);
   const clientId = field("client_id") || undefined;
+  const issuer = resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL);
 
   try {
     if (grantType === "authorization_code") {
+      const persistentMcpResource = mcpResourceUrl(issuer);
       const grant = await consumeAuthorizationCode(db, {
         code: field("code"),
         clientId: field("client_id"),
         redirectUri: field("redirect_uri"),
         codeVerifier: field("code_verifier"),
+        issuer,
       });
       const tokens = await issueConnectorTokens(db, {
         userId: grant.userId,
         clientId: field("client_id"),
         scope: grant.scope,
         resource: grant.resource,
+        persistentMcpResource,
+        issuer,
       });
       return withOAuthTokenTelemetry(
         tokenResponse(tokens),
@@ -418,7 +451,8 @@ export async function handleOAuthToken(
       const tokens = await rotateConnectorTokens(db, {
         refreshToken: field("refresh_token"),
         clientId: field("client_id"),
-        legacyMcpResource: mcpResourceUrl(resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL)),
+        issuer,
+        legacyMcpResource: mcpResourceUrl(issuer),
       });
       return withOAuthTokenTelemetry(
         tokenResponse(tokens),
@@ -460,7 +494,11 @@ export async function handleOAuthToken(
  * so revocation authenticates by possession of the refresh token and optional
  * client_id binding.
  */
-export async function handleOAuthRevoke(request: Request, db: Database): Promise<Response> {
+export async function handleOAuthRevoke(
+  request: Request,
+  db: Database,
+  env?: OAuthEnv | null,
+): Promise<Response> {
   if (request.method !== "POST") {
     return withOAuthRevokeTelemetry(
       Response.json({ error: "invalid_request", error_description: "POST required" }, { status: 405 }),
@@ -499,9 +537,10 @@ export async function handleOAuthRevoke(request: Request, db: Database): Promise
     const revoked = await revokeConnectorRefreshToken(db, {
       refreshToken: (form.get("token") ?? "").toString(),
       clientId,
+      issuer: resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL),
     });
     return withOAuthRevokeTelemetry(
-      new Response(null, { status: 204 }),
+      new Response(null, { status: 200 }),
       {
         outcome: revoked ? "revoked" : "not_found",
         clientId: revoked ? clientId : undefined,
@@ -532,8 +571,33 @@ export interface AuthorizeRequestParams {
 }
 
 export type AuthorizeView =
-  | { kind: "consent"; clientName: string | null; scope: string; params: AuthorizeRequestParams }
+  | { kind: "consent"; clientName: string | null; scope: string; params: AuthorizeRequestParams; consentToken: string }
   | { kind: "error"; message: string };
+
+const OAUTH_CONSENT_TTL_MS = 10 * 60 * 1000;
+
+async function createConsentTransaction(
+  db: Database,
+  input: { userId: string; issuer: string; params: AuthorizeRequestParams; expiresAt: Date },
+): Promise<string> {
+  const token = createOAuthOpaqueToken("oct_");
+  await db.oAuthConsentTransaction.deleteMany({ where: { expiresAt: { lte: new Date() } } });
+  await db.oAuthConsentTransaction.create({
+    data: {
+      tokenHash: await hashOAuthOpaqueToken(token),
+      userId: input.userId,
+      issuer: input.issuer,
+      clientId: input.params.clientId,
+      redirectUri: input.params.redirectUri,
+      state: input.params.state,
+      scope: input.params.scope,
+      codeChallenge: input.params.codeChallenge,
+      resource: input.params.resource || null,
+      expiresAt: input.expiresAt,
+    },
+  });
+  return token;
+}
 
 type OAuthAuthorizeStateClass = "missing" | "short" | "present" | "unknown";
 
@@ -699,11 +763,12 @@ function authorizeDecision(value: string): "approve" | "deny" | "other" {
 async function validateClientRedirect(
   db: Database,
   params: AuthorizeRequestParams,
+  issuer: string,
 ): Promise<
   | { ok: true; clientName: string | null }
   | { ok: false; code: "invalid_client" | "invalid_redirect_uri"; message: string }
 > {
-  const client = await getOAuthClient(db, params.clientId);
+  const client = await getOAuthClient(db, params.clientId, issuer);
   if (!client) return { ok: false, code: "invalid_client", message: "Unknown OAuth client." };
   if (!params.redirectUri || !clientAllowsRedirect(client, params.redirectUri)) {
     return {
@@ -715,10 +780,11 @@ async function validateClientRedirect(
   return { ok: true, clientName: client.clientName };
 }
 
-function redirectBackWithError(params: AuthorizeRequestParams, code: string): Response {
+function redirectBackWithError(params: AuthorizeRequestParams, code: string, issuer: string): Response {
   const url = new URL(params.redirectUri);
   url.searchParams.set("error", code);
   if (params.state) url.searchParams.set("state", params.state);
+  url.searchParams.set("iss", issuer);
   return new Response(null, { status: 302, headers: { Location: url.toString() } });
 }
 
@@ -728,8 +794,8 @@ function validS256CodeChallenge(value: string) {
 
 function normalizeAuthorizeResource(request: Request, env: OAuthEnv | null | undefined, resource: string) {
   if (!resource) return null;
-  const expected = mcpResourceUrl(resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL));
-  return resource === expected ? resource : "";
+  const origin = resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL);
+  return isCanonicalMcpResource(resource, origin) ? resource : "";
 }
 
 async function validateAuthorizeRequest(
@@ -742,7 +808,8 @@ async function validateAuthorizeRequest(
   | { ok: false; kind: "local"; code: string; message: string }
   | { ok: false; kind: "redirect"; code: string; resource?: string | null }
 > {
-  const validation = await validateClientRedirect(db, params);
+  const issuer = resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL);
+  const validation = await validateClientRedirect(db, params, issuer);
   if (!validation.ok) return { ok: false, kind: "local", code: validation.code, message: validation.message };
   if (params.responseType !== "code") return { ok: false, kind: "redirect", code: "unsupported_response_type" };
   if (params.state.trim().length < 16) return { ok: false, kind: "redirect", code: "invalid_request" };
@@ -768,6 +835,7 @@ export async function loadOAuthAuthorize(
   env: OAuthEnv | null | undefined,
 ): Promise<AuthorizeView | Response> {
   const url = new URL(request.url);
+  const issuer = resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL);
   const params = readAuthorizeParams(url.searchParams);
 
   const validation = await validateAuthorizeRequest(request, db, env, params);
@@ -783,7 +851,7 @@ export async function loadOAuthAuthorize(
   }
   if (!validation.ok) {
     return withOAuthAuthorizeTelemetry(
-      redirectBackWithError(params, validation.code),
+      redirectBackWithError(params, validation.code, issuer),
       {
         outcome: "redirect_error",
         clientId: params.clientId,
@@ -815,6 +883,12 @@ export async function loadOAuthAuthorize(
       clientName: validation.clientName,
       scope: validation.scope,
       params: { ...params, scope: validation.scope, resource: validation.resource ?? "" },
+      consentToken: await createConsentTransaction(db, {
+        issuer,
+        userId,
+        params: { ...params, scope: validation.scope, resource: validation.resource ?? "" },
+        expiresAt: new Date(Date.now() + OAUTH_CONSENT_TTL_MS),
+      }),
     },
     {
       ...validatedAuthorizeTelemetry(params, validation, userId),
@@ -832,6 +906,7 @@ export async function handleOAuthAuthorizeAction(
   db: Database,
   env: OAuthEnv | null | undefined,
 ): Promise<Response> {
+  const issuer = resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL);
   const crossOrigin = crossOriginConsentResponse(request, env);
   if (crossOrigin) {
     return withOAuthAuthorizeTelemetry(crossOrigin, {
@@ -861,62 +936,86 @@ export async function handleOAuthAuthorizeAction(
       },
     );
   }
-  const params = readAuthorizeParams(form);
   const decision = (form.get("decision") ?? "").toString();
   const userId = await getUserId(request, env);
-
-  const validation = await validateAuthorizeRequest(request, db, env, params);
-  if (!validation.ok && validation.kind === "local") {
+  const consentToken = (form.get("consent_token") ?? "").toString();
+  if (!userId || (decision !== "approve" && decision !== "deny") || !consentToken) {
     return withOAuthAuthorizeTelemetry(
-      Response.json({ error: "invalid_request", error_description: validation.message }, { status: 400 }),
+      Response.json({ error: "invalid_request", error_description: "The consent transaction is invalid or expired." }, { status: 400 }),
       {
-        outcome: "client_error",
-        errorCode: validation.code,
+        outcome: "error",
+        errorCode: "invalid_request",
         principalId: userId || undefined,
-        stateClass: authorizeStateClass(params.state),
+        decision: authorizeDecision(decision),
+        stateClass: "unknown",
       },
     );
   }
+
+  const now = new Date();
+  const transaction = await db.oAuthConsentTransaction.findFirst({
+    where: {
+      tokenHash: await hashOAuthOpaqueToken(consentToken),
+      userId,
+      issuer,
+      expiresAt: { gt: now },
+    },
+  });
+  if (!transaction) {
+    return withOAuthAuthorizeTelemetry(
+      Response.json({ error: "invalid_request", error_description: "The consent transaction is invalid or expired." }, { status: 400 }),
+      {
+        outcome: "error",
+        principalId: userId,
+        decision,
+        errorCode: "invalid_request",
+        stateClass: "unknown",
+      },
+    );
+  }
+
+  const params: AuthorizeRequestParams = {
+    clientId: transaction.clientId,
+    redirectUri: transaction.redirectUri,
+    responseType: "code",
+    state: transaction.state,
+    scope: transaction.scope,
+    codeChallenge: transaction.codeChallenge,
+    codeChallengeMethod: "S256",
+    resource: transaction.resource ?? "",
+  };
+  const validation = await validateAuthorizeRequest(request, db, env, params);
   if (!validation.ok) {
     return withOAuthAuthorizeTelemetry(
-      redirectBackWithError(params, validation.code),
+      Response.json({ error: "invalid_request", error_description: "The consent transaction is no longer valid." }, { status: 400 }),
       {
-        outcome: "redirect_error",
+        outcome: "error",
         clientId: params.clientId,
-        principalId: userId || undefined,
-        errorCode: validation.code,
+        principalId: userId,
+        decision,
+        errorCode: "invalid_request",
         stateClass: authorizeStateClass(params.state),
-        resource: validation.resource ?? undefined,
       },
     );
   }
 
-  if (!userId) {
-    const returnTo = `/oauth/authorize?${new URLSearchParams({
-      client_id: params.clientId,
-      redirect_uri: params.redirectUri,
-      response_type: params.responseType,
-      code_challenge: params.codeChallenge,
-      code_challenge_method: params.codeChallengeMethod,
-      scope: params.scope,
-      state: params.state,
-      resource: params.resource,
-    })}`;
-    return withOAuthAuthorizeTelemetry(
-      new Response(null, {
-        status: 302,
-        headers: { Location: `/login?redirectTo=${encodeURIComponent(returnTo)}` },
-      }),
-      {
-        ...validatedAuthorizeTelemetry(params, validation),
-        outcome: "login_redirect",
-      },
-    );
-  }
+  const consumeConsent = () => db.oAuthConsentTransaction.deleteMany({
+    where: { tokenHash: transaction.tokenHash, userId, issuer, expiresAt: { gt: now } },
+  });
+  const consumedError = () => withOAuthAuthorizeTelemetry(
+    Response.json({ error: "invalid_request", error_description: "The consent transaction is invalid or expired." }, { status: 400 }),
+    {
+      ...validatedAuthorizeTelemetry(params, validation, userId),
+      outcome: "error" as const,
+      decision,
+      errorCode: "invalid_request",
+    },
+  );
 
-  if (decision !== "approve") {
+  if (decision === "deny") {
+    if ((await consumeConsent()).count !== 1) return consumedError();
     return withOAuthAuthorizeTelemetry(
-      redirectBackWithError(params, "access_denied"),
+      redirectBackWithError(params, "access_denied", issuer),
       {
         ...validatedAuthorizeTelemetry(params, validation, userId),
         outcome: "denied",
@@ -933,11 +1032,24 @@ export async function handleOAuthAuthorizeAction(
     codeChallenge: params.codeChallenge,
     scope: validation.scope,
     resource: validation.resource,
+    issuer,
   });
+  let consumed: { count: number };
+  try {
+    consumed = await consumeConsent();
+  } catch (error) {
+    await db.oAuthAuthCode.deleteMany({ where: { codeHash: await hashOAuthOpaqueToken(code) } });
+    throw error;
+  }
+  if (consumed.count !== 1) {
+    await db.oAuthAuthCode.deleteMany({ where: { codeHash: await hashOAuthOpaqueToken(code) } });
+    return consumedError();
+  }
 
   const url = new URL(params.redirectUri);
   url.searchParams.set("code", code);
   url.searchParams.set("state", params.state);
+  url.searchParams.set("iss", issuer);
   return withOAuthAuthorizeTelemetry(
     new Response(null, { status: 302, headers: { Location: url.toString() } }),
     {

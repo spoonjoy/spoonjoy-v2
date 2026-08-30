@@ -143,6 +143,25 @@ describe("oauth-route.server", () => {
     );
   });
 
+  it("lets the configured production origin override hostile forwarding headers", () => {
+    const request = new Request("https://spoonjoy-v2.workers.dev/auth/apple", {
+      headers: {
+        "X-Forwarded-Host": "evil.example:8443",
+        "X-Forwarded-Proto": "http",
+      },
+    });
+
+    expect(buildOAuthCallbackUrl(request, "github", "HTTPS://SPOONJOY.APP.:443/path")).toBe(
+      "https://spoonjoy.app/auth/github/callback",
+    );
+    expect(buildAppleReturnUrl(
+      request,
+      "loginWithApple",
+      "legacy",
+      "HTTPS://SPOONJOY.APP.:443/path",
+    )).toBe("https://spoonjoy.app/.redwood/functions/auth/oauth?method=loginWithApple");
+  });
+
   it("allows forwarded http origins for local proxy callback URLs", () => {
     const request = new Request("https://spoonjoy-v2.mendelow-studio.workers.dev/auth/google", {
       headers: {

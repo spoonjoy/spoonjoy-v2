@@ -12,30 +12,31 @@ generator client {
 // to create migrations for them and apply to your dev DB.
 
 model User {
-  id                  String             @id @default(cuid())
-  email               String             @unique
-  username            String             @unique
+  id                       String                    @id @default(cuid())
+  email                    String                    @unique
+  username                 String                    @unique
   // this and salt are optional because we allow OAuth only users to not have a password
-  hashedPassword      String?
-  salt                String?
-  resetToken          String?
-  resetTokenExpiresAt DateTime?
-  webAuthnChallenge   String?            @unique
-  photoUrl            String?
-  credentials         UserCredential[]
-  OAuth               OAuth[]
-  recipes             Recipe[]
-  shoppingList        ShoppingList?
-  cookbooks           Cookbook[]
-  addedToCookbooks    RecipeInCookbook[]
-  apiCredentials      ApiCredential[]
-  apiIdempotencyKeys  ApiIdempotencyKey[]
-  nativeSyncTombstones NativeSyncTombstone[]
-  agentConnections    AgentConnectionRequest[]
-  oauthAuthCodes      OAuthAuthCode[]
-  oauthRefreshTokens  OAuthRefreshToken[]
-  spoons              RecipeSpoon[]
-  imageGenLedger      ImageGenLedger[]
+  hashedPassword           String?
+  salt                     String?
+  resetToken               String?
+  resetTokenExpiresAt      DateTime?
+  webAuthnChallenge        String?                   @unique
+  photoUrl                 String?
+  credentials              UserCredential[]
+  OAuth                    OAuth[]
+  recipes                  Recipe[]
+  shoppingList             ShoppingList?
+  cookbooks                Cookbook[]
+  addedToCookbooks         RecipeInCookbook[]
+  apiCredentials           ApiCredential[]
+  apiIdempotencyKeys       ApiIdempotencyKey[]
+  nativeSyncTombstones     NativeSyncTombstone[]
+  agentConnections         AgentConnectionRequest[]
+  oauthAuthCodes           OAuthAuthCode[]
+  oauthConsentTransactions OAuthConsentTransaction[]
+  oauthRefreshTokens       OAuthRefreshToken[]
+  spoons                   RecipeSpoon[]
+  imageGenLedger           ImageGenLedger[]
 
   pushSubscriptions      PushSubscription[]
   nativePushDevices      NativePushDevice[]
@@ -47,20 +48,22 @@ model User {
 }
 
 model ApiCredential {
-  id          String    @id @default(cuid())
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name        String
-  tokenHash   String    @unique
-  tokenPrefix String
-  scopes      String    @default("kitchen:read kitchen:write")
-  lastUsedAt  DateTime?
-  revokedAt   DateTime?
-  oauthClientId String?
-  oauthResource String?
+  id                 String    @id @default(cuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name               String
+  tokenHash          String    @unique
+  tokenPrefix        String
+  scopes             String    @default("kitchen:read kitchen:write")
+  lastUsedAt         DateTime?
+  revokedAt          DateTime?
+  oauthClientId      String?
+  oauthIssuer        String?
+  oauthResource      String?
+  oauthConnectionKey String?
   // Optional expiry. Null = non-expiring (API tokens, agent-delegated tokens).
   // OAuth-connector access tokens set this so they roll over via refresh.
-  expiresAt   DateTime?
+  expiresAt          DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
@@ -71,15 +74,16 @@ model ApiCredential {
   @@index([userId])
   @@index([tokenPrefix])
   @@index([oauthClientId])
+  @@index([oauthConnectionKey])
   @@index([oauthResource])
 }
 
 model ApiIdempotencyKey {
-  id             String         @id @default(cuid())
+  id             String                 @id @default(cuid())
   userId         String
-  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   credentialId   String?
-  credential     ApiCredential? @relation(fields: [credentialId], references: [id], onDelete: SetNull)
+  credential     ApiCredential?         @relation(fields: [credentialId], references: [id], onDelete: SetNull)
   clientKey      String
   key            String
   operation      String
@@ -133,12 +137,12 @@ model NativeSyncTombstone {
 }
 
 model AgentConnectionRequest {
-  id             String         @id @default(cuid())
-  deviceCodeHash String         @unique
-  userCode       String         @unique
+  id             String @id @default(cuid())
+  deviceCodeHash String @unique
+  userCode       String @unique
   agentName      String
-  scopes         String         @default("kitchen:read kitchen:write")
-  status         String         @default("pending")
+  scopes         String @default("kitchen:read kitchen:write")
+  status         String @default("pending")
 
   approvedById String?
   approvedBy   User?   @relation(fields: [approvedById], references: [id], onDelete: SetNull)
@@ -196,13 +200,14 @@ model OAuth {
 // `OAuth` model above, which records Spoonjoy logging in *as a client* to
 // Google/Apple. Clients self-register via Dynamic Client Registration.
 model OAuthClient {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   clientName   String?
   // Space-separated list of allowed redirect URIs (validated at authorize/token).
   redirectUris String
+  issuer       String?
   // Retained tombstone: revoked clients cannot authorize, mint, rotate, or authenticate.
   revokedAt    DateTime?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
 }
 
 // Short-lived, single-use authorization codes for the PKCE auth-code grant.
@@ -210,6 +215,7 @@ model OAuthAuthCode {
   id            String    @id @default(cuid())
   codeHash      String    @unique
   clientId      String
+  issuer        String?
   userId        String
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   redirectUri   String
@@ -225,20 +231,40 @@ model OAuthAuthCode {
   @@index([userId])
 }
 
+// Short-lived, single-use server-side snapshot of the authorization request
+// shown on the consent screen. The browser receives only the opaque token.
+model OAuthConsentTransaction {
+  tokenHash     String   @id
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  issuer        String
+  clientId      String
+  redirectUri   String
+  state         String
+  scope         String
+  codeChallenge String
+  resource      String?
+  expiresAt     DateTime
+
+  @@index([expiresAt])
+  @@index([userId, expiresAt])
+}
+
 // Long-lived refresh tokens for the connector. Rotated on every use: a refresh
 // mints a new access token + new refresh token and marks the old one revoked,
 // so a replayed refresh token is rejected. Stored only as a SHA-256 hash.
 model OAuthRefreshToken {
-  id        String    @id @default(cuid())
-  tokenHash String    @unique
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  clientId  String
-  scope     String
-  resource  String?
+  id            String    @id @default(cuid())
+  tokenHash     String    @unique
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId      String
+  issuer        String?
+  scope         String
+  resource      String?
   connectionKey String?
-  revokedAt DateTime?
-  createdAt DateTime  @default(now())
+  revokedAt     DateTime?
+  createdAt     DateTime  @default(now())
 
   @@index([userId])
   @@index([clientId])
@@ -246,21 +272,21 @@ model OAuthRefreshToken {
 }
 
 model Recipe {
-  id          String             @id @default(cuid())
-  title       String
-  description String?
-  servings    String?
-  chefId      String
-  chef        User               @relation(fields: [chefId], references: [id], onDelete: Cascade)
-  deletedAt   DateTime?
-  steps       RecipeStep[]
-  cookbooks   RecipeInCookbook[]
-  spoons      RecipeSpoon[]
-  covers      RecipeCover[]      @relation("RecipeCoverHistory")
+  id                 String             @id @default(cuid())
+  title              String
+  description        String?
+  servings           String?
+  chefId             String
+  chef               User               @relation(fields: [chefId], references: [id], onDelete: Cascade)
+  deletedAt          DateTime?
+  steps              RecipeStep[]
+  cookbooks          RecipeInCookbook[]
+  spoons             RecipeSpoon[]
+  covers             RecipeCover[]      @relation("RecipeCoverHistory")
   activeCoverId      String?
-  activeCover        RecipeCover? @relation("RecipeActiveCover", fields: [activeCoverId], references: [id], onDelete: SetNull)
+  activeCover        RecipeCover?       @relation("RecipeActiveCover", fields: [activeCoverId], references: [id], onDelete: SetNull)
   activeCoverVariant String?
-  coverMode          String       @default("auto")
+  coverMode          String             @default("auto")
 
   sourceRecipeId String?
   sourceRecipe   Recipe? @relation("SourceRecipe", fields: [sourceRecipeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -288,7 +314,7 @@ model RecipeStep {
   recipe      Recipe          @relation(fields: [recipeId], references: [id], onDelete: Cascade)
   stepNum     Int
   stepTitle   String?
-  description String          
+  description String
   duration    Int?
   ingredients Ingredient[]
   usingSteps  StepOutputUse[] @relation("input")
@@ -356,7 +382,7 @@ model Unit {
 
 model Cookbook {
   id       String             @id @default(cuid())
-  title    String             
+  title    String
   authorId String
   author   User               @relation(fields: [authorId], references: [id], onDelete: Cascade)
   recipes  RecipeInCookbook[]

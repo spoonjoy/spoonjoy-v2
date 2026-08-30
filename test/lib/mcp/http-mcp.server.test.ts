@@ -237,6 +237,7 @@ describe("handleMcpHttpRequest", () => {
     const created = await createApiCredential(db, user.id, "oauth mcp token", {
       scopes: ["kitchen:read", "kitchen:write"],
       oauthClientId: "oauth_client_1",
+      oauthIssuer: "https://spoonjoy.app",
       oauthResource: options.oauthResource ?? null,
     });
     return { user, token: created.token, credential: created.credential };
@@ -297,13 +298,17 @@ describe("handleMcpHttpRequest", () => {
   it("points the challenge at SPOONJOY_BASE_URL, not the worker's own host", async () => {
     const request = new UndiciRequest("https://spoonjoy-v2.mendelow-studio.workers.dev/mcp", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Forwarded-Host": "evil.example:8443",
+        "X-Forwarded-Proto": "http",
+      },
       body: JSON.stringify(init(4, "initialize", {})),
     }) as unknown as Request;
     const response = await handleMcpHttpRequest({
       request,
       db,
-      cloudflareEnv: { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+      cloudflareEnv: { SPOONJOY_BASE_URL: "HTTPS://SPOONJOY.APP.:443/config/path" },
     });
     expect(response.status).toBe(401);
     expect(response.headers.get("WWW-Authenticate")).toContain(
@@ -320,6 +325,17 @@ describe("handleMcpHttpRequest", () => {
     const body = await response.json() as { result: { protocolVersion: string; serverInfo: { name: string } } };
     expect(body.result.protocolVersion).toBe("2025-06-18");
     expect(body.result.serverInfo.name).toBe("spoonjoy");
+  });
+
+  it("does not advertise an unsupported future version during legacy initialize", async () => {
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(init(1, "initialize", { protocolVersion: "2099-01-01" }), bearer(await mintToken())),
+      db,
+    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      result: { protocolVersion: "2025-06-18" },
+    });
   });
 
   it("lists tools for an authenticated request", async () => {
@@ -429,6 +445,83 @@ describe("handleMcpHttpRequest", () => {
     });
   });
 
+  it.each([
+    "https://SPOONJOY.APP/mcp",
+    "https://spoonjoy.app:443/mcp",
+    "https://spoonjoy.app./mcp",
+    "https://spoonjoy.app:8443/mcp",
+    "http://spoonjoy.app/mcp",
+    "https://spoonjoy.app/mcp/",
+    "https://spoonjoy.app/%6dcp",
+    "https://spoonjoy.app/mcp?query=1",
+    "https://spoonjoy.app/mcp#fragment",
+  ])("rejects a bearer bound to non-canonical audience %s", async (oauthResource) => {
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(init(6, "tools/list"), bearer(await mintOAuthToken({ oauthResource }))),
+      db,
+      cloudflareEnv: { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    });
+
+    expect(response.status).toBe(403);
+  });
+
+  it("rejects a bearer issued by a different authorization-server issuer", async () => {
+    const oauth = await mintOAuthCredential({ oauthResource: "https://spoonjoy.app/mcp" });
+    await db.apiCredential.update({
+      where: { id: oauth.credential.id },
+      data: { oauthIssuer: "https://issuer-a.example" },
+    });
+
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(init(74, "tools/list"), bearer(oauth.token)),
+      db,
+      cloudflareEnv: { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("WWW-Authenticate")).toContain("Bearer");
+  });
+
+  it("returns an RFC 6750 step-up challenge with every missing tool scope", async () => {
+    const limited = await mintCredential({ scopes: ["recipes:read"] });
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(init(75, "tools/call", {
+        name: "create_recipe",
+        arguments: {},
+      }), bearer(limited.token)),
+      db,
+      cloudflareEnv: { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.headers.get("WWW-Authenticate")).toBe(
+      'Bearer error="insufficient_scope", scope="kitchen:write", resource_metadata="https://spoonjoy.app/.well-known/oauth-protected-resource/mcp"',
+    );
+    await expect(response.json()).resolves.toEqual({
+      error: "insufficient_scope",
+      message: "Additional authorization is required for this tool.",
+      required_scopes: ["kitchen:write"],
+    });
+  });
+
+  it("omits already granted scopes from a multi-scope step-up challenge", async () => {
+    const limited = await mintCredential({ scopes: ["recipes:read"] });
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(init(76, "tools/call", {
+        name: "search_spoonjoy",
+        arguments: { query: "soup" },
+      }), bearer(limited.token)),
+      db,
+      cloudflareEnv: { SPOONJOY_BASE_URL: "https://spoonjoy.app" },
+    });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "insufficient_scope",
+      required_scopes: ["cookbooks:read", "shopping_list:read"],
+    });
+  });
+
   it("allows legacy Claude MCP OAuth tokens that predate resource binding", async () => {
     const legacyClientId = "legacy_claude_mcp_client";
     await db.oAuthClient.create({
@@ -442,6 +535,7 @@ describe("handleMcpHttpRequest", () => {
     const created = await createApiCredential(db, user.id, "legacy Claude MCP token", {
       scopes: ["kitchen:read", "kitchen:write"],
       oauthClientId: legacyClientId,
+      oauthIssuer: "https://spoonjoy.app",
       oauthResource: null,
     });
 
@@ -470,6 +564,7 @@ describe("handleMcpHttpRequest", () => {
     const created = await createApiCredential(db, user.id, "mixed legacy Claude MCP token", {
       scopes: ["kitchen:read", "kitchen:write"],
       oauthClientId: legacyClientId,
+      oauthIssuer: "https://spoonjoy.app",
       oauthResource: null,
     });
 
@@ -493,6 +588,23 @@ describe("handleMcpHttpRequest", () => {
     expect(response.status).toBe(200);
     const body = await response.json() as { error: { code: number; message: string } };
     expect(body.error.code).toBe(-32700);
+  });
+
+  it.each([
+    ["batch", [{ jsonrpc: "2.0", id: 70, method: "tools/list" }], null],
+    ["client response", { jsonrpc: "2.0", id: "legacy-response", result: {} }, "legacy-response"],
+  ])("preserves legacy HTTP semantics for an invalid JSON-RPC %s", async (_label, body, id) => {
+    const response = await handleMcpHttpRequest({
+      request: rpcRequest(body, bearer(await mintToken())),
+      db,
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      jsonrpc: "2.0",
+      id,
+      error: { code: -32600, message: "Invalid request" },
+    });
   });
 
   it("rejects oversized Content-Length before JSON-RPC dispatch", async () => {
@@ -832,16 +944,20 @@ describe("handleMcpHttpRequest", () => {
   });
 
   it("normalizes MCP JSON-RPC telemetry helper edge cases without leaking unknown values", () => {
-    expect(mcpJsonRpcTelemetry("not json")).toEqual({});
-    expect(mcpJsonRpcTelemetry("[]")).toEqual({});
-    expect(mcpJsonRpcTelemetry(JSON.stringify({ jsonrpc: "2.0", id: 61, method: 42 }))).toEqual({});
-    expect(mcpJsonRpcTelemetry(JSON.stringify({ jsonrpc: "2.0", id: 62, method: "resources/read" }))).toEqual({});
-    expect(mcpJsonRpcTelemetry(JSON.stringify({
+    expect(mcpJsonRpcTelemetry("not an object")).toEqual({});
+    expect(mcpJsonRpcTelemetry([])).toEqual({});
+    expect(mcpJsonRpcTelemetry({ jsonrpc: "2.0", id: 61, method: 42 })).toEqual({});
+    expect(mcpJsonRpcTelemetry({ jsonrpc: "2.0", id: 62, method: "resources/read" })).toEqual({});
+    expect(mcpJsonRpcTelemetry({ jsonrpc: "2.0", id: 62, method: "server/discover" })).toEqual({
+      jsonRpcMethod: "server/discover",
+      toolName: undefined,
+    });
+    expect(mcpJsonRpcTelemetry({
       jsonrpc: "2.0",
       id: 63,
       method: "tools/call",
       params: { name: "raw_secret_tool_name" },
-    }))).toEqual({ jsonRpcMethod: "tools/call", toolName: undefined });
+    })).toEqual({ jsonRpcMethod: "tools/call", toolName: undefined });
 
     expect(jsonRpcErrorCode(null)).toBeUndefined();
     expect(jsonRpcErrorCode({ error: null })).toBeUndefined();

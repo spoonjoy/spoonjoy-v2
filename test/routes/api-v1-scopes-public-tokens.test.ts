@@ -9,8 +9,8 @@ import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser } from "../utils";
 
-function routeArgs(request: Request, splat: string) {
-  return { request, params: { "*": splat }, context: { cloudflare: { env: null } } } as any;
+function routeArgs(request: Request, splat: string, env: Record<string, unknown> | null = null) {
+  return { request, params: { "*": splat }, context: { cloudflare: { env } } } as any;
 }
 
 async function readJson(response: Response) {
@@ -123,6 +123,44 @@ describe("API v1 public/token scope matrix", () => {
         status: 403,
       },
     });
+  });
+
+  it("accepts a null-resource OAuth token only at its exact issuer", async () => {
+    const issuer = "https://issuer-a.example";
+    const user = await db.user.create({ data: createTestUser() });
+    await db.oAuthClient.create({
+      data: {
+        id: "oauth_client_issuer_boundary",
+        clientName: "Issuer boundary test client",
+        redirectUris: "https://client.example/oauth/callback",
+        issuer,
+      },
+    });
+    const credential = await createApiCredential(db, user.id, "Issuer-bound REST token", {
+      scopes: ["shopping_list:read"],
+      oauthClientId: "oauth_client_issuer_boundary",
+      oauthIssuer: issuer,
+      oauthResource: null,
+    });
+
+    const wrongIssuer = await loader(routeArgs(new UndiciRequest("https://internal.workers.dev/api/v1/shopping-list", {
+      headers: { Authorization: `Bearer ${credential.token}`, "X-Request-Id": "req_scope_issuer_mismatch" },
+    }) as unknown as Request, "shopping-list", { SPOONJOY_BASE_URL: "https://issuer-b.example" }));
+
+    expect(wrongIssuer.status).toBe(401);
+    await expect(readJson(wrongIssuer)).resolves.toMatchObject({
+      ok: false,
+      requestId: "req_scope_issuer_mismatch",
+      error: { code: "invalid_token", message: "Invalid API token", status: 401 },
+    });
+    await expect(db.apiCredential.findUniqueOrThrow({ where: { id: credential.credential.id } }))
+      .resolves.toMatchObject({ lastUsedAt: null });
+
+    const matching = await loader(routeArgs(new UndiciRequest("https://internal.workers.dev/api/v1/shopping-list", {
+      headers: { Authorization: `Bearer ${credential.token}`, "X-Request-Id": "req_scope_issuer_match" },
+    }) as unknown as Request, "shopping-list", { SPOONJOY_BASE_URL: issuer }));
+
+    expect(matching.status).toBe(200);
   });
 
   it("enforces recipe and cookbook read scopes only when a bearer caller is present", async () => {

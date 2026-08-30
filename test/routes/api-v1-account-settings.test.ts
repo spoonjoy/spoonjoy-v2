@@ -8,6 +8,7 @@ import { db } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestUser } from "../utils";
+import { expectConsoleError } from "../warning-policy";
 
 function routeArgs(request: Request, splat: string, context: Record<string, unknown> = {}) {
   return {
@@ -810,6 +811,8 @@ describe("API v1 native account settings", () => {
 	  });
 
   it("lists and disconnects OAuth app connections with opaque native IDs", async () => {
+    const issuer = "http://localhost";
+    const otherIssuer = "https://other.example";
     const token = await createApiCredential(db, userId, "Native token admin", { scopes: ["tokens:read", "tokens:write"] });
     const client = await db.oAuthClient.create({
       data: {
@@ -823,6 +826,25 @@ describe("API v1 native account settings", () => {
     const access = await createApiCredential(db, userId, "Meal planner access", {
       scopes: ["shopping_list:read"],
       oauthClientId: client.id,
+      oauthIssuer: issuer,
+      oauthResource: "https://spoonjoy.app/mcp",
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    await db.oAuthRefreshToken.create({
+      data: {
+        tokenHash: `refresh-${faker.string.alphanumeric(18)}`,
+        userId,
+        clientId: client.id,
+        issuer: otherIssuer,
+        resource: "https://spoonjoy.app/mcp",
+        scope: "account:read",
+        createdAt: new Date("2026-06-20T12:00:00.000Z"),
+      },
+    });
+    const otherAccess = await createApiCredential(db, userId, "Meal planner other issuer", {
+      scopes: ["account:read"],
+      oauthClientId: client.id,
+      oauthIssuer: otherIssuer,
       oauthResource: "https://spoonjoy.app/mcp",
       expiresAt: new Date(Date.now() + 60_000),
     });
@@ -856,21 +878,24 @@ describe("API v1 native account settings", () => {
       id: expect.stringMatching(/^conn_[A-Za-z0-9_-]+$/),
       clientId: client.id,
       clientName: "Meal planner",
+      issuer,
       resource: "https://spoonjoy.app/mcp",
       scopes: ["cookbooks:read", "recipes:read", "shopping_list:read", "shopping_list:write"],
       createdAt: "2026-06-21T10:00:00.000Z",
       refreshTokenCount: 3,
       accessTokenCount: 1,
     }), expect.objectContaining({
-      clientId: missingClientId,
-      clientName: missingClientId,
-      resource: null,
+      clientId: client.id,
+      clientName: "Meal planner",
+      issuer: otherIssuer,
+      resource: "https://spoonjoy.app/mcp",
       scopes: ["account:read"],
       refreshTokenCount: 1,
       accessTokenCount: 1,
     }), expect.objectContaining({
       clientId: unnamedClient.id,
       clientName: unnamedClient.id,
+      issuer: "http://localhost",
       resource: null,
       scopes: ["recipes:read"],
       refreshTokenCount: 1,
@@ -880,13 +905,22 @@ describe("API v1 native account settings", () => {
     type NativeConnectionSummary = {
       id: string;
       clientId: string;
+      issuer: string;
       resource: string | null;
     };
     const connections = payload.data.connections as NativeConnectionSummary[];
     const primaryConnection = connections.find((connection) =>
-      connection.clientId === client.id && connection.resource === "https://spoonjoy.app/mcp");
+      connection.clientId === client.id
+      && connection.issuer === issuer
+      && connection.resource === "https://spoonjoy.app/mcp");
+    const otherConnection = connections.find((connection) =>
+      connection.clientId === client.id
+      && connection.issuer === otherIssuer
+      && connection.resource === "https://spoonjoy.app/mcp");
 
     expect(primaryConnection).toBeDefined();
+    expect(otherConnection).toBeDefined();
+    expect(otherConnection!.id).not.toBe(primaryConnection!.id);
     const connectionId = primaryConnection!.id;
     const malformedPrefix = await apiDelete("me/connections/not-a-connection", {
       Authorization: `Bearer ${token.token}`,
@@ -907,6 +941,7 @@ describe("API v1 native account settings", () => {
 
     const invalidResourceId = `conn_${Buffer.from(JSON.stringify({
       clientId: "client-with-invalid-resource",
+      issuer,
       resource: 123,
       connectionKey: "bad-resource",
     })).toString("base64url")}`;
@@ -916,6 +951,88 @@ describe("API v1 native account settings", () => {
 
     expect(invalidResource.status).toBe(404);
 
+    const oversizedId = `conn_${Buffer.from(JSON.stringify({
+      clientId: client.id,
+      issuer,
+      resource: null,
+      connectionKeys: Array.from({ length: 33 }, (_, index) => `ocn_${index}`),
+    })).toString("base64url")}`;
+    const oversized = await apiDelete(`me/connections/${oversizedId}`, {
+      Authorization: `Bearer ${token.token}`,
+    }, "req_me_connection_oversized");
+
+    expect(oversized.status).toBe(404);
+
+    const missingSnapshotId = `conn_${Buffer.from(JSON.stringify({
+      clientId: client.id,
+      issuer,
+      resource: "https://spoonjoy.app/mcp",
+      connectionKeys: ["ocn_missing"],
+    })).toString("base64url")}`;
+    const missingSnapshot = await apiDelete(`me/connections/${missingSnapshotId}`, {
+      Authorization: `Bearer ${token.token}`,
+    }, "req_me_connection_missing_snapshot");
+    expect(missingSnapshot.status).toBe(404);
+
+    const missingKeysId = `conn_${Buffer.from(JSON.stringify({
+      clientId: client.id,
+      issuer,
+      resource: null,
+    })).toString("base64url")}`;
+    const missingKeys = await apiDelete(`me/connections/${missingKeysId}`, {
+      Authorization: `Bearer ${token.token}`,
+    }, "req_me_connection_missing_keys");
+    expect(missingKeys.status).toBe(404);
+
+    const accessRevokeError = new Error("access revoke failed");
+    const accessRevoke = vi.spyOn(db.apiCredential, "updateMany")
+      .mockRejectedValueOnce(accessRevokeError);
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_me_connection_partial_disconnect",
+      method: "DELETE",
+      path: `/api/v1/me/connections/${connectionId}`,
+      error: {
+        name: accessRevokeError.name,
+        message: accessRevokeError.message,
+        stack: accessRevokeError.stack,
+      },
+    });
+    const partialDisconnect = await apiDelete(`me/connections/${connectionId}`, {
+      Authorization: `Bearer ${token.token}`,
+    }, "req_me_connection_partial_disconnect");
+
+    expect(partialDisconnect.status).toBe(500);
+    await expect(db.oAuthRefreshToken.count({ where: { userId, clientId: client.id, issuer, revokedAt: null } })).resolves.toBe(0);
+    await expect(db.apiCredential.findUniqueOrThrow({ where: { id: access.credential.id } }))
+      .resolves.toMatchObject({ revokedAt: null });
+    const revokedRefresh = await db.oAuthRefreshToken.findFirstOrThrow({
+      where: { userId, clientId: client.id, issuer, revokedAt: { not: null } },
+      orderBy: { revokedAt: "desc" },
+    });
+    const laterConnectionKey = `ocn_${faker.string.alphanumeric(16)}`;
+    const laterRefresh = await oauthConnectionFixture(
+      userId,
+      client.id,
+      "https://spoonjoy.app/mcp",
+      "shopping_list:read",
+      new Date(),
+      laterConnectionKey,
+    );
+    await db.oAuthRefreshToken.update({ where: { id: laterRefresh.id }, data: { issuer } });
+    const laterAccess = await createApiCredential(db, userId, "Meal planner reconnect", {
+      scopes: ["shopping_list:read"],
+      oauthClientId: client.id,
+      oauthIssuer: issuer,
+      oauthResource: "https://spoonjoy.app/mcp",
+      oauthConnectionKey: laterConnectionKey,
+    });
+    const sameSecond = new Date(Math.floor(revokedRefresh.revokedAt!.getTime() / 1_000) * 1_000);
+    await db.apiCredential.update({
+      where: { id: laterAccess.credential.id },
+      data: { createdAt: sameSecond },
+    });
+    accessRevoke.mockRestore();
+
     const disconnect = await apiDelete(`me/connections/${connectionId}`, {
       Authorization: `Bearer ${token.token}`,
     }, "req_me_connection_disconnect");
@@ -923,23 +1040,32 @@ describe("API v1 native account settings", () => {
 
     expect(disconnect.status).toBe(200);
     expect(disconnectPayload.data).toMatchObject({ disconnected: true, connectionId });
-    await expect(db.oAuthRefreshToken.count({ where: { userId, clientId: client.id, revokedAt: null } })).resolves.toBe(0);
+    await expect(db.oAuthRefreshToken.count({ where: { userId, clientId: client.id, issuer, revokedAt: null } })).resolves.toBe(1);
+    await expect(db.oAuthRefreshToken.count({ where: { userId, clientId: client.id, issuer: otherIssuer, revokedAt: null } })).resolves.toBe(1);
     await expect(db.apiCredential.findUniqueOrThrow({ where: { id: access.credential.id } }))
       .resolves.toMatchObject({ revokedAt: expect.any(Date) });
+    await expect(db.apiCredential.findUniqueOrThrow({ where: { id: laterAccess.credential.id } }))
+      .resolves.toMatchObject({ revokedAt: null });
+    await expect(db.oAuthRefreshToken.findUniqueOrThrow({ where: { id: laterRefresh.id } }))
+      .resolves.toMatchObject({ revokedAt: null });
+    await expect(db.apiCredential.findUniqueOrThrow({ where: { id: otherAccess.credential.id } }))
+      .resolves.toMatchObject({ revokedAt: null });
 
     const repeated = await apiDelete(`me/connections/${connectionId}`, {
       Authorization: `Bearer ${token.token}`,
     }, "req_me_connection_repeat");
 
-    expect(repeated.status).toBe(404);
+    expect(repeated.status).toBe(200);
 
-    await oauthConnectionFixture(userId, client.id, "https://spoonjoy.app/mcp", "shopping_list:read", new Date("2026-06-23T10:00:00.000Z"));
+    const newestRefresh = await oauthConnectionFixture(userId, client.id, "https://spoonjoy.app/mcp", "shopping_list:read", new Date("2026-06-23T10:00:00.000Z"));
+    await db.oAuthRefreshToken.update({ where: { id: newestRefresh.id }, data: { issuer } });
     const staleDisconnect = await apiDelete(`me/connections/${connectionId}`, {
       Authorization: `Bearer ${token.token}`,
     }, "req_me_connection_stale");
 
-    expect(staleDisconnect.status).toBe(404);
-    await expect(db.oAuthRefreshToken.count({ where: { userId, clientId: client.id, revokedAt: null } })).resolves.toBe(1);
+    expect(staleDisconnect.status).toBe(200);
+    await expect(db.oAuthRefreshToken.count({ where: { userId, clientId: client.id, issuer, revokedAt: null } })).resolves.toBe(2);
+    await expect(db.oAuthRefreshToken.count({ where: { userId, clientId: client.id, issuer: otherIssuer, revokedAt: null } })).resolves.toBe(1);
   });
 
   it("keeps OAuth app connection IDs stable across refresh rotation", async () => {
@@ -963,6 +1089,10 @@ describe("API v1 native account settings", () => {
       data: { revokedAt: new Date("2026-06-22T10:00:00.000Z") },
     });
     await oauthConnectionFixture(userId, client.id, null, "account:read", new Date("2026-06-22T10:00:01.000Z"), original.id);
+    await db.oAuthRefreshToken.updateMany({
+      where: { userId, clientId: client.id, revokedAt: null },
+      data: { issuer: "http://localhost" },
+    });
 
     const disconnect = await apiDelete(`me/connections/${connectionId}`, {
       Authorization: `Bearer ${token.token}`,
@@ -972,6 +1102,59 @@ describe("API v1 native account settings", () => {
     expect(disconnect.status).toBe(200);
     expect(disconnectPayload.data).toMatchObject({ disconnected: true, connectionId });
     await expect(db.oAuthRefreshToken.count({ where: { userId, clientId: client.id, revokedAt: null } })).resolves.toBe(0);
+  });
+
+  it("partitions and disconnects OAuth groups larger than one safe query batch", async () => {
+    const issuer = "http://localhost";
+    const token = await createApiCredential(db, userId, "Native token admin", { scopes: ["tokens:read", "tokens:write"] });
+    const client = await db.oAuthClient.create({
+      data: {
+        clientName: "Many grants",
+        redirectUris: JSON.stringify(["https://client.example/callback"]),
+        issuer,
+      },
+    });
+    await db.oAuthRefreshToken.createMany({
+      data: Array.from({ length: 101 }, (_, index) => ({
+        tokenHash: `refresh-api-batch-${index}-${faker.string.alphanumeric(8)}`,
+        userId,
+        clientId: client.id,
+        issuer,
+        scope: "shopping_list:read",
+        resource: null,
+        connectionKey: `ocn_api_batch_${String(index).padStart(3, "0")}`,
+      })),
+    });
+    const listed = await apiGet("me/connections", {
+      Authorization: `Bearer ${token.token}`,
+    }, "req_me_connection_batches");
+    const payload = await readJson(listed);
+    const batches = (payload.data.connections as Array<{ id: string; clientId: string; refreshTokenCount: number }>)
+      .filter((connection) => connection.clientId === client.id);
+
+    expect(batches.map((batch) => batch.refreshTokenCount)).toEqual([32, 32, 32, 5]);
+    const laterConnectionKey = "ocn_api_batch_000_extra";
+    const laterRefresh = await db.oAuthRefreshToken.create({
+      data: {
+        tokenHash: `refresh-api-later-${faker.string.alphanumeric(8)}`,
+        userId,
+        clientId: client.id,
+        issuer,
+        scope: "shopping_list:read",
+        resource: null,
+        connectionKey: laterConnectionKey,
+      },
+    });
+    for (const [index, batch] of batches.entries()) {
+      const disconnected = await apiDelete(`me/connections/${batch.id}`, {
+        Authorization: `Bearer ${token.token}`,
+      }, `req_me_connection_batch_${index}`);
+      expect(disconnected.status).toBe(200);
+    }
+    await expect(db.oAuthRefreshToken.findUniqueOrThrow({ where: { id: laterRefresh.id } }))
+      .resolves.toMatchObject({ revokedAt: null });
+    await expect(db.oAuthRefreshToken.count({ where: { userId, clientId: client.id, revokedAt: null } }))
+      .resolves.toBe(1);
   });
 
   it("enforces authentication and native settings scopes", async () => {

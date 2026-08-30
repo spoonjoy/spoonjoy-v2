@@ -8,7 +8,6 @@ import {
   oauthAuthorizeTelemetryFor,
   oauthAuthorizeTelemetryForRequest,
   withOAuthAuthorizeTelemetry,
-  type AuthorizeRequestParams,
   type AuthorizeView,
   type OAuthAuthorizeTelemetryMetadata,
 } from "~/lib/oauth-routes.server";
@@ -161,7 +160,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     const telemetry = oauthAuthorizeTelemetryFor(result);
     if (telemetry.outcome === "login_redirect" && getOAuthProviderHint(request)) {
       const clientId = new URL(request.url).searchParams.get("client_id")!;
-      const client = await getOAuthClient(db, clientId);
+      const client = await getOAuthClient(
+        db,
+        clientId,
+        resolveIssuerOrigin(request.url, context.cloudflare?.env?.SPOONJOY_BASE_URL),
+      );
       const providerStartPath = resolveOAuthProviderHintStartPath(request, client);
       if (providerStartPath) {
         const providerResponse = withOAuthAuthorizeTelemetry(redirectTo(providerStartPath), telemetry);
@@ -223,21 +226,6 @@ const SCOPE_LABELS: Record<string, string> = {
   "shopping_list:read": "Read your shopping list",
   "shopping_list:write": "Add, check, and remove shopping-list items",
 };
-
-function HiddenParams({ params }: { params: AuthorizeRequestParams }) {
-  return (
-    <>
-      <input type="hidden" name="client_id" value={params.clientId} />
-      <input type="hidden" name="redirect_uri" value={params.redirectUri} />
-      <input type="hidden" name="response_type" value={params.responseType} />
-      <input type="hidden" name="code_challenge" value={params.codeChallenge} />
-      <input type="hidden" name="code_challenge_method" value={params.codeChallengeMethod} />
-      <input type="hidden" name="scope" value={params.scope} />
-      <input type="hidden" name="state" value={params.state} />
-      <input type="hidden" name="resource" value={params.resource} />
-    </>
-  );
-}
 
 function ConnectorConsentShell({ children }: { children: ReactNode }) {
   return (
@@ -336,13 +324,13 @@ export default function OAuthAuthorize() {
 
       <div className="mt-6 grid gap-3 sm:flex sm:flex-wrap">
         <form method="post">
-          <HiddenParams params={view.params} />
+          <input type="hidden" name="consent_token" value={view.consentToken} />
           <Button className="w-full sm:w-auto" type="submit" name="decision" value="approve">
             Allow access
           </Button>
         </form>
         <form method="post">
-          <HiddenParams params={view.params} />
+          <input type="hidden" name="consent_token" value={view.consentToken} />
           <Button className="w-full sm:w-auto" type="submit" name="decision" value="deny" plain>
             Deny
           </Button>

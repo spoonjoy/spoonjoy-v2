@@ -63,6 +63,7 @@ export interface NativeAppleCredentialInput {
 export interface NativeAppleAuthResult {
   action: "user_created" | "user_logged_in";
   userId: string;
+  clientId: string;
   tokens: IssuedConnectorTokens;
 }
 
@@ -96,6 +97,32 @@ function base64UrlDecodeJson<T>(value: string): T {
 async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export async function nativeAppleOAuthClientId(issuer: string): Promise<string> {
+  return issuer === "https://spoonjoy.app"
+    ? NATIVE_APPLE_CLIENT_ID
+    : `${NATIVE_APPLE_CLIENT_ID}:${await sha256Hex(issuer)}`;
+}
+
+export async function ensureNativeAppleOAuthClient(
+  db: Database,
+  issuer: string,
+): Promise<string> {
+  const clientId = await nativeAppleOAuthClientId(issuer);
+  await db.oAuthClient.upsert({
+    where: { id: clientId },
+    create: {
+      id: clientId,
+      clientName: NATIVE_APPLE_CLIENT_NAME,
+      redirectUris: "spoonjoy-native://apple-sign-in spoonjoy-native://password-sign-in",
+      issuer,
+    },
+    update: {
+      clientName: NATIVE_APPLE_CLIENT_NAME,
+    },
+  });
+  return clientId;
 }
 
 function stringClaim(value: unknown): string | null {
@@ -207,9 +234,12 @@ export async function handleNativeAppleSignIn(
   db: Database,
   input: NativeAppleCredentialInput,
   config: AppleNativeAuthConfig,
-  options: { fetcher?: typeof fetch; now?: Date } = {},
+  options: { issuer: string; fetcher?: typeof fetch; now?: Date },
 ): Promise<NativeAppleAuthResult> {
-  const appleUser = await verifyNativeAppleIdentityToken(input, config, options);
+  const appleUser = await verifyNativeAppleIdentityToken(input, config, {
+    fetcher: options.fetcher,
+    now: options.now,
+  });
   const callback = await handleAppleOAuthCallback({
     db,
     appleUser,
@@ -221,24 +251,18 @@ export async function handleNativeAppleSignIn(
   }
 
   const action = callback.action === "user_created" ? "user_created" : "user_logged_in";
-  await db.oAuthClient.upsert({
-    where: { id: NATIVE_APPLE_CLIENT_ID },
-    create: {
-      id: NATIVE_APPLE_CLIENT_ID,
-      clientName: NATIVE_APPLE_CLIENT_NAME,
-      redirectUris: "spoonjoy-native://apple-sign-in",
-    },
-    update: {
-      clientName: NATIVE_APPLE_CLIENT_NAME,
-    },
-  });
+  const clientId = await ensureNativeAppleOAuthClient(
+    db,
+    options.issuer,
+  );
   const tokens = await issueConnectorTokens(db, {
     userId: callback.userId,
-    clientId: NATIVE_APPLE_CLIENT_ID,
+    clientId,
     scope: NATIVE_APPLE_TOKEN_SCOPE,
     resource: null,
+    issuer: options.issuer,
     now: options.now,
   });
 
-  return { action, userId: callback.userId, tokens };
+  return { action, userId: callback.userId, clientId, tokens };
 }

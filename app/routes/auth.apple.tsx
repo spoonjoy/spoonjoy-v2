@@ -39,15 +39,21 @@ async function initiateAppleOAuth({ request, context }: Route.LoaderArgs | Route
   }
 
   const callbackMethod = sessionData.linking ? "linkAppleAccount" : "loginWithApple";
-  const redirectUri = buildAppleReturnUrl(request, callbackMethod, callbackConfig.mode);
-  const registeredRedirectUris = buildRegisteredAppleReturnUrls(
-    request,
-    callbackMethod,
-    callbackConfig
-  );
-  sessionData.redirectUri = redirectUri;
   let authorizationUrl;
   try {
+    const redirectUri = buildAppleReturnUrl(
+      request,
+      callbackMethod,
+      callbackConfig.mode,
+      env?.SPOONJOY_BASE_URL,
+    );
+    const registeredRedirectUris = buildRegisteredAppleReturnUrls(
+      request,
+      callbackMethod,
+      callbackConfig,
+      env?.SPOONJOY_BASE_URL,
+    );
+    sessionData.redirectUri = redirectUri;
     authorizationUrl = createRegisteredAppleAuthorizationURL(
       config,
       redirectUri,

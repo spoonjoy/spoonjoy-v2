@@ -1,5 +1,6 @@
 import type { ApiCredential, PrismaClient as PrismaClientType, User } from "@prisma/client";
 import { getUserId, type SessionEnv } from "~/lib/session.server";
+import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 
 export type ApiPrincipalSource = "session" | "bearer" | "environment";
 
@@ -53,6 +54,7 @@ export interface ApiPrincipal {
   source: ApiPrincipalSource;
   credentialId?: string;
   oauthClientId?: string | null;
+  oauthIssuer?: string | null;
   oauthResource?: string | null;
   scopes: string[];
 }
@@ -152,6 +154,7 @@ function toPrincipal(
   credentialId?: string,
   scopes: readonly string[] = ALL_FIRST_SLICE_SCOPES,
   oauthClientId?: string | null,
+  oauthIssuer?: string | null,
   oauthResource?: string | null,
 ): ApiPrincipal {
   return {
@@ -161,6 +164,7 @@ function toPrincipal(
     source,
     credentialId,
     oauthClientId,
+    oauthIssuer,
     oauthResource,
     scopes: [...scopes],
   };
@@ -197,7 +201,7 @@ export async function createApiCredential(
   db: PrismaClientType,
   userId: string,
   name: string,
-  options: { expiresAt?: Date | null; scopes?: string | string[] | null; oauthClientId?: string | null; oauthResource?: string | null } = {}
+  options: { expiresAt?: Date | null; scopes?: string | string[] | null; oauthClientId?: string | null; oauthIssuer?: string | null; oauthResource?: string | null; oauthConnectionKey?: string | null } = {}
 ): Promise<CreatedApiCredential> {
   const token = generateApiToken();
   const tokenHash = await hashApiToken(token);
@@ -209,7 +213,9 @@ export async function createApiCredential(
       tokenPrefix: token.slice(0, 12),
       scopes: normalizeCredentialScopes(options.scopes),
       oauthClientId: options.oauthClientId ?? null,
+      oauthIssuer: options.oauthIssuer ?? null,
       oauthResource: options.oauthResource ?? null,
+      oauthConnectionKey: options.oauthConnectionKey ?? null,
       expiresAt: options.expiresAt ?? null,
     },
   });
@@ -217,7 +223,11 @@ export async function createApiCredential(
   return { token, credential };
 }
 
-export async function authenticateApiToken(db: PrismaClientType, token: string): Promise<ApiPrincipal> {
+export async function authenticateApiToken(
+  db: PrismaClientType,
+  token: string,
+  expectedOAuthIssuer: string,
+): Promise<ApiPrincipal> {
   const tokenHash = await hashApiToken(token);
   const credential = await db.apiCredential.findUnique({
     where: { tokenHash },
@@ -232,13 +242,33 @@ export async function authenticateApiToken(db: PrismaClientType, token: string):
     throw new ApiAuthError("Invalid API token", 401);
   }
 
-  if (
-    credential.oauthClientId
-    && !await db.oAuthClient.findFirst({
-      where: { id: credential.oauthClientId, revokedAt: null },
+  let oauthIssuer = credential.oauthIssuer;
+  if (credential.oauthClientId) {
+    if (oauthIssuer !== null && oauthIssuer !== expectedOAuthIssuer) {
+      throw new ApiAuthError("Invalid API token", 401);
+    }
+    await db.oAuthClient.updateMany({
+      where: { id: credential.oauthClientId, issuer: null, revokedAt: null },
+      data: { issuer: expectedOAuthIssuer },
+    });
+    const client = await db.oAuthClient.findFirst({
+      where: { id: credential.oauthClientId, issuer: expectedOAuthIssuer, revokedAt: null },
       select: { id: true },
-    })
-  ) {
+    });
+    if (!client) throw new ApiAuthError("Invalid API token", 401);
+
+    if (oauthIssuer === null) {
+      await db.apiCredential.updateMany({
+        where: { id: credential.id, oauthIssuer: null },
+        data: { oauthIssuer: expectedOAuthIssuer },
+      });
+      oauthIssuer = (await db.apiCredential.findUniqueOrThrow({
+        where: { id: credential.id },
+        select: { oauthIssuer: true },
+      })).oauthIssuer;
+    }
+    if (oauthIssuer !== expectedOAuthIssuer) throw new ApiAuthError("Invalid API token", 401);
+  } else if (oauthIssuer !== null) {
     throw new ApiAuthError("Invalid API token", 401);
   }
 
@@ -253,6 +283,7 @@ export async function authenticateApiToken(db: PrismaClientType, token: string):
     credential.id,
     expandCredentialScopes(credential.scopes),
     credential.oauthClientId,
+    oauthIssuer,
     credential.oauthResource,
   );
 }
@@ -260,11 +291,15 @@ export async function authenticateApiToken(db: PrismaClientType, token: string):
 export async function authenticateApiRequest(
   db: PrismaClientType,
   request: Request,
-  env?: SessionEnv | null
+  env?: (SessionEnv & { SPOONJOY_BASE_URL?: string }) | null,
 ): Promise<ApiPrincipal | null> {
   const bearerToken = extractBearerToken(request);
   if (bearerToken) {
-    return authenticateApiToken(db, bearerToken);
+    return authenticateApiToken(
+      db,
+      bearerToken,
+      resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL),
+    );
   }
 
   const cookie = request.headers.get("Cookie");

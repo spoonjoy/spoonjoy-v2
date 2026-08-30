@@ -81,7 +81,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const db = await getRequestDb(context);
-  const response = await handleOAuthRevoke(request, db);
+  const response = await handleOAuthRevoke(request, db, cfEnv);
   return observeOAuthRevokeResponse({ request, context }, {
     response: applyOAuthCorsHeaders(response),
     startedAt,

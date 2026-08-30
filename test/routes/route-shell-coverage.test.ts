@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { sessionStorage } from "~/lib/session.server";
+import {
+  buildAuthorizationServerMetadata,
+  buildProtectedResourceMetadata,
+} from "~/lib/oauth-metadata.server";
 
 function routeArgs(request: Request, extras: Record<string, unknown> = {}) {
   return {
@@ -43,18 +47,13 @@ describe("route shell coverage", () => {
     const args = routeArgs(new Request("https://worker.example/.well-known/oauth-authorization-server"), {
       context: { cloudflare: { env: { SPOONJOY_BASE_URL: "https://spoonjoy.app" } } },
     });
-    await expect(authorization.loader(args).json()).resolves.toMatchObject({
-      issuer: "https://spoonjoy.app",
-      token_endpoint: "https://spoonjoy.app/oauth/token",
-    });
-    await expect(protectedResource.loader(args).json()).resolves.toMatchObject({
-      resource: "https://spoonjoy.app/mcp",
-      authorization_servers: ["https://spoonjoy.app"],
-    });
-    await expect(mcpProtectedResource.loader(args).json()).resolves.toMatchObject({
-      resource: "https://spoonjoy.app/mcp",
-      authorization_servers: ["https://spoonjoy.app"],
-    });
+    const authorizationBody = await authorization.loader(args).json();
+    expect(authorizationBody).toEqual(buildAuthorizationServerMetadata("https://spoonjoy.app"));
+    expect(authorizationBody).not.toHaveProperty("client_id_metadata_document_supported");
+    await expect(protectedResource.loader(args).json())
+      .resolves.toEqual(buildProtectedResourceMetadata("https://spoonjoy.app"));
+    await expect(mcpProtectedResource.loader(args).json())
+      .resolves.toEqual(buildProtectedResourceMetadata("https://spoonjoy.app"));
   });
 
   it("serves Apple App Site Association metadata for native Universal Links", async () => {
@@ -346,7 +345,10 @@ describe("route shell coverage", () => {
     const response = await action(routeArgs(
       new Request("https://spoonjoy.app/mcp", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          Accept: "application/json, text/event-stream",
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize" }),
       }),
       { context: { cloudflare: { env: { POSTHOG_KEY: "ph_test" }, ctx: { waitUntil } } } },
