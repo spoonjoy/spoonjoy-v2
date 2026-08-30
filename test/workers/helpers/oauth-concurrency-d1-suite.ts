@@ -1,5 +1,5 @@
 import { env } from "cloudflare:test";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getRequestDb } from "../../../app/lib/route-platform.server";
 import { hashApiToken } from "../../../app/lib/api-auth.server";
@@ -36,6 +36,11 @@ const REDIRECT_URI = "https://example.com/callback";
 const VERIFIER = "verifier-0123456789-abcdefghijklmnopqrstuvwxyz";
 const NOW = new Date("2026-08-29T18:00:00.000Z");
 const CONTENDERS = ["honest_client", "indistinguishable_replay"] as const;
+const PRISMA_D1_TRANSACTION_WARNING =
+  "prisma:warn Cloudflare D1 does not support transactions yet. When using Prisma's D1 adapter, " +
+  "implicit & explicit transactions will be ignored and run as individual queries, which breaks " +
+  "the guarantees of the ACID properties of transactions. For more details see " +
+  "https://pris.ly/d/d1-transactions";
 
 function database() {
   return (env as unknown as { DB: TestD1Database }).DB;
@@ -83,6 +88,8 @@ function failAt(
 
 describe("OAuth concurrency baseline through independent PrismaD1 clients", () => {
   let clients: [DatabaseClient, DatabaseClient];
+  let prismaTransactionWarnings: string[];
+  let restorePrismaInfo: () => void;
 
   beforeAll(async () => {
     await applyRepositoryMigrations(database());
@@ -97,6 +104,16 @@ describe("OAuth concurrency baseline through independent PrismaD1 clients", () =
   });
 
   beforeEach(async () => {
+    prismaTransactionWarnings = [];
+    const originalInfo = console.info;
+    const prismaInfo = vi.spyOn(console, "info").mockImplementation((...args: unknown[]) => {
+      if (args.length === 1 && args[0] === PRISMA_D1_TRANSACTION_WARNING) {
+        prismaTransactionWarnings.push(PRISMA_D1_TRANSACTION_WARNING);
+        return;
+      }
+      Reflect.apply(originalInfo, console, args);
+    });
+    restorePrismaInfo = () => prismaInfo.mockRestore();
     await database().prepare(`DELETE FROM "ApiCredential" WHERE "userId" = '${USER_ID}'`).run();
     await database().prepare(`DELETE FROM "OAuthRefreshToken" WHERE "userId" = '${USER_ID}'`).run();
     await database().prepare(`DELETE FROM "OAuthAuthCode" WHERE "userId" = '${USER_ID}'`).run();
@@ -108,7 +125,11 @@ describe("OAuth concurrency baseline through independent PrismaD1 clients", () =
   });
 
   afterEach(async () => {
-    await Promise.all(clients.map((client) => client.$disconnect()));
+    try {
+      await Promise.all(clients.map((client) => client.$disconnect()));
+    } finally {
+      restorePrismaInfo();
+    }
   });
 
   afterAll(async () => {
@@ -218,6 +239,7 @@ describe("OAuth concurrency baseline through independent PrismaD1 clients", () =
       revokedAt: null,
       expiresAt: new Date("2026-08-29T18:15:00.000Z"),
     });
+    expect(prismaTransactionWarnings).toEqual(process.platform === "linux" ? [PRISMA_D1_TRANSACTION_WARNING] : []);
   });
 
   it.each(["before", "after"] as const)(
