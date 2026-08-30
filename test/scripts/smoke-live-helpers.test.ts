@@ -1927,6 +1927,10 @@ describe("smoke-live helpers", () => {
     expect(command).toContain("foreign_key_violations");
     expect(command).toContain("active_refresh_without_grant");
     expect(command).toContain("active_access_without_grant");
+    expect(command).toContain("grant_cutoff_invalid");
+    expect(command).toContain("0027_oauth_grants_and_lineage.sql");
+    expect(command).toContain("datetime(rt_unlinked.createdAt)");
+    expect(command).toContain("datetime(ac_unlinked.createdAt)");
     expect(command).toContain("active_grant_without_active_refresh");
     expect(command).toContain("grant_identity_mismatch");
     expect(command).toContain("oauth_grant_count");
@@ -1955,20 +1959,26 @@ describe("smoke-live helpers", () => {
       CREATE TABLE "User" (id TEXT PRIMARY KEY, email TEXT NOT NULL);
       CREATE TABLE "OAuthClient" (id TEXT PRIMARY KEY, clientName TEXT, redirectUris TEXT NOT NULL, revokedAt DATETIME);
       CREATE TABLE "OAuthGrant" (id TEXT PRIMARY KEY, userId TEXT NOT NULL, clientId TEXT NOT NULL, issuer TEXT NOT NULL, resource TEXT, scope TEXT NOT NULL, connectionKey TEXT NOT NULL, status TEXT NOT NULL);
-      CREATE TABLE "OAuthRefreshToken" (id TEXT PRIMARY KEY, userId TEXT NOT NULL, clientId TEXT NOT NULL, issuer TEXT, resource TEXT, scope TEXT NOT NULL, connectionKey TEXT, revokedAt DATETIME, grantId TEXT);
-      CREATE TABLE "ApiCredential" (id TEXT PRIMARY KEY, userId TEXT NOT NULL, oauthClientId TEXT, oauthIssuer TEXT, oauthResource TEXT, scopes TEXT NOT NULL, oauthConnectionKey TEXT, oauthGrantId TEXT, revokedAt DATETIME, expiresAt DATETIME);
+      CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY, name TEXT, applied_at TIMESTAMP);
+      CREATE TABLE "OAuthRefreshToken" (id TEXT PRIMARY KEY, userId TEXT NOT NULL, clientId TEXT NOT NULL, issuer TEXT, resource TEXT, scope TEXT NOT NULL, connectionKey TEXT, revokedAt DATETIME, grantId TEXT, createdAt DATETIME);
+      CREATE TABLE "ApiCredential" (id TEXT PRIMARY KEY, userId TEXT NOT NULL, oauthClientId TEXT, oauthIssuer TEXT, oauthResource TEXT, scopes TEXT NOT NULL, oauthConnectionKey TEXT, oauthGrantId TEXT, revokedAt DATETIME, expiresAt DATETIME, createdAt DATETIME);
+      INSERT INTO d1_migrations VALUES (28, '0027_oauth_grants_and_lineage.sql', '2026-08-30 08:04:30');
       INSERT INTO "User" VALUES ('user-1', 'person@example.com');
       INSERT INTO "OAuthClient" VALUES ('client-1', 'Not Claude', 'https://client.example/callback', NULL);
       INSERT INTO "OAuthGrant" VALUES ('grant-1', 'user-1', 'client-1', 'https://issuer.example', NULL, 'account:read kitchen:read', 'connection-1', 'active');
       INSERT INTO "OAuthRefreshToken" VALUES
-        ('refresh-good', 'user-1', 'client-1', 'https://issuer.example', NULL, 'kitchen:read account:read', 'connection-1', NULL, 'grant-1'),
-        ('refresh-null-issuer', 'user-1', 'client-1', NULL, NULL, 'account:read kitchen:read', 'connection-1', NULL, 'grant-1'),
-        ('refresh-null-key', 'user-1', 'client-1', 'https://issuer.example', NULL, 'account:read kitchen:read', NULL, NULL, 'grant-1'),
-        ('refresh-wrong-scope', 'user-1', 'client-1', 'https://issuer.example', NULL, 'kitchen:read', 'connection-1', NULL, 'grant-1');
+        ('refresh-good', 'user-1', 'client-1', 'https://issuer.example', NULL, 'kitchen:read account:read', 'connection-1', NULL, 'grant-1', '2026-08-30T08:04:31Z'),
+        ('refresh-null-issuer', 'user-1', 'client-1', NULL, NULL, 'account:read kitchen:read', 'connection-1', NULL, 'grant-1', '2026-08-30T08:04:31Z'),
+        ('refresh-null-key', 'user-1', 'client-1', 'https://issuer.example', NULL, 'account:read kitchen:read', NULL, NULL, 'grant-1', '2026-08-30T08:04:31Z'),
+        ('refresh-wrong-scope', 'user-1', 'client-1', 'https://issuer.example', NULL, 'kitchen:read', 'connection-1', NULL, 'grant-1', '2026-08-30T08:04:31Z'),
+        ('refresh-legacy', 'user-1', 'client-1', 'https://issuer.example', NULL, 'kitchen:read', 'legacy', NULL, NULL, '2026-08-30T08:04:29Z'),
+        ('refresh-exact', 'user-1', 'client-1', 'https://issuer.example', NULL, 'kitchen:read', 'exact', NULL, NULL, '2026-08-30T08:04:30Z'),
+        ('refresh-after', 'user-1', 'client-1', 'https://issuer.example', NULL, 'kitchen:read', 'after', NULL, NULL, '2026-08-30T08:04:31Z');
       INSERT INTO "ApiCredential" VALUES
-        ('access-null-issuer', 'user-1', 'client-1', NULL, NULL, 'account:read kitchen:read', 'connection-1', 'grant-1', NULL, NULL),
-        ('access-null-key', 'user-1', 'client-1', 'https://issuer.example', NULL, 'account:read kitchen:read', NULL, 'grant-1', NULL, NULL),
-        ('access-missing-grant', 'user-1', 'client-1', 'https://issuer.example', NULL, 'account:read kitchen:read', 'connection-1', NULL, NULL, NULL);
+        ('access-null-issuer', 'user-1', 'client-1', NULL, NULL, 'account:read kitchen:read', 'connection-1', 'grant-1', NULL, NULL, '2026-08-30T08:04:31Z'),
+        ('access-null-key', 'user-1', 'client-1', 'https://issuer.example', NULL, 'account:read kitchen:read', NULL, 'grant-1', NULL, NULL, '2026-08-30T08:04:31Z'),
+        ('access-missing-grant', 'user-1', 'client-1', 'https://issuer.example', NULL, 'account:read kitchen:read', 'connection-1', NULL, NULL, NULL, '2026-08-30T08:04:31Z'),
+        ('access-legacy', 'user-1', 'client-1', 'https://issuer.example', NULL, 'account:read kitchen:read', 'legacy', NULL, NULL, NULL, '2026-08-30T08:04:29Z');
     `);
 
     const command = buildMcpOAuthInvariantAuditD1Args({ targetEnv: "local" }).at(-1)!;
@@ -1976,9 +1986,27 @@ describe("smoke-live helpers", () => {
     const counts = Object.fromEntries(rows.map((row) => [row.invariant, row.count]));
 
     expect(counts.grant_identity_mismatch).toBe(5);
+    expect(counts.grant_cutoff_invalid).toBe(0);
     expect(counts.foreign_key_violations).toBe(0);
-    expect(counts.active_refresh_without_grant).toBe(0);
+    expect(counts.active_refresh_without_grant).toBe(2);
     expect(counts.active_access_without_grant).toBe(1);
+
+    for (const appliedAt of [undefined, null, "not-a-date"]) {
+      db.prepare("DELETE FROM d1_migrations").run();
+      if (appliedAt !== undefined) db.prepare("INSERT INTO d1_migrations VALUES (28, '0027_oauth_grants_and_lineage.sql', ?)").run(appliedAt);
+      const failedClosed = Object.fromEntries((db.prepare(command).all() as Array<{ invariant: string; count: number }>).map((row) => [row.invariant, row.count]));
+      expect(failedClosed.grant_cutoff_invalid).toBe(1);
+      expect(failedClosed.active_refresh_without_grant).toBe(3);
+      expect(failedClosed.active_access_without_grant).toBe(2);
+    }
+    db.exec("INSERT INTO d1_migrations VALUES (29, '0027_oauth_grants_and_lineage.sql', '2026-08-30 08:04:30'); INSERT INTO d1_migrations VALUES (30, '0027_oauth_grants_and_lineage.sql', '2026-08-30 08:04:30');");
+    const duplicateCutoff = Object.fromEntries((db.prepare(command).all() as Array<{ invariant: string; count: number }>).map((row) => [row.invariant, row.count]));
+    expect(duplicateCutoff.grant_cutoff_invalid).toBe(1);
+    expect(duplicateCutoff.active_refresh_without_grant).toBe(3);
+    expect(duplicateCutoff.active_access_without_grant).toBe(2);
+    db.exec('DELETE FROM "OAuthRefreshToken"; DELETE FROM "ApiCredential";');
+    const emptyButInvalid = Object.fromEntries((db.prepare(command).all() as Array<{ invariant: string; count: number }>).map((row) => [row.invariant, row.count]));
+    expect(emptyButInvalid.grant_cutoff_invalid).toBe(1);
     db.close();
   });
 
