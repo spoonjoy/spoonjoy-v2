@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { useNavigate } from "react-router";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import { loader, meta } from "~/routes/recipes._index";
@@ -173,6 +174,76 @@ describe("Recipes Index Route", () => {
       "Ricotta Toast",
       "Lemon Ricotta Pancakes",
     ]);
+  });
+
+  it("treats a comma query as a pantry query ranked by matched terms", async () => {
+    const chef = await createUser(
+      db,
+      faker.internet.email(),
+      faker.internet.username() + "_" + faker.string.alphanumeric(8),
+      "testPassword123"
+    );
+    await db.recipe.create({ data: { title: "Roasted Tomato Soup", chefId: chef.id } });
+    await db.recipe.create({ data: { title: "Lemon Herb Rice", chefId: chef.id } });
+    await db.recipe.create({ data: { title: "Tomato Lemon Salad", chefId: chef.id } });
+    await db.recipe.create({ data: { title: "Miso Glazed Salmon", chefId: chef.id } });
+
+    const result = await loader({
+      request: new UndiciRequest("http://localhost:3000/recipes?q=tomato%2C+lemon"),
+      context: { cloudflare: { env: null } },
+      params: {},
+    } as any);
+
+    const titles = result.recipes.map((recipe: { title: string }) => recipe.title);
+    expect(titles[0]).toBe("Tomato Lemon Salad");
+    expect(titles.slice(1).sort()).toEqual(["Lemon Herb Rice", "Roasted Tomato Soup"]);
+  });
+
+  it("keeps the search box in step with the results across Back and Forward", async () => {
+    function RecipesWithHistory() {
+      const navigate = useNavigate();
+      return (
+        <>
+          <button type="button" onClick={() => navigate(-1)}>History back</button>
+          <button type="button" onClick={() => navigate(1)}>History forward</button>
+          <RecipesIndex />
+        </>
+      );
+    }
+    const Stub = createTestRoutesStub([
+      {
+        path: "/recipes",
+        Component: RecipesWithHistory,
+        loader: ({ request }: { request: Request }) => ({
+          query: new URL(request.url).searchParams.get("q") ?? "",
+          isAuthenticated: false,
+          recipes: [],
+        }),
+      },
+    ]);
+
+    render(<Stub initialEntries={["/recipes?q=lemon"]} />);
+
+    expect(await screen.findByRole("heading", { name: 'Recipes for "lemon"' })).toBeInTheDocument();
+    const box = screen.getByLabelText("Search recipes") as HTMLInputElement;
+    expect(box.value).toBe("lemon");
+    expect(box).toHaveAttribute("autocomplete", "off");
+
+    fireEvent.change(box, { target: { value: "tomato" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(await screen.findByRole("heading", { name: 'Recipes for "tomato"' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "History back" }));
+    expect(await screen.findByRole("heading", { name: 'Recipes for "lemon"' })).toBeInTheDocument();
+    expect((screen.getByLabelText("Search recipes") as HTMLInputElement).value).toBe("lemon");
+
+    fireEvent.click(screen.getByRole("button", { name: "History forward" }));
+    expect(await screen.findByRole("heading", { name: 'Recipes for "tomato"' })).toBeInTheDocument();
+    expect((screen.getByLabelText("Search recipes") as HTMLInputElement).value).toBe("tomato");
+
+    fireEvent.click(screen.getByRole("link", { name: "Clear" }));
+    expect(await screen.findByRole("heading", { name: "All public recipes" })).toBeInTheDocument();
+    expect((screen.getByLabelText("Search recipes") as HTMLInputElement).value).toBe("");
   });
 
   it("renders a cookbook-style public browse page", async () => {

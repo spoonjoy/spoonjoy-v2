@@ -9,6 +9,7 @@ import {
   searchSpoonjoy,
   tokenizeSearchQuery,
   toFtsQuery,
+  toSearchTerms,
 } from "~/lib/search.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
@@ -51,6 +52,14 @@ async function createSearchableRecipe(chefId: string, title: string, ingredientN
     },
   });
   return recipe;
+}
+
+async function addIngredient(recipeId: string, ingredientName: string) {
+  const unit = await getOrCreateUnit(db, `tsp_${faker.string.alphanumeric(5).toLowerCase()}`);
+  const ingredientRef = await getOrCreateIngredientRef(db, ingredientName);
+  await db.ingredient.create({
+    data: { recipeId, stepNum: 1, quantity: 1, unitId: unit.id, ingredientRefId: ingredientRef.id },
+  });
 }
 
 async function createShoppingItem(ownerId: string, name: string, checked: boolean, quantity: number | null) {
@@ -550,5 +559,84 @@ describe("search.server", () => {
     });
 
     await expect(searchSpoonjoy(db, { query: "oat milk", scope: "shopping-list" })).resolves.toEqual([]);
+  });
+
+  describe("pantry queries (comma-separated terms)", () => {
+    it("splits comma queries into independently matched terms and drops empty or punctuation-only terms", () => {
+      expect(toSearchTerms("")).toEqual([]);
+      expect(toSearchTerms("   ")).toEqual([]);
+      expect(toSearchTerms("Creme brulee")).toEqual(["creme* AND brulee*"]);
+      expect(toSearchTerms("tomato, Olive Oil,, !!! , ;")).toEqual(["tomato*", "olive* AND oil*"]);
+      expect(toSearchTerms("Tomato, tomato ,TOMATO")).toEqual(["tomato*"]);
+      expect(toSearchTerms(", ; %%, !!!")).toEqual([]);
+      expect(toSearchTerms('tomato" OR NEAR(x, lemon*) NOT')).toEqual(["tomato* AND or* AND near* AND x*", "lemon* AND not*"]);
+    });
+
+    it("keeps at most twelve pantry terms so the query stays within D1's bound-parameter budget", () => {
+      const terms = Array.from({ length: 20 }, (_, index) => `item${index}`).join(", ");
+      expect(toSearchTerms(terms)).toHaveLength(12);
+      expect(toSearchTerms(terms)[11]).toBe("item11*");
+    });
+
+    it("returns recipes matching any term, ranked by matched-term count and then by relevance", async () => {
+      const chef = await createChef("pantrychef");
+      const both = await createSearchableRecipe(chef.id, "Weeknight Pasta", "cherry tomato");
+      await addIngredient(both.id, "meyer lemon");
+      const tomatoTitle = await createSearchableRecipe(chef.id, "Tomato Soup", "tomato");
+      const lemonBody = await createSearchableRecipe(chef.id, "Glazed Tart", "lemon");
+      const neither = await createSearchableRecipe(chef.id, "Plain Bread", "flour");
+
+      const results = await searchSpoonjoy(db, { query: "tomato, lemon", scope: "recipes" });
+      const ids = results.map((result) => result.id);
+
+      expect(ids).toHaveLength(3);
+      expect(ids[0]).toBe(both.id);
+      expect(ids.slice(1)).toEqual([tomatoTitle.id, lemonBody.id]);
+      expect(ids).not.toContain(neither.id);
+      expect(results[0]).toMatchObject({ type: "recipe", title: "Weeknight Pasta", href: `/recipes/${both.id}` });
+      expect(typeof results[0].score).toBe("number");
+    });
+
+    it("ANDs the words inside one term and respects the limit", async () => {
+      const chef = await createChef("pantrywords");
+      const oliveOil = await createSearchableRecipe(chef.id, "Dressed Greens", "olive oil");
+      const oliveOnly = await createSearchableRecipe(chef.id, "Olive Tapenade", "kalamata olive");
+      const basil = await createSearchableRecipe(chef.id, "Basil Pesto", "basil");
+
+      const results = await searchSpoonjoy(db, { query: "olive oil, basil", scope: "recipes" });
+      expect(results.map((result) => result.id).sort()).toEqual([oliveOil.id, basil.id].sort());
+      expect(results.map((result) => result.id)).not.toContain(oliveOnly.id);
+
+      const limited = await searchSpoonjoy(db, { query: "olive oil, basil", scope: "recipes", limit: 1 });
+      expect(limited).toHaveLength(1);
+    });
+
+    it("keeps all-words semantics for queries without commas and ignores empty pantry terms", async () => {
+      const chef = await createChef("plainchef");
+      const both = await createSearchableRecipe(chef.id, "Tomato Lemon Salad", "parsley");
+      await createSearchableRecipe(chef.id, "Tomato Soup", "tomato");
+      await createSearchableRecipe(chef.id, "Lemon Tart", "lemon");
+
+      const plain = await searchSpoonjoy(db, { query: "tomato lemon", scope: "recipes" });
+      expect(plain.map((result) => result.id)).toEqual([both.id]);
+
+      const singleTerm = await searchSpoonjoy(db, { query: "tomato lemon, , !!!", scope: "recipes" });
+      expect(singleTerm).toEqual(plain);
+
+      await expect(searchSpoonjoy(db, { query: ", ;, %%", scope: "recipes" })).resolves.toEqual([]);
+    });
+
+    it("applies pantry queries across scopes and privacy filters", async () => {
+      const owner = await createChef("pantryshopper");
+      const recipe = await createSearchableRecipe(owner.id, "Tomato Toast", "tomato");
+      const item = await createShoppingItem(owner.id, "lemon curd", false, 1);
+
+      const signedOut = await searchSpoonjoy(db, { query: "tomato, lemon", scope: "all" });
+      expect(signedOut.map((result) => result.id)).toContain(recipe.id);
+      expect(signedOut.map((result) => result.id)).not.toContain(item.id);
+
+      const signedIn = await searchSpoonjoy(db, { query: "tomato, lemon", scope: "all", viewerId: owner.id });
+      expect(signedIn.map((result) => result.id)).toEqual(expect.arrayContaining([recipe.id, item.id]));
+    });
   });
 });
