@@ -413,7 +413,7 @@ describe("Login Route", () => {
       expect(screen.queryByLabelText("Email")).not.toBeInTheDocument();
     });
 
-    it("updates the controlled identifier value as the user types", async () => {
+    it("keeps what the user types in the uncontrolled identifier field", async () => {
       const Stub = createTestRoutesStub([
         {
           path: "/login",
