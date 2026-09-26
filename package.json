@@ -63,6 +63,7 @@
     "cleanup:remote:qa:apply": "node scripts/cleanup-local-qa-data.mjs --target-env qa --apply",
     "cleanup:production": "node scripts/cleanup-local-qa-data.mjs --target-env production",
     "check:journeys": "node scripts/check-journey-rules.mjs e2e/journeys",
+    "test:journeys": "node scripts/warning-gate.ts -- pnpm exec playwright test -c playwright.journeys.config.ts",
     "typecheck": "pnpm run api:playground:generate && react-router typegen && tsc",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "test": "pnpm run api:playground:generate && vitest",
@@ -143,6 +144,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@chromatic-com/storybook": "^5.0.0",
     "@cloudflare/vitest-pool-workers": "0.18.6",
     "@cloudflare/workers-types": "^4.20260507.1",

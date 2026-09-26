@@ -12,6 +12,7 @@ const webServerEnv = Object.fromEntries(
 
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: ['**/journeys/**'],
   globalTeardown: './e2e/support/global-teardown.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
