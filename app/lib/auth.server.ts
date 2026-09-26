@@ -129,6 +129,25 @@ export async function authenticateUserByEmailOrUsername(
   return authenticatePasswordUser(user, password);
 }
 
+/**
+ * Resolve a chef-supplied identifier (a username or an email) to the
+ * account's email address, for callers that must look a user up by email
+ * but accept either (e.g. the WebAuthn authenticate routes). Same branching
+ * as authenticateUserByEmailOrUsername: a value containing "@" is treated as
+ * an email and lowercased; otherwise it's looked up as an exact username.
+ * An unknown username resolves to the original identifier unchanged, so a
+ * caller that feeds the result into a plain email lookup gets the same "no
+ * such user" behavior an unknown email already gets (no enumeration).
+ */
+export async function resolveIdentifierToEmail(db: PrismaClient, identifier: string): Promise<string> {
+  const trimmed = identifier.trim();
+  if (trimmed.includes("@")) {
+    return trimmed.toLowerCase();
+  }
+  const user = await db.user.findUnique({ where: { username: trimmed }, select: { email: true } });
+  return user?.email ?? trimmed;
+}
+
 // Get user by ID
 export async function getUserById(db: PrismaClient, id: string) {
   return db.user.findUnique({

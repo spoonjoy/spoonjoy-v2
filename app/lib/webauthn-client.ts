@@ -90,10 +90,9 @@ export async function registerPasskey(deps: RegisterPasskeyDeps = {}): Promise<P
  * 2. prompt the authenticator (startAuthentication)
  * 3. post the assertion for verification; on success a session cookie is set
  *
- * The options request sends `{ identifier }` — the options route resolves a
- * username or an email. The verify request still sends `{ email: identifier
- * }`: that route looks the pending challenge up by email regardless of what
- * the chef typed, unchanged by this flow.
+ * Both the options and verify requests send `{ identifier }` — both routes
+ * resolve a username or an email the same way (an "@" means an email;
+ * otherwise it's looked up as an exact username).
  */
 export async function authenticatePasskey(
   identifier: string,
@@ -123,7 +122,7 @@ export async function authenticatePasskey(
   const verifyResponse = await fetchImpl("/auth/webauthn/authenticate/verify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: identifier, response: assertion, redirectTo }),
+    body: JSON.stringify({ identifier, response: assertion, redirectTo }),
   });
   if (!verifyResponse.ok) {
     return { ok: false, error: await readError(verifyResponse) };

@@ -277,20 +277,23 @@ describe("WebAuthn routes", () => {
       expect(res.status).toBe(429);
     });
 
-    it("400s without email + response", async () => {
+    it("400s without a response even when an identifier is present", async () => {
       const res = await authenticateVerify(routeArgs(jsonRequest("https://spoonjoy.app/auth/webauthn/authenticate/verify", { email: "x@example.com" })));
       expect(res.status).toBe(400);
     });
 
-    it("400s without email even when a response is present", async () => {
+    it("400s without an identifier even when a response is present", async () => {
       const res = await authenticateVerify(routeArgs(jsonRequest(
         "https://spoonjoy.app/auth/webauthn/authenticate/verify",
         { response: { id: "vc" } },
       )));
       expect(res.status).toBe(400);
+      await expect(res.json()).resolves.toEqual({
+        error: "Username or email and authentication response are required",
+      });
     });
 
-    it("mints a session cookie on a verified passkey", async () => {
+    it("mints a session cookie on a verified passkey via the legacy email field", async () => {
       const user = await db.user.create({
         data: { ...createTestUser(), email: "passkey-login@example.com", webAuthnChallenge: "ac" },
       });
@@ -300,6 +303,38 @@ describe("WebAuthn routes", () => {
       const res = await authenticateVerify(routeArgs(jsonRequest(
         "https://spoonjoy.app/auth/webauthn/authenticate/verify",
         { email: user.email, response: { id: "vc" }, redirectTo: "/recipes" },
+      )));
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Set-Cookie") ?? "").toContain("__session=");
+      await expect(res.json()).resolves.toMatchObject({ verified: true, redirectTo: "/recipes" });
+    });
+
+    it("mints a session cookie on a verified passkey via the identifier field (email)", async () => {
+      const user = await db.user.create({
+        data: { ...createTestUser(), email: "passkey-identifier-email@example.com", webAuthnChallenge: "ac" },
+      });
+      await db.userCredential.create({ data: { id: "vc-id-email", userId: user.id, publicKey: new Uint8Array([1]), counter: 1n } });
+      vi.mocked(verifyAuthentication).mockResolvedValue({ verified: true, authenticationInfo: { newCounter: 2 } } as never);
+
+      const res = await authenticateVerify(routeArgs(jsonRequest(
+        "https://spoonjoy.app/auth/webauthn/authenticate/verify",
+        { identifier: user.email.toUpperCase(), response: { id: "vc-id-email" }, redirectTo: "/recipes" },
+      )));
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Set-Cookie") ?? "").toContain("__session=");
+      await expect(res.json()).resolves.toMatchObject({ verified: true, redirectTo: "/recipes" });
+    });
+
+    it("mints a session cookie on a verified passkey via a username identifier", async () => {
+      const user = await db.user.create({
+        data: { ...createTestUser(), email: "passkey-username-login@example.com", webAuthnChallenge: "ac" },
+      });
+      await db.userCredential.create({ data: { id: "vc-username", userId: user.id, publicKey: new Uint8Array([1]), counter: 1n } });
+      vi.mocked(verifyAuthentication).mockResolvedValue({ verified: true, authenticationInfo: { newCounter: 2 } } as never);
+
+      const res = await authenticateVerify(routeArgs(jsonRequest(
+        "https://spoonjoy.app/auth/webauthn/authenticate/verify",
+        { identifier: user.username, response: { id: "vc-username" }, redirectTo: "/recipes" },
       )));
       expect(res.status).toBe(200);
       expect(res.headers.get("Set-Cookie") ?? "").toContain("__session=");

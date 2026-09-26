@@ -3,6 +3,7 @@ import { getRequestDb } from "~/lib/route-platform.server";
 import { configFromRequest, startAuthentication } from "~/lib/webauthn-route.server";
 import { authTelemetryFromContext } from "~/lib/auth-telemetry.server";
 import { enforceAuthRateLimit, rateLimitedResponse } from "~/lib/rate-limit.server";
+import { resolveIdentifierToEmail } from "~/lib/auth.server";
 
 export async function action({ request, context }: Route.ActionArgs) {
   const rateLimit = await enforceAuthRateLimit(request, context.cloudflare?.env?.AUTH_IP_RATE_LIMITER);
@@ -26,19 +27,12 @@ export async function action({ request, context }: Route.ActionArgs) {
   try {
     const db = await getRequestDb(context);
 
-    // Same lookup shape as authenticateUserByEmailOrUsername: an "@" means
-    // an email, otherwise an exact username. startAuthentication itself only
-    // looks up by email, so a username is resolved to its account's email
-    // first; an unknown username resolves to nothing and falls through to
-    // startAuthentication's existing "unknown user" behavior (empty allow
-    // list, no error) unchanged.
-    let email: string;
-    if (identifier.includes("@")) {
-      email = identifier.toLowerCase();
-    } else {
-      const user = await db.user.findUnique({ where: { username: identifier }, select: { email: true } });
-      email = user?.email ?? identifier;
-    }
+    // startAuthentication itself only looks up by email, so a username is
+    // resolved to its account's email first (same lookup shape as
+    // authenticateUserByEmailOrUsername); an unknown username resolves to
+    // nothing and falls through to startAuthentication's existing "unknown
+    // user" behavior (empty allow list, no error) unchanged.
+    const email = await resolveIdentifierToEmail(db, identifier);
 
     const options = await startAuthentication(
       db,

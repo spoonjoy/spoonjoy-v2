@@ -126,7 +126,7 @@ describe("authenticatePasskey", () => {
     expect(startAuthentication).toHaveBeenCalledWith({ optionsJSON: { challenge: "ac" } });
     const verifyCall = fetchImpl.mock.calls[1];
     expect(JSON.parse(verifyCall[1].body)).toEqual({
-      email: "chef@example.com",
+      identifier: "chef@example.com",
       response: { id: "assertion" },
       redirectTo: "/recipes",
     });
