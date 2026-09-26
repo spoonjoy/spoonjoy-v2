@@ -53,6 +53,7 @@
     "qa:preflight": "tsx scripts/qa-preflight.ts",
     "qa:migrate": "pnpm exec wrangler d1 migrations apply DB --remote --env qa",
     "qa:seed": "node scripts/seed-qa.mjs --target-env qa",
+    "seed:qa:kitchen": "node scripts/seed-qa-kitchen.mjs --target-env qa",
     "production:readiness": "tsx scripts/production-readiness.ts",
     "advisory:scan": "tsx scripts/advisory-scan.ts",
     "cleanup:qa": "node scripts/cleanup-local-qa-data.mjs --target-env local",

@@ -12,6 +12,7 @@ const coverageInclude = [
   "scripts/advisory-scan.ts",
   "scripts/script-environment.mjs",
   "scripts/cleanup-local-qa-data.mjs",
+  "scripts/seed-qa-kitchen.mjs",
   "scripts/smoke-live-helpers.mjs",
   "scripts/smoke-live-oauth.mjs",
   "scripts/smoke-live-runtime.mjs",
