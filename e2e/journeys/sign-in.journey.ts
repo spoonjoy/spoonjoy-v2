@@ -13,6 +13,7 @@ test.describe("Sign-in", () => {
     await page.getByLabel("Password").fill(chef.password);
     await page.getByRole("button", { name: "Log In", exact: true }).click();
     await expect(page).toHaveURL(/\/recipes(?:[?#].*)?$/);
+    await expectAccessible();
     await verifyAfterReload(async () => {
       await expect(page).toHaveURL(/\/recipes(?:[?#].*)?$/);
       await page.goto("/login");
@@ -39,11 +40,9 @@ test.describe("Sign-in", () => {
   });
 
   test("logging out ends the session", async ({ browser }) => {
-    // A fresh context signed in through the real form, not the shared newbie storage state:
-    // that state is one real server-side session, and the personas project's storage state is
-    // reused by both device projects, so two concurrent instances of this test logging out the
-    // same session would race each other. Signing in here gives this test's own session, owned
-    // only by this run.
+    // A fresh context signed in through the real form, not the stored newbie storage state,
+    // so this test owns the session it logs out and neither depends on nor disturbs the
+    // stored persona sessions that signed-in journeys start from.
     const context = await browser.newContext();
     const page = await context.newPage();
     await signInThroughForm(page, "newbie");
