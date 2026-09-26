@@ -144,7 +144,6 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.13.0",
     "@chromatic-com/storybook": "^5.0.0",
     "@cloudflare/vitest-pool-workers": "0.18.6",
     "@cloudflare/workers-types": "^4.20260507.1",
@@ -174,6 +173,7 @@
     "@vitest/coverage-v8": "4.1.10",
     "@vitest/ui": "4.1.10",
     "autoprefixer": "^10.4.23",
+    "axe-core": "4.11.1",
     "better-sqlite3": "13.0.0",
     "chromatic": "^11.28.0",
     "happy-dom": "20.8.9",
