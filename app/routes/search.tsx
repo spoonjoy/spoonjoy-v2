@@ -9,6 +9,7 @@ import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
+import { useUrlSyncedInput } from "~/hooks/useUrlSyncedInput";
 import {
   normalizeSearchScope,
   searchSpoonjoy,
@@ -137,6 +138,7 @@ function ResultCard({ result }: { result: SearchResult }) {
 export default function Search() {
   const { query, scope, isAuthenticated, results } = useLoaderData<typeof loader>();
   const hasQuery = query.trim().length > 0;
+  const searchInputRef = useUrlSyncedInput(query);
   const showPrivatePrompt = scope === "shopping-list" && !isAuthenticated;
   const resultCounts = results.reduce<Record<SearchEntityType, number>>(
     (counts, result) => ({
@@ -164,6 +166,7 @@ export default function Search() {
               <div className="flex h-[4.5rem] items-center rounded-[var(--sj-radius-surface)] border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-5">
                 <SearchIcon className="mr-3 size-5 shrink-0 text-[var(--sj-ink-soft)]" aria-hidden="true" />
                 <input
+                  ref={searchInputRef}
                   id="search-query"
                   type="search"
                   name="q"
