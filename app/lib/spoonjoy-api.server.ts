@@ -1363,7 +1363,7 @@ const revokeApiTokenTool: SpoonjoyApiOperation = {
 
 const searchRecipesTool: SpoonjoyApiOperation = {
   name: "search_recipes",
-  description: "Full-text search Spoonjoy recipes by title, description, source URL, steps, ingredients, and optional chef email.",
+  description: "Full-text search Spoonjoy recipes by title, description, source URL, steps, ingredients, and optional chef email. Without commas every query word must match; commas separate alternatives, so a result matching any of them is returned, ordered by how many alternatives it matches, and at most 12 alternatives are used.",
   requiredScopes: ["recipes:read"],
   inputSchema: {
     type: "object",
@@ -1416,7 +1416,7 @@ const searchRecipesTool: SpoonjoyApiOperation = {
 
 const searchSpoonjoyTool: SpoonjoyApiOperation = {
   name: "search_spoonjoy",
-  description: "Full-text search Spoonjoy recipes, cookbooks, chefs, and the configured owner's private shopping list.",
+  description: "Full-text search Spoonjoy recipes, cookbooks, chefs, and the configured owner's private shopping list. Without commas every query word must match; commas separate alternatives, so a result matching any of them is returned, ordered by how many alternatives it matches, and at most 12 alternatives are used.",
   requiredScopes: ["recipes:read", "cookbooks:read", "shopping_list:read"],
   inputSchema: {
     type: "object",
@@ -1454,7 +1454,7 @@ const searchSpoonjoyTool: SpoonjoyApiOperation = {
 
 const searchShoppingListTool: SpoonjoyApiOperation = {
   name: "search_shopping_list",
-  description: "Full-text search the configured owner's private shopping list by ingredient, unit, category, icon, and checked state.",
+  description: "Full-text search the configured owner's private shopping list by ingredient, unit, category, icon, and checked state. Without commas every query word must match; commas separate alternatives, so a result matching any of them is returned, ordered by how many alternatives it matches, and at most 12 alternatives are used.",
   requiredScopes: ["shopping_list:read"],
   inputSchema: {
     type: "object",

@@ -1473,7 +1473,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "required": false,
           "defaultValue": "",
           "placeholder": "pasta",
-          "description": "Search text. When both query and q are sent, query wins.",
+          "description": "Search text. Without commas, every word must match. Commas separate alternatives: a result matching any of them is returned, ordered by how many alternatives it matches and then by relevance. At most 12 alternatives are used. When both query and q are sent, query wins.",
           "schema": {
             "type": "string"
           }
@@ -1485,7 +1485,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "required": false,
           "defaultValue": "",
           "placeholder": "weeknight",
-          "description": "Search-text alias for clients that conventionally use q. Ignored when query is also present.",
+          "description": "Search-text alias for clients that conventionally use q, with the same comma-separated alternatives as query. Ignored when query is also present.",
           "schema": {
             "type": "string"
           }
