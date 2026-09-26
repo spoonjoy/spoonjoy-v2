@@ -1,0 +1,207 @@
+name: Refresh lockfile
+
+# Regenerates pnpm-lock.yaml from a branch's package.json on a GitHub runner and
+# commits it back to that branch. Agents on networks that cannot reach the public
+# npm registry edit package.json locally, push their branch, dispatch this
+# workflow, and only then open the pull request: pushes made with the workflow
+# token do not trigger pull_request workflows, so if a PR is already open, close
+# and reopen it afterwards to run CI (including Journeys on QA) on the new head.
+#
+# Security model:
+# - The input must be a plain branch name; it is checked out as refs/heads/<name>,
+#   so pull-request refs, tags and SHAs cannot be used. main is refused.
+# - The resolve job has read-only permissions, keeps no credentials on disk, and
+#   runs no repository code: corepack ignores the branch's packageManager field
+#   and .corepack.env, pnpm hooks (.pnpmfile) and install scripts are disabled,
+#   and the branch's .npmrc and pnpm-workspace.yaml may only contain the keys the
+#   repository uses today.
+# - The commit job runs no repository code: it checks out the exact resolved
+#   commit, re-validates the resolved lockfile (a regular file with only public
+#   sources), replaces pnpm-lock.yaml (never writing through a symlink), commits
+#   without any token in the environment, and only then pushes with the token,
+#   leased on the resolved commit so a moved, reset or deleted branch is rejected.
+#
+# If a bump leaves an existing pnpm.patchedDependencies entry unused, pnpm fails
+# resolution; update the patch in the same branch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch whose package.json should be locked (plain branch name, never main)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lockfile-refresh-${{ inputs.branch }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  resolve:
+    name: resolve-lockfile
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      TARGET_BRANCH: ${{ inputs.branch }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      # Stop corepack from honouring branch-controlled pnpm selection.
+      COREPACK_ENV_FILE: '0'
+      COREPACK_ENABLE_PROJECT_SPEC: '0'
+    outputs:
+      sha: ${{ steps.head.outputs.sha }}
+      changed: ${{ steps.diff.outputs.changed }}
+    steps:
+      - name: Validate the target branch
+        run: |
+          if [ -z "$TARGET_BRANCH" ] || [ "$TARGET_BRANCH" = "main" ] || [ "$TARGET_BRANCH" = "$DEFAULT_BRANCH" ]; then
+            echo "::error::Refusing to refresh the lockfile on '$TARGET_BRANCH'. Use a feature branch."
+            exit 1
+          fi
+          case "$TARGET_BRANCH" in
+            refs/*|HEAD|-*) echo "::error::Pass a plain branch name, not '$TARGET_BRANCH'."; exit 1 ;;
+          esac
+          git check-ref-format --branch "$TARGET_BRANCH" >/dev/null
+
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: refs/heads/${{ inputs.branch }}
+          persist-credentials: false
+
+      - name: Record the resolved commit
+        id: head
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Refuse branch-controlled tooling, registry or hook configuration
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          [ -e .corepack.env ] && fail "A .corepack.env file is not allowed on a lockfile refresh branch."
+          { [ -e .pnpmfile.cjs ] || [ -e .pnpmfile.mjs ]; } && fail "A .pnpmfile is not allowed on a lockfile refresh branch."
+          [ "$(jq -r '.packageManager // ""' package.json)" = "pnpm@10.28.1" ] || fail "package.json packageManager must be exactly pnpm@10.28.1."
+          [ "$(jq -r '.devEngines // "" | tostring' package.json)" = "" ] || fail "package.json devEngines is not allowed on a lockfile refresh branch."
+          for f in .npmrc pnpm-workspace.yaml; do
+            # pnpm splits lines on bare carriage returns; grep does not.
+            if [ -e "$f" ] && LC_ALL=C grep -q $'\r' "$f"; then fail "$f may not contain carriage returns."; fi
+          done
+          if [ -e .npmrc ]; then
+            bad=$(grep -vE '^[[:space:]]*($|#|;|public-hoist-pattern\[\]=)' .npmrc || true)
+            [ -z "$bad" ] || fail ".npmrc may only contain public-hoist-pattern[] entries; found: $bad"
+          fi
+          if [ -e pnpm-workspace.yaml ]; then
+            command -v yq >/dev/null || fail "yq is required to validate pnpm-workspace.yaml."
+            # Parse rather than grep: YAML explicit keys (? key) and other forms hide keys from grep.
+            yq -e '((keys | length) == 1) and has("allowBuilds") and (.allowBuilds | to_entries | all_c(.value | tag == "!!bool"))' pnpm-workspace.yaml >/dev/null \
+              || fail "pnpm-workspace.yaml may only contain allowBuilds with boolean values."
+          fi
+          if git check-ignore -q pnpm-lock.yaml; then fail "pnpm-lock.yaml must not be gitignored."; fi
+          if [ -L pnpm-lock.yaml ] || { [ -e pnpm-lock.yaml ] && [ ! -f pnpm-lock.yaml ]; }; then
+            fail "pnpm-lock.yaml must be a regular file."
+          fi
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+
+      - name: Activate pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.28.1 --activate
+
+      - name: Resolve the lockfile from the public registry
+        run: >-
+          pnpm install --lockfile-only --ignore-scripts --ignore-pnpmfile
+          --config.manage-package-manager-versions=false
+          --registry=https://registry.npmjs.org/
+
+      - name: Allow only public registry sources
+        run: |
+          # Package sources appear only as `tarball:` or `repo:` fields; registry
+          # packages carry no URL at all. Deprecation messages may contain URLs.
+          if grep -noE '(tarball|repo): *[^,} ]+' pnpm-lock.yaml | grep -vE '(tarball|repo): *https://(registry\.npmjs\.org|codeload\.github\.com|github\.com)/'; then
+            echo "::error::pnpm-lock.yaml references a source outside the public npm registry or GitHub."
+            exit 1
+          fi
+
+      - name: Detect changes
+        id: diff
+        run: |
+          other=$(git status --porcelain | grep -v ' pnpm-lock.yaml$' || true)
+          if [ -n "$other" ]; then
+            echo "::error::Resolution changed files other than pnpm-lock.yaml:"
+            echo "$other"
+            exit 1
+          fi
+          if [ -n "$(git status --porcelain -- pnpm-lock.yaml)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "pnpm-lock.yaml is already up to date."
+          fi
+
+      - name: Upload the resolved lockfile
+        if: steps.diff.outputs.changed == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pnpm-lock
+          path: pnpm-lock.yaml
+          retention-days: 1
+
+  commit:
+    name: commit-lockfile
+    needs: resolve
+    if: needs.resolve.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      TARGET_BRANCH: ${{ inputs.branch }}
+      RESOLVED_SHA: ${{ needs.resolve.outputs.sha }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          persist-credentials: false
+
+      - name: Fetch the resolved lockfile
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: pnpm-lock
+          path: ${{ runner.temp }}/resolved
+
+      - name: Validate the resolved lockfile
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          resolved="$RUNNER_TEMP/resolved/pnpm-lock.yaml"
+          { [ -f "$resolved" ] && [ ! -L "$resolved" ]; } || fail "The resolved lockfile artifact must be a regular file."
+          if grep -noE '(tarball|repo): *[^,} ]+' "$resolved" | grep -vE '(tarball|repo): *https://(registry\.npmjs\.org|codeload\.github\.com|github\.com)/'; then
+            fail "The resolved lockfile references a source outside the public npm registry or GitHub."
+          fi
+          mode=$(git ls-files -s -- pnpm-lock.yaml | awk '{print $1}')
+          { [ -z "$mode" ] || [ "$mode" = "100644" ]; } || fail "pnpm-lock.yaml is tracked with mode $mode; only a regular file is allowed."
+
+      - name: Commit only pnpm-lock.yaml
+        run: |
+          rm -f pnpm-lock.yaml
+          cp "$RUNNER_TEMP/resolved/pnpm-lock.yaml" pnpm-lock.yaml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- pnpm-lock.yaml
+          git commit -m "build: regenerate pnpm-lock.yaml"
+
+      - name: Push to the target branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+            push --force-with-lease="refs/heads/$TARGET_BRANCH:$RESOLVED_SHA" origin "HEAD:refs/heads/$TARGET_BRANCH"
