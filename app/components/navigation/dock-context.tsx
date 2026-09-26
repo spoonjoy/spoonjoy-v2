@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ElementType,
   type ReactNode,
@@ -135,23 +136,86 @@ export function useDockContext(): DockContextValue {
   return useContext(DockContext);
 }
 
+function dockButtons(config: DockConfig | null): DockButton[] {
+  return config ? [config.left, config.primary, ...config.tools] : [];
+}
+
+/** Everything the dock shows or links to for a button; handlers are left out. */
+function buttonSignature(button: DockButton): unknown[] {
+  return [
+    button.id,
+    button.icon,
+    button.label,
+    button.sublabel,
+    button.ariaLabel,
+    typeof button.onAction === "string" ? button.onAction : null,
+    Boolean(button.onLinkClick),
+    button.active,
+    button.tone,
+    button.iconClassName,
+    button.labelClassName,
+  ];
+}
+
+function configSignature(config: DockConfig | null): unknown[] | null {
+  if (!config) return null;
+  return [config.variant, config.ariaLabel, ...dockButtons(config).flatMap(buttonSignature)];
+}
+
+function sameSignature(a: unknown[] | null, b: unknown[] | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.length === b.length && a.every((value, index) => Object.is(value, b[index]));
+}
+
+/**
+ * Registers the page's dock. The dock is re-registered only when something it shows changes
+ * (ids, labels, icons, hrefs), so callers need not memoize. Handlers are registered as stable
+ * wrappers that call the button's handler from the page's latest render, so a handler that
+ * closes over page state (the recipe's current scale, say) is never stale.
+ */
 export function useDockConfig(config: DockConfig | null): void {
   const { setConfig } = useDockContext();
-  const configKey = config
-    ? [
-        config.left.id,
-        config.primary.id,
-        ...config.tools.map((tool) => tool.id),
-        config.variant ?? "",
-      ].join(",")
-    : "";
+  const latestConfig = useRef(config);
+  const registeredSignature = useRef<unknown[] | null | undefined>(undefined);
 
   useEffect(() => {
-    setConfig(config);
-  }, [configKey, setConfig]);
+    latestConfig.current = config;
+  });
+
+  useEffect(() => {
+    const signature = configSignature(config);
+    if (registeredSignature.current !== undefined && sameSignature(registeredSignature.current, signature)) {
+      return;
+    }
+    registeredSignature.current = signature;
+
+    const latestButton = (id: string) => dockButtons(latestConfig.current).find((button) => button.id === id);
+    const withLatestHandlers = (button: DockButton): DockButton => ({
+      ...button,
+      onAction: typeof button.onAction === "function"
+        ? () => {
+            const handler = latestButton(button.id)?.onAction;
+            if (typeof handler === "function") handler();
+          }
+        : button.onAction,
+      onLinkClick: button.onLinkClick
+        ? (event) => latestButton(button.id)?.onLinkClick?.(event)
+        : undefined,
+    });
+
+    setConfig(config
+      ? {
+          ...config,
+          left: withLatestHandlers(config.left),
+          primary: withLatestHandlers(config.primary),
+          tools: config.tools.map(withLatestHandlers),
+        }
+      : null);
+  });
 
   useEffect(() => {
     return () => {
+      registeredSignature.current = undefined;
       setConfig(null);
     };
   }, [setConfig]);

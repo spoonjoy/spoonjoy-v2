@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import {
   DockContextProvider,
+  MobileNav,
   useDockContext,
   useRecipeDetailActions,
   useRecipeEditActions,
@@ -140,6 +141,32 @@ describe('Recipe Dock Actions', () => {
       expect(() => capturedActions?.find(a => a.id === 'share')?.onAction?.()).not.toThrow()
       expect(() => capturedActions?.find(a => a.id === 'add-to-list')?.onAction?.()).not.toThrow()
       expect(() => capturedActions?.find(a => a.id === 'cook')?.onAction?.()).not.toThrow()
+    })
+    it('keeps the rendered dock list action current as the page changes', async () => {
+      // The page's add-to-list handler closes over its current scale, so it changes whenever
+      // the scale does; the dock must call the current one and relabel once the list has it.
+      function ScaledRecipePage({ scale, inList, submit }: { scale: number; inList: boolean; submit: (scale: number) => void }) {
+        useRecipeDetailActions({ recipeId: '123', chefId: 'chef-1', isOwner: true, isInShoppingList: inList, onAddToList: () => submit(scale) })
+        return null
+      }
+      const submit = vi.fn()
+      const tree = (scale: number, inList: boolean) => (
+        <MemoryRouter initialEntries={['/recipes/123']}>
+          <DockContextProvider>
+            <MobileNav />
+            <ScaledRecipePage scale={scale} inList={inList} submit={submit} />
+          </DockContextProvider>
+        </MemoryRouter>
+      )
+      const { rerender } = render(tree(1, false))
+      rerender(tree(2, false))
+
+      fireEvent.click(screen.getByRole('button', { name: 'Add ingredients to shopping list' }))
+      expect(submit).toHaveBeenCalledWith(2)
+      expect(submit).not.toHaveBeenCalledWith(1)
+
+      rerender(tree(2, true))
+      expect(screen.getByRole('button', { name: 'Ingredients already in shopping list' })).toBeInTheDocument()
     })
   })
 

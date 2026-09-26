@@ -178,6 +178,143 @@ describe('DockContext', () => {
     })
   })
 
+  describe('useDockConfig keeps registered buttons current', () => {
+    type ListState = { handler: () => void; inList: boolean; onBack?: (event: React.MouseEvent<HTMLElement>) => void }
+
+    function ListPage({ handler, inList, onBack }: ListState) {
+      // Not memoized on purpose: a new config object (and new handlers) on every render.
+      useDockConfig({
+        variant: 'context',
+        left: { id: 'back', icon: ArrowLeft, label: 'Back', onAction: '/recipes', onLinkClick: onBack },
+        primary: { id: 'cook', icon: Edit, label: 'Cook', onAction: vi.fn() },
+        tools: [{
+          id: 'add-to-list',
+          icon: inList ? Share : ShoppingCart,
+          label: 'List',
+          ariaLabel: inList ? 'Ingredients already in shopping list' : 'Add ingredients to shopping list',
+          onAction: handler,
+        }],
+      })
+      return null
+    }
+
+    let captured: ReturnType<typeof useDockContext> | null = null
+    function Capture() {
+      captured = useDockContext()
+      return null
+    }
+
+    function renderListPage(state: ListState) {
+      return (
+        <DockContextProvider>
+          <Capture />
+          <ListPage {...state} />
+        </DockContextProvider>
+      )
+    }
+
+    function registeredTool() {
+      const tool = captured?.config?.tools[0]
+      if (!tool || typeof tool.onAction !== 'function') throw new Error('list tool not registered')
+      return tool as typeof tool & { onAction: () => void }
+    }
+
+    it('calls the latest handler when the handler changes but the button ids do not', () => {
+      const firstHandler = vi.fn()
+      const latestHandler = vi.fn()
+      const { rerender } = render(renderListPage({ handler: firstHandler, inList: false }))
+      const heldBeforeRerender = registeredTool().onAction
+
+      rerender(renderListPage({ handler: latestHandler, inList: false }))
+      act(() => registeredTool().onAction())
+      act(() => heldBeforeRerender())
+
+      expect(firstHandler).not.toHaveBeenCalled()
+      expect(latestHandler).toHaveBeenCalledTimes(2)
+    })
+
+    it('calls the latest link click handler', () => {
+      const firstBack = vi.fn()
+      const latestBack = vi.fn()
+      const { rerender } = render(renderListPage({ handler: vi.fn(), inList: false, onBack: firstBack }))
+      rerender(renderListPage({ handler: vi.fn(), inList: false, onBack: latestBack }))
+
+      const event = { preventDefault: vi.fn() } as unknown as React.MouseEvent<HTMLElement>
+      act(() => captured?.config?.left.onLinkClick?.(event))
+
+      expect(firstBack).not.toHaveBeenCalled()
+      expect(latestBack).toHaveBeenCalledWith(event)
+    })
+
+    it('re-registers when a button label or icon changes', () => {
+      const handler = vi.fn()
+      const { rerender } = render(renderListPage({ handler, inList: false }))
+      expect(registeredTool().ariaLabel).toBe('Add ingredients to shopping list')
+      expect(registeredTool().icon).toBe(ShoppingCart)
+
+      rerender(renderListPage({ handler, inList: true }))
+
+      expect(registeredTool().ariaLabel).toBe('Ingredients already in shopping list')
+      expect(registeredTool().icon).toBe(Share)
+      expect(captured?.actions?.[2]?.ariaLabel).toBe('Ingredients already in shopping list')
+    })
+
+    it('does not re-register when nothing the dock shows has changed', () => {
+      const handler = vi.fn()
+      const { rerender } = render(renderListPage({ handler, inList: false }))
+      const registered = captured?.config
+
+      rerender(renderListPage({ handler: vi.fn(), inList: false }))
+
+      expect(captured?.config).toBe(registered)
+    })
+
+    it('ignores a held handler once its button is no longer registered', () => {
+      const handler = vi.fn()
+      function SwitchingPage({ withList, cleared = false }: { withList: boolean; cleared?: boolean }) {
+        useDockConfig(cleared ? null : withList
+          ? {
+              left: { id: 'back', icon: ArrowLeft, label: 'Back', onAction: '/recipes' },
+              primary: { id: 'cook', icon: Edit, label: 'Cook', onAction: vi.fn() },
+              tools: [{ id: 'add-to-list', icon: ShoppingCart, label: 'List', onAction: handler }],
+            }
+          : {
+              left: { id: 'back', icon: ArrowLeft, label: 'Back', onAction: '/recipes' },
+              primary: { id: 'cook', icon: Edit, label: 'Cook', onAction: vi.fn() },
+              tools: [{ id: 'add-to-list', icon: ShoppingCart, label: 'List', onAction: '/shopping-list' }],
+            })
+        return null
+      }
+      const { rerender } = render(
+        <DockContextProvider>
+          <Capture />
+          <SwitchingPage withList />
+        </DockContextProvider>
+      )
+      const held = registeredTool().onAction
+
+      rerender(
+        <DockContextProvider>
+          <Capture />
+          <SwitchingPage withList={false} />
+        </DockContextProvider>
+      )
+      expect(captured?.config?.tools[0]?.onAction).toBe('/shopping-list')
+      act(() => held())
+
+      rerender(
+        <DockContextProvider>
+          <Capture />
+          <SwitchingPage withList={false} cleared />
+        </DockContextProvider>
+      )
+      expect(captured?.config).toBeNull()
+      act(() => held())
+
+      expect(handler).not.toHaveBeenCalled()
+    })
+  })
+
   describe('useDockActions', () => {
     it('converts legacy side actions into a dock config with fallback slots', () => {
       const onlyLeftActions: DockAction[] = [
