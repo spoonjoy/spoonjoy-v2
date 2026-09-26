@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import type { ElementType } from "react";
+import type { ElementType, MouseEvent } from "react";
 import { Link } from "~/components/ui/link";
 
 export interface DockItemProps {
@@ -12,7 +12,7 @@ export interface DockItemProps {
   className?: string;
   iconClassName?: string;
   labelClassName?: string;
-  onClick?: () => void;
+  onClick?: (event: MouseEvent<HTMLElement>) => void;
   variant?: "place" | "primary" | "tool";
   tone?: "default" | "primary" | "danger" | "quiet";
 }

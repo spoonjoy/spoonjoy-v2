@@ -1,5 +1,6 @@
 import {
   createContext,
+  type MouseEvent,
   useCallback,
   useContext,
   useEffect,
@@ -18,6 +19,12 @@ export interface DockButton {
   sublabel?: string;
   ariaLabel?: string;
   onAction: DockActionHandler;
+  /**
+   * Optional click handler for a link item (`onAction` is an href). The item stays a real
+   * link; the handler may call `event.preventDefault()` to navigate differently, as the
+   * recipe Back item does to return to the previous in-app page.
+   */
+  onLinkClick?: (event: MouseEvent<HTMLElement>) => void;
   active?: boolean;
   tone?: "default" | "primary" | "danger" | "quiet";
   iconClassName?: string;

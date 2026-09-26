@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { ThemeProvider } from "~/components/ui/theme-provider";
 import { AppNavbar } from "~/root";
 
-function renderNavbar(userId: string | null = null) {
+function renderNavbar(userId: string | null = null, path = "/") {
   const router = createMemoryRouter(
     [
       {
@@ -17,7 +17,7 @@ function renderNavbar(userId: string | null = null) {
         ),
       },
     ],
-    { initialEntries: ["/"] },
+    { initialEntries: [path] },
   );
 
   return render(
@@ -70,7 +70,28 @@ describe("AppNavbar", () => {
     expect(screen.getByRole("link", { name: "Shopping List" })).toHaveAttribute("href", "/shopping-list");
     expect(screen.getByRole("link", { name: "Chefs" })).toHaveAttribute("href", "/chefs");
     expect(screen.getByRole("link", { name: "Kitchen Search" })).toHaveAttribute("href", "/search");
-    expect(screen.queryByRole("link", { name: "Recipes" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "List" })).not.toBeInTheDocument();
+  });
+
+  it("lets signed-in cooks reach every public recipe from the desktop navigation", () => {
+    renderNavbar("chef-1", "/recipes");
+
+    const nav = screen.getByRole("navigation", { name: "Main navigation" });
+    const recipes = within(nav).getByRole("link", { name: "Recipes", exact: true });
+    expect(recipes).toHaveAttribute("href", "/recipes");
+    expect(recipes).toHaveAttribute("data-current", "true");
+    expect(within(nav).getByRole("link", { name: "Kitchen" })).toHaveAttribute("data-current", "false");
+    expect(within(nav).getByRole("link", { name: "My Recipes" })).toHaveAttribute("data-current", "false");
+
+    const centerLinks = within(nav).getAllByRole("link").map((link) => link.textContent);
+    expect(centerLinks.slice(1, 3)).toEqual(["Kitchen", "Recipes"]);
+  });
+
+  it("keeps Recipes unmarked on the kitchen home page", () => {
+    renderNavbar("chef-1", "/");
+
+    const nav = screen.getByRole("navigation", { name: "Main navigation" });
+    expect(within(nav).getByRole("link", { name: "Recipes", exact: true })).toHaveAttribute("data-current", "false");
+    expect(within(nav).getByRole("link", { name: "Kitchen" })).toHaveAttribute("data-current", "true");
   });
 });

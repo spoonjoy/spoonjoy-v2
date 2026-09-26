@@ -13,6 +13,9 @@ describe("kitchen navigation design language", () => {
     for (const marker of [
       "Main Kitchen Navigation",
       "`Kitchen` -> `/`",
+      "`Recipes` -> `/recipes`",
+      "The Pantry drawer contains `Recipes`",
+      "Back means back",
       "`My Recipes` -> `/my-recipes`",
       "`Saved Recipes` -> `/saved-recipes`",
       "`Cookbooks` -> `/cookbooks`",

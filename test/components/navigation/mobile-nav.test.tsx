@@ -1,10 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { createMemoryRouter, MemoryRouter, RouterProvider } from "react-router";
 import { ArrowLeft, Edit, Share2 } from "lucide-react";
 import { MobileNav } from "~/components/navigation/mobile-nav";
 import { DockContext, DockContextProvider, useRecipeDetailActions, type DockAction } from "~/components/navigation";
+import { HISTORY_TRAIL_KEY } from "~/hooks/use-back-navigation";
 
 describe("MobileNav unauthenticated variant", () => {
   it("renders a mobile-only Spoonjoy dock", () => {
@@ -78,6 +79,7 @@ describe("MobileNav", () => {
       expect(pantry).toHaveClass("backdrop-blur-2xl");
       expect(pantry).toHaveClass("bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_95%,transparent)]");
       expect(pantry.className).not.toContain("supports-[backdrop-filter]:bg-");
+      expect(within(pantry).getByRole("link", { name: "Recipes", exact: true })).toHaveAttribute("href", "/recipes");
       expect(within(pantry).getByRole("link", { name: "My Recipes" })).toHaveAttribute("href", "/my-recipes");
       expect(within(pantry).getByRole("link", { name: "Saved Recipes" })).toHaveAttribute("href", "/saved-recipes");
       expect(within(pantry).getByRole("link", { name: "Cookbooks" })).toHaveAttribute("href", "/cookbooks");
@@ -437,5 +439,85 @@ describe("MobileNav", () => {
       expect(screen.getByTestId("dock-center")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /create recipe/i })).toBeInTheDocument();
     });
+  });
+});
+
+describe("MobileNav recipe Back item", () => {
+  afterEach(() => {
+    window.history.replaceState(null, "");
+    window.sessionStorage.clear();
+  });
+
+  function RecipeDetailDock() {
+    useRecipeDetailActions({ recipeId: "r1", chefId: "c1", isOwner: false });
+    return <MobileNav isAuthenticated />;
+  }
+
+  function renderRecipeOpenedFrom(entries: string[]) {
+    const router = createMemoryRouter(
+      [
+        { path: "/", element: <h1>Home page</h1> },
+        { path: "/recipes", element: <h1>All recipes page</h1> },
+        { path: "/recipes/:id/edit", element: <h1>Edit page</h1> },
+        { path: "/recipes/:id", element: <RecipeDetailDock /> },
+      ],
+      { initialEntries: entries, initialIndex: entries.length - 1 },
+    );
+    render(
+      <DockContextProvider>
+        <RouterProvider router={router} />
+      </DockContextProvider>,
+    );
+    return router;
+  }
+
+  function renderRecipeOpenedFromHome() {
+    return renderRecipeOpenedFrom(["/", "/recipes/r1"]);
+  }
+
+  // What the root history recorder would have stored for these entries.
+  function seedTrail(paths: string[]) {
+    window.sessionStorage.setItem(
+      HISTORY_TRAIL_KEY,
+      JSON.stringify(Object.fromEntries(paths.map((path, idx) => [String(idx), { path, cook: false }]))),
+    );
+  }
+
+  it("stays a real link to /recipes for no-JS and middle click", () => {
+    renderRecipeOpenedFromHome();
+
+    expect(screen.getByRole("link", { name: /back/i })).toHaveAttribute("href", "/recipes");
+  });
+
+  it("returns to the previous in-app page when the recipe was reached inside the app", async () => {
+    seedTrail(["/", "/recipes/r1"]);
+    window.history.replaceState({ idx: 1, key: "abc", usr: null }, "");
+    const router = renderRecipeOpenedFromHome();
+
+    fireEvent.click(screen.getByRole("link", { name: /back/i }));
+
+    expect(await screen.findByRole("heading", { name: "Home page" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/");
+  });
+
+  it("skips the edit form after an edit and returns to the page before the recipe", async () => {
+    seedTrail(["/", "/recipes/r1", "/recipes/r1/edit", "/recipes/r1"]);
+    window.history.replaceState({ idx: 3, key: "abc", usr: null }, "");
+    const router = renderRecipeOpenedFrom(["/", "/recipes/r1", "/recipes/r1/edit", "/recipes/r1"]);
+
+    fireEvent.click(screen.getByRole("link", { name: /back/i }));
+
+    expect(await screen.findByRole("heading", { name: "Home page" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/");
+  });
+
+  it("goes to /recipes when the recipe was opened directly", async () => {
+    window.history.replaceState({ idx: 0, key: "default", usr: null }, "");
+    const router = renderRecipeOpenedFromHome();
+
+    fireEvent.click(screen.getByRole("link", { name: /back/i }));
+
+    expect(await screen.findByRole("heading", { name: "All recipes page" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/recipes");
   });
 });
