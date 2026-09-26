@@ -7,7 +7,7 @@
       "version": "7.1.5",
       "ecosystem": "npm",
       "reason": "Tooling-only residual through Prisma 6 configuration; the fix requires deepmerge-ts 8 and cannot be forced across Prisma's major-version contract. Application request data is not merged by this package.",
-      "expiresOn": "2026-09-18"
+      "expiresOn": "2026-10-24"
     },
     {
       "id": "GHSA-38f7-945m-qr2g",
@@ -15,7 +15,7 @@
       "version": "3.18.4",
       "ecosystem": "npm",
       "reason": "Tooling-only residual through Prisma 6 configuration; remediation requires Prisma to adopt Effect 3.20.0. Spoonjoy does not use Effect fibers or its RPC runtime.",
-      "expiresOn": "2026-09-18"
+      "expiresOn": "2026-10-24"
     },
     {
       "id": "GHSA-g7r4-m6w7-qqqr",
@@ -23,7 +23,7 @@
       "version": "0.27.3",
       "ecosystem": "npm",
       "reason": "Tooling-only residual in the Vite, Wrangler, and Storybook build graph; the advisory concerns the esbuild development server on Windows, while production runs a prebuilt Cloudflare Worker.",
-      "expiresOn": "2026-09-18"
+      "expiresOn": "2026-10-24"
     },
     {
       "id": "GHSA-w5hq-g745-h8pq",
@@ -31,7 +31,7 @@
       "version": "8.3.2",
       "ecosystem": "npm",
       "reason": "Tooling-only residual under the legacy Storybook test runner and coverage utilities; application code neither imports this copy nor supplies buffers to UUID generation.",
-      "expiresOn": "2026-09-18"
+      "expiresOn": "2026-10-24"
     }
   ]
 }

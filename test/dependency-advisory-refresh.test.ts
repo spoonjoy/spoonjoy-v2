@@ -68,7 +68,7 @@ describe("dependency advisory refresh contract", () => {
       expect(entry.version).toMatch(/^\d+\.\d+\.\d+/);
       expect(entry.ecosystem).toBe("npm");
       expect(entry.reason).toMatch(/tooling-only/i);
-      expect(entry.expiresOn).toBe("2026-09-18");
+      expect(entry.expiresOn).toBe("2026-10-24");
     }
   });
 });
