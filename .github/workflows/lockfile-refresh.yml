@@ -87,14 +87,21 @@ jobs:
           { [ -e .pnpmfile.cjs ] || [ -e .pnpmfile.mjs ]; } && fail "A .pnpmfile is not allowed on a lockfile refresh branch."
           [ "$(jq -r '.packageManager // ""' package.json)" = "pnpm@10.28.1" ] || fail "package.json packageManager must be exactly pnpm@10.28.1."
           [ "$(jq -r '.devEngines // "" | tostring' package.json)" = "" ] || fail "package.json devEngines is not allowed on a lockfile refresh branch."
+          for f in .npmrc pnpm-workspace.yaml; do
+            # pnpm splits lines on bare carriage returns; grep does not.
+            if [ -e "$f" ] && LC_ALL=C grep -q $'\r' "$f"; then fail "$f may not contain carriage returns."; fi
+          done
           if [ -e .npmrc ]; then
             bad=$(grep -vE '^[[:space:]]*($|#|;|public-hoist-pattern\[\]=)' .npmrc || true)
             [ -z "$bad" ] || fail ".npmrc may only contain public-hoist-pattern[] entries; found: $bad"
           fi
           if [ -e pnpm-workspace.yaml ]; then
-            keys=$(grep -oE '^[^[:space:]#][^:]*:' pnpm-workspace.yaml | sort -u | tr '\n' ' ')
-            [ "$keys" = "allowBuilds: " ] || fail "pnpm-workspace.yaml may only contain allowBuilds; found: $keys"
+            command -v yq >/dev/null || fail "yq is required to validate pnpm-workspace.yaml."
+            # Parse rather than grep: YAML explicit keys (? key) and other forms hide keys from grep.
+            yq -e '((keys | length) == 1) and has("allowBuilds") and (.allowBuilds | to_entries | all_c(.value | tag == "!!bool"))' pnpm-workspace.yaml >/dev/null \
+              || fail "pnpm-workspace.yaml may only contain allowBuilds with boolean values."
           fi
+          if git check-ignore -q pnpm-lock.yaml; then fail "pnpm-lock.yaml must not be gitignored."; fi
           if [ -L pnpm-lock.yaml ] || { [ -e pnpm-lock.yaml ] && [ ! -f pnpm-lock.yaml ]; }; then
             fail "pnpm-lock.yaml must be a regular file."
           fi
