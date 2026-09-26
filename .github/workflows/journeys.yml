@@ -1,0 +1,107 @@
+name: Journeys
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa-environment
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  PRISMA_HIDE_UPDATE_MESSAGE: "1"
+  SPOONJOY_JOURNEYS_BASE_URL: https://spoonjoy-v2-qa.mendelow-studio.workers.dev
+  SPOONJOY_QA_CREDENTIALS: ${{ github.workspace }}/.journeys/credentials.json
+
+jobs:
+  fork-notice:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "::warning::Journeys need QA credentials and do not run for fork pull requests. A maintainer must re-run them from a same-repo branch."
+
+  journeys:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    name: journeys
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+
+      - name: Require Cloudflare credentials
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are required. Journeys fail closed."
+            exit 1
+          fi
+
+      - name: Activate pnpm
+        run: |
+          node scripts/warning-gate.ts -- corepack enable
+          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate
+
+      - name: Install dependencies
+        run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: node scripts/warning-gate.ts -- pnpm prisma:generate
+
+      - name: Check journey house rules
+        run: node scripts/warning-gate.ts -- pnpm run check:journeys
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium webkit
+
+      - name: Deploy this build to QA
+        run: pnpm run deploy:qa
+
+      - name: Seed the QA kitchen
+        run: |
+          mkdir -p .journeys
+          pnpm run seed:qa:kitchen -- --credentials-out "$SPOONJOY_QA_CREDENTIALS"
+          for p in chef friend newbie; do
+            echo "::add-mask::$(jq -r ".${p}.password" "$SPOONJOY_QA_CREDENTIALS")"
+          done
+
+      - name: Run journeys
+        run: pnpm run test:journeys
+
+      - name: Clean up disposable QA data
+        if: always()
+        run: node scripts/warning-gate.ts -- pnpm run cleanup:remote:qa:apply
+
+      - name: Remove credentials and session files
+        if: always()
+        run: rm -rf .journeys e2e/.auth/journeys-*.json
+
+      # Playwright traces record typed values, so traces can contain the per-run QA passwords.
+      # This is acceptable only because the passwords are regenerated on every run and die with
+      # the next seed: there is no standing credential for the report to leak.
+      - name: Upload journeys report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: journeys-report
+          path: |
+            journeys-report/
+            test-results/
+          retention-days: 30
