@@ -3,7 +3,7 @@ import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
-import { loader, action } from "~/routes/recipes.$id.steps.new";
+import { loader, action, meta } from "~/routes/recipes.$id.steps.new";
 import NewStep from "~/routes/recipes.$id.steps.new";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
@@ -27,6 +27,20 @@ describe("Recipes $id Steps New Route", () => {
   let testUserId: string;
   let otherUserId: string;
   let recipeId: string;
+
+  it("falls back to a generic title when there is no loader data", () => {
+    expect(meta({ data: undefined } as any)).toEqual([
+      { title: "New step - Spoonjoy" },
+      { name: "description", content: "Add a new step to a Spoonjoy recipe." },
+    ]);
+  });
+
+  it("uses the recipe's title in the document title when loader data is present", () => {
+    expect(meta({ data: { recipe: { title: "Tomato Soup" } } } as any)).toEqual([
+      { title: "New step · Tomato Soup - Spoonjoy" },
+      { name: "description", content: 'Add a new step to "Tomato Soup" on Spoonjoy.' },
+    ]);
+  });
 
   beforeEach(async () => {
     await cleanupDatabase();

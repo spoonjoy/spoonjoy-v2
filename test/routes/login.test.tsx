@@ -4,7 +4,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
-import { loader, action } from "~/routes/login";
+import { loader, action, meta } from "~/routes/login";
 import Login from "~/routes/login";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
@@ -27,6 +27,13 @@ function extractResponseData(response: any): { data: any; status: number } {
 describe("Login Route", () => {
   beforeEach(async () => {
     await cleanupDatabase();
+  });
+
+  it("returns the login document title", () => {
+    expect(meta({} as any)).toEqual([
+      { title: "Log in - Spoonjoy" },
+      { name: "description", content: "Log in to your Spoonjoy kitchen." },
+    ]);
   });
 
   afterEach(async () => {

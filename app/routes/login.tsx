@@ -34,6 +34,13 @@ function requiresPostLoginDocumentReload(redirectTo: string): boolean {
   return new URL(redirectTo, "https://spoonjoy.app").pathname === "/oauth/authorize";
 }
 
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: "Log in - Spoonjoy" },
+    { name: "description", content: "Log in to your Spoonjoy kitchen." },
+  ];
+}
+
 // Loader - redirect if already logged in, handle OAuth errors
 export async function loader({ request, context }: Route.LoaderArgs) {
   const userId = await getUserId(request, context.cloudflare?.env);

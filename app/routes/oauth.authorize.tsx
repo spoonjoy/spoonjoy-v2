@@ -122,6 +122,26 @@ function observeOAuthAuthorizeView(
   return input.view;
 }
 
+export function meta({ data }: Route.MetaArgs) {
+  if (data?.kind === "consent") {
+    const appName = safeOAuthClientDisplayName(data.clientName);
+    return [
+      { title: `Authorize ${appName} - Spoonjoy` },
+      { name: "description", content: `${appName} is requesting access to your Spoonjoy kitchen.` },
+    ];
+  }
+  if (data?.kind === "error") {
+    return [
+      { title: "Connection problem - Spoonjoy" },
+      { name: "description", content: "There was a problem with this Spoonjoy connection request." },
+    ];
+  }
+  return [
+    { title: "Authorize access - Spoonjoy" },
+    { name: "description", content: "Authorize an app to access your Spoonjoy kitchen." },
+  ];
+}
+
 export function headers({
   parentHeaders,
   loaderHeaders,

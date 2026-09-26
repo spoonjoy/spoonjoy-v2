@@ -51,6 +51,13 @@ export async function loadIngredientNamesByRecipeId(
   return namesByRecipeId;
 }
 
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: "My recipes - Spoonjoy" },
+    { name: "description", content: "Recipes you've created on Spoonjoy." },
+  ];
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const url = new URL(request.url);

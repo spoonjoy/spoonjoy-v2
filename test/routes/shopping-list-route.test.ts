@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { db } from "~/lib/db.server";
-import { loader, action, parseShoppingItemFallback, __internal__ } from "~/routes/shopping-list";
+import { loader, action, meta, parseShoppingItemFallback, __internal__ } from "~/routes/shopping-list";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -36,6 +36,13 @@ async function restoreFullIdentityIndex() {
 
 describe("Shopping List Route", () => {
   let testUserId: string;
+
+  it("returns the shopping list document title", () => {
+    expect(meta({} as any)).toEqual([
+      { title: "Shopping list - Spoonjoy" },
+      { name: "description", content: "Your Spoonjoy shopping list." },
+    ]);
+  });
 
   beforeEach(async () => {
     await cleanupDatabase();

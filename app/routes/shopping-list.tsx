@@ -24,6 +24,13 @@ import { ChecklistRow } from "~/components/shopping/checklist-row";
 
 export { __internal__, parseShoppingItemFallback };
 
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: "Shopping list - Spoonjoy" },
+    { name: "description", content: "Your Spoonjoy shopping list." },
+  ];
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   return loadShoppingList({ request, context });
 }

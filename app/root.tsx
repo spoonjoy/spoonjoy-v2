@@ -35,6 +35,19 @@ import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
 import { Text } from "~/components/ui/text";
 import "./styles/tailwind.css";
 
+/**
+ * Default document title for every route. React Router only calls a route's
+ * own `meta` when that route module exports one; a route with no `meta`
+ * inherits this root export instead, so no page ever renders without a
+ * `<title>` (axe: document-title). Any route that exports its own `meta`
+ * fully replaces this — none of the existing route `meta` functions merge
+ * with the parent's via `matches`, so this addition doesn't change their
+ * output.
+ */
+export function meta() {
+  return [{ title: "Spoonjoy" }];
+}
+
 export function links() {
   return [
     { rel: "preconnect", href: "https://fonts.googleapis.com" },

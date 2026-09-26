@@ -254,6 +254,13 @@ async function chefActivity(database: Awaited<ReturnType<typeof getRequestDb>>, 
   return rows.sort(compareActivity).slice(0, 50);
 }
 
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: "Chefs - Spoonjoy" },
+    { name: "description", content: "Chefs you've cooked, forked, or saved from, and who's cooked from you." },
+  ];
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const database = await getRequestDb(context);

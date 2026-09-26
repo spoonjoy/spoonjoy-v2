@@ -17,6 +17,13 @@ import { AddPasskeyButton } from "~/components/auth/AddPasskeyButton";
 import { ProfilePhotoField } from "~/components/account/ProfilePhotoField";
 import { CookbookPage, CookbookHeader, SettingsPanel } from "~/components/cookbook/page";
 
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: "Account settings - Spoonjoy" },
+    { name: "description", content: "Manage your Spoonjoy account settings." },
+  ];
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   return loadAccountSettings({ request, context });
 }

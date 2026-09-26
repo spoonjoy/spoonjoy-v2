@@ -3,7 +3,7 @@ import { Request as UndiciRequest } from "undici";
 import { render, screen } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
-import { loader, action } from "~/routes/signup";
+import { loader, action, meta } from "~/routes/signup";
 import Signup from "~/routes/signup";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
@@ -26,6 +26,13 @@ function extractResponseData(response: any): { data: any; status: number } {
 describe("Signup Route", () => {
   beforeEach(async () => {
     await cleanupDatabase();
+  });
+
+  it("returns the signup document title", () => {
+    expect(meta({} as any)).toEqual([
+      { title: "Sign up - Spoonjoy" },
+      { name: "description", content: "Create a Spoonjoy account." },
+    ]);
   });
 
   afterEach(async () => {

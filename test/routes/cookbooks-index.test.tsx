@@ -3,7 +3,7 @@ import { Request as UndiciRequest } from "undici";
 import { render, screen } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
-import { loader } from "~/routes/cookbooks._index";
+import { loader, meta } from "~/routes/cookbooks._index";
 import CookbooksIndexRedirect from "~/routes/cookbooks._index";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
@@ -13,6 +13,13 @@ import { faker } from "@faker-js/faker";
 describe("Cookbooks drawer route", () => {
   beforeEach(async () => {
     await cleanupDatabase();
+  });
+
+  it("returns the cookbooks document title", () => {
+    expect(meta({} as any)).toEqual([
+      { title: "Cookbooks - Spoonjoy" },
+      { name: "description", content: "Your Spoonjoy cookbooks." },
+    ]);
   });
 
   afterEach(async () => {

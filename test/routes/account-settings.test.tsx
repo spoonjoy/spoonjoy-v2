@@ -12,13 +12,20 @@ import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
 
 // Import loader and component from the route
-import AccountSettings, { loader, action } from "~/routes/account.settings";
+import AccountSettings, { loader, action, meta } from "~/routes/account.settings";
 import type { AccountSettingsLoaderData } from "~/lib/account-settings.server";
 
 describe("Account Settings Route", () => {
   let testUserId: string;
   let testUserEmail: string;
   let testUsername: string;
+
+  it("returns the account settings document title", () => {
+    expect(meta({} as any)).toEqual([
+      { title: "Account settings - Spoonjoy" },
+      { name: "description", content: "Manage your Spoonjoy account settings." },
+    ]);
+  });
 
   beforeEach(async () => {
     await cleanupDatabase();

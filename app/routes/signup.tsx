@@ -30,6 +30,13 @@ interface LoaderData {
   oauthProviders: OAuthProvider[];
 }
 
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: "Sign up - Spoonjoy" },
+    { name: "description", content: "Create a Spoonjoy account." },
+  ];
+}
+
 // Loader - redirect if already logged in, handle OAuth errors
 export async function loader({ request, context }: Route.LoaderArgs) {
   const userId = await getUserId(request, context.cloudflare?.env);

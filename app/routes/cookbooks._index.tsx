@@ -28,6 +28,13 @@ function matchesCookbookQuery(
   ].some((value) => value.toLowerCase().includes(needle));
 }
 
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: "Cookbooks - Spoonjoy" },
+    { name: "description", content: "Your Spoonjoy cookbooks." },
+  ];
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const query = normalizedQuery(request);

@@ -4,7 +4,7 @@ import { render, screen } from "@testing-library/react";
 import { db } from "~/lib/db.server";
 import { createTestRoutesStub } from "../utils";
 import { cleanupDatabase } from "../helpers/cleanup";
-import Chefs, { loader } from "~/routes/chefs";
+import Chefs, { loader, meta } from "~/routes/chefs";
 import {
   createDrawerRecipe,
   createDrawerUser,
@@ -14,6 +14,16 @@ import {
 describe("Chefs drawer route", () => {
   beforeEach(async () => {
     await cleanupDatabase();
+  });
+
+  it("returns the chefs document title", () => {
+    expect(meta({} as any)).toEqual([
+      { title: "Chefs - Spoonjoy" },
+      {
+        name: "description",
+        content: "Chefs you've cooked, forked, or saved from, and who's cooked from you.",
+      },
+    ]);
   });
 
   afterEach(async () => {

@@ -3,7 +3,7 @@ import { Request as UndiciRequest } from "undici";
 import { render, screen } from "@testing-library/react";
 import { db } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
-import { loader } from "~/routes/saved-recipes";
+import { loader, meta } from "~/routes/saved-recipes";
 import SavedRecipes from "~/routes/saved-recipes";
 import { createTestRoutesStub } from "../utils";
 import {
@@ -15,6 +15,13 @@ import {
 describe("Saved Recipes drawer route", () => {
   beforeEach(async () => {
     await cleanupDatabase();
+  });
+
+  it("returns the saved recipes document title", () => {
+    expect(meta({} as any)).toEqual([
+      { title: "Saved recipes - Spoonjoy" },
+      { name: "description", content: "Recipes you've saved on Spoonjoy." },
+    ]);
   });
 
   afterEach(async () => {

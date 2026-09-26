@@ -44,6 +44,14 @@ function connectionTitle(status: LoaderData["status"]): string {
   return "Connection Expired";
 }
 
+export function meta({ data }: Route.MetaArgs) {
+  const status = data?.status ?? "expired";
+  return [
+    { title: connectionTitle(status) },
+    { name: "description", content: "Connect an agent to your Spoonjoy kitchen." },
+  ];
+}
+
 function normalizeUserCode(value: string | null): string {
   const compact = (value ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   if (compact.length <= 4) return compact;

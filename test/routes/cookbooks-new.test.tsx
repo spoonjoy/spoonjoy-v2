@@ -3,7 +3,7 @@ import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { render, screen } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
-import { loader, action } from "~/routes/cookbooks.new";
+import { loader, action, meta } from "~/routes/cookbooks.new";
 import NewCookbook from "~/routes/cookbooks.new";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
@@ -23,6 +23,13 @@ function extractResponseData(response: any): { data: any; status: number } {
 
 describe("Cookbooks New Route", () => {
   let testUserId: string;
+
+  it("returns the new cookbook document title", () => {
+    expect(meta({} as any)).toEqual([
+      { title: "New cookbook - Spoonjoy" },
+      { name: "description", content: "Create a new Spoonjoy cookbook." },
+    ]);
+  });
 
   beforeEach(async () => {
     await cleanupDatabase();

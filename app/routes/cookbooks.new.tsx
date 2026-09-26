@@ -18,6 +18,13 @@ interface ActionData {
   };
 }
 
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: "New cookbook - Spoonjoy" },
+    { name: "description", content: "Create a new Spoonjoy cookbook." },
+  ];
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   await requireUserId(request, "/login", context.cloudflare?.env);
   return null;
