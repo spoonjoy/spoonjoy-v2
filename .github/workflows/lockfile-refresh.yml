@@ -11,12 +11,15 @@ name: Refresh lockfile
 # - The input must be a plain branch name; it is checked out as refs/heads/<name>,
 #   so pull-request refs, tags and SHAs cannot be used. main is refused.
 # - The resolve job has read-only permissions, keeps no credentials on disk, and
-#   runs no repository code: pnpm hooks (.pnpmfile), install scripts and
-#   packageManager version switching are disabled, and the branch's .npmrc may not
-#   configure registries or pnpmfiles.
-# - The commit job holds the write token but runs no repository code: it checks
-#   out the exact resolved commit, copies in only pnpm-lock.yaml, and pushes. The
-#   push is rejected if the branch moved in between.
+#   runs no repository code: corepack ignores the branch's packageManager field
+#   and .corepack.env, pnpm hooks (.pnpmfile) and install scripts are disabled,
+#   and the branch's .npmrc and pnpm-workspace.yaml may only contain the keys the
+#   repository uses today.
+# - The commit job runs no repository code: it checks out the exact resolved
+#   commit, re-validates the resolved lockfile (a regular file with only public
+#   sources), replaces pnpm-lock.yaml (never writing through a symlink), commits
+#   without any token in the environment, and only then pushes with the token,
+#   leased on the resolved commit so a moved, reset or deleted branch is rejected.
 #
 # If a bump leaves an existing pnpm.patchedDependencies entry unused, pnpm fails
 # resolution; update the patch in the same branch.
@@ -50,6 +53,9 @@ jobs:
     env:
       TARGET_BRANCH: ${{ inputs.branch }}
       DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      # Stop corepack from honouring branch-controlled pnpm selection.
+      COREPACK_ENV_FILE: '0'
+      COREPACK_ENABLE_PROJECT_SPEC: '0'
     outputs:
       sha: ${{ steps.head.outputs.sha }}
       changed: ${{ steps.diff.outputs.changed }}
@@ -74,18 +80,24 @@ jobs:
         id: head
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Refuse branch-controlled registry or hook configuration
+      - name: Refuse branch-controlled tooling, registry or hook configuration
         run: |
-          if [ -f .pnpmfile.cjs ] || [ -f .pnpmfile.mjs ]; then
-            echo "::error::A .pnpmfile is not allowed on a lockfile refresh branch."
-            exit 1
+          fail() { echo "::error::$1"; exit 1; }
+          [ -e .corepack.env ] && fail "A .corepack.env file is not allowed on a lockfile refresh branch."
+          { [ -e .pnpmfile.cjs ] || [ -e .pnpmfile.mjs ]; } && fail "A .pnpmfile is not allowed on a lockfile refresh branch."
+          [ "$(jq -r '.packageManager // ""' package.json)" = "pnpm@10.28.1" ] || fail "package.json packageManager must be exactly pnpm@10.28.1."
+          [ "$(jq -r '.devEngines // "" | tostring' package.json)" = "" ] || fail "package.json devEngines is not allowed on a lockfile refresh branch."
+          if [ -e .npmrc ]; then
+            bad=$(grep -vE '^[[:space:]]*($|#|;|public-hoist-pattern\[\]=)' .npmrc || true)
+            [ -z "$bad" ] || fail ".npmrc may only contain public-hoist-pattern[] entries; found: $bad"
           fi
-          for rc in .npmrc; do
-            if [ -f "$rc" ] && grep -nEi '(^|:)registry|pnpmfile|_auth|global-pnpmfile' "$rc"; then
-              echo "::error::$rc may not configure registries, auth or pnpmfiles."
-              exit 1
-            fi
-          done
+          if [ -e pnpm-workspace.yaml ]; then
+            keys=$(grep -oE '^[^[:space:]#][^:]*:' pnpm-workspace.yaml | sort -u | tr '\n' ' ')
+            [ "$keys" = "allowBuilds: " ] || fail "pnpm-workspace.yaml may only contain allowBuilds; found: $keys"
+          fi
+          if [ -L pnpm-lock.yaml ] || { [ -e pnpm-lock.yaml ] && [ ! -f pnpm-lock.yaml ]; }; then
+            fail "pnpm-lock.yaml must be a regular file."
+          fi
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
@@ -158,15 +170,31 @@ jobs:
           name: pnpm-lock
           path: ${{ runner.temp }}/resolved
 
-      - name: Commit and push only pnpm-lock.yaml
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Validate the resolved lockfile
         run: |
+          fail() { echo "::error::$1"; exit 1; }
+          resolved="$RUNNER_TEMP/resolved/pnpm-lock.yaml"
+          { [ -f "$resolved" ] && [ ! -L "$resolved" ]; } || fail "The resolved lockfile artifact must be a regular file."
+          if grep -noE '(tarball|repo): *[^,} ]+' "$resolved" | grep -vE '(tarball|repo): *https://(registry\.npmjs\.org|codeload\.github\.com|github\.com)/'; then
+            fail "The resolved lockfile references a source outside the public npm registry or GitHub."
+          fi
+          mode=$(git ls-files -s -- pnpm-lock.yaml | awk '{print $1}')
+          { [ -z "$mode" ] || [ "$mode" = "100644" ]; } || fail "pnpm-lock.yaml is tracked with mode $mode; only a regular file is allowed."
+
+      - name: Commit only pnpm-lock.yaml
+        run: |
+          rm -f pnpm-lock.yaml
           cp "$RUNNER_TEMP/resolved/pnpm-lock.yaml" pnpm-lock.yaml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "build: regenerate pnpm-lock.yaml" -- pnpm-lock.yaml
+          git add -- pnpm-lock.yaml
+          git commit -m "build: regenerate pnpm-lock.yaml"
+
+      - name: Push to the target branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
           auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
           echo "::add-mask::$auth"
           git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
-            push origin "HEAD:refs/heads/$TARGET_BRANCH"
+            push --force-with-lease="refs/heads/$TARGET_BRANCH:$RESOLVED_SHA" origin "HEAD:refs/heads/$TARGET_BRANCH"
