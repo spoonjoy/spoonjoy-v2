@@ -37,8 +37,8 @@ describe("dependency advisory refresh contract", () => {
       "defu": "6.1.5",
       "dompurify": "3.4.13",
       "form-data": "4.0.6",
-      "joi@17": "17.13.4",
-      "js-yaml@3": "3.15.1",
+      "joi@17": "17.13.6",
+      "js-yaml@3": "3.15.2",
       "lodash": "4.18.0",
       "minimatch@3": "3.1.4",
       "minimatch@9": "9.0.7",
@@ -60,15 +60,15 @@ describe("dependency advisory refresh contract", () => {
   });
 
   it("keeps only exact short-lived reviewed tooling residuals", () => {
-    expect(allowlist.allowedVulnerabilities).toHaveLength(4);
+    expect(allowlist.allowedVulnerabilities).toHaveLength(3);
     expect(allowlist.allowedVulnerabilities.map((entry: { packageName: string }) => entry.packageName).sort())
-      .toEqual(["deepmerge-ts", "effect", "esbuild", "uuid"]);
+      .toEqual(["deepmerge-ts", "esbuild", "uuid"]);
     for (const entry of allowlist.allowedVulnerabilities) {
       expect(entry.id).toMatch(/^GHSA-/);
       expect(entry.version).toMatch(/^\d+\.\d+\.\d+/);
       expect(entry.ecosystem).toBe("npm");
       expect(entry.reason).toMatch(/tooling-only/i);
-      expect(entry.expiresOn).toBe("2026-09-18");
+      expect(entry.expiresOn).toBe("2026-10-24");
     }
   });
 });
