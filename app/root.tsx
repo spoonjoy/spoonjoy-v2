@@ -34,6 +34,7 @@ import { SpoonjoyLogo } from "~/components/ui/spoonjoy-logo";
 import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
 import { Text } from "~/components/ui/text";
 import { SkipLink } from "~/components/navigation/skip-link";
+import { useHistoryTrail } from "~/hooks/use-back-navigation";
 import "./styles/tailwind.css";
 
 /**
@@ -189,6 +190,10 @@ export default function App() {
     applyStorageSchemaMigration();
     void registerServiceWorker();
   }, []);
+
+  // Record which page each history entry shows, for recipe "Back" (after the migration above,
+  // which may clear app session storage on a schema change).
+  useHistoryTrail();
 
   // Track page views on route changes
   useEffect(() => {

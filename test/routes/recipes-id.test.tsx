@@ -29,6 +29,7 @@ import {
   writeCookProgress,
 } from "~/routes/recipes.$id";
 import RecipeDetail from "~/routes/recipes.$id";
+import { HISTORY_TRAIL_KEY } from "~/hooks/use-back-navigation";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -3224,7 +3225,16 @@ describe("Recipes $id Route", () => {
         render(<Stub initialEntries={["/", "/recipes/recipe-1"]} initialIndex={1} />);
       }
 
+      afterEach(() => {
+        window.sessionStorage.clear();
+      });
+
       it("returns to the previous in-app page when the recipe was reached inside the app", async () => {
+        // What the root history recorder would have stored for "/" then this recipe.
+        window.sessionStorage.setItem(
+          HISTORY_TRAIL_KEY,
+          JSON.stringify({ "0": { path: "/", cook: false }, "1": { path: "/recipes/recipe-1", cook: false } }),
+        );
         window.history.replaceState({ idx: 1, key: "abc", usr: null }, "", "/");
         renderRecipeOpenedFromHome();
 
