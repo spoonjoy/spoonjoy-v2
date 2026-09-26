@@ -1,16 +1,31 @@
 name: Refresh lockfile
 
-# Regenerates pnpm-lock.yaml from package.json on a GitHub runner and commits it
-# back to the given branch. Agents on networks that cannot reach the public npm
-# registry edit package.json locally, dispatch this workflow on their branch,
-# and then open the pull request so CI (including Journeys on QA) proves it.
-# Lockfile-only resolution with install scripts disabled: no dependency code runs.
+# Regenerates pnpm-lock.yaml from a branch's package.json on a GitHub runner and
+# commits it back to that branch. Agents on networks that cannot reach the public
+# npm registry edit package.json locally, push their branch, dispatch this
+# workflow, and only then open the pull request: pushes made with the workflow
+# token do not trigger pull_request workflows, so if a PR is already open, close
+# and reopen it afterwards to run CI (including Journeys on QA) on the new head.
+#
+# Security model:
+# - The input must be a plain branch name; it is checked out as refs/heads/<name>,
+#   so pull-request refs, tags and SHAs cannot be used. main is refused.
+# - The resolve job has read-only permissions, keeps no credentials on disk, and
+#   runs no repository code: pnpm hooks (.pnpmfile), install scripts and
+#   packageManager version switching are disabled, and the branch's .npmrc may not
+#   configure registries or pnpmfiles.
+# - The commit job holds the write token but runs no repository code: it checks
+#   out the exact resolved commit, copies in only pnpm-lock.yaml, and pushes. The
+#   push is rejected if the branch moved in between.
+#
+# If a bump leaves an existing pnpm.patchedDependencies entry unused, pnpm fails
+# resolution; update the patch in the same branch.
 
 on:
   workflow_dispatch:
     inputs:
       branch:
-        description: Branch whose package.json should be locked (never main)
+        description: Branch whose package.json should be locked (plain branch name, never main)
         required: true
         type: string
 
@@ -26,25 +41,51 @@ defaults:
     shell: bash
 
 jobs:
-  refresh:
-    name: refresh-lockfile
+  resolve:
+    name: resolve-lockfile
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write
+      contents: read
     env:
       TARGET_BRANCH: ${{ inputs.branch }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    outputs:
+      sha: ${{ steps.head.outputs.sha }}
+      changed: ${{ steps.diff.outputs.changed }}
     steps:
-      - name: Refuse protected targets
+      - name: Validate the target branch
         run: |
-          if [ -z "$TARGET_BRANCH" ] || [ "$TARGET_BRANCH" = "main" ] || [ "$TARGET_BRANCH" = "${{ github.event.repository.default_branch }}" ]; then
+          if [ -z "$TARGET_BRANCH" ] || [ "$TARGET_BRANCH" = "main" ] || [ "$TARGET_BRANCH" = "$DEFAULT_BRANCH" ]; then
             echo "::error::Refusing to refresh the lockfile on '$TARGET_BRANCH'. Use a feature branch."
             exit 1
           fi
+          case "$TARGET_BRANCH" in
+            refs/*|HEAD|-*) echo "::error::Pass a plain branch name, not '$TARGET_BRANCH'."; exit 1 ;;
+          esac
+          git check-ref-format --branch "$TARGET_BRANCH" >/dev/null
 
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
-          ref: ${{ inputs.branch }}
+          ref: refs/heads/${{ inputs.branch }}
+          persist-credentials: false
+
+      - name: Record the resolved commit
+        id: head
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Refuse branch-controlled registry or hook configuration
+        run: |
+          if [ -f .pnpmfile.cjs ] || [ -f .pnpmfile.mjs ]; then
+            echo "::error::A .pnpmfile is not allowed on a lockfile refresh branch."
+            exit 1
+          fi
+          for rc in .npmrc; do
+            if [ -f "$rc" ] && grep -nEi '(^|:)registry|pnpmfile|_auth|global-pnpmfile' "$rc"; then
+              echo "::error::$rc may not configure registries, auth or pnpmfiles."
+              exit 1
+            fi
+          done
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
@@ -52,27 +93,80 @@ jobs:
 
       - name: Activate pnpm
         run: |
-          node scripts/warning-gate.ts -- corepack enable
-          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate
+          corepack enable
+          corepack prepare pnpm@10.28.1 --activate
 
       - name: Resolve the lockfile from the public registry
-        run: pnpm install --lockfile-only --ignore-scripts --registry=https://registry.npmjs.org/
+        run: >-
+          pnpm install --lockfile-only --ignore-scripts --ignore-pnpmfile
+          --config.manage-package-manager-versions=false
+          --registry=https://registry.npmjs.org/
 
-      - name: Refuse private registry URLs
+      - name: Allow only public registry sources
         run: |
-          if grep -nE 'pkgs\.visualstudio\.com|packagefeedproxy' pnpm-lock.yaml; then
-            echo "::error::pnpm-lock.yaml references a private registry."
+          # Package sources appear only as `tarball:` or `repo:` fields; registry
+          # packages carry no URL at all. Deprecation messages may contain URLs.
+          if grep -noE '(tarball|repo): *[^,} ]+' pnpm-lock.yaml | grep -vE '(tarball|repo): *https://(registry\.npmjs\.org|codeload\.github\.com|github\.com)/'; then
+            echo "::error::pnpm-lock.yaml references a source outside the public npm registry or GitHub."
             exit 1
           fi
 
-      - name: Commit the regenerated lockfile
+      - name: Detect changes
+        id: diff
         run: |
-          if git diff --quiet -- pnpm-lock.yaml; then
-            echo "pnpm-lock.yaml is already up to date."
-            exit 0
+          other=$(git status --porcelain | grep -v ' pnpm-lock.yaml$' || true)
+          if [ -n "$other" ]; then
+            echo "::error::Resolution changed files other than pnpm-lock.yaml:"
+            echo "$other"
+            exit 1
           fi
+          if [ -n "$(git status --porcelain -- pnpm-lock.yaml)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "pnpm-lock.yaml is already up to date."
+          fi
+
+      - name: Upload the resolved lockfile
+        if: steps.diff.outputs.changed == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pnpm-lock
+          path: pnpm-lock.yaml
+          retention-days: 1
+
+  commit:
+    name: commit-lockfile
+    needs: resolve
+    if: needs.resolve.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      TARGET_BRANCH: ${{ inputs.branch }}
+      RESOLVED_SHA: ${{ needs.resolve.outputs.sha }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          persist-credentials: false
+
+      - name: Fetch the resolved lockfile
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: pnpm-lock
+          path: ${{ runner.temp }}/resolved
+
+      - name: Commit and push only pnpm-lock.yaml
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp "$RUNNER_TEMP/resolved/pnpm-lock.yaml" pnpm-lock.yaml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pnpm-lock.yaml
-          git commit -m "build: regenerate pnpm-lock.yaml"
-          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
+          git commit -m "build: regenerate pnpm-lock.yaml" -- pnpm-lock.yaml
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+            push origin "HEAD:refs/heads/$TARGET_BRANCH"
