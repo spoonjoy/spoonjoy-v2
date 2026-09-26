@@ -1,4 +1,4 @@
-import { test, expect, assertNoConsoleIssues, watchConsole } from "./support/journey";
+import { test, expect, appendConsoleIssues, assertNoConsoleIssues, watchConsole } from "./support/journey";
 import { persona } from "./support/personas";
 import { signInThroughForm } from "./support/sign-in";
 
@@ -30,7 +30,11 @@ test.describe("Sign-in", () => {
     await expect(page).toHaveURL(/\/recipes(?:[?#].*)?$/);
   });
 
-  test("a wrong password shows an error and stays on the login page", async ({ page }) => {
+  test("a wrong password shows an error and stays on the login page", async ({ page, expectConsoleError }) => {
+    // The login action correctly answers bad credentials with a 401, and browsers log any
+    // failed resource load (including a same-origin fetch's non-2xx response) as a console
+    // error regardless of whether the app handled it — this one is expected, not an app bug.
+    expectConsoleError(/Failed to load resource: the server responded with a status of 401/);
     await page.goto("/login");
     await page.getByLabel("Username or email").fill(persona("friend").username);
     await page.getByLabel("Password").fill("definitely-not-the-password");
@@ -46,15 +50,23 @@ test.describe("Sign-in", () => {
     const context = await browser.newContext();
     const page = await context.newPage();
     // This page isn't the fixture-provided `page`, so the auto-used consoleGate fixture in
-    // support/journey.ts never sees it; watch it the same way by hand instead.
+    // support/journey.ts never sees it; watch it the same way by hand instead. try/finally
+    // keeps dispose()/context.close() running even if an assertion below fails (instead of
+    // leaking the context and skipping the console check), and a failing assertion still
+    // surfaces any console issues alongside it rather than the console check masking it.
     const consoleWatcher = watchConsole(page);
-    await signInThroughForm(page, "newbie");
-    await page.goto("/logout");
-    await expect(page).not.toHaveURL(/\/recipes/);
-    await page.goto("/account/settings");
-    await expect(page).toHaveURL(/\/login/);
-    consoleWatcher.dispose();
+    try {
+      await signInThroughForm(page, "newbie");
+      await page.goto("/logout");
+      await expect(page).not.toHaveURL(/\/recipes/);
+      await page.goto("/account/settings");
+      await expect(page).toHaveURL(/\/login/);
+    } catch (error) {
+      throw appendConsoleIssues(error, consoleWatcher.issues);
+    } finally {
+      consoleWatcher.dispose();
+      await context.close();
+    }
     assertNoConsoleIssues(consoleWatcher.issues);
-    await context.close();
   });
 });

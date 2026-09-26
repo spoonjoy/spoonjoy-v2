@@ -8,14 +8,17 @@
 // records every violation of every impact instead, since explore never asserts app behaviour.
 // Both read the same injected axe source, so this is the one place that owns it.
 //
-// preload: false — axe's default preload behaviour fetches cross-origin stylesheets (here,
-// the Google Fonts sheet linked in app/root.tsx) so colour-contrast checks can read font
-// metrics from them. QA's CSP connect-src correctly blocks that fetch (the app only ever
-// allows the stylesheet via style-src, never fetches it), which surfaced as a console error
-// on every page ("Couldn't load preload assets: ProgressEvent") and failed the console gate
-// in support/journey.ts. The app isn't at fault, so we don't touch its CSP; instead axe falls
-// back to computed styles already present in the document for contrast checks, which is what
-// every page here already has.
+// preload: false — by default axe fetches assets (stylesheets' CSSOM, media metadata) for the
+// handful of rules whose metadata declares `preload: true` (in axe-core 4.11: css-orientation-
+// lock and no-autoplay-audio); every other rule runs immediately without waiting on that fetch.
+// Here it fetched the Google Fonts sheet linked in app/root.tsx, which QA's CSP connect-src
+// correctly blocks (the app only ever allows that stylesheet via style-src and never fetches
+// it itself); the blocked fetch is what produced a console error on every page ("Couldn't load
+// preload assets: ProgressEvent") and failed the console gate in support/journey.ts. Contrast
+// checking (color-contrast) does not declare `preload: true` and was never part of that
+// fetch — it already reads computed styles the browser has resolved, so preload: false does
+// not weaken it. The app isn't at fault here, so we don't touch its CSP; we just stop axe
+// making a request the CSP was always going to block.
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
