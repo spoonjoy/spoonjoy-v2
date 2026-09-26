@@ -776,7 +776,8 @@ export default function RecipeDetail() {
     onCook: enterCookMode,
     disabled: showOwnerTools,
   });
-  useDockSuppressed(showOwnerTools);
+  // The dock is hidden in cook mode so it never covers the step controls.
+  useDockSuppressed(showOwnerTools || (isCookMode && recipe.steps.length > 0));
 
   useEffect(() => {
     setAvailableCookbooks(cookbooks);

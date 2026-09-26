@@ -3146,6 +3146,21 @@ describe("Recipes $id Route", () => {
         await user.click(screen.getByRole("button", { name: "Browser back" }));
         expect(await screen.findByRole("heading", { name: "Home page" })).toBeInTheDocument();
       });
+
+      it("hides the dock while cook mode is open so it cannot cover the step controls", async () => {
+        const user = userEvent.setup();
+        renderRecipeFromHome();
+        await screen.findByRole("heading", { name: "History Cook Recipe" });
+        expect(screen.getByRole("navigation", { name: "Spoonjoy navigation" })).toBeInTheDocument();
+
+        await user.click(screen.getByRole("link", { name: "Cook mode" }));
+        const cookMode = await screen.findByTestId("cook-mode-panel");
+
+        expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
+
+        await user.click(within(cookMode).getByRole("button", { name: "Exit cook mode" }));
+        expect(await screen.findByRole("navigation", { name: "Spoonjoy navigation" })).toBeInTheDocument();
+      });
     });
 
     it("lets the registered dock cook action enter focused cook mode", async () => {
