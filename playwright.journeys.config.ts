@@ -20,7 +20,21 @@ export default defineConfig({
   },
   projects: [
     { name: "personas", testMatch: /personas\.setup\.ts/, use: { ...devices["Desktop Chrome"] } },
-    { name: "iphone-webkit", testMatch: /\.journey\.ts/, dependencies: ["personas"], use: { ...devices["iPhone 15"] } },
-    { name: "desktop-chrome", testMatch: /\.journey\.ts/, dependencies: ["personas"], use: { ...devices["Desktop Chrome"] } },
+    // A plain *.journey.ts runs on both devices. *.desktop.journey.ts / *.mobile.journey.ts
+    // route to one device only; check:journeys still scans them (they end in .journey.ts).
+    {
+      name: "iphone-webkit",
+      testMatch: /\.journey\.ts/,
+      testIgnore: /\.desktop\.journey\.ts$/,
+      dependencies: ["personas"],
+      use: { ...devices["iPhone 15"] },
+    },
+    {
+      name: "desktop-chrome",
+      testMatch: /\.journey\.ts/,
+      testIgnore: /\.mobile\.journey\.ts$/,
+      dependencies: ["personas"],
+      use: { ...devices["Desktop Chrome"] },
+    },
   ],
 });

@@ -69,6 +69,7 @@
     "cleanup:production": "node scripts/cleanup-local-qa-data.mjs --target-env production",
     "check:journeys": "node scripts/check-journey-rules.mjs e2e/journeys",
     "test:journeys": "node scripts/warning-gate.ts -- pnpm exec playwright test -c playwright.journeys.config.ts",
+    "explore:qa": "node scripts/warning-gate.ts -- pnpm exec playwright test -c playwright.explore.config.ts",
     "typecheck": "pnpm run api:playground:generate && react-router typegen && tsc",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "test": "pnpm run api:playground:generate && vitest",
