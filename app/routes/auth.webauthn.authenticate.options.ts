@@ -3,7 +3,7 @@ import { getRequestDb } from "~/lib/route-platform.server";
 import { configFromRequest, startAuthentication } from "~/lib/webauthn-route.server";
 import { authTelemetryFromContext } from "~/lib/auth-telemetry.server";
 import { enforceAuthRateLimit, rateLimitedResponse } from "~/lib/rate-limit.server";
-import { resolveIdentifierToEmail } from "~/lib/auth.server";
+import { extractIdentifierFromBody, resolveIdentifierToEmail } from "~/lib/auth.server";
 
 export async function action({ request, context }: Route.ActionArgs) {
   const rateLimit = await enforceAuthRateLimit(request, context.cloudflare?.env?.AUTH_IP_RATE_LIMITER);
@@ -18,8 +18,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const raw = typeof body.identifier === "string" ? body.identifier : typeof body.email === "string" ? body.email : "";
-  const identifier = raw.trim();
+  const identifier = extractIdentifierFromBody(body);
   if (!identifier) {
     return Response.json({ error: "Username or email is required" }, { status: 400 });
   }

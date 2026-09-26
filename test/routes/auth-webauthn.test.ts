@@ -210,7 +210,15 @@ describe("WebAuthn routes", () => {
     });
 
     it("returns options for a known email via the identifier field", async () => {
-      const user = await db.user.create({ data: createTestUser() });
+      // Email is an explicit lowercase literal (not the raw createTestUser()
+      // faker email, which faker mixes case in) so toUpperCase()/resolution
+      // round-trips to the exact stored value regardless of DB collation.
+      const user = await db.user.create({
+        data: { ...createTestUser(), email: "known-email-identifier@example.com" },
+      });
+      await db.userCredential.create({
+        data: { id: "vc-known-email", userId: user.id, publicKey: new Uint8Array([7]), counter: 2n },
+      });
       vi.mocked(buildAuthenticationOptions).mockResolvedValue({ challenge: "ac" } as never);
       const res = await authenticateOptions(routeArgs(jsonRequest(
         "https://spoonjoy.app/auth/webauthn/authenticate/options",
@@ -218,10 +226,18 @@ describe("WebAuthn routes", () => {
       )));
       expect(res.status).toBe(200);
       await expect(res.json()).resolves.toEqual({ challenge: "ac" });
+      // The account's own credential reached the options builder — proves the
+      // identifier resolved to this specific user, not merely to "some" user.
+      expect(vi.mocked(buildAuthenticationOptions).mock.calls[0][1]).toEqual([
+        { id: "vc-known-email", publicKey: new Uint8Array([7]), counter: 2n, transports: null },
+      ]);
     });
 
     it("returns options for a known username via the identifier field", async () => {
       const user = await db.user.create({ data: createTestUser() });
+      await db.userCredential.create({
+        data: { id: "vc-known-username", userId: user.id, publicKey: new Uint8Array([9]), counter: 3n },
+      });
       vi.mocked(buildAuthenticationOptions).mockResolvedValue({ challenge: "ac" } as never);
       const res = await authenticateOptions(routeArgs(jsonRequest(
         "https://spoonjoy.app/auth/webauthn/authenticate/options",
@@ -229,8 +245,14 @@ describe("WebAuthn routes", () => {
       )));
       expect(res.status).toBe(200);
       await expect(res.json()).resolves.toEqual({ challenge: "ac" });
-      // Resolved to the account's real email before calling startAuthentication.
-      expect(vi.mocked(buildAuthenticationOptions).mock.calls[0][1]).toEqual([]);
+      // Resolved to the account's real email before calling startAuthentication
+      // — proven by this account's own credential reaching the options
+      // builder. An unresolved username (or one resolved to the wrong
+      // account) would produce an empty or different allow-list instead, as
+      // the unknown-username test below demonstrates.
+      expect(vi.mocked(buildAuthenticationOptions).mock.calls[0][1]).toEqual([
+        { id: "vc-known-username", publicKey: new Uint8Array([9]), counter: 3n, transports: null },
+      ]);
     });
 
     it("keeps the unknown-user behaviour for an unknown username (no enumeration)", async () => {

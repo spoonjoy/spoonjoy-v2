@@ -5,7 +5,7 @@ import { getRequestDb } from "~/lib/route-platform.server";
 import { configFromRequest, finishAuthentication, WebAuthnError } from "~/lib/webauthn-route.server";
 import { authTelemetryFromContext } from "~/lib/auth-telemetry.server";
 import { enforceAuthRateLimit, rateLimitedResponse } from "~/lib/rate-limit.server";
-import { resolveIdentifierToEmail } from "~/lib/auth.server";
+import { extractIdentifierFromBody, resolveIdentifierToEmail } from "~/lib/auth.server";
 
 export async function action({ request, context }: Route.ActionArgs) {
   const env = context.cloudflare?.env;
@@ -22,8 +22,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const rawIdentifier = typeof body.identifier === "string" ? body.identifier : typeof body.email === "string" ? body.email : "";
-  const identifier = rawIdentifier.trim();
+  const identifier = extractIdentifierFromBody(body);
   if (!identifier || !body.response) {
     return Response.json({ error: "Username or email and authentication response are required" }, { status: 400 });
   }

@@ -130,6 +130,17 @@ export async function authenticateUserByEmailOrUsername(
 }
 
 /**
+ * Extract a chef-supplied identifier from a parsed JSON request body that
+ * may carry it under `identifier` (preferred) or the legacy `email` field,
+ * trimmed. Shared by the WebAuthn authenticate routes (options + verify) so
+ * the "identifier ?? email" fallback lives in exactly one place.
+ */
+export function extractIdentifierFromBody(body: { identifier?: unknown; email?: unknown }): string {
+  const raw = typeof body.identifier === "string" ? body.identifier : typeof body.email === "string" ? body.email : "";
+  return raw.trim();
+}
+
+/**
  * Resolve a chef-supplied identifier (a username or an email) to the
  * account's email address, for callers that must look a user up by email
  * but accept either (e.g. the WebAuthn authenticate routes). Same branching
@@ -138,14 +149,16 @@ export async function authenticateUserByEmailOrUsername(
  * An unknown username resolves to the original identifier unchanged, so a
  * caller that feeds the result into a plain email lookup gets the same "no
  * such user" behavior an unknown email already gets (no enumeration).
+ *
+ * Expects an already-trimmed identifier (e.g. from extractIdentifierFromBody)
+ * — both current callers trim before calling, so this doesn't re-trim.
  */
 export async function resolveIdentifierToEmail(db: PrismaClient, identifier: string): Promise<string> {
-  const trimmed = identifier.trim();
-  if (trimmed.includes("@")) {
-    return trimmed.toLowerCase();
+  if (identifier.includes("@")) {
+    return identifier.toLowerCase();
   }
-  const user = await db.user.findUnique({ where: { username: trimmed }, select: { email: true } });
-  return user?.email ?? trimmed;
+  const user = await db.user.findUnique({ where: { username: identifier }, select: { email: true } });
+  return user?.email ?? identifier;
 }
 
 // Get user by ID
