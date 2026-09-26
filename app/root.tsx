@@ -33,6 +33,7 @@ import { OAuthButtonGroup } from "~/components/ui/oauth";
 import { SpoonjoyLogo } from "~/components/ui/spoonjoy-logo";
 import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
 import { Text } from "~/components/ui/text";
+import { SkipLink } from "~/components/navigation/skip-link";
 import "./styles/tailwind.css";
 
 /**
@@ -288,7 +289,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body className="m-0 bg-[var(--sj-page)] p-0 text-[var(--sj-ink)] antialiased">
         <ThemeProvider>
-          <a className="sj-skip-link" href="#main">Skip to main content</a>
+          <SkipLink />
           {children}
         </ThemeProvider>
         <ScrollRestoration nonce={nonce} />
