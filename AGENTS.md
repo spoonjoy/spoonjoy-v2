@@ -51,13 +51,14 @@ prisma/
 
 ## Development Commands
 
+Local commands are for writing code and running unit tests. App behaviour is validated only by the `Journeys` workflow in CI (see Validation above), so do not start the app locally to check it.
+
 ```bash
-npm run dev          # Start dev server (localhost:5173)
-npm run build        # Production build
-npm run test         # Run tests (Vitest)
-npm run test:ui      # Vitest UI mode
-npm run test:coverage # Coverage report
-npm run prisma:studio # Database GUI
+npm run test          # Run unit tests (Vitest, watch mode)
+npm run test:ui       # Vitest UI mode
+npm run test:coverage # Unit test coverage report
+npm run typecheck     # Type-check the code
+npm run build         # Production build, to check the app compiles
 ```
 
 ## Work Suite Autopilot

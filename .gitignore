@@ -53,6 +53,7 @@ test-results/
 e2e/.auth/
 journeys-report/
 e2e/.auth/journeys-*.json
+.journeys/
 
 # Live smoke artifacts (scripts/smoke-live.mjs default outDir)
 live-smoke-artifacts/

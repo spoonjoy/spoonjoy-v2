@@ -10,10 +10,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: qa-environment
-  cancel-in-progress: false
-
 defaults:
   run:
     shell: bash
@@ -34,6 +30,14 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: journeys
     runs-on: ubuntu-latest
+    # One journeys run at a time against the shared QA mirror. This sits on the job, not the
+    # workflow, so the fork-notice job never takes the group's pending slot. GitHub keeps only
+    # one pending run per concurrency group, so a newer run can cancel an older pending one
+    # (cancel-in-progress: false only protects the run that is already going). A cancelled
+    # pull request run is re-triggered by the next push or a manual re-run.
+    concurrency:
+      group: qa-environment
+      cancel-in-progress: false
     timeout-minutes: 30
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
