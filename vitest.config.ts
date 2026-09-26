@@ -23,6 +23,7 @@ const coverageInclude = [
   "scripts/deploy-production-canary.ts",
   "scripts/run-with-warning-policy.mjs",
   "scripts/e2e-run-cleanup.mjs",
+  "scripts/check-journey-rules.mjs",
   "test/warning-policy.ts",
   "e2e/warning-policy.ts",
   "e2e/fixtures.ts",
