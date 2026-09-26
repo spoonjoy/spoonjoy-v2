@@ -358,8 +358,8 @@ export function isCliEntry(moduleUrl, argv1 = process.argv[1]) {
   return typeof argv1 === "string" && moduleUrl === pathToFileURL(argv1).href;
 }
 
-export function defaultCliErrorHandler(error) {
-  console.error(error instanceof Error ? error.message : String(error));
+export function defaultCliErrorHandler(error, io = console) {
+  io.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 }
 

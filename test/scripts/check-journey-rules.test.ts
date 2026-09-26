@@ -9,6 +9,7 @@ import {
   main,
   runCliIfEntry,
 } from "../../scripts/check-journey-rules.mjs";
+import { expectConsoleError } from "../warning-policy";
 
 const rules = (src: string) => checkJourneySource("x.journey.ts", src).map((v: { rule: string }) => v.rule);
 
@@ -371,24 +372,26 @@ describe("main", () => {
   });
 
   it("uses default readdir/readFile/io/exit when no deps are injected", async () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    await expect(main(["/definitely/does/not/exist/e2e-journeys-dir"], {})).resolves.toBeUndefined();
+    const directory = "/definitely/does/not/exist/e2e-journeys-dir";
+    expectConsoleError(
+      `check-journey-rules: cannot read directory "${directory}": ENOENT: no such file or directory, scandir '${directory}'`,
+    );
+    await expect(main([directory], {})).resolves.toBeUndefined();
     expect(process.exitCode).toBe(1);
-    expect(errorSpy).toHaveBeenCalled();
     process.exitCode = 0;
-    errorSpy.mockRestore();
   });
 
   it("uses default argv and default deps when neither is passed at all", async () => {
     const originalArgv = process.argv;
     process.argv = ["node", "check-journey-rules.mjs"];
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    await expect(main()).resolves.toBeUndefined();
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Usage"));
-    expect(process.exitCode).toBe(1);
-    process.exitCode = 0;
-    process.argv = originalArgv;
-    errorSpy.mockRestore();
+    expectConsoleError("Usage: check-journey-rules.mjs <directory>");
+    try {
+      await expect(main()).resolves.toBeUndefined();
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = 0;
+      process.argv = originalArgv;
+    }
   });
 
   it("formats a non-Error readdir rejection with String(error)", async () => {
@@ -463,20 +466,25 @@ describe("CLI entry guard", () => {
     expect(onError).toHaveBeenCalledWith(failure);
   });
 
-  it("defaultCliErrorHandler logs an Error's message and sets exitCode 1", () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    defaultCliErrorHandler(new Error("boom"));
-    expect(errorSpy).toHaveBeenCalledWith("boom");
+  it("defaultCliErrorHandler logs an Error's message via the injected io and sets exitCode 1", () => {
+    const io = { error: vi.fn() };
+    defaultCliErrorHandler(new Error("boom"), io);
+    expect(io.error).toHaveBeenCalledWith("boom");
     expect(process.exitCode).toBe(1);
     process.exitCode = 0;
-    errorSpy.mockRestore();
   });
 
-  it("defaultCliErrorHandler stringifies a non-Error throw", () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    defaultCliErrorHandler("boom");
-    expect(errorSpy).toHaveBeenCalledWith("boom");
+  it("defaultCliErrorHandler stringifies a non-Error throw via the injected io", () => {
+    const io = { error: vi.fn() };
+    defaultCliErrorHandler("boom", io);
+    expect(io.error).toHaveBeenCalledWith("boom");
     process.exitCode = 0;
-    errorSpy.mockRestore();
+  });
+
+  it("defaultCliErrorHandler defaults to console when no io is injected", () => {
+    expectConsoleError("boom-default");
+    defaultCliErrorHandler(new Error("boom-default"));
+    expect(process.exitCode).toBe(1);
+    process.exitCode = 0;
   });
 });

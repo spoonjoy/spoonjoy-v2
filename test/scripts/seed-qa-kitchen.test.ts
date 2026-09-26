@@ -13,6 +13,7 @@ import {
   parseSeedKitchenArgs,
   runCliIfEntry,
 } from "../../scripts/seed-qa-kitchen.mjs";
+import { expectConsoleError } from "../warning-policy";
 
 const MIGRATIONS = resolve(__dirname, "../../migrations");
 function migratedDb() {
@@ -514,27 +515,36 @@ describe("seed-qa-kitchen", () => {
       expect(runCliIfEntry()).toBe(false);
     });
 
-    it("prints an Error message and sets a failing exit code by default", () => {
-      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    it("prints an Error message and sets a failing exit code via the injected io", () => {
+      const io = { error: vi.fn() };
       const originalExitCode = process.exitCode;
       try {
-        defaultCliErrorHandler(new Error("kaboom"));
-        expect(errorSpy).toHaveBeenCalledWith("kaboom");
+        defaultCliErrorHandler(new Error("kaboom"), io);
+        expect(io.error).toHaveBeenCalledWith("kaboom");
         expect(process.exitCode).toBe(1);
       } finally {
-        errorSpy.mockRestore();
         process.exitCode = originalExitCode;
       }
     });
 
-    it("stringifies a non-Error thrown value", () => {
-      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    it("stringifies a non-Error thrown value via the injected io", () => {
+      const io = { error: vi.fn() };
       const originalExitCode = process.exitCode;
       try {
-        defaultCliErrorHandler("plain string failure");
-        expect(errorSpy).toHaveBeenCalledWith("plain string failure");
+        defaultCliErrorHandler("plain string failure", io);
+        expect(io.error).toHaveBeenCalledWith("plain string failure");
       } finally {
-        errorSpy.mockRestore();
+        process.exitCode = originalExitCode;
+      }
+    });
+
+    it("defaults to console when no io is injected", () => {
+      const originalExitCode = process.exitCode;
+      try {
+        expectConsoleError("kaboom-default");
+        defaultCliErrorHandler(new Error("kaboom-default"));
+        expect(process.exitCode).toBe(1);
+      } finally {
         process.exitCode = originalExitCode;
       }
     });
