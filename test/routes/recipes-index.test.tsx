@@ -227,6 +227,7 @@ describe("Recipes Index Route", () => {
     expect(await screen.findByRole("heading", { name: 'Recipes for "lemon"' })).toBeInTheDocument();
     const box = screen.getByLabelText("Search recipes") as HTMLInputElement;
     expect(box.value).toBe("lemon");
+    expect(box).toHaveAttribute("autocomplete", "off");
 
     fireEvent.change(box, { target: { value: "tomato" } });
     fireEvent.click(screen.getByRole("button", { name: "Search" }));

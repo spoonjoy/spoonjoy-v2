@@ -119,6 +119,9 @@ export default function RecipesIndex() {
                     name="q"
                     type="search"
                     defaultValue={query}
+                    // Off, so a document-level Back does not restore stale typed text over the
+                    // server-rendered query (the browser skips form restoration for these fields).
+                    autoComplete="off"
                     placeholder="tomato, beans, lemon"
                     className="min-w-0 flex-1 before:hidden after:hidden [&_input]:h-14 [&_input]:border-0 [&_input]:bg-transparent [&_input]:px-0 [&_input]:py-0 [&_input]:font-sj-display [&_input]:text-2xl/8 [&_input]:outline-none [&_input]:placeholder:text-[var(--sj-ink-soft)]"
                   />

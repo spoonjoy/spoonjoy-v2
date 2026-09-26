@@ -171,6 +171,9 @@ export default function Search() {
                   type="search"
                   name="q"
                   defaultValue={query}
+                  // Off, so a document-level Back does not restore stale typed text over the
+                  // server-rendered query (the browser skips form restoration for these fields).
+                  autoComplete="off"
                   placeholder="tomato basil"
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
