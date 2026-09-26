@@ -23,7 +23,7 @@ function buttonHref(action: DockButton) {
 }
 
 function buttonOnClick(action: DockButton) {
-  return typeof action.onAction === "function" ? action.onAction : undefined;
+  return typeof action.onAction === "function" ? action.onAction : action.onLinkClick;
 }
 
 function isPath(pathname: string, href: string) {

@@ -116,6 +116,8 @@ Signed-in navigation must use plain kitchen words and stable routes:
 
 `/recipes` remains the broader `Explore Recipes` index, not the signed-in cook's authored drawer.
 
+Back means back: the recipe page's `Recipes` link and the dock's `Back` item return to the previous in-app page when there is one, and go to `/recipes` only when the recipe was opened directly. Both stay real links to `/recipes`, so middle click and open-in-new-tab still work.
+
 Saved Recipes are recipes saved through cookbooks owned by the signed-in cook. That includes the cook's own recipes when they have saved them into one of their cookbooks. It does not mean every recipe the cook wrote.
 
 Global search stays at `/search` with scopes for all, recipes, cookbooks, chefs, and shopping list. The personal drawer filters are local filters for the current drawer; they do not create a second search system.

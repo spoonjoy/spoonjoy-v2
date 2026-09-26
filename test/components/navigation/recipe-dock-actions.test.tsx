@@ -65,6 +65,8 @@ describe('Recipe Dock Actions', () => {
       expect(screen.getByTestId('action-labels')).toHaveTextContent('Back,Cook,List,Save,Share')
       expect(capturedActions?.find(a => a.id === 'edit')).toBeUndefined()
       expect(capturedActions?.find(a => a.id === 'recipe-back')?.onAction).toBe('/recipes')
+      // Back means back: the link keeps its /recipes href and adds a history-aware click handler.
+      expect(typeof capturedActions?.find(a => a.id === 'recipe-back')?.onLinkClick).toBe('function')
     })
 
     it('clears the contextual dock while recipe management is expanded', () => {

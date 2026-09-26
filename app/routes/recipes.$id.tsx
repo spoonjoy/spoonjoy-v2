@@ -29,6 +29,7 @@ import { IngredientList, type Ingredient } from "~/components/recipe/IngredientL
 import type { StepReference } from "~/components/recipe/StepOutputUseCallout";
 import { shareContent, useDockSuppressed, useRecipeDetailActions } from "~/components/navigation";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
+import { useBackNavigation } from "~/hooks/use-back-navigation";
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   return loadRecipeDetail({ request, params, context });
@@ -611,6 +612,10 @@ export default function RecipeDetail() {
     enterCookMode();
   }, [enterCookMode]);
 
+  // Back means back: the "Recipes" link returns to the previous in-app page when there is
+  // one, and only goes to /recipes when the recipe was opened directly.
+  const handleBackToRecipes = useBackNavigation();
+
   const handleExitCookMode = useCallback(() => {
     pendingCookModeScroll.current = false;
     setIsCookMode(false);
@@ -632,7 +637,7 @@ export default function RecipeDetail() {
 
   const headerMasthead = (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <Link href="/recipes" className={recipeMastheadLinkClass}>
+      <Link href="/recipes" onClick={handleBackToRecipes} className={recipeMastheadLinkClass}>
         <ArrowLeft className="size-4" aria-hidden="true" />
         Recipes
       </Link>

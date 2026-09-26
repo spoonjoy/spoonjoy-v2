@@ -3201,6 +3201,50 @@ describe("Recipes $id Route", () => {
       await settleBrowserTasks();
     });
 
+    describe("Recipes link (back means back)", () => {
+      const backLinkData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Test Recipe",
+          description: null,
+          servings: null,
+          coverImageUrl: null,
+          chef: { id: "user-1", username: "testchef" },
+          steps: [],
+        },
+        isOwner: false,
+      };
+
+      function renderRecipeOpenedFromHome() {
+        const Stub = createTestRoutesStub([
+          { path: "/", Component: () => <h1>Home page</h1> },
+          { path: "/recipes", Component: () => <h1>All recipes page</h1> },
+          { path: "/recipes/:id", Component: RecipeDetail, loader: () => backLinkData },
+        ]);
+        render(<Stub initialEntries={["/", "/recipes/recipe-1"]} initialIndex={1} />);
+      }
+
+      it("returns to the previous in-app page when the recipe was reached inside the app", async () => {
+        window.history.replaceState({ idx: 1, key: "abc", usr: null }, "", "/");
+        renderRecipeOpenedFromHome();
+
+        const recipesLink = await screen.findByRole("link", { name: "Recipes" });
+        expect(recipesLink).toHaveAttribute("href", "/recipes");
+        fireEvent.click(recipesLink);
+
+        expect(await screen.findByRole("heading", { name: "Home page" })).toBeInTheDocument();
+      });
+
+      it("goes to /recipes when the recipe was opened directly", async () => {
+        window.history.replaceState({ idx: 0, key: "default", usr: null }, "", "/");
+        renderRecipeOpenedFromHome();
+
+        fireEvent.click(await screen.findByRole("link", { name: "Recipes" }));
+
+        expect(await screen.findByRole("heading", { name: "All recipes page" })).toBeInTheDocument();
+      });
+    });
+
     it("should render recipe with no steps (empty state) as non-owner", async () => {
       const mockData = {
         recipe: {

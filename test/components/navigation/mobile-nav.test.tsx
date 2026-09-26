@@ -1,7 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { createMemoryRouter, MemoryRouter, RouterProvider } from "react-router";
 import { ArrowLeft, Edit, Share2 } from "lucide-react";
 import { MobileNav } from "~/components/navigation/mobile-nav";
 import { DockContext, DockContextProvider, useRecipeDetailActions, type DockAction } from "~/components/navigation";
@@ -437,5 +437,59 @@ describe("MobileNav", () => {
       expect(screen.getByTestId("dock-center")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /create recipe/i })).toBeInTheDocument();
     });
+  });
+});
+
+describe("MobileNav recipe Back item", () => {
+  afterEach(() => {
+    window.history.replaceState(null, "");
+  });
+
+  function RecipeDetailDock() {
+    useRecipeDetailActions({ recipeId: "r1", chefId: "c1", isOwner: false });
+    return <MobileNav isAuthenticated />;
+  }
+
+  function renderRecipeOpenedFromHome() {
+    const router = createMemoryRouter(
+      [
+        { path: "/", element: <h1>Home page</h1> },
+        { path: "/recipes", element: <h1>All recipes page</h1> },
+        { path: "/recipes/:id", element: <RecipeDetailDock /> },
+      ],
+      { initialEntries: ["/", "/recipes/r1"], initialIndex: 1 },
+    );
+    render(
+      <DockContextProvider>
+        <RouterProvider router={router} />
+      </DockContextProvider>,
+    );
+    return router;
+  }
+
+  it("stays a real link to /recipes for no-JS and middle click", () => {
+    renderRecipeOpenedFromHome();
+
+    expect(screen.getByRole("link", { name: /back/i })).toHaveAttribute("href", "/recipes");
+  });
+
+  it("returns to the previous in-app page when the recipe was reached inside the app", async () => {
+    window.history.replaceState({ idx: 1, key: "abc", usr: null }, "");
+    const router = renderRecipeOpenedFromHome();
+
+    fireEvent.click(screen.getByRole("link", { name: /back/i }));
+
+    expect(await screen.findByRole("heading", { name: "Home page" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/");
+  });
+
+  it("goes to /recipes when the recipe was opened directly", async () => {
+    window.history.replaceState({ idx: 0, key: "default", usr: null }, "");
+    const router = renderRecipeOpenedFromHome();
+
+    fireEvent.click(screen.getByRole("link", { name: /back/i }));
+
+    expect(await screen.findByRole("heading", { name: "All recipes page" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/recipes");
   });
 });
