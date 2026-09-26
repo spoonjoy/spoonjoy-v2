@@ -2,7 +2,7 @@ import { expect, type Page } from '@playwright/test';
 import { readLatestDisposableE2EUser } from './disposable-auth';
 
 export async function fillLoginEmail(page: Page, emailAddress: string) {
-  const email = page.getByLabel('Email').first();
+  const email = page.getByLabel('Username or email').first();
   await expect(async () => {
     await email.fill(emailAddress);
     await expect(email).toHaveValue(emailAddress);
@@ -10,7 +10,7 @@ export async function fillLoginEmail(page: Page, emailAddress: string) {
 }
 
 export async function submitPasswordLogin(page: Page, emailAddress: string, password: string) {
-  const emailInput = page.getByLabel('Email').first();
+  const emailInput = page.getByLabel('Username or email').first();
   const passwordInput = page.getByLabel('Password').first();
   const loginButton = page.locator('form').getByRole('button', { name: 'Log In', exact: true });
 

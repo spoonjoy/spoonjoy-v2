@@ -182,9 +182,10 @@ describe("WebAuthn routes", () => {
       expect(res.status).toBe(429);
     });
 
-    it("400s without an email", async () => {
+    it("400s without an identifier", async () => {
       const res = await authenticateOptions(routeArgs(jsonRequest("https://spoonjoy.app/auth/webauthn/authenticate/options", {})));
       expect(res.status).toBe(400);
+      await expect(res.json()).resolves.toEqual({ error: "Username or email is required" });
     });
 
     it("400s on invalid JSON", async () => {
@@ -197,7 +198,7 @@ describe("WebAuthn routes", () => {
       expect(res.status).toBe(400);
     });
 
-    it("returns options for a known email", async () => {
+    it("returns options for a known email via the legacy email field", async () => {
       const user = await db.user.create({ data: createTestUser() });
       vi.mocked(buildAuthenticationOptions).mockResolvedValue({ challenge: "ac" } as never);
       const res = await authenticateOptions(routeArgs(jsonRequest(
@@ -206,6 +207,41 @@ describe("WebAuthn routes", () => {
       )));
       expect(res.status).toBe(200);
       await expect(res.json()).resolves.toEqual({ challenge: "ac" });
+    });
+
+    it("returns options for a known email via the identifier field", async () => {
+      const user = await db.user.create({ data: createTestUser() });
+      vi.mocked(buildAuthenticationOptions).mockResolvedValue({ challenge: "ac" } as never);
+      const res = await authenticateOptions(routeArgs(jsonRequest(
+        "https://spoonjoy.app/auth/webauthn/authenticate/options",
+        { identifier: user.email.toUpperCase() },
+      )));
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({ challenge: "ac" });
+    });
+
+    it("returns options for a known username via the identifier field", async () => {
+      const user = await db.user.create({ data: createTestUser() });
+      vi.mocked(buildAuthenticationOptions).mockResolvedValue({ challenge: "ac" } as never);
+      const res = await authenticateOptions(routeArgs(jsonRequest(
+        "https://spoonjoy.app/auth/webauthn/authenticate/options",
+        { identifier: user.username },
+      )));
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({ challenge: "ac" });
+      // Resolved to the account's real email before calling startAuthentication.
+      expect(vi.mocked(buildAuthenticationOptions).mock.calls[0][1]).toEqual([]);
+    });
+
+    it("keeps the unknown-user behaviour for an unknown username (no enumeration)", async () => {
+      vi.mocked(buildAuthenticationOptions).mockResolvedValue({ challenge: "ac" } as never);
+      const res = await authenticateOptions(routeArgs(jsonRequest(
+        "https://spoonjoy.app/auth/webauthn/authenticate/options",
+        { identifier: "no_such_chef_anywhere" },
+      )));
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({ challenge: "ac" });
+      expect(vi.mocked(buildAuthenticationOptions).mock.calls[0][1]).toEqual([]);
     });
 
     it("falls back when authentication option orchestration throws a non-Error", async () => {

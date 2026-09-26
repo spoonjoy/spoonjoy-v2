@@ -10,20 +10,36 @@ export async function action({ request, context }: Route.ActionArgs) {
     return rateLimitedResponse(rateLimit.retryAfterSeconds);
   }
 
-  let body: { email?: string };
+  let body: { identifier?: string; email?: string };
   try {
-    body = (await request.json()) as { email?: string };
+    body = (await request.json()) as { identifier?: string; email?: string };
   } catch {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
-  if (!email) {
-    return Response.json({ error: "Email is required" }, { status: 400 });
+  const raw = typeof body.identifier === "string" ? body.identifier : typeof body.email === "string" ? body.email : "";
+  const identifier = raw.trim();
+  if (!identifier) {
+    return Response.json({ error: "Username or email is required" }, { status: 400 });
   }
 
   try {
     const db = await getRequestDb(context);
+
+    // Same lookup shape as authenticateUserByEmailOrUsername: an "@" means
+    // an email, otherwise an exact username. startAuthentication itself only
+    // looks up by email, so a username is resolved to its account's email
+    // first; an unknown username resolves to nothing and falls through to
+    // startAuthentication's existing "unknown user" behavior (empty allow
+    // list, no error) unchanged.
+    let email: string;
+    if (identifier.includes("@")) {
+      email = identifier.toLowerCase();
+    } else {
+      const user = await db.user.findUnique({ where: { username: identifier }, select: { email: true } });
+      email = user?.email ?? identifier;
+    }
+
     const options = await startAuthentication(
       db,
       email,

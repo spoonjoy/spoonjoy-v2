@@ -1,10 +1,10 @@
 /**
  * "Sign in with a passkey" control for the login page.
  *
- * Username-first flow: the email comes from the login form's single shared
- * email field (passed in as a prop). Clicking prompts the authenticator; on
- * success the server sets a session cookie and we navigate to the
- * post-login destination.
+ * Username-first flow: the identifier (a username or an email) comes from
+ * the login form's single shared identifier field (passed in as a prop).
+ * Clicking prompts the authenticator; on success the server sets a session
+ * cookie and we navigate to the post-login destination.
  *
  * WebAuthn support is detected after mount (not during render) so the
  * server render and the first client render agree. The support check is
@@ -22,8 +22,8 @@ import {
 } from "~/lib/webauthn-client";
 
 export interface PasskeySignInButtonProps {
-  /** Email from the login form's shared email field. */
-  email: string;
+  /** Username or email from the login form's shared identifier field. */
+  identifier: string;
   redirectTo?: string;
   /** Test seam: override the support check. */
   supportsPasskeys?: boolean;
@@ -32,7 +32,7 @@ export interface PasskeySignInButtonProps {
 }
 
 export function PasskeySignInButton({
-  email,
+  identifier,
   redirectTo,
   supportsPasskeys,
   onNavigate,
@@ -53,9 +53,9 @@ export function PasskeySignInButton({
 
   async function handleClick() {
     setError(null);
-    const trimmed = email.trim();
+    const trimmed = identifier.trim();
     if (!trimmed) {
-      setError("Enter your email above to use a passkey.");
+      setError("Enter your username or email above to use a passkey.");
       return;
     }
 

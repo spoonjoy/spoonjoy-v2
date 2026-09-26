@@ -2,7 +2,7 @@ import type { Route } from "./+types/login";
 import { useState } from "react";
 import { Form, redirect, data, useActionData, useLoaderData, useSearchParams } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
-import { authenticateUser } from "~/lib/auth.server";
+import { authenticateUserByEmailOrUsername } from "~/lib/auth.server";
 import { createUserSession, getUserId, sanitizeSessionRedirect } from "~/lib/session.server";
 import { enforceAuthRateLimit } from "~/lib/rate-limit.server";
 import { OAuthButtonGroup, OAuthDivider, OAuthError } from "~/components/ui/oauth";
@@ -19,7 +19,7 @@ import { ValidationError } from "~/components/ui/validation-error";
 
 interface ActionData {
   errors?: {
-    email?: string;
+    identifier?: string;
     password?: string;
     general?: string;
   };
@@ -65,7 +65,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const formData = await request.formData();
-  const email = formData.get("email")?.toString() || "";
+  const identifier = (formData.get("identifier") ?? formData.get("email"))?.toString().trim() ?? "";
   const password = formData.get("password")?.toString() || "";
 
   const url = new URL(request.url);
@@ -74,8 +74,8 @@ export async function action({ request, context }: Route.ActionArgs) {
   const errors: ActionData["errors"] = {};
 
   // Validation
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    errors.email = "Valid email is required";
+  if (!identifier) {
+    errors.identifier = "Enter your username or email";
   }
 
   if (!password) {
@@ -89,12 +89,12 @@ export async function action({ request, context }: Route.ActionArgs) {
   // Get the appropriate database instance
   const database = await getRequestDb(context);
 
-  // Authenticate user
-  const user = await authenticateUser(database, email, password);
+  // Authenticate user by username or email
+  const user = await authenticateUserByEmailOrUsername(database, identifier, password);
 
   if (!user) {
     return data(
-      { errors: { general: "Invalid email or password" } },
+      { errors: { general: "Invalid username, email, or password" } },
       { status: 401 }
     );
   }
@@ -113,7 +113,7 @@ export default function Login() {
   const oauthProviders = loaderData?.oauthProviders ?? [];
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get("redirectTo") ?? undefined;
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
 
   return (
     <AuthLayout>
@@ -123,7 +123,7 @@ export default function Login() {
         {/* OAuth error messages */}
         <OAuthError error={loaderData?.oauthError} className="mt-4" />
 
-        {/* istanbul ignore next -- @preserve */ actionData?.errors?.general && (
+        {actionData?.errors?.general && (
           <ValidationError error={actionData.errors.general} className="mt-4" />
         )}
 
@@ -136,19 +136,22 @@ export default function Login() {
 
         <Form method="post" className={oauthProviders.length > 0 ? "space-y-6" : "mt-8 space-y-6"}>
           <Field>
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="identifier">Username or email</Label>
             <Input
-              type="email"
-              id="email"
-              name="email"
+              type="text"
+              id="identifier"
+              name="identifier"
               autoComplete="username webauthn"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              invalid={/* istanbul ignore next -- @preserve */ !!actionData?.errors?.email}
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              invalid={!!actionData?.errors?.identifier}
             />
-            {/* istanbul ignore next -- @preserve */ actionData?.errors?.email && (
-              <ErrorMessage>{actionData.errors.email}</ErrorMessage>
+            {actionData?.errors?.identifier && (
+              <ErrorMessage>{actionData.errors.identifier}</ErrorMessage>
             )}
           </Field>
 
@@ -172,7 +175,7 @@ export default function Login() {
         </Form>
 
         <div className="my-6 border-t border-[var(--sj-border)]" aria-hidden="true" />
-        <PasskeySignInButton email={email} redirectTo={redirectTo} />
+        <PasskeySignInButton identifier={identifier} redirectTo={redirectTo} />
 
         <Text className="mt-6 text-center">
           Don't have an account?{" "}

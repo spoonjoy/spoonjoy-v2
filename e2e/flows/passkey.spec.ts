@@ -92,7 +92,7 @@ test.describe('Passkey lifecycle', () => {
     });
     await page.goto(`/oauth/authorize?${authorizeParams}`);
     await expect(page).toHaveURL(/\/login\?redirectTo=/);
-    const loginEmail = page.getByLabel('Email').first();
+    const loginEmail = page.getByLabel('Username or email').first();
     await expect(page.getByRole('button', { name: /sign in with a passkey/i }).first()).toBeVisible();
     await loginEmail.fill(user.email);
     await expect(loginEmail).toHaveValue(user.email);

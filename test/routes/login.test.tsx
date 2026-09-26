@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { Request as UndiciRequest } from "undici";
+import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub } from "../utils";
@@ -118,27 +118,6 @@ describe("Login Route", () => {
       expect(data.errors.general).toMatch(/too many attempts/i);
     });
 
-    it("should return validation errors for invalid email", async () => {
-      const formData = new FormData();
-      formData.set("email", "invalid-email");
-      formData.set("password", "Valid-Test-Password-42!");
-
-      const request = new Request("http://localhost:3000/login", {
-        method: "POST",
-        body: formData,
-      });
-
-      const response = await action({
-        request,
-        context: { cloudflare: { env: null } },
-        params: {},
-      } as any);
-
-      const { data, status } = extractResponseData(response);
-      expect(status).toBe(400);
-      expect(data.errors.email).toBe("Valid email is required");
-    });
-
     it("should return validation errors for missing password", async () => {
       const formData = new FormData();
       formData.set("email", "test@example.com");
@@ -178,7 +157,7 @@ describe("Login Route", () => {
 
       const { data, status } = extractResponseData(response);
       expect(status).toBe(401);
-      expect(data.errors.general).toBe("Invalid email or password");
+      expect(data.errors.general).toBe("Invalid username, email, or password");
     });
 
     it("should return error for wrong password", async () => {
@@ -205,7 +184,7 @@ describe("Login Route", () => {
 
       const { data, status } = extractResponseData(response);
       expect(status).toBe(401);
-      expect(data.errors.general).toBe("Invalid email or password");
+      expect(data.errors.general).toBe("Invalid username, email, or password");
     });
 
     it("should redirect on successful login", async () => {
@@ -321,7 +300,7 @@ describe("Login Route", () => {
       }
     );
 
-    it("should handle missing email and password", async () => {
+    it("should handle missing identifier and password", async () => {
       const formData = new FormData();
 
       const request = new Request("http://localhost:3000/login", {
@@ -337,8 +316,53 @@ describe("Login Route", () => {
 
       const { data, status } = extractResponseData(response);
       expect(status).toBe(400);
-      expect(data.errors.email).toBe("Valid email is required");
+      expect(data.errors.identifier).toBe("Enter your username or email");
       expect(data.errors.password).toBe("Password is required");
+    });
+  });
+
+  describe("action: username or email", () => {
+    async function submit(fields: Record<string, string>) {
+      const form = new UndiciFormData();
+      for (const [k, v] of Object.entries(fields)) form.set(k, v);
+      const request = new UndiciRequest("http://localhost:3000/login", { method: "POST", body: form });
+      return action({ request, context: { cloudflare: { env: null } }, params: {} } as any);
+    }
+
+    it("signs in with the username", async () => {
+      const username = `chef_${faker.string.alphanumeric(8).toLowerCase()}`;
+      await createUser(db, `${username}@example.com`, username, "correct-horse-1");
+      const response = await submit({ identifier: username, password: "correct-horse-1" });
+      expect(response).toBeInstanceOf(Response);
+      expect((response as Response).status).toBe(302);
+    });
+
+    it("signs in with the email, case-insensitively", async () => {
+      const username = `chef_${faker.string.alphanumeric(8).toLowerCase()}`;
+      await createUser(db, `${username}@example.com`, username, "correct-horse-1");
+      const response = await submit({ identifier: `${username.toUpperCase()}@EXAMPLE.COM`, password: "correct-horse-1" });
+      expect((response as Response).status).toBe(302);
+    });
+
+    it("still accepts the legacy email field", async () => {
+      const username = `chef_${faker.string.alphanumeric(8).toLowerCase()}`;
+      await createUser(db, `${username}@example.com`, username, "correct-horse-1");
+      const response = await submit({ email: `${username}@example.com`, password: "correct-horse-1" });
+      expect((response as Response).status).toBe(302);
+    });
+
+    it("rejects a blank identifier", async () => {
+      const { data, status } = extractResponseData(await submit({ identifier: "   ", password: "x" }));
+      expect(status).toBe(400);
+      expect(data.errors.identifier).toBe("Enter your username or email");
+    });
+
+    it("rejects a wrong password without saying which part was wrong", async () => {
+      const username = `chef_${faker.string.alphanumeric(8).toLowerCase()}`;
+      await createUser(db, `${username}@example.com`, username, "correct-horse-1");
+      const { data, status } = extractResponseData(await submit({ identifier: username, password: "nope" }));
+      expect(status).toBe(401);
+      expect(data.errors.general).toBe("Invalid username, email, or password");
     });
   });
 
@@ -355,14 +379,14 @@ describe("Login Route", () => {
       render(<Stub initialEntries={["/login"]} />);
 
       expect(await screen.findByRole("heading", { name: "Log In" })).toBeInTheDocument();
-      expect(screen.getByLabelText("Email")).toBeInTheDocument();
+      expect(screen.getByLabelText("Username or email")).toBeInTheDocument();
       expect(screen.getByLabelText("Password")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Log In" })).toBeInTheDocument();
       expect(screen.getByText("Don't have an account?")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Sign up" })).toHaveAttribute("href", "/signup");
     });
 
-    it("should have email input with correct attributes", async () => {
+    it("should have identifier input with correct attributes and no Email field", async () => {
       const Stub = createTestRoutesStub([
         {
           path: "/login",
@@ -373,13 +397,16 @@ describe("Login Route", () => {
 
       render(<Stub initialEntries={["/login"]} />);
 
-      const emailInput = await screen.findByLabelText("Email");
-      expect(emailInput).toHaveAttribute("type", "email");
-      expect(emailInput).toHaveAttribute("name", "email");
-      expect(emailInput).toHaveAttribute("required");
+      const identifierInput = await screen.findByLabelText("Username or email");
+      expect(identifierInput).toHaveAttribute("type", "text");
+      expect(identifierInput).toHaveAttribute("name", "identifier");
+      expect(identifierInput).toHaveAttribute("autocomplete", "username webauthn");
+      expect(identifierInput).toHaveAttribute("autocapitalize", "none");
+      expect(identifierInput).toHaveAttribute("required");
+      expect(screen.queryByLabelText("Email")).not.toBeInTheDocument();
     });
 
-    it("updates the controlled email value as the user types", async () => {
+    it("updates the controlled identifier value as the user types", async () => {
       const Stub = createTestRoutesStub([
         {
           path: "/login",
@@ -390,10 +417,10 @@ describe("Login Route", () => {
 
       render(<Stub initialEntries={["/login"]} />);
 
-      const emailInput = await screen.findByLabelText("Email");
+      const identifierInput = await screen.findByLabelText("Username or email");
       const user = userEvent.setup();
-      await user.type(emailInput, "chef@example.com");
-      expect(emailInput).toHaveValue("chef@example.com");
+      await user.type(identifierInput, "chef@example.com");
+      expect(identifierInput).toHaveValue("chef@example.com");
     });
 
     it("should have password input with correct attributes", async () => {
@@ -702,28 +729,50 @@ describe("Login Route", () => {
 
         await screen.findByRole("heading", { name: "Log In" });
 
-        expect(screen.getByLabelText("Email")).toBeInTheDocument();
+        expect(screen.getByLabelText("Username or email")).toBeInTheDocument();
         expect(screen.getByLabelText("Password")).toBeInTheDocument();
       });
 
-      it("should display general error using ValidationError component", async () => {
-        // Test that general error uses ValidationError (which has data-slot="validation-error")
-        // This is verified by checking that the error element has the correct structure
+      it("should display the general error returned by the action", async () => {
+        const user = userEvent.setup();
         const Stub = createTestRoutesStub([
           {
             path: "/login",
             Component: Login,
             loader: () => ({ oauthProviders: [] }),
+            action: () => ({ errors: { general: "Invalid username, email, or password" } }),
           },
         ]);
 
         render(<Stub initialEntries={["/login"]} />);
-        await screen.findByRole("heading", { name: "Log In" });
 
-        // The ValidationError component is imported and used in login.tsx
-        // When general errors are displayed, they use ValidationError
-        // This is verified by the actual error handling test in the action tests
-        expect(true).toBe(true); // Structure test - actual behavior tested in action tests
+        await user.type(await screen.findByLabelText("Username or email"), "chef_test");
+        await user.type(screen.getByLabelText("Password"), "wrong-password");
+        await user.click(screen.getByRole("button", { name: "Log In" }));
+
+        expect(await screen.findByText("Invalid username, email, or password")).toBeInTheDocument();
+      });
+
+      it("should display the identifier field error returned by the action", async () => {
+        const user = userEvent.setup();
+        const Stub = createTestRoutesStub([
+          {
+            path: "/login",
+            Component: Login,
+            loader: () => ({ oauthProviders: [] }),
+            action: () => ({ errors: { identifier: "Enter your username or email" } }),
+          },
+        ]);
+
+        render(<Stub initialEntries={["/login"]} />);
+
+        const identifierInput = await screen.findByLabelText("Username or email");
+        await user.type(identifierInput, "  ");
+        await user.type(screen.getByLabelText("Password"), "some-password");
+        await user.click(screen.getByRole("button", { name: "Log In" }));
+
+        expect(await screen.findByText("Enter your username or email")).toBeInTheDocument();
+        expect(identifierInput).toHaveAttribute("data-invalid");
       });
     });
   });
