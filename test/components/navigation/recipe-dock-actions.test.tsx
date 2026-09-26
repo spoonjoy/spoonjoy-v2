@@ -70,6 +70,16 @@ describe('Recipe Dock Actions', () => {
       expect(typeof capturedActions?.find(a => a.id === 'recipe-back')?.onLinkClick).toBe('function')
     })
 
+    it('labels the left item plain "Back" because it returns wherever the cook came from', () => {
+      render(<MemoryRouter initialEntries={['/recipes/123']}><DockContextProvider><ContextDisplay /><MobileNav /><RecipeDetailPage recipeId="123" chefId="chef-1" isOwner={false} /></DockContextProvider></MemoryRouter>)
+      const back = capturedActions?.find(a => a.id === 'recipe-back')
+      expect(back?.label).toBe('Back')
+      expect(back?.sublabel).toBeUndefined()
+      const dockBack = screen.getByRole('link', { name: 'Back' })
+      expect(dockBack).toHaveAttribute('href', '/recipes')
+      expect(dockBack).not.toHaveTextContent(/recipes/i)
+    })
+
     it('clears the contextual dock while recipe management is expanded', () => {
       render(<MemoryRouter><DockContextProvider><ContextDisplay /><RecipeDetailPage recipeId="123" chefId="chef-1" isOwner={true} disabled /></DockContextProvider></MemoryRouter>)
       expect(screen.getByTestId('is-contextual')).toHaveTextContent('no')
