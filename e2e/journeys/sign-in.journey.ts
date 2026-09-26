@@ -34,7 +34,14 @@ test.describe("Sign-in", () => {
     // The login action correctly answers bad credentials with a 401, and browsers log any
     // failed resource load (including a same-origin fetch's non-2xx response) as a console
     // error regardless of whether the app handled it — this one is expected, not an app bug.
-    expectConsoleError(/Failed to load resource: the server responded with a status of 401/);
+    // Scoped to the login action's own request so an unrelated 401 elsewhere on the page can't
+    // be credited instead: the <Form method="post"> submits via React Router's single-fetch
+    // action call, which always targets "<pathname>.data" (react-router's singleFetchUrl, in
+    // node_modules/react-router/dist/development/chunk-HHGH3NKS.js) — "/login.data" here, since
+    // "/login" has no trailing slash either branch of that helper appends ".data" the same way.
+    expectConsoleError(/Failed to load resource: the server responded with a status of 401/, {
+      url: /\/login\.data$/,
+    });
     await page.goto("/login");
     await page.getByLabel("Username or email").fill(persona("friend").username);
     await page.getByLabel("Password").fill("definitely-not-the-password");
