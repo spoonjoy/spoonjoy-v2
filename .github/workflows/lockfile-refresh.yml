@@ -1,0 +1,78 @@
+name: Refresh lockfile
+
+# Regenerates pnpm-lock.yaml from package.json on a GitHub runner and commits it
+# back to the given branch. Agents on networks that cannot reach the public npm
+# registry edit package.json locally, dispatch this workflow on their branch,
+# and then open the pull request so CI (including Journeys on QA) proves it.
+# Lockfile-only resolution with install scripts disabled: no dependency code runs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch whose package.json should be locked (never main)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lockfile-refresh-${{ inputs.branch }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  refresh:
+    name: refresh-lockfile
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      TARGET_BRANCH: ${{ inputs.branch }}
+    steps:
+      - name: Refuse protected targets
+        run: |
+          if [ -z "$TARGET_BRANCH" ] || [ "$TARGET_BRANCH" = "main" ] || [ "$TARGET_BRANCH" = "${{ github.event.repository.default_branch }}" ]; then
+            echo "::error::Refusing to refresh the lockfile on '$TARGET_BRANCH'. Use a feature branch."
+            exit 1
+          fi
+
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ inputs.branch }}
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+
+      - name: Activate pnpm
+        run: |
+          node scripts/warning-gate.ts -- corepack enable
+          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate
+
+      - name: Resolve the lockfile from the public registry
+        run: pnpm install --lockfile-only --ignore-scripts --registry=https://registry.npmjs.org/
+
+      - name: Refuse private registry URLs
+        run: |
+          if grep -nE 'pkgs\.visualstudio\.com|packagefeedproxy' pnpm-lock.yaml; then
+            echo "::error::pnpm-lock.yaml references a private registry."
+            exit 1
+          fi
+
+      - name: Commit the regenerated lockfile
+        run: |
+          if git diff --quiet -- pnpm-lock.yaml; then
+            echo "pnpm-lock.yaml is already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml
+          git commit -m "build: regenerate pnpm-lock.yaml"
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
