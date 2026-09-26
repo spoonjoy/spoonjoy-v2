@@ -98,6 +98,8 @@ const MAX_SEARCH_LIMIT = 50;
 const SEARCH_INSERT_COLUMN_COUNT = 11;
 const SEARCH_INSERT_BATCH_SIZE = 8;
 const SEARCH_METADATA_ID = "current";
+// A pantry query binds one parameter per term; D1 allows 100 bound parameters per query.
+const MAX_PANTRY_TERMS = 12;
 
 const SEARCH_SOURCE_TABLES = [
   { tableName: "User", countKey: "userCount", latestKey: "userLatestAt" },
@@ -205,6 +207,20 @@ export function toFtsQuery(query: string): string | null {
   }
 
   return tokens.map((token) => `${token}*`).join(" AND ");
+}
+
+/**
+ * Splits a search query into FTS5 term queries. A query without commas is one term (all of its
+ * words must match). A query with commas is a pantry query: each comma-separated part is its own
+ * term, matched independently. Parts with no letters or digits and repeated parts are dropped.
+ */
+export function toSearchTerms(query: string): string[] {
+  const terms = query
+    .split(",")
+    .map(toFtsQuery)
+    .filter((term): term is string => term !== null);
+
+  return [...new Set(terms)].slice(0, MAX_PANTRY_TERMS);
 }
 
 function compactText(parts: Array<string | null | undefined | false>): string {
@@ -679,8 +695,8 @@ export async function searchSpoonjoy(database: PrismaClient, options: SearchOpti
     return [];
   }
 
-  const ftsQuery = toFtsQuery(query);
-  if (query && !ftsQuery) {
+  const terms = toSearchTerms(query);
+  if (query && terms.length === 0) {
     return [];
   }
 
@@ -688,7 +704,7 @@ export async function searchSpoonjoy(database: PrismaClient, options: SearchOpti
 
   const where = buildWhereClause(entityTypes, options.ownerId, options.viewerId);
 
-  if (ftsQuery) {
+  if (terms.length === 1) {
     const rows = await database.$queryRawUnsafe<SearchRow[]>(
       `SELECT
         entityType,
@@ -707,7 +723,42 @@ export async function searchSpoonjoy(database: PrismaClient, options: SearchOpti
       WHERE "SearchDocument" MATCH ? AND ${where.sql}
       ORDER BY rank ASC, title COLLATE NOCASE ASC
       LIMIT ?`,
-      ftsQuery,
+      terms[0],
+      ...where.values,
+      limit
+    );
+
+    return rows.map(parseRow);
+  }
+
+  if (terms.length > 1) {
+    // Pantry query: a document matching any term is returned, ranked first by how many terms it
+    // matches and then by relevance. Every term comes from toFtsQuery, so only prefix words
+    // joined by AND/OR reach MATCH, never user-written FTS5 syntax.
+    const matchedTermCount = terms
+      .map(() => `(rowid IN (SELECT rowid FROM "SearchDocument" WHERE "SearchDocument" MATCH ?))`)
+      .join(" + ");
+    const rows = await database.$queryRawUnsafe<SearchRow[]>(
+      `SELECT
+        entityType,
+        entityId,
+        ownerId,
+        ownerUsername,
+        title,
+        subtitle,
+        body,
+        href,
+        imageUrl,
+        metadata,
+        bm25("SearchDocument", 0, 0, 0, 0, 0, 8, 3, 1, 0, 0, 0) AS rank,
+        snippet("SearchDocument", -1, '', '', '...', 24) AS snippet,
+        ${matchedTermCount} AS matchedTermCount
+      FROM "SearchDocument"
+      WHERE "SearchDocument" MATCH ? AND ${where.sql}
+      ORDER BY matchedTermCount DESC, rank ASC, title COLLATE NOCASE ASC
+      LIMIT ?`,
+      ...terms,
+      terms.map((term) => `(${term})`).join(" OR "),
       ...where.values,
       limit
     );

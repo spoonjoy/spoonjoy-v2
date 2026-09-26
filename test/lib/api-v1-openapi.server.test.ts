@@ -275,6 +275,22 @@ describe("API v1 OpenAPI document", () => {
     expect(nativeDogfoodScenario.sample).not.toContain("/api/v1/shopping-list/sync");
   });
 
+  it("documents pantry (comma-separated) semantics only on the full-text search endpoint", () => {
+    const document = buildApiV1OpenApiDocument();
+    const parameterDescription = (path: string, name: string) =>
+      operation(document, path, "GET").parameters.find((parameter: { name: string }) => parameter.name === name).description;
+
+    expect(parameterDescription("/api/v1/search", "query")).toContain("Commas separate alternatives");
+    expect(parameterDescription("/api/v1/search", "query")).toContain("ordered by how many alternatives it matches");
+    expect(parameterDescription("/api/v1/search", "query")).toContain("At most 12 alternatives are used");
+    expect(parameterDescription("/api/v1/search", "q")).toContain("comma-separated alternatives");
+    expect(parameterDescription("/api/v1/recipes", "query")).toBe("Search text. When both query and q are sent, query wins.");
+    expect(parameterDescription("/api/v1/cookbooks", "q")).not.toContain("comma");
+    expect(document.components.schemas.SearchResult.properties.score.description).toContain(
+      "ordered by how many alternatives each result matches first",
+    );
+  });
+
   it("declares paths, auth, scopes, parameters, examples, and error responses for every resource", () => {
     const document = buildApiV1OpenApiDocument();
 

@@ -2955,6 +2955,18 @@ describe("spoonjoy MCP tools", () => {
     await expect(context.db.shoppingListItem.count()).resolves.toBe(1);
   });
 
+  it("describes comma-separated pantry alternatives on every search tool", () => {
+    const searchTools = listSpoonjoyMcpTools().filter((tool) =>
+      ["search_recipes", "search_spoonjoy", "search_shopping_list"].includes(tool.name)
+    );
+    expect(searchTools.map((tool) => tool.name).sort()).toEqual(["search_recipes", "search_shopping_list", "search_spoonjoy"]);
+    expect(searchTools.map((tool) => tool.description)).toEqual([
+      expect.stringContaining("commas separate alternatives, so a result matching any of them is returned, ordered by how many alternatives it matches, and at most 12 alternatives are used"),
+      expect.stringContaining("commas separate alternatives, so a result matching any of them is returned, ordered by how many alternatives it matches, and at most 12 alternatives are used"),
+      expect.stringContaining("commas separate alternatives, so a result matching any of them is returned, ordered by how many alternatives it matches, and at most 12 alternatives are used"),
+    ]);
+  });
+
   it("exposes unified full-text search and private shopping-list search to Ouroboros agents", async () => {
     const recipe = parseJson(await callSpoonjoyMcpTool("create_recipe", {
       title: "Harness Tomato Toast",

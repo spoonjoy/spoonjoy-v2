@@ -740,7 +740,7 @@ const schemas = {
     href: { type: "string" },
     canonicalUrl: uriSchema,
     imageUrl: { type: ["string", "null"], format: "uri" },
-    score: { type: "number", description: "Lower values are better for full-text ranked queries. Empty-query recency results use 0." },
+    score: { type: "number", description: "Lower values are better for full-text ranked queries. Pantry queries (comma-separated alternatives) are ordered by how many alternatives each result matches first, then by this score. Empty-query recency results use 0." },
     metadata: {
       type: "object",
       additionalProperties: true,
@@ -1381,6 +1381,10 @@ const pathParameters = {
 const queryParameters = {
   query: { name: "query", in: "query", required: false, description: "Search text. When both query and q are sent, query wins.", schema: { type: "string" } },
   q: { name: "q", in: "query", required: false, description: "Search-text alias for clients that conventionally use q. Ignored when query is also present.", schema: { type: "string" } },
+  // /api/v1/search uses the full-text search index, so its query text has pantry semantics; the
+  // shared query/q above stay plain substring matches for /api/v1/recipes and /api/v1/cookbooks.
+  searchQuery: { name: "query", in: "query", required: false, description: "Search text. Without commas, every word must match. Commas separate alternatives: a result matching any of them is returned, ordered by how many alternatives it matches and then by relevance. At most 12 alternatives are used. When both query and q are sent, query wins.", schema: { type: "string" } },
+  searchQ: { name: "q", in: "query", required: false, description: "Search-text alias for clients that conventionally use q, with the same comma-separated alternatives as query. Ignored when query is also present.", schema: { type: "string" } },
   scope: { name: "scope", in: "query", required: false, description: "Global search scope. The legacy value shopping is accepted as shopping-list.", schema: { type: "string", enum: ["all", "recipes", "cookbooks", "chefs", "shopping-list"], default: "all" } },
   cursor: { name: "cursor", in: "query", required: false, description: "Opaque pagination cursor returned as nextCursor. Catalog cursors are v1.* values; shopping-list sync also accepts an ISO timestamp only as bootstrap compatibility.", schema: { type: "string" }, examples: { catalog: { value: "v1.cursor_from_nextCursor" }, sync: { value: "v1.cursor_or_iso_bootstrap" } } },
   limit: { name: "limit", in: "query", required: false, description: "Page size from 1 to 50. Defaults to 20.", schema: { type: "integer", minimum: 1, maximum: 50, default: 20 } },
@@ -1421,7 +1425,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
     POST: { operationId: "postApiV1NativeTelemetry", tags: ["Native"], summary: "Capture redacted first-party native app diagnostics", auth: "optional", scopes: [], success: { 202: "NativeTelemetryEnvelope" }, errors: ["invalid_json", "validation_error", "invalid_token", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "NativeTelemetryRequest" },
   },
   "/api/v1/search": {
-    GET: { operationId: "getApiV1Search", tags: ["Search"], summary: "Search recipes, cookbooks, chefs, and authorized private shopping-list items", auth: "optional", scopes: [], success: { 200: "SearchEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], parameters: [queryParameters.query, queryParameters.q, queryParameters.scope, queryParameters.limit] },
+    GET: { operationId: "getApiV1Search", tags: ["Search"], summary: "Search recipes, cookbooks, chefs, and authorized private shopping-list items", auth: "optional", scopes: [], success: { 200: "SearchEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], parameters: [queryParameters.searchQuery, queryParameters.searchQ, queryParameters.scope, queryParameters.limit] },
   },
   "/api/v1/recipes": {
     GET: { operationId: "getApiV1Recipes", tags: ["Recipes"], summary: "Search public recipes", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeListEnvelope" }, errors: ["validation_error", "invalid_cursor", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"], parameters: [queryParameters.query, queryParameters.q, queryParameters.cursor, queryParameters.limit] },
