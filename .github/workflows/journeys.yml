@@ -6,6 +6,14 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      suite:
+        description: Which suite to run
+        type: choice
+        options:
+          - journeys
+          - explore
+        default: journeys
 
 permissions:
   contents: read
@@ -18,6 +26,10 @@ env:
   PRISMA_HIDE_UPDATE_MESSAGE: "1"
   SPOONJOY_JOURNEYS_BASE_URL: https://spoonjoy-v2-qa.mendelow-studio.workers.dev
   SPOONJOY_QA_CREDENTIALS: ${{ github.workspace }}/.journeys/credentials.json
+  # Push and pull_request runs always run the journeys suite; only a workflow_dispatch can
+  # choose explore. Everything else (deploy, seed, rotate, sanitise, gated upload, cleanup,
+  # concurrency) is shared between the two suites.
+  SUITE: ${{ github.event_name == 'workflow_dispatch' && inputs.suite || 'journeys' }}
 
 jobs:
   fork-notice:
@@ -86,8 +98,13 @@ jobs:
             echo "::add-mask::$(jq -r ".${p}.password" "$SPOONJOY_QA_CREDENTIALS")"
           done
 
-      - name: Run journeys
-        run: pnpm run test:journeys
+      - name: Run test suite
+        run: |
+          if [ "$SUITE" = "explore" ]; then
+            pnpm run explore:qa
+          else
+            pnpm run test:journeys
+          fi
 
       # The report and traces can contain this run's persona passwords, so re-seed with fresh
       # passwords that nobody keeps (no --credentials-out) before anything is uploaded. Every
@@ -112,24 +129,29 @@ jobs:
       # it references) from every trace, including the copies inside the HTML report, and
       # redact storage-state and cookie values from the remaining trace events. Fails if a
       # network entry or unredacted value is left.
+      # journeys-report/ and explore-report/ are each other's sibling: only the directory the
+      # suite that actually ran produced exists, and sanitize-journey-traces.mjs skips any
+      # directory that does not exist, so passing both is harmless regardless of $SUITE.
       - name: Strip network logs from traces
         id: strip-traces
         if: always()
-        run: node scripts/sanitize-journey-traces.mjs test-results journeys-report
+        run: node scripts/sanitize-journey-traces.mjs test-results journeys-report explore-report
 
       # The artifact is public to any signed-in GitHub user. It can contain:
-      #   - journeys-report/: the HTML report, whose step titles include typed values (the
-      #     persona passwords), plus failure screenshots, videos, error context and copies of
-      #     the failure traces;
+      #   - journeys-report/ or explore-report/: the HTML report, whose step titles include
+      #     typed values (the persona passwords), plus failure screenshots, videos, error
+      #     context and copies of the failure traces (explore-report/ additionally holds
+      #     summary.json and a full-page screenshot per route visited);
       #   - test-results/: per-failure traces, videos, screenshots and error context.
       # Traces keep the action log (with typed values), DOM snapshots, screencast frames and
       # test source. It is safe to publish because (1) "Rotate persona passwords" has already
       # replaced every password it contains, and (2) "Strip network logs from traces" has
       # removed network logs and redacted session cookies and storage state from every trace.
-      # Upload runs only if both steps succeeded; the credentials file and session files are
-      # deleted above and are never in the uploaded paths.
+      # Upload runs only if both steps succeeded, and only the report matching $SUITE actually
+      # exists; the credentials file and session files are deleted above and are never in the
+      # uploaded paths.
       - name: Upload journeys report
-        if: ${{ !cancelled() && steps.rotate-passwords.outcome == 'success' && steps.strip-traces.outcome == 'success' }}
+        if: ${{ !cancelled() && env.SUITE == 'journeys' && steps.rotate-passwords.outcome == 'success' && steps.strip-traces.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: journeys-report
@@ -137,3 +159,15 @@ jobs:
             journeys-report/
             test-results/
           retention-days: 30
+          include-hidden-files: false
+
+      - name: Upload explore report
+        if: ${{ !cancelled() && env.SUITE == 'explore' && steps.rotate-passwords.outcome == 'success' && steps.strip-traces.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: explore-report
+          path: |
+            explore-report/
+            test-results/
+          retention-days: 30
+          include-hidden-files: false

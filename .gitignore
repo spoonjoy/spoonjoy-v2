@@ -52,6 +52,7 @@ test-results/
 .playwright/
 e2e/.auth/
 journeys-report/
+explore-report/
 e2e/.auth/journeys-*.json
 .journeys/
 
