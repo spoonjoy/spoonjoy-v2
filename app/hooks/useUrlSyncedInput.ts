@@ -9,6 +9,10 @@ import { useLocation } from "react-router";
  * re-renders within the same history entry, so text typed before hydration or while the page
  * sits still is left alone. The input stays uncontrolled on purpose: a controlled input would
  * wipe text typed before hydration.
+ *
+ * When the browser restores the page from its back/forward cache (`pageshow` with `persisted`),
+ * the input is reset to `value` too: the cached page can carry newer text typed just before a
+ * full-document search left it.
  */
 export function useUrlSyncedInput(value: string) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -20,6 +24,14 @@ export function useUrlSyncedInput(value: string) {
     syncedKey.current = key;
     inputRef.current!.value = value;
   }, [key, value]);
+
+  useEffect(() => {
+    const resetAfterCacheRestore = (event: PageTransitionEvent) => {
+      if (event.persisted) inputRef.current!.value = value;
+    };
+    window.addEventListener("pageshow", resetAfterCacheRestore);
+    return () => window.removeEventListener("pageshow", resetAfterCacheRestore);
+  }, [value]);
 
   return inputRef;
 }
