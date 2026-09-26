@@ -29,6 +29,7 @@ import {
   writeCookProgress,
 } from "~/routes/recipes.$id";
 import RecipeDetail from "~/routes/recipes.$id";
+import { HISTORY_TRAIL_KEY } from "~/hooks/use-back-navigation";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -3199,6 +3200,59 @@ describe("Recipes $id Route", () => {
         window.history.replaceState(null, "", "/");
       }
       await settleBrowserTasks();
+    });
+
+    describe("Recipes link (back means back)", () => {
+      const backLinkData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Test Recipe",
+          description: null,
+          servings: null,
+          coverImageUrl: null,
+          chef: { id: "user-1", username: "testchef" },
+          steps: [],
+        },
+        isOwner: false,
+      };
+
+      function renderRecipeOpenedFromHome() {
+        const Stub = createTestRoutesStub([
+          { path: "/", Component: () => <h1>Home page</h1> },
+          { path: "/recipes", Component: () => <h1>All recipes page</h1> },
+          { path: "/recipes/:id", Component: RecipeDetail, loader: () => backLinkData },
+        ]);
+        render(<Stub initialEntries={["/", "/recipes/recipe-1"]} initialIndex={1} />);
+      }
+
+      afterEach(() => {
+        window.sessionStorage.clear();
+      });
+
+      it("returns to the previous in-app page when the recipe was reached inside the app", async () => {
+        // What the root history recorder would have stored for "/" then this recipe.
+        window.sessionStorage.setItem(
+          HISTORY_TRAIL_KEY,
+          JSON.stringify({ "0": { path: "/", cook: false }, "1": { path: "/recipes/recipe-1", cook: false } }),
+        );
+        window.history.replaceState({ idx: 1, key: "abc", usr: null }, "", "/");
+        renderRecipeOpenedFromHome();
+
+        const recipesLink = await screen.findByRole("link", { name: "Recipes" });
+        expect(recipesLink).toHaveAttribute("href", "/recipes");
+        fireEvent.click(recipesLink);
+
+        expect(await screen.findByRole("heading", { name: "Home page" })).toBeInTheDocument();
+      });
+
+      it("goes to /recipes when the recipe was opened directly", async () => {
+        window.history.replaceState({ idx: 0, key: "default", usr: null }, "", "/");
+        renderRecipeOpenedFromHome();
+
+        fireEvent.click(await screen.findByRole("link", { name: "Recipes" }));
+
+        expect(await screen.findByRole("heading", { name: "All recipes page" })).toBeInTheDocument();
+      });
     });
 
     it("should render recipe with no steps (empty state) as non-owner", async () => {

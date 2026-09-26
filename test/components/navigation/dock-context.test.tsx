@@ -66,6 +66,7 @@ describe('DockContext', () => {
       // The default setActions should be callable but do nothing
       expect(() => {
         result.current.setActions(sampleActions)
+        result.current.setConfig(null)
         result.current.setSuppressed(true)
       }).not.toThrow()
 

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { ArrowLeft, Bookmark, Check, Edit, Save, Search, Share2, ShoppingBag, X } from "lucide-react";
+import { useBackNavigation } from "~/hooks/use-back-navigation";
 import { useDockConfig, type DockConfig } from "./dock-context";
 
 export interface UseRecipeDetailActionsOptions {
@@ -34,6 +35,9 @@ export function useRecipeDetailActions({
   onCook,
   disabled = false,
 }: UseRecipeDetailActionsOptions): void {
+  // Back means back: a real link to /recipes that returns to the previous in-app page when
+  // there is one (see useBackNavigation).
+  const handleBack = useBackNavigation();
   const config = useMemo<DockConfig | null>(() => {
     if (disabled) {
       return null;
@@ -76,6 +80,7 @@ export function useRecipeDetailActions({
         label: "Back",
         sublabel: "recipes",
         onAction: "/recipes",
+        onLinkClick: handleBack,
       },
       primary: {
         id: "cook",
@@ -85,7 +90,7 @@ export function useRecipeDetailActions({
       },
       tools: isOwner ? [listAction, shareAction, editAction] : [listAction, saveAction, shareAction],
     };
-  }, [recipeId, isOwner, isInShoppingList, onSave, onAddToList, onShare, onCook, disabled]);
+  }, [recipeId, isOwner, isInShoppingList, onSave, onAddToList, onShare, onCook, disabled, handleBack]);
 
   useDockConfig(config);
 }
