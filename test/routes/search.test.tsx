@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { useNavigate } from "react-router";
 import { faker } from "@faker-js/faker";
 import { db } from "~/lib/db.server";
 import Search, { loader, meta } from "~/routes/search";
@@ -85,6 +86,22 @@ describe("Search Route", () => {
       });
     });
 
+    it("treats a comma query as a pantry query: any term matches, more matched terms rank first", async () => {
+      const user = await createSearchUser("pantry_searcher");
+      const soup = await db.recipe.create({ data: { title: "Roasted Tomato Soup", chefId: user.id } });
+      const rice = await db.recipe.create({ data: { title: "Lemon Herb Rice", chefId: user.id } });
+      const both = await db.recipe.create({ data: { title: "Tomato Lemon Salad", chefId: user.id } });
+      await db.recipe.create({ data: { title: "Miso Glazed Salmon", chefId: user.id } });
+
+      const request = new UndiciRequest("http://localhost:3000/search?q=tomato%2C+lemon&scope=recipes");
+      const result = await loader({ request, context: { cloudflare: { env: null } }, params: {} } as any);
+
+      expect(result.query).toBe("tomato, lemon");
+      const ids = result.results.map((searchResult) => searchResult.id);
+      expect(ids[0]).toBe(both.id);
+      expect(ids.slice(1).sort()).toEqual([soup.id, rice.id].sort());
+    });
+
     it("defaults empty query and scope parameters", async () => {
       const request = new UndiciRequest("http://localhost:3000/search");
       const result = await loader({ request, context: { cloudflare: { env: null } }, params: {} } as any);
@@ -127,6 +144,68 @@ describe("Search Route", () => {
       expect(screen.getByText(/Try searching by ingredient/i)).toBeInTheDocument();
       expect(screen.getByText("No matches yet")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Recipes" })).toHaveAttribute("href", "/search?scope=recipes");
+    });
+
+    it("keeps the search box in step with the results across Back and Forward", async () => {
+      function SearchWithHistory() {
+        const navigate = useNavigate();
+        return (
+          <>
+            <button type="button" onClick={() => navigate(-1)}>History back</button>
+            <button type="button" onClick={() => navigate(1)}>History forward</button>
+            <Search />
+          </>
+        );
+      }
+      const Stub = createTestRoutesStub([
+        {
+          path: "/search",
+          Component: SearchWithHistory,
+          loader: ({ request }: { request: Request }) => ({
+            query: new URL(request.url).searchParams.get("q") ?? "",
+            scope: "all",
+            isAuthenticated: false,
+            results: [],
+          }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/search?q=lemon"]} />);
+
+      expect(await screen.findByRole("heading", { name: 'Results for "lemon"' })).toBeInTheDocument();
+      const box = screen.getByLabelText("Search terms") as HTMLInputElement;
+      expect(box.value).toBe("lemon");
+      expect(box).toHaveAttribute("autocomplete", "off");
+
+      fireEvent.change(box, { target: { value: "saffron" } });
+      fireEvent.click(screen.getByRole("button", { name: "Search" }));
+      expect(await screen.findByRole("heading", { name: 'Results for "saffron"' })).toBeInTheDocument();
+      expect((screen.getByLabelText("Search terms") as HTMLInputElement).value).toBe("saffron");
+
+      fireEvent.click(screen.getByRole("button", { name: "History back" }));
+      expect(await screen.findByRole("heading", { name: 'Results for "lemon"' })).toBeInTheDocument();
+      expect((screen.getByLabelText("Search terms") as HTMLInputElement).value).toBe("lemon");
+
+      fireEvent.click(screen.getByRole("button", { name: "History forward" }));
+      expect(await screen.findByRole("heading", { name: 'Results for "saffron"' })).toBeInTheDocument();
+      expect((screen.getByLabelText("Search terms") as HTMLInputElement).value).toBe("saffron");
+    });
+
+    it("leaves text typed into the box alone until the page navigates", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/search",
+          Component: Search,
+          loader: () => ({ query: "lemon", scope: "all", isAuthenticated: false, results: [] }),
+        },
+      ]);
+
+      const { rerender } = render(<Stub initialEntries={["/search?q=lemon"]} />);
+      const box = (await screen.findByLabelText("Search terms")) as HTMLInputElement;
+      fireEvent.change(box, { target: { value: "half typed" } });
+      rerender(<Stub initialEntries={["/search?q=lemon"]} />);
+
+      expect((screen.getByLabelText("Search terms") as HTMLInputElement).value).toBe("half typed");
     });
 
     it("submits the search form when Enter is pressed in the search field", async () => {
