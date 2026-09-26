@@ -23,6 +23,7 @@ test.describe("Search", () => {
     await results.getByRole("link", { name: "Recipe Saffron Risotto", exact: true }).click();
     await expect(page).toHaveURL(/\/recipes\/qa-kitchen-recipe-risotto(?:[?#].*)?$/);
     await expect(page.getByRole("heading", { level: 1, name: "Saffron Risotto", exact: true })).toBeVisible();
+    await expectAccessible();
 
     await page.goBack();
     await expect(page).toHaveURL(/[?&]q=saffron(?:&|$)/);
@@ -37,9 +38,11 @@ test.describe("Search", () => {
     await page.getByLabel("Search terms", { exact: true }).press("Enter");
     await expect(page).toHaveURL(/[?&]q=lemon(?:&|$)/);
     await expect(page.getByRole("heading", { name: 'Results for "lemon"', exact: true })).toBeVisible();
-    // If the first search was a full-document submit (typed before hydration), let that
-    // document finish loading before the second search.
-    await page.waitForLoadState("load");
+    // If the first search was a full-document submit (typed before hydration), wait until React
+    // Router has started hydrating this document before the second search. React Router sets
+    // this global while hydrating, after React's root event listeners exist, so Enter goes
+    // through the app's handler (a client-side navigation) rather than a native form submit.
+    await page.waitForFunction(() => "__reactRouterDataRouter" in window);
 
     await page.getByLabel("Search terms", { exact: true }).fill("saffron");
     await page.getByLabel("Search terms", { exact: true }).press("Enter");
