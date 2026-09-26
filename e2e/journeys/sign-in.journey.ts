@@ -1,4 +1,4 @@
-import { test, expect } from "./support/journey";
+import { test, expect, assertNoConsoleIssues, watchConsole } from "./support/journey";
 import { persona } from "./support/personas";
 import { signInThroughForm } from "./support/sign-in";
 
@@ -45,11 +45,16 @@ test.describe("Sign-in", () => {
     // stored persona sessions that signed-in journeys start from.
     const context = await browser.newContext();
     const page = await context.newPage();
+    // This page isn't the fixture-provided `page`, so the auto-used consoleGate fixture in
+    // support/journey.ts never sees it; watch it the same way by hand instead.
+    const consoleWatcher = watchConsole(page);
     await signInThroughForm(page, "newbie");
     await page.goto("/logout");
     await expect(page).not.toHaveURL(/\/recipes/);
     await page.goto("/account/settings");
     await expect(page).toHaveURL(/\/login/);
+    consoleWatcher.dispose();
+    assertNoConsoleIssues(consoleWatcher.issues);
     await context.close();
   });
 });
