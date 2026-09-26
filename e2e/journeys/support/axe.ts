@@ -7,6 +7,18 @@
 // `journey.ts`'s expectAccessible() fails on serious/critical violations; app.explore.ts
 // records every violation of every impact instead, since explore never asserts app behaviour.
 // Both read the same injected axe source, so this is the one place that owns it.
+//
+// preload: false — by default axe fetches assets (stylesheets' CSSOM, media metadata) for the
+// handful of rules whose metadata declares `preload: true` (in axe-core 4.11: css-orientation-
+// lock and no-autoplay-audio); every other rule runs immediately without waiting on that fetch.
+// Here it fetched the Google Fonts sheet linked in app/root.tsx, which QA's CSP connect-src
+// correctly blocks (the app only ever allows that stylesheet via style-src and never fetches
+// it itself); the blocked fetch is what produced a console error on every page ("Couldn't load
+// preload assets: ProgressEvent") and failed the console gate in support/journey.ts. Contrast
+// checking (color-contrast) does not declare `preload: true` and was never part of that
+// fetch — it already reads computed styles the browser has resolved, so preload: false does
+// not weaken it. The app isn't at fault here, so we don't touch its CSP; we just stop axe
+// making a request the CSP was always going to block.
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
@@ -21,6 +33,7 @@ export async function runAxe(page: Page): Promise<AxeResults> {
   return page.evaluate(
     () => (window as unknown as { axe: typeof import("axe-core") }).axe.run(document, {
       resultTypes: ["violations"],
+      preload: false,
     }),
   ) as Promise<AxeResults>;
 }

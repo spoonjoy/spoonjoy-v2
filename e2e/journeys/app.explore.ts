@@ -21,7 +21,8 @@
 //
 // summary.json is uploaded as a public CI artifact, so every URL recorded here (failed-request
 // URLs, the final page URL, and any URL appearing inside console/pageerror text) is redacted
-// down to origin + pathname first — see redactUrl()/redactUrlsInText() — dropping query
+// down to origin + pathname first — see support/redact.ts's redactUrl()/redactUrlsInText(),
+// shared with the console gate in support/journey.ts for the same reason — dropping query
 // strings, fragments, and userinfo that could carry search terms, tokens, or other data.
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -29,6 +30,7 @@ import type { ConsoleMessage, Locator, Page, Request, Response } from "@playwrig
 import { test } from "./support/journey";
 import { personaStorageStatePath } from "./support/personas";
 import { runAxe } from "./support/axe";
+import { redactUrl, redactUrlsInText } from "./support/redact";
 import { SUMMARY_ATTACHMENT_NAME, SUMMARY_OUTPUT_PATH, type VisitRecord } from "./support/explore-report";
 
 const ROUTES = [
@@ -66,28 +68,6 @@ function isExcludedRequestUrl(url: string): boolean {
     return false;
   }
   return EXCLUDED_HOST_SUFFIXES.some((suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`));
-}
-
-// Keeps only origin + pathname of a recorded URL — no query string, fragment, or userinfo —
-// since summary.json is uploaded as a public artifact and those can carry search terms,
-// session identifiers, or other data that shouldn't leave the run. `new URL()` throws for a
-// relative URL (e.g. a dock item's href, which is app-relative); for that case there is no
-// userinfo/origin to worry about, so the query string and fragment are just cut off directly.
-function redactUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    return `${parsed.origin}${parsed.pathname}`;
-  } catch {
-    return url.split(/[?#]/)[0];
-  }
-}
-
-const EMBEDDED_URL_PATTERN = /https?:\/\/[^\s"'<>]+/g;
-
-// Cheap redaction for free-form console/pageerror text: finds any absolute URL substring and
-// applies the same origin+pathname redaction, leaving the surrounding message untouched.
-function redactUrlsInText(text: string): string {
-  return text.replace(EMBEDDED_URL_PATTERN, (match) => redactUrl(match));
 }
 
 function slug(route: string): string {
