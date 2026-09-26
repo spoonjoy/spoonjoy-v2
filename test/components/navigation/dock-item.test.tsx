@@ -148,7 +148,10 @@ describe('DockItem', () => {
         </RouterWrapper>
       )
 
-      expect(screen.getByRole('link', { name: /delete/i }).className).toContain('bg-[var(--sj-tomato)]')
+      const link = screen.getByRole('link', { name: /delete/i })
+      expect(link.className).toContain('bg-[var(--sj-tomato)]')
+      // Dark tomato is too light for the cream glyph; deepen it toward charcoal.
+      expect(link.className).toContain('dark:bg-[color-mix(in_srgb,var(--sj-tomato)_70%,var(--sj-photo-charcoal))]')
     })
 
     it('uses an on-photo brass fill for the default primary so it stays visible on the dark dock', () => {
@@ -163,6 +166,8 @@ describe('DockItem', () => {
       // dark-on-dark in light mode and must not be used here.
       expect(link.className).toContain('bg-[var(--sj-brass)]')
       expect(link.className).not.toContain('bg-[var(--sj-action)]')
+      // Dark brass leaves the cream glyph at 2.2:1; the deepened fill gives 3.7:1.
+      expect(link.className).toContain('dark:bg-[color-mix(in_srgb,var(--sj-brass)_70%,var(--sj-photo-charcoal))]')
     })
   })
 

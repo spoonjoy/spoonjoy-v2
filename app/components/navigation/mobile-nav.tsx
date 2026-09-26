@@ -283,8 +283,10 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
   return (
     <>
       {isPantryOpen ? (
+        // Same 95% charcoal surface as the dock, so the links stay readable
+        // over any page content.
         <div
-          className="fixed bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))] z-50 mx-auto max-w-lg rounded-[var(--sj-radius-surface)] border border-[var(--sj-photo-line)] bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_72%,transparent)] p-2 shadow-[0_18px_60px_rgba(31,26,20,0.26),inset_0_1px_0_color-mix(in_srgb,var(--sj-on-photo)_22%,transparent)] backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_60%,transparent)] lg:hidden"
+          className="fixed bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))] z-50 mx-auto max-w-lg rounded-[var(--sj-radius-surface)] border border-[var(--sj-photo-line)] bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_95%,transparent)] p-2 shadow-[0_18px_60px_rgba(31,26,20,0.26),inset_0_1px_0_color-mix(in_srgb,var(--sj-on-photo)_22%,transparent)] backdrop-blur-2xl backdrop-saturate-150 lg:hidden"
           data-testid="mobile-pantry"
         >
           <div className="grid grid-cols-2 gap-1.5">
