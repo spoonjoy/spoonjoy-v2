@@ -2,7 +2,9 @@
 // Static "house rules" checker for Playwright journeys (e2e/journeys/**/*.journey.ts,
 // **/*.setup.ts). Runs in CI, ahead of the journeys themselves, and fails the build when a
 // journey hides flakiness (retries, clicking in a loop, clicking inside a .toPass() retry
-// callback) or asserts conditionally, or when a @mutates test skips the post-reload check.
+// callback or an array-iteration callback) or asserts conditionally, when a @mutates test skips
+// the post-reload check, or when a journey/describe block is skipped, only'd, fixme'd, or
+// marked to fail instead of actually running.
 import { readFile as nodeReadFile, readdir as nodeReaddir } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -12,15 +14,40 @@ export const JOURNEY_FILE_PATTERN = /\.(?:journey|setup)\.ts$/;
 
 const CLICK_LIKE_METHODS = new Set(["click", "tap", "press", "fill", "check", "dispatchEvent"]);
 
+const ARRAY_ITERATION_METHODS = new Set([
+  "forEach",
+  "map",
+  "flatMap",
+  "filter",
+  "some",
+  "every",
+  "reduce",
+  "reduceRight",
+  "find",
+  "findIndex",
+]);
+
+// Playwright's `test`/`test.describe` modifiers. `test.<modifier>(...)` is still a real test
+// (rule 4 must still check it for a missing reload check), and both `test.<modifier>(...)` and
+// `test.describe.<modifier>(...)` are themselves flagged by rule 5 below.
+const TEST_MODIFIERS = new Set(["only", "skip", "fixme", "fail"]);
+
 function lineOf(sourceFile, node) {
   return sourceFile.getLineAndCharacterOfPosition(node.getStart()).line + 1;
 }
 
 function propertyAssignmentName(node) {
+  if (ts.isShorthandPropertyAssignment(node)) return node.name.text;
   if (!ts.isPropertyAssignment(node)) return undefined;
   const name = node.name;
   if (ts.isIdentifier(name) || ts.isStringLiteral(name)) return name.text;
   return undefined;
+}
+
+// True for a bare `test` identifier reference, i.e. the `test` in `test(...)` or the base of
+// `test.only(...)` / `test.describe.skip(...)`.
+function isTestNamespaceIdentifier(node) {
+  return ts.isIdentifier(node) && node.text === "test";
 }
 
 function isClickLikeCall(node) {
@@ -67,6 +94,20 @@ function isInsideToPassCallback(node) {
   return false;
 }
 
+// Matches `rows.forEach(async (row) => { ... })` and the other Array iteration methods: the
+// click sits inside the function expression/arrow function passed as the callback argument.
+function isInsideArrayIterationCallback(node) {
+  for (let current = node.parent; current; current = current.parent) {
+    if (!ts.isFunctionExpression(current) && !ts.isArrowFunction(current)) continue;
+    const call = current.parent;
+    if (!call || !ts.isCallExpression(call) || !call.arguments.includes(current)) continue;
+    if (ts.isPropertyAccessExpression(call.expression) && ARRAY_ITERATION_METHODS.has(call.expression.name.text)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function isExpectCall(node) {
   return ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "expect";
 }
@@ -88,17 +129,55 @@ function isInsideIfOrConditionalBranch(node) {
   return false;
 }
 
+// Matches `test(...)` and `test.only(...)` / `test.skip(...)` / `test.fixme(...)` /
+// `test.fail(...)`: all of these run (or, for skip/fixme, are declared as) an actual test whose
+// `@mutates` title still needs a reload check. `test.describe(...)` and its own modifiers are
+// deliberately excluded here — a describe block's "body" holds nested tests, not a single
+// page-object callback to check for `verifyAfterReload(...)`.
 function isTestCall(node) {
+  if (!ts.isCallExpression(node) || node.arguments.length < 1) return false;
+  if (isTestNamespaceIdentifier(node.expression)) return true;
   return (
-    ts.isCallExpression(node) &&
-    ts.isIdentifier(node.expression) &&
-    node.expression.text === "test" &&
-    node.arguments.length >= 1
+    ts.isPropertyAccessExpression(node.expression) &&
+    isTestNamespaceIdentifier(node.expression.expression) &&
+    TEST_MODIFIERS.has(node.expression.name.text)
   );
 }
 
+// Finds the test body: the last function-like argument, regardless of position. Covers both
+// `test(title, body)` and Playwright's 3-argument `test(title, options, body)` form.
+function testBodyArgument(node) {
+  for (let index = node.arguments.length - 1; index >= 0; index -= 1) {
+    const candidate = node.arguments[index];
+    if (ts.isFunctionExpression(candidate) || ts.isArrowFunction(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+// Reads a call/property-name's static string content. For a template literal with
+// interpolations (e.g. `` `adds ${item} @mutates` ``), only the literal text of the head and
+// each span is read — the interpolated expressions themselves are not statically known — which
+// is enough to detect a literal `@mutates` tag regardless of what is interpolated around it.
 function literalTextOf(node) {
-  return ts.isStringLiteralLike(node) ? node.text : undefined;
+  if (ts.isStringLiteralLike(node)) return node.text;
+  if (ts.isTemplateExpression(node)) {
+    return node.templateSpans.reduce((text, span) => text + span.literal.text, node.head.text);
+  }
+  return undefined;
+}
+
+// Matches `test.skip(...)`, `test.only(...)`, `test.fixme(...)`, `test.fail(...)`, and the same
+// modifiers chained off `test.describe` (`test.describe.skip(...)`, etc.), anywhere in the file.
+function isSkippedJourneyCall(node) {
+  if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return false;
+  const { expression: object, name } = node.expression;
+  if (!TEST_MODIFIERS.has(name.text)) return false;
+  if (isTestNamespaceIdentifier(object)) return true;
+  return (
+    ts.isPropertyAccessExpression(object) &&
+    object.name.text === "describe" &&
+    isTestNamespaceIdentifier(object.expression)
+  );
 }
 
 function containsVerifyAfterReloadCall(node) {
@@ -123,7 +202,12 @@ function containsVerifyAfterReloadCall(node) {
  * Walks a journey/setup file's AST and returns every house-rule violation it contains.
  * @param {string} fileName
  * @param {string} source
- * @returns {Array<{ file: string, line: number, rule: string, message: string }>}
+ * @returns {Array<{
+ *   file: string,
+ *   line: number,
+ *   rule: "no-retry-config" | "no-click-in-loop" | "no-assertion-in-if" | "no-skipped-journeys" | "mutation-needs-reload-check",
+ *   message: string,
+ * }>}
  */
 export function checkJourneySource(fileName, source) {
   const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
@@ -143,11 +227,14 @@ export function checkJourneySource(fileName, source) {
       );
     }
 
-    if (isClickLikeCall(node) && (isInsideLoop(node) || isInsideToPassCallback(node))) {
+    if (
+      isClickLikeCall(node) &&
+      (isInsideLoop(node) || isInsideToPassCallback(node) || isInsideArrayIterationCallback(node))
+    ) {
       report(
         node,
         "no-click-in-loop",
-        `"${node.expression.name.text}" must not run inside a loop or a .toPass() retry callback; loops and auto-retry hide flakiness.`,
+        `"${node.expression.name.text}" must not run inside a loop, a .toPass() retry callback, or an array-iteration callback; loops and auto-retry hide flakiness.`,
       );
     }
 
@@ -155,10 +242,18 @@ export function checkJourneySource(fileName, source) {
       report(node, "no-assertion-in-if", "Assertions must not be conditional; branch on setup, not on expect(...).");
     }
 
+    if (isSkippedJourneyCall(node)) {
+      report(
+        node,
+        "no-skipped-journeys",
+        `"${node.expression.getText(sourceFile)}" must not appear in a journey; a skipped, only'd, fixme'd, or fail-marked journey hides a real failure instead of surfacing it.`,
+      );
+    }
+
     if (isTestCall(node)) {
       const title = literalTextOf(node.arguments[0]);
       if (title !== undefined && title.includes("@mutates")) {
-        const body = node.arguments[1];
+        const body = testBodyArgument(node);
         if (!body || !containsVerifyAfterReloadCall(body)) {
           report(
             node,

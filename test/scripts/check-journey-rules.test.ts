@@ -29,6 +29,10 @@ describe("checkJourneySource", () => {
     it("allows a computed property name (neither an identifier nor a string literal)", () => {
       expect(rules(`const key = "retries"; const cfg = { [key]: 2 };`)).toEqual([]);
     });
+
+    it("flags a shorthand retries property assignment", () => {
+      expect(rules(`const retries = 2; test.describe.configure({ retries });`)).toEqual(["no-retry-config"]);
+    });
   });
 
   describe("no-click-in-loop", () => {
@@ -75,6 +79,20 @@ describe("checkJourneySource", () => {
       // assigned to a variable and invoked separately, so it is never the argument of a
       // `.toPass()` call and must not be mistaken for one.
       expect(rules(`const helper = function () { btn.click(); }; helper();`)).toEqual([]);
+    });
+
+    it("flags clicks inside an Array.forEach callback (finding 2 regression)", () => {
+      expect(rules(`rows.forEach(async (row) => { await row.click(); });`)).toEqual(["no-click-in-loop"]);
+    });
+
+    it("flags clicks inside an Array.map callback", () => {
+      expect(rules(`items.map(async (item) => { await item.click(); return item; });`)).toEqual([
+        "no-click-in-loop",
+      ]);
+    });
+
+    it("allows a click inside a non-iteration callback like .then(...)", () => {
+      expect(rules(`promise.then(async () => { await btn.click(); });`)).toEqual([]);
     });
   });
 
@@ -143,6 +161,122 @@ describe("checkJourneySource", () => {
           `test("adds item @mutates", async ({ page, verifyAfterReload }) => { await verifyAfterReload(async () => {}); await page.click("a"); });`,
         ),
       ).toEqual([]);
+    });
+
+    it("flags a @mutates title on test.only for a missing reload check (finding 1 regression)", () => {
+      // test.only is also a no-skipped-journeys violation in its own right (rule 5) — both
+      // fire together, which is the point: skipping/only-ing a test must not let it dodge the
+      // reload-check requirement too.
+      expect(
+        rules(`test.only("adds item @mutates", async ({ page }) => { await page.click("a"); });`),
+      ).toEqual(["no-skipped-journeys", "mutation-needs-reload-check"]);
+    });
+
+    it("flags a @mutates title on test.skip for a missing reload check (finding 1 regression)", () => {
+      expect(
+        rules(`test.skip("adds item @mutates", async ({ page }) => { await page.click("a"); });`),
+      ).toEqual(["no-skipped-journeys", "mutation-needs-reload-check"]);
+    });
+
+    it("flags a @mutates title on test.fixme for a missing reload check (finding 1 regression)", () => {
+      expect(
+        rules(`test.fixme("adds item @mutates", async ({ page }) => { await page.click("a"); });`),
+      ).toEqual(["no-skipped-journeys", "mutation-needs-reload-check"]);
+    });
+
+    it("allows test.only with @mutates once it calls verifyAfterReload", () => {
+      expect(
+        rules(
+          `test.only("adds item @mutates", async ({ page, verifyAfterReload }) => { await verifyAfterReload(async () => {}); });`,
+        ),
+        // no-skipped-journeys still fires for test.only itself; mutation-needs-reload-check does not.
+      ).toEqual(["no-skipped-journeys"]);
+    });
+
+    it("flags a @mutates tag inside an interpolated template-literal title (finding 3 regression)", () => {
+      expect(
+        rules("test(`adds ${item} @mutates`, async ({ page }) => { await page.click('a'); });"),
+      ).toEqual(["mutation-needs-reload-check"]);
+    });
+
+    it("allows an interpolated template-literal @mutates title that calls verifyAfterReload", () => {
+      expect(
+        rules(
+          "test(`adds ${item} @mutates`, async ({ page, verifyAfterReload }) => { await verifyAfterReload(async () => {}); });",
+        ),
+      ).toEqual([]);
+    });
+
+    it("ignores an interpolated template-literal title with no @mutates tag anywhere in its static text", () => {
+      expect(rules("test(`adds ${item}`, async ({ page }) => { await page.click('a'); });")).toEqual([]);
+    });
+
+    it("finds the test body across Playwright's 3-argument test(title, options, body) form (finding 4 regression)", () => {
+      expect(
+        rules(
+          `test("adds item @mutates", { tag: "@smoke" }, async ({ page, verifyAfterReload }) => { await verifyAfterReload(async () => {}); });`,
+        ),
+      ).toEqual([]);
+    });
+
+    it("still flags the 3-argument form when the body has no reload check", () => {
+      expect(
+        rules(`test("adds item @mutates", { tag: "@smoke" }, async ({ page }) => { await page.click("a"); });`),
+      ).toEqual(["mutation-needs-reload-check"]);
+    });
+  });
+
+  describe("no-skipped-journeys", () => {
+    it("flags test.skip", () => {
+      expect(rules(`test.skip("some test", async () => {});`)).toEqual(["no-skipped-journeys"]);
+    });
+
+    it("flags test.fixme", () => {
+      expect(rules(`test.fixme("some test", async () => {});`)).toEqual(["no-skipped-journeys"]);
+    });
+
+    it("flags test.only", () => {
+      expect(rules(`test.only("some test", async () => {});`)).toEqual(["no-skipped-journeys"]);
+    });
+
+    it("flags test.fail", () => {
+      expect(rules(`test.fail("some test", async () => {});`)).toEqual(["no-skipped-journeys"]);
+    });
+
+    it("flags test.describe.skip", () => {
+      expect(rules(`test.describe.skip("suite", () => { test("t", async () => {}); });`)).toEqual([
+        "no-skipped-journeys",
+      ]);
+    });
+
+    it("flags test.describe.only", () => {
+      expect(rules(`test.describe.only("suite", () => { test("t", async () => {}); });`)).toEqual([
+        "no-skipped-journeys",
+      ]);
+    });
+
+    it("flags test.describe.fixme", () => {
+      expect(rules(`test.describe.fixme("suite", () => { test("t", async () => {}); });`)).toEqual([
+        "no-skipped-journeys",
+      ]);
+    });
+
+    it("allows a plain test(...) call", () => {
+      expect(rules(`test("some test", async () => {});`)).toEqual([]);
+    });
+
+    it("allows a plain test.describe(...) call", () => {
+      expect(rules(`test.describe("suite", () => { test("t", async () => {}); });`)).toEqual([]);
+    });
+
+    it("does not flag an unrelated object's .skip(...)/.only(...) call", () => {
+      // Regression guard: only `test.<modifier>` and `test.describe.<modifier>` should match,
+      // not any arbitrary `.skip(...)` call on an unrelated object.
+      expect(rules(`someOtherThing.skip("x");`)).toEqual([]);
+    });
+
+    it("does not flag test.step, which is not a skip/only/fixme/fail modifier", () => {
+      expect(rules(`test.step("do a thing", async () => {});`)).toEqual([]);
     });
   });
 
