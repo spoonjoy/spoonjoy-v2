@@ -1,5 +1,6 @@
 import { test, expect } from "./support/journey";
 import { persona } from "./support/personas";
+import { signInThroughForm } from "./support/sign-in";
 
 test.describe("Sign-in", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
@@ -38,10 +39,14 @@ test.describe("Sign-in", () => {
   });
 
   test("logging out ends the session", async ({ browser }) => {
-    const context = await browser.newContext({ storageState: persona("newbie").storageState });
+    // A fresh context signed in through the real form, not the shared newbie storage state:
+    // that state is one real server-side session, and the personas project's storage state is
+    // reused by both device projects, so two concurrent instances of this test logging out the
+    // same session would race each other. Signing in here gives this test's own session, owned
+    // only by this run.
+    const context = await browser.newContext();
     const page = await context.newPage();
-    await page.goto("/recipes");
-    await expect(page).toHaveURL(/\/recipes/);
+    await signInThroughForm(page, "newbie");
     await page.goto("/logout");
     await expect(page).not.toHaveURL(/\/recipes/);
     await page.goto("/account/settings");

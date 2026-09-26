@@ -7,17 +7,13 @@
 // storage state it writes is reused as-is by the iphone-webkit project, since cookies are
 // engine-independent.
 import type { Page } from "@playwright/test";
-import { test as setup, expect } from "./support/journey";
+import { test as setup } from "./support/journey";
 import { persona, type PersonaName } from "./support/personas";
+import { signInThroughForm } from "./support/sign-in";
 
 async function signInAndSave(page: Page, name: PersonaName): Promise<void> {
-  const user = persona(name);
-  await page.goto("/login");
-  await page.getByLabel("Username or email").fill(user.username);
-  await page.getByLabel("Password").fill(user.password);
-  await page.getByRole("button", { name: "Log In", exact: true }).click();
-  await expect(page).toHaveURL(/\/recipes(?:[?#].*)?$/);
-  await page.context().storageState({ path: user.storageState });
+  await signInThroughForm(page, name);
+  await page.context().storageState({ path: persona(name).storageState });
 }
 
 setup("chef", async ({ page }) => {
