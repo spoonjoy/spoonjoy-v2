@@ -78,6 +78,7 @@ describe("MobileNav", () => {
       expect(pantry).toHaveClass("backdrop-blur-2xl");
       expect(pantry).toHaveClass("bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_95%,transparent)]");
       expect(pantry.className).not.toContain("supports-[backdrop-filter]:bg-");
+      expect(within(pantry).getByRole("link", { name: "Recipes", exact: true })).toHaveAttribute("href", "/recipes");
       expect(within(pantry).getByRole("link", { name: "My Recipes" })).toHaveAttribute("href", "/my-recipes");
       expect(within(pantry).getByRole("link", { name: "Saved Recipes" })).toHaveAttribute("href", "/saved-recipes");
       expect(within(pantry).getByRole("link", { name: "Cookbooks" })).toHaveAttribute("href", "/cookbooks");

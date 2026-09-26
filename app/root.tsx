@@ -142,6 +142,7 @@ export function AppNavbar({
         <>
           <div className="sj-desktop-nav-center">
             <RouterLink to="/" className={navLinkClass} data-current={currentNav === "kitchen"}>Kitchen</RouterLink>
+            <RouterLink to="/recipes" className={navLinkClass} data-current={currentNav === "recipes"}>Recipes</RouterLink>
             <RouterLink to="/my-recipes" className={navLinkClass} data-current={currentNav === "my-recipes"}>My Recipes</RouterLink>
             <RouterLink to="/saved-recipes" className={navLinkClass} data-current={currentNav === "saved-recipes"}>Saved</RouterLink>
             <RouterLink to="/cookbooks" className={navLinkClass} data-current={currentNav === "cookbooks"}>Cookbooks</RouterLink>

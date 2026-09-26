@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   BookOpen,
   Bookmark,
+  Globe,
   Home,
   Menu,
   Plus,
@@ -243,6 +244,7 @@ function rootConfig(pathname: string, search: string, isAuthenticated: boolean, 
 }
 
 const pantryLinks = [
+  { href: "/recipes", label: "Recipes", icon: Globe },
   { href: "/my-recipes", label: "My Recipes", icon: BookOpen },
   { href: "/saved-recipes", label: "Saved Recipes", icon: Bookmark },
   { href: "/cookbooks", label: "Cookbooks", icon: BookOpen },

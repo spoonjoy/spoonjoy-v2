@@ -107,6 +107,7 @@ New structure:
 Signed-in navigation must use plain kitchen words and stable routes:
 
 - `Kitchen` -> `/`
+- `Recipes` -> `/recipes`
 - `My Recipes` -> `/my-recipes`
 - `Saved Recipes` -> `/saved-recipes`
 - `Cookbooks` -> `/cookbooks`
@@ -114,7 +115,7 @@ Signed-in navigation must use plain kitchen words and stable routes:
 - `Chefs` -> `/chefs`
 - `Kitchen Search` -> `/search`
 
-`/recipes` remains the broader `Explore Recipes` index, not the signed-in cook's authored drawer.
+`Recipes` (`/recipes`) is the broader index of every public recipe, not the signed-in cook's authored drawer; it stays reachable from both the desktop navigation and the Pantry drawer.
 
 Back means back: the recipe page's `Recipes` link and the dock's `Back` item return to the previous in-app page when there is one, and go to `/recipes` only when the recipe was opened directly. Both stay real links to `/recipes`, so middle click and open-in-new-tab still work.
 
@@ -122,7 +123,7 @@ Saved Recipes are recipes saved through cookbooks owned by the signed-in cook. T
 
 Global search stays at `/search` with scopes for all, recipes, cookbooks, chefs, and shopping list. The personal drawer filters are local filters for the current drawer; they do not create a second search system.
 
-The mobile dock stays small and glass/material-like: `My Kitchen`, create, `My Recipes`, `Shopping List`, and a `Pantry drawer` affordance. The Pantry drawer contains `My Recipes`, `Saved Recipes`, `Cookbooks`, `Shopping List`, `Chefs`, and `Kitchen Search`.
+The mobile dock stays small and glass/material-like: `My Kitchen`, create, `My Recipes`, `Shopping List`, and a `Pantry drawer` affordance. The Pantry drawer contains `Recipes`, `My Recipes`, `Saved Recipes`, `Cookbooks`, `Shopping List`, `Chefs`, and `Kitchen Search`.
 
 ### Recipe Detail
 
