@@ -13,11 +13,19 @@
 // once the whole run ends (see that file for why this isn't written directly here).
 //
 // A visit never fails the test except on a real navigation crash: page.goto() only throws for
-// an actual navigation failure (DNS, timeout, crash), never for a non-2xx response, so it is
-// intentionally left unguarded by a try/catch. Everything else is collected defensively.
+// an actual navigation failure (DNS, timeout, crash), never for a non-2xx response. Unlike the
+// rest of a visit's collection, that call IS wrapped in a try/catch — not to swallow the
+// crash (it is rethrown once this route's record and every prior route's evidence are safely
+// persisted), but so a crash on route N doesn't discard routes 1..N-1's already-collected
+// evidence. See the per-route try/catch/finally below.
+//
+// summary.json is uploaded as a public CI artifact, so every URL recorded here (failed-request
+// URLs, the final page URL, and any URL appearing inside console/pageerror text) is redacted
+// down to origin + pathname first — see redactUrl()/redactUrlsInText() — dropping query
+// strings, fragments, and userinfo that could carry search terms, tokens, or other data.
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import type { ConsoleMessage, Page, Request, Response } from "@playwright/test";
+import type { ConsoleMessage, Locator, Page, Request, Response } from "@playwright/test";
 import { test } from "./support/journey";
 import { personaStorageStatePath } from "./support/personas";
 import { runAxe } from "./support/axe";
@@ -60,6 +68,28 @@ function isExcludedRequestUrl(url: string): boolean {
   return EXCLUDED_HOST_SUFFIXES.some((suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`));
 }
 
+// Keeps only origin + pathname of a recorded URL — no query string, fragment, or userinfo —
+// since summary.json is uploaded as a public artifact and those can carry search terms,
+// session identifiers, or other data that shouldn't leave the run. `new URL()` throws for a
+// relative URL (e.g. a dock item's href, which is app-relative); for that case there is no
+// userinfo/origin to worry about, so the query string and fragment are just cut off directly.
+function redactUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return url.split(/[?#]/)[0];
+  }
+}
+
+const EMBEDDED_URL_PATTERN = /https?:\/\/[^\s"'<>]+/g;
+
+// Cheap redaction for free-form console/pageerror text: finds any absolute URL substring and
+// applies the same origin+pathname redaction, leaving the surrounding message untouched.
+function redactUrlsInText(text: string): string {
+  return text.replace(EMBEDDED_URL_PATTERN, (match) => redactUrl(match));
+}
+
 function slug(route: string): string {
   return route.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "root";
 }
@@ -78,104 +108,146 @@ interface AxeViolationRecord {
 
 type DockItemRecord = { name: string; href: string | null } | { name: string; control: "button" };
 
+// Resolves each dock item's true computed accessible name — including an aria-labelledby
+// reference, which a hand-rolled `textContent ?? aria-label` read in page.evaluate() would
+// miss — via Playwright's own aria snapshot of that one element, rather than reimplementing
+// accessible-name computation. A leaf item's snapshot is a single line like `- link "Recipes"`
+// or `- button "Search"`; an item with no accessible name has no quoted segment at all.
+async function accessibleNameOf(locator: Locator): Promise<string> {
+  const snapshot = await locator.ariaSnapshot();
+  const match = snapshot.match(/^-\s*\S+\s+"([^"]*)"/);
+  return match ? match[1] : "";
+}
+
 async function collectDockItems(page: Page): Promise<DockItemRecord[]> {
   const nav = page.getByRole("navigation", { name: DOCK_LANDMARK_NAME });
   if ((await nav.count()) === 0) return [];
 
-  return nav.first().evaluate((element) =>
-    Array.from(element.querySelectorAll("a[href], button")).map((node) => {
-      const name = (node.getAttribute("aria-label") ?? node.textContent ?? "").trim();
-      if (node.tagName.toLowerCase() === "a") {
-        return { name, href: node.getAttribute("href") };
-      }
-      return { name, control: "button" as const };
-    }),
-  );
-}
+  const items = nav.first().locator("a[href], button");
+  const count = await items.count();
+  const records: DockItemRecord[] = [];
 
-async function exploreRoutes(page: Page, personaName: string, device: string): Promise<VisitRecord[]> {
-  const records: VisitRecord[] = [];
-
-  for (const route of ROUTES) {
-    const consoleErrors: string[] = [];
-    const consoleWarnings: string[] = [];
-    const pageErrors: string[] = [];
-    const failedRequests: FailedRequestRecord[] = [];
-
-    const onConsole = (message: ConsoleMessage) => {
-      if (message.type() === "error") consoleErrors.push(message.text());
-      else if (message.type() === "warning") consoleWarnings.push(message.text());
-    };
-    const onPageError = (error: Error) => pageErrors.push(error.message);
-    const onRequestFailed = (request: Request) => {
-      if (isExcludedRequestUrl(request.url())) return;
-      failedRequests.push({ url: request.url(), failure: request.failure()?.errorText ?? "unknown" });
-    };
-    const onResponse = (response: Response) => {
-      if (response.status() < 400 || isExcludedRequestUrl(response.url())) return;
-      failedRequests.push({ url: response.url(), status: response.status() });
-    };
-
-    page.on("console", onConsole);
-    page.on("pageerror", onPageError);
-    page.on("requestfailed", onRequestFailed);
-    page.on("response", onResponse);
-
-    // Never wrapped in try/catch: a thrown navigation is a real crash and must fail the test.
-    const response = await page.goto(route, { waitUntil: "load" });
-    // Gives late console/pageerror/network events (e.g. deferred scripts) a moment to arrive
-    // before this visit's listeners are detached below.
-    await page.waitForTimeout(300);
-
-    const axeResults = await runAxe(page);
-    const isMobile = device === MOBILE_PROJECT_NAME;
-    const screenshot = await page.screenshot({ fullPage: true });
-    const attachmentName = `${personaName}--${device}--${slug(route)}`;
-    await test.info().attach(attachmentName, { body: screenshot, contentType: "image/png" });
-
-    page.off("console", onConsole);
-    page.off("pageerror", onPageError);
-    page.off("requestfailed", onRequestFailed);
-    page.off("response", onResponse);
-
-    const axeViolations: AxeViolationRecord[] = axeResults.violations.map((violation) => ({
-      id: violation.id,
-      impact: violation.impact ?? null,
-      targets: violation.nodes.map((node) => node.target.join(" ")),
-    }));
-
-    records.push({
-      route,
-      persona: personaName,
-      device,
-      finalUrl: page.url(),
-      httpStatus: response?.status() ?? null,
-      consoleErrors,
-      consoleWarnings,
-      pageErrors,
-      failedRequests,
-      axeViolations,
-      screenshot: attachmentName,
-      ...(isMobile ? { dockItems: await collectDockItems(page) } : {}),
-    });
+  for (let index = 0; index < count; index += 1) {
+    const item = items.nth(index);
+    const [name, tagAndHref] = await Promise.all([
+      accessibleNameOf(item),
+      item.evaluate((node) => [node.tagName.toLowerCase(), node.getAttribute("href")] as const),
+    ]);
+    const [tagName, href] = tagAndHref;
+    records.push(tagName === "a" ? { name, href: href ? redactUrl(href) : null } : { name, control: "button" });
   }
 
   return records;
 }
 
-async function runExploreTest(page: Page, personaName: string): Promise<void> {
-  const device = test.info().project.name;
-  const records = await exploreRoutes(page, personaName, device);
-  const body = Buffer.from(JSON.stringify(records, null, 2));
-  await test.info().attach(SUMMARY_ATTACHMENT_NAME, { body, contentType: "application/json" });
-
-  // Defense-in-depth alongside the attachment: also persist this test's own slice directly, so
-  // the evidence exists as a real file even if the reporter in support/explore-report.ts is
-  // ever skipped or misconfigured. The reporter still owns writing the single merged
-  // explore-report/summary.json once every persona x device test has finished.
+function writePartialFile(records: VisitRecord[], personaName: string, device: string): void {
   const partialPath = path.join(path.dirname(SUMMARY_OUTPUT_PATH), `summary.${personaName}.${device}.json`);
   mkdirSync(path.dirname(partialPath), { recursive: true });
-  writeFileSync(partialPath, `${body.toString("utf8")}\n`);
+  writeFileSync(partialPath, `${JSON.stringify(records, null, 2)}\n`);
+}
+
+async function runExploreTest(page: Page, personaName: string): Promise<void> {
+  const device = test.info().project.name;
+  const records: VisitRecord[] = [];
+
+  try {
+    for (const route of ROUTES) {
+      const consoleErrors: string[] = [];
+      const consoleWarnings: string[] = [];
+      const pageErrors: string[] = [];
+      const failedRequests: FailedRequestRecord[] = [];
+
+      const onConsole = (message: ConsoleMessage) => {
+        if (message.type() === "error") consoleErrors.push(redactUrlsInText(message.text()));
+        else if (message.type() === "warning") consoleWarnings.push(redactUrlsInText(message.text()));
+      };
+      const onPageError = (error: Error) => pageErrors.push(redactUrlsInText(error.message));
+      const onRequestFailed = (request: Request) => {
+        if (isExcludedRequestUrl(request.url())) return;
+        failedRequests.push({ url: redactUrl(request.url()), failure: request.failure()?.errorText ?? "unknown" });
+      };
+      const onResponse = (response: Response) => {
+        if (response.status() < 400 || isExcludedRequestUrl(response.url())) return;
+        failedRequests.push({ url: redactUrl(response.url()), status: response.status() });
+      };
+
+      page.on("console", onConsole);
+      page.on("pageerror", onPageError);
+      page.on("requestfailed", onRequestFailed);
+      page.on("response", onResponse);
+
+      try {
+        // The only call in this file allowed to throw past its own visit: a rejection here is
+        // a real navigation crash (DNS, timeout, target crashed), never just a non-2xx
+        // response, so it must still fail the test — see the catch block below.
+        const response = await page.goto(route, { waitUntil: "load" });
+        // Gives late console/pageerror/network events (e.g. deferred scripts) a moment to
+        // arrive before this visit's listeners are detached below.
+        await page.waitForTimeout(300);
+
+        const axeResults = await runAxe(page);
+        const isMobile = device === MOBILE_PROJECT_NAME;
+        const screenshot = await page.screenshot({ fullPage: true });
+        const attachmentName = `${personaName}--${device}--${slug(route)}`;
+        await test.info().attach(attachmentName, { body: screenshot, contentType: "image/png" });
+
+        const axeViolations: AxeViolationRecord[] = axeResults.violations.map((violation) => ({
+          id: violation.id,
+          impact: violation.impact ?? null,
+          targets: violation.nodes.map((node) => node.target.join(" ")),
+        }));
+
+        records.push({
+          route,
+          persona: personaName,
+          device,
+          finalUrl: redactUrl(page.url()),
+          httpStatus: response?.status() ?? null,
+          consoleErrors,
+          consoleWarnings,
+          pageErrors,
+          failedRequests,
+          axeViolations,
+          screenshot: attachmentName,
+          ...(isMobile ? { dockItems: await collectDockItems(page) } : {}),
+        });
+      } catch (error) {
+        // Keep whatever the listeners above already captured for this route, plus the error
+        // itself, instead of losing the visit entirely — then rethrow so the test still fails
+        // on a genuine crash. The finally block below still persists this record (and every
+        // prior route's) before that rethrow propagates.
+        records.push({
+          route,
+          persona: personaName,
+          device,
+          error: error instanceof Error ? error.message : String(error),
+          consoleErrors,
+          consoleWarnings,
+          pageErrors,
+          failedRequests,
+        });
+        throw error;
+      } finally {
+        page.off("console", onConsole);
+        page.off("pageerror", onPageError);
+        page.off("requestfailed", onRequestFailed);
+        page.off("response", onResponse);
+
+        // Written after every route, success or crash: this test's evidence-so-far is durable
+        // on disk even if a later route crashes the whole test (or the process is killed
+        // before the summary attachment below ever runs). Defense-in-depth alongside that
+        // attachment; the reporter in support/explore-report.ts still owns the single merged
+        // explore-report/summary.json once every persona x device test has finished.
+        writePartialFile(records, personaName, device);
+      }
+    }
+  } finally {
+    // Runs whether the loop above finished cleanly or a route rethrew a crash, so the
+    // attachment always reflects every route recorded so far (routes 1..N-1 plus route N's
+    // own error record on a crash), never nothing at all.
+    const body = Buffer.from(JSON.stringify(records, null, 2));
+    await test.info().attach(SUMMARY_ATTACHMENT_NAME, { body, contentType: "application/json" });
+  }
 }
 
 test.describe("Explore: chef", () => {
