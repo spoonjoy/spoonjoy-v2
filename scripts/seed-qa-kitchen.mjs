@@ -7,7 +7,7 @@
 // injectable execFile, CLI guard).
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -129,6 +129,12 @@ function sqlString(value) {
   return `'${value.replaceAll("'", "''")}'`;
 }
 
+const PERSONA_IDS = [KITCHEN.chef.id, KITCHEN.friend.id, KITCHEN.newbie.id];
+
+function sqlIdList(ids) {
+  return ids.map(sqlString).join(", ");
+}
+
 function slug(name) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
@@ -143,26 +149,42 @@ export function generatePersonaPasswords(random = randomBytes) {
 
 export function buildKitchenResetSql({ passwords, hash = (password) => bcrypt.hashSync(password, 10) }) {
   const statements = [];
+  const personaIds = sqlIdList(PERSONA_IDS);
 
-  // 1. Detach forks made by throwaway users before the recipes they fork from are deleted.
-  statements.push(`UPDATE Recipe SET sourceRecipeId = NULL WHERE sourceRecipeId LIKE 'qa-kitchen-%';`);
+  // 1. Detach forks that point at ANY recipe owned by a kitchen persona. Match by
+  // ownership (chefId), not by the forked recipe's own id: a persona's recipe can carry
+  // a journey-created id (a real UUID from the app, not our fixed 'qa-kitchen-recipe-*'
+  // scheme) once journeys have run against it, and a fork of it — made by another
+  // persona or by a throwaway user — would otherwise survive with a dangling
+  // sourceRecipeId and block the cascade delete below (Recipe.sourceRecipeId is
+  // ON DELETE RESTRICT).
+  statements.push(
+    `UPDATE Recipe SET sourceRecipeId = NULL WHERE sourceRecipeId IN (SELECT id FROM Recipe WHERE chefId IN (${personaIds}));`,
+  );
 
   // 2. RecipeInCookbook.recipeId/addedById are ON DELETE RESTRICT (not CASCADE); clear
-  // every row that touches a kitchen recipe, cookbook, or user before deleting them below.
+  // every row that touches a persona-owned recipe or cookbook (by ownership, for the
+  // same journey-drift reason as above — id, cookbookId is matched by ownership since a
+  // persona's own cookbook could likewise carry a journey-created id), or that a
+  // persona added (addedById is a direct user reference, matched by exact persona id).
   statements.push(
-    `DELETE FROM RecipeInCookbook WHERE recipeId LIKE 'qa-kitchen-%' OR cookbookId LIKE 'qa-kitchen-%' OR addedById LIKE 'qa-kitchen-%';`,
+    `DELETE FROM RecipeInCookbook WHERE recipeId IN (SELECT id FROM Recipe WHERE chefId IN (${personaIds})) OR cookbookId IN (SELECT id FROM Cookbook WHERE authorId IN (${personaIds})) OR addedById IN (${personaIds});`,
   );
 
   // 3. UserCredential.userId and OAuth.userId are also ON DELETE RESTRICT — every other
   // table that references "User" (Recipe, Cookbook, ShoppingList, RecipeSpoon,
   // ApiCredential, OAuth* tables, etc.) cascades, but these two must be cleared by hand
-  // or the delete of "User" below fails with a foreign key error.
-  statements.push(`DELETE FROM UserCredential WHERE userId LIKE 'qa-kitchen-%';`);
-  statements.push(`DELETE FROM OAuth WHERE userId LIKE 'qa-kitchen-%';`);
+  // or the delete of "User" below fails with a foreign key error. Direct user references,
+  // so matched by exact persona id, not by ownership.
+  statements.push(`DELETE FROM UserCredential WHERE userId IN (${personaIds});`);
+  statements.push(`DELETE FROM OAuth WHERE userId IN (${personaIds});`);
 
   // 4. Deleting the kitchen users cascades their recipes, steps, ingredients, step output
-  // uses, cookbooks, shopping list and items, and spoons.
-  statements.push(`DELETE FROM "User" WHERE id LIKE 'qa-kitchen-%';`);
+  // uses, cookbooks, shopping list and items, spoons, and their OAuth grant graph
+  // (OAuthGrant/OAuthAuthCode/ApiCredential/OAuthRefreshToken/OAuthTokenIssuance/
+  // OAuthRefreshLineage) — every one of those is ON DELETE CASCADE from "User", directly
+  // or transitively through OAuthGrant, once UserCredential/OAuth are out of the way.
+  statements.push(`DELETE FROM "User" WHERE id IN (${personaIds});`);
 
   // 5. Shared lookup tables: reuse an existing row with the same name; never delete these.
   for (const name of UNITS) {
@@ -254,7 +276,13 @@ export function parseSeedKitchenArgs(argv) {
     throw new Error("seed-qa-kitchen refuses non-QA targets; run with `--target-env qa`.");
   }
   const credentialsOutIndex = argv.indexOf("--credentials-out");
-  const credentialsOut = credentialsOutIndex === -1 ? null : argv[credentialsOutIndex + 1];
+  let credentialsOut = null;
+  if (credentialsOutIndex !== -1) {
+    credentialsOut = argv[credentialsOutIndex + 1];
+    if (credentialsOut === undefined || credentialsOut.startsWith("--")) {
+      throw new Error("--credentials-out requires a path value.");
+    }
+  }
   return {
     targetEnv,
     dryRun: argv.includes("--dry-run"),
@@ -276,11 +304,13 @@ export function main(argv = process.argv.slice(2), deps = {}) {
     writeFile = writeFileSync,
     mkdtemp = mkdtempSync,
     rm = rmSync,
+    chmod = chmodSync,
+    generatePasswords = generatePersonaPasswords,
     io = console,
   } = deps;
 
   const options = parseSeedKitchenArgs(argv);
-  const passwords = generatePersonaPasswords();
+  const passwords = generatePasswords();
   const sql = buildKitchenResetSql({ passwords });
 
   if (options.dryRun) {
@@ -289,21 +319,34 @@ export function main(argv = process.argv.slice(2), deps = {}) {
   }
 
   const directory = mkdtemp(join(tmpdir(), "spoonjoy-qa-kitchen-"));
-  const file = join(directory, "kitchen-reset.sql");
-  writeFile(file, sql, { encoding: "utf8", mode: 0o600 });
+  let primaryError;
   try {
+    const file = join(directory, "kitchen-reset.sql");
+    writeFile(file, sql, { encoding: "utf8", mode: 0o600 });
     execFile("pnpm", ["exec", "wrangler", "d1", "execute", "DB", "--remote", "--env", "qa", "--file", file], {
       stdio: "inherit",
     });
+  } catch (error) {
+    primaryError = error;
   } finally {
-    rm(file);
+    // Always attempt cleanup, but a cleanup failure must never hide a real wrangler
+    // failure — only surface the cleanup error when nothing else already failed.
+    try {
+      rm(directory, { recursive: true, force: true });
+    } catch (cleanupError) {
+      if (!primaryError) primaryError = cleanupError;
+    }
   }
+  if (primaryError) throw primaryError;
 
   if (options.credentialsOut) {
     writeFile(options.credentialsOut, `${JSON.stringify(credentialsPayload(passwords), null, 2)}\n`, {
       encoding: "utf8",
       mode: 0o600,
     });
+    // writeFile's mode option only applies to a newly created file; chmod explicitly so
+    // a pre-existing file at this path is restricted too.
+    chmod(options.credentialsOut, 0o600);
   }
 }
 
