@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useLocation, useNavigate, useNavigationType } from "react-router";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import { ToastProvider } from "~/components/ui/toast";
@@ -15,7 +16,7 @@ vi.mock("~/components/navigation", async () => {
   };
 });
 
-import { shareContent, useRecipeDetailActions } from "~/components/navigation";
+import { DockContextProvider, MobileNav, shareContent, useRecipeDetailActions } from "~/components/navigation";
 import {
   loader,
   action,
@@ -2753,7 +2754,6 @@ describe("Recipes $id Route", () => {
       await user.click(screen.getByTestId("recipe-header-cook-action"));
 
       const cookMode = await screen.findByTestId("cook-mode-panel");
-      expect(window.location.hash).toBe("#cook");
       expect(screen.queryByTestId("recipe-masthead")).not.toBeInTheDocument();
       expect(within(cookMode).getByTestId("cook-mode-pager")).toBeInTheDocument();
       expect(within(cookMode).getByText("Step 1 of 2")).toBeInTheDocument();
@@ -2780,7 +2780,6 @@ describe("Recipes $id Route", () => {
       await user.click(within(cookMode).getByRole("button", { name: "Exit cook mode" }));
       expect(screen.queryByTestId("cook-mode-panel")).not.toBeInTheDocument();
       expect(await screen.findByTestId("recipe-masthead")).toBeInTheDocument();
-      expect(window.location.hash).toBe("");
     });
 
     it("persists focused cook-mode progress across reloads", async () => {
@@ -3034,11 +3033,11 @@ describe("Recipes $id Route", () => {
       }
     });
 
-    it("opens focused cook mode from a cook hash and leaves it on browser back", async () => {
-      const mockData = {
+    describe("cook mode history", () => {
+      const historyRecipeData = {
         recipe: {
           id: "recipe-1",
-          title: "Deep Link Cook Recipe",
+          title: "History Cook Recipe",
           description: null,
           servings: null,
           coverImageUrl: null,
@@ -3059,27 +3058,93 @@ describe("Recipes $id Route", () => {
         savedInCookbookIds: [],
       };
 
-      const Stub = createTestRoutesStub([
-        {
-          path: "/recipes/:id",
-          Component: RecipeDetail,
-          loader: () => mockData,
-        },
-      ]);
+      // Shows the router's location and gives the test a browser Back button.
+      function LocationProbe() {
+        const location = useLocation();
+        const navigationType = useNavigationType();
+        const navigate = useNavigate();
+        return (
+          <>
+            <output data-testid="probe-location">{`${location.pathname}${location.search}${location.hash}`}</output>
+            <output data-testid="probe-navigation-type">{navigationType}</output>
+            <button type="button" onClick={() => void navigate(-1)}>Browser back</button>
+          </>
+        );
+      }
 
-      window.history.replaceState(null, "", "/recipes/recipe-1#cook");
-      render(<Stub initialEntries={["/recipes/recipe-1#cook"]} />);
+      function RecipeWithDock() {
+        return (
+          <DockContextProvider>
+            <RecipeDetail />
+            <MobileNav />
+            <LocationProbe />
+          </DockContextProvider>
+        );
+      }
 
-      expect(await screen.findByTestId("cook-mode-panel")).toBeInTheDocument();
-      expect(window.location.hash).toBe("#cook");
+      function renderRecipeFromHome(recipeEntry = "/recipes/recipe-1") {
+        const Stub = createTestRoutesStub([
+          { path: "/", Component: () => <><h1>Home page</h1><LocationProbe /></> },
+          { path: "/recipes/:id", Component: RecipeWithDock, loader: () => historyRecipeData },
+        ]);
+        render(<Stub initialEntries={["/", recipeEntry]} initialIndex={1} />);
+      }
 
-      await act(async () => {
-        window.history.replaceState(null, "", "/recipes/recipe-1");
-        window.dispatchEvent(new PopStateEvent("popstate"));
+      const probeLocation = () => screen.getByTestId("probe-location");
+      const probeNavigationType = () => screen.getByTestId("probe-navigation-type");
+
+      it("adds one #cook entry through the router and Exit removes it", async () => {
+        const user = userEvent.setup();
+        renderRecipeFromHome("/recipes/recipe-1?from=home");
+        await screen.findByRole("heading", { name: "History Cook Recipe" });
+
+        await user.click(screen.getByRole("link", { name: "Cook mode" }));
+
+        const cookMode = await screen.findByTestId("cook-mode-panel");
+        expect(probeLocation()).toHaveTextContent("/recipes/recipe-1?from=home#cook");
+        expect(probeNavigationType()).toHaveTextContent("PUSH");
+
+        await user.click(within(cookMode).getByRole("button", { name: "Exit cook mode" }));
+
+        await waitFor(() => expect(screen.queryByTestId("cook-mode-panel")).not.toBeInTheDocument());
+        expect(probeLocation()).toHaveTextContent(/^\/recipes\/recipe-1\?from=home$/);
+        expect(probeNavigationType()).toHaveTextContent("POP");
+
+        // Exit popped the cook entry, so one Back leaves the recipe.
+        await user.click(screen.getByRole("button", { name: "Browser back" }));
+        expect(await screen.findByRole("heading", { name: "Home page" })).toBeInTheDocument();
       });
 
-      await waitFor(() => {
-        expect(screen.queryByTestId("cook-mode-panel")).not.toBeInTheDocument();
+      it("closes cook mode on browser Back and a second Back leaves the recipe", async () => {
+        const user = userEvent.setup();
+        renderRecipeFromHome();
+        await screen.findByRole("heading", { name: "History Cook Recipe" });
+        await user.click(screen.getByRole("link", { name: "Cook mode" }));
+        await screen.findByTestId("cook-mode-panel");
+
+        await user.click(screen.getByRole("button", { name: "Browser back" }));
+
+        await waitFor(() => expect(screen.queryByTestId("cook-mode-panel")).not.toBeInTheDocument());
+        expect(probeLocation()).toHaveTextContent(/^\/recipes\/recipe-1$/);
+        expect(await screen.findByTestId("recipe-masthead")).toBeInTheDocument();
+
+        await user.click(screen.getByRole("button", { name: "Browser back" }));
+        expect(await screen.findByRole("heading", { name: "Home page" })).toBeInTheDocument();
+      });
+
+      it("opens cook mode from a #cook link and Exit replaces that entry instead of leaving the page", async () => {
+        const user = userEvent.setup();
+        renderRecipeFromHome("/recipes/recipe-1#cook");
+
+        const cookMode = await screen.findByTestId("cook-mode-panel");
+        await user.click(within(cookMode).getByRole("button", { name: "Exit cook mode" }));
+
+        await waitFor(() => expect(screen.queryByTestId("cook-mode-panel")).not.toBeInTheDocument());
+        expect(probeLocation()).toHaveTextContent(/^\/recipes\/recipe-1$/);
+        expect(probeNavigationType()).toHaveTextContent("REPLACE");
+
+        await user.click(screen.getByRole("button", { name: "Browser back" }));
+        expect(await screen.findByRole("heading", { name: "Home page" })).toBeInTheDocument();
       });
     });
 
@@ -3186,7 +3251,8 @@ describe("Recipes $id Route", () => {
       try {
         await user.click(screen.getByRole("link", { name: "Cook mode" }));
 
-        expect(window.location.hash).toBe("#cook");
+        // A recipe without steps has no cook mode: the link scrolls to the empty steps section.
+        expect(screen.queryByTestId("cook-mode-panel")).not.toBeInTheDocument();
         expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
       } finally {
         if (originalScrollIntoView) {

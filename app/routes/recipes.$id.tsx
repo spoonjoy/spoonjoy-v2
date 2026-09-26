@@ -1,5 +1,5 @@
 import type { Route } from "./+types/recipes.$id";
-import { useActionData, useFetcher, useLoaderData, useRevalidator, useSubmit } from "react-router";
+import { useActionData, useFetcher, useLoaderData, useLocation, useNavigate, useRevalidator, useSubmit } from "react-router";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { MouseEvent } from "react";
 import { usePostHog } from "@posthog/react";
@@ -125,6 +125,13 @@ interface CookProgressState {
   scaleFactor: number;
   checkedIngredientIds: Set<string>;
   checkedStepOutputIds: Set<string>;
+}
+
+// History state marking the `#cook` entry cook mode pushed (so Exit can pop it).
+const COOK_MODE_ENTRY_STATE = "spoonjoyCookModeEntry";
+
+function isCookModeEntryState(state: unknown): boolean {
+  return isRecord(state) && state[COOK_MODE_ENTRY_STATE] === true;
 }
 
 export function getCookProgressStorageKey(recipeId: string) {
@@ -296,6 +303,8 @@ export default function RecipeDetail() {
   const createCookbookFetcher = useFetcher<typeof action>();
   const posthog = usePostHog();
   const { showToast } = useToast();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   // Scale state for recipe scaling
   const [scaleFactor, setScaleFactor] = useState(1);
@@ -496,25 +505,17 @@ export default function RecipeDetail() {
     }, 0);
   }, []);
 
+  // Cook mode is the recipe's `#cook` history entry. Reading the router's location (in an effect,
+  // so the server-rendered page hydrates first) opens it for a `#cook` link and closes it when
+  // Back or Exit leaves that entry.
   useEffect(() => {
-    const syncCookModeHash = () => {
-      const shouldShowCookMode = window.location.hash === "#cook" && recipe.steps.length > 0;
-      setIsCookMode(shouldShowCookMode);
+    const shouldShowCookMode = location.hash === "#cook" && recipe.steps.length > 0;
+    setIsCookMode(shouldShowCookMode);
 
-      if (shouldShowCookMode) {
-        pendingCookModeScroll.current = true;
-      }
-    };
-
-    syncCookModeHash();
-    window.addEventListener("hashchange", syncCookModeHash);
-    window.addEventListener("popstate", syncCookModeHash);
-
-    return () => {
-      window.removeEventListener("hashchange", syncCookModeHash);
-      window.removeEventListener("popstate", syncCookModeHash);
-    };
-  }, [recipe.steps.length]);
+    if (shouldShowCookMode) {
+      pendingCookModeScroll.current = true;
+    }
+  }, [location.hash, recipe.steps.length]);
 
   useEffect(() => {
     if (!isCookMode || !pendingCookModeScroll.current) {
@@ -600,12 +601,19 @@ export default function RecipeDetail() {
     }
   }, [addToListFetcher, recipe.id, scaleFactor, posthog, isAuthenticated, loginRedirect]);
 
+  // Entering cook mode pushes one `#cook` entry through the router, so the entry carries the
+  // router's history index (the recipe's Back reads it) and Back closes cook mode.
   const enterCookMode = useCallback(() => {
-    pendingCookModeScroll.current = true;
-    setIsCookMode(true);
-    const nextUrl = `${window.location.pathname}${window.location.search}#cook`;
-    window.history.pushState(null, "", nextUrl);
-  }, []);
+    if (recipe.steps.length === 0) {
+      scrollCookModeIntoView();
+      return;
+    }
+
+    void navigate(
+      { pathname: location.pathname, search: location.search, hash: "#cook" },
+      { state: { [COOK_MODE_ENTRY_STATE]: true }, preventScrollReset: true },
+    );
+  }, [navigate, location.pathname, location.search, recipe.steps.length, scrollCookModeIntoView]);
 
   const handleEnterCookMode = useCallback((event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
@@ -616,11 +624,23 @@ export default function RecipeDetail() {
   // one, and only goes to /recipes when the recipe was opened directly.
   const handleBackToRecipes = useBackNavigation();
 
+  // Exit removes the `#cook` entry: it pops the entry cook mode pushed, so history never holds
+  // two entries for this recipe. A `#cook` page opened from a link was not pushed here, so its
+  // entry is replaced with the plain recipe instead of going back to whatever came before.
   const handleExitCookMode = useCallback(() => {
     pendingCookModeScroll.current = false;
     setIsCookMode(false);
-    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-  }, []);
+
+    if (isCookModeEntryState(location.state)) {
+      void navigate(-1);
+      return;
+    }
+
+    void navigate(
+      { pathname: location.pathname, search: location.search },
+      { replace: true, preventScrollReset: true },
+    );
+  }, [navigate, location.pathname, location.search, location.state]);
 
   const addToListLabel = addToListFetcher.state !== "idle"
     ? "Adding"
