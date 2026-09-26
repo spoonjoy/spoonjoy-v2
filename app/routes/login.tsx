@@ -1,5 +1,5 @@
 import type { Route } from "./+types/login";
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import { Form, redirect, data, useActionData, useLoaderData, useSearchParams } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { authenticateUserByEmailOrUsername } from "~/lib/auth.server";
@@ -124,14 +124,10 @@ export default function Login() {
   // controlled `value` would reset anything typed before hydration: after
   // hydration any re-render of the input (a focus change, a router update)
   // makes React set the DOM value back to its state, "" — and `required` then
-  // silently blocks the submit. `identifier` only mirrors the field for the
-  // passkey button, and the mount effect picks up pre-hydration typing.
+  // silently blocks the submit. The passkey button reads the field through
+  // this ref when tapped, so it also sees autofilled values that fire no
+  // input event.
   const identifierRef = useRef<HTMLInputElement>(null);
-  const [identifier, setIdentifier] = useState("");
-
-  useEffect(() => {
-    setIdentifier(identifierRef.current!.value);
-  }, []);
 
   return (
     <AuthLayout>
@@ -165,7 +161,6 @@ export default function Login() {
               spellCheck={false}
               required
               ref={identifierRef}
-              onChange={(e) => setIdentifier(e.target.value)}
               invalid={!!actionData?.errors?.identifier}
             />
             {actionData?.errors?.identifier && (
@@ -193,7 +188,7 @@ export default function Login() {
         </Form>
 
         <div className="my-6 border-t border-[var(--sj-border)]" aria-hidden="true" />
-        <PasskeySignInButton identifier={identifier} redirectTo={redirectTo} />
+        <PasskeySignInButton identifierRef={identifierRef} redirectTo={redirectTo} />
 
         <Text className="mt-6 text-center">
           Don't have an account?{" "}

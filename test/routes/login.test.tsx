@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -10,6 +10,14 @@ import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
+import { authenticatePasskey, browserSupportsPasskeys } from "~/lib/webauthn-client";
+
+// The passkey button stays hidden (as in a browser without WebAuthn) unless a
+// test turns support on; the ceremony itself is stubbed.
+vi.mock("~/lib/webauthn-client", () => ({
+  authenticatePasskey: vi.fn(),
+  browserSupportsPasskeys: vi.fn(() => false),
+}));
 
 // Helper to extract data from React Router's data() response
 function extractResponseData(response: any): { data: any; status: number } {
@@ -428,6 +436,34 @@ describe("Login Route", () => {
       const user = userEvent.setup();
       await user.type(identifierInput, "chef@example.com");
       expect(identifierInput).toHaveValue("chef@example.com");
+    });
+
+    it("signs in with a passkey using an identifier filled without an input event", async () => {
+      // iOS Keychain and password managers can fill the field without firing
+      // an event React sees; the passkey button must still use the value.
+      vi.mocked(browserSupportsPasskeys).mockReturnValue(true);
+      vi.mocked(authenticatePasskey).mockResolvedValue({ ok: false, error: "No passkey for this account" });
+      const Stub = createTestRoutesStub([
+        {
+          path: "/login",
+          Component: Login,
+          loader: () => ({ oauthProviders: [] }),
+        },
+      ]);
+
+      try {
+        render(<Stub initialEntries={["/login?redirectTo=/cookbooks"]} />);
+
+        const passkeyButton = await screen.findByRole("button", { name: "Sign in with a passkey" });
+        (screen.getByLabelText("Username or email") as HTMLInputElement).value = "keychain_chef";
+        await userEvent.setup().click(passkeyButton);
+
+        expect(authenticatePasskey).toHaveBeenCalledWith("keychain_chef", "/cookbooks");
+        expect(await screen.findByText("No passkey for this account")).toBeInTheDocument();
+        expect(screen.queryByText(/enter your username or email above/i)).not.toBeInTheDocument();
+      } finally {
+        vi.mocked(browserSupportsPasskeys).mockReturnValue(false);
+      }
     });
 
     it("should have password input with correct attributes", async () => {

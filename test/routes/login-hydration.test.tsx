@@ -1,16 +1,17 @@
 import { act } from "react";
+import { fireEvent } from "@testing-library/react";
 import { hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import Login from "~/routes/login";
+import { authenticatePasskey } from "~/lib/webauthn-client";
 import { createTestRoutesStub } from "../utils";
 
-// Replace the passkey button with a probe that shows the identifier prop it
-// receives, so the test can check what the button would sign in with.
-vi.mock("~/components/auth/PasskeySignInButton", () => ({
-  PasskeySignInButton: ({ identifier }: { identifier: string }) => (
-    <p data-testid="passkey-identifier">{identifier}</p>
-  ),
+// Use the real passkey button, with the WebAuthn ceremony stubbed out, so the
+// test checks the identifier the button would actually sign in with.
+vi.mock("~/lib/webauthn-client", () => ({
+  authenticatePasskey: vi.fn(async () => ({ ok: false, error: "Stubbed ceremony" })),
+  browserSupportsPasskeys: vi.fn(() => true),
 }));
 
 const TYPED = "typed_before_hydration";
@@ -84,7 +85,6 @@ describe("Login hydration", () => {
     // React adopted the server input rather than replacing it.
     expect(container.querySelector("#identifier")).toBe(identifierInput);
     expect(identifierInput.value).toBe(TYPED);
-    expect(container.querySelector('[data-testid="passkey-identifier"]')).toHaveTextContent(TYPED);
 
     // Moving focus re-renders the Headless UI input. A controlled input would
     // have its DOM value reset to React state here.
@@ -96,6 +96,14 @@ describe("Login hydration", () => {
     });
 
     expect(identifierInput.value).toBe(TYPED);
-    expect(container.querySelector('[data-testid="passkey-identifier"]')).toHaveTextContent(TYPED);
+
+    // The passkey button signs in with what was typed before hydration.
+    const passkeyButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Sign in with a passkey",
+    )!;
+    await act(async () => {
+      fireEvent.click(passkeyButton);
+    });
+    expect(authenticatePasskey).toHaveBeenCalledWith(TYPED, undefined);
   });
 });

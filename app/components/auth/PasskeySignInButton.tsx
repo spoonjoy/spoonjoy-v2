@@ -2,7 +2,10 @@
  * "Sign in with a passkey" control for the login page.
  *
  * Username-first flow: the identifier (a username or an email) comes from
- * the login form's single shared identifier field (passed in as a prop).
+ * the login form's single shared identifier field, passed in as a ref and
+ * read when the button is clicked. Reading the live DOM value (rather than a
+ * mirrored React state) picks up text typed before hydration and values that
+ * iOS Keychain or a password manager fills without firing an input event.
  * Clicking prompts the authenticator; on success the server sets a session
  * cookie and we navigate to the post-login destination.
  *
@@ -13,7 +16,7 @@
  * mismatch. We render nothing until mounted + supported.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type RefObject } from "react";
 import { Button } from "~/components/ui/button";
 import { Text } from "~/components/ui/text";
 import {
@@ -22,8 +25,8 @@ import {
 } from "~/lib/webauthn-client";
 
 export interface PasskeySignInButtonProps {
-  /** Username or email from the login form's shared identifier field. */
-  identifier: string;
+  /** The login form's shared username-or-email field, read at click time. */
+  identifierRef: RefObject<HTMLInputElement | null>;
   redirectTo?: string;
   /** Test seam: override the support check. */
   supportsPasskeys?: boolean;
@@ -32,7 +35,7 @@ export interface PasskeySignInButtonProps {
 }
 
 export function PasskeySignInButton({
-  identifier,
+  identifierRef,
   redirectTo,
   supportsPasskeys,
   onNavigate,
@@ -53,7 +56,7 @@ export function PasskeySignInButton({
 
   async function handleClick() {
     setError(null);
-    const trimmed = identifier.trim();
+    const trimmed = (identifierRef.current?.value ?? "").trim();
     if (!trimmed) {
       setError("Enter your username or email above to use a passkey.");
       return;
