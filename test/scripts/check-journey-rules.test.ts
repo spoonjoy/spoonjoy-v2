@@ -6,12 +6,15 @@ import {
   checkJourneySource,
   defaultCliErrorHandler,
   isCliEntry,
+  journeyFileKind,
   main,
   runCliIfEntry,
 } from "../../scripts/check-journey-rules.mjs";
 import { expectConsoleError } from "../warning-policy";
 
 const rules = (src: string) => checkJourneySource("x.journey.ts", src).map((v: { rule: string }) => v.rule);
+const supportRules = (src: string) =>
+  checkJourneySource("support/helper.ts", src, { kind: "support" }).map((v: { rule: string }) => v.rule);
 
 describe("checkJourneySource", () => {
   describe("no-retry-config", () => {
@@ -281,6 +284,86 @@ describe("checkJourneySource", () => {
     });
   });
 
+  describe("setup and imported test aliases", () => {
+    it("treats setup like test for skipped-journey calls", () => {
+      expect(rules(`setup.skip("chef", async () => {});`)).toEqual(["no-skipped-journeys"]);
+      expect(rules(`setup.only("chef", async () => {});`)).toEqual(["no-skipped-journeys"]);
+      expect(rules(`setup.fixme("chef", async () => {});`)).toEqual(["no-skipped-journeys"]);
+      expect(rules(`setup.describe.skip("personas", () => {});`)).toEqual(["no-skipped-journeys"]);
+    });
+
+    it("treats setup like test for the @mutates reload check", () => {
+      expect(rules(`setup("seeds @mutates", async ({ page }) => { await page.click("a"); });`)).toEqual([
+        "mutation-needs-reload-check",
+      ]);
+    });
+
+    it("recognises an alias of test imported from @playwright/test", () => {
+      expect(rules(`import { test as t } from "@playwright/test"; t.skip("x", async () => {});`)).toEqual([
+        "no-skipped-journeys",
+      ]);
+    });
+
+    it("recognises an alias of test imported from the journeys' support/journey module", () => {
+      expect(
+        rules(`import { expect, test as journey } from "./support/journey"; journey.describe.only("s", () => {});`),
+      ).toEqual(["no-skipped-journeys"]);
+      expect(
+        rules(`import { test as j } from "../journey.ts"; j("adds @mutates", async ({ page }) => { await page.click("a"); });`),
+      ).toEqual(["mutation-needs-reload-check"]);
+      expect(rules(`import { test as j } from "./journey"; j.fail("x", async () => {});`)).toEqual([
+        "no-skipped-journeys",
+      ]);
+    });
+
+    it("still recognises a plain, un-aliased test import", () => {
+      expect(rules(`import { test } from "./support/journey"; test.skip("x", async () => {});`)).toEqual([
+        "no-skipped-journeys",
+      ]);
+    });
+
+    it("ignores aliases from other modules, other imported names, and imports without named bindings", () => {
+      expect(
+        rules(
+          [
+            `import "./support/journey";`,
+            `import pw from "@playwright/test";`,
+            `import * as all from "@playwright/test";`,
+            `import { test as vt } from "vitest";`,
+            `import { expect as e } from "@playwright/test";`,
+            `import { test as nj } from "./support/journeys";`,
+            `const local = 1;`,
+            `vt.skip("x"); e.skip("x"); nj.only("x"); pw.skip("x"); all.test.skip("x");`,
+          ].join("\n"),
+        ),
+      ).toEqual([]);
+    });
+  });
+
+  describe("support files", () => {
+    it("flag clicks in loops, toPass callbacks and array-iteration callbacks", () => {
+      expect(supportRules(`for (const a of rows) { await a.click(); }`)).toEqual(["no-click-in-loop"]);
+      expect(supportRules(`await expect(async () => { await btn.click(); }).toPass();`)).toEqual(["no-click-in-loop"]);
+      expect(supportRules(`rows.forEach(async (row) => { await row.fill("x"); });`)).toEqual(["no-click-in-loop"]);
+    });
+
+    it("flag retries configuration", () => {
+      expect(supportRules(`export const options = { retries: 1 };`)).toEqual(["no-retry-config"]);
+    });
+
+    it("flag skipped calls and unchecked @mutates tests", () => {
+      expect(supportRules(`test.skip("x", async () => {});`)).toEqual(["no-skipped-journeys"]);
+      expect(supportRules(`test("adds @mutates", async ({ page }) => { await page.click("a"); });`)).toEqual([
+        "mutation-needs-reload-check",
+      ]);
+    });
+
+    it("allow a conditional assertion, which only journeys forbid", () => {
+      expect(supportRules(`if (strict) { await expect(x).toBeVisible(); }`)).toEqual([]);
+      expect(rules(`if (strict) { await expect(x).toBeVisible(); }`)).toEqual(["no-assertion-in-if"]);
+    });
+  });
+
   it("reports line numbers relative to the source", () => {
     const [v] = checkJourneySource("x.journey.ts", `\n\ntest.describe.configure({ retries: 1 });`);
     expect(v.line).toBe(3);
@@ -299,6 +382,22 @@ describe("checkJourneySource", () => {
     expect(violations).toHaveLength(1);
     expect(typeof violations[0].message).toBe("string");
     expect(violations[0].message.length).toBeGreaterThan(0);
+  });
+});
+
+describe("journeyFileKind", () => {
+  it("classifies journeys, setup files and support helpers by path relative to the journeys directory", () => {
+    expect(journeyFileKind("sign-in.journey.ts")).toBe("journey");
+    expect(journeyFileKind("nested/personas.setup.ts")).toBe("journey");
+    expect(journeyFileKind("support/journey.ts")).toBe("support");
+    expect(journeyFileKind("support/nested/helper.ts")).toBe("support");
+    expect(journeyFileKind(join("support", "sign-in.ts"))).toBe("support");
+  });
+
+  it("skips non-TypeScript support files and helpers outside support/", () => {
+    expect(journeyFileKind("support/notes.md")).toBeUndefined();
+    expect(journeyFileKind("helpers.ts")).toBeUndefined();
+    expect(journeyFileKind("fixtures/support/x.ts")).toBeUndefined();
   });
 });
 
@@ -337,6 +436,27 @@ describe("main", () => {
     await main(["e2e/journeys"], { io, exit, readdir, readFile: vi.fn() });
     expect(io.log).toHaveBeenCalledWith(expect.stringContaining("Checked 0 journey file(s)"));
     expect(exit).not.toHaveBeenCalledWith(1);
+  });
+
+  it("checks support helpers as support files, so a conditional assertion there passes", async () => {
+    const io = { log: vi.fn(), error: vi.fn() };
+    const exit = vi.fn();
+    const readdir = vi.fn().mockResolvedValue([fakeFile("e2e/journeys/support", "sign-in.ts")]);
+    const readFile = vi.fn().mockResolvedValue(`if (strict) { await expect(x).toBeVisible(); }`);
+    await main(["e2e/journeys"], { io, exit, readdir, readFile });
+    expect(readFile).toHaveBeenCalledWith(join("e2e/journeys/support", "sign-in.ts"));
+    expect(io.log).toHaveBeenCalledWith("Checked 1 journey file(s), 0 violation(s).");
+    expect(exit).not.toHaveBeenCalled();
+  });
+
+  it("reports a click-in-loop violation inside a support helper", async () => {
+    const io = { log: vi.fn(), error: vi.fn() };
+    const exit = vi.fn();
+    const readdir = vi.fn().mockResolvedValue([fakeFile("e2e/journeys/support", "rows.ts")]);
+    const readFile = vi.fn().mockResolvedValue(`for (const r of rows) { await r.click(); }`);
+    await main(["e2e/journeys"], { io, exit, readdir, readFile });
+    expect(io.log).toHaveBeenCalledWith(expect.stringContaining("rows.ts:1 no-click-in-loop"));
+    expect(exit).toHaveBeenCalledWith(1);
   });
 
   it("filters to only *.journey.ts and *.setup.ts files, skipping others and directories", async () => {

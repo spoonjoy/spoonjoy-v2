@@ -1,16 +1,33 @@
 #!/usr/bin/env node
 // Static "house rules" checker for Playwright journeys (e2e/journeys/**/*.journey.ts,
-// **/*.setup.ts). Runs in CI, ahead of the journeys themselves, and fails the build when a
-// journey hides flakiness (retries, clicking in a loop, clicking inside a .toPass() retry
-// callback or an array-iteration callback) or asserts conditionally, when a @mutates test skips
-// the post-reload check, or when a journey/describe block is skipped, only'd, fixme'd, or
-// marked to fail instead of actually running.
+// **/*.setup.ts) and their helpers (e2e/journeys/support/**/*.ts). Runs in CI, ahead of the
+// journeys themselves, and fails the build when a journey hides flakiness (retries, clicking in
+// a loop, clicking inside a .toPass() retry callback or an array-iteration callback) or asserts
+// conditionally, when a @mutates test skips the post-reload check, or when a journey/describe
+// block is skipped, only'd, fixme'd, or marked to fail instead of actually running.
+//
+// Support helpers run inside journeys, so they get the same retry, click-in-loop, skipped and
+// @mutates rules; only the conditional-assertion rule is journey-only. `test` and `setup` are
+// both recognised as the test function, as is any local alias of `test` imported from
+// `@playwright/test` or from the journeys' own `support/journey` module
+// (`import { test as t } from "./support/journey"`).
 import { readFile as nodeReadFile, readdir as nodeReaddir } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
 export const JOURNEY_FILE_PATTERN = /\.(?:journey|setup)\.ts$/;
+
+// Directory, relative to the scanned journeys directory, whose .ts files are journey helpers.
+export const SUPPORT_DIRECTORY = "support";
+
+// Modules whose `test` export is the Playwright test function: Playwright itself, and the
+// journeys' own extended `test` in support/journey.ts, imported by relative path.
+const TEST_MODULE_PATTERN = /^(?:@playwright\/test|\.{1,2}\/(?:.*\/)?journey(?:\.[cm]?[jt]s)?)$/;
+
+// Names that always mean the test function: Playwright's own `test`, and `setup`, the
+// conventional alias used by setup projects.
+const DEFAULT_TEST_NAMES = ["test", "setup"];
 
 const CLICK_LIKE_METHODS = new Set(["click", "tap", "press", "fill", "check", "dispatchEvent"]);
 
@@ -44,10 +61,39 @@ function propertyAssignmentName(node) {
   return undefined;
 }
 
-// True for a bare `test` identifier reference, i.e. the `test` in `test(...)` or the base of
-// `test.only(...)` / `test.describe.skip(...)`.
-function isTestNamespaceIdentifier(node) {
-  return ts.isIdentifier(node) && node.text === "test";
+/**
+ * Classifies a file by its path relative to the scanned journeys directory: "journey" for
+ * *.journey.ts / *.setup.ts files, "support" for other .ts files under support/, otherwise
+ * undefined (not checked).
+ * @param {string} relativePath
+ * @returns {"journey" | "support" | undefined}
+ */
+export function journeyFileKind(relativePath) {
+  const posixPath = relativePath.split(path.sep).join("/");
+  if (JOURNEY_FILE_PATTERN.test(posixPath)) return "journey";
+  if (posixPath.startsWith(`${SUPPORT_DIRECTORY}/`) && posixPath.endsWith(".ts")) return "support";
+  return undefined;
+}
+
+// Every local name bound to the test function in this file: `test`, `setup`, and each alias of
+// a `test` import from a TEST_MODULE_PATTERN module.
+function collectTestNames(sourceFile) {
+  const names = new Set(DEFAULT_TEST_NAMES);
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement) || !TEST_MODULE_PATTERN.test(statement.moduleSpecifier.text)) continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    for (const element of bindings.elements) {
+      if ((element.propertyName ?? element.name).text === "test") names.add(element.name.text);
+    }
+  }
+  return names;
+}
+
+// True for a bare test-function identifier reference, i.e. the `test` in `test(...)` or the
+// base of `test.only(...)` / `setup.skip(...)` / `t.describe.skip(...)`.
+function isTestNamespaceIdentifier(node, testNames) {
+  return ts.isIdentifier(node) && testNames.has(node.text);
 }
 
 function isClickLikeCall(node) {
@@ -134,12 +180,12 @@ function isInsideIfOrConditionalBranch(node) {
 // `@mutates` title still needs a reload check. `test.describe(...)` and its own modifiers are
 // deliberately excluded here — a describe block's "body" holds nested tests, not a single
 // page-object callback to check for `verifyAfterReload(...)`.
-function isTestCall(node) {
+function isTestCall(node, testNames) {
   if (!ts.isCallExpression(node) || node.arguments.length < 1) return false;
-  if (isTestNamespaceIdentifier(node.expression)) return true;
+  if (isTestNamespaceIdentifier(node.expression, testNames)) return true;
   return (
     ts.isPropertyAccessExpression(node.expression) &&
-    isTestNamespaceIdentifier(node.expression.expression) &&
+    isTestNamespaceIdentifier(node.expression.expression, testNames) &&
     TEST_MODIFIERS.has(node.expression.name.text)
   );
 }
@@ -168,15 +214,15 @@ function literalTextOf(node) {
 
 // Matches `test.skip(...)`, `test.only(...)`, `test.fixme(...)`, `test.fail(...)`, and the same
 // modifiers chained off `test.describe` (`test.describe.skip(...)`, etc.), anywhere in the file.
-function isSkippedJourneyCall(node) {
+function isSkippedJourneyCall(node, testNames) {
   if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return false;
   const { expression: object, name } = node.expression;
   if (!TEST_MODIFIERS.has(name.text)) return false;
-  if (isTestNamespaceIdentifier(object)) return true;
+  if (isTestNamespaceIdentifier(object, testNames)) return true;
   return (
     ts.isPropertyAccessExpression(object) &&
     object.name.text === "describe" &&
-    isTestNamespaceIdentifier(object.expression)
+    isTestNamespaceIdentifier(object.expression, testNames)
   );
 }
 
@@ -199,9 +245,11 @@ function containsVerifyAfterReloadCall(node) {
 }
 
 /**
- * Walks a journey/setup file's AST and returns every house-rule violation it contains.
+ * Walks a journey/setup or support file's AST and returns every house-rule violation it
+ * contains. Support files (kind "support") skip only the no-assertion-in-if rule.
  * @param {string} fileName
  * @param {string} source
+ * @param {{ kind?: "journey" | "support" }} [options]
  * @returns {Array<{
  *   file: string,
  *   line: number,
@@ -209,8 +257,10 @@ function containsVerifyAfterReloadCall(node) {
  *   message: string,
  * }>}
  */
-export function checkJourneySource(fileName, source) {
+export function checkJourneySource(fileName, source, { kind = "journey" } = {}) {
   const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const testNames = collectTestNames(sourceFile);
+  const checkConditionalAssertions = kind === "journey";
   const violations = [];
 
   function report(node, rule, message) {
@@ -238,11 +288,11 @@ export function checkJourneySource(fileName, source) {
       );
     }
 
-    if (isExpectCall(node) && isInsideIfOrConditionalBranch(node)) {
+    if (checkConditionalAssertions && isExpectCall(node) && isInsideIfOrConditionalBranch(node)) {
       report(node, "no-assertion-in-if", "Assertions must not be conditional; branch on setup, not on expect(...).");
     }
 
-    if (isSkippedJourneyCall(node)) {
+    if (isSkippedJourneyCall(node, testNames)) {
       report(
         node,
         "no-skipped-journeys",
@@ -250,7 +300,7 @@ export function checkJourneySource(fileName, source) {
       );
     }
 
-    if (isTestCall(node)) {
+    if (isTestCall(node, testNames)) {
       const title = literalTextOf(node.arguments[0]);
       if (title !== undefined && title.includes("@mutates")) {
         const body = testBodyArgument(node);
@@ -312,13 +362,15 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
   }
 
   const files = entries
-    .filter((entry) => entry.isFile() && JOURNEY_FILE_PATTERN.test(entry.name))
-    .map((entry) => path.join(entry.parentPath ?? entry.path ?? directory, entry.name));
+    .filter((entry) => entry.isFile())
+    .map((entry) => path.join(entry.parentPath ?? entry.path ?? directory, entry.name))
+    .map((file) => ({ file, kind: journeyFileKind(path.relative(directory, file)) }))
+    .filter(({ kind }) => kind !== undefined);
 
   const violations = [];
-  for (const file of files) {
+  for (const { file, kind } of files) {
     const source = await readFile(file);
-    violations.push(...checkJourneySource(file, source));
+    violations.push(...checkJourneySource(file, source, { kind }));
   }
 
   for (const violation of violations) {
