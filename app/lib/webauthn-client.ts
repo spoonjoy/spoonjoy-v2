@@ -86,12 +86,16 @@ export async function registerPasskey(deps: RegisterPasskeyDeps = {}): Promise<P
 
 /**
  * Sign in with a passkey (username-first).
- * 1. fetch authentication options for the email
+ * 1. fetch authentication options for the identifier (a username or an email)
  * 2. prompt the authenticator (startAuthentication)
  * 3. post the assertion for verification; on success a session cookie is set
+ *
+ * Both the options and verify requests send `{ identifier }` — both routes
+ * resolve a username or an email the same way (an "@" means an email;
+ * otherwise it's looked up as an exact username).
  */
 export async function authenticatePasskey(
-  email: string,
+  identifier: string,
   redirectTo: string | undefined,
   deps: AuthenticatePasskeyDeps = {},
 ): Promise<PasskeyResult> {
@@ -101,7 +105,7 @@ export async function authenticatePasskey(
   const optionsResponse = await fetchImpl("/auth/webauthn/authenticate/options", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ identifier }),
   });
   if (!optionsResponse.ok) {
     return { ok: false, error: await readError(optionsResponse) };
@@ -118,7 +122,7 @@ export async function authenticatePasskey(
   const verifyResponse = await fetchImpl("/auth/webauthn/authenticate/verify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, response: assertion, redirectTo }),
+    body: JSON.stringify({ identifier, response: assertion, redirectTo }),
   });
   if (!verifyResponse.ok) {
     return { ok: false, error: await readError(verifyResponse) };

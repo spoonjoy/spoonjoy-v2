@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
-import { loader, action } from "~/routes/recipes.$id.edit";
+import { loader, action, meta } from "~/routes/recipes.$id.edit";
 import EditRecipe from "~/routes/recipes.$id.edit";
 import { DockContextProvider, MobileNav } from "~/components/navigation";
 import { createUser } from "~/lib/auth.server";
@@ -53,6 +53,20 @@ describe("Recipes $id Edit Route", () => {
   let testUserId: string;
   let otherUserId: string;
   let recipeId: string;
+
+  it("falls back to a generic title when there is no loader data", () => {
+    expect(meta({ data: undefined } as any)).toEqual([
+      { title: "Edit recipe - Spoonjoy" },
+      { name: "description", content: "Edit this Spoonjoy recipe." },
+    ]);
+  });
+
+  it("uses the recipe's title in the document title when loader data is present", () => {
+    expect(meta({ data: { recipe: { title: "Tomato Soup" } } } as any)).toEqual([
+      { title: "Edit Tomato Soup - Spoonjoy" },
+      { name: "description", content: 'Edit "Tomato Soup" on Spoonjoy.' },
+    ]);
+  });
 
   beforeEach(async () => {
     await cleanupDatabase();

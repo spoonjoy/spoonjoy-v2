@@ -6,6 +6,7 @@ import {
   INGREDIENT_LOOKUP_BATCH_SIZE,
   loadIngredientNamesByRecipeId,
   loader,
+  meta,
 } from "~/routes/my-recipes";
 import MyRecipes from "~/routes/my-recipes";
 import { createTestRoutesStub } from "../utils";
@@ -19,6 +20,13 @@ import {
 describe("My Recipes drawer route", () => {
   beforeEach(async () => {
     await cleanupDatabase();
+  });
+
+  it("returns the my recipes document title", () => {
+    expect(meta({} as any)).toEqual([
+      { title: "My recipes - Spoonjoy" },
+      { name: "description", content: "Recipes you've created on Spoonjoy." },
+    ]);
   });
 
   afterEach(async () => {

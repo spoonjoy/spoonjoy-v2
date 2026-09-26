@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { cleanup as cleanupDom, render, screen } from "@testing-library/react";
 import { faker } from "@faker-js/faker";
-import AgentConnectLookup, { action as lookupAction, loader as lookupLoader } from "~/routes/agent.connect";
-import AgentConnect, { action, loader } from "~/routes/agent.connect.$requestId";
+import AgentConnectLookup, { action as lookupAction, loader as lookupLoader, meta as lookupMeta } from "~/routes/agent.connect";
+import AgentConnect, { action, loader, meta } from "~/routes/agent.connect.$requestId";
 import { startAgentConnection } from "~/lib/agent-connection.server";
 import { getLocalDb } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
@@ -79,6 +79,25 @@ describe("agent connect route", () => {
   let userId: string;
   let userEmail: string;
   const activeNow = new Date("2099-05-26T12:00:00Z");
+
+  it("returns the connect-an-agent document title for the lookup page", () => {
+    expect(lookupMeta({} as any)).toEqual([
+      { title: "Connect an agent - Spoonjoy" },
+      { name: "description", content: "Connect an agent to your Spoonjoy kitchen." },
+    ]);
+  });
+
+  it("titles the connection page by status", () => {
+    expect(meta({ data: { status: "pending" } } as any)).toEqual([
+      { title: "Connect Spoonjoy" },
+      { name: "description", content: "Connect an agent to your Spoonjoy kitchen." },
+    ]);
+    expect(meta({ data: { status: "approved" } } as any)[0]).toEqual({ title: "Spoonjoy Connected" });
+    expect(meta({ data: { status: "claimed" } } as any)[0]).toEqual({ title: "Spoonjoy Connected" });
+    expect(meta({ data: { status: "denied" } } as any)[0]).toEqual({ title: "Connection Denied" });
+    expect(meta({ data: { status: "missing" } } as any)[0]).toEqual({ title: "Connection Expired" });
+    expect(meta({ data: undefined } as any)[0]).toEqual({ title: "Connection Expired" });
+  });
 
   beforeEach(async () => {
     await cleanupDatabase();

@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { links } from "~/root";
+import { links, meta } from "~/root";
+
+describe("root.tsx meta()", () => {
+  it("returns the plain brand title as the document default", () => {
+    expect(meta()).toEqual([{ title: "Spoonjoy" }]);
+  });
+});
 
 describe("root.tsx links()", () => {
   it("includes the manifest.webmanifest link", () => {

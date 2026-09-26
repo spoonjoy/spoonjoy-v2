@@ -5,6 +5,7 @@ import { getRequestDb } from "~/lib/route-platform.server";
 import { configFromRequest, finishAuthentication, WebAuthnError } from "~/lib/webauthn-route.server";
 import { authTelemetryFromContext } from "~/lib/auth-telemetry.server";
 import { enforceAuthRateLimit, rateLimitedResponse } from "~/lib/rate-limit.server";
+import { extractIdentifierFromBody, resolveIdentifierToEmail } from "~/lib/auth.server";
 
 export async function action({ request, context }: Route.ActionArgs) {
   const env = context.cloudflare?.env;
@@ -14,20 +15,23 @@ export async function action({ request, context }: Route.ActionArgs) {
     return rateLimitedResponse(rateLimit.retryAfterSeconds);
   }
 
-  let body: { email?: string; response?: AuthenticationResponseJSON; redirectTo?: string };
+  let body: { identifier?: string; email?: string; response?: AuthenticationResponseJSON; redirectTo?: string };
   try {
     body = (await request.json()) as typeof body;
   } catch {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
-  if (!email || !body.response) {
-    return Response.json({ error: "Email and authentication response are required" }, { status: 400 });
+  const identifier = extractIdentifierFromBody(body);
+  if (!identifier || !body.response) {
+    return Response.json({ error: "Username or email and authentication response are required" }, { status: 400 });
   }
 
   try {
     const db = await getRequestDb(context);
+    // Same identifier resolution as the options route, so a chef who typed
+    // a username there can complete verification with that same username.
+    const email = await resolveIdentifierToEmail(db, identifier);
     const result = await finishAuthentication(
       db,
       email,

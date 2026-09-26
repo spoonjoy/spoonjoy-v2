@@ -91,12 +91,15 @@ describe('SpoonDock', () => {
   })
 
   describe('surface styling', () => {
-    it('uses a translucent liquid-glass material instead of a solid fill', () => {
+    it('uses a near-opaque charcoal surface so labels stay readable over any content', () => {
       render(<SpoonDock />)
       const nav = screen.getByRole('navigation')
       expect(nav.className).toMatch(/backdrop-blur/)
-      expect(nav.className).toContain('bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_72%,transparent)]')
-      expect(nav.className).toContain('supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_62%,transparent)]')
+      // 95% charcoal keeps the labels and icons at WCAG AA even over white
+      // page content, whether or not backdrop-filter is supported, so there is
+      // no thinner supports-[backdrop-filter] fill.
+      expect(nav.className).toContain('bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_95%,transparent)]')
+      expect(nav.className).not.toContain('supports-[backdrop-filter]:bg-')
       expect(nav.className).toContain('shadow-[0_18px_60px_rgba(31,26,20,0.28),inset_0_1px_0_color-mix(in_srgb,var(--sj-on-photo)_24%,transparent)]')
     })
 

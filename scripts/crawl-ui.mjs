@@ -62,7 +62,7 @@ async function login(page, baseUrl) {
   if (!email || !password) return false
 
   await page.goto(new URL('/login', baseUrl).toString(), { waitUntil: 'domcontentloaded' })
-  await page.locator('input[name="email"]:visible').fill(email)
+  await page.locator('input[name="identifier"]:visible').fill(email)
   await page.locator('input[name="password"]:visible').fill(password)
   await Promise.all([
     page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15000 }).catch(() => null),

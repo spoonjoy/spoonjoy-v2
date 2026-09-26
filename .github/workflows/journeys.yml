@@ -1,0 +1,139 @@
+name: Journeys
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  PRISMA_HIDE_UPDATE_MESSAGE: "1"
+  SPOONJOY_JOURNEYS_BASE_URL: https://spoonjoy-v2-qa.mendelow-studio.workers.dev
+  SPOONJOY_QA_CREDENTIALS: ${{ github.workspace }}/.journeys/credentials.json
+
+jobs:
+  fork-notice:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "::warning::Journeys need QA credentials and do not run for fork pull requests. A maintainer must re-run them from a same-repo branch."
+
+  journeys:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    name: journeys
+    runs-on: ubuntu-latest
+    # One journeys run at a time against the shared QA mirror. This sits on the job, not the
+    # workflow, so the fork-notice job never takes the group's pending slot. GitHub keeps only
+    # one pending run per concurrency group, so a newer run can cancel an older pending one
+    # (cancel-in-progress: false only protects the run that is already going). A cancelled
+    # pull request run is re-triggered by the next push or a manual re-run.
+    concurrency:
+      group: qa-environment
+      cancel-in-progress: false
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+
+      - name: Require Cloudflare credentials
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are required. Journeys fail closed."
+            exit 1
+          fi
+
+      - name: Activate pnpm
+        run: |
+          node scripts/warning-gate.ts -- corepack enable
+          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate
+
+      - name: Install dependencies
+        run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: node scripts/warning-gate.ts -- pnpm prisma:generate
+
+      - name: Check journey house rules
+        run: node scripts/warning-gate.ts -- pnpm run check:journeys
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium webkit
+
+      - name: Deploy this build to QA
+        run: pnpm run deploy:qa
+
+      - name: Seed the QA kitchen
+        run: |
+          mkdir -p .journeys
+          pnpm run seed:qa:kitchen -- --credentials-out "$SPOONJOY_QA_CREDENTIALS"
+          for p in chef friend newbie; do
+            echo "::add-mask::$(jq -r ".${p}.password" "$SPOONJOY_QA_CREDENTIALS")"
+          done
+
+      - name: Run journeys
+        run: pnpm run test:journeys
+
+      # The report and traces can contain this run's persona passwords, so re-seed with fresh
+      # passwords that nobody keeps (no --credentials-out) before anything is uploaded. Every
+      # password in the artifact is then already dead. Runs even if the journeys failed; if the
+      # seed step never ran, re-seeding is harmless.
+      - name: Rotate persona passwords
+        id: rotate-passwords
+        if: always()
+        run: pnpm run seed:qa:kitchen
+
+      - name: Clean up disposable QA data
+        if: always()
+        run: node scripts/warning-gate.ts -- pnpm run cleanup:remote:qa:apply
+
+      - name: Remove credentials and session files
+        if: always()
+        run: rm -rf .journeys e2e/.auth/journeys-*.json
+
+      # Sessions are stateless 30-day cookies keyed only by user id: they survive re-seeding
+      # and logout, so rotating passwords does not revoke them. Remove the network log (every
+      # Cookie / Set-Cookie / Authorization header, plus the request and response bodies only
+      # it references) from every trace, including the copies inside the HTML report, and
+      # redact storage-state and cookie values from the remaining trace events. Fails if a
+      # network entry or unredacted value is left.
+      - name: Strip network logs from traces
+        id: strip-traces
+        if: always()
+        run: node scripts/sanitize-journey-traces.mjs test-results journeys-report
+
+      # The artifact is public to any signed-in GitHub user. It can contain:
+      #   - journeys-report/: the HTML report, whose step titles include typed values (the
+      #     persona passwords), plus failure screenshots, videos, error context and copies of
+      #     the failure traces;
+      #   - test-results/: per-failure traces, videos, screenshots and error context.
+      # Traces keep the action log (with typed values), DOM snapshots, screencast frames and
+      # test source. It is safe to publish because (1) "Rotate persona passwords" has already
+      # replaced every password it contains, and (2) "Strip network logs from traces" has
+      # removed network logs and redacted session cookies and storage state from every trace.
+      # Upload runs only if both steps succeeded; the credentials file and session files are
+      # deleted above and are never in the uploaded paths.
+      - name: Upload journeys report
+        if: ${{ !cancelled() && steps.rotate-passwords.outcome == 'success' && steps.strip-traces.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: journeys-report
+          path: |
+            journeys-report/
+            test-results/
+          retention-days: 30

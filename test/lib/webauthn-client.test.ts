@@ -122,11 +122,11 @@ describe("authenticatePasskey", () => {
     expect(result).toEqual({ ok: true, redirectTo: "/recipes" });
     const optionsCall = fetchImpl.mock.calls[0];
     expect(optionsCall[0]).toBe("/auth/webauthn/authenticate/options");
-    expect(JSON.parse(optionsCall[1].body)).toEqual({ email: "chef@example.com" });
+    expect(JSON.parse(optionsCall[1].body)).toEqual({ identifier: "chef@example.com" });
     expect(startAuthentication).toHaveBeenCalledWith({ optionsJSON: { challenge: "ac" } });
     const verifyCall = fetchImpl.mock.calls[1];
     expect(JSON.parse(verifyCall[1].body)).toEqual({
-      email: "chef@example.com",
+      identifier: "chef@example.com",
       response: { id: "assertion" },
       redirectTo: "/recipes",
     });

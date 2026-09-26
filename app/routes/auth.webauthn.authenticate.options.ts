@@ -3,6 +3,7 @@ import { getRequestDb } from "~/lib/route-platform.server";
 import { configFromRequest, startAuthentication } from "~/lib/webauthn-route.server";
 import { authTelemetryFromContext } from "~/lib/auth-telemetry.server";
 import { enforceAuthRateLimit, rateLimitedResponse } from "~/lib/rate-limit.server";
+import { extractIdentifierFromBody, resolveIdentifierToEmail } from "~/lib/auth.server";
 
 export async function action({ request, context }: Route.ActionArgs) {
   const rateLimit = await enforceAuthRateLimit(request, context.cloudflare?.env?.AUTH_IP_RATE_LIMITER);
@@ -10,20 +11,28 @@ export async function action({ request, context }: Route.ActionArgs) {
     return rateLimitedResponse(rateLimit.retryAfterSeconds);
   }
 
-  let body: { email?: string };
+  let body: { identifier?: string; email?: string };
   try {
-    body = (await request.json()) as { email?: string };
+    body = (await request.json()) as { identifier?: string; email?: string };
   } catch {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
-  if (!email) {
-    return Response.json({ error: "Email is required" }, { status: 400 });
+  const identifier = extractIdentifierFromBody(body);
+  if (!identifier) {
+    return Response.json({ error: "Username or email is required" }, { status: 400 });
   }
 
   try {
     const db = await getRequestDb(context);
+
+    // startAuthentication itself only looks up by email, so a username is
+    // resolved to its account's email first (same lookup shape as
+    // authenticateUserByEmailOrUsername); an unknown username resolves to
+    // nothing and falls through to startAuthentication's existing "unknown
+    // user" behavior (empty allow list, no error) unchanged.
+    const email = await resolveIdentifierToEmail(db, identifier);
+
     const options = await startAuthentication(
       db,
       email,

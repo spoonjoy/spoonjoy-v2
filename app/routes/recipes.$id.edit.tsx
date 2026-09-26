@@ -46,6 +46,19 @@ interface ActionData {
   success?: boolean;
 }
 
+export function meta({ data }: Route.MetaArgs) {
+  if (!data) {
+    return [
+      { title: "Edit recipe - Spoonjoy" },
+      { name: "description", content: "Edit this Spoonjoy recipe." },
+    ];
+  }
+  return [
+    { title: `Edit ${data.recipe.title} - Spoonjoy` },
+    { name: "description", content: `Edit "${data.recipe.title}" on Spoonjoy.` },
+  ];
+}
+
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const { id } = params;

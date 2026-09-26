@@ -182,9 +182,10 @@ describe("WebAuthn routes", () => {
       expect(res.status).toBe(429);
     });
 
-    it("400s without an email", async () => {
+    it("400s without an identifier", async () => {
       const res = await authenticateOptions(routeArgs(jsonRequest("https://spoonjoy.app/auth/webauthn/authenticate/options", {})));
       expect(res.status).toBe(400);
+      await expect(res.json()).resolves.toEqual({ error: "Username or email is required" });
     });
 
     it("400s on invalid JSON", async () => {
@@ -197,7 +198,7 @@ describe("WebAuthn routes", () => {
       expect(res.status).toBe(400);
     });
 
-    it("returns options for a known email", async () => {
+    it("returns options for a known email via the legacy email field", async () => {
       const user = await db.user.create({ data: createTestUser() });
       vi.mocked(buildAuthenticationOptions).mockResolvedValue({ challenge: "ac" } as never);
       const res = await authenticateOptions(routeArgs(jsonRequest(
@@ -206,6 +207,63 @@ describe("WebAuthn routes", () => {
       )));
       expect(res.status).toBe(200);
       await expect(res.json()).resolves.toEqual({ challenge: "ac" });
+    });
+
+    it("returns options for a known email via the identifier field", async () => {
+      // Email is an explicit lowercase literal (not the raw createTestUser()
+      // faker email, which faker mixes case in) so toUpperCase()/resolution
+      // round-trips to the exact stored value regardless of DB collation.
+      const user = await db.user.create({
+        data: { ...createTestUser(), email: "known-email-identifier@example.com" },
+      });
+      await db.userCredential.create({
+        data: { id: "vc-known-email", userId: user.id, publicKey: new Uint8Array([7]), counter: 2n },
+      });
+      vi.mocked(buildAuthenticationOptions).mockResolvedValue({ challenge: "ac" } as never);
+      const res = await authenticateOptions(routeArgs(jsonRequest(
+        "https://spoonjoy.app/auth/webauthn/authenticate/options",
+        { identifier: user.email.toUpperCase() },
+      )));
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({ challenge: "ac" });
+      // The account's own credential reached the options builder — proves the
+      // identifier resolved to this specific user, not merely to "some" user.
+      expect(vi.mocked(buildAuthenticationOptions).mock.calls[0][1]).toEqual([
+        { id: "vc-known-email", publicKey: new Uint8Array([7]), counter: 2n, transports: null },
+      ]);
+    });
+
+    it("returns options for a known username via the identifier field", async () => {
+      const user = await db.user.create({ data: createTestUser() });
+      await db.userCredential.create({
+        data: { id: "vc-known-username", userId: user.id, publicKey: new Uint8Array([9]), counter: 3n },
+      });
+      vi.mocked(buildAuthenticationOptions).mockResolvedValue({ challenge: "ac" } as never);
+      const res = await authenticateOptions(routeArgs(jsonRequest(
+        "https://spoonjoy.app/auth/webauthn/authenticate/options",
+        { identifier: user.username },
+      )));
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({ challenge: "ac" });
+      // Resolved to the account's real email before calling startAuthentication
+      // — proven by this account's own credential reaching the options
+      // builder. An unresolved username (or one resolved to the wrong
+      // account) would produce an empty or different allow-list instead, as
+      // the unknown-username test below demonstrates.
+      expect(vi.mocked(buildAuthenticationOptions).mock.calls[0][1]).toEqual([
+        { id: "vc-known-username", publicKey: new Uint8Array([9]), counter: 3n, transports: null },
+      ]);
+    });
+
+    it("keeps the unknown-user behaviour for an unknown username (no enumeration)", async () => {
+      vi.mocked(buildAuthenticationOptions).mockResolvedValue({ challenge: "ac" } as never);
+      const res = await authenticateOptions(routeArgs(jsonRequest(
+        "https://spoonjoy.app/auth/webauthn/authenticate/options",
+        { identifier: "no_such_chef_anywhere" },
+      )));
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({ challenge: "ac" });
+      expect(vi.mocked(buildAuthenticationOptions).mock.calls[0][1]).toEqual([]);
     });
 
     it("falls back when authentication option orchestration throws a non-Error", async () => {
@@ -241,20 +299,23 @@ describe("WebAuthn routes", () => {
       expect(res.status).toBe(429);
     });
 
-    it("400s without email + response", async () => {
+    it("400s without a response even when an identifier is present", async () => {
       const res = await authenticateVerify(routeArgs(jsonRequest("https://spoonjoy.app/auth/webauthn/authenticate/verify", { email: "x@example.com" })));
       expect(res.status).toBe(400);
     });
 
-    it("400s without email even when a response is present", async () => {
+    it("400s without an identifier even when a response is present", async () => {
       const res = await authenticateVerify(routeArgs(jsonRequest(
         "https://spoonjoy.app/auth/webauthn/authenticate/verify",
         { response: { id: "vc" } },
       )));
       expect(res.status).toBe(400);
+      await expect(res.json()).resolves.toEqual({
+        error: "Username or email and authentication response are required",
+      });
     });
 
-    it("mints a session cookie on a verified passkey", async () => {
+    it("mints a session cookie on a verified passkey via the legacy email field", async () => {
       const user = await db.user.create({
         data: { ...createTestUser(), email: "passkey-login@example.com", webAuthnChallenge: "ac" },
       });
@@ -264,6 +325,38 @@ describe("WebAuthn routes", () => {
       const res = await authenticateVerify(routeArgs(jsonRequest(
         "https://spoonjoy.app/auth/webauthn/authenticate/verify",
         { email: user.email, response: { id: "vc" }, redirectTo: "/recipes" },
+      )));
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Set-Cookie") ?? "").toContain("__session=");
+      await expect(res.json()).resolves.toMatchObject({ verified: true, redirectTo: "/recipes" });
+    });
+
+    it("mints a session cookie on a verified passkey via the identifier field (email)", async () => {
+      const user = await db.user.create({
+        data: { ...createTestUser(), email: "passkey-identifier-email@example.com", webAuthnChallenge: "ac" },
+      });
+      await db.userCredential.create({ data: { id: "vc-id-email", userId: user.id, publicKey: new Uint8Array([1]), counter: 1n } });
+      vi.mocked(verifyAuthentication).mockResolvedValue({ verified: true, authenticationInfo: { newCounter: 2 } } as never);
+
+      const res = await authenticateVerify(routeArgs(jsonRequest(
+        "https://spoonjoy.app/auth/webauthn/authenticate/verify",
+        { identifier: user.email.toUpperCase(), response: { id: "vc-id-email" }, redirectTo: "/recipes" },
+      )));
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Set-Cookie") ?? "").toContain("__session=");
+      await expect(res.json()).resolves.toMatchObject({ verified: true, redirectTo: "/recipes" });
+    });
+
+    it("mints a session cookie on a verified passkey via a username identifier", async () => {
+      const user = await db.user.create({
+        data: { ...createTestUser(), email: "passkey-username-login@example.com", webAuthnChallenge: "ac" },
+      });
+      await db.userCredential.create({ data: { id: "vc-username", userId: user.id, publicKey: new Uint8Array([1]), counter: 1n } });
+      vi.mocked(verifyAuthentication).mockResolvedValue({ verified: true, authenticationInfo: { newCounter: 2 } } as never);
+
+      const res = await authenticateVerify(routeArgs(jsonRequest(
+        "https://spoonjoy.app/auth/webauthn/authenticate/verify",
+        { identifier: user.username, response: { id: "vc-username" }, redirectTo: "/recipes" },
       )));
       expect(res.status).toBe(200);
       expect(res.headers.get("Set-Cookie") ?? "").toContain("__session=");

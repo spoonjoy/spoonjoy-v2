@@ -18,6 +18,16 @@ Ongoing feedback and improvements are tracked in `feedback/YYYY-MM-DD.md` files.
 
 **General rule**: Always prefer Cloudflare services when possible.
 
+## Validation
+
+Spoonjoy is built for agentic developers end to end, and so is its validation.
+
+- **App behaviour is validated only in CI, against the QA mirror.** The `Journeys` workflow (`.github/workflows/journeys.yml`) deploys each pull request to `spoonjoy-v2-qa` (its own Worker, D1 `spoonjoy-qa`, R2 `spoonjoy-photos-qa`, cook-session Durable Object, production mode), seeds it, and runs the journeys in `e2e/journeys/` on iPhone WebKit and desktop Chrome. Do not run the app, `wrangler dev` or Playwright on your machine to check behaviour; it is not the real stack and it wastes time. Unit tests may run locally for a fast red/green loop.
+- **Journeys test outcomes, not renders.** A step passes only when its result survives a reload or shows up on another page. Tests that change data are tagged `@mutates` and must call `verifyAfterReload`. `pnpm run check:journeys` enforces this and also forbids retries, clicks inside loops, array callbacks or `toPass`, assertions inside `if`, and skipped, `fixme`, `fail` or `only` journeys. Flaky is failing, and a skipped journey is a hidden failure.
+- **QA has permanent personas** seeded by `scripts/seed-qa-kitchen.mjs`: `qa_kitchen_chef` (recipes, cookbooks, shopping list), `qa_kitchen_friend` (public recipes to search, save and fork) and `qa_kitchen_newbie` (empty). Their passwords are regenerated on every run and never stored; CI signs in with them. Add data a journey needs to the seed rather than creating it ad hoc.
+- **Every bug becomes a failing journey step first**, then a fix. Read failures from the workflow's `journeys-report` artifact (traces, video, screenshots).
+- **Coverage is not validation.** The 100% unit-coverage rule below still applies, but green coverage says nothing about whether a user can use the app.
+
 ## Project Structure
 
 ```
@@ -41,13 +51,14 @@ prisma/
 
 ## Development Commands
 
+Local commands are for writing code and running unit tests. App behaviour is validated only by the `Journeys` workflow in CI (see Validation above), so do not start the app locally to check it.
+
 ```bash
-npm run dev          # Start dev server (localhost:5173)
-npm run build        # Production build
-npm run test         # Run tests (Vitest)
-npm run test:ui      # Vitest UI mode
-npm run test:coverage # Coverage report
-npm run prisma:studio # Database GUI
+npm run test          # Run unit tests (Vitest, watch mode)
+npm run test:ui       # Vitest UI mode
+npm run test:coverage # Unit test coverage report
+npm run typecheck     # Type-check the code
+npm run build         # Production build, to check the app compiles
 ```
 
 ## Work Suite Autopilot
@@ -130,10 +141,9 @@ npm test              # Watch mode
 npm run test:coverage # With coverage
 ```
 
-### Manual/Smoke Data Hygiene
-- Never leave Codex-created smoke, manual QA, or browser-test recipes/users/cookbooks in local, staging, or production Spoonjoy data.
-- Prefer automated tests with `cleanupDatabase()` over manual app flows. When a live/manual flow is necessary, use clearly disposable names such as `codex-smoke-*` or `e2e *` and clean them in the same run before reporting completion.
-- Run `pnpm cleanup:qa` before and after manual/e2e cleanup work to inspect local disposable residue; use `pnpm cleanup:qa -- --apply` only for local D1 cleanup. Never use this cleanup path against remote D1.
+### Disposable Data Hygiene
+- Never leave agent-created recipes, users or cookbooks in QA or production outside the `qa-kitchen` personas. Throwaway users use the `codex-e2e-*` / `codex_e2e_*` naming so cleanup can find them.
+- The `Journeys` workflow runs `pnpm run cleanup:remote:qa:apply` after every run. Never run cleanup with `--apply` against production.
 - `scripts/smoke-live.mjs` cleans its disposable user by default; pass `--keep-smoke-data` only when the human explicitly asks to preserve debugging data, and remove that data before the task is done.
 
 ## Git Workflow

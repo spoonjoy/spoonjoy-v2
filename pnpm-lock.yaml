@@ -208,6 +208,9 @@ importers:
       autoprefixer:
         specifier: ^10.4.23
         version: 10.4.23(postcss@8.5.23)
+      axe-core:
+        specifier: 4.11.1
+        version: 4.11.1
       better-sqlite3:
         specifier: 13.0.0
         version: 13.0.0

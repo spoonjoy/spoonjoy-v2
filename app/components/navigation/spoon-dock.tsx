@@ -37,8 +37,12 @@ export function SpoonDock({
         // which still fills the width without spilling (guarded by
         // e2e/flows/spoondock-responsive.spec.ts). MobileNav grows the zones.
         centered ? null : "justify-between",
-        "rounded-full border border-[var(--sj-photo-line)] bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_72%,transparent)] p-2 max-[389px]:p-1.5 text-[var(--sj-on-photo)]",
-        "shadow-[0_18px_60px_rgba(31,26,20,0.28),inset_0_1px_0_color-mix(in_srgb,var(--sj-on-photo)_24%,transparent)] backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_62%,transparent)]",
+        // The surface is 95% charcoal with or without backdrop-filter support,
+        // so its labels and icons stay WCAG AA readable over any page content,
+        // including white (worst case: 4.7:1 for the soft sublabel in dark
+        // mode). The blur only softens the remaining 5%.
+        "rounded-full border border-[var(--sj-photo-line)] bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_95%,transparent)] p-2 max-[389px]:p-1.5 text-[var(--sj-on-photo)]",
+        "shadow-[0_18px_60px_rgba(31,26,20,0.28),inset_0_1px_0_color-mix(in_srgb,var(--sj-on-photo)_24%,transparent)] backdrop-blur-2xl backdrop-saturate-150",
         "z-50 mb-[max(1rem,env(safe-area-inset-bottom))] lg:hidden",
         className,
       )}

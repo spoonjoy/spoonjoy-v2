@@ -52,6 +52,19 @@ interface ActionData {
 
 const STEP_CONTENT_REQUIREMENT_ERROR = "Add at least 1 ingredient or 1 step output use before saving this step.";
 
+export function meta({ data }: Route.MetaArgs) {
+  if (!data) {
+    return [
+      { title: "New step - Spoonjoy" },
+      { name: "description", content: "Add a new step to a Spoonjoy recipe." },
+    ];
+  }
+  return [
+    { title: `New step · ${data.recipe.title} - Spoonjoy` },
+    { name: "description", content: `Add a new step to "${data.recipe.title}" on Spoonjoy.` },
+  ];
+}
+
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const { id } = params;

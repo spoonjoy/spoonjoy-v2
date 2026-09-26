@@ -35,6 +35,13 @@ function matchesSavedRecipeQuery(recipe: SavedRecipe, query: string) {
   ].some((value) => value?.toLowerCase().includes(needle));
 }
 
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: "Saved recipes - Spoonjoy" },
+    { name: "description", content: "Recipes you've saved on Spoonjoy." },
+  ];
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const query = normalizedQuery(request);

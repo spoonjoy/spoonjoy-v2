@@ -48,10 +48,13 @@ export function DockItem({
       // to the round tools.) The dock is an always-dark glass surface, so the
       // fill uses an on-photo accent: `--sj-brass` reads on charcoal in both
       // themes, where `--sj-action` would be dark-on-dark in light mode.
+      // Dark mode lightens brass and tomato for text on dark pages, which
+      // leaves the cream glyph at 2.2:1; deepening the fill 30% toward the
+      // dock charcoal brings it to 3.7:1 (WCAG AA for icons).
       "grid size-14 place-items-center max-[389px]:size-13",
       tone === "danger"
-        ? "bg-[var(--sj-tomato)] text-[var(--sj-on-photo)]"
-        : "bg-[var(--sj-brass)] text-[var(--sj-on-photo)]",
+        ? "bg-[var(--sj-tomato)] dark:bg-[color-mix(in_srgb,var(--sj-tomato)_70%,var(--sj-photo-charcoal))] text-[var(--sj-on-photo)]"
+        : "bg-[var(--sj-brass)] dark:bg-[color-mix(in_srgb,var(--sj-brass)_70%,var(--sj-photo-charcoal))] text-[var(--sj-on-photo)]",
     ],
     variant === "tool" && "grid w-[50px] place-items-center bg-[color-mix(in_srgb,var(--sj-on-photo)_10%,transparent)] max-[389px]:w-11",
     active && "dock-item-active",

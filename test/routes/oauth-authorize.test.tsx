@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { render, screen } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
-import OAuthAuthorize, { action, headers as authorizeHeaders, loader } from "~/routes/oauth.authorize";
+import OAuthAuthorize, { action, headers as authorizeHeaders, loader, meta } from "~/routes/oauth.authorize";
 import type { AuthorizeView } from "~/lib/oauth-routes.server";
 import { db } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
@@ -49,6 +49,64 @@ describe("oauth.authorize route", () => {
     await cleanupDatabase();
   });
   afterEach(async () => { await cleanupDatabase(); });
+
+  it("falls back to a generic authorize title when there is no view yet", () => {
+    expect(meta({ data: undefined } as any)).toEqual([
+      { title: "Authorize access - Spoonjoy" },
+      { name: "description", content: "Authorize an app to access your Spoonjoy kitchen." },
+    ]);
+  });
+
+  it("titles the consent view with the requesting app's name", () => {
+    const view: AuthorizeView = {
+      kind: "consent",
+      clientName: "Recipe Robot",
+      scope: "kitchen:read",
+      params: {
+        clientId: "client_1",
+        redirectUri: "https://example.com/callback",
+        responseType: "code",
+        state: "state",
+        scope: "kitchen:read",
+        codeChallenge: "challenge",
+        codeChallengeMethod: "S256",
+        resource: null,
+      } as any,
+      consentToken: "token",
+    };
+    expect(meta({ data: view } as any)).toEqual([
+      { title: "Authorize Recipe Robot - Spoonjoy" },
+      { name: "description", content: "Recipe Robot is requesting access to your Spoonjoy kitchen." },
+    ]);
+  });
+
+  it("falls back to a safe display name when the client has no name", () => {
+    const view: AuthorizeView = {
+      kind: "consent",
+      clientName: null,
+      scope: "kitchen:read",
+      params: {
+        clientId: "client_1",
+        redirectUri: "https://example.com/callback",
+        responseType: "code",
+        state: "state",
+        scope: "kitchen:read",
+        codeChallenge: "challenge",
+        codeChallengeMethod: "S256",
+        resource: null,
+      } as any,
+      consentToken: "token",
+    };
+    expect(meta({ data: view } as any)[0]).toEqual({ title: "Authorize This app - Spoonjoy" });
+  });
+
+  it("titles the error view as a connection problem", () => {
+    const view: AuthorizeView = { kind: "error", message: "Something went wrong." };
+    expect(meta({ data: view } as any)).toEqual([
+      { title: "Connection problem - Spoonjoy" },
+      { name: "description", content: "There was a problem with this Spoonjoy connection request." },
+    ]);
+  });
 
   async function setup(options: {
     clientName?: string;

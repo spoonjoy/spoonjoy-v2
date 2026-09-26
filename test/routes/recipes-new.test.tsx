@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { redirect } from "react-router";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
-import { loader, action } from "~/routes/recipes.new";
+import { loader, action, meta } from "~/routes/recipes.new";
 import { action as shoppingListAction } from "~/routes/shopping-list";
 import NewRecipe from "~/routes/recipes.new";
 import { createUser } from "~/lib/auth.server";
@@ -69,6 +69,13 @@ async function expectAwaitingPlaceholderCover(recipeId: string, userId: string) 
 
 describe("Recipes New Route", () => {
   let testUserId: string;
+
+  it("returns the new recipe document title", () => {
+    expect(meta({} as any)).toEqual([
+      { title: "New recipe - Spoonjoy" },
+      { name: "description", content: "Create a new Spoonjoy recipe." },
+    ]);
+  });
 
   beforeEach(async () => {
     await cleanupDatabase();

@@ -27,6 +27,13 @@ async function redirectForCode(request: Request, context: Route.LoaderArgs["cont
   throw redirect(`/agent/connect/${connection.id}?code=${encodeURIComponent(userCode)}${from === null ? "" : `&from=${encodeURIComponent(from)}`}`);
 }
 
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: "Connect an agent - Spoonjoy" },
+    { name: "description", content: "Connect an agent to your Spoonjoy kitchen." },
+  ];
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code") ?? "";

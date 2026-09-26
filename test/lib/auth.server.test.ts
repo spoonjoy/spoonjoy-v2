@@ -7,6 +7,8 @@ import {
   createUser,
   authenticateUser,
   authenticateUserByEmailOrUsername,
+  extractIdentifierFromBody,
+  resolveIdentifierToEmail,
   getUserById,
   emailExists,
   usernameExists,
@@ -216,6 +218,43 @@ describe("auth.server", () => {
       expect(compareSpy).toHaveBeenCalledWith("anyPassword", expect.stringMatching(/^\$2[ab]\$10\$/));
 
       compareSpy.mockRestore();
+    });
+  });
+
+  describe("extractIdentifierFromBody", () => {
+    it("prefers the identifier field when present", () => {
+      expect(extractIdentifierFromBody({ identifier: " chef_native ", email: "ignored@example.com" })).toBe("chef_native");
+    });
+
+    it("falls back to the legacy email field when identifier is absent", () => {
+      expect(extractIdentifierFromBody({ email: " chef@example.com " })).toBe("chef@example.com");
+    });
+
+    it("returns an empty string when neither field is a string", () => {
+      expect(extractIdentifierFromBody({})).toBe("");
+      expect(extractIdentifierFromBody({ identifier: 42 as unknown as string })).toBe("");
+    });
+  });
+
+  describe("resolveIdentifierToEmail", () => {
+    it("lowercases an email-shaped identifier without a database lookup", async () => {
+      const email = await resolveIdentifierToEmail(db, "NativeChef@EXAMPLE.com");
+      expect(email).toBe("nativechef@example.com");
+    });
+
+    it("resolves a known username to the account's real email", async () => {
+      const realEmail = faker.internet.email();
+      const username = `chef_${faker.string.alphanumeric(8)}`;
+      await createUser(db, realEmail, username, "testPassword123");
+
+      const email = await resolveIdentifierToEmail(db, username);
+
+      expect(email).toBe(realEmail.toLowerCase());
+    });
+
+    it("returns the original identifier for an unknown username (no enumeration)", async () => {
+      const email = await resolveIdentifierToEmail(db, "no_such_chef_anywhere");
+      expect(email).toBe("no_such_chef_anywhere");
     });
   });
 
