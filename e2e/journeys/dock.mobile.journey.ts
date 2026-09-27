@@ -111,12 +111,21 @@ test.describe("Dock on iPhone", () => {
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await expect(toggle).toBeFocused();
 
-    // A tap outside it closes it, and does not also open whatever is under the tap.
+    // A tap outside it closes it, and the backdrop swallows the tap: the link under it does not
+    // open. The tap lands on the centre of the kitchen's Settings link (to /account/settings),
+    // scrolled to the top of the screen so the pantry, which sits just above the dock, cannot
+    // cover it.
+    const settingsLink = page.getByRole("main").getByRole("link", { name: "Kitchen settings", exact: true });
+    await expect(settingsLink).toHaveAttribute("href", "/account/settings");
+    await settingsLink.evaluate((element) => element.scrollIntoView({ block: "start" }));
     await toggle.click();
     await expect(pantry).toBeVisible();
-    const viewport = page.viewportSize();
-    if (!viewport) throw new Error("The iPhone project always sets a viewport.");
-    await page.touchscreen.tap(viewport.width / 2, 160);
+    const settingsBox = await boxOf(settingsLink, "Kitchen settings link");
+    const pantryBox = await boxOf(pantry, "pantry");
+    expect(settingsBox.y + settingsBox.height, "Kitchen settings link's bottom edge against the pantry's top edge").toBeLessThanOrEqual(pantryBox.y);
+    await page.touchscreen.tap(settingsBox.x + settingsBox.width / 2, settingsBox.y + settingsBox.height / 2);
+    // Following the link would close the pantry only once the URL changed, so checking the URL
+    // after the pantry has closed catches a tap that went through.
     await expect(pantry).toBeHidden();
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await expect(page).toHaveURL(pathUrl("/"));
