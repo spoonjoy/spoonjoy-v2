@@ -1,12 +1,11 @@
 import type { Cookbook, PrismaClient, Recipe, RecipeCover, RecipeInCookbook } from "@prisma/client";
-import { d1Count, d1ReadBatch, groupRows, type D1ReadDatabase, type D1Row } from "~/lib/d1-read.server";
+import { d1Count, d1ReadBatch, type D1ReadDatabase, type D1Row } from "~/lib/d1-read.server";
+import { COOKBOOK_COLUMNS, mapModel, RECIPE_COVER_COLUMNS, selectColumns } from "~/lib/d1-models.server";
 import {
-  COOKBOOK_COLUMNS,
-  mapModel,
-  RECIPE_COVER_COLUMNS,
-  RECIPE_IN_COOKBOOK_COLUMNS,
-  selectColumns,
-} from "~/lib/d1-models.server";
+  COOKBOOK_PREVIEW_RECIPES,
+  cookbookPreviewQuery,
+  cookbookPreviewsById,
+} from "~/lib/cookbook-previews.server";
 
 // Reads behind the kitchen home page (`/`, `/?chef=…`). The Prisma reader is the
 // original query; the D1 reader returns the same shapes in one batch.
@@ -38,8 +37,6 @@ export interface KitchenHomeInput {
   kitchenUserWhere: KitchenUserWhere;
 }
 
-// Each cookbook card shows its newest recipes.
-const COOKBOOK_PREVIEW_RECIPES = 4;
 
 export async function readKitchenHomeWithPrisma(
   database: PrismaClient,
@@ -80,10 +77,12 @@ export async function readKitchenHomeWithPrisma(
       where: { authorId: kitchenUser.id },
       orderBy: { updatedAt: "desc" },
       include: {
-        _count: { select: { recipes: true } },
+        // A deleted recipe stays in its cookbooks, but the card neither counts nor shows it.
+        _count: { select: { recipes: { where: { recipe: { deletedAt: null } } } } },
         recipes: {
+          where: { recipe: { deletedAt: null } },
           take: COOKBOOK_PREVIEW_RECIPES,
-          orderBy: { createdAt: "desc" },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           include: {
             recipe: {
               select: {
@@ -140,7 +139,8 @@ const ACTIVE_COVER_JOIN = `LEFT JOIN "RecipeCover" rc ON rc."id" = r."activeCove
  * The kitchen home reads as one D1 batch. Every statement finds the kitchen owner through
  * the same condition, so the owner's recipes (not deleted) and cookbooks come back in the
  * same round trip as the owner. Results match `readKitchenHomeWithPrisma`, except that a
- * recipe's `covers` holds only its active cover.
+ * recipe's `covers` holds only its active cover. A cookbook card counts and previews only
+ * recipes that are not deleted, newest four first.
  */
 export async function readKitchenHomeFromD1(
   db: D1ReadDatabase,
@@ -149,7 +149,7 @@ export async function readKitchenHomeFromD1(
   const owner = kitchenUserCondition(kitchenUserWhere);
   const ownerId = `(SELECT "id" FROM "User" WHERE ${owner.sql})`;
   const coverSelect = selectColumns(RECIPE_COVER_COLUMNS, "rc", "cover_");
-  const [viewerRows, kitchenUserRows, recipeRows, cookbookRows, entryRows, entryRecipeRows] = await d1ReadBatch(db, [
+  const [viewerRows, kitchenUserRows, recipeRows, cookbookRows, previewRows] = await d1ReadBatch(db, [
     viewerId
       ? [`SELECT "id", "username", "email", "photoUrl" FROM "User" WHERE "id" = ? LIMIT 1`, viewerId]
       : [`SELECT NULL AS "id" WHERE 0`],
@@ -163,28 +163,15 @@ export async function readKitchenHomeFromD1(
     ],
     [
       `SELECT ${selectColumns(COOKBOOK_COLUMNS, "c")},
-         (SELECT COUNT(*) FROM "RecipeInCookbook" ric WHERE ric."cookbookId" = c."id") AS "recipeCount"
+         (SELECT COUNT(*) FROM "RecipeInCookbook" ric
+          JOIN "Recipe" live ON live."id" = ric."recipeId" AND live."deletedAt" IS NULL
+          WHERE ric."cookbookId" = c."id") AS "recipeCount"
        FROM "Cookbook" c
        WHERE c."authorId" = ${ownerId}
        ORDER BY c."updatedAt" DESC`,
       owner.value,
     ],
-    [
-      `SELECT ${selectColumns(RECIPE_IN_COOKBOOK_COLUMNS, "ric")}
-       FROM "RecipeInCookbook" ric
-       WHERE ric."cookbookId" IN (SELECT "id" FROM "Cookbook" WHERE "authorId" = ${ownerId})
-       ORDER BY ric."createdAt" DESC`,
-      owner.value,
-    ],
-    [
-      `SELECT r."id", r."title", r."activeCoverId", r."activeCoverVariant", r."coverMode", ${coverSelect}
-       FROM "Recipe" r ${ACTIVE_COVER_JOIN}
-       WHERE r."id" IN (
-         SELECT ric."recipeId" FROM "RecipeInCookbook" ric
-         WHERE ric."cookbookId" IN (SELECT "id" FROM "Cookbook" WHERE "authorId" = ${ownerId})
-       )`,
-      owner.value,
-    ],
+    cookbookPreviewQuery(`SELECT "id" FROM "Cookbook" WHERE "authorId" = ${ownerId}`, owner.value),
   ]);
 
   const viewerRow = viewerRows[0];
@@ -216,32 +203,13 @@ export async function readKitchenHomeFromD1(
     covers: activeCovers(row),
   }));
 
-  const entryRecipes = new Map(
-    entryRecipeRows.map((row) => [
-      requiredString(row.id, "id"),
-      {
-        id: requiredString(row.id, "id"),
-        title: requiredString(row.title, "title"),
-        ...recipeCoverFields(row),
-        covers: activeCovers(row),
-      },
-    ]),
-  );
-  const entriesByCookbook = groupRows(
-    entryRows.map((row) => mapModel(RECIPE_IN_COOKBOOK_COLUMNS, row)),
-    (entry) => entry.cookbookId,
-  );
-
+  const previews = cookbookPreviewsById(previewRows);
   const cookbooks = cookbookRows.map((row) => {
     const cookbook = mapModel(COOKBOOK_COLUMNS, row);
     return {
       ...cookbook,
       _count: { recipes: d1Count(row.recipeCount, "recipeCount") },
-      recipes: (entriesByCookbook.get(cookbook.id) ?? []).slice(0, COOKBOOK_PREVIEW_RECIPES).map((entry) => {
-        const recipe = entryRecipes.get(entry.recipeId);
-        if (!recipe) throw new Error(`D1 cookbook entry ${entry.id} has no recipe`);
-        return { ...entry, recipe };
-      }),
+      recipes: previews.get(cookbook.id) ?? [],
     };
   });
 

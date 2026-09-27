@@ -69,11 +69,16 @@ async function seedKitchen() {
   await db.recipe.create({ data: { title: "Not the owner's", chefId: other.id } });
 
   const big = await db.cookbook.create({ data: { title: "Big", authorId: owner.id, updatedAt: at(10) } });
-  for (const [index, entry] of [withCover, deleted, ...others].entries()) {
+  // The deleted recipe is the newest entry, and two entries share a timestamp: the card
+  // skips the deleted recipe and breaks the tie by id.
+  for (const [index, entry] of [withCover, ...others].entries()) {
     await db.recipeInCookbook.create({
-      data: { cookbookId: big.id, recipeId: entry.id, addedById: owner.id, createdAt: at(20 + index) },
+      data: { cookbookId: big.id, recipeId: entry.id, addedById: owner.id, createdAt: at(20 + Math.min(index, 2)) },
     });
   }
+  await db.recipeInCookbook.create({
+    data: { cookbookId: big.id, recipeId: deleted.id, addedById: owner.id, createdAt: at(29) },
+  });
   await db.cookbook.create({ data: { title: "Empty", authorId: owner.id, updatedAt: at(11) } });
   const small = await db.cookbook.create({ data: { title: "Small", authorId: owner.id, updatedAt: at(9) } });
   await db.recipeInCookbook.create({
@@ -122,8 +127,13 @@ describe("kitchen home reads", () => {
     expect(rows.recipes[2]!.covers).toHaveLength(1);
     expect(rows.recipes[0]!.covers).toEqual([]);
     expect(rows.cookbooks.map((cookbook) => [cookbook.title, cookbook._count.recipes, cookbook.recipes.length])).toEqual([
-      ["Empty", 0, 0], ["Big", 6, 4], ["Small", 1, 1],
+      ["Empty", 0, 0], ["Big", 5, 4], ["Small", 1, 1],
     ]);
+    const bigPreview = rows.cookbooks[1]!.recipes;
+    expect(bigPreview.map((entry) => entry.recipe.title)).not.toContain("Deleted");
+    // Extra 6, 7 and 8 share the newest timestamp and come highest id first.
+    const tied = bigPreview.slice(0, 3).map((entry) => entry.id);
+    expect(tied).toEqual([...tied].sort().reverse());
     expect(rows.viewer?.id).toBe(viewer.id);
   });
 
@@ -146,16 +156,21 @@ describe("kitchen home reads", () => {
     });
     const user = { id: "u", username: "chef", photoUrl: null };
     const input = { viewerId: "v", kitchenUserWhere: { id: "u" } };
-    await expect(readKitchenHomeFromD1(rowsFor([[{ ...user, email: 3 }], [user], [], [], [], []]) as never, input))
+    await expect(readKitchenHomeFromD1(rowsFor([[{ ...user, email: 3 }], [user], [], [], []]) as never, input))
       .rejects.toThrow("D1 column email is not a string");
-    await expect(readKitchenHomeFromD1(rowsFor([[], [{ ...user, photoUrl: 1 }], [], [], [], []]) as never, input))
+    await expect(readKitchenHomeFromD1(rowsFor([[], [{ ...user, photoUrl: 1 }], [], [], []]) as never, input))
       .rejects.toThrow("D1 column photoUrl is not a string");
     const cookbook = { id: "c", title: "t", authorId: "u", createdAt: 1, updatedAt: 1, recipeCount: 1 };
-    const entry = { id: "e", cookbookId: "c", recipeId: "gone", addedById: "u", createdAt: 1, updatedAt: 1 };
-    await expect(readKitchenHomeFromD1(rowsFor([[], [user], [], [cookbook], [entry], []]) as never, input))
-      .rejects.toThrow("D1 cookbook entry e has no recipe");
+    const entry = {
+      id: "e", cookbookId: "c", recipeId: "r", addedById: "u", createdAt: 1, updatedAt: 1,
+      recipe_id: "r", recipe_title: "t", recipe_activeCoverId: null, recipe_activeCoverVariant: null, recipe_coverMode: null, cover_id: null,
+    };
+    await expect(readKitchenHomeFromD1(rowsFor([[], [user], [], [cookbook], [entry]]) as never, input))
+      .rejects.toThrow("D1 column recipe_coverMode does not hold a string value");
+    await expect(readKitchenHomeFromD1(rowsFor([[], [user], [], [{ ...cookbook, recipeCount: null }], []]) as never, input))
+      .rejects.toThrow("D1 column recipeCount is not a count");
     await expect(
-      readKitchenHomeFromD1(rowsFor([[], [user], [{ id: "r", title: "t", description: null, servings: null, activeCoverId: null, activeCoverVariant: null, coverMode: null, cover_id: null }], [], [], []]) as never, input),
+      readKitchenHomeFromD1(rowsFor([[], [user], [{ id: "r", title: "t", description: null, servings: null, activeCoverId: null, activeCoverVariant: null, coverMode: null, cover_id: null }], [], []]) as never, input),
     ).rejects.toThrow("D1 column coverMode is not a string");
   });
 });
@@ -213,7 +228,7 @@ describe("kitchen home loader on a D1 binding", () => {
       request: new UndiciRequest("http://localhost:3000/", {
         headers: { Cookie: (await createUserSessionCookie(owner.id)).split(";")[0]! },
       }),
-      context: { cloudflare: { env: { DB: { ...d1.binding, batch: async () => [[], [], [], [], [], []].map((results) => ({ results })) } } } },
+      context: { cloudflare: { env: { DB: { ...d1.binding, batch: async () => [[], [], [], [], []].map((results) => ({ results })) } } } },
       params: {},
     } as never);
     expect(orphan).toMatchObject({ kitchenUser: null, viewer: null, recipes: [], cookbooks: [] });
