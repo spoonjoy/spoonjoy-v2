@@ -79,6 +79,21 @@ describe("InstallPromptCard", () => {
     expect(screen.getByRole("button", { name: /dismiss/i })).toBeInTheDocument();
   });
 
+  it("sits above the mobile dock, including the safe-area inset", () => {
+    render(<InstallPromptCard options={defaultOptions()} />);
+
+    act(() => {
+      fireInstallPromptEvent();
+    });
+
+    // The dock's top edge is max(1rem, inset) + 4.25rem from the bottom; the card's bottom edge
+    // clears it by 1rem, as the pantry does. jsdom cannot resolve env(), so this checks the
+    // offset the browser is given, not a measured position.
+    const card = screen.getByRole("region", { name: "Install Spoonjoy" });
+    expect(card).toHaveClass("fixed", "bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)]");
+    expect(card).not.toHaveClass("bottom-20");
+  });
+
   it("does not render when the PWA is already installed", () => {
     const matchMedia = vi.fn((query: string) => ({
       matches: query === "(display-mode: standalone)",
