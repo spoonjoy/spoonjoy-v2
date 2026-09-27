@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CookSessionSync,
   DEFAULT_COOK_PROGRESS,
+  clearCookProgressCache,
+  clearOtherUsersCookProgressCache,
   cookProgressChanges,
   createCookSessionClient,
   mergeCookProgress,
@@ -159,6 +161,57 @@ describe("signed-in progress cache", () => {
     }
     window.localStorage.setItem(key, JSON.stringify({ version: 1, progress: progress(), server: "bad" }));
     expect(readSyncedCookCache("user-1", "recipe-1", bounds)).toEqual({ progress: progress(), server: null });
+  });
+
+  function seedCookProgressKeys() {
+    for (const key of [
+      "spoonjoy-cook-progress:recipe-1",
+      "spoonjoy-cook-progress:user:user-1:recipe-1",
+      "spoonjoy-cook-progress:user:user-1:recipe-2",
+      "spoonjoy-cook-progress:user:user-10:recipe-1",
+      "spoonjoy-cook-progress:user:user-2:recipe-1",
+      "spoonjoy-theme",
+      "ingredient-input-mode",
+    ]) {
+      window.localStorage.setItem(key, "{}");
+    }
+  }
+
+  function storedKeys() {
+    return Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index)).sort();
+  }
+
+  it("clears every cook progress entry on sign-out and nothing else", () => {
+    seedCookProgressKeys();
+
+    clearCookProgressCache();
+
+    expect(storedKeys()).toEqual(["ingredient-input-mode", "spoonjoy-theme"]);
+  });
+
+  it("keeps only the current user's signed-in entries, and all signed-out progress", () => {
+    seedCookProgressKeys();
+
+    clearOtherUsersCookProgressCache("user-1");
+    expect(storedKeys()).toEqual([
+      "ingredient-input-mode",
+      "spoonjoy-cook-progress:recipe-1",
+      "spoonjoy-cook-progress:user:user-1:recipe-1",
+      "spoonjoy-cook-progress:user:user-1:recipe-2",
+      "spoonjoy-theme",
+    ]);
+
+    clearOtherUsersCookProgressCache(null);
+    expect(storedKeys()).toEqual(["ingredient-input-mode", "spoonjoy-cook-progress:recipe-1", "spoonjoy-theme"]);
+  });
+
+  it("clears nothing, and does not throw, when storage is unavailable", () => {
+    const localStorage = vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    expect(() => clearCookProgressCache()).not.toThrow();
+    expect(() => clearOtherUsersCookProgressCache(null)).not.toThrow();
+    localStorage.mockRestore();
   });
 
   it("tolerates unavailable storage", () => {

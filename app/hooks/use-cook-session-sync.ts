@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   CookSessionSync,
+  clearOtherUsersCookProgressCache,
   createCookSessionClient,
   normalizeCookProgress,
   readSyncedCookCache,
@@ -9,6 +10,16 @@ import {
   type CookProgressValue,
   type CookSyncStatus,
 } from "~/lib/cook-session-sync";
+
+/**
+ * App-wide: whenever the signed-in user changes (including to signed out), drops cached cook
+ * progress that belongs to any other account. Called from the root with the root loader's user.
+ */
+export function useCookProgressCacheOwner(userId: string | null): void {
+  useEffect(() => {
+    clearOtherUsersCookProgressCache(userId);
+  }, [userId]);
+}
 
 export interface UseCookSessionSyncOptions {
   recipeId: string;

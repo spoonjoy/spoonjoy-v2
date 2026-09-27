@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
-import { useCookSessionSync, type UseCookSessionSyncOptions } from "~/hooks/use-cook-session-sync";
+import { useCookProgressCacheOwner, useCookSessionSync, type UseCookSessionSyncOptions } from "~/hooks/use-cook-session-sync";
 import {
   DEFAULT_COOK_PROGRESS,
   syncedCookProgressStorageKey,
@@ -170,3 +170,25 @@ describe("useCookSessionSync", () => {
   });
 });
 
+describe("useCookProgressCacheOwner", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    window.localStorage.setItem("spoonjoy-cook-progress:recipe-1", "{}");
+    window.localStorage.setItem(syncedCookProgressStorageKey("user-1", "recipe-1"), "{}");
+    window.localStorage.setItem(syncedCookProgressStorageKey("user-2", "recipe-1"), "{}");
+  });
+
+  it("drops other accounts' cached progress when a user is signed in, and all of it once signed out", () => {
+    const { rerender } = renderHook(({ userId }: { userId: string | null }) => useCookProgressCacheOwner(userId), {
+      initialProps: { userId: "user-1" as string | null },
+    });
+
+    expect(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1"))).toBe("{}");
+    expect(window.localStorage.getItem(syncedCookProgressStorageKey("user-2", "recipe-1"))).toBeNull();
+
+    rerender({ userId: null });
+
+    expect(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1"))).toBeNull();
+    expect(window.localStorage.getItem("spoonjoy-cook-progress:recipe-1")).toBe("{}");
+  });
+});

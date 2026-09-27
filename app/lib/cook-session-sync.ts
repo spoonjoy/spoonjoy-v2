@@ -1,6 +1,7 @@
 // Cross-device cook progress for a signed-in cook: the recipe page's checklist, scale, and current
 // step are kept in the user's CookSession on the server (cook-session protocol v1) and cached in
-// this browser's localStorage so the page works offline and loads instantly.
+// this browser's localStorage so the page works offline and loads instantly. The cache is cleared
+// on sign-out (clearCookProgressCache), so the next person on a shared browser starts clean.
 //
 // Merge rule: the server holds numbered revisions. The browser remembers the last server state it
 // saw (the "base") and treats everything that differs from the base as its own pending changes.
@@ -160,6 +161,42 @@ export function parseCookServerState(value: unknown): CookServerSnapshot | null 
 // by another account (or by a signed-out visitor) on a shared browser.
 export function syncedCookProgressStorageKey(userId: string, recipeId: string): string {
   return `spoonjoy-cook-progress:user:${userId}:${recipeId}`;
+}
+
+const COOK_PROGRESS_KEY_PREFIX = "spoonjoy-cook-progress:";
+const SIGNED_IN_COOK_PROGRESS_KEY_PREFIX = "spoonjoy-cook-progress:user:";
+
+function removeLocalStorageKeys(shouldRemove: (key: string) => boolean): void {
+  try {
+    const storage = window.localStorage;
+    const keys = Array.from({ length: storage.length }, (_, index) => storage.key(index));
+    for (const key of keys) {
+      if (key !== null && shouldRemove(key)) storage.removeItem(key);
+    }
+  } catch {
+    // Unavailable storage holds nothing to clear.
+  }
+}
+
+/**
+ * Sign-out: removes every cached cook progress entry in this browser, signed-in and signed-out
+ * alike, so the next person to use it starts clean. Signed-in progress is still on the server.
+ */
+export function clearCookProgressCache(): void {
+  removeLocalStorageKeys((key) => key.startsWith(COOK_PROGRESS_KEY_PREFIX));
+}
+
+/**
+ * Removes signed-in cook progress cached for anyone but `currentUserId` (everyone when signed
+ * out). This covers the ways a session ends without the logout form: visiting /logout directly,
+ * "Sign out everywhere" or a password change on another device, and session expiry. Signed-out
+ * progress stays: it belongs to whoever is using the browser now.
+ */
+export function clearOtherUsersCookProgressCache(currentUserId: string | null): void {
+  const keep = currentUserId === null ? null : `${SIGNED_IN_COOK_PROGRESS_KEY_PREFIX}${currentUserId}:`;
+  removeLocalStorageKeys((key) =>
+    key.startsWith(SIGNED_IN_COOK_PROGRESS_KEY_PREFIX) && (keep === null || !key.startsWith(keep)),
+  );
 }
 
 export function readSyncedCookCache(
