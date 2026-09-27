@@ -1,11 +1,12 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { useLocation } from "react-router";
 
 /**
  * Keeps an uncontrolled input (`defaultValue`) in step with the page's URL-driven value.
  *
- * After each navigation (a new search, Back or Forward) the input is set to `value`, so the box
- * never shows newer text than the results below it. It does nothing on the first render and on
+ * After each navigation (a new search, Back or Forward) the input is set to `value` in the same
+ * commit that renders the new results, before the browser paints, so the box never shows
+ * different text from the results below it. It does nothing on the first render and on
  * re-renders within the same history entry, so text typed before hydration or while the page
  * sits still is left alone. The input stays uncontrolled on purpose: a controlled input would
  * wipe text typed before hydration.
@@ -19,7 +20,7 @@ export function useUrlSyncedInput(value: string) {
   const { key } = useLocation();
   const syncedKey = useRef(key);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (syncedKey.current === key) return;
     syncedKey.current = key;
     inputRef.current!.value = value;
