@@ -29,12 +29,13 @@ defaults:
 # QA is single-tenant, and runs take their turn through the FIFO queue in the qa-turn job below,
 # not through a shared concurrency group: GitHub keeps one running and one pending run per group
 # and cancels the older pending run whenever a newer one queues, which silently dropped runs.
-# The only group left is per pull request, so a newer push to a pull request replaces that pull
-# request's older run. Every other run (pushes to main, the schedule, manual runs) gets a group
-# of its own and is never cancelled.
+# The only shared group left is per pull request, and it never cancels a run in progress, so a
+# run already on QA always finishes, including its rotate and cleanup steps. A newer push to the
+# same pull request still replaces that pull request's pending run (GitHub's one-pending rule).
+# Every other run (pushes to main, the schedule, manual runs) gets a group of its own.
 concurrency:
   group: journeys-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 env:
   PRISMA_HIDE_UPDATE_MESSAGE: "1"
@@ -53,14 +54,16 @@ jobs:
       - run: echo "::warning::Journeys need QA credentials and do not run for fork pull requests. A maintainer must re-run them from a same-repo branch."
 
   # One run at a time on the shared QA mirror, first in, first out. scripts/wait-for-qa-turn.mjs
-  # waits until no active Journeys run is ahead of this one, ordered by the start of each run's
-  # current attempt and then by run id (a re-run joins the back of the queue). It fails after
-  # 90 minutes rather than proceed without its turn. The run keeps QA until it completes.
+  # waits until no other active Journeys run of this repository is ahead of this one (ordered by
+  # the start of each run's current attempt, then by run id, so a re-run joins the back of the
+  # queue) and none behind it already holds QA. Fork pull request runs never enter the queue. It
+  # fails after 90 minutes rather than proceed without its turn; the job timeout leaves 15 minutes
+  # more for checkout, setup and that clear failure message. The run keeps QA until it completes.
   qa-turn:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     name: wait for QA
     runs-on: ubuntu-latest
-    timeout-minutes: 95
+    timeout-minutes: 105
     permissions:
       actions: read
       contents: read
@@ -78,9 +81,12 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/wait-for-qa-turn.mjs
 
+  # `journeys` is the required check. It runs even when qa-turn failed or timed out (a skipped
+  # required check would count as passing) and then fails in its first step. Steps that touch QA
+  # after a failure (tail, rotate, cleanup) run only when this run actually got its turn.
   journeys:
     needs: qa-turn
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     name: journeys
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -88,6 +94,14 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
+      - name: Require this run's turn on QA
+        if: needs.qa-turn.result != 'success'
+        env:
+          QA_TURN_RESULT: ${{ needs.qa-turn.result }}
+        run: |
+          echo "::error::This run did not get its turn on QA (the wait for QA job ended as: ${QA_TURN_RESULT}). Journeys fail instead of sharing QA or reporting as skipped. Re-run once the runs ahead have finished."
+          exit 1
+
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
@@ -164,7 +178,7 @@ jobs:
       # wall and CPU time per path pattern (per-run ids collapsed to :id). No header, cookie or
       # body is copied. The raw stream is then deleted.
       - name: Stop QA Worker tail and summarise it
-        if: always()
+        if: always() && needs.qa-turn.result == 'success'
         continue-on-error: true
         run: |
           if [ -f .worker-tail/pid ]; then
@@ -232,12 +246,12 @@ jobs:
       # Runs even if the journeys failed; if the seed step never ran, re-seeding is harmless.
       - name: Rotate persona passwords
         id: rotate-passwords
-        if: always()
+        if: always() && needs.qa-turn.result == 'success'
         run: pnpm run seed:qa:kitchen -- --rotate
 
       - name: Clean up disposable QA data
         id: cleanup-qa-data
-        if: always()
+        if: always() && needs.qa-turn.result == 'success'
         run: node scripts/warning-gate.ts -- pnpm run cleanup:remote:qa:apply
 
       - name: Remove credentials and session files

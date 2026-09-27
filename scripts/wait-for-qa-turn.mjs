@@ -5,30 +5,40 @@
 // cancels the older pending run whenever a newer one queues, so with three or more branches
 // pushing, runs were silently cancelled. This is an explicit first-in, first-out queue instead.
 //
-// Queue order: every active Journeys run (status queued, in_progress, waiting, requested or
-// pending) is ordered by the start time of its current attempt (`run_started_at`, falling back
-// to `created_at` for a run that has not started), then by run id. A re-run keeps its old id but
-// gets a new `run_started_at`, so a re-run joins the back of the queue. This run waits only for
-// runs strictly ahead of it in that order, so the run at the front never waits and two runs can
-// never wait on each other. Runs behind it (including ones already waiting on this run) are
-// ignored.
+// Who is in the queue: only this repository's own Journeys runs (`head_repository` equal to
+// GITHUB_REPOSITORY) that are `queued` or `in_progress`. Fork pull request runs never deploy to
+// QA (their qa-turn and journeys jobs are skipped), so they are ignored, and this script refuses
+// to run for one. Both status lists are paginated, so an active run cannot fall out of view.
+//
+// Queue order: runs are ordered by the start time of their current attempt (`run_started_at`,
+// falling back to `created_at` for a run that has not started), then by run id. A re-run keeps
+// its old id but gets a new `run_started_at`, so a re-run joins the back of the queue.
+//
+// When this run may start: when no run is ahead of it in that order, and no run behind it
+// already holds QA. A run holds QA once its "wait for QA" job has succeeded; it keeps QA until
+// the run completes. The holder check covers a run that was pending on its pull request's
+// concurrency group and shows up late with an early start time. The run at the front never
+// waits on runs behind it unless one of them holds QA, so no two runs wait on each other.
 //
 // Failure handling: a GitHub server error or network failure is retried on the next poll; a
 // client error (for example a missing `actions: read` permission) fails at once. Once the
-// maximum wait is used up, the step fails with the runs still ahead, and never proceeds without
-// confirming its turn.
+// maximum wait is used up, the step fails, naming the runs it was waiting for, and never
+// proceeds without confirming its turn.
 //
-// Limit: one request per poll lists the 100 most recent Journeys runs. An active run older than
-// the newest 100 runs would be missed; with runs serialised on QA that does not happen.
+// API budget: two list requests per poll (more only past 100 active runs per status), plus one
+// jobs request per active run behind this one when nothing is ahead, polled every 60 s.
 //
 // Environment (set by GitHub Actions): GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_RUN_ID and,
 // optionally, GITHUB_API_URL.
 import { pathToFileURL } from "node:url";
 
 export const WORKFLOW_FILE = "journeys.yml";
-export const ACTIVE_RUN_STATUSES = ["queued", "in_progress", "waiting", "requested", "pending"];
-export const DEFAULT_POLL_MS = 30_000;
+export const LISTED_RUN_STATUSES = ["queued", "in_progress"];
+export const QA_TURN_JOB_NAME = "wait for QA";
+export const DEFAULT_POLL_MS = 60_000;
 export const DEFAULT_MAX_WAIT_MS = 90 * 60_000;
+export const PAGE_SIZE = 100;
+export const MAX_PAGES = 10;
 
 class GitHubApiError extends Error {
   constructor(status) {
@@ -47,8 +57,18 @@ export function isAheadInQueue(candidate, self) {
   return candidate.startedAt < self.startedAt || (candidate.startedAt === self.startedAt && candidate.id < self.id);
 }
 
+// Branch names and URLs of other runs end up in log lines and annotations; keep them to plain
+// characters and a bounded length.
+export function safeText(value) {
+  return String(value).replace(/[^\w./@+:-]/g, "?").slice(0, 100);
+}
+
 function describeRun(run) {
-  const details = [run.status, run.event && run.head_branch ? `${run.event} on ${run.head_branch}` : null, run.html_url]
+  const details = [
+    safeText(run.status),
+    run.event && run.head_branch ? `${safeText(run.event)} on ${safeText(run.head_branch)}` : null,
+    run.html_url ? safeText(run.html_url) : null,
+  ]
     .filter(Boolean)
     .join(", ");
   return `${run.id} (${details})`;
@@ -90,40 +110,78 @@ export async function waitForQaTurn({
     return response.json();
   }
 
-  let self;
+  let selfRun;
   try {
-    self = queueKey(await getJson(`/actions/runs/${runId}`));
+    selfRun = await getJson(`/actions/runs/${runId}`);
   } catch (error) {
     throw new Error(`Could not read this workflow run (${runId}): ${error.message}.`);
+  }
+  if (selfRun.head_repository?.full_name !== repository) {
+    const origin = selfRun.head_repository?.full_name ? safeText(selfRun.head_repository.full_name) : "an unknown repository";
+    throw new Error(`Run ${runId} is from ${origin}, not ${repository}; fork runs never deploy to QA.`);
+  }
+  const self = queueKey(selfRun);
+
+  // This repository's other queued and in-progress Journeys runs, every page.
+  async function activeRuns() {
+    const runs = new Map();
+    for (const status of LISTED_RUN_STATUSES) {
+      for (let page = 1; page <= MAX_PAGES; page += 1) {
+        const listing = await getJson(
+          `/actions/workflows/${WORKFLOW_FILE}/runs?status=${status}&per_page=${PAGE_SIZE}&page=${page}`,
+        );
+        const batch = listing.workflow_runs ?? [];
+        for (const run of batch) runs.set(run.id, run);
+        if (batch.length < PAGE_SIZE) break;
+      }
+    }
+    return [...runs.values()].filter((run) => run.id !== runId && run.head_repository?.full_name === repository);
+  }
+
+  async function holdsQa(run) {
+    const listing = await getJson(`/actions/runs/${run.id}/jobs?filter=latest&per_page=${PAGE_SIZE}`);
+    return (listing.jobs ?? []).some((job) => job.name === QA_TURN_JOB_NAME && job.conclusion === "success");
   }
 
   const startedWaiting = now();
   for (;;) {
     const waited = now() - startedWaiting;
-    let ahead = null;
+    let blocking = null;
+    let reason = null;
     let failure = null;
     try {
-      const listing = await getJson(`/actions/workflows/${WORKFLOW_FILE}/runs?per_page=100`);
-      ahead = (listing.workflow_runs ?? []).filter(
-        (run) => run.id !== runId && ACTIVE_RUN_STATUSES.includes(run.status) && isAheadInQueue(queueKey(run), self),
-      );
+      const active = await activeRuns();
+      const ahead = active.filter((run) => isAheadInQueue(queueKey(run), self));
+      if (ahead.length > 0) {
+        blocking = ahead;
+        reason = "ahead of";
+      } else {
+        blocking = [];
+        for (const run of active) {
+          if (await holdsQa(run)) blocking.push(run);
+        }
+        reason = "already on QA, behind";
+      }
     } catch (error) {
       if (error instanceof GitHubApiError && error.status < 500) {
         throw new Error(`Could not list Journeys runs: ${error.message}. The job needs the actions: read permission.`);
       }
+      // A partial answer is no answer: never proceed on it.
+      blocking = null;
       failure = error.message;
     }
 
-    if (ahead && ahead.length === 0) {
-      log(`No Journeys run is ahead of run ${runId} on QA; starting now.`);
+    if (blocking && blocking.length === 0) {
+      log(`No Journeys run is ahead of run ${runId} or on QA; starting now.`);
       return { waitedMs: waited };
     }
 
+    const described = blocking && `${blocking.length} Journeys run(s) ${reason} run ${runId}: ${blocking.map(describeRun).join("; ")}`;
     if (waited >= maxWaitMs) {
-      if (ahead) {
+      if (blocking) {
         throw new Error(
-          `Run ${runId} waited ${minutes(waited)} min for QA and ${ahead.length} Journeys run(s) are still ahead of it: ` +
-            `${ahead.map(describeRun).join("; ")}. Cancel or finish the runs ahead, then re-run this one.`,
+          `Run ${runId} waited ${minutes(waited)} min for QA and is still waiting for ${described}. ` +
+            "Cancel or finish those runs, then re-run this one.",
         );
       }
       throw new Error(
@@ -131,11 +189,7 @@ export async function waitForQaTurn({
       );
     }
 
-    log(
-      ahead
-        ? `Waiting for ${ahead.length} Journeys run(s) ahead of run ${runId} on QA: ${ahead.map(describeRun).join("; ")}`
-        : `Could not list Journeys runs (${failure}); retrying.`,
-    );
+    log(blocking ? `Waiting for ${described}` : `Could not list Journeys runs (${failure}); retrying.`);
     await sleep(pollMs);
   }
 }
