@@ -99,6 +99,10 @@ function createCleanupDatabase(path = ":memory:") {
     CREATE TABLE PushSubscription (userId TEXT NOT NULL);
     CREATE TABLE NotificationPreference (userId TEXT NOT NULL);
     CREATE TABLE ImageGenLedger (userId TEXT NOT NULL);
+    CREATE TABLE Unit (id TEXT PRIMARY KEY);
+    CREATE TABLE IngredientRef (id TEXT PRIMARY KEY);
+    CREATE TABLE Ingredient (id TEXT PRIMARY KEY, unitId TEXT REFERENCES Unit(id), ingredientRefId TEXT REFERENCES IngredientRef(id));
+    CREATE TABLE ShoppingListItem (id TEXT PRIMARY KEY, unitId TEXT REFERENCES Unit(id), ingredientRefId TEXT REFERENCES IngredientRef(id));
   `);
   return db;
 }

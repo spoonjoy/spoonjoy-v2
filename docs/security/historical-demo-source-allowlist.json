@@ -59,8 +59,8 @@
       "legacy-marco-user-id",
       "legacy-sarah-user-id"
     ],
-    "reason": "Environment-gated cleanup must name each legacy identity exactly, including the retired legacy QA seed namespace being swept from QA's D1; the pinned digest makes any expansion or unrelated source use review-visible.",
-    "sha256": "f1ca39f4452ba7a5927c76f04be372c3e35bdf77dc32656ff619a1ba7b0e9f3e"
+    "reason": "Environment-gated cleanup must name each legacy identity exactly, including the one retired seed-qa.mjs account being swept from QA's D1 by its exact id and email; the pinned digest makes any expansion or unrelated source use review-visible.",
+    "sha256": "9805b8b8377178e0fb8190bc6a29ee8c586428c565a5ba88f74da34e1b784037"
   },
   {
     "path": "test/scripts/migration-0024-remove-legacy-demo-identities.test.ts",

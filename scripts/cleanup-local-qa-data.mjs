@@ -40,20 +40,43 @@ export const SUSPICIOUS_RECIPE_WHERE = [
   "lower(title) LIKE 'codex-smoke-%'",
 ].join("\n    OR ");
 
-// The retired 'sj-qa-demo' seed namespace (superseded by the 'qa-kitchen' persona scheme; see
-// scripts/seed-qa-kitchen.mjs) left rows behind in QA's D1 that still pollute QA search and
-// recipe lists. Match its accounts by id, username, or email prefix so every row they own is
-// swept through the same FK-safe cascade below. Never matches 'qa-kitchen-%'/'qa_kitchen_%'.
-export const LEGACY_QA_DEMO_ID_PREFIX = "sj-qa-demo-";
-export const LEGACY_QA_DEMO_USERNAME_PREFIX = "sj_qa_demo_";
-export const LEGACY_QA_DEMO_EMAIL_PREFIX = "sj-qa-demo-";
+// The retired seed-qa.mjs (superseded by the 'qa-kitchen' persona scheme; see
+// scripts/seed-qa-kitchen.mjs) left exactly one account behind in QA's D1 that still pollutes
+// QA search and recipe lists (see git show 39979853:scripts/seed-qa.mjs for the source). Name
+// this one legacy identity exactly, the same way the other fixed legacy ids above are named,
+// rather than sweeping by prefix: a prefix match would also catch any future, unrelated
+// look-alike account (e.g. a real 'sj_qa_demo_ari'). Never matches 'qa-kitchen-%'/'qa_kitchen_%'.
+export const LEGACY_QA_DEMO_USER_ID = "sj-qa-demo-chef";
+export const LEGACY_QA_DEMO_EMAIL = "sj-qa-demo-chef@example.com";
+
+// The same retired seed also left two shared reference rows (Unit/IngredientRef are shared,
+// name-unique tables, not owned by a single user) behind for its one disposable recipe's one
+// ingredient line. Once that recipe (and, by ON DELETE CASCADE, its RecipeStep and Ingredient
+// rows) is gone, these become orphaned and safe to drop -- but only when nothing else has since
+// come to reference the exact same row, since Unit/IngredientRef are shared across recipes.
+export const LEGACY_QA_DEMO_UNIT_ID = "sj-qa-demo-unit-cup";
+export const LEGACY_QA_DEMO_INGREDIENT_REF_ID = "sj-qa-demo-ingredient-rice";
 
 export const DISPOSABLE_USER_WHERE = [
   "id IN ('demo_user_001', 'user_demo', 'user_julia', 'user_marco', 'user_sarah')",
   "(email LIKE 'codex-%' AND instr(username, 'codex_') = 1)",
   "(email LIKE 'e2e-passkey-%' AND instr(username, 'e2e_passkey_') = 1)",
-  `(instr(id, '${LEGACY_QA_DEMO_ID_PREFIX}') = 1 OR instr(username, '${LEGACY_QA_DEMO_USERNAME_PREFIX}') = 1 OR instr(email, '${LEGACY_QA_DEMO_EMAIL_PREFIX}') = 1)`,
+  `(id = '${LEGACY_QA_DEMO_USER_ID}' AND email = '${LEGACY_QA_DEMO_EMAIL}')`,
 ].join("\n    OR ");
+
+export function buildLegacyQaDemoOrphanReferenceCleanupSql() {
+  return `
+DELETE FROM Unit
+WHERE id = '${LEGACY_QA_DEMO_UNIT_ID}'
+  AND NOT EXISTS (SELECT 1 FROM Ingredient WHERE unitId = '${LEGACY_QA_DEMO_UNIT_ID}')
+  AND NOT EXISTS (SELECT 1 FROM ShoppingListItem WHERE unitId = '${LEGACY_QA_DEMO_UNIT_ID}');
+
+DELETE FROM IngredientRef
+WHERE id = '${LEGACY_QA_DEMO_INGREDIENT_REF_ID}'
+  AND NOT EXISTS (SELECT 1 FROM Ingredient WHERE ingredientRefId = '${LEGACY_QA_DEMO_INGREDIENT_REF_ID}')
+  AND NOT EXISTS (SELECT 1 FROM ShoppingListItem WHERE ingredientRefId = '${LEGACY_QA_DEMO_INGREDIENT_REF_ID}');
+`.trim();
+}
 
 export function photoKeyFromImageUrl(imageUrl) {
   if (typeof imageUrl !== "string" || !imageUrl.startsWith("/photos/")) return null;
@@ -958,6 +981,8 @@ WHERE id IN (SELECT id FROM hard_delete_recipes)
 
 DELETE FROM Recipe
 WHERE id IN (SELECT id FROM hard_delete_recipes);
+
+${buildLegacyQaDemoOrphanReferenceCleanupSql()}
 
 UPDATE Recipe
 SET deletedAt = COALESCE(deletedAt, CURRENT_TIMESTAMP)
