@@ -313,7 +313,8 @@ export async function readCookbookListWithPrisma(database: PrismaClient, userId:
     where: { authorId: userId },
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     include: {
-      _count: { select: { recipes: true } },
+      // A deleted recipe stays in its cookbooks, but no card counts it (as on the kitchen home).
+      _count: { select: { recipes: { where: { recipe: { deletedAt: null } } } } },
       recipes: {
         take: COOKBOOK_PREVIEW_RECIPES,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -373,15 +374,17 @@ const RECIPE_TITLE_COLUMNS: ColumnSpec<{ cookbookId: string; title: string }> = 
 
 /**
  * `/cookbooks` on D1: one batch of three statements, all filtered by the signed-in
- * user's cookbooks. As before, a card's count includes entries whose recipe was deleted,
- * while its preview and search titles skip them.
+ * user's cookbooks. A card's count, preview and search titles all skip entries whose
+ * recipe was deleted.
  */
 export async function readCookbookListFromD1(db: D1ReadDatabase, userId: string): Promise<CookbookListItem[]> {
   const userCookbookIds = `SELECT "id" FROM "Cookbook" WHERE "authorId" = ?`;
   const [cookbookRows, previewRows, titleRows] = await d1ReadBatch(db, [
     [
       `SELECT ${selectColumns(COOKBOOK_COLUMNS, "c")},
-         (SELECT COUNT(*) FROM "RecipeInCookbook" ric WHERE ric."cookbookId" = c."id") AS "recipeCount"
+         (SELECT COUNT(*) FROM "RecipeInCookbook" ric
+          JOIN "Recipe" live ON live."id" = ric."recipeId" AND live."deletedAt" IS NULL
+          WHERE ric."cookbookId" = c."id") AS "recipeCount"
        FROM "Cookbook" c
        WHERE c."authorId" = ?
        ORDER BY c."updatedAt" DESC, c."id" DESC`,

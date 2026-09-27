@@ -125,8 +125,8 @@ describe("collection reads", () => {
     }
     const [favourites, weeknight, empty] = await readCookbookListFromD1(d1.binding, chef.id);
     expect([favourites!.title, weeknight!.title, empty!.title]).toEqual(["Favourites", "Weeknight", "Empty"]);
-    // The count still includes the deleted recipe's entry, as it always has on this page.
-    expect(weeknight!._count.recipes).toBe(6);
+    // Six entries, one of them a deleted recipe: the card counts five, as the kitchen home does.
+    expect(weeknight!._count.recipes).toBe(5);
     expect(weeknight!.recipes.map((entry) => entry.recipe.title)).toHaveLength(4);
     expect(weeknight!.recipes.map((entry) => entry.recipe.title)).not.toContain("Gone Pudding");
     expect(weeknight!.searchableRecipeTitles).not.toContain("Gone Pudding");

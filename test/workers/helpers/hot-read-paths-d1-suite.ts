@@ -294,6 +294,8 @@ describe("hot read paths on Wrangler D1", () => {
       }
     }
     const [weeknights] = await readCookbookListFromD1(database(), OWNER);
+    // Seven entries, one of them a deleted recipe: counted as six, as on the kitchen home.
+    expect(weeknights!._count.recipes).toBe(6);
     expect(weeknights!.recipes.map((entry) => entry.id)).toEqual(["hot-read-entry-7", "hot-read-entry-6", "hot-read-entry-5", "hot-read-entry-4"]);
     expect(weeknights!.searchableRecipeTitles).not.toContain("Hot Read Deleted");
   });
