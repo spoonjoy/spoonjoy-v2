@@ -36,6 +36,25 @@ describe('Dialog', () => {
       })
     })
 
+    it('opens the panel in place, so its buttons never move under a tap', async () => {
+      render(
+        <Dialog open={true} onClose={() => {}}>
+          <DialogTitle>Steady Dialog</DialogTitle>
+        </Dialog>
+      )
+
+      await waitFor(() => {
+        expect(document.querySelector('[data-slot="dialog-panel"]')).toBeTruthy()
+      })
+      const classes = document.querySelector('[data-slot="dialog-panel"]')!.className.split(/\s+/)
+      // Entering only fades: no closed-state offset or scale that also applies while entering.
+      expect(classes.filter((name) => /translate|scale/.test(name) && !name.includes('data-leave:'))).toEqual([])
+      expect(classes).toContain('data-closed:opacity-0')
+      // Leaving may still slide away; nothing can be tapped by then.
+      expect(classes).toContain('data-leave:data-closed:translate-y-8')
+      expect(classes).toContain('sm:data-leave:data-closed:scale-95')
+    })
+
     it('keeps the accessible dialog wrapper sized to the viewport', async () => {
       render(
         <Dialog open={true} onClose={() => {}}>
