@@ -67,13 +67,6 @@ function capFor(kind: ImageGenKind): number {
 }
 
 /**
- * Atomically reserve one unit of the daily image-gen budget for `(userId, kind, today)`.
- * Returns true when the budget was incremented, false when the cap is reached or the
- * user no longer exists. Safe to call concurrently — when two callers race on the very
- * first consume of the day, both will succeed and the ledger ends at count=2. With a D1
- * binding it is one atomic batch; Prisma's version runs as separate queries on D1.
- */
-/**
  * A DateTime as Prisma's D1 adapter stores it: ISO 8601 text with a `+00:00` offset. The
  * ledger's unique key compares `bucketStart` as stored, so the D1 path writes the day the way
  * Prisma did on D1. It also matches the other forms a DateTime can take in SQLite (`Z` text,
@@ -132,6 +125,13 @@ async function tryConsumeImageGenQuotaOnD1(
   return increment!.changes === 1;
 }
 
+/**
+ * Atomically reserve one unit of the daily image-gen budget for `(userId, kind, today)`.
+ * Returns true when the budget was incremented, false when the cap is reached or the
+ * user no longer exists. Safe to call concurrently — when two callers race on the very
+ * first consume of the day, both will succeed and the ledger ends at count=2. With a D1
+ * binding it is one atomic batch; Prisma's version runs as separate queries on D1.
+ */
 export async function tryConsumeImageGenQuota(
   db: PrismaClient,
   userId: string,
