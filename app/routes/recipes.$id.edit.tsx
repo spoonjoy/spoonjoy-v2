@@ -34,6 +34,7 @@ import { FOOD_IMAGE_ACCEPT, RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE
 import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR, validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { createCover, getRecipeCoverImageUrl, setActiveRecipeCover } from "~/lib/recipe-cover.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
+import { runAfterRecipeSave } from "~/lib/recipe-save-follow-up.server";
 import {
   touchNativeSyncCookbooksForRecipeOperation,
   touchNativeSyncRecipeOperation,
@@ -344,6 +345,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     }
   }
 
+  // The uploaded cover, once the save has committed it. Stylization follows the save.
+  let savedCover: { id: string; imageUrl: string } | null = null;
   try {
     const d1 = requestD1(context);
     if (d1) {
@@ -357,74 +360,51 @@ export async function action({ request, params, context }: Route.ActionArgs) {
           ? { kind: "upload", coverId, imageUrl: uploadedImageUrl, createdById: userId }
           : clearImage ? { kind: "clear" } : null,
       });
-      if (uploadedImageUrl) {
-        await scheduleSpoonCoverStylization({
-          db: database,
-          userId,
-          recipeId: id,
-          coverId,
-          rawPhotoUrl: uploadedImageUrl,
-          recipeTitle: updateData.title,
-          env: cloudflareEnv,
-          bucket: photosBucket,
-          sourceType: "chef-upload",
-        });
-      }
-      return redirect(`/recipes/${id}`);
-    }
-
-    const updatedAt = new Date();
-    await database.$transaction([
-      database.recipe.update({
-        where: { id },
-        data: { ...updateData, updatedAt },
-      }),
-      touchNativeSyncCookbooksForRecipeOperation(database, id, updatedAt),
-    ]);
-
-    if (uploadedImageUrl) {
-      const uploadedCover = await createCover(database, {
-        recipeId: id,
-        imageUrl: uploadedImageUrl,
-        sourceType: "chef-upload",
-        status: "ready",
-        createdById: userId,
-        sourceImageUrl: uploadedImageUrl,
-        generationStatus: "none",
-      });
-      await setActiveRecipeCover(database, {
-        recipeId: id,
-        coverId: uploadedCover.id,
-        variant: "image",
-      });
-      await scheduleSpoonCoverStylization({
-        db: database,
-        userId,
-        recipeId: id,
-        coverId: uploadedCover.id,
-        rawPhotoUrl: uploadedImageUrl,
-        recipeTitle: updateData.title,
-        env: cloudflareEnv,
-        bucket: photosBucket,
-        sourceType: "chef-upload",
-      });
-    } else if (clearImage) {
+      if (uploadedImageUrl) savedCover = { id: coverId, imageUrl: uploadedImageUrl };
+    } else {
+      // Without a D1 binding (local development and tests) the save runs through Prisma: the
+      // fields and cookbook touch, then the uploaded cover made active, or the cleared cover.
       const updatedAt = new Date();
       await database.$transaction([
         database.recipe.update({
           where: { id },
-          data: {
-            activeCoverId: null,
-            activeCoverVariant: null,
-            coverMode: "none",
-            updatedAt,
-          },
+          data: { ...updateData, updatedAt },
         }),
         touchNativeSyncCookbooksForRecipeOperation(database, id, updatedAt),
       ]);
-    }
 
-    return redirect(`/recipes/${id}`);
+      if (uploadedImageUrl) {
+        const uploadedCover = await createCover(database, {
+          recipeId: id,
+          imageUrl: uploadedImageUrl,
+          sourceType: "chef-upload",
+          status: "ready",
+          createdById: userId,
+          sourceImageUrl: uploadedImageUrl,
+          generationStatus: "none",
+        });
+        await setActiveRecipeCover(database, {
+          recipeId: id,
+          coverId: uploadedCover.id,
+          variant: "image",
+        });
+        savedCover = { id: uploadedCover.id, imageUrl: uploadedImageUrl };
+      } else if (clearImage) {
+        const clearedAt = new Date();
+        await database.$transaction([
+          database.recipe.update({
+            where: { id },
+            data: {
+              activeCoverId: null,
+              activeCoverVariant: null,
+              coverMode: "none",
+              updatedAt: clearedAt,
+            },
+          }),
+          touchNativeSyncCookbooksForRecipeOperation(database, id, clearedAt),
+        ]);
+      }
+    }
   } catch (error) {
     const postHogConfig = cloudflareEnv
       ? resolvePostHogServerConfig(cloudflareEnv)
@@ -479,6 +459,33 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       { status: 500 }
     );
   }
+
+  // The save is committed and the saved cover points at the upload. From here a failure is
+  // captured, never answered as a failed save and never a reason to delete the upload.
+  const committedCover = savedCover;
+  if (committedCover) {
+    await runAfterRecipeSave(() => scheduleSpoonCoverStylization({
+      db: database,
+      userId,
+      recipeId: id,
+      coverId: committedCover.id,
+      rawPhotoUrl: committedCover.imageUrl,
+      recipeTitle: updateData.title,
+      env: cloudflareEnv,
+      bucket: photosBucket,
+      sourceType: "chef-upload",
+    }), {
+      env: cloudflareEnv,
+      waitUntil: context.cloudflare?.ctx?.waitUntil
+        ? context.cloudflare.ctx.waitUntil.bind(context.cloudflare.ctx)
+        : undefined,
+      distinctId: userId,
+      request,
+      surface: "recipe_edit",
+    });
+  }
+
+  return redirect(`/recipes/${id}`);
 }
 
 export default function EditRecipe() {

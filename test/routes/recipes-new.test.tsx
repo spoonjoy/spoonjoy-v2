@@ -12,6 +12,8 @@ import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "~/lib/recipe-title-uniqueness.server";
 import * as ingredientParseModule from "~/lib/ingredient-parse.server";
+import * as placeholderCoverModule from "~/lib/ai-placeholder-cover.server";
+import * as stylizationModule from "~/lib/spoon-cover-stylization.server";
 import { IngredientParseError } from "~/lib/ingredient-parse.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
@@ -861,6 +863,87 @@ describe("Recipes New Route", () => {
         expect(mockR2Bucket.delete).toHaveBeenCalledWith(uploadedKey);
       } finally {
         db.recipe.create = originalCreate;
+      }
+    });
+
+    it("keeps the upload and reports the save when stylization fails after the recipe is committed", async () => {
+      const phCalls: Array<Record<string, unknown>> = [];
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+        phCalls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(null, { status: 200 });
+      });
+      const stylization = vi.spyOn(stylizationModule, "scheduleSpoonCoverStylization")
+        .mockRejectedValue(new Error("Stylization queue unavailable"));
+      const mockR2Bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn().mockResolvedValue(undefined),
+      };
+      const scheduled: Promise<unknown>[] = [];
+      const waitUntil = vi.fn((promise: Promise<unknown>) => {
+        scheduled.push(promise);
+      });
+
+      try {
+        const formData = new UndiciFormData();
+        formData.append("title", "Committed Before Stylization");
+        formData.append("image", validImageFile("recipe.webp", "image/webp"));
+        const request = await createMultipartRequest(formData, testUserId);
+
+        const response = await action({
+          request,
+          context: {
+            cloudflare: {
+              env: { PHOTOS: mockR2Bucket, POSTHOG_KEY: "ph_test" },
+              ctx: { waitUntil },
+            },
+          },
+          params: {},
+        } as any);
+
+        const recipe = await db.recipe.findFirstOrThrow({
+          where: { chefId: testUserId, title: "Committed Before Stylization" },
+          include: { activeCover: true },
+        });
+        expect(response).toBeInstanceOf(Response);
+        expect(response.status).toBe(302);
+        expect(response.headers.get("Location")).toBe(`/recipes/${recipe.id}`);
+        expect(stylization).toHaveBeenCalledTimes(1);
+        const uploadedKey = mockR2Bucket.put.mock.calls[0][0];
+        expect(recipe.activeCover?.imageUrl).toBe(`/photos/${uploadedKey}`);
+        expect(mockR2Bucket.delete).not.toHaveBeenCalled();
+
+        await Promise.all(scheduled);
+        const exceptions = phCalls.filter((c) => c.event === "$exception").map((c) => c.properties as Record<string, unknown>);
+        expect(exceptions.map((properties) => properties.$exception_message)).toEqual(["Stylization queue unavailable"]);
+        expect(exceptions[0]).toMatchObject({ surface: "recipe_create", stage: "after_save" });
+      } finally {
+        stylization.mockRestore();
+        fetchMock.mockRestore();
+      }
+    });
+
+    it("reports the save when placeholder generation fails after the recipe is committed", async () => {
+      const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover")
+        .mockRejectedValue(new Error("Placeholder queue unavailable"));
+
+      try {
+        const request = await createFormRequest({ title: "Committed Before Placeholder" }, testUserId);
+
+        const response = await action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any);
+
+        const recipe = await db.recipe.findFirstOrThrow({
+          where: { chefId: testUserId, title: "Committed Before Placeholder" },
+        });
+        expect(response).toBeInstanceOf(Response);
+        expect(response.status).toBe(302);
+        expect(response.headers.get("Location")).toBe(`/recipes/${recipe.id}`);
+        expect(placeholder).toHaveBeenCalledTimes(1);
+      } finally {
+        placeholder.mockRestore();
       }
     });
 

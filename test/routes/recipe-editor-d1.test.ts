@@ -172,6 +172,19 @@ async function expectParity(page: Page, fields: (seeded: Seeded) => Record<strin
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
 
+/** Runs `run` with stylization scheduling failing, as a failure after the save batch would. */
+async function withFailingStylization<T>(run: () => Promise<T>) {
+  vi.doMock("~/lib/spoon-cover-stylization.server", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("~/lib/spoon-cover-stylization.server")>()),
+    scheduleSpoonCoverStylization: vi.fn().mockRejectedValue(new Error("Stylization queue unavailable")),
+  }));
+  try {
+    return await run();
+  } finally {
+    vi.doUnmock("~/lib/spoon-cover-stylization.server");
+  }
+}
+
 describe("recipe editor routes on a D1 binding", () => {
   beforeEach(async () => {
     db = await getLocalDb();
@@ -244,6 +257,44 @@ describe("recipe editor routes on a D1 binding", () => {
       expect((result as Response).status).toBe(404);
       expect(bucket.delete).toHaveBeenCalledTimes(1);
       await expect(db.recipeCover.count({ where: { recipeId: mine.recipe.id } })).resolves.toBe(0);
+    });
+  });
+
+  describe("after the save batch commits", () => {
+    it("keeps the edit page's upload the committed cover points at, and redirects, when stylization fails", async () => {
+      const mine = await seedRecipe("Saved then stylized");
+      const bucket = photos();
+      const result = await withFailingStylization(() => withD1Routes(() => act("edit", mine, () => ({
+        title: "Saved then stylized", description: "New photo", image: new File([PNG], "cover.png", { type: "image/png" }),
+      }), { DB: d1.binding, PHOTOS: bucket })));
+
+      expect(result).toBeInstanceOf(Response);
+      expect((result as Response).status).toBe(302);
+      expect((result as Response).headers.get("Location")).toBe(`/recipes/${mine.recipe.id}`);
+      expect(bucket.delete).not.toHaveBeenCalled();
+      const recipe = await db.recipe.findUniqueOrThrow({ where: { id: mine.recipe.id }, include: { activeCover: true } });
+      expect(recipe.description).toBe("New photo");
+      expect(recipe.activeCover?.imageUrl).toBe(`/photos/${bucket.put.mock.calls[0]![0]}`);
+    });
+
+    it("keeps the new recipe page's upload the committed cover points at, and redirects, when stylization fails", async () => {
+      const bucket = photos();
+      const body = form({ title: "Created then stylized", steps: "[]", image: new File([PNG], "cover.png", { type: "image/png" }) });
+      const result = await withFailingStylization(() => withD1Routes(async () => {
+        const { action } = await import("~/routes/recipes.new");
+        return action({
+          request: new UndiciRequest("http://localhost:3000/recipes/new", { method: "POST", headers: { Cookie: cookie }, body }) as never,
+          context: { cloudflare: { env: { DB: d1.binding, PHOTOS: bucket } } },
+          params: {},
+        } as never);
+      }));
+
+      const recipe = await db.recipe.findFirstOrThrow({ where: { title: "Created then stylized" }, include: { activeCover: true } });
+      expect(result).toBeInstanceOf(Response);
+      expect((result as Response).status).toBe(302);
+      expect((result as Response).headers.get("Location")).toBe(`/recipes/${recipe.id}`);
+      expect(bucket.delete).not.toHaveBeenCalled();
+      expect(recipe.activeCover?.imageUrl).toBe(`/photos/${bucket.put.mock.calls[0]![0]}`);
     });
   });
 

@@ -26,6 +26,7 @@ import { FOOD_IMAGE_ACCEPT, RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE
 import { ActiveRecipeTitleConflictError, validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { scheduleAiPlaceholderCover } from "~/lib/ai-placeholder-cover.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
+import { runAfterRecipeSave } from "~/lib/recipe-save-follow-up.server";
 import {
   IngredientParseError,
   parseIngredients,
@@ -170,13 +171,14 @@ export async function action({ request, context }: Route.ActionArgs) {
     }
   }
 
+  const trimmedTitle = title.trim();
+  const trimmedDescription = description.trim() || null;
+  const coverId = crypto.randomUUID();
+  let recipe: Awaited<ReturnType<typeof createRecipeDraft>>;
   try {
-    const trimmedTitle = title.trim();
-    const trimmedDescription = description.trim() || null;
     // The recipe, its steps and its cover (the upload, made active, or the placeholder that
     // generation fills in) are written together: on D1 as one atomic batch.
-    const coverId = crypto.randomUUID();
-    const recipe = await createRecipeDraft(database, {
+    recipe = await createRecipeDraft(database, {
       id: recipeId,
       title: trimmedTitle,
       description: trimmedDescription,
@@ -203,39 +205,6 @@ export async function action({ request, context }: Route.ActionArgs) {
           generationStatus: "processing",
         },
     }, requestD1(context));
-
-    if (uploadedImageUrl) {
-      await scheduleSpoonCoverStylization({
-        db: database,
-        userId,
-        recipeId: recipe.id,
-        coverId,
-        rawPhotoUrl: uploadedImageUrl,
-        recipeTitle: trimmedTitle,
-        env: cloudflareEnv,
-        bucket: photosBucket,
-        sourceType: "chef-upload",
-      });
-    } else {
-      const waitUntil = context.cloudflare?.ctx?.waitUntil;
-      const task = scheduleAiPlaceholderCover({
-        db: database,
-        userId,
-        recipeId: recipe.id,
-        coverId,
-        title: trimmedTitle,
-        description: trimmedDescription,
-        env: cloudflareEnv,
-        bucket: photosBucket,
-      });
-      if (waitUntil) {
-        waitUntil.call(context.cloudflare!.ctx!, task);
-      } else {
-        await task;
-      }
-    }
-
-    return redirect(`/recipes/${recipe.id}`);
   } catch (error) {
     const postHogConfig = cloudflareEnv
       ? resolvePostHogServerConfig(cloudflareEnv)
@@ -286,6 +255,52 @@ export async function action({ request, context }: Route.ActionArgs) {
       { status: 500 }
     );
   }
+
+  // The recipe and its cover are committed, and the cover may point at the upload. From here a
+  // failure is captured, never answered as a failed save and never a reason to delete the upload.
+  const createdId = recipe.id;
+  await runAfterRecipeSave(async () => {
+    if (uploadedImageUrl) {
+      await scheduleSpoonCoverStylization({
+        db: database,
+        userId,
+        recipeId: createdId,
+        coverId,
+        rawPhotoUrl: uploadedImageUrl,
+        recipeTitle: trimmedTitle,
+        env: cloudflareEnv,
+        bucket: photosBucket,
+        sourceType: "chef-upload",
+      });
+      return;
+    }
+    const waitUntil = context.cloudflare?.ctx?.waitUntil;
+    const task = scheduleAiPlaceholderCover({
+      db: database,
+      userId,
+      recipeId: createdId,
+      coverId,
+      title: trimmedTitle,
+      description: trimmedDescription,
+      env: cloudflareEnv,
+      bucket: photosBucket,
+    });
+    if (waitUntil) {
+      waitUntil.call(context.cloudflare!.ctx!, task);
+    } else {
+      await task;
+    }
+  }, {
+    env: cloudflareEnv,
+    waitUntil: context.cloudflare?.ctx?.waitUntil
+      ? context.cloudflare.ctx.waitUntil.bind(context.cloudflare.ctx)
+      : undefined,
+    distinctId: userId,
+    request,
+    surface: "recipe_create",
+  });
+
+  return redirect(`/recipes/${createdId}`);
 }
 
 export default function NewRecipe() {
