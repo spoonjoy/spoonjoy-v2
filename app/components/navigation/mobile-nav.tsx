@@ -45,7 +45,9 @@ function shouldHideDock(pathname: string, isAuthenticated: boolean) {
     return pathname === "/login" || pathname === "/signup";
   }
 
-  if (pathname === "/recipes/new" || pathname === "/cookbooks/new" || pathname.startsWith("/cookbooks/")) {
+  // Forms hide the dock; a cookbook's own page is not a form, so it keeps the dock (R-M3-2). Its
+  // inline title editor hides the dock itself (useDockSuppressed in cookbooks.$id.tsx).
+  if (pathname === "/recipes/new" || pathname === "/cookbooks/new") {
     return true;
   }
 
@@ -142,7 +144,8 @@ function rootConfig(pathname: string, search: string, isAuthenticated: boolean, 
         icon: BookOpen,
         label: "Cookbooks",
         onAction: "/cookbooks",
-        active: true,
+        // Current only on the list itself; on a cookbook's page it leads back to the list.
+        active: pathname === "/cookbooks",
       },
       primary: { id: "new-cookbook", icon: Plus, label: "+", ariaLabel: "Create cookbook", onAction: "/cookbooks/new" },
       tools: [
