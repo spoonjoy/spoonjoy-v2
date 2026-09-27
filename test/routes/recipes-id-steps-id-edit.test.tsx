@@ -3873,7 +3873,62 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
             { intent: "addIngredients", ingredientsJson: JSON.stringify(parsed) },
           ]);
         });
-        expect(screen.queryByRole("button", { name: /Add all/ })).not.toBeInTheDocument();
+        // The list clears once the request has answered success, not when it is sent.
+        await waitFor(() => {
+          expect(screen.queryByRole("button", { name: /Add all/ })).not.toBeInTheDocument();
+        });
+      });
+
+      // A rejected batch (say, one ingredient is already in the recipe) must leave the parsed
+      // list in place so it can be fixed; it used to be cleared before the server answered.
+      it("keeps the parsed list when Add All is rejected, and clears it only after success", async () => {
+        const mockData = {
+          recipe: { id: "recipe-1", title: "Test Recipe" },
+          step: { id: "step-1", stepNum: 1, stepTitle: null, description: "A step", ingredients: [] },
+          availableSteps: [],
+        };
+        const parsed = [
+          { quantity: 2, unit: "cups", ingredientName: "flour" },
+          { quantity: 1, unit: "cup", ingredientName: "rice" },
+        ];
+        let addAttempts = 0;
+
+        const Stub = createTestRoutesStub([
+          {
+            path: "/recipes/:id/steps/:stepId/edit",
+            Component: EditStep,
+            loader: () => mockData,
+            action: async ({ request }: { request: Request }) => {
+              const formData = await request.formData();
+              if (formData.get("intent") === "parseIngredients") {
+                return { parsedIngredients: parsed };
+              }
+              addAttempts += 1;
+              return addAttempts === 1
+                ? { errors: { ingredientName: "rice is already in the recipe" } }
+                : { success: true };
+            },
+          },
+        ]);
+
+        render(<Stub initialEntries={["/recipes/recipe-1/steps/step-1/edit"]} />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "+ Add Ingredient" }));
+        fireEvent.change(screen.getByPlaceholderText(/Enter ingredients/), {
+          target: { value: "2 cups flour, 1 cup rice" },
+        });
+        fireEvent.click(await screen.findByRole("button", { name: "Add all 2 ingredients to recipe" }, { timeout: 3000 }));
+
+        expect(await screen.findByText("rice is already in the recipe")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Add all 2 ingredients to recipe" })).toBeInTheDocument();
+
+        // Fix the batch and try again: this time it is added and the list clears.
+        fireEvent.click(screen.getByRole("button", { name: "Remove rice" }));
+        fireEvent.click(screen.getByRole("button", { name: "Add all 1 ingredients to recipe" }));
+        await waitFor(() => {
+          expect(screen.queryByRole("button", { name: /Add all/ })).not.toBeInTheDocument();
+        });
+        expect(addAttempts).toBe(2);
       });
 
       it("shows why an ingredient could not be added", async () => {

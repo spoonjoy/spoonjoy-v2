@@ -1,5 +1,5 @@
 import type { Route } from "./+types/recipes.$id.steps.$stepId.edit";
-import { Form, redirect, data, useActionData, useLoaderData, useSearchParams, useSubmit } from "react-router";
+import { Form, redirect, data, useActionData, useFetcher, useLoaderData, useSearchParams, useSubmit } from "react-router";
 import { getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { useEffect, useState } from "react";
@@ -524,6 +524,7 @@ export default function EditStep() {
   const [ingredientInputMode, setIngredientInputMode] = useState<IngredientInputMode>('ai');
   const [parsedIngredients, setParsedIngredients] = useState<ParsedIngredient[]>([]);
   const submit = useSubmit();
+  const addAllFetcher = useFetcher<ActionData>();
   const [searchParams, setSearchParams] = useSearchParams();
   const { showToast } = useToast();
 
@@ -537,11 +538,17 @@ export default function EditStep() {
   const usesStepsErrorId = "edit-step-uses-steps-error";
   const descriptionErrorId = "edit-step-description-error";
 
-  // Why an ingredient could not be added (invalid field or already in the recipe).
+  // Why an ingredient, or an Add All batch, could not be added (invalid field,
+  // already in the recipe, nothing to add).
+  const addAllErrors = addAllFetcher.data?.errors;
   const ingredientErrors = [
     actionData?.errors?.quantity,
     actionData?.errors?.unitName,
     actionData?.errors?.ingredientName,
+    addAllErrors?.general,
+    addAllErrors?.quantity,
+    addAllErrors?.unitName,
+    addAllErrors?.ingredientName,
   ].filter((error): error is string => Boolean(error));
   const showUsesStepsPicker = step.stepNum !== 1 && availableSteps.length > 0;
 
@@ -590,13 +597,21 @@ export default function EditStep() {
 
   const handleAddAll = (ingredients: ParsedIngredient[]) => {
     // One request for the whole batch: separate submit() calls would each
-    // cancel the navigation before them.
+    // cancel the navigation before them. Its own fetcher, so the parsed list
+    // is cleared only once this request succeeds (below).
     const formData = new FormData();
     formData.set("intent", "addIngredients");
     formData.set("ingredientsJson", JSON.stringify(ingredients));
-    submit(formData, { method: "post" });
-    setParsedIngredients([]);
+    addAllFetcher.submit(formData, { method: "post" });
   };
+
+  // A rejected batch (say, one ingredient is already in the recipe) keeps the
+  // parsed list so it can be fixed and added again.
+  useEffect(() => {
+    if (addAllFetcher.state === "idle" && addAllFetcher.data?.success) {
+      setParsedIngredients([]);
+    }
+  }, [addAllFetcher.state, addAllFetcher.data]);
 
   return (
     <CookbookPage>
