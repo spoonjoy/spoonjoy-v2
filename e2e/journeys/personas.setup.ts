@@ -17,14 +17,16 @@
 // alone performs 3 persona sign-ins + 12 scratch sign-ins (6 indices, each a base account and a
 // desktop twin) = 15 attempts, all up front, before any journey starts (Playwright runs this
 // "personas" project to completion first, as every journey project depends on it). The
-// journeys themselves add, at most, 12 more across a full run: sign-in.journey.ts's 4 login
+// journeys themselves add, at most, 14 more across a full run: sign-in.journey.ts's 4 login
 // submissions (username, email, wrong-password, and the logout test's fresh sign-in) run on
 // both the iphone-webkit and desktop-chrome device projects (it is a plain *.journey.ts, not
 // device-suffixed) for 8; round-trips.journey.ts's 1 "log in, then redirect back" submission
-// likewise runs on both devices for 2; cooking.mobile.journey.ts's 1 /signup (the only
+// likewise runs on both devices for 2; account-settings.journey.ts's 1 sign-in with the
+// password it just changed (scratch 5's base account on iPhone, its desktop twin on desktop)
+// runs on both devices for 2; cooking.mobile.journey.ts's 1 /signup (the only
 // throwaway-signup journey today) runs on iphone-webkit only for 1; and
 // sessions.desktop.journey.ts's 1 fresh scratch-6 sign-in (its second browser) runs on
-// desktop-chrome only for 1 — 8 + 2 + 1 + 1 = 12. That is a nominal 15 + 12 = 27 attempts
+// desktop-chrome only for 1 — 8 + 2 + 2 + 1 + 1 = 14. That is a nominal 15 + 14 = 29 attempts
 // across the whole run — under half of the 60/minute cap even in the worst case where every
 // attempt somehow landed in the same rolling 60-second window, so there is still headroom for
 // another sign-in-heavy journey or scratch index.

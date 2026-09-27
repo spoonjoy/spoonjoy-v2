@@ -33,7 +33,7 @@ Spoonjoy is built for agentic developers end to end, and so is its validation.
   | 2 | Cookbooks | `cookbooks.journey.ts` |
   | 3 | Shopping list (per-device twins) | `shopping-list.journey.ts`, `shopping-list.mobile.journey.ts` |
   | 4 | Social (saves, forks, cooks; per-device twins) | `social.journey.ts` |
-  | 5 | Account settings | `account-settings.journey.ts` |
+  | 5 | Account settings (per-device twins) | `account-settings.journey.ts` |
   | 6 | Sessions (revocation) | `sessions.desktop.journey.ts` |
 
   Only the New user journey signs up through `/signup` — every other data-changing journey uses its assigned scratch index. `cooking.mobile.journey.ts`'s existing throwaway `/signup` user predates this scheme and is a candidate to move onto a scratch index in a follow-up. See `personas.setup.ts` for the full sign-in budget accounting: 3 persona sign-ins + 12 scratch sign-ins per run up front, plus the journeys' own sign-ins, against QA's 60/minute cap.
