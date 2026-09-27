@@ -399,11 +399,16 @@ function RecipeIndex({
   onShare: (recipe: KitchenRecipe) => void;
 }) {
   return (
-    <aside aria-label="Recipe index" className="lg:max-h-[44rem] lg:overflow-y-auto lg:border-l lg:border-[var(--sj-border)] lg:pl-6 lg:pr-1">
+    // A <section aria-labelledby>, not <aside>: root.tsx already wraps every route in a
+    // <main> landmark, so a complementary landmark here would nest inside it and fail
+    // landmark-complementary-is-top-level. This still names its own topic (the recipe
+    // index, distinct from the "Recently Updated" hero beside it), so it keeps a labelled
+    // region instead of dropping to a plain <div>.
+    <section aria-labelledby="recipe-index-heading" className="lg:max-h-[44rem] lg:overflow-y-auto lg:border-l lg:border-[var(--sj-border)] lg:pl-6 lg:pr-1">
       <div className="flex items-end justify-between gap-4 border-b border-[var(--sj-border-strong)] pb-3">
         <div>
           <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Index</p>
-          <Subheading level={2} className="mt-1 text-2xl/8">Recipe index</Subheading>
+          <Subheading id="recipe-index-heading" level={2} className="mt-1 text-2xl/8">Recipe index</Subheading>
         </div>
         {isOwner ? <Link href="/recipes/new" className="font-sj-ui inline-flex min-h-11 items-center text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)] no-underline hover:text-[var(--sj-ink)]">New +</Link> : null}
       </div>
@@ -421,7 +426,7 @@ function RecipeIndex({
           </Text>
         </div>
       )}
-    </aside>
+    </section>
   );
 }
 

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { useNavigate } from "react-router";
 import { faker } from "@faker-js/faker";
 import { db } from "~/lib/db.server";
@@ -144,6 +144,19 @@ describe("Search Route", () => {
       expect(screen.getByText(/Try searching by ingredient/i)).toBeInTheDocument();
       expect(screen.getByText("No matches yet")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Recipes" })).toHaveAttribute("href", "/search?scope=recipes");
+      // Quick filters sits inside root.tsx's <main>, so it can't be an <aside>
+      // (complementary landmark) without nesting inside another landmark
+      // (landmark-complementary-is-top-level); it renders as a plain container instead.
+      expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+      expect(screen.getByText("Quick filters")).toBeInTheDocument();
+      // The scope switcher is in-page navigation, so it's a labelled <nav> rather than an
+      // <aside> or a bare <div>.
+      const scopeNav = screen.getByRole("navigation", { name: "Search scope" });
+      expect(within(scopeNav).getByRole("heading", { name: "Everything" })).toBeInTheDocument();
+      expect(within(scopeNav).getByRole("link", { name: "Recipes" })).toHaveAttribute(
+        "href",
+        "/search?scope=recipes",
+      );
     });
 
     it("keeps the search box in step with the results across Back and Forward", async () => {

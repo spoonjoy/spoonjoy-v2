@@ -456,6 +456,10 @@ export default function CookbookDetail() {
             recipeCount={cookbook.recipes.length}
             recipeImages={recipeImages}
             className="mx-auto w-full max-w-56 lg:max-w-none"
+            // The page's own <h1> (in CookbookHeader, just above) already is this exact
+            // title, and it renders before the "Recipes" <h2> below — a second <h3> here
+            // would skip past that <h2> and trip heading-order.
+            titleAsHeading={false}
           />
         </div>
 

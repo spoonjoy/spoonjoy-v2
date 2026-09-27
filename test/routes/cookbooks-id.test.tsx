@@ -1393,6 +1393,12 @@ describe("Cookbooks $id Route", () => {
       expect(await screen.findByRole("heading", { name: "Recipe Collection", level: 1 })).toBeInTheDocument();
       expect(screen.getAllByText("2 recipes").length).toBeGreaterThan(0);
       expect(within(screen.getByLabelText("Recipe Collection cover photos")).getByText("Editorial photo")).toBeInTheDocument();
+      // The cover art caption repeats the cookbook title visually (still present as text)
+      // but must not add a second heading: the page's h1 already is this title, and a
+      // duplicate/second heading there would appear before the "Recipes" h2 and skip a
+      // level (heading-order).
+      expect(screen.getAllByText("Recipe Collection").length).toBeGreaterThan(1);
+      expect(screen.getAllByRole("heading").map((heading) => heading.tagName)).toEqual(["H1", "H2"]);
       const recipesSection = screen.getByRole("region", { name: "Recipes" });
       expect(within(recipesSection).getByText("Editorial photo")).toBeInTheDocument();
       expect(within(recipesSection).getByRole("link", { name: "Spaghetti" })).toHaveAttribute(
