@@ -173,10 +173,10 @@ describe("useCookSessionSync", () => {
 
   it("makes no request after a 401, whatever happens next", async () => {
     fetchMock.mockImplementation(async () => jsonResponse({ error: { code: "authentication_required" } }, 401));
-    const { result, rerender, initialProps } = render();
+    const { result, rerender, initialProps, unmount } = render();
     await settle();
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(result.current).toBe("stopped");
+    expect(result.current).toBe("signed_out");
 
     rerender({ ...initialProps, progress: progress({ scaleFactor: 2 }) });
     await settle(MIN_COOK_PULL_INTERVAL_MS);
@@ -187,29 +187,32 @@ describe("useCookSessionSync", () => {
       window.dispatchEvent(new Event("pagehide"));
       await vi.advanceTimersByTimeAsync(10 * 60_000);
     });
+    unmount();
+    await settle(60_000);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     // The change is still kept on this device for the next visit.
     expect(JSON.parse(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1")) ?? "{}").progress.scaleFactor).toBe(2);
   });
 
-  it("stops without saving when another account now owns the browser's session", async () => {
+  it("stops without saving when another account now owns the browser's session, and clears the unsent changes", async () => {
     writeSyncedCookCache("user-1", "recipe-1", { progress: progress({ scaleFactor: 2 }), server: serverState(3) });
-    const cachedBefore = window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1"));
     fetchMock.mockImplementation(async () => jsonResponse({ error: { code: "user_mismatch" } }, 412));
-    const { result } = render({ progress: progress({ scaleFactor: 2 }) });
+    const { result, onRemoteProgress } = render({ progress: progress({ scaleFactor: 2 }) });
     await settle();
 
     expect(result.current).toBe("account_changed");
     expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({ "X-Spoonjoy-Cook-User": "user-1" });
-    expect(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1"))).toBe(cachedBefore);
+    // The page falls back to what was saved; this tab's cached entry for the recipe is gone.
+    expect(onRemoteProgress).toHaveBeenLastCalledWith(progress());
+    expect(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1"))).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("flushes a pending change with keepalive when the page is hidden, left, or unmounted", async () => {
+  it("flushes a pending change with keepalive when the page is hidden or closed", async () => {
     writeSyncedCookCache("user-1", "recipe-1", { progress: progress(), server: serverState(4) });
     fetchMock.mockImplementation(async () => jsonResponse({ state: serverState(4) }));
-    const { rerender, initialProps, unmount } = render();
+    const { rerender, initialProps } = render();
     await settle();
     fetchMock.mockClear();
     fetchMock.mockImplementation(async () => new Promise<Response>(() => undefined));
@@ -229,16 +232,78 @@ describe("useCookSessionSync", () => {
       window.dispatchEvent(new Event("pagehide"));
     });
     expect(keepalivePatches()).toHaveLength(2);
-
-    rerender({ ...initialProps, progress: progress({ scaleFactor: 4 }) });
-    unmount();
-    expect(keepalivePatches()).toHaveLength(3);
     // Nothing else went out while hidden, and the queue is still cached for the next visit.
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(JSON.parse(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1")) ?? "{}")).toMatchObject({
-      progress: progress({ scaleFactor: 4 }),
+      progress: progress({ scaleFactor: 3 }),
       server: serverState(4),
     });
+  });
+
+  it("leaving the recipe in the app lets a save in flight land and then sends the later change", async () => {
+    writeSyncedCookCache("user-1", "recipe-1", { progress: progress(), server: serverState(1) });
+    let finishFirstSave!: () => void;
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ state: serverState(1) }))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => {
+        finishFirstSave = () => resolve(jsonResponse({ state: serverState(2, { checkedIngredientIds: ["stock"] }) }));
+      }))
+      .mockResolvedValueOnce(jsonResponse({ state: serverState(3, { checkedIngredientIds: ["stock", "rice"] }) }));
+    const { rerender, initialProps, unmount } = render();
+    await settle();
+
+    rerender({ ...initialProps, progress: progress({ checkedIngredientIds: ["stock"] }) });
+    await settle(300);
+    rerender({ ...initialProps, progress: progress({ checkedIngredientIds: ["stock", "rice"] }) });
+    unmount();
+    await act(async () => {
+      finishFirstSave();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    const patches = fetchMock.mock.calls.filter(([, init]) => (init as RequestInit).method === "PATCH").map(([, init]) => init as RequestInit);
+    expect(patches).toHaveLength(2);
+    expect(patches.every((init) => init.keepalive === undefined)).toBe(true);
+    expect(JSON.parse(String(patches[1].body))).toMatchObject({ expectedRevision: 2, changes: { checkedIngredientIds: ["stock", "rice"] } });
+    expect(JSON.parse(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1")) ?? "{}").server.revision).toBe(3);
+  });
+
+  it("closing the tab with a save in flight sends no stale flush, and the next visit replays the queue", async () => {
+    writeSyncedCookCache("user-1", "recipe-1", { progress: progress(), server: serverState(1) });
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ state: serverState(1) }))
+      .mockImplementationOnce(() => new Promise<Response>(() => undefined));
+    const first = render();
+    await settle();
+    first.rerender({ ...first.initialProps, progress: progress({ checkedIngredientIds: ["stock"] }) });
+    await settle(300);
+    first.rerender({ ...first.initialProps, progress: progress({ checkedIngredientIds: ["stock", "rice"] }) });
+
+    await act(async () => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    // Only the load and the save in flight: no keepalive flush from the old revision.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1")) ?? "{}").progress)
+      .toEqual(progress({ checkedIngredientIds: ["stock", "rice"] }));
+    setVisibility("hidden");
+    first.unmount();
+    setVisibility("visible");
+
+    // Next visit: the save in flight had landed (revision 2, stock); the queued rice goes now.
+    fetchMock.mockReset();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ state: serverState(2, { checkedIngredientIds: ["stock"] }) }))
+      .mockResolvedValueOnce(jsonResponse({ state: serverState(3, { checkedIngredientIds: ["stock", "rice"] }) }));
+    const next = render({ progress: progress({ checkedIngredientIds: ["stock", "rice"] }) });
+    await settle();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(String((fetchMock.mock.calls[1][1] as RequestInit).body))).toMatchObject({
+      expectedRevision: 2,
+      changes: { checkedIngredientIds: ["stock", "rice"] },
+    });
+    expect(next.result.current).toBe("synced");
   });
 
   it("stops syncing when the page unmounts", async () => {

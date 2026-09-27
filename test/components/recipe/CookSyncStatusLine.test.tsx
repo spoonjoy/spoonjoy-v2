@@ -33,14 +33,18 @@ describe('CookSyncStatusLine', () => {
     expect(announcement).toHaveTextContent('You signed in as someone else in another tab. Reload to keep cooking.')
   })
 
-  it('offers a reload only when another account owns the session', () => {
+  it('offers a reload only when another account owns the session or the page is out of date', () => {
     const onReload = vi.fn()
     const { rerender } = render(<CookSyncStatusLine status="stopped" onReload={onReload} />)
+    expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull()
+    rerender(<CookSyncStatusLine status="signed_out" onReload={onReload} />)
     expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull()
 
     rerender(<CookSyncStatusLine status="account_changed" onReload={onReload} />)
     fireEvent.click(screen.getByRole('button', { name: 'Reload' }))
-    expect(onReload).toHaveBeenCalledTimes(1)
+    rerender(<CookSyncStatusLine status="update_required" onReload={onReload} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Reload' }))
+    expect(onReload).toHaveBeenCalledTimes(2)
   })
 
   it('reloads the page by default', () => {

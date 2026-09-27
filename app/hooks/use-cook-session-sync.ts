@@ -5,6 +5,7 @@ import {
   createCookSessionClient,
   normalizeCookProgress,
   readSyncedCookCache,
+  removeSyncedCookCache,
   writeSyncedCookCache,
   type CookProgressBounds,
   type CookProgressValue,
@@ -38,10 +39,12 @@ export interface UseCookSessionSyncOptions {
  *
  * The page reads the server's progress when it loads, when the tab becomes visible again, when
  * the window regains focus, and when the browser comes back online; the cook's own changes are
- * pushed shortly after each one, and flushed once (keepalive) when the page is hidden, left, or
- * unmounted. There is no timer polling: coming back to the recipe on another device (a new visit,
- * switching tabs or apps, refocusing) is what picks up that device's changes. Nothing is sent
- * while the page is hidden, except that one flush.
+ * pushed shortly after each one. Leaving the recipe inside the app lets the last saves finish
+ * (bounded); hiding the tab or closing it sends one keepalive flush when nothing is in flight, and
+ * the unsent queue always stays in the cache for the next visit. There is no timer polling:
+ * coming back to the recipe on another device (a new visit, switching tabs or apps, refocusing) is
+ * what picks up that device's changes. Nothing is sent while the page is hidden, except that one
+ * flush.
  */
 export function useCookSessionSync({
   recipeId,
@@ -67,8 +70,11 @@ export function useCookSessionSync({
       normalize: (value) => normalizeCookProgress(value, latest.current.bounds),
       onProgress: (value) => latest.current.onRemoteProgress(value),
       onChange: () => {
-        // Once another account owns the browser's session, this tab's progress is never saved.
-        if (engine.status !== "account_changed") {
+        if (engine.status === "account_changed") {
+          // Another account owns the browser's session: this tab drops its cook's unsent changes
+          // for this recipe, including anything it cached after the switch.
+          removeSyncedCookCache(userId, recipeId);
+        } else {
           writeSyncedCookCache(userId, recipeId, { progress: engine.progress, server: engine.server });
         }
         setStatus(engine.status);
@@ -94,8 +100,9 @@ export function useCookSessionSync({
     pull();
 
     return () => {
-      // Leaving the recipe: dispose sends pending changes once (keepalive) before stopping.
-      engine.dispose();
+      // Leaving the recipe inside the app: the engine finishes a save in flight and sends what is
+      // still pending (at most 10 s, only while visible), then stops. pagehide covers tab close.
+      void engine.leave();
       engineRef.current = null;
       window.removeEventListener("focus", pull);
       window.removeEventListener("online", pull);

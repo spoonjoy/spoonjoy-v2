@@ -6,10 +6,19 @@ export const COOK_SYNC_STATUS_TEXT: Record<CookSyncStatus, string> = {
   synced: 'Progress synced',
   offline: 'Progress saved on this device',
   stopped: 'Progress saved on this device',
+  signed_out: 'Signed out: progress saved on this device. Sign in again to sync it.',
   account_changed: 'You signed in as someone else in another tab. Reload to keep cooking.',
+  update_required: 'Spoonjoy has been updated. Reload to keep syncing your progress.',
 }
 
-const PROBLEM_STATUSES: ReadonlySet<CookSyncStatus> = new Set(['offline', 'stopped', 'account_changed'])
+const PROBLEM_STATUSES: ReadonlySet<CookSyncStatus> = new Set([
+  'offline',
+  'stopped',
+  'signed_out',
+  'account_changed',
+  'update_required',
+])
+const RELOAD_STATUSES: ReadonlySet<CookSyncStatus> = new Set(['account_changed', 'update_required'])
 
 export interface CookSyncStatusLineProps {
   status: CookSyncStatus
@@ -45,7 +54,7 @@ export function CookSyncStatusLine({ status, onReload = () => window.location.re
       >
         {COOK_SYNC_STATUS_TEXT[status]}
       </p>
-      {status === 'account_changed' ? (
+      {RELOAD_STATUSES.has(status) ? (
         <button
           type="button"
           onClick={onReload}
