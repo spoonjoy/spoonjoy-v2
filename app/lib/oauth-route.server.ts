@@ -15,7 +15,7 @@ import {
   SPOONJOY_APPLE_OAUTH_REDIRECT_URI,
 } from "~/lib/oauth-server.server";
 import { getCloudflareEnv } from "~/lib/route-platform.server";
-import { getOAuthSessionStorage, getUserId, sanitizeSessionRedirect, type SessionEnv } from "~/lib/session.server";
+import { getCurrentSessionIdentity, getOAuthSessionStorage, sanitizeSessionRedirect, type SessionEnv } from "~/lib/session.server";
 
 export type OAuthProvider = "google" | "github" | "apple";
 export type OAuthProviderHint = Extract<OAuthProvider, "google" | "github">;
@@ -28,6 +28,9 @@ export interface OAuthStartSessionData {
   failureRedirect: string;
   linking: boolean;
   linkingUserId?: string;
+  // Session version of the user who started linking, so a callback that falls
+  // back to linkingUserId can refuse a session revoked in the meantime.
+  linkingSessionVersion?: number;
 }
 
 const OAUTH_SESSION_PREFIX = "oauth";
@@ -212,9 +215,10 @@ export async function assertCanStartOAuthLinking(
 ) {
   if (!data.linking) return null;
 
-  const userId = await getUserId(request, env);
-  if (userId) {
-    data.linkingUserId = userId;
+  const identity = await getCurrentSessionIdentity(request, env);
+  if (identity) {
+    data.linkingUserId = identity.userId;
+    data.linkingSessionVersion = identity.sessionVersion;
     return null;
   }
 
@@ -253,6 +257,12 @@ export async function commitOAuthStartSession(
     session.unset(oauthSessionKey(provider, "linkingUserId"));
   }
 
+  if (data.linkingSessionVersion !== undefined) {
+    session.set(oauthSessionKey(provider, "linkingSessionVersion"), data.linkingSessionVersion);
+  } else {
+    session.unset(oauthSessionKey(provider, "linkingSessionVersion"));
+  }
+
   return storage.commitSession(session);
 }
 
@@ -274,6 +284,7 @@ export async function readOAuthStartSession(
   const failureRedirect = session.get(oauthSessionKey(provider, "failureRedirect"));
   const linking = session.get(oauthSessionKey(provider, "linking"));
   const linkingUserId = session.get(oauthSessionKey(provider, "linkingUserId"));
+  const linkingSessionVersion = session.get(oauthSessionKey(provider, "linkingSessionVersion"));
 
   return {
     state,
@@ -289,6 +300,7 @@ export async function readOAuthStartSession(
     ),
     linking: linking === "true",
     linkingUserId: typeof linkingUserId === "string" ? linkingUserId : undefined,
+    linkingSessionVersion: typeof linkingSessionVersion === "number" ? linkingSessionVersion : undefined,
   };
 }
 

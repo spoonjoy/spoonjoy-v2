@@ -94,6 +94,21 @@ jobs:
       - name: Deploy this build to QA
         run: pnpm run deploy:qa
 
+      # Workers-side evidence for every run: stream the QA Worker's invocation log while the
+      # suite runs, so an outcome the browser can't see (exceededCpu, exceededMemory, an
+      # exception) is on record. The raw stream holds request headers (cookies), so it stays in
+      # .worker-tail/, outside every uploaded path, and is deleted once summarised. Observability
+      # must never fail a run, so this step and the summary step are non-fatal.
+      - name: Start QA Worker tail
+        continue-on-error: true
+        run: |
+          mkdir -p .worker-tail
+          nohup ./node_modules/.bin/wrangler tail spoonjoy-v2-qa --format json \
+            > .worker-tail/tail.json 2> .worker-tail/tail.err < /dev/null &
+          echo $! > .worker-tail/pid
+          # The JSON format prints no "connected" line; give the socket a moment to open.
+          sleep 10 || true
+
       - name: Seed the QA kitchen
         run: |
           mkdir -p .journeys
@@ -111,6 +126,72 @@ jobs:
             pnpm run explore:qa
           else
             pnpm run test:journeys
+          fi
+
+      # Reduce the Worker tail to a small summary inside test-results/ (uploaded with either
+      # report): per-request outcome, path without its query, method, status, CPU and wall time
+      # when present, and exception names and messages. Only non-ok invocations, the first 20
+      # with exceptions and the 25 slowest by wall time are kept per request, plus p50/p95/max
+      # wall and CPU time per path pattern (per-run ids collapsed to :id). No header, cookie or
+      # body is copied. The raw stream is then deleted.
+      - name: Stop QA Worker tail and summarise it
+        if: always()
+        continue-on-error: true
+        run: |
+          if [ -f .worker-tail/pid ]; then
+            kill "$(cat .worker-tail/pid)" 2>/dev/null || true
+            sleep 2 || true
+            kill -9 "$(cat .worker-tail/pid)" 2>/dev/null || true
+          fi
+          mkdir -p test-results
+          if [ -f .worker-tail/tail.json ]; then
+            # Keep only the JSON events (from the first line that opens an object), and stop at
+            # a value cut off by the kill instead of failing on it.
+            sed -n '/^{/,$p' .worker-tail/tail.json | jq -c '.' > .worker-tail/events.ndjson 2>/dev/null || true
+            jq -s '
+              def request_path: (.event.request.url // "") | sub("^[A-Za-z][A-Za-z0-9+.-]*://[^/]*"; "") | sub("[?#].*$"; "");
+              def invocation: {
+                outcome: (.outcome // null),
+                path: request_path,
+                method: (.event.request.method // null),
+                status: (.event.response.status // null),
+                cpuTime: (.cpuTime // null),
+                wallTime: (.wallTime // null),
+                eventTimestamp: (.eventTimestamp // null),
+                exceptions: [(.exceptions // [])[] | { name: (.name // null), message: ((.message // "") | tostring | .[0:500]) }]
+              };
+              # A path with per-run ids collapsed to :id (cuid, uuid, number, codex-e2e user), keeping
+              # a trailing .data, so invocations of the same route group together.
+              def collapse_segment:
+                capture("^(?<base>.*?)(?<ext>\\.data)?$") as $m
+                | ($m.base
+                    | if test("^c[a-z0-9]{20,}$")
+                        or test("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+                        or test("^[0-9]+$")
+                        or test("^codex[-_]e2e[-_]")
+                      then ":id" else . end)
+                  + ($m.ext // "");
+              def path_pattern: request_path | split("/") | map(if . == "" then . else collapse_segment end) | join("/");
+              # Nearest-rank percentile over the numeric values present; null when there are none.
+              def percentile($p): if length == 0 then null else sort | .[((length - 1) * $p | floor)] end;
+              def timing($field): [.[] | .[$field] | select(type == "number")]
+                | { p50: percentile(0.5), p95: percentile(0.95), max: (if length == 0 then null else max end) };
+              {
+                totalInvocations: length,
+                outcomes: (map(.outcome // "unknown") | group_by(.) | map({ key: .[0], value: length }) | from_entries),
+                nonOkInvocations: [.[] | select((.outcome // "unknown") != "ok") | invocation],
+                firstExceptions: ([.[] | select(((.exceptions // []) | length) > 0) | invocation] | .[0:20]),
+                slowest: ([.[] | select((.wallTime | type) == "number")] | sort_by(-.wallTime) | .[0:25] | map(invocation)),
+                byPath: (group_by(path_pattern)
+                  | map({ path: (.[0] | path_pattern), count: length, wallTime: timing("wallTime"), cpuTime: timing("cpuTime") })
+                  | sort_by(-(.wallTime.p95 // 0)))
+              }
+            ' .worker-tail/events.ndjson > test-results/worker-tail-summary.json || true
+            if [ -s .worker-tail/tail.err ]; then tail -n 20 .worker-tail/tail.err || true; fi
+          fi
+          rm -rf .worker-tail
+          if [ -f test-results/worker-tail-summary.json ]; then
+            jq '{ totalInvocations, outcomes, nonOk: (.nonOkInvocations | length), slowestPaths: (.byPath | .[0:5]) }' test-results/worker-tail-summary.json || true
           fi
 
       # The report and traces can contain this run's persona and scratch-user passwords, so
@@ -132,7 +213,7 @@ jobs:
 
       - name: Remove credentials and session files
         if: always()
-        run: rm -rf .journeys e2e/.auth/journeys-*.json
+        run: rm -rf .journeys e2e/.auth/journeys-*.json .worker-tail
 
       # Sessions are stateless 30-day cookies keyed only by user id: they survive re-seeding
       # and logout, so rotating passwords does not revoke them. Remove the network log (every
@@ -153,7 +234,9 @@ jobs:
       #     typed values (the persona passwords), plus failure screenshots, videos, error
       #     context and copies of the failure traces (explore-report/ additionally holds
       #     summary.json and a full-page screenshot per route visited);
-      #   - test-results/: per-failure traces, videos, screenshots and error context.
+      #   - test-results/: per-failure traces, videos, screenshots and error context, plus
+      #     worker-tail-summary.json (Worker outcomes, paths without queries, statuses, timings and
+      #     exception names/messages only; no headers, cookies or bodies).
       # Traces keep the action log (with typed values), DOM snapshots, screencast frames and
       # test source. It is safe to publish because (1) "Rotate persona passwords" has already
       # replaced every persona password and invalidated every scratch-user password it

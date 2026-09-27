@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { render, screen } from "@testing-library/react";
-import { createTestRoutesStub } from "../utils";
+import { createTestRoutesStub, createTestUser } from "../utils";
 import { db } from "~/lib/db.server";
 import { loader, action, meta } from "~/routes/signup";
 import Signup from "~/routes/signup";
@@ -63,7 +63,8 @@ describe("Signup Route", () => {
 
     it("should redirect when user is already logged in", async () => {
       const session = await sessionStorage.getSession();
-      session.set("userId", "test-user-id");
+      const user = await db.user.create({ data: createTestUser() });
+      session.set("userId", user.id);
       const setCookieHeader = await sessionStorage.commitSession(session);
       const cookieValue = setCookieHeader.split(";")[0];
 

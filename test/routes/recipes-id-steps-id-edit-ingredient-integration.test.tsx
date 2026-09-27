@@ -786,9 +786,11 @@ describe('Step Edit Ingredient Integration', () => {
       const addAllButton = screen.getByRole('button', { name: /add all/i })
       await userEvent.click(addAllButton)
 
-      // The action should be triggered (form submission)
-      // The test stub returns success, so we verify the button was clickable
-      // In a real scenario, the ingredients would be added and the list would update
+      // The stub answers success; the parsed list clears only once that answer arrives, so wait
+      // for it rather than ending the test with the request still in flight.
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: /add all/i })).not.toBeInTheDocument()
+      })
     })
 
     it('removes parsed ingredient when remove button is clicked', async () => {

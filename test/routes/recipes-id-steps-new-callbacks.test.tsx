@@ -126,7 +126,7 @@ describe("Recipes $id Steps New callback rendering", () => {
       JSON.stringify([{ quantity: 4, unit: "oz", ingredientName: "edited butter" }])
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove edited butter" }));
     expect(screen.getByText("No ingredients added yet")).toBeInTheDocument();
     expect((document.querySelector('input[name="ingredientsJson"]') as HTMLInputElement).value).toBe("[]");
   });

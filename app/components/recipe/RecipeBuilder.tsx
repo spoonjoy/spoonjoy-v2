@@ -78,10 +78,20 @@ export function RecipeBuilder({
   // Combine disabled and loading for isDisabled
   const isDisabled = disabled || loading
 
-  // Form state for metadata
+  // The title, description and servings fields are uncontrolled, and saving
+  // reads them from the DOM. They are server-rendered, and a controlled `value`
+  // would wipe anything typed before hydration: the first re-render after it (a
+  // focus change in the Headless UI field) makes React write its state back to
+  // the field. `title` only mirrors the field to dim Create while it is empty;
+  // the mount effect picks up a title typed before hydration.
+  const titleRef = useRef<HTMLInputElement>(null)
+  const descriptionRef = useRef<HTMLTextAreaElement>(null)
+  const servingsRef = useRef<HTMLInputElement>(null)
   const [title, setTitle] = useState(recipe?.title ?? '')
-  const [description, setDescription] = useState(recipe?.description ?? '')
-  const [servings, setServings] = useState(recipe?.servings ?? '')
+
+  useEffect(() => {
+    setTitle(titleRef.current!.value)
+  }, [])
 
   // Image state
   const [imageFile, setImageFile] = useState<File | null>(null)
@@ -108,6 +118,10 @@ export function RecipeBuilder({
     // Prevent save if disabled, loading, or no title
     // Note: Button is only disabled when isDisabled=true, not when title is empty
     // When title is empty, button is visually dimmed but still clickable
+    const title = titleRef.current!.value
+    const description = descriptionRef.current!.value
+    const servings = servingsRef.current!.value
+
     /* istanbul ignore next -- @preserve defensive guard; save button is disabled for these states */
     if (isDisabled || !title.trim()) return
 
@@ -132,10 +146,6 @@ export function RecipeBuilder({
 
   const handleCancel = () => {
     onCancel?.()
-  }
-
-  const handleStepsChange = (newSteps: StepData[]) => {
-    setSteps(newSteps)
   }
 
   const handleImageSelect = (file: File) => {
@@ -201,8 +211,9 @@ export function RecipeBuilder({
           <Field>
             <Label>Title</Label>
             <Input
+              ref={titleRef}
               type="text"
-              value={title}
+              defaultValue={recipe?.title ?? ''}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g., Chocolate Chip Cookies"
               maxLength={TITLE_MAX_LENGTH}
@@ -218,8 +229,8 @@ export function RecipeBuilder({
           <Field>
             <Label>Description</Label>
             <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              ref={descriptionRef}
+              defaultValue={recipe?.description ?? ''}
               placeholder="Recipe description"
               rows={3}
               maxLength={DESCRIPTION_MAX_LENGTH}
@@ -234,9 +245,9 @@ export function RecipeBuilder({
           <Field>
             <Label>Servings</Label>
             <Input
+              ref={servingsRef}
               type="text"
-              value={servings}
-              onChange={(e) => setServings(e.target.value)}
+              defaultValue={recipe?.servings ?? ''}
               placeholder="e.g., 4 servings"
               maxLength={SERVINGS_MAX_LENGTH}
               disabled={isDisabled}
@@ -282,7 +293,7 @@ export function RecipeBuilder({
           <StepList
             steps={steps}
             recipeId={recipeId}
-            onChange={handleStepsChange}
+            onChange={setSteps}
             disabled={isDisabled}
           />
         </section>
