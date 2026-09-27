@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import type { D1ReadDatabase } from "~/lib/d1-read.server";
-import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
+import { d1Guard, d1Timestamp, d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
 
 export interface OAuthUserData {
   provider: string;
@@ -160,6 +160,9 @@ async function writeOAuthUser(
     const id = crypto.randomUUID();
     const at = d1Timestamp(new Date());
     await d1WriteBatch(d1, [
+      // The unique index on email is case-sensitive; this stops a racing sign-up that stored
+      // the same email in another case from leaving two accounts.
+      d1Guard(`NOT EXISTS (SELECT 1 FROM "User" WHERE LOWER("email") = ?)`, normalizedEmail),
       [
         `INSERT INTO "User" ("id", "email", "username", "hashedPassword", "salt", "createdAt", "updatedAt")
          VALUES (?, ?, ?, NULL, NULL, ?, ?)`,
@@ -242,7 +245,8 @@ export async function createOAuthUser(
       const user = await writeOAuthUser(db, d1, oauthData, normalizedEmail, username);
       return { success: true, user };
     } catch (error) {
-      if (!isUniqueConflict(error)) throw error;
+      // A guard failure means the email (in any case) was taken in between.
+      if (!isUniqueConflict(error) && !isD1GuardFailure(error)) throw error;
       // Another request created this provider identity first: sign in to that account.
       const existing = await findExistingOAuthAccount(db, oauthData.provider, oauthData.providerUserId);
       if (existing) {

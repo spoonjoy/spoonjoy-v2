@@ -159,13 +159,28 @@ describe("security-relevant writes on a D1 binding", () => {
       await expect(db.oAuth.findMany({ select: { provider: true } })).resolves.toEqual([{ provider: "github" }]);
     });
 
+    it("answers account_exists when a sign-up in between took the email in another case", async () => {
+      // The unique index on email is case-sensitive, so only the batch's guard stops this.
+      const racing: D1ReadDatabase = {
+        prepare: (sql) => d1.binding.prepare(sql),
+        async batch(statements) {
+          await db.user.create({ data: { ...createTestUser(), email: "COOK@example.com" } });
+          return d1.binding.batch(statements as never);
+        },
+      };
+
+      await expect(createOAuthUser(db, data(), racing)).resolves.toMatchObject({ success: false, error: "account_exists" });
+      await expect(db.user.findMany({ select: { email: true } })).resolves.toEqual([{ email: "COOK@example.com" }]);
+      await expect(db.oAuth.count()).resolves.toBe(0);
+    });
+
     it("picks another username when one is taken in between, and gives up after three tries", async () => {
       let taken = 0;
       const takeUsername = (limit: number): D1ReadDatabase => ({
         prepare: (sql) => d1.binding.prepare(sql),
         async batch(statements) {
           if (taken < limit) {
-            const username = (statements as unknown as Array<{ params: unknown[] }>)[0]!.params[2] as string;
+            const username = (statements as unknown as Array<{ params: unknown[] }>)[1]!.params[2] as string;
             await db.user.create({ data: { ...createTestUser(), username } });
             taken += 1;
           }

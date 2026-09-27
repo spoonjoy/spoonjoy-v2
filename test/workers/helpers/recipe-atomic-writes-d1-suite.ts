@@ -33,6 +33,7 @@ import { handleGoogleOAuthCallback } from "../../../app/lib/google-oauth-callbac
 import { handleGitHubOAuthCallback } from "../../../app/lib/github-oauth-callback.server";
 import { handleAppleOAuthCallback } from "../../../app/lib/apple-oauth-callback.server";
 import { IMPORT_DAILY_CAP, tryConsumeImageGenQuota } from "../../../app/lib/image-gen-ledger.server";
+import { createOAuthUser } from "../../../app/lib/oauth-user.server";
 import { handleRecipeDetailAction } from "../../../app/lib/recipe-detail.server";
 import { importRecipeFromSource } from "../../../app/lib/recipe-import.server";
 import { createUserSessionCookie } from "../../../app/lib/session.server";
@@ -776,6 +777,26 @@ describe("atomic recipe writes on Wrangler D1", () => {
 
       const concurrent = await Promise.all([1, 2].map(() => signIn(database())));
       expect(concurrent.map((result) => result.userId)).toEqual([second!.userId, second!.userId]);
+    });
+
+    it("answers account_exists when a sign-up in between stored the same email in another case", async () => {
+      // The unique index on email is case-sensitive, so only the batch's guard stops a second account.
+      const result = await createOAuthUser(prisma, {
+        provider: "google",
+        providerUserId: "atomic-google-case",
+        providerUsername: "Atomic Cook",
+        email: "atomic-oauth-case@example.com",
+        name: "Atomic Cook",
+      }, interleaved(() => run(
+        `INSERT INTO "User" ("id", "email", "username", "createdAt", "updatedAt") VALUES ('atomic-case-user', ?, 'atomic-case-user', ?, ?)`,
+        "Atomic-OAuth-Case@example.com",
+        OLD,
+        OLD,
+      )));
+
+      expect(result).toMatchObject({ success: false, error: "account_exists" });
+      expect(await count(`SELECT COUNT(*) AS "count" FROM "User" WHERE LOWER("email") = 'atomic-oauth-case@example.com'`)).toBe(1);
+      expect(await count(`SELECT COUNT(*) AS "count" FROM "OAuth" WHERE "providerUserId" = 'atomic-google-case'`)).toBe(0);
     });
 
     it("creates one account for two truly concurrent first sign-ins", async () => {
