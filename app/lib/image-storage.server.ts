@@ -96,11 +96,14 @@ export async function validateImageFileForStorage(
     return options.messages.invalidType;
   }
 
+  // Trust the bytes, not the client-declared type: the sniffed format must
+  // match the declared one. GIF is only accepted when the caller lists it
+  // explicitly (profile photos); food photos never accept it.
   const bytes = new Uint8Array(await file.arrayBuffer());
   const detectedType = detectImageMimeType(bytes);
   if (
     detectedType === null ||
-    detectedType === "image/gif" ||
+    (detectedType === "image/gif" && !options.allowedTypes?.includes("image/gif")) ||
     detectedType !== file.type
   ) {
     return options.messages.invalidType;

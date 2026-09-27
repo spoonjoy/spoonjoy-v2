@@ -8,6 +8,7 @@ import {
   RECIPE_IMAGE_TYPES,
   storeImage,
   validateImageFile,
+  validateImageFileForStorage,
 } from "~/lib/image-storage.server";
 import type { PostHogServerConfig } from "~/lib/analytics-server";
 
@@ -286,6 +287,24 @@ describe("image storage helpers", () => {
       await expect(validateImageFileForStorage(
         new File([gifBytes], "fake.jpg", { type: "image/jpeg" }),
         { allowedTypes: RECIPE_IMAGE_TYPES, messages },
+      )).resolves.toBe("Invalid image format");
+    });
+
+    it("accepts GIF bytes only when the caller explicitly allows GIF", async () => {
+      const gifBytes = textEncoder.encode("GIF89a");
+      const allowedWithGif = [...RECIPE_IMAGE_TYPES, "image/gif"];
+
+      await expect(validateImageFileForStorage(
+        new File([gifBytes], "profile.gif", { type: "image/gif" }),
+        { allowedTypes: allowedWithGif, messages },
+      )).resolves.toBeNull();
+      await expect(validateImageFileForStorage(
+        new File([gifBytes], "profile.gif", { type: "image/gif" }),
+        { messages },
+      )).resolves.toBe("Invalid image format");
+      await expect(validateImageFileForStorage(
+        new File([gifBytes], "profile.png", { type: "image/png" }),
+        { allowedTypes: allowedWithGif, messages },
       )).resolves.toBe("Invalid image format");
     });
 

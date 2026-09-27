@@ -11,7 +11,7 @@ import {
   deleteStoredImageWithCapture,
   hasUploadedImageFile,
   storeImage,
-  validateImageFile,
+  validateImageFileForStorage,
 } from "~/lib/image-storage.server";
 import { resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { PROFILE_IMAGE_TYPES } from "~/lib/recipe-image";
@@ -403,8 +403,9 @@ export async function handleAccountSettingsAction({
       };
     }
 
-    // Check file type
-    const imageError = validateImageFile(photo, {
+    // Check the declared type, the size, and that the bytes really are that
+    // image format (the client-declared type alone is not trusted).
+    const imageError = await validateImageFileForStorage(photo, {
       allowedTypes: PROFILE_IMAGE_TYPES,
       messages: {
         invalidType: "Please upload an image file",
