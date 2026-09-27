@@ -112,6 +112,17 @@ export function scratchStorageStatePathForProject(n: number, projectName: string
   );
 }
 
+// The credentials behind scratchStorageStatePathForProject(n, projectName): the base account on
+// iPhone, the desktop twin on desktop Chrome. For a journey that must re-enter its own account's
+// password (account-settings.journey.ts's password change); never log or interpolate the password.
+export function scratchForProject(n: number, projectName: string): Persona {
+  if (projectName === IPHONE_PROJECT) return scratch(n);
+  if (projectName === DESKTOP_PROJECT) return scratchDesktop(n);
+  throw new Error(
+    `No per-device scratch user for project "${projectName}"; expected "${IPHONE_PROJECT}" or "${DESKTOP_PROJECT}".`,
+  );
+}
+
 // Option-fixture form of scratchStorageStatePathForProject, for module- or describe-level use:
 //   test.use({ storageState: scratchStorageStateForProject(3) });
 // Playwright runs a function passed to test.use as that option's fixture, per test, with the
