@@ -174,6 +174,9 @@ describe("Signup Route", () => {
       const { data, status } = extractResponseData(response);
       expect(status).toBe(400);
       expect(data.errors.username).toBe("Username must be at least 3 characters");
+      // The form is filled back in from these; the password is never sent back.
+      expect(data.values).toEqual({ email: "test@example.com", username: "ab" });
+      expect(JSON.stringify(data)).not.toContain("Valid-Test-Password-42!");
     });
 
     it("should return validation errors for short password", async () => {
@@ -578,6 +581,7 @@ describe("Signup Route", () => {
               email: "Valid email is required",
               username: "Username must be at least 3 characters",
             },
+            values: { email: "not-an-email", username: "ab" },
           }),
         },
       ]);
@@ -592,6 +596,40 @@ describe("Signup Route", () => {
       expect(screen.getByLabelText("Email")).toHaveAttribute("aria-invalid", "true");
       expect(screen.getByLabelText("Email")).toHaveAccessibleDescription("Valid email is required");
       expect(screen.getByLabelText("Email")).toHaveFocus();
+    });
+
+    it("fills in the email and username the server sent back after a full-page submit", async () => {
+      // Before hydration the form posts natively and the page is rendered afresh from the
+      // action's answer; the typed email and username come back as default values.
+      const Stub = createTestRoutesStub([
+        {
+          id: "signup",
+          path: "/signup",
+          Component: Signup,
+          loader: () => ({ oauthProviders: [] }),
+        },
+      ]);
+
+      render(
+        <Stub
+          initialEntries={["/signup"]}
+          hydrationData={{
+            loaderData: { signup: { oauthProviders: [] } },
+            actionData: {
+              signup: {
+                errors: { username: "Username must be at least 3 characters" },
+                values: { email: "new-cook@example.com", username: "ab" },
+              },
+            },
+          }}
+        />,
+      );
+
+      expect(await screen.findByText("Username must be at least 3 characters")).toBeInTheDocument();
+      expect(screen.getByLabelText("Email")).toHaveValue("new-cook@example.com");
+      expect(screen.getByLabelText("Username")).toHaveValue("ab");
+      expect(screen.getByLabelText("Password")).toHaveValue("");
+      expect(screen.getByLabelText("Username")).toHaveFocus();
     });
 
     it("should have login link", async () => {

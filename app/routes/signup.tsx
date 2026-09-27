@@ -24,6 +24,12 @@ interface ActionData {
     confirmPassword?: string;
     general?: string;
   };
+  // What was typed, so a full-page submit (before hydration) comes back with the fields filled
+  // in. Never the password.
+  values?: {
+    email: string;
+    username: string;
+  };
 }
 
 interface LoaderData {
@@ -112,7 +118,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   if (Object.keys(errors).length > 0) {
-    return data({ errors }, { status: 400 });
+    return data({ errors, values: { email, username } }, { status: 400 });
   }
 
   // Create user
@@ -170,6 +176,7 @@ export default function Signup() {
               type="email"
               id="email"
               name="email"
+              defaultValue={actionData?.values?.email}
               required
               invalid={!!actionData?.errors?.email}
             />
@@ -184,6 +191,7 @@ export default function Signup() {
               type="text"
               id="username"
               name="username"
+              defaultValue={actionData?.values?.username}
               required
               minLength={3}
               invalid={!!actionData?.errors?.username}
