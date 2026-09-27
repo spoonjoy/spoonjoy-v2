@@ -98,7 +98,7 @@ function validQaImageCoverSmokeWorkflow(): string {
     "          if [ -z \"${CLOUDFLARE_API_TOKEN:-}\" ] || [ -z \"${CLOUDFLARE_ACCOUNT_ID:-}\" ]; then",
     "            echo \"ready=false\" >> \"$GITHUB_OUTPUT\"",
     "            echo \"Skipping QA image-cover smoke because Cloudflare GitHub secrets are not configured.\"",
-    "            exit 0",
+    "            exit 1",
     "          fi",
           "          echo \"ready=true\" >> \"$GITHUB_OUTPUT\"",
     "      - uses: actions/checkout@v6",
@@ -128,7 +128,7 @@ function validQaImageCoverSmokeWorkflow(): string {
     "          if ! printf '%s' \"$secrets_json\" | grep -Eq '\"(OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY)\"'; then",
     "            echo \"ready=false\" >> \"$GITHUB_OUTPUT\"",
     "            echo \"Skipping QA image-cover smoke because no QA image-provider secret is configured.\"",
-    "            exit 0",
+    "            exit 1",
     "          fi",
     "          echo \"ready=true\" >> \"$GITHUB_OUTPUT\"",
     "      - name: Run QA image-cover smoke",
@@ -4063,7 +4063,7 @@ describe("deployment preflight", () => {
         "          if [ -z \"${CLOUDFLARE_API_TOKEN:-}\" ] || [ -z \"${CLOUDFLARE_ACCOUNT_ID:-}\" ]; then",
         "            echo \"ready=false\" >> \"$GITHUB_OUTPUT\"",
         "            echo \"Skipping QA image-cover smoke because Cloudflare GitHub secrets are not configured.\"",
-        "            exit 0",
+        "            exit 1",
         "          fi",
         "          echo \"ready=true\" >> \"$GITHUB_OUTPUT\"",
       ].join("\n"),
@@ -4082,8 +4082,8 @@ describe("deployment preflight", () => {
   it("rejects QA image-cover workflows that echo exit commands instead of executing them", () => {
     const inputs = validInputs();
     inputs.qaImageCoverSmokeWorkflow = validQaImageCoverSmokeWorkflow().replaceAll(
-      "            exit 0",
-      "            echo \"exit 0\"",
+      "            exit 1",
+      "            echo \"exit 1\"",
     );
 
     const result = validateDeploymentConfig(inputs);
@@ -4118,7 +4118,7 @@ describe("deployment preflight", () => {
         "          if ! printf '%s' \"$secrets_json\" | grep -Eq '\"(OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY)\"'; then",
         "            echo \"ready=false\" >> \"$GITHUB_OUTPUT\"",
         "            echo \"Skipping QA image-cover smoke because no QA image-provider secret is configured.\"",
-        "            exit 0",
+        "            exit 1",
         "          fi",
         "          echo \"ready=true\" >> \"$GITHUB_OUTPUT\"",
       ].join("\n"),
@@ -4130,7 +4130,7 @@ describe("deployment preflight", () => {
         "          if ! printf '%s' \"$secrets_json\" | grep -Eq '\"(OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY)\"'; then",
         "          echo \"ready=false\" >> \"$GITHUB_OUTPUT\"",
         "          echo \"Skipping QA image-cover smoke because no QA image-provider secret is configured.\"",
-        "          exit 0",
+        "          exit 1",
         "          fi",
         "          echo \"ready=true\" >> \"$GITHUB_OUTPUT\"",
         "          EOF",
@@ -4145,7 +4145,7 @@ describe("deployment preflight", () => {
   it("rejects QA image-cover workflows that set provider ready true after skip branches", () => {
     const inputs = validInputs();
     inputs.qaImageCoverSmokeWorkflow = validQaImageCoverSmokeWorkflow().replaceAll(
-      "            exit 0\n",
+      "            exit 1\n",
       "",
     );
 

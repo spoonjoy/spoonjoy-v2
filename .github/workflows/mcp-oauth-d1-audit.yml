@@ -44,8 +44,11 @@ jobs:
     name: readonly audit
     needs: guard
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     environment: production
+    permissions:
+      contents: read
+      actions: read
 
     steps:
       - name: Require GitHub Cloudflare credentials
@@ -61,6 +64,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           ref: ${{ github.sha }}
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -74,6 +78,64 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # A concurrent Production Deploy or MCP OAuth Canary run can leave transient rows (e.g.
+      # canary_user_residue) that make this read-only audit report false positives (seen
+      # 2026-09-26, run 36275447499; a re-run passed). Wait out any in-flight run of either
+      # workflow immediately before the first step that reads production data, so the checkout
+      # and dependency install above cannot widen the race window between the check and the
+      # read. This avoids editing production-deploy.yml, whose deploy job step inventory and
+      # shell bodies are frozen by test/release-workflow-security.test.ts.
+      - name: Wait for in-flight production deploy or canary
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          max_attempts=40
+          interval_seconds=30
+          attempt=0
+          busy_workflows="production-deploy.yml mcp-oauth-canary.yml"
+          busy_status_pattern='^(in_progress|queued|waiting|pending|requested)$'
+
+          fetch_statuses() {
+            local workflow="$1"
+            local gh_attempt=0
+            local gh_max_attempts=3
+            local output=""
+            while :; do
+              gh_attempt=$((gh_attempt + 1))
+              if output="$(gh run list --workflow "$workflow" --json status --repo "$GITHUB_REPOSITORY" --jq '.[].status' 2>&1)"; then
+                printf '%s\n' "$output"
+                return 0
+              fi
+              if [ "$gh_attempt" -ge "$gh_max_attempts" ]; then
+                echo "::error::gh run list --workflow $workflow failed $gh_max_attempts times: $output" >&2
+                return 1
+              fi
+              echo "gh run list --workflow $workflow failed (attempt $gh_attempt/$gh_max_attempts); retrying in 5s..." >&2
+              sleep 5
+            done
+          }
+
+          while :; do
+            statuses=""
+            for workflow in $busy_workflows; do
+              statuses="$statuses
+          $(fetch_statuses "$workflow")"
+            done
+            statuses="$(printf '%s\n' "$statuses" | sed '/^$/d' | sort -u | tr '\n' ' ')"
+            if ! printf '%s\n' "$statuses" | tr ' ' '\n' | grep -Eq "$busy_status_pattern"; then
+              echo "No in-flight Production Deploy or MCP OAuth Canary run. Proceeding with the read-only audit."
+              break
+            fi
+            attempt=$((attempt + 1))
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "::error::Timed out after 20 minutes waiting for in-flight Production Deploy / MCP OAuth Canary runs to finish. Refusing to audit mid-deploy."
+              exit 1
+            fi
+            echo "A Production Deploy or MCP OAuth Canary run is busy (statuses: $statuses). Waiting 30s before re-checking (attempt $attempt/$max_attempts)..."
+            sleep "$interval_seconds"
+          done
 
       - name: Dry-run OAuth grant backfill
         env:
