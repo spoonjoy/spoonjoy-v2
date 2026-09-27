@@ -47,7 +47,7 @@ function loadCredentials(): CredentialsFile {
 
   const raw = readFileSync(credentialsPath, "utf8");
   // Every "password" field becomes a Secret as it is parsed.
-  cachedCredentials = parseCredentialsJson(raw) as CredentialsFile;
+  cachedCredentials = parseCredentialsJson(raw, credentialsPath) as CredentialsFile;
   return cachedCredentials;
 }
 

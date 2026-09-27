@@ -121,6 +121,32 @@ describe("parseCredentialsJson", () => {
     expect(inspect(parsed, { depth: 10 })).not.toContain(PLANTED);
   });
 
+  it("reports a malformed file by path and position only, never its content", () => {
+    function failure(text: string, path?: string): Error {
+      try {
+        parseCredentialsJson(text, path);
+      } catch (error) {
+        return error as Error;
+      }
+      throw new Error("expected parseCredentialsJson to throw");
+    }
+
+    // V8 quotes an excerpt of the input for an unexpected token; none of it may come through.
+    const excerpt = failure(`{"chef":{"password":${PLANTED}}}`, ".journeys/credentials.json");
+    expect(excerpt.message).toBe("The QA credentials file at .journeys/credentials.json is not valid JSON.");
+    expect(excerpt.cause).toBeUndefined();
+    expect(`${excerpt.message}\n${excerpt.stack}`).not.toContain(PLANTED.slice(0, 7));
+
+    // Other errors carry a position, which is kept.
+    const cut = failure(`{"chef":{"password":"${PLANTED}`, ".journeys/credentials.json");
+    expect(cut.message).toMatch(/^The QA credentials file at \.journeys\/credentials\.json is not valid JSON \(position \d+\)\.$/);
+    expect(cut.message).not.toContain(PLANTED.slice(0, 7));
+
+    expect(failure("").message).toBe("The QA credentials file is not valid JSON.");
+    // A well-formed file with an empty password fails as such, not as bad JSON.
+    expect(failure('{"password":""}').message).toBe("A Secret needs a non-empty string.");
+  });
+
   it("leaves a non-string password field alone", () => {
     expect(parseCredentialsJson('{"password":null,"count":2}')).toEqual({ password: null, count: 2 });
   });

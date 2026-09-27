@@ -80,10 +80,21 @@ function revealSecret(secret: Secret): string {
 
 // Parses the QA credentials file (scripts/seed-qa-kitchen.mjs's --credentials-out), turning every
 // "password" field into a Secret on the way in, so no string password ever exists in journey code.
-export function parseCredentialsJson(text: string): unknown {
-  return JSON.parse(text, (key, value: unknown) =>
-    key === "password" && typeof value === "string" ? new Secret(value) : value,
-  );
+// A malformed file is reported by path and, when the engine gives one, position only: V8's
+// JSON.parse error quotes an excerpt of the input, which here would be part of a password.
+export function parseCredentialsJson(text: string, path?: string): unknown {
+  try {
+    return JSON.parse(text, (key, value: unknown) =>
+      key === "password" && typeof value === "string" ? new Secret(value) : value,
+    );
+  } catch (error) {
+    // Only a syntax error quotes the input; the Secret constructor's own error does not.
+    if (!(error instanceof SyntaxError)) throw error;
+    const position = /\bat position (\d+)\b/.exec(error.message)?.[1];
+    const where = path ? ` at ${path}` : "";
+    const at = position ? ` (position ${position})` : "";
+    throw new Error(`The QA credentials file${where} is not valid JSON${at}.`);
+  }
 }
 
 export interface DisposableJourneyUser {
