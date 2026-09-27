@@ -10,6 +10,7 @@ import { shouldLogRollupBuildMessage } from "./scripts/build-output-hygiene";
 const appDirectory = new URL("./app", import.meta.url).pathname;
 const componentsDirectory = new URL("./app/components", import.meta.url).pathname;
 const prismaWasmClient = new URL("./node_modules/.prisma/client/wasm.js", import.meta.url).pathname;
+const serverPostHogReactShim = new URL("./app/lib/posthog-react.server-shim.ts", import.meta.url).pathname;
 
 type RequestInitWithDuplex = RequestInit & { duplex: "half" };
 
@@ -156,6 +157,21 @@ async function normalizeMcpDataResponse(response: Response, url: URL): Promise<R
   });
 }
 
+// The Worker (the "ssr" environment) gets a stand-in for `@posthog/react`: components only
+// use the PostHog client in effects and event handlers, which run in the browser, and the
+// real package would bring all of `posthog-js` into every cold start. The browser build
+// keeps the real package.
+export function serverPostHogReactShimPlugin(): Plugin {
+  return {
+    name: "spoonjoy-server-posthog-react-shim",
+    enforce: "pre",
+    applyToEnvironment: (environment) => environment.name === "ssr",
+    resolveId(id) {
+      return id === "@posthog/react" ? serverPostHogReactShim : null;
+    },
+  };
+}
+
 function mcpPostDevMiddleware(): Plugin {
   return {
     name: "spoonjoy-mcp-post-dev-middleware",
@@ -219,6 +235,7 @@ export default defineConfig(({ command }) => ({
   },
   plugins: [
     cloudflare({ viteEnvironment: { name: "ssr" } }),
+    serverPostHogReactShimPlugin(),
     mcpPostDevMiddleware(),
     reactRouter(),
   ],
