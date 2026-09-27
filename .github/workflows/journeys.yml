@@ -130,9 +130,10 @@ jobs:
 
       # Reduce the Worker tail to a small summary inside test-results/ (uploaded with either
       # report): per-request outcome, path without its query, method, status, CPU and wall time
-      # when present, and exception names and messages. Only non-ok invocations plus the first
-      # 20 with exceptions are kept, and no header, cookie or body is copied. The raw stream is
-      # then deleted.
+      # when present, and exception names and messages. Only non-ok invocations, the first 20
+      # with exceptions and the 25 slowest by wall time are kept per request, plus p50/p95/max
+      # wall and CPU time per path pattern (per-run ids collapsed to :id). No header, cookie or
+      # body is copied. The raw stream is then deleted.
       - name: Stop QA Worker tail and summarise it
         if: always()
         continue-on-error: true
@@ -159,18 +160,38 @@ jobs:
                 eventTimestamp: (.eventTimestamp // null),
                 exceptions: [(.exceptions // [])[] | { name: (.name // null), message: ((.message // "") | tostring | .[0:500]) }]
               };
+              # A path with per-run ids collapsed to :id (cuid, uuid, number, codex-e2e user), keeping
+              # a trailing .data, so invocations of the same route group together.
+              def collapse_segment:
+                capture("^(?<base>.*?)(?<ext>\\.data)?$") as $m
+                | ($m.base
+                    | if test("^c[a-z0-9]{20,}$")
+                        or test("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+                        or test("^[0-9]+$")
+                        or test("^codex[-_]e2e[-_]")
+                      then ":id" else . end)
+                  + ($m.ext // "");
+              def path_pattern: request_path | split("/") | map(if . == "" then . else collapse_segment end) | join("/");
+              # Nearest-rank percentile over the numeric values present; null when there are none.
+              def percentile($p): if length == 0 then null else sort | .[((length - 1) * $p | floor)] end;
+              def timing($field): [.[] | .[$field] | select(type == "number")]
+                | { p50: percentile(0.5), p95: percentile(0.95), max: (if length == 0 then null else max end) };
               {
                 totalInvocations: length,
                 outcomes: (map(.outcome // "unknown") | group_by(.) | map({ key: .[0], value: length }) | from_entries),
                 nonOkInvocations: [.[] | select((.outcome // "unknown") != "ok") | invocation],
-                firstExceptions: ([.[] | select(((.exceptions // []) | length) > 0) | invocation] | .[0:20])
+                firstExceptions: ([.[] | select(((.exceptions // []) | length) > 0) | invocation] | .[0:20]),
+                slowest: ([.[] | select((.wallTime | type) == "number")] | sort_by(-.wallTime) | .[0:25] | map(invocation)),
+                byPath: (group_by(path_pattern)
+                  | map({ path: (.[0] | path_pattern), count: length, wallTime: timing("wallTime"), cpuTime: timing("cpuTime") })
+                  | sort_by(-(.wallTime.p95 // 0)))
               }
             ' .worker-tail/events.ndjson > test-results/worker-tail-summary.json || true
             if [ -s .worker-tail/tail.err ]; then tail -n 20 .worker-tail/tail.err || true; fi
           fi
           rm -rf .worker-tail
           if [ -f test-results/worker-tail-summary.json ]; then
-            jq '{ totalInvocations, outcomes, nonOk: (.nonOkInvocations | length) }' test-results/worker-tail-summary.json || true
+            jq '{ totalInvocations, outcomes, nonOk: (.nonOkInvocations | length), slowestPaths: (.byPath | .[0:5]) }' test-results/worker-tail-summary.json || true
           fi
 
       # The report and traces can contain this run's persona and scratch-user passwords, so
