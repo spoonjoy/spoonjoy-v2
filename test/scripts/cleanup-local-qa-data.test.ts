@@ -1732,6 +1732,94 @@ describe("cleanup-local-qa-data", () => {
     );
   });
 
+  describe("transient Cloudflare R2 API refusals", () => {
+    const enableR2 = () => Object.assign(new Error("Command failed: pnpm exec wrangler r2 object delete"), {
+      stderr: '✘ [ERROR] Failed to fetch /accounts/x/r2/buckets/spoonjoy-photos-qa/objects/covers/a.jpg - 403: Forbidden;\n{"success":false,"errors":[{"code":10042,"message":"Please enable R2 through the Cloudflare Dashboard."}]}',
+    });
+    const r2Command = (phases: Array<() => unknown>) => {
+      let calls = 0;
+      return vi.fn(async (_cmd: string, args: string[]) => {
+        const command = args.join(" ");
+        if (command.includes("candidate_r2_keys")) {
+          return { stdout: wranglerJson([{ action: "delete", key: "covers/a.jpg" }]), stderr: "" };
+        }
+        if (command.includes("r2 object delete")) {
+          const phase = phases[calls] ?? (() => ({ stdout: "", stderr: "" }));
+          calls += 1;
+          return phase();
+        }
+        if (command.includes("r2 object get")) throw "NoSuchKey";
+        return { stdout: wranglerJson(), stderr: "" };
+      });
+    };
+
+    it("retries a refused delete with backoff and then verifies it", async () => {
+      const stdout = writableBuffer();
+      const stderr = writableBuffer();
+      const sleep = vi.fn(async () => {});
+      const runCommand = r2Command([
+        () => { throw enableR2(); },
+        () => { throw { stderr: "Failed to fetch /accounts/x/r2/buckets/b/objects/covers/a.jpg - 503: Service Unavailable" }; },
+        () => ({ stdout: "", stderr: "" }),
+      ]);
+
+      await cleanup.runCleanupCli({ argv: ["--target-env", "qa", "--apply"], runCommand, stdout: stdout.stream, stderr: stderr.stream, sleep });
+
+      expect(sleep.mock.calls.map((call) => call[0])).toEqual([5_000, 15_000]);
+      expect(stdout.text()).toContain("Cloudflare's R2 API refused the delete of covers/a.jpg for a moment; trying again in 5 s (retry 1 of 3).");
+      expect(stdout.text()).toContain("Verified deleted QA R2 keys: covers/a.jpg");
+      expect(stdout.text()).not.toMatch(/warn/i);
+    });
+
+    it("waits with a real timer by default", async () => {
+      vi.useFakeTimers();
+      try {
+        const stdout = writableBuffer();
+        const stderr = writableBuffer();
+        const runCommand = r2Command([() => { throw enableR2(); }]);
+        const done = cleanup.runCleanupCli({ argv: ["--target-env", "qa", "--apply"], runCommand, stdout: stdout.stream, stderr: stderr.stream });
+        await vi.advanceTimersByTimeAsync(5_000);
+        await done;
+        expect(stdout.text()).toContain("Verified deleted QA R2 keys: covers/a.jpg");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("gives up after three retries", async () => {
+      const stdout = writableBuffer();
+      const stderr = writableBuffer();
+      const sleep = vi.fn(async () => {});
+      const runCommand = r2Command([0, 1, 2, 3].map(() => () => { throw enableR2(); }));
+
+      await expect(cleanup.runCleanupCli({ argv: ["--target-env", "qa", "--apply"], runCommand, stdout: stdout.stream, stderr: stderr.stream, sleep }))
+        .rejects.toThrow(/wrangler r2 object delete/);
+      expect(sleep).toHaveBeenCalledTimes(3);
+    });
+
+    it("never retries an error that is not a transient API refusal", async () => {
+      const stdout = writableBuffer();
+      const stderr = writableBuffer();
+      const sleep = vi.fn(async () => {});
+      const runCommand = r2Command([() => { throw new Error("404 Not Found: R2 bucket not found"); }]);
+
+      await expect(cleanup.runCleanupCli({ argv: ["--target-env", "qa", "--apply"], runCommand, stdout: stdout.stream, stderr: stderr.stream, sleep }))
+        .rejects.toThrow(/R2 bucket not found/);
+      expect(sleep).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["429", { stderr: "Failed to fetch /accounts/x/r2/buckets/b/objects/k - 429: Too Many Requests" }, true],
+      ["a plain string", 'Please enable R2 through the Cloudflare Dashboard.', true],
+      ["stdout code", { stdout: '{"errors":[{"code": 10042}]}' }, true],
+      ["403 without 10042", { stderr: "Failed to fetch /accounts/x/r2/buckets/b/objects/k - 403: Forbidden" }, false],
+      ["missing key", new Error("The specified key does not exist."), false],
+      ["nothing", undefined, false],
+    ])("classifies %s", (_label, error, transient) => {
+      expect(cleanup.isTransientR2ApiError(error)).toBe(transient);
+    });
+  });
+
   it("fails QA apply when R2 verification still fetches a deleted key", async () => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();
