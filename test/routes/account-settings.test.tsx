@@ -3699,8 +3699,10 @@ describe("Account Settings Route", () => {
           params: {},
         } as any);
 
-        expect(result.success).toBe(true);
-        expect(result.message).toContain("password");
+        // A password change re-issues this browser's session cookie at the bumped version.
+        expect((result as any).data.success).toBe(true);
+        expect((result as any).data.message).toContain("password");
+        expect((result as any).init.headers["Set-Cookie"]).toContain("__session=");
       });
 
       it("should return error when current password is incorrect", async () => {
@@ -3954,7 +3956,7 @@ describe("Account Settings Route", () => {
           params: {},
         } as any);
 
-        expect(result.success).toBe(true);
+        expect((result as any).data.success).toBe(true);
 
         // Verify password hash changed in database
         const userAfter = await db.user.findUnique({

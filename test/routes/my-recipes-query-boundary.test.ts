@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { createUserSessionCookie } from "~/lib/session.server";
+import { ensureSessionUser } from "../helpers/session-user";
 
 const mocks = vi.hoisted(() => ({
   getRequestDb: vi.fn(),
@@ -56,6 +57,7 @@ describe("My Recipes loader query boundary", () => {
   });
 
   it("uses a bounded SQL search instead of materializing and filtering the full owner corpus", async () => {
+    onTestFinished(await ensureSessionUser("owner_query_boundary"));
     const result = await loader({
       request: await authedRequest("http://localhost/my-recipes?q=sumac&page=1"),
       context: { cloudflare: { env: null } },

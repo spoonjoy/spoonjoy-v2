@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { Request as UndiciRequest } from "undici";
 import { getLocalDb } from "~/lib/db.server";
@@ -15,7 +15,6 @@ import {
   generateApiToken,
   hashApiToken,
   principalFromUserEmail,
-  principalFromUserId,
   requireApiPrincipal,
 } from "~/lib/api-auth.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -28,9 +27,10 @@ function uniqueEmail(prefix = "api-auth") {
   return `${prefix}-${faker.string.alphanumeric(8).toLowerCase()}@example.com`;
 }
 
-async function sessionCookie(userId: string) {
+async function sessionCookie(userId: string, sessionVersion?: number) {
   const session = await sessionStorage.getSession();
   session.set("userId", userId);
+  if (sessionVersion !== undefined) session.set("sessionVersion", sessionVersion);
   return (await sessionStorage.commitSession(session)).split(";")[0];
 }
 
@@ -309,6 +309,42 @@ describe("API authentication helpers", () => {
     });
   });
 
+  it("rejects browser sessions that were revoked or belong to a deleted user, with one user read", async () => {
+    const user = await db.user.create({
+      data: { email: uniqueEmail(), username: faker.internet.username(), sessionVersion: 2 },
+    });
+    const sessionRequest = async (cookie: string) => authenticateApiRequest(db, new UndiciRequest("http://localhost/api", {
+      headers: { Cookie: cookie },
+    }));
+    const findUnique = vi.spyOn(db.user, "findUnique");
+
+    try {
+      await expect(sessionRequest(await sessionCookie(user.id, 2))).resolves.toMatchObject({ source: "session", id: user.id });
+      expect(findUnique).toHaveBeenCalledTimes(1);
+      expect(findUnique).toHaveBeenCalledWith({
+        where: { id: user.id },
+        select: { id: true, email: true, username: true, sessionVersion: true },
+      });
+    } finally {
+      findUnique.mockRestore();
+    }
+
+    await expect(sessionRequest(await sessionCookie(user.id, 1))).resolves.toBeNull();
+    await expect(sessionRequest(await sessionCookie(user.id))).resolves.toBeNull();
+    await expect(sessionRequest(await sessionCookie(user.id, -1))).resolves.toBeNull();
+
+    await db.user.delete({ where: { id: user.id } });
+    await expect(sessionRequest(await sessionCookie(user.id, 2))).resolves.toBeNull();
+  });
+
+  it("accepts a browser session cookie issued before session versions existed as version 0", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+
+    await expect(authenticateApiRequest(db, new UndiciRequest("http://localhost/api", {
+      headers: { Cookie: await sessionCookie(user.id) },
+    }))).resolves.toMatchObject({ source: "session", id: user.id });
+  });
+
   it("handles absent users and owner authorization checks", async () => {
     await expect(authenticateApiRequest(db, new UndiciRequest("http://localhost/api"))).resolves.toBeNull();
     await expect(authenticateApiRequest(db, new UndiciRequest("http://localhost/api", {
@@ -319,14 +355,15 @@ describe("API authentication helpers", () => {
       new UndiciRequest("http://localhost/api"),
       { NODE_ENV: "production" },
     )).resolves.toBeNull();
-    await expect(principalFromUserId(db, "missing-user")).resolves.toBeNull();
     await expect(principalFromUserEmail(db, "missing@example.com")).resolves.toBeNull();
 
     expect(() => requireApiPrincipal(null)).toThrow("Authentication required");
     expect(() => assertCanUseOwnerEmail(null, "anyone@example.com")).not.toThrow();
 
     const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
-    const principal = await principalFromUserId(db, user.id);
+    const principal = await authenticateApiRequest(db, new UndiciRequest("http://localhost/api", {
+      headers: { Cookie: await sessionCookie(user.id) },
+    }));
     expect(requireApiPrincipal(principal)).toMatchObject({ source: "session", id: user.id });
     expect(() => assertCanUseOwnerEmail(principal, user.email.toUpperCase())).not.toThrow();
     expect(() => assertCanUseOwnerEmail(principal, "other@example.com")).toThrow("different owner");

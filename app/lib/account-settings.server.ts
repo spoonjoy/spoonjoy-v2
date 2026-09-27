@@ -1,7 +1,7 @@
 import type { AppLoadContext } from "react-router";
-import { redirect } from "react-router";
+import { data, redirect } from "react-router";
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
-import { requireUserId } from "~/lib/session.server";
+import { createUserSessionCookie, requireUserId } from "~/lib/session.server";
 import { unlinkOAuthAccount } from "~/lib/oauth-user.server";
 import { hashPassword, verifyPassword } from "~/lib/auth.server";
 import { listUserPasskeys, removeUserPasskey, renameUserPasskey } from "~/lib/webauthn-route.server";
@@ -116,6 +116,13 @@ export interface AccountSettingsActionResult {
   };
   photoUrl?: string;
 }
+
+// Password changes and "Sign out everywhere" bump the user's session version,
+// which revokes every existing browser session. Their result carries a fresh
+// session cookie at the new version so this browser stays signed in.
+export type AccountSettingsActionResponse =
+  | AccountSettingsActionResult
+  | ReturnType<typeof data<AccountSettingsActionResult>>;
 
 interface AccountSettingsRouteArgs {
   request: Request;
@@ -336,10 +343,16 @@ export async function loadAccountSettings({
 export async function handleAccountSettingsAction({
   request,
   context,
-}: AccountSettingsRouteArgs): Promise<AccountSettingsActionResult> {
+}: AccountSettingsRouteArgs): Promise<AccountSettingsActionResponse> {
   const userId = await requireUserId(request, "/login", getCloudflareEnv(context));
 
   const database = await getRequestDb(context);
+  const withSessionForVersion = async (result: AccountSettingsActionResult, sessionVersion: number) =>
+    data(result, {
+      headers: {
+        "Set-Cookie": await createUserSessionCookie(userId, getCloudflareEnv(context), request, { sessionVersion }),
+      },
+    });
   await promoteLegacyOAuthIssuerForUser(
     database,
     userId,
@@ -769,17 +782,31 @@ export async function handleAccountSettingsAction({
       };
     }
 
-    // Hash and save new password
+    // Hash and save new password, and revoke every other session in the same write.
     const { hashedPassword, salt } = await hashPassword(newPassword);
-    await database.user.update({
+    const { sessionVersion } = await database.user.update({
       where: { id: userId },
-      data: { hashedPassword, salt },
+      data: { hashedPassword, salt, sessionVersion: { increment: 1 } },
+      select: { sessionVersion: true },
     });
 
-    return {
+    return withSessionForVersion({
       success: true,
-      message: "Your password has been changed successfully",
-    };
+      message: "Your password has been changed successfully. Other browsers signed in to your account have been signed out.",
+    }, sessionVersion);
+  }
+
+  if (intent === "signOutEverywhere") {
+    const { sessionVersion } = await database.user.update({
+      where: { id: userId },
+      data: { sessionVersion: { increment: 1 } },
+      select: { sessionVersion: true },
+    });
+
+    return withSessionForVersion({
+      success: true,
+      message: "You've been signed out everywhere else. You're still signed in here.",
+    }, sessionVersion);
   }
 
   if (intent === "setPassword") {

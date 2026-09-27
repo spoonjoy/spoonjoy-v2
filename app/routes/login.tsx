@@ -106,8 +106,10 @@ export async function action({ request, context }: Route.ActionArgs) {
     );
   }
 
-  // Create session and redirect
-  const response = await createUserSession(user.id, redirectTo, context.cloudflare?.env, request);
+  // Create session and redirect, at the session version read with the password hash.
+  const response = await createUserSession(user.id, redirectTo, context.cloudflare?.env, request, {
+    sessionVersion: user.sessionVersion,
+  });
   if (requiresPostLoginDocumentReload(redirectTo)) {
     response.headers.set("X-Remix-Reload-Document", "true");
   }

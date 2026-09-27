@@ -117,8 +117,8 @@ export async function action({ request, context }: Route.ActionArgs) {
   // Create user
   const user = await createUser(database, email, username, password);
 
-  // Create session and redirect
-  return createUserSession(user.id, "/recipes", context.cloudflare?.env, request);
+  // Create session and redirect. A new account starts at session version 0.
+  return createUserSession(user.id, "/recipes", context.cloudflare?.env, request, { sessionVersion: 0 });
 }
 
 export default function Signup() {

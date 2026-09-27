@@ -26,7 +26,8 @@ import { action as registerVerify } from "~/routes/auth.webauthn.register.verify
 import { action as authenticateOptions } from "~/routes/auth.webauthn.authenticate.options";
 import { action as authenticateVerify } from "~/routes/auth.webauthn.authenticate.verify";
 import { getLocalDb } from "~/lib/db.server";
-import { sessionStorage } from "~/lib/session.server";
+import { WebAuthnError } from "~/lib/webauthn-route.server";
+import { getSessionIdentity, getUserId, sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestUser } from "../utils";
 
@@ -93,13 +94,25 @@ describe("WebAuthn routes", () => {
     });
 
     it("maps orchestration errors to their status", async () => {
+      const user = await db.user.create({ data: createTestUser() });
+      vi.mocked(buildRegistrationOptions).mockRejectedValue(new WebAuthnError("Passkeys are unavailable", 409) as never);
+      const res = await registerOptions(routeArgs(jsonRequest(
+        "https://spoonjoy.app/auth/webauthn/register/options",
+        {},
+        { Cookie: await sessionCookie(user.id) },
+      )));
+      expect(res.status).toBe(409);
+      await expect(res.json()).resolves.toEqual({ error: "Passkeys are unavailable" });
+    });
+
+    it("treats a session for a deleted user as signed out", async () => {
       const cookie = await sessionCookie("ghost-user-id");
       const res = await registerOptions(routeArgs(jsonRequest(
         "https://spoonjoy.app/auth/webauthn/register/options",
         {},
         { Cookie: cookie },
       )));
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(401);
     });
 
     it("falls back when registration option orchestration throws a non-Error", async () => {
@@ -329,6 +342,30 @@ describe("WebAuthn routes", () => {
       expect(res.status).toBe(200);
       expect(res.headers.get("Set-Cookie") ?? "").toContain("__session=");
       await expect(res.json()).resolves.toMatchObject({ verified: true, redirectTo: "/recipes" });
+    });
+
+    it("mints the session at the version read when the passkey login began, not a later one", async () => {
+      const user = await db.user.create({
+        data: { ...createTestUser(), email: "passkey-race@example.com", webAuthnChallenge: "ac" },
+      });
+      await db.userCredential.create({ data: { id: "vc-race", userId: user.id, publicKey: new Uint8Array([1]), counter: 1n } });
+      // "Sign out everywhere" lands while the assertion is being verified.
+      vi.mocked(verifyAuthentication).mockImplementation(async () => {
+        await db.user.update({ where: { id: user.id }, data: { sessionVersion: { increment: 1 } } });
+        return { verified: true, authenticationInfo: { newCounter: 2 } } as never;
+      });
+
+      const res = await authenticateVerify(routeArgs(jsonRequest(
+        "https://spoonjoy.app/auth/webauthn/authenticate/verify",
+        { email: user.email, response: { id: "vc-race" } },
+      )));
+      const signedIn = new UndiciRequest("https://spoonjoy.app/recipes", {
+        headers: { Cookie: (res.headers.get("Set-Cookie") ?? "").split(";")[0] },
+      }) as unknown as Request;
+
+      expect(res.status).toBe(200);
+      await expect(getSessionIdentity(signedIn)).resolves.toEqual({ userId: user.id, sessionVersion: 0 });
+      await expect(getUserId(signedIn)).resolves.toBeNull();
     });
 
     it("mints a session cookie on a verified passkey via the identifier field (email)", async () => {

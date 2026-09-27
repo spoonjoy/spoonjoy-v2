@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import {
   handleAccountSettingsAction,
   loadAccountSettings,
+  type AccountSettingsActionResponse,
   type AccountSettingsActionResult,
   type AccountSettingsLoaderData,
 } from "~/lib/account-settings.server";
@@ -28,7 +29,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return loadAccountSettings({ request, context });
 }
 
-export async function action({ request, context }: Route.ActionArgs): Promise<AccountSettingsActionResult> {
+export async function action({ request, context }: Route.ActionArgs): Promise<AccountSettingsActionResponse> {
   return handleAccountSettingsAction({ request, context });
 }
 
@@ -58,6 +59,7 @@ export default function AccountSettings() {
   const [removingPasskeyId, setRemovingPasskeyId] = useState<string | null>(null);
   const [renamingPasskeyId, setRenamingPasskeyId] = useState<string | null>(null);
   const [passwordFormState, setPasswordFormState] = useState<"idle" | "change" | "set" | "removeConfirm">("idle");
+  const [isConfirmingSignOutEverywhere, setIsConfirmingSignOutEverywhere] = useState(false);
   const apiCredentials = user.apiCredentials ?? [];
   const oauthConnections = user.oauthConnections ?? [];
 
@@ -595,6 +597,34 @@ export default function AccountSettings() {
                 </Button>
               </div>
             )
+          )}
+        </div>
+
+        <div className="mt-6 border-t border-[var(--sj-border)] pt-4" data-testid="sign-out-everywhere">
+          <Text className="font-medium text-[var(--sj-ink)]">Sign out everywhere</Text>
+          <Text className="mt-1 text-sm">
+            Signs you out of every other browser where you're signed in to Spoonjoy. You stay signed in here. Apps and agents
+            connected with API tokens keep their access; revoke those under API and app access.
+          </Text>
+          {isConfirmingSignOutEverywhere ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Text className="text-sm">Are you sure?</Text>
+              <Form method="post" className="inline" onSubmit={() => setIsConfirmingSignOutEverywhere(false)}>
+                <input type="hidden" name="intent" value="signOutEverywhere" />
+                <Button type="submit" variant="destructive" aria-label="Confirm sign out everywhere">
+                  Confirm
+                </Button>
+              </Form>
+              <Button type="button" plain onClick={() => setIsConfirmingSignOutEverywhere(false)}>
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <div className="mt-3">
+              <Button type="button" plain onClick={() => setIsConfirmingSignOutEverywhere(true)}>
+                Sign out everywhere
+              </Button>
+            </div>
           )}
         </div>
       </SettingsPanel>

@@ -53,6 +53,10 @@ type AuthenticatedUser = {
   id: string;
   email: string;
   username: string;
+  // Read in the same query as the password hash. A session minted for this
+  // sign-in must use this value, not a later read: a password change that lands
+  // during the bcrypt compare bumps the version, and the cookie must stay behind it.
+  sessionVersion: number;
 };
 
 async function authenticatePasswordUser(
@@ -77,7 +81,7 @@ async function authenticatePasswordUser(
     return null;
   }
 
-  return { id: user.id, email: user.email, username: user.username };
+  return { id: user.id, email: user.email, username: user.username, sessionVersion: user.sessionVersion };
 }
 
 // Authenticate user by email and password
@@ -93,6 +97,7 @@ export async function authenticateUser(
       email: true,
       username: true,
       hashedPassword: true,
+      sessionVersion: true,
     },
   });
 
@@ -114,6 +119,7 @@ export async function authenticateUserByEmailOrUsername(
           email: true,
           username: true,
           hashedPassword: true,
+          sessionVersion: true,
         },
       })
     : await db.user.findUnique({
@@ -123,6 +129,7 @@ export async function authenticateUserByEmailOrUsername(
           email: true,
           username: true,
           hashedPassword: true,
+          sessionVersion: true,
         },
       });
 

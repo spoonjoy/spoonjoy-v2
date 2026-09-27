@@ -208,6 +208,33 @@ describe("auth.server", () => {
       });
     });
 
+    it("returns the session version read in the same query as the password hash", async () => {
+      const email = faker.internet.email();
+      const username = `chef_${faker.string.alphanumeric(8)}`;
+      const created = await createUser(db, email, username, "testPassword123");
+      await db.user.update({ where: { id: created.id }, data: { sessionVersion: 4 } });
+      const findUnique = vi.spyOn(db!.user, "findUnique");
+
+      try {
+        await expect(authenticateUserByEmailOrUsername(db!, username, "testPassword123")).resolves.toEqual({
+          id: created.id,
+          email: email.toLowerCase(),
+          username,
+          sessionVersion: 4,
+        });
+        await expect(authenticateUserByEmailOrUsername(db!, email, "testPassword123")).resolves.toMatchObject({
+          sessionVersion: 4,
+        });
+        await expect(authenticateUser(db!, email, "testPassword123")).resolves.toMatchObject({ sessionVersion: 4 });
+        expect(findUnique).toHaveBeenCalledTimes(3);
+        for (const [query] of findUnique.mock.calls) {
+          expect(query).toMatchObject({ select: { hashedPassword: true, sessionVersion: true } });
+        }
+      } finally {
+        findUnique.mockRestore();
+      }
+    });
+
     it("runs a bcrypt comparison for unknown username/email identifiers", async () => {
       const compareSpy = vi.spyOn(bcrypt, "compareSync");
 

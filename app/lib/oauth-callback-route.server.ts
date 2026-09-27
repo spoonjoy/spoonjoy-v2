@@ -1,5 +1,5 @@
 import type { AppLoadContext } from "react-router";
-import { createUserSession, getUserId } from "~/lib/session.server";
+import { createUserSession, getUserId, isSessionIdentityCurrent, type SessionEnv } from "~/lib/session.server";
 import { getAppleOAuthConfig, getGitHubOAuthConfig, getGoogleOAuthConfig } from "~/lib/env.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { handleAppleOAuthCallback } from "~/lib/apple-oauth-callback.server";
@@ -24,9 +24,28 @@ import {
   isValidOAuthState,
   readOAuthStartSession,
   redirectWithOAuthError,
+  type OAuthStartSessionData,
 } from "~/lib/oauth-route.server";
 
 const SOCIAL_CALLBACK_EVENT = "spoonjoy.oauth.social_callback";
+
+// The signed-in user a linking callback links to. Apple posts its callback
+// cross-site, so the Lax session cookie can be missing; then fall back to the
+// user who started linking, but only while that session is still current (not
+// revoked by a password change or "Sign out everywhere" since, user not deleted).
+async function currentLinkingUserId(
+  request: Request,
+  stored: OAuthStartSessionData,
+  env?: SessionEnv | null,
+): Promise<string | null> {
+  const sessionUserId = await getUserId(request, env);
+  if (sessionUserId) return sessionUserId;
+  if (!stored.linkingUserId) return null;
+
+  // A linking start recorded before session versions existed counts as version 0.
+  const identity = { userId: stored.linkingUserId, sessionVersion: stored.linkingSessionVersion ?? 0 };
+  return (await isSessionIdentityCurrent(identity, env)) ? identity.userId : null;
+}
 
 interface OAuthFailureTelemetry {
   failureKind: OAuthProviderFailureKind;
@@ -198,7 +217,7 @@ export async function handleAppleCallback(request: Request, context: AppLoadCont
   }
 
   const currentUserId = stored.linking
-    ? (await getUserId(request, env)) ?? stored.linkingUserId ?? null
+    ? await currentLinkingUserId(request, stored, env)
     : null;
   if (stored.linking && !currentUserId) {
     return redirectWithCapturedOAuthError(telemetry, request, "apple", failureRedirect, "login_required", "link_account", env);
@@ -288,7 +307,7 @@ export async function handleGitHubCallback(request: Request, context: AppLoadCon
   }
 
   const currentUserId = stored.linking
-    ? (await getUserId(request, env)) ?? stored.linkingUserId ?? null
+    ? await currentLinkingUserId(request, stored, env)
     : null;
   if (stored.linking && !currentUserId) {
     return redirectWithCapturedOAuthError(telemetry, request, "github", failureRedirect, "login_required", "link_account", env);
@@ -392,7 +411,7 @@ export async function handleGoogleCallback(request: Request, context: AppLoadCon
   }
 
   const currentUserId = stored.linking
-    ? (await getUserId(request, env)) ?? stored.linkingUserId ?? null
+    ? await currentLinkingUserId(request, stored, env)
     : null;
   if (stored.linking && !currentUserId) {
     return redirectWithCapturedOAuthError(telemetry, request, "google", failureRedirect, "login_required", "link_account", env);
