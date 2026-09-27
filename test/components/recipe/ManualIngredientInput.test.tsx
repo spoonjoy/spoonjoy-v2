@@ -13,6 +13,34 @@ describe('ManualIngredientInput', () => {
       expect(screen.getByLabelText('Ingredient')).toBeInTheDocument()
     })
 
+    // Every step card in the recipe builder can show this form at once. Fixed ids
+    // ("quantity", "unit", "ingredientName") repeated across cards, so each card's labels
+    // pointed at the first card's fields.
+    it('gives each instance its own field ids so labels point at their own fields', () => {
+      render(
+        <>
+          <section aria-label="first card">
+            <ManualIngredientInput onAdd={vi.fn()} />
+          </section>
+          <section aria-label="second card">
+            <ManualIngredientInput onAdd={vi.fn()} />
+          </section>
+        </>
+      )
+
+      const ids = Array.from(document.querySelectorAll('input')).map((input) => input.id)
+      expect(ids).toHaveLength(6)
+      expect(ids.every(Boolean)).toBe(true)
+      expect(new Set(ids).size).toBe(6)
+
+      for (const card of screen.getAllByRole('region')) {
+        for (const label of Array.from(card.querySelectorAll('label'))) {
+          const field = document.getElementById(label.htmlFor)
+          expect(card.contains(field)).toBe(true)
+        }
+      }
+    })
+
     it('renders add button', () => {
       render(<ManualIngredientInput onAdd={vi.fn()} />)
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
 import {
@@ -19,6 +19,12 @@ export function ManualIngredientInput({
   disabled = false,
   loading = false,
 }: ManualIngredientInputProps) {
+  // Several step cards can show this form at once, so the ids must be unique
+  // per instance or every card's labels would point at the first card's fields.
+  const id = useId()
+  const quantityId = `${id}-quantity`
+  const unitId = `${id}-unit`
+  const ingredientNameId = `${id}-ingredient-name`
   const [quantity, setQuantity] = useState<string>('')
   const [unit, setUnit] = useState('')
   const [ingredientName, setIngredientName] = useState('')
@@ -59,12 +65,12 @@ export function ManualIngredientInput({
     <form onSubmit={handleSubmit}>
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_2fr_auto] gap-4 items-end">
         <div>
-          <label htmlFor="quantity" className="block mb-2 text-sm font-bold">
+          <label htmlFor={quantityId} className="block mb-2 text-sm font-bold">
             Quantity
           </label>
           <Input
             type="number"
-            id="quantity"
+            id={quantityId}
             name="quantity"
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
@@ -78,12 +84,12 @@ export function ManualIngredientInput({
           />
         </div>
         <div>
-          <label htmlFor="unit" className="block mb-2 text-sm font-bold">
+          <label htmlFor={unitId} className="block mb-2 text-sm font-bold">
             Unit
           </label>
           <Input
             type="text"
-            id="unit"
+            id={unitId}
             name="unit"
             value={unit}
             onChange={(e) => setUnit(e.target.value)}
@@ -95,12 +101,12 @@ export function ManualIngredientInput({
           />
         </div>
         <div>
-          <label htmlFor="ingredientName" className="block mb-2 text-sm font-bold">
+          <label htmlFor={ingredientNameId} className="block mb-2 text-sm font-bold">
             Ingredient
           </label>
           <Input
             type="text"
-            id="ingredientName"
+            id={ingredientNameId}
             name="ingredientName"
             value={ingredientName}
             onChange={(e) => setIngredientName(e.target.value)}
