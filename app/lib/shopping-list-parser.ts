@@ -8,6 +8,8 @@ export type ParsedItemDraft = {
 
 export type ShoppingListActionData = {
   success?: boolean;
+  /** Set on a successful addItem, so the page knows to clear its Item field (R-M3-3). */
+  intent?: "addItem";
   errors?: {
     parse?: string;
   };

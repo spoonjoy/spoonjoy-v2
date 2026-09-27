@@ -25,13 +25,18 @@ export interface SpoonsStripProps {
   spoons: SpoonsStripItem[];
   showRecipe?: boolean;
   emptyAction?: ReactNode;
+  /**
+   * The time the cooks' relative times are measured from, in epoch milliseconds: the loader's
+   * render time, so the server and the hydrating browser render the same text. Defaults to the
+   * clock, which only suits client-only renders.
+   */
+  now?: number;
 }
 
 const NOTE_TRUNCATE_AT = 180;
 
-function relativeTime(iso: string): string {
+function relativeTime(iso: string, now: number): string {
   const then = new Date(iso).getTime();
-  const now = Date.now();
   const seconds = Math.max(0, Math.round((now - then) / 1000));
   if (seconds < 45) return "just now";
   const minutes = Math.round(seconds / 60);
@@ -95,7 +100,11 @@ function CompactCookVisual({ spoon }: { spoon: SpoonsStripItem }) {
   );
 }
 
-function CompactSpoonList({ spoons }: { spoons: SpoonsStripItem[] }) {
+function CookedAt({ iso, now }: { iso: string; now: number }) {
+  return <time dateTime={iso}>{relativeTime(iso, now)}</time>;
+}
+
+function CompactSpoonList({ spoons, now }: { spoons: SpoonsStripItem[]; now: number }) {
   return (
     <ul className="sj-list-ruled">
       {spoons.map((spoon) => (
@@ -116,7 +125,7 @@ function CompactSpoonList({ spoons }: { spoons: SpoonsStripItem[] }) {
                   {spoon.chef.username}
                 </span>
                 {" cooked this "}
-                <span className="sm:hidden">{relativeTime(spoon.cookedAt)}</span>
+                <span className="sm:hidden"><CookedAt iso={spoon.cookedAt} now={now} /></span>
               </p>
               {spoon.note ? (
                 <p className="mt-1 line-clamp-2 text-sm/5 text-[var(--sj-ink)]">
@@ -131,7 +140,7 @@ function CompactSpoonList({ spoons }: { spoons: SpoonsStripItem[] }) {
               ) : null}
             </div>
             <span className="hidden font-sj-ui text-xs font-bold uppercase tracking-[0.12em] text-[var(--sj-brass)] sm:block">
-              {relativeTime(spoon.cookedAt)}
+              <CookedAt iso={spoon.cookedAt} now={now} />
             </span>
           </div>
         </li>
@@ -140,7 +149,7 @@ function CompactSpoonList({ spoons }: { spoons: SpoonsStripItem[] }) {
   );
 }
 
-export function SpoonsStrip({ spoons, showRecipe = false, emptyAction }: SpoonsStripProps) {
+export function SpoonsStrip({ spoons, showRecipe = false, emptyAction, now = Date.now() }: SpoonsStripProps) {
   if (spoons.length === 0) {
     return (
       <div className="border-y border-dashed border-[var(--sj-border-strong)] py-5">
@@ -153,7 +162,7 @@ export function SpoonsStrip({ spoons, showRecipe = false, emptyAction }: SpoonsS
   }
 
   if (showRecipe) {
-    return <CompactSpoonList spoons={spoons} />;
+    return <CompactSpoonList spoons={spoons} now={now} />;
   }
 
   return (
@@ -171,7 +180,7 @@ export function SpoonsStrip({ spoons, showRecipe = false, emptyAction }: SpoonsS
               {spoon.chef.username}
             </Link>
             <span className="text-[var(--sj-ink-soft)]">
-              {relativeTime(spoon.cookedAt)}
+              <CookedAt iso={spoon.cookedAt} now={now} />
             </span>
           </div>
           {spoon.photoUrl ? (

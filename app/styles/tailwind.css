@@ -121,6 +121,14 @@ html *:where(input, textarea, select, button) {
   transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.15s ease-in-out;
 }
 
+/* Controls whose colours show their state (pressed view buttons, filter chips, checkboxes) switch
+   instantly instead of fading with the theme rules above: mid-fade, their text and background
+   pass through near-identical greys (axe measured 1.19:1 to 2.87:1 on the shopping list's view
+   buttons right after a tap). Unlayered like the rules above, and more specific, so it wins. */
+.sj-instant-state {
+  transition: none;
+}
+
 .font-sj-display {
   font-family: var(--font-sj-display);
 }

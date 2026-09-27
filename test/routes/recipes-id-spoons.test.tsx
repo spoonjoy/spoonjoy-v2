@@ -110,6 +110,9 @@ describe("Recipes $id route — spoons + provenance", () => {
     const { data } = extractResponseData(response);
     expect(data.spoons).toHaveLength(1);
     expect(data.spoons[0].note).toBe("first");
+    // The cooks' relative times are measured from this, on the server and in the browser alike.
+    expect(data.renderedAt).toBeGreaterThanOrEqual(Date.parse(data.spoons[0].cookedAt));
+    expect(data.renderedAt).toBeLessThanOrEqual(Date.now());
     expect(data.isOriginCookCandidate).toBe(true);
     expect(data.coverImageUrl).toBeNull();
   });
@@ -260,6 +263,56 @@ describe("Recipes $id route — spoons + provenance", () => {
     await waitFor(() => {
       expect(screen.getByText("fan note")).toBeInTheDocument();
     });
+  });
+
+  it("measures each cook's time from the loader's render time, not the browser's clock", async () => {
+    const renderedAt = Date.parse("2025-05-01T15:00:30Z");
+    const mockData = {
+      recipe: {
+        id: "r1",
+        title: "Mock Recipe",
+        description: null,
+        servings: null,
+        sourceUrl: null,
+        chef: { id: "c1", username: "testchef", photoUrl: null },
+        steps: [],
+      },
+      coverImageUrl: "/p.png",
+      isOwner: false,
+      cookbooks: [],
+      savedInCookbookIds: [],
+      hasIngredientsInShoppingList: false,
+      spoons: [
+        {
+          id: "s1",
+          cookedAt: "2025-05-01T12:00:00.000Z",
+          photoUrl: null,
+          note: "three hours back",
+          nextTime: null,
+          chef: { id: "c2", username: "cook", photoUrl: null },
+        },
+      ],
+      isOriginCookCandidate: false,
+      renderedAt,
+    };
+    const Stub = createTestRoutesStub([
+      {
+        path: "/recipes/:id",
+        Component: () => (
+          <ToastProvider>
+            <RecipeDetail />
+          </ToastProvider>
+        ),
+        loader: () => mockData,
+      },
+    ]);
+    render(<Stub initialEntries={["/recipes/r1"]} />);
+    await waitFor(() => {
+      expect(screen.getByText("three hours back")).toBeInTheDocument();
+    });
+    const cookedAt = screen.getByText("3 hr ago");
+    expect(cookedAt.tagName).toBe("TIME");
+    expect(cookedAt).toHaveAttribute("datetime", "2025-05-01T12:00:00.000Z");
   });
 
   it("clicking 'Log cook' opens then closes the SpoonDialog via Cancel", async () => {
@@ -710,27 +763,58 @@ describe("Recipes $id route — spoons + provenance", () => {
     expect(spoons[0].nextTime).toBe("more thyme");
   });
 
-  it("action with intent=createSpoon accepts a valid cookedAt timestamp", async () => {
+  async function postCookedAt(cookedAt: string) {
     const fd = new UndiciFormData();
     fd.append("intent", "createSpoon");
     fd.append("note", "ok");
-    fd.append("cookedAt", "2025-08-15T10:30");
+    fd.append("cookedAt", cookedAt);
     const request = new UndiciRequest("http://localhost/recipes/x", {
       method: "POST",
       headers: { cookie: cookSessionCookie },
       body: fd,
     }) as unknown as Request;
-    const response = await action({
+    return action({
       request,
       params: { id: recipeId },
       context: { cloudflare: { env: null } } as any,
     });
-    const { data } = extractResponseData(response);
+  }
+
+  it("action with intent=createSpoon stores a cookedAt instant exactly as sent", async () => {
+    const { data } = extractResponseData(await postCookedAt("2025-08-15T17:30:00.000Z"));
     expect(data?.success).toBe(true);
     const spoons = await db.recipeSpoon.findMany({
       where: { recipeId, chefId: cookUserId },
     });
     expect(spoons).toHaveLength(1);
+    expect(spoons[0].cookedAt.toISOString()).toBe("2025-08-15T17:30:00.000Z");
+  });
+
+  it("action with intent=createSpoon accepts a cookedAt with a UTC offset", async () => {
+    const { data } = extractResponseData(await postCookedAt("2025-08-15T10:30-07:00"));
+    expect(data?.success).toBe(true);
+    const spoons = await db.recipeSpoon.findMany({
+      where: { recipeId, chefId: cookUserId },
+    });
+    expect(spoons[0].cookedAt.toISOString()).toBe("2025-08-15T17:30:00.000Z");
+  });
+
+  it("action with intent=createSpoon rejects a cookedAt with no timezone with 400 instead of reading it as UTC", async () => {
+    let caught: unknown = null;
+    try {
+      await postCookedAt("2025-08-15T10:30");
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(Response);
+    expect((caught as Response).status).toBe(400);
+    expect(await (caught as Response).text()).toBe("Invalid cookedAt: send an ISO 8601 instant with a timezone");
+    expect(await db.recipeSpoon.count({ where: { recipeId, chefId: cookUserId } })).toBe(0);
+  });
+
+  it("action with intent=createSpoon rejects an instant-shaped cookedAt that is not a real time with 400", async () => {
+    await expect(postCookedAt("2025-13-45T25:99:00Z")).rejects.toMatchObject({ status: 400 });
+    expect(await db.recipeSpoon.count({ where: { recipeId, chefId: cookUserId } })).toBe(0);
   });
 
   it("action with intent=createSpoon rejects an invalid cookedAt with 400", async () => {

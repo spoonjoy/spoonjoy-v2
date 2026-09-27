@@ -14,6 +14,7 @@ import {
   FOOD_IMAGE_TYPES,
   IMAGE_MAX_FILE_SIZE,
 } from "~/lib/recipe-image";
+import { localDateTimeToIso } from "~/lib/cooked-at";
 
 function validateClientFile(file: File): string | null {
   if (!(FOOD_IMAGE_TYPES as readonly string[]).includes(file.type)) {
@@ -142,6 +143,9 @@ export function SpoonDialog({
           onSubmit={handleSubmit}
         >
           <input type="hidden" name="intent" value="createSpoon" />
+          {/* The field below is a wall-clock time with no timezone; this sends the instant it means
+              in the cook's own timezone (see ~/lib/cooked-at). */}
+          <input type="hidden" name="cookedAt" value={localDateTimeToIso(cookedAt)} />
           {showFirstPhotoCoverPrompt ? (
             <p className="text-sm text-[var(--sj-brass)]">
               Add a photo to create the recipe cover
@@ -231,7 +235,6 @@ export function SpoonDialog({
             <Label htmlFor={cookedAtId}>Cooked at</Label>
             <Input
               id={cookedAtId}
-              name="cookedAt"
               type="datetime-local"
               value={cookedAt}
               onChange={(event) => setCookedAt(event.target.value)}

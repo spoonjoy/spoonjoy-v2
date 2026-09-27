@@ -1,5 +1,6 @@
 import { test, expect } from "../fixtures";
 import { createDisposableE2EUser } from '../support/disposable-auth';
+import { Secret, fillSecret } from '../journeys/support/secret';
 import {
   e2eOauthClientName,
   recordE2eOauthClient,
@@ -40,8 +41,8 @@ test.describe('Passkey lifecycle', () => {
     await page.goto('/signup');
     await page.getByLabel('Email').first().fill(user.email);
     await page.getByLabel('Username').first().fill(user.username);
-    await page.getByLabel('Password', { exact: true }).first().fill(user.password);
-    await page.getByLabel('Confirm Password').first().fill(user.password);
+    await fillSecret(page.getByLabel('Password', { exact: true }).first(), new Secret(user.password));
+    await fillSecret(page.getByLabel('Confirm Password').first(), new Secret(user.password));
     await page.getByRole('button', { name: /sign up/i }).first().click();
     await expect(page).toHaveURL('/recipes');
 

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestRoutesStub } from "../../utils";
 import { RecipePhotoStudio } from "~/components/recipe/RecipePhotoStudio";
+import { withTimeZone } from "../../helpers/timezone";
 
 function makeFile(name: string, type: string, size = 1024): File {
   return new File([new Uint8Array(size)], name, { type });
@@ -70,6 +71,11 @@ describe("RecipePhotoStudio", () => {
   });
 
   it("defaults a missing-cover upload to a Spoon-backed editorial cover", async () => {
+    // A cook in Los Angeles: "Cooked at" is sent as the instant they meant, not a bare wall-clock time.
+    await withTimeZone("America/Los_Angeles", () => defaultsToSpoonBackedEditorialCover());
+  });
+
+  async function defaultsToSpoonBackedEditorialCover() {
     const user = userEvent.setup();
     let captured: FormData | null = null;
     renderStudio({}, (formData) => {
@@ -101,10 +107,10 @@ describe("RecipePhotoStudio", () => {
     expect(captured!.get("activateWhenReady")).toBe("true");
     expect(captured!.get("note")).toBe("Ate this for Tuesday dinner.");
     expect(captured!.get("nextTime")).toBe("More lemon.");
-    expect(captured!.get("cookedAt")).toBe("2026-07-14T19:30");
+    expect(captured!.getAll("cookedAt")).toEqual(["2026-07-15T02:30:00.000Z"]);
     expect(captured!.get("promptAddition")).toBe("brighter window light");
     expect((captured!.get("photo") as File).name).toBe("finished-pasta.png");
-  });
+  }
 
   it("hides Spoon fields when the photo should only become a cover", async () => {
     const user = userEvent.setup();
