@@ -162,9 +162,9 @@ export default function Signup() {
               id="email"
               name="email"
               required
-              invalid={/* istanbul ignore next -- @preserve */ !!actionData?.errors?.email}
+              invalid={!!actionData?.errors?.email}
             />
-            {/* istanbul ignore next -- @preserve */ actionData?.errors?.email && (
+            {actionData?.errors?.email && (
               <ErrorMessage>{actionData.errors.email}</ErrorMessage>
             )}
           </Field>
@@ -177,9 +177,9 @@ export default function Signup() {
               name="username"
               required
               minLength={3}
-              invalid={/* istanbul ignore next -- @preserve */ !!actionData?.errors?.username}
+              invalid={!!actionData?.errors?.username}
             />
-            {/* istanbul ignore next -- @preserve */ actionData?.errors?.username && (
+            {actionData?.errors?.username && (
               <ErrorMessage>{actionData.errors.username}</ErrorMessage>
             )}
           </Field>
@@ -192,9 +192,9 @@ export default function Signup() {
               name="password"
               required
               minLength={8}
-              invalid={/* istanbul ignore next -- @preserve */ !!actionData?.errors?.password}
+              invalid={!!actionData?.errors?.password}
             />
-            {/* istanbul ignore next -- @preserve */ actionData?.errors?.password && (
+            {actionData?.errors?.password && (
               <ErrorMessage>{actionData.errors.password}</ErrorMessage>
             )}
           </Field>
@@ -207,9 +207,9 @@ export default function Signup() {
               name="confirmPassword"
               required
               minLength={8}
-              invalid={/* istanbul ignore next -- @preserve */ !!actionData?.errors?.confirmPassword}
+              invalid={!!actionData?.errors?.confirmPassword}
             />
-            {/* istanbul ignore next -- @preserve */ actionData?.errors?.confirmPassword && (
+            {actionData?.errors?.confirmPassword && (
               <ErrorMessage>{actionData.errors.confirmPassword}</ErrorMessage>
             )}
           </Field>

@@ -542,6 +542,7 @@ describe("Signup Route", () => {
       const form = (await screen.findByRole("button", { name: "Sign Up" })).closest("form");
       expect(form).toHaveAttribute("novalidate");
 
+      await user.type(screen.getByLabelText("Email"), "new-cook@example.com");
       await user.type(screen.getByLabelText("Username"), "ab");
       await user.type(screen.getByLabelText("Password"), "short");
       await user.click(screen.getByRole("button", { name: "Sign Up" }));
@@ -559,7 +560,35 @@ describe("Signup Route", () => {
       expect(screen.getByLabelText("Confirm Password")).toHaveAccessibleDescription("Passwords do not match");
       expect(screen.getByLabelText("Email")).not.toHaveAttribute("aria-invalid");
       // The fields keep what was typed, so the user corrects them instead of starting over.
+      expect(screen.getByLabelText("Email")).toHaveValue("new-cook@example.com");
       expect(screen.getByLabelText("Username")).toHaveValue("ab");
+    });
+
+    it("marks a rejected email invalid and describes it with the server's message", async () => {
+      const user = userEvent.setup();
+      const Stub = createTestRoutesStub([
+        {
+          path: "/signup",
+          Component: Signup,
+          loader: () => ({ oauthProviders: [] }),
+          action: () => ({
+            errors: {
+              email: "Valid email is required",
+              username: "Username must be at least 3 characters",
+            },
+          }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/signup"]} />);
+
+      await user.type(await screen.findByLabelText("Email"), "not-an-email");
+      await user.type(screen.getByLabelText("Username"), "ab");
+      await user.click(screen.getByRole("button", { name: "Sign Up" }));
+
+      expect(await screen.findByText("Valid email is required")).toBeInTheDocument();
+      expect(screen.getByLabelText("Email")).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByLabelText("Email")).toHaveAccessibleDescription("Valid email is required");
     });
 
     it("should have login link", async () => {
