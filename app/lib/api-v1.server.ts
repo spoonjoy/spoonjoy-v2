@@ -116,9 +116,9 @@ import {
   asCompatibleD1Database,
   coalesceShoppingRecipeIngredients,
   createCompatibleShoppingListD1Batch,
+  addToCompatibleShoppingListItem,
   findCompatibleShoppingListItem,
   mergedShoppingItemQuantity,
-  mutateCompatibleShoppingListItem,
   runCompatibleShoppingListBatch,
   type ShoppingListItemWritePlan,
 } from "~/lib/shopping-list-mutations.server";
@@ -4064,19 +4064,18 @@ async function handleShoppingItemCreate(args: ApiV1RouteArgs, requestId: string,
       ingredientRefId: ingredientRef.id,
       unitId: unit?.id ?? null,
     };
-    const result = await mutateCompatibleShoppingListItem({
+    // The quantity, check and removed state change atomically in addToCompatibleShoppingListItem.
+    const result = await addToCompatibleShoppingListItem({
       database: db,
       identity,
-      update: async (existing) => db.shoppingListItem.update({
+      added: quantity,
+      sortIndex: async (existing) => existing.checked || existing.checkedAt || existing.deletedAt
+        ? nextShoppingSortIndex(db, list.id)
+        : existing.sortIndex,
+      update: (existing, sortIndex) => db.shoppingListItem.update({
         where: { id: existing.id },
         data: {
-          quantity: mergedShoppingItemQuantity(existing, quantity),
-          checked: false,
-          checkedAt: null,
-          deletedAt: null,
-          sortIndex: existing.checked || existing.checkedAt || existing.deletedAt
-            ? await nextShoppingSortIndex(db, list.id)
-            : existing.sortIndex,
+          sortIndex,
           categoryKey: categoryKey ?? existing.categoryKey,
           iconKey: iconKey ?? existing.iconKey,
         },

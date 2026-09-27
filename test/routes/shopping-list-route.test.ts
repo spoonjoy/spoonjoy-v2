@@ -224,6 +224,57 @@ describe("Shopping List Route", () => {
       expect(await activeItems()).toEqual([{ name, quantity: 4, unit: "clove" }]);
     });
 
+    // Two adds of the same item that both read the row before either writes (two devices, or a
+    // double tap). The gate holds each request's lookup until both have made it, so the writes
+    // always race; both amounts must still land.
+    async function raceTwoAdds(name: string, lookup: "active" | "removed", first: string, second: string) {
+      const findFirst = db.shoppingListItem.findFirst.bind(db.shoppingListItem);
+      let arrived = 0;
+      let release!: () => void;
+      const bothArrived = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const spy = vi.spyOn(db.shoppingListItem, "findFirst").mockImplementation((async (args: any) => {
+        const result = await findFirst(args);
+        const where = args?.where ?? {};
+        const isGatedLookup = lookup === "active" ? where.deletedAt === null : Boolean(where.deletedAt?.not === null);
+        if (where.ingredientRefId && isGatedLookup) {
+          arrived += 1;
+          if (arrived === 2) release();
+          await bothArrived;
+        }
+        return result;
+      }) as any);
+      try {
+        await Promise.all([
+          post({ intent: "addItem", ingredientText: `${first} ${name}` }),
+          post({ intent: "addItem", ingredientText: `${second} ${name}` }),
+        ]);
+      } finally {
+        spy.mockRestore();
+      }
+      expect(arrived).toBe(2);
+    }
+
+    it("keeps both amounts when two adds race on an item that is on the list", async () => {
+      const name = `pear_${faker.string.alphanumeric(6).toLowerCase()}`;
+      await post({ intent: "addItem", ingredientText: `1 ${name}` });
+
+      await raceTwoAdds(name, "active", "3", "2");
+
+      expect(await activeItems()).toEqual([{ name, quantity: 6, unit: "whole" }]);
+    });
+
+    it("keeps both amounts when two adds race to bring back a cleared item", async () => {
+      const name = `plum_${faker.string.alphanumeric(6).toLowerCase()}`;
+      await post({ intent: "addItem", ingredientText: `5 ${name}` });
+      await post({ intent: "clearAll" });
+
+      await raceTwoAdds(name, "removed", "3", "2");
+
+      expect(await activeItems()).toEqual([{ name, quantity: 5, unit: "whole" }]);
+    });
+
     it("still adds to an item that is on the list, checked or not", async () => {
       const name = `carrot_${faker.string.alphanumeric(6).toLowerCase()}`;
       await post({ intent: "addItem", ingredientText: `3 ${name}` });
@@ -792,30 +843,30 @@ describe("Shopping List Route", () => {
             deletedAt: new Date(),
           },
         });
+        // Another request brings the item back as a live row just after this one found only the
+        // removed row, so this request's own restore hits the active-identity index for real.
         const delegate = db.shoppingListItem as any;
         const originalCreate = delegate.create.bind(delegate);
-        const originalUpdate = delegate.update.bind(delegate);
-        const updateSpy = vi.spyOn(delegate, "update").mockImplementationOnce(async () => {
-          await originalCreate({
-            data: {
-              id: "compat-web-manual-restore-winner",
-              shoppingListId: shoppingList.id,
-              ingredientRefId: ingredientRef.id,
-              unitId: unit.id,
-              quantity: 4,
-              sortIndex: 1,
-              categoryKey: "winner-category",
-            },
-          });
-          throw Object.assign(new Error("Unique constraint failed on the fields"), {
-            code: "P2002",
-            meta: {
-              modelName: "ShoppingListItem",
-              target: ["shoppingListId", "unitId", "ingredientRefId"],
-            },
-          });
+        const originalFindFirst = delegate.findFirst.bind(delegate);
+        let winnerInserted = false;
+        const findFirstSpy = vi.spyOn(delegate, "findFirst").mockImplementation(async (args: any) => {
+          const result = await originalFindFirst(args);
+          if (!winnerInserted && args?.where?.deletedAt?.not === null && result?.id === tombstone.id) {
+            winnerInserted = true;
+            await originalCreate({
+              data: {
+                id: "compat-web-manual-restore-winner",
+                shoppingListId: shoppingList.id,
+                ingredientRefId: ingredientRef.id,
+                unitId: unit.id,
+                quantity: 4,
+                sortIndex: 1,
+                categoryKey: "winner-category",
+              },
+            });
+          }
+          return result;
         });
-        updateSpy.mockImplementation(originalUpdate);
 
         const response = await action({
           request: await createFormRequest(
@@ -837,7 +888,8 @@ describe("Shopping List Route", () => {
           .resolves.toMatchObject({ quantity: 7, deletedAt: null, iconKey: "package" });
         await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: tombstone.id } }))
           .resolves.toMatchObject({ quantity: 20, deletedAt: expect.any(Date) });
-        expect(updateSpy).toHaveBeenCalledTimes(2);
+        expect(winnerInserted).toBe(true);
+        findFirstSpy.mockRestore();
       } finally {
         await restoreFullIdentityIndex();
       }

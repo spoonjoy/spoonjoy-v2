@@ -13,9 +13,9 @@ import {
   asCompatibleD1Database,
   coalesceShoppingRecipeIngredients,
   createCompatibleShoppingListD1Batch,
+  addToCompatibleShoppingListItem,
   findCompatibleShoppingListItem,
   mergedShoppingItemQuantity,
-  mutateCompatibleShoppingListItem,
   runCompatibleShoppingListBatch,
   type ShoppingListItemWritePlan,
 } from "~/lib/shopping-list-mutations.server";
@@ -256,33 +256,24 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
         ingredientRefId: ingredientRef.id,
       };
 
-      await mutateCompatibleShoppingListItem({
+      // The quantity, check and removed state change atomically in addToCompatibleShoppingListItem.
+      await addToCompatibleShoppingListItem({
         database,
         identity,
-        update: async (existingItem) => {
-          const newQuantity = mergedShoppingItemQuantity(
-            existingItem,
-            quantity ? parseFloat(quantity) : null
-          );
+        added: quantity ? parseFloat(quantity) : null,
+        sortIndex: async (existingItem) => {
           const shouldMoveToEnd = Boolean(
             existingItem.deletedAt || existingItem.checkedAt || existingItem.checked
           );
-
-          return database.shoppingListItem.update({
-            where: { id: existingItem.id },
-            data: {
-              quantity: newQuantity,
-              checked: false,
-              checkedAt: null,
-              categoryKey,
-              iconKey,
-              deletedAt: null,
-              sortIndex: shouldMoveToEnd
-                ? await nextSortIndex(database, shoppingList.id)
-                : existingItem.sortIndex,
-            },
-          });
+          return shouldMoveToEnd
+            ? nextSortIndex(database, shoppingList.id)
+            : existingItem.sortIndex;
         },
+        update: (existingItem, sortIndex) =>
+          database.shoppingListItem.update({
+            where: { id: existingItem.id },
+            data: { categoryKey, iconKey, sortIndex },
+          }),
         create: async () => {
           const sortIndex = await nextSortIndex(database, shoppingList.id);
 
