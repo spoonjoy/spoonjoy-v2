@@ -12,7 +12,7 @@ import {
   type PostHogServerEnv,
 } from "~/lib/analytics-server";
 import { formatServingsLabel } from "~/lib/quantity";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { absoluteUrlFromRequest, cookbookOgPath } from "~/lib/og-image.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 
@@ -388,7 +388,6 @@ export default function CookbookDetail() {
   const [recipeToRemove, setRecipeToRemove] = useState<string | null>(null);
   const [titleError, setTitleError] = useState<string | null>(null);
   const submit = useSubmit();
-  const deleteFormRef = useRef<HTMLFormElement>(null);
   // The title editor is a form, so it hides the dock like other edit forms (R-M3-2).
   useDockSuppressed(isEditingTitle);
 
@@ -469,7 +468,9 @@ export default function CookbookDetail() {
             onClose={() => setShowDeleteDialog(false)}
             onConfirm={() => {
               setShowDeleteDialog(false);
-              deleteFormRef.current?.submit();
+              // Through the router, like the page's other actions: it follows the action's redirect
+              // to /cookbooks instead of relying on a native document submit.
+              submit({ intent: "delete" }, { method: "post" });
             }}
             title="Delete this cookbook?"
             description="This will permanently delete the cookbook and remove all recipe associations. The recipes themselves will not be deleted."
@@ -567,17 +568,14 @@ export default function CookbookDetail() {
                     >
                       Edit title
                     </Button>
-                    <Form method="post" ref={deleteFormRef}>
-                      <input type="hidden" name="intent" value="delete" />
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        aria-label="Delete cookbook"
-                        onClick={() => setShowDeleteDialog(true)}
-                      >
-                        Delete
-                      </Button>
-                    </Form>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      aria-label="Delete cookbook"
+                      onClick={() => setShowDeleteDialog(true)}
+                    >
+                      Delete
+                    </Button>
                   </div>
                 </div>
 
