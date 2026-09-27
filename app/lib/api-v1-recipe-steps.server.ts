@@ -803,7 +803,7 @@ async function createNativeRecipeStepOnce(
   chefId: string,
   recipeId: string,
   input: NativeRecipeStepCreateInput,
-  options: { stepId?: string; d1?: D1ReadDatabase | null } = {},
+  options: { stepId?: string; d1?: D1ReadDatabase | null },
 ): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; stepNum: number }>> {
   const recipe = await loadOwnedRecipe(db, chefId, recipeId);
   if (!recipe.ok) return recipe;
@@ -906,7 +906,7 @@ async function updateNativeRecipeStepOnce(
   recipeId: string,
   stepId: string,
   input: NativeRecipeStepPatchInput,
-  options: { d1?: D1ReadDatabase | null } = {},
+  options: { d1?: D1ReadDatabase | null },
 ): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; updated: boolean }>> {
   const recipe = await loadOwnedRecipe(db, chefId, recipeId);
   if (!recipe.ok) return recipe;
@@ -1010,7 +1010,7 @@ async function deleteNativeRecipeStepOnce(
   chefId: string,
   recipeId: string,
   stepId: string,
-  options: NativeRecipeStepDeleteOptions = {},
+  options: NativeRecipeStepDeleteOptions,
 ): Promise<ApiV1RecipeStepResult<{ recipeId: string; step: { id: string; stepNum: number } }>> {
   const recipe = await loadOwnedRecipe(db, chefId, recipeId);
   if (!recipe.ok) return recipe;
@@ -1088,7 +1088,7 @@ async function createNativeRecipeStepIngredientOnce(
   recipeId: string,
   stepId: string,
   input: NativeRecipeStepIngredientCreateInput,
-  options: { ingredientId?: string; d1?: D1ReadDatabase | null } = {},
+  options: { ingredientId?: string; d1?: D1ReadDatabase | null },
 ): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; ingredientId: string }>> {
   const recipe = await loadOwnedRecipe(db, chefId, recipeId);
   if (!recipe.ok) return recipe;
@@ -1140,7 +1140,7 @@ async function deleteNativeRecipeStepIngredientOnce(
   recipeId: string,
   stepId: string,
   ingredientId: string,
-  options: NativeRecipeStepIngredientDeleteOptions = {},
+  options: NativeRecipeStepIngredientDeleteOptions,
 ): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; ingredient: { id: string } }>> {
   const recipe = await loadOwnedRecipe(db, chefId, recipeId);
   if (!recipe.ok) return recipe;
@@ -1243,7 +1243,7 @@ async function reorderNativeRecipeStepOnce(
   chefId: string,
   recipeId: string,
   input: NativeRecipeStepReorderInput,
-  options: NativeRecipeStepReorderOptions = {},
+  options: NativeRecipeStepReorderOptions,
 ): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; reordered: boolean }>> {
   const recipe = await loadOwnedRecipe(db, chefId, recipeId);
   if (!recipe.ok) return recipe;
@@ -1366,7 +1366,7 @@ async function replaceNativeRecipeStepOutputUsesOnce(
   chefId: string,
   recipeId: string,
   input: NativeRecipeStepOutputUsesInput,
-  options: { d1?: D1ReadDatabase | null } = {},
+  options: { d1?: D1ReadDatabase | null },
 ): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; replaced: boolean }>> {
   const recipe = await loadOwnedRecipe(db, chefId, recipeId);
   if (!recipe.ok) return recipe;
