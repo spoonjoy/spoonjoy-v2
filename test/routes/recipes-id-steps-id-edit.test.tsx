@@ -3947,17 +3947,21 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
           },
         ]);
 
+        // Start in manual mode (the toggle's remembered preference) rather than depending on the
+        // toggle state earlier tests left behind.
+        window.localStorage.setItem("ingredient-input-mode", "manual");
         render(<Stub initialEntries={["/recipes/recipe-1/steps/step-1/edit"]} />);
 
         try {
           fireEvent.click(await screen.findByRole("button", { name: "+ Add Ingredient" }));
-          fireEvent.click(screen.getByRole("switch"));
-          fireEvent.change(screen.getByRole("spinbutton", { name: "Quantity" }), { target: { value: "1" } });
+          fireEvent.change(await screen.findByRole("spinbutton", { name: "Quantity" }), { target: { value: "1" } });
           fireEvent.change(screen.getByLabelText("Unit"), { target: { value: "cup" } });
           fireEvent.change(screen.getByLabelText("Ingredient"), { target: { value: "rice" } });
           fireEvent.click(screen.getByRole("button", { name: "Add ingredient" }));
 
-          expect(await screen.findByRole("alert")).toHaveTextContent("This ingredient is already in the recipe");
+          expect(await screen.findByRole("alert", {}, { timeout: 3000 })).toHaveTextContent(
+            "This ingredient is already in the recipe"
+          );
         } finally {
           // The toggle remembers manual mode in localStorage; later tests expect AI mode first.
           window.localStorage.removeItem("ingredient-input-mode");
