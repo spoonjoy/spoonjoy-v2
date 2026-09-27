@@ -437,7 +437,7 @@ describe("Users $identifier Route", () => {
           path: "/users/:identifier",
           Component: UserProfile,
           loader: () => ({
-            profile: { id: "user-1", username: "chef-logout", photoUrl: null, joinedLabel: "Joined May 2026" },
+            profile: { id: "user-1", username: "chef-logout", photoUrl: null, joinedAt: "2026-05-15T12:00:00.000Z" },
             isOwner: true,
             recipes: [],
             cookbooks: [],
