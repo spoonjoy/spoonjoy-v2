@@ -16,6 +16,7 @@ import {
 import { resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { PROFILE_IMAGE_TYPES } from "~/lib/recipe-image";
 import { safeOAuthClientDisplayName } from "~/lib/oauth-client-metadata";
+import { normalizeUsername, usernameFormatError } from "~/lib/username";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import {
   oauthAccessConnectionOwnership,
@@ -86,8 +87,14 @@ export interface AccountSettingsLoaderData {
   oauthError?: string;
 }
 
+// The forms whose results the page needs to tell apart: a successful Save closes the user
+// information form, a successful password change or set closes the password form, and a photo
+// upload's error shows next to the photo instead of in the page banner.
+export type AccountSettingsFormIntent = "updateUserInfo" | "changePassword" | "setPassword" | "uploadPhoto";
+
 export interface AccountSettingsActionResult {
   success: boolean;
+  intent?: AccountSettingsFormIntent;
   error?:
     | "email_taken"
     | "username_taken"
@@ -279,6 +286,31 @@ export async function loadAccountSettings({
   };
 }
 
+// R2 delete is best-effort: a throw here was previously uninstrumented and would escape the
+// action. Capture it (and the orphaned-avatar event) and swallow it, so removing or replacing the
+// avatar still succeeds in the database.
+async function deleteAvatarBestEffort(
+  context: AppLoadContext,
+  userId: string,
+  photoUrl: string | null | undefined,
+): Promise<void> {
+  const env = getCloudflareEnv(context);
+  const postHogConfig = env
+    ? resolvePostHogServerConfig(env)
+    : ({ enabled: false, reason: "missing-key" } as const);
+  const waitUntil = context.cloudflare?.ctx?.waitUntil
+    ? context.cloudflare.ctx.waitUntil.bind(context.cloudflare.ctx)
+    : undefined;
+  await deleteStoredImageWithCapture({
+    bucket: env?.PHOTOS,
+    imageUrl: photoUrl,
+    event: "spoonjoy.storage.avatar_delete_failed",
+    postHogConfig,
+    waitUntil,
+    distinctId: userId,
+  });
+}
+
 export async function handleAccountSettingsAction({
   request,
   context,
@@ -307,7 +339,7 @@ export async function handleAccountSettingsAction({
 
   if (intent === "updateUserInfo") {
     const email = formData.get("email")?.toString() || "";
-    const username = formData.get("username")?.toString() || "";
+    const username = normalizeUsername(formData.get("username"));
 
     // Validation
     const fieldErrors: { email?: string; username?: string } = {};
@@ -318,13 +350,14 @@ export async function handleAccountSettingsAction({
       fieldErrors.email = "Please enter a valid email address";
     }
 
-    if (!username.trim()) {
+    if (!username) {
       fieldErrors.username = "Username is required";
     }
 
     if (Object.keys(fieldErrors).length > 0) {
       return {
         success: false,
+        intent: "updateUserInfo",
         error: "validation_error",
         fieldErrors,
       };
@@ -357,14 +390,26 @@ export async function handleAccountSettingsAction({
       if (existingEmail.length > 0) {
         return {
           success: false,
+          intent: "updateUserInfo",
           error: "email_taken",
           message: "This email is already in use by another account",
         };
       }
     }
 
-    // Check username uniqueness if username changed
+    // A changed username must follow the username rule (an account whose older username predates
+    // it can still save its email), and must not be taken.
     if (username !== currentUser.username) {
+      const formatError = usernameFormatError(username);
+      if (formatError) {
+        return {
+          success: false,
+          intent: "updateUserInfo",
+          error: "validation_error",
+          fieldErrors: { username: formatError },
+        };
+      }
+
       const existingUsername = await database.user.findUnique({
         where: { username },
         select: { id: true },
@@ -373,6 +418,7 @@ export async function handleAccountSettingsAction({
       if (existingUsername && existingUsername.id !== userId) {
         return {
           success: false,
+          intent: "updateUserInfo",
           error: "username_taken",
           message: "This username is already taken",
         };
@@ -388,7 +434,7 @@ export async function handleAccountSettingsAction({
       },
     });
 
-    return { success: true };
+    return { success: true, intent: "updateUserInfo", message: "Account details saved." };
   }
 
   if (intent === "uploadPhoto") {
@@ -398,6 +444,7 @@ export async function handleAccountSettingsAction({
     if (!hasUploadedImageFile(photo)) {
       return {
         success: false,
+        intent: "uploadPhoto",
         error: "no_file",
         message: "Please select a photo to upload",
       };
@@ -415,6 +462,7 @@ export async function handleAccountSettingsAction({
     if (imageError === "Please upload an image file") {
       return {
         success: false,
+        intent: "uploadPhoto",
         error: "invalid_file_type",
         message: imageError,
       };
@@ -423,10 +471,16 @@ export async function handleAccountSettingsAction({
     if (imageError === "Photo must be less than 5MB") {
       return {
         success: false,
+        intent: "uploadPhoto",
         error: "file_too_large",
         message: imageError,
       };
     }
+
+    const previous = await database.user.findUnique({
+      where: { id: userId },
+      select: { photoUrl: true },
+    });
 
     const photoUrl = await storeImage({
       bucket: getCloudflareEnv(context)?.PHOTOS,
@@ -439,7 +493,11 @@ export async function handleAccountSettingsAction({
       data: { photoUrl },
     });
 
-    return { success: true, photoUrl };
+    // The replaced photo's stored file is no longer referenced; without this it stays in R2
+    // forever, where not even the disposable-data cleanup (which follows User.photoUrl) finds it.
+    await deleteAvatarBestEffort(context, userId, previous?.photoUrl);
+
+    return { success: true, intent: "uploadPhoto", photoUrl };
   }
 
   if (intent === "removePhoto") {
@@ -449,24 +507,7 @@ export async function handleAccountSettingsAction({
       select: { photoUrl: true },
     });
 
-    // R2 delete is best-effort: a throw here was previously uninstrumented and
-    // would escape the action. Capture it (and the orphaned-avatar event) and
-    // swallow so removing the avatar still succeeds in the DB.
-    const env = getCloudflareEnv(context);
-    const postHogConfig = env
-      ? resolvePostHogServerConfig(env)
-      : ({ enabled: false, reason: "missing-key" } as const);
-    const waitUntil = context.cloudflare?.ctx?.waitUntil
-      ? context.cloudflare.ctx.waitUntil.bind(context.cloudflare.ctx)
-      : undefined;
-    await deleteStoredImageWithCapture({
-      bucket: env?.PHOTOS,
-      imageUrl: user?.photoUrl,
-      event: "spoonjoy.storage.avatar_delete_failed",
-      postHogConfig,
-      waitUntil,
-      distinctId: userId,
-    });
+    await deleteAvatarBestEffort(context, userId, user?.photoUrl);
 
     await database.user.update({
       where: { id: userId },
@@ -735,6 +776,7 @@ export async function handleAccountSettingsAction({
 
     return withSessionForVersion({
       success: true,
+      intent: "changePassword",
       message: "Your password has been changed successfully. Other browsers signed in to your account have been signed out.",
     }, sessionVersion);
   }
@@ -809,6 +851,7 @@ export async function handleAccountSettingsAction({
 
     return {
       success: true,
+      intent: "setPassword",
       message: "Your password has been set successfully",
     };
   }

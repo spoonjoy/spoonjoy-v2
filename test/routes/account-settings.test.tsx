@@ -5239,6 +5239,7 @@ describe("Account Settings Route", () => {
 
         const actionResult = {
           success: false,
+          intent: "uploadPhoto" as const,
           error: "file_too_large" as const,
           message: "File size exceeds 5MB limit",
         };
@@ -5265,10 +5266,9 @@ describe("Account Settings Route", () => {
 
         await screen.findByRole("heading", { name: /account settings/i });
 
-        // Error message appears in both global banner and photo section
-        // We use getAllByText to verify at least one error message is displayed
+        // An upload error appears once, in the photo section, not in the page banner too
         const errorMessages = screen.getAllByText(/file size exceeds 5mb limit/i);
-        expect(errorMessages.length).toBeGreaterThanOrEqual(1);
+        expect(errorMessages).toHaveLength(1);
 
         // Verify the error appears in the profile photo section specifically
         const photoSection = screen.getByTestId("profile-photo-section");

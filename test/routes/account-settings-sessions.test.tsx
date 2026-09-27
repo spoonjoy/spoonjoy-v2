@@ -132,6 +132,7 @@ describe("Account settings - revocable sessions", () => {
 
       expect(result.data).toEqual({
         success: true,
+        intent: "changePassword",
         message: "Your password has been changed successfully. Other browsers signed in to your account have been signed out.",
       });
       expect(await currentVersion(userId)).toBe(1);
