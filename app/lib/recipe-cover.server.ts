@@ -1,4 +1,6 @@
 import type { PrismaClient, RecipeCover } from "@prisma/client";
+import type { D1Query } from "~/lib/d1-read.server";
+import { d1Timestamp } from "~/lib/d1-write.server";
 import {
   touchNativeSyncCookbooksForRecipe,
   touchNativeSyncCookbooksForRecipeOperation,
@@ -99,36 +101,67 @@ export interface RecipeCoverDisplay {
   cover: RecipeCover;
 }
 
-export async function createCover(
-  db: PrismaClient,
-  input: CreateCoverInput,
-): Promise<RecipeCover> {
+function coverCreateData(input: CreateCoverInput) {
   assertSourceType(input.sourceType);
   const status = input.status ?? "ready";
   assertCoverStatus(status);
   const generationStatus = input.generationStatus ?? "none";
   assertGenerationStatus(generationStatus);
 
-  return db.recipeCover.create({
-    data: {
-      id: input.id,
-      recipeId: input.recipeId,
-      imageUrl: input.imageUrl,
-      stylizedImageUrl: input.stylizedImageUrl ?? null,
-      sourceType: input.sourceType,
-      sourceSpoonId: input.sourceSpoonId ?? null,
-      status,
-      createdById: input.createdById ?? null,
-      sourceImageUrl: input.sourceImageUrl ?? null,
-      generationStatus,
-      failureReason: input.failureReason ?? null,
-      promptVersion: input.promptVersion ?? null,
-      styleVersion: input.styleVersion ?? null,
-      promptAddition: input.promptAddition ?? null,
-      parentCoverId: input.parentCoverId ?? null,
-      archivedAt: input.archivedAt ?? null,
-    },
-  });
+  return {
+    id: input.id,
+    recipeId: input.recipeId,
+    imageUrl: input.imageUrl,
+    stylizedImageUrl: input.stylizedImageUrl ?? null,
+    sourceType: input.sourceType,
+    sourceSpoonId: input.sourceSpoonId ?? null,
+    status,
+    createdById: input.createdById ?? null,
+    sourceImageUrl: input.sourceImageUrl ?? null,
+    generationStatus,
+    failureReason: input.failureReason ?? null,
+    promptVersion: input.promptVersion ?? null,
+    styleVersion: input.styleVersion ?? null,
+    promptAddition: input.promptAddition ?? null,
+    parentCoverId: input.parentCoverId ?? null,
+    archivedAt: input.archivedAt ?? null,
+  };
+}
+
+export async function createCover(
+  db: PrismaClient,
+  input: CreateCoverInput,
+): Promise<RecipeCover> {
+  return db.recipeCover.create({ data: coverCreateData(input) });
+}
+
+/** `createCover` as a D1 statement for a write batch, with the same checks. */
+export function coverInsertStatement(input: CreateCoverInput & { id: string }, now: Date): D1Query {
+  const data = coverCreateData(input);
+  return [
+    `INSERT INTO "RecipeCover" (
+       "id", "recipeId", "imageUrl", "stylizedImageUrl", "sourceType", "sourceSpoonId", "status", "createdById",
+       "sourceImageUrl", "generationStatus", "failureReason", "promptVersion", "styleVersion", "promptAddition",
+       "parentCoverId", "archivedAt", "createdAt"
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    input.id,
+    data.recipeId,
+    data.imageUrl,
+    data.stylizedImageUrl,
+    data.sourceType,
+    data.sourceSpoonId,
+    data.status,
+    data.createdById,
+    data.sourceImageUrl,
+    data.generationStatus,
+    data.failureReason,
+    data.promptVersion,
+    data.styleVersion,
+    data.promptAddition,
+    data.parentCoverId,
+    data.archivedAt && d1Timestamp(data.archivedAt),
+    d1Timestamp(now),
+  ];
 }
 
 export async function listCoversForRecipe(

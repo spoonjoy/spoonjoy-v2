@@ -1,4 +1,6 @@
 import type { Prisma, PrismaClient as PrismaClientType } from "@prisma/client";
+import type { D1Query } from "~/lib/d1-read.server";
+import { d1Timestamp } from "~/lib/d1-write.server";
 
 type NativeSyncInvalidationDb = PrismaClientType | Prisma.TransactionClient;
 
@@ -47,6 +49,29 @@ export function nativeSyncTombstoneUpsertOperation(
       updatedAt: input.updatedAt,
     },
   });
+}
+
+/** `nativeSyncTombstoneUpsertOperation` as a D1 statement, for a write batch. */
+export function nativeSyncTombstoneUpsertStatement(input: NativeSyncTombstoneInput): D1Query {
+  return [
+    `INSERT INTO "NativeSyncTombstone" (
+       "id", "accountId", "resourceType", "resourceId", "parentResourceId", "title", "deletedAt", "updatedAt", "createdAt"
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT ("accountId", "resourceType", "resourceId") DO UPDATE SET
+       "parentResourceId" = excluded."parentResourceId",
+       "title" = excluded."title",
+       "deletedAt" = excluded."deletedAt",
+       "updatedAt" = excluded."updatedAt"`,
+    crypto.randomUUID(),
+    input.accountId,
+    input.resourceType,
+    input.resourceId,
+    input.parentResourceId ?? null,
+    input.title ?? null,
+    d1Timestamp(input.deletedAt),
+    d1Timestamp(input.updatedAt),
+    d1Timestamp(input.updatedAt),
+  ];
 }
 
 export async function recordNativeSyncTombstone(

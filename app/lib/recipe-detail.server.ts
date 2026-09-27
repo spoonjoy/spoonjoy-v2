@@ -2,7 +2,13 @@ import type { AppLoadContext } from "react-router";
 import { data, redirect } from "react-router";
 import { deferBackgroundTask } from "~/lib/background-task.server";
 import { getRequestDb } from "~/lib/route-platform.server";
-import { requestD1 } from "~/lib/d1-read.server";
+import { requestD1, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1Timestamp, d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
+import {
+  cookbooksForRecipeTouchStatement,
+  recipeActiveGuard,
+  recipeUpdateStatement,
+} from "~/lib/recipe-d1-writes.server";
 import { readRecipeDetailFromD1, readRecipeDetailWithPrisma } from "~/lib/recipe-detail-reads.server";
 import {
   archiveRecipeCover,
@@ -32,6 +38,7 @@ import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { buildRecipeJsonLd } from "~/lib/recipe-structured-data.server";
 import {
   nativeSyncTombstoneUpsertOperation,
+  nativeSyncTombstoneUpsertStatement,
   touchNativeSyncRecipeAndContainingCookbooks,
 } from "~/lib/native-sync-invalidation.server";
 import {
@@ -840,6 +847,15 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
       throw new Response("confirmNoCover is required", { status: 400 });
     }
     const updatedAt = new Date();
+    const d1 = requestD1(context);
+    if (d1) {
+      // One atomic batch: the cleared cover (with the recipe touch) and the cookbook touch.
+      await writeExistingRecipeOnD1(d1, id, [
+        recipeUpdateStatement(id, { activeCoverId: null, activeCoverVariant: null, coverMode: "none" }, updatedAt),
+        cookbooksForRecipeTouchStatement(id, updatedAt),
+      ]);
+      return { success: true, intent: "setRecipeNoCover" };
+    }
     await database.$transaction(async (tx) => {
       await tx.recipe.update({
         where: { id },
@@ -1045,6 +1061,27 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
 
   if (intent === "delete") {
     const deletedAt = new Date();
+    const d1 = requestD1(context);
+    if (d1) {
+      // One atomic batch: the soft delete and its native sync tombstone.
+      await writeExistingRecipeOnD1(d1, id, [
+        [
+          `UPDATE "Recipe" SET "deletedAt" = ?, "updatedAt" = ? WHERE "id" = ?`,
+          d1Timestamp(deletedAt),
+          d1Timestamp(deletedAt),
+          id,
+        ],
+        nativeSyncTombstoneUpsertStatement({
+          accountId: userId,
+          resourceType: "recipe",
+          resourceId: id,
+          title: recipe.title,
+          deletedAt,
+          updatedAt: deletedAt,
+        }),
+      ]);
+      return redirect("/recipes");
+    }
     await database.$transaction([
       database.recipe.update({
         where: { id },
@@ -1064,6 +1101,19 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
   }
 
   return null;
+}
+
+/**
+ * Runs a recipe page write as one atomic D1 batch that first re-checks the recipe still
+ * exists; if it was removed after the page's checks, nothing applies and the answer is 404.
+ */
+async function writeExistingRecipeOnD1(d1: D1ReadDatabase, recipeId: string, statements: D1Query[]) {
+  try {
+    await d1WriteBatch(d1, [recipeActiveGuard(recipeId), ...statements]);
+  } catch (error) {
+    if (isD1GuardFailure(error)) throw new Response("Recipe not found", { status: 404 });
+    throw error;
+  }
 }
 
 async function assertActiveRecipe(

@@ -23,7 +23,7 @@ interface FakeStatement {
 export interface SqliteD1 {
   binding: {
     prepare(sql: string): FakeStatement;
-    batch(statements: FakeStatement[]): Promise<Array<{ results: unknown[]; success: true; meta: Record<string, unknown> }>>;
+    batch(statements: FakeStatement[]): Promise<Array<{ results: unknown[]; success: true; meta: { changes: number } }>>;
   };
   /** Every statement run, in order. */
   statements: RecordedStatement[];
@@ -37,12 +37,19 @@ export function sqliteD1(path = resolve(__dirname, "../../prisma/test.db")): Sql
   const statements: RecordedStatement[] = [];
   let roundTrips = 0;
 
-  function execute(statement: FakeStatement): unknown[] {
+  function executeWithChanges(statement: FakeStatement): { rows: unknown[]; changes: number } {
     statements.push({ sql: statement.sql, params: statement.params });
     const prepared = sqlite.prepare(statement.sql);
-    if (prepared.reader) return prepared.all(...statement.params) as unknown[];
-    prepared.run(...statement.params);
-    return [];
+    if (prepared.reader) {
+      const rows = prepared.all(...statement.params) as unknown[];
+      // A write with RETURNING changes the rows it returns; a plain read changes none.
+      return { rows, changes: prepared.readonly ? 0 : rows.length };
+    }
+    return { rows: [], changes: prepared.run(...statement.params).changes };
+  }
+
+  function execute(statement: FakeStatement): unknown[] {
+    return executeWithChanges(statement).rows;
   }
 
   function makeStatement(sql: string, params: unknown[] = []): FakeStatement {
@@ -72,8 +79,12 @@ export function sqliteD1(path = resolve(__dirname, "../../prisma/test.db")): Sql
     prepare: (sql: string) => makeStatement(sql),
     batch: async (batchStatements: FakeStatement[]) => {
       roundTrips += 1;
+      // One SQLite transaction, as a D1 batch is: a failing statement rolls back the rest.
       return sqlite.transaction(() =>
-        batchStatements.map((statement) => ({ results: execute(statement), success: true as const, meta: {} })),
+        batchStatements.map((statement) => {
+          const { rows, changes } = executeWithChanges(statement);
+          return { results: rows, success: true as const, meta: { changes } };
+        }),
       )();
     },
   };

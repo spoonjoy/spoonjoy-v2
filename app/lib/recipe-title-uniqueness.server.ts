@@ -43,3 +43,11 @@ export async function validateActiveRecipeTitleUnique(
 
   return { valid: true };
 }
+
+/** An atomic write found, as it ran, that the chef already has an active recipe with the title. */
+export class ActiveRecipeTitleConflictError extends Error {
+  constructor() {
+    super(ACTIVE_RECIPE_TITLE_CONFLICT_ERROR);
+    this.name = "ActiveRecipeTitleConflictError";
+  }
+}

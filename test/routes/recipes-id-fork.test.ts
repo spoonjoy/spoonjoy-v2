@@ -121,10 +121,11 @@ describe("recipes.$id.fork action", () => {
     expect(result).toBeInstanceOf(Response);
     expect(result.status).toBe(302);
     expect(result.headers.get("Location")).toBe("/recipes/new-recipe-id");
+    // No D1 binding in the context, so the fork runs through Prisma.
     expect(forkRecipeMock).toHaveBeenCalledWith(mockDb, {
       sourceRecipeId: "abc",
       viewerId: "viewer-1",
-    });
+    }, null);
   });
 
   it("throws a 404 Response when params.id is missing", async () => {

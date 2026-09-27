@@ -1,5 +1,18 @@
-import type { Prisma, PrismaClient as PrismaClientType, Recipe } from "@prisma/client";
+import type { Prisma, PrismaClient as PrismaClientType } from "@prisma/client";
+import type { D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
 import type { ParsedIngredient } from "~/lib/ingredient-parse.server";
+import { coverInsertStatement, createCover, setActiveRecipeCover, type CreateCoverInput } from "~/lib/recipe-cover.server";
+import type { D1Query } from "~/lib/d1-read.server";
+import {
+  activeRecipeTitleFreeGuard,
+  recipeUpdateStatement,
+  nameUpsertStatements,
+  namedIngredientInsertStatement,
+  recipeInsertStatement,
+  stepInsertStatement,
+} from "~/lib/recipe-d1-writes.server";
+import { ActiveRecipeTitleConflictError } from "~/lib/recipe-title-uniqueness.server";
 import {
   validateIngredientName,
   validateQuantity,
@@ -33,6 +46,11 @@ export interface CreateRecipeDraftInput {
   servings: string | null;
   chefId: string;
   steps: RecipeStepDraft[];
+  /**
+   * A cover to create with the recipe; `activeVariant` also makes it the active cover, as
+   * `setActiveRecipeCover` does. On D1 it is part of the recipe's batch.
+   */
+  cover?: Omit<CreateCoverInput, "recipeId"> & { id: string; activeVariant?: "image" };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -225,20 +243,70 @@ async function getOrCreateIngredientRef(db: Database, name: string) {
   });
 }
 
+/**
+ * The recipe graph (recipe, steps, units, ingredient refs, ingredients, and a cover if one
+ * is given) as one atomic D1 batch, so a failure part way leaves no partial recipe. The batch also re-checks, as it
+ * writes, that the chef has no active recipe with this title.
+ */
+function coverStatements(input: CreateRecipeDraftInput, now: Date): D1Query[] {
+  if (!input.cover) return [];
+  const { activeVariant, ...cover } = input.cover;
+  return [
+    coverInsertStatement({ ...cover, recipeId: input.id }, now),
+    ...(activeVariant
+      ? [recipeUpdateStatement(input.id, { activeCoverId: cover.id, activeCoverVariant: activeVariant, coverMode: "manual" }, now)]
+      : []),
+  ];
+}
+
+async function createRecipeDraftOnD1(d1: D1ReadDatabase, input: CreateRecipeDraftInput): Promise<{ id: string }> {
+  const now = new Date();
+  const ingredients = input.steps.flatMap((step, stepIndex) =>
+    step.ingredients.map((ingredient) => ({
+      recipeId: input.id,
+      stepNum: stepIndex + 1,
+      quantity: ingredient.quantity,
+      unitName: normalizeName(ingredient.unit),
+      ingredientName: normalizeName(ingredient.ingredientName),
+      now,
+    })),
+  );
+  try {
+    await d1WriteBatch(d1, [
+      activeRecipeTitleFreeGuard(input.chefId, input.title),
+      recipeInsertStatement({ ...input, now }),
+      ...input.steps.map((step, stepIndex) => stepInsertStatement({
+        recipeId: input.id,
+        stepNum: stepIndex + 1,
+        stepTitle: step.stepTitle,
+        description: step.description,
+        duration: step.duration,
+        now,
+      })),
+      ...nameUpsertStatements(ingredients, now),
+      ...ingredients.map(namedIngredientInsertStatement),
+      ...coverStatements(input, now),
+    ]);
+  } catch (error) {
+    // The batch's only guard is the title check.
+    if (isD1GuardFailure(error)) throw new ActiveRecipeTitleConflictError();
+    throw error;
+  }
+  return { id: input.id };
+}
+
+/**
+ * Creates the recipe with its steps and ingredients. With a D1 binding it is one atomic
+ * batch; without one (unit tests, scripts) it runs through Prisma.
+ */
 export async function createRecipeDraft(
   db: PrismaClientType,
-  input: CreateRecipeDraftInput
-): Promise<Recipe> {
-  // Cloudflare D1 (used in both local dev and production) does not support
-  // Prisma's interactive `$transaction(async (tx) => ...)` form. Mirror the
-  // F1 forkRecipe pattern (see `recipe-fork.server.ts`) and persist the
-  // recipe graph as a sequence of writes against the top-level client.
-  //
-  // Trade-off: a mid-sequence failure can leave a partial recipe row in the
-  // database. This is the same risk F1 accepted; the schema's
-  // `@@unique([chefId, title, deletedAt])` index still protects against
-  // duplicate-title races at the storage layer, and single-user create flows
-  // are not contention-prone.
+  input: CreateRecipeDraftInput,
+  d1: D1ReadDatabase | null = null,
+): Promise<{ id: string }> {
+  if (d1) return createRecipeDraftOnD1(d1, input);
+
+  // Prisma (no D1 binding): the writes run in sequence against the top-level client.
   const recipe = await db.recipe.create({
     data: {
       id: input.id,
@@ -273,6 +341,14 @@ export async function createRecipeDraft(
           ingredientRefId: ingredientRef.id,
         },
       });
+    }
+  }
+
+  if (input.cover) {
+    const { activeVariant, ...cover } = input.cover;
+    await createCover(db, { ...cover, recipeId: recipe.id });
+    if (activeVariant) {
+      await setActiveRecipeCover(db, { recipeId: recipe.id, coverId: cover.id, variant: activeVariant });
     }
   }
 

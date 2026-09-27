@@ -1,5 +1,18 @@
 import type { Prisma, PrismaClient as PrismaClientType } from "@prisma/client";
 import type { ApiV1ErrorCode } from "~/lib/api-v1-contract.server";
+import type { D1Query, D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1Guard, d1Timestamp, d1WriteBatch, retryOnD1GuardFailure } from "~/lib/d1-write.server";
+import {
+  nameUpsertStatements,
+  namedIngredientInsertStatement,
+  recipeUpdateStatement,
+  stepAtGuard,
+  stepDeleteStatement,
+  stepInsertStatement,
+  stepNumUpdateStatement,
+  stepOutputUseInsertStatement,
+  stepOutputUsesDeleteStatement,
+} from "~/lib/recipe-d1-writes.server";
 import { validateStepDeletion } from "~/lib/step-deletion-validation.server";
 import { checkStepUsage } from "~/lib/step-output-use-queries.server";
 import { validateStepReorderComplete } from "~/lib/step-reorder-validation.server";
@@ -76,6 +89,8 @@ interface NativeRecipeStepDeleteOptions {
     idempotencyKeyId: string;
     operation: string;
   };
+  /** The request's D1 binding: the write then goes to D1 as one atomic batch. */
+  d1?: D1ReadDatabase | null;
 }
 
 interface NativeRecipeStepIngredientDeleteOptions {
@@ -83,6 +98,8 @@ interface NativeRecipeStepIngredientDeleteOptions {
     idempotencyKeyId: string;
     operation: string;
   };
+  /** The request's D1 binding: the write then goes to D1 as one atomic batch. */
+  d1?: D1ReadDatabase | null;
 }
 
 interface NativeRecipeStepReorderOptions {
@@ -90,6 +107,8 @@ interface NativeRecipeStepReorderOptions {
     idempotencyKeyId: string;
     operation: string;
   };
+  /** The request's D1 binding: the write then goes to D1 as one atomic batch. */
+  d1?: D1ReadDatabase | null;
 }
 
 function success<T>(data: T, status = 200): ApiV1RecipeStepResult<T> {
@@ -106,6 +125,22 @@ function failure<T>(
 
 function fieldFailure<T>(field: string, message: string): ApiV1RecipeStepResult<T> {
   return failure("validation_error", "Invalid recipe step fields", { fieldErrors: { [field]: message } });
+}
+
+/**
+ * Runs a REST step write whose D1 batch re-checks what it read. When another request changed
+ * those rows in between, the batch applies nothing and the write runs again, so the caller
+ * gets the answer the checks now give (not found, a validation error) rather than a 500.
+ */
+function withRaceRetry<T>(
+  d1: D1ReadDatabase | null | undefined,
+  attempt: () => Promise<ApiV1RecipeStepResult<T>>,
+): Promise<ApiV1RecipeStepResult<T>> {
+  return d1
+    ? retryOnD1GuardFailure(attempt, () => failure<T>("validation_error", "This recipe changed while you were editing it; reload and try again.", {
+      reason: "concurrent_change",
+    }))
+    : attempt();
 }
 
 function touchRecipeOp(db: Database, recipeId: string): Prisma.PrismaPromise<unknown> {
@@ -595,6 +630,81 @@ function createMutationTombstoneOp(
   });
 }
 
+/** `createMutationTombstoneOp` as a D1 statement, for a write batch. */
+function mutationTombstoneStatement(input: Parameters<typeof createMutationTombstoneOp>[1], now: Date): D1Query {
+  return [
+    `INSERT INTO "ApiMutationTombstone" (
+       "id", "idempotencyKeyId", "operation", "resourceType", "resourceId", "parentResourceId", "payload", "createdAt"
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT ("idempotencyKeyId", "resourceType", "resourceId") DO UPDATE SET
+       "operation" = excluded."operation",
+       "parentResourceId" = excluded."parentResourceId",
+       "payload" = excluded."payload"`,
+    crypto.randomUUID(),
+    input.idempotencyKeyId,
+    input.operation,
+    input.resourceType,
+    input.resourceId,
+    input.parentResourceId,
+    JSON.stringify(input.payload),
+    d1Timestamp(now),
+  ];
+}
+
+/** The ingredients as named inserts (with their names' upserts first) for a D1 batch. */
+function namedIngredientStatements(
+  recipeId: string,
+  stepNum: number,
+  ingredients: ReadonlyArray<NativeRecipeStepIngredientInput & { id?: string }>,
+  now: Date,
+): D1Query[] {
+  const named = ingredients.map((ingredient) => ({
+    id: ingredient.id ?? crypto.randomUUID(),
+    recipeId,
+    stepNum,
+    quantity: ingredient.quantity,
+    unitName: normalizeName(ingredient.unit),
+    ingredientName: normalizeName(ingredient.ingredientName),
+    now,
+  }));
+  return [...nameUpsertStatements(named, now), ...named.map(namedIngredientInsertStatement)];
+}
+
+/** Fails the batch if any of the named ingredients is already in the recipe. */
+function noRecipeIngredientConflictsGuard(recipeId: string, ingredients: NativeRecipeStepIngredientInput[]): D1Query {
+  return d1Guard(
+    `NOT EXISTS (
+       SELECT 1 FROM "Ingredient" JOIN "IngredientRef" ON "IngredientRef"."id" = "Ingredient"."ingredientRefId"
+       WHERE "Ingredient"."recipeId" = ? AND "IngredientRef"."name" IN (SELECT "value" FROM json_each(?))
+     )`,
+    recipeId,
+    JSON.stringify(ingredients.map((ingredient) => normalizeName(ingredient.ingredientName))),
+  );
+}
+
+/**
+ * Fails the batch unless the step will still have content: an ingredient, or an output use
+ * (the replacement ones, or the existing ones when they are not being replaced).
+ */
+function stepWillHaveContentGuards(recipeId: string, stepNum: number, replacementOutputStepNums?: number[]): D1Query[] {
+  if (replacementOutputStepNums && replacementOutputStepNums.length > 0) return [];
+  const ingredient = `EXISTS (SELECT 1 FROM "Ingredient" WHERE "recipeId" = ? AND "stepNum" = ?)`;
+  return [replacementOutputStepNums
+    ? d1Guard(ingredient, recipeId, stepNum)
+    : d1Guard(
+      `${ingredient} OR EXISTS (SELECT 1 FROM "StepOutputUse" WHERE "recipeId" = ? AND "inputStepNum" = ?)`,
+      recipeId,
+      stepNum,
+      recipeId,
+      stepNum,
+    )];
+}
+
+function stepOutputUseStatements(recipeId: string, inputStepNum: number, outputStepNums: number[], now: Date): D1Query[] {
+  return [...new Set(outputStepNums)].map((outputStepNum) =>
+    stepOutputUseInsertStatement(recipeId, inputStepNum, outputStepNum, now));
+}
+
 async function assertNoRecipeIngredientConflicts<T>(
   db: Database,
   recipeId: string,
@@ -683,7 +793,17 @@ export async function createNativeRecipeStep(
   chefId: string,
   recipeId: string,
   input: NativeRecipeStepCreateInput,
-  options: { stepId?: string } = {},
+  options: { stepId?: string; d1?: D1ReadDatabase | null } = {},
+): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; stepNum: number }>> {
+  return withRaceRetry(options.d1, () => createNativeRecipeStepOnce(db, chefId, recipeId, input, options));
+}
+
+async function createNativeRecipeStepOnce(
+  db: Database,
+  chefId: string,
+  recipeId: string,
+  input: NativeRecipeStepCreateInput,
+  options: { stepId?: string; d1?: D1ReadDatabase | null },
 ): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; stepNum: number }>> {
   const recipe = await loadOwnedRecipe(db, chefId, recipeId);
   if (!recipe.ok) return recipe;
@@ -726,6 +846,28 @@ export async function createNativeRecipeStep(
   if (invalidRefs) return invalidRefs;
 
   const stepId = options.stepId ?? crypto.randomUUID();
+  if (options.d1) {
+    // One atomic batch: the step, its output uses and ingredients, and the recipe touch.
+    const now = new Date();
+    await d1WriteBatch(options.d1, [
+      noRecipeIngredientConflictsGuard(recipeId, input.ingredients),
+      // Still the next step number: a step added in between sends the write back to its checks.
+      d1Guard(`NOT EXISTS (SELECT 1 FROM "RecipeStep" WHERE "recipeId" = ? AND "stepNum" >= ?)`, recipeId, stepNum),
+      stepInsertStatement({
+        id: stepId,
+        recipeId,
+        stepNum,
+        stepTitle: input.stepTitle,
+        description: input.description,
+        duration: input.duration,
+        now,
+      }),
+      ...stepOutputUseStatements(recipeId, stepNum, input.outputStepNums, now),
+      ...namedIngredientStatements(recipeId, stepNum, input.ingredients, now),
+      recipeUpdateStatement(recipeId, {}, now),
+    ]);
+    return success({ recipeId, stepId, stepNum }, 201);
+  }
   const ops: Prisma.PrismaPromise<unknown>[] = [
     db.recipeStep.create({
       data: {
@@ -753,6 +895,18 @@ export async function updateNativeRecipeStep(
   recipeId: string,
   stepId: string,
   input: NativeRecipeStepPatchInput,
+  options: { d1?: D1ReadDatabase | null } = {},
+): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; updated: boolean }>> {
+  return withRaceRetry(options.d1, () => updateNativeRecipeStepOnce(db, chefId, recipeId, stepId, input, options));
+}
+
+async function updateNativeRecipeStepOnce(
+  db: Database,
+  chefId: string,
+  recipeId: string,
+  stepId: string,
+  input: NativeRecipeStepPatchInput,
+  options: { d1?: D1ReadDatabase | null },
 ): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; updated: boolean }>> {
   const recipe = await loadOwnedRecipe(db, chefId, recipeId);
   if (!recipe.ok) return recipe;
@@ -791,6 +945,34 @@ export async function updateNativeRecipeStep(
   };
   const updated = Object.keys(stepFields).length > 0 || input.fields.outputStepNums !== undefined;
 
+  if (options.d1 && updated) {
+    // One atomic batch: the step fields, the replaced output uses and the recipe touch. The
+    // guards re-check that the step is where it was and will still have content.
+    const now = new Date();
+    const { outputStepNums } = input.fields;
+    const assignments = Object.keys(stepFields).map((column) => `"${column}" = ?`);
+    await d1WriteBatch(options.d1, [
+      stepAtGuard(stepId, recipeId, step.data.stepNum),
+      ...stepWillHaveContentGuards(recipeId, step.data.stepNum, outputStepNums),
+      ...(assignments.length > 0
+        ? [[
+          `UPDATE "RecipeStep" SET ${assignments.join(", ")}, "updatedAt" = ? WHERE "id" = ?`,
+          ...Object.values(stepFields),
+          d1Timestamp(now),
+          stepId,
+        ] as D1Query]
+        : []),
+      ...(outputStepNums === undefined
+        ? []
+        : [
+          stepOutputUsesDeleteStatement(recipeId, step.data.stepNum),
+          ...stepOutputUseStatements(recipeId, step.data.stepNum, outputStepNums, now),
+        ]),
+      recipeUpdateStatement(recipeId, {}, now),
+    ]);
+    return success({ recipeId, stepId, updated });
+  }
+
   const ops: Prisma.PrismaPromise<unknown>[] = [];
   if (Object.keys(stepFields).length > 0) {
     ops.push(
@@ -820,6 +1002,16 @@ export async function deleteNativeRecipeStep(
   stepId: string,
   options: NativeRecipeStepDeleteOptions = {},
 ): Promise<ApiV1RecipeStepResult<{ recipeId: string; step: { id: string; stepNum: number } }>> {
+  return withRaceRetry(options.d1, () => deleteNativeRecipeStepOnce(db, chefId, recipeId, stepId, options));
+}
+
+async function deleteNativeRecipeStepOnce(
+  db: Database,
+  chefId: string,
+  recipeId: string,
+  stepId: string,
+  options: NativeRecipeStepDeleteOptions,
+): Promise<ApiV1RecipeStepResult<{ recipeId: string; step: { id: string; stepNum: number } }>> {
   const recipe = await loadOwnedRecipe(db, chefId, recipeId);
   if (!recipe.ok) return recipe;
 
@@ -834,6 +1026,32 @@ export async function deleteNativeRecipeStep(
       reason: "step_output_dependency",
       dependentStepNums: dependentSteps.map((dependentStep) => dependentStep.inputStepNum).sort((a, b) => a - b),
     });
+  }
+
+  if (options.d1) {
+    // One atomic batch: the tombstone, the step (its ingredients and output uses cascade) and
+    // the recipe touch. The guards re-check that the step is where it was and still unused.
+    const now = new Date();
+    await d1WriteBatch(options.d1, [
+      stepAtGuard(stepId, recipeId, step.data.stepNum),
+      d1Guard(
+        `NOT EXISTS (SELECT 1 FROM "StepOutputUse" WHERE "recipeId" = ? AND "outputStepNum" = ?)`,
+        recipeId,
+        step.data.stepNum,
+      ),
+      ...(options.tombstone
+        ? [mutationTombstoneStatement({
+          ...options.tombstone,
+          resourceType: "recipe_step",
+          resourceId: stepId,
+          parentResourceId: recipeId,
+          payload: { recipeId, stepNum: step.data.stepNum },
+        }, now)]
+        : []),
+      stepDeleteStatement(stepId),
+      recipeUpdateStatement(recipeId, {}, now),
+    ]);
+    return success({ recipeId, step: { id: stepId, stepNum: step.data.stepNum } });
   }
 
   const ops: Prisma.PrismaPromise<unknown>[] = [];
@@ -859,7 +1077,18 @@ export async function createNativeRecipeStepIngredient(
   recipeId: string,
   stepId: string,
   input: NativeRecipeStepIngredientCreateInput,
-  options: { ingredientId?: string } = {},
+  options: { ingredientId?: string; d1?: D1ReadDatabase | null } = {},
+): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; ingredientId: string }>> {
+  return withRaceRetry(options.d1, () => createNativeRecipeStepIngredientOnce(db, chefId, recipeId, stepId, input, options));
+}
+
+async function createNativeRecipeStepIngredientOnce(
+  db: Database,
+  chefId: string,
+  recipeId: string,
+  stepId: string,
+  input: NativeRecipeStepIngredientCreateInput,
+  options: { ingredientId?: string; d1?: D1ReadDatabase | null },
 ): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; ingredientId: string }>> {
   const recipe = await loadOwnedRecipe(db, chefId, recipeId);
   if (!recipe.ok) return recipe;
@@ -875,6 +1104,17 @@ export async function createNativeRecipeStepIngredient(
   if (ingredientConflict) return ingredientConflict;
 
   const ingredientId = options.ingredientId ?? crypto.randomUUID();
+  if (options.d1) {
+    // One atomic batch: the ingredient (with its unit and ingredient ref) and the recipe touch.
+    const now = new Date();
+    await d1WriteBatch(options.d1, [
+      stepAtGuard(stepId, recipeId, step.data.stepNum),
+      noRecipeIngredientConflictsGuard(recipeId, [input]),
+      ...namedIngredientStatements(recipeId, step.data.stepNum, [{ ...input, id: ingredientId }], now),
+      recipeUpdateStatement(recipeId, {}, now),
+    ]);
+    return success({ recipeId, stepId, ingredientId }, 201);
+  }
   await db.$transaction([
     createIngredientOp(db, recipeId, step.data.stepNum, input, ingredientId),
     touchRecipeOp(db, recipeId),
@@ -890,6 +1130,17 @@ export async function deleteNativeRecipeStepIngredient(
   stepId: string,
   ingredientId: string,
   options: NativeRecipeStepIngredientDeleteOptions = {},
+): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; ingredient: { id: string } }>> {
+  return withRaceRetry(options.d1, () => deleteNativeRecipeStepIngredientOnce(db, chefId, recipeId, stepId, ingredientId, options));
+}
+
+async function deleteNativeRecipeStepIngredientOnce(
+  db: Database,
+  chefId: string,
+  recipeId: string,
+  stepId: string,
+  ingredientId: string,
+  options: NativeRecipeStepIngredientDeleteOptions,
 ): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; ingredient: { id: string } }>> {
   const recipe = await loadOwnedRecipe(db, chefId, recipeId);
   if (!recipe.ok) return recipe;
@@ -907,6 +1158,32 @@ export async function deleteNativeRecipeStepIngredient(
   });
   if (!ingredient) {
     return failure("not_found", "Recipe step ingredient not found", { resource: "recipe_step_ingredient", ingredientId });
+  }
+
+  if (options.d1) {
+    // One atomic batch: the tombstone, the ingredient and the recipe touch. The guard
+    // re-checks that the ingredient is still on the step.
+    const now = new Date();
+    await d1WriteBatch(options.d1, [
+      d1Guard(
+        `EXISTS (SELECT 1 FROM "Ingredient" WHERE "id" = ? AND "recipeId" = ? AND "stepNum" = ?)`,
+        ingredient.id,
+        recipeId,
+        step.data.stepNum,
+      ),
+      ...(options.tombstone
+        ? [mutationTombstoneStatement({
+          ...options.tombstone,
+          resourceType: "recipe_step_ingredient",
+          resourceId: ingredient.id,
+          parentResourceId: stepId,
+          payload: { recipeId, stepId, stepNum: step.data.stepNum },
+        }, now)]
+        : []),
+      [`DELETE FROM "Ingredient" WHERE "id" = ?`, ingredient.id],
+      recipeUpdateStatement(recipeId, {}, now),
+    ]);
+    return success({ recipeId, stepId, ingredient: { id: ingredient.id } });
   }
 
   const ops: Prisma.PrismaPromise<unknown>[] = [];
@@ -958,6 +1235,16 @@ export async function reorderNativeRecipeStep(
   input: NativeRecipeStepReorderInput,
   options: NativeRecipeStepReorderOptions = {},
 ): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; reordered: boolean }>> {
+  return withRaceRetry(options.d1, () => reorderNativeRecipeStepOnce(db, chefId, recipeId, input, options));
+}
+
+async function reorderNativeRecipeStepOnce(
+  db: Database,
+  chefId: string,
+  recipeId: string,
+  input: NativeRecipeStepReorderInput,
+  options: NativeRecipeStepReorderOptions,
+): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; reordered: boolean }>> {
   const recipe = await loadOwnedRecipe(db, chefId, recipeId);
   if (!recipe.ok) return recipe;
 
@@ -1000,6 +1287,38 @@ export async function reorderNativeRecipeStep(
   const [moved] = reorderedSteps.splice(currentIndex, 1);
   reorderedSteps.splice(targetIndex, 0, moved!);
 
+  if (options.d1) {
+    // One atomic batch: every step renumbered (through negative numbers, so no two steps
+    // share a number at any point), the tombstone and the recipe touch. The guard re-checks
+    // that the recipe still has exactly the steps read above, at the same numbers.
+    const now = new Date();
+    await d1WriteBatch(options.d1, [
+      d1Guard(
+        `(SELECT COUNT(*) FROM "RecipeStep" WHERE "recipeId" = ?) = ?
+         AND (SELECT COUNT(*) FROM "RecipeStep"
+              WHERE "recipeId" = ? AND ("id" || ':' || "stepNum") IN (SELECT "value" FROM json_each(?))) = ?`,
+        recipeId,
+        steps.length,
+        recipeId,
+        JSON.stringify(steps.map((candidate) => `${candidate.id}:${candidate.stepNum}`)),
+        steps.length,
+      ),
+      ...reorderedSteps.map((candidate, index) => stepNumUpdateStatement(candidate.id, -(index + 1), now)),
+      ...reorderedSteps.map((candidate, index) => stepNumUpdateStatement(candidate.id, index + 1, now)),
+      ...(options.tombstone
+        ? [mutationTombstoneStatement({
+          ...options.tombstone,
+          resourceType: "recipe_step_reorder",
+          resourceId: input.stepId,
+          parentResourceId: recipeId,
+          payload: { recipeId, stepId: input.stepId, toStepNum: input.toStepNum, reordered: true },
+        }, now)]
+        : []),
+      recipeUpdateStatement(recipeId, {}, now),
+    ]);
+    return success({ recipeId, stepId: input.stepId, reordered: true });
+  }
+
   const ops: Prisma.PrismaPromise<unknown>[] = [];
   for (const [index, candidate] of reorderedSteps.entries()) {
     ops.push(
@@ -1037,6 +1356,17 @@ export async function replaceNativeRecipeStepOutputUses(
   chefId: string,
   recipeId: string,
   input: NativeRecipeStepOutputUsesInput,
+  options: { d1?: D1ReadDatabase | null } = {},
+): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; replaced: boolean }>> {
+  return withRaceRetry(options.d1, () => replaceNativeRecipeStepOutputUsesOnce(db, chefId, recipeId, input, options));
+}
+
+async function replaceNativeRecipeStepOutputUsesOnce(
+  db: Database,
+  chefId: string,
+  recipeId: string,
+  input: NativeRecipeStepOutputUsesInput,
+  options: { d1?: D1ReadDatabase | null },
 ): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; replaced: boolean }>> {
   const recipe = await loadOwnedRecipe(db, chefId, recipeId);
   if (!recipe.ok) return recipe;
@@ -1060,6 +1390,20 @@ export async function replaceNativeRecipeStepOutputUses(
     input.outputStepNums,
   );
   if (contentError) return contentError;
+
+  if (options.d1) {
+    // One atomic batch: the output uses replaced and the recipe touch. The guards re-check
+    // that the step is where it was and will still have content.
+    const now = new Date();
+    await d1WriteBatch(options.d1, [
+      stepAtGuard(input.inputStepId, recipeId, step.data.stepNum),
+      ...stepWillHaveContentGuards(recipeId, step.data.stepNum, input.outputStepNums),
+      stepOutputUsesDeleteStatement(recipeId, step.data.stepNum),
+      ...stepOutputUseStatements(recipeId, step.data.stepNum, input.outputStepNums, now),
+      recipeUpdateStatement(recipeId, {}, now),
+    ]);
+    return success({ recipeId, stepId: input.inputStepId, replaced: true });
+  }
 
   await db.$transaction([
     ...replaceStepOutputUseOps(db, recipeId, step.data.stepNum, input.outputStepNums),
