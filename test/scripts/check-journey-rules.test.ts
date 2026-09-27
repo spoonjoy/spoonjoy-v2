@@ -325,6 +325,31 @@ describe("checkJourneySource", () => {
     });
   });
 
+  describe("no-password-field-fill", () => {
+    it("flags typing into a field named or selected as a password, whatever the value", () => {
+      expect(rules(`await page.getByLabel("Password").fill(pw);`)).toEqual(["no-password-field-fill"]);
+      expect(rules(`await page.getByLabel(/current password/i).type(pw);`)).toEqual(["no-password-field-fill"]);
+      expect(rules(`await page.getByPlaceholder("Your password").pressSequentially(pw);`)).toEqual(["no-password-field-fill"]);
+      expect(rules(`await page.getByRole("textbox", { name: "New Password" }).fill(pw);`)).toEqual(["no-password-field-fill"]);
+      expect(rules(`await page.locator("input[type=password]").fill(pw);`)).toEqual(["no-password-field-fill"]);
+      expect(rules(`await passwordField.fill(randomBytes(24).toString("hex"));`)).toEqual(["no-password-field-fill"]);
+    });
+
+    it("flags page.fill and frame.fill whose selector is a password field", () => {
+      expect(rules(`await page.fill('input[name="password"]', pw);`)).toEqual(["no-password-field-fill"]);
+      expect(rules(`await frame.type("#confirmPassword", pw);`)).toEqual(["no-password-field-fill"]);
+    });
+
+    it("allows fillSecret, clear, and fills of other fields, whatever their value", () => {
+      expect(rules(`await fillSecret(page.getByLabel("Password"), secret);`)).toEqual([]);
+      expect(rules(`await page.getByLabel("Password").clear();`)).toEqual([]);
+      expect(rules(`await page.getByLabel("Search").fill("secret sauce");`)).toEqual([]);
+      expect(rules(`await page.getByLabel("Token name").fill("CI token");`)).toEqual([]);
+      expect(rules(`await page.fill("#search", "password reset");`)).toEqual([]);
+      expect(rules(`await page.getByLabel("Password").check();`)).toEqual([]);
+    });
+  });
+
   describe("setup and imported test aliases", () => {
     it("treats setup like test for skipped-journey calls", () => {
       expect(rules(`setup.skip("chef", async () => {});`)).toEqual(["no-skipped-journeys"]);

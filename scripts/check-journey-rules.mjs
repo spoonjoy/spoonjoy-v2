@@ -6,7 +6,8 @@
 // conditionally, when a @mutates test skips the post-reload check, or when a journey/describe
 // block is skipped, only'd, fixme'd, or marked to fail instead of actually running. It also fails
 // when a file other than support/secret.ts crosses the secret boundary (see
-// SECRET_BOUNDARY_IDENTIFIERS below).
+// SECRET_BOUNDARY_IDENTIFIERS below), and when anything is typed into a password field with
+// fill()/type()/pressSequentially() instead of fillSecret.
 //
 // Support helpers run inside journeys, so they get the same retry, click-in-loop, skipped,
 // @mutates and secret-boundary rules; only the conditional-assertion rule is journey-only. `test` and `setup` are
@@ -61,6 +62,14 @@ const SECRET_BOUNDARY_IDENTIFIERS = new Set([
   "readLatestDisposableE2EUser",
 ]);
 const CREDENTIALS_FILE_MARKERS = /SPOONJOY_QA_CREDENTIALS|credentials\.json/;
+
+// The field-side backstop: a password created as a plain string (not a Secret) would still
+// typecheck with fill(). Typing anything into a field whose own locator text names a password (a
+// label, placeholder or role name, a type=password / name=password selector, or a variable named
+// for one) must go through fillSecret. For page.fill(selector, value) / frame.type(...) the
+// selector is the first argument. Only the field is judged, never the value.
+const TYPING_METHODS = new Set(["fill", "type", "pressSequentially"]);
+const PASSWORD_FIELD_PATTERN = /passw(?:or)?d/i;
 
 // Playwright's `test`/`test.describe` modifiers. `test.<modifier>(...)` is still a real test
 // (rule 4 must still check it for a missing reload check), and both `test.<modifier>(...)` and
@@ -124,6 +133,14 @@ function isClickLikeCall(node) {
 
 function isSecretModule(fileName) {
   return fileName.split(path.sep).join("/").endsWith(SECRET_MODULE_SUFFIX);
+}
+
+function isPasswordFieldTypingCall(node, sourceFile) {
+  if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return false;
+  if (!TYPING_METHODS.has(node.expression.name.text)) return false;
+  if (PASSWORD_FIELD_PATTERN.test(node.expression.expression.getText(sourceFile))) return true;
+  const selector = node.arguments.length >= 2 ? node.arguments[0] : undefined;
+  return Boolean(selector && PASSWORD_FIELD_PATTERN.test(selector.getText(sourceFile)));
 }
 
 function isJsonParseCall(node) {
@@ -285,7 +302,7 @@ function containsVerifyAfterReloadCall(node) {
  * @returns {Array<{
  *   file: string,
  *   line: number,
- *   rule: "no-retry-config" | "no-click-in-loop" | "no-assertion-in-if" | "no-skipped-journeys" | "mutation-needs-reload-check" | "secret-boundary",
+ *   rule: "no-retry-config" | "no-click-in-loop" | "no-assertion-in-if" | "no-skipped-journeys" | "mutation-needs-reload-check" | "secret-boundary" | "no-password-field-fill",
  *   message: string,
  * }>}
  */
@@ -319,6 +336,14 @@ export function checkJourneySource(fileName, source, { kind = "journey" } = {}) 
         node,
         "no-click-in-loop",
         `"${node.expression.name.text}" must not run inside a loop, a .toPass() retry callback, or an array-iteration callback; loops and auto-retry hide flakiness.`,
+      );
+    }
+
+    if (isPasswordFieldTypingCall(node, sourceFile)) {
+      report(
+        node,
+        "no-password-field-fill",
+        `"${node.expression.name.text}" must not type into a password field; Playwright puts the typed value in the public report and job log. Type a Secret with fillSecret(locator, secret) from support/secret.ts.`,
       );
     }
 

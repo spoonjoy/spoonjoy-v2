@@ -8,7 +8,7 @@ export async function secretTypeChecks(page: Page, field: Locator, secret: Secre
   // @ts-expect-error fill() takes a string; secrets go through fillSecret.
   await field.fill(secret);
   // @ts-expect-error page.fill(selector, value) takes a string value.
-  await page.fill("#password", secret);
+  await page.fill("#current", secret);
   // @ts-expect-error type() takes a string.
   await field.type(secret);
   // @ts-expect-error pressSequentially() takes a string.
