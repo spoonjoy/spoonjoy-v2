@@ -44,10 +44,41 @@ jobs:
     name: readonly audit
     needs: guard
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     environment: production
+    permissions:
+      contents: read
+      actions: read
 
     steps:
+      # A concurrent Production Deploy canary can leave transient rows (e.g. canary_user_residue)
+      # that make this read-only audit report false positives (seen 2026-09-26, run
+      # 36275447499; a re-run passed). Wait out any in-flight deploy before auditing instead of
+      # editing production-deploy.yml, whose deploy job step inventory and shell bodies are
+      # frozen by test/release-workflow-security.test.ts.
+      - name: Wait for in-flight production deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          max_attempts=40
+          interval_seconds=30
+          attempt=0
+          while :; do
+            statuses="$(gh run list --workflow production-deploy.yml --json status --repo "$GITHUB_REPOSITORY" --jq '.[].status' | sort -u | tr '\n' ' ')"
+            if ! printf '%s' "$statuses" | grep -Eq 'in_progress|queued'; then
+              echo "No in-flight Production Deploy run. Proceeding with the read-only audit."
+              break
+            fi
+            attempt=$((attempt + 1))
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "::error::Timed out after 20 minutes waiting for an in-flight Production Deploy run to finish. Refusing to audit mid-deploy."
+              exit 1
+            fi
+            echo "Production Deploy run in progress (statuses: $statuses). Waiting 30s before re-checking (attempt $attempt/$max_attempts)..."
+            sleep "$interval_seconds"
+          done
+
       - name: Require GitHub Cloudflare credentials
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
