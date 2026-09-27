@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub, createTestUser } from "../utils";
 import { db } from "~/lib/db.server";
 import { loader, action, meta } from "~/routes/signup";
@@ -511,6 +512,46 @@ describe("Signup Route", () => {
       expect(confirmPasswordInput).toHaveAttribute("type", "password");
       expect(confirmPasswordInput).toHaveAttribute("name", "confirmPassword");
       expect(confirmPasswordInput).toBeRequired();
+    });
+
+    it("sends a short username, a short password or a mismatched confirmation to the server and shows its messages", async () => {
+      // The browser's own checks (required, minlength) would stop the submit with a native
+      // bubble that never shows the app's messages; the form leaves every rule to the action.
+      const user = userEvent.setup();
+      let submissions = 0;
+      const Stub = createTestRoutesStub([
+        {
+          path: "/signup",
+          Component: Signup,
+          loader: () => ({ oauthProviders: [] }),
+          action: () => {
+            submissions += 1;
+            return {
+              errors: {
+                username: "Username must be at least 3 characters",
+                password: "Password must be at least 8 characters",
+                confirmPassword: "Passwords do not match",
+              },
+            };
+          },
+        },
+      ]);
+
+      render(<Stub initialEntries={["/signup"]} />);
+
+      const form = (await screen.findByRole("button", { name: "Sign Up" })).closest("form");
+      expect(form).toHaveAttribute("novalidate");
+
+      await user.type(screen.getByLabelText("Username"), "ab");
+      await user.type(screen.getByLabelText("Password"), "short");
+      await user.click(screen.getByRole("button", { name: "Sign Up" }));
+
+      expect(await screen.findByText("Username must be at least 3 characters")).toBeInTheDocument();
+      expect(screen.getByText("Password must be at least 8 characters")).toBeInTheDocument();
+      expect(screen.getByText("Passwords do not match")).toBeInTheDocument();
+      expect(submissions).toBe(1);
+      // The fields keep what was typed, so the user corrects them instead of starting over.
+      expect(screen.getByLabelText("Username")).toHaveValue("ab");
     });
 
     it("should have login link", async () => {
