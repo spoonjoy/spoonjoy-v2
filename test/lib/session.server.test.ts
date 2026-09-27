@@ -1,15 +1,242 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { faker } from "@faker-js/faker";
 import {
   createUserSession,
+  createUserSessionCookie,
   destroyUserSession,
+  getSessionIdentity,
   getUserId,
+  isCurrentSession,
   requireUserId,
   sanitizeSessionRedirect,
   sessionStorage,
   _resetSessionWarningLatchForTests,
 } from "~/lib/session.server";
+import { getLocalDb } from "~/lib/db.server";
 import { Request } from "undici";
+import { cleanupDatabase } from "../helpers/cleanup";
+
+async function createSessionUser(sessionVersion = 0): Promise<string> {
+  const db = await getLocalDb();
+  const user = await db.user.create({
+    data: {
+      email: `session-${faker.string.alphanumeric(10).toLowerCase()}@example.com`,
+      username: `session_${faker.string.alphanumeric(10).toLowerCase()}`,
+      sessionVersion,
+    },
+    select: { id: true },
+  });
+  return user.id;
+}
+
+async function cookieFor(values: Record<string, unknown>): Promise<string> {
+  const session = await sessionStorage.getSession();
+  for (const [key, value] of Object.entries(values)) session.set(key, value);
+  return (await sessionStorage.commitSession(session)).split(";")[0];
+}
+
+function requestWithCookie(cookie: string, url = "http://localhost:3000/account/settings") {
+  return new Request(url, { headers: { Cookie: cookie } }) as unknown as globalThis.Request;
+}
+
+async function thrownResponse(promise: Promise<unknown>): Promise<Response> {
+  try {
+    await promise;
+  } catch (error) {
+    expect(error).toBeInstanceOf(Response);
+    return error as Response;
+  }
+  throw new Error("Expected a thrown Response");
+}
+
+describe("revocable sessions", () => {
+  beforeEach(async () => {
+    await cleanupDatabase();
+  });
+
+  afterEach(async () => {
+    await cleanupDatabase();
+  });
+
+  it("stores the user's current session version in new session cookies", async () => {
+    const userId = await createSessionUser(3);
+
+    const cookie = (await createUserSessionCookie(userId)).split(";")[0];
+
+    await expect(getSessionIdentity(requestWithCookie(cookie))).resolves.toEqual({ userId, sessionVersion: 3 });
+    await expect(getUserId(requestWithCookie(cookie))).resolves.toBe(userId);
+  });
+
+  it("uses a caller-supplied session version without reading the user", async () => {
+    const userId = await createSessionUser(0);
+    const db = await getLocalDb();
+    const findUnique = vi.spyOn(db.user, "findUnique");
+
+    try {
+      const cookie = (await createUserSessionCookie(userId, null, null, { sessionVersion: 0 })).split(";")[0];
+      expect(findUnique).not.toHaveBeenCalled();
+      await expect(getSessionIdentity(requestWithCookie(cookie))).resolves.toEqual({ userId, sessionVersion: 0 });
+    } finally {
+      findUnique.mockRestore();
+    }
+  });
+
+  it("accepts a cookie issued before session versions existed as version 0", async () => {
+    const userId = await createSessionUser(0);
+    const cookie = await cookieFor({ userId });
+
+    await expect(getSessionIdentity(requestWithCookie(cookie))).resolves.toEqual({ userId, sessionVersion: 0 });
+    await expect(getUserId(requestWithCookie(cookie))).resolves.toBe(userId);
+    await expect(requireUserId(requestWithCookie(cookie))).resolves.toBe(userId);
+  });
+
+  it("rejects a cookie without a version once the user's version has been bumped", async () => {
+    const userId = await createSessionUser(1);
+    const cookie = await cookieFor({ userId });
+
+    await expect(getUserId(requestWithCookie(cookie))).resolves.toBeNull();
+  });
+
+  it("rejects a cookie whose version does not match the user's current version", async () => {
+    const userId = await createSessionUser(0);
+    const cookie = (await createUserSessionCookie(userId)).split(";")[0];
+    const db = await getLocalDb();
+    await db.user.update({ where: { id: userId }, data: { sessionVersion: { increment: 1 } } });
+
+    await expect(getUserId(requestWithCookie(cookie))).resolves.toBeNull();
+  });
+
+  it("rejects a cookie for a user that no longer exists", async () => {
+    const userId = await createSessionUser(0);
+    const cookie = (await createUserSessionCookie(userId)).split(";")[0];
+    const db = await getLocalDb();
+    await db.user.delete({ where: { id: userId } });
+
+    await expect(getUserId(requestWithCookie(cookie))).resolves.toBeNull();
+  });
+
+  it("mints version 0 for a user id that does not exist, which the read then rejects", async () => {
+    const cookie = (await createUserSessionCookie("missing-user-id")).split(";")[0];
+
+    await expect(getSessionIdentity(requestWithCookie(cookie))).resolves.toEqual({
+      userId: "missing-user-id",
+      sessionVersion: 0,
+    });
+    await expect(getUserId(requestWithCookie(cookie))).resolves.toBeNull();
+  });
+
+  it.each([
+    ["a negative version", -1],
+    ["a fractional version", 1.5],
+    ["a string version", "0"],
+    ["a null version", null],
+  ])("treats a cookie with %s as signed out", async (_label, sessionVersion) => {
+    const userId = await createSessionUser(0);
+    const cookie = await cookieFor({ userId, sessionVersion });
+
+    await expect(getSessionIdentity(requestWithCookie(cookie))).resolves.toBeNull();
+    await expect(getUserId(requestWithCookie(cookie))).resolves.toBeNull();
+  });
+
+  it("treats a cookie with an empty or non-string user id as signed out", async () => {
+    await expect(getSessionIdentity(requestWithCookie(await cookieFor({ userId: "" })))).resolves.toBeNull();
+    await expect(getSessionIdentity(requestWithCookie(await cookieFor({ userId: 42 })))).resolves.toBeNull();
+  });
+
+  it("clears a revoked cookie when requireUserId redirects to sign-in", async () => {
+    const userId = await createSessionUser(2);
+    const cookie = await cookieFor({ userId, sessionVersion: 1 });
+
+    const response = await thrownResponse(requireUserId(requestWithCookie(cookie)));
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe("/login?redirectTo=%2Faccount%2Fsettings");
+    expect(response.headers.get("Set-Cookie")).toContain("__session=;");
+    expect(response.headers.get("Set-Cookie")).toContain("Expires=Thu, 01 Jan 1970 00:00:00 GMT");
+  });
+
+  it("clears a malformed cookie when requireUserId redirects to sign-in", async () => {
+    const cookie = await cookieFor({ userId: "someone", sessionVersion: "nope" });
+
+    const response = await thrownResponse(requireUserId(requestWithCookie(cookie)));
+
+    expect(response.headers.get("Set-Cookie")).toContain("Expires=Thu, 01 Jan 1970 00:00:00 GMT");
+  });
+
+  it("does not set a cookie when requireUserId redirects a visitor who never signed in", async () => {
+    const response = await thrownResponse(requireUserId(requestWithCookie("")));
+
+    expect(response.headers.get("Set-Cookie")).toBeNull();
+  });
+
+  it("reads the user's version once per request and environment, however many loaders ask", async () => {
+    const userId = await createSessionUser(0);
+    const cookie = (await createUserSessionCookie(userId)).split(";")[0];
+    const request = requestWithCookie(cookie);
+    const db = await getLocalDb();
+    const findUnique = vi.spyOn(db.user, "findUnique");
+
+    try {
+      await expect(Promise.all([
+        getUserId(request),
+        getUserId(request, null),
+        requireUserId(request),
+      ])).resolves.toEqual([userId, userId, userId]);
+      expect(findUnique).toHaveBeenCalledTimes(1);
+      expect(findUnique).toHaveBeenCalledWith({ where: { id: userId }, select: { sessionVersion: true } });
+
+      await expect(getUserId(requestWithCookie(cookie))).resolves.toBe(userId);
+      expect(findUnique).toHaveBeenCalledTimes(2);
+    } finally {
+      findUnique.mockRestore();
+    }
+  });
+
+  it("does not read the database when the request carries no session", async () => {
+    const db = await getLocalDb();
+    const findUnique = vi.spyOn(db.user, "findUnique");
+
+    try {
+      await expect(getUserId(requestWithCookie(""))).resolves.toBeNull();
+      expect(findUnique).not.toHaveBeenCalled();
+    } finally {
+      findUnique.mockRestore();
+    }
+  });
+
+  it("reads the version through the request's D1 binding when the environment provides one", async () => {
+    const userId = await createSessionUser(0);
+    const cookie = (await createUserSessionCookie(userId)).split(";")[0];
+    const localDb = await getLocalDb();
+    vi.resetModules();
+    const findUnique = vi.fn(async () => ({ sessionVersion: 0 }));
+    const getDb = vi.fn(async () => ({ user: { findUnique } }));
+    vi.doMock("~/lib/db.server", () => ({ getDb, getLocalDb: vi.fn(async () => localDb) }));
+
+    try {
+      const module = await import("~/lib/session.server");
+      const binding = { binding: "DB" };
+
+      await expect(module.getUserId(requestWithCookie(cookie), { DB: binding })).resolves.toBe(userId);
+      expect(getDb).toHaveBeenCalledWith({ DB: binding });
+      expect(findUnique).toHaveBeenCalledWith({ where: { id: userId }, select: { sessionVersion: true } });
+    } finally {
+      vi.doUnmock("~/lib/db.server");
+      vi.resetModules();
+    }
+  });
+
+  it("compares a cookie's version with the user's current version", () => {
+    const identity = { userId: "user", sessionVersion: 2 };
+
+    expect(isCurrentSession(identity, 2)).toBe(true);
+    expect(isCurrentSession(identity, 3)).toBe(false);
+    expect(isCurrentSession(identity, 1)).toBe(false);
+    expect(isCurrentSession(identity, null)).toBe(false);
+    expect(isCurrentSession(identity, undefined)).toBe(false);
+  });
+});
 
 describe("session.server", () => {
   let originalSessionSecret: string | undefined;
@@ -18,12 +245,14 @@ describe("session.server", () => {
     return setCookieHeader.split(";")[0];
   }
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     originalSessionSecret = process.env.SESSION_SECRET;
+    await cleanupDatabase();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await cleanupDatabase();
     // Restore original SESSION_SECRET
     if (originalSessionSecret !== undefined) {
       process.env.SESSION_SECRET = originalSessionSecret;
@@ -68,6 +297,7 @@ describe("session.server", () => {
       delete process.env.SESSION_SECRET;
       vi.stubEnv("NODE_ENV", "production");
       try {
+        const localDogfoodUserId = await createSessionUser();
         const request = new Request("http://localhost:5173/", { method: "GET" }) as unknown as globalThis.Request;
 
         await expect(getUserId(request, {
@@ -75,7 +305,7 @@ describe("session.server", () => {
           SPOONJOY_BASE_URL: "http://localhost:5173",
         })).resolves.toBeNull();
 
-        const response = await createUserSession("local-dogfood-user-id", "/recipes", {
+        const response = await createUserSession(localDogfoodUserId, "/recipes", {
           NODE_ENV: "production",
           SPOONJOY_BASE_URL: "http://localhost:5173",
         }, request);
@@ -89,7 +319,7 @@ describe("session.server", () => {
         await expect(getUserId(signedInRequest, {
           NODE_ENV: "production",
           SPOONJOY_BASE_URL: "http://localhost:5173",
-        })).resolves.toBe("local-dogfood-user-id");
+        })).resolves.toBe(localDogfoodUserId);
       } finally {
         vi.unstubAllEnvs();
       }
@@ -99,9 +329,10 @@ describe("session.server", () => {
       delete process.env.SESSION_SECRET;
       vi.stubEnv("NODE_ENV", "production");
       try {
+        const localIpv6DogfoodUserId = await createSessionUser();
         const request = new Request("http://[::1]:5173/", { method: "GET" }) as unknown as globalThis.Request;
 
-        const response = await createUserSession("local-ipv6-dogfood-user-id", "/recipes", {
+        const response = await createUserSession(localIpv6DogfoodUserId, "/recipes", {
           NODE_ENV: "production",
           SPOONJOY_BASE_URL: "http://[::1]:5173",
         }, request);
@@ -115,7 +346,7 @@ describe("session.server", () => {
         await expect(getUserId(signedInRequest, {
           NODE_ENV: "production",
           SPOONJOY_BASE_URL: "http://[::1]:5173",
-        })).resolves.toBe("local-ipv6-dogfood-user-id");
+        })).resolves.toBe(localIpv6DogfoodUserId);
       } finally {
         vi.unstubAllEnvs();
       }
@@ -158,9 +389,10 @@ describe("session.server", () => {
     });
 
     it("uses secure runtime session cookies when production has a real secret", async () => {
+      const secureProductionUserId = await createSessionUser();
       const request = new Request("https://spoonjoy.app/", { method: "GET" }) as unknown as globalThis.Request;
 
-      const response = await createUserSession("secure-production-user-id", "/recipes", {
+      const response = await createUserSession(secureProductionUserId, "/recipes", {
         NODE_ENV: "production",
         SESSION_SECRET: "production-runtime-secret",
       }, request);
@@ -174,7 +406,7 @@ describe("session.server", () => {
       await expect(getUserId(signedInRequest, {
         NODE_ENV: "production",
         SESSION_SECRET: "production-runtime-secret",
-      })).resolves.toBe("secure-production-user-id");
+      })).resolves.toBe(secureProductionUserId);
     });
 
     it("does not resolve default session storage during production module import", async () => {
@@ -202,8 +434,9 @@ describe("session.server", () => {
     });
 
     it("should return userId from valid session", async () => {
+      const testUserId = await createSessionUser();
       const session = await sessionStorage.getSession();
-      session.set("userId", "test-user-id");
+      session.set("userId", testUserId);
       const setCookieHeader = await sessionStorage.commitSession(session);
 
       // Extract just the cookie value from the Set-Cookie header
@@ -219,7 +452,7 @@ describe("session.server", () => {
       });
 
       const userId = await getUserId(request);
-      expect(userId).toBe("test-user-id");
+      expect(userId).toBe(testUserId);
     });
 
     it("does not trust a default-secret cookie when a runtime session secret is configured", async () => {
@@ -249,8 +482,9 @@ describe("session.server", () => {
     });
 
     it("should return userId from valid session", async () => {
+      const testUserId = await createSessionUser();
       const session = await sessionStorage.getSession();
-      session.set("userId", "test-user-id");
+      session.set("userId", testUserId);
       const setCookieHeader = await sessionStorage.commitSession(session);
 
       // Extract just the cookie value from the Set-Cookie header
@@ -265,7 +499,7 @@ describe("session.server", () => {
       });
 
       const result = await requireUserId(request);
-      expect(result).toBe("test-user-id");
+      expect(result).toBe(testUserId);
     });
   });
 
@@ -284,12 +518,13 @@ describe("session.server", () => {
       process.env.SESSION_SECRET = "process-secret";
 
       try {
-        const response = await createUserSession("process-user-id", "/recipes");
+        const processUserId = await createSessionUser();
+        const response = await createUserSession(processUserId, "/recipes");
         const request = new Request("http://localhost:3000/recipes", {
           headers: { Cookie: cookieHeader(response.headers.get("Set-Cookie") ?? "") },
         });
 
-        await expect(getUserId(request)).resolves.toBe("process-user-id");
+        await expect(getUserId(request)).resolves.toBe(processUserId);
         await expect(getUserId(request, { SESSION_SECRET: "different-secret" })).resolves.toBeNull();
       } finally {
         if (original === undefined) {
@@ -305,12 +540,13 @@ describe("session.server", () => {
       delete process.env.SESSION_SECRET;
 
       try {
-        const response = await createUserSession("dev-secret-user-id", "/recipes");
+        const devSecretUserId = await createSessionUser();
+        const response = await createUserSession(devSecretUserId, "/recipes");
         const request = new Request("http://localhost:3000/recipes", {
           headers: { Cookie: cookieHeader(response.headers.get("Set-Cookie") ?? "") },
         });
 
-        await expect(getUserId(request)).resolves.toBe("dev-secret-user-id");
+        await expect(getUserId(request)).resolves.toBe(devSecretUserId);
         await expect(getUserId(request, { SESSION_SECRET: "different-secret" })).resolves.toBeNull();
       } finally {
         if (original === undefined) {
@@ -322,7 +558,8 @@ describe("session.server", () => {
     });
 
     it("creates cookies that are scoped to the runtime session secret", async () => {
-      const response = await createUserSession("test-user-id", "/recipes", {
+      const testUserId = await createSessionUser();
+      const response = await createUserSession(testUserId, "/recipes", {
         SESSION_SECRET: "runtime-secret",
       });
       const headers = new Headers();
@@ -331,7 +568,7 @@ describe("session.server", () => {
         headers,
       });
 
-      await expect(getUserId(request, { SESSION_SECRET: "runtime-secret" })).resolves.toBe("test-user-id");
+      await expect(getUserId(request, { SESSION_SECRET: "runtime-secret" })).resolves.toBe(testUserId);
       await expect(getUserId(request, { SESSION_SECRET: "different-secret" })).resolves.toBeNull();
     });
 

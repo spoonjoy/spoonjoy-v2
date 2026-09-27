@@ -26,6 +26,7 @@ import { action as registerVerify } from "~/routes/auth.webauthn.register.verify
 import { action as authenticateOptions } from "~/routes/auth.webauthn.authenticate.options";
 import { action as authenticateVerify } from "~/routes/auth.webauthn.authenticate.verify";
 import { getLocalDb } from "~/lib/db.server";
+import { WebAuthnError } from "~/lib/webauthn-route.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestUser } from "../utils";
@@ -93,13 +94,25 @@ describe("WebAuthn routes", () => {
     });
 
     it("maps orchestration errors to their status", async () => {
+      const user = await db.user.create({ data: createTestUser() });
+      vi.mocked(buildRegistrationOptions).mockRejectedValue(new WebAuthnError("Passkeys are unavailable", 409) as never);
+      const res = await registerOptions(routeArgs(jsonRequest(
+        "https://spoonjoy.app/auth/webauthn/register/options",
+        {},
+        { Cookie: await sessionCookie(user.id) },
+      )));
+      expect(res.status).toBe(409);
+      await expect(res.json()).resolves.toEqual({ error: "Passkeys are unavailable" });
+    });
+
+    it("treats a session for a deleted user as signed out", async () => {
       const cookie = await sessionCookie("ghost-user-id");
       const res = await registerOptions(routeArgs(jsonRequest(
         "https://spoonjoy.app/auth/webauthn/register/options",
         {},
         { Cookie: cookie },
       )));
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(401);
     });
 
     it("falls back when registration option orchestration throws a non-Error", async () => {

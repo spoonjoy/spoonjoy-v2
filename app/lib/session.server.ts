@@ -1,4 +1,6 @@
-import { createCookie, createCookieSessionStorage } from "react-router";
+import { createCookie, createCookieSessionStorage, type Session } from "react-router";
+import type { PrismaClient as PrismaClientType } from "@prisma/client";
+import { getDb, getLocalDb } from "~/lib/db.server";
 
 // Session cookie configuration
 const DEFAULT_DEV_SESSION_SECRET = "default-dev-secret-please-change-in-production";
@@ -9,6 +11,18 @@ export interface SessionEnv {
   NODE_ENV?: string;
   SPOONJOY_BASE_URL?: string;
   SPOONJOY_ALLOW_INSECURE_LOCAL_SESSIONS?: string;
+  // The request's D1 binding. Session reads check the user's session version
+  // through it; without it (unit tests, scripts) they use the local database.
+  DB?: D1Database;
+}
+
+const USER_ID_KEY = "userId";
+const SESSION_VERSION_KEY = "sessionVersion";
+
+/** Who a signed session cookie says the visitor is, before any database check. */
+export interface SessionIdentity {
+  userId: string;
+  sessionVersion: number;
 }
 
 const storageCache = new Map<string, ReturnType<typeof createSessionStorageForSecret>>();
@@ -163,44 +177,132 @@ export async function getSession(request: Request, env?: SessionEnv | null) {
   return sessionStorageForEnv(env, request).getSession(cookie);
 }
 
-// Helper to get user ID from session
-export async function getUserId(request: Request, env?: SessionEnv | null): Promise<string | null> {
-  const session = await getSession(request, env);
-  const userId = session.get("userId");
-  return userId || null;
+function identityFromSession(session: Session): SessionIdentity | null {
+  const userId = session.get(USER_ID_KEY);
+  if (typeof userId !== "string" || !userId) return null;
+
+  // Cookies issued before session versions existed carry no version. They count
+  // as version 0, so they stay valid until the user's first bump.
+  const rawVersion = session.get(SESSION_VERSION_KEY);
+  const sessionVersion = rawVersion === undefined ? 0 : rawVersion;
+  if (!Number.isSafeInteger(sessionVersion) || sessionVersion < 0) return null;
+
+  return { userId, sessionVersion };
 }
 
-// Helper to require user ID (throws if not authenticated)
+/**
+ * Reads the signed session cookie without checking the database. Callers that
+ * trust the identity must also check it with `isCurrentSession` against the
+ * user's current `sessionVersion` (see `getUserId` and `authenticateApiRequest`).
+ */
+export async function getSessionIdentity(
+  request: Request,
+  env?: SessionEnv | null
+): Promise<SessionIdentity | null> {
+  return identityFromSession(await getSession(request, env));
+}
+
+/** A cookie is current only while its user exists and its version is the user's current one. */
+export function isCurrentSession(identity: SessionIdentity, currentSessionVersion: number | null | undefined): boolean {
+  return identity.sessionVersion === currentSessionVersion;
+}
+
+async function sessionDb(env?: SessionEnv | null): Promise<PrismaClientType> {
+  return env?.DB ? getDb({ DB: env.DB }) : getLocalDb();
+}
+
+// One primary-key lookup that selects only the version.
+async function readCurrentSessionVersion(userId: string, env?: SessionEnv | null): Promise<number | null> {
+  const db = await sessionDb(env);
+  const user = await db.user.findUnique({ where: { id: userId }, select: { sessionVersion: true } });
+  return user ? user.sessionVersion : null;
+}
+
+interface SessionCheck {
+  session: Session;
+  userId: string | null;
+  // True when the request carried a signed-in cookie that is no longer valid.
+  stale: boolean;
+}
+
+async function checkSession(request: Request, env?: SessionEnv | null): Promise<SessionCheck> {
+  const session = await getSession(request, env);
+  const identity = identityFromSession(session);
+  if (!identity) return { session, userId: null, stale: session.has(USER_ID_KEY) };
+
+  const currentSessionVersion = await readCurrentSessionVersion(identity.userId, env);
+  return isCurrentSession(identity, currentSessionVersion)
+    ? { session, userId: identity.userId, stale: false }
+    : { session, userId: null, stale: true };
+}
+
+// The root loader and a route loader read the session for the same Request
+// object, so the version lookup runs once per request (and environment).
+const sessionChecks = new WeakMap<Request, Map<SessionEnv | null, Promise<SessionCheck>>>();
+
+function checkSessionOnce(request: Request, env?: SessionEnv | null): Promise<SessionCheck> {
+  const key = env ?? null;
+  let checksForRequest = sessionChecks.get(request);
+  if (!checksForRequest) {
+    checksForRequest = new Map();
+    sessionChecks.set(request, checksForRequest);
+  }
+
+  let check = checksForRequest.get(key);
+  if (!check) {
+    check = checkSession(request, env);
+    checksForRequest.set(key, check);
+  }
+  return check;
+}
+
+// Helper to get user ID from session. A cookie for a deleted user, or one whose
+// version is behind the user's current session version, counts as signed out.
+export async function getUserId(request: Request, env?: SessionEnv | null): Promise<string | null> {
+  return (await checkSessionOnce(request, env)).userId;
+}
+
+// Helper to require user ID (throws if not authenticated). A stale cookie is
+// cleared on the way to the sign-in page.
 export async function requireUserId(
   request: Request,
   redirectTo: string = "/login",
   env?: SessionEnv | null
 ): Promise<string> {
-  const userId = await getUserId(request, env);
-  if (!userId) {
+  const check = await checkSessionOnce(request, env);
+  if (!check.userId) {
     const url = new URL(request.url);
     const searchParams = new URLSearchParams([["redirectTo", url.pathname]]);
-    throw new Response(null, {
-      status: 302,
-      headers: {
-        Location: `${redirectTo}?${searchParams}`,
-      },
-    });
+    const headers = new Headers({ Location: `${redirectTo}?${searchParams}` });
+    if (check.stale) {
+      headers.set("Set-Cookie", await sessionStorageForEnv(env, request).destroySession(check.session));
+    }
+    throw new Response(null, { status: 302, headers });
   }
-  return userId;
+  return check.userId;
+}
+
+export interface CreateUserSessionOptions {
+  // The user's current session version, when the caller already has it (for
+  // example straight after bumping it). Otherwise it is read from the database.
+  sessionVersion?: number;
 }
 
 // Helper to mint a `__session` Set-Cookie string for a user, without
 // building a Response. Useful when the caller wants to attach the session
-// to a non-redirect response (e.g. a JSON passkey-login response).
+// to a non-redirect response (e.g. a JSON passkey-login response). The cookie
+// carries the user's session version, so bumping the version revokes it.
 export async function createUserSessionCookie(
   userId: string,
   env?: SessionEnv | null,
-  request?: Request | null
+  request?: Request | null,
+  options: CreateUserSessionOptions = {}
 ): Promise<string> {
+  const sessionVersion = options.sessionVersion ?? (await readCurrentSessionVersion(userId, env)) ?? 0;
   const storage = sessionStorageForEnv(env, request);
   const session = await storage.getSession();
-  session.set("userId", userId);
+  session.set(USER_ID_KEY, userId);
+  session.set(SESSION_VERSION_KEY, sessionVersion);
   return storage.commitSession(session);
 }
 
@@ -209,12 +311,13 @@ export async function createUserSession(
   userId: string,
   redirectTo: string,
   env?: SessionEnv | null,
-  request?: Request | null
+  request?: Request | null,
+  options: CreateUserSessionOptions = {}
 ) {
   return new Response(null, {
     status: 302,
     headers: {
-      "Set-Cookie": await createUserSessionCookie(userId, env, request),
+      "Set-Cookie": await createUserSessionCookie(userId, env, request, options),
       Location: sanitizeSessionRedirect(redirectTo),
     },
   });

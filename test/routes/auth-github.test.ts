@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, onTestFinished } from "vitest";
 import { sessionStorage } from "~/lib/session.server";
 import { commitOAuthStartSession, readOAuthStartSession } from "~/lib/oauth-route.server";
 
@@ -28,6 +28,7 @@ import { action, loader } from "~/routes/auth.github";
 import GitHubOAuthRoute from "~/routes/auth.github";
 import { loader as callbackLoader } from "~/routes/auth.github.callback";
 import GitHubOAuthCallbackRoute from "~/routes/auth.github.callback";
+import { ensureSessionUser } from "../helpers/session-user";
 
 const githubEnv = {
   GITHUB_CLIENT_ID: "github-client",
@@ -389,6 +390,7 @@ describe("GitHub OAuth routes", () => {
   });
 
   it("passes current user ID for successful linking callbacks", async () => {
+    onTestFinished(await ensureSessionUser("user-1"));
     const loginSession = await sessionStorage.getSession();
     loginSession.set("userId", "user-1");
     const loginCookie = await sessionStorage.commitSession(loginSession);

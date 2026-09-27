@@ -22,6 +22,7 @@ import {
   sanitizeInternalRedirect,
 } from "~/lib/oauth-route.server";
 import { oauthSessionStorage, sessionStorage } from "~/lib/session.server";
+import { ensureSessionUser } from "../helpers/session-user";
 
 function cookieHeader(setCookie: string) {
   return setCookie.split(";")[0];
@@ -372,15 +373,21 @@ describe("oauth-route.server", () => {
   });
 
   it("allows linking starts when a user session exists", async () => {
-    const session = await sessionStorage.getSession();
-    session.set("userId", "user-1");
-    const cookie = await sessionStorage.commitSession(session);
-    const request = new Request("https://spoonjoy.app/auth/google?linking=true", {
-      headers: { Cookie: cookieHeader(cookie) },
-    });
-    const data = resolveOAuthStartSessionData(request, "state");
+    const removeUser = await ensureSessionUser("user-1");
+    try {
+      const session = await sessionStorage.getSession();
+      session.set("userId", "user-1");
+      const cookie = await sessionStorage.commitSession(session);
+      const request = new Request("https://spoonjoy.app/auth/google?linking=true", {
+        headers: { Cookie: cookieHeader(cookie) },
+      });
+      const data = resolveOAuthStartSessionData(request, "state");
 
-    await expect(assertCanStartOAuthLinking(request, data)).resolves.toBeNull();
+      await expect(assertCanStartOAuthLinking(request, data)).resolves.toBeNull();
+      expect(data.linkingUserId).toBe("user-1");
+    } finally {
+      await removeUser();
+    }
   });
 
   it("redirects linking starts without a user session", async () => {

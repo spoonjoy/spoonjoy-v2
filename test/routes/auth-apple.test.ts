@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, onTestFinished } from "vitest";
 import { sessionStorage } from "~/lib/session.server";
 import { commitOAuthStartSession, readOAuthStartSession } from "~/lib/oauth-route.server";
 
@@ -30,6 +30,7 @@ import AppleOAuthRoute from "~/routes/auth.apple";
 import { action as callbackAction, loader as callbackLoader } from "~/routes/auth.apple.callback";
 import AppleOAuthCallbackRoute from "~/routes/auth.apple.callback";
 import { action as legacyCallbackAction } from "~/routes/redwood-functions-auth-oauth";
+import { ensureSessionUser } from "../helpers/session-user";
 
 const appleEnv = {
   APPLE_CLIENT_ID: "apple-client",
@@ -173,6 +174,7 @@ describe("Apple OAuth routes", () => {
   });
 
   it("uses the linkAppleAccount return path for a logged-in linking flow", async () => {
+    onTestFinished(await ensureSessionUser("user-1"));
     const session = await sessionStorage.getSession();
     session.set("userId", "user-1");
     const userCookie = await sessionStorage.commitSession(session);

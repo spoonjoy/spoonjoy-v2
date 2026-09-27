@@ -1,5 +1,5 @@
 import type { ApiCredential, PrismaClient as PrismaClientType, User } from "@prisma/client";
-import { getUserId, type SessionEnv } from "~/lib/session.server";
+import { getSessionIdentity, isCurrentSession, type SessionEnv } from "~/lib/session.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 
 export type ApiPrincipalSource = "session" | "bearer" | "environment";
@@ -308,8 +308,16 @@ export async function authenticateApiRequest(
     return null;
   }
 
-  const sessionUserId = await getUserId(request, env);
-  return sessionUserId ? principalFromUserId(db, sessionUserId, "session") : null;
+  // Browser session: one user read both loads the principal and checks that the
+  // cookie's session version is still current (not revoked, user not deleted).
+  const identity = await getSessionIdentity(request, env);
+  if (!identity) return null;
+
+  const user = await db.user.findUnique({
+    where: { id: identity.userId },
+    select: { id: true, email: true, username: true, sessionVersion: true },
+  });
+  return user && isCurrentSession(identity, user.sessionVersion) ? toPrincipal(user, "session") : null;
 }
 
 export function requireApiPrincipal(principal: ApiPrincipal | null | undefined): ApiPrincipal {
