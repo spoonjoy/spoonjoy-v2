@@ -539,10 +539,10 @@ WHERE credentialId IN (SELECT id FROM disposable_credentials)
       fromWhere: `FROM NotificationEvent
 WHERE recipientId NOT IN (SELECT id FROM disposable_users)
   AND (
-    EXISTS (SELECT 1 FROM disposable_users WHERE NotificationEvent.payload LIKE '%' || disposable_users.id || '%')
-    OR EXISTS (SELECT 1 FROM hard_delete_recipes WHERE NotificationEvent.payload LIKE '%' || hard_delete_recipes.id || '%')
-    OR EXISTS (SELECT 1 FROM disposable_spoons WHERE NotificationEvent.payload LIKE '%' || disposable_spoons.id || '%')
-    OR EXISTS (SELECT 1 FROM disposable_covers WHERE NotificationEvent.payload LIKE '%' || disposable_covers.id || '%')
+    EXISTS (SELECT 1 FROM disposable_users WHERE instr(NotificationEvent.payload, disposable_users.id) > 0)
+    OR EXISTS (SELECT 1 FROM hard_delete_recipes WHERE instr(NotificationEvent.payload, hard_delete_recipes.id) > 0)
+    OR EXISTS (SELECT 1 FROM disposable_spoons WHERE instr(NotificationEvent.payload, disposable_spoons.id) > 0)
+    OR EXISTS (SELECT 1 FROM disposable_covers WHERE instr(NotificationEvent.payload, disposable_covers.id) > 0)
   )`,
     },
   ];
@@ -775,10 +775,10 @@ WHERE ownerId IN (SELECT id FROM disposable_users)
    OR entityId IN (SELECT id FROM disposable_spoons)
    OR entityId IN (SELECT id FROM disposable_covers)
    OR imageUrl IN (SELECT imageUrl FROM disposable_cover_image_urls)
-   OR EXISTS (SELECT 1 FROM disposable_users WHERE SearchDocument.href LIKE '%' || disposable_users.id || '%')
-   OR EXISTS (SELECT 1 FROM hard_delete_recipes WHERE SearchDocument.href LIKE '%' || hard_delete_recipes.id || '%')
-   OR EXISTS (SELECT 1 FROM disposable_spoons WHERE SearchDocument.href LIKE '%' || disposable_spoons.id || '%')
-   OR EXISTS (SELECT 1 FROM disposable_covers WHERE SearchDocument.href LIKE '%' || disposable_covers.id || '%');
+   OR EXISTS (SELECT 1 FROM disposable_users WHERE instr(SearchDocument.href, disposable_users.id) > 0)
+   OR EXISTS (SELECT 1 FROM hard_delete_recipes WHERE instr(SearchDocument.href, hard_delete_recipes.id) > 0)
+   OR EXISTS (SELECT 1 FROM disposable_spoons WHERE instr(SearchDocument.href, disposable_spoons.id) > 0)
+   OR EXISTS (SELECT 1 FROM disposable_covers WHERE instr(SearchDocument.href, disposable_covers.id) > 0);
 `.trim());
   }
 
@@ -911,10 +911,10 @@ INSERT INTO cleanup_blockers (blocker, rowId)
 SELECT 'blocker_notification_payload', id FROM NotificationEvent
 WHERE recipientId NOT IN (SELECT id FROM disposable_users)
   AND (
-    EXISTS (SELECT 1 FROM disposable_users WHERE NotificationEvent.payload LIKE '%' || disposable_users.id || '%')
-    OR EXISTS (SELECT 1 FROM hard_delete_recipes WHERE NotificationEvent.payload LIKE '%' || hard_delete_recipes.id || '%')
-    OR EXISTS (SELECT 1 FROM disposable_spoons WHERE NotificationEvent.payload LIKE '%' || disposable_spoons.id || '%')
-    OR EXISTS (SELECT 1 FROM disposable_covers WHERE NotificationEvent.payload LIKE '%' || disposable_covers.id || '%')
+    EXISTS (SELECT 1 FROM disposable_users WHERE instr(NotificationEvent.payload, disposable_users.id) > 0)
+    OR EXISTS (SELECT 1 FROM hard_delete_recipes WHERE instr(NotificationEvent.payload, hard_delete_recipes.id) > 0)
+    OR EXISTS (SELECT 1 FROM disposable_spoons WHERE instr(NotificationEvent.payload, disposable_spoons.id) > 0)
+    OR EXISTS (SELECT 1 FROM disposable_covers WHERE instr(NotificationEvent.payload, disposable_covers.id) > 0)
   );
 
 -- The literal abort shape is kept here for reviewer/search visibility:

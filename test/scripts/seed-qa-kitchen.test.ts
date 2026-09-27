@@ -247,15 +247,16 @@ describe("seed-qa-kitchen", () => {
   });
 
   describe("scratch users", () => {
-    it("generates SCRATCH_USER_COUNT users by default, each in the codex-e2e-* / codex_e2e_* disposable namespace", () => {
+    it("generates SCRATCH_USER_COUNT users by default, each in the codex-e2e-* / codex_e2e_* disposable namespace, no id over 40 characters", () => {
       const users = generateScratchUsers();
       expect(users).toHaveLength(SCRATCH_USER_COUNT);
       for (const user of users) {
-        expect(user.email).toMatch(/^codex-e2e-scratch-[a-z0-9-]+@example\.com$/);
-        expect(user.username).toMatch(/^codex_e2e_scratch_[a-z0-9_]+$/);
+        expect(user.email).toMatch(/^codex-e2e-s-[a-z0-9-]+@example\.com$/);
+        expect(user.username).toMatch(/^codex_e2e_s_[a-z0-9_]+$/);
         expect(user.id).toBe(user.username);
         expect(user.email).toMatch(/^codex-/);
         expect(user.username.startsWith("codex_")).toBe(true);
+        expect(user.id.length).toBeLessThanOrEqual(40);
       }
     });
 
@@ -278,10 +279,9 @@ describe("seed-qa-kitchen", () => {
       expect(new Set(users.map((u) => u.email)).size).toBe(users.length);
     });
 
-    it("never collides across two runs, even at the same instant, via the random run token", () => {
-      const now = () => new Date("2026-09-26T12:00:00.000Z");
-      const runA = generateScratchUsers(SCRATCH_USER_COUNT, { now });
-      const runB = generateScratchUsers(SCRATCH_USER_COUNT, { now });
+    it("never collides across two runs via the random run token", () => {
+      const runA = generateScratchUsers(SCRATCH_USER_COUNT);
+      const runB = generateScratchUsers(SCRATCH_USER_COUNT);
       const idsA = new Set(runA.map((u) => u.id));
       for (const user of runB) {
         expect(idsA.has(user.id)).toBe(false);
@@ -310,7 +310,7 @@ describe("seed-qa-kitchen", () => {
 
     it("inserts scratch users on a database created from the real migrations, each with its own bcrypt-hashed password", () => {
       const db = migratedDb();
-      const users = generateScratchUsers(2, { now: () => new Date("2026-09-26T12:00:00.000Z") });
+      const users = generateScratchUsers(2);
       const passwords = ["scratch-pw-1", "scratch-pw-2"];
       db.exec(buildScratchUsersSql({ users, passwords, hash: fastHash }));
 
@@ -324,7 +324,7 @@ describe("seed-qa-kitchen", () => {
 
     it("is idempotent: re-applying the same generated statement never throws", () => {
       const db = migratedDb();
-      const users = generateScratchUsers(2, { now: () => new Date("2026-09-26T12:00:00.000Z") });
+      const users = generateScratchUsers(2);
       const passwords = ["scratch-pw-1", "scratch-pw-2"];
       const sql = buildScratchUsersSql({ users, passwords, hash: fastHash });
       db.exec(sql);
@@ -336,7 +336,7 @@ describe("seed-qa-kitchen", () => {
 
     it("does not collide with the qa-kitchen personas' reset logic: a kitchen reset leaves scratch users untouched", () => {
       const db = migratedDb();
-      const users = generateScratchUsers(2, { now: () => new Date("2026-09-26T12:00:00.000Z") });
+      const users = generateScratchUsers(2);
       db.exec(buildScratchUsersSql({ users, passwords: ["scratch-pw-1", "scratch-pw-2"], hash: fastHash }));
       db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
       expect(db.prepare('SELECT COUNT(*) n FROM "User" WHERE id IN (?, ?)').get(users[0].id, users[1].id)).toEqual({
@@ -346,7 +346,7 @@ describe("seed-qa-kitchen", () => {
 
     it("is picked up by cleanup-local-qa-data.mjs's disposable-user rule and removed by its apply SQL", () => {
       const db = migratedDb();
-      const users = generateScratchUsers(SCRATCH_USER_COUNT, { now: () => new Date("2026-09-26T12:00:00.000Z") });
+      const users = generateScratchUsers(SCRATCH_USER_COUNT);
       const scratchPasswords = generateScratchPasswords(users.length);
       db.exec(buildScratchUsersSql({ users, passwords: scratchPasswords, hash: fastHash }));
 
@@ -368,8 +368,8 @@ describe("seed-qa-kitchen", () => {
     describe("buildScratchInvalidationSql (--rotate)", () => {
       it("nulls out hashedPassword and salt for every scratch user, regardless of which run created it", () => {
         const db = migratedDb();
-        const runA = generateScratchUsers(2, { now: () => new Date("2026-09-26T12:00:00.000Z") });
-        const runB = generateScratchUsers(2, { now: () => new Date("2026-09-27T00:00:00.000Z") });
+        const runA = generateScratchUsers(2);
+        const runB = generateScratchUsers(2);
         db.exec(buildScratchUsersSql({ users: runA, passwords: ["pw-a1", "pw-a2"], hash: fastHash }));
         db.exec(buildScratchUsersSql({ users: runB, passwords: ["pw-b1", "pw-b2"], hash: fastHash }));
 
@@ -385,7 +385,7 @@ describe("seed-qa-kitchen", () => {
       it("never touches the kitchen personas", () => {
         const db = migratedDb();
         db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
-        const users = generateScratchUsers(1, { now: () => new Date("2026-09-26T12:00:00.000Z") });
+        const users = generateScratchUsers(1);
         db.exec(buildScratchUsersSql({ users, passwords: ["pw-1"], hash: fastHash }));
 
         db.exec(buildScratchInvalidationSql());
@@ -406,7 +406,7 @@ describe("seed-qa-kitchen", () => {
         // side of that contract: after invalidation, the stored hash is exactly null, which is
         // the value that function's `!user.hashedPassword` check treats as "no password set".
         const db = migratedDb();
-        const users = generateScratchUsers(1, { now: () => new Date("2026-09-26T12:00:00.000Z") });
+        const users = generateScratchUsers(1);
         const password = "scratch-pw-1";
         db.exec(buildScratchUsersSql({ users, passwords: [password], hash: fastHash }));
         const before = db.prepare('SELECT hashedPassword FROM "User" WHERE id = ?').get(users[0].id) as any;
@@ -511,8 +511,9 @@ describe("seed-qa-kitchen", () => {
       expect(credentials.newbie).toEqual({ username: "qa_kitchen_newbie", email: "qa-kitchen-newbie@example.com", password: expect.any(String) });
       expect(credentials.scratch).toHaveLength(SCRATCH_USER_COUNT);
       for (const entry of credentials.scratch) {
-        expect(entry.email).toMatch(/^codex-e2e-scratch-/);
-        expect(entry.username).toMatch(/^codex_e2e_scratch_/);
+        expect(entry.email).toMatch(/^codex-e2e-s-/);
+        expect(entry.username).toMatch(/^codex_e2e_s_/);
+        expect(entry.username.length).toBeLessThanOrEqual(40);
         expect(entry.password).toEqual(expect.any(String));
       }
       expect(writeFile.mock.calls[1][2]).toEqual({ encoding: "utf8", mode: 0o600 });

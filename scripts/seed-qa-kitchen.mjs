@@ -156,41 +156,41 @@ export function generatePersonaPasswords(random = randomBytes) {
 // accounting before raising this further.
 export const SCRATCH_USER_COUNT = 6;
 
-// Same stamp/token shape as e2e/support/disposable-auth.ts's createDisposableE2EUser() and this
+// Token shape follows e2e/support/disposable-auth.ts's createDisposableE2EUser() and this
 // script's own sibling scripts/seed-qa.mjs (duplicated, not imported — this file's top-of-file
-// comment notes it follows that script's dependency-free, unit-testable house style). Matching
-// the shape keeps scratch users inside the same disposable namespace
-// scripts/cleanup-local-qa-data.mjs already removes: DISPOSABLE_USER_WHERE matches any user
-// whose email starts with 'codex-' and whose username starts with 'codex_'.
-function stampDate(date) {
-  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "z").toLowerCase();
-}
-
+// comment notes it follows that script's dependency-free, unit-testable house style), sanitized
+// down to lowercase alphanumerics only.
 function disposableToken(value) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 16) || "run";
 }
 
-// Email prefix unique to this generator (no other script or e2e helper mints
-// 'codex-e2e-scratch-*' addresses), so it doubles as the exact-match predicate
-// buildScratchInvalidationSql uses to find every scratch user from every past run, regardless of
-// their run token or index.
-const SCRATCH_EMAIL_PREFIX = "codex-e2e-scratch-";
+// Email prefix unique to this generator (no other script or e2e helper mints 'codex-e2e-s-*'
+// addresses), so it doubles as the exact-match predicate buildScratchInvalidationSql uses to
+// find every scratch user from every past run, regardless of their run token or index. Kept
+// short, like the whole generated id below: Cloudflare D1 caps a LIKE/GLOB pattern at 50 bytes,
+// and scripts/cleanup-local-qa-data.mjs's disposable-row blockers build patterns from a row's
+// id — a long id was exactly what broke that in QA before these ids were shortened (D1 error
+// SQLITE_ERROR 7500, "LIKE or GLOB pattern too complex"); cleanup itself now builds those
+// specific blockers with instr(...) instead of a concatenated LIKE pattern, which has no length
+// limit, but ids here stay short regardless, in case another LIKE/GLOB pattern is ever built
+// from one.
+const SCRATCH_EMAIL_PREFIX = "codex-e2e-s-";
 
 // Generates `count` scratch user identities for this run. Every one shares a single run token
-// (an extra random segment beyond the per-user index) baked into both email and username, so a
-// concurrent run, or a leftover run whose cleanup didn't get to run, can never collide with this
-// run's scratch users. Scratch users own no data (no recipes, cookbooks, or shopping lists), so
-// there is no persona-style drift to reset here — only identity.
-export function generateScratchUsers(count = SCRATCH_USER_COUNT, { now = () => new Date(), random = randomBytes } = {}) {
-  const stamp = stampDate(now());
-  const runToken = disposableToken(random(8).toString("hex"));
+// (an 8-character random segment, no timestamp — see SCRATCH_EMAIL_PREFIX on why these stay
+// short) baked into both email and username, so a concurrent run, or a leftover run whose
+// cleanup didn't get to run, can never collide with this run's scratch users: no generated id
+// exceeds 40 characters. Scratch users own no data (no recipes, cookbooks, or shopping lists),
+// so there is no persona-style drift to reset here — only identity.
+export function generateScratchUsers(count = SCRATCH_USER_COUNT, { random = randomBytes } = {}) {
+  const runToken = disposableToken(random(4).toString("hex"));
   return Array.from({ length: count }, (_, index) => {
     const n = index + 1;
-    const username = `codex_e2e_scratch_${stamp}_${runToken}_${n}`;
+    const username = `codex_e2e_s_${runToken}_${n}`;
     return {
       id: username,
       username,
-      email: `${SCRATCH_EMAIL_PREFIX}${stamp}-${runToken}-${n}@example.com`,
+      email: `${SCRATCH_EMAIL_PREFIX}${runToken}-${n}@example.com`,
     };
   });
 }

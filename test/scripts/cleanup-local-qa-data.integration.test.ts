@@ -177,6 +177,24 @@ describe("cleanup-local-qa-data executable ownership boundaries", () => {
     expect(scratchSchemaRows(db)).toEqual([]);
   });
 
+  it("detects a non-disposable NotificationEvent payload blocker even when the disposable id is longer than Cloudflare D1's 50-byte LIKE/GLOB pattern limit", () => {
+    // A disposable user id this long broke QA cleanup before instr(...) replaced the
+    // concatenated LIKE pattern this blocker used to build ('%' || id || '%', which D1 caps at
+    // 50 bytes and rejects with SQLITE_ERROR 7500 "LIKE or GLOB pattern too complex"). instr has
+    // no such limit, so this must still correctly detect the reference regardless of id length.
+    db = createCleanupDatabase();
+    const longDisposableUserId = `codex-user-${"a".repeat(50)}`;
+    expect(longDisposableUserId.length).toBeGreaterThan(50);
+    db.exec(`
+      INSERT INTO User VALUES ('seed-user', 'demo@example.com', 'demo', NULL);
+      INSERT INTO User VALUES ('${longDisposableUserId}', 'codex-broad-cleanup@example.com', 'codex_broad_cleanup', NULL);
+      INSERT INTO NotificationEvent VALUES ('notif-1', 'seed-user', 'mentions ${longDisposableUserId} in its payload');
+    `);
+
+    expect(blockerRows(db)).toEqual([{ blocker: "blocker_notification_payload", rowId: "notif-1" }]);
+    expect(() => db!.exec(buildApplySql())).toThrow(/malformed JSON/);
+  });
+
   it("deletes only captured OAuth client IDs, their credential support graph, and no principal", () => {
     db = createCleanupDatabase();
     db.exec(`
