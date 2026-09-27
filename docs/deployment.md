@@ -9,10 +9,12 @@ Spoonjoy v2 deploys to Cloudflare Workers with D1 for data and R2 for uploaded p
 | Binding | Type | Purpose |
 | --- | --- | --- |
 | `DB` | D1 database | Prisma-backed application data |
-| `COOK_SESSIONS` | Durable Object namespace | SQLite-backed cook-session lifecycle; bootstrap releases expose only the bounded verification probe |
+| `COOK_SESSIONS` | Durable Object namespace | SQLite-backed cook sessions: one object per signed-in cook and recipe holds that cook's checklist, scale, and current step (protocol v1); bootstrap releases expose only the bounded verification probe |
 | `PHOTOS` | R2 bucket | Profile and recipe image uploads served through `/photos/*` |
 
 The top-level and QA `migrations` arrays must retain the `v1_cook_session` tag with `new_sqlite_classes: ["CookSession"]`. The bootstrap release enables its public probe only long enough to verify the new namespace; the immediately following product-activation release removes that public route while preserving the binding and migration. Bootstrap requests require an empty body, a Cloudflare client IP, and the configured auth IP rate limiter.
+
+`COOK_SESSION_PROTOCOL` switches cook-session protocol v1 on for an environment. With it set to `v1`, a signed-in cook's recipe-page progress syncs across devices through `GET /api/cook-sessions/:recipeId`, `POST /api/cook-sessions/:recipeId/start`, and revision-checked `PATCH /api/cook-sessions/:recipeId`; the list, socket, complete, abandon, restart, and purge routes still answer the retryable `503 cook_session_protocol_unavailable`. Without it, every cook-session route keeps that 503 and the recipe page keeps progress in the browser only. QA sets it (`env.qa.vars`); production does not yet. To turn it on in production, one reviewed PR sets `COOK_SESSION_PROTOCOL: "v1"` in the top-level `vars` and changes `production-deploy.yml`'s `SPOONJOY_RELEASE_MODE` to `atomic-product-activation` (see Production Deploy Flow below); `test/config/cook-session-binding.test.ts` refuses the flag under `atomic-bootstrap`. No Durable Object migration is needed: the `CookSession` class and its `v1_cook_session` migration already exist in both environments. Idle sessions delete themselves 30 days after their last change.
 
 Create first-time production resources with the commands below. R2 must first be enabled in Cloudflare Dashboard > R2 Object Storage; if it is not enabled, Wrangler returns `10042: Please enable R2 through the Cloudflare Dashboard`.
 

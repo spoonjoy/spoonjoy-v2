@@ -304,6 +304,7 @@ describe("seed-qa-kitchen", () => {
   describe("scratch users", () => {
     it("generates a base account and a desktop twin for each of SCRATCH_USER_COUNT indices by default, each in the codex-e2e-* / codex_e2e_* disposable namespace, no id over 40 characters", () => {
       const users = generateScratchUsers();
+      expect(SCRATCH_USER_COUNT).toBe(8);
       expect(SCRATCH_ACCOUNT_COUNT).toBe(SCRATCH_USER_COUNT * 2);
       expect(users).toHaveLength(SCRATCH_ACCOUNT_COUNT);
       expect(users.filter((user) => user.variant === "base")).toHaveLength(SCRATCH_USER_COUNT);
@@ -504,7 +505,7 @@ describe("seed-qa-kitchen", () => {
         expect(db.prepare('SELECT sessionVersion FROM "User" WHERE id = ?').get(KITCHEN.chef.id)).toEqual(chefBefore);
       });
 
-      it("revokes every desktop twin too: password NULLed and session version bumped, for a full run's 12 accounts", () => {
+      it("revokes every desktop twin too: password NULLed and session version bumped, for a full run's 16 accounts", () => {
         const db = migratedDb();
         const users = generateScratchUsers();
         db.exec(buildScratchUsersSql({ users, passwords: passwordsFor(users), hash: fastHash }));

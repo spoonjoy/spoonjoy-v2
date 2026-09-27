@@ -1,20 +1,30 @@
-// Cooking on both devices (chef session): the ingredient checklist, step outputs and scale persist
-// across reloads and visits, cook mode walks the steps with scaled quantities, and cook mode adds
-// exactly one history entry that Exit or Back removes (R-M2-4), so leaving the recipe afterwards
-// takes one Back. Cooking progress lives in each browser context's localStorage, so these tests
-// write nothing on the server and the two device projects cannot interfere. The app sets the
-// storage-schema version key itself on first load (app/lib/client-storage-schema.ts), and every
-// test loads a page before it checks anything, so no test seeds that key.
+// Cooking Lemon Herb Rice on both devices: the ingredient checklist, step outputs and scale persist
+// across reloads and visits, cook mode walks the steps with scaled quantities and resumes at the
+// step it was left on, and cook mode adds exactly one history entry that Exit or Back removes
+// (R-M2-4), so leaving the recipe afterwards takes one Back.
+//
+// On QA a signed-in cook's progress lives in their account (cook-session sync, bug 16), not in the
+// browser, so it outlasts a test's browser context. The tests that change progress therefore run
+// as scratch index 7 with per-device twins — the base account on iPhone WebKit, its desktop twin
+// on desktop Chrome (AGENTS.md's scratch table) — so the two device projects never race on one
+// account, reset that cook's Lemon Herb Rice progress through the cook-session API before they
+// start, and wait for "Progress synced" before a reload so the reload proves the account kept the
+// change. The history tests
+// open the recipe from the chef's kitchen home (a scratch cook's home lists no recipes) and change
+// no progress, so the chef's progress on Lemon Herb Rice stays untouched.
 import { test, expect } from "./support/journey";
 import type { Page } from "@playwright/test";
+import { resetCookProgress } from "./support/cook-progress";
 import { pathUrl, recipeLink, waitForHydration } from "./support/navigation";
-import { personaStorageStatePath } from "./support/personas";
+import { personaStorageStatePath, scratchStorageStateForProject } from "./support/personas";
 
-const LEMON_RICE = "/recipes/qa-kitchen-recipe-lemon-rice";
+const LEMON_RICE_ID = "qa-kitchen-recipe-lemon-rice";
+const LEMON_RICE = `/recipes/${LEMON_RICE_ID}`;
 const JASMINE_RICE_QUANTITY = "ingredient-quantity-qa-kitchen-recipe-lemon-rice-ingredient-1-jasmine-rice";
 // The recipe with no hash: cook mode closed.
 const LEMON_RICE_URL = new RegExp(`^https?://[^/]+${LEMON_RICE}$`);
 const LEMON_RICE_COOK_URL = new RegExp(`^https?://[^/]+${LEMON_RICE}#cook$`);
+const SCRATCH_INDEX = 7;
 
 function recipeHeading(page: Page) {
   return page.getByRole("heading", { level: 1, name: "Lemon Herb Rice", exact: true });
@@ -22,6 +32,10 @@ function recipeHeading(page: Page) {
 
 function kitchenHeading(page: Page) {
   return page.getByRole("heading", { level: 1, name: "My Kitchen", exact: true });
+}
+
+function syncStatus(page: Page) {
+  return page.getByTestId("cook-sync-status");
 }
 
 // Home, then Lemon Herb Rice through its link, so the recipe has an in-app page before it.
@@ -34,10 +48,12 @@ async function openLemonRiceFromHome(page: Page) {
   await expect(recipeHeading(page)).toBeVisible();
 }
 
+// Opens the recipe and waits until the page has read the cook's progress from their account.
 async function openLemonRiceDirectly(page: Page) {
   await page.goto(LEMON_RICE);
   await waitForHydration(page);
   await expect(recipeHeading(page)).toBeVisible();
+  await expect(syncStatus(page)).toHaveText("Progress synced");
 }
 
 // Two presses of "Increase scale": 1× -> 1.25× -> 1.5×.
@@ -51,166 +67,208 @@ async function scaleToOneAndAHalf(page: Page) {
 }
 
 test.describe("Cooking Lemon Herb Rice", () => {
-  // The stored session path, not persona("chef").storageState: persona() reads the per-run
-  // credentials file, which `playwright test --list` must not need.
-  test.use({ storageState: personaStorageStatePath("chef") });
+  test.describe("progress", () => {
+    // Scratch 7's base account on iPhone, its desktop twin on desktop Chrome. A stored session
+    // path, never the credentials file, which `playwright test --list` must not need.
+    test.use({ storageState: scratchStorageStateForProject(SCRATCH_INDEX) });
 
-  test("the checklist and scale persist across a reload and a visit elsewhere @mutates", async ({ page, verifyAfterReload, expectAccessible }) => {
-    const jasmineRice = page.getByRole("checkbox", { name: "jasmine rice", exact: true });
-    const jasmineRiceQuantity = page.getByTestId(JASMINE_RICE_QUANTITY);
-    const scaleDisplay = page.getByTestId("scale-display");
+    test.beforeEach(async ({ page }) => {
+      await resetCookProgress(page, LEMON_RICE_ID);
+    });
 
-    await openLemonRiceFromHome(page);
-    await expect(jasmineRice).toHaveAttribute("aria-checked", "false");
-    await expect(jasmineRiceQuantity).toHaveText("1 cup");
+    test("the checklist and scale persist across a reload and a visit elsewhere @mutates", async ({ page, verifyAfterReload, expectAccessible }) => {
+      const jasmineRice = page.getByRole("checkbox", { name: "jasmine rice", exact: true });
+      const jasmineRiceQuantity = page.getByTestId(JASMINE_RICE_QUANTITY);
+      const scaleDisplay = page.getByTestId("scale-display");
 
-    await jasmineRice.click();
-    await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
-    await scaleToOneAndAHalf(page);
-    await expect(jasmineRiceQuantity).toHaveText("1 ½ cup");
+      await openLemonRiceDirectly(page);
+      await expect(jasmineRice).toHaveAttribute("aria-checked", "false");
+      await expect(jasmineRiceQuantity).toHaveText("1 cup");
 
-    await verifyAfterReload(async () => {
+      await jasmineRice.click();
+      await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
+      await scaleToOneAndAHalf(page);
+      await expect(jasmineRiceQuantity).toHaveText("1 ½ cup");
+      await expect(syncStatus(page)).toHaveText("Progress synced");
+
+      await verifyAfterReload(async () => {
+        await expect(scaleDisplay).toHaveText("1.5×");
+        await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
+        await expect(jasmineRiceQuantity).toHaveText("1 ½ cup");
+      });
+
+      // Somewhere else and back to the recipe: the progress is still there.
+      await page.goto("/account/settings");
+      await expect(page.getByRole("heading", { level: 1, name: "Account settings", exact: true })).toBeVisible();
+      await openLemonRiceDirectly(page);
       await expect(scaleDisplay).toHaveText("1.5×");
       await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
       await expect(jasmineRiceQuantity).toHaveText("1 ½ cup");
+      await expectAccessible();
     });
 
-    // Home and back to the recipe: the progress is still there.
-    await openLemonRiceFromHome(page);
-    await expect(scaleDisplay).toHaveText("1.5×");
-    await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
-    await expect(jasmineRiceQuantity).toHaveText("1 ½ cup");
-    await expectAccessible();
-  });
+    test("a step output checks off and stays checked after a reload @mutates", async ({ page, verifyAfterReload, expectAccessible }) => {
+      // Step 3 ("Combine") uses step 1's output.
+      const cookedRice = page.getByRole("checkbox", { name: "Step 1: Cook the rice", exact: true });
 
-  test("a step output checks off and stays checked after a reload @mutates", async ({ page, verifyAfterReload, expectAccessible }) => {
-    // Step 3 ("Combine") uses step 1's output.
-    const cookedRice = page.getByRole("checkbox", { name: "Step 1: Cook the rice", exact: true });
-
-    await openLemonRiceDirectly(page);
-    await expect(cookedRice).toHaveAttribute("aria-checked", "false");
-    await cookedRice.click();
-    await expect(cookedRice).toHaveAttribute("aria-checked", "true");
-
-    await verifyAfterReload(async () => {
+      await openLemonRiceDirectly(page);
+      await expect(cookedRice).toHaveAttribute("aria-checked", "false");
+      await cookedRice.click();
       await expect(cookedRice).toHaveAttribute("aria-checked", "true");
+      await expect(syncStatus(page)).toHaveText("Progress synced");
+
+      await verifyAfterReload(async () => {
+        await expect(cookedRice).toHaveAttribute("aria-checked", "true");
+      });
+      await expectAccessible();
     });
-    await expectAccessible();
-  });
 
-  test("cook mode walks every step with scaled quantities, and Exit leaves one Back to the page before", async ({ page, expectAccessible }) => {
-    const panel = page.getByTestId("cook-mode-panel");
-    const nextStep = panel.getByRole("button", { name: "Next step" });
-    const jasmineRice = page.getByRole("checkbox", { name: "jasmine rice", exact: true });
+    test("cook mode walks every step with scaled quantities and resumes at the step it was left on @mutates", async ({ page, verifyAfterReload, expectAccessible }) => {
+      const panel = page.getByTestId("cook-mode-panel");
+      const nextStep = panel.getByRole("button", { name: "Next step" });
+      const jasmineRice = page.getByRole("checkbox", { name: "jasmine rice", exact: true });
 
-    await openLemonRiceFromHome(page);
-    await jasmineRice.click();
-    await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
-    await scaleToOneAndAHalf(page);
+      await openLemonRiceDirectly(page);
+      await jasmineRice.click();
+      await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
+      await scaleToOneAndAHalf(page);
 
-    await page.getByRole("link", { name: "Cook mode", exact: true }).click();
-    await expect(panel).toBeVisible();
-    await expect(page).toHaveURL(LEMON_RICE_COOK_URL);
-    await expect(panel).toContainText("Step 1 of 3");
-    await expect(page.getByRole("region", { name: "Cook the rice", exact: true })).toBeVisible();
-    // Step 1's quantities follow the scale, and the checklist carries over.
-    await expect(panel.getByTestId(JASMINE_RICE_QUANTITY)).toHaveText("1 ½ cup");
-    await expect(panel.getByRole("checkbox", { name: "jasmine rice", exact: true })).toHaveAttribute("aria-checked", "true");
-    // Nothing covers the step controls on a phone (R-M2-5): the dock is hidden in cook mode.
-    await expect(page.getByRole("navigation", { name: "Spoonjoy navigation" })).toBeHidden();
-    await expectAccessible();
+      await page.getByRole("link", { name: "Cook mode", exact: true }).click();
+      await expect(panel).toBeVisible();
+      await expect(page).toHaveURL(LEMON_RICE_COOK_URL);
+      await expect(panel).toContainText("Step 1 of 3");
+      await expect(page.getByRole("region", { name: "Cook the rice", exact: true })).toBeVisible();
+      // Step 1's quantities follow the scale, and the checklist carries over.
+      await expect(panel.getByTestId(JASMINE_RICE_QUANTITY)).toHaveText("1 ½ cup");
+      await expect(panel.getByRole("checkbox", { name: "jasmine rice", exact: true })).toHaveAttribute("aria-checked", "true");
+      // Nothing covers the step controls on a phone (R-M2-5): the dock is hidden in cook mode.
+      await expect(page.getByRole("navigation", { name: "Spoonjoy navigation" })).toBeHidden();
+      await expectAccessible();
 
-    await nextStep.click();
-    await expect(panel).toContainText("Step 2 of 3");
-    await expect(page.getByRole("region", { name: "Make the dressing", exact: true })).toBeVisible();
+      await nextStep.click();
+      await expect(panel).toContainText("Step 2 of 3");
+      await expect(page.getByRole("region", { name: "Make the dressing", exact: true })).toBeVisible();
 
-    await nextStep.click();
-    await expect(panel).toContainText("Step 3 of 3");
-    await expect(page.getByRole("region", { name: "Combine", exact: true })).toBeVisible();
-    await expect(nextStep).toBeDisabled();
+      await nextStep.click();
+      await expect(panel).toContainText("Step 3 of 3");
+      await expect(page.getByRole("region", { name: "Combine", exact: true })).toBeVisible();
+      await expect(nextStep).toBeDisabled();
 
-    await panel.getByRole("button", { name: "Exit cook mode", exact: true }).click();
-    await expect(panel).toBeHidden();
-    await expect(page).toHaveURL(LEMON_RICE_URL);
-    await expect(recipeHeading(page)).toBeVisible();
-    await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
-    await expect(page.getByTestId("scale-display")).toHaveText("1.5×");
-    await expectAccessible();
+      await panel.getByRole("button", { name: "Exit cook mode", exact: true }).click();
+      await expect(panel).toBeHidden();
+      await expect(page).toHaveURL(LEMON_RICE_URL);
+      await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
+      await expect(page.getByTestId("scale-display")).toHaveText("1.5×");
+      await expect(syncStatus(page)).toHaveText("Progress synced");
 
-    // Exit removed cook mode's history entry, so one Back leaves the recipe (R-M2-4).
-    await page.goBack();
-    await expect(page).toHaveURL(pathUrl("/"));
-    await expect(kitchenHeading(page)).toBeVisible();
-    await expectAccessible();
-  });
+      await verifyAfterReload(async () => {
+        await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
+        await expect(page.getByTestId("scale-display")).toHaveText("1.5×");
+      });
 
-  test("browser Back closes cook mode, and a second Back leaves the recipe", async ({ page, expectAccessible }) => {
-    const panel = page.getByTestId("cook-mode-panel");
+      // The current step is part of the saved progress: cook mode reopens on step 3.
+      await page.getByRole("link", { name: "Cook mode", exact: true }).click();
+      await expect(panel).toBeVisible();
+      await expect(panel).toContainText("Step 3 of 3");
+      await expect(page.getByRole("region", { name: "Combine", exact: true })).toBeVisible();
+      await expectAccessible();
+    });
 
-    await openLemonRiceFromHome(page);
-    await page.getByRole("link", { name: "Cook mode", exact: true }).click();
-    await expect(panel).toBeVisible();
-    await expect(page).toHaveURL(LEMON_RICE_COOK_URL);
+    test("Clear progress unchecks everything and stays cleared after a reload @mutates", async ({ page, verifyAfterReload, expectAccessible }) => {
+      const jasmineRice = page.getByRole("checkbox", { name: "jasmine rice", exact: true });
+      const cookedRice = page.getByRole("checkbox", { name: "Step 1: Cook the rice", exact: true });
+      const checkedRows = page.locator('[role="checkbox"][aria-checked="true"]');
+      const scaleDisplay = page.getByTestId("scale-display");
 
-    await page.goBack();
-    await expect(panel).toBeHidden();
-    await expect(page).toHaveURL(LEMON_RICE_URL);
-    await expect(recipeHeading(page)).toBeVisible();
-
-    await page.goBack();
-    await expect(page).toHaveURL(pathUrl("/"));
-    await expect(kitchenHeading(page)).toBeVisible();
-    await expectAccessible();
-  });
-
-  test("after cook mode, the recipe's Back control returns to the page before the recipe", async ({ page, isMobile, expectAccessible }) => {
-    const panel = page.getByTestId("cook-mode-panel");
-    // On a phone that is the dock's Back item; on desktop (no dock) the page's "Recipes" link.
-    // Both keep an /recipes href for a recipe opened directly (R-M2-2).
-    const backControl = isMobile
-      ? page.getByRole("navigation", { name: "Spoonjoy navigation" }).getByRole("link", { name: "Back", exact: true })
-      : page.getByRole("main").getByRole("link", { name: "Recipes", exact: true });
-
-    await openLemonRiceFromHome(page);
-    await page.getByRole("link", { name: "Cook mode", exact: true }).click();
-    await expect(panel).toBeVisible();
-    await panel.getByRole("button", { name: "Exit cook mode", exact: true }).click();
-    await expect(panel).toBeHidden();
-    await expect(page).toHaveURL(LEMON_RICE_URL);
-    await expect(backControl).toHaveAttribute("href", "/recipes");
-
-    await backControl.click();
-    await expect(page).toHaveURL(pathUrl("/"));
-    await expect(kitchenHeading(page)).toBeVisible();
-    await expectAccessible();
-  });
-
-  test("Clear progress unchecks everything and stays cleared after a reload @mutates", async ({ page, verifyAfterReload, expectAccessible }) => {
-    const jasmineRice = page.getByRole("checkbox", { name: "jasmine rice", exact: true });
-    const cookedRice = page.getByRole("checkbox", { name: "Step 1: Cook the rice", exact: true });
-    const checkedRows = page.locator('[role="checkbox"][aria-checked="true"]');
-    const scaleDisplay = page.getByTestId("scale-display");
-
-    await openLemonRiceDirectly(page);
-    await jasmineRice.click();
-    await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
-    await cookedRice.click();
-    await expect(cookedRice).toHaveAttribute("aria-checked", "true");
-    // Clear progress keeps the scale; 1.25× after the reload shows the saved progress was read.
-    await page.getByRole("button", { name: "Increase scale" }).click();
-    await expect(scaleDisplay).toHaveText("1.25×");
-
-    await page.getByTestId("clear-progress-button").click();
-    await expect(checkedRows).toHaveCount(0);
-    await expect(jasmineRice).toHaveAttribute("aria-checked", "false");
-    await expect(cookedRice).toHaveAttribute("aria-checked", "false");
-
-    await verifyAfterReload(async () => {
+      await openLemonRiceDirectly(page);
+      await jasmineRice.click();
+      await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
+      await cookedRice.click();
+      await expect(cookedRice).toHaveAttribute("aria-checked", "true");
+      // Clear progress keeps the scale; 1.25× after the reload shows the saved progress was read.
+      await page.getByRole("button", { name: "Increase scale" }).click();
       await expect(scaleDisplay).toHaveText("1.25×");
+
+      await page.getByTestId("clear-progress-button").click();
+      await expect(checkedRows).toHaveCount(0);
       await expect(jasmineRice).toHaveAttribute("aria-checked", "false");
       await expect(cookedRice).toHaveAttribute("aria-checked", "false");
-      await expect(checkedRows).toHaveCount(0);
+      await expect(syncStatus(page)).toHaveText("Progress synced");
+
+      await verifyAfterReload(async () => {
+        await expect(scaleDisplay).toHaveText("1.25×");
+        await expect(jasmineRice).toHaveAttribute("aria-checked", "false");
+        await expect(cookedRice).toHaveAttribute("aria-checked", "false");
+        await expect(checkedRows).toHaveCount(0);
+      });
+      await expectAccessible();
     });
-    await expectAccessible();
+  });
+
+  test.describe("history", () => {
+    // The stored session path, not persona("chef").storageState: persona() reads the per-run
+    // credentials file, which `playwright test --list` must not need.
+    test.use({ storageState: personaStorageStatePath("chef") });
+
+    test("Exit leaves one Back to the page before the recipe", async ({ page, expectAccessible }) => {
+      const panel = page.getByTestId("cook-mode-panel");
+
+      await openLemonRiceFromHome(page);
+      await page.getByRole("link", { name: "Cook mode", exact: true }).click();
+      await expect(panel).toBeVisible();
+      await expect(page).toHaveURL(LEMON_RICE_COOK_URL);
+
+      await panel.getByRole("button", { name: "Exit cook mode", exact: true }).click();
+      await expect(panel).toBeHidden();
+      await expect(page).toHaveURL(LEMON_RICE_URL);
+      await expect(recipeHeading(page)).toBeVisible();
+
+      // Exit removed cook mode's history entry, so one Back leaves the recipe (R-M2-4).
+      await page.goBack();
+      await expect(page).toHaveURL(pathUrl("/"));
+      await expect(kitchenHeading(page)).toBeVisible();
+      await expectAccessible();
+    });
+
+    test("browser Back closes cook mode, and a second Back leaves the recipe", async ({ page, expectAccessible }) => {
+      const panel = page.getByTestId("cook-mode-panel");
+
+      await openLemonRiceFromHome(page);
+      await page.getByRole("link", { name: "Cook mode", exact: true }).click();
+      await expect(panel).toBeVisible();
+      await expect(page).toHaveURL(LEMON_RICE_COOK_URL);
+
+      await page.goBack();
+      await expect(panel).toBeHidden();
+      await expect(page).toHaveURL(LEMON_RICE_URL);
+      await expect(recipeHeading(page)).toBeVisible();
+
+      await page.goBack();
+      await expect(page).toHaveURL(pathUrl("/"));
+      await expect(kitchenHeading(page)).toBeVisible();
+      await expectAccessible();
+    });
+
+    test("after cook mode, the recipe's Back control returns to the page before the recipe", async ({ page, isMobile, expectAccessible }) => {
+      const panel = page.getByTestId("cook-mode-panel");
+      // On a phone that is the dock's Back item; on desktop (no dock) the page's "Recipes" link.
+      // Both keep an /recipes href for a recipe opened directly (R-M2-2).
+      const backControl = isMobile
+        ? page.getByRole("navigation", { name: "Spoonjoy navigation" }).getByRole("link", { name: "Back", exact: true })
+        : page.getByRole("main").getByRole("link", { name: "Recipes", exact: true });
+
+      await openLemonRiceFromHome(page);
+      await page.getByRole("link", { name: "Cook mode", exact: true }).click();
+      await expect(panel).toBeVisible();
+      await panel.getByRole("button", { name: "Exit cook mode", exact: true }).click();
+      await expect(panel).toBeHidden();
+      await expect(page).toHaveURL(LEMON_RICE_URL);
+      await expect(backControl).toHaveAttribute("href", "/recipes");
+
+      await backControl.click();
+      await expect(page).toHaveURL(pathUrl("/"));
+      await expect(kitchenHeading(page)).toBeVisible();
+      await expectAccessible();
+    });
   });
 });
