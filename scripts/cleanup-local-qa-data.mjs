@@ -57,11 +57,31 @@ export const LEGACY_QA_DEMO_EMAIL = "sj-qa-demo-chef@example.com";
 export const LEGACY_QA_DEMO_UNIT_ID = "sj-qa-demo-unit-cup";
 export const LEGACY_QA_DEMO_INGREDIENT_REF_ID = "sj-qa-demo-ingredient-rice";
 
+// Native CI (spoonjoy-apple's Journeys workflow) creates its own two `codex-native-*` /
+// `codex_native_*` accounts per run and drives real XCUITest journeys against this same QA
+// mirror over however long the run takes. The generic codex clause below would otherwise match
+// (and delete) those accounts on the very next web cleanup pass, mid-run. Carve the native
+// namespace out of the generic clause and instead make native accounts disposable only once
+// they are NATIVE_JOURNEY_STALE_AFTER_SECONDS old (STALE_NATIVE_JOURNEY_USER_WHERE below), so a
+// concurrent native run always outlives the accounts it is actively using.
+export const NATIVE_JOURNEY_EMAIL_PREFIX = "codex-native-";
+export const NATIVE_JOURNEY_USERNAME_PREFIX = "codex_native_";
+export const NATIVE_JOURNEY_STALE_AFTER_SECONDS = 3 * 60 * 60;
+// Coupled markers, instr() not LIKE (D1 rejects LIKE patterns over 50 bytes; '_' is a LIKE wildcard).
+export const NATIVE_JOURNEY_USER_WHERE =
+  `(instr(email, '${NATIVE_JOURNEY_EMAIL_PREFIX}') = 1 AND instr(username, '${NATIVE_JOURNEY_USERNAME_PREFIX}') = 1)`;
+// createdAt may be CURRENT_TIMESTAMP text, Prisma ISO-8601 text, or epoch milliseconds; unparseable -> NULL -> kept.
+export const USER_CREATED_AT_EPOCH_SECONDS_SQL =
+  "(CASE typeof(createdAt) WHEN 'integer' THEN createdAt / 1000 WHEN 'real' THEN CAST(createdAt / 1000 AS INTEGER) ELSE CAST(strftime('%s', createdAt) AS INTEGER) END)";
+export const STALE_NATIVE_JOURNEY_USER_WHERE =
+  `(${NATIVE_JOURNEY_USER_WHERE} AND ${USER_CREATED_AT_EPOCH_SECONDS_SQL} <= CAST(strftime('%s', 'now') AS INTEGER) - ${NATIVE_JOURNEY_STALE_AFTER_SECONDS})`;
+
 export const DISPOSABLE_USER_WHERE = [
   "id IN ('demo_user_001', 'user_demo', 'user_julia', 'user_marco', 'user_sarah')",
-  "(email LIKE 'codex-%' AND instr(username, 'codex_') = 1)",
+  "(email LIKE 'codex-%' AND instr(username, 'codex_') = 1 AND instr(email, 'codex-native-') != 1)",
   "(email LIKE 'e2e-passkey-%' AND instr(username, 'e2e_passkey_') = 1)",
   `(id = '${LEGACY_QA_DEMO_USER_ID}' AND email = '${LEGACY_QA_DEMO_EMAIL}')`,
+  STALE_NATIVE_JOURNEY_USER_WHERE,
 ].join("\n    OR ");
 
 export function buildLegacyQaDemoOrphanReferenceCleanupSql() {
@@ -398,8 +418,9 @@ WITH
   ),
   soft_delete_recipes AS (
     SELECT id FROM Recipe
-    WHERE ${SUSPICIOUS_RECIPE_WHERE}
+    WHERE (${SUSPICIOUS_RECIPE_WHERE})
       AND chefId NOT IN (SELECT id FROM disposable_users)
+      AND chefId NOT IN (SELECT id FROM User WHERE ${NATIVE_JOURNEY_USER_WHERE})
   ),
   disposable_spoons AS (
     SELECT id FROM RecipeSpoon
@@ -443,6 +464,7 @@ WITH
     SELECT id FROM Recipe
     WHERE (${SUSPICIOUS_RECIPE_WHERE})
       AND chefId NOT IN (SELECT id FROM disposable_users)
+      AND chefId NOT IN (SELECT id FROM User WHERE ${NATIVE_JOURNEY_USER_WHERE})
   ),
   disposable_spoons AS (
     SELECT id FROM RecipeSpoon
@@ -729,7 +751,8 @@ WITH disposable_users AS (
 SELECT 'soft-delete suspicious recipes owned by non-disposable users' AS item, COUNT(*) AS count
 FROM Recipe
 WHERE (${SUSPICIOUS_RECIPE_WHERE})
-  AND chefId NOT IN (SELECT id FROM disposable_users);
+  AND chefId NOT IN (SELECT id FROM disposable_users)
+  AND chefId NOT IN (SELECT id FROM User WHERE ${NATIVE_JOURNEY_USER_WHERE});
 
 SELECT 'active suspicious recipes' AS item, COUNT(*) AS count
 FROM Recipe
@@ -742,6 +765,10 @@ WHERE deletedAt IS NOT NULL AND (${SUSPICIOUS_RECIPE_WHERE});
 SELECT 'disposable users' AS item, COUNT(*) AS count
 FROM User
 WHERE ${DISPOSABLE_USER_WHERE};
+
+SELECT 'stale native journey users' AS item, COUNT(*) AS count
+FROM User
+WHERE ${STALE_NATIVE_JOURNEY_USER_WHERE};
 
 WITH disposable_users AS (
   SELECT id FROM User WHERE ${DISPOSABLE_USER_WHERE}
@@ -817,7 +844,8 @@ CREATE TABLE soft_delete_recipes (id TEXT PRIMARY KEY);
 INSERT INTO soft_delete_recipes
 SELECT id FROM Recipe
 WHERE (${SUSPICIOUS_RECIPE_WHERE})
-  AND chefId NOT IN (SELECT id FROM disposable_users);
+  AND chefId NOT IN (SELECT id FROM disposable_users)
+  AND chefId NOT IN (SELECT id FROM User WHERE ${NATIVE_JOURNEY_USER_WHERE});
 
 CREATE TABLE disposable_spoons (id TEXT PRIMARY KEY);
 INSERT INTO disposable_spoons

@@ -460,6 +460,38 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
     expect(await membershipCount(REST_RECIPE_ID)).toBe(0);
   });
 
+  it("answers a native D1 duplicate cookbook title with a 400 the Save dialog can show", async () => {
+    const title = "Cutover D1 Cookbook";
+    const cookie = await createUserSessionCookie(
+      USER_ID,
+      env as unknown as { SESSION_SECRET?: string },
+      new Request(`${TEST_ORIGIN}/recipes/${REST_RECIPE_ID}`),
+    );
+    const formData = new FormData();
+    formData.set("intent", "createCookbookAndSave");
+    formData.set("title", title);
+    const membershipsBefore = await membershipCount(REST_RECIPE_ID);
+
+    const result = await handleRecipeDetailAction({
+      request: new Request(`${TEST_ORIGIN}/recipes/${REST_RECIPE_ID}`, {
+        method: "POST",
+        headers: { Cookie: cookie },
+        body: formData,
+      }),
+      params: { id: REST_RECIPE_ID },
+      context: routeContext(),
+    } as any);
+    const response = result as { data: unknown; init?: { status?: number } | null };
+
+    expect(response.init?.status).toBe(400);
+    expect(response.data).toEqual({
+      error: "You already have a cookbook with this title",
+      intent: "createCookbookAndSave",
+    });
+    expect(await cookbookTitleCount(title)).toBe(1);
+    expect(await membershipCount(REST_RECIPE_ID)).toBe(membershipsBefore);
+  });
+
   it("rolls back a native D1 REST membership when the cookbook touch fails second", async () => {
     await installCookbookAbortTrigger();
     const requestId = "req_cutover_d1_rest_second";
