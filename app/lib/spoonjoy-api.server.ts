@@ -22,14 +22,13 @@ import {
   pollAgentConnection,
   startAgentConnection,
 } from "~/lib/agent-connection.server";
-import {
-  ACTIVE_RECIPE_TITLE_CONFLICT_ERROR,
-  validateActiveRecipeTitleUnique,
-} from "~/lib/recipe-title-uniqueness.server";
-import { d1Binding, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
-import { d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
+import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
+import { d1Binding } from "~/lib/d1-read.server";
+import { d1WriteBatch, retryOnD1GuardFailure } from "~/lib/d1-write.server";
 import {
   activeRecipeTitleFreeGuard,
+  cookbooksForRecipeTouchStatement,
+  recipeActiveGuard,
   recipeInsertStatement,
   recipeStepsReplaceStatements,
   recipeUpdateStatement,
@@ -39,6 +38,7 @@ import {
 import {
   archiveRecipeCover,
   clearActiveRecipeCover,
+  coverInsertStatement,
   createCover,
   getRecipeCoverDisplay,
   getRecipeCoverProvenanceLabel,
@@ -1182,14 +1182,20 @@ function normalizedReplacementSteps(steps: ReturnType<typeof parseSteps>): Repla
   }));
 }
 
-/** Runs a recipe write batch whose first statement is the active-title guard. */
-async function writeRecipeBatchWithTitleGuard(d1: D1ReadDatabase, statements: D1Query[]) {
-  try {
-    return await d1WriteBatch(d1, statements);
-  } catch (error) {
-    if (isD1GuardFailure(error)) throw new Error(ACTIVE_RECIPE_TITLE_CONFLICT_ERROR);
-    throw error;
-  }
+/** The recipe fields that make a new chef-upload cover the active one, as setActiveRecipeCover does. */
+function activeImageCover(coverId: string): RecipeFields {
+  return { activeCoverId: coverId, activeCoverVariant: "image", coverMode: "manual" };
+}
+
+/**
+ * Runs a recipe tool whose D1 batch re-checks what it read. When another request changed
+ * those rows in between, nothing applied and the tool runs again, so the caller gets the
+ * answer the tool's checks now give (the title error, "Recipe not found").
+ */
+function withRaceRetry(attempt: () => Promise<unknown>): Promise<unknown> {
+  return retryOnD1GuardFailure(attempt, () => {
+    throw new Error("The recipe changed while this request ran. Please try again.");
+  });
 }
 
 const healthTool: SpoonjoyApiOperation = {
@@ -2342,90 +2348,102 @@ const createRecipeTool: SpoonjoyApiOperation = {
     required: ["title"],
     additionalProperties: false,
   },
-  async handle(args, context) {
-    const email = requireOwnerEmail(args, context);
-    const title = requiredString(args, "title");
-    const imageUrl = optionalString(args.imageUrl);
-    const steps = parseSteps(args.steps);
+  handle(args, context) {
+    return withRaceRetry(async () => {
+      const email = requireOwnerEmail(args, context);
+      const title = requiredString(args, "title");
+      const imageUrl = optionalString(args.imageUrl);
+      const steps = parseSteps(args.steps);
 
-    const owner = await getOrCreateOwner(context.db, email);
-    const titleUniqueness = await validateActiveRecipeTitleUnique(context.db, {
-      chefId: owner.id,
-      title,
-    });
-    if (!titleUniqueness.valid) throw new Error(titleUniqueness.error);
-    if (imageUrl) {
-      await validateRecipeCoverImageSource({
-        imageUrl,
-        ownerId: owner.id,
-        bucket: context.bucket,
-        allowLocalImageFallback: context.allowLocalImageFallback,
+      const owner = await getOrCreateOwner(context.db, email);
+      const titleUniqueness = await validateActiveRecipeTitleUnique(context.db, {
+        chefId: owner.id,
+        title,
       });
-    }
+      if (!titleUniqueness.valid) throw new Error(titleUniqueness.error);
+      if (imageUrl) {
+        await validateRecipeCoverImageSource({
+          imageUrl,
+          ownerId: owner.id,
+          bucket: context.bucket,
+          allowLocalImageFallback: context.allowLocalImageFallback,
+        });
+      }
 
-    const d1 = d1Binding(context.env?.DB);
-    let created: { id: string };
-    if (d1) {
-      // One atomic batch: the recipe and its steps apply together, and the title is
-      // re-checked as they are written.
-      const now = new Date();
-      created = { id: crypto.randomUUID() };
-      await writeRecipeBatchWithTitleGuard(d1, [
-        activeRecipeTitleFreeGuard(owner.id, title),
-        recipeInsertStatement({
-          id: created.id,
-          title,
-          description: optionalString(args.description) ?? null,
-          servings: optionalString(args.servings) ?? null,
-          sourceUrl: optionalString(args.sourceUrl) ?? null,
-          chefId: owner.id,
-          now,
-        }),
-        ...recipeStepsReplaceStatements(created.id, normalizedReplacementSteps(steps), now),
-      ]);
-    } else {
-      created = await context.db.recipe.create({
-        data: {
-          title,
-          description: optionalString(args.description) ?? null,
-          servings: optionalString(args.servings) ?? null,
-          sourceUrl: optionalString(args.sourceUrl) ?? null,
-          chefId: owner.id,
+      const d1 = d1Binding(context.env?.DB);
+      let created: { id: string };
+      let coverId: string | null = null;
+      if (d1) {
+        // One atomic batch: the recipe, its steps and its cover (created and made active) apply
+        // together, and the title is re-checked as they are written.
+        const now = new Date();
+        created = { id: crypto.randomUUID() };
+        coverId = imageUrl ? crypto.randomUUID() : null;
+        await d1WriteBatch(d1, [
+          activeRecipeTitleFreeGuard(owner.id, title),
+          recipeInsertStatement({
+            id: created.id,
+            title,
+            description: optionalString(args.description) ?? null,
+            servings: optionalString(args.servings) ?? null,
+            sourceUrl: optionalString(args.sourceUrl) ?? null,
+            chefId: owner.id,
+            now,
+          }),
+          ...recipeStepsReplaceStatements(created.id, normalizedReplacementSteps(steps), now),
+          ...(coverId
+            ? [
+              coverInsertStatement({ id: coverId, recipeId: created.id, imageUrl: imageUrl!, sourceType: "chef-upload" }, now),
+              recipeUpdateStatement(created.id, activeImageCover(coverId), now),
+            ]
+            : []),
+        ]);
+      } else {
+        created = await context.db.recipe.create({
+          data: {
+            title,
+            description: optionalString(args.description) ?? null,
+            servings: optionalString(args.servings) ?? null,
+            sourceUrl: optionalString(args.sourceUrl) ?? null,
+            chefId: owner.id,
+          },
+        });
+
+        await replaceRecipeSteps(context.db, created.id, steps);
+        if (imageUrl) {
+          coverId = (await createCover(context.db, {
+            recipeId: created.id,
+            imageUrl,
+            sourceType: "chef-upload",
+          })).id;
+        }
+      }
+      if (imageUrl && coverId) {
+        await scheduleRecipeCoverStylization(context, {
+          userId: owner.id,
+          recipeId: created.id,
+          coverId,
+          rawPhotoUrl: imageUrl,
+          recipeTitle: title,
+          sourceType: "chef-upload",
+        });
+        await activateRecipeCoverWithBestAvailableVariant(context.db, {
+          recipeId: created.id,
+          coverId,
+        });
+      }
+
+      const recipe = await context.db.recipe.findUniqueOrThrow({
+        where: { id: created.id },
+        include: {
+          chef: { select: { id: true, email: true, username: true } },
+          covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
+          steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
         },
       });
 
-      await replaceRecipeSteps(context.db, created.id, steps);
-    }
-    if (imageUrl) {
-      const cover = await createCover(context.db, {
-        recipeId: created.id,
-        imageUrl,
-        sourceType: "chef-upload",
-      });
-      await scheduleRecipeCoverStylization(context, {
-        userId: owner.id,
-        recipeId: created.id,
-        coverId: cover.id,
-        rawPhotoUrl: imageUrl,
-        recipeTitle: title,
-        sourceType: "chef-upload",
-      });
-      await activateRecipeCoverWithBestAvailableVariant(context.db, {
-        recipeId: created.id,
-        coverId: cover.id,
-      });
-    }
-
-    const recipe = await context.db.recipe.findUniqueOrThrow({
-      where: { id: created.id },
-      include: {
-        chef: { select: { id: true, email: true, username: true } },
-        covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
-        steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
-      },
+      return json({ recipe: formatRecipe(recipe) });
     });
-
-    return json({ recipe: formatRecipe(recipe) });
   },
 };
 
@@ -2473,98 +2491,109 @@ const updateRecipeTool: SpoonjoyApiOperation = {
     required: ["id"],
     additionalProperties: false,
   },
-  async handle(args, context) {
-    const email = requireOwnerEmail(args, context);
-    const id = requiredString(args, "id");
-    const title = hasArgument(args, "title") ? requiredString(args, "title") : undefined;
-    const description = optionalNullableStringArgument(args, "description");
-    const servings = optionalNullableStringArgument(args, "servings");
-    const sourceUrl = optionalNullableStringArgument(args, "sourceUrl");
-    const imageUrl = optionalNullableStringArgument(args, "imageUrl");
-    const shouldReplaceSteps = hasArgument(args, "steps");
-    const steps = shouldReplaceSteps ? parseSteps(args.steps) : undefined;
+  handle(args, context) {
+    return withRaceRetry(async () => {
+      const email = requireOwnerEmail(args, context);
+      const id = requiredString(args, "id");
+      const title = hasArgument(args, "title") ? requiredString(args, "title") : undefined;
+      const description = optionalNullableStringArgument(args, "description");
+      const servings = optionalNullableStringArgument(args, "servings");
+      const sourceUrl = optionalNullableStringArgument(args, "sourceUrl");
+      const imageUrl = optionalNullableStringArgument(args, "imageUrl");
+      const shouldReplaceSteps = hasArgument(args, "steps");
+      const steps = shouldReplaceSteps ? parseSteps(args.steps) : undefined;
 
-    const owner = await getOrCreateOwner(context.db, email);
-    const existing = await context.db.recipe.findFirst({
-      where: { id, chefId: owner.id, deletedAt: null },
-      select: { id: true, title: true },
-    });
-    if (!existing) throw new Error("Recipe not found");
-
-    const data: Pick<RecipeFields, "title" | "description" | "servings" | "sourceUrl"> = {};
-    if (title !== undefined) {
-      const titleUniqueness = await validateActiveRecipeTitleUnique(context.db, {
-        chefId: owner.id,
-        title,
-        excludeRecipeId: existing.id,
+      const owner = await getOrCreateOwner(context.db, email);
+      const existing = await context.db.recipe.findFirst({
+        where: { id, chefId: owner.id, deletedAt: null },
+        select: { id: true, title: true },
       });
-      if (!titleUniqueness.valid) throw new Error(titleUniqueness.error);
-      data.title = title;
-    }
-    if (description !== undefined) data.description = description;
-    if (servings !== undefined) data.servings = servings;
-    if (sourceUrl !== undefined) data.sourceUrl = sourceUrl;
+      if (!existing) throw new Error("Recipe not found");
 
-    if (imageUrl) {
-      await validateRecipeCoverImageSource({
-        imageUrl,
-        ownerId: owner.id,
-        bucket: context.bucket,
-        allowLocalImageFallback: context.allowLocalImageFallback,
-      });
-    }
+      const data: Pick<RecipeFields, "title" | "description" | "servings" | "sourceUrl"> = {};
+      if (title !== undefined) {
+        const titleUniqueness = await validateActiveRecipeTitleUnique(context.db, {
+          chefId: owner.id,
+          title,
+          excludeRecipeId: existing.id,
+        });
+        if (!titleUniqueness.valid) throw new Error(titleUniqueness.error);
+        data.title = title;
+      }
+      if (description !== undefined) data.description = description;
+      if (servings !== undefined) data.servings = servings;
+      if (sourceUrl !== undefined) data.sourceUrl = sourceUrl;
 
-    const d1 = d1Binding(context.env?.DB);
-    if (d1 && (Object.keys(data).length > 0 || steps)) {
-      // One atomic batch: the field changes and the step replacement apply together, and a
-      // new title is re-checked as it is written.
-      const now = new Date();
-      const results = await writeRecipeBatchWithTitleGuard(d1, [
-        ...(title === undefined ? [] : [activeRecipeTitleFreeGuard(owner.id, title, existing.id)]),
-        ...(steps ? recipeStepsReplaceStatements(existing.id, normalizedReplacementSteps(steps), now) : []),
-        recipeUpdateStatement(existing.id, data, now),
-      ]);
-      if (results.at(-1)!.changes !== 1) throw new Error("Recipe not found");
-    } else {
-      if (Object.keys(data).length > 0) {
-        await context.db.recipe.update({ where: { id: existing.id }, data });
+      if (imageUrl) {
+        await validateRecipeCoverImageSource({
+          imageUrl,
+          ownerId: owner.id,
+          bucket: context.bucket,
+          allowLocalImageFallback: context.allowLocalImageFallback,
+        });
       }
 
-      if (steps) {
-        await replaceRecipeSteps(context.db, existing.id, steps);
-        await context.db.recipe.update({ where: { id: existing.id }, data: { updatedAt: new Date() } });
+      const d1 = d1Binding(context.env?.DB);
+      let coverId: string | null = null;
+      if (d1 && (Object.keys(data).length > 0 || steps || imageUrl)) {
+        // One atomic batch: the field changes, the step replacement and the new cover (created
+        // and made active) apply together. The guards re-check that the recipe is still active
+        // and a new title still free.
+        const now = new Date();
+        coverId = imageUrl ? crypto.randomUUID() : null;
+        await d1WriteBatch(d1, [
+          recipeActiveGuard(existing.id),
+          ...(title === undefined ? [] : [activeRecipeTitleFreeGuard(owner.id, title, existing.id)]),
+          ...(steps ? recipeStepsReplaceStatements(existing.id, normalizedReplacementSteps(steps), now) : []),
+          ...(coverId
+            ? [coverInsertStatement({ id: coverId, recipeId: existing.id, imageUrl: imageUrl!, sourceType: "chef-upload" }, now)]
+            : []),
+          recipeUpdateStatement(existing.id, { ...data, ...(coverId ? activeImageCover(coverId) : {}) }, now),
+          ...(coverId ? [cookbooksForRecipeTouchStatement(existing.id, now)] : []),
+        ]);
+      } else {
+        if (Object.keys(data).length > 0) {
+          await context.db.recipe.update({ where: { id: existing.id }, data });
+        }
+
+        if (steps) {
+          await replaceRecipeSteps(context.db, existing.id, steps);
+          await context.db.recipe.update({ where: { id: existing.id }, data: { updatedAt: new Date() } });
+        }
+        if (imageUrl) {
+          coverId = (await createCover(context.db, {
+            recipeId: existing.id,
+            imageUrl,
+            sourceType: "chef-upload",
+          })).id;
+        }
       }
-    }
-    if (imageUrl) {
-      const cover = await createCover(context.db, {
-        recipeId: existing.id,
-        imageUrl,
-        sourceType: "chef-upload",
-      });
-      await scheduleRecipeCoverStylization(context, {
-        userId: owner.id,
-        recipeId: existing.id,
-        coverId: cover.id,
-        rawPhotoUrl: imageUrl,
-        recipeTitle: title ?? existing.title,
-        sourceType: "chef-upload",
-      });
-      await activateRecipeCoverWithBestAvailableVariant(context.db, {
-        recipeId: existing.id,
-        coverId: cover.id,
-      });
-    }
+      if (imageUrl && coverId) {
+        await scheduleRecipeCoverStylization(context, {
+          userId: owner.id,
+          recipeId: existing.id,
+          coverId,
+          rawPhotoUrl: imageUrl,
+          recipeTitle: title ?? existing.title,
+          sourceType: "chef-upload",
+        });
+        await activateRecipeCoverWithBestAvailableVariant(context.db, {
+          recipeId: existing.id,
+          coverId,
+        });
+      }
 
-    const recipe = await context.db.recipe.findUniqueOrThrow({
-      where: { id: existing.id },
-      include: {
-        chef: { select: { id: true, email: true, username: true } },
-        covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
-        steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
-      },
+      const recipe = await context.db.recipe.findUniqueOrThrow({
+        where: { id: existing.id },
+        include: {
+          chef: { select: { id: true, email: true, username: true } },
+          covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
+          steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
+        },
+      });
+
+      return json({ recipe: formatRecipe(recipe) });
     });
-
-    return json({ recipe: formatRecipe(recipe) });
   },
 };
 
