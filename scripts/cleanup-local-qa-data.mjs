@@ -614,6 +614,36 @@ function isR2ObjectMissingError(error) {
   return /(?:the specified key does not exist|nosuchkey)/i.test(text);
 }
 
+// Cloudflare's R2 API sometimes refuses a request for a moment and then serves it again: on
+// 2026-09-27 a QA cleanup got 403 "Please enable R2 through the Cloudflare Dashboard" (code 10042)
+// for one delete while the same token listed both buckets a few minutes later. Only these
+// account-level answers and 429/5xx are retried; a missing key or bucket, or any other error, is
+// never retried.
+export const R2_TRANSIENT_RETRY_DELAYS_MS = [5_000, 15_000, 30_000];
+
+export function isTransientR2ApiError(error) {
+  const text = [
+    typeof error === "string" ? error : "",
+    error instanceof Error ? error.message : "",
+    typeof error?.stdout === "string" ? error.stdout : "",
+    typeof error?.stderr === "string" ? error.stderr : "",
+  ].join("\n");
+  return /"code":\s*10042\b|Please enable R2 through the Cloudflare Dashboard|Failed to fetch \S+ - (?:429|5\d\d)\b/i.test(text);
+}
+
+async function runR2Command({ runCommand, args, options, sleep, stdout, label }) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await runCommand("pnpm", args, options);
+    } catch (error) {
+      if (attempt >= R2_TRANSIENT_RETRY_DELAYS_MS.length || !isTransientR2ApiError(error)) throw error;
+      const delay = R2_TRANSIENT_RETRY_DELAYS_MS[attempt];
+      stdout.write(`Cloudflare's R2 API refused the ${label} for a moment; trying again in ${delay / 1000} s (retry ${attempt + 1} of ${R2_TRANSIENT_RETRY_DELAYS_MS.length}).\n`);
+      await sleep(delay);
+    }
+  }
+}
+
 function r2BlockerError(blockers, targetLabel) {
   const details = blockers
     .map((row) => `${row.action}:${row.key}${row.reason ? ` (${row.reason})` : ""}`)
@@ -701,7 +731,7 @@ async function collectR2Candidates({ dbName, target, runCommand, existingSearchT
   };
 }
 
-async function deleteAndVerifyR2Keys({ deleteKeys, targetEnv, runCommand, stdout }) {
+async function deleteAndVerifyR2Keys({ deleteKeys, targetEnv, runCommand, stdout, sleep }) {
   const targetLabel = targetEnv === "local" ? "local" : "QA";
   const deleteArgs = targetEnv === "local" ? buildLocalR2DeleteArgs : buildQaR2DeleteArgs;
   const getArgs = targetEnv === "local" ? buildLocalR2GetArgs : buildQaR2GetArgs;
@@ -709,18 +739,26 @@ async function deleteAndVerifyR2Keys({ deleteKeys, targetEnv, runCommand, stdout
   const verifiedDeletedKeys = [];
   for (const key of deleteKeys) {
     try {
-      await runCommand("pnpm", deleteArgs(key), {
-        encoding: "utf8",
-        maxBuffer: MAX_WRANGLER_BUFFER,
+      await runR2Command({
+        runCommand,
+        args: deleteArgs(key),
+        options: { encoding: "utf8", maxBuffer: MAX_WRANGLER_BUFFER },
+        sleep,
+        stdout,
+        label: `delete of ${key}`,
       });
       deletedKeys.push(key);
     } catch (error) {
       if (!isR2ObjectMissingError(error)) throw error;
     }
     try {
-      await runCommand("pnpm", getArgs(key), {
-        encoding: "buffer",
-        maxBuffer: MAX_WRANGLER_BUFFER,
+      await runR2Command({
+        runCommand,
+        args: getArgs(key),
+        options: { encoding: "buffer", maxBuffer: MAX_WRANGLER_BUFFER },
+        sleep,
+        stdout,
+        label: `check that ${key} is gone`,
       });
     } catch (error) {
       if (isR2ObjectMissingError(error)) {
@@ -1227,6 +1265,7 @@ export async function runCleanupCli({
   runCommand = execFileAsync,
   stdout = process.stdout,
   stderr = process.stderr,
+  sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 } = {}) {
   if (argv.includes("--help") || argv.includes("-h")) {
     printHelp(stdout);
@@ -1296,6 +1335,7 @@ export async function runCleanupCli({
         targetEnv: options.target.targetEnv,
         runCommand,
         stdout,
+        sleep,
       });
     }
 
