@@ -4,6 +4,7 @@ import { getRequestDb } from "~/lib/route-platform.server";
 import { createUser, emailExists, usernameExists } from "~/lib/auth.server";
 import { createUserSession, getUserId } from "~/lib/session.server";
 import { enforceAuthRateLimit } from "~/lib/rate-limit.server";
+import { normalizeUsername, usernameFormatError } from "~/lib/username";
 import { OAuthButtonGroup, OAuthDivider, OAuthError } from "~/components/ui/oauth";
 import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
 import { getOAuthEnv } from "~/lib/oauth-route.server";
@@ -69,7 +70,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   const formData = await request.formData();
   const email = formData.get("email")?.toString() || "";
-  const username = formData.get("username")?.toString() || "";
+  const username = normalizeUsername(formData.get("username"));
   const password = formData.get("password")?.toString() || "";
   const confirmPassword = formData.get("confirmPassword")?.toString() || "";
 
@@ -80,8 +81,9 @@ export async function action({ request, context }: Route.ActionArgs) {
     errors.email = "Valid email is required";
   }
 
-  if (!username || username.length < 3) {
-    errors.username = "Username must be at least 3 characters";
+  const usernameError = usernameFormatError(username);
+  if (usernameError) {
+    errors.username = usernameError;
   }
 
   if (!password || password.length < 8) {
