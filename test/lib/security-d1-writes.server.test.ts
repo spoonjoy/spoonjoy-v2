@@ -55,6 +55,22 @@ describe("security-relevant writes on a D1 binding", () => {
       await expect(tryConsumeImageGenQuota(db, user.id, "import", { now })).resolves.toBe(false);
     });
 
+    it("spends one unit in one row when older writers stored the same day in two forms", async () => {
+      const user = await db.user.create({ data: createTestUser() });
+      const insert = d1.binding.prepare(
+        `INSERT INTO "ImageGenLedger" ("id", "userId", "kind", "bucketStart", "count", "updatedAt") VALUES (?, ?, 'import', ?, ?, ?)`,
+      );
+      await insert.bind("day-offset", user.id, "2026-09-27T00:00:00.000+00:00", 0, "2026-09-27T01:00:00.000Z").run();
+      await insert.bind("day-z", user.id, "2026-09-27T00:00:00.000Z", 0, "2026-09-27T01:00:00.000Z").run();
+
+      await expect(tryConsumeImageGenQuota(db, user.id, "import", { now, d1: d1.binding })).resolves.toBe(true);
+      const counts = await d1.binding
+        .prepare(`SELECT "count" FROM "ImageGenLedger" WHERE "userId" = ? ORDER BY "id"`)
+        .bind(user.id)
+        .all<{ count: number }>();
+      expect(counts.results.map((row) => row.count).sort()).toEqual([0, 1]);
+    });
+
     it("starts the day's row, and writes nothing for a user that is gone", async () => {
       const user = await db.user.create({ data: createTestUser() });
       await expect(tryConsumeImageGenQuota(db, user.id, "stylization", { now, d1: d1.binding })).resolves.toBe(true);

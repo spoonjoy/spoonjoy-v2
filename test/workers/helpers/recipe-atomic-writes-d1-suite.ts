@@ -690,6 +690,22 @@ describe("atomic recipe writes on Wrangler D1", () => {
       expect(await ledger()).toEqual([{ count: 5 }]);
     });
 
+    it("spends one unit in one row when older writers stored the same day in two forms", async () => {
+      for (const [id, day] of [["atomic-ledger-offset", DAY], ["atomic-ledger-z", "2026-09-27T00:00:00.000Z"]]) {
+        await run(
+          `INSERT INTO "ImageGenLedger" ("id", "userId", "kind", "bucketStart", "count", "updatedAt") VALUES (?, ?, 'import', ?, 0, ?)`,
+          id,
+          FRIEND,
+          day,
+          DAY,
+        );
+      }
+
+      await expect(tryConsumeImageGenQuota(prisma, FRIEND, "import", { now, d1: database() })).resolves.toBe(true);
+      const counts = await rows<{ count: number }>(`SELECT "count" FROM "ImageGenLedger" WHERE "userId" = ?`, FRIEND);
+      expect(counts.map((row) => row.count).sort()).toEqual([0, 1]);
+    });
+
     it("consumes nothing, and writes no row, for a user that is gone", async () => {
       await expect(tryConsumeImageGenQuota(prisma, "atomic-nobody", "import", { now, d1: database() })).resolves.toBe(false);
       expect(await count(`SELECT COUNT(*) AS "count" FROM "ImageGenLedger" WHERE "userId" = 'atomic-nobody'`)).toBe(0);

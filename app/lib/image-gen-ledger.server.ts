@@ -113,8 +113,9 @@ async function tryConsumeImageGenQuotaOnD1(
       ...dayForms,
     ],
     [
+      // One row only: a day stored in two forms by older writers must spend one unit, not two.
       `UPDATE "ImageGenLedger" SET "count" = "count" + 1, "updatedAt" = ?
-       WHERE ${sameDay} AND "count" < ?`,
+       WHERE "id" = (SELECT "id" FROM "ImageGenLedger" WHERE ${sameDay} AND "count" < ? LIMIT 1)`,
       updatedAt,
       userId,
       kind,
@@ -122,7 +123,7 @@ async function tryConsumeImageGenQuotaOnD1(
       cap,
     ],
   ]);
-  return increment!.changes === 1;
+  return increment!.changes >= 1;
 }
 
 /**
