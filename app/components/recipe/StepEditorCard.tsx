@@ -112,11 +112,6 @@ export function StepEditorCard({
     setIngredients((prev) => prev.filter((_, i) => i !== index))
   }
 
-  const handleAddAllIngredients = (_addedIngredients: ParsedIngredient[]) => {
-    // Ingredients are already in state, this is called from ParsedIngredientList
-    // which displays the ingredients that are already added
-  }
-
   const handleSave = () => {
     // Don't save if instructions is empty
     if (!description.trim()) {
@@ -224,6 +219,7 @@ export function StepEditorCard({
             recipeId={recipeId}
             stepId={stepId}
             onParsed={handleParsedIngredients}
+            onSwitchToManual={() => handleModeChange('manual')}
             disabled={disabled}
           />
         ) : (
@@ -242,7 +238,6 @@ export function StepEditorCard({
               ingredients={ingredients}
               onEdit={handleIngredientEdit}
               onRemove={handleIngredientRemove}
-              onAddAll={handleAddAllIngredients}
               disabled={disabled}
             />
           )}

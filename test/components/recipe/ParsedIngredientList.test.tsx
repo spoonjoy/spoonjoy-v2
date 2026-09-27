@@ -103,6 +103,19 @@ describe('ParsedIngredientList', () => {
       expect(screen.queryByRole('button', { name: /add all/i })).not.toBeInTheDocument()
     })
 
+    it('omits Add All when the caller has nothing for it to do', () => {
+      render(
+        <ParsedIngredientList
+          ingredients={createIngredientList(2)}
+          onEdit={vi.fn()}
+          onRemove={vi.fn()}
+        />
+      )
+
+      expect(screen.getByRole('list')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /add all/i })).not.toBeInTheDocument()
+    })
+
     it('renders as a list element', () => {
       render(
         <ParsedIngredientList

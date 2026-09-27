@@ -7,7 +7,12 @@ export interface ParsedIngredientListProps {
   ingredients: ParsedIngredient[]
   onEdit: (index: number, ingredient: ParsedIngredient) => void
   onRemove: (index: number) => void
-  onAddAll: (ingredients: ParsedIngredient[]) => void
+  /**
+   * Adds the listed ingredients somewhere else (the step). Leave it out when the
+   * list already is the step's ingredients; the "Add All" button is then hidden
+   * rather than shown as a button that does nothing.
+   */
+  onAddAll?: (ingredients: ParsedIngredient[]) => void
   disabled?: boolean
   loading?: boolean
 }
@@ -28,10 +33,6 @@ export function ParsedIngredientList({
 
   const handleRowRemove = (index: number) => () => {
     onRemove(index)
-  }
-
-  const handleAddAll = () => {
-    onAddAll(ingredients)
   }
 
   if (ingredients.length === 0) {
@@ -58,18 +59,20 @@ export function ParsedIngredientList({
           />
         ))}
       </ul>
-      <div className="mt-4">
-        <Button
-          type="button"
-          onClick={handleAddAll}
-          disabled={isDisabled}
-          aria-busy={loading}
-          aria-label={`Add all ${ingredients.length} ingredients to recipe`}
-        >
-          <Plus data-slot="icon" aria-hidden="true" />
-          Add All ({ingredients.length})
-        </Button>
-      </div>
+      {onAddAll && (
+        <div className="mt-4">
+          <Button
+            type="button"
+            onClick={() => onAddAll(ingredients)}
+            disabled={isDisabled}
+            aria-busy={loading}
+            aria-label={`Add all ${ingredients.length} ingredients to recipe`}
+          >
+            <Plus data-slot="icon" aria-hidden="true" />
+            Add All ({ingredients.length})
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
