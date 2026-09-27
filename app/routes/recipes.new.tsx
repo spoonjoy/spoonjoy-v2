@@ -1,6 +1,7 @@
 import type { Route } from "./+types/recipes.new";
 import { redirect, data, useActionData, useNavigate, useNavigation, Form } from "react-router";
 import { getCloudflareEnv, getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
+import { revalidateUnlessIngredientParse } from "~/lib/ingredient-parse-revalidation";
 import { requireUserId } from "~/lib/session.server";
 import { Link } from "~/components/ui/link";
 import { Text } from "~/components/ui/text";
@@ -51,6 +52,9 @@ export function meta({}: Route.MetaArgs) {
     { name: "description", content: "Create a new Spoonjoy recipe." },
   ];
 }
+
+// An ingredient parse changes no data; don't reload the page after one.
+export const shouldRevalidate = revalidateUnlessIngredientParse;
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   await requireUserId(request, "/login", context.cloudflare?.env);

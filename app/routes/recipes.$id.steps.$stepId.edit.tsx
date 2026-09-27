@@ -1,6 +1,7 @@
 import type { Route } from "./+types/recipes.$id.steps.$stepId.edit";
 import { Form, redirect, data, useActionData, useFetcher, useLoaderData, useSearchParams, useSubmit } from "react-router";
 import { getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
+import { revalidateUnlessIngredientParse } from "~/lib/ingredient-parse-revalidation";
 import { requireUserId } from "~/lib/session.server";
 import { useEffect, useState } from "react";
 import { ConfirmationDialog } from "~/components/confirmation-dialog";
@@ -101,6 +102,9 @@ export function meta({ data }: Route.MetaArgs) {
     { name: "description", content: `Edit a step in "${data.recipe.title}" on Spoonjoy.` },
   ];
 }
+
+// An ingredient parse changes no data; don't reload the page after one.
+export const shouldRevalidate = revalidateUnlessIngredientParse;
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
