@@ -7,7 +7,8 @@ import { withTimeZone } from "../../helpers/timezone";
 
 // Server-renders `ui` in the Worker's timezone (UTC), then hydrates that markup in `timeZone`, as a
 // viewer's browser there would. Returns the hydrated container and React's recoverable errors
-// (a hydration mismatch is reported there).
+// (a hydration mismatch is reported there). Any console.error during hydration fails the test through
+// the global warning gate, so no local console spy is needed.
 async function serverThenHydrate(ui: React.ReactElement, timeZone: string) {
   const html = await withTimeZone("UTC", () => renderToString(ui));
   const container = document.createElement("div");
@@ -15,21 +16,18 @@ async function serverThenHydrate(ui: React.ReactElement, timeZone: string) {
   document.body.appendChild(container);
   const serverText = container.textContent;
   const onRecoverableError = vi.fn();
-  const consoleError = vi.spyOn(console, "error");
   await withTimeZone(timeZone, async () => {
     await act(async () => {
       hydrateRoot(container, ui, { onRecoverableError });
     });
   });
-  const errors = consoleError.mock.calls;
-  consoleError.mockRestore();
-  return { container, serverText, onRecoverableError, consoleErrors: errors };
+  return { container, serverText, onRecoverableError };
 }
 
 describe("LocalDate", () => {
   it("server-renders the UTC calendar date, then shows the viewer's local date once hydrated", async () => {
     // 20:00 UTC on 1 June is already 2 June in Kiritimati (UTC+14).
-    const { container, serverText, onRecoverableError, consoleErrors } = await serverThenHydrate(
+    const { container, serverText, onRecoverableError } = await serverThenHydrate(
       <LocalDate value="2026-06-01T20:00:00.000Z" />,
       "Pacific/Kiritimati",
     );
@@ -39,7 +37,6 @@ describe("LocalDate", () => {
       expect(time).toHaveTextContent("Jun 2, 2026");
       expect(time).toHaveAttribute("datetime", "2026-06-01T20:00:00.000Z");
       expect(onRecoverableError).not.toHaveBeenCalled();
-      expect(consoleErrors).toEqual([]);
     } finally {
       container.remove();
     }
@@ -76,7 +73,7 @@ describe("LocalDate", () => {
 
   it("with unit=\"month\", server-renders the UTC month, then the viewer's month across a month boundary", async () => {
     // 03:00 UTC on 1 June is still 31 May in Los Angeles.
-    const { container, serverText, onRecoverableError, consoleErrors } = await serverThenHydrate(
+    const { container, serverText, onRecoverableError } = await serverThenHydrate(
       <LocalDate value="2026-06-01T03:00:00.000Z" unit="month" />,
       "America/Los_Angeles",
     );
@@ -86,7 +83,6 @@ describe("LocalDate", () => {
       expect(time).toHaveTextContent("May 2026");
       expect(time).toHaveAttribute("datetime", "2026-06-01T03:00:00.000Z");
       expect(onRecoverableError).not.toHaveBeenCalled();
-      expect(consoleErrors).toEqual([]);
     } finally {
       container.remove();
     }
