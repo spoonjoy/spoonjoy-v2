@@ -11,7 +11,7 @@ import {
   parseShoppingItemFallback,
   type ShoppingListActionData,
 } from "~/lib/shopping-list-parser";
-import { Text } from "~/components/ui/text";
+import { Text, TextLink } from "~/components/ui/text";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Field, Label } from "~/components/ui/fieldset";
@@ -311,13 +311,11 @@ export default function ShoppingList() {
         {/* Empty State */}
         {displayItems.length === 0 ? (
           // "Add from recipe" below only lists the user's own recipes, so a new user gets a way
-          // to the public recipes, where any recipe's ingredients can be added.
-          <RuledEmptyState
-            title="Your shopping list is empty"
-            action={<Button href="/recipes" plain>Explore recipes</Button>}
-          >
+          // to the public recipes, where any recipe's ingredients can be added. The link sits in
+          // the sentence, not in a button row, so the Add button still clears the dock on a phone.
+          <RuledEmptyState title="Your shopping list is empty">
             <Text className="mt-2">
-              Add items manually or add all ingredients from a recipe
+              <TextLink href="/recipes">Explore recipes</TextLink> to add a recipe&apos;s ingredients, or add items one at a time below.
             </Text>
           </RuledEmptyState>
         ) : filteredItems.length === 0 ? (
