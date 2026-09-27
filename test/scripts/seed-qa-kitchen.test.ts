@@ -10,6 +10,8 @@ import {
   buildScratchInvalidationSql,
   buildScratchUsersSql,
   defaultCliErrorHandler,
+  PERSONA_SESSION_VERSION_EPOCH_SECONDS,
+  personaSessionVersion,
   generatePersonaPasswords,
   generateScratchPasswords,
   generateScratchUsers,
@@ -47,6 +49,55 @@ describe("seed-qa-kitchen", () => {
     expect(db.prepare("SELECT COUNT(*) n FROM ShoppingListItem i JOIN ShoppingList l ON l.id = i.shoppingListId WHERE l.authorId = ? AND i.checked = 0").get(KITCHEN.chef.id)).toEqual({ n: 3 });
     expect(db.prepare("SELECT COUNT(*) n FROM RecipeSpoon WHERE chefId = ?").get(KITCHEN.chef.id)).toEqual({ n: 1 });
     expect(db.prepare("SELECT COUNT(*) n FROM Recipe WHERE chefId = ?").get(KITCHEN.newbie.id)).toEqual({ n: 0 });
+  });
+
+  describe("session versions (revoking leftover persona sessions)", () => {
+    const personaVersions = (db: InstanceType<typeof Database>) =>
+      (db.prepare(`SELECT id, sessionVersion FROM "User" WHERE id IN (?, ?, ?) ORDER BY id`)
+        .all(KITCHEN.chef.id, KITCHEN.friend.id, KITCHEN.newbie.id) as Array<{ id: string; sessionVersion: number }>)
+        .map((row) => row.sessionVersion);
+
+    it("recreates every persona at the session version for the reset time", () => {
+      const db = migratedDb();
+      const now = () => Date.UTC(2026, 8, 27, 4, 16, 0);
+
+      db.exec(buildKitchenResetSql({ passwords, hash: fastHash, now }));
+
+      const expected = Math.floor(now() / 1000) - PERSONA_SESSION_VERSION_EPOCH_SECONDS;
+      expect(personaSessionVersion(now())).toBe(expected);
+      expect(personaVersions(db)).toEqual([expected, expected, expected]);
+    });
+
+    it("gives a later reset (the pre-upload --rotate) a newer version, so session cookies minted in between are revoked", () => {
+      // A persona is deleted and re-inserted on every reset, so an in-place `+ 1` would be lost.
+      // Minting the version from the reset time keeps it increasing across seed and rotate.
+      const db = migratedDb();
+      db.exec(buildKitchenResetSql({ passwords, hash: fastHash, now: () => Date.UTC(2026, 8, 27, 4, 0, 0) }));
+      const [versionAtSeed] = personaVersions(db);
+
+      db.exec(buildKitchenResetSql({ passwords, hash: fastHash, now: () => Date.UTC(2026, 8, 27, 4, 20, 0) }));
+
+      expect(personaVersions(db).every((version) => version > versionAtSeed)).toBe(true);
+    });
+
+    it("keeps persona versions positive and inside Prisma's 32-bit Int for decades", () => {
+      expect(personaSessionVersion(0)).toBe(1);
+      expect(personaSessionVersion(PERSONA_SESSION_VERSION_EPOCH_SECONDS * 1000 + 999)).toBe(1);
+      expect(personaSessionVersion(Date.UTC(2090, 0, 1))).toBeLessThan(2 ** 31 - 1);
+    });
+
+    it("defaults the reset time to now", () => {
+      const before = personaSessionVersion(Date.now());
+      const db = migratedDb();
+
+      db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
+
+      const after = personaSessionVersion(Date.now());
+      for (const version of personaVersions(db)) {
+        expect(version).toBeGreaterThanOrEqual(before);
+        expect(version).toBeLessThanOrEqual(after);
+      }
+    });
   });
 
   it("is idempotent and resets drift, including forks and cookbook entries made by other users", () => {
@@ -382,6 +433,22 @@ describe("seed-qa-kitchen", () => {
         }
       });
 
+      it("bumps every scratch user's session version, so their leftover session cookies are revoked", () => {
+        const db = migratedDb();
+        db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
+        const users = generateScratchUsers(2);
+        db.exec(buildScratchUsersSql({ users, passwords: ["pw-1", "pw-2"], hash: fastHash }));
+        db.prepare('UPDATE "User" SET sessionVersion = 3 WHERE id = ?').run(users[1].id);
+        const chefBefore = db.prepare('SELECT sessionVersion FROM "User" WHERE id = ?').get(KITCHEN.chef.id);
+
+        db.exec(buildScratchInvalidationSql());
+
+        const version = (id: string) => (db.prepare('SELECT sessionVersion FROM "User" WHERE id = ?').get(id) as any).sessionVersion;
+        expect(version(users[0].id)).toBe(1);
+        expect(version(users[1].id)).toBe(4);
+        expect(db.prepare('SELECT sessionVersion FROM "User" WHERE id = ?').get(KITCHEN.chef.id)).toEqual(chefBefore);
+      });
+
       it("also invalidates a legacy scratch user minted under the old, longer 'codex-e2e-scratch-...' email shape", () => {
         // Before scratch ids were shortened to fit under D1's 50-byte LIKE pattern limit, this
         // generator minted 'codex-e2e-scratch-<stamp>-<token>-<n>@example.com' addresses. Some
@@ -575,7 +642,7 @@ describe("seed-qa-kitchen", () => {
       expect(generateScratch).not.toHaveBeenCalled();
       expect(generateScratchPasswordsSpy).not.toHaveBeenCalled();
       const sql = writeFile.mock.calls[0][1] as string;
-      expect(sql).toContain('UPDATE "User" SET hashedPassword = NULL, salt = NULL');
+      expect(sql).toContain('UPDATE "User" SET hashedPassword = NULL, salt = NULL, sessionVersion = sessionVersion + 1');
       expect(sql).not.toContain("INSERT OR IGNORE INTO \"User\"");
       // The kitchen personas are still reset/rotated as before.
       expect(sql).toContain('INSERT INTO "User"');
