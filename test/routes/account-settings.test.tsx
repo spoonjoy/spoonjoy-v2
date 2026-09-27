@@ -2527,6 +2527,60 @@ describe("Account Settings Route", () => {
         expect(result.message).toContain("5MB");
       });
 
+      it("refuses an oversized photo body before buffering it whole", async () => {
+        const session = await sessionStorage.getSession();
+        session.set("userId", testUserId);
+        const cookieValue = (await sessionStorage.commitSession(session)).split(";")[0];
+
+        // A 20MB streamed multipart body with no declared length: reading must stop just past
+        // the upload limit instead of buffering the whole body.
+        const chunk = new Uint8Array(1024 * 1024);
+        let pulled = 0;
+        let pulls = 0;
+        const body = new ReadableStream<Uint8Array>({
+          pull(controller) {
+            if (pulls++ === 20) {
+              controller.close();
+              return;
+            }
+            pulled += chunk.byteLength;
+            controller.enqueue(chunk);
+          },
+        }, { highWaterMark: 0 });
+        const request = new UndiciRequest("http://localhost:3000/account/settings", {
+          method: "POST",
+          headers: { Cookie: cookieValue, "Content-Type": "multipart/form-data; boundary=spoonjoy" },
+          body,
+          duplex: "half",
+        });
+
+        const result = await action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any);
+
+        expect(result).toEqual({ success: false, error: "file_too_large", message: "Photo must be less than 5MB" });
+        expect(pulled).toBeLessThan(8 * 1024 * 1024);
+      });
+
+      it("still fails a settings post whose body is not valid form data", async () => {
+        const session = await sessionStorage.getSession();
+        session.set("userId", testUserId);
+        const cookieValue = (await sessionStorage.commitSession(session)).split(";")[0];
+        const request = new UndiciRequest("http://localhost:3000/account/settings", {
+          method: "POST",
+          headers: { Cookie: cookieValue, "Content-Type": "multipart/form-data; boundary=spoonjoy" },
+          body: "not a multipart body",
+        });
+
+        await expect(action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any)).rejects.toThrow();
+      });
+
       it("should update user photoUrl in database after successful upload", async () => {
         const session = await sessionStorage.getSession();
         session.set("userId", testUserId);

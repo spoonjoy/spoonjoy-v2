@@ -94,6 +94,65 @@ export function detectImageMimeType(bytes: Uint8Array): DetectedImageMimeType | 
   return null;
 }
 
+/** The most multipart body an image upload may send: the image limit plus room for the other fields. */
+export const IMAGE_UPLOAD_MULTIPART_MAX_BYTES = IMAGE_MAX_FILE_SIZE + 512 * 1024;
+
+/**
+ * Reads a multipart image upload's form data, refusing it with `tooLarge()` as soon as the body
+ * passes IMAGE_UPLOAD_MULTIPART_MAX_BYTES, whether by its declared length or while streaming, so
+ * an oversized body is never buffered whole.
+ */
+export async function imageUploadFormDataWithinLimit(
+  request: Request,
+  tooLarge: () => Error,
+): Promise<FormData> {
+  const declaredLength = Number(request.headers.get("Content-Length") ?? "0");
+  if (Number.isFinite(declaredLength) && declaredLength > IMAGE_UPLOAD_MULTIPART_MAX_BYTES) {
+    throw tooLarge();
+  }
+
+  if (!request.body) {
+    return request.formData();
+  }
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > IMAGE_UPLOAD_MULTIPART_MAX_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw tooLarge();
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const replayHeaders: Record<string, string> = {};
+  request.headers.forEach((value, key) => {
+    if (key.toLowerCase() !== "content-length") {
+      replayHeaders[key] = value;
+    }
+  });
+  const replayBytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    replayBytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const RequestConstructor = request.constructor as new (input: string, init: RequestInit) => Request;
+  return await new RequestConstructor(request.url, {
+    method: request.method,
+    headers: replayHeaders,
+    body: new Blob([replayBytes.buffer]),
+  }).formData();
+}
+
 export async function validateImageFileForStorage(
   file: File,
   options: ValidateImageFileOptions,

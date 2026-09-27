@@ -1,10 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
+import { Request as UndiciRequest } from "undici";
 import {
   deleteStoredImage,
   deleteStoredImageWithCapture,
   getImageExtension,
   getStoredImageKey,
   hasUploadedImageFile,
+  IMAGE_UPLOAD_MULTIPART_MAX_BYTES,
+  imageUploadFormDataWithinLimit,
   RECIPE_IMAGE_TYPES,
   storeImage,
   validateImageFile,
@@ -769,3 +772,97 @@ describe("image storage helpers", () => {
   });
 });
 
+describe("imageUploadFormDataWithinLimit", () => {
+  class TooLarge extends Error {}
+  const tooLarge = () => new TooLarge("too large");
+
+  function streamOf(chunks: Uint8Array[], onCancel?: () => void) {
+    let index = 0;
+    let pulled = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const chunk = chunks[index++];
+        if (!chunk) {
+          controller.close();
+          return;
+        }
+        pulled += chunk.byteLength;
+        controller.enqueue(chunk);
+      },
+      cancel() {
+        onCancel?.();
+      },
+    }, { highWaterMark: 0 });
+    return { stream, pulled: () => pulled };
+  }
+
+  it("refuses a body whose declared length is over the limit without reading it", async () => {
+    const body = streamOf([new Uint8Array(10)]);
+    const request = new UndiciRequest("https://spoonjoy.test/upload", {
+      method: "POST",
+      headers: { "Content-Length": String(IMAGE_UPLOAD_MULTIPART_MAX_BYTES + 1), "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.stream,
+      duplex: "half",
+    }) as unknown as Request;
+
+    await expect(imageUploadFormDataWithinLimit(request, tooLarge)).rejects.toBeInstanceOf(TooLarge);
+    expect(body.pulled()).toBe(0);
+  });
+
+  it("stops reading a streamed body as soon as it passes the limit", async () => {
+    const chunk = new Uint8Array(1024 * 1024);
+    let cancelled = false;
+    const body = streamOf(Array.from({ length: 20 }, () => chunk), () => {
+      cancelled = true;
+    });
+    const request = new UndiciRequest("https://spoonjoy.test/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.stream,
+      duplex: "half",
+    }) as unknown as Request;
+
+    await expect(imageUploadFormDataWithinLimit(request, tooLarge)).rejects.toBeInstanceOf(TooLarge);
+    expect(cancelled).toBe(true);
+    expect(body.pulled()).toBeLessThanOrEqual(IMAGE_UPLOAD_MULTIPART_MAX_BYTES + 2 * chunk.byteLength);
+  });
+
+  it("still refuses an oversized body when cancelling the stream fails", async () => {
+    const chunk = new Uint8Array(1024 * 1024);
+    const body = streamOf(Array.from({ length: 20 }, () => chunk), () => {
+      throw new Error("cancel failed");
+    });
+    const request = new UndiciRequest("https://spoonjoy.test/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.stream,
+      duplex: "half",
+    }) as unknown as Request;
+
+    await expect(imageUploadFormDataWithinLimit(request, tooLarge)).rejects.toBeInstanceOf(TooLarge);
+  });
+
+  it("returns the form data of a body within the limit", async () => {
+    const encoded = new TextEncoder().encode("intent=uploadPhoto&name=chef");
+    const request = new UndiciRequest("https://spoonjoy.test/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "Content-Length": String(encoded.byteLength) },
+      body: streamOf([encoded.slice(0, 7), encoded.slice(7)]).stream,
+      duplex: "half",
+    }) as unknown as Request;
+
+    const formData = await imageUploadFormDataWithinLimit(request, tooLarge);
+    expect(formData.get("intent")).toBe("uploadPhoto");
+    expect(formData.get("name")).toBe("chef");
+  });
+
+  it("reads a request without a body as the platform does", async () => {
+    const request = new UndiciRequest("https://spoonjoy.test/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    }) as unknown as Request;
+
+    const formData = await imageUploadFormDataWithinLimit(request, tooLarge);
+    expect([...formData.keys()]).toEqual([]);
+  });
+});

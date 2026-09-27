@@ -133,6 +133,7 @@ import {
   detectImageMimeType,
   type DetectedImageMimeType,
   hasUploadedImageFile,
+  imageUploadFormDataWithinLimit,
   RECIPE_IMAGE_TYPES,
   storeImage,
   validateImageFile,
@@ -4501,59 +4502,14 @@ function accountPhotoExtension(mimeType: DetectedImageMimeType) {
   return ACCOUNT_PHOTO_EXTENSIONS[mimeType];
 }
 
-const PROFILE_PHOTO_MULTIPART_MAX_BYTES = IMAGE_MAX_FILE_SIZE + 512 * 1024;
 const UNKNOWN_MULTIPART_FILE_TYPES = new Set(["", "application/octet-stream"]);
 
 function accountPhotoTooLargeError() {
   return new ApiV1Error("validation_error", "Photo must be less than 5MB", { field: "photo" });
 }
 
-async function accountPhotoFormDataWithinLimit(request: Request): Promise<FormData> {
-  const declaredLength = Number(request.headers.get("Content-Length") ?? "0");
-  if (Number.isFinite(declaredLength) && declaredLength > PROFILE_PHOTO_MULTIPART_MAX_BYTES) {
-    throw accountPhotoTooLargeError();
-  }
-
-  if (!request.body) {
-    return request.formData();
-  }
-
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      totalBytes += value.byteLength;
-      if (totalBytes > PROFILE_PHOTO_MULTIPART_MAX_BYTES) {
-        await reader.cancel().catch(() => undefined);
-        throw accountPhotoTooLargeError();
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  const replayHeaders: Record<string, string> = {};
-  request.headers.forEach((value, key) => {
-    if (key.toLowerCase() !== "content-length") {
-      replayHeaders[key] = value;
-    }
-  });
-  const replayBytes = new Uint8Array(totalBytes);
-  let offset = 0;
-  for (const chunk of chunks) {
-    replayBytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  const RequestConstructor = request.constructor as new (input: string, init: RequestInit) => Request;
-  return await new RequestConstructor(request.url, {
-    method: request.method,
-    headers: replayHeaders,
-    body: new Blob([replayBytes.buffer]),
-  }).formData();
+function accountPhotoFormDataWithinLimit(request: Request): Promise<FormData> {
+  return imageUploadFormDataWithinLimit(request, accountPhotoTooLargeError);
 }
 
 async function normalizeAccountPhotoFile(photo: File): Promise<File> {

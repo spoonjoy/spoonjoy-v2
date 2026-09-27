@@ -10,6 +10,7 @@ import { removeUserPasskey, renameUserPasskey } from "~/lib/webauthn-route.serve
 import {
   deleteStoredImageWithCapture,
   hasUploadedImageFile,
+  imageUploadFormDataWithinLimit,
   storeImage,
   validateImageFileForStorage,
 } from "~/lib/image-storage.server";
@@ -279,6 +280,10 @@ export async function loadAccountSettings({
   };
 }
 
+const PROFILE_PHOTO_TOO_LARGE_MESSAGE = "Photo must be less than 5MB";
+
+class ProfilePhotoBodyTooLargeError extends Error {}
+
 export async function handleAccountSettingsAction({
   request,
   context,
@@ -302,7 +307,17 @@ export async function handleAccountSettingsAction({
     await promoteLegacyOAuthIssuerForUser(database, userId, issuerOrigin);
   }
 
-  const formData = await request.formData();
+  // Every settings form posts here, and the profile photo is the only large field, so the body is
+  // read through the image upload limit: an oversized upload is refused before it is buffered whole.
+  let formData: FormData;
+  try {
+    formData = await imageUploadFormDataWithinLimit(request, () => new ProfilePhotoBodyTooLargeError());
+  } catch (error) {
+    if (error instanceof ProfilePhotoBodyTooLargeError) {
+      return { success: false, error: "file_too_large", message: PROFILE_PHOTO_TOO_LARGE_MESSAGE };
+    }
+    throw error;
+  }
   const intent = formData.get("intent");
 
   if (intent === "updateUserInfo") {
@@ -409,7 +424,7 @@ export async function handleAccountSettingsAction({
       allowedTypes: PROFILE_IMAGE_TYPES,
       messages: {
         invalidType: "Please upload an image file",
-        fileTooLarge: "Photo must be less than 5MB",
+        fileTooLarge: PROFILE_PHOTO_TOO_LARGE_MESSAGE,
       },
     });
 
@@ -421,7 +436,7 @@ export async function handleAccountSettingsAction({
       };
     }
 
-    if (imageError === "Photo must be less than 5MB") {
+    if (imageError === PROFILE_PHOTO_TOO_LARGE_MESSAGE) {
       return {
         success: false,
         error: "file_too_large",
