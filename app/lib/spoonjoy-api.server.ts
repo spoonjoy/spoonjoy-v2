@@ -87,12 +87,11 @@ import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import { addRecipeToCookbook, asCompatibleCookbookD1Database } from "~/lib/cookbook-membership-compat.server";
 import {
-  addToShoppingListItem,
+  addShoppingListItem,
   asCompatibleD1Database,
   coalesceShoppingRecipeIngredients,
   createCompatibleShoppingListD1Batch,
   findCompatibleShoppingListItem,
-  mutateCompatibleShoppingListItem,
   runCompatibleShoppingListBatch,
   type ShoppingListItemWritePlan,
 } from "~/lib/shopping-list-mutations.server";
@@ -3120,32 +3119,14 @@ const addShoppingListItemTool: SpoonjoyApiOperation = {
       ingredientRefId: ingredientRef.id,
       unitId: unit?.id ?? null,
     };
-    const mutation = await mutateCompatibleShoppingListItem({
-      database: context.db,
+    const mutation = await addShoppingListItem(context.db, {
       identity,
-      update: async (existing) => {
-        const shouldMoveToEnd = Boolean(existing.checked || existing.checkedAt || existing.deletedAt);
-        await addToShoppingListItem(context.db, {
-          id: existing.id,
-          shoppingListId: shoppingList.id,
-          quantityDelta: quantity,
-          sortIndex: shouldMoveToEnd ? await nextSortIndex(context.db, shoppingList.id) : existing.sortIndex,
-          categoryKey: categoryKey ?? existing.categoryKey,
-          iconKey: iconKey ?? existing.iconKey,
-        });
-      },
-      create: async () => {
-        await context.db.shoppingListItem.create({
-          data: {
-            ...identity,
-            quantity,
-            sortIndex: await nextSortIndex(context.db, shoppingList.id),
-            categoryKey,
-            iconKey,
-          },
-        });
-      },
+      quantity,
+      categoryKey,
+      iconKey,
+      nextSortIndex: () => nextSortIndex(context.db, shoppingList.id),
     });
+    if (!mutation) throw new Error("Shopping list not found");
     const result = {
       created: mutation.created ? 1 : 0,
       updated: mutation.created ? 0 : 1,

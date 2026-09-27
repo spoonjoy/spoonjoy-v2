@@ -116,13 +116,12 @@ import {
   type ApiV1ErrorCode,
 } from "~/lib/api-v1-contract.server";
 import {
-  addToShoppingListItem,
+  addShoppingListItem,
   asCompatibleD1Database,
   coalesceShoppingRecipeIngredients,
   shoppingListItemsRemoveStatements,
   createCompatibleShoppingListD1Batch,
   findCompatibleShoppingListItem,
-  mutateCompatibleShoppingListItem,
   runCompatibleShoppingListBatch,
   type ShoppingListItemWritePlan,
 } from "~/lib/shopping-list-mutations.server";
@@ -4068,42 +4067,24 @@ async function handleShoppingItemCreate(args: ApiV1RouteArgs, requestId: string,
       ingredientRefId: ingredientRef.id,
       unitId: unit?.id ?? null,
     };
-    const result = await mutateCompatibleShoppingListItem({
-      database: db,
+    const result = await addShoppingListItem(db, {
       identity,
-      update: async (existing) => {
-        await addToShoppingListItem(db, {
-          id: existing.id,
-          shoppingListId: list.id,
-          quantityDelta: quantity,
-          sortIndex: existing.checked || existing.checkedAt || existing.deletedAt
-            ? await nextShoppingSortIndex(db, list.id)
-            : existing.sortIndex,
-          categoryKey: categoryKey ?? existing.categoryKey,
-          iconKey: iconKey ?? existing.iconKey,
-        });
-        return db.shoppingListItem.findUniqueOrThrow({
-          where: { id: existing.id },
-          include: { unit: true, ingredientRef: true },
-        });
-      },
-      create: async () => db.shoppingListItem.create({
-        data: {
-          ...identity,
-          quantity,
-          sortIndex: await nextShoppingSortIndex(db, list.id),
-          categoryKey,
-          iconKey,
-        },
-        include: { unit: true, ingredientRef: true },
-      }),
+      quantity,
+      categoryKey,
+      iconKey,
+      nextSortIndex: () => nextShoppingSortIndex(db, list.id),
+    });
+    if (!result) throw new ApiV1Error("not_found", "Shopping list not found", { resource: "shopping_list" });
+    const item = await db.shoppingListItem.findUniqueOrThrow({
+      where: { id: result.id },
+      include: { unit: true, ingredientRef: true },
     });
     return {
       status: result.created ? 201 : 200,
       data: {
         created: result.created,
         updated: !result.created,
-        item: shoppingItem(result.item),
+        item: shoppingItem(item),
         mutation: { clientMutationId, replayed: false },
       },
     };

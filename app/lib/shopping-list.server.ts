@@ -10,12 +10,11 @@ import {
   type ParsedItemDraft,
 } from "~/lib/shopping-list-parser";
 import {
-  addToShoppingListItem,
+  addShoppingListItem,
   asCompatibleD1Database,
   coalesceShoppingRecipeIngredients,
   createCompatibleShoppingListD1Batch,
   findCompatibleShoppingListItem,
-  mutateCompatibleShoppingListItem,
   runCompatibleShoppingListBatch,
   type ShoppingListItemWritePlan,
 } from "~/lib/shopping-list-mutations.server";
@@ -250,46 +249,19 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
         unitId = unit.id;
       }
 
-      const identity = {
-        shoppingListId: shoppingList.id,
-        unitId,
-        ingredientRefId: ingredientRef.id,
-      };
-
-      await mutateCompatibleShoppingListItem({
-        database,
-        identity,
-        update: async (existingItem) => {
-          const shouldMoveToEnd = Boolean(
-            existingItem.deletedAt || existingItem.checkedAt || existingItem.checked
-          );
-
-          await addToShoppingListItem(database, {
-            id: existingItem.id,
-            shoppingListId: shoppingList.id,
-            /* istanbul ignore next -- @preserve a quantity is usually given */
-            quantityDelta: quantity ? parseFloat(quantity) : null,
-            sortIndex: shouldMoveToEnd
-              ? await nextSortIndex(database, shoppingList.id)
-              : existingItem.sortIndex,
-            categoryKey,
-            iconKey,
-          });
+      const added = await addShoppingListItem(database, {
+        identity: {
+          shoppingListId: shoppingList.id,
+          unitId,
+          ingredientRefId: ingredientRef.id,
         },
-        create: async () => {
-          const sortIndex = await nextSortIndex(database, shoppingList.id);
-
-          await database.shoppingListItem.create({
-            data: {
-              ...identity,
-              quantity: quantity ? parseFloat(quantity) : null,
-              categoryKey,
-              iconKey,
-              sortIndex,
-            },
-          });
-        },
+        /* istanbul ignore next -- @preserve a quantity is usually given */
+        quantity: quantity ? parseFloat(quantity) : null,
+        categoryKey,
+        iconKey,
+        nextSortIndex: () => nextSortIndex(database, shoppingList.id),
       });
+      if (!added) throw new Response("Shopping list not found", { status: 404 });
     }
 
     if (!ingredientName || parsedDraft.isAmbiguous) {

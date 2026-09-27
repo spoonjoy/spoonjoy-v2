@@ -318,6 +318,108 @@ export async function addToShoppingListItem(
   `;
 }
 
+/**
+ * Creates the item in one statement, only while no row on the list has its identity (the
+ * unit compared null-safely, which the unique index does not do) and the list still exists.
+ * Returns the number of rows inserted: 0 when a concurrent add created the item first or
+ * the list is gone.
+ */
+async function insertShoppingListItemIfAbsent(
+  database: PrismaClient,
+  item: ShoppingListItemIdentity & {
+    id: string;
+    quantity: number | null;
+    sortIndex: number;
+    categoryKey: string | null;
+    iconKey: string | null;
+  },
+): Promise<number> {
+  const updatedAt = d1Timestamp(new Date());
+  return database.$executeRaw`
+    INSERT INTO "ShoppingListItem" (
+      "id", "shoppingListId", "quantity", "unitId", "ingredientRefId",
+      "checked", "sortIndex", "categoryKey", "iconKey", "updatedAt"
+    )
+    SELECT ${item.id}, ${item.shoppingListId}, ${item.quantity}, ${item.unitId}, ${item.ingredientRefId},
+      0, ${item.sortIndex}, ${item.categoryKey}, ${item.iconKey}, ${updatedAt}
+    WHERE EXISTS (SELECT 1 FROM "ShoppingList" WHERE "id" = ${item.shoppingListId})
+      AND NOT EXISTS (
+        SELECT 1 FROM "ShoppingListItem"
+        WHERE "shoppingListId" = ${item.shoppingListId}
+          AND "ingredientRefId" = ${item.ingredientRefId}
+          AND "unitId" IS ${item.unitId}
+      )
+  `;
+}
+
+export interface ShoppingListItemAdd {
+  identity: ShoppingListItemIdentity;
+  /** The amount to add; null adds none (a new item has no quantity). */
+  quantity: number | null;
+  /** Set on a new item; on an existing one, a null key keeps the item's own. */
+  categoryKey: string | null;
+  iconKey: string | null;
+  /** The sort index after the list's active items. */
+  nextSortIndex: () => Promise<number>;
+}
+
+const SHOPPING_LIST_ITEM_ADD_ATTEMPTS = 3;
+
+/**
+ * Adds one item to a list the way the web, REST and MCP single-item adds do: an existing
+ * item with the same identity (active first, else removed) gets the amount added and is
+ * unchecked and restored; otherwise a new item is created. Each write is one conditional
+ * statement, so a lost race writes nothing: a create that finds the identity taken (a
+ * concurrent add created it), an addition that finds the item gone, or a restore that
+ * conflicts with an item a concurrent add made active reads again and takes the path the
+ * fresh read gives. Returns the item written, or null when the list itself no longer exists.
+ */
+export async function addShoppingListItem(
+  database: PrismaClient,
+  add: ShoppingListItemAdd,
+): Promise<{ created: boolean; id: string } | null> {
+  for (let attempt = 1; attempt <= SHOPPING_LIST_ITEM_ADD_ATTEMPTS; attempt += 1) {
+    const existing = await findCompatibleShoppingListItem(database, add.identity);
+    if (existing) {
+      const moveToEnd = Boolean(existing.checked || existing.checkedAt || existing.deletedAt);
+      const sortIndex = moveToEnd ? await add.nextSortIndex() : existing.sortIndex;
+      try {
+        const changed = await addToShoppingListItem(database, {
+          id: existing.id,
+          shoppingListId: add.identity.shoppingListId,
+          quantityDelta: add.quantity,
+          sortIndex,
+          categoryKey: add.categoryKey ?? existing.categoryKey,
+          iconKey: add.iconKey ?? existing.iconKey,
+        });
+        if (changed > 0) return { created: false, id: existing.id };
+      } catch (error) {
+        // Restoring a removed item conflicts where an active-identity index exists and a
+        // concurrent add already made an active item: read again and add to that one.
+        if (!isShoppingListUniqueConflict(error)) throw error;
+      }
+      continue;
+    }
+
+    const id = crypto.randomUUID();
+    const inserted = await insertShoppingListItemIfAbsent(database, {
+      ...add.identity,
+      id,
+      quantity: add.quantity,
+      sortIndex: await add.nextSortIndex(),
+      categoryKey: add.categoryKey,
+      iconKey: add.iconKey,
+    });
+    if (inserted > 0) return { created: true, id };
+    const list = await database.shoppingList.findUnique({
+      where: { id: add.identity.shoppingListId },
+      select: { id: true },
+    });
+    if (!list) return null;
+  }
+  throw new Error("Shopping list item add kept losing to concurrent writes; try again");
+}
+
 export async function mutateCompatibleShoppingListItem<T>(
   input: CompatibleMutationInput<T>,
 ): Promise<{ created: boolean; item: T }> {

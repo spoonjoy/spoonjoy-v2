@@ -612,13 +612,15 @@ describe("API v1 shopping-list mutations", () => {
     });
   });
 
-  it("rereads and updates the active identity once after a create uniqueness conflict", async () => {
+  it("adds to the item another request creates between the read and the conditional insert", async () => {
     const fixture = await createShoppingMutationFixture(db);
     const ingredientRef = await getOrCreateIngredientRef(db, `conflict reread ${faker.string.alphanumeric(6)}`.toLowerCase());
-    const delegate = db.shoppingListItem as any;
-    const originalCreate = delegate.create.bind(delegate);
-    const createSpy = vi.spyOn(delegate, "create").mockImplementationOnce(async () => {
-      await originalCreate({
+    // Another request creates the item between this one's read and its conditional insert,
+    // so the insert writes nothing and the add goes to the winner instead.
+    const client = db as any;
+    const originalExecuteRaw = client.$executeRaw.bind(client);
+    const executeRawSpy = vi.spyOn(client, "$executeRaw").mockImplementationOnce(async (...args: unknown[]) => {
+      await db.shoppingListItem.create({
         data: {
           id: "compat-rest-manual-conflict-winner",
           shoppingListId: fixture.list.id,
@@ -629,14 +631,9 @@ describe("API v1 shopping-list mutations", () => {
           categoryKey: "winner-category",
         },
       });
-      throw Object.assign(new Error("Unique constraint failed on the fields"), {
-        code: "P2002",
-        meta: {
-          modelName: "ShoppingListItem",
-          target: ["shoppingListId", "unitId", "ingredientRefId"],
-        },
-      });
+      return originalExecuteRaw(...args);
     });
+    executeRawSpy.mockImplementation(originalExecuteRaw);
     const request = (requestId: string) => mutationRequest(
       "POST",
       "shopping-list/items",
@@ -668,7 +665,8 @@ describe("API v1 shopping-list mutations", () => {
       mutation: { clientMutationId: "compat-conflict-reread", replayed: false },
     });
     expectShoppingItemShape(payload.data.item);
-    expect(createSpy).toHaveBeenCalledTimes(1);
+    // The insert that found the item taken, then the addition.
+    expect(executeRawSpy).toHaveBeenCalledTimes(2);
     expect(await db.shoppingListItem.count({
       where: { shoppingListId: fixture.list.id, ingredientRefId: ingredientRef.id, unitId: null },
     })).toBe(1);
@@ -685,7 +683,57 @@ describe("API v1 shopping-list mutations", () => {
         mutation: { clientMutationId: "compat-conflict-reread", replayed: true },
       },
     });
-    expect(createSpy).toHaveBeenCalledTimes(1);
+    expect(executeRawSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("creates the item again when it is deleted between the read and the addition", async () => {
+    const fixture = await createShoppingMutationFixture(db);
+    const existing = await createExistingItem(db, fixture.user.id, `vanishing ${faker.string.alphanumeric(6)}`.toLowerCase());
+    const name = (await db.ingredientRef.findUniqueOrThrow({ where: { id: existing.ingredientRefId } })).name;
+    const client = db as any;
+    const originalExecuteRaw = client.$executeRaw.bind(client);
+    vi.spyOn(client, "$executeRaw").mockImplementationOnce(async (...args: unknown[]) => {
+      await db.shoppingListItem.delete({ where: { id: existing.id } });
+      return originalExecuteRaw(...args);
+    }).mockImplementation(originalExecuteRaw);
+
+    const response = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/items", fixture.credential.token, "req_vanished_item", {
+        clientMutationId: "vanished-item",
+        name,
+        quantity: 3,
+      }),
+      "shopping-list/items",
+    ));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(201);
+    expectSuccessEnvelope(payload, "req_vanished_item");
+    expect(payload.data).toMatchObject({ created: true, updated: false, item: { name, quantity: 3 } });
+    expect(payload.data.item.id).not.toBe(existing.id);
+  });
+
+  it("answers not found when the shopping list is deleted during the add", async () => {
+    const fixture = await createShoppingMutationFixture(db);
+    const client = db as any;
+    const originalExecuteRaw = client.$executeRaw.bind(client);
+    vi.spyOn(client, "$executeRaw").mockImplementationOnce(async (...args: unknown[]) => {
+      await db.shoppingList.delete({ where: { id: fixture.list.id } });
+      return originalExecuteRaw(...args);
+    }).mockImplementation(originalExecuteRaw);
+
+    const response = await action(routeArgs(
+      mutationRequest("POST", "shopping-list/items", fixture.credential.token, "req_vanished_list", {
+        clientMutationId: "vanished-list",
+        name: `vanished list ${faker.string.alphanumeric(6)}`,
+        quantity: 1,
+      }),
+      "shopping-list/items",
+    ));
+
+    expect(response.status).toBe(404);
+    expectErrorEnvelope(await readJson(response), "req_vanished_list", "not_found", 404);
+    await expect(db.shoppingListItem.count({ where: { shoppingListId: fixture.list.id } })).resolves.toBe(0);
   });
 
   it("covers mutation validation, duplicate text, false checks, and missing item boundaries", async () => {

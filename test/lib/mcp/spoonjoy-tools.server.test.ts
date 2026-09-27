@@ -2903,34 +2903,51 @@ describe("spoonjoy MCP tools", () => {
     });
   });
 
-  it("rereads the active manual identity once after a real uniqueness race", async () => {
-    type ShoppingCreateArgs = Parameters<SpoonjoyMcpContext["db"]["shoppingListItem"]["create"]>[0];
+  it("reports a shopping list deleted during a manual add instead of success", async () => {
+    let deleted = false;
+    const deletingDb = new Proxy(context.db, {
+      get(target, property, receiver) {
+        const value = Reflect.get(target, property, receiver);
+        if (property !== "$executeRaw") return value;
+        return async (strings: TemplateStringsArray, ...values: unknown[]) => {
+          if (!deleted) {
+            deleted = true;
+            await context.db.shoppingList.deleteMany();
+          }
+          return (value as (...args: unknown[]) => Promise<number>).call(target, strings, ...values);
+        };
+      },
+    }) as SpoonjoyMcpContext["db"];
+
+    await expect(callSpoonjoyMcpTool("add_shopping_list_item", { name: "Vanished list milk", quantity: 1 }, { ...context, db: deletingDb }))
+      .rejects.toThrow("Shopping list not found");
+    expect(deleted).toBe(true);
+    await expect(context.db.shoppingListItem.count()).resolves.toBe(0);
+  });
+
+  it("adds to the manual item another request creates between the read and the conditional insert", async () => {
     const racedId = `manual-race-${faker.string.alphanumeric(8).toLowerCase()}`;
     let injected = false;
+    // Another request creates the item between this one's read and its conditional insert,
+    // so the insert writes nothing and the add goes to the winner instead.
     const racingDb = new Proxy(context.db, {
       get(target, property, receiver) {
-        if (property !== "shoppingListItem") return Reflect.get(target, property, receiver);
-        const delegate = Reflect.get(target, property, receiver);
-        return new Proxy(delegate, {
-          get(delegateTarget, delegateProperty, delegateReceiver) {
-            if (delegateProperty !== "create") {
-              return Reflect.get(delegateTarget, delegateProperty, delegateReceiver);
-            }
-            const create = Reflect.get(delegateTarget, delegateProperty, delegateReceiver) as (
-              args: ShoppingCreateArgs,
-            ) => Promise<unknown>;
-            return async (args: ShoppingCreateArgs) => {
-              if (!injected) {
-                injected = true;
-                await create.call(delegateTarget, {
-                  ...args,
-                  data: { ...args.data, id: racedId, quantity: 5 },
-                });
-              }
-              return create.call(delegateTarget, args);
-            };
-          },
-        });
+        const value = Reflect.get(target, property, receiver);
+        if (property !== "$executeRaw") return value;
+        return async (strings: TemplateStringsArray, ...values: unknown[]) => {
+          if (!injected && strings.join("?").includes('INSERT INTO "ShoppingListItem"')) {
+            injected = true;
+            const [list, ref, unit] = await Promise.all([
+              context.db.shoppingList.findFirstOrThrow(),
+              context.db.ingredientRef.findUniqueOrThrow({ where: { name: "manual race milk" } }),
+              context.db.unit.findUniqueOrThrow({ where: { name: "gallon" } }),
+            ]);
+            await context.db.shoppingListItem.create({
+              data: { id: racedId, shoppingListId: list.id, ingredientRefId: ref.id, unitId: unit.id, quantity: 5 },
+            });
+          }
+          return (value as (...args: unknown[]) => Promise<number>).call(target, strings, ...values);
+        };
       },
     }) as SpoonjoyMcpContext["db"];
 

@@ -338,6 +338,80 @@ describe("atomic shopping-list and cookbook writes on Wrangler D1", () => {
     });
   });
 
+  describe("adding one item with no unit", () => {
+    const insert = /INSERT INTO "ShoppingListItem"/;
+    const addition = /UPDATE "ShoppingListItem"\s+SET "quantity" = CASE/;
+
+    async function unitless() {
+      return rows<{ id: string; quantity: number | null; deleted: number }>(
+        `SELECT "id", "quantity", "deletedAt" IS NOT NULL AS "deleted" FROM "ShoppingListItem"
+         WHERE "shoppingListId" = ? AND "ingredientRefId" = ? AND "unitId" IS NULL`,
+        LIST,
+        APPLES,
+      );
+    }
+
+    it("keeps one item with every amount when adds run concurrently", async () => {
+      const [rest1, rest2, mcp1, mcp2] = await Promise.all([
+        apiPost("shopping-list/items", { clientMutationId: "sca-unitless-1", name: "sca apples", quantity: 1 }),
+        apiPost("shopping-list/items", { clientMutationId: "sca-unitless-2", name: "sca apples", quantity: 2 }),
+        callSpoonjoyApiOperation("add_shopping_list_item", { name: "sca apples", quantity: 4 }, mcp()),
+        callSpoonjoyApiOperation("add_shopping_list_item", { name: "sca apples", quantity: 8 }, mcp()),
+      ]);
+
+      // Exactly one of the four adds created the item; the others added to it.
+      const created = [rest1, rest2].map((response) => (response.status === 201 ? 1 : 0))
+        .concat([mcp1, mcp2].map((result) => (result as { created: number }).created));
+      expect(created.reduce((sum, value) => sum + value, 0)).toBe(1);
+      expect(await unitless()).toEqual([{ id: expect.any(String), quantity: 15, deleted: 0 }]);
+    });
+
+    it("adds to the item another add created between a REST add's read and its insert", async () => {
+      const added = await apiPost(
+        "shopping-list/items",
+        { clientMutationId: "sca-unitless-race", name: "sca apples", quantity: 2 },
+        interleaved(() => callSpoonjoyApiOperation("add_shopping_list_item", { name: "sca apples", quantity: 5 }, mcp()), insert),
+      );
+
+      expect(added.status).toBe(200);
+      expect(added.body.data).toMatchObject({ created: false, updated: true, item: { quantity: 5 + 2 } });
+      expect(await unitless()).toEqual([{ id: expect.any(String), quantity: 7, deleted: 0 }]);
+    });
+
+    it("creates the item again when it is deleted between a REST add's read and its addition", async () => {
+      await run(
+        `INSERT INTO "ShoppingListItem" ("id", "shoppingListId", "quantity", "unitId", "ingredientRefId", "sortIndex", "updatedAt")
+         VALUES ('sca-unitless-gone', ?, 3, NULL, ?, 0, ?)`,
+        LIST, APPLES, OLD,
+      );
+
+      const added = await apiPost(
+        "shopping-list/items",
+        { clientMutationId: "sca-unitless-gone", name: "sca apples", quantity: 2 },
+        interleaved(() => run(`DELETE FROM "ShoppingListItem" WHERE "id" = 'sca-unitless-gone'`), addition),
+      );
+
+      expect(added.status).toBe(201);
+      expect(added.body.data).toMatchObject({ created: true, updated: false, item: { quantity: 2 } });
+      expect(await unitless()).toEqual([{ id: expect.not.stringMatching(/^sca-unitless-gone$/), quantity: 2, deleted: 0 }]);
+    });
+
+    it("answers not found, writing nothing, when the list is deleted during a REST add", async () => {
+      try {
+        const added = await apiPost(
+          "shopping-list/items",
+          { clientMutationId: "sca-unitless-no-list", name: "sca apples", quantity: 2 },
+          interleaved(() => run(`DELETE FROM "ShoppingList" WHERE "id" = ?`, LIST), insert),
+        );
+
+        expect(added.status).toBe(404);
+        expect(await unitless()).toEqual([]);
+      } finally {
+        await run(`INSERT OR IGNORE INTO "ShoppingList" ("id", "authorId", "createdAt", "updatedAt") VALUES (?, ?, ?, ?)`, LIST, CHEF, OLD, OLD);
+      }
+    });
+  });
+
   describe("clearing the shopping list", () => {
     /** 95 items: more than one statement's worth of ids (D1 binds at most 100 values). */
     async function seedBulk() {
