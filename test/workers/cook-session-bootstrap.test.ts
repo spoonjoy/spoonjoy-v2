@@ -69,7 +69,15 @@ const publicCookRoutes: PublicCookRoute[] = [
   { method: "GET", path: "/api/cook-sessions/recipe-socket/socket", scope: "read", upgrade: true },
 ];
 
-const internalCookRoutes = publicCookRoutes.filter(({ path }) => path !== "/api/cook-sessions");
+// Internal routes protocol v1 does not implement yet (detail, start, and PATCH are served by
+// the product object; see cook-session-protocol.test.ts).
+const internalCookRoutes = publicCookRoutes.filter(({ path }) => [
+  "/api/cook-sessions/recipe-delete",
+  "/api/cook-sessions/recipe-complete/complete",
+  "/api/cook-sessions/recipe-abandon/abandon",
+  "/api/cook-sessions/recipe-restart/restart",
+  "/api/cook-sessions/recipe-socket/socket",
+].includes(path));
 
 function testEnvironment(): TestWorkerEnvironment {
   return env as unknown as TestWorkerEnvironment;
@@ -762,7 +770,7 @@ describe("CookSession lifecycle bootstrap", () => {
     }
   });
 
-  itWithCookSessionNamespace("returns the frozen response for every recognized internal protocol request without storage mutation", async (namespace) => {
+  itWithCookSessionNamespace("returns the frozen response for every unimplemented internal protocol request without storage mutation", async (namespace) => {
     const stub = namespace.get(namespace.idFromName("internal-contract"));
     await seedDurableObjectStorage(stub);
     const storageBefore = await durableObjectStorageSnapshot(stub);
