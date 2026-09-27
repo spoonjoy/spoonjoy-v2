@@ -550,12 +550,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
           usesSteps,
         });
       } catch (error) {
-        // The step moved, or lost its last ingredient, in between; nothing was saved.
+        // The step moved, went away or lost its last ingredient in between; nothing was saved.
         if (!isD1GuardFailure(error)) throw error;
         const current = await database.recipeStep.findUnique({ where: { id: stepId }, select: { stepNum: true } });
-        const ingredients = current
-          ? await database.ingredient.count({ where: { recipeId: id, stepNum: current.stepNum } })
-          : null;
+        if (!current) return data({ errors: { general: "Step not found" } }, { status: 404 });
+        const ingredients = await database.ingredient.count({ where: { recipeId: id, stepNum: current.stepNum } });
         return ingredients === 0 && usesSteps.length === 0
           ? data({ errors: { usesSteps: STEP_CONTENT_REQUIREMENT_ERROR } }, { status: 400 })
           : data({ errors: { general: RECIPE_CHANGED_MESSAGE } }, { status: 409 });

@@ -426,20 +426,39 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
     return redirect(`/recipes/${id}`);
   } catch (error) {
-    // Another recipe took the title between the check above and the save (the save's only
-    // guard), so nothing was written: answer as the check does. The upload is left alone.
-    if (isD1GuardFailure(error)) {
-      return data({ errors: { title: ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } }, { status: 400 });
-    }
-    // The recipe update failed after a replacement image landed in R2. Capture
-    // the real failure (previously discarded), then best-effort delete the
-    // orphaned upload — capturing if that delete also throws.
     const postHogConfig = cloudflareEnv
       ? resolvePostHogServerConfig(cloudflareEnv)
       : ({ enabled: false, reason: "missing-key" } as const);
     const waitUntil = context.cloudflare?.ctx?.waitUntil
       ? context.cloudflare.ctx.waitUntil.bind(context.cloudflare.ctx)
       : undefined;
+    const deleteUpload = async () => {
+      if (!uploadedImageUrl) return;
+      await deleteStoredImageWithCapture({
+        bucket: photosBucket,
+        imageUrl: uploadedImageUrl,
+        event: "spoonjoy.storage.orphan_cleanup_failed",
+        postHogConfig,
+        waitUntil,
+        distinctId: userId,
+        extras: { surface: "recipe_edit" },
+      });
+    };
+    // The save lost a race, so nothing was written. Nothing else would ever remove the upload,
+    // so it is deleted; this is an expected outcome, not a server fault, so nothing is captured.
+    // Answer as the checks above now do: the recipe was deleted in between, or another recipe
+    // took the title.
+    if (isD1GuardFailure(error)) {
+      await deleteUpload();
+      const current = await database.recipe.findUnique({ where: { id }, select: { deletedAt: true } });
+      if (!current || current.deletedAt) {
+        throw new Response("Recipe not found", { status: 404 });
+      }
+      return data({ errors: { title: ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } }, { status: 400 });
+    }
+    // The recipe update failed after a replacement image landed in R2. Capture
+    // the real failure (previously discarded), then best-effort delete the
+    // orphaned upload — capturing if that delete also throws.
     if (postHogConfig.enabled) {
       const capture = captureException(postHogConfig, {
         error,
@@ -453,17 +472,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         void capture;
       }
     }
-    if (uploadedImageUrl) {
-      await deleteStoredImageWithCapture({
-        bucket: photosBucket,
-        imageUrl: uploadedImageUrl,
-        event: "spoonjoy.storage.orphan_cleanup_failed",
-        postHogConfig,
-        waitUntil,
-        distinctId: userId,
-        extras: { surface: "recipe_edit" },
-      });
-    }
+    await deleteUpload();
 
     return data(
       { errors: { general: "Failed to update recipe. Please try again." } },

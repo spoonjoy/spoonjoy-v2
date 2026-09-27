@@ -237,21 +237,35 @@ export async function action({ request, context }: Route.ActionArgs) {
 
     return redirect(`/recipes/${recipe.id}`);
   } catch (error) {
-    // Another recipe took the title between the check above and the write, so nothing was
-    // written: answer as the check does. The upload is left alone.
-    if (error instanceof ActiveRecipeTitleConflictError) {
-      return data({ errors: { title: error.message } }, { status: 400 });
-    }
-    // The recipe create failed after the image landed in R2. Record the real
-    // failure first (it was previously discarded behind a generic 500), then
-    // best-effort roll back the orphaned upload — capturing if that delete also
-    // throws so the orphan never becomes a silent leak.
     const postHogConfig = cloudflareEnv
       ? resolvePostHogServerConfig(cloudflareEnv)
       : ({ enabled: false, reason: "missing-key" } as const);
     const waitUntil = context.cloudflare?.ctx?.waitUntil
       ? context.cloudflare.ctx.waitUntil.bind(context.cloudflare.ctx)
       : undefined;
+    // Nothing else would ever remove an upload whose recipe was not created, so it is deleted
+    // best-effort, capturing if that delete also throws.
+    const deleteUpload = async () => {
+      if (!uploadedImageUrl) return;
+      await deleteStoredImageWithCapture({
+        bucket: photosBucket,
+        imageUrl: uploadedImageUrl,
+        event: "spoonjoy.storage.orphan_cleanup_failed",
+        postHogConfig,
+        waitUntil,
+        distinctId: userId,
+        extras: { surface: "recipe_create" },
+      });
+    };
+    // Another recipe took the title between the check above and the write, so nothing was
+    // written: answer as the check does. That is an expected outcome, so nothing is captured.
+    if (error instanceof ActiveRecipeTitleConflictError) {
+      await deleteUpload();
+      return data({ errors: { title: error.message } }, { status: 400 });
+    }
+    // The recipe create failed after the image landed in R2. Record the real
+    // failure first (it was previously discarded behind a generic 500), then
+    // roll back the orphaned upload.
     if (postHogConfig.enabled) {
       const capture = captureException(postHogConfig, {
         error,
@@ -265,17 +279,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         void capture;
       }
     }
-    if (uploadedImageUrl) {
-      await deleteStoredImageWithCapture({
-        bucket: photosBucket,
-        imageUrl: uploadedImageUrl,
-        event: "spoonjoy.storage.orphan_cleanup_failed",
-        postHogConfig,
-        waitUntil,
-        distinctId: userId,
-        extras: { surface: "recipe_create" },
-      });
-    }
+    await deleteUpload();
 
     return data(
       { errors: { general: "Failed to create recipe. Please try again." } },

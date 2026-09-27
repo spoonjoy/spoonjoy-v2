@@ -7,6 +7,7 @@ import {
   activeRecipeTitleFreeGuard,
   cookbooksForRecipeTouchStatement,
   ingredientInsertStatement,
+  recipeActiveGuard,
   recipeUpdateStatement,
   stepAtGuard,
   stepDeleteStatement,
@@ -62,7 +63,8 @@ export type RecipeEditCover =
 
 /**
  * The edit page's save: the recipe's fields, the uploaded cover (created and made active)
- * or the cleared cover, and the touch of every cookbook holding the recipe.
+ * or the cleared cover, and the touch of every cookbook holding the recipe. The guards
+ * re-check that the recipe is still active and the new title still free.
  */
 export async function saveRecipeEditOnD1(
   d1: D1ReadDatabase,
@@ -81,7 +83,8 @@ export async function saveRecipeEditOnD1(
   } else if (cover?.kind === "clear") {
     coverFields = { activeCoverId: null, activeCoverVariant: null, coverMode: "none" };
   }
-  const results = await d1WriteBatch(d1, [
+  await d1WriteBatch(d1, [
+    recipeActiveGuard(recipeId),
     activeRecipeTitleFreeGuard(input.chefId, input.fields.title, recipeId),
     ...(cover?.kind === "upload"
       ? [coverInsertStatement({
@@ -98,7 +101,6 @@ export async function saveRecipeEditOnD1(
     recipeUpdateStatement(recipeId, { ...input.fields, ...coverFields }, now),
     cookbooksForRecipeTouchStatement(recipeId, now),
   ]);
-  if (results.at(-2)!.changes !== 1) throw new Error("Recipe to update was not found");
 }
 
 /** Swaps a step with its neighbour through a temporary step number, then touches the recipe. */
