@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import type { ApiPrincipal } from "~/lib/api-auth.server";
 import type { D1ReadDatabase } from "~/lib/d1-read.server";
@@ -163,7 +163,7 @@ describe("MCP recipe tools on a D1 binding", () => {
       },
     };
     await expect(callSpoonjoyApiOperation("update_recipe", { id, title: "Contested" }, context(rivalDuringBatch)))
-      .rejects.toThrow("The recipe changed while this request ran. Please try again.");
+      .rejects.toThrow("This recipe changed while this request ran; reload it and try again.");
     expect(races).toBe(3);
   });
 
@@ -216,5 +216,28 @@ describe("MCP recipe tools on a D1 binding", () => {
       await expect(db.recipe.findUniqueOrThrow({ where: { id } })).resolves.toMatchObject({ title: "Keep me", activeCoverId: null });
       expect((await graph(id)).steps).toHaveLength(2);
     });
+  });
+
+  it("never repeats what runs after the write when it hits a guard failure", async () => {
+    vi.resetModules();
+    const { D1GuardFailure } = await import("~/lib/d1-write.server");
+    const actual = await vi.importActual<typeof import("~/lib/recipe-cover-service.server")>("~/lib/recipe-cover-service.server");
+    const activate = vi.fn(async () => {
+      throw new D1GuardFailure(new Error("malformed JSON"));
+    });
+    vi.doMock("~/lib/recipe-cover-service.server", () => ({ ...actual, activateRecipeCoverWithBestAvailableVariant: activate }));
+    try {
+      const { callSpoonjoyApiOperation: call } = await import("~/lib/spoonjoy-api.server");
+      const image = "data:image/png;base64," + Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]).toString("base64");
+      const before = d1.roundTrips();
+      await expect(call("create_recipe", { title: "Written once", imageUrl: image, steps }, { ...context(d1.binding), allowLocalImageFallback: true }))
+        .rejects.toBeInstanceOf(D1GuardFailure);
+      expect(d1.roundTrips() - before).toBe(1);
+      expect(activate).toHaveBeenCalledTimes(1);
+      await expect(db.recipe.count({ where: { title: "Written once" } })).resolves.toBe(1);
+    } finally {
+      vi.doUnmock("~/lib/recipe-cover-service.server");
+      vi.resetModules();
+    }
   });
 });

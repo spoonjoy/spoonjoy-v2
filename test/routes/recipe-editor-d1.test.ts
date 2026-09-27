@@ -213,7 +213,7 @@ describe("recipe editor routes on a D1 binding", () => {
       await expectParity("edit", ({ recipe }) => ({ title: recipe.title, clearImage: "true" }));
     });
 
-    it("answers a save that lost its title with the title error, keeping the upload", async () => {
+    it("answers a save that lost its title with the title error, and removes the upload", async () => {
       const mine = await seedRecipe("Mine");
       const bucket = photos();
       const racing = {
@@ -228,8 +228,22 @@ describe("recipe editor routes on a D1 binding", () => {
       }), { DB: racing, PHOTOS: bucket }));
 
       expect(status).toBe(400);
-      expect(bucket.delete).not.toHaveBeenCalled();
+      expect(bucket.delete).toHaveBeenCalledTimes(1);
       await expect(graph(mine)).resolves.toMatchObject({ title: "Mine", touched: false, covers: [] });
+    });
+
+    it("answers a save whose recipe was deleted in between with 404, and removes the upload", async () => {
+      const mine = await seedRecipe("Deleted while saving");
+      const bucket = photos();
+      const deleting = racing(() => db.recipe.update({ where: { id: mine.recipe.id }, data: { deletedAt: new Date() } }));
+      const result = await withD1Routes(() => act("edit", mine, () => ({
+        title: "Deleted while saving", image: new File([PNG], "cover.png", { type: "image/png" }),
+      }), { DB: deleting, PHOTOS: bucket })).catch((error: unknown) => error);
+
+      expect(result).toBeInstanceOf(Response);
+      expect((result as Response).status).toBe(404);
+      expect(bucket.delete).toHaveBeenCalledTimes(1);
+      await expect(db.recipeCover.count({ where: { recipeId: mine.recipe.id } })).resolves.toBe(0);
     });
   });
 
@@ -322,7 +336,7 @@ describe("recipe editor routes on a D1 binding", () => {
       const gone = await seedRecipe("Save race gone");
       await expect(lostRace("step", gone, { stepTitle: "Mixed", description: "Mix it" }, () =>
         db.recipeStep.delete({ where: { id: gone.steps[0]!.id } }), 0))
-        .resolves.toEqual({ status: 409, errors: { general: CHANGED } });
+        .resolves.toEqual({ status: 404, errors: { general: "Step not found" } });
     });
 
     it("rethrows other D1 failures from the editor batches", async () => {
@@ -398,15 +412,22 @@ describe("recipe editor routes on a D1 binding", () => {
       expect(bucket.delete).toHaveBeenCalledTimes(1);
     });
 
-    it("answers a create that lost its title with the title error, keeping the upload", async () => {
+    it("answers a create that lost its title with the title error, removing the upload and capturing nothing", async () => {
       const bucket = photos();
+      const posted: string[] = [];
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+        posted.push(String(init?.body ?? ""));
+        return new Response("ok");
+      });
       const result = await withD1Routes(() => create("Taken title", {
         DB: racing(() => db.recipe.create({ data: { title: "Taken title", chefId } })),
         PHOTOS: bucket,
-      }, new File([PNG], "cover.png", { type: "image/png" })));
+        POSTHOG_KEY: "ph_test",
+      }, new File([PNG], "cover.png", { type: "image/png" }))).finally(() => fetchSpy.mockRestore());
+      expect(posted.filter((body) => body.includes("$exception"))).toEqual([]);
       expect(responseStatus(result)).toBe(400);
       expect((result as { data: { errors: unknown } }).data.errors).toEqual({ title: "You already have an active recipe with this title" });
-      expect(bucket.delete).not.toHaveBeenCalled();
+      expect(bucket.delete).toHaveBeenCalledTimes(1);
       await expect(db.recipe.count({ where: { title: "Taken title" } })).resolves.toBe(1);
     });
   });

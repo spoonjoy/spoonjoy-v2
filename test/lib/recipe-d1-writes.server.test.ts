@@ -406,7 +406,7 @@ describe("D1 recipe write batches", () => {
     it("fails a save for a recipe that is gone, and one whose title was taken", async () => {
       await expect(saveRecipeEditOnD1(d1.binding, {
         recipeId: "missing", chefId, fields: { title: "Whatever", description: null, servings: null }, cover: null,
-      })).rejects.toThrow("Recipe to update was not found");
+      })).rejects.toBeInstanceOf(D1GuardFailure);
 
       const { recipe } = await seedRecipe("Mine");
       await seedRecipe("Other");

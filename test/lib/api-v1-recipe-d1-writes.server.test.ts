@@ -357,7 +357,7 @@ describe("REST recipe writes on a D1 binding", () => {
         .resolves.toEqual({
           ok: false,
           code: "validation_error",
-          message: "The recipe changed while this request ran. Retry it.",
+          message: "This recipe changed while you were editing it; reload and try again.",
           details: { reason: "concurrent_change" },
         });
       expect(moves).toBe(3);
