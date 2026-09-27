@@ -12,6 +12,14 @@ import {
   type CookSyncStatus,
 } from "~/lib/cook-session-sync";
 
+// One live engine per cook and recipe in this document, including one still finishing its saves
+// after its page moved on.
+const activeCookSessionEngines = new Map<string, CookSessionSync>();
+
+function cookSessionEngineKey(userId: string, recipeId: string): string {
+  return `${userId}\u0000${recipeId}`;
+}
+
 /**
  * App-wide: whenever the signed-in user changes (including to signed out), drops cached cook
  * progress that belongs to any other account. Called from the root with the root loader's user.
@@ -56,18 +64,31 @@ export function useCookSessionSync({
 }: UseCookSessionSyncOptions): CookSyncStatus | null {
   const [status, setStatus] = useState<CookSyncStatus>("syncing");
   const engineRef = useRef<CookSessionSync | null>(null);
-  const latest = useRef({ bounds, progress, onRemoteProgress });
-  latest.current = { bounds, progress, onRemoteProgress };
+  const latest = useRef({ recipeId, bounds, progress, onRemoteProgress });
+  latest.current = { recipeId, bounds, progress, onRemoteProgress };
 
   useEffect(() => {
     if (!userId || !ready) return;
 
+    // This engine belongs to this recipe for its whole life: it captures the recipe's ids now and
+    // never reads the page's later data, because the same mounted route can move on to another
+    // recipe (a provenance or spoon link, a fork redirect) while this engine finishes its saves.
+    const bounds = latest.current.bounds;
+    const isCurrentRecipe = () => latest.current.recipeId === recipeId;
+    const key = cookSessionEngineKey(userId, recipeId);
     const isVisible = () => document.visibilityState === "visible";
+
+    // A newer page for the same cook and recipe takes over from one still finishing its saves.
+    // Its queue is already in the cache this engine loads, so it stops without sending more.
+    activeCookSessionEngines.get(key)?.dispose();
+
     const engine = new CookSessionSync({
       client: createCookSessionClient(recipeId, userId),
       progress: latest.current.progress,
-      server: readSyncedCookCache(userId, recipeId, latest.current.bounds)?.server ?? null,
-      normalize: (value) => normalizeCookProgress(value, latest.current.bounds),
+      server: readSyncedCookCache(userId, recipeId, bounds)?.server ?? null,
+      normalize: (value) => normalizeCookProgress(value, isCurrentRecipe() ? latest.current.bounds : bounds),
+      // Only called while this engine's recipe is the page's: once the page moves on, the engine
+      // is leaving (or stopped), and a leaving engine never touches page state.
       onProgress: (value) => latest.current.onRemoteProgress(value),
       onChange: () => {
         if (engine.status === "account_changed") {
@@ -77,10 +98,11 @@ export function useCookSessionSync({
         } else {
           writeSyncedCookCache(userId, recipeId, { progress: engine.progress, server: engine.server });
         }
-        setStatus(engine.status);
+        if (isCurrentRecipe()) setStatus(engine.status);
       },
       isVisible,
     });
+    activeCookSessionEngines.set(key, engine);
     engineRef.current = engine;
     setStatus(engine.status);
 
@@ -102,12 +124,14 @@ export function useCookSessionSync({
     return () => {
       // Leaving the recipe inside the app: the engine finishes a save in flight and sends what is
       // still pending (at most 10 s, only while visible), then stops. pagehide covers tab close.
-      void engine.leave();
       engineRef.current = null;
       window.removeEventListener("focus", pull);
       window.removeEventListener("online", pull);
       window.removeEventListener("pagehide", flush);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      void engine.leave().then(() => {
+        if (activeCookSessionEngines.get(key) === engine) activeCookSessionEngines.delete(key);
+      });
     };
   }, [recipeId, userId, ready]);
 

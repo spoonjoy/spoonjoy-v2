@@ -816,6 +816,40 @@ describe("CookSessionSync", () => {
       expect(sync.server?.revision).toBe(3);
     });
 
+    it("never changes the page while leaving, even when the server answers with other progress", async () => {
+      const { client, sync, onProgress } = createSync({ server: snapshot(1) });
+      client.reads.push({ kind: "state", state: snapshot(1) });
+      await sync.sync(true);
+      onProgress.mockClear();
+      const save = deferred();
+      client.patches.push(save.promise);
+      client.patches.push({ kind: "conflict", state: snapshot(3, { scaleFactor: 2, checkedIngredientIds: ["stock"] }) });
+      client.patches.push({ kind: "rejected" });
+      client.reads.push({ kind: "state", state: snapshot(4, { checkedIngredientIds: ["lemon"] }) });
+
+      sync.setProgress(progress({ checkedIngredientIds: ["rice"] }));
+      await vi.advanceTimersByTimeAsync(300);
+      const leaving = sync.leave();
+      save.resolve({ kind: "state", state: snapshot(2, { checkedIngredientIds: ["rice", "stock"] }) });
+      await leaving;
+
+      expect(onProgress).not.toHaveBeenCalled();
+    });
+
+    it("never changes the page after an account switch found while leaving", async () => {
+      const { client, sync, onProgress } = createSync({ server: snapshot(1) });
+      client.reads.push({ kind: "state", state: snapshot(1) });
+      await sync.sync(true);
+      onProgress.mockClear();
+      client.patches.push({ kind: "wrong_user" });
+
+      sync.setProgress(progress({ checkedIngredientIds: ["rice"] }));
+      await sync.leave();
+
+      expect(sync.status).toBe("account_changed");
+      expect(onProgress).not.toHaveBeenCalled();
+    });
+
     it("replays a conflict while leaving", async () => {
       const { client, sync } = createSync({ server: snapshot(1) });
       client.reads.push({ kind: "state", state: snapshot(1) });

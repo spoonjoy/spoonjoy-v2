@@ -544,8 +544,7 @@ export class CookSessionSync {
         if (outcome.reason === "account_changed") {
           // Another account owns the browser's session now: drop this tab's unsent changes, show
           // only what was saved, and never send or save anything more.
-          this.local = this.options.normalize(this.known?.progress ?? DEFAULT_COOK_PROGRESS);
-          this.options.onProgress(this.local);
+          this.show(this.options.normalize(this.known?.progress ?? DEFAULT_COOK_PROGRESS));
         }
       } else {
         this.retries = 0;
@@ -565,15 +564,20 @@ export class CookSessionSync {
     this.retryTimer = setTimeout(() => void this.run(true), delay);
   }
 
+  // Replaces this engine's progress and, unless it is leaving, the page's. A leaving engine's
+  // recipe is no longer on the page (the route may already show another recipe), so it only
+  // finishes delivering its own queue and never touches page state.
+  private show(progress: CookProgressValue): void {
+    this.local = progress;
+    if (!this.leaving) this.options.onProgress(progress);
+  }
+
   // Accepts `state` as the latest server state. `sent` is the page progress the exchange started
   // from; anything the cook changed since then is replayed on top so it is not lost.
   private acknowledge(state: CookServerSnapshot, sent: CookProgressValue): void {
     this.known = state;
     const next = this.options.normalize(mergeCookProgress(sent, this.local, state.progress));
-    if (!sameCookProgress(next, this.local)) {
-      this.local = next;
-      this.options.onProgress(next);
-    }
+    if (!sameCookProgress(next, this.local)) this.show(next);
   }
 
   private failure(result: CookSyncResult): Outcome {
@@ -647,8 +651,7 @@ export class CookSessionSync {
     this.lastPullAt = startedAt;
     const adopted = this.options.normalize(read.state?.progress ?? DEFAULT_COOK_PROGRESS);
     this.known = read.state ? { ...read.state, progress: adopted } : null;
-    this.local = adopted;
-    this.options.onProgress(adopted);
+    this.show(adopted);
     return { kind: "ok" };
   }
 }

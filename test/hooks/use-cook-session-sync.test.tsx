@@ -268,6 +268,91 @@ describe("useCookSessionSync", () => {
     expect(JSON.parse(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1")) ?? "{}").server.revision).toBe(3);
   });
 
+  it("moving to another recipe with a save in flight keeps the first recipe's checks and leaves the new page alone", async () => {
+    // Recipe X (rice, stock) is on the page; the route then shows recipe Y (flour) in the same mount.
+    writeSyncedCookCache("user-1", "recipe-x", { progress: progress(), server: serverState(1) });
+    let finishFirstSave!: () => void;
+    const requests: Array<{ url: string; init: RequestInit }> = [];
+    fetchMock.mockImplementation(async (url: string, init: RequestInit) => {
+      requests.push({ url, init });
+      if (url === "/api/cook-sessions/recipe-x" && init.method === "GET") return jsonResponse({ state: serverState(1) });
+      if (url === "/api/cook-sessions/recipe-x" && init.method === "PATCH" && requests.filter((r) => r.init.method === "PATCH").length === 1) {
+        return new Promise<Response>((resolve) => {
+          // The server answers with a newer revision that also holds another device's lemon check.
+          finishFirstSave = () => resolve(jsonResponse({ state: serverState(2, { checkedIngredientIds: ["stock", "lemon"] }) }));
+        });
+      }
+      if (init.method === "PATCH") {
+        const body = JSON.parse(String(init.body)) as { expectedRevision: number; changes: { checkedIngredientIds: string[] } };
+        return jsonResponse({ state: serverState(body.expectedRevision + 1, { checkedIngredientIds: body.changes.checkedIngredientIds }) });
+      }
+      if (url === "/api/cook-sessions/recipe-y/start") return jsonResponse({ state: serverState(0) }, 201);
+      return jsonResponse({ state: null });
+    });
+    const xBounds = { stepCount: 2, ingredientIds: new Set(["rice", "stock", "lemon"]), stepOutputIds: new Set<string>() };
+    const yBounds = { stepCount: 1, ingredientIds: new Set(["flour"]), stepOutputIds: new Set<string>() };
+    const { rerender, initialProps, onRemoteProgress } = render({ recipeId: "recipe-x", bounds: xBounds });
+    await settle();
+
+    rerender({ ...initialProps, recipeId: "recipe-x", bounds: xBounds, progress: progress({ checkedIngredientIds: ["stock"] }) });
+    await settle(300);
+    rerender({ ...initialProps, recipeId: "recipe-x", bounds: xBounds, progress: progress({ checkedIngredientIds: ["stock", "rice"] }) });
+    onRemoteProgress.mockClear();
+
+    // The route moves on to recipe Y: first render before Y's progress loads, then ready with Y's.
+    rerender({ ...initialProps, recipeId: "recipe-y", bounds: yBounds, ready: false, progress: progress({ checkedIngredientIds: ["stock", "rice"] }) });
+    rerender({ ...initialProps, recipeId: "recipe-y", bounds: yBounds, ready: true, progress: progress({ checkedIngredientIds: ["flour"] }) });
+    await act(async () => {
+      finishFirstSave();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await settle(300);
+
+    const xPatches = requests.filter((r) => r.url === "/api/cook-sessions/recipe-x" && r.init.method === "PATCH");
+    expect(xPatches).toHaveLength(2);
+    // X's follow-up save keeps X's own ids: stock and lemon from the server, plus the queued rice.
+    expect(JSON.parse(String(xPatches[1].init.body))).toMatchObject({
+      expectedRevision: 2,
+      changes: { checkedIngredientIds: ["stock", "lemon", "rice"] },
+    });
+    expect(JSON.parse(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-x")) ?? "{}").progress)
+      .toEqual(progress({ checkedIngredientIds: ["stock", "lemon", "rice"] }));
+    // Y's page never received X's progress, and Y saved only Y's own flour check.
+    expect(onRemoteProgress).not.toHaveBeenCalled();
+    const yPatches = requests.filter((r) => r.url === "/api/cook-sessions/recipe-y" && r.init.method === "PATCH");
+    expect(yPatches.map((r) => JSON.parse(String(r.init.body)).changes)).toEqual([{ checkedIngredientIds: ["flour"] }]);
+  });
+
+  it("a new page for the same recipe stops the old one at once, without re-sending or caching stale checks", async () => {
+    writeSyncedCookCache("user-1", "recipe-1", { progress: progress(), server: serverState(1) });
+    let finishOldSave!: () => void;
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ state: serverState(1) }))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => {
+        finishOldSave = () => resolve(jsonResponse({ error: { code: "stale_revision", state: serverState(2) } }, 409));
+      }));
+    const old = render();
+    await settle();
+    old.rerender({ ...old.initialProps, progress: progress({ checkedIngredientIds: ["rice"] }) });
+    await settle(300);
+    old.unmount();
+
+    // The cook comes straight back and unchecks rice on the new page.
+    fetchMock.mockImplementation(async () => jsonResponse({ state: serverState(2) }));
+    const next = render({ progress: progress() });
+    await settle();
+    const callsBefore = fetchMock.mock.calls.length;
+    await act(async () => {
+      finishOldSave();
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+
+    // The old engine neither replays "rice checked" nor overwrites the cache.
+    expect(fetchMock.mock.calls.length).toBe(callsBefore);
+    expect(JSON.parse(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1")) ?? "{}").progress).toEqual(progress());
+    expect(next.result.current).toBe("synced");
+  });
+
   it("closing the tab with a save in flight sends no stale flush, and the next visit replays the queue", async () => {
     writeSyncedCookCache("user-1", "recipe-1", { progress: progress(), server: serverState(1) });
     fetchMock
