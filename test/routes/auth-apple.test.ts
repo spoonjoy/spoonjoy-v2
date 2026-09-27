@@ -694,6 +694,7 @@ describe("Apple OAuth routes", () => {
     expect(response.headers.get("Set-Cookie")).toContain("__oauth=");
     expect(mocks.handleAppleOAuthCallback).toHaveBeenCalledWith({
       db: { source: "db" },
+      d1: null,
       appleUser,
       currentUserId: null,
       redirectTo: "/cookbooks",

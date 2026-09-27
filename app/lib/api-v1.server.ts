@@ -6383,7 +6383,10 @@ async function handleNativeAppleSignInRequest(args: ApiV1RouteArgs, requestId: s
       db,
       { identityToken, rawNonce, email, fullName },
       getAppleNativeAuthConfig((args.context.cloudflare?.env ?? {}) as OAuthEnv),
-      { issuer: resolveIssuerOrigin(args.request.url, args.context.cloudflare?.env?.SPOONJOY_BASE_URL) },
+      {
+        issuer: resolveIssuerOrigin(args.request.url, args.context.cloudflare?.env?.SPOONJOY_BASE_URL),
+        d1: requestD1(args.context),
+      },
     );
     return withApiV1Telemetry(
       apiV1SamePartyPrivateSuccess(requestId, {

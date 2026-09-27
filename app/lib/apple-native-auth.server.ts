@@ -1,3 +1,4 @@
+import type { D1ReadDatabase } from "~/lib/d1-read.server";
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import { normalizeCredentialScopes } from "~/lib/api-auth.server";
 import { handleAppleOAuthCallback } from "~/lib/apple-oauth-callback.server";
@@ -234,7 +235,7 @@ export async function handleNativeAppleSignIn(
   db: Database,
   input: NativeAppleCredentialInput,
   config: AppleNativeAuthConfig,
-  options: { issuer: string; fetcher?: typeof fetch; now?: Date },
+  options: { issuer: string; fetcher?: typeof fetch; now?: Date; d1?: D1ReadDatabase | null },
 ): Promise<NativeAppleAuthResult> {
   const appleUser = await verifyNativeAppleIdentityToken(input, config, {
     fetcher: options.fetcher,
@@ -242,6 +243,7 @@ export async function handleNativeAppleSignIn(
   });
   const callback = await handleAppleOAuthCallback({
     db,
+    d1: options.d1,
     appleUser,
     currentUserId: null,
     redirectTo: null,

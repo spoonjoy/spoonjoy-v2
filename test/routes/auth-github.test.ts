@@ -383,6 +383,7 @@ describe("GitHub OAuth routes", () => {
     expect(response.headers.get("Set-Cookie")).toBeTruthy();
     expect(mocks.handleGitHubOAuthCallback).toHaveBeenCalledWith({
       db: { source: "db" },
+      d1: null,
       githubUser,
       currentUserId: null,
       redirectTo: "/cookbooks",
