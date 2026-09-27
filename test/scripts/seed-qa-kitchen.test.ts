@@ -317,6 +317,10 @@ describe("seed-qa-kitchen", () => {
         expect(user.id.length).toBeLessThanOrEqual(40);
         expect(user.email.length).toBeLessThanOrEqual(40);
       }
+      // The longest are index 6's desktop twin: a 23-character id and a 35-character email, as the
+      // seed's comment says.
+      expect(Math.max(...users.map((user) => user.id.length))).toBe(23);
+      expect(Math.max(...users.map((user) => user.email.length))).toBe(35);
     });
 
     it("honors a custom count, per variant", () => {

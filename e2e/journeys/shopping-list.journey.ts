@@ -21,6 +21,12 @@ const SHOPPING_LIST = "/shopping-list";
 const SHOPPING_LIST_ACTION = "/shopping-list.data";
 const TOMATO_SOUP = "/recipes/qa-kitchen-recipe-tomato-soup";
 
+// Attached to every assertion that depends on the fallback parser's exact output, so that if QA
+// ever gains an OpenAI key the failure says why instead of looking like a flake.
+const FALLBACK_PARSER =
+  "QA parses shopping items with the built-in fallback parser because spoonjoy-v2-qa has no OPENAI_API_KEY; " +
+  "if that secret was added, update these expected values";
+
 function itemField(page: Page) {
   return page.getByLabel("Item", { exact: true });
 }
@@ -70,7 +76,7 @@ function recordShoppingListActions(page: Page, intent: string): number[] {
 async function addByHand(page: Page, text: string, name: string, amount: string) {
   await itemField(page).fill(text);
   await addSection(page).getByRole("button", { name: "Add", exact: true }).click();
-  await expect(row(page, name)).toContainText(amount);
+  await expect(row(page, name), FALLBACK_PARSER).toContainText(amount);
   await expect(itemField(page)).toHaveValue("");
 }
 
@@ -113,13 +119,13 @@ test.describe("Shopping list", () => {
     await waitForHydration(page);
     await expect(itemField(page)).toHaveValue("2 lemons");
     await addSection(page).getByRole("button", { name: "Add", exact: true }).click();
-    await expect(lemons).toContainText("2 whole");
+    await expect(lemons, FALLBACK_PARSER).toContainText("2 whole");
     await expect(lemons).toHaveAttribute("aria-checked", "false");
     // R-M3-3: the field clears, so pressing Add again can't add the lemons twice (bug 10). The
     // empty field is required, so the browser doesn't submit it.
     await expect(itemField(page)).toHaveValue("");
     await addSection(page).getByRole("button", { name: "Add", exact: true }).click();
-    await expect(lemons).toContainText("2 whole");
+    await expect(lemons, FALLBACK_PARSER).toContainText("2 whole");
     await expect(view(page, "Need", 1)).toBeVisible();
     await expectAccessible();
 
@@ -140,7 +146,7 @@ test.describe("Shopping list", () => {
 
     await verifyAfterReload(async () => {
       await expect(lemons).toHaveAttribute("aria-checked", "true");
-      await expect(lemons).toContainText("2 whole");
+      await expect(lemons, FALLBACK_PARSER).toContainText("2 whole");
       await expect(view(page, "Basket", 1)).toBeVisible();
     });
 
@@ -243,11 +249,14 @@ test.describe("Shopping list", () => {
     const ambiguous = nextShoppingListAction(page, "addItem");
     await itemField(page).fill("salt");
     await review.getByRole("button", { name: "Add", exact: true }).click();
-    expect((await ambiguous).status()).toBe(400);
-    await expect(review.getByText("Couldn't confidently parse one item. Review and correct before adding.")).toBeVisible();
-    await expect(review.getByLabel("Ingredient", { exact: true })).toHaveValue("salt");
-    await expect(review.getByLabel("Quantity", { exact: true })).toHaveValue("");
-    await expect(review.getByLabel("Unit", { exact: true })).toHaveValue("");
+    expect((await ambiguous).status(), FALLBACK_PARSER).toBe(400);
+    await expect(
+      review.getByText("Couldn't confidently parse one item. Review and correct before adding."),
+      FALLBACK_PARSER,
+    ).toBeVisible();
+    await expect(review.getByLabel("Ingredient", { exact: true }), FALLBACK_PARSER).toHaveValue("salt");
+    await expect(review.getByLabel("Quantity", { exact: true }), FALLBACK_PARSER).toHaveValue("");
+    await expect(review.getByLabel("Unit", { exact: true }), FALLBACK_PARSER).toHaveValue("");
     // The typed text stays for the review; nothing is on the list yet.
     await expect(itemField(page)).toHaveValue("salt");
     await expect(emptyList(page)).toBeVisible();
@@ -325,12 +334,12 @@ test.describe("Shopping list", () => {
     expect((await checked).status()).toBe(200);
     await page.getByRole("button", { name: "Clear checked", exact: true }).click();
     await expect(onions).toBeHidden();
-    await expect(carrots).toContainText("3 whole");
+    await expect(carrots, FALLBACK_PARSER).toContainText("3 whole");
     await expect(view(page, "All", 1)).toBeVisible();
 
     await verifyAfterReload(async () => {
       await expect(onions).toBeHidden();
-      await expect(carrots).toContainText("3 whole");
+      await expect(carrots, FALLBACK_PARSER).toContainText("3 whole");
       await expect(view(page, "All", 1)).toBeVisible();
     });
 

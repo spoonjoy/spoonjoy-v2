@@ -161,6 +161,11 @@ export function generatePersonaPasswords(random = randomBytes) {
   };
 }
 
+// SCRATCH_USER_COUNT counts scratch INDICES (1..6), not accounts: each index is seeded as
+// SCRATCH_VARIANTS.length accounts, and SCRATCH_ACCOUNT_COUNT below is the total number of
+// accounts (12). The name predates the desktop twins and is kept because journeys, AGENTS.md and
+// the tests refer to it.
+//
 // Number of per-run scratch indices seeded alongside the three kitchen personas. Journeys that
 // change data use one of these (via support/personas.ts's scratch(n)) instead of signing up a
 // throwaway user through /signup, so they stop spending QA's shared auth rate limit
@@ -182,7 +187,8 @@ export const SCRATCH_VARIANTS = Object.freeze([
   { variant: "desktop", suffix: "d" },
 ]);
 
-// Total scratch accounts seeded per run: every index, once per variant.
+// Total scratch ACCOUNTS seeded per run (12): every index (SCRATCH_USER_COUNT), once per variant.
+// Use this for anything counted per account, such as passwords or sign-ins.
 export const SCRATCH_ACCOUNT_COUNT = SCRATCH_USER_COUNT * SCRATCH_VARIANTS.length;
 
 // Token shape follows e2e/support/disposable-auth.ts's createDisposableE2EUser() and this
@@ -210,8 +216,9 @@ const SCRATCH_EMAIL_PREFIX = "codex-e2e-s-";
 // random segment, no timestamp — see SCRATCH_EMAIL_PREFIX on why these stay short) baked into
 // both email and username, so a concurrent run, or a leftover run whose cleanup didn't get to
 // run, can never collide with this run's scratch users: no generated id exceeds 40 characters
-// (the longest today, a desktop twin, is 24). Scratch users own no data (no recipes, cookbooks,
-// or shopping lists), so there is no persona-style drift to reset here — only identity.
+// (the longest today, a desktop twin's, is 23; its email is 35). Scratch users are created with
+// no data (no recipes, cookbooks, or shopping lists), so there is no persona-style drift to reset
+// here — only identity; whatever a journey gives them is removed by the run's cleanup.
 export function generateScratchUsers(count = SCRATCH_USER_COUNT, { random = randomBytes } = {}) {
   // 4 bytes (32 bits) of randomness is what fits the 40-character id budget above; that's still
   // plenty of entropy for run-to-run uniqueness (this is a collision-avoidance token, not a
