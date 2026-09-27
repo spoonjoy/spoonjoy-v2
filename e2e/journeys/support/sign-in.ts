@@ -4,9 +4,9 @@
 import type { Page } from "@playwright/test";
 import { expect } from "./journey";
 import { persona, scratch, scratchDesktop, type PersonaName } from "./personas";
-import { fillSecret } from "./secret-input";
+import { fillSecret, type Secret } from "./secret";
 
-async function submitLoginForm(page: Page, user: { username: string; password: string }): Promise<void> {
+async function submitLoginForm(page: Page, user: { username: string; password: Secret }): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("Username or email").fill(user.username);
   await fillSecret(page.getByLabel("Password"), user.password);

@@ -137,6 +137,13 @@ jobs:
       - name: Check journey house rules
         run: node scripts/warning-gate.ts -- pnpm run check:journeys
 
+      # Passwords are Secret values that fill() and toHaveValue() don't accept
+      # (e2e/journeys/support/secret.ts); this typecheck of every Playwright suite under e2e/ is
+      # what enforces that, before any password reaches QA. It lives here, not in ci.yml, whose
+      # job and step lists are pinned by scripts/deployment-preflight.ts.
+      - name: Typecheck the journeys
+        run: node scripts/warning-gate.ts -- pnpm exec tsc -p tsconfig.e2e.json
+
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium webkit
 
@@ -269,8 +276,8 @@ jobs:
 
       # The artifact is public to any signed-in GitHub user. It can contain:
       #   - journeys-report/ or explore-report/: the HTML report, whose step titles include
-      #     typed values (never a password: journeys type secrets with fillSecret, which keeps
-      #     them out of step titles, and check:journeys' no-secret-fill rule enforces it), plus
+      #     typed values (never a password: passwords are Secret values that only fillSecret can
+      #     type, which keeps them out of step titles; the journeys typecheck enforces it), plus
       #     failure screenshots, videos, error context and copies of the failure traces
       #     (explore-report/ additionally holds summary.json and a full-page screenshot per
       #     route visited);

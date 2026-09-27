@@ -16,14 +16,14 @@
 // one sign-in attempt per device, two per run, against QA's 60/minute cap (see personas.setup.ts).
 //
 // The new password is made here at run time and typed with fillSecret, never fill(), so it stays
-// out of the report's step titles and the trace's action log (see support/secret-input.ts).
+// out of the report's step titles and the trace's action log (see support/secret.ts).
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { test, expect } from "./support/journey";
 import type { Locator, Page } from "@playwright/test";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { scratchForProject, scratchStorageStateForProject } from "./support/personas";
-import { fillSecret } from "./support/secret-input";
+import { Secret, fillSecret } from "./support/secret";
 
 const SCRATCH_INDEX = 5;
 const SETTINGS = "/account/settings";
@@ -98,7 +98,7 @@ test.describe("Account settings", () => {
     const firstName = `codex_e2e_a_${runId}`;
     const newName = `codex_e2e_b_${runId}`;
     const recipeTitle = `Account Journey Stew ${runId}`;
-    const newPassword = randomBytes(24).toString("base64url");
+    const newPassword = Secret.generate();
 
     // --- A recipe of the chef's own, for the chef link and the avatar on a recipe page.
     await page.goto("/recipes/new");

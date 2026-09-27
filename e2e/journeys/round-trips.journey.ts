@@ -4,7 +4,7 @@
 import { test, expect } from "./support/journey";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { persona } from "./support/personas";
-import { fillSecret } from "./support/secret-input";
+import { fillSecret } from "./support/secret";
 
 const RISOTTO = "/recipes/qa-kitchen-recipe-risotto";
 

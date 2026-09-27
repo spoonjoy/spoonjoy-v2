@@ -5,11 +5,11 @@
 // a loop, clicking inside a .toPass() retry callback or an array-iteration callback) or asserts
 // conditionally, when a @mutates test skips the post-reload check, or when a journey/describe
 // block is skipped, only'd, fixme'd, or marked to fail instead of actually running. It also fails
-// when a password or other secret is typed with fill()/type()/pressSequentially()/insertText(),
-// whose typed value Playwright puts in the public report's step titles (use fillSecret).
+// when a file other than support/secret.ts crosses the secret boundary (see
+// SECRET_BOUNDARY_IDENTIFIERS below).
 //
 // Support helpers run inside journeys, so they get the same retry, click-in-loop, skipped,
-// @mutates and secret-typing rules; only the conditional-assertion rule is journey-only. `test` and `setup` are
+// @mutates and secret-boundary rules; only the conditional-assertion rule is journey-only. `test` and `setup` are
 // both recognised as the test function, as is any local alias of `test` imported from
 // `@playwright/test` or from the journeys' own `support/journey` module
 // (`import { test as t } from "./support/journey"`).
@@ -46,17 +46,21 @@ const ARRAY_ITERATION_METHODS = new Set([
   "findIndex",
 ]);
 
-// Playwright methods that type text and record it: Playwright 1.58 titles their report step with
-// the typed value (protocolMetainfo: 'Fill "{value}"', 'Type "{text}"', 'Insert "{text}"') and keeps
-// it as a call parameter, and the journeys report is public. Secrets go through fillSecret
-// (support/secret-input.ts) instead, which is a plain function call and so is never flagged.
-const TYPING_METHODS = new Set(["fill", "type", "pressSequentially", "insertText"]);
-
-// A field that takes a password (by label, name, type or variable name), or a value that names
-// one. Heuristic by design: it reads source text, and follows a local variable one step to what it
-// was set to, so `const box = page.getByLabel("Password"); box.fill(x)` is caught too.
-const SECRET_FIELD_PATTERN = /passw(?:or)?d|secret|credential/i;
-const SECRET_VALUE_PATTERN = /passw(?:or)?d|secret|credential|token/i;
+// The secret boundary (e2e/journeys/support/secret.ts): passwords are Secret values, which
+// fill(), type() and toHaveValue() don't accept, so the typecheck (tsconfig.e2e.json) stops a
+// password reaching a step title or an assertion message. This rule is the backstop for the ways
+// around that type: outside the Secret module, nothing may call its private reveal function, use
+// a raw password source (the disposable-user factory and readers in e2e/support/disposable-auth,
+// which the Secret module wraps), or JSON.parse the QA credentials file (parseCredentialsJson
+// turns its passwords into Secrets).
+const SECRET_MODULE_SUFFIX = "support/secret.ts";
+const SECRET_BOUNDARY_IDENTIFIERS = new Set([
+  "revealSecret",
+  "createDisposableE2EUser",
+  "readDisposableE2EUsers",
+  "readLatestDisposableE2EUser",
+]);
+const CREDENTIALS_FILE_MARKERS = /SPOONJOY_QA_CREDENTIALS|credentials\.json/;
 
 // Playwright's `test`/`test.describe` modifiers. `test.<modifier>(...)` is still a real test
 // (rule 4 must still check it for a missing reload check), and both `test.<modifier>(...)` and
@@ -118,39 +122,18 @@ function isClickLikeCall(node) {
   );
 }
 
-// Every `const x = <initializer>` in the file, by name, so a typing call on (or of) a local variable
-// can be judged by what the variable holds.
-function collectVariableInitializers(sourceFile) {
-  const initializers = new Map();
-  function walk(node) {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
-      initializers.set(node.name.text, node.initializer.getText(sourceFile));
-    }
-    ts.forEachChild(node, walk);
-  }
-  walk(sourceFile);
-  return initializers;
+function isSecretModule(fileName) {
+  return fileName.split(path.sep).join("/").endsWith(SECRET_MODULE_SUFFIX);
 }
 
-// The expression's own text, plus what its root variable was set to, if it is a local variable.
-function expressionTexts(expression, sourceFile, initializers) {
-  const texts = [expression.getText(sourceFile)];
-  let root = expression;
-  while (ts.isPropertyAccessExpression(root) || ts.isCallExpression(root)) root = root.expression;
-  if (ts.isIdentifier(root) && initializers.has(root.text)) texts.push(initializers.get(root.text));
-  return texts;
-}
-
-// `<locator>.fill(<value>)` (or type/pressSequentially/insertText) where the locator is a password
-// field or the value names a secret.
-function isSecretTypingCall(node, sourceFile, initializers) {
-  if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return false;
-  if (!TYPING_METHODS.has(node.expression.name.text)) return false;
-  const receiverTexts = expressionTexts(node.expression.expression, sourceFile, initializers);
-  if (receiverTexts.some((text) => SECRET_FIELD_PATTERN.test(text))) return true;
-  const value = node.arguments[0];
-  if (!value) return false;
-  return expressionTexts(value, sourceFile, initializers).some((text) => SECRET_VALUE_PATTERN.test(text));
+function isJsonParseCall(node) {
+  return (
+    ts.isCallExpression(node) &&
+    ts.isPropertyAccessExpression(node.expression) &&
+    ts.isIdentifier(node.expression.expression) &&
+    node.expression.expression.text === "JSON" &&
+    node.expression.name.text === "parse"
+  );
 }
 
 function isInsideLoop(node) {
@@ -302,14 +285,15 @@ function containsVerifyAfterReloadCall(node) {
  * @returns {Array<{
  *   file: string,
  *   line: number,
- *   rule: "no-retry-config" | "no-click-in-loop" | "no-assertion-in-if" | "no-skipped-journeys" | "mutation-needs-reload-check" | "no-secret-fill",
+ *   rule: "no-retry-config" | "no-click-in-loop" | "no-assertion-in-if" | "no-skipped-journeys" | "mutation-needs-reload-check" | "secret-boundary",
  *   message: string,
  * }>}
  */
 export function checkJourneySource(fileName, source, { kind = "journey" } = {}) {
   const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const testNames = collectTestNames(sourceFile);
-  const initializers = collectVariableInitializers(sourceFile);
+  const checkSecretBoundary = !isSecretModule(fileName);
+  const readsCredentialsFile = CREDENTIALS_FILE_MARKERS.test(source);
   const checkConditionalAssertions = kind === "journey";
   const violations = [];
 
@@ -338,11 +322,19 @@ export function checkJourneySource(fileName, source, { kind = "journey" } = {}) 
       );
     }
 
-    if (isSecretTypingCall(node, sourceFile, initializers)) {
+    if (checkSecretBoundary && ts.isIdentifier(node) && SECRET_BOUNDARY_IDENTIFIERS.has(node.text)) {
       report(
         node,
-        "no-secret-fill",
-        `"${node.expression.name.text}" must not type a password or other secret; Playwright puts the typed value in the public report's step title. Use fillSecret(locator, value) from support/secret-input.ts.`,
+        "secret-boundary",
+        `"${node.text}" is a raw password source; only support/secret.ts may use it. Passwords are Secret values typed with fillSecret (support/secret.ts).`,
+      );
+    }
+
+    if (checkSecretBoundary && readsCredentialsFile && isJsonParseCall(node)) {
+      report(
+        node,
+        "secret-boundary",
+        "Parse the QA credentials file with parseCredentialsJson (support/secret.ts), which turns its passwords into Secret values, not JSON.parse.",
       );
     }
 

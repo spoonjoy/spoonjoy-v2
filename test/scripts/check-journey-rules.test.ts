@@ -284,54 +284,44 @@ describe("checkJourneySource", () => {
     });
   });
 
-  describe("no-secret-fill", () => {
-    it("flags fill() into a field labelled Password, whatever is typed", () => {
-      expect(rules(`await page.getByLabel("Password").fill(value);`)).toEqual(["no-secret-fill"]);
-      expect(rules(`await page.getByLabel("Confirm Password", { exact: true }).fill(value);`)).toEqual(["no-secret-fill"]);
-      expect(rules(`await section.getByRole("textbox", { name: /current password/i }).fill(value);`)).toEqual([
-        "no-secret-fill",
+  describe("secret-boundary", () => {
+    it("flags revealing a Secret outside the Secret module", () => {
+      expect(rules(`import { revealSecret } from "./support/secret"; await page.fill("#pw", revealSecret(s));`)).toEqual([
+        "secret-boundary",
+        "secret-boundary",
+      ]);
+      expect(supportRules(`const text = secretModule.revealSecret(s);`)).toEqual(["secret-boundary"]);
+    });
+
+    it("flags a raw password source: the disposable-user factory and its readers", () => {
+      expect(rules(`import { createDisposableE2EUser } from "../support/disposable-auth";`)).toEqual(["secret-boundary"]);
+      expect(supportRules(`const user = auth.readLatestDisposableE2EUser();`)).toEqual(["secret-boundary"]);
+      expect(supportRules(`for (const u of readDisposableE2EUsers()) {}`)).toEqual(["secret-boundary"]);
+    });
+
+    it("flags parsing the credentials file with JSON.parse instead of parseCredentialsJson", () => {
+      expect(
+        supportRules(`const raw = readFileSync(process.env.SPOONJOY_QA_CREDENTIALS!, "utf8"); const c = JSON.parse(raw);`),
+      ).toEqual(["secret-boundary"]);
+      expect(supportRules(`const c = JSON.parse(readFileSync(".journeys/credentials.json", "utf8"));`)).toEqual([
+        "secret-boundary",
       ]);
     });
 
-    it("flags fill() into a password input selected by name or type", () => {
-      expect(rules(`await page.locator('input[name="password"]:visible').fill(value);`)).toEqual(["no-secret-fill"]);
-      expect(rules(`await page.locator("input[type=password]").fill(value);`)).toEqual(["no-secret-fill"]);
-      expect(rules(`await page.locator('input[name="confirmPassword"]').fill(value);`)).toEqual(["no-secret-fill"]);
-    });
-
-    it("flags fill() of a value that names a password, secret, credential or token", () => {
-      expect(rules(`await field.fill(user.password);`)).toEqual(["no-secret-fill"]);
-      expect(rules(`await field.fill(newPassword);`)).toEqual(["no-secret-fill"]);
-      expect(rules(`await field.fill(account.secret);`)).toEqual(["no-secret-fill"]);
-      expect(rules(`await field.fill(credentials.value);`)).toEqual(["no-secret-fill"]);
-      expect(rules(`await field.fill(apiToken);`)).toEqual(["no-secret-fill"]);
-      expect(rules(`await field.fill("definitely-not-the-password");`)).toEqual(["no-secret-fill"]);
-    });
-
-    it("follows a local variable to the locator or value it was set to", () => {
-      expect(rules(`const box = page.getByLabel("New Password"); await box.fill(value);`)).toEqual(["no-secret-fill"]);
-      expect(rules(`const typed = persona("chef").password; await field.fill(typed);`)).toEqual(["no-secret-fill"]);
-    });
-
-    it("flags the other typing methods too", () => {
-      expect(rules(`await page.getByLabel("Password").type(value);`)).toEqual(["no-secret-fill"]);
-      expect(rules(`await field.pressSequentially(user.password);`)).toEqual(["no-secret-fill"]);
-      expect(rules(`await page.keyboard.insertText(user.password);`)).toEqual(["no-secret-fill"]);
-    });
-
-    it("flags it in support helpers as well as journeys", () => {
-      expect(supportRules(`export async function login(page, user) { await page.getByLabel("Password").fill(user.password); }`)).toEqual([
-        "no-secret-fill",
-      ]);
-    });
-
-    it("allows fillSecret and ordinary fills", () => {
-      expect(rules(`await fillSecret(page.getByLabel("Password"), user.password);`)).toEqual([]);
-      expect(rules(`await page.getByLabel("Username or email").fill(user.username);`)).toEqual([]);
-      expect(rules(`const box = page.getByLabel("Search terms"); await box.fill("lemon");`)).toEqual([]);
-      expect(rules(`await field.fill(typed);`)).toEqual([]);
-      expect(rules(`await field.fill();`)).toEqual([]);
-      expect(rules(`await fill(user.password);`)).toEqual([]);
+    it("allows the Secret module itself, parseCredentialsJson, and unrelated JSON.parse", () => {
+      const secretModule = (src: string) =>
+        checkJourneySource("e2e/journeys/support/secret.ts", src, { kind: "support" }).map((v: { rule: string }) => v.rule);
+      expect(
+        secretModule(
+          `import { createDisposableE2EUser } from "../../support/disposable-auth"; function revealSecret(s) { return s; } revealSecret(x); JSON.parse(text);`,
+        ),
+      ).toEqual([]);
+      expect(
+        supportRules(`const raw = readFileSync(process.env.SPOONJOY_QA_CREDENTIALS!, "utf8"); const c = parseCredentialsJson(raw);`),
+      ).toEqual([]);
+      expect(supportRules(`const parsed = JSON.parse(attachment.body.toString("utf8"));`)).toEqual([]);
+      expect(rules(`await fillSecret(page.getByLabel("Password"), persona("chef").password);`)).toEqual([]);
+      expect(rules(`await page.getByLabel("Search").fill("secret sauce");`)).toEqual([]);
     });
   });
 

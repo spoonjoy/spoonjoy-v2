@@ -3,9 +3,8 @@
 // (codex-e2e-*, removed by the workflow's QA cleanup) who forks Lemon Herb Rice, leaving the
 // personas' lists untouched.
 import { test, expect } from "./support/journey";
-import { createDisposableE2EUser } from "../support/disposable-auth";
 import { pathUrl, waitForHydration } from "./support/navigation";
-import { fillSecret } from "./support/secret-input";
+import { createDisposableJourneyUser, fillSecret } from "./support/secret";
 
 const LEMON_RICE = "/recipes/qa-kitchen-recipe-lemon-rice";
 
@@ -13,7 +12,7 @@ test.describe("Recipe dock list action on iPhone", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
   test("the dock adds ingredients at the current scale and then reads as already on the list @mutates", async ({ page, verifyAfterReload, expectAccessible }) => {
-    const user = createDisposableE2EUser();
+    const user = createDisposableJourneyUser();
     const dock = page.getByRole("navigation", { name: "Spoonjoy navigation" });
     const scaleDisplay = page.getByTestId("scale-display");
     const increaseScale = page.getByRole("button", { name: "Increase scale" });

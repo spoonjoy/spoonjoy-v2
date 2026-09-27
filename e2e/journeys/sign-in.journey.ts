@@ -1,7 +1,7 @@
 import { test, expect, appendConsoleIssues, assertNoConsoleIssues, watchConsole } from "./support/journey";
 import { persona } from "./support/personas";
 import { signInThroughForm } from "./support/sign-in";
-import { fillSecret } from "./support/secret-input";
+import { Secret, fillSecret } from "./support/secret";
 
 test.describe("Sign-in", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
@@ -45,7 +45,7 @@ test.describe("Sign-in", () => {
     });
     await page.goto("/login");
     await page.getByLabel("Username or email").fill(persona("friend").username);
-    await fillSecret(page.getByLabel("Password"), "definitely-not-the-password");
+    await fillSecret(page.getByLabel("Password"), new Secret("definitely-not-the-password"));
     await page.getByRole("button", { name: "Log In", exact: true }).click();
     await expect(page.getByText("Invalid username, email, or password")).toBeVisible();
     await expect(page).toHaveURL(/\/login/);

@@ -4,7 +4,7 @@ import {
   recordDisposableE2EUser,
   writeDisposableE2EAuthState,
 } from './support/disposable-auth';
-import { fillSecret } from './journeys/support/secret-input';
+import { Secret, fillSecret } from './journeys/support/secret';
 
 setup('authenticate', async ({ page }) => {
   const user = createDisposableE2EUser();
@@ -12,8 +12,8 @@ setup('authenticate', async ({ page }) => {
   await page.goto('/signup');
   await page.locator('input[name="email"]:visible').fill(user.email);
   await page.locator('input[name="username"]:visible').fill(user.username);
-  await fillSecret(page.locator('input[name="password"]:visible'), user.password);
-  await fillSecret(page.locator('input[name="confirmPassword"]:visible'), user.password);
+  await fillSecret(page.locator('input[name="password"]:visible'), new Secret(user.password));
+  await fillSecret(page.locator('input[name="confirmPassword"]:visible'), new Secret(user.password));
   await page.getByRole('button', { name: /sign up/i }).first().click();
 
   // Wait for redirect away from /signup — signup redirects to /recipes by default,
