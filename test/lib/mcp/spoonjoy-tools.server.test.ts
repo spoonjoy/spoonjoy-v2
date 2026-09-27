@@ -1221,6 +1221,24 @@ describe("spoonjoy MCP tools", () => {
     expect(fallback.imageUrl).toBe(`data:image/png;base64,${b64(VALID_PNG_BYTES)}`);
   });
 
+  it("uses the account an owner email already has in another case instead of creating a second one", async () => {
+    const email = context.defaultOwnerEmail!;
+    const mixedCase = await context.db.user.create({
+      data: { email: email.toUpperCase(), username: `mixed-${faker.string.alphanumeric(8).toLowerCase()}` },
+    });
+
+    const created = parseJson(await callSpoonjoyMcpTool("create_api_token", { name: "Case token" }, context));
+    await expect(authenticateApiToken(context.db, created.token as string)).resolves.toMatchObject({ id: mixedCase.id });
+    await expect(context.db.user.count()).resolves.toBe(1);
+
+    // Where both cases exist, the exact match wins.
+    const exact = await context.db.user.create({
+      data: { email, username: `exact-${faker.string.alphanumeric(8).toLowerCase()}` },
+    });
+    const second = parseJson(await callSpoonjoyMcpTool("create_api_token", { name: "Exact token" }, context));
+    await expect(authenticateApiToken(context.db, second.token as string)).resolves.toMatchObject({ id: exact.id });
+  });
+
   it("reports health and writable state", async () => {
     expect(parseJson(await callSpoonjoyMcpTool("health", {}, context))).toMatchObject({
       ok: true,

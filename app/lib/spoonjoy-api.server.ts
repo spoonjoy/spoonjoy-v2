@@ -792,8 +792,20 @@ async function uniqueUsername(db: Database, email: string): Promise<string> {
   return candidate;
 }
 
+/**
+ * The account for an email, matched case-insensitively as sign-up checks it (the unique index
+ * on email is case-sensitive), preferring an exact match. Without this, an account stored with
+ * different case would get a second account for the same person.
+ */
+async function findOwnerByEmail(db: Database, email: string) {
+  const rows = await db.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM User WHERE LOWER(email) = ${email.toLowerCase()} ORDER BY email = ${email} DESC LIMIT 1
+  `;
+  return rows[0] ? db.user.findUnique({ where: { id: rows[0].id } }) : null;
+}
+
 async function getOrCreateOwner(db: Database, email: string) {
-  const existing = await db.user.findUnique({ where: { email } });
+  const existing = await findOwnerByEmail(db, email);
   if (existing) return existing;
 
   return db.user.create({
