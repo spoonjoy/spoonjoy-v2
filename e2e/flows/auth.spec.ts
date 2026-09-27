@@ -98,7 +98,7 @@ test.describe('Auth Flow', () => {
     const mainServer = createServer((request, response) => {
       mainRequests.push({
         path: request.url ?? '',
-        override: request.headers[OVERRIDE_HEADER] ?? null,
+        override: [request.headers[OVERRIDE_HEADER]].flat().join(',') || null,
       });
       if (request.url === '/same-origin-start') {
         response.writeHead(302, { Location: '/same-origin-target' });
