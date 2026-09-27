@@ -23,6 +23,7 @@ import { Dialog, DialogActions, DialogBody, DialogDescription, DialogTitle } fro
 import { Field, Label } from "~/components/ui/fieldset";
 import { Heading } from "~/components/ui/heading";
 import { Input } from "~/components/ui/input";
+import { ValidationError } from "~/components/ui/validation-error";
 import { Link } from "~/components/ui/link";
 import { Text } from "~/components/ui/text";
 import { RecipeHeader } from "~/components/recipe/RecipeHeader";
@@ -568,6 +569,7 @@ export default function RecipeDetail() {
   const [isSpoonDialogOpen, setIsSpoonDialogOpen] = useState(false);
   const [showOwnerTools, setShowOwnerTools] = useState(false);
   const [newCookbookTitle, setNewCookbookTitle] = useState("");
+  const [createCookbookError, setCreateCookbookError] = useState<string | null>(null);
   const saveModalTitleRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -590,6 +592,7 @@ export default function RecipeDetail() {
       return;
     }
 
+    setCreateCookbookError(null);
     setIsSaveModalOpen(true);
   }, [isAuthenticated, loginRedirect]);
 
@@ -825,6 +828,14 @@ export default function RecipeDetail() {
       lastHandledCreatedCookbookId.current = createCookbookFetcher.data.newCookbook.id;
     }
   }, [createCookbookFetcher.data, availableCookbooks, savedCookbookIds]);
+
+  // A refused "Create & Save" (a title the user already has) shows its error under the field.
+  useEffect(() => {
+    const result = createCookbookFetcher.data as { intent?: unknown; error?: unknown } | undefined;
+    if (result?.intent === "createCookbookAndSave" && typeof result.error === "string") {
+      setCreateCookbookError(result.error);
+    }
+  }, [createCookbookFetcher.data]);
 
   const handleToggleCookbookSave = (cookbookId: string) => {
     const isCurrentlySaved = savedCookbookIds.has(cookbookId);
@@ -1095,10 +1106,15 @@ export default function RecipeDetail() {
                   type="text"
                   placeholder="Cookbook name"
                   value={newCookbookTitle}
-                  onChange={(event) => setNewCookbookTitle(event.target.value)}
+                  onChange={(event) => {
+                    setNewCookbookTitle(event.target.value);
+                    setCreateCookbookError(null);
+                  }}
+                  invalid={createCookbookError ? true : undefined}
                   data-testid="new-cookbook-input"
                 />
               </Field>
+              <ValidationError error={createCookbookError} />
               <Button
                 type="submit"
                 disabled={newCookbookTitle.trim().length === 0 || createCookbookFetcher.state !== "idle"}

@@ -69,6 +69,29 @@ function isCookbookMembershipUniqueConflict(error: unknown): boolean {
   return false;
 }
 
+// A cookbook title the author already uses (the Cookbook (authorId, title) unique index), from
+// local Prisma (P2002 on those fields) or from native D1 (SQLite's constraint message).
+export function isCookbookTitleUniqueConflict(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as {
+    code?: unknown;
+    meta?: { target?: unknown } | null;
+    message?: unknown;
+  };
+  const target = candidate.meta?.target;
+  if (
+    candidate.code === "P2002" &&
+    Array.isArray(target) &&
+    target.length === 2 &&
+    target[0] === "authorId" &&
+    target[1] === "title"
+  ) {
+    return true;
+  }
+  return typeof candidate.message === "string" &&
+    /UNIQUE constraint failed: Cookbook\.authorId, Cookbook\.title(?![A-Za-z0-9_.]|\s*,)/.test(candidate.message);
+}
+
 function requiredD1Changes(results: CompatibleD1Result[]): number {
   const changes = results[0]?.meta?.changes;
   if (typeof changes !== "number") {

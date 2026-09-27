@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Outlet, useLocation, useNavigate, useNavigationType, useRevalidator } from "react-router";
+import { data as routerData, Outlet, useLocation, useNavigate, useNavigationType, useRevalidator } from "react-router";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import { ToastProvider } from "~/components/ui/toast";
@@ -2233,6 +2233,25 @@ describe("Recipes $id Route", () => {
       } as any)).rejects.toMatchObject({ code: "P2003" });
     });
 
+    it("answers 400 with the error when creating a cookbook with a title the user already has", async () => {
+      const title = "Taken Cookbook " + faker.string.alphanumeric(6);
+      await db.cookbook.create({ data: { title, authorId: testUserId } });
+
+      const result = await action({
+        request: await createFormRequest({ intent: "createCookbookAndSave", title }, testUserId),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(result).toMatchObject({
+        type: "DataWithResponseInit",
+        data: { error: "You already have a cookbook with this title", intent: "createCookbookAndSave" },
+        init: { status: 400 },
+      });
+      await expect(db.cookbook.count({ where: { authorId: testUserId, title } })).resolves.toBe(1);
+      await expect(db.recipeInCookbook.count({ where: { recipeId } })).resolves.toBe(0);
+    });
+
     it("throws 400 when creating a cookbook with a blank title", async () => {
       const request = await createFormRequest(
         { intent: "createCookbookAndSave", title: "   " },
@@ -2421,6 +2440,65 @@ describe("Recipes $id Route", () => {
       expect(createdCookbook).toBeInTheDocument();
       expect(createdCookbook).toHaveTextContent("✓");
       expect(createdCookbook).toHaveAttribute("aria-pressed", "true");
+      await closeSaveModal(user);
+    });
+
+    it("shows a failed Create & Save's error in the save modal and clears it when the title changes", async () => {
+      const user = userEvent.setup();
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Save Modal Recipe",
+          description: null,
+          servings: null,
+          coverImageUrl: null,
+          chef: { id: "user-1", username: "testchef" },
+          steps: [],
+        },
+        isOwner: true,
+        cookbooks: [{ id: "cb-1", title: "Weeknights" }],
+        savedInCookbookIds: [],
+      };
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader: () => mockData,
+          action: () => routerData(
+            { error: "You already have a cookbook with this title", intent: "createCookbookAndSave" },
+            { status: 400 },
+          ),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+      await screen.findByRole("heading", { name: "Save Modal Recipe" });
+
+      await openSaveModalFromDock();
+      const dialog = await screen.findByRole("dialog", { name: "Save to Cookbook" });
+
+      const titleInput = screen.getByLabelText("Create new cookbook");
+      await user.type(titleInput, "Weeknights");
+      await user.click(screen.getByRole("button", { name: "Create & Save" }));
+
+      expect(await within(dialog).findByRole("alert")).toHaveTextContent("You already have a cookbook with this title");
+      expect(titleInput).toHaveAttribute("aria-invalid", "true");
+      expect(titleInput).toHaveValue("Weeknights");
+      expect(screen.getByTestId("cookbook-item-cb-1")).toHaveAttribute("aria-pressed", "false");
+
+      await user.type(titleInput, " again");
+      expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+      expect(titleInput).not.toHaveAttribute("aria-invalid");
+
+      await user.click(screen.getByRole("button", { name: "Create & Save" }));
+      expect(await within(dialog).findByRole("alert")).toBeInTheDocument();
+      await closeSaveModal(user);
+
+      // Reopening starts clean.
+      await openSaveModalFromDock();
+      const reopened = await screen.findByRole("dialog", { name: "Save to Cookbook" });
+      expect(within(reopened).queryByRole("alert")).not.toBeInTheDocument();
       await closeSaveModal(user);
     });
 

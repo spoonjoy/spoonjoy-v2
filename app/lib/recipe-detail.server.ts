@@ -1,5 +1,5 @@
 import type { AppLoadContext } from "react-router";
-import { redirect } from "react-router";
+import { data, redirect } from "react-router";
 import { deferBackgroundTask } from "~/lib/background-task.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import {
@@ -39,6 +39,7 @@ import {
   addRecipeToCookbook,
   asCompatibleCookbookD1Database,
   createCookbookWithRecipe,
+  isCookbookTitleUniqueConflict,
   removeRecipeFromCookbook,
 } from "~/lib/cookbook-membership-compat.server";
 import {
@@ -823,6 +824,13 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
       const cutoverResponse = productActivationPendingWebResponse(error);
       if (cutoverResponse) {
         return cutoverResponse;
+      }
+      // A title the user already has is their mistake to fix in the Save dialog, not a crash.
+      if (isCookbookTitleUniqueConflict(error)) {
+        return data(
+          { error: "You already have a cookbook with this title", intent: "createCookbookAndSave" },
+          { status: 400 },
+        );
       }
       throw error;
     }
