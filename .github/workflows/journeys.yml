@@ -85,14 +85,17 @@ jobs:
         run: node scripts/wait-for-qa-turn.mjs
 
   # `journeys` is the required check. It runs even when qa-turn failed or timed out (a skipped
-  # required check would count as passing) and then fails in its first step. Steps that touch QA
-  # after a failure (tail, rotate, cleanup) run only when this run actually got its turn.
+  # required check would count as passing) and then fails in its first step. The queue only
+  # orders runs: it reads the Actions API, which can lag, so before deploying the job also takes
+  # an atomic lock in QA's own D1 (scripts/qa-lock.mjs) and releases it as its last step. Steps
+  # that touch QA after a failure (tail, rotate, cleanup) run only while this run holds the lock.
+  # The job timeout stays below the lock's 45-minute expiry.
   journeys:
     needs: qa-turn
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     name: journeys
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -136,6 +139,12 @@ jobs:
 
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium webkit
+
+      # The atomic step: one D1 statement takes the lock only if it is free or expired, and the
+      # row is read back to confirm this run and attempt hold it. Waits up to 10 minutes.
+      - name: Take the QA lock
+        id: qa-lock
+        run: node scripts/qa-lock.mjs acquire --target-env qa
 
       - name: Deploy this build to QA
         run: pnpm run deploy:qa
@@ -185,7 +194,7 @@ jobs:
       # the summary says `complete: false` and the log warns: that is no evidence, not a clean
       # run. The raw stream is then deleted.
       - name: Stop QA Worker tail and summarise it
-        if: always() && needs.qa-turn.result == 'success'
+        if: always() && steps.qa-lock.outcome == 'success'
         continue-on-error: true
         run: |
           mkdir -p .worker-tail test-results
@@ -229,12 +238,12 @@ jobs:
       # Runs even if the journeys failed; if the seed step never ran, re-seeding is harmless.
       - name: Rotate persona passwords
         id: rotate-passwords
-        if: always() && needs.qa-turn.result == 'success'
+        if: always() && steps.qa-lock.outcome == 'success'
         run: pnpm run seed:qa:kitchen -- --rotate
 
       - name: Clean up disposable QA data
         id: cleanup-qa-data
-        if: always() && needs.qa-turn.result == 'success'
+        if: always() && steps.qa-lock.outcome == 'success'
         run: node scripts/warning-gate.ts -- pnpm run cleanup:remote:qa:apply
 
       - name: Remove credentials and session files
@@ -268,7 +277,8 @@ jobs:
       # Traces keep the action log (with typed values), DOM snapshots, screencast frames and
       # test source. It is safe to publish because (1) "Rotate persona passwords" has already
       # replaced every persona password, invalidated every scratch-user password it contains
-      # and revoked every persona and scratch-user session from the run, (2) "Clean up disposable QA data" has removed the (now-invalidated) scratch
+      # and revoked every persona and scratch-user session from the run, (2) "Clean up
+      # disposable QA data" has removed the (now-invalidated) scratch
       # users and every other disposable row, and (3) "Strip network logs from traces" has
       # removed network logs and redacted session cookies and storage state from every trace.
       # Upload runs only if all three steps succeeded, and only the report matching $SUITE
@@ -295,3 +305,9 @@ jobs:
             test-results/
           retention-days: 30
           include-hidden-files: false
+
+      # Last step, so QA stays locked through rotate and cleanup. Deletes the lock only if this
+      # run and attempt hold it; a failed release only warns, and the lock then expires.
+      - name: Release the QA lock
+        if: always() && steps.qa-lock.outcome == 'success'
+        run: node scripts/qa-lock.mjs release --target-env qa

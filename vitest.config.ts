@@ -26,6 +26,7 @@ const coverageInclude = [
   "scripts/check-journey-rules.mjs",
   "scripts/sanitize-journey-traces.mjs",
   "scripts/wait-for-qa-turn.mjs",
+  "scripts/qa-lock.mjs",
   "test/warning-policy.ts",
   "e2e/warning-policy.ts",
   "e2e/fixtures.ts",

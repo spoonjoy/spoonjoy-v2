@@ -492,13 +492,15 @@ describe("Journeys workflow queue wiring", () => {
 
   it("never touches QA from a run that did not get its turn", () => {
     // always() steps would otherwise rotate passwords and clean up QA under another run's feet.
-    for (const name of ["Stop QA Worker tail and summarise it", "Rotate persona passwords", "Clean up disposable QA data"]) {
-      const step = journeysSteps.find((candidate) => candidate.name === name);
-      expect(step?.if, name).toBe("always() && needs.qa-turn.result == 'success'");
-    }
+    // They require the QA lock, which is only taken after the turn gate passes.
+    const gate = journeysSteps.findIndex((candidate) => candidate.name === "Require this run's turn on QA");
+    const lock = journeysSteps.findIndex((candidate) => candidate.name === "Take the QA lock");
+    expect(gate).toBe(0);
+    expect(lock).toBeGreaterThan(gate);
+    expect(journeysSteps[lock].if).toBeUndefined();
     for (const step of journeysSteps.filter((candidate) => candidate.if?.startsWith("always()"))) {
       if (step.name === "Remove credentials and session files" || step.name === "Strip network logs from traces") continue;
-      expect(step.if, step.name).toContain("needs.qa-turn.result == 'success'");
+      expect(step.if, step.name).toBe("always() && steps.qa-lock.outcome == 'success'");
     }
   });
 

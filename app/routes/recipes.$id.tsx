@@ -1042,7 +1042,7 @@ export default function RecipeDetail() {
         initialFocus={saveModalTitleRef}
         autoFocus={false}
         size="md"
-        className="mb-24 max-h-[calc(100dvh-7.5rem)] overflow-hidden !rounded-[var(--sj-radius-surface)] !shadow-[var(--sj-shadow)] pb-[max(0.75rem,env(safe-area-inset-bottom))] data-enter:duration-200 data-enter:ease-out data-leave:duration-150 data-leave:ease-in data-closed:translate-y-4 data-enter:data-closed:translate-y-4 sm:mb-auto sm:max-h-[calc(100dvh-4rem)] sm:data-closed:translate-y-1"
+        className="mb-24 max-h-[calc(100dvh-7.5rem)] overflow-hidden !rounded-[var(--sj-radius-surface)] !shadow-[var(--sj-shadow)] pb-[max(0.75rem,env(safe-area-inset-bottom))] data-enter:duration-200 data-enter:ease-out data-leave:duration-150 data-leave:ease-in data-leave:data-closed:translate-y-4 sm:mb-auto sm:max-h-[calc(100dvh-4rem)] sm:data-leave:data-closed:translate-y-1"
       >
         <div className="flex max-h-full flex-col" data-testid="save-modal">
           <div className="flex items-start justify-between gap-3">

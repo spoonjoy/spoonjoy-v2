@@ -2378,11 +2378,9 @@ describe("Recipes $id Route", () => {
       expect(backdrop).toBeTruthy();
       expect(panel).toBeTruthy();
       expect(backdrop).toHaveClass("data-enter:duration-300", "data-leave:duration-200");
-      expect(panel).toHaveClass(
-        "data-closed:translate-y-4",
-        "data-enter:data-closed:translate-y-4",
-        "data-closed:opacity-0"
-      );
+      // The sheet fades in place (its cookbook buttons never move under a tap) and slides only on leave.
+      expect(panel).toHaveClass("data-leave:data-closed:translate-y-4", "data-closed:opacity-0");
+      expect(panel?.className.split(/\s+/).filter((name) => /translate|scale/.test(name) && !name.includes("data-leave:"))).toEqual([]);
       expect(panel?.className).toContain("mb-24");
       expect(panel?.className).toContain("max-h-[calc(100dvh-7.5rem)]");
       expect(panel?.className).toContain("sm:mb-auto");
