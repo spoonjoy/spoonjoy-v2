@@ -598,7 +598,7 @@ export async function runOAuthNavigationCanary({
   expectedClientId,
   expectedRedirectUri,
   expectedResponseMode,
-  redirectTo = null,
+  redirectTo = /** @type {string | null} */ (null),
   publicSignInMarker,
   publicErrorSentinel,
   observe = observeOAuthNavigationWithPage,

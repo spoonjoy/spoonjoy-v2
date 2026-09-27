@@ -27,13 +27,13 @@ When registered under the server name `spoonjoy`, the harness exposes these firs
 | `delete_recipe` | Soft-delete an owner-scoped recipe so agent-created drafts and test recipes can be cleaned up. |
 | `upload_recipe_image` | Upload JPG/PNG/WebP base64 bytes and receive a Spoonjoy image URL for recipe cover assignment. |
 | `upload_spoon_photo` | Upload JPG/PNG/WebP base64 bytes and receive a Spoonjoy image URL for spoon photo assignment. |
-| `add_recipe_to_shopping_list` | Add all recipe ingredients to the owner shopping list, merging duplicates. |
+| `add_recipe_to_shopping_list` | Add all recipe ingredients to the owner shopping list. Each one adds to the quantity of a matching item still on the list (same ingredient and unit); a removed or cleared matching item comes back at the added quantity, not on top of its old one. |
 | `list_cookbooks` | List cookbooks owned by the configured owner, with active recipe counts and cover recipes. |
 | `get_cookbook` | Fetch one owner-scoped cookbook by `cookbookId`, `title`, or `cookbookTitle`. |
 | `create_cookbook` | Create or return an existing owner-scoped cookbook by exact title. |
 | `add_recipe_to_cookbook` | Idempotently add an active recipe to an owner-scoped cookbook. |
 | `remove_recipe_from_cookbook` | Idempotently remove a recipe from an owner-scoped cookbook. |
-| `add_shopping_list_item` | Add or restore one manual shopping-list item, merging matching owner/unit/ingredient rows. |
+| `add_shopping_list_item` | Add or restore one manual shopping-list item. It adds to the quantity of a matching item still on the list (same ingredient and unit); a removed or cleared matching item comes back at the added quantity, not on top of its old one. |
 | `set_shopping_list_item_checked` | Check or uncheck one active shopping-list item by id. |
 | `remove_shopping_list_item` | Soft-remove one shopping-list item by id. |
 | `get_shopping_list` | Fetch the owner shopping list. |

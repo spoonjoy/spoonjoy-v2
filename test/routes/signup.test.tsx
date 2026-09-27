@@ -312,6 +312,109 @@ describe("Signup Route", () => {
       expect(user?.username).toBe(username);
     });
 
+    describe("username trimming and format (ui-map bug 18)", () => {
+      async function signUpWithUsername(username: string) {
+        const formData = new FormData();
+        formData.set("email", `trim-${faker.string.alphanumeric(10)}@example.com`);
+        formData.set("username", username);
+        formData.set("password", "Valid-Test-Password-42!");
+        formData.set("confirmPassword", "Valid-Test-Password-42!");
+        return action({
+          request: new Request("http://localhost:3000/signup", { method: "POST", body: formData }),
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any);
+      }
+
+      it("stores a username typed with surrounding spaces without them", async () => {
+        const username = `trimmed_${faker.string.alphanumeric(8)}`;
+
+        const response = await signUpWithUsername(`  ${username}  `);
+
+        expect(response).toBeInstanceOf(Response);
+        expect((response as Response).status).toBe(302);
+        const user = await db.user.findUnique({ where: { username } });
+        expect(user?.username).toBe(username);
+      });
+
+      it("counts the length after trimming, so spaces can't pad a short username", async () => {
+        const { data, status } = extractResponseData(await signUpWithUsername("  ab  "));
+        expect(status).toBe(400);
+        expect(data.errors.username).toBe("Username must be at least 3 characters");
+      });
+
+      it("finds a taken username even when it is typed with surrounding spaces", async () => {
+        const existing = createTestUser();
+        await createUser(db, existing.email, existing.username, "Valid-Test-Password-42!");
+
+        const { data, status } = extractResponseData(await signUpWithUsername(` ${existing.username} `));
+        expect(status).toBe(400);
+        expect(data.errors.username).toBe("This username is already taken");
+      });
+
+      it("rejects a username with a space or a slash inside it", async () => {
+        const spaced = extractResponseData(await signUpWithUsername("chef rj"));
+        expect(spaced.status).toBe(400);
+        expect(spaced.data.errors.username).toBe(
+          "Username can only use letters, numbers, periods, underscores and hyphens",
+        );
+
+        const slashed = extractResponseData(await signUpWithUsername("chef/rj"));
+        expect(slashed.status).toBe(400);
+        expect(slashed.data.errors.username).toBe(
+          "Username can only use letters, numbers, periods, underscores and hyphens",
+        );
+        expect(await db.user.count()).toBe(0);
+      });
+
+      it("finds a taken username in a different letter case", async () => {
+        await createUser(db, `case-${faker.string.alphanumeric(10)}@example.com`, "Alice_Chef", "Valid-Test-Password-42!");
+
+        const { data, status } = extractResponseData(await signUpWithUsername("alice_chef"));
+        expect(status).toBe(400);
+        expect(data.errors.username).toBe("This username is already taken");
+      });
+
+      it("refuses another account's ID, and any username shaped like an ID", async () => {
+        const other = await db.user.create({
+          data: { id: "qa-seeded-chef", email: `seeded-${faker.string.alphanumeric(10)}@example.com`, username: "qa_seeded" },
+        });
+
+        const taken = extractResponseData(await signUpWithUsername(other.id));
+        expect(taken.status).toBe(400);
+        expect(taken.data.errors.username).toBe("This username is already taken");
+
+        const idShaped = extractResponseData(await signUpWithUsername("cmg1a2b3c0000d4e5f6g7h8i9"));
+        expect(idShaped.status).toBe(400);
+        expect(idShaped.data.errors.username).toBe("Username can't look like an account ID");
+      });
+
+      it("trims the email before checking and storing it", async () => {
+        const username = `email_trim_${faker.string.alphanumeric(8)}`;
+        const formData = new FormData();
+        formData.set("email", "  Spaced.Chef@Example.com  ");
+        formData.set("username", username);
+        formData.set("password", "Valid-Test-Password-42!");
+        formData.set("confirmPassword", "Valid-Test-Password-42!");
+
+        const response = await action({
+          request: new Request("http://localhost:3000/signup", { method: "POST", body: formData }),
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any);
+
+        expect((response as Response).status).toBe(302);
+        const user = await db.user.findUnique({ where: { username } });
+        expect(user?.email).toBe("spaced.chef@example.com");
+      });
+
+      it("rejects a username longer than 50 characters", async () => {
+        const { data, status } = extractResponseData(await signUpWithUsername("a".repeat(51)));
+        expect(status).toBe(400);
+        expect(data.errors.username).toBe("Username must be at most 50 characters");
+      });
+    });
+
     it("should handle multiple validation errors at once", async () => {
       const formData = new FormData();
       formData.set("email", "");

@@ -1,30 +1,35 @@
 // Persona lookup for the QA journeys. Credentials come from the JSON file scripts/seed-qa-kitchen.mjs
 // writes (path in env SPOONJOY_QA_CREDENTIALS), shaped as:
 //   { "chef": { "username", "email", "password" }, "friend": {...}, "newbie": {...},
-//     "scratch": [{ "username", "email", "password" }, ...] }
+//     "scratch": [{ "username", "email", "password" }, ...],
+//     "scratchDesktop": [{ "username", "email", "password" }, ...] }
 //
 // Loading is intentionally lazy: the credentials file only needs to exist once a persona (or
 // scratch user) is actually used inside a test/setup body. `playwright test --list` never runs
 // test bodies, so listing journeys must not require a real credentials file on disk.
 import { readFileSync } from "node:fs";
+import type { TestInfo } from "@playwright/test";
+import { parseCredentialsJson, type Secret } from "./secret";
 
 export type PersonaName = "chef" | "friend" | "newbie";
 
+// A persona's password is a Secret (support/secret.ts): type it with fillSecret, never fill().
 export interface Persona {
   username: string;
   email: string;
-  password: string;
+  password: Secret;
   storageState: string;
 }
 
 interface PersonaCredentials {
   username: string;
   email: string;
-  password: string;
+  password: Secret;
 }
 
 type CredentialsFile = Record<PersonaName, PersonaCredentials> & {
   scratch: PersonaCredentials[];
+  scratchDesktop?: PersonaCredentials[];
 };
 
 let cachedCredentials: CredentialsFile | undefined;
@@ -41,7 +46,8 @@ function loadCredentials(): CredentialsFile {
   }
 
   const raw = readFileSync(credentialsPath, "utf8");
-  cachedCredentials = JSON.parse(raw) as CredentialsFile;
+  // Every "password" field becomes a Secret as it is parsed.
+  cachedCredentials = parseCredentialsJson(raw, credentialsPath) as CredentialsFile;
   return cachedCredentials;
 }
 
@@ -63,7 +69,7 @@ export function persona(name: PersonaName): Persona {
 // and mutate freely without touching the shared personas or the other scratch indices — see
 // AGENTS.md's Validation section for which journey file owns which index. Using a stored
 // scratch session instead of signing up through /signup keeps journeys off QA's shared
-// 20-per-minute auth rate limit (see personas.setup.ts for the budget accounting).
+// 60-per-minute auth rate limit (see personas.setup.ts for the budget accounting).
 export function scratchStorageStatePath(n: number): string {
   return `e2e/.auth/journeys-scratch-${n}.json`;
 }
@@ -75,4 +81,60 @@ export function scratch(n: number): Persona {
     throw new Error(`No credentials for scratch user ${n} in the file at SPOONJOY_QA_CREDENTIALS.`);
   }
   return { ...entry, storageState: scratchStorageStatePath(n) };
+}
+
+// Per-device scratch twins. The iphone-webkit and desktop-chrome projects run at the same time,
+// and some data is one per user (each user has exactly one shopping list), so a journey whose
+// devices must not share state signs in as scratch index n's base account on iPhone and as its
+// desktop twin (seeded alongside it by scripts/seed-qa-kitchen.mjs) on desktop Chrome. Journeys
+// that don't need the isolation keep using scratch(n) / scratchStorageStatePath(n) on both.
+export const IPHONE_PROJECT = "iphone-webkit";
+export const DESKTOP_PROJECT = "desktop-chrome";
+
+export function scratchDesktopStorageStatePath(n: number): string {
+  return `e2e/.auth/journeys-scratch-${n}-desktop.json`;
+}
+
+export function scratchDesktop(n: number): Persona {
+  const credentials = loadCredentials();
+  const entry = credentials.scratchDesktop?.[n - 1];
+  if (!entry) {
+    throw new Error(`No credentials for scratch user ${n}'s desktop twin in the file at SPOONJOY_QA_CREDENTIALS.`);
+  }
+  return { ...entry, storageState: scratchDesktopStorageStatePath(n) };
+}
+
+// The stored session for scratch index n on one device project: the base account on iPhone, the
+// desktop twin on desktop Chrome. Any other project name is a mistake (the personas setup project
+// never runs journeys), so it throws rather than quietly sharing an account across devices.
+export function scratchStorageStatePathForProject(n: number, projectName: string): string {
+  if (projectName === IPHONE_PROJECT) return scratchStorageStatePath(n);
+  if (projectName === DESKTOP_PROJECT) return scratchDesktopStorageStatePath(n);
+  throw new Error(
+    `No per-device scratch session for project "${projectName}"; expected "${IPHONE_PROJECT}" or "${DESKTOP_PROJECT}".`,
+  );
+}
+
+// The credentials behind scratchStorageStatePathForProject(n, projectName): the base account on
+// iPhone, the desktop twin on desktop Chrome. For a journey that must re-enter its own account's
+// password (account-settings.journey.ts's password change); never log or interpolate the password.
+export function scratchForProject(n: number, projectName: string): Persona {
+  if (projectName === IPHONE_PROJECT) return scratch(n);
+  if (projectName === DESKTOP_PROJECT) return scratchDesktop(n);
+  throw new Error(
+    `No per-device scratch user for project "${projectName}"; expected "${IPHONE_PROJECT}" or "${DESKTOP_PROJECT}".`,
+  );
+}
+
+// Option-fixture form of scratchStorageStatePathForProject, for module- or describe-level use:
+//   test.use({ storageState: scratchStorageStateForProject(3) });
+// Playwright runs a function passed to test.use as that option's fixture, per test, with the
+// test's TestInfo, so each device project resolves its own account. Reading only the path (never
+// the credentials file) keeps `playwright test --list` working without one.
+export function scratchStorageStateForProject(
+  n: number,
+): (args: object, use: (storageState: string) => Promise<void>, testInfo: TestInfo) => Promise<void> {
+  return async ({}, use, testInfo) => {
+    await use(scratchStorageStatePathForProject(n, testInfo.project.name));
+  };
 }

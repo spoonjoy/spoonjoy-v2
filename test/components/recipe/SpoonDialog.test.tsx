@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { createTestRoutesStub } from "../../utils";
 import { SpoonDialog } from "../../../app/components/recipe/SpoonDialog";
+import { withTimeZone } from "../../helpers/timezone";
 
 function renderDialog(props: Partial<React.ComponentProps<typeof SpoonDialog>> = {}) {
   const onClose = props.onClose ?? vi.fn();
@@ -208,6 +209,45 @@ describe("SpoonDialog", () => {
     expect(captured!.get("intent")).toBe("createSpoon");
     expect(captured!.get("note")).toBe("tasted ok");
     expect(captured!.get("useAsRecipeCover")).toBe("true");
+  });
+
+  async function submitCookedAt(typed: string | null): Promise<FormData> {
+    let captured: FormData | null = null;
+    const Stub = createTestRoutesStub([
+      {
+        path: "/",
+        Component: () => (
+          <SpoonDialog isOpen={true} onClose={vi.fn()} actionUrl="/recipes/r1" isOriginCookCandidate={false} />
+        ),
+      },
+      {
+        path: "/recipes/r1",
+        async action({ request }) {
+          captured = await request.formData();
+          return null;
+        },
+        Component: () => <div data-testid="redirected" />,
+      },
+    ]);
+    render(<Stub initialEntries={["/"]} />);
+    await userEvent.type(await screen.findByLabelText(/note/i), "tasted ok");
+    if (typed !== null) {
+      await userEvent.type(screen.getByLabelText(/cooked at/i), typed);
+    }
+    await userEvent.click(screen.getByRole("button", { name: /save spoon/i }));
+    await waitFor(() => expect(captured).not.toBeNull());
+    return captured!;
+  }
+
+  it("sends Cooked at as the instant the cook meant in their own timezone, not a bare wall-clock time", async () => {
+    const captured = await withTimeZone("America/Los_Angeles", () => submitCookedAt("2026-09-26T07:30"));
+    expect(captured.getAll("cookedAt")).toEqual(["2026-09-26T14:30:00.000Z"]);
+  });
+
+  it("sends no Cooked at when none is chosen, so the server uses the time of posting", async () => {
+    const captured = await submitCookedAt(null);
+    // Absent or empty: the server treats both as "now".
+    expect(captured.get("cookedAt") || null).toBeNull();
   });
 
   it("locks the form and ignores duplicate submits while a photo is uploading", async () => {

@@ -59,7 +59,8 @@ export function ProfilePhotoField({ photoUrl }: { photoUrl: string | null }) {
     }
   };
 
-  const errorMessage = validationError ?? (actionData?.error ? actionData.message : null);
+  // Only this field's own upload errors belong here; the page banner shows every other form's.
+  const errorMessage = validationError ?? (actionData?.intent === "uploadPhoto" && actionData.error ? actionData.message : null);
 
   return (
     <div className="mt-4 flex flex-col gap-6 sm:flex-row sm:items-start">

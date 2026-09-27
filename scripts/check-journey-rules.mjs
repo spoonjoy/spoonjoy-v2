@@ -4,10 +4,13 @@
 // journeys themselves, and fails the build when a journey hides flakiness (retries, clicking in
 // a loop, clicking inside a .toPass() retry callback or an array-iteration callback) or asserts
 // conditionally, when a @mutates test skips the post-reload check, or when a journey/describe
-// block is skipped, only'd, fixme'd, or marked to fail instead of actually running.
+// block is skipped, only'd, fixme'd, or marked to fail instead of actually running. It also fails
+// when a file other than support/secret.ts crosses the secret boundary (see
+// SECRET_BOUNDARY_IDENTIFIERS below), and when anything is typed into a password field with
+// fill()/type()/pressSequentially() instead of fillSecret.
 //
-// Support helpers run inside journeys, so they get the same retry, click-in-loop, skipped and
-// @mutates rules; only the conditional-assertion rule is journey-only. `test` and `setup` are
+// Support helpers run inside journeys, so they get the same retry, click-in-loop, skipped,
+// @mutates and secret-boundary rules; only the conditional-assertion rule is journey-only. `test` and `setup` are
 // both recognised as the test function, as is any local alias of `test` imported from
 // `@playwright/test` or from the journeys' own `support/journey` module
 // (`import { test as t } from "./support/journey"`).
@@ -43,6 +46,30 @@ const ARRAY_ITERATION_METHODS = new Set([
   "find",
   "findIndex",
 ]);
+
+// The secret boundary (e2e/journeys/support/secret.ts): passwords are Secret values, which
+// fill(), type() and toHaveValue() don't accept, so the typecheck (tsconfig.e2e.json) stops a
+// password reaching a step title or an assertion message. This rule is the backstop for the ways
+// around that type: outside the Secret module, nothing may call its private reveal function, use
+// a raw password source (the disposable-user factory and readers in e2e/support/disposable-auth,
+// which the Secret module wraps), or JSON.parse the QA credentials file (parseCredentialsJson
+// turns its passwords into Secrets).
+const SECRET_MODULE_SUFFIX = "support/secret.ts";
+const SECRET_BOUNDARY_IDENTIFIERS = new Set([
+  "revealSecret",
+  "createDisposableE2EUser",
+  "readDisposableE2EUsers",
+  "readLatestDisposableE2EUser",
+]);
+const CREDENTIALS_FILE_MARKERS = /SPOONJOY_QA_CREDENTIALS|credentials\.json/;
+
+// The field-side backstop: a password created as a plain string (not a Secret) would still
+// typecheck with fill(). Typing anything into a field whose own locator text names a password (a
+// label, placeholder or role name, a type=password / name=password selector, or a variable named
+// for one) must go through fillSecret. For page.fill(selector, value) / frame.type(...) the
+// selector is the first argument. Only the field is judged, never the value.
+const TYPING_METHODS = new Set(["fill", "type", "pressSequentially"]);
+const PASSWORD_FIELD_PATTERN = /passw(?:or)?d/i;
 
 // Playwright's `test`/`test.describe` modifiers. `test.<modifier>(...)` is still a real test
 // (rule 4 must still check it for a missing reload check), and both `test.<modifier>(...)` and
@@ -101,6 +128,28 @@ function isClickLikeCall(node) {
     ts.isCallExpression(node) &&
     ts.isPropertyAccessExpression(node.expression) &&
     CLICK_LIKE_METHODS.has(node.expression.name.text)
+  );
+}
+
+function isSecretModule(fileName) {
+  return fileName.split(path.sep).join("/").endsWith(SECRET_MODULE_SUFFIX);
+}
+
+function isPasswordFieldTypingCall(node, sourceFile) {
+  if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return false;
+  if (!TYPING_METHODS.has(node.expression.name.text)) return false;
+  if (PASSWORD_FIELD_PATTERN.test(node.expression.expression.getText(sourceFile))) return true;
+  const selector = node.arguments.length >= 2 ? node.arguments[0] : undefined;
+  return Boolean(selector && PASSWORD_FIELD_PATTERN.test(selector.getText(sourceFile)));
+}
+
+function isJsonParseCall(node) {
+  return (
+    ts.isCallExpression(node) &&
+    ts.isPropertyAccessExpression(node.expression) &&
+    ts.isIdentifier(node.expression.expression) &&
+    node.expression.expression.text === "JSON" &&
+    node.expression.name.text === "parse"
   );
 }
 
@@ -253,13 +302,15 @@ function containsVerifyAfterReloadCall(node) {
  * @returns {Array<{
  *   file: string,
  *   line: number,
- *   rule: "no-retry-config" | "no-click-in-loop" | "no-assertion-in-if" | "no-skipped-journeys" | "mutation-needs-reload-check",
+ *   rule: "no-retry-config" | "no-click-in-loop" | "no-assertion-in-if" | "no-skipped-journeys" | "mutation-needs-reload-check" | "secret-boundary" | "no-password-field-fill",
  *   message: string,
  * }>}
  */
 export function checkJourneySource(fileName, source, { kind = "journey" } = {}) {
   const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const testNames = collectTestNames(sourceFile);
+  const checkSecretBoundary = !isSecretModule(fileName);
+  const readsCredentialsFile = CREDENTIALS_FILE_MARKERS.test(source);
   const checkConditionalAssertions = kind === "journey";
   const violations = [];
 
@@ -285,6 +336,30 @@ export function checkJourneySource(fileName, source, { kind = "journey" } = {}) 
         node,
         "no-click-in-loop",
         `"${node.expression.name.text}" must not run inside a loop, a .toPass() retry callback, or an array-iteration callback; loops and auto-retry hide flakiness.`,
+      );
+    }
+
+    if (isPasswordFieldTypingCall(node, sourceFile)) {
+      report(
+        node,
+        "no-password-field-fill",
+        `"${node.expression.name.text}" must not type into a password field; Playwright puts the typed value in the public report and job log. Type a Secret with fillSecret(locator, secret) from support/secret.ts.`,
+      );
+    }
+
+    if (checkSecretBoundary && ts.isIdentifier(node) && SECRET_BOUNDARY_IDENTIFIERS.has(node.text)) {
+      report(
+        node,
+        "secret-boundary",
+        `"${node.text}" is a raw password source; only support/secret.ts may use it. Passwords are Secret values typed with fillSecret (support/secret.ts).`,
+      );
+    }
+
+    if (checkSecretBoundary && readsCredentialsFile && isJsonParseCall(node)) {
+      report(
+        node,
+        "secret-boundary",
+        "Parse the QA credentials file with parseCredentialsJson (support/secret.ts), which turns its passwords into Secret values, not JSON.parse.",
       );
     }
 
