@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { withTimeZone } from "../helpers/timezone";
 import { faker } from "@faker-js/faker";
 import { createTestRoutesStub } from "../utils";
@@ -427,6 +427,33 @@ describe("Users $identifier Route", () => {
       // inside it and fail landmark-complementary-is-top-level.
       expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
       expect(screen.getByRole("region", { name: "Cookbooks" })).toBeInTheDocument();
+    });
+
+    it("clears cached cook progress when the owner logs out from their profile", async () => {
+      window.localStorage.setItem("spoonjoy-cook-progress:user:user-1:recipe-1", "{}");
+      window.localStorage.setItem("spoonjoy-cook-progress:recipe-1", "{}");
+      const Stub = createTestRoutesStub([
+        {
+          path: "/users/:identifier",
+          Component: UserProfile,
+          loader: () => ({
+            profile: { id: "user-1", username: "chef-logout", photoUrl: null, joinedAt: "2026-05-15T12:00:00.000Z" },
+            isOwner: true,
+            recipes: [],
+            cookbooks: [],
+          }),
+        },
+        { path: "/logout", action: () => null, Component: () => <p>Signed out</p> },
+      ]);
+
+      render(<Stub initialEntries={["/users/chef-logout"]} />);
+      fireEvent.click(await screen.findByRole("button", { name: "Logout" }));
+
+      await waitFor(() => {
+        expect(window.localStorage.getItem("spoonjoy-cook-progress:user:user-1:recipe-1")).toBeNull();
+      });
+      expect(window.localStorage.getItem("spoonjoy-cook-progress:recipe-1")).toBeNull();
+      window.localStorage.clear();
     });
 
     it("renders owner actions, default avatar fallback, and empty states", async () => {

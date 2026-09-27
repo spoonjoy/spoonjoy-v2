@@ -24,6 +24,8 @@ import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.serve
 import { getOAuthEnv } from "~/lib/oauth-route.server";
 import { toAnalyticsPageUrl } from "~/lib/analytics";
 import { applyStorageSchemaMigration } from "~/lib/client-storage-schema";
+import { clearCookProgressCache } from "~/lib/cook-session-sync";
+import { useCookProgressCacheOwner } from "~/hooks/use-cook-session-sync";
 import { registerServiceWorkerOnPageLoad } from "~/lib/push-client";
 import { ThemeProvider } from "~/components/ui/theme-provider";
 import { ToastProvider } from "~/components/ui/toast";
@@ -162,7 +164,7 @@ export function AppNavbar({
           <div className="sj-desktop-nav-actions">
             <ThemeToggle />
             <RouterLink to="/account/settings" className={navLinkClass} data-current={currentNav === "account"}>Account</RouterLink>
-            <Form method="post" action="/logout" className="m-0">
+            <Form method="post" action="/logout" className="m-0" onSubmit={clearCookProgressCache}>
               <button type="submit" className={navLinkClass} aria-label="Log out">
                 Logout
               </button>
@@ -210,6 +212,10 @@ export default function App() {
       });
     }
   }, [location.pathname, posthog]);
+
+  // Cached cook progress never outlives its account in this browser (the logout forms clear it
+  // all; this catches sessions that end any other way).
+  useCookProgressCacheOwner(userId);
 
   // Identify user when logged in
   useEffect(() => {

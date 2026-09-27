@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
@@ -272,6 +272,23 @@ jobs:
     );
     expect(runCommands(workersCoverageJob)).not.toContain("pnpm run test:workers:coverage");
     expect(runCommands(workersCoverageJob)).not.toContain("pnpm run test:coverage");
+  });
+
+  it("keeps every Cloudflare-pool test file out of the Node lane", () => {
+    const appConfig = workersConfigObject(readFileSync("vitest.config.ts", "utf8"));
+    const appTestConfig = appConfig && property(appConfig, "test");
+    expect(appTestConfig && ts.isObjectLiteralExpression(appTestConfig)).toBe(true);
+    if (!appTestConfig || !ts.isObjectLiteralExpression(appTestConfig)) return;
+    const excluded = literalValue(property(appTestConfig, "exclude")) as string[];
+    const cloudflarePoolFiles = readdirSync("test/workers")
+      .filter((name) => name.endsWith(".test.ts"))
+      .map((name) => `test/workers/${name}`)
+      .filter((path) => readFileSync(path, "utf8").includes('from "cloudflare:test"'));
+
+    expect(cloudflarePoolFiles).toContain("test/workers/cook-session-protocol.test.ts");
+    for (const path of cloudflarePoolFiles) {
+      expect(excluded, `${path} imports cloudflare:test, so the Node lane must exclude it`).toContain(path);
+    }
   });
 
   it("provides a dedicated Worker test configuration file", () => {
