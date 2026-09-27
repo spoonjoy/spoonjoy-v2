@@ -261,6 +261,19 @@ const PAGE_SNAPSHOT = [
   `  - textbox "API token": ${PLANTED_NEW_PASSWORD}`,
   '  - textbox "New Password" [ref=e6]',
   '  - textbox "Search terms" [ref=e7]: lemon',
+  // A textbox with props (a placeholder) prints its value on a child "- text:" line.
+  '  - textbox "Password" [ref=e8]:',
+  "    - /placeholder: ••••••••",
+  `    - text: ${PLANTED_PASSWORD}`,
+  // A name holding ": " or " #" makes YAML single-quote the whole key.
+  `  - 'textbox "Password: 8+ characters" [ref=e9]': ${PLANTED_NEW_PASSWORD}`,
+  `  - 'textbox "Secret #2 it''s" [ref=e10]':`,
+  "    - /placeholder: sj_...",
+  `    - text: "${PLANTED_PASSWORD}"`,
+  '  - textbox "Search recipes" [ref=e11]:',
+  "    - /placeholder: Search",
+  "    - text: saffron",
+  '  - button "Log In" [ref=e12]',
   "```",
 ].join("\n");
 
@@ -312,7 +325,36 @@ describe("typed passwords", () => {
     expect(redacted).toContain('  - textbox "Username or email" [ref=e2]: codex_e2e_b_1');
     expect(redacted).toContain('  - textbox "New Password" [ref=e6]\n');
     expect(redacted).toContain('  - textbox "Search terms" [ref=e7]: lemon');
+    expect(redacted).toContain('  - textbox "Password" [ref=e8]:\n    - /placeholder: ••••••••\n    - text: [redacted]\n');
+    expect(redacted).toContain(`  - 'textbox "Password: 8+ characters" [ref=e9]': [redacted]`);
+    expect(redacted).toContain(`  - 'textbox "Secret #2 it''s" [ref=e10]':\n    - /placeholder: sj_...\n    - text: [redacted]\n`);
+    expect(redacted).toContain('  - textbox "Search recipes" [ref=e11]:\n    - /placeholder: Search\n    - text: saffron\n');
+    expect(redacted).toContain('  - button "Log In" [ref=e12]');
     expect(redactPageSnapshotText(redacted)).toBe(redacted);
+  });
+
+  it("stops redacting child lines once the secret textbox's block ends", () => {
+    const text = [
+      '- textbox "Password":',
+      `  - text: ${PLANTED_PASSWORD}`,
+      "",
+      "- text: visible copy",
+      "- 'unterminated key",
+      "- 'heading \"Password: tips\"': shown",
+      "- '': empty",
+    ].join("\n");
+
+    expect(redactPageSnapshotText(text)).toBe(
+      [
+        '- textbox "Password":',
+        "  - text: [redacted]",
+        "",
+        "- text: visible copy",
+        "- 'unterminated key",
+        "- 'heading \"Password: tips\"': shown",
+        "- '': empty",
+      ].join("\n"),
+    );
   });
 
   it("redacts an attached page snapshot inside a trace zip and reports one that is left", () => {

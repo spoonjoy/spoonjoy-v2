@@ -62,10 +62,20 @@ const SECRET_INPUT_NAME = /passw(?:or)?d|passcode/i;
 // Snapshot attributes that carry an input's value: the live value, and the markup's value=.
 const SNAPSHOT_VALUE_ATTRIBUTES = ["__playwright_value_", "value"];
 
-// An ARIA page-snapshot line for a textbox whose (quoted) accessible name names a secret, with
-// its optional [attribute] markers, followed by ": <value>".
-const SECRET_TEXTBOX_LINE =
-  /^(\s*- textbox "(?:[^"\\\n]|\\.)*(?:passw(?:or)?d|passcode|secret|token|credential)(?:[^"\\\n]|\\.)*"(?:\s*\[[^\]\n]*\])*):[ \t]*(\S.*)$/gim;
+// Page snapshots (Playwright 1.58's renderAriaTree) print a textbox's value either inline,
+//   - textbox "Password" [ref=e5]: <value>
+// or, when the textbox has props such as a placeholder, on a child line:
+//   - textbox "Password" [ref=e5]:
+//     - /placeholder: ••••
+//     - text: <value>
+// and YAML single-quotes the whole key when the name holds ": ", " #" and the like:
+//   - 'textbox "Password: 8+ characters" [ref=e5]': <value>
+// A textbox is secret when its accessible name names a password, passcode, secret, token or
+// credential.
+const SNAPSHOT_ITEM_LINE = /^(\s*)- (.*)$/;
+const TEXTBOX_KEY = /^textbox "((?:[^"\\]|\\.)*)"(?:\s*\[[^\]]*\])*$/;
+const SECRET_TEXTBOX_NAME = /passw(?:or)?d|passcode|secret|token|credential/i;
+const TEXT_CHILD_LINE = /^(\s*- text):[ \t]*\S/;
 
 // Text files the report and test results can hold a page snapshot in.
 const TEXT_FILE_PATTERN = /\.(?:md|txt|ya?ml)$/i;
@@ -262,14 +272,70 @@ export function redactSnapshotNode(node) {
   ];
 }
 
+// Splits a page-snapshot item ("- <key>: <value>", "- <key>:" or "- <key>") into its key text
+// (unquoted if YAML quoted it), the raw key as written, and what follows the key. Returns undefined
+// for a line that is not an item or whose quoted key never closes.
+function splitSnapshotItem(body) {
+  if (body.startsWith("'")) {
+    // A doubled quote ('') inside a single-quoted YAML key is an escaped quote.
+    let close = 1;
+    while (close < body.length && !(body[close] === "'" && body[close + 1] !== "'")) {
+      close += body[close] === "'" ? 2 : 1;
+    }
+    if (close >= body.length) return undefined;
+    return {
+      key: body.slice(1, close).replace(/''/g, "'"),
+      rawKey: body.slice(0, close + 1),
+      rest: body.slice(close + 1),
+    };
+  }
+  const colon = body.search(/:(?:[ \t]|$)/);
+  if (colon === -1) return { key: body, rawKey: body, rest: "" };
+  return { key: body.slice(0, colon), rawKey: body.slice(0, colon), rest: body.slice(colon) };
+}
+
+function isSecretTextboxKey(key) {
+  const match = TEXTBOX_KEY.exec(key);
+  return Boolean(match && SECRET_TEXTBOX_NAME.test(match[1]));
+}
+
 /**
- * Redacts the value of every textbox whose accessible name names a password or other secret
- * in ARIA page-snapshot text (error-context.md and its copies). Idempotent.
+ * Redacts the value of every textbox whose accessible name names a password or other secret in
+ * ARIA page-snapshot text (error-context.md and its copies), whether the value is inline or on a
+ * child "- text:" line, and whether or not YAML quoted the key. Idempotent.
  * @param {string} text
  * @returns {string}
  */
 export function redactPageSnapshotText(text) {
-  return text.replace(SECRET_TEXTBOX_LINE, (_line, prefix) => `${prefix}: ${REDACTED}`);
+  const lines = text.split("\n");
+  // Indent of a secret textbox whose value sits on child lines, while inside its block.
+  let secretBlockIndent = null;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const item = SNAPSHOT_ITEM_LINE.exec(line);
+    const indent = item ? item[1].length : null;
+
+    if (secretBlockIndent !== null) {
+      if (line.trim() === "") continue;
+      if (indent !== null && indent > secretBlockIndent) {
+        const child = TEXT_CHILD_LINE.exec(line);
+        if (child) lines[index] = `${child[1]}: ${REDACTED}`;
+        continue;
+      }
+      secretBlockIndent = null;
+    }
+
+    if (!item) continue;
+    const parts = splitSnapshotItem(item[2]);
+    if (!parts || !isSecretTextboxKey(parts.key)) continue;
+    const value = parts.rest.replace(/^:[ \t]*/, "");
+    if (parts.rest.startsWith(":") && value !== "") {
+      lines[index] = `${item[1]}- ${parts.rawKey}: ${REDACTED}`;
+    } else if (parts.rest.startsWith(":")) {
+      secretBlockIndent = indent;
+    }
+  }
+  return lines.join("\n");
 }
 
 // Session state and headers everywhere (redactTraceValue), and password inputs in DOM snapshots.
