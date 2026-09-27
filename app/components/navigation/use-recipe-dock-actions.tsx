@@ -36,7 +36,8 @@ export function useRecipeDetailActions({
   disabled = false,
 }: UseRecipeDetailActionsOptions): void {
   // Back means back: a real link to /recipes that returns to the previous in-app page when
-  // there is one (see useBackNavigation).
+  // there is one (see useBackNavigation). It is labelled plain "Back", with no "recipes"
+  // sublabel, because it usually returns somewhere other than the recipe list.
   const handleBack = useBackNavigation();
   const config = useMemo<DockConfig | null>(() => {
     if (disabled) {
@@ -78,7 +79,6 @@ export function useRecipeDetailActions({
         id: "recipe-back",
         icon: ArrowLeft,
         label: "Back",
-        sublabel: "recipes",
         onAction: "/recipes",
         onLinkClick: handleBack,
       },

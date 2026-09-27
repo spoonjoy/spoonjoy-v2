@@ -130,7 +130,8 @@ function isPlainPrimaryClick(event: MouseEvent<HTMLElement>): boolean {
 export function useBackNavigation(): (event: MouseEvent<HTMLElement>) => void {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  // Read at click time: the dock keeps the handler from its first registration.
+  // Read at click time through a ref, so the returned handler keeps one identity across renders
+  // (a stable dock registration) and still acts on the current path.
   const pathnameRef = useRef(pathname);
   useEffect(() => {
     pathnameRef.current = pathname;

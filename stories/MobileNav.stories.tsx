@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
-import { ArrowLeft, Edit, Share2, ShoppingBag, Trash2 } from 'lucide-react'
+import { ArrowLeft, Check, Edit, Share2, ShoppingBag, Trash2 } from 'lucide-react'
 import { MobileNav } from '../app/components/navigation/mobile-nav'
-import { DockContextProvider, useDockActions, type DockAction } from '../app/components/navigation/dock-context'
+import { DockContextProvider, useDockActions, useDockConfig, type DockAction } from '../app/components/navigation/dock-context'
 
 // iPhone 5/SE (320px) is the narrowest target; 13 mini (375px) is where the
 // dock historically clipped. These let you eyeball every dock variant at the
@@ -141,13 +141,17 @@ export const RecipeEditContext: Story = {
 
 /** Worst case for width: place + primary + three tools (recipe detail, owner). */
 function ContextualRecipeActionsFull() {
-  const actions: DockAction[] = [
-    { id: 'back', icon: ArrowLeft, label: 'Back', sublabel: 'recipes', onAction: '/recipes', position: 'left' },
-    { id: 'list', icon: ShoppingBag, label: 'List', onAction: () => undefined, position: 'right' },
-    { id: 'share', icon: Share2, label: 'Share', onAction: () => undefined, position: 'right' },
-    { id: 'edit', icon: Edit, label: 'Edit', onAction: '/recipes/r-1/edit', position: 'right' },
-  ]
-  useDockActions(actions)
+  // Registered like the real recipe dock (useRecipeDetailActions): plain "Back", no sublabel.
+  useDockConfig({
+    variant: 'context',
+    left: { id: 'recipe-back', icon: ArrowLeft, label: 'Back', onAction: '/recipes' },
+    primary: { id: 'cook', icon: Check, label: 'Cook', onAction: () => undefined },
+    tools: [
+      { id: 'add-to-list', icon: ShoppingBag, label: 'List', ariaLabel: 'Add ingredients to shopping list', onAction: () => undefined },
+      { id: 'share', icon: Share2, label: 'Share', onAction: () => undefined },
+      { id: 'edit', icon: Edit, label: 'Edit', onAction: '/recipes/r-1/edit' },
+    ],
+  })
   return <MobileNav isAuthenticated />
 }
 
