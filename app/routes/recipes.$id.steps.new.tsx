@@ -533,6 +533,7 @@ export default function NewStep() {
                             type="button"
                             variant="destructive"
                             onClick={() => handleRemoveIngredient(index)}
+                            aria-label={`Remove ${ingredient.ingredientName}`}
                           >
                             Remove
                           </Button>

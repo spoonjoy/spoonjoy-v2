@@ -758,6 +758,7 @@ export default function EditStep() {
                         type="button"
                         variant="destructive"
                         onClick={() => setIngredientToRemove(ingredient.id)}
+                        aria-label={`Remove ${ingredient.ingredientRef.name}`}
                       >
                         Remove
                       </Button>

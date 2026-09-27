@@ -2496,8 +2496,9 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
       expect(screen.getByText(/cups flour/)).toBeInTheDocument();
       expect(screen.getByText("0.5")).toBeInTheDocument();
       expect(screen.getByText(/tsp salt/)).toBeInTheDocument();
-      // Two remove buttons for two ingredients
-      expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(2);
+      // One remove button per ingredient, each named for its ingredient.
+      expect(screen.getByRole("button", { name: "Remove flour" })).toHaveTextContent("Remove");
+      expect(screen.getByRole("button", { name: "Remove salt" })).toHaveTextContent("Remove");
     });
 
     it("should show add ingredient form when clicking add ingredient button", async () => {
@@ -2709,7 +2710,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
       expect(screen.getByText(/cups flour/)).toBeInTheDocument();
 
       // Verify remove button exists
-      const removeButton = screen.getByRole("button", { name: "Remove" });
+      const removeButton = screen.getByRole("button", { name: /^Remove / });
       expect(removeButton).toBeInTheDocument();
     });
 
@@ -3548,7 +3549,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         render(<Stub initialEntries={["/recipes/recipe-1/steps/step-1/edit"]} />);
 
         // Click remove button to set ingredientToRemove state
-        const removeButton = await screen.findByRole("button", { name: "Remove" });
+        const removeButton = await screen.findByRole("button", { name: /^Remove / });
         fireEvent.click(removeButton);
 
         // Dialog should be open
@@ -3604,7 +3605,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         render(<Stub initialEntries={["/recipes/recipe-1/steps/step-1/edit"]} />);
 
         // Click remove button
-        const removeButton = await screen.findByRole("button", { name: "Remove" });
+        const removeButton = await screen.findByRole("button", { name: /^Remove / });
         fireEvent.click(removeButton);
         expect(await screen.findByRole("alertdialog", { name: "Remove this ingredient?" })).toBeInTheDocument();
 
