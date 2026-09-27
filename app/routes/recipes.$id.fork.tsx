@@ -1,6 +1,7 @@
 import { redirect, type ActionFunctionArgs, type AppLoadContext } from "react-router";
 import { requireUserId } from "~/lib/session.server";
 import { getRequestDb } from "~/lib/route-platform.server";
+import { requestD1 } from "~/lib/d1-read.server";
 import {
   forkRecipe,
   ForkSourceNotFoundError,
@@ -49,7 +50,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
 
   const db = await getRequestDb(context);
   try {
-    const result = await forkRecipe(db, { sourceRecipeId, viewerId });
+    const result = await forkRecipe(db, { sourceRecipeId, viewerId }, requestD1(context));
 
     // Fire-and-forget: notify the source chef when someone else forked.
     try {

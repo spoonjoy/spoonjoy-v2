@@ -13,6 +13,7 @@ import {
   validateServings,
 } from "~/lib/validation";
 import { createRecipeDraft, parseRecipeStepsJson } from "~/lib/recipe-create.server";
+import { requestD1 } from "~/lib/d1-read.server";
 import {
   deleteStoredImageWithCapture,
   hasUploadedImageFile,
@@ -180,7 +181,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       servings: servings.trim() || null,
       chefId: userId,
       steps: recipeSteps,
-    });
+    }, requestD1(context));
 
     if (uploadedImageUrl) {
       const uploadedCover = await createCover(database, {

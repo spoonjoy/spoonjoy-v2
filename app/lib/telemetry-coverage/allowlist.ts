@@ -123,6 +123,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
 
   // --- expected client (4xx) outcomes handled by the caller ---
   {
+    file: "app/lib/recipe-fork.server.ts",
+    category: "rethrow",
+    reason:
+      "Catch recovers only a lost title race on the atomic D1 fork batch (the batch guard failed, so nothing was written) by resolving the title again; every other failure rethrows to the instrumented REST, MCP or first-party route boundary.",
+  },
+  {
     file: "app/lib/recipe-create.server.ts",
     category: "expected-4xx",
     reason:
