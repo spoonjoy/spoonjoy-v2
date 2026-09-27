@@ -101,6 +101,9 @@ jobs:
           for p in chef friend newbie; do
             echo "::add-mask::$(jq -r ".${p}.password" "$SPOONJOY_QA_CREDENTIALS")"
           done
+          while IFS= read -r password; do
+            echo "::add-mask::$password"
+          done < <(jq -r '.scratch[]?.password' "$SPOONJOY_QA_CREDENTIALS")
 
       - name: Run test suite
         run: |
@@ -110,16 +113,20 @@ jobs:
             pnpm run test:journeys
           fi
 
-      # The report and traces can contain this run's persona passwords, so re-seed with fresh
-      # passwords that nobody keeps (no --credentials-out) before anything is uploaded. Every
-      # password in the artifact is then already dead. Runs even if the journeys failed; if the
-      # seed step never ran, re-seeding is harmless.
+      # The report and traces can contain this run's persona and scratch-user passwords, so
+      # before anything is uploaded: rotate the kitchen personas to fresh passwords nobody
+      # keeps (no --credentials-out), same as before, and --rotate additionally invalidates
+      # every existing scratch-namespace user's password in place (NULLs it out) instead of
+      # minting a fresh scratch batch, so there is never a new, never-yet-invalidated scratch
+      # password for the upload to carry. Every password in the artifact is then already dead.
+      # Runs even if the journeys failed; if the seed step never ran, re-seeding is harmless.
       - name: Rotate persona passwords
         id: rotate-passwords
         if: always()
-        run: pnpm run seed:qa:kitchen
+        run: pnpm run seed:qa:kitchen -- --rotate
 
       - name: Clean up disposable QA data
+        id: cleanup-qa-data
         if: always()
         run: node scripts/warning-gate.ts -- pnpm run cleanup:remote:qa:apply
 
@@ -149,13 +156,15 @@ jobs:
       #   - test-results/: per-failure traces, videos, screenshots and error context.
       # Traces keep the action log (with typed values), DOM snapshots, screencast frames and
       # test source. It is safe to publish because (1) "Rotate persona passwords" has already
-      # replaced every password it contains, and (2) "Strip network logs from traces" has
+      # replaced every persona password and invalidated every scratch-user password it
+      # contains, (2) "Clean up disposable QA data" has removed the (now-invalidated) scratch
+      # users and every other disposable row, and (3) "Strip network logs from traces" has
       # removed network logs and redacted session cookies and storage state from every trace.
-      # Upload runs only if both steps succeeded, and only the report matching $SUITE actually
-      # exists; the credentials file and session files are deleted above and are never in the
-      # uploaded paths.
+      # Upload runs only if all three steps succeeded, and only the report matching $SUITE
+      # actually exists; the credentials file and session files are deleted above and are
+      # never in the uploaded paths.
       - name: Upload journeys report
-        if: ${{ !cancelled() && env.SUITE == 'journeys' && steps.rotate-passwords.outcome == 'success' && steps.strip-traces.outcome == 'success' }}
+        if: ${{ !cancelled() && env.SUITE == 'journeys' && steps.rotate-passwords.outcome == 'success' && steps.cleanup-qa-data.outcome == 'success' && steps.strip-traces.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: journeys-report
@@ -166,7 +175,7 @@ jobs:
           include-hidden-files: false
 
       - name: Upload explore report
-        if: ${{ !cancelled() && env.SUITE == 'explore' && steps.rotate-passwords.outcome == 'success' && steps.strip-traces.outcome == 'success' }}
+        if: ${{ !cancelled() && env.SUITE == 'explore' && steps.rotate-passwords.outcome == 'success' && steps.cleanup-qa-data.outcome == 'success' && steps.strip-traces.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: explore-report

@@ -1,10 +1,11 @@
 // Persona lookup for the QA journeys. Credentials come from the JSON file scripts/seed-qa-kitchen.mjs
 // writes (path in env SPOONJOY_QA_CREDENTIALS), shaped as:
-//   { "chef": { "username", "email", "password" }, "friend": {...}, "newbie": {...} }
+//   { "chef": { "username", "email", "password" }, "friend": {...}, "newbie": {...},
+//     "scratch": [{ "username", "email", "password" }, ...] }
 //
-// Loading is intentionally lazy: the credentials file only needs to exist once a persona is
-// actually used inside a test/setup body. `playwright test --list` never runs test bodies, so
-// listing journeys must not require a real credentials file on disk.
+// Loading is intentionally lazy: the credentials file only needs to exist once a persona (or
+// scratch user) is actually used inside a test/setup body. `playwright test --list` never runs
+// test bodies, so listing journeys must not require a real credentials file on disk.
 import { readFileSync } from "node:fs";
 
 export type PersonaName = "chef" | "friend" | "newbie";
@@ -22,7 +23,9 @@ interface PersonaCredentials {
   password: string;
 }
 
-type CredentialsFile = Record<PersonaName, PersonaCredentials>;
+type CredentialsFile = Record<PersonaName, PersonaCredentials> & {
+  scratch: PersonaCredentials[];
+};
 
 let cachedCredentials: CredentialsFile | undefined;
 
@@ -53,4 +56,23 @@ export function persona(name: PersonaName): Persona {
     throw new Error(`No credentials for persona "${name}" in the file at SPOONJOY_QA_CREDENTIALS.`);
   }
   return { ...entry, storageState: personaStorageStatePath(name) };
+}
+
+// Per-run scratch users (1-indexed), seeded alongside the kitchen personas by
+// scripts/seed-qa-kitchen.mjs. They own no data, so a data-changing journey can sign in as one
+// and mutate freely without touching the shared personas or the other scratch indices — see
+// AGENTS.md's Validation section for which journey file owns which index. Using a stored
+// scratch session instead of signing up through /signup keeps journeys off QA's shared
+// 20-per-minute auth rate limit (see personas.setup.ts for the budget accounting).
+export function scratchStorageStatePath(n: number): string {
+  return `e2e/.auth/journeys-scratch-${n}.json`;
+}
+
+export function scratch(n: number): Persona {
+  const credentials = loadCredentials();
+  const entry = credentials.scratch?.[n - 1];
+  if (!entry) {
+    throw new Error(`No credentials for scratch user ${n} in the file at SPOONJOY_QA_CREDENTIALS.`);
+  }
+  return { ...entry, storageState: scratchStorageStatePath(n) };
 }

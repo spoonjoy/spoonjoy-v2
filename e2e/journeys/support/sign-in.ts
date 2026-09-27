@@ -3,13 +3,24 @@
 // instead of reusing a shared one (see sign-in.journey.ts's logout test).
 import type { Page } from "@playwright/test";
 import { expect } from "./journey";
-import { persona, type PersonaName } from "./personas";
+import { persona, scratch, type PersonaName } from "./personas";
 
-export async function signInThroughForm(page: Page, name: PersonaName): Promise<void> {
-  const user = persona(name);
+async function submitLoginForm(page: Page, user: { username: string; password: string }): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("Username or email").fill(user.username);
   await page.getByLabel("Password").fill(user.password);
   await page.getByRole("button", { name: "Log In", exact: true }).click();
   await expect(page).toHaveURL(/\/recipes(?:[?#].*)?$/);
+}
+
+export async function signInThroughForm(page: Page, name: PersonaName): Promise<void> {
+  await submitLoginForm(page, persona(name));
+}
+
+// Same form-driving step as signInThroughForm, for a per-run scratch user (see
+// support/personas.ts's scratch(n)) instead of a shared persona — used by personas.setup.ts to
+// save each scratch index's session, and available to any journey that needs its own fresh
+// scratch sign-in instead of the stored one.
+export async function signInScratchThroughForm(page: Page, n: number): Promise<void> {
+  await submitLoginForm(page, scratch(n));
 }

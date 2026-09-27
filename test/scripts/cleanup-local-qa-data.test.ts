@@ -815,12 +815,27 @@ describe("cleanup-local-qa-data", () => {
     expectAll(sql, [
       "DELETE FROM NotificationEvent",
       "recipientId IN (SELECT id FROM disposable_users)",
-      "EXISTS (SELECT 1 FROM disposable_users WHERE NotificationEvent.payload LIKE '%' || disposable_users.id || '%')",
-      "EXISTS (SELECT 1 FROM hard_delete_recipes WHERE NotificationEvent.payload LIKE '%' || hard_delete_recipes.id || '%')",
-      "EXISTS (SELECT 1 FROM disposable_spoons WHERE NotificationEvent.payload LIKE '%' || disposable_spoons.id || '%')",
-      "EXISTS (SELECT 1 FROM disposable_covers WHERE NotificationEvent.payload LIKE '%' || disposable_covers.id || '%')",
+      "EXISTS (SELECT 1 FROM disposable_users WHERE instr(NotificationEvent.payload, disposable_users.id) > 0)",
+      "EXISTS (SELECT 1 FROM hard_delete_recipes WHERE instr(NotificationEvent.payload, hard_delete_recipes.id) > 0)",
+      "EXISTS (SELECT 1 FROM disposable_spoons WHERE instr(NotificationEvent.payload, disposable_spoons.id) > 0)",
+      "EXISTS (SELECT 1 FROM disposable_covers WHERE instr(NotificationEvent.payload, disposable_covers.id) > 0)",
       "blocker_notification_payload",
     ]);
+  });
+
+  it("never builds an id into a concatenated LIKE pattern, which Cloudflare D1 caps at 50 bytes (SQLITE_ERROR 7500 'LIKE or GLOB pattern too complex') — uses instr(...) instead, which has no such limit", () => {
+    // A pre-fix scratch user id of this shape ('codex-e2e-scratch-<16-char stamp>-<16-char
+    // token>-<n>', 54+ characters) broke QA cleanup: '%' || id || '%' became a 56+ byte runtime
+    // LIKE pattern once D1 evaluated it per row. instr(column, expr) performs the same
+    // substring test with no pattern-length limit at any id length, so none of these id-based
+    // blocker/cleanup queries may ever build a LIKE pattern out of a variable id again —
+    // regardless of how long an id gets, which is why this is a text assertion on the
+    // generated SQL rather than one tied to a specific id value.
+    for (const sql of [buildApplySql(), buildDryRunSql(), cleanup.buildBlockerReportSql()]) {
+      expect(sql).not.toContain("LIKE '%' ||");
+      expect(sql).not.toContain("' || '%'");
+    }
+    expect(buildApplySql()).toContain("instr(NotificationEvent.payload, disposable_users.id) > 0");
   });
 
   it("extracts only Spoonjoy photo keys from /photos/ URLs", () => {

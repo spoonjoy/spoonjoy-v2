@@ -147,6 +147,97 @@ export function generatePersonaPasswords(random = randomBytes) {
   };
 }
 
+// Number of per-run scratch users seeded alongside the three kitchen personas. Journeys that
+// change data use one of these (via support/personas.ts's scratch(n)) instead of signing up a
+// throwaway user through /signup, so they stop spending QA's shared auth rate limit
+// (AUTH_IP_RATE_LIMITER, 60/minute in QA — see docs/deployment.md). Each scratch index is owned
+// by exactly one journey file (see AGENTS.md's Validation section for the assignment table) —
+// 6 is exactly today's assignment table; see personas.setup.ts's budget comment for the
+// accounting before raising this further.
+export const SCRATCH_USER_COUNT = 6;
+
+// Token shape follows e2e/support/disposable-auth.ts's createDisposableE2EUser() and this
+// script's own sibling scripts/seed-qa.mjs (duplicated, not imported — this file's top-of-file
+// comment notes it follows that script's dependency-free, unit-testable house style), sanitized
+// down to lowercase alphanumerics only.
+function disposableToken(value) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 16) || "run";
+}
+
+// Email prefix this generator mints going forward (no other script or e2e helper uses it). Kept
+// short, like the whole generated id below: Cloudflare D1 caps a LIKE/GLOB pattern at 50 bytes,
+// and scripts/cleanup-local-qa-data.mjs's disposable-row blockers build patterns from a row's
+// id — a long id was exactly what broke that in QA before these ids were shortened (D1 error
+// SQLITE_ERROR 7500, "LIKE or GLOB pattern too complex"); cleanup itself now builds those
+// specific blockers with instr(...) instead of a concatenated LIKE pattern, which has no length
+// limit, but ids here stay short regardless, in case another LIKE/GLOB pattern is ever built
+// from one. buildScratchInvalidationSql matches a broader pattern than this exact prefix, to
+// still catch older scratch users minted before this shortening — see its own comment.
+const SCRATCH_EMAIL_PREFIX = "codex-e2e-s-";
+
+// Generates `count` scratch user identities for this run. Every one shares a single run token
+// (an 8-character random segment, no timestamp — see SCRATCH_EMAIL_PREFIX on why these stay
+// short) baked into both email and username, so a concurrent run, or a leftover run whose
+// cleanup didn't get to run, can never collide with this run's scratch users: no generated id
+// exceeds 40 characters. Scratch users own no data (no recipes, cookbooks, or shopping lists),
+// so there is no persona-style drift to reset here — only identity.
+export function generateScratchUsers(count = SCRATCH_USER_COUNT, { random = randomBytes } = {}) {
+  // 4 bytes (32 bits) of randomness is what fits the 40-character id budget above; that's still
+  // plenty of entropy for run-to-run uniqueness (this is a collision-avoidance token, not a
+  // security secret).
+  const runToken = disposableToken(random(4).toString("hex"));
+  return Array.from({ length: count }, (_, index) => {
+    const n = index + 1;
+    const username = `codex_e2e_s_${runToken}_${n}`;
+    return {
+      id: username,
+      username,
+      email: `${SCRATCH_EMAIL_PREFIX}${runToken}-${n}@example.com`,
+    };
+  });
+}
+
+export function generateScratchPasswords(count = SCRATCH_USER_COUNT, random = randomBytes) {
+  return Array.from({ length: count }, () => random(24).toString("base64url"));
+}
+
+// Builds the scratch users' insert statements, kept separate from buildKitchenResetSql because
+// scratch users never own data and never need the kitchen personas' fork/cookbook/credential
+// reset logic — and so this can never collide with that reset's persona-scoped DELETEs, which
+// only ever match PERSONA_IDS. INSERT OR IGNORE (rather than a plain INSERT, matching the
+// Unit/IngredientRef inserts above) makes this idempotent if the same generated statement is
+// ever re-applied, for example after a retried `wrangler d1 execute` following a network flake.
+export function buildScratchUsersSql({ users, passwords, hash = (password) => bcrypt.hashSync(password, 10) }) {
+  if (users.length !== passwords.length) {
+    throw new Error("buildScratchUsersSql requires exactly one password per scratch user.");
+  }
+  return users
+    .map((user, index) => {
+      const hashedPassword = hash(passwords[index]);
+      const salt = hashedPassword.slice(0, 29);
+      return `INSERT OR IGNORE INTO "User" (id, email, username, hashedPassword, salt, createdAt, updatedAt) VALUES (${sqlString(user.id)}, ${sqlString(user.email)}, ${sqlString(user.username)}, ${sqlString(hashedPassword)}, ${sqlString(salt)}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`;
+    })
+    .join("\n");
+}
+
+// Invalidates every scratch user from every past run (not just this one), instead of minting a
+// fresh batch: used by `--rotate` so the "rotate before uploading the report" step never leaves
+// a brand-new, never-yet-invalidated scratch password sitting in the database for the traces
+// that are about to be uploaded to carry. NULL, not a freshly generated bcrypt hash: this repo's
+// authenticatePasswordUser (app/lib/auth.server.ts) rejects any login attempt whose looked-up
+// user has a null hashedPassword before it ever runs a bcrypt comparison, so a null hash is a
+// simpler, equally final way to make the password unusable than hashing an unknown value would
+// be. Matches by email prefix only, not by PERSONA_IDS or any other id list, so it can never
+// touch the kitchen personas. The pattern here is deliberately broader than SCRATCH_EMAIL_PREFIX:
+// 'codex-e2e-s%' (no trailing hyphen) matches both this generator's current
+// 'codex-e2e-s-...' addresses and the older, longer 'codex-e2e-scratch-...' addresses minted
+// before ids were shortened to fit under D1's LIKE pattern-length limit — some of those are
+// still sitting in QA, and --rotate must keep invalidating them too. Still a short literal
+// prefix, nowhere near D1's 50-byte LIKE limit.
+export function buildScratchInvalidationSql() {
+  return `UPDATE "User" SET hashedPassword = NULL, salt = NULL WHERE email LIKE 'codex-e2e-s%';`;
+}
+
 export function buildKitchenResetSql({ passwords, hash = (password) => bcrypt.hashSync(password, 10) }) {
   const statements = [];
   const personaIds = sqlIdList(PERSONA_IDS);
@@ -287,14 +378,20 @@ export function parseSeedKitchenArgs(argv) {
     targetEnv,
     dryRun: argv.includes("--dry-run"),
     credentialsOut,
+    rotate: argv.includes("--rotate"),
   };
 }
 
-function credentialsPayload(passwords) {
+function credentialsPayload(passwords, scratchUsers, scratchPasswords) {
   return {
     chef: { username: KITCHEN.chef.username, email: KITCHEN.chef.email, password: passwords.chef },
     friend: { username: KITCHEN.friend.username, email: KITCHEN.friend.email, password: passwords.friend },
     newbie: { username: KITCHEN.newbie.username, email: KITCHEN.newbie.email, password: passwords.newbie },
+    scratch: scratchUsers.map((user, index) => ({
+      username: user.username,
+      email: user.email,
+      password: scratchPasswords[index],
+    })),
   };
 }
 
@@ -306,12 +403,22 @@ export function main(argv = process.argv.slice(2), deps = {}) {
     rm = rmSync,
     chmod = chmodSync,
     generatePasswords = generatePersonaPasswords,
+    generateScratch = generateScratchUsers,
+    generateScratchPasswords: generateScratchPwds = generateScratchPasswords,
     io = console,
   } = deps;
 
   const options = parseSeedKitchenArgs(argv);
   const passwords = generatePasswords();
-  const sql = buildKitchenResetSql({ passwords });
+  // --rotate invalidates every existing scratch user in place instead of minting a new batch,
+  // so a rotation never leaves a fresh, never-yet-invalidated scratch password in the database
+  // for the report/traces it runs ahead of to carry (see buildScratchInvalidationSql).
+  const scratchUsers = options.rotate ? [] : generateScratch();
+  const scratchPasswords = options.rotate ? [] : generateScratchPwds(scratchUsers.length);
+  const scratchSql = options.rotate
+    ? buildScratchInvalidationSql()
+    : buildScratchUsersSql({ users: scratchUsers, passwords: scratchPasswords });
+  const sql = `${buildKitchenResetSql({ passwords })}\n${scratchSql}`;
 
   if (options.dryRun) {
     io.log(sql.replace(BCRYPT_HASH_PATTERN, "<hash>"));
@@ -340,7 +447,7 @@ export function main(argv = process.argv.slice(2), deps = {}) {
   if (primaryError) throw primaryError;
 
   if (options.credentialsOut) {
-    writeFile(options.credentialsOut, `${JSON.stringify(credentialsPayload(passwords), null, 2)}\n`, {
+    writeFile(options.credentialsOut, `${JSON.stringify(credentialsPayload(passwords, scratchUsers, scratchPasswords), null, 2)}\n`, {
       encoding: "utf8",
       mode: 0o600,
     });
