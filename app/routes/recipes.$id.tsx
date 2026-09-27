@@ -30,6 +30,8 @@ import type { StepReference } from "~/components/recipe/StepOutputUseCallout";
 import { shareContent, useDockSuppressed, useRecipeDetailActions } from "~/components/navigation";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { useBackNavigation } from "~/hooks/use-back-navigation";
+import { revalidateUnlessHashOnly } from "~/lib/hash-only-revalidation";
+import type { ShouldRevalidateFunctionArgs } from "react-router";
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   return loadRecipeDetail({ request, params, context });
@@ -67,6 +69,12 @@ export function meta({ data }: Route.MetaArgs) {
       ? [{ "script:ld+json": data.recipeJsonLd }]
       : []),
   ];
+}
+
+// Entering and leaving cook mode (`#cook`) changes only the hash: keep the loaded recipe, so
+// closing cook mode never waits on (or, offline, fails on) a data fetch.
+export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
+  return revalidateUnlessHashOnly(args);
 }
 
 export async function action({ request, params, context }: Route.ActionArgs) {
@@ -507,7 +515,9 @@ export default function RecipeDetail() {
 
   // Cook mode is the recipe's `#cook` history entry. Reading the router's location (in an effect,
   // so the server-rendered page hydrates first) opens it for a `#cook` link and closes it when
-  // Back or Exit leaves that entry.
+  // Back or Exit leaves that entry. It re-runs for every new entry (`location.key`), not only a
+  // new hash: Exit hides the panel at once, and a "Cook mode" tap that lands before Exit's pop
+  // pushes a new `#cook` entry without the hash ever changing.
   useEffect(() => {
     const shouldShowCookMode = location.hash === "#cook" && recipe.steps.length > 0;
     setIsCookMode(shouldShowCookMode);
@@ -515,7 +525,7 @@ export default function RecipeDetail() {
     if (shouldShowCookMode) {
       pendingCookModeScroll.current = true;
     }
-  }, [location.hash, recipe.steps.length]);
+  }, [location.key, location.hash, recipe.steps.length]);
 
   useEffect(() => {
     if (!isCookMode || !pendingCookModeScroll.current) {

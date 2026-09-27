@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useLocation, useNavigate, useNavigationType } from "react-router";
+import { useLocation, useNavigate, useNavigationType, useRevalidator } from "react-router";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import { ToastProvider } from "~/components/ui/toast";
@@ -28,6 +28,7 @@ import {
   readCookProgress,
   formatTimerSeconds,
   writeCookProgress,
+  shouldRevalidate as recipeShouldRevalidate,
 } from "~/routes/recipes.$id";
 import RecipeDetail from "~/routes/recipes.$id";
 import { HISTORY_TRAIL_KEY } from "~/hooks/use-back-navigation";
@@ -3063,11 +3064,13 @@ describe("Recipes $id Route", () => {
         const location = useLocation();
         const navigationType = useNavigationType();
         const navigate = useNavigate();
+        const revalidator = useRevalidator();
         return (
           <>
             <output data-testid="probe-location">{`${location.pathname}${location.search}${location.hash}`}</output>
             <output data-testid="probe-navigation-type">{navigationType}</output>
             <button type="button" onClick={() => void navigate(-1)}>Browser back</button>
+            <button type="button" onClick={() => void revalidator.revalidate()}>Revalidate</button>
           </>
         );
       }
@@ -3082,10 +3085,19 @@ describe("Recipes $id Route", () => {
         );
       }
 
-      function renderRecipeFromHome(recipeEntry = "/recipes/recipe-1") {
+      function renderRecipeFromHome(
+        recipeEntry = "/recipes/recipe-1",
+        loader: () => unknown = () => historyRecipeData,
+        shouldRevalidate: typeof recipeShouldRevalidate = recipeShouldRevalidate,
+      ) {
         const Stub = createTestRoutesStub([
           { path: "/", Component: () => <><h1>Home page</h1><LocationProbe /></> },
-          { path: "/recipes/:id", Component: RecipeWithDock, loader: () => historyRecipeData },
+          {
+            path: "/recipes/:id",
+            Component: RecipeWithDock,
+            loader,
+            shouldRevalidate,
+          },
         ]);
         render(<Stub initialEntries={["/", recipeEntry]} initialIndex={1} />);
       }
@@ -3145,6 +3157,68 @@ describe("Recipes $id Route", () => {
 
         await user.click(screen.getByRole("button", { name: "Browser back" }));
         expect(await screen.findByRole("heading", { name: "Home page" })).toBeInTheDocument();
+      });
+
+      it("does not reload the recipe when cook mode opens or closes", async () => {
+        const user = userEvent.setup();
+        const loader = vi.fn(() => historyRecipeData);
+        renderRecipeFromHome("/recipes/recipe-1", loader);
+        await screen.findByRole("heading", { name: "History Cook Recipe" });
+        const loadsBefore = loader.mock.calls.length;
+
+        // Enter, then Exit (pops the entry).
+        await user.click(screen.getByRole("link", { name: "Cook mode" }));
+        await user.click(within(await screen.findByTestId("cook-mode-panel")).getByRole("button", { name: "Exit cook mode" }));
+        await waitFor(() => expect(probeLocation()).toHaveTextContent(/^\/recipes\/recipe-1$/));
+
+        // Enter, then browser Back.
+        await user.click(screen.getByRole("link", { name: "Cook mode" }));
+        await screen.findByTestId("cook-mode-panel");
+        await user.click(screen.getByRole("button", { name: "Browser back" }));
+        await waitFor(() => expect(screen.queryByTestId("cook-mode-panel")).not.toBeInTheDocument());
+        expect(probeLocation()).toHaveTextContent(/^\/recipes\/recipe-1$/);
+
+        expect(loader).toHaveBeenCalledTimes(loadsBefore);
+      });
+
+      it("still reloads the recipe on an explicit revalidation in cook mode", async () => {
+        const user = userEvent.setup();
+        const loader = vi.fn(() => historyRecipeData);
+        renderRecipeFromHome("/recipes/recipe-1", loader);
+        await screen.findByRole("heading", { name: "History Cook Recipe" });
+        await user.click(screen.getByRole("link", { name: "Cook mode" }));
+        await screen.findByTestId("cook-mode-panel");
+        const loadsBefore = loader.mock.calls.length;
+
+        await user.click(screen.getByRole("button", { name: "Revalidate" }));
+
+        await waitFor(() => expect(loader).toHaveBeenCalledTimes(loadsBefore + 1));
+        expect(screen.getByTestId("cook-mode-panel")).toBeInTheDocument();
+      });
+
+      it("reopens cook mode for a new #cook entry even when the hash has not changed", async () => {
+        // Exit hides the panel at once and starts popping the #cook entry. While that pop is still
+        // in flight (here: held on a slow reload), a "Cook mode" tap pushes a new #cook entry, so
+        // the hash never leaves "#cook"; only the entry's key changes.
+        const user = userEvent.setup();
+        let releaseReload: (() => void) | null = null;
+        let holdReloads = false;
+        const loader = () => holdReloads
+          ? new Promise((resolve) => { releaseReload = () => resolve(historyRecipeData); })
+          : historyRecipeData;
+        renderRecipeFromHome("/recipes/recipe-1", loader, () => true);
+        await screen.findByRole("heading", { name: "History Cook Recipe" });
+        await user.click(screen.getByRole("link", { name: "Cook mode" }));
+        const cookMode = await screen.findByTestId("cook-mode-panel");
+        holdReloads = true;
+
+        await user.click(within(cookMode).getByRole("button", { name: "Exit cook mode" }));
+        await user.click(screen.getByRole("link", { name: "Cook mode" }));
+
+        await waitFor(() => expect(probeLocation()).toHaveTextContent("/recipes/recipe-1#cook"));
+        expect(await screen.findByTestId("cook-mode-panel")).toBeInTheDocument();
+        await act(async () => releaseReload?.());
+        await settleBrowserTasks();
       });
 
       it("hides the dock while cook mode is open so it cannot cover the step controls", async () => {

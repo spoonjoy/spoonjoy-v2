@@ -18,6 +18,8 @@ import { usePostHog } from "@posthog/react";
 import * as Headless from "@headlessui/react";
 import { getUserId } from "~/lib/session.server";
 import { NonceContext } from "~/lib/nonce";
+import { revalidateUnlessHashOnly } from "~/lib/hash-only-revalidation";
+import type { ShouldRevalidateFunctionArgs } from "react-router";
 import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
 import { getOAuthEnv } from "~/lib/oauth-route.server";
 import { toAnalyticsPageUrl } from "~/lib/analytics";
@@ -62,6 +64,11 @@ export function links() {
     { rel: "apple-touch-icon", href: "/logos/sj_black.svg" },
     { rel: "manifest", href: "/manifest.webmanifest" },
   ];
+}
+
+// Hash-only navigations (entering or leaving cook mode) keep the loaded data.
+export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
+  return revalidateUnlessHashOnly(args);
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
