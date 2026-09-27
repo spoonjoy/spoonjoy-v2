@@ -289,6 +289,54 @@ describe("RecipeBuilder", () => {
       );
     });
 
+    // Ruling R-M3-1: a step card keeps what was typed into it. "Create Recipe" sends each
+    // card's instructions, duration and ingredients even when its own "Save" was never
+    // pressed; before, those steps went out empty and the create failed with a 400.
+    it("sends typed step content and ingredients without pressing each card's Save", async () => {
+      const onSave = vi.fn();
+      const Wrapper = createTestWrapper({ onSave });
+      render(<Wrapper initialEntries={["/recipes/new"]} />);
+
+      await userEvent.type(screen.getByLabelText(/title/i), "Two Step Toast");
+
+      await userEvent.click(screen.getByRole("button", { name: /add step/i }));
+      const firstCard = screen.getByRole("article", { name: "Step 1" });
+      await userEvent.type(within(firstCard).getByLabelText(/instructions/i), "Toast the bread");
+      await userEvent.type(within(firstCard).getByLabelText(/duration/i), "5");
+      await userEvent.click(within(firstCard).getByRole("switch"));
+      await userEvent.type(within(firstCard).getByLabelText("Quantity"), "2");
+      await userEvent.type(within(firstCard).getByLabelText("Unit"), "slice");
+      await userEvent.type(within(firstCard).getByLabelText("Ingredient"), "bread");
+      await userEvent.click(within(firstCard).getByRole("button", { name: "Add ingredient" }));
+
+      await userEvent.click(screen.getByRole("button", { name: /add step/i }));
+      const secondCard = screen.getByRole("article", { name: "Step 2" });
+      await userEvent.type(within(secondCard).getByLabelText(/instructions/i), "Butter the toast");
+      await userEvent.click(within(secondCard).getByRole("switch"));
+      await userEvent.type(within(secondCard).getByLabelText("Quantity"), "1");
+      await userEvent.type(within(secondCard).getByLabelText("Unit"), "tbsp");
+      await userEvent.type(within(secondCard).getByLabelText("Ingredient"), "butter");
+      await userEvent.click(within(secondCard).getByRole("button", { name: "Add ingredient" }));
+
+      await userEvent.click(screen.getByRole("button", { name: /create recipe/i }));
+
+      expect(onSave).toHaveBeenCalledTimes(1);
+      const saved = onSave.mock.calls[0][0];
+      expect(saved.steps).toEqual([
+        expect.objectContaining({
+          stepNum: 1,
+          description: "Toast the bread",
+          duration: 5,
+          ingredients: [{ quantity: 2, unit: "slice", ingredientName: "bread" }],
+        }),
+        expect.objectContaining({
+          stepNum: 2,
+          description: "Butter the toast",
+          ingredients: [{ quantity: 1, unit: "tbsp", ingredientName: "butter" }],
+        }),
+      ]);
+    });
+
     it("save button disabled when title is empty (validation)", () => {
       const Wrapper = createTestWrapper();
       render(<Wrapper initialEntries={["/recipes/new"]} />);

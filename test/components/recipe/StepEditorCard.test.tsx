@@ -308,6 +308,37 @@ describe('StepEditorCard', () => {
       )
     })
 
+    it('reports every draft change through onChange without waiting for Save', async () => {
+      const onChange = vi.fn()
+      const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }), { onChange })
+      render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
+
+      // Nothing is reported for the untouched card.
+      expect(onChange).not.toHaveBeenCalled()
+
+      await userEvent.type(screen.getByRole('textbox', { name: /instructions/i }), 'Whisk')
+      expect(onChange).toHaveBeenLastCalledWith({
+        stepTitle: undefined,
+        description: 'Whisk',
+        duration: undefined,
+        ingredients: [],
+      })
+
+      await userEvent.type(screen.getByLabelText(/duration/i), '3')
+      await userEvent.click(screen.getByRole('switch'))
+      await userEvent.type(screen.getByLabelText('Quantity'), '2')
+      await userEvent.type(screen.getByLabelText('Unit'), 'large')
+      await userEvent.type(screen.getByLabelText('Ingredient'), 'eggs')
+      await userEvent.click(screen.getByRole('button', { name: 'Add ingredient' }))
+
+      expect(onChange).toHaveBeenLastCalledWith({
+        stepTitle: undefined,
+        description: 'Whisk',
+        duration: 3,
+        ingredients: [{ quantity: 2, unit: 'large', ingredientName: 'eggs' }],
+      })
+    })
+
     it('calls onRemove when remove clicked', async () => {
       const onRemove = vi.fn()
       const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }), { onRemove })

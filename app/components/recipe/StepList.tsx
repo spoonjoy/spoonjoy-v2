@@ -34,6 +34,7 @@ interface StepReorderItemProps {
   autoFocusInstructions: boolean
   onFocused: () => void
   onSave: (data: Omit<StepData, 'id' | 'stepNum'>) => void
+  onChange: (data: Omit<StepData, 'id' | 'stepNum'>) => void
   onRemove: () => void
   onMoveUp: () => void
   onMoveDown: () => void
@@ -49,6 +50,7 @@ function StepReorderItem({
   autoFocusInstructions,
   onFocused,
   onSave,
+  onChange,
   onRemove,
   onMoveUp,
   onMoveDown,
@@ -76,6 +78,7 @@ function StepReorderItem({
         step={step}
         recipeId={recipeId}
         onSave={onSave}
+        onChange={onChange}
         onRemove={onRemove}
         onMoveUp={onMoveUp}
         onMoveDown={onMoveDown}
@@ -252,6 +255,7 @@ export function StepList({ steps, recipeId, onChange, disabled = false }: StepLi
               autoFocusInstructions={newlyAddedStepId === step.id}
               onFocused={() => handleFocused(step.id)}
               onSave={(data) => handleStepSave(step.id, data)}
+              onChange={(data) => handleStepSave(step.id, data)}
               onRemove={() => handleRemoveStep(step.id)}
               onMoveUp={() => handleMoveUp(index)}
               onMoveDown={() => handleMoveDown(index)}
