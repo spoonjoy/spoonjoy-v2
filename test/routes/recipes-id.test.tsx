@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useLocation, useNavigate, useNavigationType, useRevalidator } from "react-router";
+import { Outlet, useLocation, useNavigate, useNavigationType, useRevalidator } from "react-router";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import { ToastProvider } from "~/components/ui/toast";
@@ -31,6 +31,8 @@ import {
   shouldRevalidate as recipeShouldRevalidate,
 } from "~/routes/recipes.$id";
 import RecipeDetail from "~/routes/recipes.$id";
+import RecipesLayout, * as recipesLayoutRoute from "~/routes/recipes";
+import { shouldRevalidate as rootShouldRevalidate } from "~/root";
 import { HISTORY_TRAIL_KEY } from "~/hooks/use-back-navigation";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
@@ -3085,21 +3087,48 @@ describe("Recipes $id Route", () => {
         );
       }
 
+      // The route tree the app builds for a recipe (app/routes.ts): the root, the /recipes layout
+      // and the recipe, each with its real `shouldRevalidate`. The root and layout loaders are
+      // stand-ins that only count their runs; the layout gets one only if its module has a loader.
+      const layoutRouteModule = recipesLayoutRoute as {
+        loader?: unknown;
+        shouldRevalidate?: typeof recipeShouldRevalidate;
+      };
+
       function renderRecipeFromHome(
         recipeEntry = "/recipes/recipe-1",
         loader: () => unknown = () => historyRecipeData,
         shouldRevalidate: typeof recipeShouldRevalidate = recipeShouldRevalidate,
       ) {
+        const rootLoader = vi.fn(() => ({ userId: "user-1" }));
+        const layoutLoader = vi.fn(() => null);
         const Stub = createTestRoutesStub([
-          { path: "/", Component: () => <><h1>Home page</h1><LocationProbe /></> },
           {
-            path: "/recipes/:id",
-            Component: RecipeWithDock,
-            loader,
-            shouldRevalidate,
+            path: "/",
+            Component: () => <Outlet />,
+            loader: rootLoader,
+            shouldRevalidate: rootShouldRevalidate,
+            children: [
+              { index: true, Component: () => <><h1>Home page</h1><LocationProbe /></> },
+              {
+                path: "recipes",
+                Component: RecipesLayout,
+                loader: layoutRouteModule.loader ? layoutLoader : undefined,
+                shouldRevalidate: layoutRouteModule.shouldRevalidate,
+                children: [
+                  {
+                    path: ":id",
+                    Component: RecipeWithDock,
+                    loader,
+                    shouldRevalidate,
+                  },
+                ],
+              },
+            ],
           },
         ]);
         render(<Stub initialEntries={["/", recipeEntry]} initialIndex={1} />);
+        return { rootLoader, layoutLoader };
       }
 
       const probeLocation = () => screen.getByTestId("probe-location");
@@ -3159,12 +3188,14 @@ describe("Recipes $id Route", () => {
         expect(await screen.findByRole("heading", { name: "Home page" })).toBeInTheDocument();
       });
 
-      it("does not reload the recipe when cook mode opens or closes", async () => {
+      it("does not reload the recipe or its parent routes when cook mode opens or closes", async () => {
         const user = userEvent.setup();
         const loader = vi.fn(() => historyRecipeData);
-        renderRecipeFromHome("/recipes/recipe-1", loader);
+        const { rootLoader, layoutLoader } = renderRecipeFromHome("/recipes/recipe-1", loader);
         await screen.findByRole("heading", { name: "History Cook Recipe" });
         const loadsBefore = loader.mock.calls.length;
+        const rootLoadsBefore = rootLoader.mock.calls.length;
+        const layoutLoadsBefore = layoutLoader.mock.calls.length;
 
         // Enter, then Exit (pops the entry).
         await user.click(screen.getByRole("link", { name: "Cook mode" }));
@@ -3178,7 +3209,10 @@ describe("Recipes $id Route", () => {
         await waitFor(() => expect(screen.queryByTestId("cook-mode-panel")).not.toBeInTheDocument());
         expect(probeLocation()).toHaveTextContent(/^\/recipes\/recipe-1$/);
 
+        // No loader in the chain (root, /recipes layout, recipe) ran for the hash-only changes.
         expect(loader).toHaveBeenCalledTimes(loadsBefore);
+        expect(rootLoader).toHaveBeenCalledTimes(rootLoadsBefore);
+        expect(layoutLoader).toHaveBeenCalledTimes(layoutLoadsBefore);
       });
 
       it("still reloads the recipe on an explicit revalidation in cook mode", async () => {
