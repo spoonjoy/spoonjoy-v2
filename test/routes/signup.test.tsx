@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub, createTestUser } from "../utils";
 import { db } from "~/lib/db.server";
 import { loader, action, meta } from "~/routes/signup";
@@ -173,6 +174,9 @@ describe("Signup Route", () => {
       const { data, status } = extractResponseData(response);
       expect(status).toBe(400);
       expect(data.errors.username).toBe("Username must be at least 3 characters");
+      // The form is filled back in from these; the password is never sent back.
+      expect(data.values).toEqual({ email: "test@example.com", username: "ab" });
+      expect(JSON.stringify(data)).not.toContain("Valid-Test-Password-42!");
     });
 
     it("should return validation errors for short password", async () => {
@@ -614,6 +618,121 @@ describe("Signup Route", () => {
       expect(confirmPasswordInput).toHaveAttribute("type", "password");
       expect(confirmPasswordInput).toHaveAttribute("name", "confirmPassword");
       expect(confirmPasswordInput).toBeRequired();
+    });
+
+    it("sends a short username, a short password or a mismatched confirmation to the server and shows its messages", async () => {
+      // The browser's own checks (required, minlength) would stop the submit with a native
+      // bubble that never shows the app's messages; the form leaves every rule to the action.
+      const user = userEvent.setup();
+      let submissions = 0;
+      const Stub = createTestRoutesStub([
+        {
+          path: "/signup",
+          Component: Signup,
+          loader: () => ({ oauthProviders: [] }),
+          action: () => {
+            submissions += 1;
+            return {
+              errors: {
+                username: "Username must be at least 3 characters",
+                password: "Password must be at least 8 characters",
+                confirmPassword: "Passwords do not match",
+              },
+            };
+          },
+        },
+      ]);
+
+      render(<Stub initialEntries={["/signup"]} />);
+
+      const form = (await screen.findByRole("button", { name: "Sign Up" })).closest("form");
+      expect(form).toHaveAttribute("novalidate");
+
+      await user.type(screen.getByLabelText("Email"), "new-cook@example.com");
+      await user.type(screen.getByLabelText("Username"), "ab");
+      await user.type(screen.getByLabelText("Password"), "short");
+      await user.click(screen.getByRole("button", { name: "Sign Up" }));
+
+      expect(await screen.findByText("Username must be at least 3 characters")).toBeInTheDocument();
+      expect(screen.getByText("Password must be at least 8 characters")).toBeInTheDocument();
+      expect(screen.getByText("Passwords do not match")).toBeInTheDocument();
+      expect(submissions).toBe(1);
+      // Screen readers get the same message: each field is marked invalid and described by it.
+      expect(screen.getByLabelText("Username")).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByLabelText("Username")).toHaveAccessibleDescription("Username must be at least 3 characters");
+      expect(screen.getByLabelText("Password")).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByLabelText("Password")).toHaveAccessibleDescription("Password must be at least 8 characters");
+      expect(screen.getByLabelText("Confirm Password")).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByLabelText("Confirm Password")).toHaveAccessibleDescription("Passwords do not match");
+      expect(screen.getByLabelText("Email")).not.toHaveAttribute("aria-invalid");
+      // The fields keep what was typed, so the user corrects them instead of starting over.
+      expect(screen.getByLabelText("Email")).toHaveValue("new-cook@example.com");
+      expect(screen.getByLabelText("Username")).toHaveValue("ab");
+      // Focus moves to the first field the server rejected, as the browser's own check did.
+      expect(screen.getByLabelText("Username")).toHaveFocus();
+    });
+
+    it("marks a rejected email and moves focus to it, ahead of the other fields", async () => {
+      const user = userEvent.setup();
+      const Stub = createTestRoutesStub([
+        {
+          path: "/signup",
+          Component: Signup,
+          loader: () => ({ oauthProviders: [] }),
+          action: () => ({
+            errors: {
+              email: "Valid email is required",
+              username: "Username must be at least 3 characters",
+            },
+            values: { email: "not-an-email", username: "ab" },
+          }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/signup"]} />);
+
+      await user.type(await screen.findByLabelText("Email"), "not-an-email");
+      await user.type(screen.getByLabelText("Username"), "ab");
+      await user.click(screen.getByRole("button", { name: "Sign Up" }));
+
+      expect(await screen.findByText("Valid email is required")).toBeInTheDocument();
+      expect(screen.getByLabelText("Email")).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByLabelText("Email")).toHaveAccessibleDescription("Valid email is required");
+      expect(screen.getByLabelText("Email")).toHaveFocus();
+    });
+
+    it("fills in the email and username the server sent back after a full-page submit", async () => {
+      // Before hydration the form posts natively and the page is rendered afresh from the
+      // action's answer; the typed email and username come back as default values.
+      const Stub = createTestRoutesStub([
+        {
+          id: "signup",
+          path: "/signup",
+          Component: Signup,
+          loader: () => ({ oauthProviders: [] }),
+        },
+      ]);
+
+      render(
+        <Stub
+          initialEntries={["/signup"]}
+          hydrationData={{
+            loaderData: { signup: { oauthProviders: [] } },
+            actionData: {
+              signup: {
+                errors: { username: "Username must be at least 3 characters" },
+                values: { email: "new-cook@example.com", username: "ab" },
+              },
+            },
+          }}
+        />,
+      );
+
+      expect(await screen.findByText("Username must be at least 3 characters")).toBeInTheDocument();
+      expect(screen.getByLabelText("Email")).toHaveValue("new-cook@example.com");
+      expect(screen.getByLabelText("Username")).toHaveValue("ab");
+      expect(screen.getByLabelText("Password")).toHaveValue("");
+      expect(screen.getByLabelText("Username")).toHaveFocus();
     });
 
     it("should have login link", async () => {

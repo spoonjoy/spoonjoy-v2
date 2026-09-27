@@ -21,6 +21,7 @@ import {
   countKitchenVisitors,
 } from "~/lib/fellow-chefs.server";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
+import { clearCookProgressCache } from "~/lib/cook-session-sync";
 import { CookbookPage, SettingsPanel } from "~/components/cookbook/page";
 
 type RecentSpoonItem = {
@@ -279,7 +280,7 @@ export default function UserProfile() {
                 <Settings data-slot="icon" className="size-4" />
                 Settings
               </Button>
-              <Form method="post" action="/logout">
+              <Form method="post" action="/logout" onSubmit={clearCookProgressCache}>
                 <Button type="submit" variant="destructive">Logout</Button>
               </Form>
             </div>

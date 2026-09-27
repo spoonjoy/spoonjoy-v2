@@ -11,6 +11,8 @@ import {
   resolvePostHogServerConfig,
 } from "../app/lib/analytics-server";
 
+import { handleCookSessionProtocolRequest, type CookProtocolOperation } from "./cook-session-api";
+
 export { CookSession } from "./cook-session";
 
 declare global {
@@ -29,6 +31,8 @@ const ACCOUNT_DELETE_INTENT_RESOURCE = "urn:spoonjoy:account-delete-intent:v1";
 
 interface CookRouteRequirement {
   ownerDelete?: boolean;
+  /** Set for the protocol-v1 operations this release implements; every other route stays 503. */
+  operation?: CookProtocolOperation;
   originRequired: boolean;
   scope: "account:write" | "kitchen:read" | "kitchen:write";
 }
@@ -106,20 +110,23 @@ function classifyCookRoute(request: Request, url: URL): CookRouteRequirement | n
 
   const recipePath = `${COOK_SESSION_PREFIX}/[^/]+`;
   if (request.method === "GET" && new RegExp(`^${recipePath}$`).test(url.pathname)) {
-    return { scope: "kitchen:read", originRequired: false };
+    return { scope: "kitchen:read", originRequired: false, operation: "detail" };
   }
   if (request.method === "GET" && new RegExp(`^${recipePath}/socket$`).test(url.pathname)) {
     return { scope: "kitchen:read", originRequired: true };
   }
-  if (
-    (request.method === "PATCH" || request.method === "DELETE") &&
-    new RegExp(`^${recipePath}$`).test(url.pathname)
-  ) {
+  if (request.method === "PATCH" && new RegExp(`^${recipePath}$`).test(url.pathname)) {
+    return { scope: "kitchen:write", originRequired: true, operation: "patch" };
+  }
+  if (request.method === "DELETE" && new RegExp(`^${recipePath}$`).test(url.pathname)) {
     return { scope: "kitchen:write", originRequired: true };
+  }
+  if (request.method === "POST" && new RegExp(`^${recipePath}/start$`).test(url.pathname)) {
+    return { scope: "kitchen:write", originRequired: true, operation: "start" };
   }
   if (
     request.method === "POST" &&
-    new RegExp(`^${recipePath}/(?:start|complete|abandon|restart)$`).test(url.pathname)
+    new RegExp(`^${recipePath}/(?:complete|abandon|restart)$`).test(url.pathname)
   ) {
     return { scope: "kitchen:write", originRequired: true };
   }
@@ -172,6 +179,14 @@ async function handleCookSessionRequest(
     }
     if (requirement.ownerDelete && await requestHasBodyBytes(request)) {
       return cookErrorResponse(400, "invalid_request", "Cook session request is invalid.");
+    }
+    // Protocol v1 is switched on per environment (QA first); production keeps the inert
+    // bootstrap answer until its release flips COOK_SESSION_PROTOCOL (see docs/deployment.md).
+    if (requirement.operation && env.COOK_SESSION_PROTOCOL === "v1") {
+      return await handleCookSessionProtocolRequest(request, env, principal.id, requirement.operation, {
+        // Browser (cookie) callers must name their user; see COOK_EXPECTED_USER_HEADER.
+        requireExpectedUser: principal.source === "session",
+      });
     }
     return cookProtocolUnavailableResponse();
   } catch (error) {

@@ -26,6 +26,11 @@
       "binding": "DB",
       "database_name": "spoonjoy-workers-test",
       "database_id": "00000000-0000-0000-0000-000000000000"
+    },
+    {
+      "binding": "COOK_PROTOCOL_TEST_DB",
+      "database_name": "spoonjoy-workers-test-cook-protocol",
+      "database_id": "00000000-0000-0000-0000-000000000001"
     }
   ],
   "ratelimits": [
