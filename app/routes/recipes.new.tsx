@@ -174,11 +174,10 @@ export async function action({ request, context }: Route.ActionArgs) {
   const trimmedTitle = title.trim();
   const trimmedDescription = description.trim() || null;
   const coverId = crypto.randomUUID();
-  let recipe: Awaited<ReturnType<typeof createRecipeDraft>>;
   try {
     // The recipe, its steps and its cover (the upload, made active, or the placeholder that
     // generation fills in) are written together: on D1 as one atomic batch.
-    recipe = await createRecipeDraft(database, {
+    await createRecipeDraft(database, {
       id: recipeId,
       title: trimmedTitle,
       description: trimmedDescription,
@@ -232,9 +231,9 @@ export async function action({ request, context }: Route.ActionArgs) {
       await deleteUpload();
       return data({ errors: { title: error.message } }, { status: 400 });
     }
-    // The recipe create failed after the image landed in R2. Record the real
+    // The recipe create threw after the image landed in R2. Record the real
     // failure first (it was previously discarded behind a generic 500), then
-    // roll back the orphaned upload.
+    // decide what to do with the upload.
     if (postHogConfig.enabled) {
       const capture = captureException(postHogConfig, {
         error,
@@ -248,17 +247,26 @@ export async function action({ request, context }: Route.ActionArgs) {
         void capture;
       }
     }
-    await deleteUpload();
-
-    return data(
-      { errors: { general: "Failed to create recipe. Please try again." } },
-      { status: 500 }
-    );
+    // A thrown save is not proof that nothing was written: an error can be reported after the
+    // write committed. So look for the recipe before deleting the upload its cover may point at.
+    // If it is there, the save landed and is answered as a success. If the lookup itself fails,
+    // the upload is kept: an unreferenced image is harmless, a cover pointing at a deleted one is
+    // not.
+    const landed = await database.recipe
+      .findUnique({ where: { id: recipeId }, select: { id: true } })
+      .catch(() => undefined);
+    if (!landed) {
+      if (landed === null) await deleteUpload();
+      return data(
+        { errors: { general: "Failed to create recipe. Please try again." } },
+        { status: 500 }
+      );
+    }
   }
 
   // The recipe and its cover are committed, and the cover may point at the upload. From here a
   // failure is captured, never answered as a failed save and never a reason to delete the upload.
-  const createdId = recipe.id;
+  const createdId = recipeId;
   await runAfterRecipeSave(async () => {
     if (uploadedImageUrl) {
       await scheduleSpoonCoverStylization({

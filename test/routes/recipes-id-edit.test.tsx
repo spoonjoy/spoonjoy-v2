@@ -11,6 +11,7 @@ import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "~/lib/recipe-title-uniqueness.server";
 import * as stylizationModule from "~/lib/spoon-cover-stylization.server";
+import * as recipeCoverModule from "~/lib/recipe-cover.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
 
@@ -1722,6 +1723,75 @@ describe("Recipes $id Edit Route", () => {
         coverMode: "none",
       });
       await expect(db.recipeCover.count({ where: { recipeId } })).resolves.toBe(1);
+    });
+
+    it("keeps the upload and redirects when a save that wrote the cover row then throws", async () => {
+      // Without D1 the writes are separate statements: the fields and the cover row commit,
+      // then making the cover active throws. The cover points at the upload, so it must stay.
+      const setActive = vi.spyOn(recipeCoverModule, "setActiveRecipeCover")
+        .mockRejectedValueOnce(new Error("Connection dropped after commit"));
+      const mockR2Bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn().mockResolvedValue(undefined),
+      };
+
+      try {
+        const formData = new UndiciFormData();
+        formData.append("title", "Partly Saved");
+        formData.append("image", validImageFile("landed.png", "image/png"));
+        const request = await createMultipartRequest(formData, testUserId);
+
+        const response = await action({
+          request,
+          context: { cloudflare: { env: { PHOTOS: mockR2Bucket } } },
+          params: { id: recipeId },
+        } as any);
+
+        expect(setActive).toHaveBeenCalledTimes(1);
+        expect(response).toBeInstanceOf(Response);
+        expect(response.status).toBe(302);
+        expect(response.headers.get("Location")).toBe(`/recipes/${recipeId}`);
+        expect(mockR2Bucket.delete).not.toHaveBeenCalled();
+        const uploadedKey = mockR2Bucket.put.mock.calls[0][0];
+        const covers = await db.recipeCover.findMany({ where: { recipeId } });
+        expect(covers.map((cover) => cover.imageUrl)).toEqual([`/photos/${uploadedKey}`]);
+        await expect(db.recipe.findUniqueOrThrow({ where: { id: recipeId } })).resolves.toMatchObject({ title: "Partly Saved" });
+      } finally {
+        setActive.mockRestore();
+      }
+    });
+
+    it("keeps the upload and answers 500 when it cannot tell whether a failed save landed", async () => {
+      const mockR2Bucket = {
+        put: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn().mockResolvedValue(undefined),
+      };
+      const originalTransaction = db.$transaction;
+      const originalFindFirst = db.recipeCover.findFirst;
+      db.$transaction = vi.fn().mockRejectedValue(new Error("Database connection failed"));
+      db.recipeCover.findFirst = vi.fn().mockRejectedValue(new Error("Database still down")) as any;
+
+      try {
+        const formData = new UndiciFormData();
+        formData.append("title", "Unknown Outcome");
+        formData.append("image", validImageFile("unknown.jpg", "image/jpeg"));
+        const request = await createMultipartRequest(formData, testUserId);
+
+        const response = await action({
+          request,
+          context: { cloudflare: { env: { PHOTOS: mockR2Bucket } } },
+          params: { id: recipeId },
+        } as any);
+
+        const { data, status } = extractResponseData(response);
+        expect(status).toBe(500);
+        expect(data.errors.general).toBe("Failed to update recipe. Please try again.");
+        expect(db.recipeCover.findFirst).toHaveBeenCalledTimes(1);
+        expect(mockR2Bucket.delete).not.toHaveBeenCalled();
+      } finally {
+        db.$transaction = originalTransaction;
+        db.recipeCover.findFirst = originalFindFirst;
+      }
     });
 
     it("should delete uploaded replacement image when database update fails", async () => {

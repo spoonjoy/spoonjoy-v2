@@ -436,9 +436,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       }
       return data({ errors: { title: ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } }, { status: 400 });
     }
-    // The recipe update failed after a replacement image landed in R2. Capture
-    // the real failure (previously discarded), then best-effort delete the
-    // orphaned upload — capturing if that delete also throws.
+    // The recipe update threw after a replacement image landed in R2. Capture
+    // the real failure (previously discarded), then decide what to do with the
+    // upload; a failed delete is captured too.
     if (postHogConfig.enabled) {
       const capture = captureException(postHogConfig, {
         error,
@@ -452,12 +452,24 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         void capture;
       }
     }
-    await deleteUpload();
-
-    return data(
-      { errors: { general: "Failed to update recipe. Please try again." } },
-      { status: 500 }
-    );
+    // A thrown save is not proof that nothing was written: on D1 an error can be reported after
+    // the batch committed, and without D1 the writes are separate statements, so an early one may
+    // have committed. So look for a cover row pointing at the upload before deleting it. If there
+    // is one, the save landed and is answered as a success. If the lookup itself fails, the upload
+    // is kept: an unreferenced image is harmless, a cover pointing at a deleted one is not.
+    const landedCover = uploadedImageUrl
+      ? await database.recipeCover
+        .findFirst({ where: { recipeId: id, imageUrl: uploadedImageUrl }, select: { id: true, imageUrl: true } })
+        .catch(() => undefined)
+      : null;
+    if (!landedCover) {
+      if (landedCover === null) await deleteUpload();
+      return data(
+        { errors: { general: "Failed to update recipe. Please try again." } },
+        { status: 500 }
+      );
+    }
+    savedCover = landedCover;
   }
 
   // The save is committed and the saved cover points at the upload. From here a failure is

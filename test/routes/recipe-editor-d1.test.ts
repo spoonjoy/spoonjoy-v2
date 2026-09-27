@@ -261,6 +261,58 @@ describe("recipe editor routes on a D1 binding", () => {
   });
 
   describe("after the save batch commits", () => {
+    /** The fake binding, answering an error after its first batch has committed. */
+    function committedThenThrows() {
+      let pending = true;
+      return {
+        prepare: (sql: string) => d1.binding.prepare(sql),
+        async batch(statements: never) {
+          const result = await d1.binding.batch(statements);
+          if (pending) {
+            pending = false;
+            throw new Error("D1 reply lost after commit");
+          }
+          return result;
+        },
+      };
+    }
+
+    it("keeps the edit page's upload and redirects when the save batch commits but answers an error", async () => {
+      const mine = await seedRecipe("Committed then errored");
+      const bucket = photos();
+      const result = await withD1Routes(() => act("edit", mine, () => ({
+        title: "Committed then errored", description: "Landed", image: new File([PNG], "cover.png", { type: "image/png" }),
+      }), { DB: committedThenThrows(), PHOTOS: bucket }));
+
+      expect(result).toBeInstanceOf(Response);
+      expect((result as Response).status).toBe(302);
+      expect((result as Response).headers.get("Location")).toBe(`/recipes/${mine.recipe.id}`);
+      expect(bucket.delete).not.toHaveBeenCalled();
+      const recipe = await db.recipe.findUniqueOrThrow({ where: { id: mine.recipe.id }, include: { activeCover: true } });
+      expect(recipe.description).toBe("Landed");
+      expect(recipe.activeCover?.imageUrl).toBe(`/photos/${bucket.put.mock.calls[0]![0]}`);
+    });
+
+    it("keeps the new recipe page's upload and redirects when the create batch commits but answers an error", async () => {
+      const bucket = photos();
+      const body = form({ title: "Created then errored", steps: "[]", image: new File([PNG], "cover.png", { type: "image/png" }) });
+      const result = await withD1Routes(async () => {
+        const { action } = await import("~/routes/recipes.new");
+        return action({
+          request: new UndiciRequest("http://localhost:3000/recipes/new", { method: "POST", headers: { Cookie: cookie }, body }) as never,
+          context: { cloudflare: { env: { DB: committedThenThrows(), PHOTOS: bucket } } },
+          params: {},
+        } as never);
+      });
+
+      const recipe = await db.recipe.findFirstOrThrow({ where: { title: "Created then errored" }, include: { activeCover: true } });
+      expect(result).toBeInstanceOf(Response);
+      expect((result as Response).status).toBe(302);
+      expect((result as Response).headers.get("Location")).toBe(`/recipes/${recipe.id}`);
+      expect(bucket.delete).not.toHaveBeenCalled();
+      expect(recipe.activeCover?.imageUrl).toBe(`/photos/${bucket.put.mock.calls[0]![0]}`);
+    });
+
     it("keeps the edit page's upload the committed cover points at, and redirects, when stylization fails", async () => {
       const mine = await seedRecipe("Saved then stylized");
       const bucket = photos();
