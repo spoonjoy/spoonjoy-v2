@@ -1310,7 +1310,7 @@ function cloudflareGateRunIsSafe(run: string): boolean {
     'if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then',
     'echo "ready=false" >> "$GITHUB_OUTPUT"',
     'echo "Skipping QA image-cover smoke because Cloudflare GitHub secrets are not configured."',
-    "exit 0",
+    "exit 1",
     "fi",
     'echo "ready=true" >> "$GITHUB_OUTPUT"',
   ]);
@@ -1323,7 +1323,7 @@ function qaProviderGateRunIsSafe(run: string): boolean {
     `if ! printf '%s' "$secrets_json" | grep -Eq '"(OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY)"'; then`,
     'echo "ready=false" >> "$GITHUB_OUTPUT"',
     'echo "Skipping QA image-cover smoke because no QA image-provider secret is configured."',
-    "exit 0",
+    "exit 1",
     "fi",
     'echo "ready=true" >> "$GITHUB_OUTPUT"',
   ]);
