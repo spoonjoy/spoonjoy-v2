@@ -76,7 +76,7 @@ describe("recipe-cover-service", () => {
       recipeId: "recipe-1",
       coverId: "cover-1",
       variant: "image",
-    });
+    }, null);
   });
 
   it("activates the stylized variant when one is available and falls back when the cover is missing", async () => {
@@ -98,11 +98,11 @@ describe("recipe-cover-service", () => {
       recipeId: "recipe-1",
       coverId: "stylized-cover",
       variant: "stylized",
-    });
+    }, null);
     expect(setActiveRecipeCover).toHaveBeenNthCalledWith(2, db, {
       recipeId: "recipe-1",
       coverId: "missing-cover",
       variant: "image",
-    });
+    }, null);
   });
 });

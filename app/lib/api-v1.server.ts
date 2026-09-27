@@ -2529,7 +2529,7 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
 
       if (activateWhenReady) {
         try {
-          await setActiveRecipeCover(db, { recipeId, coverId: createdCover.id, variant: "image" });
+          await setActiveRecipeCover(db, { recipeId, coverId: createdCover.id, variant: "image" }, requestD1(args.context));
         } catch (error) {
           throw coverMutationError(error, createdCover.id);
         }
@@ -2677,7 +2677,7 @@ async function handleRecipeCoverCreate(args: ApiV1RouteArgs, requestId: string, 
 
     if (activate) {
       try {
-        await setActiveRecipeCover(db, { recipeId, coverId: cover.id, variant: "image" });
+        await setActiveRecipeCover(db, { recipeId, coverId: cover.id, variant: "image" }, requestD1(args.context));
       } catch (error) {
         throw coverMutationError(error, cover.id);
       }
@@ -2786,7 +2786,7 @@ async function handleRecipeCoverSetNoCover(args: ApiV1RouteArgs, requestId: stri
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
     const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
-    const nextRecipe = await clearActiveRecipeCover(db, recipe.id);
+    const nextRecipe = await clearActiveRecipeCover(db, recipe.id, requestD1(args.context));
     return {
       status: 200,
       data: {
@@ -2809,7 +2809,7 @@ async function handleRecipeCoverActivate(args: ApiV1RouteArgs, requestId: string
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
     const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
     try {
-      await setActiveRecipeCover(db, { recipeId, coverId, variant });
+      await setActiveRecipeCover(db, { recipeId, coverId, variant }, requestD1(args.context));
     } catch (error) {
       throw coverMutationError(error, coverId);
     }
@@ -2851,7 +2851,7 @@ async function handleRecipeCoverArchive(args: ApiV1RouteArgs, requestId: string,
         replacementCoverId,
         replacementVariant,
         confirmNoCover,
-      });
+      }, requestD1(args.context));
       archivedCoverId = result.archivedCover.id;
     } catch (error) {
       throw coverMutationError(error, coverId);
@@ -2985,7 +2985,7 @@ async function handleRecipeCoverFromSpoon(args: ApiV1RouteArgs, requestId: strin
         } : undefined,
       });
     } else if (activate) {
-      await setActiveRecipeCover(db, { recipeId, coverId: cover.id, variant: "image" });
+      await setActiveRecipeCover(db, { recipeId, coverId: cover.id, variant: "image" }, requestD1(args.context));
     }
     const nextRecipe = await loadOwnedCoverRecipe(db, principal, recipeId);
     const createdCover = await db.recipeCover.findFirstOrThrow({ where: { id: cover.id, recipeId } });

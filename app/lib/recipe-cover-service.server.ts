@@ -1,3 +1,4 @@
+import type { D1ReadDatabase } from "~/lib/d1-read.server";
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import { deferBackgroundTask } from "~/lib/background-task.server";
 import { sanitizeImagePromptAddition, type ImageGenEnv, type ImageGenRunner } from "~/lib/image-gen.server";
@@ -141,6 +142,7 @@ export async function scheduleRecipePlaceholderGeneration(
 export async function activateRecipeCoverWithBestAvailableVariant(
   db: PrismaClientType,
   input: { recipeId: string; coverId: string },
+  d1: D1ReadDatabase | null = null,
 ): Promise<void> {
   const cover = await db.recipeCover.findUnique({
     where: { id: input.coverId },
@@ -150,5 +152,5 @@ export async function activateRecipeCoverWithBestAvailableVariant(
     recipeId: input.recipeId,
     coverId: input.coverId,
     variant: cover?.stylizedImageUrl ? "stylized" : "image",
-  });
+  }, d1);
 }

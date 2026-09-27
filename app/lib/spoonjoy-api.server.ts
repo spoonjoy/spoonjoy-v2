@@ -1793,7 +1793,7 @@ const createRecipeCoverFromUploadTool: SpoonjoyApiOperation = {
             recipeId,
             coverId: cover.id,
             variant: "image",
-          });
+          }, d1Binding(context.env?.DB));
         }
 
         const nextRecipe = await reloadCoverMutationRecipe(context, recipeId);
@@ -1994,7 +1994,7 @@ const createRecipeCoverFromSpoonTool: SpoonjoyApiOperation = {
             recipeId,
             coverId: cover.id,
             variant: "image",
-          });
+          }, d1Binding(context.env?.DB));
         }
 
         const nextRecipe = await reloadCoverMutationRecipe(context, recipeId);
@@ -2174,7 +2174,7 @@ const setActiveRecipeCoverTool: SpoonjoyApiOperation = {
       dryRun: false,
       write: async (mutationKey) => {
         try {
-          await setActiveRecipeCover(context.db, { recipeId, coverId, variant });
+          await setActiveRecipeCover(context.db, { recipeId, coverId, variant }, d1Binding(context.env?.DB));
         } catch (error) {
           coverLifecycleApiError(error);
         }
@@ -2222,7 +2222,7 @@ const setRecipeNoCoverTool: SpoonjoyApiOperation = {
       idempotencyKey,
       dryRun: false,
       write: async (mutationKey) => {
-        await clearActiveRecipeCover(context.db, recipeId);
+        await clearActiveRecipeCover(context.db, recipeId, d1Binding(context.env?.DB));
         const nextRecipe = await reloadCoverMutationRecipe(context, recipeId);
         return activeCoverMutationResponse({
           activeCover: await activeFullCoverPayload(context, nextRecipe),
@@ -2283,7 +2283,7 @@ const archiveRecipeCoverTool: SpoonjoyApiOperation = {
             replacementCoverId,
             replacementVariant,
             confirmNoCover,
-          });
+          }, d1Binding(context.env?.DB));
           archivedCoverId = result.archivedCover.id;
         } catch (error) {
           coverLifecycleApiError(error);
@@ -2434,7 +2434,7 @@ const createRecipeTool: SpoonjoyApiOperation = {
       await activateRecipeCoverWithBestAvailableVariant(context.db, {
         recipeId: created.id,
         coverId,
-      });
+      }, d1Binding(context.env?.DB));
     }
 
     const recipe = await context.db.recipe.findUniqueOrThrow({
@@ -2586,7 +2586,7 @@ const updateRecipeTool: SpoonjoyApiOperation = {
       await activateRecipeCoverWithBestAvailableVariant(context.db, {
         recipeId: existing.id,
         coverId,
-      });
+      }, d1Binding(context.env?.DB));
     }
 
     const recipe = await context.db.recipe.findUniqueOrThrow({
