@@ -320,6 +320,47 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
 
   return (
     <>
+      <SpoonDock aria-label={activeConfig.ariaLabel ?? "Spoonjoy navigation"} centered={centered}>
+        {/* When centered, the side zones grow (flex-1) so the place item and the
+            tools fill the dock — no bare dock between items — and the equal zones
+            leave the primary dead-center. */}
+        <div className={clsx("flex min-w-0 justify-start", centered && "flex-1")}>
+          <DockItem
+            {...activeConfig.left}
+            variant="place"
+            className={centered ? "flex-1" : undefined}
+            href={buttonHref(activeConfig.left)}
+            onClick={buttonOnClick(activeConfig.left)}
+          />
+        </div>
+
+        <div className="flex shrink-0 justify-center" data-testid="dock-center">
+          <DockItem
+            {...activeConfig.primary}
+            variant="primary"
+            tone={activeConfig.primary.tone ?? "primary"}
+            href={buttonHref(activeConfig.primary)}
+            onClick={buttonOnClick(activeConfig.primary)}
+          />
+        </div>
+
+        <div className={clsx("flex justify-end gap-1", centered && "flex-1")}>
+          {tools.map((tool) => (
+            <DockItem
+              key={tool.id}
+              {...tool}
+              variant="tool"
+              className={centered ? "flex-1" : undefined}
+              href={buttonHref(tool)}
+              onClick={buttonOnClick(tool)}
+            />
+          ))}
+        </div>
+      </SpoonDock>
+
+      {/* The pantry comes after the dock in the document, although it shows above it, so the next
+          thing after its button, for VoiceOver or the Tab key, is the pantry it just opened. Both
+          it and its backdrop are position: fixed, so their place in the document moves nothing. */}
       {isPantryOpen ? (
         <>
           {/* A tap anywhere outside the pantry closes it without also activating what's under
@@ -363,44 +404,6 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
           </div>
         </>
       ) : null}
-
-      <SpoonDock aria-label={activeConfig.ariaLabel ?? "Spoonjoy navigation"} centered={centered}>
-        {/* When centered, the side zones grow (flex-1) so the place item and the
-            tools fill the dock — no bare dock between items — and the equal zones
-            leave the primary dead-center. */}
-        <div className={clsx("flex min-w-0 justify-start", centered && "flex-1")}>
-          <DockItem
-            {...activeConfig.left}
-            variant="place"
-            className={centered ? "flex-1" : undefined}
-            href={buttonHref(activeConfig.left)}
-            onClick={buttonOnClick(activeConfig.left)}
-          />
-        </div>
-
-        <div className="flex shrink-0 justify-center" data-testid="dock-center">
-          <DockItem
-            {...activeConfig.primary}
-            variant="primary"
-            tone={activeConfig.primary.tone ?? "primary"}
-            href={buttonHref(activeConfig.primary)}
-            onClick={buttonOnClick(activeConfig.primary)}
-          />
-        </div>
-
-        <div className={clsx("flex justify-end gap-1", centered && "flex-1")}>
-          {tools.map((tool) => (
-            <DockItem
-              key={tool.id}
-              {...tool}
-              variant="tool"
-              className={centered ? "flex-1" : undefined}
-              href={buttonHref(tool)}
-              onClick={buttonOnClick(tool)}
-            />
-          ))}
-        </div>
-      </SpoonDock>
     </>
   );
 }

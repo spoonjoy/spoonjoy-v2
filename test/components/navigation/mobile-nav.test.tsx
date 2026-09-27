@@ -111,6 +111,31 @@ describe("MobileNav", () => {
       expect(screen.queryByTestId("mobile-pantry")).not.toBeInTheDocument();
     });
 
+    it("puts the pantry right after its button in document and focus order", async () => {
+      const user = userEvent.setup();
+      render(
+        <MemoryRouter initialEntries={["/"]}>
+          <MobileNav />
+        </MemoryRouter>,
+      );
+
+      const toggle = screen.getByRole("button", { name: "Pantry navigation" });
+      await user.click(toggle);
+      const pantry = screen.getByTestId("mobile-pantry");
+
+      // The pantry follows its button in the document, so VoiceOver's next item and the Tab key
+      // both go from the button into the pantry it just opened, not back into the dock.
+      expect(toggle.compareDocumentPosition(pantry) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(toggle).toHaveFocus();
+      await user.tab();
+      expect(within(pantry).getByRole("link", { name: "Recipes", exact: true })).toHaveFocus();
+
+      // From inside the pantry, Escape still closes it and returns focus to its button.
+      await user.keyboard("{Escape}");
+      expect(screen.queryByTestId("mobile-pantry")).not.toBeInTheDocument();
+      expect(toggle).toHaveFocus();
+    });
+
     it("closes the pantry on Escape and returns focus to its button, ignoring other keys", async () => {
       const user = userEvent.setup();
       render(
