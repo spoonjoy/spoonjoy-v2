@@ -527,7 +527,11 @@ describe("Kitchen Index Route", () => {
       expect(screen.getByText("Recently Updated")).toBeInTheDocument();
       expect(screen.queryByText("Latest from the kitchen")).not.toBeInTheDocument();
       expect(screen.queryByText("On the Counter")).not.toBeInTheDocument();
-      expect(screen.getByRole("complementary", { name: "Recipe index" })).toBeInTheDocument();
+      // The recipe index sits inside root.tsx's <main>, so it's a labelled region rather than
+      // a complementary landmark (which must be top level) — see
+      // landmark-complementary-is-top-level.
+      expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "Recipe index" })).toBeInTheDocument();
       expect(screen.getByRole("region", { name: "Cookbooks" })).toBeInTheDocument();
       expect(screen.getByText("3 recipes and 1 cookbook")).toBeInTheDocument();
       expect(screen.getAllByText("Cheese Night").length).toBeGreaterThan(0);

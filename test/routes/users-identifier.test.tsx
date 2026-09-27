@@ -390,6 +390,11 @@ describe("Users $identifier Route", () => {
       expect(screen.getAllByText("Weeknight Pantry").length).toBeGreaterThan(0);
       expect(screen.queryByRole("link", { name: "Open settings" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Logout" })).not.toBeInTheDocument();
+      // The cookbook sidebar is a labelled region, not an <aside>: root.tsx already wraps
+      // every route in a <main> landmark, so a complementary landmark here would nest
+      // inside it and fail landmark-complementary-is-top-level.
+      expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "Cookbooks" })).toBeInTheDocument();
     });
 
     it("renders owner actions, default avatar fallback, and empty states", async () => {

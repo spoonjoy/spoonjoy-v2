@@ -2886,8 +2886,14 @@ describe("Recipes $id Route", () => {
       const cookMode = await screen.findByTestId("cook-mode-panel");
       expect(screen.queryByTestId("recipe-masthead")).not.toBeInTheDocument();
       expect(within(cookMode).getByTestId("cook-mode-pager")).toBeInTheDocument();
+      // Cook mode replaces the whole page, so it needs its own h1 (page-has-heading-one):
+      // the recipe title, promoted from a plain <p> in the "Now cooking" masthead.
+      expect(within(cookMode).getByRole("heading", { level: 1, name: "Cookable Recipe" })).toBeInTheDocument();
+      // The ingredient checklist/scale panel is core cook-mode UI, not a complementary
+      // landmark nested inside root.tsx's <main> (landmark-complementary-is-top-level).
+      expect(within(cookMode).queryByRole("complementary")).not.toBeInTheDocument();
       expect(within(cookMode).getByText("Step 1 of 2")).toBeInTheDocument();
-      expect(within(cookMode).getByRole("heading", { name: "Prep" })).toBeInTheDocument();
+      expect(within(cookMode).getByRole("heading", { level: 2, name: "Prep" })).toBeInTheDocument();
       expect(within(cookMode).getByText("Chop everything before the pan is hot.")).toBeInTheDocument();
 
       await user.click(within(cookMode).getByRole("checkbox", { name: "tomatoes" }));

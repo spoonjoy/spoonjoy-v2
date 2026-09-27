@@ -1298,9 +1298,12 @@ function CookModePanel({
         <header className="flex min-h-20 shrink-0 items-center justify-between gap-4 border-b border-[var(--sj-border)] py-4">
           <div className="min-w-0">
             <p className="sj-eyebrow">Now cooking</p>
-            <p className="font-sj-ui mt-1 truncate text-sm font-semibold text-[var(--sj-ink-soft)]">
+            {/* Cook mode replaces the whole page (see the early return above), so this
+                promotes the recipe title to the page's `h1` instead of adding a second,
+                visually redundant one. */}
+            <h1 className="font-sj-ui mt-1 truncate text-sm font-semibold text-[var(--sj-ink-soft)]">
               {recipeTitle}
-            </p>
+            </h1>
             <p className="font-sj-ui mt-1 text-xs uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
               {recipeProgressLabel}
             </p>
@@ -1338,7 +1341,11 @@ function CookModePanel({
             {step.duration ? <CookModeTimer durationMinutes={step.duration} /> : null}
           </article>
 
-          <aside className="mx-auto flex w-full max-w-[38rem] shrink-0 flex-col justify-between gap-8 border-y border-[var(--sj-border)] py-6 lg:min-h-0 lg:shrink lg:py-8">
+          {/* A <div>, not <aside>: this ingredient checklist and scale selector are core
+              cook-mode controls for the current step, not tangential "complementary"
+              content, and root.tsx always wraps route content in a <main> landmark, so an
+              <aside> here would violate landmark-complementary-is-top-level. */}
+          <div className="mx-auto flex w-full max-w-[38rem] shrink-0 flex-col justify-between gap-8 border-y border-[var(--sj-border)] py-6 lg:min-h-0 lg:shrink lg:py-8">
             <div>
               <div className="flex items-end justify-between gap-4">
                 <div>
@@ -1376,7 +1383,7 @@ function CookModePanel({
             <div className="mx-auto w-full max-w-[24rem]">
               <ScaleSelector value={scaleFactor} onChange={onScaleChange} />
             </div>
-          </aside>
+          </div>
         </div>
 
         <footer className="z-10 shrink-0 border-t border-[var(--sj-border)] bg-[var(--sj-page)] py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">

@@ -305,9 +305,14 @@ export default function UserProfile() {
             />
           </section>
 
-          <aside>
+          {/* A <section aria-labelledby>, not <aside>: root.tsx already wraps every route in a
+              <main> landmark, so an <aside> here would nest a complementary landmark inside it
+              and fail landmark-complementary-is-top-level. This cookbook list is still worth
+              naming as its own region for screen-reader navigation, so it keeps a labelled
+              region instead of dropping to a plain <div>. */}
+          <section aria-labelledby="chef-cookbooks-heading">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <Subheading level={2} className="text-2xl/8">Cookbooks</Subheading>
+              <Subheading id="chef-cookbooks-heading" level={2} className="text-2xl/8">Cookbooks</Subheading>
               <Text className="font-sj-ui text-xs uppercase tracking-[0.14em]">{cookbooks.length} total</Text>
             </div>
 
@@ -334,7 +339,7 @@ export default function UserProfile() {
                 ))}
               </div>
             )}
-          </aside>
+          </section>
         </div>
 
         <SettingsPanel title="Recent cooks">
