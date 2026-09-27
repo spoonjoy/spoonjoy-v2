@@ -199,10 +199,11 @@ describe("REST recipe writes on a D1 binding", () => {
 
     it("reports a title taken before the write, a recipe gone before it, and other failures", async () => {
       const { recipe } = await seedRecipe("Mine");
-      await seedRecipe("Theirs");
-      const racing = interleaved(() => db.recipe.update({ where: { id: recipe.id }, data: { title: "Mine" } }));
-      await expect(updateNativeRecipe(db, chefId, recipe.id, { clientMutationId: "u", fields: { title: "Theirs" } }, racing))
+      const theirs = await seedRecipe("Theirs");
+      const racing = interleaved(() => db.recipe.update({ where: { id: theirs.recipe.id }, data: { title: "Taken" } }));
+      await expect(updateNativeRecipe(db, chefId, recipe.id, { clientMutationId: "u", fields: { title: "Taken" } }, racing))
         .resolves.toMatchObject({ ok: false, details: { fieldErrors: { title: ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } } });
+      await expect(db.recipe.findUniqueOrThrow({ where: { id: recipe.id } })).resolves.toMatchObject({ title: "Mine" });
       await expect(updateNativeRecipe(db, chefId, recipe.id, { clientMutationId: "u", fields: { description: "x" } }, failing()))
         .rejects.toThrow("D1 is down");
 

@@ -228,8 +228,11 @@ describe("recipe editor routes on a D1 binding", () => {
       await expectParity("step", ({ ingredients }) => ({ intent: "deleteIngredient", ingredientId: ingredients[2]!.id }), 0);
     });
 
-    it("saves a step and its output uses as the Prisma path does", async () => {
-      const { statuses } = await expectParity("step", () => ({ stepTitle: "Bake hot", description: "Bake it hot", usesSteps: "2" }), 2);
+    it.each([
+      ["with a title", "Bake hot"],
+      ["without a title", "  "],
+    ])("saves a step %s and its output uses as the Prisma path does", async (_label, stepTitle) => {
+      const { statuses } = await expectParity("step", () => ({ stepTitle, description: "Bake it hot", usesSteps: "2" }), 2);
       expect(statuses).toEqual([302, 302]);
     });
   });

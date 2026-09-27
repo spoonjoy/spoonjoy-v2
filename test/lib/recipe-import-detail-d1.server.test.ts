@@ -196,5 +196,18 @@ describe("recipe import and recipe page writes on a D1 binding", () => {
       expect(result).toBeInstanceOf(Response);
       expect((result as Response).status).toBe(404);
     });
+
+    it("rethrows any other D1 failure", async () => {
+      const { recipe } = await seedRecipe("Down");
+      const failing: D1ReadDatabase = {
+        prepare: (sql) => d1.binding.prepare(sql),
+        batch: async () => {
+          throw new Error("D1 is down");
+        },
+      };
+      const result = await act(recipe.id, { intent: "delete" }, { DB: failing });
+      expect(result).toEqual(new Error("D1 is down"));
+      await expect(graph(recipe.id)).resolves.toMatchObject({ deleted: false });
+    });
   });
 });
