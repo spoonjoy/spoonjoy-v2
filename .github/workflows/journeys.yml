@@ -26,6 +26,16 @@ defaults:
   run:
     shell: bash
 
+# QA is single-tenant, and runs take their turn through the FIFO queue in the qa-turn job below,
+# not through a shared concurrency group: GitHub keeps one running and one pending run per group
+# and cancels the older pending run whenever a newer one queues, which silently dropped runs.
+# The only group left is per pull request, so a newer push to a pull request replaces that pull
+# request's older run. Every other run (pushes to main, the schedule, manual runs) gets a group
+# of its own and is never cancelled.
+concurrency:
+  group: journeys-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   PRISMA_HIDE_UPDATE_MESSAGE: "1"
   SPOONJOY_JOURNEYS_BASE_URL: https://spoonjoy-v2-qa.mendelow-studio.workers.dev
@@ -42,18 +52,37 @@ jobs:
     steps:
       - run: echo "::warning::Journeys need QA credentials and do not run for fork pull requests. A maintainer must re-run them from a same-repo branch."
 
+  # One run at a time on the shared QA mirror, first in, first out. scripts/wait-for-qa-turn.mjs
+  # waits until no active Journeys run is ahead of this one, ordered by the start of each run's
+  # current attempt and then by run id (a re-run joins the back of the queue). It fails after
+  # 90 minutes rather than proceed without its turn. The run keeps QA until it completes.
+  qa-turn:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    name: wait for QA
+    runs-on: ubuntu-latest
+    timeout-minutes: 95
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+
+      - name: Wait for this run's turn on QA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/wait-for-qa-turn.mjs
+
   journeys:
+    needs: qa-turn
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: journeys
     runs-on: ubuntu-latest
-    # One journeys run at a time against the shared QA mirror. This sits on the job, not the
-    # workflow, so the fork-notice job never takes the group's pending slot. GitHub keeps only
-    # one pending run per concurrency group, so a newer run can cancel an older pending one
-    # (cancel-in-progress: false only protects the run that is already going). A cancelled
-    # pull request run is re-triggered by the next push or a manual re-run.
-    concurrency:
-      group: qa-environment
-      cancel-in-progress: false
     timeout-minutes: 30
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
