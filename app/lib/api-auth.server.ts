@@ -170,20 +170,6 @@ function toPrincipal(
   };
 }
 
-export async function principalFromUserId(
-  db: PrismaClientType,
-  userId: string,
-  source: ApiPrincipalSource = "session",
-  credentialId?: string
-): Promise<ApiPrincipal | null> {
-  const user = await db.user.findUnique({
-    where: { id: userId },
-    select: { id: true, email: true, username: true },
-  });
-
-  return user ? toPrincipal(user, source, credentialId) : null;
-}
-
 export async function principalFromUserEmail(
   db: PrismaClientType,
   email: string,

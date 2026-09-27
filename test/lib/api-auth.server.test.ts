@@ -15,7 +15,6 @@ import {
   generateApiToken,
   hashApiToken,
   principalFromUserEmail,
-  principalFromUserId,
   requireApiPrincipal,
 } from "~/lib/api-auth.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -356,14 +355,15 @@ describe("API authentication helpers", () => {
       new UndiciRequest("http://localhost/api"),
       { NODE_ENV: "production" },
     )).resolves.toBeNull();
-    await expect(principalFromUserId(db, "missing-user")).resolves.toBeNull();
     await expect(principalFromUserEmail(db, "missing@example.com")).resolves.toBeNull();
 
     expect(() => requireApiPrincipal(null)).toThrow("Authentication required");
     expect(() => assertCanUseOwnerEmail(null, "anyone@example.com")).not.toThrow();
 
     const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
-    const principal = await principalFromUserId(db, user.id);
+    const principal = await authenticateApiRequest(db, new UndiciRequest("http://localhost/api", {
+      headers: { Cookie: await sessionCookie(user.id) },
+    }));
     expect(requireApiPrincipal(principal)).toMatchObject({ source: "session", id: user.id });
     expect(() => assertCanUseOwnerEmail(principal, user.email.toUpperCase())).not.toThrow();
     expect(() => assertCanUseOwnerEmail(principal, "other@example.com")).toThrow("different owner");
