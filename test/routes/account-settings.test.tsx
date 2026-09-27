@@ -2500,9 +2500,9 @@ describe("Account Settings Route", () => {
 
         const formData = new UndiciFormData();
         formData.append("intent", "uploadPhoto");
-        // Simulate a file larger than 5MB (simulated via size property in test)
-        // Note: actual file creation would be expensive, so we'll check the implementation handles size
-        const largeFileData = new Uint8Array(6 * 1024 * 1024); // 6MB
+        // Just over the 5MB photo limit, but within the multipart body limit, so the photo check
+        // (not the body reader) answers.
+        const largeFileData = new Uint8Array(5 * 1024 * 1024 + 1);
         const mockFile = new File([largeFileData], "large-photo.jpg", { type: "image/jpeg" });
         formData.append("photo", mockFile);
 
