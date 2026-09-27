@@ -807,9 +807,11 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
   if (intent === "createCookbookAndSave") {
     await assertActiveRecipe(database, id);
 
+    // Validation failures are answered, not thrown, so the Save dialog shows them instead of the
+    // route's error boundary replacing the recipe page.
     const title = formData.get("title")?.toString()?.trim();
     if (!title) {
-      throw new Response("Title is required", { status: 400 });
+      return data({ error: "Title is required", intent: "createCookbookAndSave" }, { status: 400 });
     }
     let newCookbook: { id: string; title: string };
     try {

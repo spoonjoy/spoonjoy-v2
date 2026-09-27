@@ -2252,23 +2252,27 @@ describe("Recipes $id Route", () => {
       await expect(db.recipeInCookbook.count({ where: { recipeId } })).resolves.toBe(0);
     });
 
-    it("throws 400 when creating a cookbook with a blank title", async () => {
-      const request = await createFormRequest(
-        { intent: "createCookbookAndSave", title: "   " },
-        testUserId
-      );
+    it.each([
+      ["a blank", "   "],
+      ["a missing", null],
+    ])("answers 400 with the error, instead of throwing, when creating a cookbook with %s title", async (_label, title) => {
+      const fields: Record<string, string> = { intent: "createCookbookAndSave" };
+      if (title !== null) fields.title = title;
+      const cookbooksBefore = await db.cookbook.count({ where: { authorId: testUserId } });
 
-      await expect(
-        action({
-          request,
-          context: { cloudflare: { env: null } },
-          params: { id: recipeId },
-        } as any)
-      ).rejects.toSatisfy((error: any) => {
-        expect(error).toBeInstanceOf(Response);
-        expect(error.status).toBe(400);
-        return true;
+      const result = await action({
+        request: await createFormRequest(fields, testUserId),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(result).toMatchObject({
+        type: "DataWithResponseInit",
+        data: { error: "Title is required", intent: "createCookbookAndSave" },
+        init: { status: 400 },
       });
+      await expect(db.cookbook.count({ where: { authorId: testUserId } })).resolves.toBe(cookbooksBefore);
+      await expect(db.recipeInCookbook.count({ where: { recipeId } })).resolves.toBe(0);
     });
   });
 
