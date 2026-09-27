@@ -73,6 +73,7 @@ export default defineConfig({
       "**/.claude/**",
       "test/workers/cook-session-bootstrap.test.ts",
       "test/workers/saved-recipe-cutover-d1.test.ts",
+      "scripts/bench/**",
     ],
     coverage: {
       provider: "istanbul",
