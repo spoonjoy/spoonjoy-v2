@@ -261,10 +261,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
     const drafts = entries.map(readIngredientDraft);
     const seenNames = new Set<string>();
-    for (const draft of drafts) {
+    for (const [index, draft] of drafts.entries()) {
       const draftErrors = ingredientDraftErrors(draft);
       if (Object.keys(draftErrors).length > 0) {
-        return data({ errors: draftErrors }, { status: 400 });
+        // Name the row to fix: by ingredient, or by position when it has no name.
+        const label = draft.ingredientName || `Ingredient ${index + 1}`;
+        const namedErrors = Object.fromEntries(
+          Object.entries(draftErrors).map(([field, message]) => [field, `${label}: ${message}`])
+        );
+        return data({ errors: namedErrors }, { status: 400 });
       }
       if (seenNames.has(draft.ingredientName)) {
         return data(

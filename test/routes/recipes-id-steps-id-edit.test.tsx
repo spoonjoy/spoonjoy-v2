@@ -2222,13 +2222,15 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         expect(data.errors.general).toBe("There are no ingredients to add.");
       });
 
+      // Each error names the offending ingredient (or its position when it has no name), so a
+      // rejected batch says which parsed row to fix.
       it.each([
-        ["a null entry", [null], "quantity"],
-        ["a zero quantity", [{ quantity: 0, unit: "cup", ingredientName: "flour" }], "quantity"],
-        ["a non-numeric quantity", [{ quantity: {}, unit: "cup", ingredientName: "flour" }], "quantity"],
-        ["a missing unit", [{ quantity: 1, unit: 3, ingredientName: "flour" }], "unitName"],
-        ["a missing name", [{ quantity: 1, unit: "cup", ingredientName: null }], "ingredientName"],
-      ])("rejects %s and adds none of the batch", async (_label, ingredients, field) => {
+        ["a null entry", [null], "quantity", "Ingredient 2: Quantity must be a valid number"],
+        ["a zero quantity", [{ quantity: 0, unit: "cup", ingredientName: "Flour" }], "quantity", "flour: Quantity must be between 0.001 and 99,999"],
+        ["a non-numeric quantity", [{ quantity: {}, unit: "cup", ingredientName: "flour" }], "quantity", "flour: Quantity must be a valid number"],
+        ["a missing unit", [{ quantity: 1, unit: 3, ingredientName: "flour" }], "unitName", "flour: Unit name is required"],
+        ["a missing name", [{ quantity: 1, unit: "cup", ingredientName: null }], "ingredientName", "Ingredient 2: Ingredient name is required"],
+      ])("rejects %s, naming it, and adds none of the batch", async (_label, ingredients, field, message) => {
         const { data, status } = await runAction(
           await addIngredientsRequest(
             JSON.stringify([{ quantity: 1, unit: "cup", ingredientName: `sugar_${faker.string.alphanumeric(6)}` }, ...ingredients])
@@ -2236,7 +2238,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         );
 
         expect(status).toBe(400);
-        expect(data.errors[field]).toEqual(expect.any(String));
+        expect(data.errors[field]).toBe(message);
         expect(await stepIngredients()).toHaveLength(0);
       });
 
