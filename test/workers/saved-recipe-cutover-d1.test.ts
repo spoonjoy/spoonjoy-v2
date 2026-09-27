@@ -18,6 +18,7 @@ import { expectConsoleError } from "../warning-policy";
 import "./helpers/oauth-concurrency-d1-suite";
 import "./helpers/hot-read-paths-d1-suite";
 import "./helpers/recipe-atomic-writes-d1-suite";
+import "./helpers/shopping-cookbook-atomic-writes-d1-suite";
 import { applyRepositoryMigrations } from "./helpers/repository-migrations";
 
 interface TestD1Statement {

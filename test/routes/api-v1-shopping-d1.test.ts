@@ -5,6 +5,7 @@ import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { sqliteD1 } from "../helpers/sqlite-d1";
 import { createTestRecipe, createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
 
 const mocked = vi.hoisted(() => ({
@@ -24,8 +25,8 @@ vi.mock("~/lib/route-platform.server", async (importOriginal) => {
 
 const { action } = await import("~/routes/api.v1.$");
 
-function routeArgs(request: Request, splat: string) {
-  return { request, params: { "*": splat }, context: { cloudflare: { env: null } } } as any;
+function routeArgs(request: Request, splat: string, env: Record<string, unknown> | null = null) {
+  return { request, params: { "*": splat }, context: { cloudflare: { env } } } as any;
 }
 
 function withD1TransactionGuard(
@@ -330,5 +331,63 @@ describe("API v1 shopping-list mutations on D1", () => {
       data: { mutation: { clientMutationId: "compat-d1-retry", replayed: true } },
     });
     expect(attempts).toHaveLength(2);
+  });
+
+  it("adds recipe quantities in SQL on D1 and answers with what each item now stores", async () => {
+    const d1 = sqliteD1();
+    try {
+      const user = await db.user.create({ data: createTestUser() });
+      const credential = await createApiCredential(db, user.id, "D1 shopping SQL writer", {
+        scopes: ["shopping_list:write"],
+      });
+      const list = await db.shoppingList.create({ data: { authorId: user.id } });
+      const recipe = await db.recipe.create({ data: createTestRecipe(user.id) });
+      await db.recipeStep.create({
+        data: { recipeId: recipe.id, stepNum: 1, stepTitle: "Gather", description: "Gather." },
+      });
+      const unit = await getOrCreateUnit(db, `d1 sql unit ${faker.string.alphanumeric(6)}`.toLowerCase());
+      const ref = await getOrCreateIngredientRef(db, `d1 sql ingredient ${faker.string.alphanumeric(6)}`.toLowerCase());
+      await db.ingredient.create({
+        data: { recipeId: recipe.id, stepNum: 1, quantity: 2, unitId: unit.id, ingredientRefId: ref.id },
+      });
+      const item = await db.shoppingListItem.create({
+        data: { shoppingListId: list.id, ingredientRefId: ref.id, unitId: unit.id, quantity: 1, sortIndex: 0 },
+      });
+      // Another request adds 5 after this one read the item (quantity 1) and before its batch.
+      let pending = true;
+      const binding = {
+        prepare: (sql: string) => d1.binding.prepare(sql),
+        async batch(statements: never) {
+          if (pending) {
+            pending = false;
+            await db.shoppingListItem.update({ where: { id: item.id }, data: { quantity: { increment: 5 } } });
+          }
+          return d1.binding.batch(statements);
+        },
+      };
+
+      const response = await action(routeArgs(
+        new UndiciRequest("http://localhost/api/v1/shopping-list/add-from-recipe", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${credential.token}`,
+            "Content-Type": "application/json",
+            "X-Request-Id": "req_d1_shopping_sql",
+          },
+          body: JSON.stringify({ clientMutationId: "d1-sql-add", recipeId: recipe.id, scaleFactor: 1.5 }),
+        }) as unknown as Request,
+        "shopping-list/add-from-recipe",
+        { DB: binding },
+      ));
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({
+        data: { created: 0, updated: 1, items: [{ id: item.id, quantity: 1 + 5 + 3 }] },
+      });
+      await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: item.id } }))
+        .resolves.toMatchObject({ quantity: 9 });
+    } finally {
+      d1.close();
+    }
   });
 });

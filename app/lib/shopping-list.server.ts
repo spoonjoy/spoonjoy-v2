@@ -10,6 +10,7 @@ import {
   type ParsedItemDraft,
 } from "~/lib/shopping-list-parser";
 import {
+  addToShoppingListItem,
   asCompatibleD1Database,
   coalesceShoppingRecipeIngredients,
   createCompatibleShoppingListD1Batch,
@@ -259,33 +260,26 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
         database,
         identity,
         update: async (existingItem) => {
-          /* istanbul ignore next -- @preserve ternary branches for quantity addition */
-          const newQuantity = quantity
-            ? (existingItem.quantity || 0) + parseFloat(quantity)
-            : existingItem.quantity;
           const shouldMoveToEnd = Boolean(
             existingItem.deletedAt || existingItem.checkedAt || existingItem.checked
           );
 
-          return database.shoppingListItem.update({
-            where: { id: existingItem.id },
-            data: {
-              quantity: newQuantity,
-              checked: false,
-              checkedAt: null,
-              categoryKey,
-              iconKey,
-              deletedAt: null,
-              sortIndex: shouldMoveToEnd
-                ? await nextSortIndex(database, shoppingList.id)
-                : existingItem.sortIndex,
-            },
+          await addToShoppingListItem(database, {
+            id: existingItem.id,
+            shoppingListId: shoppingList.id,
+            /* istanbul ignore next -- @preserve a quantity is usually given */
+            quantityDelta: quantity ? parseFloat(quantity) : null,
+            sortIndex: shouldMoveToEnd
+              ? await nextSortIndex(database, shoppingList.id)
+              : existingItem.sortIndex,
+            categoryKey,
+            iconKey,
           });
         },
         create: async () => {
           const sortIndex = await nextSortIndex(database, shoppingList.id);
 
-          return database.shoppingListItem.create({
+          await database.shoppingListItem.create({
             data: {
               ...identity,
               quantity: quantity ? parseFloat(quantity) : null,
@@ -412,6 +406,7 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
               ingredientRefId: ingredient.ingredientRefId,
               unitId: ingredient.unitId,
               quantity: newQuantity,
+              quantityDelta: ingredient.quantity || null,
               checked: false,
               checkedAt: null,
               deletedAt: null,
@@ -458,7 +453,7 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
         return {
           operations,
           metadata: null,
-          native: createCompatibleShoppingListD1Batch(nativeD1, writePlans, []),
+          native: createCompatibleShoppingListD1Batch(nativeD1, writePlans),
         };
       });
     }

@@ -86,6 +86,7 @@ import {
 import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import {
+  addToShoppingListItem,
   asCompatibleD1Database,
   coalesceShoppingRecipeIngredients,
   createCompatibleShoppingListD1Batch,
@@ -2787,6 +2788,7 @@ const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
             ingredientRefId: row.ingredientRefId,
             unitId: row.unitId,
             quantity,
+            quantityDelta: row.quantity,
             checked: false,
             checkedAt: null,
             deletedAt: null,
@@ -2833,7 +2835,7 @@ const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
       return {
         operations,
         metadata: { created, updated },
-        native: createCompatibleShoppingListD1Batch(nativeD1, writePlans, []),
+        native: createCompatibleShoppingListD1Batch(nativeD1, writePlans),
       };
     });
 
@@ -3134,28 +3136,26 @@ const addShoppingListItemTool: SpoonjoyApiOperation = {
       identity,
       update: async (existing) => {
         const shouldMoveToEnd = Boolean(existing.checked || existing.checkedAt || existing.deletedAt);
-        return context.db.shoppingListItem.update({
-          where: { id: existing.id },
+        await addToShoppingListItem(context.db, {
+          id: existing.id,
+          shoppingListId: shoppingList.id,
+          quantityDelta: quantity,
+          sortIndex: shouldMoveToEnd ? await nextSortIndex(context.db, shoppingList.id) : existing.sortIndex,
+          categoryKey: categoryKey ?? existing.categoryKey,
+          iconKey: iconKey ?? existing.iconKey,
+        });
+      },
+      create: async () => {
+        await context.db.shoppingListItem.create({
           data: {
-            quantity: quantity === null ? existing.quantity : (existing.quantity ?? 0) + quantity,
-            checked: false,
-            checkedAt: null,
-            deletedAt: null,
-            sortIndex: shouldMoveToEnd ? await nextSortIndex(context.db, shoppingList.id) : existing.sortIndex,
-            categoryKey: categoryKey ?? existing.categoryKey,
-            iconKey: iconKey ?? existing.iconKey,
+            ...identity,
+            quantity,
+            sortIndex: await nextSortIndex(context.db, shoppingList.id),
+            categoryKey,
+            iconKey,
           },
         });
       },
-      create: async () => context.db.shoppingListItem.create({
-        data: {
-          ...identity,
-          quantity,
-          sortIndex: await nextSortIndex(context.db, shoppingList.id),
-          categoryKey,
-          iconKey,
-        },
-      }),
     });
     const result = {
       created: mutation.created ? 1 : 0,

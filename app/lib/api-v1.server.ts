@@ -115,6 +115,7 @@ import {
   type ApiV1ErrorCode,
 } from "~/lib/api-v1-contract.server";
 import {
+  addToShoppingListItem,
   asCompatibleD1Database,
   coalesceShoppingRecipeIngredients,
   createCompatibleShoppingListD1Batch,
@@ -4068,21 +4069,22 @@ async function handleShoppingItemCreate(args: ApiV1RouteArgs, requestId: string,
     const result = await mutateCompatibleShoppingListItem({
       database: db,
       identity,
-      update: async (existing) => db.shoppingListItem.update({
-        where: { id: existing.id },
-        data: {
-          quantity: quantity === null ? existing.quantity : (existing.quantity ?? 0) + quantity,
-          checked: false,
-          checkedAt: null,
-          deletedAt: null,
+      update: async (existing) => {
+        await addToShoppingListItem(db, {
+          id: existing.id,
+          shoppingListId: list.id,
+          quantityDelta: quantity,
           sortIndex: existing.checked || existing.checkedAt || existing.deletedAt
             ? await nextShoppingSortIndex(db, list.id)
             : existing.sortIndex,
           categoryKey: categoryKey ?? existing.categoryKey,
           iconKey: iconKey ?? existing.iconKey,
-        },
-        include: { unit: true, ingredientRef: true },
-      }),
+        });
+        return db.shoppingListItem.findUniqueOrThrow({
+          where: { id: existing.id },
+          include: { unit: true, ingredientRef: true },
+        });
+      },
       create: async () => db.shoppingListItem.create({
         data: {
           ...identity,
@@ -4279,6 +4281,7 @@ async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: stri
             ingredientRefId: requested.ingredientRefId,
             unitId: requested.unitId,
             quantity,
+            quantityDelta: requested.quantity,
             checked: false,
             checkedAt: null,
             deletedAt: null,
@@ -4323,12 +4326,12 @@ async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: stri
         }
       }
 
-      const plannedItems = writePlans.map((plan) => ({
+      const plannedItem = (plan: ShoppingListItemWritePlan, quantity: number | null): ShoppingItemRow => ({
         id: plan.id,
         shoppingListId: plan.shoppingListId,
         ingredientRefId: plan.ingredientRefId,
         unitId: plan.unitId,
-        quantity: plan.quantity,
+        quantity,
         checked: plan.checked,
         checkedAt: plan.checkedAt,
         deletedAt: plan.deletedAt,
@@ -4340,12 +4343,12 @@ async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: stri
           plan.ingredientRefId,
           plan.unitId,
         ]))!,
-      }));
+      });
 
       return {
         operations,
         metadata: { created, updated },
-        native: createCompatibleShoppingListD1Batch(nativeD1, writePlans, plannedItems),
+        native: createCompatibleShoppingListD1Batch(nativeD1, writePlans, plannedItem),
       };
     });
 

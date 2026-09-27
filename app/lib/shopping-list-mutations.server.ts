@@ -3,6 +3,14 @@ import type {
   PrismaClient,
   ShoppingListItem,
 } from "@prisma/client";
+import { d1Binding, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
+import {
+  d1Guard,
+  d1Timestamp,
+  d1WriteBatch,
+  isD1GuardFailure,
+  type D1WriteResult,
+} from "~/lib/d1-write.server";
 
 export interface ShoppingListItemIdentity {
   shoppingListId: string;
@@ -38,28 +46,22 @@ interface CompatibleMutationInput<T> {
 interface CompatibleBatch<T, Metadata> {
   operations: Array<Prisma.PrismaPromise<T>>;
   metadata: Metadata;
-  native?: {
-    database: Pick<CompatibleD1Database, "batch">;
-    statements: CompatibleD1PreparedStatement[];
-    items: T[];
-  };
+  native?: CompatibleShoppingListD1Batch<T>;
 }
 
-export interface CompatibleD1PreparedStatement {
-  bind(...values: unknown[]): CompatibleD1PreparedStatement;
+/** A shopping-list write as one atomic D1 batch, and how to read its items from the results. */
+export interface CompatibleShoppingListD1Batch<T> {
+  database: D1ReadDatabase;
+  queries: D1Query[];
+  items: (results: D1WriteResult[]) => T[];
 }
 
-export interface CompatibleD1Database {
-  prepare(query: string): CompatibleD1PreparedStatement;
-  batch(statements: CompatibleD1PreparedStatement[]): Promise<unknown>;
-}
-
-export interface ShoppingListItemWritePlan {
-  mode: "create" | "update";
+interface ShoppingListItemWriteFields {
   id: string;
   shoppingListId: string;
   ingredientRefId: string;
   unitId: string | null;
+  /** The quantity the row is expected to hold after the write (what the Prisma path stores). */
   quantity: number | null;
   checked: boolean;
   checkedAt: Date | null;
@@ -69,6 +71,17 @@ export interface ShoppingListItemWritePlan {
   iconKey: string | null;
   updatedAt: Date;
 }
+
+export type ShoppingListItemWritePlan =
+  | (ShoppingListItemWriteFields & { mode: "create" })
+  | (ShoppingListItemWriteFields & {
+    mode: "update";
+    /**
+     * The amount to add to the stored quantity, in SQL, so a concurrent add to the same item
+     * is not lost; null keeps the stored quantity. `quantity` is only what the read predicted.
+     */
+    quantityDelta: number | null;
+  });
 
 function compareBinary(left: string, right: string): number {
   const encoder = new TextEncoder();
@@ -116,36 +129,71 @@ export function isShoppingListUniqueConflict(error: unknown): boolean {
     /UNIQUE constraint failed: (?:ShoppingListItem\.shoppingListId, ShoppingListItem\.unitId, ShoppingListItem\.ingredientRefId(?![A-Za-z0-9_.]|\s*,)|index ['"]ShoppingListItem_active_identity_key['"](?![A-Za-z0-9_]))/.test(message);
 }
 
-export function asCompatibleD1Database(value: unknown): CompatibleD1Database | null {
-  if (!value || typeof value !== "object") return null;
-  const candidate = value as Partial<CompatibleD1Database>;
-  return typeof candidate.prepare === "function" && typeof candidate.batch === "function"
-    ? candidate as CompatibleD1Database
-    : null;
+/** The request's D1 binding, or null without one (unit tests, scripts): then Prisma writes. */
+export function asCompatibleD1Database(value: unknown): D1ReadDatabase | null {
+  return d1Binding(value);
 }
 
 function d1Date(value: Date | null): string | null {
-  return value?.toISOString() ?? null;
+  return value ? d1Timestamp(value) : null;
 }
 
-export function prepareShoppingListItemD1Write(
-  database: Pick<CompatibleD1Database, "prepare">,
-  plan: ShoppingListItemWritePlan,
-): CompatibleD1PreparedStatement {
-  const updatedAt = plan.updatedAt.toISOString();
+/**
+ * The statements for one planned write. Each one first re-checks, inside the batch, what the
+ * plan was read from: a create needs the identity still free (the unique index does not cover
+ * a null unit), an update needs the row still on this list. If either changed, the guard stops
+ * the whole batch and `runCompatibleShoppingListBatch` reads again. The write itself returns
+ * the quantity it stored.
+ */
+export function shoppingListItemWriteStatements(plan: ShoppingListItemWritePlan): D1Query[] {
+  const updatedAt = d1Timestamp(plan.updatedAt);
   if (plan.mode === "create") {
-    return database.prepare(`
-      INSERT INTO "ShoppingListItem" (
-        "id", "shoppingListId", "quantity", "unitId", "ingredientRefId",
-        "checked", "checkedAt", "deletedAt", "sortIndex", "categoryKey",
-        "iconKey", "updatedAt"
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
+    return [
+      d1Guard(
+        `NOT EXISTS (SELECT 1 FROM "ShoppingListItem"
+          WHERE "shoppingListId" = ? AND "ingredientRefId" = ? AND "unitId" IS ?)`,
+        plan.shoppingListId,
+        plan.ingredientRefId,
+        plan.unitId,
+      ),
+      [
+        `INSERT INTO "ShoppingListItem" (
+          "id", "shoppingListId", "quantity", "unitId", "ingredientRefId",
+          "checked", "checkedAt", "deletedAt", "sortIndex", "categoryKey",
+          "iconKey", "updatedAt"
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        RETURNING "quantity"`,
+        plan.id,
+        plan.shoppingListId,
+        plan.quantity,
+        plan.unitId,
+        plan.ingredientRefId,
+        plan.checked ? 1 : 0,
+        d1Date(plan.checkedAt),
+        d1Date(plan.deletedAt),
+        plan.sortIndex,
+        plan.categoryKey,
+        plan.iconKey,
+        updatedAt,
+      ],
+    ];
+  }
+
+  return [
+    d1Guard(
+      `EXISTS (SELECT 1 FROM "ShoppingListItem" WHERE "id" = ? AND "shoppingListId" = ?)`,
       plan.id,
       plan.shoppingListId,
-      plan.quantity,
-      plan.unitId,
-      plan.ingredientRefId,
+    ),
+    [
+      `UPDATE "ShoppingListItem"
+      SET "quantity" = CASE WHEN ? IS NULL THEN "quantity" ELSE COALESCE("quantity", 0) + ? END,
+          "checked" = ?, "checkedAt" = ?, "deletedAt" = ?,
+          "sortIndex" = ?, "categoryKey" = ?, "iconKey" = ?, "updatedAt" = ?
+      WHERE "id" = ? AND "shoppingListId" = ?
+      RETURNING "quantity"`,
+      plan.quantityDelta,
+      plan.quantityDelta,
       plan.checked ? 1 : 0,
       d1Date(plan.checkedAt),
       d1Date(plan.deletedAt),
@@ -153,37 +201,38 @@ export function prepareShoppingListItemD1Write(
       plan.categoryKey,
       plan.iconKey,
       updatedAt,
-    );
-  }
-
-  return database.prepare(`
-    UPDATE "ShoppingListItem"
-    SET "quantity" = ?, "checked" = ?, "checkedAt" = ?, "deletedAt" = ?,
-        "sortIndex" = ?, "categoryKey" = ?, "iconKey" = ?, "updatedAt" = ?
-    WHERE "id" = ?
-  `).bind(
-    plan.quantity,
-    plan.checked ? 1 : 0,
-    d1Date(plan.checkedAt),
-    d1Date(plan.deletedAt),
-    plan.sortIndex,
-    plan.categoryKey,
-    plan.iconKey,
-    updatedAt,
-    plan.id,
-  );
+      plan.id,
+      plan.shoppingListId,
+    ],
+  ];
 }
 
-export function createCompatibleShoppingListD1Batch<T>(
-  database: CompatibleD1Database | null,
+/**
+ * The planned writes as one D1 batch, or undefined without a binding. `toItem` builds each
+ * response item from its plan and the quantity the row now stores.
+ */
+export function createCompatibleShoppingListD1Batch<T = never>(
+  database: D1ReadDatabase | null,
   writePlans: ShoppingListItemWritePlan[],
-  items: T[],
-) {
+  toItem?: (plan: ShoppingListItemWritePlan, storedQuantity: number | null) => T,
+): CompatibleShoppingListD1Batch<T> | undefined {
   if (!database) return undefined;
+  const queries: D1Query[] = [];
+  const writeIndexes: number[] = [];
+  for (const plan of writePlans) {
+    const statements = shoppingListItemWriteStatements(plan);
+    queries.push(...statements);
+    writeIndexes.push(queries.length - 1);
+  }
   return {
     database,
-    statements: writePlans.map((plan) => prepareShoppingListItemD1Write(database, plan)),
-    items,
+    queries,
+    items: (results) => toItem
+      ? writePlans.map((plan, index) => toItem(
+        plan,
+        results[writeIndexes[index]].rows[0].quantity as number | null,
+      ))
+      : [],
   };
 }
 
@@ -208,6 +257,37 @@ export async function findCompatibleShoppingListItem(
     where: { ...identity, deletedAt: { not: null } },
     orderBy: [{ sortIndex: "asc" }, { id: "asc" }],
   });
+}
+
+export interface ShoppingListItemAddition {
+  id: string;
+  shoppingListId: string;
+  /** Added to the stored quantity in SQL (null keeps it), so a concurrent add is not lost. */
+  quantityDelta: number | null;
+  sortIndex: number;
+  categoryKey: string | null;
+  iconKey: string | null;
+}
+
+/**
+ * Adds to an existing item in one statement: the new quantity is computed from the row as it
+ * is when the statement runs, not from an earlier read, and the item is unchecked and
+ * restored. Returns the number of rows changed (0 when the row is no longer on the list).
+ */
+export async function addToShoppingListItem(
+  database: PrismaClient,
+  addition: ShoppingListItemAddition,
+): Promise<number> {
+  const updatedAt = d1Timestamp(new Date());
+  return database.$executeRaw`
+    UPDATE "ShoppingListItem"
+    SET "quantity" = CASE WHEN ${addition.quantityDelta} IS NULL THEN "quantity"
+          ELSE COALESCE("quantity", 0) + ${addition.quantityDelta} END,
+        "checked" = 0, "checkedAt" = NULL, "deletedAt" = NULL,
+        "sortIndex" = ${addition.sortIndex}, "categoryKey" = ${addition.categoryKey},
+        "iconKey" = ${addition.iconKey}, "updatedAt" = ${updatedAt}
+    WHERE "id" = ${addition.id} AND "shoppingListId" = ${addition.shoppingListId}
+  `;
 }
 
 export async function mutateCompatibleShoppingListItem<T>(
@@ -278,6 +358,14 @@ export function coalesceShoppingRecipeIngredients(
   return [...coalesced.values()];
 }
 
+const SHOPPING_LIST_BATCH_ATTEMPTS = 3;
+
+/**
+ * Builds and runs a shopping-list batch: one D1 batch on the Worker, one Prisma
+ * `$transaction` without a binding. When the batch loses a race (a guard found the rows it
+ * was planned from changed, or a concurrent create took the identity), nothing in it applied,
+ * so it is built again from fresh reads, up to three times in all.
+ */
 export async function runCompatibleShoppingListBatch<T, Metadata>(
   database: PrismaClient,
   build: () => Promise<CompatibleBatch<T, Metadata>>,
@@ -286,10 +374,10 @@ export async function runCompatibleShoppingListBatch<T, Metadata>(
     const batch = await build();
     let items: T[];
     if (batch.native) {
-      if (batch.native.statements.length > 0) {
-        await batch.native.database.batch(batch.native.statements);
-      }
-      items = batch.native.items;
+      const results = batch.native.queries.length > 0
+        ? await d1WriteBatch(batch.native.database, batch.native.queries)
+        : [];
+      items = batch.native.items(results);
     } else {
       items = batch.operations.length > 0
         ? await database.$transaction(batch.operations)
@@ -298,10 +386,12 @@ export async function runCompatibleShoppingListBatch<T, Metadata>(
     return { items, metadata: batch.metadata };
   };
 
-  try {
-    return await execute();
-  } catch (error) {
-    if (!isShoppingListUniqueConflict(error)) throw error;
-    return execute();
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await execute();
+    } catch (error) {
+      const lostRace = isShoppingListUniqueConflict(error) || isD1GuardFailure(error);
+      if (!lostRace || attempt >= SHOPPING_LIST_BATCH_ATTEMPTS) throw error;
+    }
   }
 }

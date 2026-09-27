@@ -721,11 +721,12 @@ describe("Shopping List Route", () => {
             deletedAt: new Date(),
           },
         });
-        const delegate = db.shoppingListItem as any;
-        const originalCreate = delegate.create.bind(delegate);
-        const originalUpdate = delegate.update.bind(delegate);
-        const updateSpy = vi.spyOn(delegate, "update").mockImplementationOnce(async () => {
-          await originalCreate({
+        // Another request restores the item first, so this request's restore of the
+        // tombstone hits the active-identity index and must add to the winner instead.
+        const client = db as any;
+        const originalExecuteRaw = client.$executeRaw.bind(client);
+        const executeRawSpy = vi.spyOn(client, "$executeRaw").mockImplementationOnce(async (...args: unknown[]) => {
+          await db.shoppingListItem.create({
             data: {
               id: "compat-web-manual-restore-winner",
               shoppingListId: shoppingList.id,
@@ -736,15 +737,9 @@ describe("Shopping List Route", () => {
               categoryKey: "winner-category",
             },
           });
-          throw Object.assign(new Error("Unique constraint failed on the fields"), {
-            code: "P2002",
-            meta: {
-              modelName: "ShoppingListItem",
-              target: ["shoppingListId", "unitId", "ingredientRefId"],
-            },
-          });
+          return originalExecuteRaw(...args);
         });
-        updateSpy.mockImplementation(originalUpdate);
+        executeRawSpy.mockImplementation(originalExecuteRaw);
 
         const response = await action({
           request: await createFormRequest(
@@ -766,7 +761,7 @@ describe("Shopping List Route", () => {
           .resolves.toMatchObject({ quantity: 7, deletedAt: null, iconKey: "package" });
         await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: tombstone.id } }))
           .resolves.toMatchObject({ quantity: 20, deletedAt: expect.any(Date) });
-        expect(updateSpy).toHaveBeenCalledTimes(2);
+        expect(executeRawSpy).toHaveBeenCalledTimes(2);
       } finally {
         await restoreFullIdentityIndex();
       }
