@@ -7,6 +7,16 @@ import {
 } from "~/lib/api-v1-contract.server";
 import { OAUTH_ACCESS_TOKEN_TTL_SECONDS } from "~/lib/oauth-server.server";
 import { USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, USERNAME_PATTERN_SOURCE } from "~/lib/username";
+
+// UpdateAccountProfileRequest.username. A JSON Schema pattern/minLength/maxLength would reject the
+// current username of an account that predates the rule, which the server accepts, so the rule is
+// stated here instead of enforced by the schema.
+const USERNAME_REQUEST_DESCRIPTION =
+  "Surrounding whitespace is trimmed. Sending the account's current username keeps it unchanged, " +
+  "even if it predates the username rule. A new username must be " +
+  `${USERNAME_MIN_LENGTH}-${USERNAME_MAX_LENGTH} characters matching ${USERNAME_PATTERN_SOURCE}, ` +
+  "include a letter or a number, not look like an account ID, and not be taken by another account " +
+  "in any letter case; otherwise the request fails with validation_error and details.field \"username\".";
 import { SEARCH_SCOPES } from "~/lib/search.server";
 import { PRODUCT_ACTIVATION_PENDING_MESSAGE } from "~/lib/saved-recipe-cutover.server";
 
@@ -646,9 +656,13 @@ const schemas = {
   UpdateAccountProfileRequest: objectSchema(["clientMutationId", "email", "username"], {
     clientMutationId: shortTextSchema,
     email: { type: "string", format: "email" },
-    // The shared username rule (app/lib/username.ts), checked after trimming; a username must also
-    // include a letter or a number, not look like an account ID, and be free regardless of case.
-    username: { type: "string", minLength: USERNAME_MIN_LENGTH, maxLength: USERNAME_MAX_LENGTH, pattern: USERNAME_PATTERN_SOURCE },
+    // Describes what the server accepts, not only the rule for a new username: the caller's
+    // current username is accepted unchanged even when it predates the rule (app/lib/username.ts).
+    username: {
+      type: "string",
+      minLength: 1,
+      description: USERNAME_REQUEST_DESCRIPTION,
+    },
   }),
   ProfilePhotoUploadRequest: objectSchema(["clientMutationId", "photo"], {
     clientMutationId: shortTextSchema,
