@@ -418,8 +418,9 @@ WITH
   ),
   soft_delete_recipes AS (
     SELECT id FROM Recipe
-    WHERE ${SUSPICIOUS_RECIPE_WHERE}
+    WHERE (${SUSPICIOUS_RECIPE_WHERE})
       AND chefId NOT IN (SELECT id FROM disposable_users)
+      AND chefId NOT IN (SELECT id FROM User WHERE ${NATIVE_JOURNEY_USER_WHERE})
   ),
   disposable_spoons AS (
     SELECT id FROM RecipeSpoon
@@ -463,6 +464,7 @@ WITH
     SELECT id FROM Recipe
     WHERE (${SUSPICIOUS_RECIPE_WHERE})
       AND chefId NOT IN (SELECT id FROM disposable_users)
+      AND chefId NOT IN (SELECT id FROM User WHERE ${NATIVE_JOURNEY_USER_WHERE})
   ),
   disposable_spoons AS (
     SELECT id FROM RecipeSpoon
