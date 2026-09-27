@@ -2598,7 +2598,7 @@ const uploadSpoonPhotoTool: SpoonjoyApiOperation = {
 
 const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
   name: "add_recipe_to_shopping_list",
-  description: "Add all ingredients from a recipe to the configured owner shopping list, merging duplicates.",
+  description: "Add all ingredients from a recipe to the configured owner shopping list. Each ingredient adds to the quantity of a matching item still on the list (same ingredient and unit); a removed or cleared matching item comes back at the added quantity, not on top of its old one.",
   requiredScopes: ["shopping_list:write"],
   inputSchema: {
     type: "object",
@@ -2992,7 +2992,7 @@ const removeRecipeFromCookbookTool: SpoonjoyApiOperation = {
 
 const addShoppingListItemTool: SpoonjoyApiOperation = {
   name: "add_shopping_list_item",
-  description: "Add or restore one manual item on the configured owner shopping list, merging matching items.",
+  description: "Add or restore one manual item on the configured owner shopping list. It adds to the quantity of a matching item still on the list (same ingredient and unit); a removed or cleared matching item comes back at the added quantity, not on top of its old one.",
   requiredScopes: ["shopping_list:write"],
   inputSchema: {
     type: "object",

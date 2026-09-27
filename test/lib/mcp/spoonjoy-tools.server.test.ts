@@ -438,6 +438,15 @@ describe("spoonjoy MCP tools", () => {
     expect(activationFields.filter((field) => field in mcpProperties)).toEqual(["activateWhenReady"]);
   });
 
+  it("tells agents that a removed shopping item restarts from the added amount while a live one adds on top", () => {
+    for (const name of ["add_shopping_list_item", "add_recipe_to_shopping_list"]) {
+      const description = toolByName(name)?.description ?? "";
+      expect(description, name).toContain("adds to the quantity of a matching item still on the list");
+      expect(description, name).toContain("a removed or cleared matching item comes back at the added quantity");
+      expect(description, name).not.toMatch(/merging/);
+    }
+  });
+
   it("describes Photo Studio schema fields so agents can choose the right cover workflow", () => {
     expect(toolByName("create_recipe_cover_from_upload")?.description)
       .toEqual(expect.stringContaining("uploaded"));
