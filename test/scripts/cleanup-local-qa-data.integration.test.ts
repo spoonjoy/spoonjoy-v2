@@ -29,7 +29,7 @@ function createCleanupDatabase(path = ":memory:") {
   const db = new DatabaseSync(path);
   db.exec(`
     PRAGMA foreign_keys=ON;
-    CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, photoUrl TEXT);
+    CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, photoUrl TEXT, createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE Recipe (id TEXT PRIMARY KEY, title TEXT NOT NULL, chefId TEXT NOT NULL, sourceRecipeId TEXT, activeCoverId TEXT, deletedAt TEXT);
     CREATE TABLE RecipeSpoon (id TEXT PRIMARY KEY, chefId TEXT NOT NULL, recipeId TEXT NOT NULL, note TEXT, photoUrl TEXT);
     CREATE TABLE OAuthClient (id TEXT PRIMARY KEY, clientName TEXT, redirectUris TEXT NOT NULL);
@@ -146,8 +146,8 @@ describe("cleanup-local-qa-data executable ownership boundaries", () => {
   it("deletes populated disposable-user lineage while leaving lookalike OAuth graphs untouched", () => {
     db = createCleanupDatabase();
     db.exec(`
-      INSERT INTO User VALUES ('seed-user', 'demo@example.com', 'demo', NULL);
-      INSERT INTO User VALUES ('codex-user', 'codex-broad-cleanup@example.com', 'codex_broad_cleanup', NULL);
+      INSERT INTO User VALUES ('seed-user', 'demo@example.com', 'demo', NULL, datetime('now'));
+      INSERT INTO User VALUES ('codex-user', 'codex-broad-cleanup@example.com', 'codex_broad_cleanup', NULL, datetime('now'));
       INSERT INTO OAuthClient VALUES ('lookalike-client', 'E2E OAuth Client', 'http://localhost:5197/privacy');
       INSERT INTO OAuthClient VALUES ('disposable-client', 'E2E OAuth Client', 'http://localhost:5197/privacy');
       INSERT INTO OAuthGrant VALUES ('lookalike-grant', 'seed-user', 'lookalike-client', 'lookalike-connection');
@@ -190,8 +190,8 @@ describe("cleanup-local-qa-data executable ownership boundaries", () => {
     const longDisposableUserId = `codex-user-${"a".repeat(50)}`;
     expect(longDisposableUserId.length).toBeGreaterThan(50);
     db.exec(`
-      INSERT INTO User VALUES ('seed-user', 'demo@example.com', 'demo', NULL);
-      INSERT INTO User VALUES ('${longDisposableUserId}', 'codex-broad-cleanup@example.com', 'codex_broad_cleanup', NULL);
+      INSERT INTO User VALUES ('seed-user', 'demo@example.com', 'demo', NULL, datetime('now'));
+      INSERT INTO User VALUES ('${longDisposableUserId}', 'codex-broad-cleanup@example.com', 'codex_broad_cleanup', NULL, datetime('now'));
       INSERT INTO NotificationEvent VALUES ('notif-1', 'seed-user', 'mentions ${longDisposableUserId} in its payload');
     `);
 
@@ -202,7 +202,7 @@ describe("cleanup-local-qa-data executable ownership boundaries", () => {
   it("deletes only captured OAuth client IDs, their credential support graph, and no principal", () => {
     db = createCleanupDatabase();
     db.exec(`
-      INSERT INTO User VALUES ('seed-user', 'demo@example.com', 'demo', NULL);
+      INSERT INTO User VALUES ('seed-user', 'demo@example.com', 'demo', NULL, datetime('now'));
       INSERT INTO OAuthClient VALUES ('captured-client', 'E2E OAuth Client [run-owned]', 'http://localhost:5197/privacy');
       INSERT INTO OAuthClient VALUES ('lookalike-client', 'E2E OAuth Client [run-owned]', 'http://localhost:5197/privacy');
       INSERT INTO OAuthGrant VALUES ('captured-grant', 'seed-user', 'captured-client', 'captured-connection');
@@ -245,7 +245,7 @@ describe("cleanup-local-qa-data executable ownership boundaries", () => {
   it("executes MCP canary cleanup against a populated issuance lineage", () => {
     db = createCleanupDatabase();
     db.exec(`
-      INSERT INTO User VALUES ('canary-user', 'canary@example.com', 'canary', NULL);
+      INSERT INTO User VALUES ('canary-user', 'canary@example.com', 'canary', NULL, datetime('now'));
       INSERT INTO OAuthClient VALUES ('canary-client', 'Claude', 'https://claude.ai/api/mcp/auth_callback');
       INSERT INTO OAuthGrant VALUES ('canary-grant', 'canary-user', 'canary-client', 'canary-connection');
       INSERT INTO ApiCredential VALUES ('canary-credential', 'canary-user', 'canary-client');
@@ -283,8 +283,8 @@ describe("cleanup-local-qa-data executable ownership boundaries", () => {
     const databasePath = join(tempRoot, "cleanup.sqlite");
     db = createCleanupDatabase(databasePath);
     db.exec(`
-      INSERT INTO User VALUES ('codex-user', 'codex-e2e@example.com', 'codex_e2e', NULL);
-      INSERT INTO User VALUES ('seed-user', 'demo@example.com', 'demo', NULL);
+      INSERT INTO User VALUES ('codex-user', 'codex-e2e@example.com', 'codex_e2e', NULL, datetime('now'));
+      INSERT INTO User VALUES ('seed-user', 'demo@example.com', 'demo', NULL, datetime('now'));
       INSERT INTO Recipe VALUES ('disposable-recipe', 'E2E owned recipe', 'codex-user', NULL, NULL, NULL);
       INSERT INTO Recipe VALUES ('retained-recipe', 'Seed recipe', 'seed-user', 'disposable-recipe', NULL, NULL);
     `);
@@ -299,6 +299,70 @@ describe("cleanup-local-qa-data executable ownership boundaries", () => {
     db = new DatabaseSync(databasePath);
 
     expect(ids(db, "Recipe")).toEqual(["disposable-recipe", "retained-recipe"]);
+    expect(scratchSchemaRows(db)).toEqual([]);
+  });
+
+  it("apply removes a stale native user and everything it owns and keeps a young one", () => {
+    // createdAt is written in the real @prisma/adapter-d1 format every native account will
+    // actually have: `arg.toISOString().replace("Z", "+00:00")`, e.g.
+    // '2026-09-27T12:34:56.789+00:00' -- never CURRENT_TIMESTAMP's space form, a 'Z' suffix, or
+    // an integer. This is the one storage form that determines whether real rows ever get swept.
+    db = createCleanupDatabase();
+    db.exec(`
+      INSERT INTO User (id, email, username, photoUrl, createdAt)
+        VALUES (
+          'stale-native-user',
+          'codex-native-r9-1@example.com',
+          'codex_native_r9_1',
+          NULL,
+          replace(strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-4 hours'), 'Z', '+00:00')
+        );
+      INSERT INTO User (id, email, username, photoUrl, createdAt)
+        VALUES (
+          'young-native-user',
+          'codex-native-r9-2@example.com',
+          'codex_native_r9_2',
+          NULL,
+          replace(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 'Z', '+00:00')
+        );
+
+      INSERT INTO Recipe (id, title, chefId, sourceRecipeId, activeCoverId, deletedAt)
+        VALUES ('stale-native-recipe', 'codex stale native recipe', 'stale-native-user', NULL, NULL, NULL);
+      INSERT INTO Recipe (id, title, chefId, sourceRecipeId, activeCoverId, deletedAt)
+        VALUES ('young-native-recipe', 'codex young native recipe', 'young-native-user', NULL, NULL, NULL);
+
+      INSERT INTO RecipeSpoon (id, chefId, recipeId, note, photoUrl)
+        VALUES ('stale-native-spoon', 'stale-native-user', 'stale-native-recipe', NULL, NULL);
+      INSERT INTO RecipeSpoon (id, chefId, recipeId, note, photoUrl)
+        VALUES ('young-native-spoon', 'young-native-user', 'young-native-recipe', NULL, NULL);
+
+      INSERT INTO Cookbook (id, authorId) VALUES ('stale-native-cookbook', 'stale-native-user');
+      INSERT INTO Cookbook (id, authorId) VALUES ('young-native-cookbook', 'young-native-user');
+
+      INSERT INTO RecipeInCookbook (id, recipeId, cookbookId, addedById)
+        VALUES ('stale-native-ric', 'stale-native-recipe', 'stale-native-cookbook', 'stale-native-user');
+      INSERT INTO RecipeInCookbook (id, recipeId, cookbookId, addedById)
+        VALUES ('young-native-ric', 'young-native-recipe', 'young-native-cookbook', 'young-native-user');
+
+      INSERT INTO ApiCredential (id, userId, oauthClientId)
+        VALUES ('stale-native-credential', 'stale-native-user', NULL);
+      INSERT INTO ApiCredential (id, userId, oauthClientId)
+        VALUES ('young-native-credential', 'young-native-user', NULL);
+    `);
+
+    expect(blockerRows(db)).toEqual([]);
+    db.exec(buildApplySql());
+
+    expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+    expect(ids(db, "User")).toEqual(["young-native-user"]);
+    expect(ids(db, "Recipe")).toEqual(["young-native-recipe"]);
+    expect(
+      db.prepare("SELECT deletedAt FROM Recipe WHERE id = 'young-native-recipe'").get(),
+    ).toEqual({ deletedAt: null });
+    expect(ids(db, "RecipeSpoon")).toEqual(["young-native-spoon"]);
+    expect(ids(db, "Cookbook")).toEqual(["young-native-cookbook"]);
+    expect(ids(db, "RecipeInCookbook")).toEqual(["young-native-ric"]);
+    expect(ids(db, "ApiCredential")).toEqual(["young-native-credential"]);
     expect(scratchSchemaRows(db)).toEqual([]);
   });
 });
