@@ -103,3 +103,12 @@ describe("formatLocalCalendarDate", () => {
     });
   });
 });
+
+describe("calendar months", () => {
+  it("formats the month in UTC, or in the process's own timezone", async () => {
+    await withTimeZone("America/Los_Angeles", () => {
+      expect(formatUtcCalendarDate("2026-06-01T03:00:00.000Z", "month")).toBe("Jun 2026");
+      expect(formatLocalCalendarDate("2026-06-01T03:00:00.000Z", "month")).toBe("May 2026");
+    });
+  });
+});

@@ -130,7 +130,7 @@ describe("Users $identifier route — recent spoons section", () => {
         id: "u1",
         username: "chefuser",
         photoUrl: null,
-        joinedLabel: "Joined 2025",
+        joinedAt: "2025-05-15T12:00:00.000Z",
       },
       isOwner: false,
       recipes: [],
@@ -165,7 +165,7 @@ describe("Users $identifier route — recent spoons section", () => {
 
   it("measures each recent cook's time from the loader's render time, not the browser's clock", async () => {
     const mockData = {
-      profile: { id: "u1", username: "chefuser", photoUrl: null, joinedLabel: "Joined 2025" },
+      profile: { id: "u1", username: "chefuser", photoUrl: null, joinedAt: "2025-05-15T12:00:00.000Z" },
       isOwner: false,
       recipes: [],
       cookbooks: [],

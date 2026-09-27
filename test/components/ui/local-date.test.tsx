@@ -74,6 +74,24 @@ describe("LocalDate", () => {
     }
   });
 
+  it("with unit=\"month\", server-renders the UTC month, then the viewer's month across a month boundary", async () => {
+    // 03:00 UTC on 1 June is still 31 May in Los Angeles.
+    const { container, serverText, onRecoverableError, consoleErrors } = await serverThenHydrate(
+      <LocalDate value="2026-06-01T03:00:00.000Z" unit="month" />,
+      "America/Los_Angeles",
+    );
+    try {
+      expect(serverText).toBe("Jun 2026");
+      const time = container.querySelector("time");
+      expect(time).toHaveTextContent("May 2026");
+      expect(time).toHaveAttribute("datetime", "2026-06-01T03:00:00.000Z");
+      expect(onRecoverableError).not.toHaveBeenCalled();
+      expect(consoleErrors).toEqual([]);
+    } finally {
+      container.remove();
+    }
+  });
+
   it("re-formats when the value changes", async () => {
     await withTimeZone("Pacific/Kiritimati", async () => {
       const { rerender } = render(<LocalDate value="2026-06-01T20:00:00.000Z" />);

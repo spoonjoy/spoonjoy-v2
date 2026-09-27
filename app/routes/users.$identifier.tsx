@@ -15,6 +15,7 @@ import { absoluteUrlFromRequest } from "~/lib/og-image.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { listSpoonsByChef } from "~/lib/recipe-spoon.server";
 import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
+import { LocalDate } from "~/components/ui/local-date";
 import {
   countFellowChefs,
   countKitchenVisitors,
@@ -35,13 +36,6 @@ type RecentSpoonItem = {
 };
 
 const EMPTY_SPOONS: RecentSpoonItem[] = [];
-
-function joinedLabel(createdAt: Date) {
-  return `Joined ${createdAt.toLocaleDateString("en-US", {
-    month: "short",
-    year: "numeric",
-  })}`;
-}
 
 export function meta({ data }: Route.MetaArgs) {
   if (!data) {
@@ -216,7 +210,8 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
       id: profileUser.id,
       username: profileUser.username,
       photoUrl: profileUser.photoUrl,
-      joinedLabel: joinedLabel(profileUser.createdAt),
+      // The instant, not a label: the page shows the viewer's local month (LocalDate).
+      joinedAt: profileUser.createdAt.toISOString(),
     },
     canonicalUrl,
     ogImageUrl,
@@ -262,7 +257,7 @@ export default function UserProfile() {
                 {profile.username}
               </Heading>
               <Text className="mt-1 text-sm">
-                {profile.joinedLabel} • {recipes.length} {recipes.length === 1 ? "recipe" : "recipes"} • {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
+                Joined <LocalDate value={profile.joinedAt} unit="month" /> • {recipes.length} {recipes.length === 1 ? "recipe" : "recipes"} • {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
               </Text>
               <Link href={`/?chef=${profile.username}`} className="sj-link mt-2 inline-flex min-h-11 items-center text-sm">
                 Open kitchen view
