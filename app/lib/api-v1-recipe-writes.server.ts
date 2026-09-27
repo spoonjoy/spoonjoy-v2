@@ -27,10 +27,12 @@ import {
   validateQuantity,
   validateServings,
   validateStepDescription,
+  validateStepReference,
   validateStepTitle,
   validateTitle,
   validateUnitName,
 } from "~/lib/validation";
+import { parseOutputStepNums } from "~/lib/api-v1-recipe-steps.server";
 import {
   nativeSyncTombstoneUpsertOperation,
   nativeSyncTombstoneUpsertStatement,
@@ -203,7 +205,7 @@ function parseStep(value: unknown, stepIndex: number): ApiV1RecipeWriteResult<Re
   if (!isRecord(value)) {
     return fieldFailure(fieldPrefix, "Step must be an object");
   }
-  const unknown = assertKnownFields<RecipeStepDraft>(value, ["stepTitle", "description", "duration", "ingredients"]);
+  const unknown = assertKnownFields<RecipeStepDraft>(value, ["stepTitle", "description", "duration", "ingredients", "outputStepNums"]);
   if (unknown) return unknown;
 
   const stepTitle = optionalText(value.stepTitle, `${fieldPrefix}.stepTitle`, validateStepTitle);
@@ -218,11 +220,22 @@ function parseStep(value: unknown, stepIndex: number): ApiV1RecipeWriteResult<Re
   const ingredients = parseIngredients(value.ingredients, stepIndex);
   if (!ingredients.ok) return ingredients;
 
+  // The same rules as the step endpoints: positive integers, each an earlier step. Here the
+  // earlier steps are the ones before this one in the same request, so each exists.
+  const outputField = `${fieldPrefix}.outputStepNums`;
+  const outputStepNums = parseOutputStepNums(value.outputStepNums, outputField);
+  if (!outputStepNums.ok) return outputStepNums;
+  for (const outputStepNum of outputStepNums.data) {
+    const reference = validateStepReference(outputStepNum, stepIndex + 1);
+    if (!reference.valid) return fieldFailure(outputField, reference.error);
+  }
+
   return success({
     stepTitle: stepTitle.data,
     description: description.data,
     duration: duration.data,
     ingredients: ingredients.data,
+    outputStepNums: outputStepNums.data,
   });
 }
 

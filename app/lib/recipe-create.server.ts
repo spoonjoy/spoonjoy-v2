@@ -11,6 +11,7 @@ import {
   namedIngredientInsertStatement,
   recipeInsertStatement,
   stepInsertStatement,
+  stepOutputUseInsertStatement,
 } from "~/lib/recipe-d1-writes.server";
 import { ActiveRecipeTitleConflictError } from "~/lib/recipe-title-uniqueness.server";
 import {
@@ -29,6 +30,11 @@ export interface RecipeStepDraft {
   description: string;
   duration: number | null;
   ingredients: ParsedIngredient[];
+  /**
+   * Earlier steps (by step number) whose output this step uses. Callers validate that each
+   * points at an earlier step of the same draft; the writes create one StepOutputUse each.
+   */
+  outputStepNums?: number[];
 }
 
 export type RecipeStepsValidationResult =
@@ -243,9 +249,16 @@ async function getOrCreateIngredientRef(db: Database, name: string) {
   });
 }
 
+/** Each step's output uses as (input, output) step-number pairs, without repeats. */
+function stepOutputUses(steps: RecipeStepDraft[]): { inputStepNum: number; outputStepNum: number }[] {
+  return steps.flatMap((step, stepIndex) =>
+    [...new Set(step.outputStepNums ?? [])].map((outputStepNum) => ({ inputStepNum: stepIndex + 1, outputStepNum })),
+  );
+}
+
 /**
- * The recipe graph (recipe, steps, units, ingredient refs, ingredients, and a cover if one
- * is given) as one atomic D1 batch, so a failure part way leaves no partial recipe. The batch also re-checks, as it
+ * The recipe graph (recipe, steps, units, ingredient refs, ingredients, step output uses, and a
+ * cover if one is given) as one atomic D1 batch, so a failure part way leaves no partial recipe. The batch also re-checks, as it
  * writes, that the chef has no active recipe with this title.
  */
 function coverStatements(input: CreateRecipeDraftInput, now: Date): D1Query[] {
@@ -285,6 +298,8 @@ async function createRecipeDraftOnD1(d1: D1ReadDatabase, input: CreateRecipeDraf
       })),
       ...nameUpsertStatements(ingredients, now),
       ...ingredients.map(namedIngredientInsertStatement),
+      ...stepOutputUses(input.steps).map((use) =>
+        stepOutputUseInsertStatement(input.id, use.inputStepNum, use.outputStepNum, now)),
       ...coverStatements(input, now),
     ]);
   } catch (error) {
@@ -342,6 +357,10 @@ export async function createRecipeDraft(
         },
       });
     }
+  }
+
+  for (const use of stepOutputUses(input.steps)) {
+    await db.stepOutputUse.create({ data: { recipeId: recipe.id, ...use } });
   }
 
   if (input.cover) {

@@ -1920,12 +1920,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "required": true,
         "contentType": "application/json",
         "fields": [],
-        "example": "{\n  \"clientMutationId\": \"device-uuid-recipe-create\",\n  \"title\": \"Pasta\",\n  \"description\": \"Weeknight pasta\",\n  \"servings\": \"4\",\n  \"steps\": [\n    {\n      \"stepTitle\": null,\n      \"description\": \"Boil pasta.\",\n      \"duration\": null,\n      \"ingredients\": [\n        {\n          \"quantity\": 1,\n          \"unit\": \"lb\",\n          \"name\": \"pasta\"\n        }\n      ]\n    }\n  ]\n}",
+        "example": "{\n  \"clientMutationId\": \"device-uuid-recipe-create\",\n  \"title\": \"Pasta\",\n  \"description\": \"Weeknight pasta\",\n  \"servings\": \"4\",\n  \"steps\": [\n    {\n      \"stepTitle\": null,\n      \"description\": \"Boil pasta.\",\n      \"duration\": null,\n      \"ingredients\": [\n        {\n          \"quantity\": 1,\n          \"unit\": \"lb\",\n          \"name\": \"pasta\"\n        }\n      ],\n      \"outputStepNums\": []\n    },\n    {\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss the pasta with sauce.\",\n      \"duration\": 3,\n      \"ingredients\": [\n        {\n          \"quantity\": 2,\n          \"unit\": \"cloves\",\n          \"name\": \"garlic\"\n        }\n      ],\n      \"outputStepNums\": [\n        1\n      ]\n    }\n  ]\n}",
         "examples": [
           {
             "name": "example",
             "label": "Example",
-            "example": "{\n  \"clientMutationId\": \"device-uuid-recipe-create\",\n  \"title\": \"Pasta\",\n  \"description\": \"Weeknight pasta\",\n  \"servings\": \"4\",\n  \"steps\": [\n    {\n      \"stepTitle\": null,\n      \"description\": \"Boil pasta.\",\n      \"duration\": null,\n      \"ingredients\": [\n        {\n          \"quantity\": 1,\n          \"unit\": \"lb\",\n          \"name\": \"pasta\"\n        }\n      ]\n    }\n  ]\n}"
+            "example": "{\n  \"clientMutationId\": \"device-uuid-recipe-create\",\n  \"title\": \"Pasta\",\n  \"description\": \"Weeknight pasta\",\n  \"servings\": \"4\",\n  \"steps\": [\n    {\n      \"stepTitle\": null,\n      \"description\": \"Boil pasta.\",\n      \"duration\": null,\n      \"ingredients\": [\n        {\n          \"quantity\": 1,\n          \"unit\": \"lb\",\n          \"name\": \"pasta\"\n        }\n      ],\n      \"outputStepNums\": []\n    },\n    {\n      \"stepTitle\": \"Sauce\",\n      \"description\": \"Toss the pasta with sauce.\",\n      \"duration\": 3,\n      \"ingredients\": [\n        {\n          \"quantity\": 2,\n          \"unit\": \"cloves\",\n          \"name\": \"garlic\"\n        }\n      ],\n      \"outputStepNums\": [\n        1\n      ]\n    }\n  ]\n}"
           }
         ]
       },

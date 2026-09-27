@@ -372,6 +372,66 @@ describe("API v1 recipe write mutations", () => {
     expect(replayPayload).toEqual(expectedReplay);
   });
 
+  it("creates steps that use earlier steps' outputs, as the native app sends them on every step", async () => {
+    const fixture = await createRecipeWriteFixture(db);
+    const body = {
+      clientMutationId: "recipe-create-output-uses",
+      title: `Layered Lasagna ${faker.string.alphanumeric(8)}`,
+      steps: [
+        { description: "Make the sauce", ingredients: [{ quantity: 1, unit: "can", name: "tomatoes" }], outputStepNums: [] },
+        { description: "Make the bechamel", ingredients: [{ quantity: 2, unit: "cup", name: "milk" }], outputStepNums: [] },
+        { description: "Layer and bake", ingredients: [], outputStepNums: [2, 1, 2] },
+      ],
+    };
+
+    const response = await action(routeArgs(
+      mutationRequest("POST", "recipes", fixture.writer.token, "req_recipe_create_output_uses", body),
+      "recipes",
+    ));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(201);
+    expectSuccessEnvelope(payload, "req_recipe_create_output_uses");
+    const steps = payload.data.recipe.steps as Array<{ stepNum: number; usingSteps: Array<{ inputStepNum: number; outputStepNum: number }> }>;
+    expect(steps.map((step) => ({
+      stepNum: step.stepNum,
+      uses: step.usingSteps.map((use) => `${use.outputStepNum}->${use.inputStepNum}`),
+    }))).toEqual([
+      { stepNum: 1, uses: [] },
+      { stepNum: 2, uses: [] },
+      { stepNum: 3, uses: ["1->3", "2->3"] },
+    ]);
+    const uses = await db.stepOutputUse.findMany({ where: { recipeId: payload.data.recipe.id } });
+    expect(uses.map((use) => `${use.outputStepNum}->${use.inputStepNum}`).sort()).toEqual(["1->3", "2->3"]);
+  });
+
+  it.each([
+    ["a forward reference", [{ description: "Mix", outputStepNums: [2] }, { description: "Bake" }], "steps.0.outputStepNums", "Can only reference previous steps"],
+    ["a self reference", [{ description: "Mix" }, { description: "Bake", outputStepNums: [2] }], "steps.1.outputStepNums", "Cannot reference the current step"],
+    ["a reference past the request's steps", [{ description: "Mix" }, { description: "Bake", outputStepNums: [7] }], "steps.1.outputStepNums", "Can only reference previous steps"],
+    ["a fractional step number", [{ description: "Mix" }, { description: "Bake", outputStepNums: [1.5] }], "steps.1.outputStepNums.0", "steps.1.outputStepNums.0 must be a positive integer"],
+    ["step zero", [{ description: "Mix" }, { description: "Bake", outputStepNums: [0] }], "steps.1.outputStepNums.0", "steps.1.outputStepNums.0 must be a positive integer"],
+    ["a non-array", [{ description: "Mix" }, { description: "Bake", outputStepNums: 1 }], "steps.1.outputStepNums", "steps.1.outputStepNums must be an array"],
+  ])("rejects a recipe create whose step output uses have %s, writing nothing", async (_label, steps, field, message) => {
+    const fixture = await createRecipeWriteFixture(db);
+    const title = `Rejected Uses ${faker.string.alphanumeric(8)}`;
+
+    const response = await action(routeArgs(
+      mutationRequest("POST", "recipes", fixture.writer.token, "req_recipe_create_bad_output_use", {
+        clientMutationId: `bad-output-use-${faker.string.alphanumeric(8)}`,
+        title,
+        steps,
+      }),
+      "recipes",
+    ));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(400);
+    expectErrorEnvelope(payload, "req_recipe_create_bad_output_use", "validation_error", 400);
+    expect(payload.error.details).toEqual({ fieldErrors: { [field]: message } });
+    await expect(db.recipe.count({ where: { title } })).resolves.toBe(0);
+  });
+
   it("updates owned recipe metadata and rejects duplicate or cross-owner updates", async () => {
     const fixture = await createRecipeWriteFixture(db);
     const recipe = await createRecipeGraph(db, fixture.chef.id, { title: "Before API Update" });

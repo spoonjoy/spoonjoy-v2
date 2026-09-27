@@ -13,7 +13,7 @@ import {
   replaceNativeRecipeStepOutputUses,
   updateNativeRecipeStep,
 } from "../../../app/lib/api-v1-recipe-steps.server";
-import { deleteNativeRecipe, updateNativeRecipe } from "../../../app/lib/api-v1-recipe-writes.server";
+import { createNativeRecipe, deleteNativeRecipe, updateNativeRecipe } from "../../../app/lib/api-v1-recipe-writes.server";
 import type { D1ReadDatabase } from "../../../app/lib/d1-read.server";
 import { d1Guard, d1WriteBatch, isD1GuardFailure } from "../../../app/lib/d1-write.server";
 import { getDb } from "../../../app/lib/db.server";
@@ -679,6 +679,31 @@ describe("atomic recipe writes on Wrangler D1", () => {
       await expect(updateNativeRecipe(prisma, CHEF, "atomic-api-update", patch, database())).resolves.toMatchObject({ ok: true });
       expect((await recipeGraph("atomic-api-update")).recipe).toMatchObject({ title: "Atomic API Title" });
       expect(await cookbookUpdatedAt()).not.toBe(OLD);
+    });
+
+    it("creates a recipe with its steps' output uses together, or nothing", async () => {
+      const input = {
+        clientMutationId: "atomic-create-uses",
+        title: "Atomic Layered Bake",
+        description: null,
+        servings: null,
+        steps: [
+          { stepTitle: null, description: "Sauce", duration: null, ingredients: [{ quantity: 1, unit: "atomic cup", ingredientName: "atomic milk" }], outputStepNums: [] },
+          { stepTitle: null, description: "Layer", duration: null, ingredients: [], outputStepNums: [1] },
+        ],
+      };
+      await failOn("INSERT", "StepOutputUse", `NEW."inputStepNum" = 2 AND NEW."recipeId" = 'atomic-create-uses'`);
+
+      expect(String(await rejection(createNativeRecipe(prisma, CHEF, input, { recipeId: "atomic-create-uses", d1: database() })))).toContain(FAILURE);
+      expect((await recipeGraph("atomic-create-uses")).recipe).toBeNull();
+      expect(await count(`SELECT COUNT(*) AS "count" FROM "RecipeStep" WHERE "recipeId" = 'atomic-create-uses'`)).toBe(0);
+
+      await run(`DROP TRIGGER "${TRIGGER}"`);
+      await expect(createNativeRecipe(prisma, CHEF, input, { recipeId: "atomic-create-uses", d1: database() }))
+        .resolves.toMatchObject({ ok: true, data: { recipeId: "atomic-create-uses" } });
+      const created = await recipeGraph("atomic-create-uses");
+      expect(created.steps).toHaveLength(2);
+      expect(created.uses).toEqual([{ outputStepNum: 1, inputStepNum: 2 }]);
     });
 
     it("soft-deletes a recipe and writes its sync tombstone together, or neither", async () => {
