@@ -131,6 +131,20 @@ function sqlString(value) {
 
 const PERSONA_IDS = [KITCHEN.chef.id, KITCHEN.friend.id, KITCHEN.newbie.id];
 
+// Session cookies carry the user's sessionVersion, and a cookie is valid only while it equals
+// the user's current value (app/lib/session.server.ts). Every reset deletes and re-inserts the
+// personas, so an in-place `+ 1` would be lost and a re-inserted default of 0 would bring back
+// every earlier persona cookie. Instead a persona is re-inserted at a version minted from the
+// reset time: seconds since 2026-01-01T00:00:00Z. The pre-upload `--rotate` runs minutes after
+// the seed that the journeys signed in against, so it always lands on a newer version, and
+// every persona session cookie from the run (including any left in a trace) is revoked
+// before the report is uploaded. Seconds keep the value inside Prisma's 32-bit Int until 2094.
+export const PERSONA_SESSION_VERSION_EPOCH_SECONDS = 1767225600;
+
+export function personaSessionVersion(nowMs) {
+  return Math.max(1, Math.floor(nowMs / 1000) - PERSONA_SESSION_VERSION_EPOCH_SECONDS);
+}
+
 function sqlIdList(ids) {
   return ids.map(sqlString).join(", ");
 }
@@ -255,12 +269,15 @@ export function buildScratchUsersSql({ users, passwords, hash = (password) => bc
 // before ids were shortened to fit under D1's LIKE pattern-length limit — some of those are
 // still sitting in QA, and --rotate must keep invalidating them too. Still a short literal
 // prefix, nowhere near D1's 50-byte LIKE limit.
+// It also bumps each scratch user's sessionVersion, which revokes every session cookie the
+// run minted for them (session reads require the cookie's version to equal the user's).
 export function buildScratchInvalidationSql() {
-  return `UPDATE "User" SET hashedPassword = NULL, salt = NULL WHERE email LIKE 'codex-e2e-s%';`;
+  return `UPDATE "User" SET hashedPassword = NULL, salt = NULL, sessionVersion = sessionVersion + 1 WHERE email LIKE 'codex-e2e-s%';`;
 }
 
-export function buildKitchenResetSql({ passwords, hash = (password) => bcrypt.hashSync(password, 10) }) {
+export function buildKitchenResetSql({ passwords, hash = (password) => bcrypt.hashSync(password, 10), now = Date.now }) {
   const statements = [];
+  const sessionVersion = personaSessionVersion(now());
   const personaIds = sqlIdList(PERSONA_IDS);
 
   // 1. Detach forks that point at ANY recipe owned by a kitchen persona. Match by
@@ -310,13 +327,14 @@ export function buildKitchenResetSql({ passwords, hash = (password) => bcrypt.ha
     );
   }
 
-  // 6. Users, each with a bcrypt hash of this run's freshly generated password.
+  // 6. Users, each with a bcrypt hash of this run's freshly generated password, at the session
+  // version for this reset (see personaSessionVersion).
   for (const key of ["chef", "friend", "newbie"]) {
     const persona = KITCHEN[key];
     const hashedPassword = hash(passwords[key]);
     const salt = hashedPassword.slice(0, 29);
     statements.push(
-      `INSERT INTO "User" (id, email, username, hashedPassword, salt, createdAt, updatedAt) VALUES (${sqlString(persona.id)}, ${sqlString(persona.email)}, ${sqlString(persona.username)}, ${sqlString(hashedPassword)}, ${sqlString(salt)}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
+      `INSERT INTO "User" (id, email, username, hashedPassword, salt, sessionVersion, createdAt, updatedAt) VALUES (${sqlString(persona.id)}, ${sqlString(persona.email)}, ${sqlString(persona.username)}, ${sqlString(hashedPassword)}, ${sqlString(salt)}, ${sessionVersion}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
     );
   }
 
