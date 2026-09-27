@@ -88,6 +88,97 @@ describe("MobileNav", () => {
       expect(within(pantry).getByRole("link", { name: "Kitchen Search" })).toHaveAttribute("href", "/search");
     });
 
+    it("tells assistive tech whether the pantry is open and which element it controls", async () => {
+      const user = userEvent.setup();
+      render(
+        <MemoryRouter initialEntries={["/"]}>
+          <MobileNav />
+        </MemoryRouter>,
+      );
+
+      const toggle = screen.getByRole("button", { name: "Open pantry navigation" });
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+      expect(toggle).toHaveAttribute("aria-controls", "mobile-pantry");
+
+      await user.click(toggle);
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+      expect(screen.getByTestId("mobile-pantry")).toHaveAttribute("id", "mobile-pantry");
+
+      await user.click(toggle);
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+      expect(screen.queryByTestId("mobile-pantry")).not.toBeInTheDocument();
+    });
+
+    it("closes the pantry on Escape and returns focus to its button, ignoring other keys", async () => {
+      const user = userEvent.setup();
+      render(
+        <MemoryRouter initialEntries={["/"]}>
+          <MobileNav />
+        </MemoryRouter>,
+      );
+
+      const toggle = screen.getByRole("button", { name: "Open pantry navigation" });
+      await user.click(toggle);
+      toggle.blur();
+
+      await user.keyboard("{Enter}");
+      expect(screen.getByTestId("mobile-pantry")).toBeInTheDocument();
+
+      await user.keyboard("{Escape}");
+      expect(screen.queryByTestId("mobile-pantry")).not.toBeInTheDocument();
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+      expect(toggle).toHaveFocus();
+
+      // Closed, Escape does nothing (the listener is gone).
+      toggle.blur();
+      await user.keyboard("{Escape}");
+      expect(toggle).not.toHaveFocus();
+    });
+
+    it("closes the pantry on a tap outside it, which does not reach the page underneath", async () => {
+      const user = userEvent.setup();
+      const onPageClick = vi.fn();
+      render(
+        <MemoryRouter initialEntries={["/"]}>
+          <button type="button" onClick={onPageClick}>Page content</button>
+          <MobileNav />
+        </MemoryRouter>,
+      );
+
+      await user.click(screen.getByRole("button", { name: "Open pantry navigation" }));
+      const backdrop = screen.getByTestId("mobile-pantry-backdrop");
+      expect(backdrop).toHaveAttribute("aria-hidden", "true");
+      expect(backdrop).toHaveClass("fixed", "inset-0", "z-40", "lg:hidden");
+
+      // A tap inside the pantry keeps it open.
+      await user.click(screen.getByTestId("mobile-pantry"));
+      expect(screen.getByTestId("mobile-pantry")).toBeInTheDocument();
+
+      await user.click(backdrop);
+      expect(screen.queryByTestId("mobile-pantry")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("mobile-pantry-backdrop")).not.toBeInTheDocument();
+      expect(onPageClick).not.toHaveBeenCalled();
+    });
+
+    it("offers Account and a Log out that posts to /logout, so a phone can sign out", async () => {
+      const user = userEvent.setup();
+      render(
+        <MemoryRouter initialEntries={["/"]}>
+          <MobileNav />
+        </MemoryRouter>,
+      );
+
+      await user.click(screen.getByRole("button", { name: "Open pantry navigation" }));
+      const pantry = screen.getByTestId("mobile-pantry");
+      expect(within(pantry).getByRole("link", { name: "Account", exact: true })).toHaveAttribute("href", "/account/settings");
+
+      const logOut = within(pantry).getByRole("button", { name: "Log out", exact: true });
+      expect(logOut).toHaveAttribute("type", "submit");
+      const form = logOut.closest("form");
+      expect(form).toHaveAttribute("method", "post");
+      expect(form).toHaveAttribute("action", "/logout");
+    });
+
     it("does not render the old dashboard navigation labels before the pantry is opened", () => {
       render(
         <MemoryRouter initialEntries={["/"]}>

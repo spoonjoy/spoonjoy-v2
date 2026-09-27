@@ -27,6 +27,10 @@ export interface DockButton {
    */
   onLinkClick?: (event: MouseEvent<HTMLElement>) => void;
   active?: boolean;
+  /** For a button that shows and hides another element: whether that element is showing. */
+  expanded?: boolean;
+  /** For a button that shows and hides another element: that element's id. */
+  controls?: string;
   tone?: "default" | "primary" | "danger" | "quiet";
   iconClassName?: string;
   labelClassName?: string;
@@ -151,6 +155,8 @@ function buttonSignature(button: DockButton): unknown[] {
     typeof button.onAction === "string" ? button.onAction : null,
     Boolean(button.onLinkClick),
     button.active,
+    button.expanded,
+    button.controls,
     button.tone,
     button.iconClassName,
     button.labelClassName,

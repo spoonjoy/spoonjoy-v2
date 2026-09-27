@@ -9,6 +9,10 @@ export interface DockItemProps {
   ariaLabel?: string;
   href?: string;
   active?: boolean;
+  /** Button only: whether the element it shows and hides (`controls`) is showing. */
+  expanded?: boolean;
+  /** Button only: the id of the element it shows and hides. */
+  controls?: string;
   className?: string;
   iconClassName?: string;
   labelClassName?: string;
@@ -24,6 +28,8 @@ export function DockItem({
   ariaLabel,
   href,
   active = false,
+  expanded,
+  controls,
   className,
   iconClassName,
   labelClassName,
@@ -111,7 +117,14 @@ export function DockItem({
   }
 
   return (
-    <button type="button" onClick={onClick} className={baseClassName} aria-label={ariaLabel}>
+    <button
+      type="button"
+      onClick={onClick}
+      className={baseClassName}
+      aria-label={ariaLabel}
+      aria-expanded={expanded}
+      aria-controls={controls}
+    >
       {content}
     </button>
   );

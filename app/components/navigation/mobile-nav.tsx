@@ -7,6 +7,7 @@ import {
   Bookmark,
   Globe,
   Home,
+  LogOut,
   Menu,
   Plus,
   Search,
@@ -57,7 +58,12 @@ function shouldHideDock(pathname: string, isAuthenticated: boolean) {
   );
 }
 
-function rootConfig(pathname: string, search: string, isAuthenticated: boolean, openPantry: () => void): DockConfig {
+interface PantryToggle {
+  isOpen: boolean;
+  toggle: () => void;
+}
+
+function rootConfig(pathname: string, search: string, isAuthenticated: boolean, pantry: PantryToggle): DockConfig {
   if (!isAuthenticated) {
     return {
       variant: "root",
@@ -242,10 +248,20 @@ function rootConfig(pathname: string, search: string, isAuthenticated: boolean, 
     tools: [
       { id: "my-recipes", icon: BookOpen, label: "My Recipes", onAction: "/my-recipes" },
       { id: "shopping", icon: ShoppingBag, label: "Shopping list", onAction: "/shopping-list" },
-      { id: "pantry", icon: Menu, label: "Pantry", ariaLabel: "Open pantry navigation", onAction: openPantry },
+      {
+        id: "pantry",
+        icon: Menu,
+        label: "Pantry",
+        ariaLabel: "Open pantry navigation",
+        onAction: pantry.toggle,
+        expanded: pantry.isOpen,
+        controls: PANTRY_ID,
+      },
     ],
   };
 }
+
+const PANTRY_ID = "mobile-pantry";
 
 const pantryLinks = [
   { href: "/recipes", label: "Recipes", icon: Globe },
@@ -256,6 +272,10 @@ const pantryLinks = [
   { href: "/chefs", label: "Chefs", icon: Users },
   { href: "/search", label: "Kitchen Search", icon: Search },
 ];
+
+const pantryItemClassName =
+  "flex min-h-12 items-center gap-2 rounded-[var(--sj-radius-control)] px-3 py-2 font-sj-ui text-sm font-bold text-[var(--sj-on-photo)] no-underline transition active:scale-[0.98]";
+const pantryIconClassName = "h-4 w-4 shrink-0 text-[var(--sj-on-photo-soft)]";
 
 interface MobileNavProps {
   isAuthenticated?: boolean;
@@ -270,6 +290,18 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
     setIsPantryOpen(false);
   }, [location.pathname, location.search]);
 
+  // Escape closes the pantry and returns focus to the button that opened it.
+  useEffect(() => {
+    if (!isPantryOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setIsPantryOpen(false);
+      document.querySelector<HTMLElement>(`[aria-controls="${PANTRY_ID}"]`)?.focus();
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [isPantryOpen]);
+
   if (isSuppressed || shouldHideDock(location.pathname, isAuthenticated)) {
     return null;
   }
@@ -278,7 +310,7 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
     location.pathname,
     location.search,
     isAuthenticated,
-    () => setIsPantryOpen((open) => !open),
+    { isOpen: isPantryOpen, toggle: () => setIsPantryOpen((open) => !open) },
   );
   const tools = activeConfig.tools.slice(0, 3);
 
@@ -289,25 +321,47 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
   return (
     <>
       {isPantryOpen ? (
-        // Same 95% charcoal surface as the dock, so the links stay readable
-        // over any page content.
-        <div
-          className="fixed bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))] z-50 mx-auto max-w-lg rounded-[var(--sj-radius-surface)] border border-[var(--sj-photo-line)] bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_95%,transparent)] p-2 shadow-[0_18px_60px_rgba(31,26,20,0.26),inset_0_1px_0_color-mix(in_srgb,var(--sj-on-photo)_22%,transparent)] backdrop-blur-2xl backdrop-saturate-150 lg:hidden"
-          data-testid="mobile-pantry"
-        >
-          <div className="grid grid-cols-2 gap-1.5">
-            {pantryLinks.map(({ href, label, icon: Icon }) => (
-              <Link
-                key={href}
-                href={href}
-                className="flex min-h-12 items-center gap-2 rounded-[var(--sj-radius-control)] px-3 py-2 font-sj-ui text-sm font-bold text-[var(--sj-on-photo)] no-underline transition active:scale-[0.98]"
-              >
-                <Icon className="h-4 w-4 shrink-0 text-[var(--sj-on-photo-soft)]" aria-hidden="true" />
-                <span className="min-w-0 truncate">{label}</span>
+        <>
+          {/* A tap anywhere outside the pantry closes it without also activating what's under
+              it. It sits under the dock (z-50), so the dock stays usable while the pantry is open. */}
+          <div
+            aria-hidden="true"
+            className="fixed inset-0 z-40 lg:hidden"
+            data-testid="mobile-pantry-backdrop"
+            onClick={() => setIsPantryOpen(false)}
+          />
+          {/* Same 95% charcoal surface as the dock, so the links stay readable
+              over any page content. */}
+          <div
+            id={PANTRY_ID}
+            className="fixed bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))] z-50 mx-auto max-w-lg rounded-[var(--sj-radius-surface)] border border-[var(--sj-photo-line)] bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_95%,transparent)] p-2 shadow-[0_18px_60px_rgba(31,26,20,0.26),inset_0_1px_0_color-mix(in_srgb,var(--sj-on-photo)_22%,transparent)] backdrop-blur-2xl backdrop-saturate-150 lg:hidden"
+            data-testid="mobile-pantry"
+          >
+            <div className="grid grid-cols-2 gap-1.5">
+              {pantryLinks.map(({ href, label, icon: Icon }) => (
+                <Link key={href} href={href} className={pantryItemClassName}>
+                  <Icon className={pantryIconClassName} aria-hidden="true" />
+                  <span className="min-w-0 truncate">{label}</span>
+                </Link>
+              ))}
+            </div>
+            {/* The account and sign-out entries: the only way to either on a phone, where the
+                desktop navigation's Account and Logout are hidden. A plain form post, so it works
+                before the page hydrates and the next page loads fresh. */}
+            <div className="mt-1.5 grid grid-cols-2 gap-1.5 border-t border-[var(--sj-photo-line)] pt-1.5">
+              <Link href="/account/settings" className={pantryItemClassName}>
+                <User className={pantryIconClassName} aria-hidden="true" />
+                <span className="min-w-0 truncate">Account</span>
               </Link>
-            ))}
+              <form method="post" action="/logout" className="m-0 flex">
+                <button type="submit" className={clsx(pantryItemClassName, "w-full bg-transparent text-left")}>
+                  <LogOut className={pantryIconClassName} aria-hidden="true" />
+                  <span className="min-w-0 truncate">Log out</span>
+                </button>
+              </form>
+            </div>
           </div>
-        </div>
+        </>
       ) : null}
 
       <SpoonDock aria-label={activeConfig.ariaLabel ?? "Spoonjoy navigation"} centered={centered}>

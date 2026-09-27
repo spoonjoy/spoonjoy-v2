@@ -226,10 +226,13 @@ export default function App() {
           <header className="sj-desktop-topbar sticky top-0 z-30 hidden items-center px-4 lg:flex">
             <AppNavbar userId={userId} oauthProviders={oauthProviders} />
           </header>
+          {/* The bottom padding clears the dock (SpoonDock): its bottom margin,
+              max(1rem, safe-area inset), plus its 4.25rem height and a 1rem gap, so the last
+              thing on a page never sits under it. */}
           <main
             id="main"
             tabIndex={-1}
-            className="sj-desktop-surface sj-mobile-surface grow pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0"
+            className="sj-desktop-surface sj-mobile-surface grow pb-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] lg:pb-0"
           >
             <Outlet />
           </main>
@@ -277,7 +280,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <html lang="en" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {/* viewport-fit=cover lets iOS report its safe-area insets (the home indicator, the
+            notch in landscape) to env(safe-area-inset-*), which the dock, the pantry and the page
+            padding use; without it they are all 0. */}
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="theme-color" content="#fbfaf6" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
