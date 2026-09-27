@@ -144,6 +144,13 @@ describe("Search Route", () => {
       expect(screen.getByText(/Try searching by ingredient/i)).toBeInTheDocument();
       expect(screen.getByText("No matches yet")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Recipes" })).toHaveAttribute("href", "/search?scope=recipes");
+      // Quick filters and the scope switcher sit inside root.tsx's <main>, so neither can
+      // be an <aside> (complementary landmark) without nesting inside another landmark
+      // (landmark-complementary-is-top-level). Both still render their content as plain
+      // containers.
+      expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+      expect(screen.getByText("Quick filters")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Everything" })).toBeInTheDocument();
     });
 
     it("keeps the search box in step with the results across Back and Forward", async () => {

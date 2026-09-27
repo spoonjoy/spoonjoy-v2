@@ -188,7 +188,12 @@ export default function Search() {
             </Form>
           </div>
 
-          <aside className="sj-receipt p-5">
+          {/* A <div>, not <aside>: root.tsx already wraps every route in a <main> landmark, so
+              an <aside> here would nest a complementary landmark inside it and fail
+              landmark-complementary-is-top-level. These result counts are also tightly
+              coupled to the page's own search results, not tangential content, so a plain
+              container is the right call rather than another named landmark. */}
+          <div className="sj-receipt p-5">
             <p className="sj-eyebrow">Quick filters</p>
             <ul className="mt-4 space-y-0">
               {[
@@ -203,11 +208,15 @@ export default function Search() {
                 </li>
               ))}
             </ul>
-          </aside>
+          </div>
         </header>
 
         <div className="grid gap-8 py-8 lg:grid-cols-[13.75rem_minmax(0,1fr)]">
-          <aside className="border-t border-[var(--sj-border)] pt-4 font-sj-ui text-sm font-bold uppercase tracking-[0.14em] lg:border-r lg:border-t-0 lg:pr-6 lg:pt-0">
+          {/* A <div>, not <aside>: root.tsx already wraps every route in a <main> landmark, and
+              this scope switcher is core search navigation for the results beside it, not
+              tangential "complementary" content, so it should not add another landmark that
+              would nest inside <main> and fail landmark-complementary-is-top-level. */}
+          <div className="border-t border-[var(--sj-border)] pt-4 font-sj-ui text-sm font-bold uppercase tracking-[0.14em] lg:border-r lg:border-t-0 lg:pr-6 lg:pt-0">
             <Subheading level={2} className="text-xl/7">{SCOPE_LABELS[scope]}</Subheading>
             <Text className="mt-2 font-sj-body text-sm/6 normal-case tracking-normal">{SCOPE_DESCRIPTIONS[scope]}</Text>
             <div className="mt-5 grid gap-0">
@@ -235,7 +244,7 @@ export default function Search() {
             <Text className="font-sj-ui mt-5 hidden text-xs/5 uppercase tracking-[0.14em] sm:block">
               Shopping List results are private to your signed-in kitchen.
             </Text>
-          </aside>
+          </div>
 
           {/* <section>, not <main>: root.tsx already renders the page's only <main>. */}
           <section aria-label="Search results">
