@@ -118,8 +118,9 @@ import {
   asCompatibleD1Database,
   coalesceShoppingRecipeIngredients,
   createCompatibleShoppingListD1Batch,
+  addToCompatibleShoppingListItem,
   findCompatibleShoppingListItem,
-  mutateCompatibleShoppingListItem,
+  mergedShoppingItemQuantity,
   runCompatibleShoppingListBatch,
   type ShoppingListItemWritePlan,
 } from "~/lib/shopping-list-mutations.server";
@@ -4065,19 +4066,18 @@ async function handleShoppingItemCreate(args: ApiV1RouteArgs, requestId: string,
       ingredientRefId: ingredientRef.id,
       unitId: unit?.id ?? null,
     };
-    const result = await mutateCompatibleShoppingListItem({
+    // The quantity, check and removed state change atomically in addToCompatibleShoppingListItem.
+    const result = await addToCompatibleShoppingListItem({
       database: db,
       identity,
-      update: async (existing) => db.shoppingListItem.update({
+      added: quantity,
+      sortIndex: async (existing) => existing.checked || existing.checkedAt || existing.deletedAt
+        ? nextShoppingSortIndex(db, list.id)
+        : existing.sortIndex,
+      update: (existing, sortIndex) => db.shoppingListItem.update({
         where: { id: existing.id },
         data: {
-          quantity: quantity === null ? existing.quantity : (existing.quantity ?? 0) + quantity,
-          checked: false,
-          checkedAt: null,
-          deletedAt: null,
-          sortIndex: existing.checked || existing.checkedAt || existing.deletedAt
-            ? await nextShoppingSortIndex(db, list.id)
-            : existing.sortIndex,
+          sortIndex,
           categoryKey: categoryKey ?? existing.categoryKey,
           iconKey: iconKey ?? existing.iconKey,
         },
@@ -4256,7 +4256,7 @@ async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: stri
           const sortIndex = existing.deletedAt || existing.checkedAt || existing.checked
             ? nextSortIndexValue++
             : existing.sortIndex;
-          const quantity = (existing.quantity ?? 0) + requested.quantity;
+          const quantity = mergedShoppingItemQuantity(existing, requested.quantity);
           const categoryKey = existing.categoryKey ?? requested.categoryKey;
           const iconKey = existing.iconKey ?? requested.iconKey;
           operations.push(db.shoppingListItem.update({

@@ -71,6 +71,15 @@ describe("developer platform docs drift", () => {
     }
   });
 
+  it("describes shopping-list adds the same way as docs/api.md: live items add on top, removed items restart", () => {
+    expect(apiDocs).toContain("restores a matching deleted item at the quantity you send (its old quantity does not come back)");
+    for (const tool of ["add_recipe_to_shopping_list", "add_shopping_list_item"]) {
+      const row = ouroborosMcpDocs.split("\n").find((line) => line.startsWith(`| \`${tool}\` |`)) ?? "";
+      expect(row, tool).toContain("adds to the quantity of a matching item still on the list");
+      expect(row, tool).toContain("a removed or cleared matching item comes back at the added quantity");
+    }
+  });
+
   it("does not claim remote MCP tools/list is unauthenticated", () => {
     expect(claudeConnectorDocs).not.toMatch(/no auth needed/i);
 

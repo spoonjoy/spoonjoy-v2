@@ -35,7 +35,7 @@ export function ChecklistRow({
     <span
       aria-hidden="true"
       className={clsx(
-        "grid size-6 place-items-center rounded-[var(--sj-radius-control)] border-2 font-sj-ui text-sm font-bold",
+        "sj-instant-state grid size-6 place-items-center rounded-[var(--sj-radius-control)] border-2 font-sj-ui text-sm font-bold",
         checked
           ? "border-[var(--sj-ink)] bg-[var(--sj-ink)] text-[var(--sj-paper)]"
           : "border-[var(--sj-border-strong)] bg-transparent text-transparent",
@@ -89,10 +89,9 @@ export function ChecklistRow({
     </>
   );
 
-  const rowBaseClassName = clsx(
-    "grid min-h-14 items-center gap-3 py-2",
-    checked && "opacity-72",
-  );
+  // A checked row is shown by its soft ink and the strike, not by dimming: soft ink is already at
+  // the edge of WCAG AA on the page, so any opacity on top drops it below 4.5:1.
+  const rowBaseClassName = "grid min-h-14 items-center gap-3 py-2";
   const rowClassName = clsx(rowBaseClassName, "grid-cols-[2rem_minmax(0,1fr)]");
 
   if (onToggle) {

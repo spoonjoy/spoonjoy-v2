@@ -4,6 +4,20 @@ import type {
   ShoppingListItem,
 } from "@prisma/client";
 
+// The quantity a shopping-list row ends up with when an amount is added to an existing row with
+// the same ingredient and unit. A live row (checked or not) merges: the added amount goes on top
+// of what is already there. A removed or cleared row is kept only as a record to reuse (the
+// identity is unique), so it restarts from the added amount; otherwise a cleared "1 lemon" would
+// come back as 2 when "1 lemon" is added again. `added` is null when no amount was given.
+export function mergedShoppingItemQuantity(
+  existing: { quantity: number | null; deletedAt: Date | null },
+  added: number | null,
+): number | null {
+  if (existing.deletedAt) return added;
+  if (added === null) return existing.quantity;
+  return (existing.quantity ?? 0) + added;
+}
+
 export interface ShoppingListItemIdentity {
   shoppingListId: string;
   ingredientRefId: string;
@@ -231,6 +245,61 @@ export async function mutateCompatibleShoppingListItem<T>(
     if (!active) throw error;
     return { created: false, item: await input.update(active) };
   }
+}
+
+// Adds `added` to one row in a single statement, so the new quantity is computed from the row as
+// it is when the write lands rather than from an earlier read: two adds that race on the same row
+// (two devices, a double tap) both count. It follows mergedShoppingItemQuantity: a removed or
+// cleared row restarts from `added`, a live row adds on top (a null `added` leaves it as is). The
+// same statement brings the row back and unchecks it; SQLite evaluates every SET expression
+// against the row before the update, so the CASE sees the old "deletedAt".
+export async function addToShoppingListItemQuantity(
+  database: PrismaClient,
+  itemId: string,
+  added: number | null,
+): Promise<void> {
+  await database.$executeRaw`
+    UPDATE "ShoppingListItem"
+    SET "quantity" = CASE
+          WHEN "deletedAt" IS NOT NULL THEN ${added}
+          WHEN ${added} IS NULL THEN "quantity"
+          ELSE COALESCE("quantity", 0) + ${added}
+        END,
+        "checked" = 0,
+        "checkedAt" = NULL,
+        "deletedAt" = NULL
+    WHERE "id" = ${itemId}
+  `;
+}
+
+interface CompatibleAddInput<T> {
+  database: PrismaClient;
+  identity: ShoppingListItemIdentity;
+  /** The amount to add; null when no amount was given. */
+  added: number | null;
+  /** Where the matched row goes on the list. Runs before the row comes back, so a "move to the
+   * end" position is computed from the other rows. */
+  sortIndex: (existing: ShoppingListItem) => Promise<number>;
+  /** Sets the fields that aren't additive (sort position, category, icon) and returns the row. */
+  update: (existing: ShoppingListItem, sortIndex: number) => Promise<T>;
+  create: () => Promise<T>;
+}
+
+// mutateCompatibleShoppingListItem for an add: the matched row's quantity, check and removed
+// state change atomically (addToShoppingListItemQuantity), and `update` sets only the rest.
+export async function addToCompatibleShoppingListItem<T>(
+  input: CompatibleAddInput<T>,
+): Promise<{ created: boolean; item: T }> {
+  return mutateCompatibleShoppingListItem({
+    database: input.database,
+    identity: input.identity,
+    create: input.create,
+    update: async (existing) => {
+      const sortIndex = await input.sortIndex(existing);
+      await addToShoppingListItemQuantity(input.database, existing.id, input.added);
+      return input.update(existing, sortIndex);
+    },
+  });
 }
 
 export function coalesceShoppingRecipeIngredients(
