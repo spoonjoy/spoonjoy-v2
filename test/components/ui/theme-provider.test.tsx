@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
-import { ThemeProvider, useTheme } from '~/components/ui/theme-provider'
+import {
+  THEME_SWITCH_DURATION_MS,
+  THEME_SWITCHING_ATTRIBUTE,
+  ThemeProvider,
+  useTheme,
+} from '~/components/ui/theme-provider'
 
 // Helper to temporarily remove window for SSR tests
 const removeWindow = () => {
@@ -318,6 +323,150 @@ describe('ThemeProvider', () => {
 
     // Even before hydration completes, children should be present
     expect(screen.getByTestId('theme')).toBeInTheDocument()
+  })
+})
+
+describe('ThemeProvider theme-switching window', () => {
+  let systemChangeHandler: (() => void) | null = null
+  let prefersReducedMotion = false
+  let systemDark = false
+
+  function installMatchMedia() {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn((query: string) => ({
+        matches:
+          query === '(prefers-reduced-motion: reduce)'
+            ? prefersReducedMotion
+            : query === '(prefers-color-scheme: dark)'
+              ? systemDark
+              : false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn((event: string, handler: () => void) => {
+          if (event === 'change') systemChangeHandler = handler
+        }),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
+  }
+
+  async function renderMounted(stored: string) {
+    localStorageMock.getItem.mockReturnValue(stored)
+    const view = render(
+      <ThemeProvider>
+        <TestConsumer />
+      </ThemeProvider>
+    )
+    await waitFor(() => {
+      expect(screen.getByTestId('theme')).toHaveTextContent(stored)
+    })
+    return view
+  }
+
+  const root = () => document.documentElement
+
+  beforeEach(() => {
+    localStorageMock.clear()
+    vi.clearAllMocks()
+    systemChangeHandler = null
+    prefersReducedMotion = false
+    systemDark = false
+    installMatchMedia()
+    root().classList.remove('light', 'dark')
+    root().removeAttribute(THEME_SWITCHING_ATTRIBUTE)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    root().classList.remove('light', 'dark')
+    root().removeAttribute(THEME_SWITCHING_ATTRIBUTE)
+  })
+
+  it('marks <html> as switching before the theme class flips, then clears it after the fade', async () => {
+    await renderMounted('light')
+    expect(root()).not.toHaveAttribute(THEME_SWITCHING_ATTRIBUTE)
+
+    vi.useFakeTimers()
+    fireEvent.click(screen.getByText('Set Dark'))
+
+    expect(root()).toHaveAttribute(THEME_SWITCHING_ATTRIBUTE)
+    expect(root().classList.contains('dark')).toBe(true)
+
+    act(() => {
+      vi.advanceTimersByTime(THEME_SWITCH_DURATION_MS - 1)
+    })
+    expect(root()).toHaveAttribute(THEME_SWITCHING_ATTRIBUTE)
+
+    act(() => {
+      vi.advanceTimersByTime(1)
+    })
+    expect(root()).not.toHaveAttribute(THEME_SWITCHING_ATTRIBUTE)
+  })
+
+  it('keeps the switching window open until the fade after the last of several quick switches', async () => {
+    await renderMounted('light')
+
+    vi.useFakeTimers()
+    fireEvent.click(screen.getByText('Set Dark'))
+    act(() => {
+      vi.advanceTimersByTime(THEME_SWITCH_DURATION_MS - 50)
+    })
+    fireEvent.click(screen.getByText('Set Light'))
+    act(() => {
+      vi.advanceTimersByTime(THEME_SWITCH_DURATION_MS - 1)
+    })
+    expect(root()).toHaveAttribute(THEME_SWITCHING_ATTRIBUTE)
+
+    act(() => {
+      vi.advanceTimersByTime(1)
+    })
+    expect(root()).not.toHaveAttribute(THEME_SWITCHING_ATTRIBUTE)
+  })
+
+  it('never marks the switch for people who prefer reduced motion', async () => {
+    prefersReducedMotion = true
+    await renderMounted('light')
+
+    fireEvent.click(screen.getByText('Set Dark'))
+
+    expect(root().classList.contains('dark')).toBe(true)
+    expect(root()).not.toHaveAttribute(THEME_SWITCHING_ATTRIBUTE)
+  })
+
+  it('marks a system-driven switch while following the system theme', async () => {
+    await renderMounted('system')
+    expect(root()).not.toHaveAttribute(THEME_SWITCHING_ATTRIBUTE)
+
+    vi.useFakeTimers()
+    systemDark = true
+    act(() => {
+      systemChangeHandler?.()
+    })
+
+    expect(root().classList.contains('dark')).toBe(true)
+    expect(root()).toHaveAttribute(THEME_SWITCHING_ATTRIBUTE)
+
+    act(() => {
+      vi.advanceTimersByTime(THEME_SWITCH_DURATION_MS)
+    })
+    expect(root()).not.toHaveAttribute(THEME_SWITCHING_ATTRIBUTE)
+  })
+
+  it('clears a pending switching mark when the provider unmounts', async () => {
+    const view = await renderMounted('light')
+
+    vi.useFakeTimers()
+    fireEvent.click(screen.getByText('Set Dark'))
+    expect(root()).toHaveAttribute(THEME_SWITCHING_ATTRIBUTE)
+
+    view.unmount()
+
+    expect(root()).not.toHaveAttribute(THEME_SWITCHING_ATTRIBUTE)
+    expect(vi.getTimerCount()).toBe(0)
   })
 })
 
