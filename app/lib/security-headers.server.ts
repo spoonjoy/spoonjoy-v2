@@ -177,7 +177,7 @@ function cspDirectives(
  * responses (redirects, CORS preflight, resource routes) which carry no inline
  * script and therefore need no nonce in `script-src`.
  */
-export function buildContentSecurityPolicy(
+function serializeContentSecurityPolicy(
   nonce?: string,
   env?: PostHogCspEnv | null,
   formActionOrigin?: string | null,
@@ -185,6 +185,37 @@ export function buildContentSecurityPolicy(
   return Object.entries(cspDirectives(nonce, env, formActionOrigin))
     .map(([directive, sources]) => [directive, ...sources].join(" "))
     .join("; ");
+}
+
+// Every response carries a CSP, and all of it but the nonce depends only on configuration
+// (the PostHog host). Serializing it means parsing and validating that host as a URL, so
+// each isolate keeps the serialized policy per host, split around the nonce, and a request
+// only joins the pieces. Responses that name an OAuth form-action origin are rare and are
+// serialized in full, so the cache holds one entry per configured host.
+const NONCE_MARKER = "spoonjoy-csp-nonce-marker";
+const cachedPolicies = new Map<string, { withNonce: readonly [string, string]; withoutNonce: string }>();
+
+function cachedPolicyFor(env?: PostHogCspEnv | null) {
+  const key = env?.VITE_POSTHOG_HOST ?? "";
+  let policy = cachedPolicies.get(key);
+  if (!policy) {
+    const [before, after] = serializeContentSecurityPolicy(NONCE_MARKER, env).split(NONCE_MARKER) as [string, string];
+    policy = { withNonce: [before, after], withoutNonce: serializeContentSecurityPolicy(undefined, env) };
+    cachedPolicies.set(key, policy);
+  }
+  return policy;
+}
+
+export function buildContentSecurityPolicy(
+  nonce?: string,
+  env?: PostHogCspEnv | null,
+  formActionOrigin?: string | null,
+): string {
+  if (formActionOrigin) {
+    return serializeContentSecurityPolicy(nonce, env, formActionOrigin);
+  }
+  const policy = cachedPolicyFor(env);
+  return nonce ? `${policy.withNonce[0]}${nonce}${policy.withNonce[1]}` : policy.withoutNonce;
 }
 
 export type ContentSecurityPolicyMode = "enforce" | "report-only";
