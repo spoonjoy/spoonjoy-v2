@@ -6,6 +6,13 @@ import { ScaleSelector } from './ScaleSelector'
 import { scaleServingsText } from '~/lib/quantity'
 import { resolveChefAvatarUrl } from '~/lib/chef-avatar'
 import { CoverProvenanceBadge } from './CoverProvenanceBadge'
+import type { CookSyncStatus } from '~/lib/cook-session-sync'
+
+const PROGRESS_SYNC_STATUS_TEXT: Record<CookSyncStatus, string> = {
+  syncing: 'Syncing progress…',
+  synced: 'Progress synced',
+  offline: 'Progress saved on this device',
+}
 
 function normalizeCoverPlaceholderLabel(label: string) {
   return label === 'Awaiting first chef photo' ? 'Awaiting first photo' : label
@@ -46,6 +53,8 @@ export interface RecipeHeaderProps {
   onScaleChange: (value: number) => void
   /** Reset checked ingredients/steps progress */
   onClearProgress?: () => void
+  /** Whether cook progress is saved to the cook's account; omitted when progress stays on this device */
+  progressSyncStatus?: CookSyncStatus | null
   /** Contextual recipe navigation and primary actions */
   masthead?: ReactNode
   /** Source/import/fork attribution when this recipe has one */
@@ -76,6 +85,7 @@ export function RecipeHeader({
   scaleFactor,
   onScaleChange,
   onClearProgress,
+  progressSyncStatus,
   masthead,
   provenance,
 }: RecipeHeaderProps) {
@@ -203,6 +213,15 @@ export function RecipeHeader({
                 </button>
               )}
             </div>
+            {progressSyncStatus ? (
+              <p
+                className="font-sj-ui mt-3 text-xs font-semibold text-[var(--sj-ink-soft)]"
+                data-testid="cook-sync-status"
+                data-status={progressSyncStatus}
+              >
+                {PROGRESS_SYNC_STATUS_TEXT[progressSyncStatus]}
+              </p>
+            ) : null}
           </div>
         </div>
       </div>

@@ -1,0 +1,86 @@
+import { useEffect, useRef, useState } from "react";
+import {
+  CookSessionSync,
+  createCookSessionClient,
+  normalizeCookProgress,
+  readSyncedCookCache,
+  writeSyncedCookCache,
+  type CookProgressBounds,
+  type CookProgressValue,
+  type CookSyncStatus,
+} from "~/lib/cook-session-sync";
+
+export interface UseCookSessionSyncOptions {
+  recipeId: string;
+  /** The signed-in cook when cook-session sync is enabled; null keeps progress on this device only. */
+  userId: string | null;
+  /** True once the page has loaded this recipe's cached progress into its state. */
+  ready: boolean;
+  bounds: CookProgressBounds;
+  progress: CookProgressValue;
+  onRemoteProgress: (progress: CookProgressValue) => void;
+}
+
+/**
+ * Syncs the recipe page's cook progress with the signed-in cook's CookSession and returns the
+ * sync status to show, or null when sync is off (signed out, or not enabled in this environment).
+ *
+ * The page reads the server's progress when it loads, when the tab becomes visible again, when
+ * the window regains focus, and when the browser comes back online; the cook's own changes are
+ * pushed shortly after each one. There is no timer polling: coming back to the recipe on another
+ * device (a new visit, switching tabs or apps, refocusing) is what picks up that device's changes.
+ */
+export function useCookSessionSync({
+  recipeId,
+  userId,
+  ready,
+  bounds,
+  progress,
+  onRemoteProgress,
+}: UseCookSessionSyncOptions): CookSyncStatus | null {
+  const [status, setStatus] = useState<CookSyncStatus>("syncing");
+  const engineRef = useRef<CookSessionSync | null>(null);
+  const latest = useRef({ bounds, progress, onRemoteProgress });
+  latest.current = { bounds, progress, onRemoteProgress };
+
+  useEffect(() => {
+    if (!userId || !ready) return;
+
+    const engine = new CookSessionSync({
+      client: createCookSessionClient(recipeId),
+      progress: latest.current.progress,
+      server: readSyncedCookCache(userId, recipeId, latest.current.bounds)?.server ?? null,
+      normalize: (value) => normalizeCookProgress(value, latest.current.bounds),
+      onProgress: (value) => latest.current.onRemoteProgress(value),
+      onChange: () => {
+        writeSyncedCookCache(userId, recipeId, { progress: engine.progress, server: engine.server });
+        setStatus(engine.status);
+      },
+    });
+    engineRef.current = engine;
+    setStatus(engine.status);
+
+    const pull = () => void engine.sync(true);
+    const pullIfVisible = () => {
+      if (document.visibilityState === "visible") pull();
+    };
+    window.addEventListener("focus", pull);
+    window.addEventListener("online", pull);
+    document.addEventListener("visibilitychange", pullIfVisible);
+    pull();
+
+    return () => {
+      engine.dispose();
+      engineRef.current = null;
+      window.removeEventListener("focus", pull);
+      window.removeEventListener("online", pull);
+      document.removeEventListener("visibilitychange", pullIfVisible);
+    };
+  }, [recipeId, userId, ready]);
+
+  useEffect(() => {
+    engineRef.current?.setProgress(progress);
+  }, [progress]);
+
+  return userId ? status : null;
+}
