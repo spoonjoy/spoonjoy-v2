@@ -23,14 +23,19 @@ const requestHandler = vi.fn(async () => new Response("handled"));
 const mcpPostRoute = vi.fn(async () => Response.json({ ok: true }));
 const captureException = vi.fn(async () => undefined);
 const resolvePostHogServerConfig = vi.fn(() => ({ enabled: false }));
-let loadServerBuild: (() => Promise<unknown>) | undefined;
+const serverBuildMarker = { marker: "server-build" };
+let configuredServerBuild: unknown;
+let configuredMode: unknown;
+
+vi.mock("virtual:react-router/server-build", () => serverBuildMarker);
 
 vi.mock("react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-router")>();
   return {
     ...actual,
-    createRequestHandler: vi.fn((loader: () => Promise<unknown>) => {
-      loadServerBuild = loader;
+    createRequestHandler: vi.fn((build: unknown, mode: unknown) => {
+      configuredServerBuild = build;
+      configuredMode = mode;
       return requestHandler;
     }),
   };
@@ -124,9 +129,9 @@ describe("Cloudflare worker app", () => {
     apiMocks.getDb.mockResolvedValue(apiMocks.db);
   });
 
-  it("configures React Router with a lazy server-build loader", async () => {
-    expect(loadServerBuild).toBeTypeOf("function");
-    await loadServerBuild?.().catch(() => undefined);
+  it("configures React Router with the statically imported server build, evaluated at Worker startup", () => {
+    expect(configuredServerBuild).toMatchObject(serverBuildMarker);
+    expect(configuredMode).toBe(import.meta.env.MODE);
   });
 
   it("answers OAuth CORS preflights before React Router handles methods", async () => {

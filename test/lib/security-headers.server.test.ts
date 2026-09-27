@@ -268,6 +268,36 @@ describe("buildContentSecurityPolicy", () => {
     }
   });
 
+  it("builds the same policy from its per-isolate cache as from scratch, for every nonce and host", () => {
+    const hosts = [undefined, "https://eu.i.posthog.com", "https://analytics.example.com/p", "not a url"];
+    const fresh = (nonce: string | undefined, host: string | undefined) =>
+      buildContentSecurityPolicy(nonce, { VITE_POSTHOG_HOST: host }, "https://oauth.example");
+    for (const host of hosts) {
+      for (const nonce of [undefined, "", "n0nce+/=", "second-nonce"]) {
+        const env = host === undefined ? undefined : { VITE_POSTHOG_HOST: host };
+        const cached = buildContentSecurityPolicy(nonce, env);
+        // The same call twice, from the cache the first call filled.
+        expect(buildContentSecurityPolicy(nonce, env)).toBe(cached);
+        // Uncached serialization (an OAuth form-action origin bypasses the cache) differs
+        // only in form-action.
+        expect(fresh(nonce, host).replace("form-action 'self' https://oauth.example", "form-action 'self'")).toBe(cached);
+        if (nonce) {
+          expect(directiveSources(cached, "script-src")).toContain(`'nonce-${nonce}'`);
+        } else {
+          expect(cached).not.toContain("'nonce-");
+        }
+      }
+    }
+    expect(buildContentSecurityPolicy("a", null)).toBe(buildContentSecurityPolicy("a"));
+  });
+
+  it("refuses to cache a policy in which the nonce would not appear exactly once", () => {
+    // A (valid) host that contains the marker puts it in two directives.
+    expect(() =>
+      buildContentSecurityPolicy("abc", { VITE_POSTHOG_HOST: "https://spoonjoy-csp-nonce-marker.example" }),
+    ).toThrow("The CSP nonce marker appears 3 times; expected exactly once.");
+  });
+
   it("points violations at the sink route (legacy report-uri + modern report-to)", () => {
     const csp = buildContentSecurityPolicy();
     expect(directiveSources(csp, "report-uri")).toEqual(["/csp-report"]);

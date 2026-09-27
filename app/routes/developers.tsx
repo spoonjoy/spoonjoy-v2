@@ -1,6 +1,6 @@
 import { useLoaderData } from "react-router";
 import { useEffect, useRef, type ReactNode } from "react";
-import { usePostHog } from "@posthog/react";
+import { usePostHog } from "~/lib/use-posthog";
 import {
   Activity,
   BookOpen,

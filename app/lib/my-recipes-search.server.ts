@@ -1,3 +1,6 @@
+import { d1ReadBatch, type D1ReadDatabase, type D1Row } from "~/lib/d1-read.server";
+import { mapModel, type ColumnSpec } from "~/lib/d1-models.server";
+
 export const MY_RECIPES_PAGE_SIZE = 50;
 const MAX_MY_RECIPES_PAGE_SIZE = 50;
 
@@ -101,6 +104,51 @@ export async function searchMyRecipes(
   };
 }
 
+// The owner's recipes (not deleted), newest first. Binds: owner id, limit, offset.
+const UNFILTERED_RECIPES_SQL = `
+      SELECT
+        recipe."id",
+        recipe."title",
+        recipe."description",
+        recipe."servings"
+      FROM "Recipe" AS recipe
+      WHERE recipe."chefId" = ?
+        AND recipe."deletedAt" IS NULL
+      ORDER BY recipe."updatedAt" DESC, recipe."id" DESC
+      LIMIT ? OFFSET ?
+    `;
+
+// The owner's recipes (not deleted) matching the query in the title, description,
+// servings or an ingredient name, or all of them when the owner's username matches.
+// Binds: owner id, the needle three times, 1 when the username matches (else 0), the
+// needle, limit, offset.
+const FILTERED_RECIPES_SQL = `
+      SELECT
+        recipe."id",
+        recipe."title",
+        recipe."description",
+        recipe."servings"
+      FROM "Recipe" AS recipe
+      WHERE recipe."chefId" = ?
+        AND recipe."deletedAt" IS NULL
+        AND (
+          instr(lower(recipe."title"), ?) > 0
+          OR instr(lower(coalesce(recipe."description", '')), ?) > 0
+          OR instr(lower(coalesce(recipe."servings", '')), ?) > 0
+          OR ? = 1
+          OR EXISTS (
+            SELECT 1
+            FROM "Ingredient" AS ingredient
+            INNER JOIN "IngredientRef" AS ingredientRef
+              ON ingredientRef."id" = ingredient."ingredientRefId"
+            WHERE ingredient."recipeId" = recipe."id"
+              AND instr(lower(ingredientRef."name"), ?) > 0
+          )
+        )
+      ORDER BY recipe."updatedAt" DESC, recipe."id" DESC
+      LIMIT ? OFFSET ?
+    `;
+
 async function searchUnfilteredRecipes(
   database: MyRecipesSearchDb,
   {
@@ -114,18 +162,7 @@ async function searchUnfilteredRecipes(
   },
 ) {
   return database.$queryRawUnsafe<MyRecipesRow[]>(
-    `
-      SELECT
-        recipe."id",
-        recipe."title",
-        recipe."description",
-        recipe."servings"
-      FROM "Recipe" AS recipe
-      WHERE recipe."chefId" = ?
-        AND recipe."deletedAt" IS NULL
-      ORDER BY recipe."updatedAt" DESC, recipe."id" DESC
-      LIMIT ? OFFSET ?
-    `,
+    UNFILTERED_RECIPES_SQL,
     ownerId,
     limit,
     offset,
@@ -152,32 +189,7 @@ async function searchFilteredRecipes(
   const ownerUsernameMatches = ownerUsername.toLowerCase().includes(needle) ? 1 : 0;
 
   return database.$queryRawUnsafe<MyRecipesRow[]>(
-    `
-      SELECT
-        recipe."id",
-        recipe."title",
-        recipe."description",
-        recipe."servings"
-      FROM "Recipe" AS recipe
-      WHERE recipe."chefId" = ?
-        AND recipe."deletedAt" IS NULL
-        AND (
-          instr(lower(recipe."title"), ?) > 0
-          OR instr(lower(coalesce(recipe."description", '')), ?) > 0
-          OR instr(lower(coalesce(recipe."servings", '')), ?) > 0
-          OR ? = 1
-          OR EXISTS (
-            SELECT 1
-            FROM "Ingredient" AS ingredient
-            INNER JOIN "IngredientRef" AS ingredientRef
-              ON ingredientRef."id" = ingredient."ingredientRefId"
-            WHERE ingredient."recipeId" = recipe."id"
-              AND instr(lower(ingredientRef."name"), ?) > 0
-          )
-        )
-      ORDER BY recipe."updatedAt" DESC, recipe."id" DESC
-      LIMIT ? OFFSET ?
-    `,
+    FILTERED_RECIPES_SQL,
     ownerId,
     needle,
     needle,
@@ -187,4 +199,63 @@ async function searchFilteredRecipes(
     limit,
     offset,
   );
+}
+
+const MY_RECIPES_ROW_COLUMNS: ColumnSpec<MyRecipesRow> = {
+  id: "string",
+  title: "string",
+  description: "string?",
+  servings: "string?",
+};
+
+const OWNER_COLUMNS: ColumnSpec<{ id: string; username: string }> = { id: "string", username: "string" };
+
+/**
+ * `searchMyRecipes` on a D1 binding, for the signed-in owner: the owner and their recipes
+ * come back in one batch. With a query, the batch carries both possible answers (the
+ * query's matches, and every recipe for when the owner's username matches) and the
+ * username test runs in JavaScript, exactly as the Prisma path does before its query.
+ */
+export async function searchMyRecipesFromD1(
+  db: D1ReadDatabase,
+  {
+    ownerId,
+    query: rawQuery = "",
+    page: rawPage = 1,
+    pageSize: rawPageSize = MY_RECIPES_PAGE_SIZE,
+  }: {
+    ownerId: string;
+    query?: string | null;
+    page?: number | null;
+    pageSize?: number | null;
+  },
+): Promise<MyRecipesSearchResult> {
+  const query = normalizeMyRecipesQuery(rawQuery);
+  const page = normalizeMyRecipesPage(String(rawPage));
+  const pageSize = normalizePageSize(rawPageSize);
+  const limit = pageSize + 1;
+  const offset = (page - 1) * pageSize;
+  const needle = query.toLowerCase();
+
+  const [ownerRows, allRows, matchingRows] = await d1ReadBatch(db, [
+    [`SELECT "id", "username" FROM "User" WHERE "id" = ? LIMIT 1`, ownerId],
+    [UNFILTERED_RECIPES_SQL, ownerId, limit, offset],
+    ...(query ? [[FILTERED_RECIPES_SQL, ownerId, needle, needle, needle, 0, needle, limit, offset] as const] : []),
+  ]);
+  const ownerRow = ownerRows![0];
+  if (!ownerRow) throw new Error("My recipes owner not found");
+  const owner = mapModel(OWNER_COLUMNS, ownerRow);
+
+  const ownerUsernameMatches = owner.username.toLowerCase().includes(needle);
+  const rows: D1Row[] = query && !ownerUsernameMatches ? matchingRows! : allRows!;
+  const pageRows = rows.slice(0, pageSize).map((row) => mapModel(MY_RECIPES_ROW_COLUMNS, row));
+
+  return {
+    query,
+    page,
+    pageSize,
+    hasPreviousPage: page > 1,
+    hasNextPage: rows.length > pageSize,
+    recipes: mapRowsToRecipes(pageRows, owner),
+  };
 }

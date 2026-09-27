@@ -1,4 +1,5 @@
 import { createRequestHandler } from "react-router";
+import * as serverBuild from "virtual:react-router/server-build";
 import { canonicalizeRequestUrlForHost } from "../app/lib/canonical-host.server";
 import { ApiAuthError, authenticateApiRequest } from "../app/lib/api-auth.server";
 import { getDb } from "../app/lib/db.server";
@@ -16,10 +17,11 @@ declare global {
   interface CloudflareEnvironment extends Env {}
 }
 
-const requestHandler = createRequestHandler(
-  () => import("virtual:react-router/server-build"),
-  import.meta.env.MODE
-);
+// The server build (every route module, React's server renderer and their libraries) is a
+// static import, so it is evaluated while the Worker starts up rather than inside the first
+// request an isolate serves. Cloudflare runs startup outside any request, so a cold
+// isolate's first request no longer spends its CPU limit evaluating the whole build.
+const requestHandler = createRequestHandler(serverBuild, import.meta.env.MODE);
 
 const COOK_SESSION_PREFIX = "/api/cook-sessions";
 const COOK_SESSION_BOOTSTRAP_PATH = "/.well-known/spoonjoy-cook-session-bootstrap";
