@@ -152,14 +152,11 @@ export async function loadAccountSettings({
   const oauthError = url.searchParams.get("oauthError") ?? undefined;
 
   // On the Worker the page's reads go to D1 as one batch; Prisma is the fallback where
-  // there is no binding, and for a user whose legacy OAuth rows must be promoted first.
+  // there is no binding, and for a user whose legacy OAuth rows can be promoted (a write).
   const d1 = requestD1(context);
-  const reads = (d1 ? await readAccountSettingsFromD1(d1, userId) : null) ??
-    await readAccountSettingsWithPrisma(
-      await getRequestDb(context),
-      userId,
-      resolveIssuerOrigin(request.url, getCloudflareEnv(context)?.SPOONJOY_BASE_URL),
-    );
+  const issuer = resolveIssuerOrigin(request.url, getCloudflareEnv(context)?.SPOONJOY_BASE_URL);
+  const reads = (d1 ? await readAccountSettingsFromD1(d1, userId, issuer) : null) ??
+    await readAccountSettingsWithPrisma(await getRequestDb(context), userId, issuer);
   const { user, passkeys, apiCredentials, activeRefreshTokens, oauthClients } = reads;
 
   /* istanbul ignore next -- @preserve user should exist if session is valid */

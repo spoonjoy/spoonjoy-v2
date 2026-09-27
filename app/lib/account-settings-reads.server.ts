@@ -203,12 +203,16 @@ const ACTIVE_REFRESH_CLIENT_IDS = `SELECT "clientId" FROM "OAuthRefreshToken" WH
 
 /**
  * The account settings reads as one D1 batch, every statement scoped to the signed-in
- * user. Returns null when the user still has OAuth rows from before issuers were recorded:
- * those are promoted by a write first, so the caller uses the Prisma reader then.
+ * user. Returns null when the user has OAuth rows from before issuers were recorded that
+ * `promoteLegacyOAuthIssuerForUser` would promote to `issuer`: those need a write first,
+ * so the caller uses the Prisma reader then. Legacy rows the promotion cannot change (their
+ * client is missing or already bound to another issuer) do not count: for them the Prisma
+ * path's promotion is a no-op, and this reader returns the same rows it would.
  */
 export async function readAccountSettingsFromD1(
   db: D1ReadDatabase,
   userId: string,
+  issuer: string,
 ): Promise<AccountSettingsReads | null> {
   const [
     legacyRows,
@@ -223,14 +227,24 @@ export async function readAccountSettingsFromD1(
     accessCountRows,
   ] = await d1ReadBatch(db, [
     [
+      // The rows promoteLegacyOAuthIssuerForUser would change: legacy tokens and access
+      // credentials whose client is unbound or already bound to this issuer.
       `SELECT (
-         EXISTS (SELECT 1 FROM "OAuthRefreshToken" WHERE "userId" = ? AND "issuer" IS NULL)
+         EXISTS (
+           SELECT 1 FROM "OAuthRefreshToken" t
+           JOIN "OAuthClient" c ON c."id" = t."clientId"
+           WHERE t."userId" = ? AND t."issuer" IS NULL AND (c."issuer" IS NULL OR c."issuer" = ?)
+         )
          OR EXISTS (
-           SELECT 1 FROM "ApiCredential" WHERE "userId" = ? AND "oauthClientId" IS NOT NULL AND "oauthIssuer" IS NULL
+           SELECT 1 FROM "ApiCredential" a
+           JOIN "OAuthClient" c ON c."id" = a."oauthClientId"
+           WHERE a."userId" = ? AND a."oauthIssuer" IS NULL AND (c."issuer" IS NULL OR c."issuer" = ?)
          )
        ) AS "needsIssuerPromotion"`,
       userId,
+      issuer,
       userId,
+      issuer,
     ],
     [
       `SELECT "id", "email", "username", "photoUrl", "hashedPassword" IS NOT NULL AS "hasPassword"

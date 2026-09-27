@@ -93,12 +93,12 @@ describe("account settings reads", () => {
 
     for (const userId of [user.id, other.id]) {
       const before = d1.roundTrips();
-      const fromD1 = await readAccountSettingsFromD1(d1.binding, userId);
+      const fromD1 = await readAccountSettingsFromD1(d1.binding, userId, ISSUER);
       expect(d1.roundTrips() - before).toBe(1);
       expect(comparable(fromD1)).toEqual(comparable(await readAccountSettingsWithPrisma(db, userId, ISSUER)));
     }
 
-    const reads = (await readAccountSettingsFromD1(d1.binding, user.id))!;
+    const reads = (await readAccountSettingsFromD1(d1.binding, user.id, ISSUER))!;
     expect(reads.user).toMatchObject({ id: user.id, hasPassword: true, photoUrl: "https://example.com/me.jpg" });
     expect(reads.user?.OAuth).toHaveLength(2);
     expect(reads.passkeys.map((passkey) => passkey.createdAt)).toEqual([new Date("2026-05-01T00:00:00Z"), null]);
@@ -112,10 +112,10 @@ describe("account settings reads", () => {
   it("reads a user with no password, preferences or connections, and a missing user", async () => {
     const bare = await db.user.create({ data: { ...createTestUser(), hashedPassword: null, salt: null } });
     for (const userId of [bare.id, "missing-user"]) {
-      const fromD1 = await readAccountSettingsFromD1(d1.binding, userId);
+      const fromD1 = await readAccountSettingsFromD1(d1.binding, userId, ISSUER);
       expect(fromD1).toEqual(await readAccountSettingsWithPrisma(db, userId, ISSUER));
     }
-    await expect(readAccountSettingsFromD1(d1.binding, bare.id)).resolves.toMatchObject({
+    await expect(readAccountSettingsFromD1(d1.binding, bare.id, ISSUER)).resolves.toMatchObject({
       user: { hasPassword: false, OAuth: [] },
       preferences: null,
       pushSubscriptionCount: 0,
@@ -126,19 +126,38 @@ describe("account settings reads", () => {
     const { user, client } = await seedAccount();
     const legacy = await db.oAuthClient.create({ data: { clientName: "Legacy", redirectUris: "[]" } });
     await refreshToken(user.id, legacy.id, { issuer: null });
-    await expect(readAccountSettingsFromD1(d1.binding, user.id)).resolves.toBeNull();
+    await expect(readAccountSettingsFromD1(d1.binding, user.id, ISSUER)).resolves.toBeNull();
 
     await readAccountSettingsWithPrisma(db, user.id, ISSUER);
-    await expect(readAccountSettingsFromD1(d1.binding, user.id)).resolves.not.toBeNull();
+    await expect(readAccountSettingsFromD1(d1.binding, user.id, ISSUER)).resolves.not.toBeNull();
 
     await createApiCredential(db, user.id, "Legacy access", { oauthClientId: client.id, oauthIssuer: null });
-    await expect(readAccountSettingsFromD1(d1.binding, user.id)).resolves.toBeNull();
+    await expect(readAccountSettingsFromD1(d1.binding, user.id, ISSUER)).resolves.toBeNull();
+  });
+
+  it("keeps legacy rows the promotion cannot change on the D1 path, with the same result as Prisma", async () => {
+    const { user } = await seedAccount();
+    // A client already bound to another issuer: promotion leaves its legacy rows as they are.
+    const foreign = await db.oAuthClient.create({ data: { clientName: "Elsewhere", redirectUris: "[]", issuer: "https://other.example" } });
+    await refreshToken(user.id, foreign.id, { issuer: null });
+    await createApiCredential(db, user.id, "Foreign access", { oauthClientId: foreign.id, oauthIssuer: null });
+    // A legacy token whose client no longer exists cannot be promoted either.
+    await refreshToken(user.id, "missing-client", { issuer: null });
+
+    const fromD1 = await readAccountSettingsFromD1(d1.binding, user.id, ISSUER);
+    expect(fromD1).not.toBeNull();
+    expect(comparable(fromD1)).toEqual(comparable(await readAccountSettingsWithPrisma(db, user.id, ISSUER)));
+    expect(fromD1!.activeRefreshTokens.filter((token) => token.issuer === null)).toHaveLength(2);
+    // The Prisma reader's promotion was a no-op, so the D1 reader still answers.
+    await expect(readAccountSettingsFromD1(d1.binding, user.id, ISSUER)).resolves.not.toBeNull();
+    // Under the issuer the foreign client is bound to, the same rows are promotable.
+    await expect(readAccountSettingsFromD1(d1.binding, user.id, "https://other.example")).resolves.toBeNull();
   });
 
   it("fails closed on a D1 error or a malformed row", async () => {
     const { user } = await seedAccount();
     const failing = { prepare: d1.binding.prepare, batch: async () => { throw new Error("D1_ERROR: lost"); } };
-    await expect(readAccountSettingsFromD1(failing as never, user.id)).rejects.toThrow("D1_ERROR: lost");
+    await expect(readAccountSettingsFromD1(failing as never, user.id, ISSUER)).rejects.toThrow("D1_ERROR: lost");
 
     const tampered = (edit: (results: Array<{ results: Record<string, unknown>[] }>) => void) => ({
       prepare: d1.binding.prepare,
@@ -148,11 +167,11 @@ describe("account settings reads", () => {
         return results;
       },
     });
-    await expect(readAccountSettingsFromD1(tampered((r) => { r[0]!.results = []; }) as never, user.id))
+    await expect(readAccountSettingsFromD1(tampered((r) => { r[0]!.results = []; }) as never, user.id, ISSUER))
       .rejects.toThrow("D1 column needsIssuerPromotion is not a Boolean");
-    await expect(readAccountSettingsFromD1(tampered((r) => { r[4]!.results = []; }) as never, user.id))
+    await expect(readAccountSettingsFromD1(tampered((r) => { r[4]!.results = []; }) as never, user.id, ISSUER))
       .rejects.toThrow("D1 column count is not a count");
-    await expect(readAccountSettingsFromD1(tampered((r) => { r[1]!.results[0]!.hasPassword = "yes"; }) as never, user.id))
+    await expect(readAccountSettingsFromD1(tampered((r) => { r[1]!.results[0]!.hasPassword = "yes"; }) as never, user.id, ISSUER))
       .rejects.toThrow("D1 column hasPassword is not a Boolean");
   });
 });
