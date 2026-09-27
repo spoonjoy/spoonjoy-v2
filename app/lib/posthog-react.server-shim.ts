@@ -2,8 +2,11 @@
 // in the browser: on the server, components call `usePostHog()` during render but use the
 // client only in effects and event handlers, which never run on the server. Bundling the
 // real package would evaluate all of `posthog-js` on every cold start of the Worker.
+// Components reach this through `~/lib/use-posthog`, whose `PostHog | undefined` type makes
+// them guard the client.
+import type { PostHog } from "posthog-js";
 
 /** On the server there is no PostHog client. */
-export function usePostHog(): undefined {
+export function usePostHog(): PostHog | undefined {
   return undefined;
 }
