@@ -439,6 +439,15 @@ describe("spoonjoy MCP tools", () => {
     expect(activationFields.filter((field) => field in mcpProperties)).toEqual(["activateWhenReady"]);
   });
 
+  it("tells agents that a removed shopping item restarts from the added amount while a live one adds on top", () => {
+    for (const name of ["add_shopping_list_item", "add_recipe_to_shopping_list"]) {
+      const description = toolByName(name)?.description ?? "";
+      expect(description, name).toContain("adds to the quantity of a matching item still on the list");
+      expect(description, name).toContain("a removed or cleared matching item comes back at the added quantity");
+      expect(description, name).not.toMatch(/merging/);
+    }
+  });
+
   it("describes Photo Studio schema fields so agents can choose the right cover workflow", () => {
     expect(toolByName("create_recipe_cover_from_upload")?.description)
       .toEqual(expect.stringContaining("uploaded"));
@@ -2310,6 +2319,7 @@ describe("spoonjoy MCP tools", () => {
         context,
       ));
 
+      // A removed row restarts from the added amount; its old quantity doesn't come back (mergedShoppingItemQuantity).
       expect(added).toEqual({
         created: 0,
         updated: 1,
@@ -2318,7 +2328,7 @@ describe("spoonjoy MCP tools", () => {
           ownerId: owner.id,
           items: [{
             id: earliest.id,
-            quantity: 7,
+            quantity: 2,
             unit: recipe.recipe.steps[0].ingredients[0].unit,
             name: recipe.recipe.steps[0].ingredients[0].name,
             checked: false,
@@ -2775,7 +2785,8 @@ describe("spoonjoy MCP tools", () => {
       unit: "Gallon",
     }, context));
     expect(restored).toMatchObject({ created: 0, updated: 1 });
-    expect(restored.shoppingList.items[0]).toMatchObject({ id: itemId, quantity: 4, checked: false });
+    // A removed row restarts from the added amount; its old quantity doesn't come back (mergedShoppingItemQuantity).
+    expect(restored.shoppingList.items[0]).toMatchObject({ id: itemId, quantity: 1, checked: false });
   });
 
   it("always updates the active manual identity before considering a matching tombstone", async () => {
@@ -2882,6 +2893,7 @@ describe("spoonjoy MCP tools", () => {
         iconKey: "jar",
       }, context));
 
+      // A removed row restarts from the added amount; its old quantity doesn't come back (mergedShoppingItemQuantity).
       expect(restored).toEqual({
         created: 0,
         updated: 1,
@@ -2890,7 +2902,7 @@ describe("spoonjoy MCP tools", () => {
           ownerId: owner.id,
           items: [{
             id: earliest.id,
-            quantity: 12,
+            quantity: 2,
             unit: unit.name,
             name: ingredientRef.name,
             checked: false,

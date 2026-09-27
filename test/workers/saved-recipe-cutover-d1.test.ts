@@ -10,7 +10,10 @@ import {
   OAUTH_CONNECTION_KEY_BATCH_SIZE,
   oauthRefreshConnectionOwnership,
 } from "../../app/lib/oauth-server.server";
-import { mutateCompatibleShoppingListItem } from "../../app/lib/shopping-list-mutations.server";
+import {
+  addShoppingListItem,
+  mutateCompatibleShoppingListItem,
+} from "../../app/lib/shopping-list-mutations.server";
 import { createUserSessionCookie } from "../../app/lib/session.server";
 import { expectConsoleError } from "../warning-policy";
 // This suite deliberately runs through the same full-schema D1 owner. Keeping
@@ -905,6 +908,59 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
         ON "ShoppingListItem" ("shoppingListId", "unitId", "ingredientRefId")
       `);
     }
+  });
+
+  it("keeps both amounts when two adds race on one shopping row through real Prisma-D1", async () => {
+    const db = await getRequestDb(routeContext() as any);
+    const identity = {
+      shoppingListId: SHOPPING_LIST_ID,
+      ingredientRefId: SHOPPING_FIRST_REF_ID,
+      unitId: SHOPPING_UNIT_ID,
+    };
+    const rowQuantity = async () => (await database().prepare(`
+      SELECT "quantity", "deletedAt", "checked" FROM "ShoppingListItem" WHERE "id" = 'cutover-d1-race-row'
+    `).first<{ quantity: number | null; deletedAt: string | null; checked: number }>());
+
+    // Both adds must have read the row before either writes, so the two writes always race.
+    async function raceTwoAdds(first: number, second: number) {
+      let reads = 0;
+      let release!: () => void;
+      const bothRead = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      // Both rows below are checked or removed, so each add asks for a sort index at the end of
+      // the list after reading the row; that hook holds both reads until both have happened.
+      const add = (added: number) => addShoppingListItem(db, {
+        identity,
+        quantity: added,
+        categoryKey: null,
+        iconKey: null,
+        async nextSortIndex() {
+          reads += 1;
+          if (reads === 2) release();
+          await bothRead;
+          return 0;
+        },
+      });
+      await Promise.all([add(first), add(second)]);
+      expect(reads).toBe(2);
+    }
+
+    // A removed row: the first add brings it back at its amount, the second adds on top.
+    await database().prepare(`
+      INSERT INTO "ShoppingListItem" (
+        "id", "shoppingListId", "ingredientRefId", "unitId", "quantity", "checked", "checkedAt",
+        "deletedAt", "sortIndex", "updatedAt"
+      ) VALUES ('cutover-d1-race-row', ?, ?, ?, 9, 1, ?, ?, 0, ?)
+    `).bind(SHOPPING_LIST_ID, SHOPPING_FIRST_REF_ID, SHOPPING_UNIT_ID, FIXTURE_TIMESTAMP, FIXTURE_TIMESTAMP, FIXTURE_TIMESTAMP).run();
+
+    await raceTwoAdds(3, 2);
+    expect(await rowQuantity()).toEqual({ quantity: 5, deletedAt: null, checked: 0 });
+
+    // A live (checked) row: both amounts go on top.
+    await database().prepare(`UPDATE "ShoppingListItem" SET "checked" = 1 WHERE "id" = 'cutover-d1-race-row'`).run();
+    await raceTwoAdds(4, 1);
+    expect(await rowQuantity()).toEqual({ quantity: 10, deletedAt: null, checked: 0 });
   });
 
   it("uses the same atomic native D1 recipe batch through MCP", async () => {

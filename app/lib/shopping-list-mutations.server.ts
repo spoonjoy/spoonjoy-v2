@@ -12,6 +12,20 @@ import {
   type D1WriteResult,
 } from "~/lib/d1-write.server";
 
+// The quantity a shopping-list row ends up with when an amount is added to an existing row with
+// the same ingredient and unit. A live row (checked or not) merges: the added amount goes on top
+// of what is already there. A removed or cleared row is kept only as a record to reuse (the
+// identity is unique), so it restarts from the added amount; otherwise a cleared "1 lemon" would
+// come back as 2 when "1 lemon" is added again. `added` is null when no amount was given.
+export function mergedShoppingItemQuantity(
+  existing: { quantity: number | null; deletedAt: Date | null },
+  added: number | null,
+): number | null {
+  if (existing.deletedAt) return added;
+  if (added === null) return existing.quantity;
+  return (existing.quantity ?? 0) + added;
+}
+
 export interface ShoppingListItemIdentity {
   shoppingListId: string;
   ingredientRefId: string;
@@ -300,7 +314,11 @@ export interface ShoppingListItemAddition {
 /**
  * Adds to an existing item in one statement: the new quantity is computed from the row as it
  * is when the statement runs, not from an earlier read, and the item is unchecked and
- * restored. Returns the number of rows changed (0 when the row is no longer on the list).
+ * restored. It follows mergedShoppingItemQuantity: a removed or cleared row restarts from the
+ * added amount (a cleared "1 lemon" added again is 1, not 2), and a live row adds on top.
+ * SQLite evaluates every SET expression against the row before the update, so the CASE sees
+ * the old "deletedAt". Returns the number of rows changed (0 when the row is no longer on the
+ * list).
  */
 export async function addToShoppingListItem(
   database: PrismaClient,
@@ -309,8 +327,11 @@ export async function addToShoppingListItem(
   const updatedAt = d1Timestamp(new Date());
   return database.$executeRaw`
     UPDATE "ShoppingListItem"
-    SET "quantity" = CASE WHEN ${addition.quantityDelta} IS NULL THEN "quantity"
-          ELSE COALESCE("quantity", 0) + ${addition.quantityDelta} END,
+    SET "quantity" = CASE
+          WHEN "deletedAt" IS NOT NULL THEN ${addition.quantityDelta}
+          WHEN ${addition.quantityDelta} IS NULL THEN "quantity"
+          ELSE COALESCE("quantity", 0) + ${addition.quantityDelta}
+        END,
         "checked" = 0, "checkedAt" = NULL, "deletedAt" = NULL,
         "sortIndex" = ${addition.sortIndex}, "categoryKey" = ${addition.categoryKey},
         "iconKey" = ${addition.iconKey}, "updatedAt" = ${updatedAt}

@@ -166,6 +166,127 @@ describe("Shopping List Route", () => {
     });
   });
 
+  describe("re-adding an item after it was cleared (shopping list journey, run 36310125579)", () => {
+    async function post(fields: Record<string, string>) {
+      const formData = new UndiciFormData();
+      for (const [key, value] of Object.entries(fields)) formData.append(key, value);
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const headers = new Headers({ Cookie: (await sessionStorage.commitSession(session)).split(";")[0] });
+      const request = new UndiciRequest("http://localhost:3000/shopping-list", { method: "POST", body: formData, headers });
+      return action({ request, context: { cloudflare: { env: null } }, params: {} } as any);
+    }
+
+    async function activeItems() {
+      const list = await db.shoppingList.findUniqueOrThrow({
+        where: { authorId: testUserId },
+        include: { items: { where: { deletedAt: null }, include: { ingredientRef: true, unit: true } } },
+      });
+      return list.items.map((item) => ({ name: item.ingredientRef.name, quantity: item.quantity, unit: item.unit?.name ?? null }));
+    }
+
+    it("adds a cleared item back at the amount just typed, not on top of the cleared amount", async () => {
+      const name = `lemon_${faker.string.alphanumeric(6).toLowerCase()}`;
+      await post({ intent: "addItem", ingredientText: `1 ${name}` });
+      await post({ intent: "clearAll" });
+      expect(await activeItems()).toEqual([]);
+
+      await post({ intent: "addItem", ingredientText: `1 ${name}` });
+
+      expect(await activeItems()).toEqual([{ name, quantity: 1, unit: "whole" }]);
+    });
+
+    it("adds a removed item back at the amount just typed", async () => {
+      const name = `onion_${faker.string.alphanumeric(6).toLowerCase()}`;
+      await post({ intent: "addItem", ingredientText: `2 ${name}` });
+      const [item] = await db.shoppingListItem.findMany({ where: { ingredientRef: { name } } });
+      await post({ intent: "removeItem", itemId: item.id });
+
+      await post({ intent: "addItem", ingredientText: `3 ${name}` });
+
+      expect(await activeItems()).toEqual([{ name, quantity: 3, unit: "whole" }]);
+    });
+
+    it("adds a cleared-checked item back from a recipe at the recipe's amount", async () => {
+      const name = `garlic_${faker.string.alphanumeric(6).toLowerCase()}`;
+      await post({ intent: "addItem", ingredientText: `4 clove ${name}` });
+      const [item] = await db.shoppingListItem.findMany({ where: { ingredientRef: { name } } });
+      await post({ intent: "toggleCheck", itemId: item.id, nextChecked: "true" });
+      await post({ intent: "clearCompleted" });
+      const recipe = await db.recipe.create({ data: { title: `Garlic ${faker.string.alphanumeric(6)}`, chefId: testUserId } });
+      await db.recipeStep.create({ data: { recipeId: recipe.id, stepNum: 1, description: "Peel" } });
+      await db.ingredient.create({
+        data: { recipeId: recipe.id, stepNum: 1, quantity: 2, unitId: item.unitId, ingredientRefId: item.ingredientRefId },
+      });
+
+      await post({ intent: "addFromRecipe", recipeId: recipe.id, scaleFactor: "2" });
+
+      expect(await activeItems()).toEqual([{ name, quantity: 4, unit: "clove" }]);
+    });
+
+    // Two adds of the same item that both read the row before either writes (two devices, or a
+    // double tap). The gate holds each request's lookup until both have made it, so the writes
+    // always race; both amounts must still land.
+    async function raceTwoAdds(name: string, lookup: "active" | "removed", first: string, second: string) {
+      const findFirst = db.shoppingListItem.findFirst.bind(db.shoppingListItem);
+      let arrived = 0;
+      let release!: () => void;
+      const bothArrived = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const spy = vi.spyOn(db.shoppingListItem, "findFirst").mockImplementation((async (args: any) => {
+        const result = await findFirst(args);
+        const where = args?.where ?? {};
+        const isGatedLookup = lookup === "active" ? where.deletedAt === null : Boolean(where.deletedAt?.not === null);
+        if (where.ingredientRefId && isGatedLookup) {
+          arrived += 1;
+          if (arrived === 2) release();
+          await bothArrived;
+        }
+        return result;
+      }) as any);
+      try {
+        await Promise.all([
+          post({ intent: "addItem", ingredientText: `${first} ${name}` }),
+          post({ intent: "addItem", ingredientText: `${second} ${name}` }),
+        ]);
+      } finally {
+        spy.mockRestore();
+      }
+      expect(arrived).toBe(2);
+    }
+
+    it("keeps both amounts when two adds race on an item that is on the list", async () => {
+      const name = `pear_${faker.string.alphanumeric(6).toLowerCase()}`;
+      await post({ intent: "addItem", ingredientText: `1 ${name}` });
+
+      await raceTwoAdds(name, "active", "3", "2");
+
+      expect(await activeItems()).toEqual([{ name, quantity: 6, unit: "whole" }]);
+    });
+
+    it("keeps both amounts when two adds race to bring back a cleared item", async () => {
+      const name = `plum_${faker.string.alphanumeric(6).toLowerCase()}`;
+      await post({ intent: "addItem", ingredientText: `5 ${name}` });
+      await post({ intent: "clearAll" });
+
+      await raceTwoAdds(name, "removed", "3", "2");
+
+      expect(await activeItems()).toEqual([{ name, quantity: 5, unit: "whole" }]);
+    });
+
+    it("still adds to an item that is on the list, checked or not", async () => {
+      const name = `carrot_${faker.string.alphanumeric(6).toLowerCase()}`;
+      await post({ intent: "addItem", ingredientText: `3 ${name}` });
+      const [item] = await db.shoppingListItem.findMany({ where: { ingredientRef: { name } } });
+      await post({ intent: "toggleCheck", itemId: item.id, nextChecked: "true" });
+
+      await post({ intent: "addItem", ingredientText: `2 ${name}` });
+
+      expect(await activeItems()).toEqual([{ name, quantity: 5, unit: "whole" }]);
+    });
+  });
+
   describe("action - addItem", () => {
     async function createFormRequest(
       formFields: Record<string, string>,
@@ -502,7 +623,7 @@ describe("Shopping List Route", () => {
       ]);
 
       expect(result).toEqual({
-        data: { success: true },
+        data: { success: true, intent: "addItem" },
         init: null,
         type: "DataWithResponseInit",
       });
@@ -629,7 +750,8 @@ describe("Shopping List Route", () => {
         db.shoppingListItem.findUnique({ where: { id: laterBySort.id } }),
       ]);
 
-        expect(restored?.quantity).toBe(31);
+        // A removed row restarts from the added amount; its old quantity doesn't come back (mergedShoppingItemQuantity).
+        expect(restored?.quantity).toBe(1);
         expect(restored?.deletedAt).toBeNull();
         expect(restored?.sortIndex).toBe(5);
         expect(sameSortLater?.quantity).toBe(20);
@@ -706,7 +828,7 @@ describe("Shopping List Route", () => {
         params: {},
       } as any);
 
-      expect(response).toEqual({ data: { success: true }, init: null, type: "DataWithResponseInit" });
+      expect(response).toEqual({ data: { success: true, intent: "addItem" }, init: null, type: "DataWithResponseInit" });
       await expect(
         db.shoppingListItem.findUnique({ where: { id: "compat-web-manual-race-winner" } })
       ).resolves.toMatchObject({
@@ -777,7 +899,7 @@ describe("Shopping List Route", () => {
           params: {},
         } as any);
 
-        expect(response).toEqual({ data: { success: true }, init: null, type: "DataWithResponseInit" });
+        expect(response).toEqual({ data: { success: true, intent: "addItem" }, init: null, type: "DataWithResponseInit" });
         await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: "compat-web-manual-restore-winner" } }))
           .resolves.toMatchObject({ quantity: 7, deletedAt: null, iconKey: "package" });
         await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: tombstone.id } }))
@@ -1654,7 +1776,8 @@ describe("Shopping List Route", () => {
         where: { id: deletedItem.id },
       });
 
-      expect(restored?.quantity).toBe(3);
+      // A removed row restarts from the added amount; its old quantity doesn't come back (mergedShoppingItemQuantity).
+      expect(restored?.quantity).toBe(2);
       expect(restored?.checked).toBe(false);
       expect(restored?.checkedAt).toBeNull();
       expect(restored?.deletedAt).toBeNull();
@@ -1828,7 +1951,8 @@ describe("Shopping List Route", () => {
           db.shoppingListItem.findUnique({ where: { id: laterBySort.id } }),
         ]);
 
-        expect(restored?.quantity).toBe(31);
+        // A removed row restarts from the added amount; its old quantity doesn't come back (mergedShoppingItemQuantity).
+        expect(restored?.quantity).toBe(1);
         expect(restored?.deletedAt).toBeNull();
         expect(restored?.sortIndex).toBe(0);
         expect(sameSortLater?.quantity).toBe(20);
@@ -2629,7 +2753,8 @@ describe("Shopping List Route", () => {
         where: { id: deletedItem.id },
       });
 
-      expect(restored?.quantity).toBe(5);
+      // A removed row restarts from the added amount; its old quantity doesn't come back (mergedShoppingItemQuantity).
+      expect(restored?.quantity).toBe(1);
       expect(restored?.checked).toBe(false);
       expect(restored?.checkedAt).toBeNull();
       expect(restored?.deletedAt).toBeNull();

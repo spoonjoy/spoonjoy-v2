@@ -63,7 +63,8 @@ export default function AccountSettings() {
   const apiCredentials = user.apiCredentials ?? [];
   const oauthConnections = user.oauthConnections ?? [];
 
-  // Restore form state when there are field errors (e.g., after form submission fails)
+  // Restore form state when there are field errors (e.g., after form submission fails), and
+  // close a form once its submission succeeds; the banner below confirms it.
   useEffect(() => {
     if (actionData?.fieldErrors?.email || actionData?.fieldErrors?.username) {
       setIsEditing(true);
@@ -71,6 +72,12 @@ export default function AccountSettings() {
     if (actionData?.fieldErrors?.newPassword) {
       // Determine which password form to open based on user state
       setPasswordFormState(user.hasPassword ? "change" : "set");
+    }
+    if (actionData?.success && actionData.intent === "updateUserInfo") {
+      setIsEditing(false);
+    }
+    if (actionData?.success && (actionData.intent === "changePassword" || actionData.intent === "setPassword")) {
+      setPasswordFormState("idle");
     }
   }, [actionData, user.hasPassword]);
 
@@ -101,9 +108,11 @@ export default function AccountSettings() {
 
       <OAuthError error={oauthError} className="mt-4" />
 
-      {/* Success/Error Messages (only show global banner when there are no field-level errors) */}
-      {actionData?.message && !actionData?.fieldErrors && (
+      {/* Success/Error Messages (only show global banner when there are no field-level errors; a
+          photo upload's error shows next to the photo instead) */}
+      {actionData?.message && !actionData?.fieldErrors && actionData.intent !== "uploadPhoto" && (
         <div
+          role={actionData.success ? "status" : "alert"}
           className={`mt-4 border-y py-4 ${
             actionData.success
               ? "border-[var(--sj-border-strong)] bg-[color-mix(in_srgb,var(--sj-action)_10%,var(--sj-panel-solid))] text-[var(--sj-ink)]"

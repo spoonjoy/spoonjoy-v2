@@ -392,10 +392,11 @@ describe("API v1 shopping-list mutations", () => {
     expectExactKeys(restorePayload.data, ["created", "updated", "item", "mutation"]);
     expect(restorePayload.data).toMatchObject({ created: false, updated: true });
     expectShoppingItemShape(restorePayload.data.item);
+    // A removed row restarts from the added amount; its old quantity doesn't come back (mergedShoppingItemQuantity).
     expect(restorePayload.data.item).toMatchObject({
       id: existing.id,
       name: ingredientRef.name,
-      quantity: 5,
+      quantity: 3,
       unit: unit.name,
       checked: false,
       checkedAt: null,
@@ -583,12 +584,13 @@ describe("API v1 shopping-list mutations", () => {
       expectEnvelopeHeaders(response, "req_compat_tombstone_first");
       expectSuccessEnvelope(payload, "req_compat_tombstone_first");
       expectExactKeys(payload.data, ["created", "updated", "item", "mutation"]);
+      // A removed row restarts from the added amount; its old quantity doesn't come back (mergedShoppingItemQuantity).
       expect(payload.data).toMatchObject({
         created: false,
         updated: true,
         item: {
           id: expectedTombstone.id,
-          quantity: 5,
+          quantity: 3,
           checked: false,
           checkedAt: null,
           deletedAt: null,

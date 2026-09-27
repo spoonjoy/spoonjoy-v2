@@ -15,6 +15,7 @@ import {
   coalesceShoppingRecipeIngredients,
   createCompatibleShoppingListD1Batch,
   findCompatibleShoppingListItem,
+  mergedShoppingItemQuantity,
   runCompatibleShoppingListBatch,
   type ShoppingListItemWritePlan,
 } from "~/lib/shopping-list-mutations.server";
@@ -276,7 +277,7 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
       );
     }
 
-    return data({ success: true });
+    return data({ success: true, intent: "addItem" as const });
   }
 
   if (intent === "addFromRecipe") {
@@ -346,10 +347,10 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
           const existingItem = existingItems[index];
 
           if (existingItem) {
-            /* istanbul ignore next -- @preserve ternary branches for quantity addition */
-            const newQuantity = ingredient.quantity
-              ? (existingItem.quantity || 0) + ingredient.quantity
-              : existingItem.quantity;
+            const newQuantity = mergedShoppingItemQuantity(
+              existingItem,
+              ingredient.quantity || null
+            );
             const shouldMoveToEnd = Boolean(
               existingItem.deletedAt || existingItem.checkedAt || existingItem.checked
             );

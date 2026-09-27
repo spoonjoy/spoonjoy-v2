@@ -8,6 +8,7 @@ import {
   coalesceShoppingRecipeIngredients,
   createCompatibleShoppingListD1Batch,
   isShoppingListUniqueConflict,
+  mergedShoppingItemQuantity,
   mutateCompatibleShoppingListItem,
   runCompatibleShoppingListBatch,
   shoppingListItemsRemoveStatements,
@@ -31,6 +32,19 @@ function results(...rows: unknown[][]) {
 }
 
 describe("shopping-list compatibility mutations", () => {
+  it("adds to a live row's quantity, but restarts a removed or cleared row from the added amount", () => {
+    const live = { quantity: 2, deletedAt: null };
+    const removed = { quantity: 5, deletedAt: new Date("2026-09-27T00:00:00.000Z") };
+
+    // A live row (checked or not) merges the new amount into what is already there.
+    expect(mergedShoppingItemQuantity(live, 3)).toBe(5);
+    expect(mergedShoppingItemQuantity({ quantity: null, deletedAt: null }, 3)).toBe(3);
+    expect(mergedShoppingItemQuantity(live, null)).toBe(2);
+    // A removed or cleared row is only a reused record: its old amount must not come back.
+    expect(mergedShoppingItemQuantity(removed, 3)).toBe(3);
+    expect(mergedShoppingItemQuantity(removed, null)).toBeNull();
+  });
+
   it("takes category and icon from the first non-null value in deterministic identity order", () => {
     const rows = [
       {

@@ -1,5 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import { readLatestDisposableE2EUser } from './disposable-auth';
+import { Secret, fillSecret } from '../journeys/support/secret';
 
 export async function fillLoginEmail(page: Page, emailAddress: string) {
   const email = page.getByLabel('Username or email').first();
@@ -17,9 +18,10 @@ export async function submitPasswordLogin(page: Page, emailAddress: string, pass
   for (let attempt = 0; attempt < 3; attempt += 1) {
     await expect(async () => {
       await emailInput.fill(emailAddress);
-      await passwordInput.fill(password);
+      await fillSecret(passwordInput, new Secret(password));
       await expect(emailInput).toHaveValue(emailAddress);
-      await expect(passwordInput).toHaveValue(password);
+      // Not toHaveValue(password): a failed value assertion prints the expected value.
+      await expect(passwordInput).not.toHaveValue('');
     }).toPass();
     await loginButton.click();
     await page.waitForTimeout(150);
