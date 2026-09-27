@@ -238,3 +238,34 @@ describe("default @simplewebauthn integration", () => {
     ).rejects.toBeDefined();
   });
 });
+
+describe("the real @simplewebauthn/server, loaded on first use", () => {
+  const config = resolveWebAuthnConfig("https://spoonjoy.test");
+
+  it("generates registration and authentication options when no generator is injected", async () => {
+    const registration = await buildRegistrationOptions(
+      config,
+      { id: "user-1", username: "chef", email: "chef@example.com" },
+      [{ id: "cred-1", publicKey: new Uint8Array([1]), counter: 0n, transports: "internal" }],
+    );
+    expect(registration.rp).toEqual({ name: "Spoonjoy", id: "spoonjoy.test" });
+    expect(registration.challenge).toEqual(expect.any(String));
+    expect(registration.excludeCredentials).toEqual([{ id: "cred-1", type: "public-key", transports: ["internal"] }]);
+
+    const authentication = await buildAuthenticationOptions(config, []);
+    expect(authentication.rpId).toBe("spoonjoy.test");
+    expect(authentication.challenge).toEqual(expect.any(String));
+  });
+
+  it("rejects a malformed response when no verifier is injected", async () => {
+    await expect(verifyRegistration(config, { id: "x" } as never, "challenge")).rejects.toThrow();
+    await expect(
+      verifyAuthentication(config, { id: "x" } as never, "challenge", {
+        id: "x",
+        publicKey: new Uint8Array([1]),
+        counter: 0n,
+        transports: null,
+      }),
+    ).rejects.toThrow();
+  });
+});
