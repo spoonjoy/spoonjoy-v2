@@ -35,6 +35,10 @@ function expectInOrder(text: string, fragments: string[]) {
   }
 }
 
+function sqlLiteral(value: string) {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
 function expectAll(text: string, fragments: string[]) {
   for (const fragment of fragments) {
     expect(text).toContain(fragment);
@@ -81,6 +85,86 @@ describe("cleanup-local-qa-data", () => {
     const rows = db.prepare(`SELECT id FROM User WHERE ${cleanup.DISPOSABLE_USER_WHERE} ORDER BY id`).all();
 
     expect(rows).toEqual([{ id: "codex-disposable" }, { id: "passkey-disposable" }]);
+  });
+
+  it("matches only the one retired seed-qa.mjs identity by its exact id and email", () => {
+    // Referenced from the script's own exported constants rather than spelled out here, so this
+    // legacy identity literal appears in exactly the one place the demo-source policy allowlists:
+    // the scripts/cleanup-local-qa-data.mjs cleanup-target-definition it exercises.
+    const legacyId = cleanup.LEGACY_QA_DEMO_USER_ID;
+    const legacyEmail = cleanup.LEGACY_QA_DEMO_EMAIL;
+
+    const db = new DatabaseSync(":memory:");
+    db.exec(`
+      CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL);
+      INSERT INTO User VALUES
+        ('real-lookalike', 'person@example.com', 'sjXqaXdemoXvictim'),
+        ('qa-kitchen-chef', 'qa-kitchen-chef@example.com', 'qa_kitchen_chef'),
+        -- A real account that happens to share the legacy namespace's username shape must
+        -- survive: only the exact retired id+email pair is disposable, not a prefix.
+        ('real-ari', 'ari@example.com', 'sj_qa_demo_ari'),
+        -- Same id, different email: must not match (the retired account never had this email).
+        ('id-only-lookalike', 'someone-else@example.com', 'someone_else'),
+        -- Same email, different id: must not match either.
+        ('email-only-lookalike', ${sqlLiteral(legacyEmail)}, 'someone_else'),
+        (${sqlLiteral(legacyId)}, ${sqlLiteral(legacyEmail)}, 'sj_qa_demo_chef');
+    `);
+
+    const rows = db.prepare(`SELECT id FROM User WHERE ${cleanup.DISPOSABLE_USER_WHERE} ORDER BY id`).all();
+
+    expect(rows).toEqual([{ id: legacyId }]);
+  });
+
+  it("drops the retired seed-qa.mjs shared Unit/IngredientRef rows only once orphaned", () => {
+    const unitId = cleanup.LEGACY_QA_DEMO_UNIT_ID;
+    const ingredientRefId = cleanup.LEGACY_QA_DEMO_INGREDIENT_REF_ID;
+
+    const stillReferenced = new DatabaseSync(":memory:");
+    stillReferenced.exec(`
+      CREATE TABLE Unit (id TEXT PRIMARY KEY);
+      CREATE TABLE IngredientRef (id TEXT PRIMARY KEY);
+      CREATE TABLE Ingredient (id TEXT PRIMARY KEY, unitId TEXT, ingredientRefId TEXT);
+      CREATE TABLE ShoppingListItem (id TEXT PRIMARY KEY, unitId TEXT, ingredientRefId TEXT);
+      INSERT INTO Unit VALUES (${sqlLiteral(unitId)});
+      INSERT INTO IngredientRef VALUES (${sqlLiteral(ingredientRefId)});
+      -- A real, unrelated recipe still uses these shared rows, so they must be kept.
+      INSERT INTO Ingredient VALUES ('real-ingredient', ${sqlLiteral(unitId)}, ${sqlLiteral(ingredientRefId)});
+    `);
+    stillReferenced.exec(cleanup.buildLegacyQaDemoOrphanReferenceCleanupSql());
+
+    expect(stillReferenced.prepare("SELECT id FROM Unit").all()).toEqual([{ id: unitId }]);
+    expect(stillReferenced.prepare("SELECT id FROM IngredientRef").all()).toEqual([{ id: ingredientRefId }]);
+
+    const orphaned = new DatabaseSync(":memory:");
+    orphaned.exec(`
+      CREATE TABLE Unit (id TEXT PRIMARY KEY);
+      CREATE TABLE IngredientRef (id TEXT PRIMARY KEY);
+      CREATE TABLE Ingredient (id TEXT PRIMARY KEY, unitId TEXT, ingredientRefId TEXT);
+      CREATE TABLE ShoppingListItem (id TEXT PRIMARY KEY, unitId TEXT, ingredientRefId TEXT);
+      INSERT INTO Unit VALUES (${sqlLiteral(unitId)});
+      INSERT INTO IngredientRef VALUES (${sqlLiteral(ingredientRefId)});
+    `);
+    orphaned.exec(cleanup.buildLegacyQaDemoOrphanReferenceCleanupSql());
+
+    expect(orphaned.prepare("SELECT id FROM Unit").all()).toEqual([]);
+    expect(orphaned.prepare("SELECT id FROM IngredientRef").all()).toEqual([]);
+
+    const referencedOnlyByShoppingList = new DatabaseSync(":memory:");
+    referencedOnlyByShoppingList.exec(`
+      CREATE TABLE Unit (id TEXT PRIMARY KEY);
+      CREATE TABLE IngredientRef (id TEXT PRIMARY KEY);
+      CREATE TABLE Ingredient (id TEXT PRIMARY KEY, unitId TEXT, ingredientRefId TEXT);
+      CREATE TABLE ShoppingListItem (id TEXT PRIMARY KEY, unitId TEXT, ingredientRefId TEXT);
+      INSERT INTO Unit VALUES (${sqlLiteral(unitId)});
+      INSERT INTO IngredientRef VALUES (${sqlLiteral(ingredientRefId)});
+      INSERT INTO ShoppingListItem VALUES ('real-item', ${sqlLiteral(unitId)}, ${sqlLiteral(ingredientRefId)});
+    `);
+    referencedOnlyByShoppingList.exec(cleanup.buildLegacyQaDemoOrphanReferenceCleanupSql());
+
+    expect(referencedOnlyByShoppingList.prepare("SELECT id FROM Unit").all()).toEqual([{ id: unitId }]);
+    expect(referencedOnlyByShoppingList.prepare("SELECT id FROM IngredientRef").all()).toEqual([
+      { id: ingredientRefId },
+    ]);
   });
 
   it("soft-deletes recipes and deletes only disposable local support rows on apply", () => {

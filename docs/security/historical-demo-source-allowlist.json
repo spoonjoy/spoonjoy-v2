@@ -52,14 +52,15 @@
     "kind": "cleanup-target-definition",
     "immutable": false,
     "patterns": [
+      "fixed-qa-demo-namespace",
       "legacy-demo-user-id",
       "legacy-primary-user-id",
       "legacy-julia-user-id",
       "legacy-marco-user-id",
       "legacy-sarah-user-id"
     ],
-    "reason": "Environment-gated cleanup must name each legacy identity exactly; the pinned digest makes any expansion or unrelated source use review-visible.",
-    "sha256": "8889a5228e0133d2a2e36c1cd8d5004eb89fb6b4eb7f1ee5528781e24a4ab030"
+    "reason": "Environment-gated cleanup must name each legacy identity exactly, including the one retired seed-qa.mjs account being swept from QA's D1 by its exact id and email; the pinned digest makes any expansion or unrelated source use review-visible.",
+    "sha256": "9805b8b8377178e0fb8190bc6a29ee8c586428c565a5ba88f74da34e1b784037"
   },
   {
     "path": "test/scripts/migration-0024-remove-legacy-demo-identities.test.ts",
