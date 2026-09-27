@@ -8,11 +8,13 @@ import { Text } from "~/components/ui/text";
 import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
 import { getRequestDb } from "~/lib/route-platform.server";
+import { requestD1 } from "~/lib/d1-read.server";
 import { getUserId } from "~/lib/session.server";
 import { useUrlSyncedInput } from "~/hooks/useUrlSyncedInput";
 import {
   normalizeSearchScope,
   searchSpoonjoy,
+  searchSpoonjoyFromD1,
   type SearchEntityType,
   type SearchResult,
   type SearchScope,
@@ -69,14 +71,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const query = url.searchParams.get("q") ?? "";
   const scope = normalizeSearchScope(url.searchParams.get("scope"));
   const userId = await getUserId(request, context.cloudflare?.env);
-  const database = await getRequestDb(context);
-
-  const results = await searchSpoonjoy(database, {
-    query,
-    scope,
-    viewerId: userId,
-    limit: 30,
-  });
+  const searchOptions = { query, scope, viewerId: userId, limit: 30 };
+  // On the Worker, search runs on the D1 binding (freshness check and search in one
+  // batch); Prisma is only the fallback where there is no binding.
+  const d1 = requestD1(context);
+  const results = d1
+    ? await searchSpoonjoyFromD1(d1, searchOptions)
+    : await searchSpoonjoy(await getRequestDb(context), searchOptions);
 
   return {
     query,

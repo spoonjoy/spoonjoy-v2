@@ -69,6 +69,14 @@ def timing($field): [.[] | .[$field] | select(type == "number")]
 
 def timestamps: [.[] | .eventTimestamp | select(type == "number")];
 
+# The CPU time budget per request: the Workers Free plan stops an invocation after 10 ms of
+# CPU (outcome `exceededCpu`, Error 1102), so a route whose p95 CPU is over it fails requests.
+def cpu_budget_ms: 10;
+
+def by_path: group_by(path_pattern)
+  | map({ path: (.[0] | path_pattern), count: length, wallTime: timing("wallTime"), cpuTime: timing("cpuTime") })
+  | sort_by(-(.wallTime.p95 // 0));
+
 {
   complete: ($tailAliveAtStop == true and length > 0),
   tailAliveAtStop: ($tailAliveAtStop == true),
@@ -79,7 +87,13 @@ def timestamps: [.[] | .eventTimestamp | select(type == "number")];
   nonOkInvocations: [.[] | select((.outcome // "unknown") != "ok") | invocation],
   firstExceptions: ([.[] | select(((.exceptions // []) | length) > 0) | invocation] | .[0:20]),
   slowest: ([.[] | select((.wallTime | type) == "number")] | sort_by(-.wallTime) | .[0:25] | map(invocation)),
-  byPath: (group_by(path_pattern)
-    | map({ path: (.[0] | path_pattern), count: length, wallTime: timing("wallTime"), cpuTime: timing("cpuTime") })
-    | sort_by(-(.wallTime.p95 // 0)))
+  byPath: by_path,
+  # Routes whose p95 CPU time is over the budget, worst first. The Journeys workflow prints
+  # each as a warning; it does not fail the run.
+  budget: {
+    cpuTimeP95Ms: cpu_budget_ms,
+    overBudget: (by_path
+      | map(select((.cpuTime.p95 // 0) > cpu_budget_ms) | { path, count, cpuTime })
+      | sort_by(-.cpuTime.p95, .path))
+  }
 }

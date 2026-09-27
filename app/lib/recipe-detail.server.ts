@@ -2,13 +2,14 @@ import type { AppLoadContext } from "react-router";
 import { redirect } from "react-router";
 import { deferBackgroundTask } from "~/lib/background-task.server";
 import { getRequestDb } from "~/lib/route-platform.server";
+import { requestD1 } from "~/lib/d1-read.server";
+import { readRecipeDetailFromD1, readRecipeDetailWithPrisma } from "~/lib/recipe-detail-reads.server";
 import {
   archiveRecipeCover,
   createCover,
   getRecipeCoverDisplay,
   getRecipeCoverProvenanceLabel,
   getScopedActiveCover,
-  RECIPE_COVER_DISPLAY_SELECT,
   setActiveRecipeCover,
   type RecipeCoverVariant,
 } from "~/lib/recipe-cover.server";
@@ -16,8 +17,6 @@ import { activateSpoonCoverForDecision } from "~/lib/spoon-cover-activation.serv
 import {
   createSpoon,
   deleteSpoon,
-  isOriginCookCandidate,
-  listSpoonsForRecipe,
   SpoonAuthError,
   SpoonNotFoundError,
   SpoonValidationError,
@@ -227,59 +226,15 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
   const userId = await getUserId(request, context.cloudflare?.env);
   const { id } = params;
 
-  const database = await getRequestDb(context);
+  // On the Worker the page's reads go to D1 as one batch; Prisma is only the fallback
+  // where there is no binding (unit tests, local scripts).
+  const d1 = requestD1(context);
+  const reads = d1
+    ? await readRecipeDetailFromD1(d1, { recipeId: id, userId })
+    : await readRecipeDetailWithPrisma(await getRequestDb(context), { recipeId: id, userId });
+  const { recipe } = reads;
 
-  const recipe = await database.recipe.findUnique({
-    where: { id },
-    include: {
-      chef: {
-        select: {
-          id: true,
-          username: true,
-          photoUrl: true,
-        },
-      },
-      sourceRecipe: {
-        select: {
-          id: true,
-          title: true,
-          deletedAt: true,
-          chef: { select: { username: true } },
-        },
-      },
-      activeCover: {
-        select: RECIPE_COVER_DISPLAY_SELECT,
-      },
-      steps: {
-        orderBy: {
-          stepNum: "asc",
-        },
-        include: {
-          ingredients: {
-            include: {
-              unit: true,
-              ingredientRef: true,
-            },
-          },
-          usingSteps: {
-            include: {
-              outputOfStep: {
-                select: {
-                  stepNum: true,
-                  stepTitle: true,
-                },
-              },
-            },
-            orderBy: {
-              outputStepNum: "asc",
-            },
-          },
-        },
-      },
-    },
-  });
-
-  if (!recipe || recipe.deletedAt) {
+  if (!recipe) {
     throw new Response("Recipe not found", { status: 404 });
   }
 
@@ -298,20 +253,7 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
     imageUrl: coverImageUrl ?? ogImageUrl,
   });
 
-  const userCookbooks = userId
-    ? await database.cookbook.findMany({
-        where: { authorId: userId },
-        select: {
-          id: true,
-          title: true,
-          recipes: {
-            where: { recipeId: id },
-            select: { id: true },
-          },
-        },
-        orderBy: { title: "asc" },
-      })
-    : [];
+  const userCookbooks = reads.userCookbooks;
 
   const cookbooks = userCookbooks.map((cookbook) => ({
     id: cookbook.id,
@@ -332,24 +274,8 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
 
   let hasIngredientsInShoppingList = false;
   if (userId && recipeIngredientKeys.size > 0 && recipeIngredientRefIds.length > 0) {
-    const shoppingList = await database.shoppingList.findUnique({
-      where: { authorId: userId },
-      select: {
-        items: {
-          where: {
-            deletedAt: null,
-            ingredientRefId: { in: recipeIngredientRefIds },
-          },
-          select: {
-            ingredientRefId: true,
-            unitId: true,
-          },
-        },
-      },
-    });
-
     const shoppingListIngredientKeys = new Set(
-      (shoppingList?.items ?? []).map(
+      reads.shoppingListItems.map(
         (item) => `${item.ingredientRefId}:${item.unitId ?? "null"}`
       )
     );
@@ -358,10 +284,8 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
     );
   }
 
-  const [spoonsRaw, originCookCandidate] = await Promise.all([
-    listSpoonsForRecipe(database, id, { limit: 10 }),
-    userId ? isOriginCookCandidate(database, userId, id) : Promise.resolve(false),
-  ]);
+  const spoonsRaw = reads.spoons;
+  const originCookCandidate = reads.isOriginCookCandidate;
   const spoons = spoonsRaw.map((spoon) => ({
     id: spoon.id,
     cookedAt: spoon.cookedAt.toISOString(),
@@ -370,28 +294,8 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
     nextTime: spoon.nextTime,
     chef: spoon.chef,
   }));
-  const coverHistoryCovers = isOwner
-    ? await database.recipeCover.findMany({
-        where: { recipeId: id },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      })
-    : [];
-  const spoonImages = isOwner
-    ? await database.recipeSpoon.findMany({
-        where: {
-          recipeId: id,
-          deletedAt: null,
-          photoUrl: { not: null },
-        },
-        select: {
-          id: true,
-          photoUrl: true,
-          cookedAt: true,
-          chef: { select: { id: true, username: true, photoUrl: true } },
-        },
-        orderBy: [{ cookedAt: "desc" }, { id: "desc" }],
-      })
-    : [];
+  const coverHistoryCovers = reads.coverHistoryCovers;
+  const spoonImages = reads.spoonImages;
   const { activeCover: _activeCover, ...recipeForClient } = recipe;
 
   return {
