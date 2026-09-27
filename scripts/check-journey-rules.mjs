@@ -4,10 +4,12 @@
 // journeys themselves, and fails the build when a journey hides flakiness (retries, clicking in
 // a loop, clicking inside a .toPass() retry callback or an array-iteration callback) or asserts
 // conditionally, when a @mutates test skips the post-reload check, or when a journey/describe
-// block is skipped, only'd, fixme'd, or marked to fail instead of actually running.
+// block is skipped, only'd, fixme'd, or marked to fail instead of actually running. It also fails
+// when a password or other secret is typed with fill()/type()/pressSequentially()/insertText(),
+// whose typed value Playwright puts in the public report's step titles (use fillSecret).
 //
-// Support helpers run inside journeys, so they get the same retry, click-in-loop, skipped and
-// @mutates rules; only the conditional-assertion rule is journey-only. `test` and `setup` are
+// Support helpers run inside journeys, so they get the same retry, click-in-loop, skipped,
+// @mutates and secret-typing rules; only the conditional-assertion rule is journey-only. `test` and `setup` are
 // both recognised as the test function, as is any local alias of `test` imported from
 // `@playwright/test` or from the journeys' own `support/journey` module
 // (`import { test as t } from "./support/journey"`).
@@ -43,6 +45,18 @@ const ARRAY_ITERATION_METHODS = new Set([
   "find",
   "findIndex",
 ]);
+
+// Playwright methods that type text and record it: Playwright 1.58 titles their report step with
+// the typed value (protocolMetainfo: 'Fill "{value}"', 'Type "{text}"', 'Insert "{text}"') and keeps
+// it as a call parameter, and the journeys report is public. Secrets go through fillSecret
+// (support/secret-input.ts) instead, which is a plain function call and so is never flagged.
+const TYPING_METHODS = new Set(["fill", "type", "pressSequentially", "insertText"]);
+
+// A field that takes a password (by label, name, type or variable name), or a value that names
+// one. Heuristic by design: it reads source text, and follows a local variable one step to what it
+// was set to, so `const box = page.getByLabel("Password"); box.fill(x)` is caught too.
+const SECRET_FIELD_PATTERN = /passw(?:or)?d|secret|credential/i;
+const SECRET_VALUE_PATTERN = /passw(?:or)?d|secret|credential|token/i;
 
 // Playwright's `test`/`test.describe` modifiers. `test.<modifier>(...)` is still a real test
 // (rule 4 must still check it for a missing reload check), and both `test.<modifier>(...)` and
@@ -102,6 +116,41 @@ function isClickLikeCall(node) {
     ts.isPropertyAccessExpression(node.expression) &&
     CLICK_LIKE_METHODS.has(node.expression.name.text)
   );
+}
+
+// Every `const x = <initializer>` in the file, by name, so a typing call on (or of) a local variable
+// can be judged by what the variable holds.
+function collectVariableInitializers(sourceFile) {
+  const initializers = new Map();
+  function walk(node) {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+      initializers.set(node.name.text, node.initializer.getText(sourceFile));
+    }
+    ts.forEachChild(node, walk);
+  }
+  walk(sourceFile);
+  return initializers;
+}
+
+// The expression's own text, plus what its root variable was set to, if it is a local variable.
+function expressionTexts(expression, sourceFile, initializers) {
+  const texts = [expression.getText(sourceFile)];
+  let root = expression;
+  while (ts.isPropertyAccessExpression(root) || ts.isCallExpression(root)) root = root.expression;
+  if (ts.isIdentifier(root) && initializers.has(root.text)) texts.push(initializers.get(root.text));
+  return texts;
+}
+
+// `<locator>.fill(<value>)` (or type/pressSequentially/insertText) where the locator is a password
+// field or the value names a secret.
+function isSecretTypingCall(node, sourceFile, initializers) {
+  if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return false;
+  if (!TYPING_METHODS.has(node.expression.name.text)) return false;
+  const receiverTexts = expressionTexts(node.expression.expression, sourceFile, initializers);
+  if (receiverTexts.some((text) => SECRET_FIELD_PATTERN.test(text))) return true;
+  const value = node.arguments[0];
+  if (!value) return false;
+  return expressionTexts(value, sourceFile, initializers).some((text) => SECRET_VALUE_PATTERN.test(text));
 }
 
 function isInsideLoop(node) {
@@ -253,13 +302,14 @@ function containsVerifyAfterReloadCall(node) {
  * @returns {Array<{
  *   file: string,
  *   line: number,
- *   rule: "no-retry-config" | "no-click-in-loop" | "no-assertion-in-if" | "no-skipped-journeys" | "mutation-needs-reload-check",
+ *   rule: "no-retry-config" | "no-click-in-loop" | "no-assertion-in-if" | "no-skipped-journeys" | "mutation-needs-reload-check" | "no-secret-fill",
  *   message: string,
  * }>}
  */
 export function checkJourneySource(fileName, source, { kind = "journey" } = {}) {
   const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const testNames = collectTestNames(sourceFile);
+  const initializers = collectVariableInitializers(sourceFile);
   const checkConditionalAssertions = kind === "journey";
   const violations = [];
 
@@ -285,6 +335,14 @@ export function checkJourneySource(fileName, source, { kind = "journey" } = {}) 
         node,
         "no-click-in-loop",
         `"${node.expression.name.text}" must not run inside a loop, a .toPass() retry callback, or an array-iteration callback; loops and auto-retry hide flakiness.`,
+      );
+    }
+
+    if (isSecretTypingCall(node, sourceFile, initializers)) {
+      report(
+        node,
+        "no-secret-fill",
+        `"${node.expression.name.text}" must not type a password or other secret; Playwright puts the typed value in the public report's step title. Use fillSecret(locator, value) from support/secret-input.ts.`,
       );
     }
 

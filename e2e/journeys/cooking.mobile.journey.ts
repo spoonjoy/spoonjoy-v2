@@ -5,6 +5,7 @@
 import { test, expect } from "./support/journey";
 import { createDisposableE2EUser } from "../support/disposable-auth";
 import { pathUrl, waitForHydration } from "./support/navigation";
+import { fillSecret } from "./support/secret-input";
 
 const LEMON_RICE = "/recipes/qa-kitchen-recipe-lemon-rice";
 
@@ -22,8 +23,8 @@ test.describe("Recipe dock list action on iPhone", () => {
     await waitForHydration(page);
     await page.getByLabel("Email", { exact: true }).fill(user.email);
     await page.getByLabel("Username", { exact: true }).fill(user.username);
-    await page.getByLabel("Password", { exact: true }).fill(user.password);
-    await page.getByLabel("Confirm Password", { exact: true }).fill(user.password);
+    await fillSecret(page.getByLabel("Password", { exact: true }), user.password);
+    await fillSecret(page.getByLabel("Confirm Password", { exact: true }), user.password);
     await page.getByRole("button", { name: "Sign Up", exact: true }).click();
     await expect(page).toHaveURL(pathUrl("/recipes"));
 

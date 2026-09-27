@@ -284,6 +284,57 @@ describe("checkJourneySource", () => {
     });
   });
 
+  describe("no-secret-fill", () => {
+    it("flags fill() into a field labelled Password, whatever is typed", () => {
+      expect(rules(`await page.getByLabel("Password").fill(value);`)).toEqual(["no-secret-fill"]);
+      expect(rules(`await page.getByLabel("Confirm Password", { exact: true }).fill(value);`)).toEqual(["no-secret-fill"]);
+      expect(rules(`await section.getByRole("textbox", { name: /current password/i }).fill(value);`)).toEqual([
+        "no-secret-fill",
+      ]);
+    });
+
+    it("flags fill() into a password input selected by name or type", () => {
+      expect(rules(`await page.locator('input[name="password"]:visible').fill(value);`)).toEqual(["no-secret-fill"]);
+      expect(rules(`await page.locator("input[type=password]").fill(value);`)).toEqual(["no-secret-fill"]);
+      expect(rules(`await page.locator('input[name="confirmPassword"]').fill(value);`)).toEqual(["no-secret-fill"]);
+    });
+
+    it("flags fill() of a value that names a password, secret, credential or token", () => {
+      expect(rules(`await field.fill(user.password);`)).toEqual(["no-secret-fill"]);
+      expect(rules(`await field.fill(newPassword);`)).toEqual(["no-secret-fill"]);
+      expect(rules(`await field.fill(account.secret);`)).toEqual(["no-secret-fill"]);
+      expect(rules(`await field.fill(credentials.value);`)).toEqual(["no-secret-fill"]);
+      expect(rules(`await field.fill(apiToken);`)).toEqual(["no-secret-fill"]);
+      expect(rules(`await field.fill("definitely-not-the-password");`)).toEqual(["no-secret-fill"]);
+    });
+
+    it("follows a local variable to the locator or value it was set to", () => {
+      expect(rules(`const box = page.getByLabel("New Password"); await box.fill(value);`)).toEqual(["no-secret-fill"]);
+      expect(rules(`const typed = persona("chef").password; await field.fill(typed);`)).toEqual(["no-secret-fill"]);
+    });
+
+    it("flags the other typing methods too", () => {
+      expect(rules(`await page.getByLabel("Password").type(value);`)).toEqual(["no-secret-fill"]);
+      expect(rules(`await field.pressSequentially(user.password);`)).toEqual(["no-secret-fill"]);
+      expect(rules(`await page.keyboard.insertText(user.password);`)).toEqual(["no-secret-fill"]);
+    });
+
+    it("flags it in support helpers as well as journeys", () => {
+      expect(supportRules(`export async function login(page, user) { await page.getByLabel("Password").fill(user.password); }`)).toEqual([
+        "no-secret-fill",
+      ]);
+    });
+
+    it("allows fillSecret and ordinary fills", () => {
+      expect(rules(`await fillSecret(page.getByLabel("Password"), user.password);`)).toEqual([]);
+      expect(rules(`await page.getByLabel("Username or email").fill(user.username);`)).toEqual([]);
+      expect(rules(`const box = page.getByLabel("Search terms"); await box.fill("lemon");`)).toEqual([]);
+      expect(rules(`await field.fill(typed);`)).toEqual([]);
+      expect(rules(`await field.fill();`)).toEqual([]);
+      expect(rules(`await fill(user.password);`)).toEqual([]);
+    });
+  });
+
   describe("setup and imported test aliases", () => {
     it("treats setup like test for skipped-journey calls", () => {
       expect(rules(`setup.skip("chef", async () => {});`)).toEqual(["no-skipped-journeys"]);

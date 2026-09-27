@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import { expect, runBrowserDiagnosticFixture, test } from '../fixtures';
 import { createDisposableE2EUser, readLatestDisposableE2EUser } from '../support/disposable-auth';
 import { currentRecipeOwnerUsername, openPublicRecipeByTitle } from '../support/recipes';
+import { fillSecret } from '../journeys/support/secret-input';
 
 async function expectProfileLinkEventually(
   page: Page,
@@ -38,8 +39,8 @@ test.describe('Fellow chefs + Kitchen visitors flow', () => {
         await page.goto('/signup');
         await page.locator('input[name="email"]:visible').fill(user.email);
         await page.locator('input[name="username"]:visible').fill(user.username);
-        await page.locator('input[name="password"]:visible').fill(user.password);
-        await page.locator('input[name="confirmPassword"]:visible').fill(user.password);
+        await fillSecret(page.locator('input[name="password"]:visible'), user.password);
+        await fillSecret(page.locator('input[name="confirmPassword"]:visible'), user.password);
         await page.getByRole('button', { name: /sign up/i }).first().click();
         await page.waitForURL((url) => !url.pathname.startsWith('/signup'));
 
