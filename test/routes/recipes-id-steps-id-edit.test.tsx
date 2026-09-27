@@ -2144,6 +2144,141 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
       });
     });
 
+    // "Add All" on the step edit page sends every parsed ingredient in one request. It used to
+    // call submit() once per ingredient; each navigation submission cancels the one before it,
+    // so some ingredients could silently never be added.
+    describe("addIngredients intent", () => {
+      async function addIngredientsRequest(ingredientsJson: string) {
+        return createFormRequest({ intent: "addIngredients", ingredientsJson }, testUserId);
+      }
+
+      async function runAction(request: UndiciRequest) {
+        return extractResponseData(
+          await action({
+            request,
+            context: { cloudflare: { env: null } },
+            params: { id: recipeId, stepId },
+          } as any)
+        );
+      }
+
+      async function stepIngredients() {
+        return db.ingredient.findMany({
+          where: { recipeId, stepNum: 1 },
+          include: { unit: true, ingredientRef: true },
+          orderBy: { quantity: "asc" },
+        });
+      }
+
+      it("adds every ingredient to the step in one request", async () => {
+        const suffix = faker.string.alphanumeric(6).toLowerCase();
+        const existingUnit = await db.unit.create({ data: { name: `cup_${suffix}` } });
+        await db.recipe.update({
+          where: { id: recipeId },
+          data: { updatedAt: new Date("2000-01-01T00:00:00.000Z") },
+        });
+
+        const { data, status } = await runAction(
+          await addIngredientsRequest(
+            JSON.stringify([
+              { quantity: 2, unit: `Cup_${suffix}`, ingredientName: ` Flour_${suffix} ` },
+              { quantity: "1.5", unit: `tsp_${suffix}`, ingredientName: `salt_${suffix}` },
+            ])
+          )
+        );
+
+        expect(status).toBe(200);
+        expect(data.success).toBe(true);
+        const ingredients = await stepIngredients();
+        expect(
+          ingredients.map((ingredient) => [ingredient.quantity, ingredient.unit.name, ingredient.ingredientRef.name])
+        ).toEqual([
+          [1.5, `tsp_${suffix}`, `salt_${suffix}`],
+          [2, `cup_${suffix}`, `flour_${suffix}`],
+        ]);
+        expect(ingredients[1].unitId).toBe(existingUnit.id);
+        const touchedRecipe = await db.recipe.findUnique({ where: { id: recipeId }, select: { updatedAt: true } });
+        expect(touchedRecipe!.updatedAt.getTime()).toBeGreaterThan(new Date("2000-01-01T00:00:00.000Z").getTime());
+      });
+
+      it.each([
+        ["malformed JSON", "{not json"],
+        ["a non-array", JSON.stringify({ quantity: 1 })],
+        ["an empty list", "[]"],
+      ])("rejects %s without adding anything", async (_label, ingredientsJson) => {
+        const { data, status } = await runAction(await addIngredientsRequest(ingredientsJson));
+
+        expect(status).toBe(400);
+        expect(data.errors.general).toBe("There are no ingredients to add.");
+        expect(await stepIngredients()).toHaveLength(0);
+      });
+
+      it("rejects a missing ingredients field without adding anything", async () => {
+        const { data, status } = await runAction(
+          await createFormRequest({ intent: "addIngredients" }, testUserId)
+        );
+
+        expect(status).toBe(400);
+        expect(data.errors.general).toBe("There are no ingredients to add.");
+      });
+
+      it.each([
+        ["a null entry", [null], "quantity"],
+        ["a zero quantity", [{ quantity: 0, unit: "cup", ingredientName: "flour" }], "quantity"],
+        ["a non-numeric quantity", [{ quantity: {}, unit: "cup", ingredientName: "flour" }], "quantity"],
+        ["a missing unit", [{ quantity: 1, unit: 3, ingredientName: "flour" }], "unitName"],
+        ["a missing name", [{ quantity: 1, unit: "cup", ingredientName: null }], "ingredientName"],
+      ])("rejects %s and adds none of the batch", async (_label, ingredients, field) => {
+        const { data, status } = await runAction(
+          await addIngredientsRequest(
+            JSON.stringify([{ quantity: 1, unit: "cup", ingredientName: `sugar_${faker.string.alphanumeric(6)}` }, ...ingredients])
+          )
+        );
+
+        expect(status).toBe(400);
+        expect(data.errors[field]).toEqual(expect.any(String));
+        expect(await stepIngredients()).toHaveLength(0);
+      });
+
+      it("rejects the same ingredient listed twice", async () => {
+        const name = `butter_${faker.string.alphanumeric(6).toLowerCase()}`;
+        const { data, status } = await runAction(
+          await addIngredientsRequest(
+            JSON.stringify([
+              { quantity: 1, unit: "tbsp", ingredientName: name },
+              { quantity: 2, unit: "tbsp", ingredientName: name.toUpperCase() },
+            ])
+          )
+        );
+
+        expect(status).toBe(400);
+        expect(data.errors.ingredientName).toBe(`${name} is listed more than once`);
+        expect(await stepIngredients()).toHaveLength(0);
+      });
+
+      it("rejects an ingredient already in the recipe and adds none of the batch", async () => {
+        const suffix = faker.string.alphanumeric(6).toLowerCase();
+        const unit = await db.unit.create({ data: { name: `cup_${suffix}` } });
+        const existingRef = await db.ingredientRef.create({ data: { name: `rice_${suffix}` } });
+        await db.ingredient.create({
+          data: { recipeId, stepNum: 1, quantity: 1, unitId: unit.id, ingredientRefId: existingRef.id },
+        });
+
+        const { data, status } = await runAction(
+          await addIngredientsRequest(
+            JSON.stringify([
+              { quantity: 1, unit: "tsp", ingredientName: `salt_${suffix}` },
+              { quantity: 2, unit: "cup", ingredientName: `rice_${suffix}` },
+            ])
+          )
+        );
+
+        expect(status).toBe(400);
+        expect(data.errors.ingredientName).toBe(`rice_${suffix} is already in the recipe`);
+        expect(await stepIngredients()).toHaveLength(1);
+      });
+    });
+
     describe("deleteIngredient intent", () => {
       it("should delete ingredient successfully", async () => {
         // Create unit, ingredientRef, and ingredient
@@ -2789,6 +2924,46 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         await screen.findByRole("heading", { name: /Edit Step/i });
 
         expect(screen.getByText(/No previous steps available/i)).toBeInTheDocument();
+      });
+
+      // Step 1 has no "Uses Output From" picker, and the "add at least 1 ingredient" error used
+      // to render only inside that picker, so pressing Update on an empty step 1 did nothing
+      // visible.
+      it.each([
+        ["step 1, which has no picker", 1, []],
+        ["a later step with no earlier steps to pick", 3, []],
+      ])("shows the content requirement error on %s", async (_label, stepNum, availableSteps) => {
+        const mockData = {
+          recipe: { id: "recipe-1", title: "Test Recipe" },
+          step: {
+            id: "step-1",
+            stepNum,
+            stepTitle: null,
+            description: "First step",
+            ingredients: [],
+            usingSteps: [],
+          },
+          availableSteps,
+        };
+
+        const Stub = createTestRoutesStub([
+          {
+            path: "/recipes/:id/steps/:stepId/edit",
+            Component: EditStep,
+            loader: () => mockData,
+            action: () => ({
+              errors: { usesSteps: "Add at least 1 ingredient or 1 step output use before saving this step." },
+            }),
+          },
+        ]);
+
+        render(<Stub initialEntries={["/recipes/recipe-1/steps/step-1/edit"]} />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Update" }));
+
+        expect(await screen.findByRole("alert")).toHaveTextContent(
+          "Add at least 1 ingredient or 1 step output use before saving this step."
+        );
       });
 
       it("should handle editing the only step in a single-step recipe", async () => {
@@ -3651,6 +3826,84 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
           const remainingButtons = screen.queryAllByRole("button", { name: /Remove / });
           expect(remainingButtons.length).toBe(1);
         });
+      });
+
+      it("adds every parsed ingredient with one request when Add All is pressed", async () => {
+        const addRequests: Array<Record<string, FormDataEntryValue>> = [];
+        const mockData = {
+          recipe: { id: "recipe-1", title: "Test Recipe" },
+          step: { id: "step-1", stepNum: 1, stepTitle: null, description: "A step", ingredients: [] },
+          availableSteps: [],
+        };
+        const parsed = [
+          { quantity: 2, unit: "cups", ingredientName: "flour" },
+          { quantity: 1, unit: "tsp", ingredientName: "salt" },
+          { quantity: 3, unit: "whole", ingredientName: "eggs" },
+        ];
+
+        const Stub = createTestRoutesStub([
+          {
+            path: "/recipes/:id/steps/:stepId/edit",
+            Component: EditStep,
+            loader: () => mockData,
+            action: async ({ request }: { request: Request }) => {
+              const formData = await request.formData();
+              if (formData.get("intent") === "parseIngredients") {
+                return { parsedIngredients: parsed };
+              }
+              addRequests.push(Object.fromEntries(formData.entries()));
+              return { success: true };
+            },
+          },
+        ]);
+
+        render(<Stub initialEntries={["/recipes/recipe-1/steps/step-1/edit"]} />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "+ Add Ingredient" }));
+        fireEvent.change(screen.getByPlaceholderText(/Enter ingredients/), {
+          target: { value: "2 cups flour, 1 tsp salt, 3 eggs" },
+        });
+        fireEvent.click(await screen.findByRole("button", { name: "Add all 3 ingredients to recipe" }, { timeout: 3000 }));
+
+        await waitFor(() => {
+          expect(addRequests).toEqual([
+            { intent: "addIngredients", ingredientsJson: JSON.stringify(parsed) },
+          ]);
+        });
+        expect(screen.queryByRole("button", { name: /Add all/ })).not.toBeInTheDocument();
+      });
+
+      it("shows why an ingredient could not be added", async () => {
+        const mockData = {
+          recipe: { id: "recipe-1", title: "Test Recipe" },
+          step: { id: "step-1", stepNum: 1, stepTitle: null, description: "A step", ingredients: [] },
+          availableSteps: [],
+        };
+
+        const Stub = createTestRoutesStub([
+          {
+            path: "/recipes/:id/steps/:stepId/edit",
+            Component: EditStep,
+            loader: () => mockData,
+            action: () => ({ errors: { ingredientName: "This ingredient is already in the recipe" } }),
+          },
+        ]);
+
+        render(<Stub initialEntries={["/recipes/recipe-1/steps/step-1/edit"]} />);
+
+        try {
+          fireEvent.click(await screen.findByRole("button", { name: "+ Add Ingredient" }));
+          fireEvent.click(screen.getByRole("switch"));
+          fireEvent.change(screen.getByRole("spinbutton", { name: "Quantity" }), { target: { value: "1" } });
+          fireEvent.change(screen.getByLabelText("Unit"), { target: { value: "cup" } });
+          fireEvent.change(screen.getByLabelText("Ingredient"), { target: { value: "rice" } });
+          fireEvent.click(screen.getByRole("button", { name: "Add ingredient" }));
+
+          expect(await screen.findByRole("alert")).toHaveTextContent("This ingredient is already in the recipe");
+        } finally {
+          // The toggle remembers manual mode in localStorage; later tests expect AI mode first.
+          window.localStorage.removeItem("ingredient-input-mode");
+        }
       });
 
       it("should call onAddAll prop when Add All button is clicked", () => {
