@@ -12,6 +12,7 @@ import {
   Form,
   Link as RouterLink,
   useLocation,
+  type ShouldRevalidateFunctionArgs,
 } from "react-router";
 import { useContext, useEffect } from "react";
 import { usePostHog } from "@posthog/react";
@@ -19,7 +20,6 @@ import * as Headless from "@headlessui/react";
 import { getUserId } from "~/lib/session.server";
 import { NonceContext } from "~/lib/nonce";
 import { revalidateUnlessHashOnly } from "~/lib/hash-only-revalidation";
-import type { ShouldRevalidateFunctionArgs } from "react-router";
 import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
 import { getOAuthEnv } from "~/lib/oauth-route.server";
 import { toAnalyticsPageUrl } from "~/lib/analytics";

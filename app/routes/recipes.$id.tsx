@@ -1,5 +1,14 @@
 import type { Route } from "./+types/recipes.$id";
-import { useActionData, useFetcher, useLoaderData, useLocation, useNavigate, useRevalidator, useSubmit } from "react-router";
+import {
+  useActionData,
+  useFetcher,
+  useLoaderData,
+  useLocation,
+  useNavigate,
+  useRevalidator,
+  useSubmit,
+  type ShouldRevalidateFunctionArgs,
+} from "react-router";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { MouseEvent } from "react";
 import { usePostHog } from "@posthog/react";
@@ -31,7 +40,6 @@ import { shareContent, useDockSuppressed, useRecipeDetailActions } from "~/compo
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { useBackNavigation } from "~/hooks/use-back-navigation";
 import { revalidateUnlessHashOnly } from "~/lib/hash-only-revalidation";
-import type { ShouldRevalidateFunctionArgs } from "react-router";
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   return loadRecipeDetail({ request, params, context });
