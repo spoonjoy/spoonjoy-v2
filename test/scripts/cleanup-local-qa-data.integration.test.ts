@@ -303,12 +303,28 @@ describe("cleanup-local-qa-data executable ownership boundaries", () => {
   });
 
   it("apply removes a stale native user and everything it owns and keeps a young one", () => {
+    // createdAt is written in the real @prisma/adapter-d1 format every native account will
+    // actually have: `arg.toISOString().replace("Z", "+00:00")`, e.g.
+    // '2026-09-27T12:34:56.789+00:00' -- never CURRENT_TIMESTAMP's space form, a 'Z' suffix, or
+    // an integer. This is the one storage form that determines whether real rows ever get swept.
     db = createCleanupDatabase();
     db.exec(`
       INSERT INTO User (id, email, username, photoUrl, createdAt)
-        VALUES ('stale-native-user', 'codex-native-r9-1@example.com', 'codex_native_r9_1', NULL, datetime('now', '-4 hours'));
+        VALUES (
+          'stale-native-user',
+          'codex-native-r9-1@example.com',
+          'codex_native_r9_1',
+          NULL,
+          replace(strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-4 hours'), 'Z', '+00:00')
+        );
       INSERT INTO User (id, email, username, photoUrl, createdAt)
-        VALUES ('young-native-user', 'codex-native-r9-2@example.com', 'codex_native_r9_2', NULL, datetime('now'));
+        VALUES (
+          'young-native-user',
+          'codex-native-r9-2@example.com',
+          'codex_native_r9_2',
+          NULL,
+          replace(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 'Z', '+00:00')
+        );
 
       INSERT INTO Recipe (id, title, chefId, sourceRecipeId, activeCoverId, deletedAt)
         VALUES ('stale-native-recipe', 'codex stale native recipe', 'stale-native-user', NULL, NULL, NULL);
