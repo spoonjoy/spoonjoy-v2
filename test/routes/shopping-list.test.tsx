@@ -509,6 +509,10 @@ describe("Shopping List Routes", () => {
       expect(screen.getByText("0 items")).toBeInTheDocument();
       expect(screen.getByText("Your shopping list is empty")).toBeInTheDocument();
       expect(screen.getByText("Add items manually or add all ingredients from a recipe")).toBeInTheDocument();
+      // A new user owns no recipes, so there is no "Add from recipe" picker; the empty state
+      // links to the public recipes instead, where a recipe's ingredients can be added.
+      expect(screen.queryByText("Add from recipe")).not.toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Explore recipes" })).toHaveAttribute("href", "/recipes");
     });
 
     it("should render shopping list with items", async () => {

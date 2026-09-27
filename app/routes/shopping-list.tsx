@@ -310,7 +310,12 @@ export default function ShoppingList() {
 
         {/* Empty State */}
         {displayItems.length === 0 ? (
-          <RuledEmptyState title="Your shopping list is empty">
+          // "Add from recipe" below only lists the user's own recipes, so a new user gets a way
+          // to the public recipes, where any recipe's ingredients can be added.
+          <RuledEmptyState
+            title="Your shopping list is empty"
+            action={<Button href="/recipes" plain>Explore recipes</Button>}
+          >
             <Text className="mt-2">
               Add items manually or add all ingredients from a recipe
             </Text>
