@@ -10,16 +10,15 @@ import {
   ForkTitleExhaustedError,
 } from "~/lib/recipe-fork.server";
 import {
-  ACTIVE_RECIPE_TITLE_CONFLICT_ERROR,
   ActiveRecipeTitleConflictError,
   validateActiveRecipeTitleUnique,
 } from "~/lib/recipe-title-uniqueness.server";
 import { d1DateTime, type D1ReadDatabase } from "~/lib/d1-read.server";
-import { d1Timestamp, d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
+import { d1Timestamp, d1WriteBatch, retryOnD1GuardFailure } from "~/lib/d1-write.server";
 import {
   activeRecipeTitleFreeGuard,
   cookbooksForRecipeTouchStatement,
-  recipeExistsGuard,
+  recipeActiveGuard,
   recipeUpdateStatement,
 } from "~/lib/recipe-d1-writes.server";
 import {
@@ -363,12 +362,39 @@ export async function createNativeRecipe(
   return success({ recipeId: recipe.id }, 201);
 }
 
+/** The answer when a write lost a race with another change every time it was retried. */
+function concurrentChangeFailure<T>(): ApiV1RecipeWriteResult<T> {
+  return failure("validation_error", "The recipe changed while this request ran. Retry it.", { reason: "concurrent_change" });
+}
+
+/**
+ * Runs a REST write whose D1 batch re-checks what it read. When another request changed
+ * those rows in between, the batch applies nothing and the write runs again, so the caller
+ * gets the answer the checks now give (not found, a title conflict) rather than a 500.
+ */
+function withRaceRetry<T>(
+  d1: D1ReadDatabase | null,
+  attempt: () => Promise<ApiV1RecipeWriteResult<T>>,
+): Promise<ApiV1RecipeWriteResult<T>> {
+  return d1 ? retryOnD1GuardFailure(attempt, () => concurrentChangeFailure<T>()) : attempt();
+}
+
 export async function updateNativeRecipe(
   db: Database,
   chefId: string,
   recipeId: string,
   input: NativeRecipePatchInput,
   d1: D1ReadDatabase | null = null,
+): Promise<ApiV1RecipeWriteResult<{ recipeId: string; updated: boolean }>> {
+  return withRaceRetry(d1, () => updateNativeRecipeOnce(db, chefId, recipeId, input, d1));
+}
+
+async function updateNativeRecipeOnce(
+  db: Database,
+  chefId: string,
+  recipeId: string,
+  input: NativeRecipePatchInput,
+  d1: D1ReadDatabase | null,
 ): Promise<ApiV1RecipeWriteResult<{ recipeId: string; updated: boolean }>> {
   const existing = await db.recipe.findUnique({
     where: { id: recipeId },
@@ -395,18 +421,13 @@ export async function updateNativeRecipe(
   const updated = Object.keys(input.fields).length > 0;
   if (updated && d1) {
     const updatedAt = new Date();
-    try {
-      const results = await d1WriteBatch(d1, [
-        ...(input.fields.title === undefined ? [] : [activeRecipeTitleFreeGuard(chefId, input.fields.title, recipeId)]),
-        recipeUpdateStatement(recipeId, input.fields, updatedAt),
-        cookbooksForRecipeTouchStatement(recipeId, updatedAt),
-      ]);
-      if (results.at(-2)!.changes !== 1) throw new Error("Recipe to update was not found");
-    } catch (error) {
-      // The batch re-checks the new title as it writes; a recipe renamed in between wins.
-      if (isD1GuardFailure(error)) return fieldFailure("title", ACTIVE_RECIPE_TITLE_CONFLICT_ERROR);
-      throw error;
-    }
+    // The guards re-check that the recipe is still active and the new title still free.
+    await d1WriteBatch(d1, [
+      recipeActiveGuard(recipeId),
+      ...(input.fields.title === undefined ? [] : [activeRecipeTitleFreeGuard(chefId, input.fields.title, recipeId)]),
+      recipeUpdateStatement(recipeId, input.fields, updatedAt),
+      cookbooksForRecipeTouchStatement(recipeId, updatedAt),
+    ]);
   } else if (updated) {
     const updatedAt = new Date();
     await db.$transaction([
@@ -421,12 +442,23 @@ export async function updateNativeRecipe(
   return success({ recipeId, updated });
 }
 
+type DeletedRecipe = { recipe: { id: string; title: string; deletedAt: Date; updatedAt: Date } };
+
 export async function deleteNativeRecipe(
   db: Database,
   chefId: string,
   recipeId: string,
   d1: D1ReadDatabase | null = null,
-): Promise<ApiV1RecipeWriteResult<{ recipe: { id: string; title: string; deletedAt: Date; updatedAt: Date } }>> {
+): Promise<ApiV1RecipeWriteResult<DeletedRecipe>> {
+  return withRaceRetry(d1, () => deleteNativeRecipeOnce(db, chefId, recipeId, d1));
+}
+
+async function deleteNativeRecipeOnce(
+  db: Database,
+  chefId: string,
+  recipeId: string,
+  d1: D1ReadDatabase | null,
+): Promise<ApiV1RecipeWriteResult<DeletedRecipe>> {
   const existing = await db.recipe.findUnique({
     where: { id: recipeId },
     select: { id: true, chefId: true, title: true, deletedAt: true },
@@ -440,32 +472,27 @@ export async function deleteNativeRecipe(
 
   const deletedAt = new Date();
   if (d1) {
-    let results: Awaited<ReturnType<typeof d1WriteBatch>>;
-    try {
-      results = await d1WriteBatch(d1, [
-        recipeExistsGuard(recipeId),
-        [
-          `UPDATE "Recipe" SET "deletedAt" = ?, "updatedAt" = ? WHERE "id" = ?
-           RETURNING "id", "title", "deletedAt", "updatedAt"`,
-          d1Timestamp(deletedAt),
-          d1Timestamp(deletedAt),
-          recipeId,
-        ],
-        cookbooksForRecipeTouchStatement(recipeId, deletedAt),
-        nativeSyncTombstoneUpsertStatement({
-          accountId: chefId,
-          resourceType: "recipe",
-          resourceId: existing.id,
-          title: existing.title,
-          deletedAt,
-          updatedAt: deletedAt,
-        }),
-      ]);
-    } catch (error) {
-      // The recipe was removed after the checks above: nothing in the batch applied.
-      if (isD1GuardFailure(error)) throw new Error("Recipe to delete was not found");
-      throw error;
-    }
+    // The guard re-checks that the recipe is still active; a delete that lost the race to
+    // another delete runs again and answers not_found.
+    const results = await d1WriteBatch(d1, [
+      recipeActiveGuard(recipeId),
+      [
+        `UPDATE "Recipe" SET "deletedAt" = ?, "updatedAt" = ? WHERE "id" = ?
+         RETURNING "id", "title", "deletedAt", "updatedAt"`,
+        d1Timestamp(deletedAt),
+        d1Timestamp(deletedAt),
+        recipeId,
+      ],
+      cookbooksForRecipeTouchStatement(recipeId, deletedAt),
+      nativeSyncTombstoneUpsertStatement({
+        accountId: chefId,
+        resourceType: "recipe",
+        resourceId: existing.id,
+        title: existing.title,
+        deletedAt,
+        updatedAt: deletedAt,
+      }),
+    ]);
     const row = results[1]!.rows[0]!;
     return success({
       recipe: {

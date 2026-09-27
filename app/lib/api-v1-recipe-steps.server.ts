@@ -1,7 +1,7 @@
 import type { Prisma, PrismaClient as PrismaClientType } from "@prisma/client";
 import type { ApiV1ErrorCode } from "~/lib/api-v1-contract.server";
 import type { D1Query, D1ReadDatabase } from "~/lib/d1-read.server";
-import { d1Guard, d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
+import { d1Guard, d1Timestamp, d1WriteBatch, retryOnD1GuardFailure } from "~/lib/d1-write.server";
 import {
   nameUpsertStatements,
   namedIngredientInsertStatement,
@@ -125,6 +125,22 @@ function failure<T>(
 
 function fieldFailure<T>(field: string, message: string): ApiV1RecipeStepResult<T> {
   return failure("validation_error", "Invalid recipe step fields", { fieldErrors: { [field]: message } });
+}
+
+/**
+ * Runs a REST step write whose D1 batch re-checks what it read. When another request changed
+ * those rows in between, the batch applies nothing and the write runs again, so the caller
+ * gets the answer the checks now give (not found, a validation error) rather than a 500.
+ */
+function withRaceRetry<T>(
+  d1: D1ReadDatabase | null | undefined,
+  attempt: () => Promise<ApiV1RecipeStepResult<T>>,
+): Promise<ApiV1RecipeStepResult<T>> {
+  return d1
+    ? retryOnD1GuardFailure(attempt, () => failure<T>("validation_error", "The recipe changed while this request ran. Retry it.", {
+      reason: "concurrent_change",
+    }))
+    : attempt();
 }
 
 function touchRecipeOp(db: Database, recipeId: string): Prisma.PrismaPromise<unknown> {
@@ -779,6 +795,16 @@ export async function createNativeRecipeStep(
   input: NativeRecipeStepCreateInput,
   options: { stepId?: string; d1?: D1ReadDatabase | null } = {},
 ): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; stepNum: number }>> {
+  return withRaceRetry(options.d1, () => createNativeRecipeStepOnce(db, chefId, recipeId, input, options));
+}
+
+async function createNativeRecipeStepOnce(
+  db: Database,
+  chefId: string,
+  recipeId: string,
+  input: NativeRecipeStepCreateInput,
+  options: { stepId?: string; d1?: D1ReadDatabase | null } = {},
+): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; stepNum: number }>> {
   const recipe = await loadOwnedRecipe(db, chefId, recipeId);
   if (!recipe.ok) return recipe;
 
@@ -821,11 +847,12 @@ export async function createNativeRecipeStep(
 
   const stepId = options.stepId ?? crypto.randomUUID();
   if (options.d1) {
-    // One atomic batch: the step, its output uses and ingredients, and the recipe touch. The
-    // unique (recipeId, stepNum) index stops a step created in between from sharing the number.
+    // One atomic batch: the step, its output uses and ingredients, and the recipe touch.
     const now = new Date();
     await d1WriteBatch(options.d1, [
       noRecipeIngredientConflictsGuard(recipeId, input.ingredients),
+      // Still the next step number: a step added in between sends the write back to its checks.
+      d1Guard(`NOT EXISTS (SELECT 1 FROM "RecipeStep" WHERE "recipeId" = ? AND "stepNum" >= ?)`, recipeId, stepNum),
       stepInsertStatement({
         id: stepId,
         recipeId,
@@ -863,6 +890,17 @@ export async function createNativeRecipeStep(
 }
 
 export async function updateNativeRecipeStep(
+  db: Database,
+  chefId: string,
+  recipeId: string,
+  stepId: string,
+  input: NativeRecipeStepPatchInput,
+  options: { d1?: D1ReadDatabase | null } = {},
+): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; updated: boolean }>> {
+  return withRaceRetry(options.d1, () => updateNativeRecipeStepOnce(db, chefId, recipeId, stepId, input, options));
+}
+
+async function updateNativeRecipeStepOnce(
   db: Database,
   chefId: string,
   recipeId: string,
@@ -964,6 +1002,16 @@ export async function deleteNativeRecipeStep(
   stepId: string,
   options: NativeRecipeStepDeleteOptions = {},
 ): Promise<ApiV1RecipeStepResult<{ recipeId: string; step: { id: string; stepNum: number } }>> {
+  return withRaceRetry(options.d1, () => deleteNativeRecipeStepOnce(db, chefId, recipeId, stepId, options));
+}
+
+async function deleteNativeRecipeStepOnce(
+  db: Database,
+  chefId: string,
+  recipeId: string,
+  stepId: string,
+  options: NativeRecipeStepDeleteOptions = {},
+): Promise<ApiV1RecipeStepResult<{ recipeId: string; step: { id: string; stepNum: number } }>> {
   const recipe = await loadOwnedRecipe(db, chefId, recipeId);
   if (!recipe.ok) return recipe;
 
@@ -1031,6 +1079,17 @@ export async function createNativeRecipeStepIngredient(
   input: NativeRecipeStepIngredientCreateInput,
   options: { ingredientId?: string; d1?: D1ReadDatabase | null } = {},
 ): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; ingredientId: string }>> {
+  return withRaceRetry(options.d1, () => createNativeRecipeStepIngredientOnce(db, chefId, recipeId, stepId, input, options));
+}
+
+async function createNativeRecipeStepIngredientOnce(
+  db: Database,
+  chefId: string,
+  recipeId: string,
+  stepId: string,
+  input: NativeRecipeStepIngredientCreateInput,
+  options: { ingredientId?: string; d1?: D1ReadDatabase | null } = {},
+): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; ingredientId: string }>> {
   const recipe = await loadOwnedRecipe(db, chefId, recipeId);
   if (!recipe.ok) return recipe;
 
@@ -1065,6 +1124,17 @@ export async function createNativeRecipeStepIngredient(
 }
 
 export async function deleteNativeRecipeStepIngredient(
+  db: Database,
+  chefId: string,
+  recipeId: string,
+  stepId: string,
+  ingredientId: string,
+  options: NativeRecipeStepIngredientDeleteOptions = {},
+): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; ingredient: { id: string } }>> {
+  return withRaceRetry(options.d1, () => deleteNativeRecipeStepIngredientOnce(db, chefId, recipeId, stepId, ingredientId, options));
+}
+
+async function deleteNativeRecipeStepIngredientOnce(
   db: Database,
   chefId: string,
   recipeId: string,
@@ -1159,6 +1229,16 @@ async function reorderBlockingStepNums(
 }
 
 export async function reorderNativeRecipeStep(
+  db: Database,
+  chefId: string,
+  recipeId: string,
+  input: NativeRecipeStepReorderInput,
+  options: NativeRecipeStepReorderOptions = {},
+): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; reordered: boolean }>> {
+  return withRaceRetry(options.d1, () => reorderNativeRecipeStepOnce(db, chefId, recipeId, input, options));
+}
+
+async function reorderNativeRecipeStepOnce(
   db: Database,
   chefId: string,
   recipeId: string,
@@ -1272,6 +1352,16 @@ export async function reorderNativeRecipeStep(
 }
 
 export async function replaceNativeRecipeStepOutputUses(
+  db: Database,
+  chefId: string,
+  recipeId: string,
+  input: NativeRecipeStepOutputUsesInput,
+  options: { d1?: D1ReadDatabase | null } = {},
+): Promise<ApiV1RecipeStepResult<{ recipeId: string; stepId: string; replaced: boolean }>> {
+  return withRaceRetry(options.d1, () => replaceNativeRecipeStepOutputUsesOnce(db, chefId, recipeId, input, options));
+}
+
+async function replaceNativeRecipeStepOutputUsesOnce(
   db: Database,
   chefId: string,
   recipeId: string,

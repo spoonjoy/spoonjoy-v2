@@ -240,9 +240,12 @@ export function cookbooksForRecipeTouchStatement(recipeId: string, updatedAt: Da
   ];
 }
 
-/** Fails the batch unless the recipe still exists (Prisma's `recipe.update` throws when it is gone). */
-export function recipeExistsGuard(recipeId: string): D1Query {
-  return d1Guard(`EXISTS (SELECT 1 FROM "Recipe" WHERE "id" = ?)`, recipeId);
+/**
+ * Fails the batch unless the recipe still exists and is not soft-deleted, as the action's
+ * checks found it. (Prisma's `recipe.update` only threw for a recipe that was gone.)
+ */
+export function recipeActiveGuard(recipeId: string): D1Query {
+  return d1Guard(`EXISTS (SELECT 1 FROM "Recipe" WHERE "id" = ? AND "deletedAt" IS NULL)`, recipeId);
 }
 
 /** Fails the batch unless the step is still the recipe's step `stepNum`. */

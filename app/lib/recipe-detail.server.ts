@@ -6,7 +6,7 @@ import { requestD1, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.serv
 import { d1Timestamp, d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
 import {
   cookbooksForRecipeTouchStatement,
-  recipeExistsGuard,
+  recipeActiveGuard,
   recipeUpdateStatement,
 } from "~/lib/recipe-d1-writes.server";
 import { readRecipeDetailFromD1, readRecipeDetailWithPrisma } from "~/lib/recipe-detail-reads.server";
@@ -1109,7 +1109,7 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
  */
 async function writeExistingRecipeOnD1(d1: D1ReadDatabase, recipeId: string, statements: D1Query[]) {
   try {
-    await d1WriteBatch(d1, [recipeExistsGuard(recipeId), ...statements]);
+    await d1WriteBatch(d1, [recipeActiveGuard(recipeId), ...statements]);
   } catch (error) {
     if (isD1GuardFailure(error)) throw new Response("Recipe not found", { status: 404 });
     throw error;

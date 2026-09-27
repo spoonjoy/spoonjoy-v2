@@ -123,6 +123,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
 
   // --- expected client (4xx) outcomes handled by the caller ---
   {
+    file: "app/lib/d1-write.server.ts",
+    category: "rethrow",
+    reason:
+      "The batch catch only re-types a batch-guard failure (nothing in the batch applied) and rethrows every error; the retry catch re-runs a write only on that typed failure and rethrows everything else. Callers answer the failure or surface it at the instrumented REST, MCP or route boundary.",
+  },
+  {
     file: "app/lib/recipe-fork.server.ts",
     category: "rethrow",
     reason:

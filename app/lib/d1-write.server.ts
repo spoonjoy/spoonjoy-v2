@@ -18,7 +18,12 @@ export interface D1WriteResult {
  * treated as an error.
  */
 export async function d1WriteBatch(db: D1ReadDatabase, queries: readonly D1Query[]): Promise<D1WriteResult[]> {
-  const results = await db.batch(queries.map(([sql, ...values]) => db.prepare(sql).bind(...values)));
+  let results: Array<{ results?: unknown[] }>;
+  try {
+    results = await db.batch(queries.map(([sql, ...values]) => db.prepare(sql).bind(...values)));
+  } catch (error) {
+    throw isGuardFailureMessage(error) ? new D1GuardFailure(error) : error;
+  }
   if (results.length !== queries.length) {
     throw new Error(`D1 batch returned ${results.length} results for ${queries.length} statements`);
   }
@@ -34,12 +39,32 @@ export async function d1WriteBatch(db: D1ReadDatabase, queries: readonly D1Query
 const GUARD_FAILURE = "malformed JSON";
 
 /**
+ * A batch was stopped by one of its `d1Guard` statements: nothing in it applied. The
+ * callers map this to the answer their own checks give (not found, a title conflict, a
+ * changed step), usually by running those checks again.
+ */
+export class D1GuardFailure extends Error {
+  constructor(cause: unknown) {
+    super("A D1 batch precondition no longer held, so nothing in the batch was applied", { cause });
+    this.name = "D1GuardFailure";
+  }
+}
+
+function isGuardFailureMessage(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  return message.includes(GUARD_FAILURE);
+}
+
+/**
  * A batch statement that fails the whole batch, so nothing in it applies, unless
  * `condition` (an SQL boolean expression over the bound values) holds when the batch runs.
  * SQLite only has RAISE inside triggers, so the guard asks `json()` to parse text that is
  * not JSON when the condition is false; the text depends on the condition, so SQLite cannot
  * evaluate it ahead of time. Use it where a write was decided from rows read earlier, to
- * stop the batch if those rows changed in between.
+ * stop the batch if those rows changed in between. `d1WriteBatch` turns the failure into a
+ * `D1GuardFailure`. The failure does not say which guard fired, so a caller that needs to
+ * tell guards apart re-runs its checks; and no batch statement may parse other JSON with
+ * `json()`, whose "malformed JSON" error would look the same.
  */
 export function d1Guard(condition: string, ...values: unknown[]): D1Query {
   return [
@@ -48,13 +73,37 @@ export function d1Guard(condition: string, ...values: unknown[]): D1Query {
   ];
 }
 
-/** Whether a batch was rejected by a `d1Guard` statement. */
-export function isD1GuardFailure(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
-  return message.includes(GUARD_FAILURE);
+/** Whether a batch was stopped by a `d1Guard` statement. */
+export function isD1GuardFailure(error: unknown): error is D1GuardFailure {
+  return error instanceof D1GuardFailure;
 }
 
-/** A DateTime value as the D1 write paths store it (ISO 8601, UTC). */
+/**
+ * Runs `attempt` again, up to `attempts` times in all, while its batch is stopped by a guard:
+ * each run re-reads and re-checks, so it either writes against the current rows or returns
+ * the answer its checks now give. `exhausted` answers if every run lost a race.
+ */
+export async function retryOnD1GuardFailure<T>(
+  attempt: () => Promise<T>,
+  exhausted: () => T,
+  attempts = 3,
+): Promise<T> {
+  for (let run = 1; run <= attempts; run++) {
+    try {
+      return await attempt();
+    } catch (error) {
+      if (!isD1GuardFailure(error)) throw error;
+    }
+  }
+  return exhausted();
+}
+
+/**
+ * A DateTime value as the D1 write paths store it (ISO 8601, UTC, with `Z`). Prisma's D1
+ * adapter writes `+00:00` instead. Both read back as the same instant, and native sync's
+ * `updatedAt >= cursor` comparison still includes every row, but a new raw SQL equality or
+ * `<`/`<=` comparison on these text columns must not assume one format.
+ */
 export function d1Timestamp(value: Date): string {
   return value.toISOString();
 }
