@@ -5,14 +5,19 @@ import bcrypt from "bcryptjs";
 import { describe, expect, it, vi } from "vitest";
 import {
   KITCHEN,
+  SCRATCH_USER_COUNT,
   buildKitchenResetSql,
+  buildScratchUsersSql,
   defaultCliErrorHandler,
   generatePersonaPasswords,
+  generateScratchPasswords,
+  generateScratchUsers,
   isCliEntry,
   main,
   parseSeedKitchenArgs,
   runCliIfEntry,
 } from "../../scripts/seed-qa-kitchen.mjs";
+import { DISPOSABLE_USER_WHERE, buildApplySql } from "../../scripts/cleanup-local-qa-data.mjs";
 import { expectConsoleError } from "../warning-policy";
 
 const MIGRATIONS = resolve(__dirname, "../../migrations");
@@ -240,6 +245,126 @@ describe("seed-qa-kitchen", () => {
     expect(a.chef).toMatch(/^[A-Za-z0-9_-]{32}$/);
   });
 
+  describe("scratch users", () => {
+    it("generates SCRATCH_USER_COUNT users by default, each in the codex-e2e-* / codex_e2e_* disposable namespace", () => {
+      const users = generateScratchUsers();
+      expect(users).toHaveLength(SCRATCH_USER_COUNT);
+      for (const user of users) {
+        expect(user.email).toMatch(/^codex-e2e-scratch-[a-z0-9-]+@example\.com$/);
+        expect(user.username).toMatch(/^codex_e2e_scratch_[a-z0-9_]+$/);
+        expect(user.id).toBe(user.username);
+        expect(user.email).toMatch(/^codex-/);
+        expect(user.username.startsWith("codex_")).toBe(true);
+      }
+    });
+
+    it("honors a custom count", () => {
+      const users = generateScratchUsers(2);
+      expect(users).toHaveLength(2);
+    });
+
+    it("falls back to a 'run' token when the injected random source sanitizes down to nothing", () => {
+      const random = () => ({ toString: () => "" }) as unknown as Buffer;
+      const users = generateScratchUsers(1, { random });
+      expect(users[0].username).toMatch(/_run_1$/);
+      expect(users[0].email).toMatch(/-run-1@example\.com$/);
+    });
+
+    it("gives every scratch user in a run a distinct id/username/email", () => {
+      const users = generateScratchUsers();
+      expect(new Set(users.map((u) => u.id)).size).toBe(users.length);
+      expect(new Set(users.map((u) => u.username)).size).toBe(users.length);
+      expect(new Set(users.map((u) => u.email)).size).toBe(users.length);
+    });
+
+    it("never collides across two runs, even at the same instant, via the random run token", () => {
+      const now = () => new Date("2026-09-26T12:00:00.000Z");
+      const runA = generateScratchUsers(SCRATCH_USER_COUNT, { now });
+      const runB = generateScratchUsers(SCRATCH_USER_COUNT, { now });
+      const idsA = new Set(runA.map((u) => u.id));
+      for (const user of runB) {
+        expect(idsA.has(user.id)).toBe(false);
+      }
+    });
+
+    it("generates SCRATCH_USER_COUNT distinct strong passwords by default", () => {
+      const passwords = generateScratchPasswords();
+      expect(passwords).toHaveLength(SCRATCH_USER_COUNT);
+      expect(new Set(passwords).size).toBe(passwords.length);
+      for (const password of passwords) {
+        expect(password).toMatch(/^[A-Za-z0-9_-]{32}$/);
+      }
+    });
+
+    it("honors a custom count for passwords", () => {
+      expect(generateScratchPasswords(3)).toHaveLength(3);
+    });
+
+    it("throws when the number of passwords doesn't match the number of users", () => {
+      const users = generateScratchUsers(2);
+      expect(() => buildScratchUsersSql({ users, passwords: ["only-one"] })).toThrow(
+        /exactly one password per scratch user/,
+      );
+    });
+
+    it("inserts scratch users on a database created from the real migrations, each with its own bcrypt-hashed password", () => {
+      const db = migratedDb();
+      const users = generateScratchUsers(2, { now: () => new Date("2026-09-26T12:00:00.000Z") });
+      const passwords = ["scratch-pw-1", "scratch-pw-2"];
+      db.exec(buildScratchUsersSql({ users, passwords, hash: fastHash }));
+
+      for (const [index, user] of users.entries()) {
+        const row = db.prepare('SELECT username, email, hashedPassword FROM "User" WHERE id = ?').get(user.id) as any;
+        expect(row.username).toBe(user.username);
+        expect(row.email).toBe(user.email);
+        expect(bcrypt.compareSync(passwords[index], row.hashedPassword)).toBe(true);
+      }
+    });
+
+    it("is idempotent: re-applying the same generated statement never throws", () => {
+      const db = migratedDb();
+      const users = generateScratchUsers(2, { now: () => new Date("2026-09-26T12:00:00.000Z") });
+      const passwords = ["scratch-pw-1", "scratch-pw-2"];
+      const sql = buildScratchUsersSql({ users, passwords, hash: fastHash });
+      db.exec(sql);
+      expect(() => db.exec(sql)).not.toThrow();
+      expect(db.prepare('SELECT COUNT(*) n FROM "User" WHERE id IN (?, ?)').get(users[0].id, users[1].id)).toEqual({
+        n: 2,
+      });
+    });
+
+    it("does not collide with the qa-kitchen personas' reset logic: a kitchen reset leaves scratch users untouched", () => {
+      const db = migratedDb();
+      const users = generateScratchUsers(2, { now: () => new Date("2026-09-26T12:00:00.000Z") });
+      db.exec(buildScratchUsersSql({ users, passwords: ["scratch-pw-1", "scratch-pw-2"], hash: fastHash }));
+      db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
+      expect(db.prepare('SELECT COUNT(*) n FROM "User" WHERE id IN (?, ?)').get(users[0].id, users[1].id)).toEqual({
+        n: 2,
+      });
+    });
+
+    it("is picked up by cleanup-local-qa-data.mjs's disposable-user rule and removed by its apply SQL", () => {
+      const db = migratedDb();
+      const users = generateScratchUsers(SCRATCH_USER_COUNT, { now: () => new Date("2026-09-26T12:00:00.000Z") });
+      const scratchPasswords = generateScratchPasswords(users.length);
+      db.exec(buildScratchUsersSql({ users, passwords: scratchPasswords, hash: fastHash }));
+
+      const scratchIds = users.map((u) => u.id);
+      const placeholders = scratchIds.map(() => "?").join(", ");
+      const disposableRows = db
+        .prepare(`SELECT id FROM "User" WHERE id IN (${placeholders}) AND (${DISPOSABLE_USER_WHERE}) ORDER BY id`)
+        .all(...scratchIds);
+      expect(disposableRows).toEqual(scratchIds.slice().sort().map((id) => ({ id })));
+
+      db.exec(buildApplySql());
+
+      expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+      expect(db.prepare(`SELECT COUNT(*) n FROM "User" WHERE id IN (${placeholders})`).get(...scratchIds)).toEqual({
+        n: 0,
+      });
+    });
+  });
+
   it("refuses any target but QA", () => {
     expect(() => parseSeedKitchenArgs([])).toThrow(/--target-env qa/);
     expect(() => parseSeedKitchenArgs(["--target-env", "production"])).toThrow(/--target-env qa/);
@@ -307,11 +432,15 @@ describe("seed-qa-kitchen", () => {
 
       expect(writeFile.mock.calls[1][0]).toBe("/tmp/creds.json");
       const credentials = JSON.parse(writeFile.mock.calls[1][1] as string);
-      expect(credentials).toEqual({
-        chef: { username: "qa_kitchen_chef", email: "qa-kitchen-chef@example.com", password: expect.any(String) },
-        friend: { username: "qa_kitchen_friend", email: "qa-kitchen-friend@example.com", password: expect.any(String) },
-        newbie: { username: "qa_kitchen_newbie", email: "qa-kitchen-newbie@example.com", password: expect.any(String) },
-      });
+      expect(credentials.chef).toEqual({ username: "qa_kitchen_chef", email: "qa-kitchen-chef@example.com", password: expect.any(String) });
+      expect(credentials.friend).toEqual({ username: "qa_kitchen_friend", email: "qa-kitchen-friend@example.com", password: expect.any(String) });
+      expect(credentials.newbie).toEqual({ username: "qa_kitchen_newbie", email: "qa-kitchen-newbie@example.com", password: expect.any(String) });
+      expect(credentials.scratch).toHaveLength(SCRATCH_USER_COUNT);
+      for (const entry of credentials.scratch) {
+        expect(entry.email).toMatch(/^codex-e2e-scratch-/);
+        expect(entry.username).toMatch(/^codex_e2e_scratch_/);
+        expect(entry.password).toEqual(expect.any(String));
+      }
       expect(writeFile.mock.calls[1][2]).toEqual({ encoding: "utf8", mode: 0o600 });
       // chmod explicitly restricts the credentials file even if it already existed
       // (writeFile's mode option only applies to a newly created file).

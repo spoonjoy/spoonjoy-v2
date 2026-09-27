@@ -147,6 +147,71 @@ export function generatePersonaPasswords(random = randomBytes) {
   };
 }
 
+// Number of per-run scratch users seeded alongside the three kitchen personas. Journeys that
+// change data use one of these (via support/personas.ts's scratch(n)) instead of signing up a
+// throwaway user through /signup, so they stop spending QA's shared 20-per-minute auth rate
+// limit. Each scratch index is owned by exactly one journey file (see AGENTS.md's Validation
+// section for the assignment table) — 6 is exactly today's assignment table, with no spare
+// index; see personas.setup.ts's budget comment before raising this, since the sign-in budget
+// it feeds is already at, not comfortably under, the rate limit.
+export const SCRATCH_USER_COUNT = 6;
+
+// Same stamp/token shape as e2e/support/disposable-auth.ts's createDisposableE2EUser() and this
+// script's own sibling scripts/seed-qa.mjs (duplicated, not imported — this file's top-of-file
+// comment notes it follows that script's dependency-free, unit-testable house style). Matching
+// the shape keeps scratch users inside the same disposable namespace
+// scripts/cleanup-local-qa-data.mjs already removes: DISPOSABLE_USER_WHERE matches any user
+// whose email starts with 'codex-' and whose username starts with 'codex_'.
+function stampDate(date) {
+  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "z").toLowerCase();
+}
+
+function disposableToken(value) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 16) || "run";
+}
+
+// Generates `count` scratch user identities for this run. Every one shares a single run token
+// (an extra random segment beyond the per-user index) baked into both email and username, so a
+// concurrent run, or a leftover run whose cleanup didn't get to run, can never collide with this
+// run's scratch users. Scratch users own no data (no recipes, cookbooks, or shopping lists), so
+// there is no persona-style drift to reset here — only identity.
+export function generateScratchUsers(count = SCRATCH_USER_COUNT, { now = () => new Date(), random = randomBytes } = {}) {
+  const stamp = stampDate(now());
+  const runToken = disposableToken(random(8).toString("hex"));
+  return Array.from({ length: count }, (_, index) => {
+    const n = index + 1;
+    const username = `codex_e2e_scratch_${stamp}_${runToken}_${n}`;
+    return {
+      id: username,
+      username,
+      email: `codex-e2e-scratch-${stamp}-${runToken}-${n}@example.com`,
+    };
+  });
+}
+
+export function generateScratchPasswords(count = SCRATCH_USER_COUNT, random = randomBytes) {
+  return Array.from({ length: count }, () => random(24).toString("base64url"));
+}
+
+// Builds the scratch users' insert statements, kept separate from buildKitchenResetSql because
+// scratch users never own data and never need the kitchen personas' fork/cookbook/credential
+// reset logic — and so this can never collide with that reset's persona-scoped DELETEs, which
+// only ever match PERSONA_IDS. INSERT OR IGNORE (rather than a plain INSERT, matching the
+// Unit/IngredientRef inserts above) makes this idempotent if the same generated statement is
+// ever re-applied, for example after a retried `wrangler d1 execute` following a network flake.
+export function buildScratchUsersSql({ users, passwords, hash = (password) => bcrypt.hashSync(password, 10) }) {
+  if (users.length !== passwords.length) {
+    throw new Error("buildScratchUsersSql requires exactly one password per scratch user.");
+  }
+  return users
+    .map((user, index) => {
+      const hashedPassword = hash(passwords[index]);
+      const salt = hashedPassword.slice(0, 29);
+      return `INSERT OR IGNORE INTO "User" (id, email, username, hashedPassword, salt, createdAt, updatedAt) VALUES (${sqlString(user.id)}, ${sqlString(user.email)}, ${sqlString(user.username)}, ${sqlString(hashedPassword)}, ${sqlString(salt)}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`;
+    })
+    .join("\n");
+}
+
 export function buildKitchenResetSql({ passwords, hash = (password) => bcrypt.hashSync(password, 10) }) {
   const statements = [];
   const personaIds = sqlIdList(PERSONA_IDS);
@@ -290,11 +355,16 @@ export function parseSeedKitchenArgs(argv) {
   };
 }
 
-function credentialsPayload(passwords) {
+function credentialsPayload(passwords, scratchUsers, scratchPasswords) {
   return {
     chef: { username: KITCHEN.chef.username, email: KITCHEN.chef.email, password: passwords.chef },
     friend: { username: KITCHEN.friend.username, email: KITCHEN.friend.email, password: passwords.friend },
     newbie: { username: KITCHEN.newbie.username, email: KITCHEN.newbie.email, password: passwords.newbie },
+    scratch: scratchUsers.map((user, index) => ({
+      username: user.username,
+      email: user.email,
+      password: scratchPasswords[index],
+    })),
   };
 }
 
@@ -306,12 +376,16 @@ export function main(argv = process.argv.slice(2), deps = {}) {
     rm = rmSync,
     chmod = chmodSync,
     generatePasswords = generatePersonaPasswords,
+    generateScratch = generateScratchUsers,
+    generateScratchPasswords: generateScratchPwds = generateScratchPasswords,
     io = console,
   } = deps;
 
   const options = parseSeedKitchenArgs(argv);
   const passwords = generatePasswords();
-  const sql = buildKitchenResetSql({ passwords });
+  const scratchUsers = generateScratch();
+  const scratchPasswords = generateScratchPwds(scratchUsers.length);
+  const sql = `${buildKitchenResetSql({ passwords })}\n${buildScratchUsersSql({ users: scratchUsers, passwords: scratchPasswords })}`;
 
   if (options.dryRun) {
     io.log(sql.replace(BCRYPT_HASH_PATTERN, "<hash>"));
@@ -340,7 +414,7 @@ export function main(argv = process.argv.slice(2), deps = {}) {
   if (primaryError) throw primaryError;
 
   if (options.credentialsOut) {
-    writeFile(options.credentialsOut, `${JSON.stringify(credentialsPayload(passwords), null, 2)}\n`, {
+    writeFile(options.credentialsOut, `${JSON.stringify(credentialsPayload(passwords, scratchUsers, scratchPasswords), null, 2)}\n`, {
       encoding: "utf8",
       mode: 0o600,
     });
