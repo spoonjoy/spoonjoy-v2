@@ -9,7 +9,7 @@ import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
-import { data as routerData } from "react-router";
+import { data as routerData, redirect } from "react-router";
 import { shareContent, useDockSuppressed } from "~/components/navigation";
 import { ToastProvider } from "~/components/ui/toast";
 
@@ -1647,12 +1647,17 @@ describe("Cookbooks $id Route", () => {
         availableRecipes: [],
       };
 
+      const submittedIntents: Array<string | null> = [];
       const Stub = createTestRoutesStub([
         {
           path: "/cookbooks/:id",
           Component: CookbookDetail,
           loader: () => mockData,
-          action: () => null,
+          action: async ({ request }) => {
+            const formData = await request.formData();
+            submittedIntents.push(formData.get("intent")?.toString() ?? null);
+            return redirect("/cookbooks");
+          },
         },
         {
           path: "/cookbooks",
@@ -1672,14 +1677,13 @@ describe("Cookbooks $id Route", () => {
       expect(await screen.findByText("Delete this cookbook?")).toBeInTheDocument();
       expect(screen.getByText(/This will permanently delete/)).toBeInTheDocument();
 
-      // Click confirm button
+      // Confirming submits through the router, which follows the action's redirect to the list.
       const confirmButton = screen.getByRole("button", { name: "Delete it" });
       fireEvent.click(confirmButton);
 
-      // Dialog should close (may need to wait for animation)
-      await waitFor(() => {
-        expect(screen.queryByText("Delete this cookbook?")).not.toBeInTheDocument();
-      });
+      expect(await screen.findByText("Cookbooks List")).toBeInTheDocument();
+      expect(submittedIntents).toEqual(["delete"]);
+      expect(screen.queryByText("Delete this cookbook?")).not.toBeInTheDocument();
     });
 
     it("should close delete dialog when clicking cancel", async () => {
