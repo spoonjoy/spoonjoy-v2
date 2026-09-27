@@ -278,7 +278,8 @@ describe("Journeys workflow tail wiring", () => {
   it("summarises the tail with the tested jq program and never copies raw fields itself", () => {
     const summarise = step("Stop QA Worker tail and summarise it");
 
-    expect(summarise.if).toBe("always()");
+    // Runs even after a failed suite, but only for a run that got its QA turn.
+    expect(summarise.if).toBe("always() && needs.qa-turn.result == 'success'");
     expect(summarise.run).toContain("-f scripts/summarize-worker-tail.jq");
     expect(summarise.run).toContain("--argjson tailAliveAtStop");
     expect(summarise.run).toContain("::warning::");
