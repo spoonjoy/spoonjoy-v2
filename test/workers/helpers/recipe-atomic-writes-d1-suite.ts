@@ -912,6 +912,28 @@ describe("atomic recipe writes on Wrangler D1", () => {
       expect(updated.uses).toEqual([]);
     });
 
+    it("soft-deletes a recipe with its sync tombstone, updatedAt bump and cookbook touch together, or none of them", async () => {
+      await seedRecipe("atomic-mcp-delete");
+      await run(`UPDATE "Cookbook" SET "updatedAt" = ? WHERE "id" = ?`, OLD, COOKBOOK);
+      await failOn("INSERT", "NativeSyncTombstone", `NEW."resourceId" = 'atomic-mcp-delete'`);
+
+      expect(String(await rejection(callSpoonjoyApiOperation("delete_recipe", { id: "atomic-mcp-delete" }, context())))).toContain(FAILURE);
+      expect((await recipeGraph("atomic-mcp-delete")).recipe).toMatchObject({ deleted: 0 });
+      expect(await recipeUpdatedAt("atomic-mcp-delete")).toBe(OLD);
+      expect(await cookbookUpdatedAt()).toBe(OLD);
+
+      await run(`DROP TRIGGER "${TRIGGER}"`);
+      await expect(callSpoonjoyApiOperation("delete_recipe", { id: "atomic-mcp-delete" }, context()))
+        .resolves.toMatchObject({ deleted: true, recipe: { id: "atomic-mcp-delete" } });
+      const [recipe] = await rows<{ deletedAt: string; updatedAt: string }>(
+        `SELECT "deletedAt", "updatedAt" FROM "Recipe" WHERE "id" = 'atomic-mcp-delete'`,
+      );
+      expect(recipe!.updatedAt).toBe(recipe!.deletedAt);
+      expect(await cookbookUpdatedAt()).toBe(recipe!.deletedAt);
+      expect(await rows(`SELECT "accountId", "resourceType", "title", "deletedAt" FROM "NativeSyncTombstone" WHERE "resourceId" = 'atomic-mcp-delete'`))
+        .toEqual([{ accountId: CHEF, resourceType: "recipe", title: "Recipe atomic-mcp-delete", deletedAt: recipe!.deletedAt }]);
+    });
+
     it("creates a recipe with its steps together, or nothing", async () => {
       const args = {
         title: "Atomic MCP Stew",

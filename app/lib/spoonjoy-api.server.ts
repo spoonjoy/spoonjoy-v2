@@ -24,6 +24,7 @@ import {
 } from "~/lib/agent-connection.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { d1Binding } from "~/lib/d1-read.server";
+import { deleteNativeRecipe } from "~/lib/api-v1-recipe-writes.server";
 import { d1WriteBatch, retryOnD1GuardFailure } from "~/lib/d1-write.server";
 import {
   activeRecipeTitleFreeGuard,
@@ -2619,27 +2620,30 @@ const deleteRecipeTool: SpoonjoyApiOperation = {
     const email = requireOwnerEmail(args, context);
     const id = requiredString(args, "id");
     const owner = await getOrCreateOwner(context.db, email);
-    const existing = await context.db.recipe.findFirst({
+    const findOwned = () => context.db.recipe.findFirst({
       where: { id, chefId: owner.id },
       select: { id: true, title: true, deletedAt: true },
     });
+    const existing = await findOwned();
 
     if (!existing) throw new Error("Recipe not found");
-    if (existing.deletedAt) {
-      return json({
-        deleted: false,
-        recipe: formatDeletedRecipe({ ...existing, deletedAt: existing.deletedAt }),
-      });
+    if (!existing.deletedAt) {
+      // The same delete as REST and the web: the soft delete, its updatedAt bump, the
+      // native sync tombstone and the cookbook touches go together (one D1 batch), so
+      // native apps drop the recipe on their next sync.
+      const result = await deleteNativeRecipe(context.db, owner.id, existing.id, d1Binding(context.env?.DB));
+      if (result.ok) {
+        return json({ deleted: true, recipe: formatDeletedRecipe(result.data.recipe) });
+      }
     }
 
-    const deletedAt = new Date();
-    const recipe = await context.db.recipe.update({
-      where: { id: existing.id },
-      data: { deletedAt },
-      select: { id: true, title: true, deletedAt: true },
+    // Already deleted, or another request deleted it first: answer as a repeated delete.
+    const deleted = existing.deletedAt ? existing : await findOwned();
+    if (!deleted?.deletedAt) throw new Error("Recipe not found");
+    return json({
+      deleted: false,
+      recipe: formatDeletedRecipe({ ...deleted, deletedAt: deleted.deletedAt }),
     });
-
-    return json({ deleted: true, recipe: formatDeletedRecipe({ ...recipe, deletedAt }) });
   },
 };
 
