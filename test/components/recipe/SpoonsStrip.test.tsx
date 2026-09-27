@@ -1,7 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
-import { BrowserRouter } from "react-router";
+import { describe, expect, it, vi } from "vitest";
+import { BrowserRouter, MemoryRouter } from "react-router";
+import { renderToString } from "react-dom/server";
+import { hydrateRoot } from "react-dom/client";
 import {
   SpoonsStrip,
   type SpoonsStripItem,
@@ -258,5 +260,55 @@ describe("SpoonsStrip", () => {
       />,
     );
     expect(screen.queryByRole("link", { name: /lentil soup/i })).toBeNull();
+  });
+
+  it("renders each cook's time relative to the given now, in a <time> carrying the exact instant", () => {
+    const cookedAt = "2025-05-01T12:00:00.000Z";
+    const now = Date.parse("2025-05-01T15:00:30Z");
+    renderWithRouter(
+      <>
+        <SpoonsStrip spoons={[makeSpoon({ id: "full", cookedAt, note: "full row" })]} now={now} />
+        <SpoonsStrip
+          spoons={[makeSpoon({ id: "compact", cookedAt, recipe: { id: "r1", title: "Lentil Soup", chefId: "u1" } })]}
+          showRecipe
+          now={now}
+        />
+      </>,
+    );
+    const times = document.querySelectorAll("time");
+    // One in the full row; the compact row has one for phones and one for wider screens.
+    expect(times).toHaveLength(3);
+    for (const time of times) {
+      expect(time).toHaveTextContent("3 hr ago");
+      expect(time).toHaveAttribute("datetime", cookedAt);
+    }
+  });
+
+  it("renders the same text on the server and when the browser hydrates it a minute later", async () => {
+    // A cook's relative time used to read the clock during render, so the server and the
+    // hydrating browser disagreed whenever the label changed in between ("just now" became
+    // "1 min ago") and React reported a hydration mismatch.
+    const renderedAt = Date.parse("2025-05-01T12:00:10Z");
+    const ui = (
+      <MemoryRouter>
+        <SpoonsStrip spoons={[makeSpoon({ id: "s1", cookedAt: "2025-05-01T12:00:00.000Z" })]} now={renderedAt} />
+      </MemoryRouter>
+    );
+    const clock = vi.spyOn(Date, "now").mockReturnValue(renderedAt);
+    const container = document.createElement("div");
+    container.innerHTML = renderToString(ui);
+    document.body.appendChild(container);
+    clock.mockReturnValue(renderedAt + 60_000);
+    const onRecoverableError = vi.fn();
+    try {
+      await act(async () => {
+        hydrateRoot(container, ui, { onRecoverableError });
+      });
+      expect(onRecoverableError).not.toHaveBeenCalled();
+      expect(container.querySelector("time")).toHaveTextContent("just now");
+    } finally {
+      clock.mockRestore();
+      container.remove();
+    }
   });
 });

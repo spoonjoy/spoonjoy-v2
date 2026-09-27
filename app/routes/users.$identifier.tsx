@@ -224,6 +224,9 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     recipes: recipesWithCover,
     cookbooks: cookbooksWithCover,
     recentSpoons,
+    // What the recent cooks' relative times ("3 hr ago") are measured from, so the server's
+    // render and the browser's hydration agree.
+    renderedAt: Date.now(),
     fellowChefsCount,
     kitchenVisitorsCount,
   };
@@ -236,6 +239,7 @@ export default function UserProfile() {
     recipes,
     cookbooks,
     recentSpoons = EMPTY_SPOONS,
+    renderedAt,
     fellowChefsCount = 0,
     kitchenVisitorsCount = 0,
   } = useLoaderData<typeof loader>();
@@ -344,7 +348,7 @@ export default function UserProfile() {
 
         <SettingsPanel title="Recent cooks">
           <div className="mt-4">
-            <SpoonsStrip spoons={recentSpoons} showRecipe />
+            <SpoonsStrip spoons={recentSpoons} showRecipe now={renderedAt} />
           </div>
         </SettingsPanel>
 
