@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { formatRelativeTime } from "~/lib/time";
+import { formatRelativeTime, formatUtcCalendarDate } from "~/lib/time";
+import { withTimeZone } from "../helpers/timezone";
 
 const NOW = new Date("2026-05-11T12:00:00Z").getTime();
 
@@ -77,5 +78,17 @@ describe("formatRelativeTime", () => {
   it("defaults `now` to Date.now() when omitted", () => {
     const result = formatRelativeTime(new Date(Date.now() - 1_000));
     expect(result).toBe("just now");
+  });
+});
+
+describe("formatUtcCalendarDate", () => {
+  it("formats the UTC calendar date in en-US whatever the process's timezone", async () => {
+    // 20:00 UTC on 1 June is already 2 June in Kiritimati (UTC+14) and still 1 June in Los Angeles.
+    await withTimeZone("Pacific/Kiritimati", () => {
+      expect(formatUtcCalendarDate(new Date("2026-06-01T20:00:00Z"))).toBe("Jun 1, 2026");
+    });
+    await withTimeZone("America/Los_Angeles", () => {
+      expect(formatUtcCalendarDate("2026-06-01T20:00:00.000Z")).toBe("Jun 1, 2026");
+    });
   });
 });

@@ -10,6 +10,7 @@ import {
   createDrawerUser,
   sessionHeaders,
 } from "./kitchen-drawer-test-utils";
+import { withTimeZone } from "../helpers/timezone";
 
 describe("Chefs drawer route", () => {
   beforeEach(async () => {
@@ -299,6 +300,34 @@ describe("Chefs drawer route", () => {
     expect(screen.getByText("In your kitchen")).toBeInTheDocument();
     expect(screen.getByText("From your kitchen")).toBeInTheDocument();
     expect(screen.getByText("chef-mina cooked your soup.")).toBeInTheDocument();
+  });
+
+  it("renders each chef's latest activity date the same way on the server and in any browser", async () => {
+    // Formatted with the runtime's default locale and timezone, the Worker (en-US, UTC) and a
+    // browser elsewhere render different text and React reports a hydration mismatch (ui-map bug
+    // 15). 20:00 UTC on 1 June is already 2 June in Kiritimati (UTC+14).
+    const Stub = createTestRoutesStub([
+      {
+        path: "/chefs",
+        Component: Chefs,
+        loader: () => ({
+          viewer: { id: "viewer", username: "viewer", photoUrl: null },
+          fellowChefs: {
+            total: 1,
+            rows: [{ chefId: "chef-1", username: "chef-rosa", latestInteractionAt: new Date("2026-06-01T20:00:00Z") }],
+          },
+          chefsUsingMyRecipes: { total: 0, rows: [] },
+          activity: [],
+        }),
+      },
+    ]);
+
+    await withTimeZone("Pacific/Kiritimati", async () => {
+      render(<Stub initialEntries={["/chefs"]} />);
+      const row = await screen.findByRole("link", { name: /chef-rosa/i });
+      expect(row).toHaveTextContent("Latest activity Jun 1, 2026");
+      expect(row.querySelector("time")).toHaveAttribute("datetime", "2026-06-01T20:00:00.000Z");
+    });
   });
 
   it("renders empty chef sections and activity guidance", async () => {

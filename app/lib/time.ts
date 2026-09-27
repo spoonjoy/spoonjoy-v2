@@ -50,3 +50,18 @@ export function formatRelativeTime(
   const years = Math.floor(days / 365);
   return `${years} ${years === 1 ? "year" : "years"} ago`;
 }
+
+/**
+ * A calendar date as "Jun 1, 2026", always in en-US and in UTC. Rendered markup has to come out
+ * the same on the server (a Worker: en-US, UTC) and in the browser that hydrates it; a date
+ * formatted with the runtime's default locale or timezone differs between the two for most
+ * viewers, and React reports a hydration mismatch.
+ */
+export function formatUtcCalendarDate(input: Date | string): string {
+  return new Date(input).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
