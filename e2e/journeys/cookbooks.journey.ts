@@ -50,7 +50,7 @@ test.describe("Cookbooks", () => {
   // file, which `playwright test --list` must not need.
   test.use({ storageState: scratchStorageStatePath(2) });
 
-  test("a recipe saved from its page is listed in the cookbook, and removing it empties the cookbook @mutates", async ({ page, isMobile, verifyAfterReload, expectAccessible }) => {
+  test("a recipe saved from its page is listed in the cookbook, and removing it empties the cookbook @mutates", async ({ page, isMobile, verifyAfterReload, expectAccessible, expectConsoleError }) => {
     const title = `Journey shelf ${uniqueSuffix()}`;
     const main = page.getByRole("main");
 
@@ -86,6 +86,18 @@ test.describe("Cookbooks", () => {
     await saveButton.click();
     await expect(saveDialog).toBeVisible();
     await expect(cookbookToggle).toHaveAttribute("aria-pressed", "false");
+
+    // "Create & Save" with a title this user already has is refused inside the dialog instead of
+    // crashing the page. Browsers log that request's 400 as a console error even though the
+    // dialog handles it.
+    expectConsoleError(/Failed to load resource: the server responded with a status of 400/, {
+      url: /\/recipes\/qa-kitchen-recipe-salmon\.data$/,
+    });
+    await saveDialog.getByRole("textbox", { name: "Create new cookbook", exact: true }).fill(title);
+    await saveDialog.getByRole("button", { name: "Create & Save", exact: true }).click();
+    await expect(saveDialog.getByRole("alert")).toHaveText("You already have a cookbook with this title");
+    await expect(cookbookToggle).toHaveAttribute("aria-pressed", "false");
+
     // The toggle flips optimistically, so wait for the save itself before leaving the page.
     const saved = page.waitForResponse(
       (response) => new URL(response.url()).pathname === `${SALMON}.data` && response.request().method() === "POST",
