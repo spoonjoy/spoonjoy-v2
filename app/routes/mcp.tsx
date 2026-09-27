@@ -325,8 +325,13 @@ export default function McpPage() {
             </CodeBlock>
           </div>
 
-          <aside className="border-y border-[var(--sj-border-strong)] py-6">
-            <h2 className="font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">Auth Discovery</h2>
+          {/* A <section aria-labelledby>, not <aside>: root.tsx already wraps every route in a
+              <main> landmark, so a complementary landmark here would nest inside it and fail
+              landmark-complementary-is-top-level. This still names its own topic (distinct
+              from the Claude Code setup beside it), so it keeps a labelled region instead of
+              dropping to a plain <div>. */}
+          <section aria-labelledby="mcp-auth-discovery-heading" className="border-y border-[var(--sj-border-strong)] py-6">
+            <h2 id="mcp-auth-discovery-heading" className="font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">Auth Discovery</h2>
             <p className="mt-2 text-sm/6 text-[var(--sj-ink-soft)]">
               OAuth-ready MCP agents learn where to authorize from Spoonjoy's protected-resource metadata.
             </p>
@@ -341,7 +346,7 @@ export default function McpPage() {
                 {protectedResourceMetadataUrl}
               </p>
             </div>
-          </aside>
+          </section>
         </section>
       </div>
     </CookbookPage>

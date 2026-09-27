@@ -6,6 +6,7 @@ import {
   asCompatibleCookbookD1Database,
   createCookbookWithRecipe,
   deleteCookbookWithTombstone,
+  isCookbookTitleUniqueConflict,
   removeRecipeFromCookbook,
   type CompatibleCookbookD1Database,
 } from "~/lib/cookbook-membership-compat.server";
@@ -54,6 +55,32 @@ function databaseStub() {
   } as unknown as PrismaClient;
   return { database, transactionClient };
 }
+
+describe("isCookbookTitleUniqueConflict", () => {
+  it("recognizes a duplicate cookbook title from local Prisma and from native D1", () => {
+    expect(isCookbookTitleUniqueConflict({ code: "P2002", meta: { target: ["authorId", "title"] } })).toBe(true);
+    expect(isCookbookTitleUniqueConflict(
+      new Error("D1_ERROR: UNIQUE constraint failed: Cookbook.authorId, Cookbook.title: SQLITE_CONSTRAINT"),
+    )).toBe(true);
+    expect(isCookbookTitleUniqueConflict(new Error("UNIQUE constraint failed: Cookbook.authorId, Cookbook.title"))).toBe(true);
+  });
+
+  it("ignores other failures", () => {
+    expect(isCookbookTitleUniqueConflict(null)).toBe(false);
+    expect(isCookbookTitleUniqueConflict("UNIQUE constraint failed: Cookbook.authorId, Cookbook.title")).toBe(false);
+    expect(isCookbookTitleUniqueConflict({ code: "P2002", meta: { target: ["cookbookId", "recipeId"] } })).toBe(false);
+    expect(isCookbookTitleUniqueConflict({ code: "P2002", meta: { target: ["authorId", "title", "extra"] } })).toBe(false);
+    expect(isCookbookTitleUniqueConflict({ code: "P2002", meta: null })).toBe(false);
+    expect(isCookbookTitleUniqueConflict({ code: "P2003", meta: { target: ["authorId", "title"] } })).toBe(false);
+    expect(isCookbookTitleUniqueConflict(new Error("UNIQUE constraint failed: Cookbook.authorId, Cookbook.titleSlug"))).toBe(false);
+    expect(isCookbookTitleUniqueConflict(
+      new Error("UNIQUE constraint failed: Cookbook.authorId, Cookbook.title, Cookbook.id"),
+    )).toBe(false);
+    expect(isCookbookTitleUniqueConflict(
+      new Error("UNIQUE constraint failed: RecipeInCookbook.cookbookId, RecipeInCookbook.recipeId"),
+    )).toBe(false);
+  });
+});
 
 describe("cookbook membership compatibility transactions", () => {
   it("recognizes only callable native D1 bindings", () => {

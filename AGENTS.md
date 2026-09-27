@@ -155,6 +155,7 @@ npm run test:coverage # With coverage
 
 ### Disposable Data Hygiene
 - Never leave agent-created recipes, users or cookbooks in QA or production outside the `qa-kitchen` personas. Throwaway users use the `codex-e2e-*` / `codex_e2e_*` naming so cleanup can find them.
+- The native (spoonjoy-apple) Journeys workflow creates its own `codex-native-*` / `codex_native_*` accounts per run; `scripts/cleanup-local-qa-data.mjs` leaves those alone while young so a concurrent native run is never swept mid-flight, then removes an account and everything it owns once it is at least 3 hours old.
 - The `Journeys` workflow runs `pnpm run cleanup:remote:qa:apply` after every run. Never run cleanup with `--apply` against production.
 - `scripts/smoke-live.mjs` cleans its disposable user by default; pass `--keep-smoke-data` only when the human explicitly asks to preserve debugging data, and remove that data before the task is done.
 

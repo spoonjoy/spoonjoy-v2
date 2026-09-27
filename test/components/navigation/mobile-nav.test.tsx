@@ -139,7 +139,7 @@ describe("MobileNav", () => {
       expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
     });
 
-    it("stays out of write-heavy recipe and cookbook forms while allowing recipe detail navigation", () => {
+    it("stays out of write-heavy recipe and cookbook forms while allowing recipe and cookbook detail navigation", () => {
       const { rerender } = render(
         <MemoryRouter initialEntries={["/recipes/new"]}>
           <MobileNav />
@@ -178,7 +178,9 @@ describe("MobileNav", () => {
         </MemoryRouter>,
       );
 
-      expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
+      // R-M3-2: a cookbook's page is not a form, so the dock stays (only /cookbooks/new and
+      // edit forms hide it).
+      expect(screen.getByRole("navigation", { name: "Spoonjoy navigation" })).toBeInTheDocument();
     });
 
     it("stays out of step writing screens", () => {
@@ -305,6 +307,22 @@ describe("MobileNav", () => {
       expect(screen.getByRole("link", { name: /^cookbooks$/i })).toHaveAttribute("aria-current", "page");
       expect(screen.getByRole("link", { name: /create cookbook/i })).toHaveAttribute("href", "/cookbooks/new");
       expect(screen.getByRole("link", { name: /my kitchen/i })).toHaveAttribute("href", "/");
+    });
+
+    it("keeps the cookbooks dock on a cookbook's page, where Cookbooks stays current and leads back to the list", () => {
+      render(
+        <MemoryRouter initialEntries={["/cookbooks/cookbook-1"]}>
+          <MobileNav />
+        </MemoryRouter>,
+      );
+
+      const dock = screen.getByRole("navigation", { name: "Spoonjoy navigation" });
+      const cookbooks = within(dock).getByRole("link", { name: /^cookbooks$/i });
+      expect(cookbooks).toHaveAttribute("href", "/cookbooks");
+      // Like every other section's place item, Cookbooks is current across the whole section.
+      expect(cookbooks).toHaveAttribute("aria-current", "page");
+      expect(within(dock).getByRole("link", { name: /create cookbook/i })).toHaveAttribute("href", "/cookbooks/new");
+      expect(within(dock).getByRole("link", { name: /my kitchen/i })).toHaveAttribute("href", "/");
     });
 
     it("exposes the personal recipe drawers and chefs in route-aware mobile places", () => {

@@ -12,7 +12,7 @@ import {
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { MouseEvent } from "react";
 import { usePostHog } from "@posthog/react";
-import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, X } from "lucide-react";
 import {
   handleRecipeDetailAction,
   loadRecipeDetail,
@@ -23,6 +23,7 @@ import { Dialog, DialogActions, DialogBody, DialogDescription, DialogTitle } fro
 import { Field, Label } from "~/components/ui/fieldset";
 import { Heading } from "~/components/ui/heading";
 import { Input } from "~/components/ui/input";
+import { ValidationError } from "~/components/ui/validation-error";
 import { Link } from "~/components/ui/link";
 import { Text } from "~/components/ui/text";
 import { RecipeHeader } from "~/components/recipe/RecipeHeader";
@@ -568,6 +569,7 @@ export default function RecipeDetail() {
   const [isSpoonDialogOpen, setIsSpoonDialogOpen] = useState(false);
   const [showOwnerTools, setShowOwnerTools] = useState(false);
   const [newCookbookTitle, setNewCookbookTitle] = useState("");
+  const [createCookbookError, setCreateCookbookError] = useState<string | null>(null);
   const saveModalTitleRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -590,6 +592,7 @@ export default function RecipeDetail() {
       return;
     }
 
+    setCreateCookbookError(null);
     setIsSaveModalOpen(true);
   }, [isAuthenticated, loginRedirect]);
 
@@ -826,6 +829,14 @@ export default function RecipeDetail() {
     }
   }, [createCookbookFetcher.data, availableCookbooks, savedCookbookIds]);
 
+  // A refused "Create & Save" (a title the user already has) shows its error under the field.
+  useEffect(() => {
+    const result = createCookbookFetcher.data as { intent?: unknown; error?: unknown } | undefined;
+    if (result?.intent === "createCookbookAndSave" && typeof result.error === "string") {
+      setCreateCookbookError(result.error);
+    }
+  }, [createCookbookFetcher.data]);
+
   const handleToggleCookbookSave = (cookbookId: string) => {
     const isCurrentlySaved = savedCookbookIds.has(cookbookId);
 
@@ -1034,7 +1045,18 @@ export default function RecipeDetail() {
         className="mb-24 max-h-[calc(100dvh-7.5rem)] overflow-hidden !rounded-[var(--sj-radius-surface)] !shadow-[var(--sj-shadow)] pb-[max(0.75rem,env(safe-area-inset-bottom))] data-enter:duration-200 data-enter:ease-out data-leave:duration-150 data-leave:ease-in data-closed:translate-y-4 data-enter:data-closed:translate-y-4 sm:mb-auto sm:max-h-[calc(100dvh-4rem)] sm:data-closed:translate-y-1"
       >
         <div className="flex max-h-full flex-col" data-testid="save-modal">
-          <DialogTitle ref={saveModalTitleRef} tabIndex={-1}>Save to Cookbook</DialogTitle>
+          <div className="flex items-start justify-between gap-3">
+            <DialogTitle ref={saveModalTitleRef} tabIndex={-1}>Save to Cookbook</DialogTitle>
+            {/* Escape and a tap outside also close it; this is the visible, touch-sized way. */}
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={() => setIsSaveModalOpen(false)}
+              className="-mr-2 -mt-2 inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-transparent text-[var(--sj-ink-soft)] hover:text-[var(--sj-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]"
+            >
+              <X className="size-5" aria-hidden="true" />
+            </button>
+          </div>
           <DialogBody
             className="mt-4 min-h-0 flex-1 overflow-y-auto pb-3"
             data-testid="save-modal-body"
@@ -1095,10 +1117,15 @@ export default function RecipeDetail() {
                   type="text"
                   placeholder="Cookbook name"
                   value={newCookbookTitle}
-                  onChange={(event) => setNewCookbookTitle(event.target.value)}
+                  onChange={(event) => {
+                    setNewCookbookTitle(event.target.value);
+                    setCreateCookbookError(null);
+                  }}
+                  invalid={createCookbookError ? true : undefined}
                   data-testid="new-cookbook-input"
                 />
               </Field>
+              <ValidationError error={createCookbookError} />
               <Button
                 type="submit"
                 disabled={newCookbookTitle.trim().length === 0 || createCookbookFetcher.state !== "idle"}
@@ -1271,9 +1298,12 @@ function CookModePanel({
         <header className="flex min-h-20 shrink-0 items-center justify-between gap-4 border-b border-[var(--sj-border)] py-4">
           <div className="min-w-0">
             <p className="sj-eyebrow">Now cooking</p>
-            <p className="font-sj-ui mt-1 truncate text-sm font-semibold text-[var(--sj-ink-soft)]">
+            {/* Cook mode replaces the whole page (see the early return above), so this
+                promotes the recipe title to the page's `h1` instead of adding a second,
+                visually redundant one. */}
+            <h1 className="font-sj-ui mt-1 truncate text-sm font-semibold text-[var(--sj-ink-soft)]">
               {recipeTitle}
-            </p>
+            </h1>
             <p className="font-sj-ui mt-1 text-xs uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
               {recipeProgressLabel}
             </p>
@@ -1311,7 +1341,11 @@ function CookModePanel({
             {step.duration ? <CookModeTimer durationMinutes={step.duration} /> : null}
           </article>
 
-          <aside className="mx-auto flex w-full max-w-[38rem] shrink-0 flex-col justify-between gap-8 border-y border-[var(--sj-border)] py-6 lg:min-h-0 lg:shrink lg:py-8">
+          {/* A <div>, not <aside>: this ingredient checklist and scale selector are core
+              cook-mode controls for the current step, not tangential "complementary"
+              content, and root.tsx always wraps route content in a <main> landmark, so an
+              <aside> here would violate landmark-complementary-is-top-level. */}
+          <div className="mx-auto flex w-full max-w-[38rem] shrink-0 flex-col justify-between gap-8 border-y border-[var(--sj-border)] py-6 lg:min-h-0 lg:shrink lg:py-8">
             <div>
               <div className="flex items-end justify-between gap-4">
                 <div>
@@ -1349,7 +1383,7 @@ function CookModePanel({
             <div className="mx-auto w-full max-w-[24rem]">
               <ScaleSelector value={scaleFactor} onChange={onScaleChange} />
             </div>
-          </aside>
+          </div>
         </div>
 
         <footer className="z-10 shrink-0 border-t border-[var(--sj-border)] bg-[var(--sj-page)] py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">

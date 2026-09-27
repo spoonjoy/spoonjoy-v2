@@ -9,10 +9,13 @@ import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
-import { shareContent } from "~/components/navigation";
+import { data as routerData } from "react-router";
+import { shareContent, useDockSuppressed } from "~/components/navigation";
+import { ToastProvider } from "~/components/ui/toast";
 
 vi.mock("~/components/navigation", () => ({
   shareContent: vi.fn(async () => ({ success: true, method: "native" })),
+  useDockSuppressed: vi.fn(),
 }));
 
 // Helper to extract data from React Router's data() response
@@ -87,6 +90,7 @@ describe("Cookbooks $id Route", () => {
 
   beforeEach(async () => {
     vi.mocked(shareContent).mockClear();
+    vi.mocked(useDockSuppressed).mockClear();
     await cleanupDatabase();
     const email = faker.internet.email();
     const username = faker.internet.username() + "_" + faker.string.alphanumeric(8);
@@ -310,7 +314,7 @@ describe("Cookbooks $id Route", () => {
       } as any);
 
       const { data } = extractResponseData(response);
-      expect(data.success).toBe(true);
+      expect(data).toEqual({ success: true, intent: "updateTitle" });
 
       // Verify title was updated
       const cookbook = await db.cookbook.findUnique({ where: { id: cookbookId } });
@@ -331,7 +335,7 @@ describe("Cookbooks $id Route", () => {
 
       const { data, status } = extractResponseData(response);
       expect(status).toBe(400);
-      expect(data.error).toBe("Title is required");
+      expect(data).toEqual({ error: "Title is required", intent: "updateTitle" });
     });
 
     it("should return error when updating to duplicate title", async () => {
@@ -358,7 +362,7 @@ describe("Cookbooks $id Route", () => {
 
       const { data, status } = extractResponseData(response);
       expect(status).toBe(400);
-      expect(data.error).toBe("You already have a cookbook with this title");
+      expect(data).toEqual({ error: "You already have a cookbook with this title", intent: "updateTitle" });
     });
 
     it("should delete cookbook and redirect", async () => {
@@ -1389,6 +1393,12 @@ describe("Cookbooks $id Route", () => {
       expect(await screen.findByRole("heading", { name: "Recipe Collection", level: 1 })).toBeInTheDocument();
       expect(screen.getAllByText("2 recipes").length).toBeGreaterThan(0);
       expect(within(screen.getByLabelText("Recipe Collection cover photos")).getByText("Editorial photo")).toBeInTheDocument();
+      // The cover art caption repeats the cookbook title visually (still present as text)
+      // but must not add a second heading: the page's h1 already is this title, and a
+      // duplicate/second heading there would appear before the "Recipes" h2 and skip a
+      // level (heading-order).
+      expect(screen.getAllByText("Recipe Collection").length).toBeGreaterThan(1);
+      expect(screen.getAllByRole("heading").map((heading) => heading.tagName)).toEqual(["H1", "H2"]);
       const recipesSection = screen.getByRole("region", { name: "Recipes" });
       expect(within(recipesSection).getByText("Editorial photo")).toBeInTheDocument();
       expect(within(recipesSection).getByRole("link", { name: "Spaghetti" })).toHaveAttribute(
@@ -1404,7 +1414,7 @@ describe("Cookbooks $id Route", () => {
       expect(screen.getByText("4 servings")).toBeInTheDocument();
       expect(screen.queryByText("Serves 4 servings")).not.toBeInTheDocument();
       expect(within(recipesSection).queryByText("COOK")).not.toBeInTheDocument();
-      expect(within(recipesSection).queryByRole("button", { name: "Remove from cookbook" })).not.toBeInTheDocument();
+      expect(within(recipesSection).queryByRole("button", { name: /^Remove .* from cookbook$/ })).not.toBeInTheDocument();
     });
 
     it("should render singular recipe count", async () => {
@@ -1471,7 +1481,8 @@ describe("Cookbooks $id Route", () => {
       await openOwnerTools();
 
       expect(await screen.findByText("Add recipe to cookbook")).toBeInTheDocument();
-      expect(screen.getByRole("combobox")).toBeInTheDocument();
+      // The select is labelled, so assistive tech and journeys can find it by name.
+      expect(screen.getByRole("combobox", { name: "Recipe" })).toBeInTheDocument();
       expect(screen.getByText("Select a recipe...")).toBeInTheDocument();
       expect(screen.getByText("Available Recipe 1")).toBeInTheDocument();
       expect(screen.getByText("Available Recipe 2")).toBeInTheDocument();
@@ -1516,14 +1527,15 @@ describe("Cookbooks $id Route", () => {
       expect(ownerToolsToggle).toHaveAttribute("aria-expanded", "false");
       expect(screen.queryByRole("button", { name: "Edit title" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Delete cookbook" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Remove from cookbook" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Remove Recipe in Book from cookbook" })).not.toBeInTheDocument();
 
       await openOwnerTools();
 
       expect(screen.getByRole("button", { name: "Owner tools Close" })).toHaveAttribute("aria-expanded", "true");
       expect(await screen.findByRole("button", { name: "Edit title" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Delete cookbook" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Remove from cookbook" })).toBeInTheDocument();
+      // Each row's button names its recipe, so rows are told apart by name.
+      expect(screen.getByRole("button", { name: "Remove Recipe in Book from cookbook" })).toBeInTheDocument();
     });
 
     it("should show edit title form when clicking edit title button", async () => {
@@ -1553,8 +1565,8 @@ describe("Cookbooks $id Route", () => {
       const editButton = await screen.findByRole("button", { name: "Edit title" });
       fireEvent.click(editButton);
 
-      // Now editing mode should show input and Save/Cancel buttons
-      expect(screen.getByRole("textbox")).toHaveValue("Original Title");
+      // Now editing mode should show the labelled input and Save/Cancel buttons
+      expect(screen.getByRole("textbox", { name: "Cookbook title" })).toHaveValue("Original Title");
       expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
     });
@@ -1745,7 +1757,7 @@ describe("Cookbooks $id Route", () => {
       await openOwnerTools();
 
       // Click remove button
-      const removeButton = await screen.findByRole("button", { name: "Remove from cookbook" });
+      const removeButton = await screen.findByRole("button", { name: "Remove Recipe to Remove from cookbook" });
       fireEvent.click(removeButton);
 
       // Dialog should be open
@@ -1797,7 +1809,7 @@ describe("Cookbooks $id Route", () => {
       await openOwnerTools();
 
       // Click remove button
-      const removeButton = await screen.findByRole("button", { name: "Remove from cookbook" });
+      const removeButton = await screen.findByRole("button", { name: "Remove Recipe to Keep from cookbook" });
       fireEvent.click(removeButton);
 
       // Click cancel
@@ -1807,6 +1819,109 @@ describe("Cookbooks $id Route", () => {
       // Dialog should close (may need to wait for animation)
       await waitFor(() => {
         expect(screen.queryByText("Remove from cookbook?")).not.toBeInTheDocument();
+      });
+    });
+
+    describe("renaming", () => {
+      const renameData = {
+        cookbook: {
+          id: "cookbook-1",
+          title: "Original Title",
+          author: { id: "user-1", username: "testchef" },
+          recipes: [],
+        },
+        isOwner: true,
+        availableRecipes: [],
+      };
+
+      function renderRenameStub(action: (args: { request: Request }) => unknown) {
+        const Stub = createTestRoutesStub([
+          {
+            path: "/cookbooks/:id",
+            Component: CookbookDetail,
+            loader: () => renameData,
+            action: action as never,
+          },
+        ]);
+
+        render(
+          <ToastProvider>
+            <Stub initialEntries={["/cookbooks/cookbook-1"]} />
+          </ToastProvider>,
+        );
+      }
+
+      async function openTitleEditor() {
+        await openOwnerTools();
+        fireEvent.click(await screen.findByRole("button", { name: "Edit title" }));
+        return screen.getByRole("textbox", { name: "Cookbook title" });
+      }
+
+      it("hides the dock only while the title editor is open", async () => {
+        renderRenameStub(() => null);
+
+        await screen.findByRole("heading", { name: "Original Title", level: 1 });
+        expect(useDockSuppressed).toHaveBeenLastCalledWith(false);
+
+        await openTitleEditor();
+        expect(useDockSuppressed).toHaveBeenLastCalledWith(true);
+
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+        expect(useDockSuppressed).toHaveBeenLastCalledWith(false);
+      });
+
+      it("closes the editor and confirms after a successful rename (R-M3-3)", async () => {
+        const submitted: Array<string | null> = [];
+        renderRenameStub(async ({ request }) => {
+          const formData = await request.formData();
+          submitted.push(formData.get("title")?.toString() ?? null);
+          return { success: true, intent: "updateTitle" };
+        });
+
+        const input = await openTitleEditor();
+        fireEvent.change(input, { target: { value: "Renamed Title" } });
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+        expect(await screen.findByRole("status")).toHaveTextContent("Cookbook renamed.");
+        expect(screen.queryByRole("textbox", { name: "Cookbook title" })).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Edit title" })).toBeInTheDocument();
+        expect(submitted).toEqual(["Renamed Title"]);
+        expect(useDockSuppressed).toHaveBeenLastCalledWith(false);
+      });
+
+      it("shows a failed rename's error and keeps the editor open, then clears it when reopened", async () => {
+        renderRenameStub(() =>
+          routerData({ error: "You already have a cookbook with this title", intent: "updateTitle" }, { status: 400 }),
+        );
+
+        const input = await openTitleEditor();
+        fireEvent.change(input, { target: { value: "Taken Title" } });
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+        expect(await screen.findByRole("alert")).toHaveTextContent("You already have a cookbook with this title");
+        expect(screen.getByRole("textbox", { name: "Cookbook title" })).toHaveAttribute("aria-invalid", "true");
+        expect(screen.queryByRole("status")).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: "Edit title" }));
+        expect(screen.getByRole("textbox", { name: "Cookbook title" })).not.toHaveAttribute("aria-invalid");
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      });
+
+      it("ignores other intents' results", async () => {
+        renderRenameStub(() => ({ success: true }));
+
+        const input = await openTitleEditor();
+        fireEvent.change(input, { target: { value: "Renamed Title" } });
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+        await waitFor(() => {
+          expect(screen.getByRole("textbox", { name: "Cookbook title" })).toHaveValue("Renamed Title");
+        });
+        expect(screen.queryByRole("status")).not.toBeInTheDocument();
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
       });
     });
   });

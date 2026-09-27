@@ -1,5 +1,5 @@
 import type { Route } from "./+types/cookbooks.$id";
-import { redirect, useLoaderData, Form, data, useSubmit, type AppLoadContext } from "react-router";
+import { redirect, useLoaderData, useActionData, Form, data, useSubmit, type AppLoadContext } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { getUserId, requireUserId } from "~/lib/session.server";
@@ -12,7 +12,7 @@ import {
   type PostHogServerEnv,
 } from "~/lib/analytics-server";
 import { formatServingsLabel } from "~/lib/quantity";
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { absoluteUrlFromRequest, cookbookOgPath } from "~/lib/og-image.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 
@@ -73,10 +73,13 @@ import { Text, Strong } from "~/components/ui/text";
 import { Link } from "~/components/ui/link";
 import { Input } from "~/components/ui/input";
 import { Select } from "~/components/ui/select";
+import { Field, Label } from "~/components/ui/fieldset";
+import { ValidationError } from "~/components/ui/validation-error";
+import { useToast } from "~/components/ui/toast";
 import { CookbookPage, CookbookHeader, RuledEmptyState } from "~/components/cookbook/page";
 import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
-import { shareContent } from "~/components/navigation";
+import { shareContent, useDockSuppressed } from "~/components/navigation";
 import {
   addRecipeToCookbook,
   asCompatibleCookbookD1Database,
@@ -246,20 +249,25 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     throw new Response("Unauthorized", { status: 403 });
   }
 
+  // Rename results carry their intent so the page can tell them from add/remove results: it
+  // closes the title editor on success and shows the error in the editor on failure.
   if (intent === "updateTitle") {
     const title = formData.get("title")?.toString() || "";
     if (!title.trim()) {
-      return data({ error: "Title is required" }, { status: 400 });
+      return data({ error: "Title is required", intent: "updateTitle" }, { status: 400 });
     }
     try {
       await database.cookbook.update({
         where: { id },
         data: { title: title.trim() },
       });
-      return data({ success: true });
+      return data({ success: true, intent: "updateTitle" });
     } catch (error: any) {
       if (error.code === "P2002") {
-        return data({ error: "You already have a cookbook with this title" }, { status: 400 });
+        return data(
+          { error: "You already have a cookbook with this title", intent: "updateTitle" },
+          { status: 400 },
+        );
       }
       captureCookbookActionFailure(request, context, userId, "updateTitle", error);
       throw error;
@@ -359,8 +367,16 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   return null;
 }
 
+interface CookbookActionData {
+  intent?: string;
+  success?: boolean;
+  error?: unknown;
+}
+
 export default function CookbookDetail() {
   const { cookbook, isOwner, availableRecipes, canonicalUrl } = useLoaderData<typeof loader>();
+  const actionData = useActionData() as CookbookActionData | null | undefined;
+  const { showToast } = useToast();
   const recipeImages = cookbook.recipes.map((item) => ({
     coverImageUrl: item.recipe.coverImageUrl,
     title: item.recipe.title,
@@ -370,8 +386,35 @@ export default function CookbookDetail() {
   const [showOwnerTools, setShowOwnerTools] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [recipeToRemove, setRecipeToRemove] = useState<string | null>(null);
+  const [titleError, setTitleError] = useState<string | null>(null);
   const submit = useSubmit();
   const deleteFormRef = useRef<HTMLFormElement>(null);
+  // The title editor is a form, so it hides the dock like other edit forms (R-M3-2).
+  useDockSuppressed(isEditingTitle);
+
+  // A rename either closes the editor with a short confirmation (R-M3-3) or keeps it open with
+  // the error. Each submission yields a new actionData object, so this runs once per result.
+  useEffect(() => {
+    if (actionData?.intent !== "updateTitle") return;
+    if (typeof actionData.error === "string") {
+      setTitleError(actionData.error);
+      return;
+    }
+    setTitleError(null);
+    setIsEditingTitle(false);
+    showToast({ message: "Cookbook renamed." });
+  }, [actionData, showToast]);
+
+  const openTitleEditor = () => {
+    setTitleError(null);
+    setIsEditingTitle(true);
+  };
+
+  const closeTitleEditor = () => {
+    setTitleError(null);
+    setIsEditingTitle(false);
+  };
+
   const handleShare = async () => {
     await shareContent({
       title: cookbook.title,
@@ -413,6 +456,10 @@ export default function CookbookDetail() {
             recipeCount={cookbook.recipes.length}
             recipeImages={recipeImages}
             className="mx-auto w-full max-w-56 lg:max-w-none"
+            // The page's own <h1> (in CookbookHeader, just above) already is this exact
+            // title, and it renders before the "Recipes" <h2> below — a second <h3> here
+            // would skip past that <h2> and trip heading-order.
+            titleAsHeading={false}
           />
         </div>
 
@@ -514,7 +561,7 @@ export default function CookbookDetail() {
                   </div>
                   <div className="flex flex-wrap gap-2 sm:justify-end">
                     <Button
-                      onClick={() => setIsEditingTitle(true)}
+                      onClick={openTitleEditor}
                       plain
                       className="text-sm"
                     >
@@ -535,27 +582,34 @@ export default function CookbookDetail() {
                 </div>
 
                 {isEditingTitle ? (
-                  <Form method="post" className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
-                    <input type="hidden" name="intent" value="updateTitle" />
-                    <Input
-                      type="text"
-                      name="title"
-                      defaultValue={cookbook.title}
-                      required
-                      autoFocus
-                      className="[&_input]:text-2xl [&_input]:font-bold"
-                    />
-                    <Button type="submit">
-                      Save
-                    </Button>
-                    <Button
-                      type="button"
-                      plain
-                      onClick={() => setIsEditingTitle(false)}
-                    >
-                      Cancel
-                    </Button>
-                  </Form>
+                  <div className="mt-5">
+                    <Form method="post" className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                      <input type="hidden" name="intent" value="updateTitle" />
+                      <Field className="min-w-0 flex-1">
+                        <Label>Cookbook title</Label>
+                        <Input
+                          type="text"
+                          name="title"
+                          defaultValue={cookbook.title}
+                          required
+                          autoFocus
+                          invalid={titleError ? true : undefined}
+                          className="[&_input]:text-2xl [&_input]:font-bold"
+                        />
+                      </Field>
+                      <Button type="submit">
+                        Save
+                      </Button>
+                      <Button
+                        type="button"
+                        plain
+                        onClick={closeTitleEditor}
+                      >
+                        Cancel
+                      </Button>
+                    </Form>
+                    <ValidationError error={titleError} className="mt-3" />
+                  </div>
                 ) : null}
 
                 {availableRecipes.length > 0 ? (
@@ -563,19 +617,21 @@ export default function CookbookDetail() {
                     <h3 className="font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">Add recipe to cookbook</h3>
                     <Form method="post" className="mt-3 flex flex-col gap-4 sm:flex-row">
                       <input type="hidden" name="intent" value="addRecipe" />
-                      <Select
-                        name="recipeId"
-                        required
-                        className="flex-1"
-                      >
-                        <option value="">Select a recipe...</option>
-                        {availableRecipes.map((recipe) => (
-                          <option key={recipe.id} value={recipe.id}>
-                            {recipe.title}
-                          </option>
-                        ))}
-                      </Select>
-                      <Button type="submit">
+                      <Field className="min-w-0 flex-1">
+                        <Label>Recipe</Label>
+                        <Select
+                          name="recipeId"
+                          required
+                        >
+                          <option value="">Select a recipe...</option>
+                          {availableRecipes.map((recipe) => (
+                            <option key={recipe.id} value={recipe.id}>
+                              {recipe.title}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Button type="submit" className="sm:self-end">
                         Add recipe
                       </Button>
                     </Form>
@@ -593,7 +649,7 @@ export default function CookbookDetail() {
                             type="button"
                             variant="destructive"
                             className="w-full text-sm sm:w-auto"
-                            aria-label="Remove from cookbook"
+                            aria-label={`Remove ${item.recipe.title} from cookbook`}
                             onClick={() => setRecipeToRemove(item.id)}
                           >
                             Remove

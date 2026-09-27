@@ -47,5 +47,10 @@ describe("/mcp landing page", () => {
       "/.well-known/oauth-protected-resource/mcp",
     );
     expect(screen.getByRole("link", { name: /developer platform/i })).toHaveAttribute("href", "/api");
+    // "Auth Discovery" is a labelled region, not an <aside>: root.tsx already wraps every
+    // route in a <main> landmark, so a complementary landmark here would nest inside it and
+    // fail landmark-complementary-is-top-level.
+    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Auth Discovery" })).toBeInTheDocument();
   });
 });

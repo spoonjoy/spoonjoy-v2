@@ -63,28 +63,173 @@ describe("cleanup-local-qa-data", () => {
     expect(sql).toContain("email LIKE 'e2e-passkey-%'");
     expect(sql).toContain("instr(username, 'codex_') = 1");
     expect(sql).toContain("instr(username, 'e2e_passkey_') = 1");
-    expect(sql).toContain("email LIKE 'codex-%' AND instr(username, 'codex_') = 1");
+    expect(sql).toContain(
+      "email LIKE 'codex-%' AND instr(username, 'codex_') = 1 AND instr(email, 'codex-native-') != 1",
+    );
     expect(sql).not.toContain("username LIKE 'codex_%'");
     expect(sql).not.toContain("username LIKE 'e2e_passkey_%'");
     expect(sql).not.toContain("lower(coalesce(note,''))");
     expect(sql).not.toContain("OAuthClient");
+    expect(sql).toContain("'stale native journey users' AS item");
   });
 
   it("requires coupled literal email and username markers for generated disposable users", () => {
     const db = new DatabaseSync(":memory:");
     db.exec(`
-      CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL);
-      INSERT INTO User VALUES
-        ('real-lookalike', 'person@example.com', 'codexXvictim'),
-        ('email-only', 'codex-run@example.com', 'ordinary_user'),
-        ('username-only', 'person2@example.com', 'codex_generated'),
-        ('codex-disposable', 'codex-run@example.com', 'codex_generated'),
-        ('passkey-disposable', 'e2e-passkey-run@example.com', 'e2e_passkey_generated');
+      CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, createdAt);
+      INSERT INTO User (id, email, username, createdAt) VALUES
+        ('real-lookalike', 'person@example.com', 'codexXvictim', datetime('now')),
+        ('email-only', 'codex-run@example.com', 'ordinary_user', datetime('now')),
+        ('username-only', 'person2@example.com', 'codex_generated', datetime('now')),
+        ('codex-disposable', 'codex-run@example.com', 'codex_generated', datetime('now')),
+        ('passkey-disposable', 'e2e-passkey-run@example.com', 'e2e_passkey_generated', datetime('now'));
     `);
 
     const rows = db.prepare(`SELECT id FROM User WHERE ${cleanup.DISPOSABLE_USER_WHERE} ORDER BY id`).all();
 
     expect(rows).toEqual([{ id: "codex-disposable" }, { id: "passkey-disposable" }]);
+  });
+
+  it("sweeps codex-native users only after 3 hours, in every createdAt storage form", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec(`
+      CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, createdAt);
+      INSERT INTO User (id, email, username, createdAt) VALUES
+        ('stale-datetime-text', 'codex-native-r1-1@example.com', 'codex_native_r1_1', datetime('now', '-4 hours')),
+        ('stale-iso-text', 'codex-native-r1-2@example.com', 'codex_native_r1_2', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-4 hours')),
+        ('stale-epoch-ms-integer', 'codex-native-r1-3@example.com', 'codex_native_r1_3', (unixepoch('now', '-4 hours') * 1000)),
+        ('young-datetime-text', 'codex-native-r1-4@example.com', 'codex_native_r1_4', datetime('now', '-2 hours')),
+        ('young-iso-text', 'codex-native-r1-5@example.com', 'codex_native_r1_5', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-2 hours')),
+        ('young-epoch-ms-integer', 'codex-native-r1-6@example.com', 'codex_native_r1_6', (unixepoch('now', '-2 hours') * 1000)),
+        ('unparseable-created-at', 'codex-native-r1-7@example.com', 'codex_native_r1_7', 'not a date');
+    `);
+
+    const rows = db.prepare(`SELECT id FROM User WHERE ${cleanup.DISPOSABLE_USER_WHERE} ORDER BY id`).all();
+
+    expect(rows).toEqual([
+      { id: "stale-datetime-text" },
+      { id: "stale-epoch-ms-integer" },
+      { id: "stale-iso-text" },
+    ]);
+  });
+
+  it("sweeps a stale account and keeps a young one in the real @prisma/adapter-d1 createdAt format", () => {
+    // @prisma/adapter-d1 serializes every bound Date as `arg.toISOString().replace("Z", "+00:00")`
+    // (node_modules/.pnpm/@prisma+adapter-d1@6.19.2.../dist/index.js), so every real
+    // `codex-native-*` account's createdAt is stored as e.g. '2026-09-27T12:34:56.789+00:00' --
+    // never the space-separated CURRENT_TIMESTAMP form, the 'Z'-suffixed form, or an integer.
+    // This is the one storage form that actually matters for correctness.
+    const db = new DatabaseSync(":memory:");
+    db.exec(`
+      CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, createdAt);
+      INSERT INTO User (id, email, username, createdAt) VALUES
+        (
+          'stale-prisma-d1-offset',
+          'codex-native-r2-1@example.com',
+          'codex_native_r2_1',
+          replace(strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-4 hours'), 'Z', '+00:00')
+        ),
+        (
+          'young-prisma-d1-offset',
+          'codex-native-r2-2@example.com',
+          'codex_native_r2_2',
+          replace(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 'Z', '+00:00')
+        );
+    `);
+
+    const sample = db.prepare("SELECT createdAt FROM User WHERE id = 'stale-prisma-d1-offset'").get() as {
+      createdAt: string;
+    };
+    expect(sample.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}\+00:00$/);
+
+    const rows = db.prepare(`SELECT id FROM User WHERE ${cleanup.DISPOSABLE_USER_WHERE} ORDER BY id`).all();
+
+    expect(rows).toEqual([{ id: "stale-prisma-d1-offset" }]);
+  });
+
+  it("treats exactly 3 hours old as stale and one second short of 3 hours as young", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec(`
+      CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, createdAt);
+      INSERT INTO User (id, email, username, createdAt) VALUES
+        ('exactly-3h00m00s-old', 'codex-native-r3-1@example.com', 'codex_native_r3_1', datetime('now', '-10800 seconds')),
+        ('exactly-2h59m59s-old', 'codex-native-r3-2@example.com', 'codex_native_r3_2', datetime('now', '-10799 seconds'));
+    `);
+
+    const rows = db.prepare(`SELECT id FROM User WHERE ${cleanup.DISPOSABLE_USER_WHERE} ORDER BY id`).all();
+
+    expect(rows).toEqual([{ id: "exactly-3h00m00s-old" }]);
+  });
+
+  it("keeps a native account with a future createdAt (clock skew) young, never stale", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec(`
+      CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, createdAt);
+      INSERT INTO User (id, email, username, createdAt) VALUES
+        ('clock-skew-future', 'codex-native-r4-1@example.com', 'codex_native_r4_1', datetime('now', '+1 hour'));
+    `);
+
+    const rows = db.prepare(`SELECT id FROM User WHERE ${cleanup.DISPOSABLE_USER_WHERE} ORDER BY id`).all();
+
+    expect(rows).toEqual([]);
+  });
+
+  it("sweeps a stale account whose createdAt is stored as a REAL-typed epoch-millisecond value", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec(`
+      CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, createdAt);
+      INSERT INTO User (id, email, username, createdAt) VALUES
+        ('stale-epoch-ms-real', 'codex-native-r5-1@example.com', 'codex_native_r5_1', (unixepoch('now', '-4 hours') * 1000.0)),
+        ('young-epoch-ms-real', 'codex-native-r5-2@example.com', 'codex_native_r5_2', (unixepoch('now', '-2 hours') * 1000.0));
+    `);
+
+    const sample = db.prepare("SELECT typeof(createdAt) AS t FROM User WHERE id = 'stale-epoch-ms-real'").get() as {
+      t: string;
+    };
+    expect(sample.t).toBe("real");
+
+    const rows = db.prepare(`SELECT id FROM User WHERE ${cleanup.DISPOSABLE_USER_WHERE} ORDER BY id`).all();
+
+    expect(rows).toEqual([{ id: "stale-epoch-ms-real" }]);
+  });
+
+  it("never sweeps a young codex-native account through the generic codex clause", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec(`
+      CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, createdAt);
+      INSERT INTO User (id, email, username, createdAt) VALUES
+        ('young-native', 'codex-native-r1-1@example.com', 'codex_native_r1_1', datetime('now')),
+        ('young-e2e', 'codex-e2e-s-x@example.com', 'codex_e2e_s_x', datetime('now'));
+    `);
+
+    const rows = db.prepare(`SELECT id FROM User WHERE ${cleanup.DISPOSABLE_USER_WHERE} ORDER BY id`).all();
+
+    expect(rows).toEqual([{ id: "young-e2e" }]);
+  });
+
+  it("requires both native markers for the stale sweep", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec(`
+      CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, createdAt);
+      INSERT INTO User (id, email, username, createdAt) VALUES
+        ('mismatched-username', 'codex-native-r1-1@example.com', 'ordinary', datetime('now', '-4 hours'));
+    `);
+
+    const rows = db.prepare(`SELECT id FROM User WHERE ${cleanup.DISPOSABLE_USER_WHERE} ORDER BY id`).all();
+
+    expect(rows).toEqual([]);
+  });
+
+  it("keeps every LIKE pattern within D1's 50-byte limit", () => {
+    for (const sql of [buildApplySql(), buildDryRunSql(), cleanup.buildQaR2CandidateSql()]) {
+      const likeLiterals = [...sql.matchAll(/LIKE '((?:[^']|'')*)'/g)].map((match) =>
+        match[1].replaceAll("''", "'"),
+      );
+      expect(likeLiterals.length).toBeGreaterThan(0);
+      for (const literal of likeLiterals) {
+        expect(Buffer.byteLength(literal, "utf8")).toBeLessThanOrEqual(50);
+      }
+    }
   });
 
   it("matches only the one retired seed-qa.mjs identity by its exact id and email", () => {
@@ -96,18 +241,18 @@ describe("cleanup-local-qa-data", () => {
 
     const db = new DatabaseSync(":memory:");
     db.exec(`
-      CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL);
-      INSERT INTO User VALUES
-        ('real-lookalike', 'person@example.com', 'sjXqaXdemoXvictim'),
-        ('qa-kitchen-chef', 'qa-kitchen-chef@example.com', 'qa_kitchen_chef'),
+      CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, createdAt);
+      INSERT INTO User (id, email, username, createdAt) VALUES
+        ('real-lookalike', 'person@example.com', 'sjXqaXdemoXvictim', datetime('now')),
+        ('qa-kitchen-chef', 'qa-kitchen-chef@example.com', 'qa_kitchen_chef', datetime('now')),
         -- A real account that happens to share the legacy namespace's username shape must
         -- survive: only the exact retired id+email pair is disposable, not a prefix.
-        ('real-ari', 'ari@example.com', 'sj_qa_demo_ari'),
+        ('real-ari', 'ari@example.com', 'sj_qa_demo_ari', datetime('now')),
         -- Same id, different email: must not match (the retired account never had this email).
-        ('id-only-lookalike', 'someone-else@example.com', 'someone_else'),
+        ('id-only-lookalike', 'someone-else@example.com', 'someone_else', datetime('now')),
         -- Same email, different id: must not match either.
-        ('email-only-lookalike', ${sqlLiteral(legacyEmail)}, 'someone_else'),
-        (${sqlLiteral(legacyId)}, ${sqlLiteral(legacyEmail)}, 'sj_qa_demo_chef');
+        ('email-only-lookalike', ${sqlLiteral(legacyEmail)}, 'someone_else', datetime('now')),
+        (${sqlLiteral(legacyId)}, ${sqlLiteral(legacyEmail)}, 'sj_qa_demo_chef', datetime('now'));
     `);
 
     const rows = db.prepare(`SELECT id FROM User WHERE ${cleanup.DISPOSABLE_USER_WHERE} ORDER BY id`).all();
@@ -1072,6 +1217,45 @@ describe("cleanup-local-qa-data", () => {
 
     expect(sql).toContain("SELECT NULL AS key WHERE 0");
     expect(sql).toContain("FROM SearchDocument");
+  });
+
+  it("still flags a young native user's SearchDocument reference as a blocker even with a codex-titled recipe", () => {
+    // soft_delete_recipes here must exclude native users the same way buildApplySql's and
+    // buildDryRunSql's copies do, or a young native user's still-referenced R2 image could be
+    // deleted out from under them (the recipe row itself would stay, since buildApplySql/
+    // buildDryRunSql correctly exclude it -- but the R2 key backing it would not).
+    const db = new DatabaseSync(":memory:");
+    db.exec(`
+      CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, createdAt);
+      CREATE TABLE Recipe (id TEXT PRIMARY KEY, title TEXT NOT NULL, chefId TEXT NOT NULL);
+      CREATE TABLE RecipeSpoon (id TEXT PRIMARY KEY, chefId TEXT NOT NULL);
+      CREATE TABLE RecipeCover (id TEXT PRIMARY KEY, recipeId TEXT NOT NULL);
+      CREATE TABLE SearchDocument (id TEXT PRIMARY KEY, ownerId TEXT, entityId TEXT, imageUrl TEXT);
+
+      INSERT INTO User (id, email, username, createdAt) VALUES
+        ('young-native-user', 'codex-native-r6-1@example.com', 'codex_native_r6_1', datetime('now'));
+      -- Native recipes are only ever titled 'Journey ...', never 'codex ...'; this title
+      -- deliberately collides with SUSPICIOUS_RECIPE_WHERE to prove the exclusion holds even if
+      -- that naming rule were ever violated (forked recipe, manual QA test, bug).
+      INSERT INTO Recipe (id, title, chefId) VALUES ('young-native-recipe', 'codex young native recipe', 'young-native-user');
+      INSERT INTO SearchDocument (id, ownerId, entityId, imageUrl) VALUES (
+        'young-native-search-doc',
+        'young-native-user',
+        'young-native-recipe',
+        '/photos/recipes/young-native-user/young-native-recipe/cover.jpg'
+      );
+    `);
+
+    const sql = cleanup.buildQaR2SearchReferenceSql(["recipes/young-native-user/young-native-recipe/cover.jpg"]);
+    const rows = db.prepare(sql).all();
+
+    expect(rows).toEqual([
+      {
+        action: "blocker_search_imageUrl",
+        key: "recipes/young-native-user/young-native-recipe/cover.jpg",
+        reason: "SearchDocument.imageUrl still references candidate key",
+      },
+    ]);
   });
 
   it("refuses QA apply before D1 mutation when base tables retain candidate R2 references", async () => {
