@@ -1,5 +1,5 @@
 // Compile-time proof that a Secret can't be typed, asserted or used as a plain string. Nothing
-// calls this; `tsc -p tsconfig.e2e.json` (run by the Journeys workflow) checks it, and every @ts-expect-error below
+// calls this; `tsc -p tsconfig.e2e.json` (part of `pnpm run typecheck`) checks it, and every @ts-expect-error below
 // fails the typecheck if its line ever compiles, for example because Secret became a string.
 import { expect, type Locator, type Page } from "@playwright/test";
 import { Secret } from "./secret";

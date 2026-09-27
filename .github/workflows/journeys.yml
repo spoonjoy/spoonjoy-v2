@@ -139,8 +139,8 @@ jobs:
 
       # Passwords are Secret values that fill() and toHaveValue() don't accept
       # (e2e/journeys/support/secret.ts); this typecheck of every Playwright suite under e2e/ is
-      # what enforces that, before any password reaches QA. It lives here, not in ci.yml, whose
-      # job and step lists are pinned by scripts/deployment-preflight.ts.
+      # what enforces that. pnpm run typecheck (and so ci.yml) runs it too; it runs here as well
+      # so the check happens before any password reaches QA.
       - name: Typecheck the journeys
         run: node scripts/warning-gate.ts -- pnpm exec tsc -p tsconfig.e2e.json
 

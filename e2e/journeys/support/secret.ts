@@ -5,8 +5,9 @@
 // its step 'Fill "<value>"' and, when it fails after finding its element, prints `fill("<value>")`
 // in the call log on the public job log; a failed toHaveValue(expected) prints the expected value.
 // Because a Secret is not a string, `locator.fill(secret)`, `page.fill(selector, secret)`,
-// `locator.type(secret)` and `expect(locator).toHaveValue(secret)` do not typecheck (`tsc -p tsconfig.e2e.json`,
-// which the Journeys workflow runs before it touches QA). Anything that turns a Secret into text by itself (a template literal, String(),
+// `locator.type(secret)` and `expect(locator).toHaveValue(secret)` do not typecheck
+// (`tsc -p tsconfig.e2e.json`, part of `pnpm run typecheck` and also run by the Journeys workflow
+// before it touches QA). Anything that turns a Secret into text by itself (a template literal, String(),
 // JSON.stringify, console.log / util.inspect, an error message, Playwright's serialisation of an
 // evaluate() argument) gets "[redacted]" or an object without the value. `pnpm run check:journeys`
 // (rule secret-boundary) fails any journey or support file other than this one that reads a raw
