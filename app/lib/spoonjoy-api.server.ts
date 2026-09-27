@@ -793,14 +793,25 @@ async function uniqueUsername(db: Database, email: string): Promise<string> {
 }
 
 /**
- * The account for an email, matched case-insensitively as sign-up checks it (the unique index
- * on email is case-sensitive), preferring an exact match. Without this, an account stored with
- * different case would get a second account for the same person.
+ * The account for an owner email (already lowercase). The exact match uses the unique email
+ * index. Only when it misses does a case-insensitive match run, which scans the table: sign-up
+ * checks email case-insensitively, so a legacy account stored with capitals must be found
+ * rather than given a second account. Two legacy accounts that differ only in case are
+ * refused, because picking one would be arbitrary.
  */
 async function findOwnerByEmail(db: Database, email: string) {
+  const exact = await db.user.findUnique({ where: { email } });
+  if (exact) return exact;
+
   const rows = await db.$queryRaw<Array<{ id: string }>>`
-    SELECT id FROM User WHERE LOWER(email) = ${email.toLowerCase()} ORDER BY email = ${email} DESC LIMIT 1
+    SELECT id FROM User WHERE LOWER(email) = ${email} LIMIT 2
   `;
+  if (rows.length > 1) {
+    throw new ApiAuthError(
+      `More than one account uses the email ${email} in different letter case; sign in with an API token for the account to use`,
+      409,
+    );
+  }
   return rows[0] ? db.user.findUnique({ where: { id: rows[0].id } }) : null;
 }
 

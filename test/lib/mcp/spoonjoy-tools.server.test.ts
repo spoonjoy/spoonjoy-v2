@@ -1239,6 +1239,21 @@ describe("spoonjoy MCP tools", () => {
     await expect(authenticateApiToken(context.db, second.token as string)).resolves.toMatchObject({ id: exact.id });
   });
 
+  it("refuses an owner email that two legacy accounts hold in different case, and creates neither", async () => {
+    const email = context.defaultOwnerEmail!;
+    const [local, domain] = email.split("@");
+    for (const variant of [email.toUpperCase(), `${local!.toUpperCase()}@${domain}`]) {
+      await context.db.user.create({
+        data: { email: variant, username: `variant-${faker.string.alphanumeric(8).toLowerCase()}` },
+      });
+    }
+
+    await expect(callSpoonjoyMcpTool("create_api_token", { name: "Ambiguous token" }, context))
+      .rejects.toThrow(`More than one account uses the email ${email} in different letter case`);
+    await expect(context.db.user.count()).resolves.toBe(2);
+    await expect(context.db.apiCredential.count()).resolves.toBe(0);
+  });
+
   it("reports health and writable state", async () => {
     expect(parseJson(await callSpoonjoyMcpTool("health", {}, context))).toMatchObject({
       ok: true,
