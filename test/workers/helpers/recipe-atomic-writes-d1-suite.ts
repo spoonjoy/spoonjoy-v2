@@ -1,6 +1,6 @@
 import { createExecutionContext, env } from "cloudflare:test";
 import type { PrismaClient } from "@prisma/client";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { action as apiV1Action } from "../../../app/routes/api.v1.$";
 import { hashApiToken } from "../../../app/lib/api-auth.server";
@@ -50,6 +50,11 @@ const FAILURE = "recipe_atomic_injected_failure";
 const TRIGGER = "RecipeAtomic_injected_failure";
 const TOKEN = "sj_recipe_atomic_d1_test";
 const ORIGIN = "https://spoonjoy.test";
+const PRISMA_D1_TRANSACTION_WARNING =
+  "prisma:warn Cloudflare D1 does not support transactions yet. When using Prisma's D1 adapter, " +
+  "implicit & explicit transactions will be ignored and run as individual queries, which breaks " +
+  "the guarantees of the ACID properties of transactions. For more details see " +
+  "https://pris.ly/d/d1-transactions";
 
 let prisma: PrismaClient;
 
@@ -574,6 +579,14 @@ describe("atomic recipe writes on Wrangler D1", () => {
     });
 
     it("imports a recipe with its steps and ingredients together, or nothing", async () => {
+      // The import's daily quota step (tryConsumeImageGenQuota, not changed here) runs a Prisma
+      // updateMany that the D1 adapter treats as a transaction, so on Linux Prisma warns once
+      // for the client. The import's recipe writes go to D1 directly, not through Prisma.
+      const importDb = await getDb({ DB: database() });
+      const infos: unknown[][] = [];
+      const info = vi.spyOn(console, "info").mockImplementation((...args: unknown[]) => {
+        infos.push(args);
+      });
       const importIt = () => importRecipeFromSource({
         chefId: CHEF,
         source: {
@@ -588,17 +601,23 @@ describe("atomic recipe writes on Wrangler D1", () => {
           },
         },
       }, {
-        db: prisma,
+        db: importDb,
         env: { DB: database() },
         ingredientParser: async (text) => [{ quantity: 1, unit: "atomic whole", ingredientName: `atomic ${text}` }],
       });
       await failOn("INSERT", "Ingredient", `NEW."ingredientRefId" IN (SELECT "id" FROM "IngredientRef" WHERE "name" = 'atomic lemon')`);
 
-      expect(String(await rejection(importIt()))).toContain(FAILURE);
-      expect(await count(`SELECT COUNT(*) AS "count" FROM "Recipe" WHERE "title" LIKE 'Atomic Imported Rice%'`)).toBe(0);
+      let imported: Awaited<ReturnType<typeof importIt>>;
+      try {
+        expect(String(await rejection(importIt()))).toContain(FAILURE);
+        expect(await count(`SELECT COUNT(*) AS "count" FROM "Recipe" WHERE "title" LIKE 'Atomic Imported Rice%'`)).toBe(0);
 
-      await run(`DROP TRIGGER "${TRIGGER}"`);
-      const imported = await importIt();
+        await run(`DROP TRIGGER "${TRIGGER}"`);
+        imported = await importIt();
+      } finally {
+        info.mockRestore();
+      }
+      expect(infos).toEqual(process.platform === "linux" ? [[PRISMA_D1_TRANSACTION_WARNING]] : []);
       expect(await recipeGraph(imported.recipeId!)).toMatchObject({
         recipe: { title: "Atomic Imported Rice", sourceUrl: "https://example.com/atomic-import" },
         steps: [
