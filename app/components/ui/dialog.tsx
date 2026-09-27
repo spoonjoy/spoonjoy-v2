@@ -40,7 +40,10 @@ export function Dialog({
             className={clsx(
               sizes[size],
               'row-start-2 w-full min-w-0 rounded-t-[var(--sj-radius-surface)] border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-(--gutter) shadow-[var(--sj-shadow)] [--gutter:--spacing(8)] sm:mb-auto sm:rounded-[var(--sj-radius-surface)] forced-colors:outline',
-              'transition will-change-transform data-enter:duration-300 data-enter:ease-out data-leave:duration-200 data-leave:ease-in data-closed:translate-y-8 data-closed:opacity-0 data-enter:data-closed:translate-y-8 data-enter:data-closed:opacity-0 sm:data-closed:translate-y-0 sm:data-closed:scale-95 sm:data-enter:data-closed:translate-y-0 sm:data-enter:data-closed:scale-95 motion-reduce:transition-none motion-reduce:data-closed:translate-y-0',
+              // Entering only fades in place: a panel that slid up moved its buttons under a tap
+              // that landed as it opened, so the tap missed (a cookbook's "Delete it" on iPhone).
+              // Leaving may still slide away, since nothing can be tapped by then.
+              'transition will-change-transform data-enter:duration-300 data-enter:ease-out data-leave:duration-200 data-leave:ease-in data-closed:opacity-0 data-leave:data-closed:translate-y-8 sm:data-leave:data-closed:translate-y-0 sm:data-leave:data-closed:scale-95 motion-reduce:transition-none motion-reduce:data-leave:data-closed:translate-y-0',
               className
             )}
           >
