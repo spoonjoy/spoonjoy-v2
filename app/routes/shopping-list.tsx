@@ -301,7 +301,9 @@ export default function ShoppingList() {
               type="button"
               onClick={() => setViewMode(option.mode)}
               className={[
-                "min-h-11 px-3 transition first:text-left last:text-right",
+                // No colour transition: mid-fade, the label and background pass through
+                // near-identical greys, below readable contrast.
+                "min-h-11 px-3 first:text-left last:text-right",
                 viewMode === option.mode
                   ? "bg-[var(--sj-ink)] text-[var(--sj-paper)]"
                   : "bg-transparent hover:text-[var(--sj-ink)]",

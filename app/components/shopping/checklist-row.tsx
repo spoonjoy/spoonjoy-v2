@@ -89,10 +89,9 @@ export function ChecklistRow({
     </>
   );
 
-  const rowBaseClassName = clsx(
-    "grid min-h-14 items-center gap-3 py-2",
-    checked && "opacity-72",
-  );
+  // A checked row is shown by its soft ink and the strike, not by dimming: soft ink is already at
+  // the edge of WCAG AA on the page, so any opacity on top drops it below 4.5:1.
+  const rowBaseClassName = "grid min-h-14 items-center gap-3 py-2";
   const rowClassName = clsx(rowBaseClassName, "grid-cols-[2rem_minmax(0,1fr)]");
 
   if (onToggle) {
