@@ -11,19 +11,13 @@ import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
 import { useUrlSyncedInput } from "~/hooks/useUrlSyncedInput";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
-import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
-import { searchSpoonjoy } from "~/lib/search.server";
+import { requestD1 } from "~/lib/d1-read.server";
+import {
+  readPublicRecipesFromD1,
+  readPublicRecipesWithPrisma,
+  type PublicRecipe,
+} from "~/lib/collection-reads.server";
 import { formatServingsLabel } from "~/lib/quantity";
-
-type PublicRecipe = {
-  id: string;
-  title: string;
-  description: string | null;
-  servings: string | null;
-  chef: { username: string };
-  coverImageUrl: string | null;
-  coverProvenanceLabel: string | null;
-};
 
 const PUBLIC_RECIPE_LIMIT = 48;
 
@@ -37,50 +31,19 @@ export function meta({}: Route.MetaArgs) {
 export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const query = (url.searchParams.get("q") ?? "").trim();
-  const database = await getRequestDb(context);
   const userId = await getUserId(request, context.cloudflare?.env);
-
-  const recipeIds = query
-    ? (await searchSpoonjoy(database, {
-        query,
-        scope: "recipes",
-        limit: PUBLIC_RECIPE_LIMIT,
-      })).map((result) => result.id)
-    : [];
-
-  const recipes = await database.recipe.findMany({
-    where: {
-      deletedAt: null,
-      ...(query ? { id: { in: recipeIds } } : {}),
-    },
-    include: {
-      chef: { select: { username: true } },
-      covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
-    },
-    orderBy: query ? undefined : { updatedAt: "desc" },
-    take: PUBLIC_RECIPE_LIMIT,
-  });
-
-  const order = new Map(recipeIds.map((id, index) => [id, index]));
-  if (query) {
-    recipes.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
-  }
+  // On the Worker the page reads from D1 in one batch (after the search, when there is a
+  // query); Prisma is only the fallback where there is no binding.
+  const d1 = requestD1(context);
+  const input = { query, limit: PUBLIC_RECIPE_LIMIT };
+  const recipes = d1
+    ? await readPublicRecipesFromD1(d1, input)
+    : await readPublicRecipesWithPrisma(await getRequestDb(context), input);
 
   return {
     query,
     isAuthenticated: Boolean(userId),
-    recipes: recipes.map(({ covers, ...recipe }): PublicRecipe => {
-      const coverDisplay = getRecipeCoverDisplay(recipe, covers);
-      return {
-        id: recipe.id,
-        title: recipe.title,
-        description: recipe.description,
-        servings: recipe.servings,
-        chef: recipe.chef,
-        coverImageUrl: coverDisplay?.displayUrl ?? null,
-        coverProvenanceLabel: coverDisplay?.provenanceLabel ?? null,
-      };
-    }),
+    recipes,
   };
 }
 

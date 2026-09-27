@@ -4,20 +4,14 @@ import { Button } from "~/components/ui/button";
 import { Text } from "~/components/ui/text";
 import { CookbookHeader, CookbookPage, ObjectRow, RuledEmptyState } from "~/components/cookbook/page";
 import { getRequestDb } from "~/lib/route-platform.server";
+import { requestD1 } from "~/lib/d1-read.server";
+import {
+  readSavedRecipesFromD1,
+  readSavedRecipesWithPrisma,
+  type SavedRecipe,
+} from "~/lib/collection-reads.server";
 import { requireUserId } from "~/lib/session.server";
 import { DrawerSearch } from "./my-recipes";
-
-type SavedRecipe = {
-  id: string;
-  title: string;
-  description: string | null;
-  servings: string | null;
-  chef: {
-    id: string;
-    username: string;
-  };
-  savedCookbookTitles: string[];
-};
 
 function normalizedQuery(request: Request) {
   return (new URL(request.url).searchParams.get("q") ?? "").trim();
@@ -45,51 +39,16 @@ export function meta({}: Route.MetaArgs) {
 export async function loader({ request, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const query = normalizedQuery(request);
-  const database = await getRequestDb(context);
-
-  const memberships = await database.recipeInCookbook.findMany({
-    where: {
-      cookbook: { authorId: userId },
-      recipe: { deletedAt: null },
-    },
-    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-    include: {
-      cookbook: {
-        select: { title: true },
-      },
-      recipe: {
-        include: {
-          chef: {
-            select: { id: true, username: true },
-          },
-        },
-      },
-    },
-  });
-
-  const byRecipeId = new Map<string, SavedRecipe>();
-  for (const membership of memberships) {
-    const existing = byRecipeId.get(membership.recipeId);
-    if (existing) {
-      existing.savedCookbookTitles.push(membership.cookbook.title);
-      continue;
-    }
-
-    byRecipeId.set(membership.recipeId, {
-      id: membership.recipe.id,
-      title: membership.recipe.title,
-      description: membership.recipe.description,
-      servings: membership.recipe.servings,
-      chef: membership.recipe.chef,
-      savedCookbookTitles: [membership.cookbook.title],
-    });
-  }
+  // On the Worker the page reads from D1 in one statement; Prisma is only the fallback
+  // where there is no binding.
+  const d1 = requestD1(context);
+  const recipes = d1
+    ? await readSavedRecipesFromD1(d1, userId)
+    : await readSavedRecipesWithPrisma(await getRequestDb(context), userId);
 
   return {
     query,
-    recipes: Array.from(byRecipeId.values()).filter((recipe) =>
-      matchesSavedRecipeQuery(recipe, query),
-    ),
+    recipes: recipes.filter((recipe) => matchesSavedRecipeQuery(recipe, query)),
   };
 }
 
