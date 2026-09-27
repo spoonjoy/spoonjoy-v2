@@ -40,10 +40,19 @@ export const SUSPICIOUS_RECIPE_WHERE = [
   "lower(title) LIKE 'codex-smoke-%'",
 ].join("\n    OR ");
 
+// The retired 'sj-qa-demo' seed namespace (superseded by the 'qa-kitchen' persona scheme; see
+// scripts/seed-qa-kitchen.mjs) left rows behind in QA's D1 that still pollute QA search and
+// recipe lists. Match its accounts by id, username, or email prefix so every row they own is
+// swept through the same FK-safe cascade below. Never matches 'qa-kitchen-%'/'qa_kitchen_%'.
+export const LEGACY_QA_DEMO_ID_PREFIX = "sj-qa-demo-";
+export const LEGACY_QA_DEMO_USERNAME_PREFIX = "sj_qa_demo_";
+export const LEGACY_QA_DEMO_EMAIL_PREFIX = "sj-qa-demo-";
+
 export const DISPOSABLE_USER_WHERE = [
   "id IN ('demo_user_001', 'user_demo', 'user_julia', 'user_marco', 'user_sarah')",
   "(email LIKE 'codex-%' AND instr(username, 'codex_') = 1)",
   "(email LIKE 'e2e-passkey-%' AND instr(username, 'e2e_passkey_') = 1)",
+  `(instr(id, '${LEGACY_QA_DEMO_ID_PREFIX}') = 1 OR instr(username, '${LEGACY_QA_DEMO_USERNAME_PREFIX}') = 1 OR instr(email, '${LEGACY_QA_DEMO_EMAIL_PREFIX}') = 1)`,
 ].join("\n    OR ");
 
 export function photoKeyFromImageUrl(imageUrl) {

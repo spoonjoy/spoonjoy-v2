@@ -83,6 +83,34 @@ describe("cleanup-local-qa-data", () => {
     expect(rows).toEqual([{ id: "codex-disposable" }, { id: "passkey-disposable" }]);
   });
 
+  it("sweeps the retired legacy QA seed namespace by id, username, or email prefix", () => {
+    // Referenced from the script's own exported constants rather than spelled out here, so this
+    // legacy namespace literal appears in exactly the one place the demo-source policy allowlists:
+    // the scripts/cleanup-local-qa-data.mjs cleanup-target-definition it exercises.
+    const legacyIdPrefix = cleanup.LEGACY_QA_DEMO_ID_PREFIX;
+    const legacyUsernamePrefix = cleanup.LEGACY_QA_DEMO_USERNAME_PREFIX;
+    const legacyEmailPrefix = cleanup.LEGACY_QA_DEMO_EMAIL_PREFIX;
+
+    const db = new DatabaseSync(":memory:");
+    db.exec(`
+      CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL);
+      INSERT INTO User VALUES
+        ('real-lookalike', 'person@example.com', 'sjXqaXdemoXvictim'),
+        ('qa-kitchen-chef', 'qa-kitchen-chef@example.com', 'qa_kitchen_chef'),
+        ('${legacyIdPrefix}chef', 'chef@example.com', 'ordinary_chef_username'),
+        ('ordinary-id-1', '${legacyEmailPrefix}friend@example.com', 'ordinary_friend_username'),
+        ('ordinary-id-2', 'newbie@example.com', '${legacyUsernamePrefix}newbie');
+    `);
+
+    const rows = db.prepare(`SELECT id FROM User WHERE ${cleanup.DISPOSABLE_USER_WHERE} ORDER BY id`).all();
+
+    expect(rows).toEqual([
+      { id: "ordinary-id-1" },
+      { id: "ordinary-id-2" },
+      { id: `${legacyIdPrefix}chef` },
+    ]);
+  });
+
   it("soft-deletes recipes and deletes only disposable local support rows on apply", () => {
     const sql = buildApplySql();
 
