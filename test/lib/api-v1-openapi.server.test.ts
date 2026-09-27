@@ -1132,7 +1132,7 @@ describe("API v1 OpenAPI document", () => {
 	      required: ["clientMutationId", "email", "username"],
 	      properties: {
 	        clientMutationId: { type: "string", minLength: 1, maxLength: 160 },
-	        email: { type: "string", format: "email" },
+	        email: { type: "string", format: "email", description: expect.stringContaining("lowercased") },
 	        username: {
 	          type: "string",
 	          minLength: 1,
@@ -1141,8 +1141,10 @@ describe("API v1 OpenAPI document", () => {
 	      },
 	    });
 	    const usernameDescription = components.schemas.UpdateAccountProfileRequest.properties.username.description;
-	    expect(usernameDescription).toContain("Surrounding whitespace is trimmed.");
+	    expect(usernameDescription).toContain("Surrounding whitespace is trimmed;");
 	    expect(usernameDescription).toContain("current username keeps it unchanged");
+	    expect(usernameDescription).toContain("details.fields including \"username\"");
+	    expect(usernameDescription).toContain("equals another account's ID");
 	    expect(components.schemas.UpdateAccountProfileRequest.properties.username).not.toHaveProperty("pattern");
 	    expect(components.schemas.ProfilePhotoUploadRequest).toMatchObject({
 	      additionalProperties: false,
