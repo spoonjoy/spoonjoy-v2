@@ -319,6 +319,9 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
     savedInCookbookIds,
     hasIngredientsInShoppingList,
     spoons,
+    // What the cooks' relative times ("3 hr ago") are measured from, so the server's render and
+    // the browser's hydration agree.
+    renderedAt: Date.now(),
     coverHistory: isOwner
       ? recipeCoverHistoryFor({ ...recipe, covers: coverHistoryCovers })
       : [],
@@ -352,18 +355,10 @@ async function handleCreateSpoon(
   const photoFile = photoEntry instanceof File && photoEntry.size > 0 ? photoEntry : undefined;
   const noteRaw = formData.get("note");
   const nextTimeRaw = formData.get("nextTime");
-  const cookedAtRaw = formData.get("cookedAt");
   const useAsRecipeCover = formData.get("useAsRecipeCover") === "true";
   const note = typeof noteRaw === "string" ? noteRaw : undefined;
   const nextTime = typeof nextTimeRaw === "string" ? nextTimeRaw : undefined;
-  let cookedAt: Date | undefined;
-  if (typeof cookedAtRaw === "string" && cookedAtRaw.trim() !== "") {
-    const parsed = new Date(cookedAtRaw);
-    if (Number.isNaN(parsed.getTime())) {
-      throw new Response("Invalid cookedAt", { status: 400 });
-    }
-    cookedAt = parsed;
-  }
+  const cookedAt = parseOptionalCookedAt(formData.get("cookedAt"));
 
   const { bucket, env, vapidEnv, waitUntil } = getCloudflareCtx(context);
   // Resolve once: threaded into both the spoon notify and the origin-cook
@@ -502,13 +497,20 @@ function optionalFormText(formData: FormData, field: string): string | undefined
   return typeof value === "string" ? value : undefined;
 }
 
+// An ISO 8601 date-time that says which timezone it is in: "Z" or a "+hh:mm" / "-hh:mm" offset.
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/i;
+
+// "Cooked at" must be an instant. The browser sends one (~/lib/cooked-at); a bare datetime-local
+// value ("2026-09-26T07:30") has no timezone, and this Worker runs in UTC, so reading it here
+// would shift the cook by the cook's own offset. It is refused instead.
 function parseOptionalCookedAt(value: FormDataEntryValue | null): Date | undefined {
   if (typeof value !== "string" || value.trim() === "") {
     return undefined;
   }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    throw new Response("Invalid cookedAt", { status: 400 });
+  const trimmed = value.trim();
+  const parsed = new Date(trimmed);
+  if (!ISO_INSTANT.test(trimmed) || Number.isNaN(parsed.getTime())) {
+    throw new Response("Invalid cookedAt: send an ISO 8601 instant with a timezone", { status: 400 });
   }
   return parsed;
 }

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { FormData as UndiciFormData, Request as UndiciRequest } from "undici";
 import { action, loader } from "~/routes/api.v1.$";
@@ -283,6 +283,78 @@ describe("API v1 native account settings", () => {
       code: "validation_error",
       details: { fields: expect.arrayContaining(["email", "username"]) },
     });
+  });
+
+  it("applies the shared username rule and trims the email on profile updates", async () => {
+    const bearer = await createApiCredential(db, userId, "Username rule writer", { scopes: ["account:write"] });
+    const auth = { Authorization: `Bearer ${bearer.token}` };
+    await createUser(db, `case-${faker.string.alphanumeric(10).toLowerCase()}@example.com`, "Alice_Chef", "testPassword123");
+    const idOwner = await db.user.create({
+      data: { id: "qa-seeded-chef", email: `seeded-${faker.string.alphanumeric(10).toLowerCase()}@example.com`, username: "qa_seeded" },
+    });
+
+    const trimmed = await apiPatch("me", auth, "req_me_rule_trimmed", {
+      clientMutationId: "cm_me_rule_trimmed",
+      email: "  Spaced.Chef@Example.com  ",
+      username: "  api_renamed  ",
+    });
+    expect(trimmed.status).toBe(200);
+    await expect(db.user.findUniqueOrThrow({ where: { id: userId } }))
+      .resolves.toMatchObject({ email: "spaced.chef@example.com", username: "api_renamed" });
+
+    const rejections = [
+      { username: "admin/x", message: "Username can only use letters, numbers, periods, underscores and hyphens" },
+      { username: "a".repeat(51), message: "Username must be at most 50 characters" },
+      { username: "ab", message: "Username must be at least 3 characters" },
+      { username: "...", message: "Username must include a letter or a number" },
+      { username: "cmg1a2b3c0000d4e5f6g7h8i9", message: "Username can't look like an account ID" },
+      { username: "alice_chef", message: "This username is already taken" },
+      { username: idOwner.id, message: "This username is already taken" },
+    ];
+    for (const [index, { username: candidate, message }] of rejections.entries()) {
+      const response = await apiPatch("me", auth, `req_me_rule_${index}`, {
+        clientMutationId: `cm_me_rule_${index}`,
+        email: "spaced.chef@example.com",
+        username: candidate,
+      });
+      const payload = await readJson(response);
+      expect(response.status).toBe(400);
+      expect(payload.error).toMatchObject({ code: "validation_error", message, details: { field: "username" } });
+    }
+    await expect(db.user.findUniqueOrThrow({ where: { id: userId } }))
+      .resolves.toMatchObject({ username: "api_renamed" });
+
+    // An older username that predates the rule can still save its email.
+    await db.user.update({ where: { id: userId }, data: { username: "legacy chef!" } });
+    const legacy = await apiPatch("me", auth, "req_me_rule_legacy", {
+      clientMutationId: "cm_me_rule_legacy",
+      email: "legacy@example.com",
+      username: " legacy chef! ",
+    });
+    expect(legacy.status).toBe(200);
+    await expect(db.user.findUniqueOrThrow({ where: { id: userId } }))
+      .resolves.toMatchObject({ email: "legacy@example.com", username: "legacy chef!" });
+  });
+
+  it("deletes the replaced profile photo's stored file on a native upload", async () => {
+    const cookie = await sessionCookie(userId);
+    await db.user.update({ where: { id: userId }, data: { photoUrl: `/photos/profiles/${userId}/1-old.png` } });
+    const bucket = { put: async () => undefined, delete: vi.fn(async () => undefined) };
+    const formData = new UndiciFormData();
+    formData.append("clientMutationId", "cm_me_photo_replace");
+    formData.append("photo", new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00])], "profile.png", { type: "image/png" }));
+
+    const response = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/me/photo", {
+      method: "POST",
+      headers: { Cookie: cookie, "X-Request-Id": "req_me_photo_replace" },
+      body: formData,
+      duplex: "half",
+    }) as unknown as Request, "me/photo", { cloudflare: { env: { PHOTOS: bucket } } }));
+
+    expect(response.status).toBe(200);
+    expect(bucket.delete).toHaveBeenCalledWith(`profiles/${userId}/1-old.png`);
+    const saved = await db.user.findUniqueOrThrow({ where: { id: userId } });
+    expect(saved.photoUrl).toMatch(new RegExp(`^/photos/profiles/${userId}/`));
   });
 
   it("reads and updates native notification preferences", async () => {

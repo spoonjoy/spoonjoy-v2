@@ -1416,7 +1416,7 @@ describe("Recipes $id Route", () => {
           activateWhenReady: "true",
           note: "Ate this for Tuesday dinner.",
           nextTime: "More lemon.",
-          cookedAt: "2026-07-14T19:30",
+          cookedAt: "2026-07-15T02:30:00.000Z",
           promptAddition: "brighter window light",
         },
         testUserId,
@@ -1443,6 +1443,7 @@ describe("Recipes $id Route", () => {
         note: "Ate this for Tuesday dinner.",
         nextTime: "More lemon.",
       });
+      expect(spoon.cookedAt.toISOString()).toBe("2026-07-15T02:30:00.000Z");
       expect(spoon.photoUrl).toMatch(/^data:image\/png;base64,/);
 
       const cover = await db.recipeCover.findUniqueOrThrow({

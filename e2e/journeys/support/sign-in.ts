@@ -3,12 +3,13 @@
 // instead of reusing a shared one (see sign-in.journey.ts's logout test).
 import type { Page } from "@playwright/test";
 import { expect } from "./journey";
-import { persona, scratch, type PersonaName } from "./personas";
+import { persona, scratch, scratchDesktop, type PersonaName } from "./personas";
+import { fillSecret, type Secret } from "./secret";
 
-async function submitLoginForm(page: Page, user: { username: string; password: string }): Promise<void> {
+async function submitLoginForm(page: Page, user: { username: string; password: Secret }): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("Username or email").fill(user.username);
-  await page.getByLabel("Password").fill(user.password);
+  await fillSecret(page.getByLabel("Password"), user.password);
   await page.getByRole("button", { name: "Log In", exact: true }).click();
   await expect(page).toHaveURL(/\/recipes(?:[?#].*)?$/);
 }
@@ -23,4 +24,10 @@ export async function signInThroughForm(page: Page, name: PersonaName): Promise<
 // scratch sign-in instead of the stored one.
 export async function signInScratchThroughForm(page: Page, n: number): Promise<void> {
   await submitLoginForm(page, scratch(n));
+}
+
+// Same again for scratch index n's desktop twin (support/personas.ts's scratchDesktop(n)), used
+// by personas.setup.ts to save each twin's session.
+export async function signInScratchDesktopThroughForm(page: Page, n: number): Promise<void> {
+  await submitLoginForm(page, scratchDesktop(n));
 }

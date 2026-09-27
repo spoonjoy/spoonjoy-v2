@@ -7,6 +7,7 @@ import { CookbookHeader, CookbookPage, RuledEmptyState } from "~/components/cook
 import { getRequestDb } from "~/lib/route-platform.server";
 import { listFellowChefs, listKitchenVisitors } from "~/lib/fellow-chefs.server";
 import { requireUserId } from "~/lib/session.server";
+import { LocalDate } from "~/components/ui/local-date";
 
 type ChefRef = {
   id: string;
@@ -342,7 +343,7 @@ function ChefList({
               <span>
                 <span className="block font-sj-ui font-bold text-[var(--sj-ink)]">{chef.username}</span>
                 <span className="text-sm text-[var(--sj-ink-soft)]">
-                  Latest activity {new Date(chef.latestInteractionAt).toLocaleDateString()}
+                  Latest activity <LocalDate value={chef.latestInteractionAt} />
                 </span>
               </span>
             </Link>

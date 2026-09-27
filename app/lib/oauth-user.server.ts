@@ -1,3 +1,4 @@
+import { findUsernameConflict } from "~/lib/account-identity.server";
 import type { PrismaClient } from "@prisma/client";
 import type { D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Guard, d1Timestamp, d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
@@ -106,12 +107,9 @@ export async function generateUsername(
   let candidate = baseUsername;
   let counter = 0;
 
+  // Taken regardless of letter case, or another account's ID (account-identity.server.ts).
   while (true) {
-    const existing = await db.user.findUnique({
-      where: { username: candidate },
-    });
-
-    if (!existing) {
+    if (!(await findUsernameConflict(db, candidate))) {
       return candidate;
     }
 

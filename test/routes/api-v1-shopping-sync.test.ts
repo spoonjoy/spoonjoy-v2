@@ -719,13 +719,14 @@ describe("API v1 shopping-list read and sync", () => {
       expectEnvelopeHeaders(response, "req_compat_recipe_tombstone_first");
       expectSuccessEnvelope(payload, "req_compat_recipe_tombstone_first");
       expectExactKeys(payload.data, ["recipe", "created", "updated", "items", "mutation"]);
+      // A removed row restarts from the added amount; its old quantity doesn't come back (mergedShoppingItemQuantity).
       expect(payload.data).toMatchObject({
         recipe: { id: recipe.id, title: recipe.title },
         created: 0,
         updated: 1,
         items: [{
           id: expectedTombstone.id,
-          quantity: 5,
+          quantity: 3,
           checked: false,
           checkedAt: null,
           deletedAt: null,

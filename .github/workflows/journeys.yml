@@ -85,14 +85,17 @@ jobs:
         run: node scripts/wait-for-qa-turn.mjs
 
   # `journeys` is the required check. It runs even when qa-turn failed or timed out (a skipped
-  # required check would count as passing) and then fails in its first step. Steps that touch QA
-  # after a failure (tail, rotate, cleanup) run only when this run actually got its turn.
+  # required check would count as passing) and then fails in its first step. The queue only
+  # orders runs: it reads the Actions API, which can lag, so before deploying the job also takes
+  # an atomic lock in QA's own D1 (scripts/qa-lock.mjs) and releases it as its last step. Steps
+  # that touch QA after a failure (tail, rotate, cleanup) run only while this run holds the lock.
+  # The job timeout stays below the lock's 45-minute expiry.
   journeys:
     needs: qa-turn
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     name: journeys
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -134,8 +137,21 @@ jobs:
       - name: Check journey house rules
         run: node scripts/warning-gate.ts -- pnpm run check:journeys
 
+      # Passwords are Secret values that fill() and toHaveValue() don't accept
+      # (e2e/journeys/support/secret.ts); this typecheck of every Playwright suite under e2e/ is
+      # what enforces that. pnpm run typecheck (and so ci.yml) runs it too; it runs here as well
+      # so the check happens before any password reaches QA.
+      - name: Typecheck the journeys
+        run: node scripts/warning-gate.ts -- pnpm exec tsc -p tsconfig.e2e.json
+
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium webkit
+
+      # The atomic step: one D1 statement takes the lock only if it is free or expired, and the
+      # row is read back to confirm this run and attempt hold it. Waits up to 10 minutes.
+      - name: Take the QA lock
+        id: qa-lock
+        run: node scripts/qa-lock.mjs acquire --target-env qa
 
       - name: Deploy this build to QA
         run: pnpm run deploy:qa
@@ -164,7 +180,7 @@ jobs:
           done
           while IFS= read -r password; do
             echo "::add-mask::$password"
-          done < <(jq -r '.scratch[]?.password' "$SPOONJOY_QA_CREDENTIALS")
+          done < <(jq -r '(.scratch[]?, .scratchDesktop[]?) | .password' "$SPOONJOY_QA_CREDENTIALS")
 
       - name: Run test suite
         run: |
@@ -185,7 +201,7 @@ jobs:
       # the summary says `complete: false` and the log warns: that is no evidence, not a clean
       # run. The raw stream is then deleted.
       - name: Stop QA Worker tail and summarise it
-        if: always() && needs.qa-turn.result == 'success'
+        if: always() && steps.qa-lock.outcome == 'success'
         continue-on-error: true
         run: |
           mkdir -p .worker-tail test-results
@@ -229,12 +245,12 @@ jobs:
       # Runs even if the journeys failed; if the seed step never ran, re-seeding is harmless.
       - name: Rotate persona passwords
         id: rotate-passwords
-        if: always() && needs.qa-turn.result == 'success'
+        if: always() && steps.qa-lock.outcome == 'success'
         run: pnpm run seed:qa:kitchen -- --rotate
 
       - name: Clean up disposable QA data
         id: cleanup-qa-data
-        if: always() && needs.qa-turn.result == 'success'
+        if: always() && steps.qa-lock.outcome == 'success'
         run: node scripts/warning-gate.ts -- pnpm run cleanup:remote:qa:apply
 
       - name: Remove credentials and session files
@@ -247,8 +263,9 @@ jobs:
       # defence in depth. Remove the network log (every
       # Cookie / Set-Cookie / Authorization header, plus the request and response bodies only
       # it references) from every trace, including the copies inside the HTML report, and
-      # redact storage-state and cookie values from the remaining trace events. Fails if a
-      # network entry or unredacted value is left.
+      # redact storage-state and cookie values from the remaining trace events, password inputs'
+      # values from trace DOM snapshots, and password textboxes' values from page snapshots
+      # (error-context.md and its copies). Fails if a network entry or unredacted value is left.
       # journeys-report/ and explore-report/ are each other's sibling: only the directory the
       # suite that actually ran produced exists, and sanitize-journey-traces.mjs skips any
       # directory that does not exist, so passing both is harmless regardless of $SUITE.
@@ -259,16 +276,23 @@ jobs:
 
       # The artifact is public to any signed-in GitHub user. It can contain:
       #   - journeys-report/ or explore-report/: the HTML report, whose step titles include
-      #     typed values (the persona passwords), plus failure screenshots, videos, error
-      #     context and copies of the failure traces (explore-report/ additionally holds
-      #     summary.json and a full-page screenshot per route visited);
+      #     typed values (never a password: passwords are Secret values that only fillSecret can
+      #     type, which keeps them out of step titles; the journeys typecheck enforces it), plus
+      #     failure screenshots, videos, error context and copies of the failure traces
+      #     (explore-report/ additionally holds summary.json and a full-page screenshot per
+      #     route visited);
       #   - test-results/: per-failure traces, videos, screenshots and error context, plus
       #     worker-tail-summary.json (Worker outcomes, paths without queries, statuses, timings and
       #     exception names plus redacted, capped messages only; no headers, cookies or bodies).
-      # Traces keep the action log (with typed values), DOM snapshots, screencast frames and
-      # test source. It is safe to publish because (1) "Rotate persona passwords" has already
+      # Traces keep the action log (with typed values other than secrets), DOM snapshots,
+      # screencast frames and test source. A DOM snapshot records every input's value and the
+      # error context prints a textbox's value, so "Strip network logs from traces" also redacts
+      # password inputs' values from every trace snapshot and password textboxes' values from
+      # every page snapshot (error-context.md, and its copies in traces and the report), and
+      # fails if one is left. It is safe to publish because (1) "Rotate persona passwords" has already
       # replaced every persona password, invalidated every scratch-user password it contains
-      # and revoked every persona and scratch-user session from the run, (2) "Clean up disposable QA data" has removed the (now-invalidated) scratch
+      # and revoked every persona and scratch-user session from the run, (2) "Clean up
+      # disposable QA data" has removed the (now-invalidated) scratch
       # users and every other disposable row, and (3) "Strip network logs from traces" has
       # removed network logs and redacted session cookies and storage state from every trace.
       # Upload runs only if all three steps succeeded, and only the report matching $SUITE
@@ -295,3 +319,9 @@ jobs:
             test-results/
           retention-days: 30
           include-hidden-files: false
+
+      # Last step, so QA stays locked through rotate and cleanup. Deletes the lock only if this
+      # run and attempt hold it; a failed release only warns, and the lock then expires.
+      - name: Release the QA lock
+        if: always() && steps.qa-lock.outcome == 'success'
+        run: node scripts/qa-lock.mjs release --target-env qa
