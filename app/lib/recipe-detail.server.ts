@@ -341,6 +341,9 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
       hasActiveRealCover: activeRealCover,
     }),
     isAuthenticated: Boolean(userId),
+    // Cook progress syncs across the signed-in cook's devices where cook-session protocol v1 is
+    // enabled (COOK_SESSION_PROTOCOL=v1); elsewhere it stays in this browser only.
+    cookSessionUserId: userId && context.cloudflare?.env?.COOK_SESSION_PROTOCOL === "v1" ? userId : null,
   };
 }
 

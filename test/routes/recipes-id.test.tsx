@@ -26,6 +26,7 @@ import {
   getCookProgressStorageKey,
   parseCookProgressSnapshot,
   readCookProgress,
+  readSyncedCookProgress,
   formatTimerSeconds,
   writeCookProgress,
   shouldRevalidate as recipeShouldRevalidate,
@@ -34,6 +35,7 @@ import RecipeDetail from "~/routes/recipes.$id";
 import RecipesLayout, * as recipesLayoutRoute from "~/routes/recipes";
 import { shouldRevalidate as rootShouldRevalidate } from "~/root";
 import { HISTORY_TRAIL_KEY } from "~/hooks/use-back-navigation";
+import { syncedCookProgressStorageKey, writeSyncedCookCache } from "~/lib/cook-session-sync";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -197,6 +199,30 @@ describe("Recipes $id Route", () => {
       ingredientIds: new Set(["ing-1"]),
       stepOutputIds: new Set(["use-1"]),
     };
+
+    it("reads a signed-in cook's cached progress from that cook's own key", () => {
+      window.localStorage.clear();
+      expect(readSyncedCookProgress("user-1", "recipe-1", bounds)).toBeNull();
+
+      writeSyncedCookCache("user-1", "recipe-1", {
+        progress: {
+          activeStepIndex: 1,
+          scaleFactor: 1.5,
+          checkedIngredientIds: ["ing-1", "gone"],
+          checkedStepOutputIds: ["use-1"],
+        },
+        server: null,
+      });
+
+      expect(readSyncedCookProgress("user-1", "recipe-1", bounds)).toEqual({
+        activeStepIndex: 1,
+        scaleFactor: 1.5,
+        checkedIngredientIds: new Set(["ing-1"]),
+        checkedStepOutputIds: new Set(["use-1"]),
+      });
+      expect(readSyncedCookProgress("user-2", "recipe-1", bounds)).toBeNull();
+      window.localStorage.clear();
+    });
 
     it("builds the recipe-specific cook progress storage key", () => {
       expect(getCookProgressStorageKey("recipe-1")).toBe("spoonjoy-cook-progress:recipe-1");
@@ -388,6 +414,22 @@ describe("Recipes $id Route", () => {
       expect(result.canonicalUrl).toBe(`http://localhost:3000/recipes/${recipeId}`);
       expect(result.ogImageUrl).toBe(`http://localhost:3000/og/recipes/${recipeId}.png`);
       expect(result.coverImageUrl).toBeNull();
+    });
+
+    it("turns on cook-session sync only for a signed-in cook where protocol v1 is enabled", async () => {
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const cookie = (await sessionStorage.commitSession(session)).split(";")[0];
+      const load = (headers: HeadersInit, env: Record<string, string> | null) => loader({
+        request: new UndiciRequest(`http://localhost:3000/recipes/${recipeId}`, { headers }),
+        context: { cloudflare: { env } },
+        params: { id: recipeId },
+      } as any);
+
+      await expect(load({ Cookie: cookie }, { COOK_SESSION_PROTOCOL: "v1" })).resolves.toMatchObject({ cookSessionUserId: testUserId });
+      await expect(load({ Cookie: cookie }, null)).resolves.toMatchObject({ cookSessionUserId: null });
+      await expect(load({ Cookie: cookie }, { COOK_SESSION_PROTOCOL: "off" })).resolves.toMatchObject({ cookSessionUserId: null });
+      await expect(load({}, { COOK_SESSION_PROTOCOL: "v1" })).resolves.toMatchObject({ cookSessionUserId: null });
     });
 
     it("returns explicit active cover display data with provenance", async () => {
@@ -3002,6 +3044,63 @@ describe("Recipes $id Route", () => {
       expect(within(restoredCookMode).getByTestId("scale-display")).toHaveTextContent("1.25×");
       await exitCookMode(restoredCookMode);
       await settleBrowserTasks();
+    });
+
+    it("syncs a signed-in cook's progress with the server instead of the device-only key", async () => {
+      window.localStorage.clear();
+      writeSyncedCookCache("user-1", "recipe-1", {
+        progress: { activeStepIndex: 0, scaleFactor: 1.5, checkedIngredientIds: [], checkedStepOutputIds: [] },
+        server: { attemptId: "attempt-1", revision: 1, progress: { activeStepIndex: 0, scaleFactor: 1.5, checkedIngredientIds: [], checkedStepOutputIds: [] } },
+      });
+      const serverProgress = { activeStepIndex: 0, scaleFactor: 1.5, checkedIngredientIds: ["ing-1"], checkedStepOutputIds: [] };
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
+        state: { attemptId: "attempt-1", revision: 2, progress: serverProgress },
+      })));
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Synced Cook Recipe",
+          description: null,
+          servings: null,
+          coverImageUrl: null,
+          chef: { id: "user-1", username: "testchef" },
+          steps: [
+            {
+              id: "step-1",
+              stepNum: 1,
+              stepTitle: "Prep",
+              description: "Chop.",
+              ingredients: [{ id: "ing-1", quantity: 1, unit: { name: "cup" }, ingredientRef: { name: "tomatoes" } }],
+              usingSteps: [],
+            },
+          ],
+        },
+        isOwner: true,
+        cookbooks: [],
+        savedInCookbookIds: [],
+        cookSessionUserId: "user-1",
+      };
+      const Stub = createTestRoutesStub([
+        { path: "/recipes/:id", Component: RecipeDetail, loader: () => mockData },
+      ]);
+
+      try {
+        render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+        await screen.findByRole("heading", { name: "Synced Cook Recipe" });
+        expect(screen.getByTestId("scale-display")).toHaveTextContent("1.5×");
+
+        // Another device checked the tomatoes: the server's progress replaces this page's.
+        await waitFor(() => {
+          expect(screen.getByRole("checkbox", { name: "tomatoes" })).toHaveAttribute("aria-checked", "true");
+        });
+        expect(screen.getByTestId("cook-sync-status")).toHaveTextContent("Progress synced");
+        expect(fetchMock).toHaveBeenCalledWith("/api/cook-sessions/recipe-1", expect.objectContaining({ method: "GET" }));
+        expect(JSON.parse(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1")) ?? "{}").server.revision).toBe(2);
+        expect(window.localStorage.getItem(getCookProgressStorageKey("recipe-1"))).toBeNull();
+      } finally {
+        fetchMock.mockRestore();
+        window.localStorage.clear();
+      }
     });
 
     it("shows a step timer in focused cook mode when a step has duration", async () => {
