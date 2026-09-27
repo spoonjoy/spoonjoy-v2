@@ -23,6 +23,20 @@
 // viewer. It then re-reads the written zip and fails if a network entry or an unredacted
 // value is still there. Zips without a `.trace` entry are not traces and are left alone.
 //
+// Typed passwords. Playwright 1.58 records every <input>'s live value in trace DOM snapshots
+// (snapshotterInjected.js writes it as the `__playwright_value_` attribute of each INPUT and
+// TEXTAREA node, password inputs included), and on failure writes an ARIA page snapshot
+// (error-context.md) that prints a textbox's value, including a password input's, as
+// `- textbox "Password" [ref=e5]: <value>`. That page snapshot is also attached to the test,
+// so it is copied into the trace zip as a `resources/<sha1>` entry and into the HTML report as
+// `data/<sha1>.md`. This script therefore also:
+//   - redacts the value of every password input (by type, password autocomplete, or a name/id
+//     naming a password) in every `frame-snapshot` event;
+//   - redacts the value of every textbox whose accessible name names a password, passcode,
+//     secret, token or credential, in every text resource inside a trace zip and in every
+//     .md/.txt/.yml/.yaml file under the given directories (error-context.md, report copies);
+// and fails if a re-read file still has such a value.
+//
 // Usage: node scripts/sanitize-journey-traces.mjs <directory> [<directory> ...]
 // A directory that does not exist is skipped (a run that failed before Playwright wrote
 // anything has no test-results/ or journeys-report/).
@@ -40,6 +54,21 @@ const SESSION_STATE_KEYS = new Set(["storagestate", "cookies", "origins"]);
 // Header names whose value is a credential, whether they appear as `{ name, value }` pairs
 // or as keys of a header map.
 const SENSITIVE_HEADER_NAMES = new Set(["cookie", "set-cookie", "authorization", "proxy-authorization"]);
+
+// An <input> that holds a password: type=password, a password or one-time-code autocomplete
+// hint, or a name/id that says so.
+const SECRET_AUTOCOMPLETE = /(?:current|new)-password|one-time-code/i;
+const SECRET_INPUT_NAME = /passw(?:or)?d|passcode/i;
+// Snapshot attributes that carry an input's value: the live value, and the markup's value=.
+const SNAPSHOT_VALUE_ATTRIBUTES = ["__playwright_value_", "value"];
+
+// An ARIA page-snapshot line for a textbox whose (quoted) accessible name names a secret, with
+// its optional [attribute] markers, followed by ": <value>".
+const SECRET_TEXTBOX_LINE =
+  /^(\s*- textbox "(?:[^"\\\n]|\\.)*(?:passw(?:or)?d|passcode|secret|token|credential)(?:[^"\\\n]|\\.)*"(?:\s*\[[^\]\n]*\])*):[ \t]*(\S.*)$/gim;
+
+// Text files the report and test results can hold a page snapshot in.
+const TEXT_FILE_PATTERN = /\.(?:md|txt|ya?ml)$/i;
 
 const EOCD_SIGNATURE = 0x06054b50;
 const CENTRAL_SIGNATURE = 0x02014b50;
@@ -193,6 +222,72 @@ export function redactTraceValue(value) {
   return redacted;
 }
 
+function isSnapshotAttributes(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isSecretInput(nodeName, attributes) {
+  if (nodeName.toUpperCase() !== "INPUT") return false;
+  const attribute = (name) => (typeof attributes[name] === "string" ? attributes[name] : "");
+  return (
+    attribute("type").toLowerCase() === "password" ||
+    SECRET_AUTOCOMPLETE.test(attribute("autocomplete")) ||
+    SECRET_INPUT_NAME.test(attribute("name")) ||
+    SECRET_INPUT_NAME.test(attribute("id"))
+  );
+}
+
+/**
+ * Returns a copy of a trace DOM-snapshot node with every password input's value redacted. A
+ * node is `[nodeName, attributes?, ...children]`; a child is a node, a text string, or a
+ * reference to a node of an earlier snapshot (`[[snapshotsAgo, nodeIndex]]`), which is left as
+ * it is, since the node it points to is redacted where it was first recorded.
+ * @param {unknown} node
+ * @returns {unknown}
+ */
+export function redactSnapshotNode(node) {
+  if (!Array.isArray(node) || typeof node[0] !== "string") return node;
+  const [nodeName, ...rest] = node;
+  return [
+    nodeName,
+    ...rest.map((part, index) => {
+      if (index !== 0 || !isSnapshotAttributes(part)) return redactSnapshotNode(part);
+      if (!isSecretInput(nodeName, part)) return part;
+      const redacted = { ...part };
+      for (const name of SNAPSHOT_VALUE_ATTRIBUTES) {
+        if (typeof redacted[name] === "string" && redacted[name] !== "") redacted[name] = REDACTED;
+      }
+      return redacted;
+    }),
+  ];
+}
+
+/**
+ * Redacts the value of every textbox whose accessible name names a password or other secret
+ * in ARIA page-snapshot text (error-context.md and its copies). Idempotent.
+ * @param {string} text
+ * @returns {string}
+ */
+export function redactPageSnapshotText(text) {
+  return text.replace(SECRET_TEXTBOX_LINE, (_line, prefix) => `${prefix}: ${REDACTED}`);
+}
+
+// Session state and headers everywhere (redactTraceValue), and password inputs in DOM snapshots.
+function redactTraceEvent(event) {
+  const redacted = redactTraceValue(event);
+  if (redacted?.type === "frame-snapshot" && isSnapshotAttributes(redacted.snapshot)) {
+    redacted.snapshot = { ...redacted.snapshot, html: redactSnapshotNode(redacted.snapshot.html) };
+  }
+  return redacted;
+}
+
+// A resource's bytes as text when they are valid UTF-8 (a page snapshot, a stylesheet), or
+// undefined for binary data (screencast frames, images).
+function resourceText(data) {
+  const decoded = data.toString("utf8");
+  return Buffer.from(decoded, "utf8").equals(data) ? decoded : undefined;
+}
+
 /**
  * Redacts every JSON line of a `.trace` entry; blank lines and lines that are not valid JSON
  * are dropped, since their content cannot be checked.
@@ -205,7 +300,7 @@ export function sanitizeTraceText(text) {
   for (const line of text.split("\n")) {
     if (line.trim() === "") continue;
     try {
-      lines.push(JSON.stringify(redactTraceValue(JSON.parse(line))));
+      lines.push(JSON.stringify(redactTraceEvent(JSON.parse(line))));
     } catch {
       droppedLines += 1;
     }
@@ -235,6 +330,12 @@ export function sanitizeTraceZip(buffer) {
       const sanitized = sanitizeTraceText(entry.data.toString("utf8"));
       droppedLines += sanitized.droppedLines;
       kept.push({ ...entry, data: Buffer.from(sanitized.text, "utf8") });
+    } else if (isResourceEntry(entry.name)) {
+      // An attached page snapshot (error-context) keeps its sha1 name: the viewer looks it up by
+      // the name the trace events use, not by hashing the content.
+      const resource = resourceText(entry.data);
+      const redacted = resource === undefined ? undefined : redactPageSnapshotText(resource);
+      kept.push(redacted === undefined || redacted === resource ? entry : { ...entry, data: Buffer.from(redacted, "utf8") });
     } else {
       kept.push(entry);
     }
@@ -259,8 +360,8 @@ export function sanitizeTraceZip(buffer) {
 }
 
 /**
- * Lists what is still unsafe in a (re-read) trace zip: network entries, and `.trace` lines
- * that redaction would still change.
+ * Lists what is still unsafe in a (re-read) trace zip: network entries, `.trace` lines that
+ * redaction would still change, and text resources with an unredacted password textbox.
  * @param {Array<{ name: string, data: Buffer }>} entries
  * @returns {string[]}
  */
@@ -271,6 +372,12 @@ export function findTraceLeaks(entries) {
     if (isTraceEntry(entry.name)) {
       const text = entry.data.toString("utf8");
       if (sanitizeTraceText(text).text !== text) leaks.push(`"${entry.name}" still has unredacted content`);
+    }
+    if (isResourceEntry(entry.name)) {
+      const resource = resourceText(entry.data);
+      if (resource !== undefined && redactPageSnapshotText(resource) !== resource) {
+        leaks.push(`"${entry.name}" still has an unredacted password value`);
+      }
     }
   }
   return leaks;
@@ -310,6 +417,7 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
   let removedNetworkLogs = 0;
   let removedResources = 0;
   let droppedLines = 0;
+  let redactedTextFiles = 0;
 
   for (const directory of argv) {
     let entries;
@@ -325,9 +433,29 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
       continue;
     }
 
-    const zips = entries
-      .filter((entry) => entry.isFile() && entry.name.endsWith(".zip"))
+    const files = entries
+      .filter((entry) => entry.isFile())
       .map((entry) => path.join(entry.parentPath ?? entry.path ?? directory, entry.name));
+    const zips = files.filter((file) => file.endsWith(".zip"));
+    const textFiles = files.filter((file) => TEXT_FILE_PATTERN.test(file));
+
+    for (const file of textFiles) {
+      try {
+        const original = (await readFile(file)).toString("utf8");
+        const redacted = redactPageSnapshotText(original);
+        if (redacted === original) continue;
+        await writeFile(file, redacted);
+        const reread = (await readFile(file)).toString("utf8");
+        if (redactPageSnapshotText(reread) !== reread) {
+          io.error(`${file}: still has an unredacted password value`);
+          failed = true;
+        }
+        redactedTextFiles += 1;
+      } catch (error) {
+        io.error(`${file}: ${errorMessage(error)}`);
+        failed = true;
+      }
+    }
 
     for (const file of zips) {
       try {
@@ -351,6 +479,7 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
   io.log(
     `Sanitized ${sanitizedTraces} trace(s): removed ${removedNetworkLogs} network log(s) and ${removedResources} network resource(s), dropped ${droppedLines} unparseable trace line(s).`,
   );
+  io.log(`Redacted password values in ${redactedTextFiles} page snapshot file(s).`);
   if (failed) exit(1);
 }
 

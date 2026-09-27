@@ -37,6 +37,7 @@ Spoonjoy is built for agentic developers end to end, and so is its validation.
   | 6 | Sessions (revocation) | `sessions.desktop.journey.ts` |
 
   Only the New user journey signs up through `/signup` — every other data-changing journey uses its assigned scratch index. `cooking.mobile.journey.ts`'s existing throwaway `/signup` user predates this scheme and is a candidate to move onto a scratch index in a follow-up. See `personas.setup.ts` for the full sign-in budget accounting: 3 persona sign-ins + 12 scratch sign-ins per run up front, plus the journeys' own sign-ins, against QA's 60/minute cap.
+- **Type passwords and other secrets with `fillSecret(locator, value)`** from `e2e/journeys/support/secret-input.ts`, never `fill()`/`type()`/`pressSequentially()`: Playwright titles those steps with the typed value, and the journeys report is public. `pnpm run check:journeys` (rule `no-secret-fill`) enforces this, and `scripts/sanitize-journey-traces.mjs` redacts password values from trace DOM snapshots and page snapshots (`error-context.md`) before upload.
 - **Every bug becomes a failing journey step first**, then a fix. Read failures from the workflow's `journeys-report` artifact (traces, video, screenshots).
 - **Coverage is not validation.** The 100% unit-coverage rule below still applies, but green coverage says nothing about whether a user can use the app.
 

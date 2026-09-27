@@ -11,6 +11,8 @@ import {
   isCliEntry,
   main,
   readZip,
+  redactPageSnapshotText,
+  redactSnapshotNode,
   redactTraceValue,
   runCliIfEntry,
   sanitizeTraceText,
@@ -212,6 +214,132 @@ describe("redaction", () => {
   });
 });
 
+// Planted secrets for the typed-password tests: nothing here may survive sanitizing.
+const PLANTED_PASSWORD = "Planted-Pa55word-7f3c";
+const PLANTED_NEW_PASSWORD = "Planted-New-9d21e";
+
+// A Playwright 1.58 frame-snapshot event for the account settings password form, filled in.
+function passwordFormSnapshot() {
+  return {
+    type: "frame-snapshot",
+    snapshot: {
+      callId: "call@7",
+      snapshotName: "after@call@7",
+      frameUrl: "https://qa.example/account/settings",
+      html: [
+        "HTML",
+        { lang: "en" },
+        [
+          "BODY",
+          {},
+          ["LABEL", { for: "current" }, "Current Password"],
+          ["INPUT", { type: "password", name: "currentPassword", autocomplete: "current-password", __playwright_value_: PLANTED_PASSWORD }],
+          ["INPUT", { type: "PASSWORD", __playwright_value_: PLANTED_NEW_PASSWORD, value: PLANTED_NEW_PASSWORD }],
+          ["INPUT", { type: "text", autocomplete: "new-password", __playwright_value_: PLANTED_NEW_PASSWORD }],
+          ["INPUT", { name: "confirmPassword", __playwright_value_: PLANTED_NEW_PASSWORD }],
+          ["INPUT", { id: "passcode", __playwright_value_: PLANTED_PASSWORD }],
+          ["INPUT", { type: "password", __playwright_value_: "" }],
+          ["INPUT", { type: "text", name: "username", __playwright_value_: "codex_e2e_b_1" }],
+          ["TEXTAREA", { name: "notes", __playwright_value_: "keep me" }, "keep me"],
+          [[3, 12]],
+          "plain text",
+        ],
+      ],
+    },
+  };
+}
+
+const PAGE_SNAPSHOT = [
+  "# Page snapshot",
+  "",
+  "```yaml",
+  "- main [ref=e1]:",
+  '  - textbox "Username or email" [ref=e2]: codex_e2e_b_1',
+  `  - textbox "Password" [active] [ref=e3]: ${PLANTED_PASSWORD}`,
+  `  - textbox "Current Password" [ref=e4]: "${PLANTED_PASSWORD}"`,
+  `  - textbox "Confirm \\"new\\" password" [ref=e5]: ${PLANTED_NEW_PASSWORD}`,
+  `  - textbox "API token": ${PLANTED_NEW_PASSWORD}`,
+  '  - textbox "New Password" [ref=e6]',
+  '  - textbox "Search terms" [ref=e7]: lemon',
+  "```",
+].join("\n");
+
+describe("typed passwords", () => {
+  it("redacts every password input's value in a DOM snapshot and leaves other nodes alone", () => {
+    const html = redactSnapshotNode(passwordFormSnapshot().snapshot.html) as unknown[];
+    const serialized = JSON.stringify(html);
+
+    expect(serialized).not.toContain(PLANTED_PASSWORD);
+    expect(serialized).not.toContain(PLANTED_NEW_PASSWORD);
+    const body = html[2] as unknown[];
+    expect(body[3]).toEqual(["INPUT", { type: "password", name: "currentPassword", autocomplete: "current-password", __playwright_value_: REDACTED }]);
+    expect(body[4]).toEqual(["INPUT", { type: "PASSWORD", __playwright_value_: REDACTED, value: REDACTED }]);
+    expect(body[8]).toEqual(["INPUT", { type: "password", __playwright_value_: "" }]);
+    expect(body[9]).toEqual(["INPUT", { type: "text", name: "username", __playwright_value_: "codex_e2e_b_1" }]);
+    expect(body[10]).toEqual(["TEXTAREA", { name: "notes", __playwright_value_: "keep me" }, "keep me"]);
+    expect(body[11]).toEqual([[3, 12]]);
+    expect(body[12]).toBe("plain text");
+    expect(redactSnapshotNode(html)).toEqual(html);
+    expect(redactSnapshotNode("text")).toBe("text");
+    expect(redactSnapshotNode(["INPUT"])).toEqual(["INPUT"]);
+  });
+
+  it("redacts frame-snapshot events in a trace, idempotently, and leaves other events alone", () => {
+    const input = lines(
+      passwordFormSnapshot(),
+      { type: "frame-snapshot" },
+      { type: "before", callId: "call@8", params: { value: "a search" } },
+      null,
+    );
+    const once = sanitizeTraceText(input);
+
+    expect(once.text).not.toContain(PLANTED_PASSWORD);
+    expect(once.text).not.toContain(PLANTED_NEW_PASSWORD);
+    expect(once.text).toContain('"__playwright_value_":"[redacted]"');
+    expect(once.text).toContain('"a search"');
+    expect(once.text).toContain('{"type":"frame-snapshot"}');
+    expect(sanitizeTraceText(once.text)).toEqual({ text: once.text, droppedLines: 0 });
+  });
+
+  it("redacts secret textboxes' values in a page snapshot, idempotently", () => {
+    const redacted = redactPageSnapshotText(PAGE_SNAPSHOT);
+
+    expect(redacted).not.toContain(PLANTED_PASSWORD);
+    expect(redacted).not.toContain(PLANTED_NEW_PASSWORD);
+    expect(redacted).toContain('  - textbox "Password" [active] [ref=e3]: [redacted]');
+    expect(redacted).toContain('  - textbox "Current Password" [ref=e4]: [redacted]');
+    expect(redacted).toContain('  - textbox "API token": [redacted]');
+    expect(redacted).toContain('  - textbox "Username or email" [ref=e2]: codex_e2e_b_1');
+    expect(redacted).toContain('  - textbox "New Password" [ref=e6]\n');
+    expect(redacted).toContain('  - textbox "Search terms" [ref=e7]: lemon');
+    expect(redactPageSnapshotText(redacted)).toBe(redacted);
+  });
+
+  it("redacts an attached page snapshot inside a trace zip and reports one that is left", () => {
+    const zip = writeZip([
+      entry("test.trace", lines({ type: "after", callId: "c1", attachments: [{ name: "error-context", contentType: "text/markdown", sha1: "abc123" }] })),
+      entry("0-trace.trace", lines(passwordFormSnapshot(), { type: "screencast-frame", sha1: "page@1.jpeg" }, { type: "resource", sha1: "sheet.css" })),
+      entry("resources/abc123", PAGE_SNAPSHOT),
+      entry("resources/page@1.jpeg", Buffer.from([0xff, 0xd8, 0xff, 0xe0])),
+      entry("resources/sheet.css", "body { color: red }"),
+    ]);
+    const out = readZip(sanitizeTraceZip(zip)!.buffer);
+
+    expect(names(out)).toEqual(["test.trace", "0-trace.trace", "resources/abc123", "resources/page@1.jpeg", "resources/sheet.css"]);
+    expect(text(out, "resources/abc123")).toBe(redactPageSnapshotText(PAGE_SNAPSHOT));
+    expect(text(out, "resources/sheet.css")).toBe("body { color: red }");
+    expect(findTraceLeaks(out)).toEqual([]);
+    for (const e of out) {
+      expect(e.data.toString("latin1")).not.toContain(PLANTED_PASSWORD);
+      expect(e.data.toString("latin1")).not.toContain(PLANTED_NEW_PASSWORD);
+    }
+
+    expect(findTraceLeaks([entry("resources/abc123", PAGE_SNAPSHOT)])).toEqual([
+      '"resources/abc123" still has an unredacted password value',
+    ]);
+  });
+});
+
 describe("sanitizeTraceZip", () => {
   it("returns null for a zip that is not a Playwright trace", () => {
     expect(sanitizeTraceZip(writeZip([entry("report.json", "{}")]))).toBeNull();
@@ -343,6 +471,78 @@ describe("main", () => {
     await main(["journeys-report"], d);
     expect(d.io.error).toHaveBeenCalledWith(expect.stringContaining("not a zip archive"));
     expect(d.exit).toHaveBeenCalledWith(1);
+  });
+
+  it("redacts page snapshot text files in place, skips clean ones, and counts them", async () => {
+    const files = new Map<string, string>([
+      [join("test-results/account", "error-context.md"), PAGE_SNAPSHOT],
+      [join("journeys-report/data", "abc.md"), "# Page snapshot\n- textbox \"Search terms\": lemon"],
+    ]);
+    const d = deps({
+      readdir: vi.fn().mockResolvedValue([
+        fakeFile("test-results/account", "error-context.md"),
+        { name: "abc.md", path: "journeys-report/data", isFile: () => true },
+        { name: "folder.md", parentPath: "test-results", isFile: () => false },
+      ]),
+      readFile: vi.fn(async (file: string) => Buffer.from(files.get(file)!, "utf8")),
+      writeFile: vi.fn(async (file: string, data: string) => {
+        files.set(file, data);
+      }),
+    });
+    await main(["test-results"], d);
+    expect(d.writeFile).toHaveBeenCalledTimes(1);
+    expect(files.get(join("test-results/account", "error-context.md"))).toBe(redactPageSnapshotText(PAGE_SNAPSHOT));
+    expect(d.io.log).toHaveBeenCalledWith("Redacted password values in 1 page snapshot file(s).");
+    expect(d.exit).not.toHaveBeenCalled();
+  });
+
+  it("fails when a page snapshot file still leaks after writing, or cannot be read", async () => {
+    const d = deps({
+      readdir: vi.fn().mockResolvedValue([fakeFile("test-results", "error-context.md"), fakeFile("test-results", "notes.txt")]),
+      readFile: vi.fn(async (file: string) => {
+        if (file.endsWith("notes.txt")) throw new Error("EACCES");
+        return Buffer.from(PAGE_SNAPSHOT, "utf8");
+      }),
+    });
+    await main(["test-results"], d);
+    expect(d.io.error).toHaveBeenCalledWith(`${join("test-results", "error-context.md")}: still has an unredacted password value`);
+    expect(d.io.error).toHaveBeenCalledWith(`${join("test-results", "notes.txt")}: EACCES`);
+    expect(d.exit).toHaveBeenCalledWith(1);
+  });
+
+  it("leaves no planted password anywhere in a real report tree", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sanitize-journey-passwords-"));
+    try {
+      mkdirSync(join(dir, "test-results", "account"), { recursive: true });
+      mkdirSync(join(dir, "journeys-report", "data"), { recursive: true });
+      const trace = writeZip([
+        entry("test.trace", lines({ type: "after", callId: "c1", attachments: [{ name: "error-context", sha1: "abc123" }] })),
+        entry("0-trace.trace", lines(passwordFormSnapshot())),
+        entry("resources/abc123", PAGE_SNAPSHOT),
+      ]);
+      writeFileSync(join(dir, "test-results", "account", "trace.zip"), trace);
+      writeFileSync(join(dir, "test-results", "account", "error-context.md"), PAGE_SNAPSHOT);
+      writeFileSync(join(dir, "journeys-report", "data", "abc123.zip"), trace);
+      writeFileSync(join(dir, "journeys-report", "data", "abc123.md"), PAGE_SNAPSHOT);
+      const io = { log: vi.fn(), error: vi.fn() };
+      const exit = vi.fn();
+
+      await main([join(dir, "test-results"), join(dir, "journeys-report")], { io, exit });
+
+      expect(exit).not.toHaveBeenCalled();
+      expect(io.error).not.toHaveBeenCalled();
+      const all = [
+        readFileSync(join(dir, "test-results", "account", "error-context.md"), "utf8"),
+        readFileSync(join(dir, "journeys-report", "data", "abc123.md"), "utf8"),
+        ...readZip(readFileSync(join(dir, "test-results", "account", "trace.zip"))).map((e) => e.data.toString("latin1")),
+        ...readZip(readFileSync(join(dir, "journeys-report", "data", "abc123.zip"))).map((e) => e.data.toString("latin1")),
+      ].join("\n");
+      expect(all).not.toContain(PLANTED_PASSWORD);
+      expect(all).not.toContain(PLANTED_NEW_PASSWORD);
+      expect(all).toContain("[redacted]");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("sanitizes a real directory tree through the default fs dependencies", async () => {
