@@ -114,19 +114,21 @@ test.describe("Recipe create and edit", () => {
       await expect(recipeHeading(renamed)).toBeVisible();
     });
 
-    // --- Add a third step on the Add Step page. Its AI box parses through the page's own
-    // action: the answer is a 200 whether or not QA can parse, and the page stays.
-    await page.goto(`${recipePath}/edit`);
-    await waitForHydration(page);
-    await page.getByRole("link", { name: "+ Add Step" }).click();
-    await expect(page).toHaveURL(pathUrl(`${recipePath}/steps/new`));
-    await expect(page.getByRole("heading", { level: 1, name: "Add Step", exact: true })).toBeVisible();
-    await page.getByRole("textbox", { name: "Description *" }).fill("Drizzle with honey");
-
+    // --- Add a third step on the Add Step page. The AI box's text is typed straight after the
+    // server markup arrives, before hydration: it has to survive hydration (bug 5) and then be
+    // parsed through the page's own action (bug 1), which answers 200 whether or not QA can
+    // parse, and the page stays.
     const parseResponse = page.waitForResponse(
       (response) => response.request().method() === "POST" && new URL(response.url()).pathname.startsWith(`${recipePath}/steps/new`),
     );
-    await page.getByRole("textbox", { name: "Ingredient text" }).fill("2 tbsp honey");
+    await page.goto(`${recipePath}/steps/new`, { waitUntil: "commit" });
+    const ingredientText = page.getByRole("textbox", { name: "Ingredient text" });
+    await ingredientText.fill("2 tbsp honey");
+    await waitForHydration(page);
+    await expect(page.getByRole("heading", { level: 1, name: "Add Step", exact: true })).toBeVisible();
+    // Typing elsewhere moves focus, which re-renders the fields after hydration.
+    await page.getByRole("textbox", { name: "Description *" }).fill("Drizzle with honey");
+    await expect(ingredientText).toHaveValue("2 tbsp honey");
     const parsed = await parseResponse;
     expect(new URL(parsed.url()).pathname).toBe(`${recipePath}/steps/new.data`);
     expect(parsed.status()).toBe(200);
@@ -148,6 +150,7 @@ test.describe("Recipe create and edit", () => {
     // --- Change step 1's ingredient: bread becomes brioche.
     await page.getByRole("link", { name: "← Back to recipe" }).click();
     await expect(page).toHaveURL(pathUrl(`${recipePath}/edit`));
+    await expect(page.getByRole("link", { name: "+ Add Step" })).toHaveAttribute("href", `${recipePath}/steps/new`);
     await expect(editPageStep(page, 3)).toContainText("Drizzle with honey");
     await expect(editPageStep(page, 3)).toContainText("1 ingredient");
     await editPageStep(page, 1).getByRole("link", { name: "Edit", exact: true }).click();
