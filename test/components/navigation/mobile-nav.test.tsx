@@ -309,7 +309,7 @@ describe("MobileNav", () => {
       expect(screen.getByRole("link", { name: /my kitchen/i })).toHaveAttribute("href", "/");
     });
 
-    it("keeps the cookbooks dock on a cookbook's page, where Cookbooks leads back to the list", () => {
+    it("keeps the cookbooks dock on a cookbook's page, where Cookbooks stays current and leads back to the list", () => {
       render(
         <MemoryRouter initialEntries={["/cookbooks/cookbook-1"]}>
           <MobileNav />
@@ -319,8 +319,8 @@ describe("MobileNav", () => {
       const dock = screen.getByRole("navigation", { name: "Spoonjoy navigation" });
       const cookbooks = within(dock).getByRole("link", { name: /^cookbooks$/i });
       expect(cookbooks).toHaveAttribute("href", "/cookbooks");
-      // The list is not the current page here.
-      expect(cookbooks).not.toHaveAttribute("aria-current");
+      // Like every other section's place item, Cookbooks is current across the whole section.
+      expect(cookbooks).toHaveAttribute("aria-current", "page");
       expect(within(dock).getByRole("link", { name: /create cookbook/i })).toHaveAttribute("href", "/cookbooks/new");
       expect(within(dock).getByRole("link", { name: /my kitchen/i })).toHaveAttribute("href", "/");
     });

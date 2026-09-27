@@ -144,8 +144,9 @@ function rootConfig(pathname: string, search: string, isAuthenticated: boolean, 
         icon: BookOpen,
         label: "Cookbooks",
         onAction: "/cookbooks",
-        // Current only on the list itself; on a cookbook's page it leads back to the list.
-        active: pathname === "/cookbooks",
+        // Current across the whole section, like the other place items; on a cookbook's page it
+        // still links back to the list.
+        active: true,
       },
       primary: { id: "new-cookbook", icon: Plus, label: "+", ariaLabel: "Create cookbook", onAction: "/cookbooks/new" },
       tools: [
