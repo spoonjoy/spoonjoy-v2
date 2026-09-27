@@ -21,6 +21,7 @@ import { API_V1_SCOPE_REQUIREMENTS } from "~/lib/api-v1-contract.server";
 import { API_V1_PLAYGROUND_MANIFEST } from "~/lib/generated/api-v1-playground";
 import { createUserSessionCookie } from "~/lib/session.server";
 import { createTestRoutesStub } from "../utils";
+import { ensureSessionUser } from "../helpers/session-user";
 
 const { posthogCapture } = vi.hoisted(() => ({
   posthogCapture: vi.fn(),
@@ -38,6 +39,7 @@ function cookieHeader(setCookie: string) {
 
 async function signedInPlaygroundData() {
   const env = { SESSION_SECRET: "playground-test-secret" };
+  await ensureSessionUser("chef_playground_test");
   const sessionCookie = await createUserSessionCookie("chef_playground_test", env);
   return loader({
     request: new UndiciRequest("https://spoonjoy.app/api/playground", {

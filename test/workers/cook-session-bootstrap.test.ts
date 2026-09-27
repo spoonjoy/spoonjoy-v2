@@ -276,7 +276,7 @@ describe("CookSession lifecycle bootstrap", () => {
       "PRAGMA foreign_keys = OFF",
       "DROP TABLE IF EXISTS ApiCredential",
       "DROP TABLE IF EXISTS User",
-      "CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, username TEXT NOT NULL UNIQUE)",
+      "CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, username TEXT NOT NULL UNIQUE, sessionVersion INTEGER NOT NULL DEFAULT 0)",
       "CREATE TABLE ApiCredential (id TEXT PRIMARY KEY, userId TEXT NOT NULL, name TEXT NOT NULL, tokenHash TEXT NOT NULL UNIQUE, tokenPrefix TEXT NOT NULL, scopes TEXT NOT NULL, lastUsedAt DATETIME, revokedAt DATETIME, oauthClientId TEXT, oauthIssuer TEXT, oauthResource TEXT, oauthConnectionKey TEXT, oauthGrantId TEXT, expiresAt DATETIME, createdAt DATETIME NOT NULL, updatedAt DATETIME NOT NULL, FOREIGN KEY (userId) REFERENCES User(id) ON DELETE CASCADE)",
       "PRAGMA foreign_keys = ON",
       "INSERT INTO User (id, email, username) VALUES ('cook-session-user', 'cook-session@example.com', 'cook_session_user')",
@@ -325,9 +325,12 @@ describe("CookSession lifecycle bootstrap", () => {
         revokedAt: "2026-07-20T00:00:00.000Z",
       },
     );
+    // Minted through the real D1 binding, as sign-in does on the Worker: the session version is
+    // read with a raw statement, so no Prisma client is loaded into workerd for it.
     sessionCookie = (await createUserSessionCookie(
       TEST_USER_ID,
       {
+        DB: DB as unknown as D1Database,
         NODE_ENV: "test",
         SESSION_SECRET: TEST_SESSION_SECRET,
         SPOONJOY_BASE_URL: TEST_ORIGIN,
@@ -392,6 +395,19 @@ describe("CookSession lifecycle bootstrap", () => {
     for (const route of publicCookRoutes) {
       const response = await SELF.fetch(requestForRoute(route, null, { cookie: sessionCookie }));
       await expectProtocolUnavailable(response);
+    }
+  });
+
+  itWithCookSessionNamespace("rejects a first-party session revoked by a session version bump", async () => {
+    const { DB } = testEnvironment();
+    await DB.prepare("UPDATE User SET sessionVersion = sessionVersion + 1 WHERE id = ?").bind(TEST_USER_ID).run();
+    try {
+      for (const route of publicCookRoutes) {
+        const response = await SELF.fetch(requestForRoute(route, null, { cookie: sessionCookie }));
+        await expectCookError(response, 401, "authentication_required", "Authentication required.");
+      }
+    } finally {
+      await DB.prepare("UPDATE User SET sessionVersion = 0 WHERE id = ?").bind(TEST_USER_ID).run();
     }
   });
 

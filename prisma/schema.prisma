@@ -22,6 +22,8 @@ model User {
   resetTokenExpiresAt      DateTime?
   webAuthnChallenge        String?                   @unique
   photoUrl                 String?
+  // Browser session cookies carry this value; bumping it revokes every older cookie.
+  sessionVersion           Int                       @default(0)
   credentials              UserCredential[]
   OAuth                    OAuth[]
   recipes                  Recipe[]

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, onTestFinished } from "vitest";
 import { sessionStorage } from "~/lib/session.server";
 import { commitOAuthStartSession, readOAuthStartSession } from "~/lib/oauth-route.server";
 
@@ -30,6 +30,7 @@ import { action, loader } from "~/routes/auth.google";
 import GoogleOAuthRoute from "~/routes/auth.google";
 import { loader as callbackLoader } from "~/routes/auth.google.callback";
 import GoogleOAuthCallbackRoute from "~/routes/auth.google.callback";
+import { ensureSessionUser } from "../helpers/session-user";
 
 const googleEnv = {
   GOOGLE_CLIENT_ID: "google-client",
@@ -421,6 +422,7 @@ describe("Google OAuth routes", () => {
   });
 
   it("passes current user ID for successful linking callbacks", async () => {
+    onTestFinished(await ensureSessionUser("user-1"));
     const loginSession = await sessionStorage.getSession();
     loginSession.set("userId", "user-1");
     const loginCookie = await sessionStorage.commitSession(loginSession);
