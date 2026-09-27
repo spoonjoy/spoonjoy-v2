@@ -562,9 +562,11 @@ describe("Signup Route", () => {
       // The fields keep what was typed, so the user corrects them instead of starting over.
       expect(screen.getByLabelText("Email")).toHaveValue("new-cook@example.com");
       expect(screen.getByLabelText("Username")).toHaveValue("ab");
+      // Focus moves to the first field the server rejected, as the browser's own check did.
+      expect(screen.getByLabelText("Username")).toHaveFocus();
     });
 
-    it("marks a rejected email invalid and describes it with the server's message", async () => {
+    it("marks a rejected email and moves focus to it, ahead of the other fields", async () => {
       const user = userEvent.setup();
       const Stub = createTestRoutesStub([
         {
@@ -589,6 +591,7 @@ describe("Signup Route", () => {
       expect(await screen.findByText("Valid email is required")).toBeInTheDocument();
       expect(screen.getByLabelText("Email")).toHaveAttribute("aria-invalid", "true");
       expect(screen.getByLabelText("Email")).toHaveAccessibleDescription("Valid email is required");
+      expect(screen.getByLabelText("Email")).toHaveFocus();
     });
 
     it("should have login link", async () => {

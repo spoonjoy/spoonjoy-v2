@@ -1,4 +1,5 @@
 import type { Route } from "./+types/signup";
+import { useEffect, useRef } from "react";
 import { Form, redirect, data, useActionData, useLoaderData, useSearchParams } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { createUser, emailExists, usernameExists } from "~/lib/auth.server";
@@ -127,6 +128,14 @@ export default function Signup() {
   const oauthProviders = loaderData?.oauthProviders ?? [];
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get("redirectTo") ?? undefined;
+  const formRef = useRef<HTMLFormElement>(null);
+  const errors = actionData?.errors;
+
+  // The browser no longer checks the fields (noValidate), so it no longer moves focus to the
+  // first bad one either. Do that here each time the server answers with errors.
+  useEffect(() => {
+    formRef.current?.querySelector<HTMLInputElement>('[aria-invalid="true"]')?.focus();
+  }, [errors]);
 
   return (
     <AuthLayout
@@ -154,7 +163,7 @@ export default function Signup() {
         {/* noValidate: the action checks every rule and answers with the messages below. Left to
             the browser, required/minLength would stop the submit with a native bubble instead, so
             a short username or password never showed the app's own message. */}
-        <Form method="post" noValidate className={oauthProviders.length > 0 ? "space-y-6" : "mt-8 space-y-6"}>
+        <Form ref={formRef} method="post" noValidate className={oauthProviders.length > 0 ? "space-y-6" : "mt-8 space-y-6"}>
           <Field>
             <Label htmlFor="email">Email</Label>
             <Input
