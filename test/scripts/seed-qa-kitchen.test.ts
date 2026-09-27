@@ -382,6 +382,32 @@ describe("seed-qa-kitchen", () => {
         }
       });
 
+      it("also invalidates a legacy scratch user minted under the old, longer 'codex-e2e-scratch-...' email shape", () => {
+        // Before scratch ids were shortened to fit under D1's 50-byte LIKE pattern limit, this
+        // generator minted 'codex-e2e-scratch-<stamp>-<token>-<n>@example.com' addresses. Some
+        // of those are still sitting in QA, and --rotate must keep invalidating them, not just
+        // users under the current, shorter 'codex-e2e-s-...' shape.
+        const db = migratedDb();
+        db.exec(`
+          INSERT INTO "User" (id, email, username, hashedPassword, salt, createdAt, updatedAt)
+          VALUES (
+            'codex_e2e_scratch_legacy_1',
+            'codex-e2e-scratch-20260101t000000z-legacytoken1234-1@example.com',
+            'codex_e2e_scratch_legacy_1',
+            '${fastHash("legacy-pw")}',
+            'salt',
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP
+          );
+        `);
+
+        db.exec(buildScratchInvalidationSql());
+
+        const row = db.prepare('SELECT hashedPassword, salt FROM "User" WHERE id = ?').get("codex_e2e_scratch_legacy_1") as any;
+        expect(row.hashedPassword).toBeNull();
+        expect(row.salt).toBeNull();
+      });
+
       it("never touches the kitchen personas", () => {
         const db = migratedDb();
         db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));

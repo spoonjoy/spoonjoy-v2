@@ -178,10 +178,14 @@ describe("cleanup-local-qa-data executable ownership boundaries", () => {
   });
 
   it("detects a non-disposable NotificationEvent payload blocker even when the disposable id is longer than Cloudflare D1's 50-byte LIKE/GLOB pattern limit", () => {
-    // A disposable user id this long broke QA cleanup before instr(...) replaced the
-    // concatenated LIKE pattern this blocker used to build ('%' || id || '%', which D1 caps at
-    // 50 bytes and rejects with SQLITE_ERROR 7500 "LIKE or GLOB pattern too complex"). instr has
-    // no such limit, so this must still correctly detect the reference regardless of id length.
+    // A disposable user id this long broke QA cleanup: this blocker used to build a
+    // concatenated LIKE pattern ('%' || id || '%'), which D1 (unlike local SQLite, which has no
+    // such cap) rejects past 50 bytes with SQLITE_ERROR 7500 "LIKE or GLOB pattern too complex".
+    // This test runs against local SQLite, so it cannot reproduce that D1-specific rejection —
+    // what it proves is that instr(...), the replacement, still correctly finds the reference at
+    // this length (functional correctness of the fix). The static assertion that the generated
+    // SQL never contains a concatenated LIKE pattern again (test/scripts/cleanup-local-qa-data.
+    // test.ts) is what actually guards against the D1 limit reappearing.
     db = createCleanupDatabase();
     const longDisposableUserId = `codex-user-${"a".repeat(50)}`;
     expect(longDisposableUserId.length).toBeGreaterThan(50);

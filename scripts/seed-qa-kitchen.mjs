@@ -164,16 +164,15 @@ function disposableToken(value) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 16) || "run";
 }
 
-// Email prefix unique to this generator (no other script or e2e helper mints 'codex-e2e-s-*'
-// addresses), so it doubles as the exact-match predicate buildScratchInvalidationSql uses to
-// find every scratch user from every past run, regardless of their run token or index. Kept
+// Email prefix this generator mints going forward (no other script or e2e helper uses it). Kept
 // short, like the whole generated id below: Cloudflare D1 caps a LIKE/GLOB pattern at 50 bytes,
 // and scripts/cleanup-local-qa-data.mjs's disposable-row blockers build patterns from a row's
 // id — a long id was exactly what broke that in QA before these ids were shortened (D1 error
 // SQLITE_ERROR 7500, "LIKE or GLOB pattern too complex"); cleanup itself now builds those
 // specific blockers with instr(...) instead of a concatenated LIKE pattern, which has no length
 // limit, but ids here stay short regardless, in case another LIKE/GLOB pattern is ever built
-// from one.
+// from one. buildScratchInvalidationSql matches a broader pattern than this exact prefix, to
+// still catch older scratch users minted before this shortening — see its own comment.
 const SCRATCH_EMAIL_PREFIX = "codex-e2e-s-";
 
 // Generates `count` scratch user identities for this run. Every one shares a single run token
@@ -183,6 +182,9 @@ const SCRATCH_EMAIL_PREFIX = "codex-e2e-s-";
 // exceeds 40 characters. Scratch users own no data (no recipes, cookbooks, or shopping lists),
 // so there is no persona-style drift to reset here — only identity.
 export function generateScratchUsers(count = SCRATCH_USER_COUNT, { random = randomBytes } = {}) {
+  // 4 bytes (32 bits) of randomness is what fits the 40-character id budget above; that's still
+  // plenty of entropy for run-to-run uniqueness (this is a collision-avoidance token, not a
+  // security secret).
   const runToken = disposableToken(random(4).toString("hex"));
   return Array.from({ length: count }, (_, index) => {
     const n = index + 1;
@@ -225,10 +227,15 @@ export function buildScratchUsersSql({ users, passwords, hash = (password) => bc
 // authenticatePasswordUser (app/lib/auth.server.ts) rejects any login attempt whose looked-up
 // user has a null hashedPassword before it ever runs a bcrypt comparison, so a null hash is a
 // simpler, equally final way to make the password unusable than hashing an unknown value would
-// be. Matches by email prefix only (SCRATCH_EMAIL_PREFIX is unique to this generator), not by
-// PERSONA_IDS or any other id list, so it can never touch the kitchen personas.
+// be. Matches by email prefix only, not by PERSONA_IDS or any other id list, so it can never
+// touch the kitchen personas. The pattern here is deliberately broader than SCRATCH_EMAIL_PREFIX:
+// 'codex-e2e-s%' (no trailing hyphen) matches both this generator's current
+// 'codex-e2e-s-...' addresses and the older, longer 'codex-e2e-scratch-...' addresses minted
+// before ids were shortened to fit under D1's LIKE pattern-length limit — some of those are
+// still sitting in QA, and --rotate must keep invalidating them too. Still a short literal
+// prefix, nowhere near D1's 50-byte LIKE limit.
 export function buildScratchInvalidationSql() {
-  return `UPDATE "User" SET hashedPassword = NULL, salt = NULL WHERE email LIKE '${SCRATCH_EMAIL_PREFIX}%';`;
+  return `UPDATE "User" SET hashedPassword = NULL, salt = NULL WHERE email LIKE 'codex-e2e-s%';`;
 }
 
 export function buildKitchenResetSql({ passwords, hash = (password) => bcrypt.hashSync(password, 10) }) {
