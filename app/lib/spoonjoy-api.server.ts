@@ -77,6 +77,7 @@ import {
   coalesceShoppingRecipeIngredients,
   createCompatibleShoppingListD1Batch,
   findCompatibleShoppingListItem,
+  mergedShoppingItemQuantity,
   mutateCompatibleShoppingListItem,
   runCompatibleShoppingListBatch,
   type ShoppingListItemWritePlan,
@@ -2659,7 +2660,7 @@ const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
           updated += 1;
           const shouldMoveToEnd = Boolean(existing.checked || existing.checkedAt || existing.deletedAt);
           const sortIndex = shouldMoveToEnd ? nextSort++ : existing.sortIndex;
-          const quantity = (existing.quantity ?? 0) + row.quantity;
+          const quantity = mergedShoppingItemQuantity(existing, row.quantity);
           const categoryKey = row.categoryKey ?? existing.categoryKey;
           const iconKey = row.iconKey ?? existing.iconKey;
           operations.push(context.db.shoppingListItem.update({
@@ -3031,7 +3032,7 @@ const addShoppingListItemTool: SpoonjoyApiOperation = {
         return context.db.shoppingListItem.update({
           where: { id: existing.id },
           data: {
-            quantity: quantity === null ? existing.quantity : (existing.quantity ?? 0) + quantity,
+            quantity: mergedShoppingItemQuantity(existing, quantity),
             checked: false,
             checkedAt: null,
             deletedAt: null,

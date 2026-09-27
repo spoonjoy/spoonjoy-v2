@@ -166,6 +166,76 @@ describe("Shopping List Route", () => {
     });
   });
 
+  describe("re-adding an item after it was cleared (shopping list journey, run 36310125579)", () => {
+    async function post(fields: Record<string, string>) {
+      const formData = new UndiciFormData();
+      for (const [key, value] of Object.entries(fields)) formData.append(key, value);
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const headers = new Headers({ Cookie: (await sessionStorage.commitSession(session)).split(";")[0] });
+      const request = new UndiciRequest("http://localhost:3000/shopping-list", { method: "POST", body: formData, headers });
+      return action({ request, context: { cloudflare: { env: null } }, params: {} } as any);
+    }
+
+    async function activeItems() {
+      const list = await db.shoppingList.findUniqueOrThrow({
+        where: { authorId: testUserId },
+        include: { items: { where: { deletedAt: null }, include: { ingredientRef: true, unit: true } } },
+      });
+      return list.items.map((item) => ({ name: item.ingredientRef.name, quantity: item.quantity, unit: item.unit?.name ?? null }));
+    }
+
+    it("adds a cleared item back at the amount just typed, not on top of the cleared amount", async () => {
+      const name = `lemon_${faker.string.alphanumeric(6).toLowerCase()}`;
+      await post({ intent: "addItem", ingredientText: `1 ${name}` });
+      await post({ intent: "clearAll" });
+      expect(await activeItems()).toEqual([]);
+
+      await post({ intent: "addItem", ingredientText: `1 ${name}` });
+
+      expect(await activeItems()).toEqual([{ name, quantity: 1, unit: "whole" }]);
+    });
+
+    it("adds a removed item back at the amount just typed", async () => {
+      const name = `onion_${faker.string.alphanumeric(6).toLowerCase()}`;
+      await post({ intent: "addItem", ingredientText: `2 ${name}` });
+      const [item] = await db.shoppingListItem.findMany({ where: { ingredientRef: { name } } });
+      await post({ intent: "removeItem", itemId: item.id });
+
+      await post({ intent: "addItem", ingredientText: `3 ${name}` });
+
+      expect(await activeItems()).toEqual([{ name, quantity: 3, unit: "whole" }]);
+    });
+
+    it("adds a cleared-checked item back from a recipe at the recipe's amount", async () => {
+      const name = `garlic_${faker.string.alphanumeric(6).toLowerCase()}`;
+      await post({ intent: "addItem", ingredientText: `4 clove ${name}` });
+      const [item] = await db.shoppingListItem.findMany({ where: { ingredientRef: { name } } });
+      await post({ intent: "toggleCheck", itemId: item.id, nextChecked: "true" });
+      await post({ intent: "clearCompleted" });
+      const recipe = await db.recipe.create({ data: { title: `Garlic ${faker.string.alphanumeric(6)}`, chefId: testUserId } });
+      await db.recipeStep.create({ data: { recipeId: recipe.id, stepNum: 1, description: "Peel" } });
+      await db.ingredient.create({
+        data: { recipeId: recipe.id, stepNum: 1, quantity: 2, unitId: item.unitId, ingredientRefId: item.ingredientRefId },
+      });
+
+      await post({ intent: "addFromRecipe", recipeId: recipe.id, scaleFactor: "2" });
+
+      expect(await activeItems()).toEqual([{ name, quantity: 4, unit: "clove" }]);
+    });
+
+    it("still adds to an item that is on the list, checked or not", async () => {
+      const name = `carrot_${faker.string.alphanumeric(6).toLowerCase()}`;
+      await post({ intent: "addItem", ingredientText: `3 ${name}` });
+      const [item] = await db.shoppingListItem.findMany({ where: { ingredientRef: { name } } });
+      await post({ intent: "toggleCheck", itemId: item.id, nextChecked: "true" });
+
+      await post({ intent: "addItem", ingredientText: `2 ${name}` });
+
+      expect(await activeItems()).toEqual([{ name, quantity: 5, unit: "whole" }]);
+    });
+  });
+
   describe("action - addItem", () => {
     async function createFormRequest(
       formFields: Record<string, string>,
@@ -629,7 +699,8 @@ describe("Shopping List Route", () => {
         db.shoppingListItem.findUnique({ where: { id: laterBySort.id } }),
       ]);
 
-        expect(restored?.quantity).toBe(31);
+        // A removed row restarts from the added amount; its old quantity doesn't come back (mergedShoppingItemQuantity).
+        expect(restored?.quantity).toBe(1);
         expect(restored?.deletedAt).toBeNull();
         expect(restored?.sortIndex).toBe(5);
         expect(sameSortLater?.quantity).toBe(20);
@@ -1638,7 +1709,8 @@ describe("Shopping List Route", () => {
         where: { id: deletedItem.id },
       });
 
-      expect(restored?.quantity).toBe(3);
+      // A removed row restarts from the added amount; its old quantity doesn't come back (mergedShoppingItemQuantity).
+      expect(restored?.quantity).toBe(2);
       expect(restored?.checked).toBe(false);
       expect(restored?.checkedAt).toBeNull();
       expect(restored?.deletedAt).toBeNull();
@@ -1812,7 +1884,8 @@ describe("Shopping List Route", () => {
           db.shoppingListItem.findUnique({ where: { id: laterBySort.id } }),
         ]);
 
-        expect(restored?.quantity).toBe(31);
+        // A removed row restarts from the added amount; its old quantity doesn't come back (mergedShoppingItemQuantity).
+        expect(restored?.quantity).toBe(1);
         expect(restored?.deletedAt).toBeNull();
         expect(restored?.sortIndex).toBe(0);
         expect(sameSortLater?.quantity).toBe(20);
@@ -2613,7 +2686,8 @@ describe("Shopping List Route", () => {
         where: { id: deletedItem.id },
       });
 
-      expect(restored?.quantity).toBe(5);
+      // A removed row restarts from the added amount; its old quantity doesn't come back (mergedShoppingItemQuantity).
+      expect(restored?.quantity).toBe(1);
       expect(restored?.checked).toBe(false);
       expect(restored?.checkedAt).toBeNull();
       expect(restored?.deletedAt).toBeNull();

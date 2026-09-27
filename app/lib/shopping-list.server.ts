@@ -14,6 +14,7 @@ import {
   coalesceShoppingRecipeIngredients,
   createCompatibleShoppingListD1Batch,
   findCompatibleShoppingListItem,
+  mergedShoppingItemQuantity,
   mutateCompatibleShoppingListItem,
   runCompatibleShoppingListBatch,
   type ShoppingListItemWritePlan,
@@ -259,10 +260,10 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
         database,
         identity,
         update: async (existingItem) => {
-          /* istanbul ignore next -- @preserve ternary branches for quantity addition */
-          const newQuantity = quantity
-            ? (existingItem.quantity || 0) + parseFloat(quantity)
-            : existingItem.quantity;
+          const newQuantity = mergedShoppingItemQuantity(
+            existingItem,
+            quantity ? parseFloat(quantity) : null
+          );
           const shouldMoveToEnd = Boolean(
             existingItem.deletedAt || existingItem.checkedAt || existingItem.checked
           );
@@ -380,10 +381,10 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
           const existingItem = existingItems[index];
 
           if (existingItem) {
-            /* istanbul ignore next -- @preserve ternary branches for quantity addition */
-            const newQuantity = ingredient.quantity
-              ? (existingItem.quantity || 0) + ingredient.quantity
-              : existingItem.quantity;
+            const newQuantity = mergedShoppingItemQuantity(
+              existingItem,
+              ingredient.quantity || null
+            );
             const shouldMoveToEnd = Boolean(
               existingItem.deletedAt || existingItem.checkedAt || existingItem.checked
             );

@@ -117,6 +117,7 @@ import {
   coalesceShoppingRecipeIngredients,
   createCompatibleShoppingListD1Batch,
   findCompatibleShoppingListItem,
+  mergedShoppingItemQuantity,
   mutateCompatibleShoppingListItem,
   runCompatibleShoppingListBatch,
   type ShoppingListItemWritePlan,
@@ -4069,7 +4070,7 @@ async function handleShoppingItemCreate(args: ApiV1RouteArgs, requestId: string,
       update: async (existing) => db.shoppingListItem.update({
         where: { id: existing.id },
         data: {
-          quantity: quantity === null ? existing.quantity : (existing.quantity ?? 0) + quantity,
+          quantity: mergedShoppingItemQuantity(existing, quantity),
           checked: false,
           checkedAt: null,
           deletedAt: null,
@@ -4254,7 +4255,7 @@ async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: stri
           const sortIndex = existing.deletedAt || existing.checkedAt || existing.checked
             ? nextSortIndexValue++
             : existing.sortIndex;
-          const quantity = (existing.quantity ?? 0) + requested.quantity;
+          const quantity = mergedShoppingItemQuantity(existing, requested.quantity);
           const categoryKey = existing.categoryKey ?? requested.categoryKey;
           const iconKey = existing.iconKey ?? requested.iconKey;
           operations.push(db.shoppingListItem.update({

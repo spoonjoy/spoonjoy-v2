@@ -4,6 +4,20 @@ import type {
   ShoppingListItem,
 } from "@prisma/client";
 
+// The quantity a shopping-list row ends up with when an amount is added to an existing row with
+// the same ingredient and unit. A live row (checked or not) merges: the added amount goes on top
+// of what is already there. A removed or cleared row is kept only as a record to reuse (the
+// identity is unique), so it restarts from the added amount; otherwise a cleared "1 lemon" would
+// come back as 2 when "1 lemon" is added again. `added` is null when no amount was given.
+export function mergedShoppingItemQuantity(
+  existing: { quantity: number | null; deletedAt: Date | null },
+  added: number | null,
+): number | null {
+  if (existing.deletedAt) return added;
+  if (added === null) return existing.quantity;
+  return (existing.quantity ?? 0) + added;
+}
+
 export interface ShoppingListItemIdentity {
   shoppingListId: string;
   ingredientRefId: string;
