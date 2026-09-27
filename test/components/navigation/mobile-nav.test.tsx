@@ -58,7 +58,7 @@ describe("MobileNav", () => {
       );
       expect(screen.getByRole("link", { name: /my recipes/i })).toHaveAttribute("href", "/my-recipes");
       expect(screen.getByRole("link", { name: /shopping list/i })).toHaveAttribute("href", "/shopping-list");
-      expect(screen.getByRole("button", { name: /open pantry navigation/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Pantry navigation" })).toBeInTheDocument();
       expect(screen.queryByRole("link", { name: /settings/i })).not.toBeInTheDocument();
     });
 
@@ -73,7 +73,7 @@ describe("MobileNav", () => {
 
       expect(screen.queryByTestId("mobile-pantry")).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: /open pantry navigation/i }));
+      await user.click(screen.getByRole("button", { name: "Pantry navigation" }));
 
       const pantry = screen.getByTestId("mobile-pantry");
       expect(pantry).toHaveClass("backdrop-blur-2xl");
@@ -96,12 +96,14 @@ describe("MobileNav", () => {
         </MemoryRouter>,
       );
 
-      const toggle = screen.getByRole("button", { name: "Open pantry navigation" });
+      const toggle = screen.getByRole("button", { name: "Pantry navigation" });
       expect(toggle).toHaveAttribute("aria-expanded", "false");
       expect(toggle).toHaveAttribute("aria-controls", "mobile-pantry");
 
       await user.click(toggle);
       expect(toggle).toHaveAttribute("aria-expanded", "true");
+      // The label names the control, not an action, so it stays true while the pantry is open.
+      expect(screen.getByRole("button", { name: "Pantry navigation", expanded: true })).toBe(toggle);
       expect(screen.getByTestId("mobile-pantry")).toHaveAttribute("id", "mobile-pantry");
 
       await user.click(toggle);
@@ -117,7 +119,7 @@ describe("MobileNav", () => {
         </MemoryRouter>,
       );
 
-      const toggle = screen.getByRole("button", { name: "Open pantry navigation" });
+      const toggle = screen.getByRole("button", { name: "Pantry navigation" });
       await user.click(toggle);
       toggle.blur();
 
@@ -145,7 +147,7 @@ describe("MobileNav", () => {
         </MemoryRouter>,
       );
 
-      await user.click(screen.getByRole("button", { name: "Open pantry navigation" }));
+      await user.click(screen.getByRole("button", { name: "Pantry navigation" }));
       const backdrop = screen.getByTestId("mobile-pantry-backdrop");
       expect(backdrop).toHaveAttribute("aria-hidden", "true");
       expect(backdrop).toHaveClass("fixed", "inset-0", "z-40", "lg:hidden");
@@ -168,7 +170,7 @@ describe("MobileNav", () => {
         </MemoryRouter>,
       );
 
-      await user.click(screen.getByRole("button", { name: "Open pantry navigation" }));
+      await user.click(screen.getByRole("button", { name: "Pantry navigation" }));
       const pantry = screen.getByTestId("mobile-pantry");
       expect(within(pantry).getByRole("link", { name: "Account", exact: true })).toHaveAttribute("href", "/account/settings");
 

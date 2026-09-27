@@ -80,7 +80,7 @@ test.describe("Dock on iPhone", () => {
 
   test("the pantry opens and closes like a menu, and its Account link lands on account settings", async ({ page, expectAccessible }) => {
     const dock = page.getByRole("navigation", { name: "Spoonjoy navigation" });
-    const toggle = dock.getByRole("button", { name: "Open pantry navigation", exact: true });
+    const toggle = dock.getByRole("button", { name: "Pantry navigation", exact: true });
     const pantry = page.getByTestId("mobile-pantry");
     const kitchenHeading = page.getByRole("heading", { level: 1, name: "My Kitchen", exact: true });
 
@@ -141,7 +141,7 @@ test.describe("Dock on iPhone", () => {
     await waitForServiceWorker(page);
     await expect(page.getByRole("heading", { level: 1, name: "My Kitchen", exact: true })).toBeVisible();
 
-    await dock.getByRole("button", { name: "Open pantry navigation", exact: true }).click();
+    await dock.getByRole("button", { name: "Pantry navigation", exact: true }).click();
     await pantry.getByRole("button", { name: "Log out", exact: true }).click();
     await expect(page).toHaveURL(pathUrl("/login"));
     await expect(page.getByRole("heading", { level: 1, name: "Log In", exact: true })).toBeVisible();
@@ -152,7 +152,7 @@ test.describe("Dock on iPhone", () => {
     await expect(page).toHaveURL(/\/login/);
     await page.goto("/");
     await expect(dock.getByRole("link", { name: "Log in", exact: true })).toHaveAttribute("href", "/login");
-    await expect(dock.getByRole("button", { name: "Open pantry navigation", exact: true })).toHaveCount(0);
+    await expect(dock.getByRole("button", { name: "Pantry navigation", exact: true })).toHaveCount(0);
   });
 
   test("the page's bottom padding clears the dock on every dock layout (R-M3-4)", async ({ page }) => {
