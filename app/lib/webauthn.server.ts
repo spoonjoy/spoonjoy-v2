@@ -19,12 +19,6 @@
  * unit-tested without real WebAuthn crypto.
  */
 
-import {
-  generateRegistrationOptions as defaultGenerateRegistrationOptions,
-  verifyRegistrationResponse as defaultVerifyRegistrationResponse,
-  generateAuthenticationOptions as defaultGenerateAuthenticationOptions,
-  verifyAuthenticationResponse as defaultVerifyAuthenticationResponse,
-} from "@simplewebauthn/server";
 import type {
   AuthenticatorTransportFuture,
   PublicKeyCredentialCreationOptionsJSON,
@@ -34,6 +28,15 @@ import type {
   VerifiedRegistrationResponse,
   VerifiedAuthenticationResponse,
 } from "@simplewebauthn/server";
+
+// `@simplewebauthn/server` and its ASN.1 dependencies take several milliseconds of CPU to
+// evaluate, and only the passkey routes use them. Importing them on first use keeps them
+// out of every other request's cold start; the runtime caches the module after that.
+type SimpleWebAuthn = typeof import("@simplewebauthn/server");
+
+function loadSimpleWebAuthn(): Promise<SimpleWebAuthn> {
+  return import("@simplewebauthn/server");
+}
 
 export interface WebAuthnConfig {
   rpName: string;
@@ -84,18 +87,19 @@ export function parseTransports(
   return parsed.length > 0 ? parsed : undefined;
 }
 
-export type GenerateRegistrationOptionsFn = typeof defaultGenerateRegistrationOptions;
-export type VerifyRegistrationResponseFn = typeof defaultVerifyRegistrationResponse;
-export type GenerateAuthenticationOptionsFn = typeof defaultGenerateAuthenticationOptions;
-export type VerifyAuthenticationResponseFn = typeof defaultVerifyAuthenticationResponse;
+export type GenerateRegistrationOptionsFn = SimpleWebAuthn["generateRegistrationOptions"];
+export type VerifyRegistrationResponseFn = SimpleWebAuthn["verifyRegistrationResponse"];
+export type GenerateAuthenticationOptionsFn = SimpleWebAuthn["generateAuthenticationOptions"];
+export type VerifyAuthenticationResponseFn = SimpleWebAuthn["verifyAuthenticationResponse"];
 
 export async function buildRegistrationOptions(
   config: WebAuthnConfig,
   user: { id: string; username: string; email: string },
   existingCredentials: StoredCredential[],
-  generate: GenerateRegistrationOptionsFn = defaultGenerateRegistrationOptions,
+  generate?: GenerateRegistrationOptionsFn,
 ): Promise<PublicKeyCredentialCreationOptionsJSON> {
-  return generate({
+  const generateOptions = generate ?? (await loadSimpleWebAuthn()).generateRegistrationOptions;
+  return generateOptions({
     rpName: config.rpName,
     rpID: config.rpID,
     userName: user.email,
@@ -123,9 +127,10 @@ export async function verifyRegistration(
   config: WebAuthnConfig,
   response: RegistrationResponseJSON,
   expectedChallenge: string,
-  verify: VerifyRegistrationResponseFn = defaultVerifyRegistrationResponse,
+  verify?: VerifyRegistrationResponseFn,
 ): Promise<VerifiedRegistrationResponse> {
-  return verify({
+  const verifyResponse = verify ?? (await loadSimpleWebAuthn()).verifyRegistrationResponse;
+  return verifyResponse({
     response,
     expectedChallenge,
     expectedOrigin: config.origin,
@@ -151,9 +156,10 @@ export function credentialFromRegistration(
 export async function buildAuthenticationOptions(
   config: WebAuthnConfig,
   credentials: StoredCredential[],
-  generate: GenerateAuthenticationOptionsFn = defaultGenerateAuthenticationOptions,
+  generate?: GenerateAuthenticationOptionsFn,
 ): Promise<PublicKeyCredentialRequestOptionsJSON> {
-  return generate({
+  const generateOptions = generate ?? (await loadSimpleWebAuthn()).generateAuthenticationOptions;
+  return generateOptions({
     rpID: config.rpID,
     userVerification: "preferred",
     allowCredentials: credentials.map((cred) => ({
@@ -168,9 +174,10 @@ export async function verifyAuthentication(
   response: AuthenticationResponseJSON,
   expectedChallenge: string,
   credential: StoredCredential,
-  verify: VerifyAuthenticationResponseFn = defaultVerifyAuthenticationResponse,
+  verify?: VerifyAuthenticationResponseFn,
 ): Promise<VerifiedAuthenticationResponse> {
-  return verify({
+  const verifyResponse = verify ?? (await loadSimpleWebAuthn()).verifyAuthenticationResponse;
+  return verifyResponse({
     response,
     expectedChallenge,
     expectedOrigin: config.origin,

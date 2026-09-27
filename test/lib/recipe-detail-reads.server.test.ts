@@ -154,6 +154,26 @@ describe("recipe detail reads", () => {
     expect(forFriend.shoppingListItems).toHaveLength(2);
   });
 
+  it("returns no owner-only rows from D1 for anyone but the owner, before the JavaScript check", async () => {
+    const { owner, friend, recipe } = await seedRecipe();
+    const rawResults: unknown[][] = [];
+    const recording = {
+      prepare: d1.binding.prepare,
+      batch: async (statements: Parameters<typeof d1.binding.batch>[0]) => {
+        const results = await d1.binding.batch(statements);
+        rawResults.splice(0, rawResults.length, ...results.map((result) => result.results));
+        return results;
+      },
+    };
+    // Statements 8 and 9 are cover history and spoon photos; their SQL guard alone hides them.
+    await readRecipeDetailFromD1(recording as never, { recipeId: recipe.id, userId: friend.id });
+    expect(rawResults[8]).toEqual([]);
+    expect(rawResults[9]).toEqual([]);
+    await readRecipeDetailFromD1(recording as never, { recipeId: recipe.id, userId: owner.id });
+    expect(rawResults[8]).toHaveLength(3);
+    expect((rawResults[9] as unknown[]).length).toBeGreaterThan(0);
+  });
+
   it("is not an origin cook once the owner has spooned the recipe", async () => {
     const { owner, recipe } = await seedRecipe();
     await db.recipeSpoon.create({ data: { recipeId: recipe.id, chefId: owner.id, note: "First cook" } });

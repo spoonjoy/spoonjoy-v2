@@ -15,6 +15,15 @@ import {
   searchSpoonjoyFromD1,
   type SearchOptions,
 } from "../../../app/lib/search.server";
+import {
+  readCookbookListFromD1,
+  readCookbookListWithPrisma,
+  readPublicRecipesFromD1,
+  readPublicRecipesWithPrisma,
+  readSavedRecipesFromD1,
+  readSavedRecipesWithPrisma,
+} from "../../../app/lib/collection-reads.server";
+import { searchMyRecipes, searchMyRecipesFromD1 } from "../../../app/lib/my-recipes-search.server";
 import { applyRepositoryMigrations } from "./repository-migrations";
 
 // The raw D1 read paths against Wrangler's real D1 (workerd), checked against the Prisma
@@ -123,17 +132,39 @@ async function seed() {
      VALUES ('hot-read-friend-cookbook', 'Hot Read Friend Picks', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
     FRIEND,
   );
-  for (const [id, cookbookId, recipeId, addedById] of [
-    ["hot-read-entry-1", "hot-read-cookbook", RECIPE, OWNER],
-    ["hot-read-entry-2", "hot-read-cookbook", "hot-read-source", OWNER],
-    ["hot-read-entry-3", "hot-read-friend-cookbook", RECIPE, FRIEND],
+  for (let index = 1; index <= 4; index += 1) {
+    await run(
+      `INSERT INTO "Recipe" ("id", "title", "chefId", "createdAt", "updatedAt")
+       VALUES (?, ?, ?, '2026-08-10 09:00:00', '2026-08-10 09:00:00')`,
+      `hot-read-extra-${index}`,
+      `Hot Read Extra Stew ${index}`,
+      FRIEND,
+    );
+  }
+  // The owner's cookbook has seven entries: more than a card previews, two sharing a
+  // timestamp, and a deleted recipe as the newest, which no card counts or shows.
+  for (const [id, cookbookId, recipeId, addedById, createdAt] of [
+    ["hot-read-entry-1", "hot-read-cookbook", RECIPE, OWNER, "2026-09-01 10:00:00"],
+    ["hot-read-entry-2", "hot-read-cookbook", "hot-read-source", OWNER, "2026-09-01 10:01:00"],
+    ["hot-read-entry-3", "hot-read-friend-cookbook", RECIPE, FRIEND, "2026-09-01 10:02:00"],
+    ["hot-read-entry-4", "hot-read-cookbook", "hot-read-extra-1", OWNER, "2026-09-01 10:03:00"],
+    ["hot-read-entry-5", "hot-read-cookbook", "hot-read-extra-2", OWNER, "2026-09-01 10:04:00"],
+    ["hot-read-entry-6", "hot-read-cookbook", "hot-read-extra-3", OWNER, "2026-09-01 10:04:00"],
+    ["hot-read-entry-7", "hot-read-cookbook", "hot-read-extra-4", OWNER, "2026-09-01 10:05:00"],
+    ["hot-read-entry-8", "hot-read-cookbook", "hot-read-deleted", OWNER, "2026-09-01 10:06:00"],
   ]) {
     await run(
       `INSERT INTO "RecipeInCookbook" ("id", "cookbookId", "recipeId", "addedById", "createdAt", "updatedAt")
-       VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-      id, cookbookId, recipeId, addedById,
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      id, cookbookId, recipeId, addedById, createdAt, createdAt,
     );
   }
+  await run(
+    `INSERT INTO "RecipeSpoon" ("id", "chefId", "recipeId", "cookedAt", "photoUrl", "note", "deletedAt", "updatedAt")
+     VALUES ('hot-read-spoon-deleted', ?, ?, '2026-09-09 18:00:00', 'https://example.com/deleted.jpg', 'Deleted', '2026-09-10 00:00:00', CURRENT_TIMESTAMP)`,
+    FRIEND,
+    RECIPE,
+  );
 
   const list = await prisma.shoppingList.create({ data: { authorId: FRIEND } });
   await prisma.shoppingListItem.create({
@@ -141,6 +172,9 @@ async function seed() {
   });
   await prisma.shoppingListItem.create({
     data: { shoppingListId: list.id, ingredientRefId: "hot-read-rice", unitId: null, quantity: null, checked: true, checkedAt: new Date() },
+  });
+  await prisma.shoppingListItem.create({
+    data: { shoppingListId: list.id, ingredientRefId: "hot-read-parsley", unitId: "hot-read-cup", quantity: 1, deletedAt: new Date() },
   });
 
   await prisma.oAuth.create({ data: { provider: "google", providerUserId: "hot-read-g", providerUsername: "owner@gmail.com", userId: OWNER } });
@@ -157,6 +191,17 @@ async function seed() {
   });
   await prisma.apiCredential.create({
     data: { userId: OWNER, name: "Hot Read CLI", tokenHash: "hot-read-cli", tokenPrefix: "sj_hotcli", lastUsedAt: new Date() },
+  });
+  await prisma.apiCredential.create({
+    data: { userId: OWNER, name: "Hot Read Revoked", tokenHash: "hot-read-revoked", tokenPrefix: "sj_hotrev", revokedAt: new Date() },
+  });
+  await prisma.oAuthRefreshToken.create({
+    data: { tokenHash: "hot-read-refresh-revoked", userId: OWNER, clientId: client.id, scope: "recipes:read", issuer: ISSUER, revokedAt: new Date() },
+  });
+  // A legacy token whose client is bound to another issuer: promotion cannot change it.
+  const foreign = await prisma.oAuthClient.create({ data: { clientName: "Elsewhere", redirectUris: "[]", issuer: "https://other.example" } });
+  await prisma.oAuthRefreshToken.create({
+    data: { tokenHash: "hot-read-refresh-foreign", userId: OWNER, clientId: foreign.id, scope: "recipes:read", issuer: null },
   });
 }
 
@@ -194,7 +239,9 @@ describe("hot read paths on Wrangler D1", () => {
     const rows = await readKitchenHomeFromD1(database(), { viewerId: OWNER, kitchenUserWhere: { id: OWNER } });
     expect(rows.recipes.map((recipe) => recipe.id)).toEqual([RECIPE]);
     expect(getRecipeCoverDisplay(rows.recipes[0]!, rows.recipes[0]!.covers)?.displayUrl).toBe("https://example.com/hot-read-editorial.jpg");
-    expect(rows.cookbooks[0]).toMatchObject({ id: "hot-read-cookbook", _count: { recipes: 2 } });
+    expect(rows.cookbooks[0]).toMatchObject({ id: "hot-read-cookbook", _count: { recipes: 6 } });
+    const preview = rows.cookbooks[0]!.recipes;
+    expect(preview.map((entry) => entry.id)).toEqual(["hot-read-entry-7", "hot-read-entry-6", "hot-read-entry-5", "hot-read-entry-4"]);
   });
 
   it("reads the recipe page as Prisma does, for the owner, another chef and a visitor", async () => {
@@ -217,16 +264,51 @@ describe("hot read paths on Wrangler D1", () => {
       .resolves.toMatchObject({ recipe: null });
   });
 
-  it("reads account settings as Prisma does", async () => {
+  it("promotes legacy OAuth rows and reads account settings in one D1 batch, as Prisma reads them", async () => {
+    // A promotable legacy token: its client has no issuer yet.
+    const legacyClient = await prisma.oAuthClient.create({ data: { clientName: "Hot Read Legacy", redirectUris: "[]" } });
+    await prisma.oAuthRefreshToken.create({
+      data: { tokenHash: "hot-read-refresh-legacy", userId: OWNER, clientId: legacyClient.id, scope: "recipes:read", issuer: null },
+    });
+
     for (const userId of [OWNER, STRANGER]) {
-      const fromD1 = await readAccountSettingsFromD1(database(), userId);
-      expect(fromD1).toEqual(await readAccountSettingsWithPrisma(prisma, userId, ISSUER));
+      const fromD1 = await readAccountSettingsFromD1(database(), userId, ISSUER);
+      expect(fromD1).toEqual(await readAccountSettingsWithPrisma(prisma, userId));
     }
-    await expect(readAccountSettingsFromD1(database(), OWNER)).resolves.toMatchObject({
+    await expect(database().prepare(`SELECT "issuer" FROM "OAuthClient" WHERE "id" = ?`).bind(legacyClient.id).first())
+      .resolves.toEqual({ issuer: ISSUER });
+    await expect(database().prepare(`SELECT "issuer" FROM "OAuthRefreshToken" WHERE "tokenHash" = ?`).bind("hot-read-refresh-legacy").first())
+      .resolves.toEqual({ issuer: ISSUER });
+    // The legacy token whose client is bound to another issuer stays as it was.
+    await expect(database().prepare(`SELECT "issuer" FROM "OAuthRefreshToken" WHERE "tokenHash" = ?`).bind("hot-read-refresh-foreign").first())
+      .resolves.toEqual({ issuer: null });
+    await expect(readAccountSettingsFromD1(database(), OWNER, ISSUER)).resolves.toMatchObject({
       user: { hasPassword: true, OAuth: [{ provider: "google" }] },
       preferences: { notifyForkOfMyRecipe: false },
       accessCredentialCounts: [{ oauthConnectionKey: "hot-read-conn", count: 1 }],
     });
+  });
+
+  it("reads the recipe, saved-recipe, cookbook and my-recipe lists as Prisma does", async () => {
+    for (const input of [{ query: "", limit: 48 }, { query: "", limit: 2 }, { query: "stew", limit: 48 }]) {
+      expect(await readPublicRecipesFromD1(database(), input), JSON.stringify(input))
+        .toEqual(await readPublicRecipesWithPrisma(prisma, input));
+    }
+    for (const userId of [OWNER, FRIEND, STRANGER]) {
+      expect(await readSavedRecipesFromD1(database(), userId)).toEqual(await readSavedRecipesWithPrisma(prisma, userId));
+      expect(await readCookbookListFromD1(database(), userId)).toEqual(await readCookbookListWithPrisma(prisma, userId));
+    }
+    for (const [ownerId, ownerUsername] of [[OWNER, "hot_read_owner"], [FRIEND, "hot_read_friend"]] as const) {
+      for (const query of ["", "stew", "hot_read", "lemon"]) {
+        expect(await searchMyRecipesFromD1(database(), { ownerId, query }))
+          .toEqual(await searchMyRecipes(prisma, { ownerId, ownerUsername, query }));
+      }
+    }
+    const [weeknights] = await readCookbookListFromD1(database(), OWNER);
+    // Seven entries, one of them a deleted recipe: counted as six, as on the kitchen home.
+    expect(weeknights!._count.recipes).toBe(6);
+    expect(weeknights!.recipes.map((entry) => entry.id)).toEqual(["hot-read-entry-7", "hot-read-entry-6", "hot-read-entry-5", "hot-read-entry-4"]);
+    expect(weeknights!.searchableRecipeTitles).not.toContain("Hot Read Deleted");
   });
 
   it("fingerprints and indexes search sources exactly as the Prisma path does", async () => {

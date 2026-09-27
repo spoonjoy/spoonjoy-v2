@@ -11,7 +11,7 @@ import {
 } from "react-router";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { MouseEvent } from "react";
-import { usePostHog } from "@posthog/react";
+import { usePostHog } from "~/lib/use-posthog";
 import { ArrowLeft, ChevronLeft, ChevronRight, X } from "lucide-react";
 import {
   handleRecipeDetailAction,

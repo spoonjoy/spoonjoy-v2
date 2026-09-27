@@ -15,7 +15,7 @@ import {
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
 import { useContext, useEffect } from "react";
-import { usePostHog } from "@posthog/react";
+import { usePostHog } from "~/lib/use-posthog";
 import * as Headless from "@headlessui/react";
 import { getUserId } from "~/lib/session.server";
 import { NonceContext } from "~/lib/nonce";

@@ -10,7 +10,9 @@ import {
   normalizeMyRecipesPage,
   normalizeMyRecipesQuery,
   searchMyRecipes,
+  searchMyRecipesFromD1,
 } from "~/lib/my-recipes-search.server";
+import { requestD1 } from "~/lib/d1-read.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 
@@ -63,6 +65,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const query = normalizeMyRecipesQuery(url.searchParams.get("q"));
   const page = normalizeMyRecipesPage(url.searchParams.get("page"));
+  // On the Worker the owner and their recipes come from D1 in one batch; Prisma is only
+  // the fallback where there is no binding.
+  const d1 = requestD1(context);
+  if (d1) {
+    return searchMyRecipesFromD1(d1, { ownerId: userId, query, page });
+  }
   const database = await getRequestDb(context);
 
   const chef = await database.user.findUniqueOrThrow({

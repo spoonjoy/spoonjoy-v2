@@ -15,6 +15,7 @@
 
 import type { OAuthRefreshToken as OAuthRefreshTokenRecord, PrismaClient as PrismaClientType } from "@prisma/client";
 import { createApiCredential, normalizeCredentialScopes } from "~/lib/api-auth.server";
+import { d1ReadBatch, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
 import {
   hasProhibitedOAuthClientNameCharacters,
   MAX_OAUTH_CLIENT_NAME_CODE_POINTS,
@@ -363,6 +364,54 @@ export async function promoteLegacyOAuthIssuerForUser(
       data: { oauthIssuer: issuer },
     }),
   ]);
+}
+
+/**
+ * `promoteLegacyOAuthIssuerForUser` as D1 statements, for one batch. A D1 batch is atomic,
+ * which the Prisma version is not on D1: Prisma's D1 adapter ignores transactions, so its
+ * reads and `updateMany` calls run as separate queries. The statements change exactly the
+ * same rows: clients behind the user's legacy (issuer-less) tokens and access credentials
+ * are bound to `issuer` if they are unbound, then the legacy rows whose client is bound to
+ * `issuer` take it. Access credentials also get a new `updatedAt`, as `updateMany` sets it.
+ */
+export function legacyOAuthIssuerPromotionStatements(userId: string, issuer: string, now: Date): D1Query[] {
+  const legacyClientIds = `SELECT "clientId" FROM "OAuthRefreshToken" WHERE "userId" = ? AND "issuer" IS NULL
+    UNION SELECT "oauthClientId" FROM "ApiCredential"
+      WHERE "userId" = ? AND "oauthClientId" IS NOT NULL AND "oauthIssuer" IS NULL`;
+  const clientsBoundToIssuer = `SELECT "id" FROM "OAuthClient" WHERE "issuer" = ?`;
+  return [
+    [
+      `UPDATE "OAuthClient" SET "issuer" = ? WHERE "issuer" IS NULL AND "id" IN (${legacyClientIds})`,
+      issuer,
+      userId,
+      userId,
+    ],
+    [
+      `UPDATE "OAuthRefreshToken" SET "issuer" = ?
+       WHERE "userId" = ? AND "issuer" IS NULL AND "clientId" IN (${clientsBoundToIssuer})`,
+      issuer,
+      userId,
+      issuer,
+    ],
+    [
+      `UPDATE "ApiCredential" SET "oauthIssuer" = ?, "updatedAt" = ?
+       WHERE "userId" = ? AND "oauthIssuer" IS NULL AND "oauthClientId" IN (${clientsBoundToIssuer})`,
+      issuer,
+      now.toISOString(),
+      userId,
+      issuer,
+    ],
+  ];
+}
+
+/** `promoteLegacyOAuthIssuerForUser` on a D1 binding, as one atomic batch. */
+export async function promoteLegacyOAuthIssuerForUserOnD1(
+  db: D1ReadDatabase,
+  userId: string,
+  issuer: string,
+  now: Date = new Date(),
+): Promise<void> {
+  await d1ReadBatch(db, legacyOAuthIssuerPromotionStatements(userId, issuer, now));
 }
 
 /** Whether `redirectUri` exactly matches one the client registered. */

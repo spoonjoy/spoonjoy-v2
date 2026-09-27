@@ -803,7 +803,8 @@ function buildSearchDocuments(sources: SearchSources): SearchDocumentInput[] {
 
 // Documents are inserted as JSON arrays expanded by json_each: one bound value per
 // statement instead of eleven per row, so a rebuild stays within D1's bound-parameter
-// limit and needs few statements. Each chunk stays well under D1's statement size limits.
+// limit and needs few statements. A chunk is capped at 64 Ki UTF-16 code units of JSON (up
+// to about 192 KB of UTF-8 for non-ASCII text), well under D1's 2 MB limit for a bound value.
 const SEARCH_INSERT_CHUNK_BYTES = 64 * 1024;
 
 const INSERT_SEARCH_DOCUMENTS_SQL = `INSERT INTO "SearchDocument" (

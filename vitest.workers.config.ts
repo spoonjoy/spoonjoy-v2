@@ -15,6 +15,7 @@ class PathOrderSequencer extends BaseSequencer {
 const appDirectory = new URL("./app", import.meta.url).pathname;
 const componentsDirectory = new URL("./app/components", import.meta.url).pathname;
 const prismaWasmClient = new URL("./node_modules/.prisma/client/wasm.js", import.meta.url).pathname;
+const serverBuildStub = new URL("./test/workers/helpers/server-build-stub.ts", import.meta.url).pathname;
 
 export default defineConfig({
   plugins: [
@@ -29,6 +30,8 @@ export default defineConfig({
       "~": appDirectory,
       "@": componentsDirectory,
       ".prisma/client/default": prismaWasmClient,
+      // workers/app.ts imports the server build statically; see the stub.
+      "virtual:react-router/server-build": serverBuildStub,
     },
   },
   test: {

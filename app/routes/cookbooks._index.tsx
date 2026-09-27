@@ -4,8 +4,9 @@ import { Plus } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Text } from "~/components/ui/text";
 import { CookbookHeader, CookbookPage, ObjectRow, RuledEmptyState } from "~/components/cookbook/page";
-import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { getRequestDb } from "~/lib/route-platform.server";
+import { requestD1 } from "~/lib/d1-read.server";
+import { readCookbookListFromD1, readCookbookListWithPrisma } from "~/lib/collection-reads.server";
 import { requireUserId } from "~/lib/session.server";
 import { DrawerSearch } from "./my-recipes";
 
@@ -38,78 +39,16 @@ export function meta({}: Route.MetaArgs) {
 export async function loader({ request, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const query = normalizedQuery(request);
-  const database = await getRequestDb(context);
-  const cookbooks = await database.cookbook.findMany({
-    where: { authorId: userId },
-    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-    include: {
-      _count: { select: { recipes: true } },
-      recipes: {
-        take: 4,
-        orderBy: { createdAt: "desc" },
-        where: {
-          recipe: { deletedAt: null },
-        },
-        include: {
-          recipe: {
-            select: {
-              id: true,
-              title: true,
-              activeCoverId: true,
-              activeCoverVariant: true,
-              coverMode: true,
-              covers: {
-                orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-              },
-            },
-          },
-        },
-      },
-    },
-  });
-  const titlesByCookbookId = new Map<string, string[]>();
-
-  if (cookbooks.length > 0) {
-    const recipeTitleRows = await database.recipeInCookbook.findMany({
-      where: {
-        cookbookId: { in: cookbooks.map((cookbook) => cookbook.id) },
-        recipe: { deletedAt: null },
-      },
-      select: {
-        cookbookId: true,
-        recipe: {
-          select: { title: true },
-        },
-      },
-    });
-
-    for (const row of recipeTitleRows) {
-      const titles = titlesByCookbookId.get(row.cookbookId) ?? [];
-      titles.push(row.recipe.title);
-      titlesByCookbookId.set(row.cookbookId, titles);
-    }
-  }
-
-  const cookbooksWithPreview = cookbooks.map(({ recipes, ...cookbook }) => ({
-    ...cookbook,
-    searchableRecipeTitles: titlesByCookbookId.get(cookbook.id) ?? [],
-    recipes: recipes.map((item) => {
-      const coverDisplay = getRecipeCoverDisplay(item.recipe, item.recipe.covers);
-      return {
-        ...item,
-        recipe: {
-          id: item.recipe.id,
-          title: item.recipe.title,
-          coverImageUrl: coverDisplay?.displayUrl ?? null,
-          coverProvenanceLabel: coverDisplay?.provenanceLabel ?? null,
-        },
-      };
-    }),
-  }));
+  // On the Worker the page reads from D1 in one batch; Prisma is only the fallback where
+  // there is no binding.
+  const d1 = requestD1(context);
+  const cookbooks = d1
+    ? await readCookbookListFromD1(d1, userId)
+    : await readCookbookListWithPrisma(await getRequestDb(context), userId);
 
   return {
     query,
-    cookbooks: cookbooksWithPreview.filter((cookbook) => matchesCookbookQuery(cookbook, query)),
+    cookbooks: cookbooks.filter((cookbook) => matchesCookbookQuery(cookbook, query)),
   };
 }
 

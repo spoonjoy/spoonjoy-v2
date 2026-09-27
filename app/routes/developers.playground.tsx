@@ -1,6 +1,6 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useLoaderData } from "react-router";
-import { usePostHog } from "@posthog/react";
+import { usePostHog } from "~/lib/use-posthog";
 import { Braces, CheckCircle2, Clipboard, KeyRound, LogIn, Play, RefreshCw, Search, ShieldOff, Terminal, XCircle } from "lucide-react";
 import {
   API_V1_PLAYGROUND_MANIFEST,
