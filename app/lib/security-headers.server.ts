@@ -199,8 +199,14 @@ function cachedPolicyFor(env?: PostHogCspEnv | null) {
   const key = env?.VITE_POSTHOG_HOST ?? "";
   let policy = cachedPolicies.get(key);
   if (!policy) {
-    const [before, after] = serializeContentSecurityPolicy(NONCE_MARKER, env).split(NONCE_MARKER) as [string, string];
-    policy = { withNonce: [before, after], withoutNonce: serializeContentSecurityPolicy(undefined, env) };
+    const parts = serializeContentSecurityPolicy(NONCE_MARKER, env).split(NONCE_MARKER);
+    // The split is only correct if the nonce appears exactly once. If a second directive
+    // took the nonce, or a configured host contained the marker, joining two pieces would
+    // silently drop the rest of the policy, so refuse to cache it instead.
+    if (parts.length !== 2) {
+      throw new Error(`The CSP nonce marker appears ${parts.length - 1} times; expected exactly once.`);
+    }
+    policy = { withNonce: [parts[0]!, parts[1]!], withoutNonce: serializeContentSecurityPolicy(undefined, env) };
     cachedPolicies.set(key, policy);
   }
   return policy;

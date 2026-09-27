@@ -291,6 +291,13 @@ describe("buildContentSecurityPolicy", () => {
     expect(buildContentSecurityPolicy("a", null)).toBe(buildContentSecurityPolicy("a"));
   });
 
+  it("refuses to cache a policy in which the nonce would not appear exactly once", () => {
+    // A (valid) host that contains the marker puts it in two directives.
+    expect(() =>
+      buildContentSecurityPolicy("abc", { VITE_POSTHOG_HOST: "https://spoonjoy-csp-nonce-marker.example" }),
+    ).toThrow("The CSP nonce marker appears 3 times; expected exactly once.");
+  });
+
   it("points violations at the sink route (legacy report-uri + modern report-to)", () => {
     const csp = buildContentSecurityPolicy();
     expect(directiveSources(csp, "report-uri")).toEqual(["/csp-report"]);
