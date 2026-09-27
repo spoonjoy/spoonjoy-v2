@@ -198,8 +198,7 @@ async function seed() {
   await prisma.oAuthRefreshToken.create({
     data: { tokenHash: "hot-read-refresh-revoked", userId: OWNER, clientId: client.id, scope: "recipes:read", issuer: ISSUER, revokedAt: new Date() },
   });
-  // A legacy token whose client is bound to another issuer: promotion cannot change it,
-  // so the D1 reader keeps answering and matches the Prisma reader's no-op promotion.
+  // A legacy token whose client is bound to another issuer: promotion cannot change it.
   const foreign = await prisma.oAuthClient.create({ data: { clientName: "Elsewhere", redirectUris: "[]", issuer: "https://other.example" } });
   await prisma.oAuthRefreshToken.create({
     data: { tokenHash: "hot-read-refresh-foreign", userId: OWNER, clientId: foreign.id, scope: "recipes:read", issuer: null },
@@ -265,12 +264,24 @@ describe("hot read paths on Wrangler D1", () => {
       .resolves.toMatchObject({ recipe: null });
   });
 
-  it("reads account settings as Prisma does", async () => {
+  it("promotes legacy OAuth rows and reads account settings in one D1 batch, as Prisma reads them", async () => {
+    // A promotable legacy token: its client has no issuer yet.
+    const legacyClient = await prisma.oAuthClient.create({ data: { clientName: "Hot Read Legacy", redirectUris: "[]" } });
+    await prisma.oAuthRefreshToken.create({
+      data: { tokenHash: "hot-read-refresh-legacy", userId: OWNER, clientId: legacyClient.id, scope: "recipes:read", issuer: null },
+    });
+
     for (const userId of [OWNER, STRANGER]) {
       const fromD1 = await readAccountSettingsFromD1(database(), userId, ISSUER);
-      expect(fromD1).toEqual(await readAccountSettingsWithPrisma(prisma, userId, ISSUER));
+      expect(fromD1).toEqual(await readAccountSettingsWithPrisma(prisma, userId));
     }
-    await expect(readAccountSettingsFromD1(database(), OWNER, "https://other.example")).resolves.toBeNull();
+    await expect(database().prepare(`SELECT "issuer" FROM "OAuthClient" WHERE "id" = ?`).bind(legacyClient.id).first())
+      .resolves.toEqual({ issuer: ISSUER });
+    await expect(database().prepare(`SELECT "issuer" FROM "OAuthRefreshToken" WHERE "tokenHash" = ?`).bind("hot-read-refresh-legacy").first())
+      .resolves.toEqual({ issuer: ISSUER });
+    // The legacy token whose client is bound to another issuer stays as it was.
+    await expect(database().prepare(`SELECT "issuer" FROM "OAuthRefreshToken" WHERE "tokenHash" = ?`).bind("hot-read-refresh-foreign").first())
+      .resolves.toEqual({ issuer: null });
     await expect(readAccountSettingsFromD1(database(), OWNER, ISSUER)).resolves.toMatchObject({
       user: { hasPassword: true, OAuth: [{ provider: "google" }] },
       preferences: { notifyForkOfMyRecipe: false },

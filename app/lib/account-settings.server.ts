@@ -22,6 +22,7 @@ import {
   OAUTH_CONNECTION_KEY_BATCH_SIZE,
   oauthRefreshConnectionOwnership,
   promoteLegacyOAuthIssuerForUser,
+  promoteLegacyOAuthIssuerForUserOnD1,
   revokeConnectorGrantsByConnectionKeys,
   validateConnectorGrantConnectionKeys,
 } from "~/lib/oauth-server.server";
@@ -143,6 +144,15 @@ function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+async function promoteThenReadWithPrisma(
+  database: Awaited<ReturnType<typeof getRequestDb>>,
+  userId: string,
+  issuer: string,
+) {
+  await promoteLegacyOAuthIssuerForUser(database, userId, issuer);
+  return readAccountSettingsWithPrisma(database, userId);
+}
+
 export async function loadAccountSettings({
   request,
   context,
@@ -151,12 +161,13 @@ export async function loadAccountSettings({
   const url = new URL(request.url);
   const oauthError = url.searchParams.get("oauthError") ?? undefined;
 
-  // On the Worker the page's reads go to D1 as one batch; Prisma is the fallback where
-  // there is no binding, and for a user whose legacy OAuth rows can be promoted (a write).
+  // On the Worker the page (legacy OAuth promotion, then reads) goes to D1 as one atomic
+  // batch; Prisma is only the fallback where there is no binding.
   const d1 = requestD1(context);
   const issuer = resolveIssuerOrigin(request.url, getCloudflareEnv(context)?.SPOONJOY_BASE_URL);
-  const reads = (d1 ? await readAccountSettingsFromD1(d1, userId, issuer) : null) ??
-    await readAccountSettingsWithPrisma(await getRequestDb(context), userId, issuer);
+  const reads = d1
+    ? await readAccountSettingsFromD1(d1, userId, issuer)
+    : await promoteThenReadWithPrisma(await getRequestDb(context), userId, issuer);
   const { user, passkeys, apiCredentials, activeRefreshTokens, oauthClients } = reads;
 
   /* istanbul ignore next -- @preserve user should exist if session is valid */
@@ -281,11 +292,15 @@ export async function handleAccountSettingsAction({
         "Set-Cookie": await createUserSessionCookie(userId, getCloudflareEnv(context), request, { sessionVersion }),
       },
     });
-  await promoteLegacyOAuthIssuerForUser(
-    database,
-    userId,
-    resolveIssuerOrigin(request.url, getCloudflareEnv(context)?.SPOONJOY_BASE_URL),
-  );
+  // Legacy OAuth rows are promoted on every settings request. On D1 that is one atomic
+  // batch; Prisma's D1 adapter would run its steps as separate, non-atomic queries.
+  const issuerOrigin = resolveIssuerOrigin(request.url, getCloudflareEnv(context)?.SPOONJOY_BASE_URL);
+  const d1 = requestD1(context);
+  if (d1) {
+    await promoteLegacyOAuthIssuerForUserOnD1(d1, userId, issuerOrigin);
+  } else {
+    await promoteLegacyOAuthIssuerForUser(database, userId, issuerOrigin);
+  }
 
   const formData = await request.formData();
   const intent = formData.get("intent");

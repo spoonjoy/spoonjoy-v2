@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { d1Boolean, d1Count, d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { mapModel, type ColumnSpec } from "~/lib/d1-models.server";
-import { promoteLegacyOAuthIssuerForUser } from "~/lib/oauth-server.server";
+import { legacyOAuthIssuerPromotionStatements } from "~/lib/oauth-server.server";
 import { listUserPasskeys, type PasskeySummary } from "~/lib/webauthn-route.server";
 
 // Reads behind the account settings page. The Prisma reader is the original sequence of
@@ -56,13 +56,11 @@ export interface AccountSettingsReads {
   }>;
 }
 
+/** The page's reads through Prisma. The caller promotes legacy OAuth rows first. */
 export async function readAccountSettingsWithPrisma(
   database: PrismaClient,
   userId: string,
-  issuer: string,
 ): Promise<AccountSettingsReads> {
-  await promoteLegacyOAuthIssuerForUser(database, userId, issuer);
-
   const user = await database.user.findUnique({
     where: { id: userId },
     select: {
@@ -202,20 +200,20 @@ const ACCESS_COUNT_COLUMNS: ColumnSpec<AccountSettingsReads["accessCredentialCou
 const ACTIVE_REFRESH_CLIENT_IDS = `SELECT "clientId" FROM "OAuthRefreshToken" WHERE "userId" = ? AND "revokedAt" IS NULL`;
 
 /**
- * The account settings reads as one D1 batch, every statement scoped to the signed-in
- * user. Returns null when the user has OAuth rows from before issuers were recorded that
- * `promoteLegacyOAuthIssuerForUser` would promote to `issuer`: those need a write first,
- * so the caller uses the Prisma reader then. Legacy rows the promotion cannot change (their
- * client is missing or already bound to another issuer) do not count: for them the Prisma
- * path's promotion is a no-op, and this reader returns the same rows it would.
+ * The account settings page as one D1 batch, every statement scoped to the signed-in user.
+ * The batch first binds the user's pre-issuer OAuth rows to `issuer` (the same change as
+ * `promoteLegacyOAuthIssuerForUser`, which the page has always made on load), then reads,
+ * so the reads see the promoted rows. A D1 batch is atomic: the promotion and the reads
+ * succeed or fail together.
  */
 export async function readAccountSettingsFromD1(
   db: D1ReadDatabase,
   userId: string,
   issuer: string,
-): Promise<AccountSettingsReads | null> {
+  now: Date = new Date(),
+): Promise<AccountSettingsReads> {
+  const promotion = legacyOAuthIssuerPromotionStatements(userId, issuer, now);
   const [
-    legacyRows,
     userRows,
     oauthRows,
     passkeyRows,
@@ -225,27 +223,8 @@ export async function readAccountSettingsFromD1(
     refreshTokenRows,
     clientRows,
     accessCountRows,
-  ] = await d1ReadBatch(db, [
-    [
-      // The rows promoteLegacyOAuthIssuerForUser would change: legacy tokens and access
-      // credentials whose client is unbound or already bound to this issuer.
-      `SELECT (
-         EXISTS (
-           SELECT 1 FROM "OAuthRefreshToken" t
-           JOIN "OAuthClient" c ON c."id" = t."clientId"
-           WHERE t."userId" = ? AND t."issuer" IS NULL AND (c."issuer" IS NULL OR c."issuer" = ?)
-         )
-         OR EXISTS (
-           SELECT 1 FROM "ApiCredential" a
-           JOIN "OAuthClient" c ON c."id" = a."oauthClientId"
-           WHERE a."userId" = ? AND a."oauthIssuer" IS NULL AND (c."issuer" IS NULL OR c."issuer" = ?)
-         )
-       ) AS "needsIssuerPromotion"`,
-      userId,
-      issuer,
-      userId,
-      issuer,
-    ],
+  ] = (await d1ReadBatch(db, [
+    ...promotion,
     [
       `SELECT "id", "email", "username", "photoUrl", "hashedPassword" IS NOT NULL AS "hasPassword"
        FROM "User" WHERE "id" = ? LIMIT 1`,
@@ -284,11 +263,7 @@ export async function readAccountSettingsFromD1(
       userId,
       userId,
     ],
-  ]);
-
-  if (d1Boolean(legacyRows[0]?.needsIssuerPromotion, "needsIssuerPromotion")) {
-    return null;
-  }
+  ])).slice(promotion.length);
 
   const userRow = userRows[0];
   const preferenceRow = preferenceRows[0];

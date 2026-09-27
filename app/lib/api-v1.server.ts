@@ -1,4 +1,5 @@
 import type { ApiCredential, ApiIdempotencyKey, NativePushDevice, Prisma, RecipeCover, RecipeSpoon } from "@prisma/client";
+import { requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
 import type { AppLoadContext } from "react-router";
 import {
   ApiAuthError,
@@ -40,6 +41,7 @@ import {
   OAUTH_CONNECTION_KEY_BATCH_SIZE,
   oauthRefreshConnectionOwnership,
   promoteLegacyOAuthIssuerForUser,
+  promoteLegacyOAuthIssuerForUserOnD1,
   revokeConnectorGrantsByConnectionKeys,
   validateConnectorGrantConnectionKeys,
 } from "~/lib/oauth-server.server";
@@ -5174,8 +5176,19 @@ function parseAccountConnectionId(connectionId: string): { clientId: string; iss
   throw new ApiV1Error("not_found", "OAuth connection not found");
 }
 
-async function oauthConnectionSummaries(db: ApiV1Db, userId: string, issuer: string) {
-  await promoteLegacyOAuthIssuerForUser(db as never, userId, issuer);
+async function oauthConnectionSummaries(
+  db: ApiV1Db,
+  nativeDatabase: D1ReadDatabase | null,
+  userId: string,
+  issuer: string,
+) {
+  // On D1 the promotion is one atomic batch; Prisma's D1 adapter would run its steps as
+  // separate, non-atomic queries.
+  if (nativeDatabase) {
+    await promoteLegacyOAuthIssuerForUserOnD1(nativeDatabase, userId, issuer);
+  } else {
+    await promoteLegacyOAuthIssuerForUser(db as never, userId, issuer);
+  }
   const activeRefreshTokens = await db.oAuthRefreshToken.findMany({
     where: { userId, revokedAt: null },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -5284,6 +5297,7 @@ async function handleOAuthConnectionList(args: ApiV1RouteArgs, requestId: string
     apiV1PrivateSuccess(requestId, {
       connections: await oauthConnectionSummaries(
         db,
+        requestD1(args.context),
         principal.id,
         resolveIssuerOrigin(args.request.url, args.context.cloudflare?.env?.SPOONJOY_BASE_URL),
       ),
