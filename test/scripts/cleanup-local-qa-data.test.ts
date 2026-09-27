@@ -63,28 +63,93 @@ describe("cleanup-local-qa-data", () => {
     expect(sql).toContain("email LIKE 'e2e-passkey-%'");
     expect(sql).toContain("instr(username, 'codex_') = 1");
     expect(sql).toContain("instr(username, 'e2e_passkey_') = 1");
-    expect(sql).toContain("email LIKE 'codex-%' AND instr(username, 'codex_') = 1");
+    expect(sql).toContain(
+      "email LIKE 'codex-%' AND instr(username, 'codex_') = 1 AND instr(email, 'codex-native-') != 1",
+    );
     expect(sql).not.toContain("username LIKE 'codex_%'");
     expect(sql).not.toContain("username LIKE 'e2e_passkey_%'");
     expect(sql).not.toContain("lower(coalesce(note,''))");
     expect(sql).not.toContain("OAuthClient");
+    expect(sql).toContain("'stale native journey users' AS item");
   });
 
   it("requires coupled literal email and username markers for generated disposable users", () => {
     const db = new DatabaseSync(":memory:");
     db.exec(`
-      CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL);
-      INSERT INTO User VALUES
-        ('real-lookalike', 'person@example.com', 'codexXvictim'),
-        ('email-only', 'codex-run@example.com', 'ordinary_user'),
-        ('username-only', 'person2@example.com', 'codex_generated'),
-        ('codex-disposable', 'codex-run@example.com', 'codex_generated'),
-        ('passkey-disposable', 'e2e-passkey-run@example.com', 'e2e_passkey_generated');
+      CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, createdAt);
+      INSERT INTO User (id, email, username, createdAt) VALUES
+        ('real-lookalike', 'person@example.com', 'codexXvictim', datetime('now')),
+        ('email-only', 'codex-run@example.com', 'ordinary_user', datetime('now')),
+        ('username-only', 'person2@example.com', 'codex_generated', datetime('now')),
+        ('codex-disposable', 'codex-run@example.com', 'codex_generated', datetime('now')),
+        ('passkey-disposable', 'e2e-passkey-run@example.com', 'e2e_passkey_generated', datetime('now'));
     `);
 
     const rows = db.prepare(`SELECT id FROM User WHERE ${cleanup.DISPOSABLE_USER_WHERE} ORDER BY id`).all();
 
     expect(rows).toEqual([{ id: "codex-disposable" }, { id: "passkey-disposable" }]);
+  });
+
+  it("sweeps codex-native users only after 3 hours, in every createdAt storage form", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec(`
+      CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, createdAt);
+      INSERT INTO User (id, email, username, createdAt) VALUES
+        ('stale-datetime-text', 'codex-native-r1-1@example.com', 'codex_native_r1_1', datetime('now', '-4 hours')),
+        ('stale-iso-text', 'codex-native-r1-2@example.com', 'codex_native_r1_2', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-4 hours')),
+        ('stale-epoch-ms-integer', 'codex-native-r1-3@example.com', 'codex_native_r1_3', (unixepoch('now', '-4 hours') * 1000)),
+        ('young-datetime-text', 'codex-native-r1-4@example.com', 'codex_native_r1_4', datetime('now', '-2 hours')),
+        ('young-iso-text', 'codex-native-r1-5@example.com', 'codex_native_r1_5', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-2 hours')),
+        ('young-epoch-ms-integer', 'codex-native-r1-6@example.com', 'codex_native_r1_6', (unixepoch('now', '-2 hours') * 1000)),
+        ('unparseable-created-at', 'codex-native-r1-7@example.com', 'codex_native_r1_7', 'not a date');
+    `);
+
+    const rows = db.prepare(`SELECT id FROM User WHERE ${cleanup.DISPOSABLE_USER_WHERE} ORDER BY id`).all();
+
+    expect(rows).toEqual([
+      { id: "stale-datetime-text" },
+      { id: "stale-epoch-ms-integer" },
+      { id: "stale-iso-text" },
+    ]);
+  });
+
+  it("never sweeps a young codex-native account through the generic codex clause", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec(`
+      CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, createdAt);
+      INSERT INTO User (id, email, username, createdAt) VALUES
+        ('young-native', 'codex-native-r1-1@example.com', 'codex_native_r1_1', datetime('now')),
+        ('young-e2e', 'codex-e2e-s-x@example.com', 'codex_e2e_s_x', datetime('now'));
+    `);
+
+    const rows = db.prepare(`SELECT id FROM User WHERE ${cleanup.DISPOSABLE_USER_WHERE} ORDER BY id`).all();
+
+    expect(rows).toEqual([{ id: "young-e2e" }]);
+  });
+
+  it("requires both native markers for the stale sweep", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec(`
+      CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, createdAt);
+      INSERT INTO User (id, email, username, createdAt) VALUES
+        ('mismatched-username', 'codex-native-r1-1@example.com', 'ordinary', datetime('now', '-4 hours'));
+    `);
+
+    const rows = db.prepare(`SELECT id FROM User WHERE ${cleanup.DISPOSABLE_USER_WHERE} ORDER BY id`).all();
+
+    expect(rows).toEqual([]);
+  });
+
+  it("keeps every LIKE pattern within D1's 50-byte limit", () => {
+    for (const sql of [buildApplySql(), buildDryRunSql(), cleanup.buildQaR2CandidateSql()]) {
+      const likeLiterals = [...sql.matchAll(/LIKE '((?:[^']|'')*)'/g)].map((match) =>
+        match[1].replaceAll("''", "'"),
+      );
+      expect(likeLiterals.length).toBeGreaterThan(0);
+      for (const literal of likeLiterals) {
+        expect(Buffer.byteLength(literal, "utf8")).toBeLessThanOrEqual(50);
+      }
+    }
   });
 
   it("matches only the one retired seed-qa.mjs identity by its exact id and email", () => {
@@ -96,18 +161,18 @@ describe("cleanup-local-qa-data", () => {
 
     const db = new DatabaseSync(":memory:");
     db.exec(`
-      CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL);
-      INSERT INTO User VALUES
-        ('real-lookalike', 'person@example.com', 'sjXqaXdemoXvictim'),
-        ('qa-kitchen-chef', 'qa-kitchen-chef@example.com', 'qa_kitchen_chef'),
+      CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL, username TEXT NOT NULL, createdAt);
+      INSERT INTO User (id, email, username, createdAt) VALUES
+        ('real-lookalike', 'person@example.com', 'sjXqaXdemoXvictim', datetime('now')),
+        ('qa-kitchen-chef', 'qa-kitchen-chef@example.com', 'qa_kitchen_chef', datetime('now')),
         -- A real account that happens to share the legacy namespace's username shape must
         -- survive: only the exact retired id+email pair is disposable, not a prefix.
-        ('real-ari', 'ari@example.com', 'sj_qa_demo_ari'),
+        ('real-ari', 'ari@example.com', 'sj_qa_demo_ari', datetime('now')),
         -- Same id, different email: must not match (the retired account never had this email).
-        ('id-only-lookalike', 'someone-else@example.com', 'someone_else'),
+        ('id-only-lookalike', 'someone-else@example.com', 'someone_else', datetime('now')),
         -- Same email, different id: must not match either.
-        ('email-only-lookalike', ${sqlLiteral(legacyEmail)}, 'someone_else'),
-        (${sqlLiteral(legacyId)}, ${sqlLiteral(legacyEmail)}, 'sj_qa_demo_chef');
+        ('email-only-lookalike', ${sqlLiteral(legacyEmail)}, 'someone_else', datetime('now')),
+        (${sqlLiteral(legacyId)}, ${sqlLiteral(legacyEmail)}, 'sj_qa_demo_chef', datetime('now'));
     `);
 
     const rows = db.prepare(`SELECT id FROM User WHERE ${cleanup.DISPOSABLE_USER_WHERE} ORDER BY id`).all();
