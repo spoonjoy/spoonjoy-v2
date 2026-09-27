@@ -22,7 +22,20 @@ import {
   pollAgentConnection,
   startAgentConnection,
 } from "~/lib/agent-connection.server";
-import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
+import {
+  ACTIVE_RECIPE_TITLE_CONFLICT_ERROR,
+  validateActiveRecipeTitleUnique,
+} from "~/lib/recipe-title-uniqueness.server";
+import { d1Binding, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
+import {
+  activeRecipeTitleFreeGuard,
+  recipeInsertStatement,
+  recipeStepsReplaceStatements,
+  recipeUpdateStatement,
+  type RecipeFields,
+  type ReplacementStep,
+} from "~/lib/recipe-d1-writes.server";
 import {
   archiveRecipeCover,
   clearActiveRecipeCover,
@@ -1153,6 +1166,30 @@ async function replaceRecipeSteps(db: PrismaClientType, recipeId: string, steps:
     }
   }
   await db.$transaction(ops);
+}
+
+/** The MCP recipe steps with unit and ingredient names normalized, for D1 statements. */
+function normalizedReplacementSteps(steps: ReturnType<typeof parseSteps>): ReplacementStep[] {
+  return steps.map((step) => ({
+    title: step.title,
+    description: step.description,
+    duration: step.duration,
+    ingredients: step.ingredients.map((ingredient) => ({
+      name: normalizeName(ingredient.name),
+      quantity: ingredient.quantity,
+      unit: normalizeName(ingredient.unit),
+    })),
+  }));
+}
+
+/** Runs a recipe write batch whose first statement is the active-title guard. */
+async function writeRecipeBatchWithTitleGuard(d1: D1ReadDatabase, statements: D1Query[]) {
+  try {
+    return await d1WriteBatch(d1, statements);
+  } catch (error) {
+    if (isD1GuardFailure(error)) throw new Error(ACTIVE_RECIPE_TITLE_CONFLICT_ERROR);
+    throw error;
+  }
 }
 
 const healthTool: SpoonjoyApiOperation = {
@@ -2326,17 +2363,39 @@ const createRecipeTool: SpoonjoyApiOperation = {
       });
     }
 
-    const created = await context.db.recipe.create({
-      data: {
-        title,
-        description: optionalString(args.description) ?? null,
-        servings: optionalString(args.servings) ?? null,
-        sourceUrl: optionalString(args.sourceUrl) ?? null,
-        chefId: owner.id,
-      },
-    });
+    const d1 = d1Binding(context.env?.DB);
+    let created: { id: string };
+    if (d1) {
+      // One atomic batch: the recipe and its steps apply together, and the title is
+      // re-checked as they are written.
+      const now = new Date();
+      created = { id: crypto.randomUUID() };
+      await writeRecipeBatchWithTitleGuard(d1, [
+        activeRecipeTitleFreeGuard(owner.id, title),
+        recipeInsertStatement({
+          id: created.id,
+          title,
+          description: optionalString(args.description) ?? null,
+          servings: optionalString(args.servings) ?? null,
+          sourceUrl: optionalString(args.sourceUrl) ?? null,
+          chefId: owner.id,
+          now,
+        }),
+        ...recipeStepsReplaceStatements(created.id, normalizedReplacementSteps(steps), now),
+      ]);
+    } else {
+      created = await context.db.recipe.create({
+        data: {
+          title,
+          description: optionalString(args.description) ?? null,
+          servings: optionalString(args.servings) ?? null,
+          sourceUrl: optionalString(args.sourceUrl) ?? null,
+          chefId: owner.id,
+        },
+      });
 
-    await replaceRecipeSteps(context.db, created.id, steps);
+      await replaceRecipeSteps(context.db, created.id, steps);
+    }
     if (imageUrl) {
       const cover = await createCover(context.db, {
         recipeId: created.id,
@@ -2432,7 +2491,7 @@ const updateRecipeTool: SpoonjoyApiOperation = {
     });
     if (!existing) throw new Error("Recipe not found");
 
-    const data: Prisma.RecipeUpdateInput = {};
+    const data: Pick<RecipeFields, "title" | "description" | "servings" | "sourceUrl"> = {};
     if (title !== undefined) {
       const titleUniqueness = await validateActiveRecipeTitleUnique(context.db, {
         chefId: owner.id,
@@ -2455,13 +2514,26 @@ const updateRecipeTool: SpoonjoyApiOperation = {
       });
     }
 
-    if (Object.keys(data).length > 0) {
-      await context.db.recipe.update({ where: { id: existing.id }, data });
-    }
+    const d1 = d1Binding(context.env?.DB);
+    if (d1 && (Object.keys(data).length > 0 || steps)) {
+      // One atomic batch: the field changes and the step replacement apply together, and a
+      // new title is re-checked as it is written.
+      const now = new Date();
+      const results = await writeRecipeBatchWithTitleGuard(d1, [
+        ...(title === undefined ? [] : [activeRecipeTitleFreeGuard(owner.id, title, existing.id)]),
+        ...(steps ? recipeStepsReplaceStatements(existing.id, normalizedReplacementSteps(steps), now) : []),
+        recipeUpdateStatement(existing.id, data, now),
+      ]);
+      if (results.at(-1)!.changes !== 1) throw new Error("Recipe not found");
+    } else {
+      if (Object.keys(data).length > 0) {
+        await context.db.recipe.update({ where: { id: existing.id }, data });
+      }
 
-    if (steps) {
-      await replaceRecipeSteps(context.db, existing.id, steps);
-      await context.db.recipe.update({ where: { id: existing.id }, data: { updatedAt: new Date() } });
+      if (steps) {
+        await replaceRecipeSteps(context.db, existing.id, steps);
+        await context.db.recipe.update({ where: { id: existing.id }, data: { updatedAt: new Date() } });
+      }
     }
     if (imageUrl) {
       const cover = await createCover(context.db, {
@@ -3601,7 +3673,7 @@ const forkRecipeTool: SpoonjoyApiOperation = {
         sourceRecipeId,
         viewerId: principal.id,
         titleOverride,
-      });
+      }, d1Binding(context.env?.DB));
 
       // Fire-and-forget: notify the source chef when someone else forked.
       try {
