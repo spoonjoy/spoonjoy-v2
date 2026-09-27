@@ -5,7 +5,7 @@
 // journey allowed to use /signup for that reason (see AGENTS.md's Validation section). That
 // submit still counts as one attempt against QA's auth rate limit (see personas.setup.ts).
 import { test, expect } from "./support/journey";
-import { createDisposableE2EUser } from "../support/disposable-auth";
+import { createDisposableJourneyUser } from "./support/secret";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { personaStorageStatePath } from "./support/personas";
 
@@ -40,7 +40,7 @@ test.describe("New user", () => {
       });
       // A unique address in the disposable codex-e2e namespace, so the email is valid and not
       // taken and the username is the only field the action rejects.
-      const email = createDisposableE2EUser().email;
+      const email = createDisposableJourneyUser().email;
       await page.goto("/signup");
       // Submit through the app, so the answer comes back without a page load and focus is
       // moved by the page, not by a fresh document.
