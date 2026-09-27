@@ -340,9 +340,9 @@ describe('StepList', () => {
       const saveButton = screen.getByRole('button', { name: /save/i })
       await userEvent.click(saveButton)
 
-      // onChange should be called with the updated step
+      // onChange should be called with an updater that changes this step
       expect(onChange).toHaveBeenCalled()
-      const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1][0]
+      const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1][0](steps)
       expect(lastCall[0].description).toBe('Updated description')
     })
 
@@ -367,9 +367,9 @@ describe('StepList', () => {
       const saveButton = within(firstStepCard).getByRole('button', { name: /save/i })
       await userEvent.click(saveButton)
 
-      // Check the call preserves id and stepNum
+      // Check the updater preserves id and stepNum
       expect(onChange).toHaveBeenCalled()
-      const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1][0]
+      const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1][0](steps)
       expect(lastCall[0].id).toBe('step-1')
       expect(lastCall[0].stepNum).toBe(1)
       // Second step should be unchanged

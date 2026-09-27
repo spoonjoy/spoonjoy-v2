@@ -1,6 +1,7 @@
 import type { Route } from "./+types/recipes.new";
 import { redirect, data, useActionData, useNavigate, useNavigation, Form } from "react-router";
 import { getCloudflareEnv, getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
+import { revalidateUnlessIngredientParse } from "~/lib/ingredient-parse-revalidation";
 import { requireUserId } from "~/lib/session.server";
 import { Link } from "~/components/ui/link";
 import { Text } from "~/components/ui/text";
@@ -52,6 +53,9 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
+// An ingredient parse changes no data; don't reload the page after one.
+export const shouldRevalidate = revalidateUnlessIngredientParse;
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   await requireUserId(request, "/login", context.cloudflare?.env);
   return null;
@@ -73,7 +77,11 @@ export async function action({ request, context }: Route.ActionArgs) {
       return data({ parsedIngredients });
     } catch (error) {
       if (error instanceof IngredientParseError) {
-        return data({ errors: { parse: error.message } }, { status: 400 });
+        // A parse failure (no API key, provider down, unparseable text) is an
+        // outcome the form shows next to the box, with the manual path, not a
+        // failed request: a 4xx here makes every browser log a console error
+        // while the person is just typing.
+        return data({ errors: { parse: error.message } }, { status: 200 });
       }
 
       return data(

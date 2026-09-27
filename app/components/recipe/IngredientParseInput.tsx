@@ -80,16 +80,21 @@ export function IngredientParseInput({
   const errorId = `${id}-error`
 
   const parser = useIngredientParser({ recipeId, stepId })
-  const hasInitialized = useRef(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const prevParsedIngredients = useRef<ParsedIngredient[] | null>(null)
 
-  // Initialize with default value
+  // The textarea is uncontrolled: it is server-rendered on "Add Step", and a
+  // controlled `value` would wipe text typed before hydration on the first
+  // re-render after it. On mount, hand the parser whatever the field holds,
+  // the default value or text typed before hydration, so it gets parsed.
   useEffect(() => {
-    if (defaultValue && !hasInitialized.current) {
-      hasInitialized.current = true
-      parser.setText(defaultValue)
+    const initialText = textareaRef.current!.value
+    if (initialText) {
+      parser.setText(initialText)
     }
-  }, [defaultValue, parser])
+    // Mount only: later text arrives through onChange.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Call onParsed when parsing succeeds
   useEffect(() => {
@@ -140,9 +145,10 @@ export function IngredientParseInput({
         Ingredient text
       </label>
       <Textarea
+        ref={textareaRef}
         id={id}
         rows={5}
-        value={parser.text}
+        defaultValue={defaultValue}
         onChange={handleChange}
         disabled={isDisabled}
         placeholder="Enter ingredients (e.g., 2 cups flour, 1/2 tsp salt)"

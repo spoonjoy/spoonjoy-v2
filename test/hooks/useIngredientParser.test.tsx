@@ -89,6 +89,13 @@ describe('useIngredientParser', () => {
     it('posts saved step parsing to the step edit route', () => {
       expect(getIngredientParserAction('recipe-1', 'step-1')).toBe('/recipes/recipe-1/steps/step-1/edit')
     })
+
+    // The "Add Step" page has no step yet. Its parse box used to post to
+    // /recipes/:id/steps/new/edit, which the step edit route matches with stepId "new" and
+    // answers with a thrown 404, replacing the page with "Page not found".
+    it('posts unsaved add-step parsing to the add step route itself', () => {
+      expect(getIngredientParserAction('recipe-1', 'new')).toBe('/recipes/recipe-1/steps/new')
+    })
   })
 
   describe('initialization', () => {

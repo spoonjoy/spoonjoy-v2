@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
 import {
@@ -19,15 +19,23 @@ export function ManualIngredientInput({
   disabled = false,
   loading = false,
 }: ManualIngredientInputProps) {
+  // Several step cards can show this form at once, so the ids must be unique
+  // per instance or every card's labels would point at the first card's fields.
+  const id = useId()
+  const quantityId = `${id}-quantity`
+  const unitId = `${id}-unit`
+  const ingredientNameId = `${id}-ingredient-name`
   const [quantity, setQuantity] = useState<string>('')
   const [unit, setUnit] = useState('')
   const [ingredientName, setIngredientName] = useState('')
 
   const isDisabled = disabled || loading
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-
+  // Not a <form>: this sits inside the Add Step page's own form, and a nested
+  // form is invalid HTML. The fields have no name and no native `required`
+  // (only aria-required), so they neither travel with nor block that form's
+  // submission; Enter adds the ingredient here instead of submitting it.
+  const handleAdd = () => {
     const trimmedUnit = unit.trim()
     const trimmedIngredientName = ingredientName.trim()
     const parsedQuantity = parseFloat(quantity)
@@ -55,64 +63,69 @@ export function ManualIngredientInput({
     setIngredientName('')
   }
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleAdd()
+    }
+  }
+
   return (
-    <form onSubmit={handleSubmit}>
+    <div role="group" aria-label="Add an ingredient" onKeyDown={handleKeyDown}>
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_2fr_auto] gap-4 items-end">
         <div>
-          <label htmlFor="quantity" className="block mb-2 text-sm font-bold">
+          <label htmlFor={quantityId} className="block mb-2 text-sm font-bold">
             Quantity
           </label>
           <Input
             type="number"
-            id="quantity"
-            name="quantity"
+            id={quantityId}
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
             step="any"
             min={QUANTITY_MIN}
             max={QUANTITY_MAX}
-            required
             placeholder="1.5"
             disabled={isDisabled}
             autoComplete="off"
+            aria-required="true"
           />
         </div>
         <div>
-          <label htmlFor="unit" className="block mb-2 text-sm font-bold">
+          <label htmlFor={unitId} className="block mb-2 text-sm font-bold">
             Unit
           </label>
           <Input
             type="text"
-            id="unit"
-            name="unit"
+            id={unitId}
             value={unit}
             onChange={(e) => setUnit(e.target.value)}
-            required
             maxLength={UNIT_NAME_MAX_LENGTH}
             placeholder="cup"
             disabled={isDisabled}
             autoComplete="off"
+            aria-required="true"
           />
         </div>
         <div>
-          <label htmlFor="ingredientName" className="block mb-2 text-sm font-bold">
+          <label htmlFor={ingredientNameId} className="block mb-2 text-sm font-bold">
             Ingredient
           </label>
           <Input
             type="text"
-            id="ingredientName"
-            name="ingredientName"
+            id={ingredientNameId}
             value={ingredientName}
             onChange={(e) => setIngredientName(e.target.value)}
-            required
             maxLength={INGREDIENT_NAME_MAX_LENGTH}
             placeholder="flour"
             disabled={isDisabled}
             autoComplete="off"
+            aria-required="true"
           />
         </div>
         <Button
-          type="submit"
+          type="button"
+          onClick={handleAdd}
           disabled={isDisabled}
           aria-busy={loading}
           aria-label="Add ingredient"
@@ -121,6 +134,6 @@ export function ManualIngredientInput({
           Add
         </Button>
       </div>
-    </form>
+    </div>
   )
 }

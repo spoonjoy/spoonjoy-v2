@@ -37,6 +37,12 @@ export interface StepEditorCardProps {
   step?: StepData
   recipeId: string
   onSave: (step: Omit<StepData, 'id' | 'stepNum'>) => void
+  /**
+   * Called with the card's draft whenever its instructions, duration or
+   * ingredients change, so the recipe keeps what was typed even if this
+   * card's own Save is never pressed.
+   */
+  onChange?: (step: Omit<StepData, 'id' | 'stepNum'>) => void
   onRemove: () => void
   onMoveUp?: () => void
   onMoveDown?: () => void
@@ -56,6 +62,7 @@ export function StepEditorCard({
   step,
   recipeId,
   onSave,
+  onChange,
   onRemove,
   onMoveUp,
   onMoveDown,
@@ -112,10 +119,30 @@ export function StepEditorCard({
     setIngredients((prev) => prev.filter((_, i) => i !== index))
   }
 
-  const handleAddAllIngredients = (_addedIngredients: ParsedIngredient[]) => {
-    // Ingredients are already in state, this is called from ParsedIngredientList
-    // which displays the ingredients that are already added
+  const buildStepData = (): Omit<StepData, 'id' | 'stepNum'> => {
+    const durationValue = duration ? parseInt(duration, 10) : undefined
+
+    return {
+      stepTitle: step?.stepTitle,
+      description: description.trim(),
+      duration: durationValue && durationValue > 0 ? durationValue : undefined,
+      ingredients,
+    }
   }
+
+  // Report the draft on every change after mount (ruling R-M3-1): "Create
+  // Recipe" sends what is in the cards, not only what each card's Save committed.
+  const hasMounted = useRef(false)
+  useEffect(() => {
+    if (!hasMounted.current) {
+      hasMounted.current = true
+      return
+    }
+    onChange?.(buildStepData())
+    // Only the draft fields trigger a report; the callback identity changes on
+    // every parent render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [description, duration, ingredients])
 
   const handleSave = () => {
     // Don't save if instructions is empty
@@ -123,14 +150,7 @@ export function StepEditorCard({
       return
     }
 
-    const durationValue = duration ? parseInt(duration, 10) : undefined
-
-    onSave({
-      stepTitle: step?.stepTitle,
-      description: description.trim(),
-      duration: durationValue && durationValue > 0 ? durationValue : undefined,
-      ingredients,
-    })
+    onSave(buildStepData())
   }
 
   const handleRemove = () => {
@@ -224,6 +244,7 @@ export function StepEditorCard({
             recipeId={recipeId}
             stepId={stepId}
             onParsed={handleParsedIngredients}
+            onSwitchToManual={() => handleModeChange('manual')}
             disabled={disabled}
           />
         ) : (
@@ -242,7 +263,6 @@ export function StepEditorCard({
               ingredients={ingredients}
               onEdit={handleIngredientEdit}
               onRemove={handleIngredientRemove}
-              onAddAll={handleAddAllIngredients}
               disabled={disabled}
             />
           )}

@@ -308,6 +308,37 @@ describe('StepEditorCard', () => {
       )
     })
 
+    it('reports every draft change through onChange without waiting for Save', async () => {
+      const onChange = vi.fn()
+      const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }), { onChange })
+      render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
+
+      // Nothing is reported for the untouched card.
+      expect(onChange).not.toHaveBeenCalled()
+
+      await userEvent.type(screen.getByRole('textbox', { name: /instructions/i }), 'Whisk')
+      expect(onChange).toHaveBeenLastCalledWith({
+        stepTitle: undefined,
+        description: 'Whisk',
+        duration: undefined,
+        ingredients: [],
+      })
+
+      await userEvent.type(screen.getByLabelText(/duration/i), '3')
+      await userEvent.click(screen.getByRole('switch'))
+      await userEvent.type(screen.getByLabelText('Quantity'), '2')
+      await userEvent.type(screen.getByLabelText('Unit'), 'large')
+      await userEvent.type(screen.getByLabelText('Ingredient'), 'eggs')
+      await userEvent.click(screen.getByRole('button', { name: 'Add ingredient' }))
+
+      expect(onChange).toHaveBeenLastCalledWith({
+        stepTitle: undefined,
+        description: 'Whisk',
+        duration: 3,
+        ingredients: [{ quantity: 2, unit: 'large', ingredientName: 'eggs' }],
+      })
+    })
+
     it('calls onRemove when remove clicked', async () => {
       const onRemove = vi.fn()
       const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }), { onRemove })
@@ -935,28 +966,43 @@ describe('StepEditorCard', () => {
       expect(screen.getByText('2')).toBeInTheDocument()
     })
 
-    it('handles parsed list add-all action without changing ingredients', async () => {
+    // Parsed ingredients are the step's ingredients as soon as they appear, so the list's
+    // "Add all" button had nothing left to do: it was a button that did nothing.
+    it('does not offer an "Add all" button for ingredients that are already in the step', async () => {
       const existingStep: StepData = {
         id: 'step-1',
         stepNum: 1,
         description: 'Test step',
         ingredients: [{ quantity: 2, unit: 'cup', ingredientName: 'flour' }],
       }
-      const onSave = vi.fn()
       const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }), {
         step: existingStep,
-        onSave,
       })
       render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
 
-      await userEvent.click(screen.getByRole('button', { name: /add all 1 ingredients to recipe/i }))
-      await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
+      expect(screen.getByText(/flour/i)).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /add all/i })).not.toBeInTheDocument()
+    })
 
-      expect(onSave).toHaveBeenCalledWith(
-        expect.objectContaining({
-          ingredients: [{ quantity: 2, unit: 'cup', ingredientName: 'flour' }],
-        })
-      )
+    // When AI parsing is unavailable the message promises a manual path; the card has to
+    // actually offer it.
+    it('offers "Add Manually" when AI parsing is unavailable and switches to manual entry', async () => {
+      const Wrapper = createTestWrapper(async () => ({
+        errors: { parse: 'OpenAI API key is required' },
+      }))
+      render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
+
+      fireEvent.change(screen.getByPlaceholderText(/enter ingredients/i), {
+        target: { value: '2 cups flour' },
+      })
+
+      const alert = await screen.findByRole('alert', {}, { timeout: 3000 })
+      expect(alert).toHaveTextContent('AI parsing is unavailable')
+      await userEvent.click(screen.getByRole('button', { name: 'Switch to manual ingredient entry' }))
+
+      expect(screen.getByLabelText('Quantity')).toBeInTheDocument()
+      expect(screen.getByRole('switch')).not.toBeChecked()
+      expect(screen.queryByPlaceholderText(/enter ingredients/i)).not.toBeInTheDocument()
     })
 
     it('includes ingredients in onSave callback', async () => {

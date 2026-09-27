@@ -1,6 +1,7 @@
 import type { Route } from "./+types/recipes.$id.steps.$stepId.edit";
-import { Form, redirect, data, useActionData, useLoaderData, useSearchParams, useSubmit } from "react-router";
+import { Form, redirect, data, useActionData, useFetcher, useLoaderData, useSearchParams, useSubmit } from "react-router";
 import { getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
+import { revalidateUnlessIngredientParse } from "~/lib/ingredient-parse-revalidation";
 import { requireUserId } from "~/lib/session.server";
 import { useEffect, useState } from "react";
 import { ConfirmationDialog } from "~/components/confirmation-dialog";
@@ -59,6 +60,35 @@ interface ActionData {
 }
 
 const STEP_CONTENT_REQUIREMENT_ERROR = "Add at least 1 ingredient or 1 step output use before saving this step.";
+const NO_INGREDIENTS_TO_ADD_ERROR = "There are no ingredients to add.";
+
+interface IngredientDraft {
+  quantity: number;
+  unitName: string;
+  ingredientName: string;
+}
+
+// Reads one entry of an "Add All" batch into trimmed, lowercased fields; anything
+// that is not the expected shape comes out empty or NaN and fails validation.
+function readIngredientDraft(entry: unknown): IngredientDraft {
+  const candidate = (entry ?? {}) as Record<string, unknown>;
+  return {
+    quantity: Number(candidate.quantity),
+    unitName: typeof candidate.unit === "string" ? candidate.unit.trim().toLowerCase() : "",
+    ingredientName: typeof candidate.ingredientName === "string" ? candidate.ingredientName.trim().toLowerCase() : "",
+  };
+}
+
+function ingredientDraftErrors(ingredient: IngredientDraft): NonNullable<ActionData["errors"]> {
+  const errors: NonNullable<ActionData["errors"]> = {};
+  const quantityResult = validateQuantity(ingredient.quantity);
+  if (!quantityResult.valid) errors.quantity = quantityResult.error;
+  const unitNameResult = validateUnitName(ingredient.unitName);
+  if (!unitNameResult.valid) errors.unitName = unitNameResult.error;
+  const ingredientNameResult = validateIngredientName(ingredient.ingredientName);
+  if (!ingredientNameResult.valid) errors.ingredientName = ingredientNameResult.error;
+  return errors;
+}
 
 export function meta({ data }: Route.MetaArgs) {
   if (!data) {
@@ -72,6 +102,9 @@ export function meta({ data }: Route.MetaArgs) {
     { name: "description", content: `Edit a step in "${data.recipe.title}" on Spoonjoy.` },
   ];
 }
+
+// An ingredient parse changes no data; don't reload the page after one.
+export const shouldRevalidate = revalidateUnlessIngredientParse;
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
@@ -181,10 +214,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       return data({ parsedIngredients });
     } catch (error) {
       if (error instanceof IngredientParseError) {
-        return data(
-          { errors: { parse: error.message } },
-          { status: 400 }
-        );
+        // A parse failure (no API key, provider down, unparseable text) is an
+        // outcome the form shows next to the box, with the manual path, not a
+        // failed request: a 4xx here makes every browser log a console error
+        // while the person is just typing.
+        return data({ errors: { parse: error.message } }, { status: 200 });
       }
       // Unexpected errors
       return data(
@@ -212,6 +246,78 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       touchNativeSyncRecipeOperation(database, id),
     ]);
     return redirect(`/recipes/${id}/edit`);
+  }
+
+  // "Add All" sends the whole parsed batch in one request, so either every
+  // ingredient is added or none is and the reason is shown. (It used to submit
+  // once per ingredient, and each submission cancelled the one before it.)
+  if (intent === "addIngredients") {
+    let entries: unknown;
+    try {
+      entries = JSON.parse(formData.get("ingredientsJson")?.toString() ?? "");
+    } catch {
+      entries = null;
+    }
+
+    if (!Array.isArray(entries) || entries.length === 0) {
+      return data({ errors: { general: NO_INGREDIENTS_TO_ADD_ERROR } }, { status: 400 });
+    }
+
+    const drafts = entries.map(readIngredientDraft);
+    const seenNames = new Set<string>();
+    for (const [index, draft] of drafts.entries()) {
+      const draftErrors = ingredientDraftErrors(draft);
+      if (Object.keys(draftErrors).length > 0) {
+        // Name the row to fix: by ingredient, or by position when it has no name.
+        const label = draft.ingredientName || `Ingredient ${index + 1}`;
+        const namedErrors = Object.fromEntries(
+          Object.entries(draftErrors).map(([field, message]) => [field, `${label}: ${message}`])
+        );
+        return data({ errors: namedErrors }, { status: 400 });
+      }
+      if (seenNames.has(draft.ingredientName)) {
+        return data(
+          { errors: { ingredientName: `${draft.ingredientName} is listed more than once` } },
+          { status: 400 }
+        );
+      }
+      seenNames.add(draft.ingredientName);
+    }
+
+    const rows = [];
+    for (const draft of drafts) {
+      const unit = await database.unit.upsert({
+        where: { name: draft.unitName },
+        update: {},
+        create: { name: draft.unitName },
+      });
+      const ingredientRef = await database.ingredientRef.upsert({
+        where: { name: draft.ingredientName },
+        update: {},
+        create: { name: draft.ingredientName },
+      });
+      const existingIngredient = await database.ingredient.findFirst({
+        where: { recipeId: id, ingredientRefId: ingredientRef.id },
+      });
+      if (existingIngredient) {
+        return data(
+          { errors: { ingredientName: `${draft.ingredientName} is already in the recipe` } },
+          { status: 400 }
+        );
+      }
+      rows.push({ quantity: draft.quantity, unitId: unit.id, ingredientRefId: ingredientRef.id });
+    }
+
+    await database.$transaction([
+      ...rows.map((row) =>
+        database.ingredient.create({
+          data: { recipeId: id, stepNum: step.stepNum, ...row },
+        })
+      ),
+      touchNativeSyncRecipeOperation(database, id),
+    ]);
+
+    return data({ success: true });
   }
 
   // Handle add ingredient intent
@@ -422,6 +528,7 @@ export default function EditStep() {
   const [ingredientInputMode, setIngredientInputMode] = useState<IngredientInputMode>('ai');
   const [parsedIngredients, setParsedIngredients] = useState<ParsedIngredient[]>([]);
   const submit = useSubmit();
+  const addAllFetcher = useFetcher<ActionData>();
   const [searchParams, setSearchParams] = useSearchParams();
   const { showToast } = useToast();
 
@@ -434,6 +541,20 @@ export default function EditStep() {
   const stepTitleErrorId = "edit-step-title-error";
   const usesStepsErrorId = "edit-step-uses-steps-error";
   const descriptionErrorId = "edit-step-description-error";
+
+  // Why an ingredient, or an Add All batch, could not be added (invalid field,
+  // already in the recipe, nothing to add).
+  const addAllErrors = addAllFetcher.data?.errors;
+  const ingredientErrors = [
+    actionData?.errors?.quantity,
+    actionData?.errors?.unitName,
+    actionData?.errors?.ingredientName,
+    addAllErrors?.general,
+    addAllErrors?.quantity,
+    addAllErrors?.unitName,
+    addAllErrors?.ingredientName,
+  ].filter((error): error is string => Boolean(error));
+  const showUsesStepsPicker = step.stepNum !== 1 && availableSteps.length > 0;
 
   const stepDeletionErrorElement = stepDeletionError
     ? <ValidationError error={stepDeletionError} className="mb-4" />
@@ -479,18 +600,22 @@ export default function EditStep() {
   };
 
   const handleAddAll = (ingredients: ParsedIngredient[]) => {
-    // Add all parsed ingredients sequentially
-    for (const ingredient of ingredients) {
-      const formData = new FormData();
-      formData.set("intent", "addIngredient");
-      formData.set("quantity", String(ingredient.quantity));
-      formData.set("unitName", ingredient.unit);
-      formData.set("ingredientName", ingredient.ingredientName);
-      submit(formData, { method: "post" });
-    }
-    // Clear parsed ingredients after adding all
-    setParsedIngredients([]);
+    // One request for the whole batch: separate submit() calls would each
+    // cancel the navigation before them. Its own fetcher, so the parsed list
+    // is cleared only once this request succeeds (below).
+    const formData = new FormData();
+    formData.set("intent", "addIngredients");
+    formData.set("ingredientsJson", JSON.stringify(ingredients));
+    addAllFetcher.submit(formData, { method: "post" });
   };
+
+  // A rejected batch (say, one ingredient is already in the recipe) keeps the
+  // parsed list so it can be fixed and added again.
+  useEffect(() => {
+    if (addAllFetcher.state === "idle" && addAllFetcher.data?.success) {
+      setParsedIngredients([]);
+    }
+  }, [addAllFetcher.state, addAllFetcher.data]);
 
   return (
     <CookbookPage>
@@ -583,6 +708,12 @@ export default function EditStep() {
             )}
           </Field>
 
+          {/* Without the picker (step 1, or no earlier steps) nothing else shows
+              this error, and Update would fail silently. */}
+          {!showUsesStepsPicker && (
+            <ValidationError error={actionData?.errors?.usesSteps} />
+          )}
+
           <div className="flex flex-col-reverse gap-3 border-t border-[var(--sj-border)] pt-4 sm:flex-row sm:justify-end">
             <Button href={`/recipes/${recipe.id}/edit`} plain>
               Cancel
@@ -605,6 +736,8 @@ export default function EditStep() {
         >
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           </div>
+
+          <ValidationError error={ingredientErrors} className="mb-4" />
 
           {showIngredientForm && (
             <div className="mb-4 border-y border-[var(--sj-border)] py-5">
@@ -649,6 +782,7 @@ export default function EditStep() {
                         type="button"
                         variant="destructive"
                         onClick={() => setIngredientToRemove(ingredient.id)}
+                        aria-label={`Remove ${ingredient.ingredientRef.name}`}
                       >
                         Remove
                       </Button>

@@ -3,7 +3,8 @@ import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
-import { loader, action, meta } from "~/routes/recipes.$id.steps.new";
+import { loader, action, meta, shouldRevalidate } from "~/routes/recipes.$id.steps.new";
+import { useRevalidator } from "react-router";
 import NewStep from "~/routes/recipes.$id.steps.new";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
@@ -472,7 +473,7 @@ describe("Recipes $id Steps New Route", () => {
         } as any);
 
         const { data, status } = extractResponseData(response);
-        expect(status).toBe(400);
+        expect(status).toBe(200);
         expect(data.errors.parse).toBe("Ingredient text is required");
       } finally {
         parseSpy.mockRestore();
@@ -1398,6 +1399,135 @@ describe("Recipes $id Steps New Route", () => {
       expect(screen.queryByText("Uses Output From")).not.toBeInTheDocument();
       expect(screen.queryByText("Uses Output From (optional)")).not.toBeInTheDocument();
       expect(screen.queryByText("No previous steps available")).not.toBeInTheDocument();
+    });
+
+    it("parses typed ingredient text through the add step route and keeps the page", async () => {
+      const mockData = {
+        recipe: { id: "recipe-1", title: "Test Recipe" },
+        nextStepNum: 1,
+        availableSteps: [],
+      };
+      const parseRequests: string[] = [];
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id/steps/new",
+          Component: NewStep,
+          loader: () => mockData,
+          action: async ({ request }) => {
+            const formData = await request.formData();
+            parseRequests.push(`${formData.get("intent")}:${formData.get("ingredientText")}`);
+            return { parsedIngredients: [{ quantity: 2, unit: "cup", ingredientName: "flour" }] };
+          },
+        },
+        {
+          // The step edit route answers an unknown step (like "new") with a thrown 404, as the
+          // real route does; the old parse box posted here and lost the whole page to it.
+          path: "/recipes/:id/steps/:stepId/edit",
+          Component: () => <p>step edit</p>,
+          action: () => {
+            throw new Response("Step not found", { status: 404 });
+          },
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1/steps/new"]} />);
+
+      await screen.findByRole("heading", { name: /Add Step/i });
+      await act(async () => {
+        fireEvent.change(screen.getByLabelText("Ingredient text"), { target: { value: "2 cups flour" } });
+      });
+
+      expect(await screen.findByRole("heading", { name: "Ingredients (1)" }, { timeout: 3000 })).toBeInTheDocument();
+      expect(parseRequests).toEqual(["parseIngredients:2 cups flour"]);
+      expect(screen.getByRole("heading", { name: /Add Step/i })).toBeInTheDocument();
+    });
+
+    describe("in-progress ingredients across a revalidation", () => {
+      const loaderData = {
+        recipe: { id: "recipe-1", title: "Test Recipe" },
+        nextStepNum: 3,
+        availableSteps: [
+          { stepNum: 1, stepTitle: null },
+          { stepNum: 2, stepTitle: null },
+        ],
+      };
+
+      function RevalidateButton() {
+        const revalidator = useRevalidator();
+        return (
+          <button type="button" onClick={() => revalidator.revalidate()}>
+            Revalidate page
+          </button>
+        );
+      }
+
+      function renderAddStep(loads: { count: number }) {
+        const Stub = createTestRoutesStub([
+          {
+            path: "/recipes/:id/steps/new",
+            Component: () => (
+              <>
+                <NewStep />
+                <RevalidateButton />
+              </>
+            ),
+            // A new object with the same content on every load, like a real revalidation.
+            loader: () => {
+              loads.count += 1;
+              return structuredClone(loaderData);
+            },
+            shouldRevalidate,
+            action: () => ({ errors: { parse: "OpenAI API key is required" } }),
+          },
+        ]);
+        render(<Stub initialEntries={["/recipes/recipe-1/steps/new"]} />);
+      }
+
+      // A failed parse is answered with 200, which makes React Router revalidate the page's
+      // loaders. Parsing changes no data, so the page opts out of that round trip.
+      it("does not reload the page's data after an ingredient parse", async () => {
+        const loads = { count: 0 };
+        renderAddStep(loads);
+
+        await screen.findByRole("heading", { name: /Add Step/i });
+        const loadsBeforeParse = loads.count;
+        fireEvent.change(screen.getByLabelText("Ingredient text"), { target: { value: "2 tbsp honey" } });
+        expect(await screen.findByRole("alert", {}, { timeout: 3000 })).toHaveTextContent("AI parsing is unavailable");
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        });
+
+        expect(loads.count).toBe(loadsBeforeParse);
+      });
+
+      // Manual mode and hand-added ingredients live only in the page; a revalidation of the same
+      // page (new loader data, same content) must leave them alone.
+      it("keeps manual mode and hand-added ingredients when the page revalidates", async () => {
+        const loads = { count: 0 };
+        renderAddStep(loads);
+
+        await screen.findByRole("heading", { name: /Add Step/i });
+        fireEvent.click(screen.getByRole("switch", { name: "AI Parse" }));
+        fireEvent.change(screen.getByLabelText("Quantity"), { target: { value: "2" } });
+        fireEvent.change(screen.getByLabelText("Unit"), { target: { value: "tbsp" } });
+        fireEvent.change(screen.getByLabelText("Ingredient"), { target: { value: "honey" } });
+        fireEvent.click(screen.getByRole("button", { name: "Add ingredient" }));
+        expect(screen.getByRole("button", { name: "Remove honey" })).toBeInTheDocument();
+
+        const loadsBeforeRevalidation = loads.count;
+        fireEvent.click(screen.getByRole("button", { name: "Revalidate page" }));
+        await waitFor(() => expect(loads.count).toBe(loadsBeforeRevalidation + 1));
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        });
+
+        expect(screen.getByRole("switch", { name: "AI Parse" })).not.toBeChecked();
+        expect(screen.getByRole("button", { name: "Remove honey" })).toBeInTheDocument();
+        expect((document.querySelector('input[name="ingredientsJson"]') as HTMLInputElement).value).toBe(
+          JSON.stringify([{ quantity: 2, unit: "tbsp", ingredientName: "honey" }])
+        );
+      });
     });
 
     it("should have correct form attributes", async () => {

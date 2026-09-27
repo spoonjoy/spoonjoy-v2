@@ -21,6 +21,13 @@ export function getIngredientParserAction(recipeId: string, stepId: string) {
     return '/recipes/new'
   }
 
+  // The "Add Step" page has no step yet, so it parses through its own action.
+  // `/steps/new/edit` would reach the step edit route, which throws a 404 for
+  // the unknown step "new" and replaces the whole page with "Page not found".
+  if (stepId === 'new') {
+    return `/recipes/${recipeId}/steps/new`
+  }
+
   return `/recipes/${recipeId}/steps/${stepId}/edit`
 }
 

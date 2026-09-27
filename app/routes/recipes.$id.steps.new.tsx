@@ -1,6 +1,7 @@
 import type { Route } from "./+types/recipes.$id.steps.new";
 import { Form, redirect, data, useActionData, useLoaderData, useNavigate } from "react-router";
 import { getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
+import { revalidateUnlessIngredientParse } from "~/lib/ingredient-parse-revalidation";
 import { requireUserId } from "~/lib/session.server";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -64,6 +65,9 @@ export function meta({ data }: Route.MetaArgs) {
     { name: "description", content: `Add a new step to "${data.recipe.title}" on Spoonjoy.` },
   ];
 }
+
+// An ingredient parse changes no data; don't reload the page after one.
+export const shouldRevalidate = revalidateUnlessIngredientParse;
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
@@ -156,10 +160,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       return data({ parsedIngredients });
     } catch (error) {
       if (error instanceof IngredientParseError) {
-        return data(
-          { errors: { parse: error.message } },
-          { status: 400 }
-        );
+        // A parse failure (no API key, provider down, unparseable text) is an
+        // outcome the form shows next to the box, with the manual path, not a
+        // failed request: a 4xx here makes every browser log a console error
+        // while the person is just typing.
+        return data({ errors: { parse: error.message } }, { status: 200 });
       }
       return data(
         { errors: { parse: "An unexpected error occurred while parsing ingredients" } },
@@ -532,6 +537,7 @@ export default function NewStep() {
                             type="button"
                             variant="destructive"
                             onClick={() => handleRemoveIngredient(index)}
+                            aria-label={`Remove ${ingredient.ingredientName}`}
                           >
                             Remove
                           </Button>
