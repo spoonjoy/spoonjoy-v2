@@ -145,4 +145,76 @@ describe("MCP recipe tools on a D1 binding", () => {
       () => db.recipe.delete({ where: { id } }),
     )))).rejects.toThrow("Recipe not found");
   });
+
+  it("answers after three lost races instead of writing", async () => {
+    const id = await createdId(await callSpoonjoyApiOperation("create_recipe", { title: "Contested home", steps }, context()));
+    let races = 0;
+    // A rival holds the title only while each batch runs, so every check passes and every batch loses.
+    const rivalDuringBatch: D1ReadDatabase = {
+      prepare: (sql) => d1.binding.prepare(sql),
+      async batch(statements) {
+        races += 1;
+        const rival = await db.recipe.create({ data: { title: "Contested", chefId: principal.id } });
+        try {
+          return await d1.binding.batch(statements as never);
+        } finally {
+          await db.recipe.delete({ where: { id: rival.id } });
+        }
+      },
+    };
+    await expect(callSpoonjoyApiOperation("update_recipe", { id, title: "Contested" }, context(rivalDuringBatch)))
+      .rejects.toThrow("The recipe changed while this request ran. Please try again.");
+    expect(races).toBe(3);
+  });
+
+  describe("with a cover image", () => {
+    const image = "data:image/png;base64," + Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]).toString("base64");
+    const imageContext = (DB?: D1ReadDatabase): SpoonjoyApiContext => ({ ...context(DB), allowLocalImageFallback: true });
+
+    async function coverState(recipeId: string) {
+      const recipe = await db.recipe.findUniqueOrThrow({ where: { id: recipeId }, include: { covers: true } });
+      return {
+        coverMode: recipe.coverMode,
+        activeCoverVariant: recipe.activeCoverVariant,
+        activeIsTheCover: recipe.covers.length === 1 && recipe.activeCoverId === recipe.covers[0]!.id,
+        covers: recipe.covers.map((cover) => ({
+          sourceType: cover.sourceType,
+          status: cover.status,
+          generationStatus: cover.generationStatus,
+          failureReason: cover.failureReason,
+          imageUrl: cover.imageUrl,
+        })),
+        ...(await graph(recipeId)),
+      };
+    }
+
+    it("creates and updates a recipe with its cover in one batch, as the Prisma path does", async () => {
+      const viaPrisma = await createdId(await callSpoonjoyApiOperation("create_recipe", { title: "Cover Prisma", imageUrl: image, steps }, imageContext()));
+      const viaD1 = await createdId(await callSpoonjoyApiOperation("create_recipe", { title: "Cover D1", imageUrl: image, steps }, imageContext(d1.binding)));
+      expect(await coverState(viaD1)).toEqual(await coverState(viaPrisma));
+
+      const plainPrisma = await createdId(await callSpoonjoyApiOperation("create_recipe", { title: "Plain Prisma", steps }, context()));
+      const plainD1 = await createdId(await callSpoonjoyApiOperation("create_recipe", { title: "Plain D1", steps }, context()));
+      await callSpoonjoyApiOperation("update_recipe", { id: plainPrisma, imageUrl: image }, imageContext());
+      await callSpoonjoyApiOperation("update_recipe", { id: plainD1, imageUrl: image }, imageContext(d1.binding));
+      expect(await coverState(plainD1)).toEqual(await coverState(plainPrisma));
+    });
+
+    it("writes nothing when the cover insert fails", async () => {
+      const id = await createdId(await callSpoonjoyApiOperation("create_recipe", { title: "Keep me", steps }, context()));
+      await db.$executeRawUnsafe(`CREATE TRIGGER "McpRecipeD1_cover_abort" BEFORE INSERT ON "RecipeCover"
+        BEGIN SELECT RAISE(ABORT, 'cover_insert_failed'); END`);
+      try {
+        await expect(callSpoonjoyApiOperation("create_recipe", { title: "Broken cover", imageUrl: image, steps }, imageContext(d1.binding)))
+          .rejects.toThrow("cover_insert_failed");
+        await expect(callSpoonjoyApiOperation("update_recipe", { id, title: "Renamed", imageUrl: image, steps: [] }, imageContext(d1.binding)))
+          .rejects.toThrow("cover_insert_failed");
+      } finally {
+        await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "McpRecipeD1_cover_abort"`);
+      }
+      await expect(db.recipe.count({ where: { title: "Broken cover" } })).resolves.toBe(0);
+      await expect(db.recipe.findUniqueOrThrow({ where: { id } })).resolves.toMatchObject({ title: "Keep me", activeCoverId: null });
+      expect((await graph(id)).steps).toHaveLength(2);
+    });
+  });
 });

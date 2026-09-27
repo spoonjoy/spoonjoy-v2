@@ -325,6 +325,39 @@ describe("atomic recipe writes on Wrangler D1", () => {
       expect(await count(`SELECT COUNT(*) AS "count" FROM "Unit" WHERE "name" LIKE '% failed'`)).toBe(0);
     });
 
+    it("writes the recipe with its active cover, or neither", async () => {
+      const draft = {
+        id: "atomic-create-cover",
+        title: "Atomic Covered Pancakes",
+        description: null,
+        servings: null,
+        chefId: CHEF,
+        steps: draftSteps,
+        cover: {
+          id: "atomic-create-cover-image",
+          imageUrl: "https://example.com/pancakes.jpg",
+          sourceType: "chef-upload" as const,
+          status: "ready" as const,
+          createdById: CHEF,
+          sourceImageUrl: "https://example.com/pancakes.jpg",
+          generationStatus: "none" as const,
+          activeVariant: "image" as const,
+        },
+      };
+      await failOn("UPDATE", "Recipe", `OLD."id" = 'atomic-create-cover'`);
+
+      expect(String(await rejection(createRecipeDraft(prisma, draft, database())))).toContain(FAILURE);
+      expect(await recipeGraph("atomic-create-cover")).toEqual({ recipe: null, steps: [], ingredients: [], uses: [], covers: [] });
+
+      await run(`DROP TRIGGER "${TRIGGER}"`);
+      await createRecipeDraft(prisma, draft, database());
+      expect(await recipeGraph("atomic-create-cover")).toMatchObject({
+        recipe: { coverMode: "manual", activeCoverVariant: "image", hasActiveCover: 1 },
+        covers: [{ imageUrl: "https://example.com/pancakes.jpg", sourceType: "chef-upload", status: "ready", createdById: CHEF }],
+      });
+      expect((await recipeGraph("atomic-create-cover")).steps).toHaveLength(2);
+    });
+
     it("lets only one of two interleaved creates take a title", async () => {
       const competitor = { id: "atomic-create-first", title: "Atomic Race Title", description: null, servings: null, chefId: CHEF, steps: [] };
       const d1 = interleaved(() => createRecipeDraft(prisma, competitor, database()));
@@ -752,7 +785,7 @@ describe("atomic recipe writes on Wrangler D1", () => {
       expect(await count(`SELECT COUNT(*) AS "count" FROM "ApiMutationTombstone" WHERE "idempotencyKeyId" = 'atomic-key-ingredient'`)).toBe(1);
     });
 
-    it("renumbers every step or none, and stops if the steps changed after they were read", async () => {
+    it("renumbers every step or none, and re-reads the steps if they changed after they were read", async () => {
       await seedRecipe("atomic-api-reorder");
       await seedIdempotencyKey("atomic-key-reorder");
       const input = { clientMutationId: "atomic-reorder", stepId: "atomic-api-reorder-step-2", toStepNum: 1 };
@@ -767,11 +800,9 @@ describe("atomic recipe writes on Wrangler D1", () => {
         `INSERT INTO "RecipeStep" ("id", "recipeId", "stepNum", "description", "updatedAt") VALUES ('atomic-api-reorder-step-4', 'atomic-api-reorder', 4, 'Late', ?)`,
         OLD,
       ));
-      const error = await rejection(reorderNativeRecipeStep(prisma, CHEF, "atomic-api-reorder", input, { ...options, d1: addedInBetween }));
-      expect(isD1GuardFailure(error)).toBe(true);
-      expect((await recipeGraph("atomic-api-reorder")).steps.map((step) => step.stepTitle)).toEqual(["Mix", "Rest", "Bake", null]);
-
-      await expect(reorderNativeRecipeStep(prisma, CHEF, "atomic-api-reorder", input, { ...options, d1: database() }))
+      // The first batch is stopped (a step appeared after the read); the write runs again from
+      // the current steps and lands.
+      await expect(reorderNativeRecipeStep(prisma, CHEF, "atomic-api-reorder", input, { ...options, d1: addedInBetween }))
         .resolves.toMatchObject({ ok: true, data: { reordered: true } });
       const reordered = await recipeGraph("atomic-api-reorder");
       expect(reordered.steps.map((step) => step.stepTitle)).toEqual(["Rest", "Mix", "Bake", null]);

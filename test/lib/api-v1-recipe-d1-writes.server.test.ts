@@ -207,10 +207,12 @@ describe("REST recipe writes on a D1 binding", () => {
       await expect(updateNativeRecipe(db, chefId, recipe.id, { clientMutationId: "u", fields: { description: "x" } }, failing()))
         .rejects.toThrow("D1 is down");
 
+      // A recipe deleted between the checks and the write answers as the checks now do.
       const lonely = await db.recipe.create({ data: { title: "Lonely", chefId } });
-      const deleting = () => interleaved(() => db.recipe.delete({ where: { id: lonely.id } }));
+      const deleting = () => interleaved(() => db.recipe.update({ where: { id: lonely.id }, data: { deletedAt: new Date() } }));
       await expect(updateNativeRecipe(db, chefId, lonely.id, { clientMutationId: "u", fields: { description: "x" } }, deleting()))
-        .rejects.toThrow("Recipe to update was not found");
+        .resolves.toEqual({ ok: false, code: "not_found", message: "Recipe not found", details: undefined });
+      await expect(db.recipe.findUniqueOrThrow({ where: { id: lonely.id } })).resolves.toMatchObject({ description: null });
     });
 
     it("soft-deletes with the cookbook touch and sync tombstone as the Prisma path does", async () => {
@@ -223,9 +225,14 @@ describe("REST recipe writes on a D1 binding", () => {
         expect.objectContaining({ resourceType: "recipe", title: viaD1.recipe.title, deletedAt }),
       ]);
 
+      // A delete that loses the race to another delete answers not_found and writes nothing.
       const lonely = await db.recipe.create({ data: { title: "Lonely", chefId } });
-      await expect(deleteNativeRecipe(db, chefId, lonely.id, interleaved(() => db.recipe.delete({ where: { id: lonely.id } }))))
-        .rejects.toThrow("Recipe to delete was not found");
+      const firstDeletedAt = new Date("2026-02-02T00:00:00.000Z");
+      await expect(deleteNativeRecipe(db, chefId, lonely.id, interleaved(() =>
+        db.recipe.update({ where: { id: lonely.id }, data: { deletedAt: firstDeletedAt } }))))
+        .resolves.toMatchObject({ ok: false, code: "not_found" });
+      await expect(db.recipe.findUniqueOrThrow({ where: { id: lonely.id } })).resolves.toMatchObject({ deletedAt: firstDeletedAt });
+      await expect(db.nativeSyncTombstone.count({ where: { resourceId: lonely.id } })).resolves.toBe(0);
       const other = await db.recipe.create({ data: { title: "Other", chefId } });
       await expect(deleteNativeRecipe(db, chefId, other.id, failing())).rejects.toThrow("D1 is down");
     });
@@ -261,7 +268,11 @@ describe("REST recipe writes on a D1 binding", () => {
       await expect(createNativeRecipeStep(db, chefId, recipe.id, {
         clientMutationId: "s", stepTitle: null, description: "Glaze", duration: null,
         ingredients: [{ quantity: 1, unit: "cup", ingredientName: "Honey" }], outputStepNums: [],
-      }, { d1: racing })).rejects.toThrow("malformed JSON");
+      }, { d1: racing })).resolves.toMatchObject({
+        ok: false,
+        code: "validation_error",
+        details: { fieldErrors: { ingredientName: "Ingredient honey is already in the recipe" } },
+      });
       await expect(db.recipeStep.count({ where: { recipeId: recipe.id } })).resolves.toBe(steps.length);
     });
 
@@ -288,7 +299,7 @@ describe("REST recipe writes on a D1 binding", () => {
       const { recipe, steps } = await seedRecipe("Content race");
       const racing = interleaved(() => db.stepOutputUse.deleteMany({ where: { recipeId: recipe.id } }));
       await expect(updateNativeRecipeStep(db, chefId, recipe.id, steps[2]!.id, { clientMutationId: "p", fields: { stepTitle: "Solo" } }, { d1: racing }))
-        .rejects.toThrow("malformed JSON");
+        .resolves.toMatchObject({ ok: false, code: "validation_error", message: "Add at least 1 ingredient or 1 step output use before saving this step." });
       await expect(db.recipeStep.findUniqueOrThrow({ where: { id: steps[2]!.id } })).resolves.toMatchObject({ stepTitle: "Bake" });
     });
 
@@ -322,13 +333,50 @@ describe("REST recipe writes on a D1 binding", () => {
       expect(d1Result).toMatchObject({ ok: true, data: { reordered: true } });
     });
 
-    it("stops a reorder when the steps changed after they were read", async () => {
+    it("reorders from the current steps when they changed after they were read", async () => {
       const { recipe, steps } = await seedRecipe("Reorder race");
       const racing = interleaved(() => db.recipeStep.update({ where: { id: steps[1]!.id }, data: { stepNum: 9 } }));
       await expect(reorderNativeRecipeStep(db, chefId, recipe.id, { clientMutationId: "r", stepId: steps[1]!.id, toStepNum: 1 }, { d1: racing }))
-        .rejects.toThrow("malformed JSON");
-      await expect(db.recipeStep.findMany({ where: { recipeId: recipe.id }, orderBy: { stepNum: "asc" }, select: { stepNum: true } }))
-        .resolves.toEqual([{ stepNum: 1 }, { stepNum: 3 }, { stepNum: 9 }]);
+        .resolves.toMatchObject({ ok: true, data: { reordered: true } });
+      await expect(db.recipeStep.findMany({ where: { recipeId: recipe.id }, orderBy: { stepNum: "asc" }, select: { id: true } }))
+        .resolves.toEqual([{ id: steps[1]!.id }, { id: steps[0]!.id }, { id: steps[2]!.id }]);
+    });
+
+    it("answers concurrent_change when every retry loses a race", async () => {
+      const { recipe, steps } = await seedRecipe("Always racing");
+      let moves = 0;
+      const alwaysRacing: D1ReadDatabase = {
+        prepare: (sql) => d1.binding.prepare(sql),
+        async batch(statements) {
+          moves += 1;
+          await db.recipeStep.update({ where: { id: steps[2]!.id }, data: { stepNum: 10 + moves } });
+          return d1.binding.batch(statements as never);
+        },
+      };
+      await expect(reorderNativeRecipeStep(db, chefId, recipe.id, { clientMutationId: "r", stepId: steps[1]!.id, toStepNum: 1 }, { d1: alwaysRacing }))
+        .resolves.toEqual({
+          ok: false,
+          code: "validation_error",
+          message: "The recipe changed while this request ran. Retry it.",
+          details: { reason: "concurrent_change" },
+        });
+      expect(moves).toBe(3);
+
+      // A rival holds the title only while each batch runs, so every check passes and every
+      // batch loses.
+      const renaming: D1ReadDatabase = {
+        prepare: (sql) => d1.binding.prepare(sql),
+        async batch(statements) {
+          const rival = await db.recipe.create({ data: { title: "Contested", chefId } });
+          try {
+            return await d1.binding.batch(statements as never);
+          } finally {
+            await db.recipe.delete({ where: { id: rival.id } });
+          }
+        },
+      };
+      await expect(updateNativeRecipe(db, chefId, recipe.id, { clientMutationId: "u", fields: { title: "Contested" } }, renaming))
+        .resolves.toMatchObject({ ok: false, details: { reason: "concurrent_change" } });
     });
 
     it.each([

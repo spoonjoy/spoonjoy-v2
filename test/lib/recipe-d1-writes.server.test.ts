@@ -2,7 +2,14 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import type { D1ReadDatabase } from "~/lib/d1-read.server";
-import { d1Guard, d1Timestamp, d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
+import {
+  D1GuardFailure,
+  d1Guard,
+  d1Timestamp,
+  d1WriteBatch,
+  isD1GuardFailure,
+  retryOnD1GuardFailure,
+} from "~/lib/d1-write.server";
 import { getLocalDb } from "~/lib/db.server";
 import { nativeSyncTombstoneUpsertStatement } from "~/lib/native-sync-invalidation.server";
 import { coverInsertStatement } from "~/lib/recipe-cover.server";
@@ -115,6 +122,16 @@ async function seedRecipe(title: string, owner = chefId) {
   return { recipe, steps, ingredients, cookbook, cup, refs };
 }
 
+/** A binding whose every batch fails with `error`. */
+function failingWith(error: unknown): D1ReadDatabase {
+  return {
+    prepare: (sql) => d1.binding.prepare(sql),
+    batch: async () => {
+      throw error;
+    },
+  };
+}
+
 /** The fake binding, with `before` run once just ahead of the first batch. */
 function interleaved(before: () => Promise<unknown>): D1ReadDatabase {
   let pending = true;
@@ -188,21 +205,43 @@ describe("D1 recipe write batches", () => {
       await expect(d1WriteBatch(stub([result]), [["SELECT 1"]])).rejects.toThrow("D1 batch statement 0 returned no result");
     });
 
-    it("recognizes a guard failure from its error or message only", async () => {
+    it("turns a guard's failure, and only that, into a D1GuardFailure", async () => {
       const error = await rejection(d1WriteBatch(d1.binding, [d1Guard("1 = ?", 2)]));
+      expect(error).toBeInstanceOf(D1GuardFailure);
       expect(isD1GuardFailure(error)).toBe(true);
-      expect(isD1GuardFailure("D1_ERROR: malformed JSON: SQLITE_ERROR")).toBe(true);
-      expect(isD1GuardFailure(new Error("UNIQUE constraint failed"))).toBe(false);
-      expect(isD1GuardFailure(42)).toBe(false);
+      expect(isD1GuardFailure(new Error("D1_ERROR: malformed JSON: SQLITE_ERROR"))).toBe(false);
+      const plain = new Error("UNIQUE constraint failed");
+      expect(await rejection(d1WriteBatch(failingWith(plain), [["SELECT 1"]]))).toBe(plain);
+      expect(await rejection(d1WriteBatch(failingWith("D1_ERROR: malformed JSON"), [["SELECT 1"]]))).toBeInstanceOf(D1GuardFailure);
+      expect(await rejection(d1WriteBatch(failingWith(42), [["SELECT 1"]]))).toBe(42);
       await expect(d1WriteBatch(d1.binding, [d1Guard("1 = ?", 1)])).resolves.toEqual([{ rows: [{ guard: "0" }], changes: 0 }]);
       expect(d1Timestamp(OLD)).toBe("2026-01-01T00:00:00.000Z");
+    });
+
+    it("retries a write while its guard fails, up to a limit, and passes other failures through", async () => {
+      const guardFailure = new D1GuardFailure(new Error("malformed JSON"));
+      let runs = 0;
+      await expect(retryOnD1GuardFailure(async () => {
+        runs += 1;
+        if (runs < 3) throw guardFailure;
+        return "written";
+      }, () => "gave up")).resolves.toBe("written");
+      runs = 0;
+      await expect(retryOnD1GuardFailure(async () => {
+        runs += 1;
+        throw guardFailure;
+      }, () => "gave up")).resolves.toBe("gave up");
+      expect(runs).toBe(3);
+      await expect(retryOnD1GuardFailure(async () => {
+        throw new Error("D1 is down");
+      }, () => "gave up")).rejects.toThrow("D1 is down");
     });
   });
 
   describe("statement builders", () => {
     it("checks active titles, optionally excluding one recipe", async () => {
       const { recipe } = await seedRecipe("Taken");
-      await expect(d1WriteBatch(d1.binding, [activeRecipeTitleFreeGuard(chefId, "Taken")])).rejects.toThrow("malformed JSON");
+      await expect(d1WriteBatch(d1.binding, [activeRecipeTitleFreeGuard(chefId, "Taken")])).rejects.toBeInstanceOf(D1GuardFailure);
       await expect(d1WriteBatch(d1.binding, [activeRecipeTitleFreeGuard(chefId, "Taken", recipe.id)])).resolves.toHaveLength(1);
       await expect(d1WriteBatch(d1.binding, [activeRecipeTitleFreeGuard(friendId, "Taken")])).resolves.toHaveLength(1);
     });

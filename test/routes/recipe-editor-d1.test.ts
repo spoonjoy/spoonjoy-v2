@@ -109,13 +109,17 @@ function responseStatus(response: unknown) {
 type Page = "edit" | "step";
 
 async function post(page: Page, seeded: Seeded, fields: (seeded: Seeded) => Record<string, string | File>, env: Record<string, unknown> | null, stepIndex = 0) {
+  return responseStatus(await act(page, seeded, fields, env, stepIndex));
+}
+
+async function act(page: Page, seeded: Seeded, fields: (seeded: Seeded) => Record<string, string | File>, env: Record<string, unknown> | null, stepIndex = 0) {
   const params = page === "edit"
     ? { id: seeded.recipe.id }
     : { id: seeded.recipe.id, stepId: seeded.steps[stepIndex]!.id };
   const module = page === "edit"
     ? await import("~/routes/recipes.$id.edit")
     : await import("~/routes/recipes.$id.steps.$stepId.edit");
-  const response = await module.action({
+  return module.action({
     request: new UndiciRequest(`http://localhost:3000/recipes/${seeded.recipe.id}/edit`, {
       method: "POST",
       headers: { Cookie: cookie },
@@ -124,8 +128,30 @@ async function post(page: Page, seeded: Seeded, fields: (seeded: Seeded) => Reco
     context: { cloudflare: { env } },
     params,
   } as never);
-  return responseStatus(response);
 }
+
+/** The fake binding, with `before` run once just ahead of the first batch: another request. */
+function racing(before: () => Promise<unknown>) {
+  let pending = true;
+  return {
+    prepare: (sql: string) => d1.binding.prepare(sql),
+    async batch(statements: never) {
+      if (pending) {
+        pending = false;
+        await before();
+      }
+      return d1.binding.batch(statements);
+    },
+  };
+}
+
+/** Runs one form post against a racing binding and answers its status and errors. */
+async function lostRace(page: Page, seeded: Seeded, fields: Record<string, string | File>, before: () => Promise<unknown>, stepIndex = 0) {
+  const result = await withD1Routes(() => act(page, seeded, () => fields, { DB: racing(before), PHOTOS: photos() }, stepIndex));
+  return { status: responseStatus(result), errors: (result as { data?: { errors?: unknown } }).data?.errors };
+}
+
+const CHANGED = "This recipe changed while you were editing it. Reload the page and try again.";
 
 const photos = () => ({ put: vi.fn().mockResolvedValue(undefined), delete: vi.fn().mockResolvedValue(undefined) });
 
@@ -187,7 +213,7 @@ describe("recipe editor routes on a D1 binding", () => {
       await expectParity("edit", ({ recipe }) => ({ title: recipe.title, clearImage: "true" }));
     });
 
-    it("rolls back a save that lost its title, and removes the uploaded image", async () => {
+    it("answers a save that lost its title with the title error, keeping the upload", async () => {
       const mine = await seedRecipe("Mine");
       const bucket = photos();
       const racing = {
@@ -201,8 +227,8 @@ describe("recipe editor routes on a D1 binding", () => {
         title: "Wanted", image: new File([PNG], "cover.png", { type: "image/png" }),
       }), { DB: racing, PHOTOS: bucket }));
 
-      expect(status).toBe(500);
-      expect(bucket.delete).toHaveBeenCalledTimes(1);
+      expect(status).toBe(400);
+      expect(bucket.delete).not.toHaveBeenCalled();
       await expect(graph(mine)).resolves.toMatchObject({ title: "Mine", touched: false, covers: [] });
     });
   });
@@ -234,6 +260,154 @@ describe("recipe editor routes on a D1 binding", () => {
     ])("saves a step %s and its output uses as the Prisma path does", async (_label, stepTitle) => {
       const { statuses } = await expectParity("step", () => ({ stepTitle, description: "Bake it hot", usesSteps: "2" }), 2);
       expect(statuses).toEqual([302, 302]);
+    });
+  });
+
+  describe("lost races", () => {
+    it("answers a step swap whose steps moved with the changed-recipe message", async () => {
+      const seeded = await seedRecipe("Swap race");
+      const moveTarget = () => db.recipeStep.update({ where: { id: seeded.steps[0]!.id }, data: { stepNum: 9 } });
+      await expect(lostRace("edit", seeded, { intent: "reorderStep", stepId: seeded.steps[1]!.id, direction: "up" }, moveTarget))
+        .resolves.toEqual({ status: 409, errors: { reorder: CHANGED } });
+      expect((await graph(seeded)).steps.map((step) => [step.position, step.stepNum])).toEqual([[1, 2], [2, 3], [0, 9]]);
+    });
+
+    it.each([
+      ["gained a dependent step", "Cannot delete Step 2 because it is used by Step 3", 400,
+        (seeded: Seeded) => db.stepOutputUse.create({ data: { recipeId: seeded.recipe.id, outputStepNum: 2, inputStepNum: 3 } })],
+      ["was deleted", "Step not found", 404, (seeded: Seeded) => db.recipeStep.delete({ where: { id: seeded.steps[1]!.id } })],
+      ["moved", CHANGED, 409, (seeded: Seeded) => db.recipeStep.update({ where: { id: seeded.steps[1]!.id }, data: { stepNum: 9 } })],
+    ])("answers a step delete whose step %s as the checks do", async (_label, error, status, before) => {
+      const seeded = await seedRecipe(`Delete race ${status}`);
+      await expect(lostRace("edit", seeded, { intent: "deleteStep", stepId: seeded.steps[1]!.id }, () => before(seeded)))
+        .resolves.toEqual({ status, errors: { stepDeletion: error } });
+      const stepPage = await seedRecipe(`Step page delete race ${status}`);
+      await expect(lostRace("step", stepPage, { intent: "delete" }, () => before(stepPage), 1))
+        .resolves.toEqual({ status, errors: { stepDeletion: error } });
+    });
+
+    it("answers ingredient adds that lost a race as the checks do", async () => {
+      const seeded = await seedRecipe("Add race");
+      const addHoney = async () => {
+        const honey = await db.ingredientRef.upsert({ where: { name: "honey" }, update: {}, create: { name: "honey" } });
+        const cup = await db.unit.findUniqueOrThrow({ where: { name: "cup" } });
+        await db.ingredient.create({ data: { recipeId: seeded.recipe.id, stepNum: 2, quantity: 1, unitId: cup.id, ingredientRefId: honey.id } });
+      };
+      const moveStep = (stepNum: number) => () => db.recipeStep.update({ where: { id: seeded.steps[2]!.id }, data: { stepNum } });
+      const batch = { intent: "addIngredients", ingredientsJson: JSON.stringify([{ quantity: 1, unit: "cup", ingredientName: "Honey" }]) };
+      const single = { intent: "addIngredient", quantity: "1", unitName: "cup", ingredientName: "Oats" };
+
+      await expect(lostRace("step", seeded, batch, addHoney, 2))
+        .resolves.toEqual({ status: 400, errors: { ingredientName: "honey is already in the recipe" } });
+      await expect(lostRace("step", seeded, { ...batch, ingredientsJson: JSON.stringify([{ quantity: 1, unit: "cup", ingredientName: "Rice" }]) }, moveStep(8), 2))
+        .resolves.toEqual({ status: 409, errors: { general: CHANGED } });
+      await db.recipeStep.update({ where: { id: seeded.steps[2]!.id }, data: { stepNum: 3 } });
+      await expect(lostRace("step", seeded, single, async () => {
+        const oats = await db.ingredientRef.upsert({ where: { name: "oats" }, update: {}, create: { name: "oats" } });
+        const cup = await db.unit.findUniqueOrThrow({ where: { name: "cup" } });
+        await db.ingredient.create({ data: { recipeId: seeded.recipe.id, stepNum: 1, quantity: 1, unitId: cup.id, ingredientRefId: oats.id } });
+      }, 2)).resolves.toEqual({ status: 400, errors: { ingredientName: "This ingredient is already in the recipe" } });
+      await expect(lostRace("step", seeded, { ...single, ingredientName: "Barley" }, moveStep(8), 2))
+        .resolves.toEqual({ status: 409, errors: { general: CHANGED } });
+    });
+
+    it("answers step saves that lost a race as the checks do", async () => {
+      const seeded = await seedRecipe("Save race");
+      await expect(lostRace("step", seeded, { stepTitle: "Mixed", description: "Mix it" }, () =>
+        db.ingredient.deleteMany({ where: { recipeId: seeded.recipe.id, stepNum: 1 } }), 0))
+        .resolves.toEqual({ status: 400, errors: { usesSteps: "Add at least 1 ingredient or 1 step output use before saving this step." } });
+      await expect(lostRace("step", seeded, { stepTitle: "Rested", description: "Rest it" }, () =>
+        db.recipeStep.update({ where: { id: seeded.steps[1]!.id }, data: { stepNum: 9 } }), 1))
+        .resolves.toEqual({ status: 409, errors: { general: CHANGED } });
+      const gone = await seedRecipe("Save race gone");
+      await expect(lostRace("step", gone, { stepTitle: "Mixed", description: "Mix it" }, () =>
+        db.recipeStep.delete({ where: { id: gone.steps[0]!.id } }), 0))
+        .resolves.toEqual({ status: 409, errors: { general: CHANGED } });
+    });
+
+    it("rethrows other D1 failures from the editor batches", async () => {
+      const seeded = await seedRecipe("Editor down");
+      const down = { prepare: (sql: string) => d1.binding.prepare(sql), batch: async () => { throw new Error("D1 is down"); } };
+      const run = (page: Page, fields: Record<string, string>, stepIndex = 0) =>
+        withD1Routes(() => act(page, seeded, () => fields, { DB: down }, stepIndex)).catch((error: unknown) => error);
+      await expect(run("edit", { intent: "reorderStep", stepId: seeded.steps[1]!.id, direction: "up" })).resolves.toEqual(new Error("D1 is down"));
+      await expect(run("edit", { intent: "deleteStep", stepId: seeded.steps[1]!.id })).resolves.toEqual(new Error("D1 is down"));
+      await expect(run("step", { intent: "delete" }, 1)).resolves.toEqual(new Error("D1 is down"));
+      await expect(run("step", { intent: "addIngredients", ingredientsJson: JSON.stringify([{ quantity: 1, unit: "cup", ingredientName: "Rye" }]) }, 2))
+        .resolves.toEqual(new Error("D1 is down"));
+      await expect(run("step", { intent: "addIngredient", quantity: "1", unitName: "cup", ingredientName: "Spelt" }, 2))
+        .resolves.toEqual(new Error("D1 is down"));
+      const saved = await run("step", { stepTitle: "Down", description: "Down" }, 0);
+      expect(responseStatus(saved)).toBe(500);
+    });
+  });
+
+  describe("new recipe page", () => {
+    async function create(title: string, env: Record<string, unknown>, image?: File) {
+      const body = form({ title, description: "Fresh", servings: "2", steps: JSON.stringify([{ description: "Stir", ingredients: [{ quantity: 1, unit: "cup", ingredientName: "Rice" }] }]), ...(image ? { image } : {}) });
+      const { action } = await import("~/routes/recipes.new");
+      return action({
+        request: new UndiciRequest("http://localhost:3000/recipes/new", { method: "POST", headers: { Cookie: cookie }, body }) as never,
+        context: { cloudflare: { env } },
+        params: {},
+      } as never);
+    }
+
+    async function coverState(title: string) {
+      const recipe = await db.recipe.findFirstOrThrow({ where: { title }, include: { covers: true } });
+      return {
+        coverMode: recipe.coverMode,
+        activeCoverVariant: recipe.activeCoverVariant,
+        activeIsTheCover: recipe.activeCoverId === (recipe.covers[0]?.id ?? null),
+        covers: recipe.covers.map((cover) => ({
+          sourceType: cover.sourceType,
+          status: cover.status,
+          generationStatus: cover.generationStatus,
+          failureReason: cover.failureReason,
+          createdById: cover.createdById,
+          hasImage: cover.imageUrl.length > 0,
+        })),
+        steps: await db.recipeStep.count({ where: { recipeId: recipe.id } }),
+      };
+    }
+
+    it.each([
+      ["with an uploaded cover", true],
+      ["with a placeholder cover", false],
+    ])("creates a recipe %s in one batch, as the Prisma path does", async (_label, withImage) => {
+      const image = () => (withImage ? new File([PNG], "cover.png", { type: "image/png" }) : undefined);
+      await withD1Routes(async () => {
+        expect(responseStatus(await create("Via Prisma", { PHOTOS: photos() }, image()))).toBe(302);
+        expect(responseStatus(await create("Via D1", { DB: d1.binding, PHOTOS: photos() }, image()))).toBe(302);
+      });
+      expect(await coverState("Via D1")).toEqual(await coverState("Via Prisma"));
+      expect((await coverState("Via D1")).covers).toHaveLength(1);
+    });
+
+    it("writes nothing when the cover insert fails, and removes the upload", async () => {
+      await db.$executeRawUnsafe(`CREATE TRIGGER "RecipeEditorD1_cover_abort" BEFORE INSERT ON "RecipeCover"
+        BEGIN SELECT RAISE(ABORT, 'cover_insert_failed'); END`);
+      const bucket = photos();
+      try {
+        const result = await withD1Routes(() => create("Broken cover", { DB: d1.binding, PHOTOS: bucket }, new File([PNG], "cover.png", { type: "image/png" })));
+        expect(responseStatus(result)).toBe(500);
+      } finally {
+        await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "RecipeEditorD1_cover_abort"`);
+      }
+      await expect(db.recipe.count({ where: { title: "Broken cover" } })).resolves.toBe(0);
+      expect(bucket.delete).toHaveBeenCalledTimes(1);
+    });
+
+    it("answers a create that lost its title with the title error, keeping the upload", async () => {
+      const bucket = photos();
+      const result = await withD1Routes(() => create("Taken title", {
+        DB: racing(() => db.recipe.create({ data: { title: "Taken title", chefId } })),
+        PHOTOS: bucket,
+      }, new File([PNG], "cover.png", { type: "image/png" })));
+      expect(responseStatus(result)).toBe(400);
+      expect((result as { data: { errors: unknown } }).data.errors).toEqual({ title: "You already have an active recipe with this title" });
+      expect(bucket.delete).not.toHaveBeenCalled();
+      await expect(db.recipe.count({ where: { title: "Taken title" } })).resolves.toBe(1);
     });
   });
 });
