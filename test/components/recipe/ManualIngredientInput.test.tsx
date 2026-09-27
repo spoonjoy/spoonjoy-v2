@@ -41,6 +41,41 @@ describe('ManualIngredientInput', () => {
       }
     })
 
+    // The Add Step page renders this inside its own <Form>. A <form> nested in a <form> is
+    // invalid HTML (React reports it as an error), and the fields must not belong to the outer
+    // form: they would be required for, and sent with, its submission.
+    it('adds without a form of its own or taking part in a surrounding form', async () => {
+      const onAdd = vi.fn()
+      const onOuterSubmit = vi.fn((event: React.FormEvent) => event.preventDefault())
+      render(
+        <form aria-label="outer" onSubmit={onOuterSubmit}>
+          <ManualIngredientInput onAdd={onAdd} />
+        </form>
+      )
+
+      const outer = screen.getByRole('form', { name: 'outer' })
+      expect(outer.querySelectorAll('form')).toHaveLength(0)
+      for (const input of Array.from(outer.querySelectorAll('input'))) {
+        expect(input).not.toHaveAttribute('name')
+        expect(input).not.toHaveAttribute('required')
+      }
+
+      await userEvent.type(screen.getByLabelText(/quantity/i), '2')
+      await userEvent.type(screen.getByLabelText(/unit/i), 'cups')
+      await userEvent.type(screen.getByLabelText('Ingredient'), 'flour{enter}')
+      await userEvent.type(screen.getByLabelText(/quantity/i), '1')
+      await userEvent.type(screen.getByLabelText(/unit/i), 'tsp')
+      await userEvent.type(screen.getByLabelText('Ingredient'), 'salt')
+      await userEvent.click(screen.getByRole('button', { name: 'Add ingredient' }))
+
+      expect(onAdd.mock.calls).toEqual([
+        [{ quantity: 2, unit: 'cups', ingredientName: 'flour' }],
+        [{ quantity: 1, unit: 'tsp', ingredientName: 'salt' }],
+      ])
+      // Neither Enter nor the Add button submitted the surrounding form.
+      expect(onOuterSubmit).not.toHaveBeenCalled()
+    })
+
     it('renders add button', () => {
       render(<ManualIngredientInput onAdd={vi.fn()} />)
 
@@ -92,21 +127,24 @@ describe('ManualIngredientInput', () => {
       render(<ManualIngredientInput onAdd={vi.fn()} />)
 
       const quantityInput = screen.getByLabelText(/quantity/i)
-      expect(quantityInput).toHaveAttribute('required')
+      // Required for adding, announced without native validation (see the surrounding-form test).
+      expect(quantityInput).toHaveAttribute('aria-required', 'true')
     })
 
     it('requires unit field', () => {
       render(<ManualIngredientInput onAdd={vi.fn()} />)
 
       const unitInput = screen.getByLabelText(/unit/i)
-      expect(unitInput).toHaveAttribute('required')
+      // Required for adding, announced without native validation (see the surrounding-form test).
+      expect(unitInput).toHaveAttribute('aria-required', 'true')
     })
 
     it('requires ingredient name field', () => {
       render(<ManualIngredientInput onAdd={vi.fn()} />)
 
       const ingredientInput = screen.getByLabelText('Ingredient')
-      expect(ingredientInput).toHaveAttribute('required')
+      // Required for adding, announced without native validation (see the surrounding-form test).
+      expect(ingredientInput).toHaveAttribute('aria-required', 'true')
     })
 
     it('has minimum quantity of 0.001', () => {
@@ -380,7 +418,7 @@ describe('ManualIngredientInput', () => {
     })
   })
 
-  describe('programmatic form submission (bypasses HTML5 validation)', () => {
+  describe('JS validation of the fields', () => {
     it('does not call onAdd when quantity is empty (JS validation)', async () => {
       const onAdd = vi.fn()
       render(<ManualIngredientInput onAdd={onAdd} />)
@@ -389,9 +427,7 @@ describe('ManualIngredientInput', () => {
       await userEvent.type(screen.getByLabelText(/unit/i), 'cups')
       await userEvent.type(screen.getByLabelText('Ingredient'), 'flour')
 
-      // Programmatically submit the form to bypass HTML5 validation
-      const form = screen.getByRole('button', { name: /add/i }).closest('form')!
-      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await userEvent.click(screen.getByRole('button', { name: /add/i }))
 
       expect(onAdd).not.toHaveBeenCalled()
     })
@@ -404,9 +440,7 @@ describe('ManualIngredientInput', () => {
       await userEvent.type(screen.getByLabelText(/unit/i), '   ')
       await userEvent.type(screen.getByLabelText('Ingredient'), 'flour')
 
-      // Programmatically submit the form to bypass HTML5 validation
-      const form = screen.getByRole('button', { name: /add/i }).closest('form')!
-      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await userEvent.click(screen.getByRole('button', { name: /add/i }))
 
       expect(onAdd).not.toHaveBeenCalled()
     })
@@ -419,9 +453,7 @@ describe('ManualIngredientInput', () => {
       await userEvent.type(screen.getByLabelText(/unit/i), 'cups')
       await userEvent.type(screen.getByLabelText('Ingredient'), '   ')
 
-      // Programmatically submit the form to bypass HTML5 validation
-      const form = screen.getByRole('button', { name: /add/i }).closest('form')!
-      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await userEvent.click(screen.getByRole('button', { name: /add/i }))
 
       expect(onAdd).not.toHaveBeenCalled()
     })
