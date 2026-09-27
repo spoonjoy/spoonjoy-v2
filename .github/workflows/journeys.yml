@@ -59,6 +59,9 @@ jobs:
   # queue) and none behind it already holds QA. Fork pull request runs never enter the queue. It
   # fails after 90 minutes rather than proceed without its turn; the job timeout leaves 15 minutes
   # more for checkout, setup and that clear failure message. The run keeps QA until it completes.
+  # Known residual race: the Actions API can lag by a few seconds, so two runs that become
+  # eligible at the same moment could both see a free QA. The worst case is a contended, failed
+  # run that needs a fresh push, never a skipped required check, because QA holds only disposable data.
   qa-turn:
     if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     name: wait for QA
