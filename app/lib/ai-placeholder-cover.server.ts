@@ -1,3 +1,4 @@
+import { d1Binding } from "~/lib/d1-read.server";
 import type { PrismaClient } from "@prisma/client";
 import {
   createGeminiImageRunner,
@@ -21,7 +22,7 @@ import { touchNativeSyncCookbooksForRecipeOperation } from "~/lib/native-sync-in
 
 const OPENAI_PLACEHOLDER_MODEL = "dall-e-3";
 
-type ImageGenerationSchedulerEnv = ImageGenEnv & PostHogServerEnv;
+type ImageGenerationSchedulerEnv = ImageGenEnv & PostHogServerEnv & { DB?: unknown };
 type ImageGenRunnerFactory = (env: ImageGenerationSchedulerEnv) => ImageGenRunner | null;
 type PlaceholderProvider = "openai" | "gemini";
 interface ResolvedPlaceholderRunner {
@@ -273,7 +274,10 @@ export async function scheduleAiPlaceholderCover(
       input.db,
       input.userId,
       "placeholder",
-      input.now ? { now: () => new Date(input.now!()) } : {},
+      {
+        ...(input.now ? { now: () => new Date(input.now!()) } : {}),
+        d1: d1Binding(input.env?.DB),
+      },
     );
     if (!consumed) {
       await captureSkipped(input, "quota_exhausted");

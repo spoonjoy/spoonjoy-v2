@@ -586,6 +586,7 @@ async function consumeImportQuota(
   if (dryRun) return;
   const ok = await tryConsumeImageGenQuota(deps.db, chefId, "import", {
     now: deps.now,
+    d1: d1Binding(deps.env?.DB),
   });
   if (!ok) {
     throw new ImportRecipeError(

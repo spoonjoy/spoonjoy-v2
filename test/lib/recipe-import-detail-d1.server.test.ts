@@ -32,6 +32,11 @@ function jsonLd(name: string) {
   };
 }
 
+/** The import's recipe batch starts with the title guard; its quota batch does not. */
+function isRecipeBatch(statements: unknown): boolean {
+  return (statements as Array<{ sql: string }>)[0]!.sql.startsWith("SELECT json(");
+}
+
 async function importRecipe(name: string, sourceUrl: string, DB?: D1ReadDatabase) {
   return importRecipeFromSource(
     { chefId, source: { type: "json-ld", jsonLd: jsonLd(name), sourceUrl } },
@@ -89,7 +94,8 @@ describe("recipe import and recipe page writes on a D1 binding", () => {
       const before = d1.roundTrips();
       const viaD1 = await importRecipe("Lemon Rice D1", "https://example.com/b", d1.binding);
 
-      expect(d1.roundTrips() - before).toBe(1);
+      // One batch for the daily import quota, one for the recipe.
+      expect(d1.roundTrips() - before).toBe(2);
       expect(await graph(viaD1.recipeId!)).toEqual(await graph(viaPrisma.recipeId!));
       await expect(db.recipe.findUniqueOrThrow({ where: { id: viaD1.recipeId! } })).resolves.toMatchObject({
         title: "Lemon Rice D1", sourceUrl: "https://example.com/b", chefId,
@@ -100,7 +106,9 @@ describe("recipe import and recipe page writes on a D1 binding", () => {
       const racing: D1ReadDatabase = {
         prepare: (sql) => d1.binding.prepare(sql),
         async batch(statements) {
-          if (!(await db.recipe.findFirst({ where: { title: "Soup" } }))) await db.recipe.create({ data: { title: "Soup", chefId } });
+          if (isRecipeBatch(statements) && !(await db.recipe.findFirst({ where: { title: "Soup" } }))) {
+            await db.recipe.create({ data: { title: "Soup", chefId } });
+          }
           return d1.binding.batch(statements as never);
         },
       };
@@ -113,9 +121,11 @@ describe("recipe import and recipe page writes on a D1 binding", () => {
       const alwaysRacing: D1ReadDatabase = {
         prepare: (sql) => d1.binding.prepare(sql),
         async batch(statements) {
-          races += 1;
-          const taken = [...(statements as unknown as Array<{ params: unknown[] }>)][0]!.params[1] as string;
-          await db.recipe.create({ data: { title: taken, chefId } });
+          if (isRecipeBatch(statements)) {
+            races += 1;
+            const taken = (statements as unknown as Array<{ params: unknown[] }>)[0]!.params[1] as string;
+            await db.recipe.create({ data: { title: taken, chefId } });
+          }
           return d1.binding.batch(statements as never);
         },
       };
@@ -124,7 +134,14 @@ describe("recipe import and recipe page writes on a D1 binding", () => {
       expect(error).toMatchObject({ code: "title-conflict", status: 409 });
       expect(races).toBe(3);
 
-      const failing: D1ReadDatabase = { prepare: (sql) => d1.binding.prepare(sql), batch: async () => { throw new Error("D1 is down"); } };
+      // The quota batch goes through; the recipe batch fails.
+      const failing: D1ReadDatabase = {
+        prepare: (sql) => d1.binding.prepare(sql),
+        async batch(statements) {
+          if (isRecipeBatch(statements)) throw new Error("D1 is down");
+          return d1.binding.batch(statements as never);
+        },
+      };
       await expect(importRecipe("Chili", "https://example.com/chili", failing)).rejects.toThrow("D1 is down");
     });
   });
