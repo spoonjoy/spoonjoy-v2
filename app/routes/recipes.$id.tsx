@@ -12,7 +12,7 @@ import {
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { MouseEvent } from "react";
 import { usePostHog } from "@posthog/react";
-import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, X } from "lucide-react";
 import {
   handleRecipeDetailAction,
   loadRecipeDetail,
@@ -1045,7 +1045,18 @@ export default function RecipeDetail() {
         className="mb-24 max-h-[calc(100dvh-7.5rem)] overflow-hidden !rounded-[var(--sj-radius-surface)] !shadow-[var(--sj-shadow)] pb-[max(0.75rem,env(safe-area-inset-bottom))] data-enter:duration-200 data-enter:ease-out data-leave:duration-150 data-leave:ease-in data-closed:translate-y-4 data-enter:data-closed:translate-y-4 sm:mb-auto sm:max-h-[calc(100dvh-4rem)] sm:data-closed:translate-y-1"
       >
         <div className="flex max-h-full flex-col" data-testid="save-modal">
-          <DialogTitle ref={saveModalTitleRef} tabIndex={-1}>Save to Cookbook</DialogTitle>
+          <div className="flex items-start justify-between gap-3">
+            <DialogTitle ref={saveModalTitleRef} tabIndex={-1}>Save to Cookbook</DialogTitle>
+            {/* Escape and a tap outside also close it; this is the visible, touch-sized way. */}
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={() => setIsSaveModalOpen(false)}
+              className="-mr-2 -mt-2 inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-transparent text-[var(--sj-ink-soft)] hover:text-[var(--sj-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]"
+            >
+              <X className="size-5" aria-hidden="true" />
+            </button>
+          </div>
           <DialogBody
             className="mt-4 min-h-0 flex-1 overflow-y-auto pb-3"
             data-testid="save-modal-body"

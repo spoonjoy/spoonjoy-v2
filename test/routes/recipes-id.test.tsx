@@ -2447,6 +2447,51 @@ describe("Recipes $id Route", () => {
       await closeSaveModal(user);
     });
 
+    it("closes the save modal from its visible Close button, a 44 px target", async () => {
+      const user = userEvent.setup();
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Save Modal Recipe",
+          description: null,
+          servings: null,
+          coverImageUrl: null,
+          chef: { id: "user-1", username: "testchef" },
+          steps: [],
+        },
+        isOwner: false,
+        cookbooks: [{ id: "cb-1", title: "Weeknights" }],
+        savedInCookbookIds: [],
+      };
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader: () => mockData,
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+      await screen.findByRole("heading", { name: "Save Modal Recipe" });
+
+      await openSaveModalFromDock();
+      const dialog = await screen.findByRole("dialog", { name: "Save to Cookbook" });
+      await settleBrowserTasks();
+
+      const closeButton = within(dialog).getByRole("button", { name: "Close", exact: true });
+      expect(closeButton).toHaveAttribute("type", "button");
+      expect(closeButton).toHaveClass("size-11");
+      // The title keeps initial focus; Close is not focused on open.
+      expect(document.activeElement).toHaveTextContent("Save to Cookbook");
+
+      await user.click(closeButton);
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog", { name: "Save to Cookbook" })).not.toBeInTheDocument();
+      });
+      await settleBrowserTasks();
+    });
+
     it("shows a failed Create & Save's error in the save modal and clears it when the title changes", async () => {
       const user = userEvent.setup();
       const mockData = {
