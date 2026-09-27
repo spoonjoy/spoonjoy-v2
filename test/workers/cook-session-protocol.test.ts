@@ -110,8 +110,13 @@ async function send(
   } = {},
 ) {
   const worker = (await import("../../workers/app")).default;
-  const headers = new Headers(options.headers);
-  headers.set("Cookie", options.cookie ?? cookieA);
+  const cookie = options.cookie ?? cookieA;
+  // Browser callers name their user (required for cookie sessions); a test can override or drop it.
+  const headers = new Headers({ "X-Spoonjoy-Cook-User": cookie === cookieB ? USER_B : USER_A, ...options.headers });
+  for (const [name, value] of Object.entries(options.headers ?? {})) {
+    if (value === "") headers.delete(name);
+  }
+  headers.set("Cookie", cookie);
   headers.set("Origin", TEST_ORIGIN);
   const suffix = path.length > 0 ? `/${path}` : "";
   return worker.fetch(
@@ -378,6 +383,22 @@ describe("cook-session protocol v1", () => {
     await expect(send("GET", RECIPE, { cookie: cookieB }).then((response) => response.json())).resolves.toEqual({ state: null });
     const matching = await send("GET", RECIPE, { headers: { "X-Spoonjoy-Cook-User": USER_A } });
     expect(await stateOf(matching)).toEqual(before);
+  });
+
+  it("requires cookie callers to name their user, and asks an old page to reload", async () => {
+    for (const [method, path] of [["GET", RECIPE], ["POST", `${RECIPE}/start`], ["PATCH", RECIPE]] as const) {
+      const error = await expectError(
+        await send(method, path, { body: method === "PATCH" ? "{}" : undefined, headers: { "X-Spoonjoy-Cook-User": "" } }),
+        428,
+        "user_header_required",
+      );
+      expect(error).toEqual({
+        code: "user_header_required",
+        message: "Reload the page to keep syncing cook progress.",
+        retryable: false,
+      });
+    }
+    await expect(userTables(objectFor(USER_A))).resolves.toEqual([]);
   });
 
   it("rejects malformed and oversized bodies before the Durable Object", async () => {

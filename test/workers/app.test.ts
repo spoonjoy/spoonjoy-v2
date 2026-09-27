@@ -370,7 +370,18 @@ describe("Cloudflare worker app", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ state: null });
     expect(response.headers.get("X-Spoonjoy-Worker-Version")).toBe(WORKER_VERSION_ID);
-    expect(cookProtocolHandler).toHaveBeenCalledWith(request, env, "user-1", operation);
+    expect(cookProtocolHandler).toHaveBeenCalledWith(request, env, "user-1", operation, { requireExpectedUser: true });
+  });
+
+  it("lets bearer callers leave out the expected-user header", async () => {
+    cookProtocolHandler.mockClear();
+    apiMocks.authenticateApiRequest.mockResolvedValueOnce(principal("bearer"));
+    const request = new Request("https://spoonjoy.app/api/cook-sessions/recipe-1");
+    const env = versionedEnvironment({ COOK_SESSION_PROTOCOL: "v1" });
+
+    await worker.fetch(request, env, context());
+
+    expect(cookProtocolHandler).toHaveBeenCalledWith(request, env, "user-1", "detail", { requireExpectedUser: false });
   });
 
   it.each([

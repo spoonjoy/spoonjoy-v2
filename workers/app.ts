@@ -183,7 +183,10 @@ async function handleCookSessionRequest(
     // Protocol v1 is switched on per environment (QA first); production keeps the inert
     // bootstrap answer until its release flips COOK_SESSION_PROTOCOL (see docs/deployment.md).
     if (requirement.operation && env.COOK_SESSION_PROTOCOL === "v1") {
-      return await handleCookSessionProtocolRequest(request, env, principal.id, requirement.operation);
+      return await handleCookSessionProtocolRequest(request, env, principal.id, requirement.operation, {
+        // Browser (cookie) callers must name their user; see COOK_EXPECTED_USER_HEADER.
+        requireExpectedUser: principal.source === "session",
+      });
     }
     return cookProtocolUnavailableResponse();
   } catch (error) {

@@ -127,8 +127,12 @@ export async function handleCookSessionProtocolRequest(
   env: CloudflareEnvironment,
   userId: string,
   operation: CookProtocolOperation,
+  options: { requireExpectedUser: boolean },
 ): Promise<Response> {
   const expectedUser = request.headers.get(COOK_EXPECTED_USER_HEADER);
+  if (expectedUser === null && options.requireExpectedUser) {
+    return cookErrorResponse(428, "user_header_required", "Reload the page to keep syncing cook progress.");
+  }
   if (expectedUser !== null && expectedUser !== userId) {
     return cookErrorResponse(412, "user_mismatch", "This request was made for a different signed-in user.");
   }
