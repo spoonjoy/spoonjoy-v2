@@ -1400,6 +1400,48 @@ describe("Recipes $id Steps New Route", () => {
       expect(screen.queryByText("No previous steps available")).not.toBeInTheDocument();
     });
 
+    it("parses typed ingredient text through the add step route and keeps the page", async () => {
+      const mockData = {
+        recipe: { id: "recipe-1", title: "Test Recipe" },
+        nextStepNum: 1,
+        availableSteps: [],
+      };
+      const parseRequests: string[] = [];
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id/steps/new",
+          Component: NewStep,
+          loader: () => mockData,
+          action: async ({ request }) => {
+            const formData = await request.formData();
+            parseRequests.push(`${formData.get("intent")}:${formData.get("ingredientText")}`);
+            return { parsedIngredients: [{ quantity: 2, unit: "cup", ingredientName: "flour" }] };
+          },
+        },
+        {
+          // The step edit route answers an unknown step (like "new") with a thrown 404, as the
+          // real route does; the old parse box posted here and lost the whole page to it.
+          path: "/recipes/:id/steps/:stepId/edit",
+          Component: () => <p>step edit</p>,
+          action: () => {
+            throw new Response("Step not found", { status: 404 });
+          },
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1/steps/new"]} />);
+
+      await screen.findByRole("heading", { name: /Add Step/i });
+      await act(async () => {
+        fireEvent.change(screen.getByLabelText("Ingredient text"), { target: { value: "2 cups flour" } });
+      });
+
+      expect(await screen.findByRole("heading", { name: "Ingredients (1)" }, { timeout: 3000 })).toBeInTheDocument();
+      expect(parseRequests).toEqual(["parseIngredients:2 cups flour"]);
+      expect(screen.getByRole("heading", { name: /Add Step/i })).toBeInTheDocument();
+    });
+
     it("should have correct form attributes", async () => {
       const mockData = {
         recipe: {
