@@ -15,6 +15,8 @@ import {
 } from "~/lib/session.server";
 import { getLocalDb } from "~/lib/db.server";
 import { Request } from "undici";
+import { resolve } from "node:path";
+import DatabaseSync from "better-sqlite3";
 import { cleanupDatabase } from "../helpers/cleanup";
 
 async function createSessionUser(sessionVersion = 0): Promise<string> {
@@ -205,26 +207,90 @@ describe("revocable sessions", () => {
     }
   });
 
-  it("reads the version through the request's D1 binding when the environment provides one", async () => {
-    const userId = await createSessionUser(0);
-    const cookie = (await createUserSessionCookie(userId)).split(";")[0];
-    const localDb = await getLocalDb();
-    vi.resetModules();
-    const findUnique = vi.fn(async () => ({ sessionVersion: 0 }));
-    const getDb = vi.fn(async () => ({ user: { findUnique } }));
-    vi.doMock("~/lib/db.server", () => ({ getDb, getLocalDb: vi.fn(async () => localDb) }));
-
-    try {
-      const module = await import("~/lib/session.server");
-      const binding = { binding: "DB" };
-
-      await expect(module.getUserId(requestWithCookie(cookie), { DB: binding })).resolves.toBe(userId);
-      expect(getDb).toHaveBeenCalledWith({ DB: binding });
-      expect(findUnique).toHaveBeenCalledWith({ where: { id: userId }, select: { sessionVersion: true } });
-    } finally {
-      vi.doUnmock("~/lib/db.server");
-      vi.resetModules();
+  describe("on a D1 binding", () => {
+    // A fake D1 binding backed by the real test database, so the raw statement runs against the
+    // real schema (table and column quoting included) without Prisma.
+    function sqliteD1() {
+      const sqlite = new DatabaseSync(resolve(__dirname, "../../prisma/test.db"), { readonly: true });
+      const statements: Array<{ sql: string; params: unknown[] }> = [];
+      const binding = {
+        prepare(sql: string) {
+          return {
+            bind(...params: unknown[]) {
+              statements.push({ sql, params });
+              return { first: async () => (sqlite.prepare(sql).get(...params) as unknown) ?? null };
+            },
+          };
+        },
+      };
+      return { binding, statements, close: () => sqlite.close() };
     }
+
+    async function withoutPrisma<T>(run: (module: typeof import("~/lib/session.server")) => Promise<T>) {
+      vi.resetModules();
+      const getDb = vi.fn();
+      const getLocalDb = vi.fn();
+      vi.doMock("~/lib/db.server", () => ({ getDb, getLocalDb }));
+      try {
+        const result = await run(await import("~/lib/session.server"));
+        expect(getDb).not.toHaveBeenCalled();
+        expect(getLocalDb).not.toHaveBeenCalled();
+        return result;
+      } finally {
+        vi.doUnmock("~/lib/db.server");
+        vi.resetModules();
+      }
+    }
+
+    it("checks the version with one prepared statement and never constructs a Prisma client", async () => {
+      const userId = await createSessionUser(2);
+      const cookie = await cookieFor({ userId, sessionVersion: 2 });
+      const d1 = sqliteD1();
+
+      try {
+        await withoutPrisma(async (module) => {
+          const env = { DB: d1.binding };
+          const request = requestWithCookie(cookie);
+          await expect(module.getUserId(request, env)).resolves.toBe(userId);
+          await expect(module.requireUserId(request, "/login", env)).resolves.toBe(userId);
+        });
+        expect(d1.statements).toEqual([
+          { sql: 'SELECT "sessionVersion" FROM "User" WHERE "id" = ?', params: [userId] },
+        ]);
+      } finally {
+        d1.close();
+      }
+    });
+
+    it("rejects a revoked or deleted user's cookie through the binding", async () => {
+      const userId = await createSessionUser(3);
+      const d1 = sqliteD1();
+
+      try {
+        await withoutPrisma(async (module) => {
+          const env = { DB: d1.binding };
+          await expect(module.getUserId(requestWithCookie(await cookieFor({ userId, sessionVersion: 2 })), env))
+            .resolves.toBeNull();
+          await expect(module.getUserId(requestWithCookie(await cookieFor({ userId: "deleted-user" })), env))
+            .resolves.toBeNull();
+        });
+      } finally {
+        d1.close();
+      }
+    });
+
+    it("mints sign-in cookies at the version read through the binding", async () => {
+      const userId = await createSessionUser(5);
+      const d1 = sqliteD1();
+
+      try {
+        const cookie = await withoutPrisma(async (module) =>
+          (await module.createUserSessionCookie(userId, { DB: d1.binding })).split(";")[0]);
+        await expect(getSessionIdentity(requestWithCookie(cookie))).resolves.toEqual({ userId, sessionVersion: 5 });
+      } finally {
+        d1.close();
+      }
+    });
   });
 
   it("compares a cookie's version with the user's current version", () => {

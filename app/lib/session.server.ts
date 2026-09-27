@@ -1,6 +1,5 @@
 import { createCookie, createCookieSessionStorage, type Session } from "react-router";
-import type { PrismaClient as PrismaClientType } from "@prisma/client";
-import { getDb, getLocalDb } from "~/lib/db.server";
+import { getLocalDb } from "~/lib/db.server";
 
 // Session cookie configuration
 const DEFAULT_DEV_SESSION_SECRET = "default-dev-secret-please-change-in-production";
@@ -12,7 +11,8 @@ export interface SessionEnv {
   SPOONJOY_BASE_URL?: string;
   SPOONJOY_ALLOW_INSECURE_LOCAL_SESSIONS?: string;
   // The request's D1 binding. Session reads check the user's session version
-  // through it; without it (unit tests, scripts) they use the local database.
+  // with a raw statement on it; without it (unit tests, scripts) they use Prisma
+  // on the local database.
   DB?: D1Database;
 }
 
@@ -207,13 +207,29 @@ export function isCurrentSession(identity: SessionIdentity, currentSessionVersio
   return identity.sessionVersion === currentSessionVersion;
 }
 
-async function sessionDb(env?: SessionEnv | null): Promise<PrismaClientType> {
-  return env?.DB ? getDb({ DB: env.DB }) : getLocalDb();
+// The slice of a D1 binding the session check uses.
+interface SessionVersionD1 {
+  prepare(query: string): {
+    bind(...values: unknown[]): { first<T>(): Promise<T | null> };
+  };
 }
 
-// One primary-key lookup that selects only the version.
+const SESSION_VERSION_SQL = 'SELECT "sessionVersion" FROM "User" WHERE "id" = ?';
+
+// One primary-key lookup that selects only the version. On the Worker it is a
+// raw prepared statement on the D1 binding: constructing a PrismaClient for it
+// costs far more CPU than the query, on every request that carries a session.
+// Prisma is used only where there is no binding (unit tests, local scripts).
 async function readCurrentSessionVersion(userId: string, env?: SessionEnv | null): Promise<number | null> {
-  const db = await sessionDb(env);
+  if (env?.DB) {
+    const row = await (env.DB as SessionVersionD1)
+      .prepare(SESSION_VERSION_SQL)
+      .bind(userId)
+      .first<{ sessionVersion: number }>();
+    return row ? row.sessionVersion : null;
+  }
+
+  const db = await getLocalDb();
   const user = await db.user.findUnique({ where: { id: userId }, select: { sessionVersion: true } });
   return user ? user.sessionVersion : null;
 }
