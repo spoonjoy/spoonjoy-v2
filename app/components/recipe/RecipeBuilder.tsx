@@ -148,10 +148,6 @@ export function RecipeBuilder({
     onCancel?.()
   }
 
-  const handleStepsChange = (newSteps: StepData[]) => {
-    setSteps(newSteps)
-  }
-
   const handleImageSelect = (file: File) => {
     setImageFile(file)
     setClearImage(false)
@@ -297,7 +293,7 @@ export function RecipeBuilder({
           <StepList
             steps={steps}
             recipeId={recipeId}
-            onChange={handleStepsChange}
+            onChange={setSteps}
             disabled={isDisabled}
           />
         </section>

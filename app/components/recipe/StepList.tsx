@@ -12,7 +12,7 @@
 
 import { Reorder, useDragControls } from 'framer-motion'
 import { GripVertical, Plus } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { Button } from '~/components/ui/button'
 import { Link } from '~/components/ui/link'
 import { Dialog, DialogActions, DialogDescription, DialogTitle } from '~/components/ui/dialog'
@@ -21,7 +21,11 @@ import { StepEditorCard, type StepData } from './StepEditorCard'
 export interface StepListProps {
   steps: StepData[]
   recipeId: string
-  onChange: (steps: StepData[]) => void
+  /**
+   * Receives the new steps, or (for a card's draft or Save) an updater applied
+   * to the latest steps, like a useState setter.
+   */
+  onChange: Dispatch<SetStateAction<StepData[]>>
   disabled?: boolean
 }
 
@@ -172,11 +176,13 @@ export function StepList({ steps, recipeId, onChange, disabled = false }: StepLi
   // 2. Native button element behavior
   // No additional handlers needed - buttons work with keyboard out of the box
 
+  // An updater, not a rebuilt array: several cards can report drafts in the
+  // same commit, and rebuilding from this render's `steps` would let the last
+  // report overwrite the others with stale steps.
   const handleStepSave = (stepId: string, data: Omit<StepData, 'id' | 'stepNum'>) => {
-    const newSteps = steps.map((step) =>
-      step.id === stepId ? { ...step, ...data } : step
+    onChange((previous) =>
+      previous.map((step) => (step.id === stepId ? { ...step, ...data } : step))
     )
-    onChange(newSteps)
   }
 
   // Renumber steps after reorder and call onChange
