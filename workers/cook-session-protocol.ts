@@ -6,6 +6,12 @@
 export const COOK_INTERNAL_ORIGIN = "https://cook-session.internal";
 export const COOK_PROTOCOL_HEADER = "X-Spoonjoy-Cook-Protocol";
 export const COOK_SESSION_PREFIX = "/api/cook-sessions";
+/**
+ * Optional request header naming the user the caller believes it is acting for. The web client
+ * always sends it: tabs share one session cookie, so a tab opened as one account can outlive a
+ * sign-in as another in a different tab. A mismatch answers 412 `user_mismatch`.
+ */
+export const COOK_EXPECTED_USER_HEADER = "X-Spoonjoy-Cook-User";
 
 export const MIN_COOK_SCALE = 0.25;
 export const MAX_COOK_SCALE = 50;

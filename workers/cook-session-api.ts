@@ -7,6 +7,7 @@
 // the recipe in D1 (it exists, is not deleted, and every submitted id belongs to it) so the
 // object never has to trust client-supplied recipe content.
 import {
+  COOK_EXPECTED_USER_HEADER,
   COOK_INTERNAL_ORIGIN,
   COOK_PROTOCOL_HEADER,
   COOK_SESSION_PREFIX,
@@ -76,9 +77,30 @@ export function changesFitRecipe({ changes }: CookPatchBody, bounds: CookRecipeB
     (changes.checkedStepOutputIds ?? []).every((id) => bounds.stepOutputIds.has(id));
 }
 
+// Reads the body with a running byte cap, so an oversized body is refused without buffering it.
 async function readBoundedText(request: Request): Promise<string | null> {
-  const text = await request.text();
-  return new TextEncoder().encode(text).byteLength > MAX_COOK_PATCH_BYTES ? null : text;
+  if (Number(request.headers.get("Content-Length") ?? 0) > MAX_COOK_PATCH_BYTES) return null;
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_COOK_PATCH_BYTES) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
 }
 
 async function forwardToCookSession(
@@ -106,6 +128,10 @@ export async function handleCookSessionProtocolRequest(
   userId: string,
   operation: CookProtocolOperation,
 ): Promise<Response> {
+  const expectedUser = request.headers.get(COOK_EXPECTED_USER_HEADER);
+  if (expectedUser !== null && expectedUser !== userId) {
+    return cookErrorResponse(412, "user_mismatch", "This request was made for a different signed-in user.");
+  }
   const recipeId = new URL(request.url).pathname.split("/")[3];
   if (!isCookRecipeId(recipeId)) return recipeNotFound();
   if (!env.COOK_SESSIONS) return cookProtocolUnavailableResponse();

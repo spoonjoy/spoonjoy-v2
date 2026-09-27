@@ -352,6 +352,34 @@ describe("cook-session protocol v1", () => {
     expect((await stateOf(response)).revision).toBe(1);
   });
 
+  it("refuses a request made for a different user without reading or writing their session", async () => {
+    const started = await startSession();
+    await patch(started, { checkedIngredientIds: [RICE] });
+    const before = await send("GET", RECIPE).then(stateOf);
+
+    for (const [method, path, body] of [
+      ["GET", RECIPE, undefined],
+      ["POST", `${RECIPE}/start`, undefined],
+      ["PATCH", RECIPE, patchBody(before, { scaleFactor: 3 })],
+    ] as const) {
+      const error = await expectError(
+        await send(method, path, { body, headers: { "X-Spoonjoy-Cook-User": USER_B } }),
+        412,
+        "user_mismatch",
+      );
+      expect(error).toEqual({
+        code: "user_mismatch",
+        message: "This request was made for a different signed-in user.",
+        retryable: false,
+      });
+    }
+
+    await expect(send("GET", RECIPE).then(stateOf)).resolves.toEqual(before);
+    await expect(send("GET", RECIPE, { cookie: cookieB }).then((response) => response.json())).resolves.toEqual({ state: null });
+    const matching = await send("GET", RECIPE, { headers: { "X-Spoonjoy-Cook-User": USER_A } });
+    expect(await stateOf(matching)).toEqual(before);
+  });
+
   it("rejects malformed and oversized bodies before the Durable Object", async () => {
     const started = await startSession();
 
@@ -371,6 +399,11 @@ describe("cook-session protocol v1", () => {
       },
     });
     await expectError(await send("PATCH", RECIPE, { body: stream }), 400, "invalid_request");
+    await expectError(
+      await send("PATCH", RECIPE, { body: "{}", headers: { "Content-Length": String(200_000) } }),
+      400,
+      "invalid_request",
+    );
     await expect(send("GET", RECIPE).then(stateOf)).resolves.toEqual(started);
   });
 
