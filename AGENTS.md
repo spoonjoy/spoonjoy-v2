@@ -36,7 +36,7 @@ Spoonjoy is built for agentic developers end to end, and so is its validation.
   | 5 | Account settings | `account-settings.journey.ts` |
   | 6 | Sessions (revocation) | `sessions.desktop.journey.ts` |
 
-  Only the New user journey signs up through `/signup` — every other data-changing journey uses its assigned scratch index. `cooking.mobile.journey.ts`'s existing throwaway `/signup` user predates this scheme and is a candidate to move onto a scratch index in a follow-up. See `personas.setup.ts` for the full sign-in budget accounting (personas + scratch users + the journeys' own sign-ins, against QA's 60/minute cap).
+  Only the New user journey (`new-user.journey.ts`) signs up through `/signup` — every other data-changing journey uses its assigned scratch index. `cooking.mobile.journey.ts`'s existing throwaway `/signup` user predates this scheme and is a candidate to move onto a scratch index in a follow-up. See `personas.setup.ts` for the full sign-in budget accounting (personas + scratch users + the journeys' own sign-ins, against QA's 60/minute cap).
 - **Every bug becomes a failing journey step first**, then a fix. Read failures from the workflow's `journeys-report` artifact (traces, video, screenshots).
 - **Coverage is not validation.** The 100% unit-coverage rule below still applies, but green coverage says nothing about whether a user can use the app.
 
