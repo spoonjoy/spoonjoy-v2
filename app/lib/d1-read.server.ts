@@ -25,7 +25,11 @@ export type D1Query = readonly [sql: string, ...values: unknown[]];
 
 /** The request's D1 binding, or null when there is none (unit tests, scripts). */
 export function requestD1(context: AppLoadContext | null | undefined): D1ReadDatabase | null {
-  const candidate = (context?.cloudflare?.env as { DB?: unknown } | undefined)?.DB;
+  return d1Binding((context?.cloudflare?.env as { DB?: unknown } | undefined)?.DB);
+}
+
+/** A D1 binding taken from an environment's `DB`, or null when it is not one. */
+export function d1Binding(candidate: unknown): D1ReadDatabase | null {
   if (!candidate || typeof candidate !== "object") return null;
   const binding = candidate as Partial<D1ReadDatabase>;
   return typeof binding.prepare === "function" && typeof binding.batch === "function"
