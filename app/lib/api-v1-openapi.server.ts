@@ -6,6 +6,7 @@ import {
   type ApiV1ErrorCode,
 } from "~/lib/api-v1-contract.server";
 import { OAUTH_ACCESS_TOKEN_TTL_SECONDS } from "~/lib/oauth-server.server";
+import { USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, USERNAME_PATTERN_SOURCE } from "~/lib/username";
 import { SEARCH_SCOPES } from "~/lib/search.server";
 import { PRODUCT_ACTIVATION_PENDING_MESSAGE } from "~/lib/saved-recipe-cutover.server";
 
@@ -645,7 +646,9 @@ const schemas = {
   UpdateAccountProfileRequest: objectSchema(["clientMutationId", "email", "username"], {
     clientMutationId: shortTextSchema,
     email: { type: "string", format: "email" },
-    username: { type: "string", minLength: 1, maxLength: 160 },
+    // The shared username rule (app/lib/username.ts), checked after trimming; a username must also
+    // include a letter or a number, not look like an account ID, and be free regardless of case.
+    username: { type: "string", minLength: USERNAME_MIN_LENGTH, maxLength: USERNAME_MAX_LENGTH, pattern: USERNAME_PATTERN_SOURCE },
   }),
   ProfilePhotoUploadRequest: objectSchema(["clientMutationId", "photo"], {
     clientMutationId: shortTextSchema,

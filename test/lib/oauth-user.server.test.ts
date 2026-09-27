@@ -64,6 +64,14 @@ describe("oauth-user.server", () => {
       expect(username).toBe("obrien-jones");
     });
 
+    it("treats a username taken in a different letter case as a collision", async () => {
+      const testUser = createTestUser();
+      await db.user.create({ data: { ...testUser, username: "Alice" } });
+
+      const username = await generateUsername(db, "alice", null);
+      expect(username).toBe("alice-1");
+    });
+
     it("should handle username collision by appending number", async () => {
       // Create existing user with username "john-smith"
       const testUser = createTestUser();

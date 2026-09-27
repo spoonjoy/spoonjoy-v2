@@ -1133,7 +1133,7 @@ describe("API v1 OpenAPI document", () => {
 	      properties: {
 	        clientMutationId: { type: "string", minLength: 1, maxLength: 160 },
 	        email: { type: "string", format: "email" },
-	        username: { type: "string", minLength: 1, maxLength: 160 },
+	        username: { type: "string", minLength: 3, maxLength: 50, pattern: "^[A-Za-z0-9._-]+$" },
 	      },
 	    });
 	    expect(components.schemas.ProfilePhotoUploadRequest).toMatchObject({

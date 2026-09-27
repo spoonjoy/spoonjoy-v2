@@ -4,7 +4,7 @@
 // only next to the photo.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { faker } from "@faker-js/faker";
 import { createTestRoutesStub } from "../utils";
@@ -121,6 +121,69 @@ describe("Account settings - identity", () => {
         fieldErrors: { username: "Username must be at most 50 characters" },
       });
       expect(await storedUsername()).toBe(username);
+    });
+
+    it("refuses a username another account holds in a different letter case", async () => {
+      await createUser(db, `case-${faker.string.alphanumeric(10).toLowerCase()}@example.com`, "Alice_Chef", PASSWORD);
+
+      const result = await saveUserInfo({ username: "alice_chef" });
+
+      expect(result).toMatchObject({ success: false, intent: "updateUserInfo", error: "username_taken" });
+      expect(await storedUsername()).toBe(username);
+    });
+
+    it("refuses another account's ID as a username, and any username shaped like an ID", async () => {
+      const other = await db.user.create({
+        data: { email: `id-${faker.string.alphanumeric(10).toLowerCase()}@example.com`, username: "id_owner" },
+      });
+
+      await expect(saveUserInfo({ username: other.id })).resolves.toMatchObject({
+        success: false,
+        error: expect.stringMatching(/^(username_taken|validation_error)$/),
+      });
+      await expect(saveUserInfo({ username: "cmg1a2b3c0000d4e5f6g7h8i9" })).resolves.toEqual({
+        success: false,
+        intent: "updateUserInfo",
+        error: "validation_error",
+        fieldErrors: { username: "Username can't look like an account ID" },
+      });
+      const seededId = await db.user.create({
+        data: { id: "qa-seeded-chef", email: `seeded-${faker.string.alphanumeric(10).toLowerCase()}@example.com`, username: "qa_seeded" },
+      });
+      await expect(saveUserInfo({ username: seededId.id })).resolves.toMatchObject({
+        success: false,
+        intent: "updateUserInfo",
+        error: "username_taken",
+        message: "This username is already taken",
+      });
+      expect(await storedUsername()).toBe(username);
+    });
+
+    it("trims the email before checking and saving it", async () => {
+      const result = await saveUserInfo({ email: "  Trimmed.Chef@Example.com  ", username });
+
+      expect(result).toMatchObject({ success: true, intent: "updateUserInfo" });
+      expect((await db.user.findUniqueOrThrow({ where: { id: userId } })).email).toBe("trimmed.chef@example.com");
+    });
+
+    it("refuses an email another account holds, typed with spaces and capitals", async () => {
+      const otherEmail = `taken-${faker.string.alphanumeric(10).toLowerCase()}@example.com`;
+      await createUser(db, otherEmail, `other_${faker.string.alphanumeric(8)}`, PASSWORD);
+
+      const result = await saveUserInfo({ email: `  ${otherEmail.toUpperCase()} `, username });
+
+      expect(result).toMatchObject({ success: false, intent: "updateUserInfo", error: "email_taken" });
+    });
+
+    it("keeps an older username whose only difference is surrounding spaces", async () => {
+      await db.user.update({ where: { id: userId }, data: { username: "  José " } });
+      const newEmail = `jose-${faker.string.alphanumeric(10).toLowerCase()}@example.com`;
+
+      const result = await saveUserInfo({ email: newEmail, username: "José" });
+
+      expect(result).toMatchObject({ success: true, intent: "updateUserInfo" });
+      expect(await storedUsername()).toBe("  José ");
+      expect((await db.user.findUniqueOrThrow({ where: { id: userId } })).email).toBe(newEmail);
     });
 
     it("still lets an account whose older username breaks the format change its email", async () => {
@@ -274,7 +337,7 @@ describe("Account settings - identity", () => {
       await userEvents.click(screen.getByRole("button", { name: "Save" }));
 
       expect(await screen.findByRole("status")).toHaveTextContent("Account details saved.");
-      expect(screen.queryByLabelText("Username")).not.toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByLabelText("Username")).not.toBeInTheDocument());
       expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
       expect(within(screen.getByTestId("user-info-section")).getByText("chef_renamed")).toBeInTheDocument();
     });
@@ -311,7 +374,7 @@ describe("Account settings - identity", () => {
       await userEvents.click(screen.getByRole("button", { name: "Change Password" }));
 
       expect(await screen.findByRole("status")).toHaveTextContent("Your password has been changed successfully.");
-      expect(screen.queryByLabelText("Current Password")).not.toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByLabelText("Current Password")).not.toBeInTheDocument());
       expect(screen.queryByLabelText("New Password")).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Change Password" })).toBeInTheDocument();
     });
@@ -331,7 +394,7 @@ describe("Account settings - identity", () => {
       await userEvents.click(screen.getByRole("button", { name: "Set Password" }));
 
       expect(await screen.findByRole("status")).toHaveTextContent("Your password has been set successfully");
-      expect(screen.queryByLabelText("New Password")).not.toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByLabelText("New Password")).not.toBeInTheDocument());
       expect(screen.getByRole("button", { name: "Change Password" })).toBeInTheDocument();
     });
 

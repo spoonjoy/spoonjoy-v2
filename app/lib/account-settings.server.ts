@@ -17,6 +17,8 @@ import { resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { PROFILE_IMAGE_TYPES } from "~/lib/recipe-image";
 import { safeOAuthClientDisplayName } from "~/lib/oauth-client-metadata";
 import { normalizeUsername, usernameFormatError } from "~/lib/username";
+import { isValidEmail, normalizeEmail } from "~/lib/email";
+import { saveAccountIdentity } from "~/lib/account-identity.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import {
   oauthAccessConnectionOwnership,
@@ -144,11 +146,6 @@ type ValidProvider = typeof VALID_PROVIDERS[number];
 
 function isValidProvider(provider: string): provider is ValidProvider {
   return VALID_PROVIDERS.includes(provider as ValidProvider);
-}
-
-function isValidEmail(email: string): boolean {
-  // Basic email validation - contains @ and at least one character on each side
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 async function promoteThenReadWithPrisma(
@@ -289,7 +286,7 @@ export async function loadAccountSettings({
 // R2 delete is best-effort: a throw here was previously uninstrumented and would escape the
 // action. Capture it (and the orphaned-avatar event) and swallow it, so removing or replacing the
 // avatar still succeeds in the database.
-async function deleteAvatarBestEffort(
+export async function deleteAvatarBestEffort(
   context: AppLoadContext,
   userId: string,
   photoUrl: string | null | undefined,
@@ -338,19 +335,19 @@ export async function handleAccountSettingsAction({
   const intent = formData.get("intent");
 
   if (intent === "updateUserInfo") {
-    const email = formData.get("email")?.toString() || "";
-    const username = normalizeUsername(formData.get("username"));
+    const email = normalizeEmail(formData.get("email"));
+    const submittedUsername = normalizeUsername(formData.get("username"));
 
     // Validation
     const fieldErrors: { email?: string; username?: string } = {};
 
-    if (!email.trim()) {
+    if (!email) {
       fieldErrors.email = "Email is required";
     } else if (!isValidEmail(email)) {
       fieldErrors.email = "Please enter a valid email address";
     }
 
-    if (!username) {
+    if (!submittedUsername) {
       fieldErrors.username = "Username is required";
     }
 
@@ -362,8 +359,6 @@ export async function handleAccountSettingsAction({
         fieldErrors,
       };
     }
-
-    const normalizedEmail = email.toLowerCase();
 
     // Get current user to check if values actually changed
     const currentUser = await database.user.findUnique({
@@ -380,26 +375,12 @@ export async function handleAccountSettingsAction({
       };
     }
 
-    // Check email uniqueness (case-insensitive) if email changed
-    if (normalizedEmail !== currentUser.email.toLowerCase()) {
-      // Use raw SQL for case-insensitive email check (SQLite doesn't support Prisma's mode: "insensitive")
-      const existingEmail = await database.$queryRaw<{ id: string }[]>`
-        SELECT id FROM User WHERE LOWER(email) = ${normalizedEmail} AND id != ${userId}
-      `;
-
-      if (existingEmail.length > 0) {
-        return {
-          success: false,
-          intent: "updateUserInfo",
-          error: "email_taken",
-          message: "This email is already in use by another account",
-        };
-      }
-    }
-
-    // A changed username must follow the username rule (an account whose older username predates
-    // it can still save its email), and must not be taken.
-    if (username !== currentUser.username) {
+    // The username is unchanged when it matches the stored one after trimming both, so an older
+    // username stored with surrounding spaces keeps its exact value. A changed username must follow
+    // the username rule (an account whose older username predates it can still save its email).
+    const usernameChanged = submittedUsername !== currentUser.username.trim();
+    const username = usernameChanged ? submittedUsername : currentUser.username;
+    if (usernameChanged) {
       const formatError = usernameFormatError(username);
       if (formatError) {
         return {
@@ -409,30 +390,35 @@ export async function handleAccountSettingsAction({
           fieldErrors: { username: formatError },
         };
       }
-
-      const existingUsername = await database.user.findUnique({
-        where: { username },
-        select: { id: true },
-      });
-
-      if (existingUsername && existingUsername.id !== userId) {
-        return {
-          success: false,
-          intent: "updateUserInfo",
-          error: "username_taken",
-          message: "This username is already taken",
-        };
-      }
     }
 
-    // Update user
-    await database.user.update({
-      where: { id: userId },
-      data: {
-        email: normalizedEmail,
-        username,
-      },
+    // Checks that neither value belongs to another account (usernames regardless of case, and
+    // not another account's ID) and saves both in one guarded write.
+    const saved = await saveAccountIdentity(database, {
+      userId,
+      email,
+      username,
+      emailChanged: email !== currentUser.email.toLowerCase(),
+      usernameChanged,
     });
+
+    if (saved === "email_taken") {
+      return {
+        success: false,
+        intent: "updateUserInfo",
+        error: "email_taken",
+        message: "This email is already in use by another account",
+      };
+    }
+
+    if (saved === "username_taken") {
+      return {
+        success: false,
+        intent: "updateUserInfo",
+        error: "username_taken",
+        message: "This username is already taken",
+      };
+    }
 
     return { success: true, intent: "updateUserInfo", message: "Account details saved." };
   }

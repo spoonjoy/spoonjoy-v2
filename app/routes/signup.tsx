@@ -1,7 +1,9 @@
 import type { Route } from "./+types/signup";
 import { Form, redirect, data, useActionData, useLoaderData, useSearchParams } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
-import { createUser, emailExists, usernameExists } from "~/lib/auth.server";
+import { createUser, emailExists } from "~/lib/auth.server";
+import { findUsernameConflict } from "~/lib/account-identity.server";
+import { isValidEmail, normalizeEmail } from "~/lib/email";
 import { createUserSession, getUserId } from "~/lib/session.server";
 import { enforceAuthRateLimit } from "~/lib/rate-limit.server";
 import { normalizeUsername, usernameFormatError } from "~/lib/username";
@@ -69,7 +71,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const formData = await request.formData();
-  const email = formData.get("email")?.toString() || "";
+  const email = normalizeEmail(formData.get("email"));
   const username = normalizeUsername(formData.get("username"));
   const password = formData.get("password")?.toString() || "";
   const confirmPassword = formData.get("confirmPassword")?.toString() || "";
@@ -77,7 +79,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const errors: ActionData["errors"] = {};
 
   // Validation
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!isValidEmail(email)) {
     errors.email = "Valid email is required";
   }
 
@@ -106,7 +108,8 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   if (!errors.username) {
-    const usernameInUse = await usernameExists(database, username);
+    // Taken regardless of letter case, or another account's ID (account-identity.server.ts).
+    const usernameInUse = await findUsernameConflict(database, username);
     if (usernameInUse) {
       errors.username = "This username is already taken";
     }

@@ -17,9 +17,10 @@ describe("normalizeUsername", () => {
     expect(normalizeUsername(undefined)).toBe("");
   });
 
-  it("reads a FormData string entry and ignores a file entry", () => {
+  it("reads a string and treats anything else (a file entry, a JSON number) as empty", () => {
     expect(normalizeUsername(" chef ")).toBe("chef");
     expect(normalizeUsername(new File(["x"], "x.txt"))).toBe("");
+    expect(normalizeUsername(456)).toBe("");
   });
 });
 
@@ -48,5 +49,22 @@ describe("usernameFormatError", () => {
     expect(usernameFormatError("chef/rj")).toBe(message);
     expect(usernameFormatError("chef?rj")).toBe(message);
     expect(usernameFormatError("chéf_rj")).toBe(message);
+  });
+
+  it("requires at least one letter or digit", () => {
+    const message = "Username must include a letter or a number";
+    expect(usernameFormatError("...")).toBe(message);
+    expect(usernameFormatError("-_-")).toBe(message);
+    expect(usernameFormatError("_a_")).toBeNull();
+  });
+
+  it("rejects a username shaped like an account ID, whatever its case", () => {
+    const message = "Username can't look like an account ID";
+    expect(usernameFormatError("cmg1a2b3c0000d4e5f6g7h8i9")).toBe(message);
+    expect(usernameFormatError("CMG1A2B3C0000D4E5F6G7H8I9")).toBe(message);
+    // One character shorter or longer, or not starting with c, is not an ID.
+    expect(usernameFormatError("cmg1a2b3c0000d4e5f6g7h8i")).toBeNull();
+    expect(usernameFormatError("cmg1a2b3c0000d4e5f6g7h8i9j")).toBeNull();
+    expect(usernameFormatError("amg1a2b3c0000d4e5f6g7h8i9")).toBeNull();
   });
 });
