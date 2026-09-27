@@ -301,9 +301,9 @@ export default function ShoppingList() {
               type="button"
               onClick={() => setViewMode(option.mode)}
               className={[
-                // No colour transition: mid-fade, the label and background pass through
-                // near-identical greys, below readable contrast.
-                "min-h-11 px-3 first:text-left last:text-right",
+                // sj-instant-state: no colour fade (see tailwind.css); mid-fade, the label and
+                // background pass through near-identical greys, below readable contrast.
+                "sj-instant-state min-h-11 px-3 first:text-left last:text-right",
                 viewMode === option.mode
                   ? "bg-[var(--sj-ink)] text-[var(--sj-paper)]"
                   : "bg-transparent hover:text-[var(--sj-ink)]",
@@ -321,7 +321,7 @@ export default function ShoppingList() {
               type="button"
               onClick={() => setActiveCategory(category)}
               className={[
-                "font-sj-ui min-h-11 shrink-0 rounded-[var(--sj-radius-control)] border px-4 py-2 text-sm font-bold capitalize",
+                "sj-instant-state font-sj-ui min-h-11 shrink-0 rounded-[var(--sj-radius-control)] border px-4 py-2 text-sm font-bold capitalize",
                 activeCategory === category
                   ? "border-[var(--sj-ink)] bg-[var(--sj-ink)] text-[var(--sj-paper)]"
                   : "border-[var(--sj-border)] text-[var(--sj-ink)]",

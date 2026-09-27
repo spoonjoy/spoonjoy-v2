@@ -35,7 +35,7 @@ export function ChecklistRow({
     <span
       aria-hidden="true"
       className={clsx(
-        "grid size-6 place-items-center rounded-[var(--sj-radius-control)] border-2 font-sj-ui text-sm font-bold",
+        "sj-instant-state grid size-6 place-items-center rounded-[var(--sj-radius-control)] border-2 font-sj-ui text-sm font-bold",
         checked
           ? "border-[var(--sj-ink)] bg-[var(--sj-ink)] text-[var(--sj-paper)]"
           : "border-[var(--sj-border-strong)] bg-transparent text-transparent",
