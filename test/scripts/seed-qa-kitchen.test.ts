@@ -7,6 +7,7 @@ import {
   KITCHEN,
   SCRATCH_USER_COUNT,
   buildKitchenResetSql,
+  buildScratchInvalidationSql,
   buildScratchUsersSql,
   defaultCliErrorHandler,
   generatePersonaPasswords,
@@ -363,16 +364,89 @@ describe("seed-qa-kitchen", () => {
         n: 0,
       });
     });
+
+    describe("buildScratchInvalidationSql (--rotate)", () => {
+      it("nulls out hashedPassword and salt for every scratch user, regardless of which run created it", () => {
+        const db = migratedDb();
+        const runA = generateScratchUsers(2, { now: () => new Date("2026-09-26T12:00:00.000Z") });
+        const runB = generateScratchUsers(2, { now: () => new Date("2026-09-27T00:00:00.000Z") });
+        db.exec(buildScratchUsersSql({ users: runA, passwords: ["pw-a1", "pw-a2"], hash: fastHash }));
+        db.exec(buildScratchUsersSql({ users: runB, passwords: ["pw-b1", "pw-b2"], hash: fastHash }));
+
+        db.exec(buildScratchInvalidationSql());
+
+        for (const user of [...runA, ...runB]) {
+          const row = db.prepare('SELECT hashedPassword, salt FROM "User" WHERE id = ?').get(user.id) as any;
+          expect(row.hashedPassword).toBeNull();
+          expect(row.salt).toBeNull();
+        }
+      });
+
+      it("never touches the kitchen personas", () => {
+        const db = migratedDb();
+        db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
+        const users = generateScratchUsers(1, { now: () => new Date("2026-09-26T12:00:00.000Z") });
+        db.exec(buildScratchUsersSql({ users, passwords: ["pw-1"], hash: fastHash }));
+
+        db.exec(buildScratchInvalidationSql());
+
+        const chef = db.prepare('SELECT hashedPassword FROM "User" WHERE id = ?').get(KITCHEN.chef.id) as any;
+        expect(bcrypt.compareSync(passwords.chef, chef.hashedPassword)).toBe(true);
+      });
+
+      it("is a no-op (does not throw) when no scratch user exists yet", () => {
+        const db = migratedDb();
+        expect(() => db.exec(buildScratchInvalidationSql())).not.toThrow();
+      });
+
+      it("makes a login attempt with the old password impossible: authenticatePasswordUser's null-hashedPassword short circuit applies", () => {
+        // scripts/seed-qa-kitchen.mjs's buildScratchInvalidationSql comment documents that
+        // app/lib/auth.server.ts's authenticatePasswordUser rejects any user row whose
+        // hashedPassword is null before ever comparing a password. This test proves the SQL
+        // side of that contract: after invalidation, the stored hash is exactly null, which is
+        // the value that function's `!user.hashedPassword` check treats as "no password set".
+        const db = migratedDb();
+        const users = generateScratchUsers(1, { now: () => new Date("2026-09-26T12:00:00.000Z") });
+        const password = "scratch-pw-1";
+        db.exec(buildScratchUsersSql({ users, passwords: [password], hash: fastHash }));
+        const before = db.prepare('SELECT hashedPassword FROM "User" WHERE id = ?').get(users[0].id) as any;
+        expect(bcrypt.compareSync(password, before.hashedPassword)).toBe(true);
+
+        db.exec(buildScratchInvalidationSql());
+
+        const after = db.prepare('SELECT hashedPassword FROM "User" WHERE id = ?').get(users[0].id) as any;
+        expect(after.hashedPassword).toBeNull();
+      });
+    });
   });
 
   it("refuses any target but QA", () => {
     expect(() => parseSeedKitchenArgs([])).toThrow(/--target-env qa/);
     expect(() => parseSeedKitchenArgs(["--target-env", "production"])).toThrow(/--target-env qa/);
-    expect(parseSeedKitchenArgs(["--target-env", "qa", "--credentials-out", "/tmp/c.json"])).toEqual({ targetEnv: "qa", dryRun: false, credentialsOut: "/tmp/c.json" });
+    expect(parseSeedKitchenArgs(["--target-env", "qa", "--credentials-out", "/tmp/c.json"])).toEqual({
+      targetEnv: "qa",
+      dryRun: false,
+      credentialsOut: "/tmp/c.json",
+      rotate: false,
+    });
   });
 
-  it("defaults credentialsOut to null when --credentials-out is not given", () => {
-    expect(parseSeedKitchenArgs(["--target-env", "qa"])).toEqual({ targetEnv: "qa", dryRun: false, credentialsOut: null });
+  it("defaults credentialsOut to null and rotate to false when neither flag is given", () => {
+    expect(parseSeedKitchenArgs(["--target-env", "qa"])).toEqual({
+      targetEnv: "qa",
+      dryRun: false,
+      credentialsOut: null,
+      rotate: false,
+    });
+  });
+
+  it("parses --rotate", () => {
+    expect(parseSeedKitchenArgs(["--target-env", "qa", "--rotate"])).toEqual({
+      targetEnv: "qa",
+      dryRun: false,
+      credentialsOut: null,
+      rotate: true,
+    });
   });
 
   it("throws when --credentials-out is the last argument with no value", () => {
@@ -446,6 +520,59 @@ describe("seed-qa-kitchen", () => {
       // (writeFile's mode option only applies to a newly created file).
       expect(chmod).toHaveBeenCalledWith("/tmp/creds.json", 0o600);
       expect(io.log).not.toHaveBeenCalled();
+    });
+
+    it("--rotate invalidates existing scratch users in place instead of minting a new batch", () => {
+      const execFile = vi.fn();
+      const writeFile = vi.fn();
+      const rm = vi.fn();
+      const chmod = vi.fn();
+      const mkdtemp = vi.fn(() => "/tmp/spoonjoy-qa-kitchen-rotate");
+      const io = { log: vi.fn() };
+      const generateScratch = vi.fn(generateScratchUsers);
+      const generateScratchPasswordsSpy = vi.fn(generateScratchPasswords);
+
+      main(["--target-env", "qa", "--rotate"], {
+        execFile,
+        writeFile,
+        mkdtemp,
+        rm,
+        chmod,
+        io,
+        generateScratch,
+        generateScratchPasswords: generateScratchPasswordsSpy,
+      });
+
+      // No new scratch batch is generated or inserted: neither generator is called, and the
+      // written SQL contains the invalidation UPDATE instead of any scratch INSERT.
+      expect(generateScratch).not.toHaveBeenCalled();
+      expect(generateScratchPasswordsSpy).not.toHaveBeenCalled();
+      const sql = writeFile.mock.calls[0][1] as string;
+      expect(sql).toContain('UPDATE "User" SET hashedPassword = NULL, salt = NULL');
+      expect(sql).not.toContain("INSERT OR IGNORE INTO \"User\"");
+      // The kitchen personas are still reset/rotated as before.
+      expect(sql).toContain('INSERT INTO "User"');
+    });
+
+    it("--rotate with --credentials-out writes an empty scratch array (no new scratch batch exists to record)", () => {
+      const execFile = vi.fn();
+      const writeFile = vi.fn();
+      const rm = vi.fn();
+      const chmod = vi.fn();
+      const mkdtemp = vi.fn(() => "/tmp/spoonjoy-qa-kitchen-rotate-creds");
+      const io = { log: vi.fn() };
+
+      main(["--target-env", "qa", "--rotate", "--credentials-out", "/tmp/creds-rotate.json"], {
+        execFile,
+        writeFile,
+        mkdtemp,
+        rm,
+        chmod,
+        io,
+      });
+
+      const credentials = JSON.parse(writeFile.mock.calls[1][1] as string);
+      expect(credentials.scratch).toEqual([]);
     });
 
     it("runs wrangler and writes no credentials file (and never calls chmod) when --credentials-out is not given", () => {
