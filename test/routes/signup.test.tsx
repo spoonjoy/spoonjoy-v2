@@ -550,6 +550,14 @@ describe("Signup Route", () => {
       expect(screen.getByText("Password must be at least 8 characters")).toBeInTheDocument();
       expect(screen.getByText("Passwords do not match")).toBeInTheDocument();
       expect(submissions).toBe(1);
+      // Screen readers get the same message: each field is marked invalid and described by it.
+      expect(screen.getByLabelText("Username")).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByLabelText("Username")).toHaveAccessibleDescription("Username must be at least 3 characters");
+      expect(screen.getByLabelText("Password")).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByLabelText("Password")).toHaveAccessibleDescription("Password must be at least 8 characters");
+      expect(screen.getByLabelText("Confirm Password")).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByLabelText("Confirm Password")).toHaveAccessibleDescription("Passwords do not match");
+      expect(screen.getByLabelText("Email")).not.toHaveAttribute("aria-invalid");
       // The fields keep what was typed, so the user corrects them instead of starting over.
       expect(screen.getByLabelText("Username")).toHaveValue("ab");
     });
