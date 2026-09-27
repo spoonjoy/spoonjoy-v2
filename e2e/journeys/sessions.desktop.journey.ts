@@ -16,12 +16,19 @@ test.describe("Sessions", () => {
 
   test("signing out everywhere keeps this browser signed in and signs the other browser out @mutates", async ({ page, browser, verifyAfterReload, expectAccessible }) => {
     // Browser B: a separate context with its own cookie jar signs in as the same scratch user
-    // through the login form. It isn't the fixture-provided `page`, so its console is watched by
-    // hand, as in sign-in.journey.ts.
-    const otherContext = await browser.newContext();
+    // through the login form. In Playwright Test, browser.newContext() inherits the test's `use`
+    // options (that is also why B's relative URLs resolve against baseURL), including the
+    // storageState above, so B must be given an explicitly empty one; otherwise it starts
+    // already signed in as scratch 6 and /login redirects it home. It isn't the
+    // fixture-provided `page`, so its console is watched by hand, as in sign-in.journey.ts.
+    const otherContext = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const otherPage = await otherContext.newPage();
     const otherConsole = watchConsole(otherPage);
     try {
+      // B starts signed out: /login stays on /login and shows the form.
+      await otherPage.goto("/login");
+      await expect(otherPage).toHaveURL(pathUrl("/login"));
+      await expect(otherPage.getByLabel("Username or email")).toBeVisible();
       await signInScratchThroughForm(otherPage, SCRATCH_INDEX);
       await otherPage.goto("/account/settings");
       await expect(otherPage).toHaveURL(pathUrl("/account/settings"));
