@@ -130,6 +130,8 @@ import {
 } from "~/lib/saved-recipe-cutover.server";
 import {
   deleteStoredImageWithCapture,
+  detectImageMimeType,
+  type DetectedImageMimeType,
   hasUploadedImageFile,
   RECIPE_IMAGE_TYPES,
   storeImage,
@@ -4488,37 +4490,14 @@ function isValidAccountEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-function bytesStartWith(bytes: Uint8Array, signature: readonly number[]): boolean {
-  if (bytes.length < signature.length) return false;
-  return signature.every((byte, index) => bytes[index] === byte);
-}
-
-type AccountPhotoMimeType = "image/gif" | "image/jpeg" | "image/png" | "image/webp";
-const ACCOUNT_PHOTO_EXTENSIONS: Record<AccountPhotoMimeType, string> = {
+const ACCOUNT_PHOTO_EXTENSIONS: Record<DetectedImageMimeType, string> = {
   "image/gif": "gif",
   "image/jpeg": "jpg",
   "image/png": "png",
   "image/webp": "webp",
 };
 
-function detectAccountPhotoMimeType(bytes: Uint8Array): AccountPhotoMimeType | null {
-  if (bytesStartWith(bytes, [0x47, 0x49, 0x46, 0x38])) return "image/gif";
-  if (bytesStartWith(bytes, [0xff, 0xd8, 0xff])) return "image/jpeg";
-  if (bytesStartWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png";
-  if (
-    bytes.length >= 12 &&
-    bytesStartWith(bytes, [0x52, 0x49, 0x46, 0x46]) &&
-    bytes[8] === 0x57 &&
-    bytes[9] === 0x45 &&
-    bytes[10] === 0x42 &&
-    bytes[11] === 0x50
-  ) {
-    return "image/webp";
-  }
-  return null;
-}
-
-function accountPhotoExtension(mimeType: AccountPhotoMimeType) {
+function accountPhotoExtension(mimeType: DetectedImageMimeType) {
   return ACCOUNT_PHOTO_EXTENSIONS[mimeType];
 }
 
@@ -4579,7 +4558,7 @@ async function accountPhotoFormDataWithinLimit(request: Request): Promise<FormDa
 
 async function normalizeAccountPhotoFile(photo: File): Promise<File> {
   const bytes = new Uint8Array(await photo.arrayBuffer());
-  const detectedType = detectAccountPhotoMimeType(bytes);
+  const detectedType = detectImageMimeType(bytes);
   const declaredType = photo.type.trim();
   if (
     detectedType === null ||

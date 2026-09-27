@@ -308,6 +308,23 @@ describe("image storage helpers", () => {
       )).resolves.toBe("Invalid image format");
     });
 
+    it("requires the full GIF87a or GIF89a header, not just GIF8", async () => {
+      const allowedWithGif = [...RECIPE_IMAGE_TYPES, "image/gif"];
+
+      await expect(validateImageFileForStorage(
+        new File([textEncoder.encode("GIF87a")], "profile.gif", { type: "image/gif" }),
+        { allowedTypes: allowedWithGif, messages },
+      )).resolves.toBeNull();
+      await expect(validateImageFileForStorage(
+        new File([textEncoder.encode("GIF8<html><script>alert(1)</script>")], "profile.gif", { type: "image/gif" }),
+        { allowedTypes: allowedWithGif, messages },
+      )).resolves.toBe("Invalid image format");
+      await expect(validateImageFileForStorage(
+        new File([textEncoder.encode("GIF88a")], "profile.gif", { type: "image/gif" }),
+        { allowedTypes: allowedWithGif, messages },
+      )).resolves.toBe("Invalid image format");
+    });
+
     it("rejects unknown bytes even when the MIME type is allowed", async () => {
       const storage = await import("~/lib/image-storage.server");
       const validateImageFileForStorage = (storage as unknown as {
@@ -751,3 +768,4 @@ describe("image storage helpers", () => {
     });
   });
 });
+

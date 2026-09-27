@@ -62,8 +62,17 @@ function bytesStartWith(bytes: Uint8Array, signature: readonly number[]): boolea
   return signature.every((byte, index) => bytes[index] === byte);
 }
 
-function detectImageMimeType(bytes: Uint8Array): string | null {
-  if (bytesStartWith(bytes, [0x47, 0x49, 0x46, 0x38])) {
+export type DetectedImageMimeType = "image/gif" | "image/jpeg" | "image/png" | "image/webp";
+
+const GIF87A_SIGNATURE = [0x47, 0x49, 0x46, 0x38, 0x37, 0x61] as const;
+const GIF89A_SIGNATURE = [0x47, 0x49, 0x46, 0x38, 0x39, 0x61] as const;
+
+/**
+ * The image format the bytes really are, from their signature, or null for anything else. The one
+ * sniffer every upload path uses, so the web and API paths accept exactly the same bytes.
+ */
+export function detectImageMimeType(bytes: Uint8Array): DetectedImageMimeType | null {
+  if (bytesStartWith(bytes, GIF87A_SIGNATURE) || bytesStartWith(bytes, GIF89A_SIGNATURE)) {
     return "image/gif";
   }
   if (bytesStartWith(bytes, [0xff, 0xd8, 0xff])) {
