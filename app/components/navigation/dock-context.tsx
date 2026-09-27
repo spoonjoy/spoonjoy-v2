@@ -172,6 +172,11 @@ function sameSignature(a: unknown[] | null, b: unknown[] | null): boolean {
  * (ids, labels, icons, hrefs), so callers need not memoize. Handlers are registered as stable
  * wrappers that call the button's handler from the page's latest render, so a handler that
  * closes over page state (the recipe's current scale, say) is never stale.
+ *
+ * Icons are compared by reference, so each button's `icon` must be a stable component (defined
+ * at module level, as the lucide icons are), never a component created during render: a new
+ * icon on every render would re-register the dock on every render, and each registration
+ * re-renders the page, so it would loop.
  */
 export function useDockConfig(config: DockConfig | null): void {
   const { setConfig } = useDockContext();

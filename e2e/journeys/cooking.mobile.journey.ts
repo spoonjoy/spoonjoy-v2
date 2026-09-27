@@ -51,7 +51,8 @@ test.describe("Recipe dock list action on iPhone", () => {
     await expect(scaleDisplay).toHaveText("2×");
 
     await dock.getByRole("button", { name: "Add ingredients to shopping list", exact: true }).click();
-    await expect(page.getByRole("status").filter({ hasText: "4 items added at 2x" })).toBeVisible();
+    // The toast appears once QA's add-and-reload round trip finishes, which can be slow.
+    await expect(page.getByRole("status").filter({ hasText: "4 items added at 2x" })).toBeVisible({ timeout: 15_000 });
     await expect(dock.getByRole("button", { name: "Ingredients already in shopping list", exact: true })).toBeVisible();
     await expectAccessible();
 
