@@ -172,15 +172,23 @@ async function expectParity(page: Page, fields: (seeded: Seeded) => Record<strin
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
 
-/** Runs `run` with stylization scheduling failing, as a failure after the save batch would. */
+/**
+ * Runs `run` with stylization scheduling failing, as a failure after the save batch would, and
+ * checks the failure was logged.
+ */
 async function withFailingStylization<T>(run: () => Promise<T>) {
+  const failure = new Error("Stylization queue unavailable");
   vi.doMock("~/lib/spoon-cover-stylization.server", async (importOriginal) => ({
     ...(await importOriginal<typeof import("~/lib/spoon-cover-stylization.server")>()),
-    scheduleSpoonCoverStylization: vi.fn().mockRejectedValue(new Error("Stylization queue unavailable")),
+    scheduleSpoonCoverStylization: vi.fn().mockRejectedValue(failure),
   }));
+  const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
   try {
-    return await run();
+    const result = await run();
+    expect(consoleError).toHaveBeenCalledWith("recipe save follow-up failed", expect.objectContaining({ error: failure }));
+    return result;
   } finally {
+    consoleError.mockRestore();
     vi.doUnmock("~/lib/spoon-cover-stylization.server");
   }
 }

@@ -267,6 +267,15 @@ export async function action({ request, context }: Route.ActionArgs) {
   // The recipe and its cover are committed, and the cover may point at the upload. From here a
   // failure is captured, never answered as a failed save and never a reason to delete the upload.
   const createdId = recipeId;
+  const followUpOptions = {
+    env: cloudflareEnv,
+    waitUntil: context.cloudflare?.ctx?.waitUntil
+      ? context.cloudflare.ctx.waitUntil.bind(context.cloudflare.ctx)
+      : undefined,
+    distinctId: userId,
+    request,
+    surface: "recipe_create",
+  } as const;
   await runAfterRecipeSave(async () => {
     if (uploadedImageUrl) {
       await scheduleSpoonCoverStylization({
@@ -282,7 +291,6 @@ export async function action({ request, context }: Route.ActionArgs) {
       });
       return;
     }
-    const waitUntil = context.cloudflare?.ctx?.waitUntil;
     const task = scheduleAiPlaceholderCover({
       db: database,
       userId,
@@ -293,20 +301,14 @@ export async function action({ request, context }: Route.ActionArgs) {
       env: cloudflareEnv,
       bucket: photosBucket,
     });
-    if (waitUntil) {
-      waitUntil.call(context.cloudflare!.ctx!, task);
+    if (followUpOptions.waitUntil) {
+      // The task outlives this follow-up, so a later rejection is routed through the same
+      // logging and capture rather than lost.
+      followUpOptions.waitUntil(task.catch((error: unknown) => runAfterRecipeSave(() => Promise.reject(error), followUpOptions)));
     } else {
       await task;
     }
-  }, {
-    env: cloudflareEnv,
-    waitUntil: context.cloudflare?.ctx?.waitUntil
-      ? context.cloudflare.ctx.waitUntil.bind(context.cloudflare.ctx)
-      : undefined,
-    distinctId: userId,
-    request,
-    surface: "recipe_create",
-  });
+  }, followUpOptions);
 
   return redirect(`/recipes/${createdId}`);
 }

@@ -19,7 +19,8 @@ interface RecipeSaveFollowUpOptions {
  * Runs work that follows a committed recipe save, such as scheduling cover stylization or the
  * placeholder cover. The save has already succeeded and its cover may point at the uploaded
  * image, so a failure here must neither delete that upload nor report the save as failed: it is
- * captured and swallowed, and the caller answers as for any successful save.
+ * logged, captured when PostHog is configured, and swallowed, and the caller answers as for any
+ * successful save.
  */
 export async function runAfterRecipeSave(
   followUp: () => Promise<unknown>,
@@ -28,6 +29,8 @@ export async function runAfterRecipeSave(
   try {
     await followUp();
   } catch (error) {
+    // Logged whether or not PostHog is configured, so the failure is never silent.
+    console.error("recipe save follow-up failed", { surface, error });
     const postHogConfig = env
       ? resolvePostHogServerConfig(env)
       : ({ enabled: false, reason: "missing-key" } as const);

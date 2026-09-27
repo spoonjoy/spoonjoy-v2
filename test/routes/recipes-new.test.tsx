@@ -808,6 +808,47 @@ describe("Recipes New Route", () => {
       await expect(db.recipe.count({ where: { chefId: testUserId } })).resolves.toBe(0);
     });
 
+    it("logs and captures a placeholder task handed to waitUntil that rejects later", async () => {
+      const phCalls: Array<Record<string, unknown>> = [];
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+        phCalls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(null, { status: 200 });
+      });
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const failure = new Error("Placeholder failure marking failed");
+      const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover")
+        .mockRejectedValue(failure);
+      const scheduled: Promise<unknown>[] = [];
+      const waitUntil = vi.fn((promise: Promise<unknown>) => {
+        scheduled.push(promise);
+      });
+
+      try {
+        const request = await createFormRequest({ title: "Background Placeholder Rejects" }, testUserId);
+        const response = await action({
+          request,
+          context: { cloudflare: { env: { POSTHOG_KEY: "ph_test" }, ctx: { waitUntil } } },
+          params: {},
+        } as any);
+
+        expect(response).toBeInstanceOf(Response);
+        expect(response.status).toBe(302);
+        expect(placeholder).toHaveBeenCalledTimes(1);
+        // The task handed to waitUntil settles instead of rejecting unobserved.
+        await expect(scheduled[0]).resolves.toBeUndefined();
+        await Promise.all(scheduled);
+        expect(consoleError).toHaveBeenCalledWith("recipe save follow-up failed", { surface: "recipe_create", error: failure });
+        const exceptions = phCalls.filter((c) => c.event === "$exception").map((c) => c.properties as Record<string, unknown>);
+        expect(exceptions).toEqual([
+          expect.objectContaining({ $exception_message: "Placeholder failure marking failed", surface: "recipe_create", stage: "after_save" }),
+        ]);
+      } finally {
+        placeholder.mockRestore();
+        consoleError.mockRestore();
+        fetchMock.mockRestore();
+      }
+    });
+
     it("schedules ai-placeholder cover generation via context.cloudflare.ctx.waitUntil when available", async () => {
       const captured: Promise<unknown>[] = [];
       const waitUntil = vi.fn((p: Promise<unknown>) => {
@@ -941,6 +982,7 @@ describe("Recipes New Route", () => {
     });
 
     it("keeps the upload and reports the save when stylization fails after the recipe is committed", async () => {
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
       const phCalls: Array<Record<string, unknown>> = [];
       const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
         phCalls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
@@ -990,13 +1032,16 @@ describe("Recipes New Route", () => {
         const exceptions = phCalls.filter((c) => c.event === "$exception").map((c) => c.properties as Record<string, unknown>);
         expect(exceptions.map((properties) => properties.$exception_message)).toEqual(["Stylization queue unavailable"]);
         expect(exceptions[0]).toMatchObject({ surface: "recipe_create", stage: "after_save" });
+        expect(consoleError).toHaveBeenCalledWith("recipe save follow-up failed", expect.objectContaining({ surface: "recipe_create" }));
       } finally {
+        consoleError.mockRestore();
         stylization.mockRestore();
         fetchMock.mockRestore();
       }
     });
 
     it("reports the save when placeholder generation fails after the recipe is committed", async () => {
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
       const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover")
         .mockRejectedValue(new Error("Placeholder queue unavailable"));
 
@@ -1016,7 +1061,9 @@ describe("Recipes New Route", () => {
         expect(response.status).toBe(302);
         expect(response.headers.get("Location")).toBe(`/recipes/${recipe.id}`);
         expect(placeholder).toHaveBeenCalledTimes(1);
+        expect(consoleError).toHaveBeenCalledWith("recipe save follow-up failed", expect.objectContaining({ surface: "recipe_create" }));
       } finally {
+        consoleError.mockRestore();
         placeholder.mockRestore();
       }
     });

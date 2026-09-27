@@ -986,6 +986,7 @@ describe("Recipes $id Edit Route", () => {
     });
 
     it("keeps the upload and reports the save when stylization fails after the save is committed", async () => {
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
       const phCalls: Array<Record<string, unknown>> = [];
       const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
         phCalls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
@@ -1033,7 +1034,9 @@ describe("Recipes $id Edit Route", () => {
         const exceptions = phCalls.filter((c) => c.event === "$exception").map((c) => c.properties as Record<string, unknown>);
         expect(exceptions.map((properties) => properties.$exception_message)).toEqual(["Stylization queue unavailable"]);
         expect(exceptions[0]).toMatchObject({ surface: "recipe_edit", stage: "after_save" });
+        expect(consoleError).toHaveBeenCalledWith("recipe save follow-up failed", expect.objectContaining({ surface: "recipe_edit" }));
       } finally {
+        consoleError.mockRestore();
         stylization.mockRestore();
         fetchMock.mockRestore();
       }
