@@ -1,7 +1,7 @@
 // @vitest-environment node
 // Runs the Journeys workflow's own "Seed the QA kitchen" step (with the seed itself stubbed out)
 // against a credentials file written by scripts/seed-qa-kitchen.mjs's main(), and checks that the
-// step masks every password in it: the three personas and all twelve scratch accounts (each
+// step masks every password in it: the three personas and all sixteen scratch accounts (each
 // scratch index's base account and its desktop twin). An unmasked password would be printed in
 // clear in the CI log.
 import { execFileSync } from "node:child_process";
@@ -39,7 +39,7 @@ function seededCredentials(): string {
 }
 
 describe("Journeys workflow: seed step masks every seeded password", () => {
-  it("masks the 3 persona passwords and all 12 scratch passwords, desktop twins included", () => {
+  it("masks the 3 persona passwords and all 16 scratch passwords, desktop twins included", () => {
     const script = seedStepScript();
     expect(script).toContain("pnpm run seed:qa:kitchen");
 
@@ -48,6 +48,7 @@ describe("Journeys workflow: seed step masks every seeded password", () => {
       scratch: Array<{ password: string }>;
       scratchDesktop: Array<{ password: string }>;
     };
+    expect(SCRATCH_ACCOUNT_COUNT).toBe(16);
     expect(parsed.scratch).toHaveLength(SCRATCH_USER_COUNT);
     expect(parsed.scratchDesktop).toHaveLength(SCRATCH_USER_COUNT);
     const scratchPasswords = [...parsed.scratch, ...parsed.scratchDesktop].map((entry) => entry.password);

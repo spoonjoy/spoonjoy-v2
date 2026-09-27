@@ -15,6 +15,8 @@ export type PersonaName = "chef" | "friend" | "newbie";
 
 // A persona's password is a Secret (support/secret.ts): type it with fillSecret, never fill().
 export interface Persona {
+  /** The seeded user id; present for scratch accounts. */
+  id?: string;
   username: string;
   email: string;
   password: Secret;
@@ -22,6 +24,8 @@ export interface Persona {
 }
 
 interface PersonaCredentials {
+  /** The seeded user id; present for scratch accounts (scripts/seed-qa-kitchen.mjs). */
+  id?: string;
   username: string;
   email: string;
   password: Secret;
@@ -115,15 +119,23 @@ export function scratchStorageStatePathForProject(n: number, projectName: string
   );
 }
 
-// The credentials behind scratchStorageStatePathForProject(n, projectName): the base account on
-// iPhone, the desktop twin on desktop Chrome. For a journey that must re-enter its own account's
-// password (account-settings.journey.ts's password change); never log or interpolate the password.
-export function scratchForProject(n: number, projectName: string): Persona {
-  if (projectName === IPHONE_PROJECT) return scratch(n);
-  if (projectName === DESKTOP_PROJECT) return scratchDesktop(n);
-  throw new Error(
-    `No per-device scratch user for project "${projectName}"; expected "${IPHONE_PROJECT}" or "${DESKTOP_PROJECT}".`,
-  );
+// The scratch account for index n on one device project (the base account on iPhone, the desktop
+// twin on desktop Chrome), with its credentials and user id. Reads the credentials file, so call it
+// inside a test or hook body, never at module level. The password is a Secret: type it with
+// fillSecret (account-settings.journey.ts re-enters it to change it); never log or interpolate it.
+export function scratchForProject(n: number, projectName: string): Persona & { id: string } {
+  let account: Persona;
+  if (projectName === IPHONE_PROJECT) account = scratch(n);
+  else if (projectName === DESKTOP_PROJECT) account = scratchDesktop(n);
+  else {
+    throw new Error(
+      `No per-device scratch user for project "${projectName}"; expected "${IPHONE_PROJECT}" or "${DESKTOP_PROJECT}".`,
+    );
+  }
+  if (!account.id) {
+    throw new Error(`No user id for scratch user ${n} on ${projectName} in the file at SPOONJOY_QA_CREDENTIALS.`);
+  }
+  return { ...account, id: account.id };
 }
 
 // Option-fixture form of scratchStorageStatePathForProject, for module- or describe-level use:

@@ -44,7 +44,12 @@ export default defineConfig({
     coverage: {
       provider: "istanbul",
       reporter: ["text", "json", "html"],
-      include: ["workers/cook-session.ts"],
+      include: [
+        "workers/cook-session.ts",
+        "workers/cook-session-api.ts",
+        "workers/cook-session-protocol.ts",
+        "workers/cook-session-store.ts",
+      ],
       thresholds: {
         statements: 100,
         branches: 100,

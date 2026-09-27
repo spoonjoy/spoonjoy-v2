@@ -65,6 +65,8 @@ declare global {
     CF_VERSION_METADATA?: WorkerVersionMetadata;
     COOK_SESSIONS?: DurableObjectNamespace;
     COOK_SESSION_BOOTSTRAP_MODE?: string;
+    /** "v1" serves cook-session protocol v1 (cross-device cook progress); unset keeps the inert 503. */
+    COOK_SESSION_PROTOCOL?: string;
     SPOONJOY_CSP_MODE?: string;
     VITE_POSTHOG_HOST?: string;
     SESSION_SECRET?: string;

@@ -40,6 +40,14 @@ import type { StepReference } from "~/components/recipe/StepOutputUseCallout";
 import { shareContent, useDockSuppressed, useRecipeDetailActions } from "~/components/navigation";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { useBackNavigation } from "~/hooks/use-back-navigation";
+import { useCookSessionSync } from "~/hooks/use-cook-session-sync";
+import {
+  normalizeScaleFactor,
+  normalizeStepIndex,
+  readSyncedCookCache,
+  type CookProgressBounds,
+  type CookProgressValue,
+} from "~/lib/cook-session-sync";
 import { revalidateUnlessHashOnly } from "~/lib/hash-only-revalidation";
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
@@ -131,12 +139,6 @@ interface CookProgressSnapshot {
   updatedAt: string;
 }
 
-interface CookProgressBounds {
-  stepCount: number;
-  ingredientIds: ReadonlySet<string>;
-  stepOutputIds: ReadonlySet<string>;
-}
-
 interface CookProgressState {
   activeStepIndex: number;
   scaleFactor: number;
@@ -165,22 +167,6 @@ function stringArray(value: unknown): string[] {
     : [];
 }
 
-function normalizedScaleFactor(value: unknown): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return 1;
-  }
-
-  return Math.min(50, Math.max(0.25, Math.round(value * 100) / 100));
-}
-
-function normalizedStepIndex(value: unknown, stepCount: number): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || stepCount <= 0) {
-    return 0;
-  }
-
-  return Math.min(stepCount - 1, Math.max(0, Math.trunc(value)));
-}
-
 export function parseCookProgressSnapshot(
   value: string | null,
   bounds: CookProgressBounds
@@ -196,8 +182,8 @@ export function parseCookProgressSnapshot(
     }
 
     return {
-      activeStepIndex: normalizedStepIndex(parsed.activeStepIndex, bounds.stepCount),
-      scaleFactor: normalizedScaleFactor(parsed.scaleFactor),
+      activeStepIndex: normalizeStepIndex(parsed.activeStepIndex, bounds.stepCount),
+      scaleFactor: normalizeScaleFactor(parsed.scaleFactor),
       checkedIngredientIds: new Set(
         stringArray(parsed.checkedIngredientIds).filter((id) => bounds.ingredientIds.has(id))
       ),
@@ -223,6 +209,25 @@ export function readCookProgress(recipeId: string, bounds: CookProgressBounds): 
   } catch {
     return null;
   }
+}
+
+// Signed-in progress when cook-session sync is on: this browser's cache of the cook's session.
+export function readSyncedCookProgress(
+  userId: string,
+  recipeId: string,
+  bounds: CookProgressBounds
+): CookProgressState | null {
+  const cached = readSyncedCookCache(userId, recipeId, bounds);
+  if (!cached) {
+    return null;
+  }
+
+  return {
+    activeStepIndex: cached.progress.activeStepIndex,
+    scaleFactor: cached.progress.scaleFactor,
+    checkedIngredientIds: new Set(cached.progress.checkedIngredientIds),
+    checkedStepOutputIds: new Set(cached.progress.checkedStepOutputIds),
+  };
 }
 
 export function writeCookProgress(
@@ -307,6 +312,7 @@ export default function RecipeDetail() {
     ? recipeCoverFields.coverProvenanceLabel
     : null;
   const isAuthenticated = loaderData.isAuthenticated ?? true;
+  const cookSessionUserId = loaderData.cookSessionUserId ?? null;
   const cookbooks = loaderData.cookbooks ?? EMPTY_COOKBOOKS;
   const savedInCookbookIds = loaderData.savedInCookbookIds ?? EMPTY_SAVED_COOKBOOK_IDS;
   const spoons = loaderData.spoons ?? EMPTY_SPOONS;
@@ -361,6 +367,27 @@ export default function RecipeDetail() {
     ingredientIds: new Set(recipe.steps.flatMap((step) => step.ingredients.map((ingredient) => ingredient.id))),
     stepOutputIds: new Set(recipe.steps.flatMap((step) => (step.usingSteps ?? []).map((use) => use.id))),
   }), [recipe.steps]);
+
+  const cookProgress = useMemo<CookProgressValue>(() => ({
+    activeStepIndex: activeCookStepIndex,
+    scaleFactor,
+    checkedIngredientIds: Array.from(checkedIngredients),
+    checkedStepOutputIds: Array.from(checkedStepOutputs),
+  }), [activeCookStepIndex, scaleFactor, checkedIngredients, checkedStepOutputs]);
+  const applyRemoteCookProgress = useCallback((progress: CookProgressValue) => {
+    setScaleFactor(progress.scaleFactor);
+    setCheckedIngredients(new Set(progress.checkedIngredientIds));
+    setCheckedStepOutputs(new Set(progress.checkedStepOutputIds));
+    setActiveCookStepIndex(progress.activeStepIndex);
+  }, []);
+  const cookSyncStatus = useCookSessionSync({
+    recipeId: recipe.id,
+    userId: cookSessionUserId,
+    ready: loadedCookProgressRecipeId === recipe.id,
+    bounds: cookProgressBounds,
+    progress: cookProgress,
+    onRemoteProgress: applyRemoteCookProgress,
+  });
 
   // PostHog: Track recipe view on mount
   useEffect(() => {
@@ -475,7 +502,9 @@ export default function RecipeDetail() {
     setCheckedStepOutputs(new Set());
     setActiveCookStepIndex(0);
 
-    const storedProgress = readCookProgress(recipe.id, cookProgressBounds);
+    const storedProgress = cookSessionUserId
+      ? readSyncedCookProgress(cookSessionUserId, recipe.id, cookProgressBounds)
+      : readCookProgress(recipe.id, cookProgressBounds);
     if (storedProgress) {
       setScaleFactor(storedProgress.scaleFactor);
       setCheckedIngredients(storedProgress.checkedIngredientIds);
@@ -484,10 +513,11 @@ export default function RecipeDetail() {
     }
 
     setLoadedCookProgressRecipeId(recipe.id);
-  }, [recipe.id, cookProgressBounds]);
+  }, [recipe.id, cookProgressBounds, cookSessionUserId]);
 
   useEffect(() => {
-    if (loadedCookProgressRecipeId !== recipe.id) {
+    // With cook-session sync on, useCookSessionSync keeps the signed-in cache instead.
+    if (loadedCookProgressRecipeId !== recipe.id || cookSessionUserId) {
       return;
     }
 
@@ -500,6 +530,7 @@ export default function RecipeDetail() {
   }, [
     recipe.id,
     loadedCookProgressRecipeId,
+    cookSessionUserId,
     activeCookStepIndex,
     scaleFactor,
     checkedIngredients,
@@ -974,6 +1005,7 @@ export default function RecipeDetail() {
         scaleFactor={scaleFactor}
         onScaleChange={handleScaleChange}
         onClearProgress={handleClearProgress}
+        progressSyncStatus={cookSyncStatus}
         masthead={headerMasthead}
         provenance={headerProvenance}
       />
