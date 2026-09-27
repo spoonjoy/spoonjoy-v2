@@ -302,7 +302,7 @@ describe("Chefs drawer route", () => {
     expect(screen.getByText("chef-mina cooked your soup.")).toBeInTheDocument();
   });
 
-  it("renders each chef's latest activity date the same way on the server and in any browser", async () => {
+  it("renders each chef's latest activity as the viewer's local date", async () => {
     // Formatted with the runtime's default locale and timezone, the Worker (en-US, UTC) and a
     // browser elsewhere render different text and React reports a hydration mismatch (ui-map bug
     // 15). 20:00 UTC on 1 June is already 2 June in Kiritimati (UTC+14).
@@ -322,10 +322,13 @@ describe("Chefs drawer route", () => {
       },
     ]);
 
+    // R1: once in the browser, the date is the viewer's own calendar date (LocalDate renders the
+    // UTC date on the server and swaps after hydration; see test/components/ui/local-date.test.tsx).
     await withTimeZone("Pacific/Kiritimati", async () => {
       render(<Stub initialEntries={["/chefs"]} />);
       const row = await screen.findByRole("link", { name: /chef-rosa/i });
-      expect(row).toHaveTextContent("Latest activity Jun 1, 2026");
+      expect(await screen.findByText("Jun 2, 2026")).toBeInTheDocument();
+      expect(row).toHaveTextContent("Latest activity Jun 2, 2026");
       expect(row.querySelector("time")).toHaveAttribute("datetime", "2026-06-01T20:00:00.000Z");
     });
   });

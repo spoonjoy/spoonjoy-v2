@@ -31,6 +31,15 @@ const HOUR = 60 * MINUTE;
 // bug 17; Los Angeles is 7 or 8 hours behind, so a shifted time is unmistakable.
 const LOS_ANGELES = "America/Los_Angeles";
 
+// The /chefs test's browser timezone, 14 hours ahead of UTC: from 10:00 UTC on, the local date
+// there is already tomorrow, so a date shown in UTC instead of the viewer's own (ruling R1) fails.
+const KIRITIMATI = "Pacific/Kiritimati";
+
+// The calendar date `iso` falls on in `timeZone`, in the app's format ("Sep 27, 2026").
+function calendarDate(iso: string, timeZone: string): string {
+  return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", timeZone });
+}
+
 function runSuffix(testInfo: TestInfo): string {
   return `${testInfo.project.name} ${Date.now().toString(36)}`;
 }
@@ -180,12 +189,13 @@ test.describe("Social", () => {
   });
 });
 
-// A British phone formats dates differently from the Worker, which renders in en-US. Any date the
-// server formats with the runtime's default locale then differs from the one the browser formats
-// on hydration, and React reports a hydration mismatch, which the console gate fails on (ui-map
-// bug 15, /chefs's "Latest activity" date).
-test.describe("Social, in a British locale", () => {
-  test.use({ storageState: scratchStorageStateForProject(4), locale: "en-GB" });
+// A British phone in Kiritimati formats dates differently from the Worker, which renders in en-US
+// and UTC. Any date the server formats with the runtime's default locale or timezone then differs
+// from the one the browser formats on hydration, and React reports a hydration mismatch, which the
+// console gate fails on (ui-map bug 15, /chefs's "Latest activity" date). Once hydrated, that date
+// must be the viewer's own (ruling R1).
+test.describe("Social, in a British locale in Kiritimati", () => {
+  test.use({ storageState: scratchStorageStateForProject(4), locale: "en-GB", timezoneId: KIRITIMATI });
 
   test("a cook logged with a note shows on the recipe, and the friend is a fellow chef and on /chefs @mutates", async ({
     page,
@@ -236,15 +246,21 @@ test.describe("Social, in a British locale", () => {
       .getByRole("region", { name: "Chef activity" })
       .getByText(`You cooked ${RISOTTO_TITLE} from ${FRIEND}.`, { exact: true })
       .first();
+    // "Latest activity" is the cook just logged, shown as the date it is in Kiritimati.
+    const latestActivity = fellowChef.locator("time");
     await page.goto("/chefs");
     await waitForHydration(page);
     await expect(fellowChef).toHaveAttribute("href", `/?chef=${FRIEND}`);
-    await expect(fellowChef).toContainText("Latest activity");
+    await expect(latestActivity).toHaveAttribute("datetime", /Z$/);
+    const latestAt = (await latestActivity.getAttribute("datetime")) as string;
+    await expect(fellowChef).toContainText(`Latest activity ${calendarDate(latestAt, KIRITIMATI)}`);
     await expect(cookActivity).toBeVisible();
     await expectAccessible();
 
     await verifyAfterReload(async () => {
       await expect(fellowChef).toHaveAttribute("href", `/?chef=${FRIEND}`);
+      await expect(latestActivity).toHaveAttribute("datetime", latestAt);
+      await expect(fellowChef).toContainText(`Latest activity ${calendarDate(latestAt, KIRITIMATI)}`);
       await expect(cookActivity).toBeVisible();
     });
 

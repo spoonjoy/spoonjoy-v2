@@ -51,17 +51,23 @@ export function formatRelativeTime(
   return `${years} ${years === 1 ? "year" : "years"} ago`;
 }
 
+const CALENDAR_DATE: Intl.DateTimeFormatOptions = { year: "numeric", month: "short", day: "numeric" };
+
 /**
  * A calendar date as "Jun 1, 2026", always in en-US and in UTC. Rendered markup has to come out
  * the same on the server (a Worker: en-US, UTC) and in the browser that hydrates it; a date
  * formatted with the runtime's default locale or timezone differs between the two for most
- * viewers, and React reports a hydration mismatch.
+ * viewers, and React reports a hydration mismatch. For the viewer's own date, render
+ * <LocalDate> (~/components/ui/local-date), which starts from this and swaps after hydration.
  */
 export function formatUtcCalendarDate(input: Date | string): string {
-  return new Date(input).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
+  return new Date(input).toLocaleDateString("en-US", { ...CALENDAR_DATE, timeZone: "UTC" });
+}
+
+/**
+ * The same calendar date format in the runtime's own timezone: the viewer's date, in a browser.
+ * Only for client-only renders (after hydration); on the Worker it is the UTC date.
+ */
+export function formatLocalCalendarDate(input: Date | string): string {
+  return new Date(input).toLocaleDateString("en-US", CALENDAR_DATE);
 }
