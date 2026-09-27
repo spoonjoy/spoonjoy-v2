@@ -17,6 +17,9 @@ import {
 import { resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { PROFILE_IMAGE_TYPES } from "~/lib/recipe-image";
 import { safeOAuthClientDisplayName } from "~/lib/oauth-client-metadata";
+import { normalizeUsername, usernameFormatError } from "~/lib/username";
+import { isValidEmail, normalizeEmail } from "~/lib/email";
+import { saveAccountIdentity } from "~/lib/account-identity.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import {
   oauthAccessConnectionOwnership,
@@ -87,8 +90,14 @@ export interface AccountSettingsLoaderData {
   oauthError?: string;
 }
 
+// The forms whose results the page needs to tell apart: a successful Save closes the user
+// information form, a successful password change or set closes the password form, and a photo
+// upload's error shows next to the photo instead of in the page banner.
+export type AccountSettingsFormIntent = "updateUserInfo" | "changePassword" | "setPassword" | "uploadPhoto";
+
 export interface AccountSettingsActionResult {
   success: boolean;
+  intent?: AccountSettingsFormIntent;
   error?:
     | "email_taken"
     | "username_taken"
@@ -138,11 +147,6 @@ type ValidProvider = typeof VALID_PROVIDERS[number];
 
 function isValidProvider(provider: string): provider is ValidProvider {
   return VALID_PROVIDERS.includes(provider as ValidProvider);
-}
-
-function isValidEmail(email: string): boolean {
-  // Basic email validation - contains @ and at least one character on each side
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 async function promoteThenReadWithPrisma(
@@ -282,6 +286,31 @@ export async function loadAccountSettings({
 
 const PROFILE_PHOTO_TOO_LARGE_MESSAGE = "Photo must be less than 5MB";
 
+// R2 delete is best-effort: a throw here was previously uninstrumented and would escape the
+// action. Capture it (and the orphaned-avatar event) and swallow it, so removing or replacing the
+// avatar still succeeds in the database.
+export async function deleteAvatarBestEffort(
+  context: AppLoadContext,
+  userId: string,
+  photoUrl: string | null | undefined,
+): Promise<void> {
+  const env = getCloudflareEnv(context);
+  const postHogConfig = env
+    ? resolvePostHogServerConfig(env)
+    : ({ enabled: false, reason: "missing-key" } as const);
+  const waitUntil = context.cloudflare?.ctx?.waitUntil
+    ? context.cloudflare.ctx.waitUntil.bind(context.cloudflare.ctx)
+    : undefined;
+  await deleteStoredImageWithCapture({
+    bucket: env?.PHOTOS,
+    imageUrl: photoUrl,
+    event: "spoonjoy.storage.avatar_delete_failed",
+    postHogConfig,
+    waitUntil,
+    distinctId: userId,
+  });
+}
+
 export async function handleAccountSettingsAction({
   request,
   context,
@@ -309,36 +338,35 @@ export async function handleAccountSettingsAction({
   // read through the image upload limit: an oversized upload is refused before it is buffered whole.
   const formData = await imageUploadFormDataWithinLimit(request);
   if (!formData) {
-    return { success: false, error: "file_too_large", message: PROFILE_PHOTO_TOO_LARGE_MESSAGE };
+    return { success: false, intent: "uploadPhoto", error: "file_too_large", message: PROFILE_PHOTO_TOO_LARGE_MESSAGE };
   }
   const intent = formData.get("intent");
 
   if (intent === "updateUserInfo") {
-    const email = formData.get("email")?.toString() || "";
-    const username = formData.get("username")?.toString() || "";
+    const email = normalizeEmail(formData.get("email"));
+    const submittedUsername = normalizeUsername(formData.get("username"));
 
     // Validation
     const fieldErrors: { email?: string; username?: string } = {};
 
-    if (!email.trim()) {
+    if (!email) {
       fieldErrors.email = "Email is required";
     } else if (!isValidEmail(email)) {
       fieldErrors.email = "Please enter a valid email address";
     }
 
-    if (!username.trim()) {
+    if (!submittedUsername) {
       fieldErrors.username = "Username is required";
     }
 
     if (Object.keys(fieldErrors).length > 0) {
       return {
         success: false,
+        intent: "updateUserInfo",
         error: "validation_error",
         fieldErrors,
       };
     }
-
-    const normalizedEmail = email.toLowerCase();
 
     // Get current user to check if values actually changed
     const currentUser = await database.user.findUnique({
@@ -355,48 +383,52 @@ export async function handleAccountSettingsAction({
       };
     }
 
-    // Check email uniqueness (case-insensitive) if email changed
-    if (normalizedEmail !== currentUser.email.toLowerCase()) {
-      // Use raw SQL for case-insensitive email check (SQLite doesn't support Prisma's mode: "insensitive")
-      const existingEmail = await database.$queryRaw<{ id: string }[]>`
-        SELECT id FROM User WHERE LOWER(email) = ${normalizedEmail} AND id != ${userId}
-      `;
-
-      if (existingEmail.length > 0) {
+    // The username is unchanged when it matches the stored one after trimming both, so an older
+    // username stored with surrounding spaces keeps its exact value. A changed username must follow
+    // the username rule (an account whose older username predates it can still save its email).
+    const usernameChanged = submittedUsername !== currentUser.username.trim();
+    const username = usernameChanged ? submittedUsername : currentUser.username;
+    if (usernameChanged) {
+      const formatError = usernameFormatError(username);
+      if (formatError) {
         return {
           success: false,
-          error: "email_taken",
-          message: "This email is already in use by another account",
+          intent: "updateUserInfo",
+          error: "validation_error",
+          fieldErrors: { username: formatError },
         };
       }
     }
 
-    // Check username uniqueness if username changed
-    if (username !== currentUser.username) {
-      const existingUsername = await database.user.findUnique({
-        where: { username },
-        select: { id: true },
-      });
-
-      if (existingUsername && existingUsername.id !== userId) {
-        return {
-          success: false,
-          error: "username_taken",
-          message: "This username is already taken",
-        };
-      }
-    }
-
-    // Update user
-    await database.user.update({
-      where: { id: userId },
-      data: {
-        email: normalizedEmail,
-        username,
-      },
+    // Checks that neither value belongs to another account (usernames regardless of case, and
+    // not another account's ID) and saves both in one guarded write.
+    const saved = await saveAccountIdentity(database, {
+      userId,
+      email,
+      username,
+      emailChanged: email !== currentUser.email.toLowerCase(),
+      usernameChanged,
     });
 
-    return { success: true };
+    if (saved === "email_taken") {
+      return {
+        success: false,
+        intent: "updateUserInfo",
+        error: "email_taken",
+        message: "This email is already in use by another account",
+      };
+    }
+
+    if (saved === "username_taken") {
+      return {
+        success: false,
+        intent: "updateUserInfo",
+        error: "username_taken",
+        message: "This username is already taken",
+      };
+    }
+
+    return { success: true, intent: "updateUserInfo", message: "Account details saved." };
   }
 
   if (intent === "uploadPhoto") {
@@ -406,6 +438,7 @@ export async function handleAccountSettingsAction({
     if (!hasUploadedImageFile(photo)) {
       return {
         success: false,
+        intent: "uploadPhoto",
         error: "no_file",
         message: "Please select a photo to upload",
       };
@@ -424,6 +457,7 @@ export async function handleAccountSettingsAction({
     if (imageError === "Please upload an image file") {
       return {
         success: false,
+        intent: "uploadPhoto",
         error: "invalid_file_type",
         message: imageError,
       };
@@ -432,10 +466,16 @@ export async function handleAccountSettingsAction({
     if (imageError === PROFILE_PHOTO_TOO_LARGE_MESSAGE) {
       return {
         success: false,
+        intent: "uploadPhoto",
         error: "file_too_large",
         message: imageError,
       };
     }
+
+    const previous = await database.user.findUnique({
+      where: { id: userId },
+      select: { photoUrl: true },
+    });
 
     const photoUrl = await storeImage({
       bucket: getCloudflareEnv(context)?.PHOTOS,
@@ -448,7 +488,11 @@ export async function handleAccountSettingsAction({
       data: { photoUrl },
     });
 
-    return { success: true, photoUrl };
+    // The replaced photo's stored file is no longer referenced; without this it stays in R2
+    // forever, where not even the disposable-data cleanup (which follows User.photoUrl) finds it.
+    await deleteAvatarBestEffort(context, userId, previous?.photoUrl);
+
+    return { success: true, intent: "uploadPhoto", photoUrl };
   }
 
   if (intent === "removePhoto") {
@@ -458,24 +502,7 @@ export async function handleAccountSettingsAction({
       select: { photoUrl: true },
     });
 
-    // R2 delete is best-effort: a throw here was previously uninstrumented and
-    // would escape the action. Capture it (and the orphaned-avatar event) and
-    // swallow so removing the avatar still succeeds in the DB.
-    const env = getCloudflareEnv(context);
-    const postHogConfig = env
-      ? resolvePostHogServerConfig(env)
-      : ({ enabled: false, reason: "missing-key" } as const);
-    const waitUntil = context.cloudflare?.ctx?.waitUntil
-      ? context.cloudflare.ctx.waitUntil.bind(context.cloudflare.ctx)
-      : undefined;
-    await deleteStoredImageWithCapture({
-      bucket: env?.PHOTOS,
-      imageUrl: user?.photoUrl,
-      event: "spoonjoy.storage.avatar_delete_failed",
-      postHogConfig,
-      waitUntil,
-      distinctId: userId,
-    });
+    await deleteAvatarBestEffort(context, userId, user?.photoUrl);
 
     await database.user.update({
       where: { id: userId },
@@ -744,6 +771,7 @@ export async function handleAccountSettingsAction({
 
     return withSessionForVersion({
       success: true,
+      intent: "changePassword",
       message: "Your password has been changed successfully. Other browsers signed in to your account have been signed out.",
     }, sessionVersion);
   }
@@ -818,6 +846,7 @@ export async function handleAccountSettingsAction({
 
     return {
       success: true,
+      intent: "setPassword",
       message: "Your password has been set successfully",
     };
   }

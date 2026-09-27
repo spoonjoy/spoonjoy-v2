@@ -13,8 +13,9 @@ import {
   asCompatibleD1Database,
   coalesceShoppingRecipeIngredients,
   createCompatibleShoppingListD1Batch,
+  addToCompatibleShoppingListItem,
   findCompatibleShoppingListItem,
-  mutateCompatibleShoppingListItem,
+  mergedShoppingItemQuantity,
   runCompatibleShoppingListBatch,
   type ShoppingListItemWritePlan,
 } from "~/lib/shopping-list-mutations.server";
@@ -255,33 +256,24 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
         ingredientRefId: ingredientRef.id,
       };
 
-      await mutateCompatibleShoppingListItem({
+      // The quantity, check and removed state change atomically in addToCompatibleShoppingListItem.
+      await addToCompatibleShoppingListItem({
         database,
         identity,
-        update: async (existingItem) => {
-          /* istanbul ignore next -- @preserve ternary branches for quantity addition */
-          const newQuantity = quantity
-            ? (existingItem.quantity || 0) + parseFloat(quantity)
-            : existingItem.quantity;
+        added: quantity ? parseFloat(quantity) : null,
+        sortIndex: async (existingItem) => {
           const shouldMoveToEnd = Boolean(
             existingItem.deletedAt || existingItem.checkedAt || existingItem.checked
           );
-
-          return database.shoppingListItem.update({
-            where: { id: existingItem.id },
-            data: {
-              quantity: newQuantity,
-              checked: false,
-              checkedAt: null,
-              categoryKey,
-              iconKey,
-              deletedAt: null,
-              sortIndex: shouldMoveToEnd
-                ? await nextSortIndex(database, shoppingList.id)
-                : existingItem.sortIndex,
-            },
-          });
+          return shouldMoveToEnd
+            ? nextSortIndex(database, shoppingList.id)
+            : existingItem.sortIndex;
         },
+        update: (existingItem, sortIndex) =>
+          database.shoppingListItem.update({
+            where: { id: existingItem.id },
+            data: { categoryKey, iconKey, sortIndex },
+          }),
         create: async () => {
           const sortIndex = await nextSortIndex(database, shoppingList.id);
 
@@ -310,7 +302,7 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
       );
     }
 
-    return data({ success: true });
+    return data({ success: true, intent: "addItem" as const });
   }
 
   if (intent === "addFromRecipe") {
@@ -380,10 +372,10 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
           const existingItem = existingItems[index];
 
           if (existingItem) {
-            /* istanbul ignore next -- @preserve ternary branches for quantity addition */
-            const newQuantity = ingredient.quantity
-              ? (existingItem.quantity || 0) + ingredient.quantity
-              : existingItem.quantity;
+            const newQuantity = mergedShoppingItemQuantity(
+              existingItem,
+              ingredient.quantity || null
+            );
             const shouldMoveToEnd = Boolean(
               existingItem.deletedAt || existingItem.checkedAt || existingItem.checked
             );

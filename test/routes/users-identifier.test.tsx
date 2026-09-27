@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { render, screen } from "@testing-library/react";
+import { withTimeZone } from "../helpers/timezone";
 import { faker } from "@faker-js/faker";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
@@ -23,6 +24,12 @@ async function createProfileUser() {
     `${faker.internet.username()}_${faker.string.alphanumeric(8)}`,
     "testPassword123"
   );
+}
+
+// The profile's "Joined … • N recipes • N cookbooks" line. The month is its own <time> element,
+// so the line is matched on the whole paragraph's text.
+function profileLine(text: string) {
+  return screen.getByText((_, element) => element?.tagName === "P" && element.textContent === text);
 }
 
 describe("Users $identifier Route", () => {
@@ -76,7 +83,10 @@ describe("Users $identifier Route", () => {
         username: user.username,
         photoUrl: "https://example.com/profile.jpg",
       });
-      expect(result.profile.joinedLabel).toMatch(/^Joined \w{3} \d{4}$/);
+      // The raw instant: the page shows the viewer's local month from it (see LocalDate).
+      const { createdAt } = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { createdAt: true } });
+      expect(result.profile.joinedAt).toBe(createdAt.toISOString());
+      expect(result.profile).not.toHaveProperty("joinedLabel");
       expect(result.isOwner).toBe(false);
       expect(result.recipes).toHaveLength(1);
       expect(result.recipes[0]).toMatchObject({ title: recipe.title, servings: "4" });
@@ -328,6 +338,28 @@ describe("Users $identifier Route", () => {
   });
 
   describe("component", () => {
+    it("shows the month the chef joined in the viewer's own timezone", async () => {
+      // 03:00 UTC on 1 June is still the evening of 31 May in Los Angeles.
+      const Stub = createTestRoutesStub([
+        {
+          path: "/users/:identifier",
+          Component: UserProfile,
+          loader: () => ({
+            profile: { id: "user-1", username: "chef-june", photoUrl: null, joinedAt: "2026-06-01T03:00:00.000Z" },
+            isOwner: false,
+            recipes: [],
+            cookbooks: [],
+          }),
+        },
+      ]);
+
+      await withTimeZone("America/Los_Angeles", async () => {
+        render(<Stub initialEntries={["/users/chef-june"]} />);
+        expect(await screen.findByText("May 2026")).toHaveAttribute("datetime", "2026-06-01T03:00:00.000Z");
+        expect(profileLine("Joined May 2026 • 0 recipes • 0 cookbooks")).toBeInTheDocument();
+      });
+    });
+
     it("renders a visitor profile with recipes, cookbooks, and canonical links", async () => {
       const Stub = createTestRoutesStub([
         {
@@ -338,7 +370,7 @@ describe("Users $identifier Route", () => {
               id: "user-1",
               username: "chef-rowan",
               photoUrl: "https://example.com/profile.jpg",
-              joinedLabel: "Joined May 2026",
+              joinedAt: "2026-05-15T12:00:00.000Z",
             },
             isOwner: false,
             recipes: [
@@ -382,7 +414,7 @@ describe("Users $identifier Route", () => {
 
       expect(await screen.findByRole("heading", { name: "chef-rowan" })).toBeInTheDocument();
       expect(screen.getAllByText("Original photo").length).toBeGreaterThan(0);
-      expect(screen.getByText("Joined May 2026 • 2 recipes • 1 cookbook")).toBeInTheDocument();
+      expect(profileLine("Joined May 2026 • 2 recipes • 1 cookbook")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Open kitchen view" })).toHaveAttribute("href", "/?chef=chef-rowan");
       expect(screen.queryByText("Canonical profile: /users/chef-rowan")).toBeNull();
       expect(screen.getAllByRole("link", { name: "Miso Soup" })[0]).toHaveAttribute("href", "/recipes/recipe-1");
@@ -407,7 +439,7 @@ describe("Users $identifier Route", () => {
               id: "user-1",
               username: "chef-empty",
               photoUrl: null,
-              joinedLabel: "Joined May 2026",
+              joinedAt: "2026-05-15T12:00:00.000Z",
             },
             isOwner: true,
             recipes: [],
@@ -420,7 +452,7 @@ describe("Users $identifier Route", () => {
 
       expect(await screen.findByRole("heading", { name: "chef-empty" })).toBeInTheDocument();
       expect(screen.getByTitle("chef-empty")).toBeInTheDocument();
-      expect(screen.getByText("Joined May 2026 • 0 recipes • 0 cookbooks")).toBeInTheDocument();
+      expect(profileLine("Joined May 2026 • 0 recipes • 0 cookbooks")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Open settings" })).toHaveAttribute("href", "/account/settings");
       expect(screen.getByRole("button", { name: "Logout" })).toBeInTheDocument();
       expect(screen.getByText("No recipes yet")).toBeInTheDocument();
@@ -438,7 +470,7 @@ describe("Users $identifier Route", () => {
               id: "user-3",
               username: "chef-one",
               photoUrl: null,
-              joinedLabel: "Joined May 2026",
+              joinedAt: "2026-05-15T12:00:00.000Z",
             },
             isOwner: false,
             recipes: [
@@ -457,7 +489,8 @@ describe("Users $identifier Route", () => {
 
       render(<Stub initialEntries={["/users/chef-one"]} />);
 
-      expect(await screen.findByText("Joined May 2026 • 1 recipe • 0 cookbooks")).toBeInTheDocument();
+      expect(await screen.findByText("May 2026")).toBeInTheDocument();
+      expect(profileLine("Joined May 2026 • 1 recipe • 0 cookbooks")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Solo Stew" })).toHaveAttribute("href", "/recipes/recipe-3");
     });
 
@@ -471,7 +504,7 @@ describe("Users $identifier Route", () => {
               id: "user-1",
               username: "chef-rowan",
               photoUrl: null,
-              joinedLabel: "Joined May 2026",
+              joinedAt: "2026-05-15T12:00:00.000Z",
             },
             isOwner: true,
             recipes: [],
@@ -504,7 +537,7 @@ describe("Users $identifier Route", () => {
               id: "user-2",
               username: "chef-other",
               photoUrl: null,
-              joinedLabel: "Joined May 2026",
+              joinedAt: "2026-05-15T12:00:00.000Z",
             },
             isOwner: false,
             recipes: [],
@@ -535,7 +568,7 @@ describe("Users $identifier Route", () => {
               id: "user-2",
               username: "chef-quiet",
               photoUrl: null,
-              joinedLabel: "Joined May 2026",
+              joinedAt: "2026-05-15T12:00:00.000Z",
             },
             isOwner: false,
             recipes: [],

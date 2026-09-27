@@ -6,6 +6,7 @@ import { Checkbox, CheckboxField } from "~/components/ui/checkbox";
 import { Description, Field, Label } from "~/components/ui/fieldset";
 import { Input } from "~/components/ui/input";
 import { Textarea } from "~/components/ui/textarea";
+import { localDateTimeToIso } from "~/lib/cooked-at";
 import {
   FOOD_IMAGE_ACCEPT,
   FOOD_IMAGE_SIZE_MESSAGE,
@@ -141,6 +142,10 @@ export function RecipePhotoStudio({
     formData.set("activateWhenReady", "true");
     if (postAsSpoon) {
       formData.set("postAsSpoon", "true");
+      // "Cooked at" is a wall-clock time with no timezone; send the instant it means in the
+      // cook's own timezone (see ~/lib/cooked-at).
+      const cookedAt = formData.get("cookedAt");
+      if (typeof cookedAt === "string") formData.set("cookedAt", localDateTimeToIso(cookedAt));
     } else {
       formData.delete("postAsSpoon");
       formData.delete("note");

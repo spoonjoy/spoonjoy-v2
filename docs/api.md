@@ -906,7 +906,7 @@ await fetch("https://spoonjoy.app/api/v1/shopping-list/items", {
 });
 ```
 
-There is no arbitrary batch import endpoint in v1. Post one ingredient per scraped row, or use `/api/v1/shopping-list/add-from-recipe` when the source is an existing Spoonjoy recipe. Spoonjoy normalizes names and units to the existing ingredient/unit references, restores matching deleted items, and adds quantity to an existing matching item instead of creating a duplicate. Preserve unknown quantity/unit strings in your own UI when Spoonjoy cannot represent them as positive numeric `quantity` plus display `unit`.
+There is no arbitrary batch import endpoint in v1. Post one ingredient per scraped row, or use `/api/v1/shopping-list/add-from-recipe` when the source is an existing Spoonjoy recipe. Spoonjoy normalizes names and units to the existing ingredient/unit references, restores a matching deleted item at the quantity you send (its old quantity does not come back), and adds quantity to a matching item that is still on the list instead of creating a duplicate. Preserve unknown quantity/unit strings in your own UI when Spoonjoy cannot represent them as positive numeric `quantity` plus display `unit`.
 
 ### Cron shopping-list export/import
 

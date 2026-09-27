@@ -90,8 +90,9 @@ import {
   asCompatibleD1Database,
   coalesceShoppingRecipeIngredients,
   createCompatibleShoppingListD1Batch,
+  addToCompatibleShoppingListItem,
   findCompatibleShoppingListItem,
-  mutateCompatibleShoppingListItem,
+  mergedShoppingItemQuantity,
   runCompatibleShoppingListBatch,
   type ShoppingListItemWritePlan,
 } from "~/lib/shopping-list-mutations.server";
@@ -2711,7 +2712,7 @@ const uploadSpoonPhotoTool: SpoonjoyApiOperation = {
 
 const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
   name: "add_recipe_to_shopping_list",
-  description: "Add all ingredients from a recipe to the configured owner shopping list, merging duplicates.",
+  description: "Add all ingredients from a recipe to the configured owner shopping list. Each ingredient adds to the quantity of a matching item still on the list (same ingredient and unit); a removed or cleared matching item comes back at the added quantity, not on top of its old one.",
   requiredScopes: ["shopping_list:write"],
   inputSchema: {
     type: "object",
@@ -2773,7 +2774,7 @@ const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
           updated += 1;
           const shouldMoveToEnd = Boolean(existing.checked || existing.checkedAt || existing.deletedAt);
           const sortIndex = shouldMoveToEnd ? nextSort++ : existing.sortIndex;
-          const quantity = (existing.quantity ?? 0) + row.quantity;
+          const quantity = mergedShoppingItemQuantity(existing, row.quantity);
           const categoryKey = row.categoryKey ?? existing.categoryKey;
           const iconKey = row.iconKey ?? existing.iconKey;
           operations.push(context.db.shoppingListItem.update({
@@ -3105,7 +3106,7 @@ const removeRecipeFromCookbookTool: SpoonjoyApiOperation = {
 
 const addShoppingListItemTool: SpoonjoyApiOperation = {
   name: "add_shopping_list_item",
-  description: "Add or restore one manual item on the configured owner shopping list, merging matching items.",
+  description: "Add or restore one manual item on the configured owner shopping list. It adds to the quantity of a matching item still on the list (same ingredient and unit); a removed or cleared matching item comes back at the added quantity, not on top of its old one.",
   requiredScopes: ["shopping_list:write"],
   inputSchema: {
     type: "object",
@@ -3137,24 +3138,23 @@ const addShoppingListItemTool: SpoonjoyApiOperation = {
       ingredientRefId: ingredientRef.id,
       unitId: unit?.id ?? null,
     };
-    const mutation = await mutateCompatibleShoppingListItem({
+    // The quantity, check and removed state change atomically in addToCompatibleShoppingListItem.
+    const mutation = await addToCompatibleShoppingListItem({
       database: context.db,
       identity,
-      update: async (existing) => {
+      added: quantity,
+      sortIndex: async (existing) => {
         const shouldMoveToEnd = Boolean(existing.checked || existing.checkedAt || existing.deletedAt);
-        return context.db.shoppingListItem.update({
-          where: { id: existing.id },
-          data: {
-            quantity: quantity === null ? existing.quantity : (existing.quantity ?? 0) + quantity,
-            checked: false,
-            checkedAt: null,
-            deletedAt: null,
-            sortIndex: shouldMoveToEnd ? await nextSortIndex(context.db, shoppingList.id) : existing.sortIndex,
-            categoryKey: categoryKey ?? existing.categoryKey,
-            iconKey: iconKey ?? existing.iconKey,
-          },
-        });
+        return shouldMoveToEnd ? nextSortIndex(context.db, shoppingList.id) : existing.sortIndex;
       },
+      update: (existing, sortIndex) => context.db.shoppingListItem.update({
+        where: { id: existing.id },
+        data: {
+          sortIndex,
+          categoryKey: categoryKey ?? existing.categoryKey,
+          iconKey: iconKey ?? existing.iconKey,
+        },
+      }),
       create: async () => context.db.shoppingListItem.create({
         data: {
           ...identity,

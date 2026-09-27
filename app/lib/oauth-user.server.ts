@@ -1,3 +1,4 @@
+import { findUsernameConflict } from "~/lib/account-identity.server";
 import type { PrismaClient } from "@prisma/client";
 
 export interface OAuthUserData {
@@ -104,12 +105,9 @@ export async function generateUsername(
   let candidate = baseUsername;
   let counter = 0;
 
+  // Taken regardless of letter case, or another account's ID (account-identity.server.ts).
   while (true) {
-    const existing = await db.user.findUnique({
-      where: { username: candidate },
-    });
-
-    if (!existing) {
+    if (!(await findUsernameConflict(db, candidate))) {
       return candidate;
     }
 
