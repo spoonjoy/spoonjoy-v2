@@ -26,6 +26,7 @@ import {
   swapRecipeStepsOnD1,
   updateRecipeStepOnD1,
 } from "../../../app/lib/recipe-d1-edits.server";
+import { archiveRecipeCover, setActiveRecipeCover } from "../../../app/lib/recipe-cover.server";
 import { forkRecipe } from "../../../app/lib/recipe-fork.server";
 import { ActiveRecipeTitleConflictError } from "../../../app/lib/recipe-title-uniqueness.server";
 import { handleGoogleOAuthCallback } from "../../../app/lib/google-oauth-callback.server";
@@ -770,6 +771,62 @@ describe("atomic recipe writes on Wrangler D1", () => {
       expect(results.every((result) => result.success)).toBe(true);
       expect(results[1]!.userId).toBe(results[0]!.userId);
       expect(await accounts("atomic-oauth-parallel@example.com")).toEqual([{ id: results[0]!.userId, provider: "google" }]);
+    });
+  });
+
+  describe("recipe covers", () => {
+    async function seedCovers(id: string) {
+      await seedRecipe(id);
+      for (const index of [0, 1]) {
+        await run(
+          `INSERT INTO "RecipeCover" ("id", "recipeId", "imageUrl", "sourceType", "status", "createdAt") VALUES (?, ?, ?, 'chef-upload', 'ready', ?)`,
+          `${id}-cover-${index}`, id, `https://example.com/${id}-${index}.jpg`, OLD,
+        );
+      }
+      await run(`UPDATE "Recipe" SET "activeCoverId" = ?, "activeCoverVariant" = 'image', "coverMode" = 'manual' WHERE "id" = ?`, `${id}-cover-0`, id);
+      await run(`UPDATE "Cookbook" SET "updatedAt" = ? WHERE "id" = ?`, OLD, COOKBOOK);
+    }
+
+    async function coverState(id: string) {
+      const [recipe] = await rows<{ activeCoverId: string | null }>(`SELECT "activeCoverId" FROM "Recipe" WHERE "id" = ?`, id);
+      const covers = await rows<{ id: string; status: string }>(`SELECT "id", "status" FROM "RecipeCover" WHERE "recipeId" = ? ORDER BY "id"`, id);
+      return { active: recipe!.activeCoverId, covers: covers.map((cover) => cover.status), cookbookUpdatedAt: await cookbookUpdatedAt() };
+    }
+
+    it("activates a cover and touches the cookbooks together, or neither", async () => {
+      await seedCovers("atomic-cover-set");
+      await failOn("UPDATE", "Cookbook", `OLD."id" = '${COOKBOOK}'`);
+      const activate = () => setActiveRecipeCover(prisma, { recipeId: "atomic-cover-set", coverId: "atomic-cover-set-cover-1", variant: "image" }, database());
+
+      expect(String(await rejection(activate()))).toContain(FAILURE);
+      expect(await coverState("atomic-cover-set")).toEqual({ active: "atomic-cover-set-cover-0", covers: ["ready", "ready"], cookbookUpdatedAt: OLD });
+
+      await run(`DROP TRIGGER "${TRIGGER}"`);
+      await activate();
+      expect(await coverState("atomic-cover-set")).toMatchObject({ active: "atomic-cover-set-cover-1" });
+      expect(await cookbookUpdatedAt()).not.toBe(OLD);
+    });
+
+    it("archives the active cover, activates its replacement and touches the cookbooks together, or none of it", async () => {
+      await seedCovers("atomic-cover-archive");
+      await failOn("UPDATE", "Cookbook", `OLD."id" = '${COOKBOOK}'`);
+      const archive = () => archiveRecipeCover(prisma, {
+        recipeId: "atomic-cover-archive",
+        coverId: "atomic-cover-archive-cover-0",
+        replacementCoverId: "atomic-cover-archive-cover-1",
+        replacementVariant: "image",
+      }, database());
+
+      expect(String(await rejection(archive()))).toContain(FAILURE);
+      expect(await coverState("atomic-cover-archive")).toEqual({
+        active: "atomic-cover-archive-cover-0", covers: ["ready", "ready"], cookbookUpdatedAt: OLD,
+      });
+
+      await run(`DROP TRIGGER "${TRIGGER}"`);
+      await archive();
+      expect(await coverState("atomic-cover-archive")).toMatchObject({
+        active: "atomic-cover-archive-cover-1", covers: ["archived", "ready"],
+      });
     });
   });
 
