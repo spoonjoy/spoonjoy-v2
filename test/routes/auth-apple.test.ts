@@ -701,6 +701,7 @@ describe("Apple OAuth routes", () => {
   });
 
   it("passes current user ID for successful linking callbacks", async () => {
+    onTestFinished(await ensureSessionUser("user-1"));
     const loginSession = await sessionStorage.getSession();
     loginSession.set("userId", "user-1");
     let cookie = await sessionStorage.commitSession(loginSession);
@@ -753,5 +754,68 @@ describe("Apple OAuth routes", () => {
 
     const response = await callbackAction({ request, context: { cloudflare: { env: appleEnv } }, params: {} } as any);
     expect(response.headers.get("Location")).toBe("/account/settings?oauthError=login_required");
+  });
+
+  describe("linking fallback when Apple's cross-site POST carries no session cookie", () => {
+    async function linkingCallback(linkingSessionVersion: number | undefined) {
+      const oauthCookie = await commitOAuthStartSession(new Request("https://spoonjoy.app/auth/apple"), "apple", {
+        state: "state",
+        redirectTo: "/account/settings",
+        failureRedirect: "/account/settings",
+        linking: true,
+        linkingUserId: "linking-user",
+        linkingSessionVersion,
+      });
+      mocks.verifyAppleCallback.mockResolvedValueOnce({
+        success: true,
+        appleUser: { id: "a1", email: "a@example.com", emailVerified: true, isPrivateEmail: false, firstName: null, lastName: null, fullName: null },
+      });
+      mocks.handleAppleOAuthCallback.mockResolvedValueOnce({ success: true, userId: "linking-user", action: "account_linked", redirectTo: "/account/settings" });
+      const formData = new FormData();
+      formData.set("state", "state");
+      formData.set("code", "code");
+      return callbackAction({
+        request: new Request("https://spoonjoy.app/auth/apple/callback", {
+          method: "POST",
+          body: formData,
+          headers: { Cookie: cookieHeader(oauthCookie) },
+        }),
+        context: { cloudflare: { env: appleEnv } },
+        params: {},
+      } as any);
+    }
+
+    it("links to the user who started linking while that session is still current", async () => {
+      onTestFinished(await ensureSessionUser("linking-user", 2));
+
+      const response = await linkingCallback(2);
+
+      expect(response.headers.get("Location")).toBe("/account/settings");
+      expect(mocks.handleAppleOAuthCallback).toHaveBeenCalledWith(expect.objectContaining({ currentUserId: "linking-user" }));
+    });
+
+    it("treats a linking start recorded without a session version as version 0", async () => {
+      onTestFinished(await ensureSessionUser("linking-user", 0));
+
+      await linkingCallback(undefined);
+
+      expect(mocks.handleAppleOAuthCallback).toHaveBeenCalledWith(expect.objectContaining({ currentUserId: "linking-user" }));
+    });
+
+    it("refuses to link once that user's sessions have been revoked", async () => {
+      onTestFinished(await ensureSessionUser("linking-user", 3));
+
+      const response = await linkingCallback(2);
+
+      expect(response.headers.get("Location")).toBe("/account/settings?oauthError=login_required");
+      expect(mocks.handleAppleOAuthCallback).not.toHaveBeenCalled();
+    });
+
+    it("refuses to link for a user who no longer exists", async () => {
+      const response = await linkingCallback(0);
+
+      expect(response.headers.get("Location")).toBe("/account/settings?oauthError=login_required");
+      expect(mocks.handleAppleOAuthCallback).not.toHaveBeenCalled();
+    });
   });
 });

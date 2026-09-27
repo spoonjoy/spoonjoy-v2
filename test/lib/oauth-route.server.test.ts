@@ -385,6 +385,26 @@ describe("oauth-route.server", () => {
 
       await expect(assertCanStartOAuthLinking(request, data)).resolves.toBeNull();
       expect(data.linkingUserId).toBe("user-1");
+      expect(data.linkingSessionVersion).toBe(0);
+    } finally {
+      await removeUser();
+    }
+  });
+
+  it("records the session version of the user who starts linking", async () => {
+    const removeUser = await ensureSessionUser("user-2", 4);
+    try {
+      const session = await sessionStorage.getSession();
+      session.set("userId", "user-2");
+      session.set("sessionVersion", 4);
+      const cookie = await sessionStorage.commitSession(session);
+      const request = new Request("https://spoonjoy.app/auth/google?linking=true", {
+        headers: { Cookie: cookieHeader(cookie) },
+      });
+      const data = resolveOAuthStartSessionData(request, "state");
+
+      await expect(assertCanStartOAuthLinking(request, data)).resolves.toBeNull();
+      expect(data).toMatchObject({ linkingUserId: "user-2", linkingSessionVersion: 4 });
     } finally {
       await removeUser();
     }
@@ -486,6 +506,7 @@ describe("oauth-route.server", () => {
       failureRedirect: "/account/settings",
       linking: true,
       linkingUserId: "user-1",
+      linkingSessionVersion: 3,
     });
 
     const readRequest = new Request("https://spoonjoy.app/auth/apple/callback", {
@@ -500,6 +521,38 @@ describe("oauth-route.server", () => {
       failureRedirect: "/account/settings",
       linking: true,
       linkingUserId: "user-1",
+      linkingSessionVersion: 3,
+    });
+
+    const relinked = await commitOAuthStartSession(readRequest, "apple", {
+      state: "state-2",
+      redirectTo: "/account/settings",
+      failureRedirect: "/account/settings",
+      linking: true,
+      linkingUserId: "user-1",
+    });
+    const relinkedRequest = new Request("https://spoonjoy.app/auth/apple/callback", {
+      headers: { Cookie: cookieHeader(relinked) },
+    });
+    const relinkedData = await readOAuthStartSession(relinkedRequest, "apple");
+    expect(relinkedData).toMatchObject({ state: "state-2", linkingUserId: "user-1" });
+    expect(relinkedData).not.toHaveProperty("linkingSessionVersion", 3);
+  });
+
+  it("ignores a stored linking session version that is not a number", async () => {
+    const session = await oauthSessionStorage.getSession();
+    session.set("oauth:apple:state", "state");
+    session.set("oauth:apple:linking", "true");
+    session.set("oauth:apple:linkingUserId", "user-1");
+    session.set("oauth:apple:linkingSessionVersion", "3");
+    const cookie = await oauthSessionStorage.commitSession(session);
+    const request = new Request("https://spoonjoy.app/auth/apple/callback", {
+      headers: { Cookie: cookieHeader(cookie) },
+    });
+
+    await expect(readOAuthStartSession(request, "apple")).resolves.toMatchObject({
+      linkingUserId: "user-1",
+      linkingSessionVersion: undefined,
     });
   });
 

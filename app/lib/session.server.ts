@@ -218,9 +218,21 @@ async function readCurrentSessionVersion(userId: string, env?: SessionEnv | null
   return user ? user.sessionVersion : null;
 }
 
+/**
+ * Checks an identity from a signed cookie against the database: true only while
+ * the user exists and the identity's version is the user's current one.
+ */
+export async function isSessionIdentityCurrent(
+  identity: SessionIdentity,
+  env?: SessionEnv | null
+): Promise<boolean> {
+  return isCurrentSession(identity, await readCurrentSessionVersion(identity.userId, env));
+}
+
 interface SessionCheck {
   session: Session;
-  userId: string | null;
+  // The cookie's identity, only when it is still current.
+  identity: SessionIdentity | null;
   // True when the request carried a signed-in cookie that is no longer valid.
   stale: boolean;
 }
@@ -228,12 +240,11 @@ interface SessionCheck {
 async function checkSession(request: Request, env?: SessionEnv | null): Promise<SessionCheck> {
   const session = await getSession(request, env);
   const identity = identityFromSession(session);
-  if (!identity) return { session, userId: null, stale: session.has(USER_ID_KEY) };
+  if (!identity) return { session, identity: null, stale: session.has(USER_ID_KEY) };
 
-  const currentSessionVersion = await readCurrentSessionVersion(identity.userId, env);
-  return isCurrentSession(identity, currentSessionVersion)
-    ? { session, userId: identity.userId, stale: false }
-    : { session, userId: null, stale: true };
+  return (await isSessionIdentityCurrent(identity, env))
+    ? { session, identity, stale: false }
+    : { session, identity: null, stale: true };
 }
 
 // The root loader and a route loader read the session for the same Request
@@ -256,10 +267,18 @@ function checkSessionOnce(request: Request, env?: SessionEnv | null): Promise<Se
   return check;
 }
 
+/** The signed-in identity (user id and session version), or null when signed out or revoked. */
+export async function getCurrentSessionIdentity(
+  request: Request,
+  env?: SessionEnv | null
+): Promise<SessionIdentity | null> {
+  return (await checkSessionOnce(request, env)).identity;
+}
+
 // Helper to get user ID from session. A cookie for a deleted user, or one whose
 // version is behind the user's current session version, counts as signed out.
 export async function getUserId(request: Request, env?: SessionEnv | null): Promise<string | null> {
-  return (await checkSessionOnce(request, env)).userId;
+  return (await getCurrentSessionIdentity(request, env))?.userId ?? null;
 }
 
 // Helper to require user ID (throws if not authenticated). A stale cookie is
@@ -270,7 +289,7 @@ export async function requireUserId(
   env?: SessionEnv | null
 ): Promise<string> {
   const check = await checkSessionOnce(request, env);
-  if (!check.userId) {
+  if (!check.identity) {
     const url = new URL(request.url);
     const searchParams = new URLSearchParams([["redirectTo", url.pathname]]);
     const headers = new Headers({ Location: `${redirectTo}?${searchParams}` });
@@ -279,7 +298,7 @@ export async function requireUserId(
     }
     throw new Response(null, { status: 302, headers });
   }
-  return check.userId;
+  return check.identity.userId;
 }
 
 export interface CreateUserSessionOptions {
