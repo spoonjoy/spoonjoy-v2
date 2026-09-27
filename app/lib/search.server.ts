@@ -8,10 +8,23 @@ import type {
   RecipeInCookbook,
   RecipeStep,
   Unit,
-  User,
 } from "@prisma/client";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { toDate, toNumber } from "~/lib/d1-coerce.server";
+import {
+  d1Count,
+  d1ReadBatch,
+  type D1Query,
+  type D1ReadDatabase,
+  type D1Row,
+} from "~/lib/d1-read.server";
+import {
+  mapModel,
+  RECIPE_COLUMNS,
+  RECIPE_COVER_COLUMNS,
+  selectColumns,
+  type ColumnSpec,
+} from "~/lib/d1-models.server";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 
 export const SEARCH_SCOPES = ["all", "recipes", "cookbooks", "chefs", "shopping-list"] as const;
@@ -95,8 +108,6 @@ interface RecipeCoverFingerprintRow {
 
 const DEFAULT_SEARCH_LIMIT = 20;
 const MAX_SEARCH_LIMIT = 50;
-const SEARCH_INSERT_COLUMN_COUNT = 11;
-const SEARCH_INSERT_BATCH_SIZE = 8;
 const SEARCH_METADATA_ID = "current";
 // A pantry query binds one parameter per term; D1 allows 100 bound parameters per query.
 const MAX_PANTRY_TERMS = 12;
@@ -292,6 +303,7 @@ function parseRow(row: SearchRow): SearchResult {
   };
 }
 
+
 async function ensureSearchIndex(database: PrismaClient) {
   await database.$executeRawUnsafe(SEARCH_SCHEMA_SQL);
   await database.$executeRawUnsafe(SEARCH_METADATA_SCHEMA_SQL);
@@ -315,27 +327,39 @@ async function sha256Hex(value: string): Promise<string> {
     .join("");
 }
 
-async function currentRecipeCoverContentHash(database: PrismaClient): Promise<string> {
-  const rows = await database.$queryRawUnsafe<RecipeCoverFingerprintRow[]>(
-    `SELECT
-        r."id" AS "recipeId",
-        r."activeCoverId" AS "activeCoverId",
-        r."activeCoverVariant" AS "activeCoverVariant",
-        r."coverMode" AS "coverMode",
-        rc."id" AS "id",
-        rc."createdAt" AS "createdAt",
-        rc."imageUrl" AS "imageUrl",
-        rc."stylizedImageUrl" AS "stylizedImageUrl",
-        rc."sourceType" AS "sourceType",
-        rc."status" AS "status",
-        rc."archivedAt" AS "archivedAt"
-      FROM "Recipe" r
-      LEFT JOIN "RecipeCover" rc
-        ON rc."id" = r."activeCoverId"
-        AND rc."recipeId" = r."id"
-      WHERE r."deletedAt" IS NULL
-      ORDER BY r."id" ASC`
-  );
+const RECIPE_COVER_FINGERPRINT_SQL = `SELECT
+    r."id" AS "recipeId",
+    r."activeCoverId" AS "activeCoverId",
+    r."activeCoverVariant" AS "activeCoverVariant",
+    r."coverMode" AS "coverMode",
+    rc."id" AS "id",
+    rc."createdAt" AS "createdAt",
+    rc."imageUrl" AS "imageUrl",
+    rc."stylizedImageUrl" AS "stylizedImageUrl",
+    rc."sourceType" AS "sourceType",
+    rc."status" AS "status",
+    rc."archivedAt" AS "archivedAt"
+  FROM "Recipe" r
+  LEFT JOIN "RecipeCover" rc
+    ON rc."id" = r."activeCoverId"
+    AND rc."recipeId" = r."id"
+  WHERE r."deletedAt" IS NULL
+  ORDER BY r."id" ASC`;
+
+const SEARCH_DOCUMENT_COUNT_SQL = `SELECT COUNT(*) AS documentCount FROM "SearchDocument"`;
+
+const SEARCH_METADATA_SQL = `SELECT "sourceFingerprint", "documentCount" FROM "SearchIndexMetadata" WHERE "id" = ? LIMIT 1`;
+
+const WRITE_SEARCH_METADATA_SQL = `INSERT INTO "SearchIndexMetadata" ("id", "sourceFingerprint", "documentCount", "rebuiltAt")
+  VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+  ON CONFLICT("id") DO UPDATE SET
+    "sourceFingerprint" = excluded."sourceFingerprint",
+    "documentCount" = excluded."documentCount",
+    "rebuiltAt" = excluded."rebuiltAt"`;
+
+const DELETE_SEARCH_DOCUMENTS_SQL = `DELETE FROM "SearchDocument"`;
+
+async function recipeCoverContentHash(rows: RecipeCoverFingerprintRow[]): Promise<string> {
   const payload = JSON.stringify(
     rows.map((row) => ({
       recipeId: row.recipeId,
@@ -354,103 +378,104 @@ async function currentRecipeCoverContentHash(database: PrismaClient): Promise<st
   return `sha256:${await sha256Hex(payload)}`;
 }
 
-async function searchSourceFingerprint(database: PrismaClient): Promise<string> {
-  const [rows, recipeCoverContentHash] = await Promise.all([
-    database.$queryRawUnsafe<SearchSourceFingerprintRow[]>(SEARCH_SOURCE_FINGERPRINT_SQL),
-    currentRecipeCoverContentHash(database),
-  ]);
-  const row = rows[0]!;
+function fingerprintFromRows(row: SearchSourceFingerprintRow, recipeCoverHash: string): string {
   const normalizedRows = SEARCH_SOURCE_TABLES.map((sourceTable) => ({
     tableName: sourceTable.tableName,
     rowCount: toNumber(row[sourceTable.countKey] as number | bigint),
     latestAt: aggregateDateString(row[sourceTable.latestKey] as Date | string | number | bigint | null),
-    contentHash: sourceTable.tableName === "RecipeCover" ? recipeCoverContentHash : null,
+    contentHash: sourceTable.tableName === "RecipeCover" ? recipeCoverHash : null,
   }));
 
   return JSON.stringify(normalizedRows);
 }
 
-async function searchDocumentCount(database: PrismaClient): Promise<number> {
-  const rows = await database.$queryRawUnsafe<SearchIndexCountRow[]>(
-    `SELECT COUNT(*) AS documentCount FROM "SearchDocument"`
-  );
-
-  return toNumber(rows[0]!.documentCount);
+/** What the search index was built from: row counts, latest updates and active cover content. */
+export async function searchSourceFingerprint(database: PrismaClient): Promise<string> {
+  const [rows, coverRows] = await Promise.all([
+    database.$queryRawUnsafe<SearchSourceFingerprintRow[]>(SEARCH_SOURCE_FINGERPRINT_SQL),
+    database.$queryRawUnsafe<RecipeCoverFingerprintRow[]>(RECIPE_COVER_FINGERPRINT_SQL),
+  ]);
+  return fingerprintFromRows(rows[0]!, await recipeCoverContentHash(coverRows));
 }
 
-async function currentSearchIndexMetadata(database: PrismaClient): Promise<SearchIndexMetadataRow | null> {
-  const rows = await database.$queryRawUnsafe<SearchIndexMetadataRow[]>(
-    `SELECT "sourceFingerprint", "documentCount" FROM "SearchIndexMetadata" WHERE "id" = ? LIMIT 1`,
-    SEARCH_METADATA_ID
-  );
-
-  return rows[0] ?? null;
+/** `searchSourceFingerprint` read through a D1 binding; the two agree on the same data. */
+export async function searchSourceFingerprintFromD1(db: D1ReadDatabase): Promise<string> {
+  const [rows, coverRows] = await d1ReadBatch(db, [[SEARCH_SOURCE_FINGERPRINT_SQL], [RECIPE_COVER_FINGERPRINT_SQL]]);
+  return fingerprintFromD1Rows(rows!, coverRows!);
 }
 
-async function writeSearchIndexMetadata(database: PrismaClient, sourceFingerprint: string, documentCount: number) {
-  await database.$executeRawUnsafe(
-    `INSERT INTO "SearchIndexMetadata" ("id", "sourceFingerprint", "documentCount", "rebuiltAt")
-      VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT("id") DO UPDATE SET
-        "sourceFingerprint" = excluded."sourceFingerprint",
-        "documentCount" = excluded."documentCount",
-        "rebuiltAt" = excluded."rebuiltAt"`,
-    SEARCH_METADATA_ID,
-    sourceFingerprint,
-    documentCount
+async function fingerprintFromD1Rows(rows: D1Row[], coverRows: D1Row[]): Promise<string> {
+  const row = rows[0];
+  if (!row) throw new Error("D1 search fingerprint returned no row");
+  return fingerprintFromRows(
+    row as SearchSourceFingerprintRow,
+    await recipeCoverContentHash(coverRows as unknown as RecipeCoverFingerprintRow[]),
   );
 }
 
-function searchDocumentSqlValues(document: SearchDocumentInput): Array<string | null> {
-  return [
-    document.type,
-    document.id,
-    document.ownerId,
-    document.ownerUsername,
-    document.sortAt,
-    document.title,
-    document.subtitle,
-    document.body,
-    document.href,
-    document.imageUrl,
-    JSON.stringify(document.metadata),
-  ];
+function isSearchIndexFresh(
+  metadata: SearchIndexMetadataRow | null | undefined,
+  documentCount: number,
+  sourceFingerprint: string,
+): boolean {
+  return Boolean(
+    metadata &&
+    metadata.sourceFingerprint === sourceFingerprint &&
+    toNumber(metadata.documentCount) === documentCount,
+  );
 }
 
-async function insertSearchDocuments(database: PrismaClient, documents: SearchDocumentInput[]) {
-  const columns = `(
-      entityType,
-      entityId,
-      ownerId,
-      ownerUsername,
-      sortAt,
-      title,
-      subtitle,
-      body,
-      href,
-      imageUrl,
-      metadata
-    )`;
-
-  for (let offset = 0; offset < documents.length; offset += SEARCH_INSERT_BATCH_SIZE) {
-    const batch = documents.slice(offset, offset + SEARCH_INSERT_BATCH_SIZE);
-    const rowPlaceholders = `(${Array.from({ length: SEARCH_INSERT_COLUMN_COUNT }, () => "?").join(", ")})`;
-    const placeholders = Array.from({ length: batch.length }, () => rowPlaceholders).join(", ");
-    const values = batch.flatMap(searchDocumentSqlValues);
-
-    await database.$executeRawUnsafe(
-      `INSERT INTO "SearchDocument" ${columns} VALUES ${placeholders}`,
-      ...values
-    );
-  }
+// The rows search documents are built from. Both readers (Prisma and D1) fill the same
+// shapes, and one set of builders turns them into documents, so both paths index
+// identical documents.
+interface SearchUserSource {
+  id: string;
+  username: string;
+  photoUrl: string | null;
+  updatedAt: Date;
+  // Every recipe, deleted ones included, as the chef card has always counted them.
+  recipeCount: number;
+  cookbookCount: number;
 }
 
-async function recipeDocuments(database: PrismaClient): Promise<SearchDocumentInput[]> {
-  const users = await database.user.findMany();
-  const recipes = await database.recipe.findMany({
-    where: { deletedAt: null },
-    orderBy: { id: "asc" },
+interface SearchShoppingItemSource {
+  id: string;
+  quantity: number | null;
+  checked: boolean;
+  categoryKey: string | null;
+  iconKey: string | null;
+  sortIndex: number;
+  updatedAt: Date;
+  unitName: string | null;
+  ingredientName: string;
+  ownerId: string;
+  ownerUsername: string;
+}
+
+interface SearchSources {
+  users: SearchUserSource[];
+  // Every recipe, deleted ones included, by id.
+  recipes: Recipe[];
+  covers: RecipeCover[];
+  // By recipe, then step number.
+  steps: Array<Pick<RecipeStep, "recipeId" | "stepNum" | "stepTitle" | "description">>;
+  // By recipe, then step number.
+  ingredients: Array<Pick<Ingredient, "recipeId" | "stepNum" | "quantity" | "unitId" | "ingredientRefId">>;
+  units: Array<Pick<Unit, "id" | "name">>;
+  ingredientRefs: Array<Pick<IngredientRef, "id" | "name">>;
+  recipeCookbooks: Array<Pick<RecipeInCookbook, "recipeId" | "cookbookId">>;
+  cookbooks: Array<Pick<Cookbook, "id" | "title" | "authorId" | "updatedAt">>;
+  // Not deleted.
+  shoppingItems: SearchShoppingItemSource[];
+}
+
+async function loadSearchSourcesWithPrisma(database: PrismaClient): Promise<SearchSources> {
+  const users = await database.user.findMany({
+    include: {
+      _count: { select: { recipes: true, cookbooks: true } },
+    },
   });
+  const recipes = await database.recipe.findMany({ orderBy: { id: "asc" } });
   const covers = await database.recipeCover.findMany();
   const steps = await database.recipeStep.findMany({
     orderBy: [{ recipeId: "asc" }, { stepNum: "asc" }],
@@ -462,20 +487,162 @@ async function recipeDocuments(database: PrismaClient): Promise<SearchDocumentIn
   const ingredientRefs = await database.ingredientRef.findMany();
   const recipeCookbooks = await database.recipeInCookbook.findMany();
   const cookbooks = await database.cookbook.findMany();
+  const items = await database.shoppingListItem.findMany({
+    where: { deletedAt: null },
+    include: {
+      unit: true,
+      ingredientRef: true,
+      shoppingList: { include: { author: { select: { id: true, username: true } } } },
+    },
+  });
 
-  const userById = new Map(users.map((user: User) => [user.id, user]));
-  const coversByRecipeId = groupedBy(covers, (cover: RecipeCover) => cover.recipeId);
-  const stepsByRecipeId = groupedBy(steps, (step: RecipeStep) => step.recipeId);
-  const ingredientsByStep = groupedBy(
+  return {
+    users: users.map((user) => ({
+      id: user.id,
+      username: user.username,
+      photoUrl: user.photoUrl,
+      updatedAt: user.updatedAt,
+      recipeCount: user._count.recipes,
+      cookbookCount: user._count.cookbooks,
+    })),
+    recipes,
+    covers,
+    steps,
     ingredients,
-    (ingredient: Ingredient) => `${ingredient.recipeId}:${ingredient.stepNum}`
-  );
-  const unitById = new Map(units.map((unit: Unit) => [unit.id, unit]));
-  const ingredientRefById = new Map(ingredientRefs.map((ingredientRef: IngredientRef) => [ingredientRef.id, ingredientRef]));
-  const cookbookById = new Map(cookbooks.map((cookbook: Cookbook) => [cookbook.id, cookbook]));
-  const cookbookLinksByRecipeId = groupedBy(recipeCookbooks, (link: RecipeInCookbook) => link.recipeId);
+    units,
+    ingredientRefs,
+    recipeCookbooks,
+    cookbooks,
+    shoppingItems: items.map((item) => ({
+      id: item.id,
+      quantity: item.quantity,
+      checked: item.checked,
+      categoryKey: item.categoryKey,
+      iconKey: item.iconKey,
+      sortIndex: item.sortIndex,
+      updatedAt: item.updatedAt,
+      unitName: item.unit?.name ?? null,
+      ingredientName: item.ingredientRef.name,
+      ownerId: item.shoppingList.authorId,
+      ownerUsername: item.shoppingList.author.username,
+    })),
+  };
+}
 
-  return recipes.map((recipe: Recipe) => {
+const SEARCH_USER_COLUMNS: ColumnSpec<SearchUserSource> = {
+  id: "string",
+  username: "string",
+  photoUrl: "string?",
+  updatedAt: "dateTime",
+  recipeCount: "int",
+  cookbookCount: "int",
+};
+
+const SEARCH_STEP_COLUMNS: ColumnSpec<SearchSources["steps"][number]> = {
+  recipeId: "string",
+  stepNum: "int",
+  stepTitle: "string?",
+  description: "string",
+};
+
+const SEARCH_INGREDIENT_COLUMNS: ColumnSpec<SearchSources["ingredients"][number]> = {
+  recipeId: "string",
+  stepNum: "int",
+  quantity: "float",
+  unitId: "string",
+  ingredientRefId: "string",
+};
+
+const SEARCH_NAMED_COLUMNS: ColumnSpec<{ id: string; name: string }> = { id: "string", name: "string" };
+
+const SEARCH_RECIPE_COOKBOOK_COLUMNS: ColumnSpec<SearchSources["recipeCookbooks"][number]> = {
+  recipeId: "string",
+  cookbookId: "string",
+};
+
+const SEARCH_COOKBOOK_COLUMNS: ColumnSpec<SearchSources["cookbooks"][number]> = {
+  id: "string",
+  title: "string",
+  authorId: "string",
+  updatedAt: "dateTime",
+};
+
+const SEARCH_SHOPPING_ITEM_COLUMNS: ColumnSpec<SearchShoppingItemSource> = {
+  id: "string",
+  quantity: "float?",
+  checked: "boolean",
+  categoryKey: "string?",
+  iconKey: "string?",
+  sortIndex: "int",
+  updatedAt: "dateTime",
+  unitName: "string?",
+  ingredientName: "string",
+  ownerId: "string",
+  ownerUsername: "string",
+};
+
+// The same reads as loadSearchSourcesWithPrisma, as one D1 batch. Tables Prisma read
+// without an ORDER BY are read in rowid order, which is the order a plain scan returns.
+const SEARCH_SOURCE_QUERIES: readonly D1Query[] = [
+  [
+    `SELECT u."id", u."username", u."photoUrl", u."updatedAt",
+       (SELECT COUNT(*) FROM "Recipe" r WHERE r."chefId" = u."id") AS "recipeCount",
+       (SELECT COUNT(*) FROM "Cookbook" c WHERE c."authorId" = u."id") AS "cookbookCount"
+     FROM "User" u ORDER BY u.rowid`,
+  ],
+  [`SELECT ${selectColumns(RECIPE_COLUMNS, "r")} FROM "Recipe" r ORDER BY r."id" ASC`],
+  [`SELECT ${selectColumns(RECIPE_COVER_COLUMNS, "rc")} FROM "RecipeCover" rc ORDER BY rc.rowid`],
+  [`SELECT "recipeId", "stepNum", "stepTitle", "description" FROM "RecipeStep" ORDER BY "recipeId" ASC, "stepNum" ASC`],
+  [`SELECT "recipeId", "stepNum", "quantity", "unitId", "ingredientRefId" FROM "Ingredient" ORDER BY "recipeId" ASC, "stepNum" ASC`],
+  [`SELECT "id", "name" FROM "Unit" ORDER BY rowid`],
+  [`SELECT "id", "name" FROM "IngredientRef" ORDER BY rowid`],
+  [`SELECT "recipeId", "cookbookId" FROM "RecipeInCookbook" ORDER BY rowid`],
+  [`SELECT "id", "title", "authorId", "updatedAt" FROM "Cookbook" ORDER BY rowid`],
+  [
+    `SELECT sli."id", sli."quantity", sli."checked", sli."categoryKey", sli."iconKey", sli."sortIndex", sli."updatedAt",
+       u."name" AS "unitName", ir."name" AS "ingredientName", sl."authorId" AS "ownerId", a."username" AS "ownerUsername"
+     FROM "ShoppingListItem" sli
+     JOIN "ShoppingList" sl ON sl."id" = sli."shoppingListId"
+     JOIN "User" a ON a."id" = sl."authorId"
+     JOIN "IngredientRef" ir ON ir."id" = sli."ingredientRefId"
+     LEFT JOIN "Unit" u ON u."id" = sli."unitId"
+     WHERE sli."deletedAt" IS NULL
+     ORDER BY sli.rowid`,
+  ],
+];
+
+async function loadSearchSourcesFromD1(db: D1ReadDatabase): Promise<SearchSources> {
+  const [users, recipes, covers, steps, ingredients, units, ingredientRefs, recipeCookbooks, cookbooks, shoppingItems] =
+    await d1ReadBatch(db, SEARCH_SOURCE_QUERIES);
+
+  return {
+    users: users!.map((row) => mapModel(SEARCH_USER_COLUMNS, row)),
+    recipes: recipes!.map((row) => mapModel(RECIPE_COLUMNS, row)),
+    covers: covers!.map((row) => mapModel(RECIPE_COVER_COLUMNS, row)),
+    steps: steps!.map((row) => mapModel(SEARCH_STEP_COLUMNS, row)),
+    ingredients: ingredients!.map((row) => mapModel(SEARCH_INGREDIENT_COLUMNS, row)),
+    units: units!.map((row) => mapModel(SEARCH_NAMED_COLUMNS, row)),
+    ingredientRefs: ingredientRefs!.map((row) => mapModel(SEARCH_NAMED_COLUMNS, row)),
+    recipeCookbooks: recipeCookbooks!.map((row) => mapModel(SEARCH_RECIPE_COOKBOOK_COLUMNS, row)),
+    cookbooks: cookbooks!.map((row) => mapModel(SEARCH_COOKBOOK_COLUMNS, row)),
+    shoppingItems: shoppingItems!.map((row) => mapModel(SEARCH_SHOPPING_ITEM_COLUMNS, row)),
+  };
+}
+
+function recipeDocuments(sources: SearchSources): SearchDocumentInput[] {
+  const userById = new Map(sources.users.map((user) => [user.id, user]));
+  const coversByRecipeId = groupedBy(sources.covers, (cover) => cover.recipeId);
+  const stepsByRecipeId = groupedBy(sources.steps, (step) => step.recipeId);
+  const ingredientsByStep = groupedBy(
+    sources.ingredients,
+    (ingredient) => `${ingredient.recipeId}:${ingredient.stepNum}`
+  );
+  const unitById = new Map(sources.units.map((unit) => [unit.id, unit]));
+  const ingredientRefById = new Map(sources.ingredientRefs.map((ingredientRef) => [ingredientRef.id, ingredientRef]));
+  const cookbookById = new Map(sources.cookbooks.map((cookbook) => [cookbook.id, cookbook]));
+  const cookbookLinksByRecipeId = groupedBy(sources.recipeCookbooks, (link) => link.recipeId);
+
+  return sources.recipes.filter((recipe) => recipe.deletedAt === null).map((recipe) => {
     const chef = userById.get(recipe.chefId)!;
     const recipeSteps = stepsByRecipeId.get(recipe.id) ?? [];
     const cookbookTitles = uniqueSorted(
@@ -537,17 +704,12 @@ async function recipeDocuments(database: PrismaClient): Promise<SearchDocumentIn
   });
 }
 
-async function cookbookDocuments(database: PrismaClient): Promise<SearchDocumentInput[]> {
-  const users = await database.user.findMany();
-  const cookbooks = await database.cookbook.findMany();
-  const recipeCookbooks = await database.recipeInCookbook.findMany();
-  const recipes = await database.recipe.findMany();
+function cookbookDocuments(sources: SearchSources): SearchDocumentInput[] {
+  const userById = new Map(sources.users.map((user) => [user.id, user]));
+  const recipeById = new Map(sources.recipes.map((recipe) => [recipe.id, recipe]));
+  const cookbookLinksByCookbookId = groupedBy(sources.recipeCookbooks, (link) => link.cookbookId);
 
-  const userById = new Map(users.map((user: User) => [user.id, user]));
-  const recipeById = new Map(recipes.map((recipe: Recipe) => [recipe.id, recipe]));
-  const cookbookLinksByCookbookId = groupedBy(recipeCookbooks, (link: RecipeInCookbook) => link.cookbookId);
-
-  return cookbooks.map((cookbook: Cookbook) => {
+  return sources.cookbooks.map((cookbook) => {
     const author = userById.get(cookbook.authorId)!;
     const activeRecipeTitles = uniqueSorted(
       (cookbookLinksByCookbookId.get(cookbook.id) ?? [])
@@ -576,14 +738,8 @@ async function cookbookDocuments(database: PrismaClient): Promise<SearchDocument
   });
 }
 
-async function chefDocuments(database: PrismaClient): Promise<SearchDocumentInput[]> {
-  const users = await database.user.findMany({
-    include: {
-      _count: { select: { recipes: true, cookbooks: true } },
-    },
-  });
-
-  return users.map((user) => ({
+function chefDocuments(sources: SearchSources): SearchDocumentInput[] {
+  return sources.users.map((user) => ({
     type: "chef",
     id: user.id,
     ownerId: user.id,
@@ -591,43 +747,33 @@ async function chefDocuments(database: PrismaClient): Promise<SearchDocumentInpu
     sortAt: user.updatedAt.toISOString(),
     title: user.username,
     subtitle: "Chef kitchen",
-    body: compactText([user.username, `recipes ${user._count.recipes}`, `cookbooks ${user._count.cookbooks}`]),
+    body: compactText([user.username, `recipes ${user.recipeCount}`, `cookbooks ${user.cookbookCount}`]),
     href: `/users/${user.username}`,
     imageUrl: resolveChefAvatarUrl(user.photoUrl),
     metadata: {
       username: user.username,
-      recipeCount: user._count.recipes,
-      cookbookCount: user._count.cookbooks,
+      recipeCount: user.recipeCount,
+      cookbookCount: user.cookbookCount,
     },
   }));
 }
 
-async function shoppingListDocuments(database: PrismaClient): Promise<SearchDocumentInput[]> {
-  const items = await database.shoppingListItem.findMany({
-    where: { deletedAt: null },
-    include: {
-      unit: true,
-      ingredientRef: true,
-      shoppingList: { include: { author: { select: { id: true, username: true } } } },
-    },
-  });
-
-  return items.map((item) => {
-    const unitName = item.unit?.name ?? null;
+function shoppingListDocuments(sources: SearchSources): SearchDocumentInput[] {
+  return sources.shoppingItems.map((item) => {
     const quantity = item.quantity === null ? null : String(item.quantity);
 
     return {
       type: "shopping-list-item",
       id: item.id,
-      ownerId: item.shoppingList.authorId,
-      ownerUsername: item.shoppingList.author.username,
+      ownerId: item.ownerId,
+      ownerUsername: item.ownerUsername,
       sortAt: item.updatedAt.toISOString(),
-      title: item.ingredientRef.name,
-      subtitle: `Shopping list item for ${item.shoppingList.author.username}`,
+      title: item.ingredientName,
+      subtitle: `Shopping list item for ${item.ownerUsername}`,
       body: compactText([
-        item.ingredientRef.name,
+        item.ingredientName,
         quantity,
-        unitName,
+        item.unitName,
         item.categoryKey,
         item.iconKey,
         item.checked ? "checked" : "unchecked",
@@ -636,7 +782,7 @@ async function shoppingListDocuments(database: PrismaClient): Promise<SearchDocu
       imageUrl: null,
       metadata: {
         quantity: item.quantity,
-        unit: unitName,
+        unit: item.unitName,
         checked: item.checked,
         categoryKey: item.categoryKey,
         iconKey: item.iconKey,
@@ -646,22 +792,97 @@ async function shoppingListDocuments(database: PrismaClient): Promise<SearchDocu
   });
 }
 
+function buildSearchDocuments(sources: SearchSources): SearchDocumentInput[] {
+  return [
+    ...recipeDocuments(sources),
+    ...cookbookDocuments(sources),
+    ...chefDocuments(sources),
+    ...shoppingListDocuments(sources),
+  ];
+}
+
+// Documents are inserted as JSON arrays expanded by json_each: one bound value per
+// statement instead of eleven per row, so a rebuild stays within D1's bound-parameter
+// limit and needs few statements. Each chunk stays well under D1's statement size limits.
+const SEARCH_INSERT_CHUNK_BYTES = 64 * 1024;
+
+const INSERT_SEARCH_DOCUMENTS_SQL = `INSERT INTO "SearchDocument" (
+    entityType, entityId, ownerId, ownerUsername, sortAt, title, subtitle, body, href, imageUrl, metadata
+  )
+  SELECT
+    json_extract(value, '$[0]'), json_extract(value, '$[1]'), json_extract(value, '$[2]'),
+    json_extract(value, '$[3]'), json_extract(value, '$[4]'), json_extract(value, '$[5]'),
+    json_extract(value, '$[6]'), json_extract(value, '$[7]'), json_extract(value, '$[8]'),
+    json_extract(value, '$[9]'), json_extract(value, '$[10]')
+  FROM json_each(?)
+  ORDER BY key`;
+
+function searchInsertStatements(documents: SearchDocumentInput[]): D1Query[] {
+  const statements: D1Query[] = [];
+  let chunk: string[] = [];
+  let chunkBytes = 0;
+  for (const document of documents) {
+    const encoded = JSON.stringify(searchDocumentSqlValues(document));
+    if (chunk.length > 0 && chunkBytes + encoded.length > SEARCH_INSERT_CHUNK_BYTES) {
+      statements.push([INSERT_SEARCH_DOCUMENTS_SQL, `[${chunk.join(",")}]`]);
+      chunk = [];
+      chunkBytes = 0;
+    }
+    chunk.push(encoded);
+    chunkBytes += encoded.length + 1;
+  }
+  if (chunk.length > 0) {
+    statements.push([INSERT_SEARCH_DOCUMENTS_SQL, `[${chunk.join(",")}]`]);
+  }
+  return statements;
+}
+
+function searchDocumentSqlValues(document: SearchDocumentInput): Array<string | null> {
+  return [
+    document.type,
+    document.id,
+    document.ownerId,
+    document.ownerUsername,
+    document.sortAt,
+    document.title,
+    document.subtitle,
+    document.body,
+    document.href,
+    document.imageUrl,
+    JSON.stringify(document.metadata),
+  ];
+}
+
+async function runPrismaStatements(database: PrismaClient, statements: readonly D1Query[]) {
+  for (const [sql, ...values] of statements) {
+    await database.$executeRawUnsafe(sql, ...values);
+  }
+}
+
 export async function rebuildSearchIndex(database: PrismaClient): Promise<number> {
   await ensureSearchIndex(database);
 
   const sourceFingerprint = await searchSourceFingerprint(database);
-  const documents = [
-    ...(await recipeDocuments(database)),
-    ...(await cookbookDocuments(database)),
-    ...(await chefDocuments(database)),
-    ...(await shoppingListDocuments(database)),
-  ];
+  const documents = buildSearchDocuments(await loadSearchSourcesWithPrisma(database));
 
-  await database.$executeRawUnsafe(`DELETE FROM "SearchDocument"`);
+  await runPrismaStatements(database, [
+    [DELETE_SEARCH_DOCUMENTS_SQL],
+    ...searchInsertStatements(documents),
+    [WRITE_SEARCH_METADATA_SQL, SEARCH_METADATA_ID, sourceFingerprint, documents.length],
+  ]);
 
-  await insertSearchDocuments(database, documents);
-  await writeSearchIndexMetadata(database, sourceFingerprint, documents.length);
+  return documents.length;
+}
 
+// The D1 rebuild replaces the index in one batch, so a concurrent search never sees a
+// half-built index.
+async function rebuildSearchIndexFromD1(db: D1ReadDatabase, sourceFingerprint: string): Promise<number> {
+  const documents = buildSearchDocuments(await loadSearchSourcesFromD1(db));
+  await d1ReadBatch(db, [
+    [DELETE_SEARCH_DOCUMENTS_SQL],
+    ...searchInsertStatements(documents),
+    [WRITE_SEARCH_METADATA_SQL, SEARCH_METADATA_ID, sourceFingerprint, documents.length],
+  ]);
   return documents.length;
 }
 
@@ -669,44 +890,46 @@ export async function ensureSearchIndexFresh(database: PrismaClient): Promise<nu
   await ensureSearchIndex(database);
 
   const sourceFingerprint = await searchSourceFingerprint(database);
-  const [metadata, documentCount] = await Promise.all([
-    currentSearchIndexMetadata(database),
-    searchDocumentCount(database),
+  const [metadataRows, countRows] = await Promise.all([
+    database.$queryRawUnsafe<SearchIndexMetadataRow[]>(SEARCH_METADATA_SQL, SEARCH_METADATA_ID),
+    database.$queryRawUnsafe<SearchIndexCountRow[]>(SEARCH_DOCUMENT_COUNT_SQL),
   ]);
+  const documentCount = toNumber(countRows[0]!.documentCount);
 
-  if (
-    metadata &&
-    metadata.sourceFingerprint === sourceFingerprint &&
-    toNumber(metadata.documentCount) === documentCount
-  ) {
+  if (isSearchIndexFresh(metadataRows[0], documentCount, sourceFingerprint)) {
     return documentCount;
   }
 
   return rebuildSearchIndex(database);
 }
 
-export async function searchSpoonjoy(database: PrismaClient, options: SearchOptions = {}): Promise<SearchResult[]> {
+interface SearchPlan {
+  statement: D1Query;
+}
+
+// Validates the options and builds the search statement, or returns null when the
+// search cannot match anything (no entity types, or a query with no searchable words).
+function planSearch(options: SearchOptions): SearchPlan | null {
   const scope = options.scope ?? "all";
   const query = options.query?.trim() ?? "";
   const limit = normalizeSearchLimit(options.limit);
   const entityTypes = entityTypesForSearch(scope, options.viewerId);
 
   if (entityTypes.length === 0) {
-    return [];
+    return null;
   }
 
   const terms = toSearchTerms(query);
   if (query && terms.length === 0) {
-    return [];
+    return null;
   }
-
-  await ensureSearchIndexFresh(database);
 
   const where = buildWhereClause(entityTypes, options.ownerId, options.viewerId);
 
   if (terms.length === 1) {
-    const rows = await database.$queryRawUnsafe<SearchRow[]>(
-      `SELECT
+    return {
+      statement: [
+        `SELECT
         entityType,
         entityId,
         ownerId,
@@ -723,12 +946,11 @@ export async function searchSpoonjoy(database: PrismaClient, options: SearchOpti
       WHERE "SearchDocument" MATCH ? AND ${where.sql}
       ORDER BY rank ASC, title COLLATE NOCASE ASC
       LIMIT ?`,
-      terms[0],
-      ...where.values,
-      limit
-    );
-
-    return rows.map(parseRow);
+        terms[0],
+        ...where.values,
+        limit,
+      ],
+    };
   }
 
   if (terms.length > 1) {
@@ -738,8 +960,9 @@ export async function searchSpoonjoy(database: PrismaClient, options: SearchOpti
     const matchedTermCount = terms
       .map(() => `(rowid IN (SELECT rowid FROM "SearchDocument" WHERE "SearchDocument" MATCH ?))`)
       .join(" + ");
-    const rows = await database.$queryRawUnsafe<SearchRow[]>(
-      `SELECT
+    return {
+      statement: [
+        `SELECT
         entityType,
         entityId,
         ownerId,
@@ -757,17 +980,17 @@ export async function searchSpoonjoy(database: PrismaClient, options: SearchOpti
       WHERE "SearchDocument" MATCH ? AND ${where.sql}
       ORDER BY matchedTermCount DESC, rank ASC, title COLLATE NOCASE ASC
       LIMIT ?`,
-      ...terms,
-      terms.map((term) => `(${term})`).join(" OR "),
-      ...where.values,
-      limit
-    );
-
-    return rows.map(parseRow);
+        ...terms,
+        terms.map((term) => `(${term})`).join(" OR "),
+        ...where.values,
+        limit,
+      ],
+    };
   }
 
-  const rows = await database.$queryRawUnsafe<SearchRow[]>(
-    `SELECT
+  return {
+    statement: [
+      `SELECT
       entityType,
       entityId,
       ownerId,
@@ -784,9 +1007,53 @@ export async function searchSpoonjoy(database: PrismaClient, options: SearchOpti
     WHERE ${where.sql}
     ORDER BY sortAt DESC, title COLLATE NOCASE ASC
     LIMIT ?`,
-    ...where.values,
-    limit
-  );
+      ...where.values,
+      limit,
+    ],
+  };
+}
 
+export async function searchSpoonjoy(database: PrismaClient, options: SearchOptions = {}): Promise<SearchResult[]> {
+  const plan = planSearch(options);
+  if (!plan) {
+    return [];
+  }
+
+  await ensureSearchIndexFresh(database);
+
+  const [sql, ...values] = plan.statement;
+  const rows = await database.$queryRawUnsafe<SearchRow[]>(sql, ...values);
   return rows.map(parseRow);
+}
+
+/**
+ * `searchSpoonjoy` on a D1 binding. The freshness check and the search itself go out as
+ * one batch; only when the index is stale does it rebuild (one batch of reads, one batch
+ * that replaces the index) and search again.
+ */
+export async function searchSpoonjoyFromD1(db: D1ReadDatabase, options: SearchOptions = {}): Promise<SearchResult[]> {
+  const plan = planSearch(options);
+  if (!plan) {
+    return [];
+  }
+
+  const [, , fingerprintRows, coverRows, metadataRows, countRows, resultRows] = await d1ReadBatch(db, [
+    [SEARCH_SCHEMA_SQL],
+    [SEARCH_METADATA_SCHEMA_SQL],
+    [SEARCH_SOURCE_FINGERPRINT_SQL],
+    [RECIPE_COVER_FINGERPRINT_SQL],
+    [SEARCH_METADATA_SQL, SEARCH_METADATA_ID],
+    [SEARCH_DOCUMENT_COUNT_SQL],
+    plan.statement,
+  ]);
+  const sourceFingerprint = await fingerprintFromD1Rows(fingerprintRows!, coverRows!);
+  const documentCount = d1Count(countRows![0]?.documentCount, "documentCount");
+
+  if (isSearchIndexFresh(metadataRows![0] as unknown as SearchIndexMetadataRow | undefined, documentCount, sourceFingerprint)) {
+    return (resultRows as unknown as SearchRow[]).map(parseRow);
+  }
+
+  await rebuildSearchIndexFromD1(db, sourceFingerprint);
+  const [rows] = await d1ReadBatch(db, [plan.statement]);
+  return (rows as unknown as SearchRow[]).map(parseRow);
 }

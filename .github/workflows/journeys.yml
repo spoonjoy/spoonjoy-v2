@@ -133,7 +133,8 @@ jobs:
       # test/scripts/summarize-worker-tail.test.ts. Per invocation it keeps the outcome, the
       # path without its query, method, status, CPU and wall time and redacted exception
       # messages, for non-ok invocations, the first 20 with exceptions and the 25 slowest,
-      # plus p50/p95/max wall and CPU time per path pattern. No header, cookie, body or log line
+      # plus p50/p95/max wall and CPU time per path pattern, and the routes whose p95 CPU time is
+      # over the 10 ms per-request budget (printed as warnings). No header, cookie, body or log line
       # is copied. If the tail had already exited when the suite finished, or recorded nothing,
       # the summary says `complete: false` and the log warns: that is no evidence, not a clean
       # run. The raw stream is then deleted.
@@ -163,6 +164,12 @@ jobs:
             echo "::warning::The QA Worker tail is incomplete (the tail exited before the suite finished, or recorded no events). Treat worker-tail-summary.json as no evidence, not as a run without Worker-side failures."
           fi
           jq '{ complete, tailAliveAtStop, totalInvocations, outcomes, nonOk: (.nonOkInvocations | length), slowestPaths: (.byPath | .[0:5]) }' \
+            test-results/worker-tail-summary.json || true
+          # One warning per route whose p95 CPU time is over the per-request budget (the Workers
+          # Free plan's 10 ms CPU limit). Non-fatal for now. A path is reduced to URL-safe
+          # characters before it reaches a workflow command.
+          jq -r '.budget.cpuTimeP95Ms as $budget | .budget.overBudget[]
+            | "::warning::CPU budget: \(.path | gsub("[^A-Za-z0-9/._:~-]"; "?")) has p95 CPU \(.cpuTime.p95) ms (max \(.cpuTime.max) ms over \(.count) requests), over the \($budget) ms budget."' \
             test-results/worker-tail-summary.json || true
 
       # The report and traces can contain this run's persona and scratch-user passwords, so

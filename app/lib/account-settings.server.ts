@@ -1,10 +1,12 @@
 import type { AppLoadContext } from "react-router";
 import { data, redirect } from "react-router";
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
+import { requestD1 } from "~/lib/d1-read.server";
+import { readAccountSettingsFromD1, readAccountSettingsWithPrisma } from "~/lib/account-settings-reads.server";
 import { createUserSessionCookie, requireUserId } from "~/lib/session.server";
 import { unlinkOAuthAccount } from "~/lib/oauth-user.server";
 import { hashPassword, verifyPassword } from "~/lib/auth.server";
-import { listUserPasskeys, removeUserPasskey, renameUserPasskey } from "~/lib/webauthn-route.server";
+import { removeUserPasskey, renameUserPasskey } from "~/lib/webauthn-route.server";
 import {
   deleteStoredImageWithCapture,
   hasUploadedImageFile,
@@ -149,104 +151,33 @@ export async function loadAccountSettings({
   const url = new URL(request.url);
   const oauthError = url.searchParams.get("oauthError") ?? undefined;
 
-  const database = await getRequestDb(context);
-  await promoteLegacyOAuthIssuerForUser(
-    database,
-    userId,
-    resolveIssuerOrigin(request.url, getCloudflareEnv(context)?.SPOONJOY_BASE_URL),
-  );
-
-  const user = await database.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      email: true,
-      username: true,
-      hashedPassword: true,
-      photoUrl: true,
-      OAuth: {
-        select: {
-          provider: true,
-          providerUsername: true,
-        },
-      },
-    },
-  });
+  // On the Worker the page's reads go to D1 as one batch; Prisma is the fallback where
+  // there is no binding, and for a user whose legacy OAuth rows must be promoted first.
+  const d1 = requestD1(context);
+  const reads = (d1 ? await readAccountSettingsFromD1(d1, userId) : null) ??
+    await readAccountSettingsWithPrisma(
+      await getRequestDb(context),
+      userId,
+      resolveIssuerOrigin(request.url, getCloudflareEnv(context)?.SPOONJOY_BASE_URL),
+    );
+  const { user, passkeys, apiCredentials, activeRefreshTokens, oauthClients } = reads;
 
   /* istanbul ignore next -- @preserve user should exist if session is valid */
   if (!user) {
     throw new Response("User not found", { status: 404 });
   }
 
-  const passkeys = await listUserPasskeys(database, userId);
-  const pushCount = await database.pushSubscription.count({ where: { userId } });
-  const prefRow = await database.notificationPreference.findUnique({
-    where: { userId },
-  });
-  const preferences: NotificationPreferenceFlags = prefRow
-    ? {
-        notifySpoonOnMyRecipe: prefRow.notifySpoonOnMyRecipe,
-        notifyForkOfMyRecipe: prefRow.notifyForkOfMyRecipe,
-        notifyCookbookSaveOfMine: prefRow.notifyCookbookSaveOfMine,
-        notifyFellowChefOriginCook: prefRow.notifyFellowChefOriginCook,
-      }
-    : DEFAULT_NOTIFICATION_PREFERENCES;
-  const apiCredentials = await database.apiCredential.findMany({
-    where: {
-      userId,
-      revokedAt: null,
-      oauthClientId: null,
-    },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    select: {
-      id: true,
-      name: true,
-      tokenPrefix: true,
-      scopes: true,
-      createdAt: true,
-      lastUsedAt: true,
-      expiresAt: true,
-    },
-  });
-  const activeRefreshTokens = await database.oAuthRefreshToken.findMany({
-    where: { userId, revokedAt: null },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    select: {
-      clientId: true,
-      id: true,
-      issuer: true,
-      resource: true,
-      scope: true,
-      createdAt: true,
-      connectionKey: true,
-    },
-  });
-  const oauthClientIds = [...new Set(activeRefreshTokens.map((token) => token.clientId))];
-  const oauthClients = oauthClientIds.length
-    ? await database.oAuthClient.findMany({
-        where: { id: { in: oauthClientIds } },
-        select: { id: true, clientName: true },
-      })
-    : [];
+  const preferences: NotificationPreferenceFlags = reads.preferences ?? DEFAULT_NOTIFICATION_PREFERENCES;
   const clientNames = new Map(
     oauthClients.map((client) => [
       client.id,
       client.clientName === null ? null : safeOAuthClientDisplayName(client.clientName),
     ]),
   );
-  const accessCredentialCounts = await database.apiCredential.groupBy({
-    by: ["oauthClientId", "oauthIssuer", "oauthResource", "oauthConnectionKey"],
-    where: {
-      userId,
-      revokedAt: null,
-      oauthClientId: { in: oauthClientIds.length ? oauthClientIds : ["__none__"] },
-    },
-    _count: { _all: true },
-  });
   const accessCounts = new Map(
-    accessCredentialCounts.map((row) => [
+    reads.accessCredentialCounts.map((row) => [
       `${row.oauthClientId!}\u0000${row.oauthIssuer ?? ""}\u0000${row.oauthResource ?? ""}\u0000${row.oauthConnectionKey ?? ""}`,
-      row._count._all,
+      row.count,
     ]),
   );
   const oauthConnectionGroups = new Map<string, {
@@ -282,7 +213,7 @@ export async function loadAccountSettings({
       id: user.id,
       email: user.email,
       username: user.username,
-      hasPassword: user.hashedPassword !== null,
+      hasPassword: user.hasPassword,
       photoUrl: user.photoUrl,
       oauthAccounts: user.OAuth,
       passkeys: passkeys.map((passkey) => ({
@@ -333,7 +264,7 @@ export async function loadAccountSettings({
       }),
     },
     notifications: {
-      pushSubscribed: pushCount > 0,
+      pushSubscribed: reads.pushSubscriptionCount > 0,
       preferences,
     },
     oauthError,

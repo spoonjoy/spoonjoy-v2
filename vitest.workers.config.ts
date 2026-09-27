@@ -1,5 +1,16 @@
 import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
+import { BaseSequencer, type TestSpecification } from "vitest/node";
+
+// With --no-isolate every file shares one D1 database, and the CookSession bootstrap test must
+// run before saved-recipe-cutover-d1.test.ts applies the full repository schema. Vitest's
+// default order puts previously slower files first once it has a results cache, which can
+// flip that; run the files in path order instead, as a cold CI run does.
+class PathOrderSequencer extends BaseSequencer {
+  override async sort(files: TestSpecification[]): Promise<TestSpecification[]> {
+    return [...files].sort((left, right) => left.moduleId.localeCompare(right.moduleId));
+  }
+}
 
 const appDirectory = new URL("./app", import.meta.url).pathname;
 const componentsDirectory = new URL("./app/components", import.meta.url).pathname;
@@ -26,6 +37,7 @@ export default defineConfig({
     setupFiles: ["./vitest.workers.setup.ts"],
     fileParallelism: false,
     maxWorkers: 1,
+    sequence: { sequencer: PathOrderSequencer },
     coverage: {
       provider: "istanbul",
       reporter: ["text", "json", "html"],

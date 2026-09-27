@@ -84,6 +84,7 @@ describe("summarize-worker-tail.jq", () => {
     const { summary, raw } = summarize([hostileEvent(), hostileEvent({ outcome: "ok" })]);
 
     expect(Object.keys(summary).sort()).toEqual([
+      "budget",
       "byPath",
       "complete",
       "firstEventTimestamp",
@@ -100,6 +101,8 @@ describe("summarize-worker-tail.jq", () => {
       for (const exception of invocation.exceptions) expect(Object.keys(exception).sort()).toEqual(["message", "name"]);
     }
     for (const entry of summary.byPath) expect(Object.keys(entry).sort()).toEqual(["count", "cpuTime", "path", "wallTime"]);
+    expect(Object.keys(summary.budget).sort()).toEqual(["cpuTimeP95Ms", "overBudget"]);
+    for (const entry of summary.budget.overBudget) expect(Object.keys(entry).sort()).toEqual(["count", "cpuTime", "path"]);
 
     for (const [name, canary] of Object.entries(CANARIES)) {
       expect(raw, `${name} canary leaked`).not.toContain(canary);
@@ -166,6 +169,7 @@ describe("summarize-worker-tail.jq", () => {
       firstExceptions: [],
       slowest: [],
       byPath: [],
+      budget: { cpuTimeP95Ms: 10, overBudget: [] },
     });
   });
 
@@ -224,6 +228,35 @@ describe("summarize-worker-tail.jq", () => {
     });
   });
 
+  it("lists the routes whose p95 CPU time is over the 10 ms budget, worst first", () => {
+    const load = (path: string, cpuTime: number | undefined) => ({
+      outcome: cpuTime !== undefined && cpuTime > 10 ? "exceededCpu" : "ok",
+      eventTimestamp: 1,
+      wallTime: 100,
+      ...(cpuTime === undefined ? {} : { cpuTime }),
+      event: { request: { url: `https://qa.example${path}`, method: "GET" }, response: { status: 200 } },
+    });
+    const events = [
+      // p95 is the nearest-rank value: 19 requests at 4 ms and one at 30 ms stay in budget.
+      ...Array.from({ length: 19 }, () => load("/_root.data", 4)),
+      load("/_root.data", 30),
+      ...[8, 9, 12, 40].map((cpu) => load("/search.data", cpu)),
+      ...[24, 43, 87].map((cpu, index) => load(`/recipes/cmg${index}abcdefghijklmnopqrstu.data`, cpu)),
+      load("/account/settings.data", 10),
+      load("/health", undefined),
+    ];
+
+    const { summary } = summarize(events);
+
+    expect(summary.budget).toEqual({
+      cpuTimeP95Ms: 10,
+      overBudget: [
+        { path: "/recipes/:id.data", count: 3, cpuTime: { p50: 43, p95: 43, max: 87 } },
+        { path: "/search.data", count: 4, cpuTime: { p50: 9, p95: 12, max: 40 } },
+      ],
+    });
+  });
+
   it("tolerates events without a request", () => {
     const { summary } = summarize([{ outcome: "exceededCpu", exceptions: [] }]);
 
@@ -251,6 +284,30 @@ describe("Journeys workflow tail wiring", () => {
     expect(summarise.run).toContain("::warning::");
     expect(summarise.run).not.toMatch(/headers|\.logs|\bbody\b|\.cf\b|diagnosticsChannelEvents/);
     expect(summarise.run).toContain("rm -rf .worker-tail");
+  });
+
+  it("warns, without failing the run, for each route over the CPU budget, with the path reduced to safe characters", () => {
+    const summarise = step("Stop QA Worker tail and summarise it") as { run?: string; "continue-on-error"?: boolean };
+    const filter = /jq -r '(\.budget[\s\S]*?)' \\\n/.exec(summarise.run ?? "")?.[1];
+    expect(filter).toBeDefined();
+    expect(summarise["continue-on-error"]).toBe(true);
+
+    const summary = {
+      budget: {
+        cpuTimeP95Ms: 10,
+        overBudget: [
+          { path: "/recipes/:id.data", count: 3, cpuTime: { p50: 43, p95: 43, max: 87 } },
+          { path: "/x y\n::error::injected%0A", count: 1, cpuTime: { p50: 12, p95: 12, max: 12 } },
+        ],
+      },
+    };
+    const output = execFileSync("jq", ["-r", filter!], { input: JSON.stringify(summary), encoding: "utf8" });
+    expect(output.trimEnd().split("\n")).toEqual([
+      "::warning::CPU budget: /recipes/:id.data has p95 CPU 43 ms (max 87 ms over 3 requests), over the 10 ms budget.",
+      "::warning::CPU budget: /x?y?::error::injected?0A has p95 CPU 12 ms (max 12 ms over 1 requests), over the 10 ms budget.",
+    ]);
+    expect(execFileSync("jq", ["-r", filter!], { input: JSON.stringify({ budget: { cpuTimeP95Ms: 10, overBudget: [] } }), encoding: "utf8" }))
+      .toBe("");
   });
 
   it("keeps the raw tail stream out of every upload, behind the unchanged gates", () => {
