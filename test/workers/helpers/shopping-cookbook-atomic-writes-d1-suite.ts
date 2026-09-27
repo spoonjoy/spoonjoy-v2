@@ -470,4 +470,53 @@ describe("atomic shopping-list and cookbook writes on Wrangler D1", () => {
       });
     });
   });
+
+  describe("MCP add_recipe_to_cookbook", () => {
+    async function memberships() {
+      return (await rows<{ count: number }>(
+        `SELECT COUNT(*) AS "count" FROM "RecipeInCookbook" WHERE "cookbookId" = ? AND "recipeId" = 'sca-pie'`,
+        BOOK,
+      ))[0]!.count;
+    }
+
+    async function bookTouched() {
+      const [book] = await rows<{ updatedAt: string }>(`SELECT "updatedAt" FROM "Cookbook" WHERE "id" = ?`, BOOK);
+      return book!.updatedAt !== OLD;
+    }
+
+    afterEach(async () => {
+      await run(`DELETE FROM "RecipeInCookbook" WHERE "cookbookId" = ? AND "recipeId" = 'sca-pie'`, BOOK);
+      await run(`UPDATE "Cookbook" SET "updatedAt" = ? WHERE "id" = ?`, OLD, BOOK);
+    });
+
+    it("adds the membership and touches the cookbook together, or neither", async () => {
+      await failOn("UPDATE", "Cookbook", `OLD."id" = '${BOOK}'`);
+
+      expect(String(await rejection(callSpoonjoyApiOperation("add_recipe_to_cookbook", { cookbookId: BOOK, recipeId: "sca-pie" }, mcp()))))
+        .toContain(FAILURE);
+      expect(await memberships()).toBe(0);
+
+      await run(`DROP TRIGGER "${TRIGGER}"`);
+      await expect(callSpoonjoyApiOperation("add_recipe_to_cookbook", { cookbookId: BOOK, recipeId: "sca-pie" }, mcp()))
+        .resolves.toMatchObject({ added: true });
+      expect(await memberships()).toBe(1);
+      expect(await bookTouched()).toBe(true);
+    });
+
+    it("answers 'already in the cookbook' when another add lands between the check and the write", async () => {
+      const added = await callSpoonjoyApiOperation(
+        "add_recipe_to_cookbook",
+        { cookbookId: BOOK, recipeId: "sca-pie" },
+        mcp(interleaved(() => run(
+          `INSERT INTO "RecipeInCookbook" ("id", "cookbookId", "recipeId", "addedById", "createdAt", "updatedAt")
+           VALUES ('sca-pie-membership', ?, 'sca-pie', ?, ?, ?)`,
+          BOOK, CHEF, OLD, OLD,
+        ))),
+      );
+
+      expect(added).toMatchObject({ added: false, cookbook: { id: BOOK, recipeCount: 1 } });
+      expect(await memberships()).toBe(1);
+      expect(await bookTouched()).toBe(true);
+    });
+  });
 });

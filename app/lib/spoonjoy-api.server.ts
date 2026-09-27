@@ -85,6 +85,7 @@ import {
 } from "~/lib/notification-triggers.server";
 import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
+import { addRecipeToCookbook, asCompatibleCookbookD1Database } from "~/lib/cookbook-membership-compat.server";
 import {
   addToShoppingListItem,
   asCompatibleD1Database,
@@ -2994,9 +2995,6 @@ const addRecipeToCookbookTool: SpoonjoyApiOperation = {
     const email = requireOwnerEmail(args, context);
     const recipeId = requiredString(args, "recipeId");
 
-    // Cloudflare D1 does not support Prisma's interactive
-    // `$transaction(async (tx) => ...)` form, so keep this path on top-level
-    // sequential writes like recipe creation and forking.
     const owner = await getOrCreateOwner(context.db, email);
     const cookbook = await findOwnerCookbook(context.db, owner.id, args);
     if (!cookbook) throw new Error("Cookbook not found");
@@ -3007,25 +3005,16 @@ const addRecipeToCookbookTool: SpoonjoyApiOperation = {
     });
     if (!recipe) throw new Error("Recipe not found");
 
-    const existing = await context.db.recipeInCookbook.findUnique({
-      where: {
-        cookbookId_recipeId: {
-          cookbookId: cookbook.id,
-          recipeId,
-        },
-      },
+    // The same membership write as the web and REST paths: one D1 batch with the cookbook
+    // touch, and a concurrent add of the same recipe answers "already in the cookbook"
+    // instead of surfacing the unique-constraint error.
+    const added = await addRecipeToCookbook({
+      database: context.db,
+      nativeDatabase: asCompatibleCookbookD1Database(context.env?.DB),
+      cookbookId: cookbook.id,
+      recipeId,
+      userId: owner.id,
     });
-
-    const added = !existing;
-    if (added) {
-      await context.db.recipeInCookbook.create({
-        data: {
-          cookbookId: cookbook.id,
-          recipeId,
-          addedById: owner.id,
-        },
-      });
-    }
 
     const result = {
       added,

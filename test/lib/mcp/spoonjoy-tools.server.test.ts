@@ -6,6 +6,7 @@ import { buildApiV1OpenApiDocument } from "~/lib/api-v1-openapi.server";
 import { callSpoonjoyMcpTool, listSpoonjoyMcpTools, type SpoonjoyMcpContext } from "~/lib/mcp/spoonjoy-tools.server";
 import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "~/lib/recipe-title-uniqueness.server";
 import { cleanupDatabase } from "../../helpers/cleanup";
+import { sqliteD1 } from "../../helpers/sqlite-d1";
 
 function parseJson(text: string) {
   return JSON.parse(text) as Record<string, any>;
@@ -2538,10 +2539,18 @@ describe("spoonjoy MCP tools", () => {
       description: "Soup for D1 runtime parity",
       steps: [{ description: "Simmer", ingredients: [{ name: "Carrot", quantity: 2, unit: "Each" }] }],
     }, guardedContext));
-    const added = parseJson(await callSpoonjoyMcpTool("add_recipe_to_cookbook", {
-      cookbookId: cookbook.cookbook.id,
-      recipeId: recipe.recipe.id,
-    }, guardedContext));
+    // On the Worker the tool always has the D1 binding, and its membership write goes there
+    // as one batch; without one it would use the local Prisma transaction.
+    const d1 = sqliteD1();
+    let added: Record<string, any>;
+    try {
+      added = parseJson(await callSpoonjoyMcpTool("add_recipe_to_cookbook", {
+        cookbookId: cookbook.cookbook.id,
+        recipeId: recipe.recipe.id,
+      }, { ...guardedContext, env: { DB: d1.binding } }));
+    } finally {
+      d1.close();
+    }
     const fromRecipe = parseJson(await callSpoonjoyMcpTool("add_recipe_to_shopping_list", {
       recipeId: recipe.recipe.id,
     }, guardedContext));
