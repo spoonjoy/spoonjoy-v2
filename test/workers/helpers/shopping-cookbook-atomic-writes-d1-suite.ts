@@ -8,6 +8,7 @@ import { getDb } from "../../../app/lib/db.server";
 import { createUserSessionCookie } from "../../../app/lib/session.server";
 import { handleShoppingListAction } from "../../../app/lib/shopping-list.server";
 import { callSpoonjoyApiOperation } from "../../../app/lib/spoonjoy-api.server";
+import { scheduleSpoonCoverStylization } from "../../../app/lib/spoon-cover-stylization.server";
 import { expectConsoleError } from "../../warning-policy";
 import { applyRepositoryMigrations } from "./repository-migrations";
 
@@ -25,6 +26,9 @@ const OLD = "2026-01-01T00:00:00.000Z";
 const APPLES = "sca-apples";
 const FLOUR = "sca-flour";
 const EACH = "sca-each";
+const BOOK = "sca-book";
+const STYLED = "sca-styled";
+const COVER = "sca-cover";
 const FAILURE = "shopping_cookbook_injected_failure";
 const TRIGGER = "ShoppingCookbookAtomic_injected_failure";
 
@@ -117,6 +121,12 @@ function interleaved(before: () => Promise<unknown>, statement?: RegExp): D1Data
   } as never;
 }
 
+async function rejection(promise: Promise<unknown>): Promise<unknown> {
+  return promise.then(() => {
+    throw new Error("expected the write to fail");
+  }, (error: unknown) => error);
+}
+
 function routeContext(DB: D1Database = database()) {
   const routeEnv = new Proxy(env as object, {
     get: (target, property, receiver) => (property === "DB" ? DB : Reflect.get(target, property, receiver)),
@@ -206,6 +216,7 @@ describe("atomic shopping-list and cookbook writes on Wrangler D1", () => {
     for (const [id, name] of [[APPLES, "sca apples"], [FLOUR, "sca flour"]]) {
       await run(`INSERT INTO "IngredientRef" ("id", "name", "updatedAt") VALUES (?, ?, ?)`, id, name, OLD);
     }
+    await run(`INSERT INTO "Cookbook" ("id", "title", "authorId", "createdAt", "updatedAt") VALUES (?, 'Sca Book', ?, ?, ?)`, BOOK, CHEF, OLD, OLD);
     await seedRecipe("sca-pie", [[APPLES, 2]]);
     await seedRecipe("sca-crumble", [[APPLES, 3], [FLOUR, 1]]);
   });
@@ -377,6 +388,86 @@ describe("atomic shopping-list and cookbook writes on Wrangler D1", () => {
         { ingredientRefId: APPLES, quantity: 1, deleted: 1, checked: 1 },
         { ingredientRefId: FLOUR, quantity: 1, deleted: 0, checked: 0 },
       ]);
+    });
+  });
+
+  describe("cover stylization status", () => {
+    async function seedCover() {
+      await seedRecipe(STYLED, []);
+      await run(
+        `INSERT INTO "RecipeInCookbook" ("id", "cookbookId", "recipeId", "addedById", "createdAt", "updatedAt")
+         VALUES ('sca-styled-membership', ?, ?, ?, ?, ?)`,
+        BOOK, STYLED, CHEF, OLD, OLD,
+      );
+      await run(
+        `INSERT INTO "RecipeCover" ("id", "recipeId", "imageUrl", "sourceType", "createdAt")
+         VALUES (?, ?, 'https://example.com/raw.jpg', 'spoon', ?)`,
+        COVER, STYLED, OLD,
+      );
+    }
+
+    async function coverState() {
+      const [cover] = await rows(
+        `SELECT "status", "generationStatus", "failureReason", "archivedAt" IS NOT NULL AS "archived" FROM "RecipeCover" WHERE "id" = ?`,
+        COVER,
+      );
+      const [recipe] = await rows<{ updatedAt: string }>(`SELECT "updatedAt" FROM "Recipe" WHERE "id" = ?`, STYLED);
+      const [book] = await rows<{ updatedAt: string }>(`SELECT "updatedAt" FROM "Cookbook" WHERE "id" = ?`, BOOK);
+      return { ...cover, recipeTouched: recipe!.updatedAt !== OLD, cookbookTouched: book!.updatedAt !== OLD };
+    }
+
+    const stylize = (DB: D1Database, rawPhotoUrl: string) => scheduleSpoonCoverStylization({
+      db: prisma,
+      userId: CHEF,
+      recipeId: STYLED,
+      coverId: COVER,
+      rawPhotoUrl,
+      recipeTitle: "Styled",
+      env: { DB } as never,
+    });
+
+    afterEach(async () => {
+      await run(`DELETE FROM "RecipeCover" WHERE "id" = ?`, COVER);
+      await run(`DELETE FROM "RecipeInCookbook" WHERE "recipeId" = ?`, STYLED);
+      await run(`DELETE FROM "Ingredient" WHERE "recipeId" = ?`, STYLED);
+      await run(`DELETE FROM "RecipeStep" WHERE "recipeId" = ?`, STYLED);
+      await run(`DELETE FROM "Recipe" WHERE "id" = ?`, STYLED);
+      await run(`UPDATE "Cookbook" SET "updatedAt" = ? WHERE "id" = ?`, OLD, BOOK);
+    });
+
+    it("updates the cover, its recipe and its cookbook together, or none of them", async () => {
+      await seedCover();
+      await failOn("UPDATE", "Cookbook", `OLD."id" = '${BOOK}'`);
+
+      expect(String(await rejection(stylize(database(), "https://example.com/raw.jpg")))).toContain(FAILURE);
+      expect(await coverState()).toEqual({
+        status: "ready", generationStatus: "none", failureReason: null, archived: 0, recipeTouched: false, cookbookTouched: false,
+      });
+
+      await run(`DROP TRIGGER "${TRIGGER}"`);
+      // No image provider is configured, so the processing cover is then marked failed.
+      await stylize(database(), "https://example.com/raw.jpg");
+      expect(await coverState()).toEqual({
+        status: "ready",
+        generationStatus: "failed",
+        failureReason: "missing_image_provider_config",
+        archived: 0,
+        recipeTouched: true,
+        cookbookTouched: true,
+      });
+    });
+
+    it("leaves a cover archived after the failure check alone, touching nothing", async () => {
+      await seedCover();
+
+      await stylize(
+        interleaved(() => run(`UPDATE "RecipeCover" SET "status" = 'archived', "archivedAt" = ? WHERE "id" = ?`, OLD, COVER)),
+        " ",
+      );
+
+      expect(await coverState()).toEqual({
+        status: "archived", generationStatus: "none", failureReason: null, archived: 1, recipeTouched: false, cookbookTouched: false,
+      });
     });
   });
 });
