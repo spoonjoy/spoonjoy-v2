@@ -147,14 +147,29 @@ export function generatePersonaPasswords(random = randomBytes) {
   };
 }
 
-// Number of per-run scratch users seeded alongside the three kitchen personas. Journeys that
+// Number of per-run scratch indices seeded alongside the three kitchen personas. Journeys that
 // change data use one of these (via support/personas.ts's scratch(n)) instead of signing up a
 // throwaway user through /signup, so they stop spending QA's shared auth rate limit
 // (AUTH_IP_RATE_LIMITER, 60/minute in QA — see docs/deployment.md). Each scratch index is owned
-// by exactly one journey file (see AGENTS.md's Validation section for the assignment table) —
+// by exactly one journey area (see AGENTS.md's Validation section for the assignment table) —
 // 6 is exactly today's assignment table; see personas.setup.ts's budget comment for the
 // accounting before raising this further.
 export const SCRATCH_USER_COUNT = 6;
+
+// Every scratch index is seeded as two accounts: the base account, and a desktop twin.
+// The iphone-webkit and desktop-chrome journey projects run at the same time, and some data is
+// one per user (a user has exactly one shopping list), so a journey that must not share state
+// across devices signs in as the base account on iPhone and as the desktop twin on desktop
+// Chrome (support/personas.ts's scratchStorageStatePathForProject). Journeys that don't need
+// that isolation keep using the base account on both devices. The twin's username and email end
+// in this suffix after the index (for example codex_e2e_s_<token>_3d).
+export const SCRATCH_VARIANTS = Object.freeze([
+  { variant: "base", suffix: "" },
+  { variant: "desktop", suffix: "d" },
+]);
+
+// Total scratch accounts seeded per run: every index, once per variant.
+export const SCRATCH_ACCOUNT_COUNT = SCRATCH_USER_COUNT * SCRATCH_VARIANTS.length;
 
 // Token shape follows e2e/support/disposable-auth.ts's createDisposableE2EUser() and this
 // script's own sibling scripts/seed-qa.mjs (duplicated, not imported — this file's top-of-file
@@ -175,29 +190,35 @@ function disposableToken(value) {
 // still catch older scratch users minted before this shortening — see its own comment.
 const SCRATCH_EMAIL_PREFIX = "codex-e2e-s-";
 
-// Generates `count` scratch user identities for this run. Every one shares a single run token
-// (an 8-character random segment, no timestamp — see SCRATCH_EMAIL_PREFIX on why these stay
-// short) baked into both email and username, so a concurrent run, or a leftover run whose
-// cleanup didn't get to run, can never collide with this run's scratch users: no generated id
-// exceeds 40 characters. Scratch users own no data (no recipes, cookbooks, or shopping lists),
-// so there is no persona-style drift to reset here — only identity.
+// Generates this run's scratch accounts: `count` indices, each as a base account and a desktop
+// twin (SCRATCH_VARIANTS), base accounts first, each group in index order. Every account records
+// its 1-based index `n` and its `variant`. Every one shares a single run token (an 8-character
+// random segment, no timestamp — see SCRATCH_EMAIL_PREFIX on why these stay short) baked into
+// both email and username, so a concurrent run, or a leftover run whose cleanup didn't get to
+// run, can never collide with this run's scratch users: no generated id exceeds 40 characters
+// (the longest today, a desktop twin, is 24). Scratch users own no data (no recipes, cookbooks,
+// or shopping lists), so there is no persona-style drift to reset here — only identity.
 export function generateScratchUsers(count = SCRATCH_USER_COUNT, { random = randomBytes } = {}) {
   // 4 bytes (32 bits) of randomness is what fits the 40-character id budget above; that's still
   // plenty of entropy for run-to-run uniqueness (this is a collision-avoidance token, not a
   // security secret).
   const runToken = disposableToken(random(4).toString("hex"));
-  return Array.from({ length: count }, (_, index) => {
-    const n = index + 1;
-    const username = `codex_e2e_s_${runToken}_${n}`;
-    return {
-      id: username,
-      username,
-      email: `${SCRATCH_EMAIL_PREFIX}${runToken}-${n}@example.com`,
-    };
-  });
+  return SCRATCH_VARIANTS.flatMap(({ variant, suffix }) =>
+    Array.from({ length: count }, (_, index) => {
+      const n = index + 1;
+      const username = `codex_e2e_s_${runToken}_${n}${suffix}`;
+      return {
+        id: username,
+        username,
+        email: `${SCRATCH_EMAIL_PREFIX}${runToken}-${n}${suffix}@example.com`,
+        n,
+        variant,
+      };
+    }),
+  );
 }
 
-export function generateScratchPasswords(count = SCRATCH_USER_COUNT, random = randomBytes) {
+export function generateScratchPasswords(count = SCRATCH_ACCOUNT_COUNT, random = randomBytes) {
   return Array.from({ length: count }, () => random(24).toString("base64url"));
 }
 
@@ -230,7 +251,7 @@ export function buildScratchUsersSql({ users, passwords, hash = (password) => bc
 // be. Matches by email prefix only, not by PERSONA_IDS or any other id list, so it can never
 // touch the kitchen personas. The pattern here is deliberately broader than SCRATCH_EMAIL_PREFIX:
 // 'codex-e2e-s%' (no trailing hyphen) matches both this generator's current
-// 'codex-e2e-s-...' addresses and the older, longer 'codex-e2e-scratch-...' addresses minted
+// 'codex-e2e-s-...' addresses (base accounts and desktop twins alike) and the older, longer 'codex-e2e-scratch-...' addresses minted
 // before ids were shortened to fit under D1's LIKE pattern-length limit — some of those are
 // still sitting in QA, and --rotate must keep invalidating them too. Still a short literal
 // prefix, nowhere near D1's 50-byte LIKE limit.
@@ -382,16 +403,24 @@ export function parseSeedKitchenArgs(argv) {
   };
 }
 
+// The credentials file lists scratch accounts by index, one array per variant: `scratch` holds
+// the base accounts (scratch[n - 1] is index n) and `scratchDesktop` the desktop twins, in the
+// same order (generateScratchUsers emits each variant in index order). support/personas.ts
+// reads both.
+function scratchCredentials(scratchUsers, scratchPasswords, variant) {
+  return scratchUsers
+    .map((user, index) => ({ user, password: scratchPasswords[index] }))
+    .filter(({ user }) => user.variant === variant)
+    .map(({ user, password }) => ({ username: user.username, email: user.email, password }));
+}
+
 function credentialsPayload(passwords, scratchUsers, scratchPasswords) {
   return {
     chef: { username: KITCHEN.chef.username, email: KITCHEN.chef.email, password: passwords.chef },
     friend: { username: KITCHEN.friend.username, email: KITCHEN.friend.email, password: passwords.friend },
     newbie: { username: KITCHEN.newbie.username, email: KITCHEN.newbie.email, password: passwords.newbie },
-    scratch: scratchUsers.map((user, index) => ({
-      username: user.username,
-      email: user.email,
-      password: scratchPasswords[index],
-    })),
+    scratch: scratchCredentials(scratchUsers, scratchPasswords, "base"),
+    scratchDesktop: scratchCredentials(scratchUsers, scratchPasswords, "desktop"),
   };
 }
 

@@ -5,7 +5,9 @@ import bcrypt from "bcryptjs";
 import { describe, expect, it, vi } from "vitest";
 import {
   KITCHEN,
+  SCRATCH_ACCOUNT_COUNT,
   SCRATCH_USER_COUNT,
+  SCRATCH_VARIANTS,
   buildKitchenResetSql,
   buildScratchInvalidationSql,
   buildScratchUsersSql,
@@ -31,6 +33,8 @@ function migratedDb() {
   return db;
 }
 const fastHash = (p: string) => bcrypt.hashSync(p, 4);
+// One distinct, predictable password per generated scratch account.
+const passwordsFor = (users: unknown[], prefix = "scratch-pw") => users.map((_, index) => `${prefix}-${index + 1}`);
 const passwords = { chef: "chef-pw", friend: "friend-pw", newbie: "newbie-pw" };
 
 describe("seed-qa-kitchen", () => {
@@ -247,9 +251,12 @@ describe("seed-qa-kitchen", () => {
   });
 
   describe("scratch users", () => {
-    it("generates SCRATCH_USER_COUNT users by default, each in the codex-e2e-* / codex_e2e_* disposable namespace, no id over 40 characters", () => {
+    it("generates a base account and a desktop twin for each of SCRATCH_USER_COUNT indices by default, each in the codex-e2e-* / codex_e2e_* disposable namespace, no id over 40 characters", () => {
       const users = generateScratchUsers();
-      expect(users).toHaveLength(SCRATCH_USER_COUNT);
+      expect(SCRATCH_ACCOUNT_COUNT).toBe(SCRATCH_USER_COUNT * 2);
+      expect(users).toHaveLength(SCRATCH_ACCOUNT_COUNT);
+      expect(users.filter((user) => user.variant === "base")).toHaveLength(SCRATCH_USER_COUNT);
+      expect(users.filter((user) => user.variant === "desktop")).toHaveLength(SCRATCH_USER_COUNT);
       for (const user of users) {
         expect(user.email).toMatch(/^codex-e2e-s-[a-z0-9-]+@example\.com$/);
         expect(user.username).toMatch(/^codex_e2e_s_[a-z0-9_]+$/);
@@ -257,12 +264,34 @@ describe("seed-qa-kitchen", () => {
         expect(user.email).toMatch(/^codex-/);
         expect(user.username.startsWith("codex_")).toBe(true);
         expect(user.id.length).toBeLessThanOrEqual(40);
+        expect(user.email.length).toBeLessThanOrEqual(40);
       }
     });
 
-    it("honors a custom count", () => {
+    it("honors a custom count, per variant", () => {
       const users = generateScratchUsers(2);
-      expect(users).toHaveLength(2);
+      expect(users).toHaveLength(2 * SCRATCH_VARIANTS.length);
+      expect(users.map((user) => [user.n, user.variant])).toEqual([
+        [1, "base"],
+        [2, "base"],
+        [1, "desktop"],
+        [2, "desktop"],
+      ]);
+    });
+
+    it("names each desktop twin after its base account plus a 'd' suffix, under the same run token", () => {
+      const users = generateScratchUsers(2);
+      const base = users.filter((user) => user.variant === "base");
+      const desktop = users.filter((user) => user.variant === "desktop");
+      for (const [index, twin] of desktop.entries()) {
+        expect(twin.n).toBe(base[index].n);
+        expect(twin.username).toBe(`${base[index].username}d`);
+        expect(twin.id).toBe(twin.username);
+        expect(twin.email).toBe(base[index].email.replace("@example.com", "d@example.com"));
+      }
+      expect(base[0].username).toMatch(/^codex_e2e_s_[a-z0-9]{8}_1$/);
+      expect(desktop[0].username).toMatch(/^codex_e2e_s_[a-z0-9]{8}_1d$/);
+      expect(desktop[0].email).toMatch(/^codex-e2e-s-[a-z0-9]{8}-1d@example\.com$/);
     });
 
     it("falls back to a 'run' token when the injected random source sanitizes down to nothing", () => {
@@ -270,6 +299,8 @@ describe("seed-qa-kitchen", () => {
       const users = generateScratchUsers(1, { random });
       expect(users[0].username).toMatch(/_run_1$/);
       expect(users[0].email).toMatch(/-run-1@example\.com$/);
+      expect(users[1].username).toMatch(/_run_1d$/);
+      expect(users[1].email).toMatch(/-run-1d@example\.com$/);
     });
 
     it("gives every scratch user in a run a distinct id/username/email", () => {
@@ -288,9 +319,9 @@ describe("seed-qa-kitchen", () => {
       }
     });
 
-    it("generates SCRATCH_USER_COUNT distinct strong passwords by default", () => {
+    it("generates SCRATCH_ACCOUNT_COUNT distinct strong passwords by default, one per base account and desktop twin", () => {
       const passwords = generateScratchPasswords();
-      expect(passwords).toHaveLength(SCRATCH_USER_COUNT);
+      expect(passwords).toHaveLength(SCRATCH_ACCOUNT_COUNT);
       expect(new Set(passwords).size).toBe(passwords.length);
       for (const password of passwords) {
         expect(password).toMatch(/^[A-Za-z0-9_-]{32}$/);
@@ -311,9 +342,10 @@ describe("seed-qa-kitchen", () => {
     it("inserts scratch users on a database created from the real migrations, each with its own bcrypt-hashed password", () => {
       const db = migratedDb();
       const users = generateScratchUsers(2);
-      const passwords = ["scratch-pw-1", "scratch-pw-2"];
+      const passwords = passwordsFor(users);
       db.exec(buildScratchUsersSql({ users, passwords, hash: fastHash }));
 
+      expect(users).toHaveLength(4);
       for (const [index, user] of users.entries()) {
         const row = db.prepare('SELECT username, email, hashedPassword FROM "User" WHERE id = ?').get(user.id) as any;
         expect(row.username).toBe(user.username);
@@ -325,7 +357,7 @@ describe("seed-qa-kitchen", () => {
     it("is idempotent: re-applying the same generated statement never throws", () => {
       const db = migratedDb();
       const users = generateScratchUsers(2);
-      const passwords = ["scratch-pw-1", "scratch-pw-2"];
+      const passwords = passwordsFor(users);
       const sql = buildScratchUsersSql({ users, passwords, hash: fastHash });
       db.exec(sql);
       expect(() => db.exec(sql)).not.toThrow();
@@ -337,7 +369,7 @@ describe("seed-qa-kitchen", () => {
     it("does not collide with the qa-kitchen personas' reset logic: a kitchen reset leaves scratch users untouched", () => {
       const db = migratedDb();
       const users = generateScratchUsers(2);
-      db.exec(buildScratchUsersSql({ users, passwords: ["scratch-pw-1", "scratch-pw-2"], hash: fastHash }));
+      db.exec(buildScratchUsersSql({ users, passwords: passwordsFor(users), hash: fastHash }));
       db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
       expect(db.prepare('SELECT COUNT(*) n FROM "User" WHERE id IN (?, ?)').get(users[0].id, users[1].id)).toEqual({
         n: 2,
@@ -370,11 +402,13 @@ describe("seed-qa-kitchen", () => {
         const db = migratedDb();
         const runA = generateScratchUsers(2);
         const runB = generateScratchUsers(2);
-        db.exec(buildScratchUsersSql({ users: runA, passwords: ["pw-a1", "pw-a2"], hash: fastHash }));
-        db.exec(buildScratchUsersSql({ users: runB, passwords: ["pw-b1", "pw-b2"], hash: fastHash }));
+        db.exec(buildScratchUsersSql({ users: runA, passwords: passwordsFor(runA, "pw-a"), hash: fastHash }));
+        db.exec(buildScratchUsersSql({ users: runB, passwords: passwordsFor(runB, "pw-b"), hash: fastHash }));
 
         db.exec(buildScratchInvalidationSql());
 
+        // Base accounts and desktop twins alike.
+        expect([...runA, ...runB].filter((user) => user.variant === "desktop")).toHaveLength(4);
         for (const user of [...runA, ...runB]) {
           const row = db.prepare('SELECT hashedPassword, salt FROM "User" WHERE id = ?').get(user.id) as any;
           expect(row.hashedPassword).toBeNull();
@@ -412,7 +446,7 @@ describe("seed-qa-kitchen", () => {
         const db = migratedDb();
         db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
         const users = generateScratchUsers(1);
-        db.exec(buildScratchUsersSql({ users, passwords: ["pw-1"], hash: fastHash }));
+        db.exec(buildScratchUsersSql({ users, passwords: passwordsFor(users, "pw"), hash: fastHash }));
 
         db.exec(buildScratchInvalidationSql());
 
@@ -434,7 +468,7 @@ describe("seed-qa-kitchen", () => {
         const db = migratedDb();
         const users = generateScratchUsers(1);
         const password = "scratch-pw-1";
-        db.exec(buildScratchUsersSql({ users, passwords: [password], hash: fastHash }));
+        db.exec(buildScratchUsersSql({ users, passwords: passwordsFor(users), hash: fastHash }));
         const before = db.prepare('SELECT hashedPassword FROM "User" WHERE id = ?').get(users[0].id) as any;
         expect(bcrypt.compareSync(password, before.hashedPassword)).toBe(true);
 
@@ -536,11 +570,23 @@ describe("seed-qa-kitchen", () => {
       expect(credentials.friend).toEqual({ username: "qa_kitchen_friend", email: "qa-kitchen-friend@example.com", password: expect.any(String) });
       expect(credentials.newbie).toEqual({ username: "qa_kitchen_newbie", email: "qa-kitchen-newbie@example.com", password: expect.any(String) });
       expect(credentials.scratch).toHaveLength(SCRATCH_USER_COUNT);
-      for (const entry of credentials.scratch) {
+      expect(credentials.scratchDesktop).toHaveLength(SCRATCH_USER_COUNT);
+      for (const entry of [...credentials.scratch, ...credentials.scratchDesktop]) {
         expect(entry.email).toMatch(/^codex-e2e-s-/);
         expect(entry.username).toMatch(/^codex_e2e_s_/);
         expect(entry.username.length).toBeLessThanOrEqual(40);
         expect(entry.password).toEqual(expect.any(String));
+      }
+      // scratch[n - 1] is index n's base account; scratchDesktop[n - 1] is its desktop twin, with
+      // its own password. Every scratch account in the file was inserted by the wrangler SQL.
+      for (const [index, entry] of credentials.scratch.entries()) {
+        expect(entry.username).toMatch(new RegExp(`_${index + 1}$`));
+        const twin = credentials.scratchDesktop[index];
+        expect(twin.username).toBe(`${entry.username}d`);
+        expect(twin.password).not.toBe(entry.password);
+      }
+      for (const entry of [...credentials.scratch, ...credentials.scratchDesktop]) {
+        expect(writeFile.mock.calls[0][1]).toContain(`'${entry.email}'`);
       }
       expect(writeFile.mock.calls[1][2]).toEqual({ encoding: "utf8", mode: 0o600 });
       // chmod explicitly restricts the credentials file even if it already existed
@@ -600,6 +646,7 @@ describe("seed-qa-kitchen", () => {
 
       const credentials = JSON.parse(writeFile.mock.calls[1][1] as string);
       expect(credentials.scratch).toEqual([]);
+      expect(credentials.scratchDesktop).toEqual([]);
     });
 
     it("runs wrangler and writes no credentials file (and never calls chmod) when --credentials-out is not given", () => {

@@ -118,7 +118,7 @@ jobs:
           done
           while IFS= read -r password; do
             echo "::add-mask::$password"
-          done < <(jq -r '.scratch[]?.password' "$SPOONJOY_QA_CREDENTIALS")
+          done < <(jq -r '(.scratch[]?, .scratchDesktop[]?) | .password' "$SPOONJOY_QA_CREDENTIALS")
 
       - name: Run test suite
         run: |
