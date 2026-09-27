@@ -25,6 +25,7 @@ const coverageInclude = [
   "scripts/e2e-run-cleanup.mjs",
   "scripts/check-journey-rules.mjs",
   "scripts/sanitize-journey-traces.mjs",
+  "scripts/wait-for-qa-turn.mjs",
   "test/warning-policy.ts",
   "e2e/warning-policy.ts",
   "e2e/fixtures.ts",
@@ -72,6 +73,7 @@ export default defineConfig({
       "**/.claude/**",
       "test/workers/cook-session-bootstrap.test.ts",
       "test/workers/saved-recipe-cutover-d1.test.ts",
+      "scripts/bench/**",
     ],
     coverage: {
       provider: "istanbul",

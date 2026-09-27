@@ -2,6 +2,12 @@ import type { Route } from "./+types/_index";
 import { useLoaderData } from "react-router";
 import { ArrowRight, BookOpen, ChefHat, Plus, Search as SearchIcon, Settings, Share2 } from "lucide-react";
 import { getRequestDb } from "~/lib/route-platform.server";
+import { requestD1 } from "~/lib/d1-read.server";
+import {
+  readKitchenHomeFromD1,
+  readKitchenHomeWithPrisma,
+  type KitchenUserWhere,
+} from "~/lib/kitchen-home.server";
 import { getUserId } from "~/lib/session.server";
 import { Button } from "~/components/ui/button";
 import { Link } from "~/components/ui/link";
@@ -32,7 +38,6 @@ const LANDING_FOOD_PHOTOS = [
 ];
 
 type KitchenTab = "recipes" | "cookbooks";
-type KitchenUserWhere = { id: string } | { username: string };
 const HOMEPAGE_TITLE = "Spoonjoy — The Recipe App";
 const HOMEPAGE_DESCRIPTION = "The recipe app for the meals you actually cook. Collect recipes, shape them into cookbooks, and keep a personal kitchen.";
 const HOMEPAGE_URL = "https://spoonjoy.app/";
@@ -90,34 +95,19 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     };
   }
 
-  const database = await getRequestDb(context);
-
-  const viewer = currentUserId
-    ? await database.user.findUnique({
-        where: { id: currentUserId },
-        select: {
-          id: true,
-          username: true,
-          email: true,
-          photoUrl: true,
-        },
-      })
-    : null;
-
   const kitchenUserWhere: KitchenUserWhere = requestedChefId
     ? { id: requestedChefId }
     : requestedChefUsername
       ? { username: requestedChefUsername }
       : { id: currentUserId as string };
 
-  const kitchenUser = await database.user.findUnique({
-    where: kitchenUserWhere,
-    select: {
-      id: true,
-      username: true,
-      photoUrl: true,
-    },
-  });
+  // On the Worker the page's reads go to D1 as one batch; Prisma is only the fallback
+  // where there is no binding (unit tests, local scripts).
+  const d1 = requestD1(context);
+  const readInput = { viewerId: currentUserId, kitchenUserWhere };
+  const { viewer, kitchenUser, recipes, cookbooks } = d1
+    ? await readKitchenHomeFromD1(d1, readInput)
+    : await readKitchenHomeWithPrisma(await getRequestDb(context), readInput);
 
   if (!kitchenUser && hasExplicitChefRequest) {
     throw new Response("Kitchen not found", { status: 404 });
@@ -133,61 +123,6 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       cookbooks: [],
     };
   }
-
-  const [recipes, cookbooks] = await Promise.all([
-    database.recipe.findMany({
-      where: {
-        chefId: kitchenUser.id,
-        deletedAt: null,
-      },
-      orderBy: {
-        updatedAt: "desc",
-      },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        servings: true,
-        activeCoverId: true,
-        activeCoverVariant: true,
-        coverMode: true,
-        covers: {
-          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        },
-      },
-    }),
-    database.cookbook.findMany({
-      where: {
-        authorId: kitchenUser.id,
-      },
-      orderBy: {
-        updatedAt: "desc",
-      },
-      include: {
-        _count: {
-          select: { recipes: true },
-        },
-        recipes: {
-          take: 4,
-          orderBy: { createdAt: "desc" },
-          include: {
-            recipe: {
-              select: {
-                id: true,
-                title: true,
-                activeCoverId: true,
-                activeCoverVariant: true,
-                coverMode: true,
-                covers: {
-                  orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-                },
-              },
-            },
-          },
-        },
-      },
-    }),
-  ]);
 
   const recipesWithCover = recipes.map(({ covers, ...rest }) => {
     const coverDisplay = getRecipeCoverDisplay(rest, covers);

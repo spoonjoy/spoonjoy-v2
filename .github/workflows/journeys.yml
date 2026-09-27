@@ -26,6 +26,17 @@ defaults:
   run:
     shell: bash
 
+# QA is single-tenant, and runs take their turn through the FIFO queue in the qa-turn job below,
+# not through a shared concurrency group: GitHub keeps one running and one pending run per group
+# and cancels the older pending run whenever a newer one queues, which silently dropped runs.
+# The only shared group left is per pull request, and it never cancels a run in progress, so a
+# run already on QA always finishes, including its rotate and cleanup steps. A newer push to the
+# same pull request still replaces that pull request's pending run (GitHub's one-pending rule).
+# Every other run (pushes to main, the schedule, manual runs) gets a group of its own.
+concurrency:
+  group: journeys-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: false
+
 env:
   PRISMA_HIDE_UPDATE_MESSAGE: "1"
   SPOONJOY_JOURNEYS_BASE_URL: https://spoonjoy-v2-qa.mendelow-studio.workers.dev
@@ -42,23 +53,58 @@ jobs:
     steps:
       - run: echo "::warning::Journeys need QA credentials and do not run for fork pull requests. A maintainer must re-run them from a same-repo branch."
 
+  # One run at a time on the shared QA mirror, first in, first out. scripts/wait-for-qa-turn.mjs
+  # waits until no other active Journeys run of this repository is ahead of this one (ordered by
+  # the start of each run's current attempt, then by run id, so a re-run joins the back of the
+  # queue) and none behind it already holds QA. Fork pull request runs never enter the queue. It
+  # fails after 90 minutes rather than proceed without its turn; the job timeout leaves 15 minutes
+  # more for checkout, setup and that clear failure message. The run keeps QA until it completes.
+  # Known residual race: the Actions API can lag by a few seconds, so two runs that become
+  # eligible at the same moment could both see a free QA. The worst case is a contended, failed
+  # run that needs a fresh push, never a skipped required check, because QA holds only disposable data.
+  qa-turn:
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    name: wait for QA
+    runs-on: ubuntu-latest
+    timeout-minutes: 105
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+
+      - name: Wait for this run's turn on QA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/wait-for-qa-turn.mjs
+
+  # `journeys` is the required check. It runs even when qa-turn failed or timed out (a skipped
+  # required check would count as passing) and then fails in its first step. Steps that touch QA
+  # after a failure (tail, rotate, cleanup) run only when this run actually got its turn.
   journeys:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: qa-turn
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     name: journeys
     runs-on: ubuntu-latest
-    # One journeys run at a time against the shared QA mirror. This sits on the job, not the
-    # workflow, so the fork-notice job never takes the group's pending slot. GitHub keeps only
-    # one pending run per concurrency group, so a newer run can cancel an older pending one
-    # (cancel-in-progress: false only protects the run that is already going). A cancelled
-    # pull request run is re-triggered by the next push or a manual re-run.
-    concurrency:
-      group: qa-environment
-      cancel-in-progress: false
     timeout-minutes: 30
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
+      - name: Require this run's turn on QA
+        if: needs.qa-turn.result != 'success'
+        env:
+          QA_TURN_RESULT: ${{ needs.qa-turn.result }}
+        run: |
+          echo "::error::This run did not get its turn on QA (the wait for QA job ended as: ${QA_TURN_RESULT}). Journeys fail instead of sharing QA or reporting as skipped. Re-run once the runs ahead have finished."
+          exit 1
+
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
@@ -129,70 +175,48 @@ jobs:
           fi
 
       # Reduce the Worker tail to a small summary inside test-results/ (uploaded with either
-      # report): per-request outcome, path without its query, method, status, CPU and wall time
-      # when present, and exception names and messages. Only non-ok invocations, the first 20
-      # with exceptions and the 25 slowest by wall time are kept per request, plus p50/p95/max
-      # wall and CPU time per path pattern (per-run ids collapsed to :id). No header, cookie or
-      # body is copied. The raw stream is then deleted.
+      # report) with scripts/summarize-worker-tail.jq, an allowlist locked by
+      # test/scripts/summarize-worker-tail.test.ts. Per invocation it keeps the outcome, the
+      # path without its query, method, status, CPU and wall time and redacted exception
+      # messages, for non-ok invocations, the first 20 with exceptions and the 25 slowest,
+      # plus p50/p95/max wall and CPU time per path pattern, and the routes whose p95 CPU time is
+      # over the 10 ms per-request budget (printed as warnings). No header, cookie, body or log line
+      # is copied. If the tail had already exited when the suite finished, or recorded nothing,
+      # the summary says `complete: false` and the log warns: that is no evidence, not a clean
+      # run. The raw stream is then deleted.
       - name: Stop QA Worker tail and summarise it
-        if: always()
+        if: always() && needs.qa-turn.result == 'success'
         continue-on-error: true
         run: |
+          mkdir -p .worker-tail test-results
+          tail_alive=false
           if [ -f .worker-tail/pid ]; then
+            if kill -0 "$(cat .worker-tail/pid)" 2>/dev/null; then tail_alive=true; fi
             kill "$(cat .worker-tail/pid)" 2>/dev/null || true
             sleep 2 || true
             kill -9 "$(cat .worker-tail/pid)" 2>/dev/null || true
           fi
-          mkdir -p test-results
+          : > .worker-tail/events.ndjson
           if [ -f .worker-tail/tail.json ]; then
             # Keep only the JSON events (from the first line that opens an object), and stop at
             # a value cut off by the kill instead of failing on it.
             sed -n '/^{/,$p' .worker-tail/tail.json | jq -c '.' > .worker-tail/events.ndjson 2>/dev/null || true
-            jq -s '
-              def request_path: (.event.request.url // "") | sub("^[A-Za-z][A-Za-z0-9+.-]*://[^/]*"; "") | sub("[?#].*$"; "");
-              def invocation: {
-                outcome: (.outcome // null),
-                path: request_path,
-                method: (.event.request.method // null),
-                status: (.event.response.status // null),
-                cpuTime: (.cpuTime // null),
-                wallTime: (.wallTime // null),
-                eventTimestamp: (.eventTimestamp // null),
-                exceptions: [(.exceptions // [])[] | { name: (.name // null), message: ((.message // "") | tostring | .[0:500]) }]
-              };
-              # A path with per-run ids collapsed to :id (cuid, uuid, number, codex-e2e user), keeping
-              # a trailing .data, so invocations of the same route group together.
-              def collapse_segment:
-                capture("^(?<base>.*?)(?<ext>\\.data)?$") as $m
-                | ($m.base
-                    | if test("^c[a-z0-9]{20,}$")
-                        or test("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
-                        or test("^[0-9]+$")
-                        or test("^codex[-_]e2e[-_]")
-                      then ":id" else . end)
-                  + ($m.ext // "");
-              def path_pattern: request_path | split("/") | map(if . == "" then . else collapse_segment end) | join("/");
-              # Nearest-rank percentile over the numeric values present; null when there are none.
-              def percentile($p): if length == 0 then null else sort | .[((length - 1) * $p | floor)] end;
-              def timing($field): [.[] | .[$field] | select(type == "number")]
-                | { p50: percentile(0.5), p95: percentile(0.95), max: (if length == 0 then null else max end) };
-              {
-                totalInvocations: length,
-                outcomes: (map(.outcome // "unknown") | group_by(.) | map({ key: .[0], value: length }) | from_entries),
-                nonOkInvocations: [.[] | select((.outcome // "unknown") != "ok") | invocation],
-                firstExceptions: ([.[] | select(((.exceptions // []) | length) > 0) | invocation] | .[0:20]),
-                slowest: ([.[] | select((.wallTime | type) == "number")] | sort_by(-.wallTime) | .[0:25] | map(invocation)),
-                byPath: (group_by(path_pattern)
-                  | map({ path: (.[0] | path_pattern), count: length, wallTime: timing("wallTime"), cpuTime: timing("cpuTime") })
-                  | sort_by(-(.wallTime.p95 // 0)))
-              }
-            ' .worker-tail/events.ndjson > test-results/worker-tail-summary.json || true
-            if [ -s .worker-tail/tail.err ]; then tail -n 20 .worker-tail/tail.err || true; fi
           fi
+          jq -s --argjson tailAliveAtStop "$tail_alive" -f scripts/summarize-worker-tail.jq \
+            .worker-tail/events.ndjson > test-results/worker-tail-summary.json || true
+          if [ -s .worker-tail/tail.err ]; then tail -n 20 .worker-tail/tail.err || true; fi
           rm -rf .worker-tail
-          if [ -f test-results/worker-tail-summary.json ]; then
-            jq '{ totalInvocations, outcomes, nonOk: (.nonOkInvocations | length), slowestPaths: (.byPath | .[0:5]) }' test-results/worker-tail-summary.json || true
+          if [ "$(jq -r '.complete' test-results/worker-tail-summary.json 2>/dev/null)" != "true" ]; then
+            echo "::warning::The QA Worker tail is incomplete (the tail exited before the suite finished, or recorded no events). Treat worker-tail-summary.json as no evidence, not as a run without Worker-side failures."
           fi
+          jq '{ complete, tailAliveAtStop, totalInvocations, outcomes, nonOk: (.nonOkInvocations | length), slowestPaths: (.byPath | .[0:5]) }' \
+            test-results/worker-tail-summary.json || true
+          # One warning per route whose p95 CPU time is over the per-request budget (the Workers
+          # Free plan's 10 ms CPU limit). Non-fatal for now. A path is reduced to URL-safe
+          # characters before it reaches a workflow command.
+          jq -r '.budget.cpuTimeP95Ms as $budget | .budget.overBudget[]
+            | "::warning::CPU budget: \(.path | gsub("[^A-Za-z0-9/._:~-]"; "?")) has p95 CPU \(.cpuTime.p95) ms (max \(.cpuTime.max) ms over \(.count) requests), over the \($budget) ms budget."' \
+            test-results/worker-tail-summary.json || true
 
       # The report and traces can contain this run's persona and scratch-user passwords, so
       # before anything is uploaded: rotate the kitchen personas to fresh passwords nobody
@@ -200,23 +224,27 @@ jobs:
       # every existing scratch-namespace user's password in place (NULLs it out) instead of
       # minting a fresh scratch batch, so there is never a new, never-yet-invalidated scratch
       # password for the upload to carry. Every password in the artifact is then already dead.
+      # It also revokes this run's session cookies: scratch users get their sessionVersion
+      # bumped, and the personas are re-created at a newer session version.
       # Runs even if the journeys failed; if the seed step never ran, re-seeding is harmless.
       - name: Rotate persona passwords
         id: rotate-passwords
-        if: always()
+        if: always() && needs.qa-turn.result == 'success'
         run: pnpm run seed:qa:kitchen -- --rotate
 
       - name: Clean up disposable QA data
         id: cleanup-qa-data
-        if: always()
+        if: always() && needs.qa-turn.result == 'success'
         run: node scripts/warning-gate.ts -- pnpm run cleanup:remote:qa:apply
 
       - name: Remove credentials and session files
         if: always()
         run: rm -rf .journeys e2e/.auth/journeys-*.json .worker-tail
 
-      # Sessions are stateless 30-day cookies keyed only by user id: they survive re-seeding
-      # and logout, so rotating passwords does not revoke them. Remove the network log (every
+      # Session cookies last 30 days and survive re-seeding and logout. They are revocable
+      # (User.sessionVersion), and "Rotate persona passwords" above already revoked every persona
+      # and scratch-user session from this run, but the cookies are still stripped here as
+      # defence in depth. Remove the network log (every
       # Cookie / Set-Cookie / Authorization header, plus the request and response bodies only
       # it references) from every trace, including the copies inside the HTML report, and
       # redact storage-state and cookie values from the remaining trace events. Fails if a
@@ -236,11 +264,11 @@ jobs:
       #     summary.json and a full-page screenshot per route visited);
       #   - test-results/: per-failure traces, videos, screenshots and error context, plus
       #     worker-tail-summary.json (Worker outcomes, paths without queries, statuses, timings and
-      #     exception names/messages only; no headers, cookies or bodies).
+      #     exception names plus redacted, capped messages only; no headers, cookies or bodies).
       # Traces keep the action log (with typed values), DOM snapshots, screencast frames and
       # test source. It is safe to publish because (1) "Rotate persona passwords" has already
-      # replaced every persona password and invalidated every scratch-user password it
-      # contains, (2) "Clean up disposable QA data" has removed the (now-invalidated) scratch
+      # replaced every persona password, invalidated every scratch-user password it contains
+      # and revoked every persona and scratch-user session from the run, (2) "Clean up disposable QA data" has removed the (now-invalidated) scratch
       # users and every other disposable row, and (3) "Strip network logs from traces" has
       # removed network logs and redacted session cookies and storage state from every trace.
       # Upload runs only if all three steps succeeded, and only the report matching $SUITE

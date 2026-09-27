@@ -16,6 +16,7 @@ import { expectConsoleError } from "../warning-policy";
 // This suite deliberately runs through the same full-schema D1 owner. Keeping
 // it here preserves the established --no-isolate CookSession → repository-schema lifecycle.
 import "./helpers/oauth-concurrency-d1-suite";
+import "./helpers/hot-read-paths-d1-suite";
 import { applyRepositoryMigrations } from "./helpers/repository-migrations";
 
 interface TestD1Statement {

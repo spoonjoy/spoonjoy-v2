@@ -291,6 +291,43 @@ describe("revocable sessions", () => {
         d1.close();
       }
     });
+
+    function stubD1(first: () => Promise<unknown>) {
+      return { prepare: () => ({ bind: () => ({ first }) }) };
+    }
+
+    it("fails closed when the D1 read errors: the error propagates instead of signing anyone in or out", async () => {
+      const cookie = await cookieFor({ userId: "d1-error-user", sessionVersion: 0 });
+      const env = { DB: stubD1(async () => { throw new Error("D1_ERROR: network connection lost"); }) };
+
+      await withoutPrisma(async (module) => {
+        await expect(module.getUserId(requestWithCookie(cookie), env)).rejects.toThrow("D1_ERROR");
+        // requireUserId rethrows the error rather than turning it into a redirect or a user id.
+        const rejection = await module.requireUserId(requestWithCookie(cookie), "/login", env).then(
+          () => null,
+          (error: unknown) => error,
+        );
+        expect(rejection).toBeInstanceOf(Error);
+        expect(rejection).not.toBeInstanceOf(Response);
+        await expect(module.isSessionIdentityCurrent({ userId: "d1-error-user", sessionVersion: 0 }, env))
+          .rejects.toThrow("D1_ERROR");
+      });
+    });
+
+    it.each([
+      ["a NULL version", { sessionVersion: null }],
+      ["a row without the column", {}],
+      ["a string version", { sessionVersion: "0" }],
+    ])("fails closed when the D1 row carries %s", async (_label, row) => {
+      const cookie = await cookieFor({ userId: "odd-row-user", sessionVersion: 0 });
+      const env = { DB: stubD1(async () => row) };
+
+      await withoutPrisma(async (module) => {
+        await expect(module.getUserId(requestWithCookie(cookie), env)).resolves.toBeNull();
+        await expect(module.isSessionIdentityCurrent({ userId: "odd-row-user", sessionVersion: 0 }, env))
+          .resolves.toBe(false);
+      });
+    });
   });
 
   it("compares a cookie's version with the user's current version", () => {
