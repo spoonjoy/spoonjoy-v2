@@ -253,13 +253,15 @@ export async function finishAuthentication(
   config: WebAuthnConfig,
   response: AuthenticationResponseJSON,
   telemetry?: AuthTelemetry,
-): Promise<{ verified: true; userId: string }> {
+): Promise<{ verified: true; userId: string; sessionVersion: number }> {
   let user;
   let credentialRow;
   try {
+    // sessionVersion is read with the challenge, so the session minted for this
+    // sign-in cannot pick up a version bumped while the assertion is verified.
     user = await db.user.findUnique({
       where: { email },
-      select: { id: true, webAuthnChallenge: true },
+      select: { id: true, webAuthnChallenge: true, sessionVersion: true },
     });
     if (!user || !user.webAuthnChallenge) {
       throw new WebAuthnError("No authentication in progress", 400);
@@ -330,7 +332,7 @@ export async function finishAuthentication(
     throw error;
   }
 
-  return { verified: true, userId: user.id };
+  return { verified: true, userId: user.id, sessionVersion: user.sessionVersion };
 }
 
 export interface PasskeySummary {

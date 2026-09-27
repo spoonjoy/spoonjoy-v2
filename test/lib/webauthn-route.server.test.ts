@@ -386,7 +386,7 @@ describe("webauthn-route orchestration", () => {
       } as never);
 
       const result = await finishAuthentication(db, user.email, config, { id: "auth_cred" } as never);
-      expect(result).toEqual({ verified: true, userId: user.id });
+      expect(result).toEqual({ verified: true, userId: user.id, sessionVersion: 0 });
 
       const stored = await db.userCredential.findUnique({ where: { id: "auth_cred" } });
       expect(stored?.counter).toBe(7n);
