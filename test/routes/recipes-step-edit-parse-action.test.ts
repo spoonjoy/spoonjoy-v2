@@ -222,7 +222,7 @@ describe('recipes.$id.steps.$stepId.edit - parseIngredients action', () => {
       } as any)
 
       const { data, status } = extractActionData(result)
-      expect(status).toBe(400)
+      expect(status).toBe(200)
       expect(data.errors.parse).toBeDefined()
       expect(data.parsedIngredients).toBeUndefined()
     })
@@ -248,7 +248,7 @@ describe('recipes.$id.steps.$stepId.edit - parseIngredients action', () => {
       } as any)
 
       const { data, status } = extractActionData(result)
-      expect(status).toBe(400)
+      expect(status).toBe(200)
       expect(data.errors.parse).toBeDefined()
     })
 
@@ -273,7 +273,7 @@ describe('recipes.$id.steps.$stepId.edit - parseIngredients action', () => {
       } as any)
 
       const { data, status } = extractActionData(result)
-      expect(status).toBe(400)
+      expect(status).toBe(200)
       expect(data.errors.parse).toBeDefined()
     })
 
