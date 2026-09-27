@@ -10,7 +10,7 @@
 // working.
 import type { Locator, Page } from "@playwright/test";
 import { test, expect } from "./support/journey";
-import { pathUrl, waitForHydration } from "./support/navigation";
+import { pathUrl, waitForHydration, waitForServiceWorker } from "./support/navigation";
 import { personaStorageStatePath } from "./support/personas";
 
 const MIN_TARGET_PX = 44;
@@ -136,6 +136,9 @@ test.describe("Dock on iPhone", () => {
 
     await page.goto("/");
     await waitForHydration(page);
+    // Log out and the checks after it are full page loads; let this load's service-worker
+    // registration finish first so none of them cancels it.
+    await waitForServiceWorker(page);
     await expect(page.getByRole("heading", { level: 1, name: "My Kitchen", exact: true })).toBeVisible();
 
     await dock.getByRole("button", { name: "Open pantry navigation", exact: true }).click();
@@ -154,6 +157,9 @@ test.describe("Dock on iPhone", () => {
 
   test("the page's bottom padding clears the dock on every dock layout (R-M3-4)", async ({ page }) => {
     await page.goto("/");
+    // The loop below makes a dozen full page loads back to back; let the first one's service-worker
+    // registration finish so no later load cancels one in flight.
+    await waitForServiceWorker(page);
     // iOS applies the safe-area insets the dock and the padding use only with viewport-fit=cover.
     await expect(page.locator('meta[name="viewport"]')).toHaveAttribute("content", /(?:^|,)\s*viewport-fit=cover\s*(?:,|$)/);
 
