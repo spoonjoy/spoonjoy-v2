@@ -20,6 +20,14 @@ export function recipeLink(scope: Locator, title: string, recipePath: string): L
     .first();
 }
 
+// A link to one seeded recipe where it is listed once (search results, the /recipes list), matched
+// by its exact accessible name and its href together. Another recipe can share the seeded title
+// (a journey's throwaway fork of Lemon Herb Rice lives until the run's cleanup, and journeys run
+// in parallel), so the name alone is not enough; the href is the seeded id.
+export function seededRecipeLink(scope: Locator, name: string, recipePath: string): Locator {
+  return scope.getByRole("link", { name, exact: true }).and(scope.page().locator(`[href="${recipePath}"]`));
+}
+
 // Matches a full URL whose path is exactly `path`, with any query or hash.
 export function pathUrl(path: string): RegExp {
   const escaped = path.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
