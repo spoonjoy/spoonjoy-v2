@@ -1254,6 +1254,31 @@ describe("spoonjoy MCP tools", () => {
     await expect(context.db.apiCredential.count()).resolves.toBe(0);
   });
 
+  it("writes a signed-in user's changes to their own account, not a legacy account whose email differs in case", async () => {
+    const email = context.defaultOwnerEmail!;
+    const own = await context.db.user.create({
+      data: { email: email.toUpperCase(), username: `own-${faker.string.alphanumeric(8).toLowerCase()}` },
+    });
+    const legacy = await context.db.user.create({
+      data: { email, username: `legacy-${faker.string.alphanumeric(8).toLowerCase()}` },
+    });
+    const { token } = await createApiCredential(context.db, own.id, "Own token", { scopes: ["kitchen:write"] });
+    const signedIn = { db: context.db, principal: await authenticateApiToken(context.db, token) };
+
+    const created = parseJson(await callSpoonjoyMcpTool("create_cookbook", { title: "Own Cookbook" }, signedIn));
+    await expect(context.db.cookbook.findUniqueOrThrow({ where: { id: created.cookbook.id } }))
+      .resolves.toMatchObject({ authorId: own.id });
+    await expect(context.db.cookbook.count({ where: { authorId: legacy.id } })).resolves.toBe(0);
+
+    // A principal whose account was deleted since it signed in acts for no one.
+    await context.db.apiCredential.deleteMany({ where: { userId: own.id } });
+    await context.db.cookbook.deleteMany({ where: { authorId: own.id } });
+    await context.db.user.delete({ where: { id: own.id } });
+    await expect(callSpoonjoyMcpTool("create_cookbook", { title: "Orphan Cookbook" }, signedIn))
+      .rejects.toThrow("The signed-in account no longer exists");
+    await expect(context.db.cookbook.count({ where: { authorId: legacy.id } })).resolves.toBe(0);
+  });
+
   it("reports health and writable state", async () => {
     expect(parseJson(await callSpoonjoyMcpTool("health", {}, context))).toMatchObject({
       ok: true,
