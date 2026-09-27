@@ -5,6 +5,10 @@ on:
     branches: [main]
   push:
     branches: [main]
+  schedule:
+    # Daily signed-in QA run against main, off-peak UTC. Scheduled runs always execute on the
+    # default branch (main), so no explicit ref is needed here.
+    - cron: "17 9 * * *"
   workflow_dispatch:
     inputs:
       suite:
@@ -26,9 +30,9 @@ env:
   PRISMA_HIDE_UPDATE_MESSAGE: "1"
   SPOONJOY_JOURNEYS_BASE_URL: https://spoonjoy-v2-qa.mendelow-studio.workers.dev
   SPOONJOY_QA_CREDENTIALS: ${{ github.workspace }}/.journeys/credentials.json
-  # Push and pull_request runs always run the journeys suite; only a workflow_dispatch can
-  # choose explore. Everything else (deploy, seed, rotate, sanitise, gated upload, cleanup,
-  # concurrency) is shared between the two suites.
+  # Push, pull_request, and the daily schedule always run the journeys suite; only a
+  # workflow_dispatch can choose explore. Everything else (deploy, seed, rotate, sanitise,
+  # gated upload, cleanup, concurrency) is shared between the two suites.
   SUITE: ${{ github.event_name == 'workflow_dispatch' && inputs.suite || 'journeys' }}
 
 jobs:
