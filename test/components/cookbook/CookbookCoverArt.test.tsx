@@ -78,4 +78,24 @@ describe("CookbookCoverArt", () => {
     expect(container.querySelectorAll("img")).toHaveLength(4);
     expect(screen.getAllByText("5 recipes").length).toBeGreaterThan(0);
   });
+
+  it("renders the cover caption title as a heading by default", () => {
+    render(<CookbookCoverArt title="Heading Book" recipeCount={1} recipeImages={[images[0]]} />);
+
+    expect(screen.getByRole("heading", { level: 3, name: "Heading Book" })).toBeInTheDocument();
+  });
+
+  it("renders the cover caption title as plain text when a caller already exposes it as a heading elsewhere", () => {
+    render(
+      <CookbookCoverArt
+        title="Already Headed Book"
+        recipeCount={1}
+        recipeImages={[images[0]]}
+        titleAsHeading={false}
+      />,
+    );
+
+    expect(screen.queryByRole("heading", { name: "Already Headed Book" })).not.toBeInTheDocument();
+    expect(screen.getByText("Already Headed Book")).toBeInTheDocument();
+  });
 });

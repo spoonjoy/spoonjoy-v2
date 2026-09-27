@@ -20,14 +20,25 @@ export function CookbookCoverArt({
   recipeCount,
   recipeImages = [],
   className,
+  titleAsHeading = true,
 }: {
   title: string;
   recipeCount: number;
   recipeImages?: CookbookCoverImage[];
   className?: string;
+  /**
+   * Whether the cover caption's title renders as a heading (`h3`) in the document outline.
+   * Defaults to `true`, matching every existing call site, where this caption is the only
+   * heading naming the cookbook (e.g. a card in a grid). Pass `false` when a caller already
+   * exposes this exact title as a heading elsewhere on the page — for example the cookbook
+   * detail page, whose own `h1` already is this title — so the caption doesn't add a
+   * duplicate heading or skip a level in the page's heading order.
+   */
+  titleAsHeading?: boolean;
 }) {
   const images = cookbookCoverImages(recipeImages);
   const recipeLabel = `${recipeCount} ${recipeCount === 1 ? "recipe" : "recipes"}`;
+  const TitleTag = titleAsHeading ? "h3" : "p";
 
   return (
     <figure
@@ -43,9 +54,9 @@ export function CookbookCoverArt({
       )}
 
       <figcaption className="absolute inset-x-0 bottom-0 z-10 border-t border-[color-mix(in_srgb,var(--sj-paper)_18%,transparent)] bg-[color-mix(in_srgb,var(--sj-charcoal)_82%,transparent)] p-4 text-[var(--sj-paper)] backdrop-blur-sm">
-        <h3 className="font-sj-display line-clamp-2 text-2xl/7 font-semibold tracking-normal">
+        <TitleTag className="font-sj-display line-clamp-2 text-2xl/7 font-semibold tracking-normal">
           {title}
-        </h3>
+        </TitleTag>
         <p className="font-sj-ui mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-[color-mix(in_srgb,var(--sj-paper)_72%,transparent)]">
           {recipeLabel}
         </p>
