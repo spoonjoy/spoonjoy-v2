@@ -92,11 +92,14 @@ async function clearAll(page: Page) {
 // Empties this device's list through the UI. A placeholder item first, so "Clear all" (shown only
 // when the list has items) is always there to press, whatever an earlier test left behind. The
 // placeholder is the seeded ingredient "lemon", so it adds nothing new to QA's shared ingredient
-// names.
+// names. Its amount isn't checked: if an earlier test failed with a "lemon" row still on the list,
+// the placeholder merges into it, and this reset must still empty the list rather than fail too.
 async function startWithAnEmptyList(page: Page) {
   await page.goto(SHOPPING_LIST);
   await waitForHydration(page);
-  await addByHand(page, "1 lemon", "lemon", "1 whole");
+  await itemField(page).fill("1 lemon");
+  await addSection(page).getByRole("button", { name: "Add", exact: true }).click();
+  await expect(row(page, "lemon")).toBeVisible();
   await clearAll(page);
 }
 
@@ -121,6 +124,8 @@ test.describe("Shopping list", () => {
     await addSection(page).getByRole("button", { name: "Add", exact: true }).click();
     await expect(lemons, FALLBACK_PARSER).toContainText("2 whole");
     await expect(lemons).toHaveAttribute("aria-checked", "false");
+    // "lemons" is its own row: the "lemon" placeholder the reset just cleared doesn't come back.
+    await expect(row(page, "lemon")).toBeHidden();
     // R-M3-3: the field clears, so pressing Add again can't add the lemons twice (bug 10). The
     // empty field is required, so the browser doesn't submit it.
     await expect(itemField(page)).toHaveValue("");
@@ -167,6 +172,17 @@ test.describe("Shopping list", () => {
     await verifyAfterReload(async () => {
       await expect(emptyList(page)).toBeVisible();
       await expect(lemons).toBeHidden();
+    });
+
+    // Adding it again starts from the amount typed: the removed row's 2 doesn't come back on top
+    // (run 36310125579 showed a cleared "1 lemon" re-added as "2 whole").
+    await waitForHydration(page);
+    await addByHand(page, "2 lemons", "lemons", "2 whole");
+    await expect(view(page, "All", 1)).toBeVisible();
+
+    await verifyAfterReload(async () => {
+      await expect(lemons, FALLBACK_PARSER).toContainText("2 whole");
+      await expect(view(page, "All", 1)).toBeVisible();
     });
   });
 
