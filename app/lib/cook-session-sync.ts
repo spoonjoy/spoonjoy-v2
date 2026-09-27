@@ -33,7 +33,16 @@ export interface SyncedCookCache {
   server: CookServerSnapshot | null;
 }
 
-export type CookSyncStatus = "syncing" | "synced" | "offline";
+/**
+ * - `syncing`: an exchange is due or running.
+ * - `synced`: the server has everything this page has.
+ * - `offline`: the server could not be reached; changes wait here and go at the next chance.
+ * - `stopped`: the server will not take this page's progress (signed out, sync switched off, the
+ *   recipe is gone); progress stays on this device and nothing is retried.
+ * - `account_changed`: this tab's cook is no longer the browser's signed-in user; nothing more is
+ *   sent or saved, and the page should be reloaded.
+ */
+export type CookSyncStatus = "syncing" | "synced" | "offline" | "stopped" | "account_changed";
 
 export const DEFAULT_COOK_PROGRESS: CookProgressValue = Object.freeze({
   activeStepIndex: 0,
@@ -47,6 +56,12 @@ const MAX_SYNC_ROUNDS = 4;
 const PUSH_DELAY_MS = 300;
 const FIRST_RETRY_DELAY_MS = 1_000;
 const MAX_RETRY_DELAY_MS = 30_000;
+/** Automatic retries after a transient failure; after that, the next focus/visible/online event retries. */
+export const MAX_COOK_SYNC_RETRIES = 5;
+/** A pull within this long of the start of the last successful one is skipped (focus and visibilitychange arrive together). */
+export const MIN_COOK_PULL_INTERVAL_MS = 2_000;
+/** Browsers cap a keepalive request's body at 64 KiB; the leave-time flush stays well under it. */
+export const MAX_KEEPALIVE_BODY_BYTES = 32 * 1024;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -234,18 +249,55 @@ export function writeSyncedCookCache(userId: string, recipeId: string, cache: Sy
 export type CookSyncResult =
   | { kind: "state"; state: CookServerSnapshot | null }
   | { kind: "conflict"; state: CookServerSnapshot }
+  /** 404: the session is gone (PATCH), or the recipe is (start, read). */
   | { kind: "missing" }
+  /** 400: the server refused this request's content. */
   | { kind: "rejected" }
-  | { kind: "unavailable" };
+  /** 412 user_mismatch: the browser's signed-in user is not this tab's cook. */
+  | { kind: "wrong_user" }
+  /** Will not succeed by retrying: 401, 403, 503 protocol unavailable, and other 4xx. */
+  | { kind: "stopped" }
+  /** May succeed later: network failure, 429, and 5xx other than 503 protocol unavailable. */
+  | { kind: "transient"; retryAfterMs?: number };
 
 export interface CookSessionClient {
   read(): Promise<CookSyncResult>;
   start(): Promise<CookSyncResult>;
-  patch(server: CookServerSnapshot, changes: Partial<CookProgressValue>): Promise<CookSyncResult>;
+  patch(
+    server: CookServerSnapshot,
+    changes: Partial<CookProgressValue>,
+    options?: { keepalive?: boolean },
+  ): Promise<CookSyncResult>;
+}
+
+function retryAfterMs(response: Response): number | undefined {
+  const header = response.headers.get("Retry-After");
+  if (header === null) return undefined;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  const date = Date.parse(header);
+  return Number.isNaN(date) ? undefined : Math.max(0, date - Date.now());
+}
+
+function errorCode(body: unknown): unknown {
+  return isRecord(body) && isRecord(body.error) ? body.error.code : undefined;
+}
+
+function classifyFailure(response: Response, body: unknown): CookSyncResult {
+  const conflictState = isRecord(body) && isRecord(body.error) ? parseCookServerState(body.error.state) : null;
+  if (response.status === 409 && conflictState) return { kind: "conflict", state: conflictState };
+  if (response.status === 412 && errorCode(body) === "user_mismatch") return { kind: "wrong_user" };
+  if (response.status === 404) return { kind: "missing" };
+  if (response.status === 400) return { kind: "rejected" };
+  if (response.status === 429) return { kind: "transient", retryAfterMs: retryAfterMs(response) };
+  if (response.status === 503 && errorCode(body) === "cook_session_protocol_unavailable") return { kind: "stopped" };
+  if (response.status >= 500) return { kind: "transient", retryAfterMs: retryAfterMs(response) };
+  return { kind: "stopped" };
 }
 
 export function createCookSessionClient(
   recipeId: string,
+  userId: string,
   options: { fetch?: typeof fetch; mutationId?: () => string } = {},
 ): CookSessionClient {
   const send = options.fetch ?? ((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init));
@@ -254,40 +306,49 @@ export function createCookSessionClient(
 
   async function call(url: string, init: RequestInit): Promise<CookSyncResult> {
     let response: Response;
-    let body: unknown;
     try {
       response = await send(url, {
         ...init,
         cache: "no-store",
         credentials: "same-origin",
-        headers: init.body ? { Accept: "application/json", "Content-Type": "application/json" } : { Accept: "application/json" },
+        headers: {
+          Accept: "application/json",
+          // Tabs share one session cookie: the server refuses the request if it is no longer this cook's.
+          "X-Spoonjoy-Cook-User": userId,
+          ...(init.body ? { "Content-Type": "application/json" } : {}),
+        },
       });
+    } catch {
+      return { kind: "transient" };
+    }
+    let body: unknown;
+    try {
       body = await response.json();
     } catch {
-      return { kind: "unavailable" };
+      body = null;
     }
     if (response.ok && isRecord(body) && body.state === null) return { kind: "state", state: null };
     const state = parseCookServerState(isRecord(body) ? body.state : null);
     if (response.ok && state) return { kind: "state", state };
-    const conflictState = isRecord(body) && isRecord(body.error) ? parseCookServerState(body.error.state) : null;
-    if (response.status === 409 && conflictState) return { kind: "conflict", state: conflictState };
-    if (response.status === 404) return { kind: "missing" };
-    if (response.status === 400) return { kind: "rejected" };
-    return { kind: "unavailable" };
+    return response.ok ? { kind: "transient" } : classifyFailure(response, body);
   }
 
   return {
     read: () => call(path, { method: "GET" }),
     start: () => call(`${path}/start`, { method: "POST" }),
-    patch: (server, changes) => call(path, {
-      method: "PATCH",
-      body: JSON.stringify({
+    patch: (server, changes, patchOptions = {}) => {
+      const body = JSON.stringify({
         attemptId: server.attemptId,
         expectedRevision: server.revision,
         mutationId: mutationId(),
         changes,
-      }),
-    }),
+      });
+      if (patchOptions.keepalive && new TextEncoder().encode(body).byteLength > MAX_KEEPALIVE_BODY_BYTES) {
+        // Too big to outlive the page; the change stays queued in this browser's cache instead.
+        return Promise.resolve({ kind: "transient" });
+      }
+      return call(path, { method: "PATCH", body, ...(patchOptions.keepalive ? { keepalive: true } : {}) });
+    },
   };
 }
 
@@ -300,11 +361,22 @@ export interface CookSessionSyncOptions {
   onProgress: (progress: CookProgressValue) => void;
   /** Progress, the known server state, or the status changed: persist and re-render. */
   onChange: () => void;
+  /** Whether the page is visible; nothing is sent or retried while it is hidden. */
+  isVisible?: () => boolean;
+  now?: () => number;
 }
+
+type Outcome =
+  | { kind: "ok" }
+  | { kind: "transient"; retryAfterMs?: number }
+  | { kind: "stopped" }
+  | { kind: "wrong_user" };
 
 /**
  * Keeps one recipe's progress in step with the user's CookSession. Every exchange with the
  * server runs one at a time; a request made while one is running is folded into a single rerun.
+ * Transient failures retry a few times while the page is visible; answers that cannot change by
+ * retrying stop the engine for good.
  */
 export class CookSessionSync {
   private local: CookProgressValue;
@@ -312,16 +384,23 @@ export class CookSessionSync {
   private pulled = false;
   private failed = false;
   private disposed = false;
+  private halted: "stopped" | "account_changed" | null = null;
   private running: Promise<void> | null = null;
   private rerun = false;
   private rerunPull = false;
   private pushTimer: ReturnType<typeof setTimeout> | undefined;
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
   private retryDelay = FIRST_RETRY_DELAY_MS;
+  private retries = 0;
+  private lastPullAt = Number.NEGATIVE_INFINITY;
+  private readonly isVisible: () => boolean;
+  private readonly now: () => number;
 
   constructor(private readonly options: CookSessionSyncOptions) {
     this.local = options.progress;
     this.known = options.server;
+    this.isVisible = options.isVisible ?? (() => true);
+    this.now = options.now ?? (() => Date.now());
   }
 
   get progress(): CookProgressValue {
@@ -337,22 +416,55 @@ export class CookSessionSync {
   }
 
   get status(): CookSyncStatus {
+    if (this.halted) return this.halted;
     if (this.pulled && !this.pending) return "synced";
     return this.failed ? "offline" : "syncing";
   }
 
   /** The page's progress changed (a check, a scale, a step). */
   setProgress(progress: CookProgressValue): void {
-    if (this.disposed || sameCookProgress(progress, this.local)) return;
+    if (this.disposed || this.halted === "account_changed" || sameCookProgress(progress, this.local)) return;
     this.local = progress;
     this.options.onChange();
+    if (this.halted) return;
     clearTimeout(this.pushTimer);
     this.pushTimer = setTimeout(() => void this.sync(false), PUSH_DELAY_MS);
   }
 
-  /** Exchanges progress with the server; `pull` first reads the server's latest state. */
+  /**
+   * Exchanges progress with the server; `pull` first reads the server's latest state. Called for
+   * page events (load, visible, focus, online) and local changes, it also restarts the retry
+   * budget. Does nothing while the page is hidden or after the engine has stopped.
+   */
   sync(pull: boolean): Promise<void> {
-    if (this.disposed) return Promise.resolve();
+    this.retries = 0;
+    this.retryDelay = FIRST_RETRY_DELAY_MS;
+    clearTimeout(this.retryTimer);
+    return this.run(pull);
+  }
+
+  /**
+   * Leaving (unmount, pagehide, tab hidden): sends pending changes once with `keepalive` so the
+   * request outlives the page. Its answer is not awaited; if it is lost, the changes are still in
+   * this browser's cache and the next visit sends them.
+   */
+  flush(): void {
+    if (this.disposed || this.halted || !this.known) return;
+    const changes = cookProgressChanges(this.known.progress, this.local);
+    if (Object.keys(changes).length === 0) return;
+    clearTimeout(this.pushTimer);
+    void this.options.client.patch(this.known, changes, { keepalive: true });
+  }
+
+  dispose(): void {
+    this.flush();
+    this.disposed = true;
+    clearTimeout(this.pushTimer);
+    clearTimeout(this.retryTimer);
+  }
+
+  private run(pull: boolean): Promise<void> {
+    if (this.disposed || this.halted || !this.isVisible()) return Promise.resolve();
     if (this.running) {
       this.rerun = true;
       this.rerunPull ||= pull;
@@ -362,31 +474,40 @@ export class CookSessionSync {
     return this.running;
   }
 
-  dispose(): void {
-    this.disposed = true;
-    clearTimeout(this.pushTimer);
-    clearTimeout(this.retryTimer);
-  }
-
   private async drain(pull: boolean): Promise<void> {
     let nextPull = pull;
     do {
       this.rerun = false;
       this.rerunPull = false;
-      const ok = await this.reconcile(nextPull);
+      const outcome = await this.reconcile(nextPull && this.now() - this.lastPullAt >= MIN_COOK_PULL_INTERVAL_MS);
       if (this.disposed) break;
-      this.failed = !ok;
       clearTimeout(this.retryTimer);
-      if (ok) {
-        this.retryDelay = FIRST_RETRY_DELAY_MS;
+      this.failed = outcome.kind === "transient";
+      if (outcome.kind === "transient") {
+        this.scheduleRetry(outcome.retryAfterMs);
+      } else if (outcome.kind === "stopped") {
+        this.halted = "stopped";
+      } else if (outcome.kind === "wrong_user") {
+        // Another account owns the browser's session now: drop this tab's pending changes and
+        // never send or save them.
+        this.halted = "account_changed";
+        this.local = this.known?.progress ?? this.local;
       } else {
-        this.retryTimer = setTimeout(() => void this.sync(true), this.retryDelay);
-        this.retryDelay = Math.min(this.retryDelay * 2, MAX_RETRY_DELAY_MS);
+        this.retries = 0;
+        this.retryDelay = FIRST_RETRY_DELAY_MS;
       }
       this.options.onChange();
       nextPull = this.rerunPull;
-    } while (this.rerun);
+    } while (this.rerun && !this.halted);
     this.running = null;
+  }
+
+  private scheduleRetry(retryAfter: number | undefined): void {
+    if (this.retries >= MAX_COOK_SYNC_RETRIES || !this.isVisible()) return;
+    this.retries += 1;
+    const delay = Math.min(Math.max(retryAfter ?? 0, this.retryDelay), MAX_RETRY_DELAY_MS);
+    this.retryDelay = Math.min(this.retryDelay * 2, MAX_RETRY_DELAY_MS);
+    this.retryTimer = setTimeout(() => void this.run(true), delay);
   }
 
   // Accepts `state` as the latest server state. `sent` is the page progress the exchange started
@@ -400,12 +521,21 @@ export class CookSessionSync {
     }
   }
 
-  private async reconcile(pull: boolean): Promise<boolean> {
+  private failure(result: CookSyncResult): Outcome {
+    if (result.kind === "wrong_user") return { kind: "wrong_user" };
+    if (result.kind === "transient") return { kind: "transient", retryAfterMs: result.retryAfterMs };
+    return { kind: "stopped" };
+  }
+
+  private async reconcile(pull: boolean): Promise<Outcome> {
     let remote: CookServerSnapshot | null = this.known;
-    if (pull || !remote) {
+    if (pull || !this.pulled) {
+      const startedAt = this.now();
       const read = await this.options.client.read();
-      if (this.disposed || read.kind !== "state") return false;
+      if (this.disposed) return { kind: "ok" };
+      if (read.kind !== "state") return this.failure(read);
       this.pulled = true;
+      this.lastPullAt = startedAt;
       remote = read.state;
     }
 
@@ -414,10 +544,11 @@ export class CookSessionSync {
         // Nothing on the server yet: only start a session once there is progress to keep.
         if (sameCookProgress(this.local, DEFAULT_COOK_PROGRESS)) {
           this.known = null;
-          return true;
+          return { kind: "ok" };
         }
         const started = await this.options.client.start();
-        if (this.disposed || started.kind !== "state" || !started.state) return false;
+        if (this.disposed) return { kind: "ok" };
+        if (started.kind !== "state" || !started.state) return this.failure(started);
         remote = started.state;
       }
 
@@ -426,11 +557,11 @@ export class CookSessionSync {
       const merged = this.options.normalize(mergeCookProgress(base, sent, remote.progress));
       if (sameCookProgress(merged, remote.progress)) {
         this.acknowledge(remote, sent);
-        return true;
+        return { kind: "ok" };
       }
 
       const result = await this.options.client.patch(remote, cookProgressChanges(remote.progress, merged));
-      if (this.disposed) return false;
+      if (this.disposed) return { kind: "ok" };
       if (result.kind === "state" && result.state) {
         this.acknowledge(result.state, sent);
         remote = result.state;
@@ -442,22 +573,25 @@ export class CookSessionSync {
       } else if (result.kind === "rejected") {
         return this.adoptServerProgress();
       } else {
-        return false;
+        return this.failure(result);
       }
     }
-    return false;
+    return { kind: "transient" };
   }
 
   // The server refused this page's progress (its recipe changed since the page loaded). Show the
   // server's progress instead of retrying the same refused change.
-  private async adoptServerProgress(): Promise<boolean> {
+  private async adoptServerProgress(): Promise<Outcome> {
+    const startedAt = this.now();
     const read = await this.options.client.read();
-    if (this.disposed || read.kind !== "state") return false;
+    if (this.disposed) return { kind: "ok" };
+    if (read.kind !== "state") return this.failure(read);
     this.pulled = true;
+    this.lastPullAt = startedAt;
     const adopted = this.options.normalize(read.state?.progress ?? DEFAULT_COOK_PROGRESS);
     this.known = read.state ? { ...read.state, progress: adopted } : null;
     this.local = adopted;
     this.options.onProgress(adopted);
-    return true;
+    return { kind: "ok" };
   }
 }

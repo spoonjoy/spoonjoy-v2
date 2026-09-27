@@ -3,6 +3,7 @@ import { act, renderHook } from "@testing-library/react";
 import { useCookProgressCacheOwner, useCookSessionSync, type UseCookSessionSyncOptions } from "~/hooks/use-cook-session-sync";
 import {
   DEFAULT_COOK_PROGRESS,
+  MIN_COOK_PULL_INTERVAL_MS,
   syncedCookProgressStorageKey,
   writeSyncedCookCache,
   type CookProgressValue,
@@ -114,43 +115,130 @@ describe("useCookSessionSync", () => {
     expect(result.current).toBe("synced");
   });
 
-  it("pulls again on focus, on reconnect, and when shown, and never on a timer", async () => {
+  async function settle(ms = 0) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  }
+
+  it("pulls again on focus, on reconnect, and when shown, never on a timer, and at most once per burst", async () => {
     fetchMock.mockImplementation(async () => jsonResponse({ state: null }));
     render();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
+    await settle();
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
+    // Returning to a tab fires focus and visibilitychange together: one pull.
+    await settle(MIN_COOK_PULL_INTERVAL_MS);
     await act(async () => {
       window.dispatchEvent(new Event("focus"));
+      document.dispatchEvent(new Event("visibilitychange"));
       await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    await settle(MIN_COOK_PULL_INTERVAL_MS);
+    await act(async () => {
       window.dispatchEvent(new Event("online"));
       await vi.advanceTimersByTimeAsync(0);
-      document.dispatchEvent(new Event("visibilitychange"));
-      await vi.advanceTimersByTimeAsync(0);
     });
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
 
     // An open, visible, idle page makes no further requests, however long it stays open.
+    await settle(10 * 60_000);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("sends nothing while the page is hidden, and pulls once it is shown", async () => {
+    fetchMock.mockImplementation(async () => jsonResponse({ state: null }));
+    setVisibility("hidden");
+    const { rerender, initialProps } = render();
+    await settle();
+
+    rerender({ ...initialProps, progress: progress({ scaleFactor: 2 }) });
     await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      window.dispatchEvent(new Event("online"));
+      document.dispatchEvent(new Event("visibilitychange"));
       await vi.advanceTimersByTimeAsync(10 * 60_000);
     });
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).not.toHaveBeenCalled();
 
-    // Hiding the tab does not pull; showing it again does.
-    setVisibility("hidden");
-    await act(async () => {
-      document.dispatchEvent(new Event("visibilitychange"));
-      await vi.advanceTimersByTimeAsync(0);
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(4);
     setVisibility("visible");
     await act(async () => {
       document.dispatchEvent(new Event("visibilitychange"));
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(fetchMock).toHaveBeenCalledWith("/api/cook-sessions/recipe-1", expect.objectContaining({ method: "GET" }));
+  });
+
+  it("makes no request after a 401, whatever happens next", async () => {
+    fetchMock.mockImplementation(async () => jsonResponse({ error: { code: "authentication_required" } }, 401));
+    const { result, rerender, initialProps } = render();
+    await settle();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.current).toBe("stopped");
+
+    rerender({ ...initialProps, progress: progress({ scaleFactor: 2 }) });
+    await settle(MIN_COOK_PULL_INTERVAL_MS);
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      window.dispatchEvent(new Event("online"));
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("pagehide"));
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // The change is still kept on this device for the next visit.
+    expect(JSON.parse(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1")) ?? "{}").progress.scaleFactor).toBe(2);
+  });
+
+  it("stops without saving when another account now owns the browser's session", async () => {
+    writeSyncedCookCache("user-1", "recipe-1", { progress: progress({ scaleFactor: 2 }), server: serverState(3) });
+    const cachedBefore = window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1"));
+    fetchMock.mockImplementation(async () => jsonResponse({ error: { code: "user_mismatch" } }, 412));
+    const { result } = render({ progress: progress({ scaleFactor: 2 }) });
+    await settle();
+
+    expect(result.current).toBe("account_changed");
+    expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({ "X-Spoonjoy-Cook-User": "user-1" });
+    expect(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1"))).toBe(cachedBefore);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("flushes a pending change with keepalive when the page is hidden, left, or unmounted", async () => {
+    writeSyncedCookCache("user-1", "recipe-1", { progress: progress(), server: serverState(4) });
+    fetchMock.mockImplementation(async () => jsonResponse({ state: serverState(4) }));
+    const { rerender, initialProps, unmount } = render();
+    await settle();
+    fetchMock.mockClear();
+    fetchMock.mockImplementation(async () => new Promise<Response>(() => undefined));
+
+    const keepalivePatches = () => fetchMock.mock.calls.filter(([, init]) => (init as RequestInit).keepalive === true);
+
+    rerender({ ...initialProps, progress: progress({ scaleFactor: 2 }) });
+    setVisibility("hidden");
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(keepalivePatches()).toHaveLength(1);
+    expect(JSON.parse(String((keepalivePatches()[0][1] as RequestInit).body))).toMatchObject({ expectedRevision: 4, changes: { scaleFactor: 2 } });
+
+    rerender({ ...initialProps, progress: progress({ scaleFactor: 3 }) });
+    await act(async () => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    expect(keepalivePatches()).toHaveLength(2);
+
+    rerender({ ...initialProps, progress: progress({ scaleFactor: 4 }) });
+    unmount();
+    expect(keepalivePatches()).toHaveLength(3);
+    // Nothing else went out while hidden, and the queue is still cached for the next visit.
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1")) ?? "{}")).toMatchObject({
+      progress: progress({ scaleFactor: 4 }),
+      server: serverState(4),
+    });
   });
 
   it("stops syncing when the page unmounts", async () => {

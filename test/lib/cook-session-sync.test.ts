@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CookSessionSync,
   DEFAULT_COOK_PROGRESS,
+  MAX_COOK_SYNC_RETRIES,
+  MAX_KEEPALIVE_BODY_BYTES,
+  MIN_COOK_PULL_INTERVAL_MS,
   clearCookProgressCache,
   clearOtherUsersCookProgressCache,
   cookProgressChanges,
@@ -223,65 +226,102 @@ describe("signed-in progress cache", () => {
 });
 
 describe("createCookSessionClient", () => {
-  function respond(status: number, body: unknown) {
-    return vi.fn(async () => new Response(JSON.stringify(body), { status }));
+  function respond(status: number, body: unknown, headers: Record<string, string> = {}) {
+    return vi.fn(async () => new Response(JSON.stringify(body), { status, headers }));
   }
 
   const state = { attemptId: "attempt-1", revision: 1, progress: progress({ scaleFactor: 2 }) };
 
-  it("reads, starts, and patches the recipe's session", async () => {
+  it("reads, starts, and patches the recipe's session as the expected cook", async () => {
     const fetch = respond(200, { state });
-    const client = createCookSessionClient("recipe 1", { fetch, mutationId: () => "m-1" });
+    const client = createCookSessionClient("recipe 1", "user-1", { fetch, mutationId: () => "m-1" });
 
     await expect(client.read()).resolves.toEqual({ kind: "state", state: snapshot(1, { scaleFactor: 2 }) });
     await client.start();
     await client.patch(snapshot(1), { scaleFactor: 2 });
 
+    const readHeaders = { Accept: "application/json", "X-Spoonjoy-Cook-User": "user-1" };
     expect(fetch.mock.calls).toEqual([
-      ["/api/cook-sessions/recipe%201", {
-        method: "GET",
-        cache: "no-store",
-        credentials: "same-origin",
-        headers: { Accept: "application/json" },
-      }],
-      ["/api/cook-sessions/recipe%201/start", {
-        method: "POST",
-        cache: "no-store",
-        credentials: "same-origin",
-        headers: { Accept: "application/json" },
-      }],
+      ["/api/cook-sessions/recipe%201", { method: "GET", cache: "no-store", credentials: "same-origin", headers: readHeaders }],
+      ["/api/cook-sessions/recipe%201/start", { method: "POST", cache: "no-store", credentials: "same-origin", headers: readHeaders }],
       ["/api/cook-sessions/recipe%201", {
         method: "PATCH",
         body: JSON.stringify({ attemptId: "attempt-1", expectedRevision: 1, mutationId: "m-1", changes: { scaleFactor: 2 } }),
         cache: "no-store",
         credentials: "same-origin",
-        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        headers: { ...readHeaders, "Content-Type": "application/json" },
       }],
     ]);
   });
 
-  it("maps each server answer to what the sync loop does next", async () => {
-    const answer = (status: number, body: unknown) => createCookSessionClient("r", { fetch: respond(status, body) }).read();
+  it("sends a leave-time flush with keepalive, and only while the body is well under the keepalive limit", async () => {
+    expect(MAX_KEEPALIVE_BODY_BYTES).toBeLessThanOrEqual(64 * 1024 / 2);
+    const fetch = respond(200, { state });
+    const client = createCookSessionClient("r", "user-1", { fetch, mutationId: () => "m-1" });
+
+    await client.patch(snapshot(1), { scaleFactor: 2 }, { keepalive: true });
+    const init = fetch.mock.calls[0][1] as RequestInit;
+    expect(init.keepalive).toBe(true);
+    expect(new TextEncoder().encode(String(init.body)).byteLength).toBeLessThan(MAX_KEEPALIVE_BODY_BYTES);
+
+    // A realistic big recipe's full checklist (100 ids of 64 characters) still fits.
+    const manyIds = Array.from({ length: 100 }, (_, index) => `${"i".repeat(60)}${String(index).padStart(4, "0")}`);
+    await client.patch(snapshot(1), { checkedIngredientIds: manyIds }, { keepalive: true });
+    expect(fetch).toHaveBeenCalledTimes(2);
+
+    // An oversized flush is not sent; the change stays queued in the browser's cache.
+    const hugeIds = Array.from({ length: 500 }, (_, index) => `${"i".repeat(120)}${String(index).padStart(4, "0")}`);
+    await expect(client.patch(snapshot(1), { checkedIngredientIds: hugeIds }, { keepalive: true })).resolves.toEqual({ kind: "transient" });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    // The same change without keepalive is sent normally.
+    await client.patch(snapshot(1), { checkedIngredientIds: hugeIds });
+    expect((fetch.mock.calls[2][1] as RequestInit).keepalive).toBeUndefined();
+  });
+
+  it("sorts each server answer into what the sync loop does next", async () => {
+    const answer = (status: number, body: unknown, headers: Record<string, string> = {}) =>
+      createCookSessionClient("r", "user-1", { fetch: respond(status, body, headers) }).read();
 
     await expect(answer(200, { state: null })).resolves.toEqual({ kind: "state", state: null });
     await expect(answer(409, { error: { code: "stale_revision", state } })).resolves.toEqual({ kind: "conflict", state: snapshot(1, { scaleFactor: 2 }) });
-    await expect(answer(409, { error: { code: "stale_revision" } })).resolves.toEqual({ kind: "unavailable" });
-    await expect(answer(409, { error: "x" })).resolves.toEqual({ kind: "unavailable" });
+    await expect(answer(412, { error: { code: "user_mismatch" } })).resolves.toEqual({ kind: "wrong_user" });
     await expect(answer(404, { error: { code: "not_found" } })).resolves.toEqual({ kind: "missing" });
     await expect(answer(400, { error: { code: "invalid_request" } })).resolves.toEqual({ kind: "rejected" });
-    await expect(answer(503, { error: { code: "cook_session_protocol_unavailable" } })).resolves.toEqual({ kind: "unavailable" });
-    await expect(answer(200, { state: { attemptId: 1 } })).resolves.toEqual({ kind: "unavailable" });
-    await expect(answer(200, "not an object")).resolves.toEqual({ kind: "unavailable" });
+    // Never retried.
+    await expect(answer(401, { error: { code: "authentication_required" } })).resolves.toEqual({ kind: "stopped" });
+    await expect(answer(403, { error: { code: "origin_forbidden" } })).resolves.toEqual({ kind: "stopped" });
+    await expect(answer(409, { error: { code: "stale_revision" } })).resolves.toEqual({ kind: "stopped" });
+    await expect(answer(409, { error: "x" })).resolves.toEqual({ kind: "stopped" });
+    await expect(answer(412, { error: { code: "other" } })).resolves.toEqual({ kind: "stopped" });
+    await expect(answer(503, { error: { code: "cook_session_protocol_unavailable" } }, { "Retry-After": "1" })).resolves.toEqual({ kind: "stopped" });
+    // Retried.
+    await expect(answer(429, { error: { code: "rate_limited" } }, { "Retry-After": "7" })).resolves.toEqual({ kind: "transient", retryAfterMs: 7_000 });
+    await expect(answer(503, { error: { code: "projection_unavailable" } })).resolves.toEqual({ kind: "transient", retryAfterMs: undefined });
+    await expect(answer(500, "boom")).resolves.toEqual({ kind: "transient", retryAfterMs: undefined });
+    await expect(answer(503, "down for maintenance")).resolves.toEqual({ kind: "transient", retryAfterMs: undefined });
+    await expect(answer(200, { state: { attemptId: 1 } })).resolves.toEqual({ kind: "transient" });
 
-    const offline = createCookSessionClient("r", { fetch: vi.fn(async () => { throw new TypeError("offline"); }) });
-    await expect(offline.read()).resolves.toEqual({ kind: "unavailable" });
-    const notJson = createCookSessionClient("r", { fetch: vi.fn(async () => new Response("<html>", { status: 502 })) });
-    await expect(notJson.read()).resolves.toEqual({ kind: "unavailable" });
+    const offline = createCookSessionClient("r", "user-1", { fetch: vi.fn(async () => { throw new TypeError("offline"); }) });
+    await expect(offline.read()).resolves.toEqual({ kind: "transient" });
+    const notJson = createCookSessionClient("r", "user-1", { fetch: vi.fn(async () => new Response("<html>", { status: 502 })) });
+    await expect(notJson.read()).resolves.toEqual({ kind: "transient", retryAfterMs: undefined });
+  });
+
+  it("reads Retry-After as seconds or as a date", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-27T00:00:00.000Z"));
+    const answer = (retryAfter: string) =>
+      createCookSessionClient("r", "user-1", { fetch: respond(429, {}, { "Retry-After": retryAfter }) }).read();
+
+    await expect(answer("Sun, 27 Sep 2026 00:00:30 GMT")).resolves.toEqual({ kind: "transient", retryAfterMs: 30_000 });
+    await expect(answer("Sat, 26 Sep 2026 23:00:00 GMT")).resolves.toEqual({ kind: "transient", retryAfterMs: 0 });
+    await expect(answer("soon")).resolves.toEqual({ kind: "transient", retryAfterMs: undefined });
+    vi.useRealTimers();
   });
 
   it("uses the browser's fetch and random mutation ids by default", async () => {
     const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ state })));
-    await createCookSessionClient("r").patch(snapshot(1), { scaleFactor: 2 });
+    await createCookSessionClient("r", "user-1").patch(snapshot(1), { scaleFactor: 2 });
 
     const body = JSON.parse(String((fetch.mock.calls[0][1] as RequestInit).body)) as { mutationId: string };
     expect(body.mutationId).toMatch(/^[0-9a-f-]{36}$/);
@@ -295,14 +335,18 @@ class FakeClient implements CookSessionClient {
   reads: Step[] = [];
   starts: Step[] = [];
   patches: Step[] = [];
-  patchCalls: Array<{ server: CookServerSnapshot; changes: Partial<CookProgressValue> }> = [];
+  patchCalls: Array<{ server: CookServerSnapshot; changes: Partial<CookProgressValue>; options?: { keepalive?: boolean } }> = [];
 
   read = vi.fn(async () => this.next(this.reads, "read"));
   start = vi.fn(async () => this.next(this.starts, "start"));
-  patch = vi.fn(async (server: CookServerSnapshot, changes: Partial<CookProgressValue>) => {
-    this.patchCalls.push({ server, changes });
+  patch = vi.fn(async (server: CookServerSnapshot, changes: Partial<CookProgressValue>, options?: { keepalive?: boolean }) => {
+    this.patchCalls.push(options ? { server, changes, options } : { server, changes });
     return this.next(this.patches, "patch");
   });
+
+  get requests() {
+    return this.read.mock.calls.length + this.start.mock.calls.length + this.patch.mock.calls.length;
+  }
 
   private next(queue: Step[], name: string): Step {
     const step = queue.shift();
@@ -319,7 +363,7 @@ function deferred() {
   return { promise, resolve };
 }
 
-function createSync(options: { progress?: CookProgressValue; server?: CookServerSnapshot | null } = {}) {
+function createSync(options: { progress?: CookProgressValue; server?: CookServerSnapshot | null; visible?: () => boolean } = {}) {
   const client = new FakeClient();
   const onProgress = vi.fn();
   const onChange = vi.fn();
@@ -330,6 +374,7 @@ function createSync(options: { progress?: CookProgressValue; server?: CookServer
     normalize: (value) => normalizeCookProgress(value, bounds),
     onProgress,
     onChange,
+    ...(options.visible ? { isVisible: options.visible } : {}),
   });
   return { client, sync, onProgress, onChange };
 }
@@ -382,8 +427,22 @@ describe("CookSessionSync", () => {
     expect(sync.status).toBe("synced");
   });
 
+  it("replays progress queued by an earlier visit from the cached server state", async () => {
+    // The cache holds the last server state and the unsent change (checked rice).
+    const { client, sync } = createSync({ progress: progress({ checkedIngredientIds: ["rice"] }), server: snapshot(3) });
+    client.reads.push({ kind: "state", state: snapshot(3) });
+    client.patches.push({ kind: "state", state: snapshot(4, { checkedIngredientIds: ["rice"] }) });
+
+    await sync.sync(true);
+
+    expect(client.patchCalls).toEqual([{ server: snapshot(3), changes: { checkedIngredientIds: ["rice"] } }]);
+    expect(sync.status).toBe("synced");
+  });
+
   it("pushes a change after a short pause, straight from the known revision", async () => {
     const { client, sync } = createSync({ server: snapshot(2) });
+    client.reads.push({ kind: "state", state: snapshot(2) });
+    await sync.sync(true);
     client.patches.push({ kind: "state", state: snapshot(3, { scaleFactor: 2 }) });
 
     sync.setProgress(progress({ scaleFactor: 2 }));
@@ -391,9 +450,24 @@ describe("CookSessionSync", () => {
     expect(sync.status).toBe("syncing");
     await vi.advanceTimersByTimeAsync(300);
 
-    expect(client.read).not.toHaveBeenCalled();
+    expect(client.read).toHaveBeenCalledTimes(1);
     expect(client.patchCalls).toEqual([{ server: snapshot(2), changes: { scaleFactor: 2 } }]);
     expect(sync.server?.revision).toBe(3);
+  });
+
+  it("skips a pull that comes right after the last one", async () => {
+    const { client, sync } = createSync();
+    client.reads.push({ kind: "state", state: null });
+    await sync.sync(true);
+
+    // focus and visibilitychange arrive together when a tab is shown again.
+    await sync.sync(true);
+    expect(client.read).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(MIN_COOK_PULL_INTERVAL_MS);
+    client.reads.push({ kind: "state", state: null });
+    await sync.sync(true);
+    expect(client.read).toHaveBeenCalledTimes(2);
   });
 
   it("replays a change onto a newer server revision after a conflict", async () => {
@@ -414,11 +488,13 @@ describe("CookSessionSync", () => {
 
   it("keeps a change made while a request was in flight and sends it next", async () => {
     const { client, sync } = createSync({ progress: progress({ scaleFactor: 2 }), server: snapshot(1) });
+    client.reads.push({ kind: "state", state: snapshot(1) });
     const firstPatch = deferred();
     client.patches.push(firstPatch.promise);
     client.patches.push({ kind: "state", state: snapshot(3, { scaleFactor: 2, checkedIngredientIds: ["rice"] }) });
 
-    const running = sync.sync(false);
+    const running = sync.sync(true);
+    await vi.advanceTimersByTimeAsync(0);
     sync.setProgress(progress({ scaleFactor: 2, checkedIngredientIds: ["rice"] }));
     firstPatch.resolve({ kind: "state", state: snapshot(2, { scaleFactor: 2 }) });
     await running;
@@ -435,6 +511,7 @@ describe("CookSessionSync", () => {
     client.reads.push({ kind: "state", state: null });
 
     const running = sync.sync(false);
+    await vi.advanceTimersByTimeAsync(MIN_COOK_PULL_INTERVAL_MS);
     const queued = sync.sync(true);
     void sync.sync(false);
     expect(queued).toBe(running);
@@ -446,11 +523,12 @@ describe("CookSessionSync", () => {
 
   it("starts over when the server no longer has the session", async () => {
     const { client, sync } = createSync({ progress: progress({ scaleFactor: 2 }), server: snapshot(5) });
+    client.reads.push({ kind: "state", state: snapshot(5) });
     client.patches.push({ kind: "missing" });
     client.starts.push({ kind: "state", state: snapshot(0, {}, "attempt-2") });
     client.patches.push({ kind: "state", state: snapshot(1, { scaleFactor: 2 }, "attempt-2") });
 
-    await sync.sync(false);
+    await sync.sync(true);
 
     expect(client.patchCalls[1]).toEqual({ server: snapshot(0, {}, "attempt-2"), changes: { scaleFactor: 2 } });
     expect(sync.server?.attemptId).toBe("attempt-2");
@@ -458,10 +536,11 @@ describe("CookSessionSync", () => {
 
   it("shows the server's progress when the server refuses this page's change", async () => {
     const { client, sync, onProgress } = createSync({ progress: progress({ checkedIngredientIds: ["rice"] }), server: snapshot(1) });
+    client.reads.push({ kind: "state", state: snapshot(1) });
     client.patches.push({ kind: "rejected" });
     client.reads.push({ kind: "state", state: snapshot(2, { checkedIngredientIds: ["stock", "gone"] }) });
 
-    await sync.sync(false);
+    await sync.sync(true);
 
     expect(onProgress).toHaveBeenLastCalledWith(progress({ checkedIngredientIds: ["stock"] }));
     expect(sync.server).toEqual(snapshot(2, { checkedIngredientIds: ["stock"] }));
@@ -470,24 +549,28 @@ describe("CookSessionSync", () => {
 
   it("clears to nothing when a refused change meets an empty server", async () => {
     const { client, sync, onProgress } = createSync({ progress: progress({ checkedIngredientIds: ["rice"] }), server: snapshot(1) });
+    client.reads.push({ kind: "state", state: snapshot(1) });
     client.patches.push({ kind: "rejected" });
     client.reads.push({ kind: "state", state: null });
 
-    await sync.sync(false);
+    await sync.sync(true);
 
     expect(onProgress).toHaveBeenLastCalledWith(progress());
     expect(sync.server).toBeNull();
   });
 
-  it("retries with growing delays while the server is unreachable, then recovers", async () => {
+  it("retries a transient failure with growing delays, honouring Retry-After, then recovers", async () => {
     const { client, sync } = createSync({ progress: progress({ scaleFactor: 2 }) });
-    client.reads.push({ kind: "unavailable" });
+    client.reads.push({ kind: "transient", retryAfterMs: 5_000 });
 
     await sync.sync(true);
     expect(sync.status).toBe("offline");
 
-    client.reads.push({ kind: "unavailable" });
-    await vi.advanceTimersByTimeAsync(1_000);
+    // Retry-After (5 s) outranks the first backoff step (1 s).
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(client.read).toHaveBeenCalledTimes(1);
+    client.reads.push({ kind: "transient" });
+    await vi.advanceTimersByTimeAsync(1);
     expect(client.read).toHaveBeenCalledTimes(2);
 
     client.reads.push({ kind: "state", state: snapshot(0) });
@@ -499,51 +582,204 @@ describe("CookSessionSync", () => {
     expect(sync.status).toBe("synced");
   });
 
-  it("caps the retry delay", async () => {
+  it("stops retrying after the cap, and a page event starts a fresh round", async () => {
     const { client, sync } = createSync();
-    for (let attempt = 0; attempt < 8; attempt += 1) client.reads.push({ kind: "unavailable" });
+    for (let attempt = 0; attempt <= MAX_COOK_SYNC_RETRIES; attempt += 1) client.reads.push({ kind: "transient" });
 
     await sync.sync(true);
-    await vi.advanceTimersByTimeAsync(1_000 + 2_000 + 4_000 + 8_000 + 16_000 + 30_000 + 30_000);
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(client.read).toHaveBeenCalledTimes(MAX_COOK_SYNC_RETRIES + 1);
+    expect(sync.status).toBe("offline");
 
-    expect(client.read).toHaveBeenCalledTimes(8);
+    client.reads.push({ kind: "state", state: null });
+    await sync.sync(true);
+    expect(client.read).toHaveBeenCalledTimes(MAX_COOK_SYNC_RETRIES + 2);
+    expect(sync.status).toBe("synced");
+  });
+
+  it("caps each retry delay at 30 seconds, even for a longer Retry-After", async () => {
+    const { client, sync } = createSync();
+    client.reads.push({ kind: "transient", retryAfterMs: 120_000 });
+    client.reads.push({ kind: "state", state: null });
+
+    await sync.sync(true);
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(client.read).toHaveBeenCalledTimes(2);
+  });
+
+  it("sends nothing while the page is hidden, and does not retry until it is visible again", async () => {
+    let visible = true;
+    const { client, sync } = createSync({ progress: progress({ scaleFactor: 2 }), visible: () => visible });
+    client.reads.push({ kind: "transient" });
+    await sync.sync(true);
+    expect(client.requests).toBe(1);
+
+    // Hidden before the retry fires: the retry sends nothing.
+    visible = false;
+    await vi.advanceTimersByTimeAsync(60_000);
+    // Hidden when a failure happens: no retry is even scheduled; pushes and pulls send nothing.
+    sync.setProgress(progress({ scaleFactor: 3 }));
+    await vi.advanceTimersByTimeAsync(60_000);
+    await sync.sync(true);
+    expect(client.requests).toBe(1);
+
+    visible = true;
+    client.reads.push({ kind: "state", state: snapshot(0) });
+    client.patches.push({ kind: "state", state: snapshot(1, { scaleFactor: 3 }) });
+    await sync.sync(true);
+    expect(client.requests).toBe(3);
+    expect(sync.status).toBe("synced");
+  });
+
+  it("does not schedule a retry when a failure lands after the page was hidden", async () => {
+    let visible = true;
+    const { client, sync } = createSync({ visible: () => visible });
+    const read = deferred();
+    client.reads.push(read.promise);
+
+    const running = sync.sync(true);
+    visible = false;
+    read.resolve({ kind: "transient" });
+    await running;
+    visible = true;
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(client.read).toHaveBeenCalledTimes(1);
+    expect(sync.status).toBe("offline");
   });
 
   it.each<[string, (client: FakeClient) => void]>([
-    ["a failed start", (client) => {
+    ["a 401 on read", (client) => {
+      client.reads.push({ kind: "stopped" });
+    }],
+    ["a 404 on read", (client) => {
+      client.reads.push({ kind: "missing" });
+    }],
+    ["a 404 on start (the recipe is gone)", (client) => {
       client.reads.push({ kind: "state", state: null });
-      client.starts.push({ kind: "unavailable" });
+      client.starts.push({ kind: "missing" });
     }],
     ["a start without state", (client) => {
       client.reads.push({ kind: "state", state: null });
       client.starts.push({ kind: "state", state: null });
     }],
-    ["a failed patch", (client) => {
+    ["a 403 or protocol-unavailable 503 on patch", (client) => {
       client.reads.push({ kind: "state", state: snapshot(0) });
-      client.patches.push({ kind: "unavailable" });
+      client.patches.push({ kind: "stopped" });
     }],
     ["a patch without state", (client) => {
       client.reads.push({ kind: "state", state: snapshot(0) });
       client.patches.push({ kind: "state", state: null });
     }],
-    ["a failed read after a refusal", (client) => {
+    ["a refused read after a refused change", (client) => {
       client.reads.push({ kind: "state", state: snapshot(0) });
       client.patches.push({ kind: "rejected" });
-      client.reads.push({ kind: "unavailable" });
+      client.reads.push({ kind: "stopped" });
     }],
-    ["endless conflicts", (client) => {
-      client.reads.push({ kind: "state", state: snapshot(0) });
-      for (let round = 1; round <= 4; round += 1) {
-        client.patches.push({ kind: "conflict", state: snapshot(round) });
-      }
-    }],
-  ])("reports offline after %s", async (_name, arrange) => {
-    const { client, sync } = createSync({ progress: progress({ scaleFactor: 2 }) });
+  ])("stops for good after %s: no retries, no further requests", async (_name, arrange) => {
+    const { client, sync, onChange } = createSync({ progress: progress({ scaleFactor: 2 }) });
     arrange(client);
+
+    await sync.sync(true);
+    const requests = client.requests;
+    expect(sync.status).toBe("stopped");
+
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    await vi.advanceTimersByTimeAsync(MIN_COOK_PULL_INTERVAL_MS);
+    await sync.sync(true);
+    sync.setProgress(progress({ scaleFactor: 3 }));
+    await vi.advanceTimersByTimeAsync(60_000);
+    sync.flush();
+    expect(client.requests).toBe(requests);
+    // Local changes are still kept (and cached) on this device.
+    expect(sync.progress).toEqual(progress({ scaleFactor: 3 }));
+    expect(onChange).toHaveBeenCalled();
+  });
+
+  it("reports offline after endless conflicts", async () => {
+    const { client, sync } = createSync({ progress: progress({ scaleFactor: 2 }) });
+    client.reads.push({ kind: "state", state: snapshot(0) });
+    for (let round = 1; round <= 4; round += 1) {
+      client.patches.push({ kind: "conflict", state: snapshot(round) });
+    }
 
     await sync.sync(true);
 
     expect(sync.status).toBe("offline");
+  });
+
+  it("stops without writing when another account owns the session, and drops this tab's pending changes", async () => {
+    const { client, sync } = createSync({ progress: progress({ checkedIngredientIds: ["rice"] }), server: snapshot(2) });
+    client.reads.push({ kind: "wrong_user" });
+
+    await sync.sync(true);
+
+    expect(sync.status).toBe("account_changed");
+    expect(sync.progress).toEqual(snapshot(2).progress);
+    expect(client.start).not.toHaveBeenCalled();
+    expect(client.patch).not.toHaveBeenCalled();
+
+    sync.setProgress(progress({ scaleFactor: 3 }));
+    await vi.advanceTimersByTimeAsync(60_000);
+    await sync.sync(true);
+    sync.dispose();
+    expect(client.requests).toBe(1);
+    expect(sync.progress).toEqual(snapshot(2).progress);
+  });
+
+  it("stops on a user mismatch from start or patch too", async () => {
+    const fromStart = createSync({ progress: progress({ scaleFactor: 2 }) });
+    fromStart.client.reads.push({ kind: "state", state: null });
+    fromStart.client.starts.push({ kind: "wrong_user" });
+    await fromStart.sync.sync(true);
+    expect(fromStart.sync.status).toBe("account_changed");
+    // No known server state: the page keeps showing what it had.
+    expect(fromStart.sync.progress).toEqual(progress({ scaleFactor: 2 }));
+
+    const fromPatch = createSync({ progress: progress({ scaleFactor: 2 }), server: snapshot(1) });
+    fromPatch.client.reads.push({ kind: "state", state: snapshot(1) });
+    fromPatch.client.patches.push({ kind: "wrong_user" });
+    await fromPatch.sync.sync(true);
+    expect(fromPatch.sync.status).toBe("account_changed");
+    expect(fromPatch.client.patch).toHaveBeenCalledTimes(1);
+  });
+
+  it("flushes a change still waiting on the push delay once, with keepalive, when disposed", async () => {
+    const { client, sync } = createSync({ server: snapshot(2) });
+    client.reads.push({ kind: "state", state: snapshot(2) });
+    await sync.sync(true);
+    client.patches.push({ kind: "state", state: snapshot(3, { checkedIngredientIds: ["rice"] }) });
+
+    sync.setProgress(progress({ checkedIngredientIds: ["rice"] }));
+    await vi.advanceTimersByTimeAsync(100);
+    sync.dispose();
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(client.patchCalls).toEqual([
+      { server: snapshot(2), changes: { checkedIngredientIds: ["rice"] }, options: { keepalive: true } },
+    ]);
+  });
+
+  it("flushes on leave without stopping, and sends nothing when there is nothing to flush", async () => {
+    const { client, sync } = createSync({ progress: progress({ scaleFactor: 2 }) });
+    // Nothing known from the server yet: nothing to patch against.
+    sync.flush();
+    expect(client.requests).toBe(0);
+
+    client.reads.push({ kind: "state", state: snapshot(1, { scaleFactor: 2 }) });
+    await sync.sync(true);
+    // In step with the server: nothing to send.
+    sync.flush();
+    expect(client.requests).toBe(1);
+
+    // Hidden with a pending change: one keepalive PATCH; the engine keeps running afterwards.
+    client.patches.push({ kind: "state", state: snapshot(2, { scaleFactor: 3 }) });
+    sync.setProgress(progress({ scaleFactor: 3 }));
+    sync.flush();
+    expect(client.patchCalls).toEqual([{ server: snapshot(1, { scaleFactor: 2 }), changes: { scaleFactor: 3 }, options: { keepalive: true } }]);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(client.requests).toBe(2);
   });
 
   it("stops quietly once disposed, whatever is in flight", async () => {
@@ -566,16 +802,20 @@ describe("CookSessionSync", () => {
 
       const running = sync.sync(true);
       await vi.advanceTimersByTimeAsync(0);
+      client.patches.push({ kind: "transient" });
       sync.dispose();
       pending.resolve({ kind: "state", state: snapshot(9, { scaleFactor: 2 }) });
       await running;
       onChange.mockClear();
+      const requests = client.requests;
 
       sync.setProgress(progress({ scaleFactor: 3 }));
       await sync.sync(true);
+      sync.flush();
       await vi.advanceTimersByTimeAsync(60_000);
       expect(onChange).not.toHaveBeenCalled();
       expect(sync.progress).toEqual(progress({ scaleFactor: 2 }));
+      expect(client.requests).toBe(requests);
     }
   });
 });

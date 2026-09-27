@@ -7,12 +7,7 @@ import { scaleServingsText } from '~/lib/quantity'
 import { resolveChefAvatarUrl } from '~/lib/chef-avatar'
 import { CoverProvenanceBadge } from './CoverProvenanceBadge'
 import type { CookSyncStatus } from '~/lib/cook-session-sync'
-
-const PROGRESS_SYNC_STATUS_TEXT: Record<CookSyncStatus, string> = {
-  syncing: 'Syncing progress…',
-  synced: 'Progress synced',
-  offline: 'Progress saved on this device',
-}
+import { CookSyncStatusLine } from './CookSyncStatusLine'
 
 function normalizeCoverPlaceholderLabel(label: string) {
   return label === 'Awaiting first chef photo' ? 'Awaiting first photo' : label
@@ -213,15 +208,7 @@ export function RecipeHeader({
                 </button>
               )}
             </div>
-            {progressSyncStatus ? (
-              <p
-                className="font-sj-ui mt-3 text-xs font-semibold text-[var(--sj-ink-soft)]"
-                data-testid="cook-sync-status"
-                data-status={progressSyncStatus}
-              >
-                {PROGRESS_SYNC_STATUS_TEXT[progressSyncStatus]}
-              </p>
-            ) : null}
+            {progressSyncStatus ? <CookSyncStatusLine status={progressSyncStatus} /> : null}
           </div>
         </div>
       </div>

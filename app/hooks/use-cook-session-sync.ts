@@ -38,8 +38,10 @@ export interface UseCookSessionSyncOptions {
  *
  * The page reads the server's progress when it loads, when the tab becomes visible again, when
  * the window regains focus, and when the browser comes back online; the cook's own changes are
- * pushed shortly after each one. There is no timer polling: coming back to the recipe on another
- * device (a new visit, switching tabs or apps, refocusing) is what picks up that device's changes.
+ * pushed shortly after each one, and flushed once (keepalive) when the page is hidden, left, or
+ * unmounted. There is no timer polling: coming back to the recipe on another device (a new visit,
+ * switching tabs or apps, refocusing) is what picks up that device's changes. Nothing is sent
+ * while the page is hidden, except that one flush.
  */
 export function useCookSessionSync({
   recipeId,
@@ -57,35 +59,48 @@ export function useCookSessionSync({
   useEffect(() => {
     if (!userId || !ready) return;
 
+    const isVisible = () => document.visibilityState === "visible";
     const engine = new CookSessionSync({
-      client: createCookSessionClient(recipeId),
+      client: createCookSessionClient(recipeId, userId),
       progress: latest.current.progress,
       server: readSyncedCookCache(userId, recipeId, latest.current.bounds)?.server ?? null,
       normalize: (value) => normalizeCookProgress(value, latest.current.bounds),
       onProgress: (value) => latest.current.onRemoteProgress(value),
       onChange: () => {
-        writeSyncedCookCache(userId, recipeId, { progress: engine.progress, server: engine.server });
+        // Once another account owns the browser's session, this tab's progress is never saved.
+        if (engine.status !== "account_changed") {
+          writeSyncedCookCache(userId, recipeId, { progress: engine.progress, server: engine.server });
+        }
         setStatus(engine.status);
       },
+      isVisible,
     });
     engineRef.current = engine;
     setStatus(engine.status);
 
     const pull = () => void engine.sync(true);
-    const pullIfVisible = () => {
-      if (document.visibilityState === "visible") pull();
+    const onVisibilityChange = () => {
+      if (isVisible()) {
+        pull();
+      } else {
+        engine.flush();
+      }
     };
+    const flush = () => engine.flush();
     window.addEventListener("focus", pull);
     window.addEventListener("online", pull);
-    document.addEventListener("visibilitychange", pullIfVisible);
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVisibilityChange);
     pull();
 
     return () => {
+      // Leaving the recipe: dispose sends pending changes once (keepalive) before stopping.
       engine.dispose();
       engineRef.current = null;
       window.removeEventListener("focus", pull);
       window.removeEventListener("online", pull);
-      document.removeEventListener("visibilitychange", pullIfVisible);
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [recipeId, userId, ready]);
 
