@@ -5,14 +5,20 @@ import bcrypt from "bcryptjs";
 import { describe, expect, it, vi } from "vitest";
 import {
   KITCHEN,
+  SCRATCH_USER_COUNT,
   buildKitchenResetSql,
+  buildScratchInvalidationSql,
+  buildScratchUsersSql,
   defaultCliErrorHandler,
   generatePersonaPasswords,
+  generateScratchPasswords,
+  generateScratchUsers,
   isCliEntry,
   main,
   parseSeedKitchenArgs,
   runCliIfEntry,
 } from "../../scripts/seed-qa-kitchen.mjs";
+import { DISPOSABLE_USER_WHERE, buildApplySql } from "../../scripts/cleanup-local-qa-data.mjs";
 import { expectConsoleError } from "../warning-policy";
 
 const MIGRATIONS = resolve(__dirname, "../../migrations");
@@ -240,14 +246,233 @@ describe("seed-qa-kitchen", () => {
     expect(a.chef).toMatch(/^[A-Za-z0-9_-]{32}$/);
   });
 
+  describe("scratch users", () => {
+    it("generates SCRATCH_USER_COUNT users by default, each in the codex-e2e-* / codex_e2e_* disposable namespace, no id over 40 characters", () => {
+      const users = generateScratchUsers();
+      expect(users).toHaveLength(SCRATCH_USER_COUNT);
+      for (const user of users) {
+        expect(user.email).toMatch(/^codex-e2e-s-[a-z0-9-]+@example\.com$/);
+        expect(user.username).toMatch(/^codex_e2e_s_[a-z0-9_]+$/);
+        expect(user.id).toBe(user.username);
+        expect(user.email).toMatch(/^codex-/);
+        expect(user.username.startsWith("codex_")).toBe(true);
+        expect(user.id.length).toBeLessThanOrEqual(40);
+      }
+    });
+
+    it("honors a custom count", () => {
+      const users = generateScratchUsers(2);
+      expect(users).toHaveLength(2);
+    });
+
+    it("falls back to a 'run' token when the injected random source sanitizes down to nothing", () => {
+      const random = () => ({ toString: () => "" }) as unknown as Buffer;
+      const users = generateScratchUsers(1, { random });
+      expect(users[0].username).toMatch(/_run_1$/);
+      expect(users[0].email).toMatch(/-run-1@example\.com$/);
+    });
+
+    it("gives every scratch user in a run a distinct id/username/email", () => {
+      const users = generateScratchUsers();
+      expect(new Set(users.map((u) => u.id)).size).toBe(users.length);
+      expect(new Set(users.map((u) => u.username)).size).toBe(users.length);
+      expect(new Set(users.map((u) => u.email)).size).toBe(users.length);
+    });
+
+    it("never collides across two runs via the random run token", () => {
+      const runA = generateScratchUsers(SCRATCH_USER_COUNT);
+      const runB = generateScratchUsers(SCRATCH_USER_COUNT);
+      const idsA = new Set(runA.map((u) => u.id));
+      for (const user of runB) {
+        expect(idsA.has(user.id)).toBe(false);
+      }
+    });
+
+    it("generates SCRATCH_USER_COUNT distinct strong passwords by default", () => {
+      const passwords = generateScratchPasswords();
+      expect(passwords).toHaveLength(SCRATCH_USER_COUNT);
+      expect(new Set(passwords).size).toBe(passwords.length);
+      for (const password of passwords) {
+        expect(password).toMatch(/^[A-Za-z0-9_-]{32}$/);
+      }
+    });
+
+    it("honors a custom count for passwords", () => {
+      expect(generateScratchPasswords(3)).toHaveLength(3);
+    });
+
+    it("throws when the number of passwords doesn't match the number of users", () => {
+      const users = generateScratchUsers(2);
+      expect(() => buildScratchUsersSql({ users, passwords: ["only-one"] })).toThrow(
+        /exactly one password per scratch user/,
+      );
+    });
+
+    it("inserts scratch users on a database created from the real migrations, each with its own bcrypt-hashed password", () => {
+      const db = migratedDb();
+      const users = generateScratchUsers(2);
+      const passwords = ["scratch-pw-1", "scratch-pw-2"];
+      db.exec(buildScratchUsersSql({ users, passwords, hash: fastHash }));
+
+      for (const [index, user] of users.entries()) {
+        const row = db.prepare('SELECT username, email, hashedPassword FROM "User" WHERE id = ?').get(user.id) as any;
+        expect(row.username).toBe(user.username);
+        expect(row.email).toBe(user.email);
+        expect(bcrypt.compareSync(passwords[index], row.hashedPassword)).toBe(true);
+      }
+    });
+
+    it("is idempotent: re-applying the same generated statement never throws", () => {
+      const db = migratedDb();
+      const users = generateScratchUsers(2);
+      const passwords = ["scratch-pw-1", "scratch-pw-2"];
+      const sql = buildScratchUsersSql({ users, passwords, hash: fastHash });
+      db.exec(sql);
+      expect(() => db.exec(sql)).not.toThrow();
+      expect(db.prepare('SELECT COUNT(*) n FROM "User" WHERE id IN (?, ?)').get(users[0].id, users[1].id)).toEqual({
+        n: 2,
+      });
+    });
+
+    it("does not collide with the qa-kitchen personas' reset logic: a kitchen reset leaves scratch users untouched", () => {
+      const db = migratedDb();
+      const users = generateScratchUsers(2);
+      db.exec(buildScratchUsersSql({ users, passwords: ["scratch-pw-1", "scratch-pw-2"], hash: fastHash }));
+      db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
+      expect(db.prepare('SELECT COUNT(*) n FROM "User" WHERE id IN (?, ?)').get(users[0].id, users[1].id)).toEqual({
+        n: 2,
+      });
+    });
+
+    it("is picked up by cleanup-local-qa-data.mjs's disposable-user rule and removed by its apply SQL", () => {
+      const db = migratedDb();
+      const users = generateScratchUsers(SCRATCH_USER_COUNT);
+      const scratchPasswords = generateScratchPasswords(users.length);
+      db.exec(buildScratchUsersSql({ users, passwords: scratchPasswords, hash: fastHash }));
+
+      const scratchIds = users.map((u) => u.id);
+      const placeholders = scratchIds.map(() => "?").join(", ");
+      const disposableRows = db
+        .prepare(`SELECT id FROM "User" WHERE id IN (${placeholders}) AND (${DISPOSABLE_USER_WHERE}) ORDER BY id`)
+        .all(...scratchIds);
+      expect(disposableRows).toEqual(scratchIds.slice().sort().map((id) => ({ id })));
+
+      db.exec(buildApplySql());
+
+      expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+      expect(db.prepare(`SELECT COUNT(*) n FROM "User" WHERE id IN (${placeholders})`).get(...scratchIds)).toEqual({
+        n: 0,
+      });
+    });
+
+    describe("buildScratchInvalidationSql (--rotate)", () => {
+      it("nulls out hashedPassword and salt for every scratch user, regardless of which run created it", () => {
+        const db = migratedDb();
+        const runA = generateScratchUsers(2);
+        const runB = generateScratchUsers(2);
+        db.exec(buildScratchUsersSql({ users: runA, passwords: ["pw-a1", "pw-a2"], hash: fastHash }));
+        db.exec(buildScratchUsersSql({ users: runB, passwords: ["pw-b1", "pw-b2"], hash: fastHash }));
+
+        db.exec(buildScratchInvalidationSql());
+
+        for (const user of [...runA, ...runB]) {
+          const row = db.prepare('SELECT hashedPassword, salt FROM "User" WHERE id = ?').get(user.id) as any;
+          expect(row.hashedPassword).toBeNull();
+          expect(row.salt).toBeNull();
+        }
+      });
+
+      it("also invalidates a legacy scratch user minted under the old, longer 'codex-e2e-scratch-...' email shape", () => {
+        // Before scratch ids were shortened to fit under D1's 50-byte LIKE pattern limit, this
+        // generator minted 'codex-e2e-scratch-<stamp>-<token>-<n>@example.com' addresses. Some
+        // of those are still sitting in QA, and --rotate must keep invalidating them, not just
+        // users under the current, shorter 'codex-e2e-s-...' shape.
+        const db = migratedDb();
+        db.exec(`
+          INSERT INTO "User" (id, email, username, hashedPassword, salt, createdAt, updatedAt)
+          VALUES (
+            'codex_e2e_scratch_legacy_1',
+            'codex-e2e-scratch-20260101t000000z-legacytoken1234-1@example.com',
+            'codex_e2e_scratch_legacy_1',
+            '${fastHash("legacy-pw")}',
+            'salt',
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP
+          );
+        `);
+
+        db.exec(buildScratchInvalidationSql());
+
+        const row = db.prepare('SELECT hashedPassword, salt FROM "User" WHERE id = ?').get("codex_e2e_scratch_legacy_1") as any;
+        expect(row.hashedPassword).toBeNull();
+        expect(row.salt).toBeNull();
+      });
+
+      it("never touches the kitchen personas", () => {
+        const db = migratedDb();
+        db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
+        const users = generateScratchUsers(1);
+        db.exec(buildScratchUsersSql({ users, passwords: ["pw-1"], hash: fastHash }));
+
+        db.exec(buildScratchInvalidationSql());
+
+        const chef = db.prepare('SELECT hashedPassword FROM "User" WHERE id = ?').get(KITCHEN.chef.id) as any;
+        expect(bcrypt.compareSync(passwords.chef, chef.hashedPassword)).toBe(true);
+      });
+
+      it("is a no-op (does not throw) when no scratch user exists yet", () => {
+        const db = migratedDb();
+        expect(() => db.exec(buildScratchInvalidationSql())).not.toThrow();
+      });
+
+      it("makes a login attempt with the old password impossible: authenticatePasswordUser's null-hashedPassword short circuit applies", () => {
+        // scripts/seed-qa-kitchen.mjs's buildScratchInvalidationSql comment documents that
+        // app/lib/auth.server.ts's authenticatePasswordUser rejects any user row whose
+        // hashedPassword is null before ever comparing a password. This test proves the SQL
+        // side of that contract: after invalidation, the stored hash is exactly null, which is
+        // the value that function's `!user.hashedPassword` check treats as "no password set".
+        const db = migratedDb();
+        const users = generateScratchUsers(1);
+        const password = "scratch-pw-1";
+        db.exec(buildScratchUsersSql({ users, passwords: [password], hash: fastHash }));
+        const before = db.prepare('SELECT hashedPassword FROM "User" WHERE id = ?').get(users[0].id) as any;
+        expect(bcrypt.compareSync(password, before.hashedPassword)).toBe(true);
+
+        db.exec(buildScratchInvalidationSql());
+
+        const after = db.prepare('SELECT hashedPassword FROM "User" WHERE id = ?').get(users[0].id) as any;
+        expect(after.hashedPassword).toBeNull();
+      });
+    });
+  });
+
   it("refuses any target but QA", () => {
     expect(() => parseSeedKitchenArgs([])).toThrow(/--target-env qa/);
     expect(() => parseSeedKitchenArgs(["--target-env", "production"])).toThrow(/--target-env qa/);
-    expect(parseSeedKitchenArgs(["--target-env", "qa", "--credentials-out", "/tmp/c.json"])).toEqual({ targetEnv: "qa", dryRun: false, credentialsOut: "/tmp/c.json" });
+    expect(parseSeedKitchenArgs(["--target-env", "qa", "--credentials-out", "/tmp/c.json"])).toEqual({
+      targetEnv: "qa",
+      dryRun: false,
+      credentialsOut: "/tmp/c.json",
+      rotate: false,
+    });
   });
 
-  it("defaults credentialsOut to null when --credentials-out is not given", () => {
-    expect(parseSeedKitchenArgs(["--target-env", "qa"])).toEqual({ targetEnv: "qa", dryRun: false, credentialsOut: null });
+  it("defaults credentialsOut to null and rotate to false when neither flag is given", () => {
+    expect(parseSeedKitchenArgs(["--target-env", "qa"])).toEqual({
+      targetEnv: "qa",
+      dryRun: false,
+      credentialsOut: null,
+      rotate: false,
+    });
+  });
+
+  it("parses --rotate", () => {
+    expect(parseSeedKitchenArgs(["--target-env", "qa", "--rotate"])).toEqual({
+      targetEnv: "qa",
+      dryRun: false,
+      credentialsOut: null,
+      rotate: true,
+    });
   });
 
   it("throws when --credentials-out is the last argument with no value", () => {
@@ -307,16 +532,74 @@ describe("seed-qa-kitchen", () => {
 
       expect(writeFile.mock.calls[1][0]).toBe("/tmp/creds.json");
       const credentials = JSON.parse(writeFile.mock.calls[1][1] as string);
-      expect(credentials).toEqual({
-        chef: { username: "qa_kitchen_chef", email: "qa-kitchen-chef@example.com", password: expect.any(String) },
-        friend: { username: "qa_kitchen_friend", email: "qa-kitchen-friend@example.com", password: expect.any(String) },
-        newbie: { username: "qa_kitchen_newbie", email: "qa-kitchen-newbie@example.com", password: expect.any(String) },
-      });
+      expect(credentials.chef).toEqual({ username: "qa_kitchen_chef", email: "qa-kitchen-chef@example.com", password: expect.any(String) });
+      expect(credentials.friend).toEqual({ username: "qa_kitchen_friend", email: "qa-kitchen-friend@example.com", password: expect.any(String) });
+      expect(credentials.newbie).toEqual({ username: "qa_kitchen_newbie", email: "qa-kitchen-newbie@example.com", password: expect.any(String) });
+      expect(credentials.scratch).toHaveLength(SCRATCH_USER_COUNT);
+      for (const entry of credentials.scratch) {
+        expect(entry.email).toMatch(/^codex-e2e-s-/);
+        expect(entry.username).toMatch(/^codex_e2e_s_/);
+        expect(entry.username.length).toBeLessThanOrEqual(40);
+        expect(entry.password).toEqual(expect.any(String));
+      }
       expect(writeFile.mock.calls[1][2]).toEqual({ encoding: "utf8", mode: 0o600 });
       // chmod explicitly restricts the credentials file even if it already existed
       // (writeFile's mode option only applies to a newly created file).
       expect(chmod).toHaveBeenCalledWith("/tmp/creds.json", 0o600);
       expect(io.log).not.toHaveBeenCalled();
+    });
+
+    it("--rotate invalidates existing scratch users in place instead of minting a new batch", () => {
+      const execFile = vi.fn();
+      const writeFile = vi.fn();
+      const rm = vi.fn();
+      const chmod = vi.fn();
+      const mkdtemp = vi.fn(() => "/tmp/spoonjoy-qa-kitchen-rotate");
+      const io = { log: vi.fn() };
+      const generateScratch = vi.fn(generateScratchUsers);
+      const generateScratchPasswordsSpy = vi.fn(generateScratchPasswords);
+
+      main(["--target-env", "qa", "--rotate"], {
+        execFile,
+        writeFile,
+        mkdtemp,
+        rm,
+        chmod,
+        io,
+        generateScratch,
+        generateScratchPasswords: generateScratchPasswordsSpy,
+      });
+
+      // No new scratch batch is generated or inserted: neither generator is called, and the
+      // written SQL contains the invalidation UPDATE instead of any scratch INSERT.
+      expect(generateScratch).not.toHaveBeenCalled();
+      expect(generateScratchPasswordsSpy).not.toHaveBeenCalled();
+      const sql = writeFile.mock.calls[0][1] as string;
+      expect(sql).toContain('UPDATE "User" SET hashedPassword = NULL, salt = NULL');
+      expect(sql).not.toContain("INSERT OR IGNORE INTO \"User\"");
+      // The kitchen personas are still reset/rotated as before.
+      expect(sql).toContain('INSERT INTO "User"');
+    });
+
+    it("--rotate with --credentials-out writes an empty scratch array (no new scratch batch exists to record)", () => {
+      const execFile = vi.fn();
+      const writeFile = vi.fn();
+      const rm = vi.fn();
+      const chmod = vi.fn();
+      const mkdtemp = vi.fn(() => "/tmp/spoonjoy-qa-kitchen-rotate-creds");
+      const io = { log: vi.fn() };
+
+      main(["--target-env", "qa", "--rotate", "--credentials-out", "/tmp/creds-rotate.json"], {
+        execFile,
+        writeFile,
+        mkdtemp,
+        rm,
+        chmod,
+        io,
+      });
+
+      const credentials = JSON.parse(writeFile.mock.calls[1][1] as string);
+      expect(credentials.scratch).toEqual([]);
     });
 
     it("runs wrangler and writes no credentials file (and never calls chmod) when --credentials-out is not given", () => {

@@ -34,6 +34,7 @@ QA resources:
 - D1 database: `spoonjoy-qa`
 - R2 bucket: `spoonjoy-photos-qa`
 - Rate-limit namespaces: `2001`, `2002`, `2003`
+- `AUTH_IP_RATE_LIMITER` (namespace `2003`) is 60/minute in QA, vs. production's 20/minute (namespace `1003`): CI's Journeys workflow exercises QA from shared GitHub-hosted runner IPs (personas + per-run scratch users signing in, plus the journeys' own sign-ins), so QA needs headroom a single real client would never need. Production is deliberately left tighter; do not raise it to match QA.
 - Disposable seed namespace: `codex-qa-seed-`
 - Disposable smoke users: `codex-smoke-...@example.com`
 
