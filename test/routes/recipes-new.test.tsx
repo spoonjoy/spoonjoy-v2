@@ -264,7 +264,7 @@ describe("Recipes New Route", () => {
       } as any);
 
       const { data, status } = extractResponseData(response);
-      expect(status).toBe(400);
+      expect(status).toBe(200);
       expect(data.errors.parse).toBe("Ingredient text is required");
     });
 

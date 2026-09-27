@@ -181,10 +181,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       return data({ parsedIngredients });
     } catch (error) {
       if (error instanceof IngredientParseError) {
-        return data(
-          { errors: { parse: error.message } },
-          { status: 400 }
-        );
+        // A parse failure (no API key, provider down, unparseable text) is an
+        // outcome the form shows next to the box, with the manual path, not a
+        // failed request: a 4xx here makes every browser log a console error
+        // while the person is just typing.
+        return data({ errors: { parse: error.message } }, { status: 200 });
       }
       // Unexpected errors
       return data(
