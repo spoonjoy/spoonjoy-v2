@@ -343,6 +343,20 @@ describe("handleRecipeDetailAction cover generation actions", () => {
       context: { cloudflare: { env: null } } as any,
     })).rejects.toMatchObject({ status: 400 });
 
+    // A bare wall-clock time from a datetime-local field has no timezone; the Worker runs in UTC,
+    // so reading it as UTC would shift the cook by the cook's own offset (ui-map bug 17).
+    const zonelessCookedAt = new UndiciFormData();
+    zonelessCookedAt.append("intent", "createFirstPhotoCover");
+    zonelessCookedAt.append("photo", photoFile("zoneless-cooked-at.png"));
+    zonelessCookedAt.append("postAsSpoon", "true");
+    zonelessCookedAt.append("cookedAt", "2026-07-14T19:30");
+    await expect(handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(chef.id, recipe.id, zonelessCookedAt) as unknown as Request,
+      params: { id: recipe.id },
+      context: { cloudflare: { env: null } } as any,
+    })).rejects.toMatchObject({ status: 400 });
+    expect(await db.recipeSpoon.count({ where: { recipeId: recipe.id } })).toBe(0);
+
     const gif = new UndiciFormData();
     gif.append("intent", "createFirstPhotoCover");
     gif.append("photo", photoFile("animated.gif", GIF_BYTES, "image/gif"));

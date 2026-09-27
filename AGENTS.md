@@ -32,7 +32,7 @@ Spoonjoy is built for agentic developers end to end, and so is its validation.
   | 1 | Recipe editing | `recipe-editing.journey.ts` |
   | 2 | Cookbooks | `cookbooks.journey.ts` |
   | 3 | Shopping list (per-device twins) | `shopping-list.journey.ts`, `shopping-list.mobile.journey.ts` |
-  | 4 | Social (spoons/forks) | `social.journey.ts` |
+  | 4 | Social (saves, forks, cooks; per-device twins) | `social.journey.ts` |
   | 5 | Account settings | `account-settings.journey.ts` |
   | 6 | Sessions (revocation) | `sessions.desktop.journey.ts` |
 

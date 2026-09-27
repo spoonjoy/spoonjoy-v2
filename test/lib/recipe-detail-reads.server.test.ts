@@ -263,6 +263,10 @@ describe("recipe detail loader on a D1 binding", () => {
     vi.doMock("~/lib/route-platform.server", () => ({ getRequestDb }));
     const { loadRecipeDetail } = await import("~/lib/recipe-detail.server");
 
+    // Both loads stamp renderedAt (what the cooks' "3 hr ago" labels are measured from) with the
+    // clock, so the clock is held still for the comparison.
+    const renderedAt = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(renderedAt);
     for (const userId of [owner.id, friend.id, null]) {
       const headers = userId ? { Cookie: (await createUserSessionCookie(userId)).split(";")[0]! } : undefined;
       const request = () => new UndiciRequest(`http://localhost:3000/recipes/${recipe.id}`, { headers });
@@ -278,8 +282,10 @@ describe("recipe detail loader on a D1 binding", () => {
         params: { id: recipe.id },
         context: { cloudflare: { env: null } },
       } as never);
+      expect(fromD1.renderedAt).toBe(renderedAt);
       expect(fromD1).toEqual(fromPrisma);
     }
+    clock.mockRestore();
     expect(getRequestDb).not.toHaveBeenCalled();
 
     await expect(

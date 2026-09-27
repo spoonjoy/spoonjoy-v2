@@ -310,6 +310,7 @@ export default function RecipeDetail() {
   const cookbooks = loaderData.cookbooks ?? EMPTY_COOKBOOKS;
   const savedInCookbookIds = loaderData.savedInCookbookIds ?? EMPTY_SAVED_COOKBOOK_IDS;
   const spoons = loaderData.spoons ?? EMPTY_SPOONS;
+  const renderedAt = loaderData.renderedAt;
   const coverHistory = loaderData.coverHistory ?? [];
   const spoonImages = loaderData.spoonImages ?? [];
   const isOriginCookCandidate = loaderData.isOriginCookCandidate ?? false;
@@ -1208,6 +1209,7 @@ export default function RecipeDetail() {
           </Heading>
           <SpoonsStrip
             spoons={spoons}
+            now={renderedAt}
             emptyAction={
               isAuthenticated ? (
                 <Button type="button" plain onClick={() => setIsSpoonDialogOpen(true)}>
