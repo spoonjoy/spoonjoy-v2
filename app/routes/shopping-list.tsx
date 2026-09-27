@@ -1,7 +1,7 @@
 import type { Route } from "./+types/shopping-list";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
-import { useLoaderData, Form, useSubmit, useFetcher, useActionData } from "react-router";
+import { useLoaderData, Form, useSubmit, useFetchers, useActionData, useLocation } from "react-router";
 import {
   handleShoppingListAction,
   loadShoppingList,
@@ -105,6 +105,40 @@ export function shouldDeleteOnSwipe(offsetX: number, isRevealed = false) {
   return resolveSwipeAction(offsetX, isRevealed) === "confirmDelete";
 }
 
+export type PendingShoppingItemChanges = {
+  checkedById: Record<string, boolean>;
+  removedById: Record<string, boolean>;
+};
+
+const SHOPPING_ITEM_FETCHER_PREFIX = "shopping-item-";
+
+// What the rows should show while their own requests are in flight. Each row's check and remove
+// go through a fetcher keyed by that row (see toggleItem and removeItem below), so a tap on one
+// row never cancels another row's request, and this optimistic view is read from the requests
+// still in flight rather than kept in state: a reload that lands for one row can't reset what
+// another row is still waiting on, and once a row's request settles, the reloaded list is the
+// truth. Fetchers that aren't a row's (other keys) are ignored.
+export function pendingShoppingItemChanges(
+  fetchers: ReadonlyArray<{ key: string; formData?: FormData }>
+): PendingShoppingItemChanges {
+  const checkedById: Record<string, boolean> = {};
+  const removedById: Record<string, boolean> = {};
+
+  for (const { key, formData } of fetchers) {
+    const itemId = formData?.get("itemId")?.toString();
+    if (!key.startsWith(SHOPPING_ITEM_FETCHER_PREFIX) || !formData || !itemId) continue;
+
+    const intent = formData.get("intent");
+    if (intent === "toggleCheck") {
+      checkedById[itemId] = formData.get("nextChecked") === "true";
+    } else if (intent === "removeItem") {
+      removedById[itemId] = true;
+    }
+  }
+
+  return { checkedById, removedById };
+}
+
 function amountLabel(item: { quantity: number | string | null; unit?: { name: string } | null }) {
   return [item.quantity, item.unit?.name].filter(Boolean).join(" ").trim();
 }
@@ -113,20 +147,39 @@ export default function ShoppingList() {
   const actionData = useActionData<ShoppingListActionData>();
   const { shoppingList, recipes } = useLoaderData<typeof loader>();
   const [showClearDialog, setShowClearDialog] = useState(false);
-  const [optimisticCheckedById, setOptimisticCheckedById] = useState<Record<string, boolean>>({});
-  const [optimisticRemovedById, setOptimisticRemovedById] = useState<Record<string, boolean>>({});
   const [revealedItemId, setRevealedItemId] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState("all");
   const [viewMode, setViewMode] = useState<ShoppingListViewMode>("all");
   const submit = useSubmit();
-  const toggleFetcher = useFetcher();
-  const removeFetcher = useFetcher();
+  const fetchers = useFetchers();
+  const location = useLocation();
+  const addItemFormRef = useRef<HTMLFormElement>(null);
+  const addItemInputRef = useRef<HTMLInputElement>(null);
+  const { checkedById: optimisticCheckedById, removedById: optimisticRemovedById } = useMemo(
+    () => pendingShoppingItemChanges(fetchers),
+    [fetchers]
+  );
 
   useEffect(() => {
-    setOptimisticCheckedById({});
-    setOptimisticRemovedById({});
     setRevealedItemId(null);
   }, [shoppingList.items]);
+
+  // A successful add clears the Item field (R-M3-3), so pressing Add again can't add the same
+  // item twice. The field is uncontrolled, so reset() puts it back to its default, which is
+  // empty once the add has succeeded (no parse draft to review).
+  useEffect(() => {
+    if (actionData?.success && actionData.intent === "addItem") {
+      addItemFormRef.current?.reset();
+    }
+  }, [actionData]);
+
+  // The dock's "Add" is a link to #add-item: bring the Item field into view with focus, ready to
+  // type. Keyed on the location, so following the link again focuses it again.
+  useEffect(() => {
+    if (location.hash === "#add-item") {
+      addItemInputRef.current?.focus();
+    }
+  }, [location.key, location.hash]);
 
   const displayItems = useMemo(() => {
     const withOptimistic = shoppingList.items
@@ -193,31 +246,30 @@ export default function ShoppingList() {
     submit({ intent: "clearAll" }, { method: "post" });
   };
 
+  // Each row has its own fetchers (one for checking, one for removing), so rapid taps on
+  // different rows each reach the server instead of the later tap cancelling the earlier one.
   const toggleItem = (item: (typeof displayItems)[number]) => {
     setRevealedItemId(null);
-    const nextChecked = !item.checked;
-    setOptimisticCheckedById((current) => ({ ...current, [item.id]: nextChecked }));
 
-    toggleFetcher.submit(
+    submit(
       {
         intent: "toggleCheck",
         itemId: item.id,
-        nextChecked: String(nextChecked),
+        nextChecked: String(!item.checked),
       },
-      { method: "post" }
+      { method: "post", navigate: false, fetcherKey: `${SHOPPING_ITEM_FETCHER_PREFIX}toggle-${item.id}` }
     );
   };
 
   const removeItem = (itemId: string) => {
     setRevealedItemId(null);
-    setOptimisticRemovedById((current) => ({ ...current, [itemId]: true }));
 
-    removeFetcher.submit(
+    submit(
       {
         intent: "removeItem",
         itemId,
       },
-      { method: "post" }
+      { method: "post", navigate: false, fetcherKey: `${SHOPPING_ITEM_FETCHER_PREFIX}remove-${itemId}` }
     );
   };
 
@@ -422,12 +474,13 @@ export default function ShoppingList() {
       {/* Add Item Form */}
       <div id="add-item" className="border-b border-[var(--sj-border)] py-6">
         <CookbookSectionTitle>Add item</CookbookSectionTitle>
-        <Form method="post" className="mt-4">
+        <Form method="post" className="mt-4" ref={addItemFormRef}>
           <input type="hidden" name="intent" value="addItem" />
           <div className="space-y-4">
             <Field>
               <Label>Item</Label>
               <Input
+                ref={addItemInputRef}
                 type="text"
                 name="ingredientText"
                 required

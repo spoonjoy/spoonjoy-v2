@@ -502,7 +502,7 @@ describe("Shopping List Route", () => {
       ]);
 
       expect(result).toEqual({
-        data: { success: true },
+        data: { success: true, intent: "addItem" },
         init: null,
         type: "DataWithResponseInit",
       });
@@ -686,7 +686,7 @@ describe("Shopping List Route", () => {
         params: {},
       } as any);
 
-      expect(response).toEqual({ data: { success: true }, init: null, type: "DataWithResponseInit" });
+      expect(response).toEqual({ data: { success: true, intent: "addItem" }, init: null, type: "DataWithResponseInit" });
       await expect(
         db.shoppingListItem.findUnique({ where: { id: "compat-web-manual-race-winner" } })
       ).resolves.toMatchObject({
@@ -761,7 +761,7 @@ describe("Shopping List Route", () => {
           params: {},
         } as any);
 
-        expect(response).toEqual({ data: { success: true }, init: null, type: "DataWithResponseInit" });
+        expect(response).toEqual({ data: { success: true, intent: "addItem" }, init: null, type: "DataWithResponseInit" });
         await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: "compat-web-manual-restore-winner" } }))
           .resolves.toMatchObject({ quantity: 7, deletedAt: null, iconKey: "package" });
         await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: tombstone.id } }))

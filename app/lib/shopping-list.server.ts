@@ -310,7 +310,7 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
       );
     }
 
-    return data({ success: true });
+    return data({ success: true, intent: "addItem" as const });
   }
 
   if (intent === "addFromRecipe") {
