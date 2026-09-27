@@ -137,6 +137,13 @@ jobs:
       - name: Check journey house rules
         run: node scripts/warning-gate.ts -- pnpm run check:journeys
 
+      # Passwords are Secret values that fill() and toHaveValue() don't accept
+      # (e2e/journeys/support/secret.ts); this typecheck of every Playwright suite under e2e/ is
+      # what enforces that. pnpm run typecheck (and so ci.yml) runs it too; it runs here as well
+      # so the check happens before any password reaches QA.
+      - name: Typecheck the journeys
+        run: node scripts/warning-gate.ts -- pnpm exec tsc -p tsconfig.e2e.json
+
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium webkit
 
@@ -256,8 +263,9 @@ jobs:
       # defence in depth. Remove the network log (every
       # Cookie / Set-Cookie / Authorization header, plus the request and response bodies only
       # it references) from every trace, including the copies inside the HTML report, and
-      # redact storage-state and cookie values from the remaining trace events. Fails if a
-      # network entry or unredacted value is left.
+      # redact storage-state and cookie values from the remaining trace events, password inputs'
+      # values from trace DOM snapshots, and password textboxes' values from page snapshots
+      # (error-context.md and its copies). Fails if a network entry or unredacted value is left.
       # journeys-report/ and explore-report/ are each other's sibling: only the directory the
       # suite that actually ran produced exists, and sanitize-journey-traces.mjs skips any
       # directory that does not exist, so passing both is harmless regardless of $SUITE.
@@ -268,14 +276,20 @@ jobs:
 
       # The artifact is public to any signed-in GitHub user. It can contain:
       #   - journeys-report/ or explore-report/: the HTML report, whose step titles include
-      #     typed values (the persona passwords), plus failure screenshots, videos, error
-      #     context and copies of the failure traces (explore-report/ additionally holds
-      #     summary.json and a full-page screenshot per route visited);
+      #     typed values (never a password: passwords are Secret values that only fillSecret can
+      #     type, which keeps them out of step titles; the journeys typecheck enforces it), plus
+      #     failure screenshots, videos, error context and copies of the failure traces
+      #     (explore-report/ additionally holds summary.json and a full-page screenshot per
+      #     route visited);
       #   - test-results/: per-failure traces, videos, screenshots and error context, plus
       #     worker-tail-summary.json (Worker outcomes, paths without queries, statuses, timings and
       #     exception names plus redacted, capped messages only; no headers, cookies or bodies).
-      # Traces keep the action log (with typed values), DOM snapshots, screencast frames and
-      # test source. It is safe to publish because (1) "Rotate persona passwords" has already
+      # Traces keep the action log (with typed values other than secrets), DOM snapshots,
+      # screencast frames and test source. A DOM snapshot records every input's value and the
+      # error context prints a textbox's value, so "Strip network logs from traces" also redacts
+      # password inputs' values from every trace snapshot and password textboxes' values from
+      # every page snapshot (error-context.md, and its copies in traces and the report), and
+      # fails if one is left. It is safe to publish because (1) "Rotate persona passwords" has already
       # replaced every persona password, invalidated every scratch-user password it contains
       # and revoked every persona and scratch-user session from the run, (2) "Clean up
       # disposable QA data" has removed the (now-invalidated) scratch

@@ -11,8 +11,12 @@ import {
 } from "~/lib/api-auth.server";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
+  deleteAvatarBestEffort,
   type NotificationPreferenceFlags,
 } from "~/lib/account-settings.server";
+import { saveAccountIdentity } from "~/lib/account-identity.server";
+import { isValidEmail, normalizeEmail } from "~/lib/email";
+import { normalizeUsername, usernameFormatError } from "~/lib/username";
 import {
   captureEvent,
   captureException,
@@ -4484,10 +4488,6 @@ function clientMutationIdFromFormDataHeaderOrQuery(args: ApiV1RouteArgs, formDat
   });
 }
 
-function isValidAccountEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
 function bytesStartWith(bytes: Uint8Array, signature: readonly number[]): boolean {
   if (bytes.length < signature.length) return false;
   return signature.every((byte, index) => bytes[index] === byte);
@@ -4745,21 +4745,19 @@ async function handleAccountUpdate(args: ApiV1RouteArgs, requestId: string, prin
   const body = await parseApiV1JsonBody(args.request);
   assertKnownFields(body, ["email", "username", "clientMutationId"]);
   const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
-  const email = typeof body.email === "string" ? body.email.trim() : "";
-  const username = typeof body.username === "string" ? body.username.trim() : "";
+  const normalizedEmail = normalizeEmail(body.email);
+  const submittedUsername = normalizeUsername(body.username);
   const fieldErrors: string[] = [];
-  if (!email || !isValidAccountEmail(email)) fieldErrors.push("email");
-  if (!username) fieldErrors.push("username");
+  if (!isValidEmail(normalizedEmail)) fieldErrors.push("email");
+  if (!submittedUsername) fieldErrors.push("username");
   if (fieldErrors.length > 0) {
     throw new ApiV1Error("validation_error", "Invalid account profile fields", { fields: fieldErrors });
   }
 
-  const normalizedEmail = email.toLowerCase();
-
   return await runIdempotentApiV1Mutation(args, requestId, principal, {
     clientMutationId,
     email: normalizedEmail,
-    username,
+    username: submittedUsername,
   }, clientMutationId, "account.update", async (db) => {
     const currentUser = await db.user.findUnique({
       where: { id: principal.id },
@@ -4770,32 +4768,30 @@ async function handleAccountUpdate(args: ApiV1RouteArgs, requestId: string, prin
       throw new ApiV1Error("not_found", "Account not found");
     }
 
-    if (normalizedEmail !== currentUser.email.toLowerCase()) {
-      const existingEmail = await db.$queryRaw<{ id: string }[]>`
-        SELECT id FROM User WHERE LOWER(email) = ${normalizedEmail} AND id != ${principal.id}
-      `;
-      if (existingEmail.length > 0) {
-        throw new ApiV1Error("validation_error", "This email is already in use by another account", { field: "email" });
+    // The same username rule as signup and account settings (app/lib/username.ts), applied only
+    // to a changed username, so an older username that predates it can still save its email.
+    const usernameChanged = submittedUsername !== currentUser.username.trim();
+    const username = usernameChanged ? submittedUsername : currentUser.username;
+    if (usernameChanged) {
+      const formatError = usernameFormatError(username);
+      if (formatError) {
+        throw new ApiV1Error("validation_error", formatError, { field: "username" });
       }
     }
 
-    if (username !== currentUser.username) {
-      const existingUsername = await db.user.findUnique({
-        where: { username },
-        select: { id: true },
-      });
-      if (existingUsername && existingUsername.id !== principal.id) {
-        throw new ApiV1Error("validation_error", "This username is already taken", { field: "username" });
-      }
-    }
-
-    await db.user.update({
-      where: { id: principal.id },
-      data: {
-        email: normalizedEmail,
-        username,
-      },
+    const saved = await saveAccountIdentity(db, {
+      userId: principal.id,
+      email: normalizedEmail,
+      username,
+      emailChanged: normalizedEmail !== currentUser.email.toLowerCase(),
+      usernameChanged,
     });
+    if (saved === "email_taken") {
+      throw new ApiV1Error("validation_error", "This email is already in use by another account", { field: "email" });
+    }
+    if (saved === "username_taken") {
+      throw new ApiV1Error("validation_error", "This username is already taken", { field: "username" });
+    }
 
     return {
       status: 200,
@@ -4829,6 +4825,10 @@ async function handleAccountPhotoUpload(args: ApiV1RouteArgs, requestId: string,
       throw new ApiV1Error("validation_error", imageError, { field: "photo" });
     }
 
+    const previous = await db.user.findUnique({
+      where: { id: principal.id },
+      select: { photoUrl: true },
+    });
     const normalizedPhoto = await normalizeAccountPhotoFile(photo);
     const photoUrl = await storeImage({
       bucket: args.context.cloudflare?.env?.PHOTOS,
@@ -4839,6 +4839,8 @@ async function handleAccountPhotoUpload(args: ApiV1RouteArgs, requestId: string,
       where: { id: principal.id },
       data: { photoUrl },
     });
+    // The replaced photo's stored file is no longer referenced (see account settings' upload).
+    await deleteAvatarBestEffort(args.context, principal.id, previous?.photoUrl);
 
     return {
       status: 200,

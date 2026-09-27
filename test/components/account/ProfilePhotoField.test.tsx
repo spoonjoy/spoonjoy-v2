@@ -179,7 +179,23 @@ describe("ProfilePhotoField", () => {
   });
 
   it("displays the server action error message", async () => {
-    renderField(null, { success: false, error: "file_too_large", message: "File size exceeds 5MB limit" });
+    renderField(null, {
+      success: false,
+      intent: "uploadPhoto",
+      error: "file_too_large",
+      message: "File size exceeds 5MB limit",
+    });
     expect(await screen.findByText(/file size exceeds 5mb limit/i)).toBeInTheDocument();
+  });
+
+  it("ignores an error from another account settings form", async () => {
+    renderField(null, {
+      success: false,
+      intent: "updateUserInfo",
+      error: "username_taken",
+      message: "This username is already taken",
+    });
+    await screen.findByRole("button", { name: /upload photo/i });
+    expect(screen.queryByText("This username is already taken")).not.toBeInTheDocument();
   });
 });

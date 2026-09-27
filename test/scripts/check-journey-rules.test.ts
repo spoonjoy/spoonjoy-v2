@@ -284,6 +284,72 @@ describe("checkJourneySource", () => {
     });
   });
 
+  describe("secret-boundary", () => {
+    it("flags revealing a Secret outside the Secret module", () => {
+      expect(rules(`import { revealSecret } from "./support/secret"; await page.fill("#pw", revealSecret(s));`)).toEqual([
+        "secret-boundary",
+        "secret-boundary",
+      ]);
+      expect(supportRules(`const text = secretModule.revealSecret(s);`)).toEqual(["secret-boundary"]);
+    });
+
+    it("flags a raw password source: the disposable-user factory and its readers", () => {
+      expect(rules(`import { createDisposableE2EUser } from "../support/disposable-auth";`)).toEqual(["secret-boundary"]);
+      expect(supportRules(`const user = auth.readLatestDisposableE2EUser();`)).toEqual(["secret-boundary"]);
+      expect(supportRules(`for (const u of readDisposableE2EUsers()) {}`)).toEqual(["secret-boundary"]);
+    });
+
+    it("flags parsing the credentials file with JSON.parse instead of parseCredentialsJson", () => {
+      expect(
+        supportRules(`const raw = readFileSync(process.env.SPOONJOY_QA_CREDENTIALS!, "utf8"); const c = JSON.parse(raw);`),
+      ).toEqual(["secret-boundary"]);
+      expect(supportRules(`const c = JSON.parse(readFileSync(".journeys/credentials.json", "utf8"));`)).toEqual([
+        "secret-boundary",
+      ]);
+    });
+
+    it("allows the Secret module itself, parseCredentialsJson, and unrelated JSON.parse", () => {
+      const secretModule = (src: string) =>
+        checkJourneySource("e2e/journeys/support/secret.ts", src, { kind: "support" }).map((v: { rule: string }) => v.rule);
+      expect(
+        secretModule(
+          `import { createDisposableE2EUser } from "../../support/disposable-auth"; function revealSecret(s) { return s; } revealSecret(x); JSON.parse(text);`,
+        ),
+      ).toEqual([]);
+      expect(
+        supportRules(`const raw = readFileSync(process.env.SPOONJOY_QA_CREDENTIALS!, "utf8"); const c = parseCredentialsJson(raw);`),
+      ).toEqual([]);
+      expect(supportRules(`const parsed = JSON.parse(attachment.body.toString("utf8"));`)).toEqual([]);
+      expect(rules(`await fillSecret(page.getByLabel("Password"), persona("chef").password);`)).toEqual([]);
+      expect(rules(`await page.getByLabel("Search").fill("secret sauce");`)).toEqual([]);
+    });
+  });
+
+  describe("no-password-field-fill", () => {
+    it("flags typing into a field named or selected as a password, whatever the value", () => {
+      expect(rules(`await page.getByLabel("Password").fill(pw);`)).toEqual(["no-password-field-fill"]);
+      expect(rules(`await page.getByLabel(/current password/i).type(pw);`)).toEqual(["no-password-field-fill"]);
+      expect(rules(`await page.getByPlaceholder("Your password").pressSequentially(pw);`)).toEqual(["no-password-field-fill"]);
+      expect(rules(`await page.getByRole("textbox", { name: "New Password" }).fill(pw);`)).toEqual(["no-password-field-fill"]);
+      expect(rules(`await page.locator("input[type=password]").fill(pw);`)).toEqual(["no-password-field-fill"]);
+      expect(rules(`await passwordField.fill(randomBytes(24).toString("hex"));`)).toEqual(["no-password-field-fill"]);
+    });
+
+    it("flags page.fill and frame.fill whose selector is a password field", () => {
+      expect(rules(`await page.fill('input[name="password"]', pw);`)).toEqual(["no-password-field-fill"]);
+      expect(rules(`await frame.type("#confirmPassword", pw);`)).toEqual(["no-password-field-fill"]);
+    });
+
+    it("allows fillSecret, clear, and fills of other fields, whatever their value", () => {
+      expect(rules(`await fillSecret(page.getByLabel("Password"), secret);`)).toEqual([]);
+      expect(rules(`await page.getByLabel("Password").clear();`)).toEqual([]);
+      expect(rules(`await page.getByLabel("Search").fill("secret sauce");`)).toEqual([]);
+      expect(rules(`await page.getByLabel("Token name").fill("CI token");`)).toEqual([]);
+      expect(rules(`await page.fill("#search", "password reset");`)).toEqual([]);
+      expect(rules(`await page.getByLabel("Password").check();`)).toEqual([]);
+    });
+  });
+
   describe("setup and imported test aliases", () => {
     it("treats setup like test for skipped-journey calls", () => {
       expect(rules(`setup.skip("chef", async () => {});`)).toEqual(["no-skipped-journeys"]);

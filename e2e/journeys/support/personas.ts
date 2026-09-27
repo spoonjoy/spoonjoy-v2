@@ -9,20 +9,22 @@
 // test bodies, so listing journeys must not require a real credentials file on disk.
 import { readFileSync } from "node:fs";
 import type { TestInfo } from "@playwright/test";
+import { parseCredentialsJson, type Secret } from "./secret";
 
 export type PersonaName = "chef" | "friend" | "newbie";
 
+// A persona's password is a Secret (support/secret.ts): type it with fillSecret, never fill().
 export interface Persona {
   username: string;
   email: string;
-  password: string;
+  password: Secret;
   storageState: string;
 }
 
 interface PersonaCredentials {
   username: string;
   email: string;
-  password: string;
+  password: Secret;
 }
 
 type CredentialsFile = Record<PersonaName, PersonaCredentials> & {
@@ -44,7 +46,8 @@ function loadCredentials(): CredentialsFile {
   }
 
   const raw = readFileSync(credentialsPath, "utf8");
-  cachedCredentials = JSON.parse(raw) as CredentialsFile;
+  // Every "password" field becomes a Secret as it is parsed.
+  cachedCredentials = parseCredentialsJson(raw, credentialsPath) as CredentialsFile;
   return cachedCredentials;
 }
 
@@ -109,6 +112,17 @@ export function scratchStorageStatePathForProject(n: number, projectName: string
   if (projectName === DESKTOP_PROJECT) return scratchDesktopStorageStatePath(n);
   throw new Error(
     `No per-device scratch session for project "${projectName}"; expected "${IPHONE_PROJECT}" or "${DESKTOP_PROJECT}".`,
+  );
+}
+
+// The credentials behind scratchStorageStatePathForProject(n, projectName): the base account on
+// iPhone, the desktop twin on desktop Chrome. For a journey that must re-enter its own account's
+// password (account-settings.journey.ts's password change); never log or interpolate the password.
+export function scratchForProject(n: number, projectName: string): Persona {
+  if (projectName === IPHONE_PROJECT) return scratch(n);
+  if (projectName === DESKTOP_PROJECT) return scratchDesktop(n);
+  throw new Error(
+    `No per-device scratch user for project "${projectName}"; expected "${IPHONE_PROJECT}" or "${DESKTOP_PROJECT}".`,
   );
 }
 
