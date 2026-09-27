@@ -2,8 +2,11 @@ import type { Prisma, PrismaClient as PrismaClientType } from "@prisma/client";
 import type { D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
 import type { ParsedIngredient } from "~/lib/ingredient-parse.server";
+import { coverInsertStatement, createCover, setActiveRecipeCover, type CreateCoverInput } from "~/lib/recipe-cover.server";
+import type { D1Query } from "~/lib/d1-read.server";
 import {
   activeRecipeTitleFreeGuard,
+  recipeUpdateStatement,
   nameUpsertStatements,
   namedIngredientInsertStatement,
   recipeInsertStatement,
@@ -43,6 +46,11 @@ export interface CreateRecipeDraftInput {
   servings: string | null;
   chefId: string;
   steps: RecipeStepDraft[];
+  /**
+   * A cover to create with the recipe; `activeVariant` also makes it the active cover, as
+   * `setActiveRecipeCover` does. On D1 it is part of the recipe's batch.
+   */
+  cover?: Omit<CreateCoverInput, "recipeId"> & { id: string; activeVariant?: "image" };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -236,10 +244,21 @@ async function getOrCreateIngredientRef(db: Database, name: string) {
 }
 
 /**
- * The recipe graph (recipe, steps, units, ingredient refs, ingredients) as one atomic D1
- * batch, so a failure part way leaves no partial recipe. The batch also re-checks, as it
+ * The recipe graph (recipe, steps, units, ingredient refs, ingredients, and a cover if one
+ * is given) as one atomic D1 batch, so a failure part way leaves no partial recipe. The batch also re-checks, as it
  * writes, that the chef has no active recipe with this title.
  */
+function coverStatements(input: CreateRecipeDraftInput, now: Date): D1Query[] {
+  if (!input.cover) return [];
+  const { activeVariant, ...cover } = input.cover;
+  return [
+    coverInsertStatement({ ...cover, recipeId: input.id }, now),
+    ...(activeVariant
+      ? [recipeUpdateStatement(input.id, { activeCoverId: cover.id, activeCoverVariant: activeVariant, coverMode: "manual" }, now)]
+      : []),
+  ];
+}
+
 async function createRecipeDraftOnD1(d1: D1ReadDatabase, input: CreateRecipeDraftInput): Promise<{ id: string }> {
   const now = new Date();
   const ingredients = input.steps.flatMap((step, stepIndex) =>
@@ -266,8 +285,10 @@ async function createRecipeDraftOnD1(d1: D1ReadDatabase, input: CreateRecipeDraf
       })),
       ...nameUpsertStatements(ingredients, now),
       ...ingredients.map(namedIngredientInsertStatement),
+      ...coverStatements(input, now),
     ]);
   } catch (error) {
+    // The batch's only guard is the title check.
     if (isD1GuardFailure(error)) throw new ActiveRecipeTitleConflictError();
     throw error;
   }
@@ -320,6 +341,14 @@ export async function createRecipeDraft(
           ingredientRefId: ingredientRef.id,
         },
       });
+    }
+  }
+
+  if (input.cover) {
+    const { activeVariant, ...cover } = input.cover;
+    await createCover(db, { ...cover, recipeId: recipe.id });
+    if (activeVariant) {
+      await setActiveRecipeCover(db, { recipeId: recipe.id, coverId: cover.id, variant: activeVariant });
     }
   }
 

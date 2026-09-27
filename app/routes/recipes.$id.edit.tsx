@@ -2,7 +2,14 @@ import type { Route } from "./+types/recipes.$id.edit";
 import { Form, redirect, data, useActionData, useLoaderData, useNavigate, useNavigation, useSubmit } from "react-router";
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
-import { deleteRecipeStepOnD1, saveRecipeEditOnD1, swapRecipeStepsOnD1 } from "~/lib/recipe-d1-edits.server";
+import {
+  deleteRecipeStepOnD1,
+  RECIPE_CHANGED_MESSAGE,
+  saveRecipeEditOnD1,
+  stepDeletionRaceAnswer,
+  swapRecipeStepsOnD1,
+} from "~/lib/recipe-d1-edits.server";
+import { isD1GuardFailure } from "~/lib/d1-write.server";
 import { requireUserId } from "~/lib/session.server";
 import { Link } from "~/components/ui/link";
 import { ValidationError } from "~/components/ui/validation-error";
@@ -24,7 +31,7 @@ import {
 } from "~/lib/image-storage.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { FOOD_IMAGE_ACCEPT, RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
-import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
+import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR, validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { createCover, getRecipeCoverImageUrl, setActiveRecipeCover } from "~/lib/recipe-cover.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
 import {
@@ -171,13 +178,19 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
         const d1 = requestD1(context);
         if (targetStep && d1) {
-          await swapRecipeStepsOnD1(d1, {
-            recipeId: id,
-            stepId,
-            stepNum: step.stepNum,
-            targetStepId: targetStep.id,
-            targetStepNum,
-          });
+          try {
+            await swapRecipeStepsOnD1(d1, {
+              recipeId: id,
+              stepId,
+              stepNum: step.stepNum,
+              targetStepId: targetStep.id,
+              targetStepNum,
+            });
+          } catch (error) {
+            // The steps moved in between; nothing was swapped.
+            if (!isD1GuardFailure(error)) throw error;
+            return data({ errors: { reorder: RECIPE_CHANGED_MESSAGE } }, { status: 409 });
+          }
 
           return data({ success: true });
         }
@@ -234,7 +247,14 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
     const d1 = requestD1(context);
     if (d1) {
-      await deleteRecipeStepOnD1(d1, { recipeId: id, stepId, stepNum: step.stepNum });
+      try {
+        await deleteRecipeStepOnD1(d1, { recipeId: id, stepId, stepNum: step.stepNum });
+      } catch (error) {
+        // The step moved, went away or gained a dependent step in between; nothing was deleted.
+        if (!isD1GuardFailure(error)) throw error;
+        const answer = await stepDeletionRaceAnswer(database, id, stepId);
+        return data({ errors: { stepDeletion: answer.error } }, { status: answer.status });
+      }
     } else {
       await database.$transaction([
         database.recipeStep.delete({
@@ -406,6 +426,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
     return redirect(`/recipes/${id}`);
   } catch (error) {
+    // Another recipe took the title between the check above and the save (the save's only
+    // guard), so nothing was written: answer as the check does. The upload is left alone.
+    if (isD1GuardFailure(error)) {
+      return data({ errors: { title: ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } }, { status: 400 });
+    }
     // The recipe update failed after a replacement image landed in R2. Capture
     // the real failure (previously discarded), then best-effort delete the
     // orphaned upload — capturing if that delete also throws.

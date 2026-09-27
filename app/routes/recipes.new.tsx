@@ -23,8 +23,7 @@ import {
 } from "~/lib/image-storage.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { FOOD_IMAGE_ACCEPT, RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
-import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
-import { createCover, setActiveRecipeCover } from "~/lib/recipe-cover.server";
+import { ActiveRecipeTitleConflictError, validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { scheduleAiPlaceholderCover } from "~/lib/ai-placeholder-cover.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
 import {
@@ -174,6 +173,9 @@ export async function action({ request, context }: Route.ActionArgs) {
   try {
     const trimmedTitle = title.trim();
     const trimmedDescription = description.trim() || null;
+    // The recipe, its steps and its cover (the upload, made active, or the placeholder that
+    // generation fills in) are written together: on D1 as one atomic batch.
+    const coverId = crypto.randomUUID();
     const recipe = await createRecipeDraft(database, {
       id: recipeId,
       title: trimmedTitle,
@@ -181,28 +183,33 @@ export async function action({ request, context }: Route.ActionArgs) {
       servings: servings.trim() || null,
       chefId: userId,
       steps: recipeSteps,
+      cover: uploadedImageUrl
+        ? {
+          id: coverId,
+          imageUrl: uploadedImageUrl,
+          sourceType: "chef-upload",
+          status: "ready",
+          createdById: userId,
+          sourceImageUrl: uploadedImageUrl,
+          generationStatus: "none",
+          activeVariant: "image",
+        }
+        : {
+          id: coverId,
+          imageUrl: "",
+          sourceType: "ai-placeholder",
+          status: "processing",
+          createdById: userId,
+          generationStatus: "processing",
+        },
     }, requestD1(context));
 
     if (uploadedImageUrl) {
-      const uploadedCover = await createCover(database, {
-        recipeId: recipe.id,
-        imageUrl: uploadedImageUrl,
-        sourceType: "chef-upload",
-        status: "ready",
-        createdById: userId,
-        sourceImageUrl: uploadedImageUrl,
-        generationStatus: "none",
-      });
-      await setActiveRecipeCover(database, {
-        recipeId: recipe.id,
-        coverId: uploadedCover.id,
-        variant: "image",
-      });
       await scheduleSpoonCoverStylization({
         db: database,
         userId,
         recipeId: recipe.id,
-        coverId: uploadedCover.id,
+        coverId,
         rawPhotoUrl: uploadedImageUrl,
         recipeTitle: trimmedTitle,
         env: cloudflareEnv,
@@ -210,20 +217,12 @@ export async function action({ request, context }: Route.ActionArgs) {
         sourceType: "chef-upload",
       });
     } else {
-      const placeholderCover = await createCover(database, {
-        recipeId: recipe.id,
-        imageUrl: "",
-        sourceType: "ai-placeholder",
-        status: "processing",
-        createdById: userId,
-        generationStatus: "processing",
-      });
       const waitUntil = context.cloudflare?.ctx?.waitUntil;
       const task = scheduleAiPlaceholderCover({
         db: database,
         userId,
         recipeId: recipe.id,
-        coverId: placeholderCover.id,
+        coverId,
         title: trimmedTitle,
         description: trimmedDescription,
         env: cloudflareEnv,
@@ -238,6 +237,11 @@ export async function action({ request, context }: Route.ActionArgs) {
 
     return redirect(`/recipes/${recipe.id}`);
   } catch (error) {
+    // Another recipe took the title between the check above and the write, so nothing was
+    // written: answer as the check does. The upload is left alone.
+    if (error instanceof ActiveRecipeTitleConflictError) {
+      return data({ errors: { title: error.message } }, { status: 400 });
+    }
     // The recipe create failed after the image landed in R2. Record the real
     // failure first (it was previously discarded behind a generic 500), then
     // best-effort roll back the orphaned upload — capturing if that delete also

@@ -6,8 +6,12 @@ import {
   addStepIngredientsOnD1,
   deleteRecipeStepOnD1,
   deleteStepIngredientOnD1,
+  ingredientAlreadyInRecipe,
+  RECIPE_CHANGED_MESSAGE,
+  stepDeletionRaceAnswer,
   updateRecipeStepOnD1,
 } from "~/lib/recipe-d1-edits.server";
+import { isD1GuardFailure } from "~/lib/d1-write.server";
 import { revalidateUnlessIngredientParse } from "~/lib/ingredient-parse-revalidation";
 import { requireUserId } from "~/lib/session.server";
 import { useEffect, useState } from "react";
@@ -248,7 +252,14 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
     const d1 = requestD1(context);
     if (d1) {
-      await deleteRecipeStepOnD1(d1, { recipeId: id, stepId, stepNum: step.stepNum });
+      try {
+        await deleteRecipeStepOnD1(d1, { recipeId: id, stepId, stepNum: step.stepNum });
+      } catch (error) {
+        // The step moved, went away or gained a dependent step in between; nothing was deleted.
+        if (!isD1GuardFailure(error)) throw error;
+        const answer = await stepDeletionRaceAnswer(database, id, stepId);
+        return data({ errors: { stepDeletion: answer.error } }, { status: answer.status });
+      }
     } else {
       await database.$transaction([
         database.recipeStep.delete({
@@ -322,7 +333,17 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
     const d1 = requestD1(context);
     if (d1) {
-      await addStepIngredientsOnD1(d1, { recipeId: id, stepId, stepNum: step.stepNum, rows });
+      try {
+        await addStepIngredientsOnD1(d1, { recipeId: id, stepId, stepNum: step.stepNum, rows });
+      } catch (error) {
+        // Another request added one of these ingredients, or moved the step, in between;
+        // none were added.
+        if (!isD1GuardFailure(error)) throw error;
+        const taken = await ingredientAlreadyInRecipe(database, id, rows.map((row) => row.ingredientRefId));
+        return taken
+          ? data({ errors: { ingredientName: `${taken} is already in the recipe` } }, { status: 400 })
+          : data({ errors: { general: RECIPE_CHANGED_MESSAGE } }, { status: 409 });
+      }
     } else {
       await database.$transaction([
         ...rows.map((row) =>
@@ -411,12 +432,20 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     // Create ingredient
     const d1 = requestD1(context);
     if (d1) {
-      await addStepIngredientsOnD1(d1, {
-        recipeId: id,
-        stepId,
-        stepNum: step.stepNum,
-        rows: [{ quantity, unitId: unit.id, ingredientRefId: ingredientRef.id }],
-      });
+      try {
+        await addStepIngredientsOnD1(d1, {
+          recipeId: id,
+          stepId,
+          stepNum: step.stepNum,
+          rows: [{ quantity, unitId: unit.id, ingredientRefId: ingredientRef.id }],
+        });
+      } catch (error) {
+        // Another request added this ingredient, or moved the step, in between.
+        if (!isD1GuardFailure(error)) throw error;
+        return await ingredientAlreadyInRecipe(database, id, [ingredientRef.id])
+          ? data({ errors: { ingredientName: "This ingredient is already in the recipe" } }, { status: 400 })
+          : data({ errors: { general: RECIPE_CHANGED_MESSAGE } }, { status: 409 });
+      }
     } else {
       await database.$transaction([
         database.ingredient.create({
@@ -511,14 +540,26 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     const d1 = requestD1(context);
     if (d1) {
       // One atomic batch: the step, its replaced output uses and the recipe touch.
-      await updateRecipeStepOnD1(d1, {
-        recipeId: id,
-        stepId,
-        stepNum: step.stepNum,
-        stepTitle: stepTitle.trim() || null,
-        description: description.trim(),
-        usesSteps,
-      });
+      try {
+        await updateRecipeStepOnD1(d1, {
+          recipeId: id,
+          stepId,
+          stepNum: step.stepNum,
+          stepTitle: stepTitle.trim() || null,
+          description: description.trim(),
+          usesSteps,
+        });
+      } catch (error) {
+        // The step moved, or lost its last ingredient, in between; nothing was saved.
+        if (!isD1GuardFailure(error)) throw error;
+        const current = await database.recipeStep.findUnique({ where: { id: stepId }, select: { stepNum: true } });
+        const ingredients = current
+          ? await database.ingredient.count({ where: { recipeId: id, stepNum: current.stepNum } })
+          : null;
+        return ingredients === 0 && usesSteps.length === 0
+          ? data({ errors: { usesSteps: STEP_CONTENT_REQUIREMENT_ERROR } }, { status: 400 })
+          : data({ errors: { general: RECIPE_CHANGED_MESSAGE } }, { status: 409 });
+      }
       return redirect(`/recipes/${id}/edit`);
     }
 

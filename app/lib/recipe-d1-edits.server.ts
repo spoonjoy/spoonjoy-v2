@@ -1,4 +1,6 @@
+import type { PrismaClient } from "@prisma/client";
 import type { D1ReadDatabase } from "~/lib/d1-read.server";
+import { validateStepDeletion } from "~/lib/step-deletion-validation.server";
 import { d1Guard, d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 import { coverInsertStatement } from "~/lib/recipe-cover.server";
 import {
@@ -18,6 +20,40 @@ import {
 // Each batch starts with guards that re-check, as it writes, what the action read and
 // validated first; if another request changed those rows in between, the batch fails and
 // nothing in it applies. The Prisma versions stay in the routes for when there is no binding.
+
+/** The answer for an editor write that lost a race and whose checks still pass. */
+export const RECIPE_CHANGED_MESSAGE = "This recipe changed while you were editing it. Reload the page and try again.";
+
+/**
+ * What the step-delete checks answer now, for a delete whose batch was stopped because the
+ * step moved, went away or gained a dependent step in between.
+ */
+export async function stepDeletionRaceAnswer(
+  db: PrismaClient,
+  recipeId: string,
+  stepId: string,
+): Promise<{ error: string; status: number }> {
+  const step = await db.recipeStep.findUnique({ where: { id: stepId }, select: { recipeId: true, stepNum: true } });
+  if (!step || step.recipeId !== recipeId) return { error: "Step not found", status: 404 };
+  const validation = await validateStepDeletion(db, recipeId, step.stepNum);
+  return validation.valid ? { error: RECIPE_CHANGED_MESSAGE, status: 409 } : { error: validation.error, status: 400 };
+}
+
+/**
+ * For an ingredient add whose batch was stopped: the name of one of the ingredients another
+ * request added to the recipe in between, or null when the step changed instead.
+ */
+export async function ingredientAlreadyInRecipe(
+  db: PrismaClient,
+  recipeId: string,
+  ingredientRefIds: readonly string[],
+): Promise<string | null> {
+  const existing = await db.ingredient.findFirst({
+    where: { recipeId, ingredientRefId: { in: [...ingredientRefIds] } },
+    select: { ingredientRef: { select: { name: true } } },
+  });
+  return existing?.ingredientRef.name ?? null;
+}
 
 export type RecipeEditCover =
   | { kind: "upload"; coverId: string; imageUrl: string; createdById: string }
