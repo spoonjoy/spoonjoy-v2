@@ -10,6 +10,7 @@ import {
   isShoppingListUniqueConflict,
   mutateCompatibleShoppingListItem,
   runCompatibleShoppingListBatch,
+  shoppingListItemsRemoveStatements,
   shoppingListItemWriteStatements,
   type ShoppingListItemWritePlan,
 } from "~/lib/shopping-list-mutations.server";
@@ -192,6 +193,21 @@ describe("shopping-list compatibility mutations", () => {
     ]);
     expect(shoppingListItemWriteStatements({ ...base, mode: "create" })[1][6]).toBe(1);
     expect(shoppingListItemWriteStatements({ ...base, mode: "update", quantityDelta: null, checked: false })[1][3]).toBe(0);
+  });
+
+  it("removes a list's items in chunks under D1's bound-parameter limit, filtered by the list", () => {
+    const ids = Array.from({ length: 95 }, (_, index) => `item-${index}`);
+    const deletedAt = new Date("2026-07-20T00:00:00.000Z");
+
+    const statements = shoppingListItemsRemoveStatements("list-id", ids, deletedAt);
+
+    expect(statements).toHaveLength(2);
+    expect(statements[0][0]).toContain('WHERE "shoppingListId" = ? AND "id" IN (');
+    expect(statements[0].slice(1, 4)).toEqual(["2026-07-20T00:00:00.000Z", "2026-07-20T00:00:00.000Z", "list-id"]);
+    expect(statements[0].slice(4)).toEqual(ids.slice(0, 90));
+    expect(statements[1].slice(4)).toEqual(ids.slice(90));
+    expect(statements.every((statement) => statement.length <= 100)).toBe(true);
+    expect(shoppingListItemsRemoveStatements("list-id", [], deletedAt)).toEqual([]);
   });
 
   it("builds native D1 batches only when a binding is available, reading back stored quantities", () => {

@@ -1,5 +1,6 @@
 import type { ApiCredential, ApiIdempotencyKey, NativePushDevice, Prisma, RecipeCover, RecipeSpoon } from "@prisma/client";
 import { requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1WriteBatch } from "~/lib/d1-write.server";
 import type { AppLoadContext } from "react-router";
 import {
   ApiAuthError,
@@ -118,6 +119,7 @@ import {
   addToShoppingListItem,
   asCompatibleD1Database,
   coalesceShoppingRecipeIngredients,
+  shoppingListItemsRemoveStatements,
   createCompatibleShoppingListD1Batch,
   findCompatibleShoppingListItem,
   mutateCompatibleShoppingListItem,
@@ -4389,13 +4391,19 @@ async function handleShoppingClear(
     });
 
     const deletedAt = new Date();
-    const removedItems = items.length > 0
-      ? await db.$transaction(items.map((item) => db.shoppingListItem.update({
+    const nativeD1 = asCompatibleD1Database(apiV1CloudflareFor(args)?.env?.DB);
+    let removedItems: ShoppingItemRow[] = [];
+    if (items.length > 0 && nativeD1) {
+      // One batch, so the list is cleared all at once or not at all.
+      await d1WriteBatch(nativeD1, shoppingListItemsRemoveStatements(list.id, items.map((item) => item.id), deletedAt));
+      removedItems = items.map((item) => ({ ...item, deletedAt, updatedAt: deletedAt }));
+    } else if (items.length > 0) {
+      removedItems = await db.$transaction(items.map((item) => db.shoppingListItem.update({
         where: { id: item.id },
         data: { deletedAt },
         include: { unit: true, ingredientRef: true },
-      })))
-      : [];
+      })));
+    }
 
     return {
       status: 200,

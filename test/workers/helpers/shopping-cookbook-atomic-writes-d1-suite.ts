@@ -8,6 +8,7 @@ import { getDb } from "../../../app/lib/db.server";
 import { createUserSessionCookie } from "../../../app/lib/session.server";
 import { handleShoppingListAction } from "../../../app/lib/shopping-list.server";
 import { callSpoonjoyApiOperation } from "../../../app/lib/spoonjoy-api.server";
+import { expectConsoleError } from "../../warning-policy";
 import { applyRepositoryMigrations } from "./repository-migrations";
 
 // Shopping-list and cookbook writes against Wrangler's real D1 (workerd). Another request's
@@ -24,6 +25,8 @@ const OLD = "2026-01-01T00:00:00.000Z";
 const APPLES = "sca-apples";
 const FLOUR = "sca-flour";
 const EACH = "sca-each";
+const FAILURE = "shopping_cookbook_injected_failure";
+const TRIGGER = "ShoppingCookbookAtomic_injected_failure";
 
 let prisma: PrismaClient;
 
@@ -33,6 +36,29 @@ function database(): D1Database {
 
 async function run(sql: string, ...values: unknown[]) {
   await database().prepare(sql).bind(...values).run();
+}
+
+/** Makes the next matching write abort, as a failing statement late in a batch would. */
+async function failOn(event: "INSERT" | "UPDATE" | "DELETE", table: string, when: string) {
+  await run(`DROP TRIGGER IF EXISTS "${TRIGGER}"`);
+  await run(`CREATE TRIGGER "${TRIGGER}" BEFORE ${event} ON "${table}" WHEN ${when}
+    BEGIN SELECT RAISE(ABORT, '${FAILURE}'); END`);
+}
+
+/** The binding, but a failing batch rejects with `error`, so the logged error is known. */
+function failingWith(error: Error): D1Database {
+  const real = database();
+  return {
+    prepare: (sql: string) => real.prepare(sql),
+    exec: (sql: string) => real.exec(sql),
+    async batch(statements: D1PreparedStatement[]) {
+      try {
+        return await real.batch(statements);
+      } catch {
+        throw error;
+      }
+    },
+  } as never;
 }
 
 async function rows<T = Record<string, unknown>>(sql: string, ...values: unknown[]): Promise<T[]> {
@@ -185,6 +211,7 @@ describe("atomic shopping-list and cookbook writes on Wrangler D1", () => {
   });
 
   afterEach(async () => {
+    await run(`DROP TRIGGER IF EXISTS "${TRIGGER}"`);
     await run(`DELETE FROM "ShoppingListItem" WHERE "shoppingListId" = ?`, LIST);
   });
 
@@ -297,6 +324,59 @@ describe("atomic shopping-list and cookbook writes on Wrangler D1", () => {
       );
 
       expect(await shoppingItems()).toEqual([{ ingredientRefId: APPLES, quantity: 1 + 3 + 2, deleted: 0, checked: 0 }]);
+    });
+  });
+
+  describe("clearing the shopping list", () => {
+    /** 95 items: more than one statement's worth of ids (D1 binds at most 100 values). */
+    async function seedBulk() {
+      for (let index = 0; index < 95; index++) {
+        const ref = `sca-bulk-${String(index).padStart(2, "0")}`;
+        await run(`INSERT OR IGNORE INTO "IngredientRef" ("id", "name", "updatedAt") VALUES (?, ?, ?)`, ref, ref, OLD);
+        await seedItem(ref, index);
+      }
+    }
+
+    async function activeCount() {
+      return (await shoppingItems()).filter((item) => item.deleted === 0).length;
+    }
+
+    it("clears every item or none when a late statement fails", async () => {
+      await seedBulk();
+      await failOn("UPDATE", "ShoppingListItem", `OLD."id" = 'sca-item-sca-bulk-94' AND NEW."deletedAt" IS NOT NULL`);
+      const batchError = new Error(FAILURE);
+      expectConsoleError("[api-v1] internal_error", {
+        requestId: "req_sca-clear-failed",
+        method: "POST",
+        path: "/api/v1/shopping-list/clear-all",
+        error: { name: batchError.name, message: batchError.message, stack: batchError.stack },
+      });
+
+      const failed = await apiPost("shopping-list/clear-all", { clientMutationId: "sca-clear-failed" }, failingWith(batchError));
+      expect(failed.status).toBe(500);
+      expect(await activeCount()).toBe(95);
+
+      await run(`DROP TRIGGER "${TRIGGER}"`);
+      const cleared = await apiPost("shopping-list/clear-all", { clientMutationId: "sca-clear" });
+      expect(cleared.status).toBe(200);
+      expect(cleared.body.data).toMatchObject({ removed: 95 });
+      expect(await activeCount()).toBe(0);
+    });
+
+    it("leaves an item added after the read on the list, and reports only what it cleared", async () => {
+      await seedItem(APPLES, 1, { checked: true });
+
+      const cleared = await apiPost(
+        "shopping-list/clear-all",
+        { clientMutationId: "sca-clear-race" },
+        interleaved(() => callSpoonjoyApiOperation("add_shopping_list_item", { name: "sca flour", unit: "sca each", quantity: 1 }, mcp())),
+      );
+
+      expect(cleared.body.data).toMatchObject({ removed: 1, items: [{ name: "sca apples", deletedAt: expect.any(String) }] });
+      expect(await shoppingItems()).toEqual([
+        { ingredientRefId: APPLES, quantity: 1, deleted: 1, checked: 1 },
+        { ingredientRefId: FLOUR, quantity: 1, deleted: 0, checked: 0 },
+      ]);
     });
   });
 });

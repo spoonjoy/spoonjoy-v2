@@ -207,6 +207,34 @@ export function shoppingListItemWriteStatements(plan: ShoppingListItemWritePlan)
   ];
 }
 
+// D1 allows at most 100 bound parameters per statement.
+const REMOVE_IDS_PER_STATEMENT = 90;
+
+/**
+ * Soft-deletes the given items of one list: an update per chunk of ids, for one batch. The
+ * list filter keeps another account's item ids out.
+ */
+export function shoppingListItemsRemoveStatements(
+  shoppingListId: string,
+  itemIds: string[],
+  deletedAt: Date,
+): D1Query[] {
+  const stored = d1Timestamp(deletedAt);
+  const queries: D1Query[] = [];
+  for (let start = 0; start < itemIds.length; start += REMOVE_IDS_PER_STATEMENT) {
+    const ids = itemIds.slice(start, start + REMOVE_IDS_PER_STATEMENT);
+    queries.push([
+      `UPDATE "ShoppingListItem" SET "deletedAt" = ?, "updatedAt" = ?
+      WHERE "shoppingListId" = ? AND "id" IN (${ids.map(() => "?").join(", ")})`,
+      stored,
+      stored,
+      shoppingListId,
+      ...ids,
+    ]);
+  }
+  return queries;
+}
+
 /**
  * The planned writes as one D1 batch, or undefined without a binding. `toItem` builds each
  * response item from its plan and the quantity the row now stores.
