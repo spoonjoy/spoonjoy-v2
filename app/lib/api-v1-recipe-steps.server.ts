@@ -137,7 +137,7 @@ function withRaceRetry<T>(
   attempt: () => Promise<ApiV1RecipeStepResult<T>>,
 ): Promise<ApiV1RecipeStepResult<T>> {
   return d1
-    ? retryOnD1GuardFailure(attempt, () => failure<T>("validation_error", "The recipe changed while this request ran. Retry it.", {
+    ? retryOnD1GuardFailure(attempt, () => failure<T>("validation_error", "This recipe changed while you were editing it; reload and try again.", {
       reason: "concurrent_change",
     }))
     : attempt();

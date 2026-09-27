@@ -364,7 +364,7 @@ export async function createNativeRecipe(
 
 /** The answer when a write lost a race with another change every time it was retried. */
 function concurrentChangeFailure<T>(): ApiV1RecipeWriteResult<T> {
-  return failure("validation_error", "The recipe changed while this request ran. Retry it.", { reason: "concurrent_change" });
+  return failure("validation_error", "This recipe changed while you were editing it; reload and try again.", { reason: "concurrent_change" });
 }
 
 /**

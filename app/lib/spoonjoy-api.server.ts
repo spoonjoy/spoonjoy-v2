@@ -1188,13 +1188,14 @@ function activeImageCover(coverId: string): RecipeFields {
 }
 
 /**
- * Runs a recipe tool whose D1 batch re-checks what it read. When another request changed
- * those rows in between, nothing applied and the tool runs again, so the caller gets the
- * answer the tool's checks now give (the title error, "Recipe not found").
+ * Runs a recipe tool's checks and write, whose D1 batch re-checks what it read. When another
+ * request changed those rows in between, nothing applied and they run again, so the caller
+ * gets the answer the checks now give (the title error, "Recipe not found"). Steps after
+ * the write (stylization, activation) stay outside, so they never run twice.
  */
-function withRaceRetry(attempt: () => Promise<unknown>): Promise<unknown> {
+function withRaceRetry<T>(attempt: () => Promise<T>): Promise<T> {
   return retryOnD1GuardFailure(attempt, () => {
-    throw new Error("The recipe changed while this request ran. Please try again.");
+    throw new Error("This recipe changed while this request ran; reload it and try again.");
   });
 }
 
@@ -2348,8 +2349,9 @@ const createRecipeTool: SpoonjoyApiOperation = {
     required: ["title"],
     additionalProperties: false,
   },
-  handle(args, context) {
-    return withRaceRetry(async () => {
+  async handle(args, context) {
+    // Only the checks and the write retry on a lost race: nothing after the write may run twice.
+    const { owner, title, imageUrl, created, coverId } = await withRaceRetry(async () => {
       const email = requireOwnerEmail(args, context);
       const title = requiredString(args, "title");
       const imageUrl = optionalString(args.imageUrl);
@@ -2418,32 +2420,33 @@ const createRecipeTool: SpoonjoyApiOperation = {
           })).id;
         }
       }
-      if (imageUrl && coverId) {
-        await scheduleRecipeCoverStylization(context, {
-          userId: owner.id,
-          recipeId: created.id,
-          coverId,
-          rawPhotoUrl: imageUrl,
-          recipeTitle: title,
-          sourceType: "chef-upload",
-        });
-        await activateRecipeCoverWithBestAvailableVariant(context.db, {
-          recipeId: created.id,
-          coverId,
-        });
-      }
-
-      const recipe = await context.db.recipe.findUniqueOrThrow({
-        where: { id: created.id },
-        include: {
-          chef: { select: { id: true, email: true, username: true } },
-          covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
-          steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
-        },
-      });
-
-      return json({ recipe: formatRecipe(recipe) });
+      return { owner, title, imageUrl, created, coverId };
     });
+    if (imageUrl && coverId) {
+      await scheduleRecipeCoverStylization(context, {
+        userId: owner.id,
+        recipeId: created.id,
+        coverId,
+        rawPhotoUrl: imageUrl,
+        recipeTitle: title,
+        sourceType: "chef-upload",
+      });
+      await activateRecipeCoverWithBestAvailableVariant(context.db, {
+        recipeId: created.id,
+        coverId,
+      });
+    }
+
+    const recipe = await context.db.recipe.findUniqueOrThrow({
+      where: { id: created.id },
+      include: {
+        chef: { select: { id: true, email: true, username: true } },
+        covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
+        steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
+      },
+    });
+
+    return json({ recipe: formatRecipe(recipe) });
   },
 };
 
@@ -2491,8 +2494,9 @@ const updateRecipeTool: SpoonjoyApiOperation = {
     required: ["id"],
     additionalProperties: false,
   },
-  handle(args, context) {
-    return withRaceRetry(async () => {
+  async handle(args, context) {
+    // Only the checks and the write retry on a lost race: nothing after the write may run twice.
+    const { owner, title, imageUrl, existing, coverId } = await withRaceRetry(async () => {
       const email = requireOwnerEmail(args, context);
       const id = requiredString(args, "id");
       const title = hasArgument(args, "title") ? requiredString(args, "title") : undefined;
@@ -2568,32 +2572,33 @@ const updateRecipeTool: SpoonjoyApiOperation = {
           })).id;
         }
       }
-      if (imageUrl && coverId) {
-        await scheduleRecipeCoverStylization(context, {
-          userId: owner.id,
-          recipeId: existing.id,
-          coverId,
-          rawPhotoUrl: imageUrl,
-          recipeTitle: title ?? existing.title,
-          sourceType: "chef-upload",
-        });
-        await activateRecipeCoverWithBestAvailableVariant(context.db, {
-          recipeId: existing.id,
-          coverId,
-        });
-      }
-
-      const recipe = await context.db.recipe.findUniqueOrThrow({
-        where: { id: existing.id },
-        include: {
-          chef: { select: { id: true, email: true, username: true } },
-          covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
-          steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
-        },
-      });
-
-      return json({ recipe: formatRecipe(recipe) });
+      return { owner, title, imageUrl, existing, coverId };
     });
+    if (imageUrl && coverId) {
+      await scheduleRecipeCoverStylization(context, {
+        userId: owner.id,
+        recipeId: existing.id,
+        coverId,
+        rawPhotoUrl: imageUrl,
+        recipeTitle: title ?? existing.title,
+        sourceType: "chef-upload",
+      });
+      await activateRecipeCoverWithBestAvailableVariant(context.db, {
+        recipeId: existing.id,
+        coverId,
+      });
+    }
+
+    const recipe = await context.db.recipe.findUniqueOrThrow({
+      where: { id: existing.id },
+      include: {
+        chef: { select: { id: true, email: true, username: true } },
+        covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
+        steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
+      },
+    });
+
+    return json({ recipe: formatRecipe(recipe) });
   },
 };
 
