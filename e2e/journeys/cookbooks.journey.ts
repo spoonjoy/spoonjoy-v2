@@ -1,6 +1,7 @@
 // Cookbooks on both devices, as scratch user 2 (AGENTS.md's scratch index table): create a
 // cookbook, save another chef's seeded recipe into it from the recipe's Save dialog, see it listed
-// on the cookbook, remove it, rename the cookbook, and delete it. On a phone the dock stays on the
+// on the cookbook, remove it, rename the cookbook, and delete it. The user also forks a seeded
+// recipe and adds its own fork from the cookbook page's "Recipe" select. On a phone the dock stays on the
 // cookbook list and a cookbook's page, and hides on the new-cookbook form and the title editor
 // (R-M3-2); a rename closes the editor with a short confirmation (R-M3-3).
 //
@@ -8,6 +9,8 @@
 // here has a name unique to this device and run, and the tests assert only on their own cookbooks,
 // never on how many cookbooks the user has. The saved recipe is qa_kitchen_friend's seeded Miso
 // Glazed Salmon, matched by name and seeded href; saving it touches only this user's cookbook.
+// Each device forks a different seeded recipe, so the two concurrent runs never race for the same
+// fork title, and the fork is picked and checked by its own recipe id.
 import { test, expect } from "./support/journey";
 import type { Page } from "@playwright/test";
 import { pathUrl, seededRecipeLink, waitForHydration } from "./support/navigation";
@@ -15,6 +18,10 @@ import { scratchStorageStatePath } from "./support/personas";
 
 const SALMON = "/recipes/qa-kitchen-recipe-salmon";
 const SALMON_TITLE = "Miso Glazed Salmon";
+// The recipe each device forks: the friend's Saffron Risotto on a phone, the chef's Roasted Tomato
+// Soup on desktop.
+const RISOTTO = { path: "/recipes/qa-kitchen-recipe-risotto", title: "Saffron Risotto" };
+const TOMATO_SOUP = { path: "/recipes/qa-kitchen-recipe-tomato-soup", title: "Roasted Tomato Soup" };
 // A cookbook's page: /cookbooks/<id>, never /cookbooks/new.
 const COOKBOOK_URL = /^https?:\/\/[^/]+\/cookbooks\/(?!new(?:[?#]|$))[^/?#]+(?:[?#].*)?$/;
 
@@ -106,6 +113,15 @@ test.describe("Cookbooks", () => {
     expect((await saved).status()).toBe(200);
     await expect(cookbookToggle).toHaveAttribute("aria-pressed", "true");
     await expectAccessible();
+
+    // The dialog has a visible, labelled Close button with a 44 px touch target.
+    const closeButton = saveDialog.getByRole("button", { name: "Close", exact: true });
+    await expect(closeButton).toBeVisible();
+    const closeBox = await closeButton.boundingBox();
+    expect(closeBox?.width ?? 0).toBeGreaterThanOrEqual(44);
+    expect(closeBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+    await closeButton.click();
+    await expect(saveDialog).toBeHidden();
 
     await verifyAfterReload(async () => {
       await waitForHydration(page);
@@ -217,5 +233,54 @@ test.describe("Cookbooks", () => {
       await expect(cookbooksHeading(page)).toBeVisible();
       await expect(cookbookRow(page, renamedTitle)).toHaveCount(0);
     });
+  });
+
+  test("a recipe the user forks is added to a cookbook from the cookbook page and stays listed @mutates", async ({ page, isMobile, verifyAfterReload, expectAccessible }) => {
+    const source = isMobile ? RISOTTO : TOMATO_SOUP;
+    const title = `Fork shelf ${uniqueSuffix()}`;
+    const main = page.getByRole("main");
+
+    // Fork the seeded recipe, so the user owns a copy with its own id.
+    await page.goto(source.path);
+    await waitForHydration(page);
+    await expect(page.getByRole("heading", { level: 1, name: source.title, exact: true })).toBeVisible();
+    await page.getByTestId("recipe-header-fork-action").click();
+    const forkDialog = page.getByRole("dialog", { name: `Fork "${source.title}"?` });
+    await expect(forkDialog).toBeVisible();
+    await forkDialog.getByRole("button", { name: "Fork", exact: true }).click();
+    await expect(page).not.toHaveURL(pathUrl(source.path));
+    await expect(page).toHaveURL(/\/recipes\/[^/?#]+$/);
+    await expect(page.getByRole("heading", { level: 1, name: source.title, exact: true })).toBeVisible();
+    const forkPath = new URL(page.url()).pathname;
+    const forkId = forkPath.slice("/recipes/".length);
+    const forkLink = main.getByRole("link", { name: source.title, exact: true }).and(page.locator(`[href="${forkPath}"]`));
+
+    // A new cookbook, then the fork added from the owner tools' labelled "Recipe" select (bug 19).
+    await page.goto("/cookbooks/new");
+    await waitForHydration(page);
+    await page.getByRole("textbox", { name: /Cookbook Title/ }).fill(title);
+    await page.getByRole("button", { name: "Create Cookbook", exact: true }).click();
+    await expect(page).toHaveURL(COOKBOOK_URL);
+    await expect(cookbookHeading(page, title)).toBeVisible();
+    await expect(forkLink).toHaveCount(0);
+
+    await ownerToolsToggle(page).click();
+    const recipeSelect = page.getByRole("combobox", { name: "Recipe", exact: true });
+    await recipeSelect.selectOption({ value: forkId });
+    await expect(recipeSelect).toHaveValue(forkId);
+    await page.getByRole("button", { name: "Add recipe", exact: true }).click();
+    await expect(forkLink).toBeVisible();
+    // Once added, the fork is no longer offered in the select.
+    await expect(recipeSelect.locator(`option[value="${forkId}"]`)).toHaveCount(0);
+    await expectAccessible();
+
+    await verifyAfterReload(async () => {
+      await expect(cookbookHeading(page, title)).toBeVisible();
+      await expect(forkLink).toBeVisible();
+    });
+
+    // The list counts it too.
+    await page.goto("/cookbooks");
+    await expect(cookbookRow(page, title)).toContainText("1 recipe");
   });
 });
