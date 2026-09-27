@@ -236,6 +236,31 @@ describe("MCP recipe tools on a D1 binding", () => {
       expect(await syncState(id, cookbookId)).toEqual(synced("Raced Soup"));
     });
 
+    it("answers the changed-recipe message when every attempt loses a race and the recipe stays active", async () => {
+      const { id } = await seedInCookbook("Contested Soup");
+      let batches = 0;
+      // Another request deletes the recipe just before each batch and restores it just after,
+      // so the guard fails every time while the recipe is still active afterwards.
+      const flickering: D1ReadDatabase = {
+        prepare: (sql) => d1.binding.prepare(sql),
+        async batch(statements) {
+          batches += 1;
+          await db.recipe.update({ where: { id }, data: { deletedAt: new Date() } });
+          try {
+            return await d1.binding.batch(statements as never);
+          } finally {
+            await db.recipe.update({ where: { id }, data: { deletedAt: null } });
+          }
+        },
+      };
+
+      await expect(callSpoonjoyApiOperation("delete_recipe", { id }, context(flickering)))
+        .rejects.toThrow("This recipe changed while this request ran; reload it and try again.");
+      expect(batches).toBeGreaterThan(1);
+      await expect(db.recipe.findUniqueOrThrow({ where: { id } })).resolves.toMatchObject({ deletedAt: null });
+      await expect(db.nativeSyncTombstone.count({ where: { resourceId: id } })).resolves.toBe(0);
+    });
+
     it("answers Recipe not found when the recipe is removed before the batch", async () => {
       const { id } = await seedInCookbook("Vanishing Soup");
       const removed: D1ReadDatabase = {

@@ -1196,9 +1196,11 @@ function activeImageCover(coverId: string): RecipeFields {
  */
 function withRaceRetry<T>(attempt: () => Promise<T>): Promise<T> {
   return retryOnD1GuardFailure(attempt, () => {
-    throw new Error("This recipe changed while this request ran; reload it and try again.");
+    throw new Error(RECIPE_CHANGED_DURING_REQUEST_MESSAGE);
   });
 }
+
+const RECIPE_CHANGED_DURING_REQUEST_MESSAGE = "This recipe changed while this request ran; reload it and try again.";
 
 const healthTool: SpoonjoyApiOperation = {
   name: "health",
@@ -2639,7 +2641,9 @@ const deleteRecipeTool: SpoonjoyApiOperation = {
 
     // Already deleted, or another request deleted it first: answer as a repeated delete.
     const deleted = existing.deletedAt ? existing : await findOwned();
-    if (!deleted?.deletedAt) throw new Error("Recipe not found");
+    if (!deleted) throw new Error("Recipe not found");
+    // Still active: every attempt lost a race to another change, so nothing was deleted.
+    if (!deleted.deletedAt) throw new Error(RECIPE_CHANGED_DURING_REQUEST_MESSAGE);
     return json({
       deleted: false,
       recipe: formatDeletedRecipe({ ...deleted, deletedAt: deleted.deletedAt }),
