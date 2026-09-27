@@ -1,6 +1,8 @@
 import type { Route } from "./+types/recipes.$id.edit";
 import { Form, redirect, data, useActionData, useLoaderData, useNavigate, useNavigation, useSubmit } from "react-router";
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
+import { requestD1 } from "~/lib/d1-read.server";
+import { deleteRecipeStepOnD1, saveRecipeEditOnD1, swapRecipeStepsOnD1 } from "~/lib/recipe-d1-edits.server";
 import { requireUserId } from "~/lib/session.server";
 import { Link } from "~/components/ui/link";
 import { ValidationError } from "~/components/ui/validation-error";
@@ -167,6 +169,19 @@ export async function action({ request, params, context }: Route.ActionArgs) {
           },
         });
 
+        const d1 = requestD1(context);
+        if (targetStep && d1) {
+          await swapRecipeStepsOnD1(d1, {
+            recipeId: id,
+            stepId,
+            stepNum: step.stepNum,
+            targetStepId: targetStep.id,
+            targetStepNum,
+          });
+
+          return data({ success: true });
+        }
+
         if (targetStep) {
           const tempStepNum = -1;
 
@@ -217,12 +232,17 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       );
     }
 
-    await database.$transaction([
-      database.recipeStep.delete({
-        where: { id: stepId },
-      }),
-      touchNativeSyncRecipeOperation(database, id),
-    ]);
+    const d1 = requestD1(context);
+    if (d1) {
+      await deleteRecipeStepOnD1(d1, { recipeId: id, stepId, stepNum: step.stepNum });
+    } else {
+      await database.$transaction([
+        database.recipeStep.delete({
+          where: { id: stepId },
+        }),
+        touchNativeSyncRecipeOperation(database, id),
+      ]);
+    }
 
     return data({ success: true });
   }
@@ -305,6 +325,34 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 
   try {
+    const d1 = requestD1(context);
+    if (d1) {
+      // One atomic batch: the fields, the uploaded or cleared cover and the cookbook touch.
+      const coverId = crypto.randomUUID();
+      await saveRecipeEditOnD1(d1, {
+        recipeId: id,
+        chefId: userId,
+        fields: updateData,
+        cover: uploadedImageUrl
+          ? { kind: "upload", coverId, imageUrl: uploadedImageUrl, createdById: userId }
+          : clearImage ? { kind: "clear" } : null,
+      });
+      if (uploadedImageUrl) {
+        await scheduleSpoonCoverStylization({
+          db: database,
+          userId,
+          recipeId: id,
+          coverId,
+          rawPhotoUrl: uploadedImageUrl,
+          recipeTitle: updateData.title,
+          env: cloudflareEnv,
+          bucket: photosBucket,
+          sourceType: "chef-upload",
+        });
+      }
+      return redirect(`/recipes/${id}`);
+    }
+
     const updatedAt = new Date();
     await database.$transaction([
       database.recipe.update({

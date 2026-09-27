@@ -1,6 +1,13 @@
 import type { Route } from "./+types/recipes.$id.steps.$stepId.edit";
 import { Form, redirect, data, useActionData, useFetcher, useLoaderData, useSearchParams, useSubmit } from "react-router";
 import { getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
+import { requestD1 } from "~/lib/d1-read.server";
+import {
+  addStepIngredientsOnD1,
+  deleteRecipeStepOnD1,
+  deleteStepIngredientOnD1,
+  updateRecipeStepOnD1,
+} from "~/lib/recipe-d1-edits.server";
 import { revalidateUnlessIngredientParse } from "~/lib/ingredient-parse-revalidation";
 import { requireUserId } from "~/lib/session.server";
 import { useEffect, useState } from "react";
@@ -239,12 +246,17 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       );
     }
 
-    await database.$transaction([
-      database.recipeStep.delete({
-        where: { id: stepId },
-      }),
-      touchNativeSyncRecipeOperation(database, id),
-    ]);
+    const d1 = requestD1(context);
+    if (d1) {
+      await deleteRecipeStepOnD1(d1, { recipeId: id, stepId, stepNum: step.stepNum });
+    } else {
+      await database.$transaction([
+        database.recipeStep.delete({
+          where: { id: stepId },
+        }),
+        touchNativeSyncRecipeOperation(database, id),
+      ]);
+    }
     return redirect(`/recipes/${id}/edit`);
   }
 
@@ -308,14 +320,19 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       rows.push({ quantity: draft.quantity, unitId: unit.id, ingredientRefId: ingredientRef.id });
     }
 
-    await database.$transaction([
-      ...rows.map((row) =>
-        database.ingredient.create({
-          data: { recipeId: id, stepNum: step.stepNum, ...row },
-        })
-      ),
-      touchNativeSyncRecipeOperation(database, id),
-    ]);
+    const d1 = requestD1(context);
+    if (d1) {
+      await addStepIngredientsOnD1(d1, { recipeId: id, stepId, stepNum: step.stepNum, rows });
+    } else {
+      await database.$transaction([
+        ...rows.map((row) =>
+          database.ingredient.create({
+            data: { recipeId: id, stepNum: step.stepNum, ...row },
+          })
+        ),
+        touchNativeSyncRecipeOperation(database, id),
+      ]);
+    }
 
     return data({ success: true });
   }
@@ -392,18 +409,28 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     }
 
     // Create ingredient
-    await database.$transaction([
-      database.ingredient.create({
-        data: {
-          recipeId: id,
-          stepNum: step.stepNum,
-          quantity,
-          unitId: unit.id,
-          ingredientRefId: ingredientRef.id,
-        },
-      }),
-      touchNativeSyncRecipeOperation(database, id),
-    ]);
+    const d1 = requestD1(context);
+    if (d1) {
+      await addStepIngredientsOnD1(d1, {
+        recipeId: id,
+        stepId,
+        stepNum: step.stepNum,
+        rows: [{ quantity, unitId: unit.id, ingredientRefId: ingredientRef.id }],
+      });
+    } else {
+      await database.$transaction([
+        database.ingredient.create({
+          data: {
+            recipeId: id,
+            stepNum: step.stepNum,
+            quantity,
+            unitId: unit.id,
+            ingredientRefId: ingredientRef.id,
+          },
+        }),
+        touchNativeSyncRecipeOperation(database, id),
+      ]);
+    }
 
     return data({ success: true });
   }
@@ -411,6 +438,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   // Handle delete ingredient intent
   if (intent === "deleteIngredient") {
     const ingredientId = formData.get("ingredientId")?.toString();
+    const d1 = requestD1(context);
+    if (ingredientId && d1) {
+      await deleteStepIngredientOnD1(d1, { recipeId: id, stepNum: step.stepNum, ingredientId });
+      return data({ success: true });
+    }
     if (ingredientId) {
       const deleted = await database.ingredient.deleteMany({
         where: {
@@ -476,6 +508,20 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 
   try {
+    const d1 = requestD1(context);
+    if (d1) {
+      // One atomic batch: the step, its replaced output uses and the recipe touch.
+      await updateRecipeStepOnD1(d1, {
+        recipeId: id,
+        stepId,
+        stepNum: step.stepNum,
+        stepTitle: stepTitle.trim() || null,
+        description: description.trim(),
+        usesSteps,
+      });
+      return redirect(`/recipes/${id}/edit`);
+    }
+
     await database.recipeStep.update({
       where: { id: stepId },
       data: {
