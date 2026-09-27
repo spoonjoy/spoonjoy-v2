@@ -8,13 +8,15 @@
 // at the same time would need its own account and adds nothing device-specific.
 import { test, expect, appendConsoleIssues, assertNoConsoleIssues, watchConsole } from "./support/journey";
 import type { Page } from "@playwright/test";
-import { resetCookProgress } from "./support/cook-progress";
+import { cookProgressSaved, resetCookProgress } from "./support/cook-progress";
 import { waitForHydration } from "./support/navigation";
 import { scratchStorageStateForProject } from "./support/personas";
 
 const SCRATCH_INDEX = 8;
 const LEMON_RICE_ID = "qa-kitchen-recipe-lemon-rice";
 const LEMON_RICE = `/recipes/${LEMON_RICE_ID}`;
+// The seeded ingredient id (scripts/seed-qa-kitchen.mjs: <recipe id>-ingredient-<step>-<slug>).
+const JASMINE_RICE_ID = `${LEMON_RICE_ID}-ingredient-1-jasmine-rice`;
 
 function jasmineRice(page: Page) {
   return page.getByRole("checkbox", { name: "jasmine rice", exact: true });
@@ -36,13 +38,16 @@ test.describe("Cook progress across devices", () => {
     const scaleDisplay = page.getByTestId("scale-display");
     await resetCookProgress(page, LEMON_RICE_ID);
 
-    // Browser A checks the jasmine rice and scales up; the account has both once it says so.
+    // Browser A checks the jasmine rice and scales up, and the account answers with both.
     await openLemonRice(page);
     await expect(jasmineRice(page)).toHaveAttribute("aria-checked", "false");
+    const checkedAndScaled = cookProgressSaved(page, LEMON_RICE_ID, (progress) =>
+      progress.scaleFactor === 1.25 && progress.checkedIngredientIds.includes(JASMINE_RICE_ID));
     await jasmineRice(page).click();
     await expect(jasmineRice(page)).toHaveAttribute("aria-checked", "true");
     await page.getByRole("button", { name: "Increase scale" }).click();
     await expect(scaleDisplay).toHaveText("1.25×");
+    await checkedAndScaled;
     await expect(page.getByTestId("cook-sync-status")).toHaveText("Progress synced");
     await expectAccessible();
 
@@ -63,10 +68,12 @@ test.describe("Cook progress across devices", () => {
       await expect(otherPage.getByTestId("cook-sync-status")).toHaveText("Progress synced");
       await expect(jasmineRice(otherPage)).toHaveAttribute("aria-checked", "true");
 
-      // B clears the jasmine rice, and it stays cleared after B reloads.
+      // B clears the jasmine rice, the account answers without it, and it stays cleared after B reloads.
+      const cleared = cookProgressSaved(otherPage, LEMON_RICE_ID, (progress) =>
+        progress.scaleFactor === 1.25 && !progress.checkedIngredientIds.includes(JASMINE_RICE_ID));
       await jasmineRice(otherPage).click();
       await expect(jasmineRice(otherPage)).toHaveAttribute("aria-checked", "false");
-      await expect(otherPage.getByTestId("cook-sync-status")).toHaveText("Progress synced");
+      await cleared;
       await otherPage.reload();
       await waitForHydration(otherPage);
       await expect(otherPage.getByTestId("cook-sync-status")).toHaveText("Progress synced");

@@ -8,19 +8,21 @@
 // as scratch index 7 with per-device twins — the base account on iPhone WebKit, its desktop twin
 // on desktop Chrome (AGENTS.md's scratch table) — so the two device projects never race on one
 // account, reset that cook's Lemon Herb Rice progress through the cook-session API before they
-// start, and wait for "Progress synced" before a reload so the reload proves the account kept the
-// change. The history tests
+// start, and wait for the account's answer to the saving PATCH before a reload, so the reload
+// proves the account kept the change. The history tests
 // open the recipe from the chef's kitchen home (a scratch cook's home lists no recipes) and change
 // no progress, so the chef's progress on Lemon Herb Rice stays untouched.
 import { test, expect } from "./support/journey";
 import type { Page } from "@playwright/test";
-import { resetCookProgress } from "./support/cook-progress";
-import { pathUrl, recipeLink, waitForHydration } from "./support/navigation";
+import { cookProgressSaved, resetCookProgress } from "./support/cook-progress";
+import { pathUrl, recipeLink, seededRecipeLink, waitForHydration } from "./support/navigation";
 import { personaStorageStatePath, scratchStorageStateForProject } from "./support/personas";
 
 const LEMON_RICE_ID = "qa-kitchen-recipe-lemon-rice";
 const LEMON_RICE = `/recipes/${LEMON_RICE_ID}`;
-const JASMINE_RICE_QUANTITY = "ingredient-quantity-qa-kitchen-recipe-lemon-rice-ingredient-1-jasmine-rice";
+// The seeded ingredient id (scripts/seed-qa-kitchen.mjs: <recipe id>-ingredient-<step>-<slug>).
+const JASMINE_RICE_ID = `${LEMON_RICE_ID}-ingredient-1-jasmine-rice`;
+const JASMINE_RICE_QUANTITY = `ingredient-quantity-${JASMINE_RICE_ID}`;
 // The recipe with no hash: cook mode closed.
 const LEMON_RICE_URL = new RegExp(`^https?://[^/]+${LEMON_RICE}$`);
 const LEMON_RICE_COOK_URL = new RegExp(`^https?://[^/]+${LEMON_RICE}#cook$`);
@@ -56,6 +58,18 @@ async function openLemonRiceDirectly(page: Page) {
   await expect(syncStatus(page)).toHaveText("Progress synced");
 }
 
+// Search, then Lemon Herb Rice through its result link: an in-app navigation, so the recipe page
+// mounts on the client (not a full document load) and still shows the account's progress.
+async function openLemonRiceFromSearch(page: Page) {
+  await page.goto("/search?q=lemon");
+  await waitForHydration(page);
+  const results = page.getByRole("region", { name: "Search results" });
+  await seededRecipeLink(results, "Recipe Lemon Herb Rice", LEMON_RICE).click();
+  await expect(page).toHaveURL(pathUrl(LEMON_RICE));
+  await expect(recipeHeading(page)).toBeVisible();
+  await expect(syncStatus(page)).toHaveText("Progress synced");
+}
+
 // Two presses of "Increase scale": 1× -> 1.25× -> 1.5×.
 async function scaleToOneAndAHalf(page: Page) {
   const increase = page.getByRole("button", { name: "Increase scale" });
@@ -85,11 +99,13 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await expect(jasmineRice).toHaveAttribute("aria-checked", "false");
       await expect(jasmineRiceQuantity).toHaveText("1 cup");
 
+      const saved = cookProgressSaved(page, LEMON_RICE_ID, (progress) =>
+        progress.scaleFactor === 1.5 && progress.checkedIngredientIds.includes(JASMINE_RICE_ID));
       await jasmineRice.click();
       await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
       await scaleToOneAndAHalf(page);
       await expect(jasmineRiceQuantity).toHaveText("1 ½ cup");
-      await expect(syncStatus(page)).toHaveText("Progress synced");
+      await saved;
 
       await verifyAfterReload(async () => {
         await expect(scaleDisplay).toHaveText("1.5×");
@@ -97,10 +113,8 @@ test.describe("Cooking Lemon Herb Rice", () => {
         await expect(jasmineRiceQuantity).toHaveText("1 ½ cup");
       });
 
-      // Somewhere else and back to the recipe: the progress is still there.
-      await page.goto("/account/settings");
-      await expect(page.getByRole("heading", { level: 1, name: "Account settings", exact: true })).toBeVisible();
-      await openLemonRiceDirectly(page);
+      // Somewhere else and back to the recipe through the app: the progress is still there.
+      await openLemonRiceFromSearch(page);
       await expect(scaleDisplay).toHaveText("1.5×");
       await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
       await expect(jasmineRiceQuantity).toHaveText("1 ½ cup");
@@ -113,9 +127,10 @@ test.describe("Cooking Lemon Herb Rice", () => {
 
       await openLemonRiceDirectly(page);
       await expect(cookedRice).toHaveAttribute("aria-checked", "false");
+      const saved = cookProgressSaved(page, LEMON_RICE_ID, (progress) => progress.checkedStepOutputIds.length === 1);
       await cookedRice.click();
       await expect(cookedRice).toHaveAttribute("aria-checked", "true");
-      await expect(syncStatus(page)).toHaveText("Progress synced");
+      await saved;
 
       await verifyAfterReload(async () => {
         await expect(cookedRice).toHaveAttribute("aria-checked", "true");
@@ -129,6 +144,9 @@ test.describe("Cooking Lemon Herb Rice", () => {
       const jasmineRice = page.getByRole("checkbox", { name: "jasmine rice", exact: true });
 
       await openLemonRiceDirectly(page);
+      // Only the final state matches: rice checked, 1.5×, and step 3 (index 2) current.
+      const saved = cookProgressSaved(page, LEMON_RICE_ID, (progress) =>
+        progress.activeStepIndex === 2 && progress.scaleFactor === 1.5 && progress.checkedIngredientIds.includes(JASMINE_RICE_ID));
       await jasmineRice.click();
       await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
       await scaleToOneAndAHalf(page);
@@ -159,7 +177,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await expect(page).toHaveURL(LEMON_RICE_URL);
       await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
       await expect(page.getByTestId("scale-display")).toHaveText("1.5×");
-      await expect(syncStatus(page)).toHaveText("Progress synced");
+      await saved;
 
       await verifyAfterReload(async () => {
         await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
@@ -181,6 +199,9 @@ test.describe("Cooking Lemon Herb Rice", () => {
       const scaleDisplay = page.getByTestId("scale-display");
 
       await openLemonRiceDirectly(page);
+      // Only the final state matches: nothing checked at 1.25× (the scale changes after the checks).
+      const saved = cookProgressSaved(page, LEMON_RICE_ID, (progress) =>
+        progress.scaleFactor === 1.25 && progress.checkedIngredientIds.length === 0 && progress.checkedStepOutputIds.length === 0);
       await jasmineRice.click();
       await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
       await cookedRice.click();
@@ -193,7 +214,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await expect(checkedRows).toHaveCount(0);
       await expect(jasmineRice).toHaveAttribute("aria-checked", "false");
       await expect(cookedRice).toHaveAttribute("aria-checked", "false");
-      await expect(syncStatus(page)).toHaveText("Progress synced");
+      await saved;
 
       await verifyAfterReload(async () => {
         await expect(scaleDisplay).toHaveText("1.25×");
