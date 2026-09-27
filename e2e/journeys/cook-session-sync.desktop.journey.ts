@@ -10,7 +10,7 @@ import { test, expect, appendConsoleIssues, assertNoConsoleIssues, watchConsole 
 import type { Page } from "@playwright/test";
 import { cookProgressSaved, resetCookProgress } from "./support/cook-progress";
 import { waitForHydration } from "./support/navigation";
-import { scratchStorageStateForProject } from "./support/personas";
+import { scratchForProject, scratchStorageStateForProject } from "./support/personas";
 
 const SCRATCH_INDEX = 8;
 const LEMON_RICE_ID = "qa-kitchen-recipe-lemon-rice";
@@ -34,9 +34,9 @@ test.describe("Cook progress across devices", () => {
   // Browser A starts from scratch 8's desktop twin (this file runs on desktop-chrome only).
   test.use({ storageState: scratchStorageStateForProject(SCRATCH_INDEX) });
 
-  test("an ingredient checked on one device is checked on the other, and clearing it there clears it here @mutates", async ({ page, browser, verifyAfterReload, expectAccessible }) => {
+  test("an ingredient checked on one device is checked on the other, and clearing it there clears it here @mutates", async ({ page, browser, verifyAfterReload, expectAccessible }, testInfo) => {
     const scaleDisplay = page.getByTestId("scale-display");
-    await resetCookProgress(page, LEMON_RICE_ID);
+    await resetCookProgress(page, LEMON_RICE_ID, scratchForProject(SCRATCH_INDEX, testInfo.project.name).id);
 
     // Browser A checks the jasmine rice and scales up, and the account answers with both.
     await openLemonRice(page);

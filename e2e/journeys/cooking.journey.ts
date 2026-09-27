@@ -16,7 +16,7 @@ import { test, expect } from "./support/journey";
 import type { Page } from "@playwright/test";
 import { cookProgressSaved, resetCookProgress } from "./support/cook-progress";
 import { pathUrl, recipeLink, seededRecipeLink, waitForHydration } from "./support/navigation";
-import { personaStorageStatePath, scratchStorageStateForProject } from "./support/personas";
+import { personaStorageStatePath, scratchForProject, scratchStorageStateForProject } from "./support/personas";
 
 const LEMON_RICE_ID = "qa-kitchen-recipe-lemon-rice";
 const LEMON_RICE = `/recipes/${LEMON_RICE_ID}`;
@@ -86,8 +86,8 @@ test.describe("Cooking Lemon Herb Rice", () => {
     // path, never the credentials file, which `playwright test --list` must not need.
     test.use({ storageState: scratchStorageStateForProject(SCRATCH_INDEX) });
 
-    test.beforeEach(async ({ page }) => {
-      await resetCookProgress(page, LEMON_RICE_ID);
+    test.beforeEach(async ({ page }, testInfo) => {
+      await resetCookProgress(page, LEMON_RICE_ID, scratchForProject(SCRATCH_INDEX, testInfo.project.name).id);
     });
 
     test("the checklist and scale persist across a reload and a visit elsewhere @mutates", async ({ page, verifyAfterReload, expectAccessible }) => {

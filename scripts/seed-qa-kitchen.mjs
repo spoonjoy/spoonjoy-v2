@@ -431,12 +431,13 @@ export function parseSeedKitchenArgs(argv) {
 // The credentials file lists scratch accounts by index, one array per variant: `scratch` holds
 // the base accounts (scratch[n - 1] is index n) and `scratchDesktop` the desktop twins, in the
 // same order (generateScratchUsers emits each variant in index order). support/personas.ts
-// reads both.
+// reads both. Each entry carries the account's user id, which journeys send to APIs that ask a
+// browser caller to name its user (the cook-session X-Spoonjoy-Cook-User header).
 function scratchCredentials(scratchUsers, scratchPasswords, variant) {
   return scratchUsers
     .map((user, index) => ({ user, password: scratchPasswords[index] }))
     .filter(({ user }) => user.variant === variant)
-    .map(({ user, password }) => ({ username: user.username, email: user.email, password }));
+    .map(({ user, password }) => ({ id: user.id, username: user.username, email: user.email, password }));
 }
 
 function credentialsPayload(passwords, scratchUsers, scratchPasswords) {

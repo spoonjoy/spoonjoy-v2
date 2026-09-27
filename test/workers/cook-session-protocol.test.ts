@@ -11,6 +11,11 @@ import { changesFitRecipe, cookSessionObjectName } from "../../workers/cook-sess
 import { parseCookPatchBody } from "../../workers/cook-session-protocol";
 import { COOK_SESSION_RETENTION_MS } from "../../workers/cook-session-store";
 import { applyRepositoryMigrations } from "./helpers/repository-migrations";
+import {
+  cookProgressResetRequest,
+  cookProgressStartRequest,
+  type CookProgressResetRequest,
+} from "../../e2e/journeys/support/cook-progress-requests";
 
 interface TestD1Statement {
   bind(...values: unknown[]): TestD1Statement;
@@ -383,6 +388,34 @@ describe("cook-session protocol v1", () => {
     await expect(send("GET", RECIPE, { cookie: cookieB }).then((response) => response.json())).resolves.toEqual({ state: null });
     const matching = await send("GET", RECIPE, { headers: { "X-Spoonjoy-Cook-User": USER_A } });
     expect(await stateOf(matching)).toEqual(before);
+  });
+
+  it("accepts the journeys' cook-progress reset exactly as it is sent", async () => {
+    const worker = (await import("../../workers/app")).default;
+    const sendReset = (request: CookProgressResetRequest) => worker.fetch(
+      new Request(`${TEST_ORIGIN}${request.path}`, {
+        method: request.method,
+        headers: { ...request.headers, Cookie: cookieA },
+        body: request.body,
+      }),
+      protocolEnvironment(),
+      createExecutionContext(),
+    );
+    const started = await startSession();
+    await patch(started, { scaleFactor: 2, checkedIngredientIds: [RICE], activeStepIndex: 2 });
+
+    const start = await sendReset(cookProgressStartRequest(RECIPE, USER_A, TEST_ORIGIN));
+    expect(start.status).toBe(200);
+    const session = await stateOf(start);
+    const reset = await sendReset(cookProgressResetRequest(RECIPE, USER_A, TEST_ORIGIN, session, "journey-reset-1"));
+
+    expect(reset.status).toBe(200);
+    expect((await stateOf(reset)).progress).toEqual({
+      activeStepIndex: 0,
+      scaleFactor: 1,
+      checkedIngredientIds: [],
+      checkedStepOutputIds: [],
+    });
   });
 
   it("requires cookie callers to name their user, and asks an old page to reload", async () => {

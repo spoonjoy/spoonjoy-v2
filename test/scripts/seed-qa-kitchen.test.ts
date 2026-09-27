@@ -692,6 +692,8 @@ describe("seed-qa-kitchen", () => {
       expect(credentials.scratch).toHaveLength(SCRATCH_USER_COUNT);
       expect(credentials.scratchDesktop).toHaveLength(SCRATCH_USER_COUNT);
       for (const entry of [...credentials.scratch, ...credentials.scratchDesktop]) {
+        // The seeded user id, which journeys send as the cook-session X-Spoonjoy-Cook-User header.
+        expect(entry.id).toBe(entry.username);
         expect(entry.email).toMatch(/^codex-e2e-s-/);
         expect(entry.username).toMatch(/^codex_e2e_s_/);
         expect(entry.username.length).toBeLessThanOrEqual(40);
