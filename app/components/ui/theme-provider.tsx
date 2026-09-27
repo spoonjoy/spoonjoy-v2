@@ -42,9 +42,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light')
   const [mounted, setMounted] = useState(false)
   const switchingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Set by setTheme; the effect that flips the class opens the fade window.
+  const switchRequested = useRef(false)
 
-  // Open the fade window just before the theme class flips. Reduced-motion
-  // users get an instant switch.
+  // Open the fade window as the theme class flips, so the window runs from the
+  // flip however long the render before it took. The attribute and the class
+  // change in the same task, and a transition takes its timing from the style
+  // after the change, so the flip still fades. Reduced-motion users get an
+  // instant switch.
   const markThemeSwitching = () => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const root = document.documentElement
@@ -83,6 +88,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const root = document.documentElement
     root.classList.remove('light', 'dark')
     root.classList.add(resolved)
+    if (switchRequested.current) {
+      switchRequested.current = false
+      markThemeSwitching()
+    }
   }, [theme, mounted])
 
   // Listen for system theme changes
@@ -106,7 +115,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [theme, mounted])
 
   const setTheme = (newTheme: Theme) => {
-    markThemeSwitching()
+    switchRequested.current = true
     setThemeState(newTheme)
     localStorage.setItem(STORAGE_KEY, newTheme)
   }

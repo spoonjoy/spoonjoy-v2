@@ -407,6 +407,30 @@ describe('ThemeProvider theme-switching window', () => {
     expect(root()).not.toHaveAttribute(THEME_SWITCHING_ATTRIBUTE)
   })
 
+  it('starts the fade timer when the theme class flips, not before the render', async () => {
+    await renderMounted('light')
+
+    vi.useFakeTimers()
+    const fakeSetTimeout = globalThis.setTimeout
+    const darkWhenTimerStarted: boolean[] = []
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
+      handler: () => void,
+      ms?: number,
+    ) => {
+      if (ms === THEME_SWITCH_DURATION_MS) darkWhenTimerStarted.push(root().classList.contains('dark'))
+      return fakeSetTimeout(handler, ms)
+    }) as typeof setTimeout)
+
+    try {
+      fireEvent.click(screen.getByText('Set Dark'))
+    } finally {
+      setTimeoutSpy.mockRestore()
+    }
+
+    expect(darkWhenTimerStarted).toEqual([true])
+    expect(root()).toHaveAttribute(THEME_SWITCHING_ATTRIBUTE)
+  })
+
   it('keeps the switching window open until the fade after the last of several quick switches', async () => {
     await renderMounted('light')
 
