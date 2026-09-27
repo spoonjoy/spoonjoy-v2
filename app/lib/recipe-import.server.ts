@@ -42,6 +42,14 @@ import {
 } from "~/lib/llm-telemetry.server";
 import { tryConsumeImageGenQuota } from "~/lib/image-gen-ledger.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
+import { d1Binding } from "~/lib/d1-read.server";
+import { d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
+import {
+  activeRecipeTitleFreeGuard,
+  ingredientInsertStatement,
+  recipeInsertStatement,
+  stepInsertStatement,
+} from "~/lib/recipe-d1-writes.server";
 import { createCover } from "~/lib/recipe-cover.server";
 import { captureImageGenerationException } from "~/lib/image-gen-telemetry.server";
 import {
@@ -139,7 +147,8 @@ export interface ImportRecipeFromSourceOptions {
 
 export interface ImportRecipeDeps {
   db: PrismaClient;
-  env?: (RecipeLlmEnv & PostHogServerEnv) | null;
+  /** The Worker environment; with a D1 binding in `DB` the recipe is written as one atomic batch. */
+  env?: (RecipeLlmEnv & PostHogServerEnv & { DB?: unknown }) | null;
   bucket?: R2Bucket;
   waitUntil?: (promise: Promise<unknown>) => void;
   fetchImpl?: typeof fetch;
@@ -620,6 +629,10 @@ async function resolveTitleWithRetry(
   );
 }
 
+// On D1 the import re-checks its title as it writes; a recipe that takes the title in
+// between sends it back to pick the next free one, this many times at most.
+const D1_TITLE_RACE_ATTEMPTS = 3;
+
 async function persistRecipe(
   db: PrismaClient,
   chefId: string,
@@ -629,7 +642,7 @@ async function persistRecipe(
   now: () => Date,
   recipeId?: string,
 ): Promise<{ id: string; recipe: unknown; title: string }> {
-  const title = await resolveTitleWithRetry(db, chefId, draft.title, now);
+  let title = await resolveTitleWithRetry(db, chefId, draft.title, now);
 
   // Parse ingredient strings up-front (outside the transaction).
   const allIngredients: ParsedIngredient[] = [];
@@ -652,32 +665,71 @@ async function persistRecipe(
     });
   }
 
-  const [created] = await db.$transaction([
-    db.recipe.create({
-      data: {
-        id,
-        title,
-        description: draft.description,
-        servings: draft.servings,
-        sourceUrl: draft.sourceUrl,
-        chefId,
-      },
-    }),
-    ...draft.steps.map((step, index) => db.recipeStep.create({
-      data: {
-        recipeId: id,
-        stepNum: index + 1,
-        description: step,
-      },
-    })),
-    ...ingredientRows.map((ingredient) => db.ingredient.create({ data: ingredient })),
-  ]);
+  const d1 = d1Binding(env?.DB);
+  if (d1) {
+    // One atomic batch: the recipe, its steps and its ingredients apply together, and the
+    // title is re-checked as they are written.
+    for (let attempt = 1; ; attempt++) {
+      const at = now();
+      try {
+        await d1WriteBatch(d1, [
+          activeRecipeTitleFreeGuard(chefId, title),
+          recipeInsertStatement({
+            id,
+            title,
+            description: draft.description,
+            servings: draft.servings,
+            sourceUrl: draft.sourceUrl,
+            chefId,
+            now: at,
+          }),
+          ...draft.steps.map((step, index) => stepInsertStatement({
+            recipeId: id,
+            stepNum: index + 1,
+            stepTitle: null,
+            description: step,
+            duration: null,
+            now: at,
+          })),
+          ...ingredientRows.map((ingredient) => ingredientInsertStatement({ ...ingredient, now: at })),
+        ]);
+        break;
+      } catch (error) {
+        if (!isD1GuardFailure(error)) throw error;
+        if (attempt === D1_TITLE_RACE_ATTEMPTS) {
+          throw new ImportRecipeError("title-conflict", 409, "Title already in use after retry suffixes");
+        }
+        title = await resolveTitleWithRetry(db, chefId, draft.title, now);
+      }
+    }
+  } else {
+    await db.$transaction([
+      db.recipe.create({
+        data: {
+          id,
+          title,
+          description: draft.description,
+          servings: draft.servings,
+          sourceUrl: draft.sourceUrl,
+          chefId,
+        },
+      }),
+      ...draft.steps.map((step, index) => db.recipeStep.create({
+        data: {
+          recipeId: id,
+          stepNum: index + 1,
+          description: step,
+        },
+      })),
+      ...ingredientRows.map((ingredient) => db.ingredient.create({ data: ingredient })),
+    ]);
+  }
 
   const full = await db.recipe.findUniqueOrThrow({
-    where: { id: created.id },
+    where: { id },
     include: recipeInclude,
   });
-  return { id: created.id, recipe: full, title };
+  return { id, recipe: full, title };
 }
 
 async function uploadImportCover(

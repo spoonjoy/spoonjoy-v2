@@ -1,5 +1,16 @@
 import type { Prisma, PrismaClient as PrismaClientType } from "@prisma/client";
+import type { D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
 import {
+  activeRecipeTitleFreeGuard,
+  ingredientInsertStatement,
+  recipeInsertStatement,
+  recipeUpdateStatement,
+  stepInsertStatement,
+  stepOutputUseInsertStatement,
+} from "~/lib/recipe-d1-writes.server";
+import {
+  coverInsertStatement,
   createCover,
   type RecipeCoverGenerationStatus,
   type RecipeCoverSourceType,
@@ -24,6 +35,9 @@ export class ForkTitleExhaustedError extends Error {
 }
 
 const MAX_VARIATION_ATTEMPTS = 100;
+// On D1 the fork re-checks its title as it writes; a recipe that takes the title in between
+// sends it back to pick the next free one, this many times at most.
+const D1_TITLE_RACE_ATTEMPTS = 3;
 
 export interface ForkRecipeInput {
   sourceRecipeId: string;
@@ -74,9 +88,7 @@ function nonEmpty(value: string | null | undefined): value is string {
   return typeof value === "string" && value.length > 0;
 }
 
-function copyableActiveVariant(
-  source: Prisma.RecipeGetPayload<{ include: typeof sourceInclude }>,
-): RecipeCoverVariant | null {
+function copyableActiveVariant(source: ForkSource): RecipeCoverVariant | null {
   const cover = source.activeCover;
   if (!cover || source.coverMode === "none") return null;
   if (cover.recipeId !== source.id) return null;
@@ -105,30 +117,104 @@ async function resolveTitle(
   throw new ForkTitleExhaustedError(baseTitle);
 }
 
-export async function forkRecipe(
+type ForkSource = Prisma.RecipeGetPayload<{ include: typeof sourceInclude }>;
+type ForkStepOutputUse = { outputStepNum: number; inputStepNum: number };
+
+function copiedCoverInput(source: ForkSource, recipeId: string) {
+  const cover = source.activeCover!;
+  return {
+    recipeId,
+    imageUrl: cover.imageUrl,
+    stylizedImageUrl: cover.stylizedImageUrl,
+    sourceType: cover.sourceType as RecipeCoverSourceType,
+    sourceSpoonId: null,
+    status: cover.status as RecipeCoverStatus,
+    createdById: cover.createdById,
+    sourceImageUrl: cover.sourceImageUrl,
+    generationStatus: cover.generationStatus as RecipeCoverGenerationStatus,
+    failureReason: cover.failureReason,
+    promptVersion: cover.promptVersion,
+    styleVersion: cover.styleVersion,
+  };
+}
+
+/**
+ * The fork as one atomic D1 batch: the recipe, its steps, ingredients, step output uses and
+ * copied cover all apply, or none do. The batch re-checks the title as it writes; if another
+ * recipe took it in between, the title is resolved again.
+ */
+async function writeForkOnD1(
   db: PrismaClientType,
+  d1: D1ReadDatabase,
+  source: ForkSource,
+  stepOutputUses: ForkStepOutputUse[],
   input: ForkRecipeInput,
-): Promise<ForkedRecipeResult> {
-  const source = await db.recipe.findUnique({
-    where: { id: input.sourceRecipeId },
-    include: sourceInclude,
-  });
-  if (!source || source.deletedAt) {
-    throw new ForkSourceNotFoundError(input.sourceRecipeId);
+  baseTitle: string,
+): Promise<string> {
+  const recipeId = input.recipeId ?? crypto.randomUUID();
+  const activeVariant = source.coverMode === "none" ? null : copyableActiveVariant(source);
+  for (let attempt = 1; ; attempt++) {
+    const { title } = await resolveTitle(db, input.viewerId, baseTitle);
+    const now = new Date();
+    const coverId = crypto.randomUUID();
+    try {
+      await d1WriteBatch(d1, [
+        activeRecipeTitleFreeGuard(input.viewerId, title),
+        recipeInsertStatement({
+          id: recipeId,
+          title,
+          description: source.description,
+          servings: source.servings,
+          chefId: input.viewerId,
+          sourceRecipeId: source.id,
+          // sourceUrl intentionally NOT propagated
+          coverMode: source.coverMode === "none" ? "none" : "auto",
+          now,
+        }),
+        ...source.steps.map((step) => stepInsertStatement({
+          recipeId,
+          stepNum: step.stepNum,
+          stepTitle: step.stepTitle,
+          description: step.description,
+          duration: step.duration,
+          now,
+        })),
+        ...source.steps.flatMap((step) => step.ingredients.map((ingredient) => ingredientInsertStatement({
+          recipeId,
+          stepNum: step.stepNum,
+          quantity: ingredient.quantity,
+          unitId: ingredient.unitId,
+          ingredientRefId: ingredient.ingredientRefId,
+          now,
+        }))),
+        ...stepOutputUses.map((use) => stepOutputUseInsertStatement(recipeId, use.inputStepNum, use.outputStepNum, now)),
+        ...(activeVariant
+          ? [
+            coverInsertStatement({ ...copiedCoverInput(source, recipeId), id: coverId }, now),
+            recipeUpdateStatement(recipeId, {
+              activeCoverId: coverId,
+              activeCoverVariant: activeVariant,
+              coverMode: source.coverMode,
+            }, now),
+          ]
+          : []),
+      ]);
+      return recipeId;
+    } catch (error) {
+      if (!isD1GuardFailure(error)) throw error;
+      if (attempt === D1_TITLE_RACE_ATTEMPTS) throw new ForkTitleExhaustedError(baseTitle);
+    }
   }
+}
 
-  const stepOutputUses = await db.stepOutputUse.findMany({
-    where: { recipeId: source.id },
-    select: { outputStepNum: true, inputStepNum: true },
-  });
-
-  const override = input.titleOverride?.trim();
-  const baseTitle = override && override.length > 0 ? override : source.title;
-
-  // Cloudflare D1 (used in both local dev and production) does not support
-  // interactive `$transaction(async (tx) => ...)`; we sequence the writes
-  // without a transaction. The schema's `(chefId, title, deletedAt)` unique
-  // index still protects against duplicate-title races at the storage layer.
+async function writeForkWithPrisma(
+  db: PrismaClientType,
+  source: ForkSource,
+  stepOutputUses: ForkStepOutputUse[],
+  input: ForkRecipeInput,
+  baseTitle: string,
+): Promise<string> {
+  // Prisma (no D1 binding): the writes run in sequence against the top-level client.
   const { title } = await resolveTitle(db, input.viewerId, baseTitle);
   const created = await db.recipe.create({
     data: {
@@ -190,20 +276,7 @@ export async function forkRecipe(
   } else {
     const activeVariant = copyableActiveVariant(source);
     if (source.activeCover && activeVariant) {
-      const copiedCover = await createCover(db, {
-        recipeId: created.id,
-        imageUrl: source.activeCover.imageUrl,
-        stylizedImageUrl: source.activeCover.stylizedImageUrl,
-        sourceType: source.activeCover.sourceType as RecipeCoverSourceType,
-        sourceSpoonId: null,
-        status: source.activeCover.status as RecipeCoverStatus,
-        createdById: source.activeCover.createdById,
-        sourceImageUrl: source.activeCover.sourceImageUrl,
-        generationStatus: source.activeCover.generationStatus as RecipeCoverGenerationStatus,
-        failureReason: source.activeCover.failureReason,
-        promptVersion: source.activeCover.promptVersion,
-        styleVersion: source.activeCover.styleVersion,
-      });
+      const copiedCover = await createCover(db, copiedCoverInput(source, created.id));
       await db.recipe.update({
         where: { id: created.id },
         data: {
@@ -215,8 +288,40 @@ export async function forkRecipe(
     }
   }
 
+  return created.id;
+}
+
+/**
+ * Forks a recipe for the viewer. With a D1 binding the writes are one atomic batch; without
+ * one (unit tests, scripts) they run through Prisma.
+ */
+export async function forkRecipe(
+  db: PrismaClientType,
+  input: ForkRecipeInput,
+  d1: D1ReadDatabase | null = null,
+): Promise<ForkedRecipeResult> {
+  const source = await db.recipe.findUnique({
+    where: { id: input.sourceRecipeId },
+    include: sourceInclude,
+  });
+  if (!source || source.deletedAt) {
+    throw new ForkSourceNotFoundError(input.sourceRecipeId);
+  }
+
+  const stepOutputUses = await db.stepOutputUse.findMany({
+    where: { recipeId: source.id },
+    select: { outputStepNum: true, inputStepNum: true },
+  });
+
+  const override = input.titleOverride?.trim();
+  const baseTitle = override && override.length > 0 ? override : source.title;
+
+  const createdId = d1
+    ? await writeForkOnD1(db, d1, source, stepOutputUses, input, baseTitle)
+    : await writeForkWithPrisma(db, source, stepOutputUses, input, baseTitle);
+
   const recipe = await db.recipe.findUniqueOrThrow({
-    where: { id: created.id },
+    where: { id: createdId },
     include: detailInclude,
   });
 

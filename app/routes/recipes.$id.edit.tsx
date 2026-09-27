@@ -1,6 +1,15 @@
 import type { Route } from "./+types/recipes.$id.edit";
 import { Form, redirect, data, useActionData, useLoaderData, useNavigate, useNavigation, useSubmit } from "react-router";
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
+import { requestD1 } from "~/lib/d1-read.server";
+import {
+  deleteRecipeStepOnD1,
+  RECIPE_CHANGED_MESSAGE,
+  saveRecipeEditOnD1,
+  stepDeletionRaceAnswer,
+  swapRecipeStepsOnD1,
+} from "~/lib/recipe-d1-edits.server";
+import { isD1GuardFailure } from "~/lib/d1-write.server";
 import { requireUserId } from "~/lib/session.server";
 import { Link } from "~/components/ui/link";
 import { ValidationError } from "~/components/ui/validation-error";
@@ -22,7 +31,7 @@ import {
 } from "~/lib/image-storage.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { FOOD_IMAGE_ACCEPT, RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
-import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
+import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR, validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { createCover, getRecipeCoverImageUrl, setActiveRecipeCover } from "~/lib/recipe-cover.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
 import {
@@ -167,6 +176,25 @@ export async function action({ request, params, context }: Route.ActionArgs) {
           },
         });
 
+        const d1 = requestD1(context);
+        if (targetStep && d1) {
+          try {
+            await swapRecipeStepsOnD1(d1, {
+              recipeId: id,
+              stepId,
+              stepNum: step.stepNum,
+              targetStepId: targetStep.id,
+              targetStepNum,
+            });
+          } catch (error) {
+            // The steps moved in between; nothing was swapped.
+            if (!isD1GuardFailure(error)) throw error;
+            return data({ errors: { reorder: RECIPE_CHANGED_MESSAGE } }, { status: 409 });
+          }
+
+          return data({ success: true });
+        }
+
         if (targetStep) {
           const tempStepNum = -1;
 
@@ -217,12 +245,24 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       );
     }
 
-    await database.$transaction([
-      database.recipeStep.delete({
-        where: { id: stepId },
-      }),
-      touchNativeSyncRecipeOperation(database, id),
-    ]);
+    const d1 = requestD1(context);
+    if (d1) {
+      try {
+        await deleteRecipeStepOnD1(d1, { recipeId: id, stepId, stepNum: step.stepNum });
+      } catch (error) {
+        // The step moved, went away or gained a dependent step in between; nothing was deleted.
+        if (!isD1GuardFailure(error)) throw error;
+        const answer = await stepDeletionRaceAnswer(database, id, stepId);
+        return data({ errors: { stepDeletion: answer.error } }, { status: answer.status });
+      }
+    } else {
+      await database.$transaction([
+        database.recipeStep.delete({
+          where: { id: stepId },
+        }),
+        touchNativeSyncRecipeOperation(database, id),
+      ]);
+    }
 
     return data({ success: true });
   }
@@ -305,6 +345,34 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 
   try {
+    const d1 = requestD1(context);
+    if (d1) {
+      // One atomic batch: the fields, the uploaded or cleared cover and the cookbook touch.
+      const coverId = crypto.randomUUID();
+      await saveRecipeEditOnD1(d1, {
+        recipeId: id,
+        chefId: userId,
+        fields: updateData,
+        cover: uploadedImageUrl
+          ? { kind: "upload", coverId, imageUrl: uploadedImageUrl, createdById: userId }
+          : clearImage ? { kind: "clear" } : null,
+      });
+      if (uploadedImageUrl) {
+        await scheduleSpoonCoverStylization({
+          db: database,
+          userId,
+          recipeId: id,
+          coverId,
+          rawPhotoUrl: uploadedImageUrl,
+          recipeTitle: updateData.title,
+          env: cloudflareEnv,
+          bucket: photosBucket,
+          sourceType: "chef-upload",
+        });
+      }
+      return redirect(`/recipes/${id}`);
+    }
+
     const updatedAt = new Date();
     await database.$transaction([
       database.recipe.update({
@@ -358,15 +426,39 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
     return redirect(`/recipes/${id}`);
   } catch (error) {
-    // The recipe update failed after a replacement image landed in R2. Capture
-    // the real failure (previously discarded), then best-effort delete the
-    // orphaned upload — capturing if that delete also throws.
     const postHogConfig = cloudflareEnv
       ? resolvePostHogServerConfig(cloudflareEnv)
       : ({ enabled: false, reason: "missing-key" } as const);
     const waitUntil = context.cloudflare?.ctx?.waitUntil
       ? context.cloudflare.ctx.waitUntil.bind(context.cloudflare.ctx)
       : undefined;
+    const deleteUpload = async () => {
+      if (!uploadedImageUrl) return;
+      await deleteStoredImageWithCapture({
+        bucket: photosBucket,
+        imageUrl: uploadedImageUrl,
+        event: "spoonjoy.storage.orphan_cleanup_failed",
+        postHogConfig,
+        waitUntil,
+        distinctId: userId,
+        extras: { surface: "recipe_edit" },
+      });
+    };
+    // The save lost a race, so nothing was written. Nothing else would ever remove the upload,
+    // so it is deleted; this is an expected outcome, not a server fault, so nothing is captured.
+    // Answer as the checks above now do: the recipe was deleted in between, or another recipe
+    // took the title.
+    if (isD1GuardFailure(error)) {
+      await deleteUpload();
+      const current = await database.recipe.findUnique({ where: { id }, select: { deletedAt: true } });
+      if (!current || current.deletedAt) {
+        throw new Response("Recipe not found", { status: 404 });
+      }
+      return data({ errors: { title: ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } }, { status: 400 });
+    }
+    // The recipe update failed after a replacement image landed in R2. Capture
+    // the real failure (previously discarded), then best-effort delete the
+    // orphaned upload — capturing if that delete also throws.
     if (postHogConfig.enabled) {
       const capture = captureException(postHogConfig, {
         error,
@@ -380,17 +472,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         void capture;
       }
     }
-    if (uploadedImageUrl) {
-      await deleteStoredImageWithCapture({
-        bucket: photosBucket,
-        imageUrl: uploadedImageUrl,
-        event: "spoonjoy.storage.orphan_cleanup_failed",
-        postHogConfig,
-        waitUntil,
-        distinctId: userId,
-        extras: { surface: "recipe_edit" },
-      });
-    }
+    await deleteUpload();
 
     return data(
       { errors: { general: "Failed to update recipe. Please try again." } },

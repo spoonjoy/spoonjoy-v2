@@ -5662,7 +5662,7 @@ async function handleRecipeCreate(args: ApiV1RouteArgs, requestId: string, princ
   const origin = publicContentOrigin(args);
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.create", async (db, reservation) => {
-    const created = recipeWriteResultOrThrow(await createNativeRecipe(db, principal.id, parsed.data, { recipeId: reservation.id }));
+    const created = recipeWriteResultOrThrow(await createNativeRecipe(db, principal.id, parsed.data, { recipeId: reservation.id, d1: requestD1(args.context) }));
     const recipe = await serializedRecipeOrThrow(db, created.data.recipeId, origin);
     return {
       status: created.status,
@@ -5689,7 +5689,7 @@ async function handleRecipeUpdate(args: ApiV1RouteArgs, requestId: string, princ
   const updated = Object.keys(parsed.data.fields).length > 0;
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.update", async (db) => {
-    const updated = recipeWriteResultOrThrow(await updateNativeRecipe(db, principal.id, recipeId, parsed.data));
+    const updated = recipeWriteResultOrThrow(await updateNativeRecipe(db, principal.id, recipeId, parsed.data, requestD1(args.context)));
     const recipe = await serializedRecipeOrThrow(db, updated.data.recipeId, origin);
     return {
       status: updated.status,
@@ -5722,7 +5722,7 @@ async function handleRecipeDelete(args: ApiV1RouteArgs, requestId: string, princ
 
   const idempotencyBody = { clientMutationId: parsed.data.clientMutationId };
   return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, parsed.data.clientMutationId, "recipes.delete", async (db) => {
-    const deleted = recipeWriteResultOrThrow(await deleteNativeRecipe(db, principal.id, recipeId));
+    const deleted = recipeWriteResultOrThrow(await deleteNativeRecipe(db, principal.id, recipeId, requestD1(args.context)));
     return {
       status: deleted.status,
       data: {
@@ -5786,7 +5786,7 @@ async function handleRecipeFork(args: ApiV1RouteArgs, requestId: string, princip
   const origin = publicContentOrigin(args);
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.fork", async (db, reservation) => {
-    const forked = recipeWriteResultOrThrow(await forkNativeRecipe(db, principal.id, sourceRecipeId, parsed.data, { recipeId: reservation.id }));
+    const forked = recipeWriteResultOrThrow(await forkNativeRecipe(db, principal.id, sourceRecipeId, parsed.data, { recipeId: reservation.id, d1: requestD1(args.context) }));
     await notifyNativeRecipeFork(args, db, {
       appliedTitle: forked.data.fork.appliedTitle,
       forkerId: principal.id,
@@ -6031,7 +6031,7 @@ async function handleRecipeStepCreate(args: ApiV1RouteArgs, requestId: string, p
   const origin = publicContentOrigin(args);
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.steps.create", async (db, reservation) => {
-    const created = recipeStepResultOrThrow(await createNativeRecipeStep(db, principal.id, recipeId, parsed.data, { stepId: reservation.id }));
+    const created = recipeStepResultOrThrow(await createNativeRecipeStep(db, principal.id, recipeId, parsed.data, { stepId: reservation.id, d1: requestD1(args.context) }));
     const { recipe, step } = await serializedRecipeStepOrThrow(db, created.data.recipeId, created.data.stepId, origin);
     return {
       status: created.status,
@@ -6061,7 +6061,7 @@ async function handleRecipeStepUpdate(args: ApiV1RouteArgs, requestId: string, p
   const updated = Object.keys(parsed.data.fields).length > 0;
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.steps.update", async (db) => {
-    const saved = recipeStepResultOrThrow(await updateNativeRecipeStep(db, principal.id, recipeId, stepId, parsed.data));
+    const saved = recipeStepResultOrThrow(await updateNativeRecipeStep(db, principal.id, recipeId, stepId, parsed.data, { d1: requestD1(args.context) }));
     const { recipe, step } = await serializedRecipeStepOrThrow(db, saved.data.recipeId, saved.data.stepId, origin);
     return {
       status: saved.status,
@@ -6099,6 +6099,7 @@ async function handleRecipeStepDelete(args: ApiV1RouteArgs, requestId: string, p
   return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, parsed.data.clientMutationId, "recipes.steps.delete", async (db, reservation) => {
     const deleted = recipeStepResultOrThrow(await deleteNativeRecipeStep(db, principal.id, recipeId, stepId, {
       tombstone: { idempotencyKeyId: reservation.id, operation: "recipes.steps.delete" },
+      d1: requestD1(args.context),
     }));
     const recipe = await serializedRecipeOrThrow(db, deleted.data.recipeId, origin);
     return {
@@ -6128,7 +6129,7 @@ async function handleRecipeStepIngredientCreate(args: ApiV1RouteArgs, requestId:
   const origin = publicContentOrigin(args);
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.steps.ingredients.create", async (db, reservation) => {
-    const created = recipeStepResultOrThrow(await createNativeRecipeStepIngredient(db, principal.id, recipeId, stepId, parsed.data, { ingredientId: reservation.id }));
+    const created = recipeStepResultOrThrow(await createNativeRecipeStepIngredient(db, principal.id, recipeId, stepId, parsed.data, { ingredientId: reservation.id, d1: requestD1(args.context) }));
     const { recipe, step, ingredient } = await serializedRecipeStepIngredientOrThrow(db, created.data.recipeId, created.data.stepId, created.data.ingredientId, origin);
     return {
       status: created.status,
@@ -6166,6 +6167,7 @@ async function handleRecipeStepIngredientDelete(args: ApiV1RouteArgs, requestId:
   return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, parsed.data.clientMutationId, "recipes.steps.ingredients.delete", async (db, reservation) => {
     const deleted = recipeStepResultOrThrow(await deleteNativeRecipeStepIngredient(db, principal.id, recipeId, stepId, ingredientId, {
       tombstone: { idempotencyKeyId: reservation.id, operation: "recipes.steps.ingredients.delete" },
+      d1: requestD1(args.context),
     }));
     const recipe = await serializedRecipeOrThrow(db, deleted.data.recipeId, origin);
     const step = findSerializedStep(recipe, deleted.data.stepId);
@@ -6203,6 +6205,7 @@ async function handleRecipeStepReorder(args: ApiV1RouteArgs, requestId: string, 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.steps.reorder", async (db, reservation) => {
     const reordered = recipeStepResultOrThrow(await reorderNativeRecipeStep(db, principal.id, recipeId, parsed.data, {
       tombstone: { idempotencyKeyId: reservation.id, operation: "recipes.steps.reorder" },
+      d1: requestD1(args.context),
     }));
     const { recipe, step } = await serializedRecipeStepOrThrow(db, reordered.data.recipeId, reordered.data.stepId, origin);
     return {
@@ -6233,7 +6236,7 @@ async function handleRecipeStepOutputUsesReplace(args: ApiV1RouteArgs, requestId
   const origin = publicContentOrigin(args);
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.steps.output-uses.replace", async (db) => {
-    const replaced = recipeStepResultOrThrow(await replaceNativeRecipeStepOutputUses(db, principal.id, recipeId, parsed.data));
+    const replaced = recipeStepResultOrThrow(await replaceNativeRecipeStepOutputUses(db, principal.id, recipeId, parsed.data, { d1: requestD1(args.context) }));
     const { recipe, step } = await serializedRecipeStepOrThrow(db, replaced.data.recipeId, replaced.data.stepId, origin);
     return {
       status: replaced.status,
