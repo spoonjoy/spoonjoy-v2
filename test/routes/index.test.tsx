@@ -8,7 +8,7 @@ import { db } from "~/lib/db.server";
 import { absoluteKitchenUrl, loader, meta } from "~/routes/_index";
 import Index from "~/routes/_index";
 import { createUser } from "~/lib/auth.server";
-import { sessionStorage } from "~/lib/session.server";
+import { getUserId, sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
 import { shareContent } from "~/components/navigation";
@@ -288,7 +288,7 @@ describe("Kitchen Index Route", () => {
       });
     });
 
-    it("returns empty kitchen payload when session user no longer exists", async () => {
+    it("treats a session whose user no longer exists as signed out", async () => {
       const session = await sessionStorage.getSession();
       session.set("userId", "missing-user-id");
       const cookieValue = (await sessionStorage.commitSession(session)).split(";")[0];
@@ -306,6 +306,28 @@ describe("Kitchen Index Route", () => {
 
       expect(result).toEqual({
         tab: "cookbooks",
+        isOwner: false,
+        viewer: null,
+        kitchenUser: null,
+        recipes: [],
+        cookbooks: [],
+      });
+    });
+    it("returns an empty kitchen when the signed-in user is deleted after the session check", async () => {
+      const user = await createUser(db!, faker.internet.email(), `chef_${faker.string.alphanumeric(8)}`, "testPassword123");
+      const session = await sessionStorage.getSession();
+      session.set("userId", user.id);
+      const request = new UndiciRequest("http://localhost:3000/", {
+        headers: { Cookie: (await sessionStorage.commitSession(session)).split(";")[0] },
+      }) as unknown as Request;
+      // The root loader checks the session first; the account is deleted before this loader reads it.
+      await expect(getUserId(request, null)).resolves.toBe(user.id);
+      await db!.user.delete({ where: { id: user.id } });
+
+      const result = await loader({ request, context: { cloudflare: { env: null } }, params: {} } as any);
+
+      expect(result).toEqual({
+        tab: "recipes",
         isOwner: false,
         viewer: null,
         kitchenUser: null,
