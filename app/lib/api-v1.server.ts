@@ -4508,8 +4508,10 @@ function accountPhotoTooLargeError() {
   return new ApiV1Error("validation_error", "Photo must be less than 5MB", { field: "photo" });
 }
 
-function accountPhotoFormDataWithinLimit(request: Request): Promise<FormData> {
-  return imageUploadFormDataWithinLimit(request, accountPhotoTooLargeError);
+async function accountPhotoFormDataWithinLimit(request: Request): Promise<FormData> {
+  const formData = await imageUploadFormDataWithinLimit(request);
+  if (!formData) throw accountPhotoTooLargeError();
+  return formData;
 }
 
 async function normalizeAccountPhotoFile(photo: File): Promise<File> {

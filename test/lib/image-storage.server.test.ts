@@ -773,9 +773,6 @@ describe("image storage helpers", () => {
 });
 
 describe("imageUploadFormDataWithinLimit", () => {
-  class TooLarge extends Error {}
-  const tooLarge = () => new TooLarge("too large");
-
   function streamOf(chunks: Uint8Array[], onCancel?: () => void) {
     let index = 0;
     let pulled = 0;
@@ -796,7 +793,7 @@ describe("imageUploadFormDataWithinLimit", () => {
     return { stream, pulled: () => pulled };
   }
 
-  it("refuses a body whose declared length is over the limit without reading it", async () => {
+  it("answers null for a body whose declared length is over the limit, without reading it", async () => {
     const body = streamOf([new Uint8Array(10)]);
     const request = new UndiciRequest("https://spoonjoy.test/upload", {
       method: "POST",
@@ -805,11 +802,11 @@ describe("imageUploadFormDataWithinLimit", () => {
       duplex: "half",
     }) as unknown as Request;
 
-    await expect(imageUploadFormDataWithinLimit(request, tooLarge)).rejects.toBeInstanceOf(TooLarge);
+    await expect(imageUploadFormDataWithinLimit(request)).resolves.toBeNull();
     expect(body.pulled()).toBe(0);
   });
 
-  it("stops reading a streamed body as soon as it passes the limit", async () => {
+  it("stops reading a streamed body and answers null as soon as it passes the limit", async () => {
     const chunk = new Uint8Array(1024 * 1024);
     let cancelled = false;
     const body = streamOf(Array.from({ length: 20 }, () => chunk), () => {
@@ -822,12 +819,12 @@ describe("imageUploadFormDataWithinLimit", () => {
       duplex: "half",
     }) as unknown as Request;
 
-    await expect(imageUploadFormDataWithinLimit(request, tooLarge)).rejects.toBeInstanceOf(TooLarge);
+    await expect(imageUploadFormDataWithinLimit(request)).resolves.toBeNull();
     expect(cancelled).toBe(true);
     expect(body.pulled()).toBeLessThanOrEqual(IMAGE_UPLOAD_MULTIPART_MAX_BYTES + 2 * chunk.byteLength);
   });
 
-  it("still refuses an oversized body when cancelling the stream fails", async () => {
+  it("still answers null for an oversized body when cancelling the stream fails", async () => {
     const chunk = new Uint8Array(1024 * 1024);
     const body = streamOf(Array.from({ length: 20 }, () => chunk), () => {
       throw new Error("cancel failed");
@@ -839,7 +836,7 @@ describe("imageUploadFormDataWithinLimit", () => {
       duplex: "half",
     }) as unknown as Request;
 
-    await expect(imageUploadFormDataWithinLimit(request, tooLarge)).rejects.toBeInstanceOf(TooLarge);
+    await expect(imageUploadFormDataWithinLimit(request)).resolves.toBeNull();
   });
 
   it("returns the form data of a body within the limit", async () => {
@@ -851,7 +848,7 @@ describe("imageUploadFormDataWithinLimit", () => {
       duplex: "half",
     }) as unknown as Request;
 
-    const formData = await imageUploadFormDataWithinLimit(request, tooLarge);
+    const formData = await imageUploadFormDataWithinLimit(request);
     expect(formData.get("intent")).toBe("uploadPhoto");
     expect(formData.get("name")).toBe("chef");
   });
@@ -862,7 +859,7 @@ describe("imageUploadFormDataWithinLimit", () => {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     }) as unknown as Request;
 
-    const formData = await imageUploadFormDataWithinLimit(request, tooLarge);
+    const formData = await imageUploadFormDataWithinLimit(request);
     expect([...formData.keys()]).toEqual([]);
   });
 });

@@ -282,8 +282,6 @@ export async function loadAccountSettings({
 
 const PROFILE_PHOTO_TOO_LARGE_MESSAGE = "Photo must be less than 5MB";
 
-class ProfilePhotoBodyTooLargeError extends Error {}
-
 export async function handleAccountSettingsAction({
   request,
   context,
@@ -309,14 +307,9 @@ export async function handleAccountSettingsAction({
 
   // Every settings form posts here, and the profile photo is the only large field, so the body is
   // read through the image upload limit: an oversized upload is refused before it is buffered whole.
-  let formData: FormData;
-  try {
-    formData = await imageUploadFormDataWithinLimit(request, () => new ProfilePhotoBodyTooLargeError());
-  } catch (error) {
-    if (error instanceof ProfilePhotoBodyTooLargeError) {
-      return { success: false, error: "file_too_large", message: PROFILE_PHOTO_TOO_LARGE_MESSAGE };
-    }
-    throw error;
+  const formData = await imageUploadFormDataWithinLimit(request);
+  if (!formData) {
+    return { success: false, error: "file_too_large", message: PROFILE_PHOTO_TOO_LARGE_MESSAGE };
   }
   const intent = formData.get("intent");
 
