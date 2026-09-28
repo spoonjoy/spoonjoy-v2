@@ -11047,6 +11047,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "400",
         "401",
         "403",
+        "404",
         "405",
         "409",
         "429",
@@ -11072,6 +11073,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "403",
           "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
         },
         {
           "status": "405",
@@ -11134,10 +11139,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: shopping_list:write\",\n    \"status\": 403\n  }\n}"
         },
         {
-          "status": "405",
-          "name": "method_not_allowed",
-          "label": "Method Not Allowed",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
         }
       ]
     },

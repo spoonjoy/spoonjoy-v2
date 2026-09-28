@@ -10,10 +10,10 @@ import {
   type ParsedItemDraft,
 } from "~/lib/shopping-list-parser";
 import {
+  addShoppingListItem,
   asCompatibleD1Database,
   coalesceShoppingRecipeIngredients,
   createCompatibleShoppingListD1Batch,
-  addToCompatibleShoppingListItem,
   findCompatibleShoppingListItem,
   mergedShoppingItemQuantity,
   runCompatibleShoppingListBatch,
@@ -250,44 +250,19 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
         unitId = unit.id;
       }
 
-      const identity = {
-        shoppingListId: shoppingList.id,
-        unitId,
-        ingredientRefId: ingredientRef.id,
-      };
-
-      // The quantity, check and removed state change atomically in addToCompatibleShoppingListItem.
-      await addToCompatibleShoppingListItem({
-        database,
-        identity,
-        added: quantity ? parseFloat(quantity) : null,
-        sortIndex: async (existingItem) => {
-          const shouldMoveToEnd = Boolean(
-            existingItem.deletedAt || existingItem.checkedAt || existingItem.checked
-          );
-          return shouldMoveToEnd
-            ? nextSortIndex(database, shoppingList.id)
-            : existingItem.sortIndex;
+      const added = await addShoppingListItem(database, {
+        identity: {
+          shoppingListId: shoppingList.id,
+          unitId,
+          ingredientRefId: ingredientRef.id,
         },
-        update: (existingItem, sortIndex) =>
-          database.shoppingListItem.update({
-            where: { id: existingItem.id },
-            data: { categoryKey, iconKey, sortIndex },
-          }),
-        create: async () => {
-          const sortIndex = await nextSortIndex(database, shoppingList.id);
-
-          return database.shoppingListItem.create({
-            data: {
-              ...identity,
-              quantity: quantity ? parseFloat(quantity) : null,
-              categoryKey,
-              iconKey,
-              sortIndex,
-            },
-          });
-        },
+        /* istanbul ignore next -- @preserve a quantity is usually given */
+        quantity: quantity ? parseFloat(quantity) : null,
+        categoryKey,
+        iconKey,
+        nextSortIndex: () => nextSortIndex(database, shoppingList.id),
       });
+      if (!added) throw new Response("Shopping list not found", { status: 404 });
     }
 
     if (!ingredientName || parsedDraft.isAmbiguous) {
@@ -404,6 +379,7 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
               ingredientRefId: ingredient.ingredientRefId,
               unitId: ingredient.unitId,
               quantity: newQuantity,
+              quantityDelta: ingredient.quantity || null,
               checked: false,
               checkedAt: null,
               deletedAt: null,
@@ -450,7 +426,7 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
         return {
           operations,
           metadata: null,
-          native: createCompatibleShoppingListD1Batch(nativeD1, writePlans, []),
+          native: createCompatibleShoppingListD1Batch(nativeD1, writePlans),
         };
       });
     }

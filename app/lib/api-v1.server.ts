@@ -1,5 +1,6 @@
 import type { ApiCredential, ApiIdempotencyKey, NativePushDevice, Prisma, RecipeCover, RecipeSpoon } from "@prisma/client";
 import { requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1WriteBatch } from "~/lib/d1-write.server";
 import type { AppLoadContext } from "react-router";
 import {
   ApiAuthError,
@@ -119,10 +120,11 @@ import {
   type ApiV1ErrorCode,
 } from "~/lib/api-v1-contract.server";
 import {
+  addShoppingListItem,
   asCompatibleD1Database,
   coalesceShoppingRecipeIngredients,
+  shoppingListItemsRemoveStatements,
   createCompatibleShoppingListD1Batch,
-  addToCompatibleShoppingListItem,
   findCompatibleShoppingListItem,
   mergedShoppingItemQuantity,
   runCompatibleShoppingListBatch,
@@ -4073,40 +4075,24 @@ async function handleShoppingItemCreate(args: ApiV1RouteArgs, requestId: string,
       ingredientRefId: ingredientRef.id,
       unitId: unit?.id ?? null,
     };
-    // The quantity, check and removed state change atomically in addToCompatibleShoppingListItem.
-    const result = await addToCompatibleShoppingListItem({
-      database: db,
+    const result = await addShoppingListItem(db, {
       identity,
-      added: quantity,
-      sortIndex: async (existing) => existing.checked || existing.checkedAt || existing.deletedAt
-        ? nextShoppingSortIndex(db, list.id)
-        : existing.sortIndex,
-      update: (existing, sortIndex) => db.shoppingListItem.update({
-        where: { id: existing.id },
-        data: {
-          sortIndex,
-          categoryKey: categoryKey ?? existing.categoryKey,
-          iconKey: iconKey ?? existing.iconKey,
-        },
-        include: { unit: true, ingredientRef: true },
-      }),
-      create: async () => db.shoppingListItem.create({
-        data: {
-          ...identity,
-          quantity,
-          sortIndex: await nextShoppingSortIndex(db, list.id),
-          categoryKey,
-          iconKey,
-        },
-        include: { unit: true, ingredientRef: true },
-      }),
+      quantity,
+      categoryKey,
+      iconKey,
+      nextSortIndex: () => nextShoppingSortIndex(db, list.id),
+    });
+    if (!result) throw new ApiV1Error("not_found", "Shopping list not found", { resource: "shopping_list" });
+    const item = await db.shoppingListItem.findUniqueOrThrow({
+      where: { id: result.id },
+      include: { unit: true, ingredientRef: true },
     });
     return {
       status: result.created ? 201 : 200,
       data: {
         created: result.created,
         updated: !result.created,
-        item: shoppingItem(result.item),
+        item: shoppingItem(item),
         mutation: { clientMutationId, replayed: false },
       },
     };
@@ -4286,6 +4272,7 @@ async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: stri
             ingredientRefId: requested.ingredientRefId,
             unitId: requested.unitId,
             quantity,
+            quantityDelta: requested.quantity,
             checked: false,
             checkedAt: null,
             deletedAt: null,
@@ -4330,12 +4317,12 @@ async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: stri
         }
       }
 
-      const plannedItems = writePlans.map((plan) => ({
+      const plannedItem = (plan: ShoppingListItemWritePlan, quantity: number | null): ShoppingItemRow => ({
         id: plan.id,
         shoppingListId: plan.shoppingListId,
         ingredientRefId: plan.ingredientRefId,
         unitId: plan.unitId,
-        quantity: plan.quantity,
+        quantity,
         checked: plan.checked,
         checkedAt: plan.checkedAt,
         deletedAt: plan.deletedAt,
@@ -4347,12 +4334,12 @@ async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: stri
           plan.ingredientRefId,
           plan.unitId,
         ]))!,
-      }));
+      });
 
       return {
         operations,
         metadata: { created, updated },
-        native: createCompatibleShoppingListD1Batch(nativeD1, writePlans, plannedItems),
+        native: createCompatibleShoppingListD1Batch(nativeD1, writePlans, plannedItem),
       };
     });
 
@@ -4393,13 +4380,19 @@ async function handleShoppingClear(
     });
 
     const deletedAt = new Date();
-    const removedItems = items.length > 0
-      ? await db.$transaction(items.map((item) => db.shoppingListItem.update({
+    const nativeD1 = asCompatibleD1Database(apiV1CloudflareFor(args)?.env?.DB);
+    let removedItems: ShoppingItemRow[] = [];
+    if (items.length > 0 && nativeD1) {
+      // One batch, so the list is cleared all at once or not at all.
+      await d1WriteBatch(nativeD1, shoppingListItemsRemoveStatements(list.id, items.map((item) => item.id), deletedAt));
+      removedItems = items.map((item) => ({ ...item, deletedAt, updatedAt: deletedAt }));
+    } else if (items.length > 0) {
+      removedItems = await db.$transaction(items.map((item) => db.shoppingListItem.update({
         where: { id: item.id },
         data: { deletedAt },
         include: { unit: true, ingredientRef: true },
-      })))
-      : [];
+      })));
+    }
 
     return {
       status: 200,
