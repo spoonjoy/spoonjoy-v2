@@ -1,4 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
+import type { D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1WriteBatch } from "~/lib/d1-write.server";
 import {
   captureException,
   type PostHogServerConfig,
@@ -24,6 +26,8 @@ export interface ConsumeQuotaDeps {
   postHogConfig?: PostHogServerConfig;
   /** fetch used for the analytics post; separate so app fetch can be mocked apart. */
   analyticsFetchImpl?: typeof fetch;
+  /** The request's D1 binding: the consume is then one atomic D1 batch instead of Prisma. */
+  d1?: D1ReadDatabase | null;
 }
 
 /** Read a Prisma known-request-error code off an unknown throw, if present. */
@@ -63,10 +67,71 @@ function capFor(kind: ImageGenKind): number {
 }
 
 /**
+ * A DateTime as Prisma's D1 adapter stores it: ISO 8601 text with a `+00:00` offset. The
+ * ledger's unique key compares `bucketStart` as stored, so the D1 path writes the day the way
+ * Prisma did on D1. It also matches the other forms a DateTime can take in SQLite (`Z` text,
+ * and the integer milliseconds Prisma's own SQLite engine writes), so a day row written any
+ * of those ways is counted, never duplicated.
+ */
+function prismaD1Timestamp(date: Date): string {
+  return date.toISOString().replace(/Z$/, "+00:00");
+}
+
+/**
+ * The consume as one D1 batch: create the day's row at zero if it is missing (and the user
+ * still exists), then add one only while the count is under the cap. D1 runs a batch as one
+ * transaction and runs batches one at a time, so concurrent consumes cannot pass the cap and
+ * exactly the calls that fit under it succeed.
+ */
+async function tryConsumeImageGenQuotaOnD1(
+  d1: D1ReadDatabase,
+  userId: string,
+  kind: ImageGenKind,
+  bucketStart: Date,
+  cap: number,
+  at: Date,
+): Promise<boolean> {
+  const day = prismaD1Timestamp(bucketStart);
+  const dayForms = [day, bucketStart.toISOString(), bucketStart.getTime()];
+  const sameDay = `"userId" = ? AND "kind" = ? AND "bucketStart" IN (?, ?, ?)`;
+  const updatedAt = prismaD1Timestamp(at);
+  const [, increment] = await d1WriteBatch(d1, [
+    [
+      `INSERT INTO "ImageGenLedger" ("id", "userId", "kind", "bucketStart", "count", "updatedAt")
+       SELECT ?, ?, ?, ?, 0, ?
+       WHERE EXISTS (SELECT 1 FROM "User" WHERE "id" = ?)
+         AND NOT EXISTS (SELECT 1 FROM "ImageGenLedger" WHERE ${sameDay})
+       ON CONFLICT ("userId", "kind", "bucketStart") DO NOTHING`,
+      crypto.randomUUID(),
+      userId,
+      kind,
+      day,
+      updatedAt,
+      userId,
+      userId,
+      kind,
+      ...dayForms,
+    ],
+    [
+      // One row only: a day stored in two forms by older writers must spend one unit, not two.
+      `UPDATE "ImageGenLedger" SET "count" = "count" + 1, "updatedAt" = ?
+       WHERE "id" = (SELECT "id" FROM "ImageGenLedger" WHERE ${sameDay} AND "count" < ? LIMIT 1)`,
+      updatedAt,
+      userId,
+      kind,
+      ...dayForms,
+      cap,
+    ],
+  ]);
+  return increment!.changes >= 1;
+}
+
+/**
  * Atomically reserve one unit of the daily image-gen budget for `(userId, kind, today)`.
  * Returns true when the budget was incremented, false when the cap is reached or the
  * user no longer exists. Safe to call concurrently — when two callers race on the very
- * first consume of the day, both will succeed and the ledger ends at count=2.
+ * first consume of the day, both will succeed and the ledger ends at count=2. With a D1
+ * binding it is one atomic batch; Prisma's version runs as separate queries on D1.
  */
 export async function tryConsumeImageGenQuota(
   db: PrismaClient,
@@ -75,8 +140,27 @@ export async function tryConsumeImageGenQuota(
   deps: ConsumeQuotaDeps = {},
 ): Promise<boolean> {
   const now = deps.now ?? (() => new Date());
-  const bucketStart = startOfUtcDay(now());
+  const at = now();
+  const bucketStart = startOfUtcDay(at);
   const cap = capFor(kind);
+
+  if (deps.d1) {
+    try {
+      return await tryConsumeImageGenQuotaOnD1(deps.d1, userId, kind, bucketStart, cap, at);
+    } catch (error) {
+      // A D1 fault must not read as "quota exhausted": capture it, then rethrow.
+      if (deps.postHogConfig) {
+        await captureException(
+          deps.postHogConfig,
+          { error, distinctId: userId, extras: { feature: "image_gen_quota", kind, phase: "ledgerBatch" } },
+          deps.analyticsFetchImpl,
+        );
+      }
+      throw error;
+    }
+  }
+
+  // Prisma (no D1 binding). Each updateMany is one UPDATE whose WHERE re-checks the cap.
 
   // 1) Try increment if a row already exists and we are under the cap.
   const updated = await db.imageGenLedger.updateMany({

@@ -795,8 +795,44 @@ async function uniqueUsername(db: Database, email: string): Promise<string> {
   return candidate;
 }
 
-async function getOrCreateOwner(db: Database, email: string) {
-  const existing = await db.user.findUnique({ where: { email } });
+/**
+ * The account for an owner email (already lowercase). The exact match uses the unique email
+ * index. Only when it misses does a case-insensitive match run, which scans the table: sign-up
+ * checks email case-insensitively, so a legacy account stored with capitals must be found
+ * rather than given a second account. Two legacy accounts that differ only in case are
+ * refused, because picking one would be arbitrary.
+ */
+async function findOwnerByEmail(db: Database, email: string) {
+  const exact = await db.user.findUnique({ where: { email } });
+  if (exact) return exact;
+
+  const rows = await db.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM User WHERE LOWER(email) = ${email} LIMIT 2
+  `;
+  if (rows.length > 1) {
+    throw new ApiAuthError(
+      `More than one account uses the email ${email} in different letter case; sign in with an API token for the account to use`,
+      409,
+    );
+  }
+  return rows[0] ? db.user.findUnique({ where: { id: rows[0].id } }) : null;
+}
+
+/**
+ * The account a tool acts for. A signed-in caller (an API or OAuth token, a browser session,
+ * or the local server's configured user) acts as their own account, loaded by id: a lookup by
+ * email could land on another account whose email differs only in case. Only a call without a
+ * principal (the local MCP server's owner email) finds, or creates, the owner by email.
+ */
+async function getOrCreateOwner(context: SpoonjoyApiContext, email: string) {
+  const db = context.db;
+  if (context.principal) {
+    const user = await db.user.findUnique({ where: { id: context.principal.id } });
+    if (!user) throw new ApiAuthError("The signed-in account no longer exists", 401);
+    return user;
+  }
+
+  const existing = await findOwnerByEmail(db, email);
   if (existing) return existing;
 
   return db.user.create({
@@ -1078,9 +1114,9 @@ async function reloadShoppingList(db: Database, shoppingListId: string): Promise
   });
 }
 
-async function getCredentialOwner(db: Database, args: Record<string, unknown>, context: SpoonjoyApiContext) {
+async function getCredentialOwner(args: Record<string, unknown>, context: SpoonjoyApiContext) {
   const email = requireOwnerEmail(args, context);
-  return getOrCreateOwner(db, email);
+  return getOrCreateOwner(context, email);
 }
 
 function normalizeCreateApiTokenScopes(value: unknown, principal: ApiPrincipal | null | undefined): string | undefined {
@@ -1340,7 +1376,7 @@ const createApiTokenTool: SpoonjoyApiOperation = {
     additionalProperties: false,
   },
   async handle(args, context) {
-    const owner = await getCredentialOwner(context.db, args, context);
+    const owner = await getCredentialOwner(args, context);
     const name = optionalString(args.name) ?? "Spoonjoy API token";
     const scopes = normalizeCreateApiTokenScopes(args.scopes, context.principal);
     const created = await createApiCredential(context.db, owner.id, name, { scopes });
@@ -1364,7 +1400,7 @@ const listApiTokensTool: SpoonjoyApiOperation = {
     additionalProperties: false,
   },
   async handle(args, context) {
-    const owner = await getCredentialOwner(context.db, args, context);
+    const owner = await getCredentialOwner(args, context);
     const credentials = await context.db.apiCredential.findMany({
       where: { userId: owner.id },
       orderBy: { createdAt: "desc" },
@@ -1388,7 +1424,7 @@ const revokeApiTokenTool: SpoonjoyApiOperation = {
     additionalProperties: false,
   },
   async handle(args, context) {
-    const owner = await getCredentialOwner(context.db, args, context);
+    const owner = await getCredentialOwner(args, context);
     const credentialId = requiredString(args, "credentialId");
     const credential = await context.db.apiCredential.findFirst({
       where: { id: credentialId, userId: owner.id },
@@ -1484,7 +1520,7 @@ const searchSpoonjoyTool: SpoonjoyApiOperation = {
     const query = optionalString(args.query);
     const scope = normalizeSearchScope(optionalString(args.scope));
     const email = ownerEmail(args, context)?.toLowerCase();
-    const owner = email ? await getOrCreateOwner(context.db, email) : null;
+    const owner = email ? await getOrCreateOwner(context, email) : null;
 
     const results = await searchSpoonjoy(context.db, {
       query,
@@ -1516,7 +1552,7 @@ const searchShoppingListTool: SpoonjoyApiOperation = {
   },
   async handle(args, context) {
     const email = requireOwnerEmail(args, context);
-    const owner = await getOrCreateOwner(context.db, email);
+    const owner = await getOrCreateOwner(context, email);
     const query = optionalString(args.query);
     const items = await searchSpoonjoy(context.db, {
       query,
@@ -1798,7 +1834,7 @@ const createRecipeCoverFromUploadTool: SpoonjoyApiOperation = {
             recipeId,
             coverId: cover.id,
             variant: "image",
-          });
+          }, d1Binding(context.env?.DB));
         }
 
         const nextRecipe = await reloadCoverMutationRecipe(context, recipeId);
@@ -1999,7 +2035,7 @@ const createRecipeCoverFromSpoonTool: SpoonjoyApiOperation = {
             recipeId,
             coverId: cover.id,
             variant: "image",
-          });
+          }, d1Binding(context.env?.DB));
         }
 
         const nextRecipe = await reloadCoverMutationRecipe(context, recipeId);
@@ -2179,7 +2215,7 @@ const setActiveRecipeCoverTool: SpoonjoyApiOperation = {
       dryRun: false,
       write: async (mutationKey) => {
         try {
-          await setActiveRecipeCover(context.db, { recipeId, coverId, variant });
+          await setActiveRecipeCover(context.db, { recipeId, coverId, variant }, d1Binding(context.env?.DB));
         } catch (error) {
           coverLifecycleApiError(error);
         }
@@ -2227,7 +2263,7 @@ const setRecipeNoCoverTool: SpoonjoyApiOperation = {
       idempotencyKey,
       dryRun: false,
       write: async (mutationKey) => {
-        await clearActiveRecipeCover(context.db, recipeId);
+        await clearActiveRecipeCover(context.db, recipeId, d1Binding(context.env?.DB));
         const nextRecipe = await reloadCoverMutationRecipe(context, recipeId);
         return activeCoverMutationResponse({
           activeCover: await activeFullCoverPayload(context, nextRecipe),
@@ -2288,7 +2324,7 @@ const archiveRecipeCoverTool: SpoonjoyApiOperation = {
             replacementCoverId,
             replacementVariant,
             confirmNoCover,
-          });
+          }, d1Binding(context.env?.DB));
           archivedCoverId = result.archivedCover.id;
         } catch (error) {
           coverLifecycleApiError(error);
@@ -2362,7 +2398,7 @@ const createRecipeTool: SpoonjoyApiOperation = {
       const imageUrl = optionalString(args.imageUrl);
       const steps = parseSteps(args.steps);
 
-      const owner = await getOrCreateOwner(context.db, email);
+      const owner = await getOrCreateOwner(context, email);
       const titleUniqueness = await validateActiveRecipeTitleUnique(context.db, {
         chefId: owner.id,
         title,
@@ -2439,7 +2475,7 @@ const createRecipeTool: SpoonjoyApiOperation = {
       await activateRecipeCoverWithBestAvailableVariant(context.db, {
         recipeId: created.id,
         coverId,
-      });
+      }, d1Binding(context.env?.DB));
     }
 
     const recipe = await context.db.recipe.findUniqueOrThrow({
@@ -2512,7 +2548,7 @@ const updateRecipeTool: SpoonjoyApiOperation = {
       const shouldReplaceSteps = hasArgument(args, "steps");
       const steps = shouldReplaceSteps ? parseSteps(args.steps) : undefined;
 
-      const owner = await getOrCreateOwner(context.db, email);
+      const owner = await getOrCreateOwner(context, email);
       const existing = await context.db.recipe.findFirst({
         where: { id, chefId: owner.id, deletedAt: null },
         select: { id: true, title: true },
@@ -2591,7 +2627,7 @@ const updateRecipeTool: SpoonjoyApiOperation = {
       await activateRecipeCoverWithBestAvailableVariant(context.db, {
         recipeId: existing.id,
         coverId,
-      });
+      }, d1Binding(context.env?.DB));
     }
 
     const recipe = await context.db.recipe.findUniqueOrThrow({
@@ -2623,7 +2659,7 @@ const deleteRecipeTool: SpoonjoyApiOperation = {
   async handle(args, context) {
     const email = requireOwnerEmail(args, context);
     const id = requiredString(args, "id");
-    const owner = await getOrCreateOwner(context.db, email);
+    const owner = await getOrCreateOwner(context, email);
     const findOwned = () => context.db.recipe.findFirst({
       where: { id, chefId: owner.id },
       select: { id: true, title: true, deletedAt: true },
@@ -2659,7 +2695,7 @@ async function uploadFoodImageForOwner(
   namespace: "recipes" | "spoons",
 ){
   const email = requireOwnerEmail(args, context);
-  const owner = await getOrCreateOwner(context.db, email);
+  const owner = await getOrCreateOwner(context, email);
   return uploadFoodImage({
     imageBase64: requiredString(args, "imageBase64"),
     mimeType: requiredString(args, "mimeType"),
@@ -2728,7 +2764,7 @@ const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
     const email = requireOwnerEmail(args, context);
     const recipeId = requiredString(args, "recipeId");
 
-    const owner = await getOrCreateOwner(context.db, email);
+    const owner = await getOrCreateOwner(context, email);
     const shoppingList = await getOrCreateShoppingList(context.db, owner.id);
     const recipe = await context.db.recipe.findFirst({
       where: { id: recipeId, deletedAt: null },
@@ -2877,7 +2913,7 @@ const listCookbooksTool: SpoonjoyApiOperation = {
   },
   async handle(args, context) {
     const email = requireOwnerEmail(args, context);
-    const owner = await getOrCreateOwner(context.db, email);
+    const owner = await getOrCreateOwner(context, email);
     const query = optionalString(args.query);
 
     const cookbooks = await context.db.cookbook.findMany({
@@ -2939,7 +2975,7 @@ const getCookbookTool: SpoonjoyApiOperation = {
   },
   async handle(args, context) {
     const email = requireOwnerEmail(args, context);
-    const owner = await getOrCreateOwner(context.db, email);
+    const owner = await getOrCreateOwner(context, email);
     const cookbook = await findOwnerCookbook(context.db, owner.id, args);
 
     return json({ cookbook: cookbook ? formatCookbook(cookbook) : null });
@@ -2963,7 +2999,7 @@ const createCookbookTool: SpoonjoyApiOperation = {
     const email = requireOwnerEmail(args, context);
     const title = requiredString(args, "title");
 
-    const owner = await getOrCreateOwner(context.db, email);
+    const owner = await getOrCreateOwner(context, email);
     const existing = await context.db.cookbook.findFirst({
       where: { authorId: owner.id, title },
       include: cookbookRecipeInclude,
@@ -3003,7 +3039,7 @@ const addRecipeToCookbookTool: SpoonjoyApiOperation = {
     const email = requireOwnerEmail(args, context);
     const recipeId = requiredString(args, "recipeId");
 
-    const owner = await getOrCreateOwner(context.db, email);
+    const owner = await getOrCreateOwner(context, email);
     const cookbook = await findOwnerCookbook(context.db, owner.id, args);
     if (!cookbook) throw new Error("Cookbook not found");
 
@@ -3075,7 +3111,7 @@ const removeRecipeFromCookbookTool: SpoonjoyApiOperation = {
     const email = requireOwnerEmail(args, context);
     const recipeId = requiredString(args, "recipeId");
 
-    const owner = await getOrCreateOwner(context.db, email);
+    const owner = await getOrCreateOwner(context, email);
     const cookbook = await findOwnerCookbook(context.db, owner.id, args);
     if (!cookbook) throw new Error("Cookbook not found");
 
@@ -3119,7 +3155,7 @@ const addShoppingListItemTool: SpoonjoyApiOperation = {
     const categoryKey = optionalString(args.categoryKey) ?? null;
     const iconKey = optionalString(args.iconKey) ?? null;
 
-    const owner = await getOrCreateOwner(context.db, email);
+    const owner = await getOrCreateOwner(context, email);
     const shoppingList = await getOrCreateShoppingList(context.db, owner.id);
     const ingredientRef = await getOrCreateIngredientRef(context.db, name);
     const unit = unitName ? await getOrCreateUnit(context.db, unitName) : null;
@@ -3169,7 +3205,7 @@ const setShoppingListItemCheckedTool: SpoonjoyApiOperation = {
     const itemId = requiredString(args, "itemId");
     const checked = requiredBoolean(args, "checked");
 
-    const owner = await getOrCreateOwner(context.db, email);
+    const owner = await getOrCreateOwner(context, email);
     const shoppingList = await getOrCreateShoppingList(context.db, owner.id);
     const item = await context.db.shoppingListItem.findFirst({
       where: { id: itemId, shoppingListId: shoppingList.id, deletedAt: null },
@@ -3208,7 +3244,7 @@ const removeShoppingListItemTool: SpoonjoyApiOperation = {
     const email = requireOwnerEmail(args, context);
     const itemId = requiredString(args, "itemId");
 
-    const owner = await getOrCreateOwner(context.db, email);
+    const owner = await getOrCreateOwner(context, email);
     const shoppingList = await getOrCreateShoppingList(context.db, owner.id);
     const item = await context.db.shoppingListItem.findFirst({
       where: { id: itemId, shoppingListId: shoppingList.id },
@@ -3241,7 +3277,7 @@ const getShoppingListTool: SpoonjoyApiOperation = {
   },
   async handle(args, context) {
     const email = requireOwnerEmail(args, context);
-    const owner = await getOrCreateOwner(context.db, email);
+    const owner = await getOrCreateOwner(context, email);
     const shoppingList = await getOrCreateShoppingList(context.db, owner.id);
     const reloaded = await reloadShoppingList(context.db, shoppingList.id);
 

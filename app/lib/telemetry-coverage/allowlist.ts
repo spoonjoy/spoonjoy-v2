@@ -129,6 +129,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "The batch catch only re-types a batch-guard failure (nothing in the batch applied) and rethrows every error; the retry catch re-runs a write only on that typed failure and rethrows everything else. Callers answer the failure or surface it at the instrumented REST, MCP or route boundary.",
   },
   {
+    file: "app/lib/oauth-user.server.ts",
+    category: "rethrow",
+    reason:
+      "The sign-up catch recovers only a unique-constraint race (the same provider identity, email or username written by another request first) by signing in to that account, answering account_exists or choosing another username; every other failure rethrows to the instrumented OAuth callback route, which captures it.",
+  },
+  {
     file: "app/lib/recipe-fork.server.ts",
     category: "rethrow",
     reason:

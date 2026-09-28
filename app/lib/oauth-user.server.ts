@@ -1,5 +1,7 @@
 import { findUsernameConflict } from "~/lib/account-identity.server";
 import type { PrismaClient } from "@prisma/client";
+import type { D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1Guard, d1Timestamp, d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
 
 export interface OAuthUserData {
   provider: string;
@@ -116,45 +118,72 @@ export async function generateUsername(
   }
 }
 
-/**
- * Create a new user from OAuth provider data.
- * Returns error if email already exists (user should log in to link account).
- */
-export async function createOAuthUser(
-  db: PrismaClient,
-  oauthData: OAuthUserData
-): Promise<CreateOAuthUserResult> {
-  // Handle missing email from provider (e.g., Apple "Hide My Email")
-  if (!oauthData.email) {
-    return {
-      success: false,
-      error: "email_required",
-      message:
-        "An email address is required to create an account. Please allow access to your email when signing in.",
-    };
-  }
+/** A unique-constraint failure, from Prisma (P2002) or from a D1 batch. */
+function isUniqueConflict(error: unknown): boolean {
+  if (error && typeof error === "object" && (error as { code?: unknown }).code === "P2002") return true;
+  const message = error instanceof Error ? error.message : "";
+  return message.includes("UNIQUE constraint failed");
+}
 
-  const normalizedEmail = oauthData.email.toLowerCase();
-
-  // Check if email already exists (case-insensitive)
-  const existingUsers = await db.$queryRaw<Array<{ id: string }>>`
+async function findUserIdByEmail(db: PrismaClient, normalizedEmail: string): Promise<string | null> {
+  const rows = await db.$queryRaw<Array<{ id: string }>>`
     SELECT id FROM User WHERE LOWER(email) = ${normalizedEmail} LIMIT 1
   `;
+  return rows[0]?.id ?? null;
+}
 
-  if (existingUsers.length > 0) {
-    return {
-      success: false,
-      error: "account_exists",
-      message:
-        "An account with this email already exists. Please log in to link your OAuth account.",
-    };
+const ACCOUNT_EXISTS: CreateOAuthUserResult = {
+  success: false,
+  error: "account_exists",
+  message:
+    "An account with this email already exists. Please log in to link your OAuth account.",
+};
+
+// A new username can lose a race to another sign-up choosing the same name; pick again.
+const USERNAME_RACE_ATTEMPTS = 3;
+
+/**
+ * Writes the user and its OAuth link. With a D1 binding they are one atomic batch, so a
+ * user can never exist without the link it was created for. Without one (unit tests,
+ * scripts) Prisma writes them as one nested create.
+ */
+async function writeOAuthUser(
+  db: PrismaClient,
+  d1: D1ReadDatabase | null,
+  oauthData: OAuthUserData,
+  normalizedEmail: string,
+  username: string,
+): Promise<{ id: string; email: string; username: string }> {
+  if (d1) {
+    const id = crypto.randomUUID();
+    const at = d1Timestamp(new Date());
+    await d1WriteBatch(d1, [
+      // The unique index on email is case-sensitive; this stops a racing sign-up that stored
+      // the same email in another case from leaving two accounts.
+      d1Guard(`NOT EXISTS (SELECT 1 FROM "User" WHERE LOWER("email") = ?)`, normalizedEmail),
+      [
+        `INSERT INTO "User" ("id", "email", "username", "hashedPassword", "salt", "createdAt", "updatedAt")
+         VALUES (?, ?, ?, NULL, NULL, ?, ?)`,
+        id,
+        normalizedEmail,
+        username,
+        at,
+        at,
+      ],
+      [
+        `INSERT INTO "OAuth" ("provider", "providerUserId", "providerUsername", "userId", "createdAt")
+         VALUES (?, ?, ?, ?, ?)`,
+        oauthData.provider,
+        oauthData.providerUserId,
+        oauthData.providerUsername,
+        id,
+        at,
+      ],
+    ]);
+    return { id, email: normalizedEmail, username };
   }
 
-  // Generate a unique username
-  const username = await generateUsername(db, oauthData.name, oauthData.email);
-
-  // Create user and OAuth record in a transaction
-  const user = await db.user.create({
+  return db.user.create({
     data: {
       email: normalizedEmail,
       username,
@@ -174,11 +203,62 @@ export async function createOAuthUser(
       username: true,
     },
   });
+}
 
-  return {
-    success: true,
-    user,
-  };
+/**
+ * Create a new user from OAuth provider data.
+ * Returns error if email already exists (user should log in to link account).
+ *
+ * Two first sign-ins with the same provider identity can race: both find no account, and
+ * the second write fails on the unique email or provider identity. That request then signs
+ * in to the account the first one created instead of failing, so there is one account and
+ * no lockout.
+ */
+export async function createOAuthUser(
+  db: PrismaClient,
+  oauthData: OAuthUserData,
+  d1: D1ReadDatabase | null = null,
+): Promise<CreateOAuthUserResult> {
+  // Handle missing email from provider (e.g., Apple "Hide My Email")
+  if (!oauthData.email) {
+    return {
+      success: false,
+      error: "email_required",
+      message:
+        "An email address is required to create an account. Please allow access to your email when signing in.",
+    };
+  }
+
+  const normalizedEmail = oauthData.email.toLowerCase();
+
+  // Check if email already exists (case-insensitive)
+  if (await findUserIdByEmail(db, normalizedEmail)) {
+    return ACCOUNT_EXISTS;
+  }
+
+  for (let attempt = 1; ; attempt++) {
+    // Generate a unique username
+    const username = await generateUsername(db, oauthData.name, oauthData.email);
+    try {
+      const user = await writeOAuthUser(db, d1, oauthData, normalizedEmail, username);
+      return { success: true, user };
+    } catch (error) {
+      // A guard failure means the email (in any case) was taken in between.
+      if (!isUniqueConflict(error) && !isD1GuardFailure(error)) throw error;
+      // Another request created this provider identity first: sign in to that account.
+      const existing = await findExistingOAuthAccount(db, oauthData.provider, oauthData.providerUserId);
+      if (existing) {
+        return {
+          success: true,
+          user: { id: existing.userId, email: existing.email, username: existing.username },
+        };
+      }
+      // Another account took the email first (for example through another provider).
+      if (await findUserIdByEmail(db, normalizedEmail)) return ACCOUNT_EXISTS;
+      // Otherwise the username was taken in between; choose again.
+      if (attempt === USERNAME_RACE_ATTEMPTS) throw error;
+    }
+  }
 }
 
 /**

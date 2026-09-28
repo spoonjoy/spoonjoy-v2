@@ -34,7 +34,7 @@ const STYLIZATION_MODEL = "configured";
 const STYLIZATION_PROMPT_VERSION = "spoon-photo-editorial-v1";
 const STYLIZATION_STYLE_VERSION = "mendelow-phone-to-editorial-v1";
 
-type ImageGenerationSchedulerEnv = ImageGenEnv & PostHogServerEnv;
+type ImageGenerationSchedulerEnv = ImageGenEnv & PostHogServerEnv & { DB?: unknown };
 type ImageGenRunnerFactory = (env: ImageGenerationSchedulerEnv) => ImageGenRunner | null;
 type ImageEditAttemptsFactory = (
   env: ImageGenerationSchedulerEnv,
@@ -737,7 +737,10 @@ export async function scheduleSpoonCoverStylization(
       input.db,
       input.userId,
       "stylization",
-      input.now ? { now: () => new Date(input.now!()) } : {},
+      {
+        ...(input.now ? { now: () => new Date(input.now!()) } : {}),
+        d1: d1Binding(input.env?.DB),
+      },
     );
     if (!consumed) {
       await markStylizationFailed(input, "quota_exhausted");

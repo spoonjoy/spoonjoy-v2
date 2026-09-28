@@ -2,6 +2,7 @@ import type { AppLoadContext } from "react-router";
 import { createUserSession, getUserId, isSessionIdentityCurrent, type SessionEnv } from "~/lib/session.server";
 import { getAppleOAuthConfig, getGitHubOAuthConfig, getGoogleOAuthConfig } from "~/lib/env.server";
 import { getRequestDb } from "~/lib/route-platform.server";
+import { requestD1 } from "~/lib/d1-read.server";
 import { handleAppleOAuthCallback } from "~/lib/apple-oauth-callback.server";
 import { verifyAppleCallback } from "~/lib/apple-oauth.server";
 import { handleGitHubOAuthCallback } from "~/lib/github-oauth-callback.server";
@@ -226,6 +227,7 @@ export async function handleAppleCallback(request: Request, context: AppLoadCont
   const database = await getRequestDb(context);
   const callbackResult = await handleAppleOAuthCallback({
     db: database,
+    d1: requestD1(context),
     appleUser: verifyResult.appleUser,
     currentUserId,
     redirectTo: stored.redirectTo,
@@ -316,6 +318,7 @@ export async function handleGitHubCallback(request: Request, context: AppLoadCon
   const database = await getRequestDb(context);
   const callbackResult = await handleGitHubOAuthCallback({
     db: database,
+    d1: requestD1(context),
     githubUser: verifyResult.githubUser,
     currentUserId,
     redirectTo: stored.redirectTo,
@@ -420,6 +423,7 @@ export async function handleGoogleCallback(request: Request, context: AppLoadCon
   const database = await getRequestDb(context);
   const callbackResult = await handleGoogleOAuthCallback({
     db: database,
+    d1: requestD1(context),
     googleUser: verifyResult.googleUser,
     currentUserId,
     redirectTo: stored.redirectTo,

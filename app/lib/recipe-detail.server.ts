@@ -643,7 +643,7 @@ async function handleCreateFirstPhotoCover(
         recipeId,
         coverId: cover.id,
         variant: "image",
-      });
+      }, requestD1(context));
     }
 
     if (generateEditorial) {
@@ -843,7 +843,7 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
       recipeId: id,
       coverId,
       variant: variant as RecipeCoverVariant,
-    });
+    }, requestD1(context));
     return { success: true, intent: "setRecipeCover" };
   }
 
@@ -1057,7 +1057,7 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
             ? replacementVariant
             : null,
         confirmNoCover: formData.get("confirmNoCover") === "true",
-      });
+      }, requestD1(context));
     } catch (error) {
       throw new Response((error as Error).message, { status: 400 });
     }

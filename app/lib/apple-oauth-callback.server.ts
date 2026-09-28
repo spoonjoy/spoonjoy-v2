@@ -9,6 +9,7 @@
  */
 
 import type { PrismaClient } from "@prisma/client";
+import type { D1ReadDatabase } from "~/lib/d1-read.server";
 import type { AppleUser } from "./apple-oauth.server";
 import {
   createOAuthUser,
@@ -22,6 +23,8 @@ import {
 export interface AppleOAuthCallbackParams {
   /** Prisma database client */
   db: PrismaClient;
+  /** The request's D1 binding: a new user and its OAuth link are then written as one atomic batch */
+  d1?: D1ReadDatabase | null;
   /** Apple user data from verified callback */
   appleUser: AppleUser;
   /** Current logged-in user ID (null if not logged in) */
@@ -70,7 +73,7 @@ export interface AppleOAuthCallbackResult {
 export async function handleAppleOAuthCallback(
   params: AppleOAuthCallbackParams
 ): Promise<AppleOAuthCallbackResult> {
-  const { db, appleUser, currentUserId, redirectTo } = params;
+  const { db, d1 = null, appleUser, currentUserId, redirectTo } = params;
 
   // Default redirect destination
   const defaultRedirect = redirectTo ?? "/";
@@ -140,7 +143,7 @@ export async function handleAppleOAuthCallback(
     providerUsername: appleUser.fullName ?? appleUser.email,
     email: appleUser.email,
     name: appleUser.fullName,
-  });
+  }, d1);
 
   if (!createResult.success) {
     return {

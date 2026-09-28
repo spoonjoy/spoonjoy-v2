@@ -9,6 +9,7 @@
  */
 
 import type { PrismaClient } from "@prisma/client";
+import type { D1ReadDatabase } from "~/lib/d1-read.server";
 import type { GoogleUser } from "./google-oauth.server";
 import {
   createOAuthUser,
@@ -23,6 +24,8 @@ import {
 export interface GoogleOAuthCallbackParams {
   /** Prisma database client */
   db: PrismaClient;
+  /** The request's D1 binding: a new user and its OAuth link are then written as one atomic batch */
+  d1?: D1ReadDatabase | null;
   /** Google user data from verified callback */
   googleUser: GoogleUser;
   /** Current logged-in user ID (null if not logged in) */
@@ -71,7 +74,7 @@ export interface GoogleOAuthCallbackResult {
 export async function handleGoogleOAuthCallback(
   params: GoogleOAuthCallbackParams
 ): Promise<GoogleOAuthCallbackResult> {
-  const { db, googleUser, currentUserId, redirectTo } = params;
+  const { db, d1 = null, googleUser, currentUserId, redirectTo } = params;
 
   // Default redirect destination
   const defaultRedirect = redirectTo ?? "/";
@@ -161,7 +164,7 @@ export async function handleGoogleOAuthCallback(
     providerUsername: googleUser.name ?? googleUser.email,
     email: googleUser.email,
     name: googleUser.name,
-  });
+  }, d1);
 
   if (!createResult.success) {
     return {

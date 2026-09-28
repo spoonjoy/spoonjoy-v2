@@ -3,6 +3,7 @@
  */
 
 import type { PrismaClient } from "@prisma/client";
+import type { D1ReadDatabase } from "~/lib/d1-read.server";
 import type { GitHubUser } from "./github-oauth.server";
 import {
   createOAuthUser,
@@ -13,6 +14,8 @@ import {
 
 export interface GitHubOAuthCallbackParams {
   db: PrismaClient;
+  /** The request's D1 binding: a new user and its OAuth link are then written as one atomic batch */
+  d1?: D1ReadDatabase | null;
   githubUser: GitHubUser;
   currentUserId?: string | null;
   redirectTo?: string | null;
@@ -35,7 +38,7 @@ export interface GitHubOAuthCallbackResult {
 export async function handleGitHubOAuthCallback(
   params: GitHubOAuthCallbackParams
 ): Promise<GitHubOAuthCallbackResult> {
-  const { db, githubUser, currentUserId } = params;
+  const { db, d1 = null, githubUser, currentUserId } = params;
   const redirectTo = params.redirectTo ?? "/recipes";
 
   if (currentUserId) {
@@ -106,7 +109,7 @@ export async function handleGitHubOAuthCallback(
     providerUsername: githubUser.login,
     email: githubUser.email,
     name: githubUser.name ?? githubUser.login,
-  });
+  }, d1);
 
   if (!createResult.success || !createResult.user) {
     return {

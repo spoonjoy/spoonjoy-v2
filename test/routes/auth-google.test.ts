@@ -415,6 +415,7 @@ describe("Google OAuth routes", () => {
     expect(response.headers.get("Set-Cookie")).toBeTruthy();
     expect(mocks.handleGoogleOAuthCallback).toHaveBeenCalledWith({
       db: { source: "db" },
+      d1: null,
       googleUser,
       currentUserId: null,
       redirectTo: "/cookbooks",

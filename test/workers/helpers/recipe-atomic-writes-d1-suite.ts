@@ -1,6 +1,6 @@
 import { createExecutionContext, env } from "cloudflare:test";
 import type { PrismaClient } from "@prisma/client";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { action as apiV1Action } from "../../../app/routes/api.v1.$";
 import { hashApiToken } from "../../../app/lib/api-auth.server";
@@ -26,8 +26,14 @@ import {
   swapRecipeStepsOnD1,
   updateRecipeStepOnD1,
 } from "../../../app/lib/recipe-d1-edits.server";
+import { archiveRecipeCover, setActiveRecipeCover } from "../../../app/lib/recipe-cover.server";
 import { forkRecipe } from "../../../app/lib/recipe-fork.server";
 import { ActiveRecipeTitleConflictError } from "../../../app/lib/recipe-title-uniqueness.server";
+import { handleGoogleOAuthCallback } from "../../../app/lib/google-oauth-callback.server";
+import { handleGitHubOAuthCallback } from "../../../app/lib/github-oauth-callback.server";
+import { handleAppleOAuthCallback } from "../../../app/lib/apple-oauth-callback.server";
+import { IMPORT_DAILY_CAP, tryConsumeImageGenQuota } from "../../../app/lib/image-gen-ledger.server";
+import { createOAuthUser } from "../../../app/lib/oauth-user.server";
 import { handleRecipeDetailAction } from "../../../app/lib/recipe-detail.server";
 import { importRecipeFromSource } from "../../../app/lib/recipe-import.server";
 import { createUserSessionCookie } from "../../../app/lib/session.server";
@@ -50,11 +56,6 @@ const FAILURE = "recipe_atomic_injected_failure";
 const TRIGGER = "RecipeAtomic_injected_failure";
 const TOKEN = "sj_recipe_atomic_d1_test";
 const ORIGIN = "https://spoonjoy.test";
-const PRISMA_D1_TRANSACTION_WARNING =
-  "prisma:warn Cloudflare D1 does not support transactions yet. When using Prisma's D1 adapter, " +
-  "implicit & explicit transactions will be ignored and run as individual queries, which breaks " +
-  "the guarantees of the ACID properties of transactions. For more details see " +
-  "https://pris.ly/d/d1-transactions";
 
 let prisma: PrismaClient;
 
@@ -612,14 +613,6 @@ describe("atomic recipe writes on Wrangler D1", () => {
     });
 
     it("imports a recipe with its steps and ingredients together, or nothing", async () => {
-      // The import's daily quota step (tryConsumeImageGenQuota, not changed here) runs a Prisma
-      // updateMany that the D1 adapter treats as a transaction, so on Linux Prisma warns once
-      // for the client. The import's recipe writes go to D1 directly, not through Prisma.
-      const importDb = await getDb({ DB: database() });
-      const infos: unknown[][] = [];
-      const info = vi.spyOn(console, "info").mockImplementation((...args: unknown[]) => {
-        infos.push(args);
-      });
       const importIt = () => importRecipeFromSource({
         chefId: CHEF,
         source: {
@@ -634,23 +627,17 @@ describe("atomic recipe writes on Wrangler D1", () => {
           },
         },
       }, {
-        db: importDb,
+        db: prisma,
         env: { DB: database() },
         ingredientParser: async (text) => [{ quantity: 1, unit: "atomic whole", ingredientName: `atomic ${text}` }],
       });
       await failOn("INSERT", "Ingredient", `NEW."ingredientRefId" IN (SELECT "id" FROM "IngredientRef" WHERE "name" = 'atomic lemon')`);
 
-      let imported: Awaited<ReturnType<typeof importIt>>;
-      try {
-        expect(String(await rejection(importIt()))).toContain(FAILURE);
-        expect(await count(`SELECT COUNT(*) AS "count" FROM "Recipe" WHERE "title" LIKE 'Atomic Imported Rice%'`)).toBe(0);
+      expect(String(await rejection(importIt()))).toContain(FAILURE);
+      expect(await count(`SELECT COUNT(*) AS "count" FROM "Recipe" WHERE "title" LIKE 'Atomic Imported Rice%'`)).toBe(0);
 
-        await run(`DROP TRIGGER "${TRIGGER}"`);
-        imported = await importIt();
-      } finally {
-        info.mockRestore();
-      }
-      expect(infos).toEqual(process.platform === "linux" ? [[PRISMA_D1_TRANSACTION_WARNING]] : []);
+      await run(`DROP TRIGGER "${TRIGGER}"`);
+      const imported = await importIt();
       expect(await recipeGraph(imported.recipeId!)).toMatchObject({
         recipe: { title: "Atomic Imported Rice", sourceUrl: "https://example.com/atomic-import" },
         steps: [
@@ -661,6 +648,221 @@ describe("atomic recipe writes on Wrangler D1", () => {
           { stepNum: 1, quantity: 1, unit: "atomic whole", ingredient: "atomic lemon" },
           { stepNum: 1, quantity: 1, unit: "atomic whole", ingredient: "atomic rice" },
         ],
+      });
+    });
+  });
+
+  describe("daily image-generation quota", () => {
+    const DAY = "2026-09-27T00:00:00.000+00:00";
+    const now = () => new Date("2026-09-27T15:00:00.000Z");
+    const ledger = () => rows<{ count: number }>(
+      `SELECT "count" FROM "ImageGenLedger" WHERE "userId" = ? AND "kind" = 'import' AND "bucketStart" = ?`,
+      FRIEND,
+      DAY,
+    );
+
+    afterEach(async () => {
+      await run(`DELETE FROM "ImageGenLedger" WHERE "userId" = ?`, FRIEND);
+    });
+
+    it("lets exactly one of many concurrent consumes take the last unit", async () => {
+      // The day's row as Prisma's D1 adapter wrote it (offset-form timestamp), one below the cap.
+      await run(
+        `INSERT INTO "ImageGenLedger" ("id", "userId", "kind", "bucketStart", "count", "updatedAt") VALUES ('atomic-ledger', ?, 'import', ?, ?, ?)`,
+        FRIEND,
+        DAY,
+        IMPORT_DAILY_CAP - 1,
+        DAY,
+      );
+
+      const results = await Promise.all(Array.from({ length: 8 }, () =>
+        tryConsumeImageGenQuota(prisma, FRIEND, "import", { now, d1: database() })));
+
+      expect(results.filter(Boolean)).toHaveLength(1);
+      expect(await ledger()).toEqual([{ count: IMPORT_DAILY_CAP }]);
+      await expect(tryConsumeImageGenQuota(prisma, FRIEND, "import", { now, d1: database() })).resolves.toBe(false);
+    });
+
+    it("counts concurrent first consumes of the day in one row", async () => {
+      const results = await Promise.all(Array.from({ length: 5 }, () =>
+        tryConsumeImageGenQuota(prisma, FRIEND, "import", { now, d1: database() })));
+
+      expect(results).toEqual([true, true, true, true, true]);
+      expect(await ledger()).toEqual([{ count: 5 }]);
+    });
+
+    it("spends one unit in one row when older writers stored the same day in two forms", async () => {
+      for (const [id, day] of [["atomic-ledger-offset", DAY], ["atomic-ledger-z", "2026-09-27T00:00:00.000Z"]]) {
+        await run(
+          `INSERT INTO "ImageGenLedger" ("id", "userId", "kind", "bucketStart", "count", "updatedAt") VALUES (?, ?, 'import', ?, 0, ?)`,
+          id,
+          FRIEND,
+          day,
+          DAY,
+        );
+      }
+
+      await expect(tryConsumeImageGenQuota(prisma, FRIEND, "import", { now, d1: database() })).resolves.toBe(true);
+      const counts = await rows<{ count: number }>(`SELECT "count" FROM "ImageGenLedger" WHERE "userId" = ?`, FRIEND);
+      expect(counts.map((row) => row.count).sort()).toEqual([0, 1]);
+    });
+
+    it("consumes nothing, and writes no row, for a user that is gone", async () => {
+      await expect(tryConsumeImageGenQuota(prisma, "atomic-nobody", "import", { now, d1: database() })).resolves.toBe(false);
+      expect(await count(`SELECT COUNT(*) AS "count" FROM "ImageGenLedger" WHERE "userId" = 'atomic-nobody'`)).toBe(0);
+    });
+  });
+
+  describe("OAuth sign-up", () => {
+    const googleUser = (id: string, email: string) => ({
+      id, email, emailVerified: true, name: "Atomic Cook", givenName: null, familyName: null, picture: null,
+    }) as never;
+    const accounts = (email: string) => rows<{ id: string; provider: string | null }>(
+      `SELECT "User"."id", "OAuth"."provider" FROM "User" LEFT JOIN "OAuth" ON "OAuth"."userId" = "User"."id"
+       WHERE "User"."email" = ?`,
+      email,
+    );
+
+    it("never leaves a user without the OAuth link it was created for", async () => {
+      await failOn("INSERT", "OAuth", `NEW."providerUserId" = 'atomic-google-1'`);
+      const signIn = (d1: D1ReadDatabase) => handleGoogleOAuthCallback({
+        db: prisma, d1, googleUser: googleUser("atomic-google-1", "atomic-oauth-1@example.com"), currentUserId: null, redirectTo: null,
+      });
+
+      expect(String(await rejection(signIn(database())))).toContain(FAILURE);
+      expect(await accounts("atomic-oauth-1@example.com")).toEqual([]);
+
+      await run(`DROP TRIGGER "${TRIGGER}"`);
+      const created = await signIn(database());
+      expect(created).toMatchObject({ success: true, action: "user_created" });
+      expect(await accounts("atomic-oauth-1@example.com")).toEqual([{ id: created.userId, provider: "google" }]);
+    });
+
+    it.each([
+      ["GitHub", (d1: D1ReadDatabase, id: string, email: string) => handleGitHubOAuthCallback({
+        db: prisma, d1, githubUser: { id, email, emailVerified: true, login: "atomic-cook", name: null, avatarUrl: null }, currentUserId: null,
+      })],
+      ["Apple", (d1: D1ReadDatabase, id: string, email: string) => handleAppleOAuthCallback({
+        db: prisma, d1, currentUserId: null, redirectTo: null,
+        appleUser: { id, email, emailVerified: true, isPrivateEmail: false, firstName: null, lastName: null, fullName: "Atomic Cook" },
+      })],
+    ])("writes a new %s user and link together, or neither", async (provider, signIn) => {
+      const id = `atomic-${provider.toLowerCase()}-1`;
+      const email = `atomic-${provider.toLowerCase()}@example.com`;
+      await failOn("INSERT", "OAuth", `NEW."providerUserId" = '${id}'`);
+
+      expect(String(await rejection(signIn(database(), id, email)))).toContain(FAILURE);
+      expect(await accounts(email)).toEqual([]);
+
+      await run(`DROP TRIGGER "${TRIGGER}"`);
+      const created = await signIn(database(), id, email);
+      expect(created).toMatchObject({ success: true, action: "user_created" });
+      expect(await accounts(email)).toEqual([{ id: created.userId, provider: provider.toLowerCase() }]);
+    });
+
+    it("signs a second concurrent first sign-in in to the account the first one created", async () => {
+      const identity = googleUser("atomic-google-race", "atomic-oauth-race@example.com");
+      const signIn = (d1: D1ReadDatabase) => handleGoogleOAuthCallback({
+        db: prisma, d1, googleUser: identity, currentUserId: null, redirectTo: null,
+      });
+      // The second sign-in finishes between the first one's checks and its write.
+      let second: Awaited<ReturnType<typeof signIn>> | undefined;
+      const first = await signIn(interleaved(async () => {
+        second = await signIn(database());
+      }));
+
+      expect(second).toMatchObject({ success: true, action: "user_created" });
+      expect(first).toMatchObject({ success: true, userId: second!.userId });
+      expect(await accounts("atomic-oauth-race@example.com")).toEqual([{ id: second!.userId, provider: "google" }]);
+
+      const concurrent = await Promise.all([1, 2].map(() => signIn(database())));
+      expect(concurrent.map((result) => result.userId)).toEqual([second!.userId, second!.userId]);
+    });
+
+    it("answers account_exists when a sign-up in between stored the same email in another case", async () => {
+      // The unique index on email is case-sensitive, so only the batch's guard stops a second account.
+      const result = await createOAuthUser(prisma, {
+        provider: "google",
+        providerUserId: "atomic-google-case",
+        providerUsername: "Atomic Cook",
+        email: "atomic-oauth-case@example.com",
+        name: "Atomic Cook",
+      }, interleaved(() => run(
+        `INSERT INTO "User" ("id", "email", "username", "createdAt", "updatedAt") VALUES ('atomic-case-user', ?, 'atomic-case-user', ?, ?)`,
+        "Atomic-OAuth-Case@example.com",
+        OLD,
+        OLD,
+      )));
+
+      expect(result).toMatchObject({ success: false, error: "account_exists" });
+      expect(await count(`SELECT COUNT(*) AS "count" FROM "User" WHERE LOWER("email") = 'atomic-oauth-case@example.com'`)).toBe(1);
+      expect(await count(`SELECT COUNT(*) AS "count" FROM "OAuth" WHERE "providerUserId" = 'atomic-google-case'`)).toBe(0);
+    });
+
+    it("creates one account for two truly concurrent first sign-ins", async () => {
+      const identity = googleUser("atomic-google-parallel", "atomic-oauth-parallel@example.com");
+      const results = await Promise.all([1, 2].map(() => handleGoogleOAuthCallback({
+        db: prisma, d1: database(), googleUser: identity, currentUserId: null, redirectTo: null,
+      })));
+
+      expect(results.every((result) => result.success)).toBe(true);
+      expect(results[1]!.userId).toBe(results[0]!.userId);
+      expect(await accounts("atomic-oauth-parallel@example.com")).toEqual([{ id: results[0]!.userId, provider: "google" }]);
+    });
+  });
+
+  describe("recipe covers", () => {
+    async function seedCovers(id: string) {
+      await seedRecipe(id);
+      for (const index of [0, 1]) {
+        await run(
+          `INSERT INTO "RecipeCover" ("id", "recipeId", "imageUrl", "sourceType", "status", "createdAt") VALUES (?, ?, ?, 'chef-upload', 'ready', ?)`,
+          `${id}-cover-${index}`, id, `https://example.com/${id}-${index}.jpg`, OLD,
+        );
+      }
+      await run(`UPDATE "Recipe" SET "activeCoverId" = ?, "activeCoverVariant" = 'image', "coverMode" = 'manual' WHERE "id" = ?`, `${id}-cover-0`, id);
+      await run(`UPDATE "Cookbook" SET "updatedAt" = ? WHERE "id" = ?`, OLD, COOKBOOK);
+    }
+
+    async function coverState(id: string) {
+      const [recipe] = await rows<{ activeCoverId: string | null }>(`SELECT "activeCoverId" FROM "Recipe" WHERE "id" = ?`, id);
+      const covers = await rows<{ id: string; status: string }>(`SELECT "id", "status" FROM "RecipeCover" WHERE "recipeId" = ? ORDER BY "id"`, id);
+      return { active: recipe!.activeCoverId, covers: covers.map((cover) => cover.status), cookbookUpdatedAt: await cookbookUpdatedAt() };
+    }
+
+    it("activates a cover and touches the cookbooks together, or neither", async () => {
+      await seedCovers("atomic-cover-set");
+      await failOn("UPDATE", "Cookbook", `OLD."id" = '${COOKBOOK}'`);
+      const activate = () => setActiveRecipeCover(prisma, { recipeId: "atomic-cover-set", coverId: "atomic-cover-set-cover-1", variant: "image" }, database());
+
+      expect(String(await rejection(activate()))).toContain(FAILURE);
+      expect(await coverState("atomic-cover-set")).toEqual({ active: "atomic-cover-set-cover-0", covers: ["ready", "ready"], cookbookUpdatedAt: OLD });
+
+      await run(`DROP TRIGGER "${TRIGGER}"`);
+      await activate();
+      expect(await coverState("atomic-cover-set")).toMatchObject({ active: "atomic-cover-set-cover-1" });
+      expect(await cookbookUpdatedAt()).not.toBe(OLD);
+    });
+
+    it("archives the active cover, activates its replacement and touches the cookbooks together, or none of it", async () => {
+      await seedCovers("atomic-cover-archive");
+      await failOn("UPDATE", "Cookbook", `OLD."id" = '${COOKBOOK}'`);
+      const archive = () => archiveRecipeCover(prisma, {
+        recipeId: "atomic-cover-archive",
+        coverId: "atomic-cover-archive-cover-0",
+        replacementCoverId: "atomic-cover-archive-cover-1",
+        replacementVariant: "image",
+      }, database());
+
+      expect(String(await rejection(archive()))).toContain(FAILURE);
+      expect(await coverState("atomic-cover-archive")).toEqual({
+        active: "atomic-cover-archive-cover-0", covers: ["ready", "ready"], cookbookUpdatedAt: OLD,
+      });
+
+      await run(`DROP TRIGGER "${TRIGGER}"`);
+      await archive();
+      expect(await coverState("atomic-cover-archive")).toMatchObject({
+        active: "atomic-cover-archive-cover-1", covers: ["archived", "ready"],
       });
     });
   });
