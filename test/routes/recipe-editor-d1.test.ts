@@ -7,6 +7,7 @@ import { createUserSessionCookie } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
 import { createTestUser } from "../utils";
+import { expectConsoleError } from "../warning-policy";
 
 // The recipe edit page and the step edit page with a D1 binding: each write is one D1
 // batch (through the SQLite-backed fake binding) and leaves the same rows as the Prisma
@@ -174,21 +175,18 @@ const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00
 
 /**
  * Runs `run` with stylization scheduling failing, as a failure after the save batch would, and
- * checks the failure was logged.
+ * expects the failure to be logged once.
  */
-async function withFailingStylization<T>(run: () => Promise<T>) {
+async function withFailingStylization<T>(surface: "recipe_create" | "recipe_edit", run: () => Promise<T>) {
   const failure = new Error("Stylization queue unavailable");
+  expectConsoleError("recipe save follow-up failed", { surface, error: failure });
   vi.doMock("~/lib/spoon-cover-stylization.server", async (importOriginal) => ({
     ...(await importOriginal<typeof import("~/lib/spoon-cover-stylization.server")>()),
     scheduleSpoonCoverStylization: vi.fn().mockRejectedValue(failure),
   }));
-  const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
   try {
-    const result = await run();
-    expect(consoleError).toHaveBeenCalledWith("recipe save follow-up failed", expect.objectContaining({ error: failure }));
-    return result;
+    return await run();
   } finally {
-    consoleError.mockRestore();
     vi.doUnmock("~/lib/spoon-cover-stylization.server");
   }
 }
@@ -324,7 +322,7 @@ describe("recipe editor routes on a D1 binding", () => {
     it("keeps the edit page's upload the committed cover points at, and redirects, when stylization fails", async () => {
       const mine = await seedRecipe("Saved then stylized");
       const bucket = photos();
-      const result = await withFailingStylization(() => withD1Routes(() => act("edit", mine, () => ({
+      const result = await withFailingStylization("recipe_edit", () => withD1Routes(() => act("edit", mine, () => ({
         title: "Saved then stylized", description: "New photo", image: new File([PNG], "cover.png", { type: "image/png" }),
       }), { DB: d1.binding, PHOTOS: bucket })));
 
@@ -340,7 +338,7 @@ describe("recipe editor routes on a D1 binding", () => {
     it("keeps the new recipe page's upload the committed cover points at, and redirects, when stylization fails", async () => {
       const bucket = photos();
       const body = form({ title: "Created then stylized", steps: "[]", image: new File([PNG], "cover.png", { type: "image/png" }) });
-      const result = await withFailingStylization(() => withD1Routes(async () => {
+      const result = await withFailingStylization("recipe_create", () => withD1Routes(async () => {
         const { action } = await import("~/routes/recipes.new");
         return action({
           request: new UndiciRequest("http://localhost:3000/recipes/new", { method: "POST", headers: { Cookie: cookie }, body }) as never,

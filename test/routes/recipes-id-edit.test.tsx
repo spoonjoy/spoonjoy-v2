@@ -1,4 +1,6 @@
+
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { expectConsoleError } from "../warning-policy";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -986,14 +988,15 @@ describe("Recipes $id Edit Route", () => {
     });
 
     it("keeps the upload and reports the save when stylization fails after the save is committed", async () => {
-      const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const failure = new Error("Stylization queue unavailable");
+      expectConsoleError("recipe save follow-up failed", { surface: "recipe_edit", error: failure });
       const phCalls: Array<Record<string, unknown>> = [];
       const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
         phCalls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
         return new Response(null, { status: 200 });
       });
       const stylization = vi.spyOn(stylizationModule, "scheduleSpoonCoverStylization")
-        .mockRejectedValue(new Error("Stylization queue unavailable"));
+        .mockRejectedValue(failure);
       const mockR2Bucket = {
         put: vi.fn().mockResolvedValue(undefined),
         delete: vi.fn().mockResolvedValue(undefined),
@@ -1034,9 +1037,7 @@ describe("Recipes $id Edit Route", () => {
         const exceptions = phCalls.filter((c) => c.event === "$exception").map((c) => c.properties as Record<string, unknown>);
         expect(exceptions.map((properties) => properties.$exception_message)).toEqual(["Stylization queue unavailable"]);
         expect(exceptions[0]).toMatchObject({ surface: "recipe_edit", stage: "after_save" });
-        expect(consoleError).toHaveBeenCalledWith("recipe save follow-up failed", expect.objectContaining({ surface: "recipe_edit" }));
       } finally {
-        consoleError.mockRestore();
         stylization.mockRestore();
         fetchMock.mockRestore();
       }

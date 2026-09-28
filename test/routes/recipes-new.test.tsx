@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { expectConsoleError } from "../warning-policy";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -814,8 +815,8 @@ describe("Recipes New Route", () => {
         phCalls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
         return new Response(null, { status: 200 });
       });
-      const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
       const failure = new Error("Placeholder failure marking failed");
+      expectConsoleError("recipe save follow-up failed", { surface: "recipe_create", error: failure });
       const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover")
         .mockRejectedValue(failure);
       const scheduled: Promise<unknown>[] = [];
@@ -837,14 +838,12 @@ describe("Recipes New Route", () => {
         // The task handed to waitUntil settles instead of rejecting unobserved.
         await expect(scheduled[0]).resolves.toBeUndefined();
         await Promise.all(scheduled);
-        expect(consoleError).toHaveBeenCalledWith("recipe save follow-up failed", { surface: "recipe_create", error: failure });
         const exceptions = phCalls.filter((c) => c.event === "$exception").map((c) => c.properties as Record<string, unknown>);
         expect(exceptions).toEqual([
           expect.objectContaining({ $exception_message: "Placeholder failure marking failed", surface: "recipe_create", stage: "after_save" }),
         ]);
       } finally {
         placeholder.mockRestore();
-        consoleError.mockRestore();
         fetchMock.mockRestore();
       }
     });
@@ -982,14 +981,15 @@ describe("Recipes New Route", () => {
     });
 
     it("keeps the upload and reports the save when stylization fails after the recipe is committed", async () => {
-      const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const failure = new Error("Stylization queue unavailable");
+      expectConsoleError("recipe save follow-up failed", { surface: "recipe_create", error: failure });
       const phCalls: Array<Record<string, unknown>> = [];
       const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
         phCalls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
         return new Response(null, { status: 200 });
       });
       const stylization = vi.spyOn(stylizationModule, "scheduleSpoonCoverStylization")
-        .mockRejectedValue(new Error("Stylization queue unavailable"));
+        .mockRejectedValue(failure);
       const mockR2Bucket = {
         put: vi.fn().mockResolvedValue(undefined),
         delete: vi.fn().mockResolvedValue(undefined),
@@ -1032,18 +1032,17 @@ describe("Recipes New Route", () => {
         const exceptions = phCalls.filter((c) => c.event === "$exception").map((c) => c.properties as Record<string, unknown>);
         expect(exceptions.map((properties) => properties.$exception_message)).toEqual(["Stylization queue unavailable"]);
         expect(exceptions[0]).toMatchObject({ surface: "recipe_create", stage: "after_save" });
-        expect(consoleError).toHaveBeenCalledWith("recipe save follow-up failed", expect.objectContaining({ surface: "recipe_create" }));
       } finally {
-        consoleError.mockRestore();
         stylization.mockRestore();
         fetchMock.mockRestore();
       }
     });
 
     it("reports the save when placeholder generation fails after the recipe is committed", async () => {
-      const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const failure = new Error("Placeholder queue unavailable");
+      expectConsoleError("recipe save follow-up failed", { surface: "recipe_create", error: failure });
       const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover")
-        .mockRejectedValue(new Error("Placeholder queue unavailable"));
+        .mockRejectedValue(failure);
 
       try {
         const request = await createFormRequest({ title: "Committed Before Placeholder" }, testUserId);
@@ -1061,9 +1060,7 @@ describe("Recipes New Route", () => {
         expect(response.status).toBe(302);
         expect(response.headers.get("Location")).toBe(`/recipes/${recipe.id}`);
         expect(placeholder).toHaveBeenCalledTimes(1);
-        expect(consoleError).toHaveBeenCalledWith("recipe save follow-up failed", expect.objectContaining({ surface: "recipe_create" }));
       } finally {
-        consoleError.mockRestore();
         placeholder.mockRestore();
       }
     });
