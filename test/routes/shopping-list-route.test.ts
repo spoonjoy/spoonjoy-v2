@@ -763,16 +763,41 @@ describe("Shopping List Route", () => {
       }
     });
 
-    it("compatibility: rereads the active identity once after a create uniqueness conflict", async () => {
+    it("answers not found when the shopping list is deleted during the add", async () => {
+      const shoppingList = await db.shoppingList.create({ data: { authorId: testUserId } });
+      const client = db as any;
+      const originalExecuteRaw = client.$executeRaw.bind(client);
+      vi.spyOn(client, "$executeRaw").mockImplementationOnce(async (...args: unknown[]) => {
+        await db.shoppingList.delete({ where: { id: shoppingList.id } });
+        return originalExecuteRaw(...args);
+      }).mockImplementation(originalExecuteRaw);
+
+      const outcome = await action({
+        request: await createFormRequest(
+          { intent: "addItem", ingredientName: `vanished_list_${faker.string.alphanumeric(6)}`, unitName: "cup", quantity: "1" },
+          testUserId,
+        ),
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any).then(() => null, (thrown: unknown) => thrown);
+
+      expect(outcome).toBeInstanceOf(Response);
+      expect((outcome as Response).status).toBe(404);
+      await expect(db.shoppingListItem.count({ where: { shoppingListId: shoppingList.id } })).resolves.toBe(0);
+    });
+
+    it("adds to the item another request creates between the read and the conditional insert", async () => {
       const shoppingList = await db.shoppingList.create({ data: { authorId: testUserId } });
       const ingredientName = `compat_manual_race_${faker.string.alphanumeric(6)}`.toLowerCase();
       const unitName = `compat_manual_race_unit_${faker.string.alphanumeric(6)}`.toLowerCase();
       const ingredientRef = await db.ingredientRef.create({ data: { name: ingredientName } });
       const unit = await db.unit.create({ data: { name: unitName } });
-      const delegate = db.shoppingListItem as any;
-      const originalCreate = delegate.create.bind(delegate);
-      const createSpy = vi.spyOn(delegate, "create").mockImplementationOnce(async () => {
-        await originalCreate({
+      // Another request creates the item between this one's read and its conditional
+      // insert, so the insert writes nothing and the add goes to the winner instead.
+      const client = db as any;
+      const originalExecuteRaw = client.$executeRaw.bind(client);
+      const executeRawSpy = vi.spyOn(client, "$executeRaw").mockImplementationOnce(async (...args: unknown[]) => {
+        await db.shoppingListItem.create({
           data: {
             id: "compat-web-manual-race-winner",
             shoppingListId: shoppingList.id,
@@ -783,14 +808,9 @@ describe("Shopping List Route", () => {
             categoryKey: "winner-category",
           },
         });
-        throw Object.assign(new Error("Unique constraint failed on the fields"), {
-          code: "P2002",
-          meta: {
-            modelName: "ShoppingListItem",
-            target: ["shoppingListId", "unitId", "ingredientRefId"],
-          },
-        });
+        return originalExecuteRaw(...args);
       });
+      executeRawSpy.mockImplementation(originalExecuteRaw);
       const request = await createFormRequest(
         {
           intent: "addItem",
@@ -816,7 +836,8 @@ describe("Shopping List Route", () => {
         categoryKey: expect.any(String),
         iconKey: "package",
       });
-      expect(createSpy).toHaveBeenCalledTimes(1);
+      // The insert that found the item taken, then the addition.
+      expect(executeRawSpy).toHaveBeenCalledTimes(2);
       await expect(
         db.shoppingListItem.count({
           where: { shoppingListId: shoppingList.id, ingredientRefId: ingredientRef.id, unitId: unit.id },
@@ -843,30 +864,25 @@ describe("Shopping List Route", () => {
             deletedAt: new Date(),
           },
         });
-        // Another request brings the item back as a live row just after this one found only the
-        // removed row, so this request's own restore hits the active-identity index for real.
-        const delegate = db.shoppingListItem as any;
-        const originalCreate = delegate.create.bind(delegate);
-        const originalFindFirst = delegate.findFirst.bind(delegate);
-        let winnerInserted = false;
-        const findFirstSpy = vi.spyOn(delegate, "findFirst").mockImplementation(async (args: any) => {
-          const result = await originalFindFirst(args);
-          if (!winnerInserted && args?.where?.deletedAt?.not === null && result?.id === tombstone.id) {
-            winnerInserted = true;
-            await originalCreate({
-              data: {
-                id: "compat-web-manual-restore-winner",
-                shoppingListId: shoppingList.id,
-                ingredientRefId: ingredientRef.id,
-                unitId: unit.id,
-                quantity: 4,
-                sortIndex: 1,
-                categoryKey: "winner-category",
-              },
-            });
-          }
-          return result;
+        // Another request restores the item first, so this request's restore of the
+        // tombstone hits the active-identity index and must add to the winner instead.
+        const client = db as any;
+        const originalExecuteRaw = client.$executeRaw.bind(client);
+        const executeRawSpy = vi.spyOn(client, "$executeRaw").mockImplementationOnce(async (...args: unknown[]) => {
+          await db.shoppingListItem.create({
+            data: {
+              id: "compat-web-manual-restore-winner",
+              shoppingListId: shoppingList.id,
+              ingredientRefId: ingredientRef.id,
+              unitId: unit.id,
+              quantity: 4,
+              sortIndex: 1,
+              categoryKey: "winner-category",
+            },
+          });
+          return originalExecuteRaw(...args);
         });
+        executeRawSpy.mockImplementation(originalExecuteRaw);
 
         const response = await action({
           request: await createFormRequest(
@@ -888,8 +904,7 @@ describe("Shopping List Route", () => {
           .resolves.toMatchObject({ quantity: 7, deletedAt: null, iconKey: "package" });
         await expect(db.shoppingListItem.findUniqueOrThrow({ where: { id: tombstone.id } }))
           .resolves.toMatchObject({ quantity: 20, deletedAt: expect.any(Date) });
-        expect(winnerInserted).toBe(true);
-        findFirstSpy.mockRestore();
+        expect(executeRawSpy).toHaveBeenCalledTimes(2);
       } finally {
         await restoreFullIdentityIndex();
       }
