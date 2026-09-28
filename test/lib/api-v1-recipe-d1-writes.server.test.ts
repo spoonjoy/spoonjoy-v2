@@ -189,6 +189,28 @@ describe("REST recipe writes on a D1 binding", () => {
       await expect(createNativeRecipe(db, chefId, createInput("Lentils"), { d1: failing() })).rejects.toThrow("D1 is down");
     });
 
+    it("creates steps with their output uses in the recipe's one batch, as the Prisma path does", async () => {
+      const input = (title: string) => ({
+        ...createInput(title),
+        steps: [
+          { stepTitle: null, description: "Soak", duration: null, ingredients: [{ quantity: 1, unit: "cup", ingredientName: "beans" }], outputStepNums: [] },
+          { stepTitle: null, description: "Chop", duration: null, ingredients: [{ quantity: 1, unit: "whole", ingredientName: "onion" }] },
+          { stepTitle: null, description: "Simmer", duration: null, ingredients: [], outputStepNums: [1, 2] },
+        ],
+      });
+      const uses = async (recipeId: string) => (await db.stepOutputUse.findMany({ where: { recipeId } }))
+        .map((use) => `${use.outputStepNum}->${use.inputStepNum}`)
+        .sort();
+
+      await createNativeRecipe(db, chefId, input("Prisma Chili"), { recipeId: "prisma-chili" });
+      const before = d1.roundTrips();
+      await createNativeRecipe(db, chefId, input("D1 Chili"), { recipeId: "d1-chili", d1: d1.binding });
+
+      expect(d1.roundTrips() - before).toBe(1);
+      expect(await uses("prisma-chili")).toEqual(["1->3", "2->3"]);
+      expect(await uses("d1-chili")).toEqual(["1->3", "2->3"]);
+    });
+
     it("updates fields and touches cookbooks as the Prisma path does", async () => {
       await expectParity(({ recipe }, binding) =>
         updateNativeRecipe(db, chefId, recipe.id, { clientMutationId: "u", fields: { description: "New" } }, binding));

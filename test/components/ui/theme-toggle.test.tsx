@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { ThemeToggle, ThemeDropdown } from '~/components/ui/theme-toggle'
-import { ThemeProvider } from '~/components/ui/theme-provider'
+import {
+  THEME_SWITCH_DURATION_MS,
+  THEME_SWITCHING_ATTRIBUTE,
+  ThemeProvider,
+} from '~/components/ui/theme-provider'
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -41,6 +45,29 @@ describe('ThemeToggle', () => {
     localStorageMock.clear()
     document.documentElement.classList.remove('light', 'dark')
     vi.clearAllMocks()
+  })
+
+  it('opens the colour-fade window on <html> for the switch it triggers, then closes it', async () => {
+    render(
+      <ThemeProvider>
+        <ThemeToggle />
+      </ThemeProvider>
+    )
+    const button = await screen.findByRole('button', { name: 'Switch theme to dark mode' })
+
+    vi.useFakeTimers()
+    try {
+      fireEvent.click(button)
+      expect(document.documentElement).toHaveAttribute(THEME_SWITCHING_ATTRIBUTE)
+      expect(document.documentElement.classList.contains('dark')).toBe(true)
+
+      act(() => {
+        vi.advanceTimersByTime(THEME_SWITCH_DURATION_MS)
+      })
+      expect(document.documentElement).not.toHaveAttribute(THEME_SWITCHING_ATTRIBUTE)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('renders a button', async () => {

@@ -588,6 +588,7 @@ describe("API v1 native account settings", () => {
     const cookie = await sessionCookie(userId);
     const validPhotos = [
       { requestId: "req_me_photo_gif", file: new File([new TextEncoder().encode("GIF89a")], "profile.gif", { type: "image/gif" }), prefix: /^data:image\/gif;base64,/ },
+      { requestId: "req_me_photo_gif87a", file: new File([new TextEncoder().encode("GIF87a")], "profile.gif", { type: "image/gif" }), prefix: /^data:image\/gif;base64,/ },
       { requestId: "req_me_photo_png", file: new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00])], "profile.png", { type: "image/png" }), prefix: /^data:image\/png;base64,/ },
       { requestId: "req_me_photo_jpeg", file: new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00])], "profile.jpeg", { type: "image/jpeg" }), prefix: /^data:image\/jpeg;base64,/ },
       { requestId: "req_me_photo_webp", file: new File([new Uint8Array([0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50])], "profile.webp", { type: "image/webp" }), prefix: /^data:image\/webp;base64,/ },
@@ -671,6 +672,17 @@ describe("API v1 native account settings", () => {
 
     expect(spoofed.status).toBe(400);
     expect(spoofedPayload.error).toMatchObject({ code: "validation_error", details: { field: "photo" } });
+
+    // "GIF8" alone is not a GIF header: the full GIF87a or GIF89a signature is required.
+    const truncatedGif = await uploadProfilePhoto(
+      cookie,
+      new File([new TextEncoder().encode("GIF8<html>")], "fake.gif", { type: "image/gif" }),
+      "req_me_photo_truncated_gif",
+    );
+    const truncatedGifPayload = await readJson(truncatedGif);
+
+    expect(truncatedGif.status).toBe(400);
+    expect(truncatedGifPayload.error).toMatchObject({ code: "validation_error", details: { field: "photo" } });
 
     const unknownTypeUpload = await uploadProfilePhoto(
       cookie,

@@ -232,7 +232,8 @@ function positiveInteger(value: unknown, field: string): ApiV1RecipeStepResult<n
   return success(parsed);
 }
 
-function parseOutputStepNums(value: unknown, field = "outputStepNums"): ApiV1RecipeStepResult<number[]> {
+/** A step's `outputStepNums`: an array of positive integers, without repeats. Shared with recipe create. */
+export function parseOutputStepNums(value: unknown, field = "outputStepNums"): ApiV1RecipeStepResult<number[]> {
   if (value === undefined || value === null) return success([]);
   if (!Array.isArray(value)) {
     return fieldFailure(field, `${field} must be an array`);

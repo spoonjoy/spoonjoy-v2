@@ -167,6 +167,116 @@ describe("MCP recipe tools on a D1 binding", () => {
     expect(races).toBe(3);
   });
 
+  describe("delete_recipe", () => {
+    const OLD = new Date("2026-01-01T00:00:00.000Z");
+
+    async function seedInCookbook(title: string) {
+      const id = await createdId(await callSpoonjoyApiOperation("create_recipe", { title, steps }, context()));
+      const cookbook = await db.cookbook.create({ data: { title: `${title} book`, authorId: principal.id } });
+      await db.recipeInCookbook.create({ data: { cookbookId: cookbook.id, recipeId: id, addedById: principal.id } });
+      await db.recipe.update({ where: { id }, data: { updatedAt: OLD } });
+      await db.cookbook.update({ where: { id: cookbook.id }, data: { updatedAt: OLD } });
+      return { id, cookbookId: cookbook.id };
+    }
+
+    async function syncState(recipeId: string, cookbookId: string) {
+      const recipe = await db.recipe.findUniqueOrThrow({ where: { id: recipeId } });
+      const cookbook = await db.cookbook.findUniqueOrThrow({ where: { id: cookbookId } });
+      const tombstones = await db.nativeSyncTombstone.findMany({ where: { resourceId: recipeId } });
+      return {
+        deleted: recipe.deletedAt !== null,
+        updatedAtIsDeletedAt: recipe.updatedAt.getTime() === recipe.deletedAt?.getTime(),
+        cookbookTouched: cookbook.updatedAt.getTime() === recipe.deletedAt?.getTime(),
+        tombstones: tombstones.map((tombstone) => ({
+          accountId: tombstone.accountId,
+          resourceType: tombstone.resourceType,
+          title: tombstone.title,
+          deletedAtMatches: tombstone.deletedAt.getTime() === recipe.deletedAt?.getTime(),
+        })),
+      };
+    }
+
+    const synced = (title: string) => ({
+      deleted: true,
+      updatedAtIsDeletedAt: true,
+      cookbookTouched: true,
+      tombstones: [{ accountId: principal.id, resourceType: "recipe", title, deletedAtMatches: true }],
+    });
+
+    it.each([
+      ["without a D1 binding", false],
+      ["on a D1 binding, in one batch", true],
+    ])("writes the sync tombstone, bumps updatedAt and touches the cookbooks %s", async (_label, onD1) => {
+      const { id, cookbookId } = await seedInCookbook("Tombstoned Soup");
+      const before = d1.roundTrips();
+
+      const result = await callSpoonjoyApiOperation("delete_recipe", { id }, context(onD1 ? d1.binding : undefined));
+
+      expect(result).toMatchObject({ deleted: true, recipe: { id, title: "Tombstoned Soup", deletedAt: expect.any(String) } });
+      expect(d1.roundTrips() - before).toBe(onD1 ? 1 : 0);
+      expect(await syncState(id, cookbookId)).toEqual(synced("Tombstoned Soup"));
+    });
+
+    it("answers a delete that lost the race to another delete as already deleted, writing nothing twice", async () => {
+      const { id, cookbookId } = await seedInCookbook("Raced Soup");
+      const otherDelete: D1ReadDatabase = {
+        prepare: (sql) => d1.binding.prepare(sql),
+        async batch(statements) {
+          if (!(await db.recipe.findUniqueOrThrow({ where: { id } })).deletedAt) {
+            await callSpoonjoyApiOperation("delete_recipe", { id }, context());
+          }
+          return d1.binding.batch(statements as never);
+        },
+      };
+
+      const result = await callSpoonjoyApiOperation("delete_recipe", { id }, context(otherDelete));
+
+      const recipe = await db.recipe.findUniqueOrThrow({ where: { id } });
+      expect(result).toEqual({ deleted: false, recipe: { id, title: "Raced Soup", deletedAt: recipe.deletedAt!.toISOString() } });
+      expect(await syncState(id, cookbookId)).toEqual(synced("Raced Soup"));
+    });
+
+    it("answers the changed-recipe message when every attempt loses a race and the recipe stays active", async () => {
+      const { id } = await seedInCookbook("Contested Soup");
+      let batches = 0;
+      // Another request deletes the recipe just before each batch and restores it just after,
+      // so the guard fails every time while the recipe is still active afterwards.
+      const flickering: D1ReadDatabase = {
+        prepare: (sql) => d1.binding.prepare(sql),
+        async batch(statements) {
+          batches += 1;
+          await db.recipe.update({ where: { id }, data: { deletedAt: new Date() } });
+          try {
+            return await d1.binding.batch(statements as never);
+          } finally {
+            await db.recipe.update({ where: { id }, data: { deletedAt: null } });
+          }
+        },
+      };
+
+      await expect(callSpoonjoyApiOperation("delete_recipe", { id }, context(flickering)))
+        .rejects.toThrow("This recipe changed while this request ran; reload it and try again.");
+      expect(batches).toBeGreaterThan(1);
+      await expect(db.recipe.findUniqueOrThrow({ where: { id } })).resolves.toMatchObject({ deletedAt: null });
+      await expect(db.nativeSyncTombstone.count({ where: { resourceId: id } })).resolves.toBe(0);
+    });
+
+    it("answers Recipe not found when the recipe is removed before the batch", async () => {
+      const { id } = await seedInCookbook("Vanishing Soup");
+      const removed: D1ReadDatabase = {
+        prepare: (sql) => d1.binding.prepare(sql),
+        async batch(statements) {
+          await db.recipeInCookbook.deleteMany({ where: { recipeId: id } });
+          await db.recipe.deleteMany({ where: { id } });
+          return d1.binding.batch(statements as never);
+        },
+      };
+
+      await expect(callSpoonjoyApiOperation("delete_recipe", { id }, context(removed))).rejects.toThrow("Recipe not found");
+      await expect(db.nativeSyncTombstone.count({ where: { resourceId: id } })).resolves.toBe(0);
+    });
+  });
+
   describe("with a cover image", () => {
     const image = "data:image/png;base64," + Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]).toString("base64");
     const imageContext = (DB?: D1ReadDatabase): SpoonjoyApiContext => ({ ...context(DB), allowLocalImageFallback: true });

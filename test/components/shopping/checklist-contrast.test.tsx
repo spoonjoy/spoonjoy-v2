@@ -95,9 +95,11 @@ describe("shopping list colour contrast", () => {
   });
 
   it("lets state controls opt out of the theme fade: .sj-instant-state has no transition and outranks the global rule", () => {
-    const globalButtonRule = cssRuleIndex(/html \*:where\(input, textarea, select, button\)\s*{[^}]*transition:/);
+    // The theme fade only runs while <html> carries data-theme-switching; its control rule is wrapped
+    // in :where(), so it has zero specificity.
+    const globalButtonRule = cssRuleIndex(/:where\(html\[data-theme-switching\] :is\(input, textarea, select, button\)\)\s*{[^}]*transition:/);
     const instant = cssRuleIndex(/\.sj-instant-state\s*{\s*transition:\s*none;?\s*}/);
-    // Both are unlayered, so the class wins on specificity (0,1,0 over 0,0,1) and comes later.
+    // Both are unlayered, so the class wins on specificity (0,1,0 over 0,0,0) and comes later.
     expect(instant).toBeGreaterThan(globalButtonRule);
     expect(CSS.slice(0, instant)).not.toMatch(/@layer[^{]*{[^}]*$/);
   });

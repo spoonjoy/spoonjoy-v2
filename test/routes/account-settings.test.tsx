@@ -15,6 +15,9 @@ import { faker } from "@faker-js/faker";
 import AccountSettings, { loader, action, meta } from "~/routes/account.settings";
 import type { AccountSettingsLoaderData } from "~/lib/account-settings.server";
 
+const JPEG_PHOTO_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+const PNG_PHOTO_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
 describe("Account Settings Route", () => {
   let testUserId: string;
   let testUserEmail: string;
@@ -2283,7 +2286,7 @@ describe("Account Settings Route", () => {
         const formData = new UndiciFormData();
         formData.append("intent", "uploadPhoto");
         // Simulate file upload with a mock file
-        const mockFile = new File(["fake image data"], "test-photo.jpg", { type: "image/jpeg" });
+        const mockFile = new File([JPEG_PHOTO_BYTES], "test-photo.jpg", { type: "image/jpeg" });
         formData.append("photo", mockFile);
 
         const headers = new Headers();
@@ -2401,6 +2404,61 @@ describe("Account Settings Route", () => {
         expect(result.message).toContain("image");
       });
 
+      it.each([
+        {
+          label: "an SVG script disguised as a JPEG",
+          bytes: new TextEncoder().encode("<svg><script>alert(1)</script></svg>"),
+          name: "avatar.jpg",
+          type: "image/jpeg",
+        },
+        {
+          label: "PNG bytes declared as a JPEG",
+          bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+          name: "avatar.jpg",
+          type: "image/jpeg",
+        },
+        {
+          label: "GIF bytes declared as a WebP",
+          bytes: new TextEncoder().encode("GIF89a"),
+          name: "avatar.webp",
+          type: "image/webp",
+        },
+      ])("should sniff the bytes and reject $label", async ({ bytes, name, type }) => {
+        const session = await sessionStorage.getSession();
+        session.set("userId", testUserId);
+        const setCookieHeader = await sessionStorage.commitSession(session);
+        const cookieValue = setCookieHeader.split(";")[0];
+
+        const formData = new UndiciFormData();
+        formData.append("intent", "uploadPhoto");
+        formData.append("photo", new File([bytes], name, { type }));
+
+        const headers = new Headers();
+        headers.set("Cookie", cookieValue);
+
+        const request = new UndiciRequest("http://localhost:3000/account/settings", {
+          method: "POST",
+          headers,
+          body: formData,
+          duplex: "half",
+        });
+
+        const result = await action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any);
+
+        expect(result).toEqual({
+          success: false,
+          intent: "uploadPhoto",
+          error: "invalid_file_type",
+          message: "Please upload an image file",
+        });
+        const user = await db.user.findUnique({ where: { id: testUserId }, select: { photoUrl: true } });
+        expect(user?.photoUrl ?? null).toBeNull();
+      });
+
       it("should reject SVG profile photos even though they are image files", async () => {
         const session = await sessionStorage.getSession();
         session.set("userId", testUserId);
@@ -2443,9 +2501,9 @@ describe("Account Settings Route", () => {
 
         const formData = new UndiciFormData();
         formData.append("intent", "uploadPhoto");
-        // Simulate a file larger than 5MB (simulated via size property in test)
-        // Note: actual file creation would be expensive, so we'll check the implementation handles size
-        const largeFileData = new Uint8Array(6 * 1024 * 1024); // 6MB
+        // Just over the 5MB photo limit, but within the multipart body limit, so the photo check
+        // (not the body reader) answers.
+        const largeFileData = new Uint8Array(5 * 1024 * 1024 + 1);
         const mockFile = new File([largeFileData], "large-photo.jpg", { type: "image/jpeg" });
         formData.append("photo", mockFile);
 
@@ -2470,6 +2528,60 @@ describe("Account Settings Route", () => {
         expect(result.message).toContain("5MB");
       });
 
+      it("refuses an oversized photo body before buffering it whole", async () => {
+        const session = await sessionStorage.getSession();
+        session.set("userId", testUserId);
+        const cookieValue = (await sessionStorage.commitSession(session)).split(";")[0];
+
+        // A 20MB streamed multipart body with no declared length: reading must stop just past
+        // the upload limit instead of buffering the whole body.
+        const chunk = new Uint8Array(1024 * 1024);
+        let pulled = 0;
+        let pulls = 0;
+        const body = new ReadableStream<Uint8Array>({
+          pull(controller) {
+            if (pulls++ === 20) {
+              controller.close();
+              return;
+            }
+            pulled += chunk.byteLength;
+            controller.enqueue(chunk);
+          },
+        }, { highWaterMark: 0 });
+        const request = new UndiciRequest("http://localhost:3000/account/settings", {
+          method: "POST",
+          headers: { Cookie: cookieValue, "Content-Type": "multipart/form-data; boundary=spoonjoy" },
+          body,
+          duplex: "half",
+        });
+
+        const result = await action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any);
+
+        expect(result).toEqual({ success: false, intent: "uploadPhoto", error: "file_too_large", message: "Photo must be less than 5MB" });
+        expect(pulled).toBeLessThan(8 * 1024 * 1024);
+      });
+
+      it("still fails a settings post whose body is not valid form data", async () => {
+        const session = await sessionStorage.getSession();
+        session.set("userId", testUserId);
+        const cookieValue = (await sessionStorage.commitSession(session)).split(";")[0];
+        const request = new UndiciRequest("http://localhost:3000/account/settings", {
+          method: "POST",
+          headers: { Cookie: cookieValue, "Content-Type": "multipart/form-data; boundary=spoonjoy" },
+          body: "not a multipart body",
+        });
+
+        await expect(action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any)).rejects.toThrow();
+      });
+
       it("should update user photoUrl in database after successful upload", async () => {
         const session = await sessionStorage.getSession();
         session.set("userId", testUserId);
@@ -2478,7 +2590,7 @@ describe("Account Settings Route", () => {
 
         const formData = new UndiciFormData();
         formData.append("intent", "uploadPhoto");
-        const mockFile = new File(["fake image data"], "test-photo.jpg", { type: "image/jpeg" });
+        const mockFile = new File([JPEG_PHOTO_BYTES], "test-photo.jpg", { type: "image/jpeg" });
         formData.append("photo", mockFile);
 
         const headers = new Headers();
@@ -2656,7 +2768,7 @@ describe("Account Settings Route", () => {
 
         const formData = new UndiciFormData();
         formData.append("intent", "uploadPhoto");
-        const mockFile = new File(["new image data"], "new-photo.png", { type: "image/png" });
+        const mockFile = new File([PNG_PHOTO_BYTES], "new-photo.png", { type: "image/png" });
         formData.append("photo", mockFile);
 
         const headers = new Headers();
@@ -2697,7 +2809,7 @@ describe("Account Settings Route", () => {
 
         const formData = new UndiciFormData();
         formData.append("intent", "uploadPhoto");
-        const mockFile = new File(["fake image data"], "test-photo.jpg", { type: "image/jpeg" });
+        const mockFile = new File([JPEG_PHOTO_BYTES], "test-photo.jpg", { type: "image/jpeg" });
         formData.append("photo", mockFile);
 
         const headers = new Headers();
@@ -2739,7 +2851,7 @@ describe("Account Settings Route", () => {
 
         const formData = new UndiciFormData();
         formData.append("intent", "uploadPhoto");
-        const mockFile = new File(["fake image data"], "test-photo.png", { type: "image/png" });
+        const mockFile = new File([PNG_PHOTO_BYTES], "test-photo.png", { type: "image/png" });
         formData.append("photo", mockFile);
 
         const headers = new Headers();
@@ -2775,7 +2887,7 @@ describe("Account Settings Route", () => {
         const formData = new UndiciFormData();
         formData.append("intent", "uploadPhoto");
         // File ending with a dot - split('.').pop() returns empty string, triggering 'jpg' fallback
-        const mockFile = new File(["fake image data"], "photo.", { type: "image/jpeg" });
+        const mockFile = new File([JPEG_PHOTO_BYTES], "photo.", { type: "image/jpeg" });
         formData.append("photo", mockFile);
 
         const headers = new Headers();

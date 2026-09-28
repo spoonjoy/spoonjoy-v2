@@ -62,8 +62,17 @@ function bytesStartWith(bytes: Uint8Array, signature: readonly number[]): boolea
   return signature.every((byte, index) => bytes[index] === byte);
 }
 
-function detectImageMimeType(bytes: Uint8Array): string | null {
-  if (bytesStartWith(bytes, [0x47, 0x49, 0x46, 0x38])) {
+export type DetectedImageMimeType = "image/gif" | "image/jpeg" | "image/png" | "image/webp";
+
+const GIF87A_SIGNATURE = [0x47, 0x49, 0x46, 0x38, 0x37, 0x61] as const;
+const GIF89A_SIGNATURE = [0x47, 0x49, 0x46, 0x38, 0x39, 0x61] as const;
+
+/**
+ * The image format the bytes really are, from their signature, or null for anything else. The one
+ * sniffer every upload path uses, so the web and API paths accept exactly the same bytes.
+ */
+export function detectImageMimeType(bytes: Uint8Array): DetectedImageMimeType | null {
+  if (bytesStartWith(bytes, GIF87A_SIGNATURE) || bytesStartWith(bytes, GIF89A_SIGNATURE)) {
     return "image/gif";
   }
   if (bytesStartWith(bytes, [0xff, 0xd8, 0xff])) {
@@ -85,6 +94,62 @@ function detectImageMimeType(bytes: Uint8Array): string | null {
   return null;
 }
 
+/** The most multipart body an image upload may send: the image limit plus room for the other fields. */
+export const IMAGE_UPLOAD_MULTIPART_MAX_BYTES = IMAGE_MAX_FILE_SIZE + 512 * 1024;
+
+/**
+ * Reads a multipart image upload's form data, or answers null as soon as the body passes
+ * IMAGE_UPLOAD_MULTIPART_MAX_BYTES, whether by its declared length or while streaming, so an
+ * oversized body is never buffered whole.
+ */
+export async function imageUploadFormDataWithinLimit(request: Request): Promise<FormData | null> {
+  const declaredLength = Number(request.headers.get("Content-Length") ?? "0");
+  if (Number.isFinite(declaredLength) && declaredLength > IMAGE_UPLOAD_MULTIPART_MAX_BYTES) {
+    return null;
+  }
+
+  if (!request.body) {
+    return request.formData();
+  }
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > IMAGE_UPLOAD_MULTIPART_MAX_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        return null;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const replayHeaders: Record<string, string> = {};
+  request.headers.forEach((value, key) => {
+    if (key.toLowerCase() !== "content-length") {
+      replayHeaders[key] = value;
+    }
+  });
+  const replayBytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    replayBytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const RequestConstructor = request.constructor as new (input: string, init: RequestInit) => Request;
+  return await new RequestConstructor(request.url, {
+    method: request.method,
+    headers: replayHeaders,
+    body: new Blob([replayBytes.buffer]),
+  }).formData();
+}
+
 export async function validateImageFileForStorage(
   file: File,
   options: ValidateImageFileOptions,
@@ -96,11 +161,14 @@ export async function validateImageFileForStorage(
     return options.messages.invalidType;
   }
 
+  // Trust the bytes, not the client-declared type: the sniffed format must
+  // match the declared one. GIF is only accepted when the caller lists it
+  // explicitly (profile photos); food photos never accept it.
   const bytes = new Uint8Array(await file.arrayBuffer());
   const detectedType = detectImageMimeType(bytes);
   if (
     detectedType === null ||
-    detectedType === "image/gif" ||
+    (detectedType === "image/gif" && !options.allowedTypes?.includes("image/gif")) ||
     detectedType !== file.type
   ) {
     return options.messages.invalidType;
