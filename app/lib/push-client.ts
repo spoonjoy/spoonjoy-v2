@@ -96,6 +96,21 @@ export async function registerServiceWorker(): Promise<unknown | null> {
   return nav.serviceWorker.register("/sw.js", { scope: "/" });
 }
 
+/**
+ * The root layout's fire-and-forget registration, run once per full page load. A registration
+ * still in flight when the page navigates away is cancelled, and WebKit rejects it with a
+ * `SecurityError` ("Script …/sw.js load failed"); left unhandled, that surfaces as an uncaught
+ * error in the console. Registration is best-effort — the next full page load finds no
+ * registration and tries again — so any rejection is swallowed here and reported as `null`.
+ */
+export async function registerServiceWorkerOnPageLoad(): Promise<unknown | null> {
+  try {
+    return await registerServiceWorker();
+  } catch {
+    return null;
+  }
+}
+
 export type SubscribeResult =
   | { ok: true }
   | {

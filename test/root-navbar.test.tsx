@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it } from "vitest";
 
@@ -26,6 +26,41 @@ function renderNavbar(userId: string | null = null, path = "/") {
 }
 
 describe("AppNavbar", () => {
+  it("clears cached cook progress when the cook logs out", async () => {
+    window.localStorage.setItem("spoonjoy-cook-progress:user:user-1:recipe-1", "{}");
+    window.localStorage.setItem("spoonjoy-cook-progress:recipe-1", "{}");
+    window.localStorage.setItem("spoonjoy-theme", "dark");
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/logout",
+          action: () => null,
+          element: <p>Signed out</p>,
+        },
+        {
+          path: "*",
+          element: (
+            <ThemeProvider>
+              <AppNavbar userId="user-1" />
+            </ThemeProvider>
+          ),
+        },
+      ],
+      { initialEntries: ["/"] },
+    );
+    render(<RouterProvider router={router} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Log out" }));
+
+    await waitFor(() => {
+      expect(router.state.navigation.state).toBe("idle");
+    });
+    expect(window.localStorage.getItem("spoonjoy-cook-progress:user:user-1:recipe-1")).toBeNull();
+    expect(window.localStorage.getItem("spoonjoy-cook-progress:recipe-1")).toBeNull();
+    expect(window.localStorage.getItem("spoonjoy-theme")).toBe("dark");
+    window.localStorage.clear();
+  });
+
   it("uses the real Spoonjoy mark for the desktop brand", () => {
     const { container } = renderNavbar("chef-1");
 

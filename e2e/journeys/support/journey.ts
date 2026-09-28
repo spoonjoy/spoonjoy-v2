@@ -23,6 +23,7 @@ import { test as base, expect } from "@playwright/test";
 import type { ConsoleMessage, Page } from "@playwright/test";
 import { runAxe } from "./axe";
 import { redactUrl, redactUrlsInText } from "./redact";
+import { isWebKitCancelledSameOriginFetch } from "./webkit-noise";
 
 const FAILING_IMPACTS = new Set(["serious", "critical"]);
 
@@ -177,6 +178,8 @@ export function watchConsole(page: Page): ConsoleWatcher {
     issues.push({ text, location: url ? redactUrl(url) : undefined });
   };
   const onPageError = (error: Error) => {
+    // Not an app error: see support/webkit-noise.ts.
+    if (isWebKitCancelledSameOriginFetch(error, process.env.SPOONJOY_JOURNEYS_BASE_URL)) return;
     const text = redactUrlsInText(error.message);
     if (isAllowed(text)) return;
     issues.push({ text });

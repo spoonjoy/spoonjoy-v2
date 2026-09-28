@@ -24,7 +24,9 @@ import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.serve
 import { getOAuthEnv } from "~/lib/oauth-route.server";
 import { toAnalyticsPageUrl } from "~/lib/analytics";
 import { applyStorageSchemaMigration } from "~/lib/client-storage-schema";
-import { registerServiceWorker } from "~/lib/push-client";
+import { clearCookProgressCache } from "~/lib/cook-session-sync";
+import { useCookProgressCacheOwner } from "~/hooks/use-cook-session-sync";
+import { registerServiceWorkerOnPageLoad } from "~/lib/push-client";
 import { ThemeProvider } from "~/components/ui/theme-provider";
 import { ToastProvider } from "~/components/ui/toast";
 import { ThemeToggle } from "~/components/ui/theme-toggle";
@@ -162,7 +164,7 @@ export function AppNavbar({
           <div className="sj-desktop-nav-actions">
             <ThemeToggle />
             <RouterLink to="/account/settings" className={navLinkClass} data-current={currentNav === "account"}>Account</RouterLink>
-            <Form method="post" action="/logout" className="m-0">
+            <Form method="post" action="/logout" className="m-0" onSubmit={clearCookProgressCache}>
               <button type="submit" className={navLinkClass} aria-label="Log out">
                 Logout
               </button>
@@ -195,7 +197,7 @@ export default function App() {
   // Apply storage schema migration after hydration (client-side only)
   useEffect(() => {
     applyStorageSchemaMigration();
-    void registerServiceWorker();
+    void registerServiceWorkerOnPageLoad();
   }, []);
 
   // Record which page each history entry shows, for recipe "Back" (after the migration above,
@@ -210,6 +212,10 @@ export default function App() {
       });
     }
   }, [location.pathname, posthog]);
+
+  // Cached cook progress never outlives its account in this browser (the logout forms clear it
+  // all; this catches sessions that end any other way).
+  useCookProgressCacheOwner(userId);
 
   // Identify user when logged in
   useEffect(() => {
@@ -226,10 +232,13 @@ export default function App() {
           <header className="sj-desktop-topbar sticky top-0 z-30 hidden items-center px-4 lg:flex">
             <AppNavbar userId={userId} oauthProviders={oauthProviders} />
           </header>
+          {/* The bottom padding clears the dock (SpoonDock): its bottom margin,
+              max(1rem, safe-area inset), plus its 4.25rem height and a 1rem gap, so the last
+              thing on a page never sits under it. */}
           <main
             id="main"
             tabIndex={-1}
-            className="sj-desktop-surface sj-mobile-surface grow pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0"
+            className="sj-desktop-surface sj-mobile-surface grow pb-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] lg:pb-0"
           >
             <Outlet />
           </main>
@@ -277,7 +286,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <html lang="en" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {/* viewport-fit=cover lets iOS report its safe-area insets (the home indicator, the
+            notch in landscape) to env(safe-area-inset-*), which the dock, the pantry and the page
+            padding use; without it they are all 0. */}
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="theme-color" content="#fbfaf6" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />

@@ -1,4 +1,5 @@
 import type { Route } from "./+types/signup";
+import { useEffect, useRef } from "react";
 import { Form, redirect, data, useActionData, useLoaderData, useSearchParams } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { createUser, emailExists } from "~/lib/auth.server";
@@ -25,6 +26,12 @@ interface ActionData {
     password?: string;
     confirmPassword?: string;
     general?: string;
+  };
+  // What was typed, so a full-page submit (before hydration) comes back with the fields filled
+  // in. Never the password.
+  values?: {
+    email: string;
+    username: string;
   };
 }
 
@@ -116,7 +123,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   if (Object.keys(errors).length > 0) {
-    return data({ errors }, { status: 400 });
+    return data({ errors, values: { email, username } }, { status: 400 });
   }
 
   // Create user
@@ -132,6 +139,14 @@ export default function Signup() {
   const oauthProviders = loaderData?.oauthProviders ?? [];
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get("redirectTo") ?? undefined;
+  const formRef = useRef<HTMLFormElement>(null);
+  const errors = actionData?.errors;
+
+  // The browser no longer checks the fields (noValidate), so it no longer moves focus to the
+  // first bad one either. Do that here each time the server answers with errors.
+  useEffect(() => {
+    formRef.current?.querySelector<HTMLInputElement>('[aria-invalid="true"]')?.focus();
+  }, [errors]);
 
   return (
     <AuthLayout
@@ -156,17 +171,21 @@ export default function Signup() {
           </>
         )}
 
-        <Form method="post" className={oauthProviders.length > 0 ? "space-y-6" : "mt-8 space-y-6"}>
+        {/* noValidate: the action checks every rule and answers with the messages below. Left to
+            the browser, required/minLength would stop the submit with a native bubble instead, so
+            a short username or password never showed the app's own message. */}
+        <Form ref={formRef} method="post" noValidate className={oauthProviders.length > 0 ? "space-y-6" : "mt-8 space-y-6"}>
           <Field>
             <Label htmlFor="email">Email</Label>
             <Input
               type="email"
               id="email"
               name="email"
+              defaultValue={actionData?.values?.email}
               required
-              invalid={/* istanbul ignore next -- @preserve */ !!actionData?.errors?.email}
+              invalid={!!actionData?.errors?.email}
             />
-            {/* istanbul ignore next -- @preserve */ actionData?.errors?.email && (
+            {actionData?.errors?.email && (
               <ErrorMessage>{actionData.errors.email}</ErrorMessage>
             )}
           </Field>
@@ -177,11 +196,12 @@ export default function Signup() {
               type="text"
               id="username"
               name="username"
+              defaultValue={actionData?.values?.username}
               required
               minLength={3}
-              invalid={/* istanbul ignore next -- @preserve */ !!actionData?.errors?.username}
+              invalid={!!actionData?.errors?.username}
             />
-            {/* istanbul ignore next -- @preserve */ actionData?.errors?.username && (
+            {actionData?.errors?.username && (
               <ErrorMessage>{actionData.errors.username}</ErrorMessage>
             )}
           </Field>
@@ -194,9 +214,9 @@ export default function Signup() {
               name="password"
               required
               minLength={8}
-              invalid={/* istanbul ignore next -- @preserve */ !!actionData?.errors?.password}
+              invalid={!!actionData?.errors?.password}
             />
-            {/* istanbul ignore next -- @preserve */ actionData?.errors?.password && (
+            {actionData?.errors?.password && (
               <ErrorMessage>{actionData.errors.password}</ErrorMessage>
             )}
           </Field>
@@ -209,9 +229,9 @@ export default function Signup() {
               name="confirmPassword"
               required
               minLength={8}
-              invalid={/* istanbul ignore next -- @preserve */ !!actionData?.errors?.confirmPassword}
+              invalid={!!actionData?.errors?.confirmPassword}
             />
-            {/* istanbul ignore next -- @preserve */ actionData?.errors?.confirmPassword && (
+            {actionData?.errors?.confirmPassword && (
               <ErrorMessage>{actionData.errors.confirmPassword}</ErrorMessage>
             )}
           </Field>

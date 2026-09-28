@@ -59,6 +59,11 @@ vi.mock("../../app/lib/db.server", () => ({
   getDb: apiMocks.getDb,
 }));
 
+const cookProtocolHandler = vi.hoisted(() => vi.fn(async () => Response.json({ state: null })));
+vi.mock("../../workers/cook-session-api", () => ({
+  handleCookSessionProtocolRequest: cookProtocolHandler,
+}));
+
 const worker = (await import("../../workers/app")).default;
 const WORKER_VERSION_ID = "22222222-2222-4222-8222-222222222222";
 const ACCOUNT_DELETE_INTENT_RESOURCE = "urn:spoonjoy:account-delete-intent:v1";
@@ -346,6 +351,57 @@ describe("Cloudflare worker app", () => {
     });
     expect(apiMocks.getDb).toHaveBeenCalledWith({ DB: env.DB });
     expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(apiMocks.db, request, env);
+  });
+
+  it.each([
+    ["GET", "/api/cook-sessions/recipe-1", "detail"],
+    ["PATCH", "/api/cook-sessions/recipe-1", "patch"],
+    ["POST", "/api/cook-sessions/recipe-1/start", "start"],
+  ])("serves protocol v1 %s %s when the environment enables it", async (method, path, operation) => {
+    cookProtocolHandler.mockClear();
+    const request = new Request(`https://spoonjoy.app${path}`, {
+      method,
+      headers: { Origin: "https://spoonjoy.app" },
+    });
+    const env = versionedEnvironment({ COOK_SESSION_PROTOCOL: "v1" });
+
+    const response = await worker.fetch(request, env, context());
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ state: null });
+    expect(response.headers.get("X-Spoonjoy-Worker-Version")).toBe(WORKER_VERSION_ID);
+    expect(cookProtocolHandler).toHaveBeenCalledWith(request, env, "user-1", operation, { requireExpectedUser: true });
+  });
+
+  it("lets bearer callers leave out the expected-user header", async () => {
+    cookProtocolHandler.mockClear();
+    apiMocks.authenticateApiRequest.mockResolvedValueOnce(principal("bearer"));
+    const request = new Request("https://spoonjoy.app/api/cook-sessions/recipe-1");
+    const env = versionedEnvironment({ COOK_SESSION_PROTOCOL: "v1" });
+
+    await worker.fetch(request, env, context());
+
+    expect(cookProtocolHandler).toHaveBeenCalledWith(request, env, "user-1", "detail", { requireExpectedUser: false });
+  });
+
+  it.each([
+    ["GET", "/api/cook-sessions"],
+    ["GET", "/api/cook-sessions/recipe-1/socket"],
+    ["DELETE", "/api/cook-sessions/recipe-1"],
+    ["POST", "/api/cook-sessions/recipe-1/complete"],
+    ["POST", "/api/cook-sessions/recipe-1/abandon"],
+    ["POST", "/api/cook-sessions/recipe-1/restart"],
+  ])("keeps unimplemented %s %s inert even when protocol v1 is enabled", async (method, path) => {
+    cookProtocolHandler.mockClear();
+    const response = await worker.fetch(
+      new Request(`https://spoonjoy.app${path}`, { method, headers: { Origin: "https://spoonjoy.app" } }),
+      versionedEnvironment({ COOK_SESSION_PROTOCOL: "v1" }),
+      context(),
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBe("1");
+    expect(cookProtocolHandler).not.toHaveBeenCalled();
   });
 
   it.each([
