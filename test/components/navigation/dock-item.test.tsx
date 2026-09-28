@@ -245,6 +245,23 @@ describe('DockItem', () => {
   })
 
   describe('accessibility', () => {
+    it('button reports what it shows and hides through aria-expanded and aria-controls', () => {
+      render(
+        <RouterWrapper>
+          <DockItem icon={Home} label="Menu" ariaLabel="Open menu" expanded={false} controls="menu-panel" />
+          <DockItem icon={Home} label="Other" onClick={() => {}} />
+        </RouterWrapper>
+      )
+
+      const toggle = screen.getByRole('button', { name: 'Open menu' })
+      expect(toggle).toHaveAttribute('aria-expanded', 'false')
+      expect(toggle).toHaveAttribute('aria-controls', 'menu-panel')
+
+      const plain = screen.getByRole('button', { name: 'Other' })
+      expect(plain).not.toHaveAttribute('aria-expanded')
+      expect(plain).not.toHaveAttribute('aria-controls')
+    })
+
     it('link has accessible name', () => {
       render(
         <RouterWrapper>

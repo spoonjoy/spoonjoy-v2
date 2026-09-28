@@ -132,11 +132,13 @@ export function InstallPromptCard(props: { options?: UseInstallPromptOptions }) 
 
   if (!visible) return null;
 
+  // The bottom offset clears the mobile dock (SpoonDock): its bottom margin, max(1rem, safe-area
+  // inset), plus its 4.25rem height and a 1rem gap — the same offset the pantry uses.
   return (
     <div
       role="region"
       aria-label="Install Spoonjoy"
-      className="fixed left-4 right-4 bottom-20 z-40 mx-auto max-w-md rounded-[var(--sj-radius-surface)] border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] shadow-[var(--sj-shadow-soft)]"
+      className="fixed left-4 right-4 bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] z-40 mx-auto max-w-md rounded-[var(--sj-radius-surface)] border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] shadow-[var(--sj-shadow-soft)]"
     >
       <div className="flex items-start gap-3 p-4">
         <div className="flex-1">
