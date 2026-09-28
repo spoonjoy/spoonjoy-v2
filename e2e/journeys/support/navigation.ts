@@ -9,6 +9,15 @@ export async function waitForHydration(page: Page): Promise<void> {
   await page.waitForFunction(() => "__reactRouterDataRouter" in window);
 }
 
+// The root layout registers the service worker once per full page load until a registration
+// completes. A registration still in flight when the page navigates away is cancelled, and WebKit
+// logs that as a console error ("Script .../sw.js load failed ... due to access control checks"),
+// which fails the console gate. A journey that makes several full page loads in quick succession
+// waits for the first registration to finish, after which no later load registers again.
+export async function waitForServiceWorker(page: Page): Promise<void> {
+  await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));
+}
+
 // A link to one seeded recipe, matched by its accessible name and its href together. A page can
 // link the same recipe more than once (the kitchen home's featured tile has a photo link and a
 // title link), so this takes the first match; the href keeps unrelated QA recipes with a similar

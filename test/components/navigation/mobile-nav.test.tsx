@@ -58,7 +58,7 @@ describe("MobileNav", () => {
       );
       expect(screen.getByRole("link", { name: /my recipes/i })).toHaveAttribute("href", "/my-recipes");
       expect(screen.getByRole("link", { name: /shopping list/i })).toHaveAttribute("href", "/shopping-list");
-      expect(screen.getByRole("button", { name: /open pantry navigation/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Pantry navigation" })).toBeInTheDocument();
       expect(screen.queryByRole("link", { name: /settings/i })).not.toBeInTheDocument();
     });
 
@@ -73,7 +73,7 @@ describe("MobileNav", () => {
 
       expect(screen.queryByTestId("mobile-pantry")).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: /open pantry navigation/i }));
+      await user.click(screen.getByRole("button", { name: "Pantry navigation" }));
 
       const pantry = screen.getByTestId("mobile-pantry");
       expect(pantry).toHaveClass("backdrop-blur-2xl");
@@ -86,6 +86,124 @@ describe("MobileNav", () => {
       expect(within(pantry).getByRole("link", { name: "Shopping List" })).toHaveAttribute("href", "/shopping-list");
       expect(within(pantry).getByRole("link", { name: "Chefs" })).toHaveAttribute("href", "/chefs");
       expect(within(pantry).getByRole("link", { name: "Kitchen Search" })).toHaveAttribute("href", "/search");
+    });
+
+    it("tells assistive tech whether the pantry is open and which element it controls", async () => {
+      const user = userEvent.setup();
+      render(
+        <MemoryRouter initialEntries={["/"]}>
+          <MobileNav />
+        </MemoryRouter>,
+      );
+
+      const toggle = screen.getByRole("button", { name: "Pantry navigation" });
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+      expect(toggle).toHaveAttribute("aria-controls", "mobile-pantry");
+
+      await user.click(toggle);
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+      // The label names the control, not an action, so it stays true while the pantry is open.
+      expect(screen.getByRole("button", { name: "Pantry navigation", expanded: true })).toBe(toggle);
+      expect(screen.getByTestId("mobile-pantry")).toHaveAttribute("id", "mobile-pantry");
+
+      await user.click(toggle);
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+      expect(screen.queryByTestId("mobile-pantry")).not.toBeInTheDocument();
+    });
+
+    it("puts the pantry right after its button in document and focus order", async () => {
+      const user = userEvent.setup();
+      render(
+        <MemoryRouter initialEntries={["/"]}>
+          <MobileNav />
+        </MemoryRouter>,
+      );
+
+      const toggle = screen.getByRole("button", { name: "Pantry navigation" });
+      await user.click(toggle);
+      const pantry = screen.getByTestId("mobile-pantry");
+
+      // The pantry follows its button in the document, so VoiceOver's next item and the Tab key
+      // both go from the button into the pantry it just opened, not back into the dock.
+      expect(toggle.compareDocumentPosition(pantry) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(toggle).toHaveFocus();
+      await user.tab();
+      expect(within(pantry).getByRole("link", { name: "Recipes", exact: true })).toHaveFocus();
+
+      // From inside the pantry, Escape still closes it and returns focus to its button.
+      await user.keyboard("{Escape}");
+      expect(screen.queryByTestId("mobile-pantry")).not.toBeInTheDocument();
+      expect(toggle).toHaveFocus();
+    });
+
+    it("closes the pantry on Escape and returns focus to its button, ignoring other keys", async () => {
+      const user = userEvent.setup();
+      render(
+        <MemoryRouter initialEntries={["/"]}>
+          <MobileNav />
+        </MemoryRouter>,
+      );
+
+      const toggle = screen.getByRole("button", { name: "Pantry navigation" });
+      await user.click(toggle);
+      toggle.blur();
+
+      await user.keyboard("{Enter}");
+      expect(screen.getByTestId("mobile-pantry")).toBeInTheDocument();
+
+      await user.keyboard("{Escape}");
+      expect(screen.queryByTestId("mobile-pantry")).not.toBeInTheDocument();
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+      expect(toggle).toHaveFocus();
+
+      // Closed, Escape does nothing (the listener is gone).
+      toggle.blur();
+      await user.keyboard("{Escape}");
+      expect(toggle).not.toHaveFocus();
+    });
+
+    it("closes the pantry on a tap outside it, which does not reach the page underneath", async () => {
+      const user = userEvent.setup();
+      const onPageClick = vi.fn();
+      render(
+        <MemoryRouter initialEntries={["/"]}>
+          <button type="button" onClick={onPageClick}>Page content</button>
+          <MobileNav />
+        </MemoryRouter>,
+      );
+
+      await user.click(screen.getByRole("button", { name: "Pantry navigation" }));
+      const backdrop = screen.getByTestId("mobile-pantry-backdrop");
+      expect(backdrop).toHaveAttribute("aria-hidden", "true");
+      expect(backdrop).toHaveClass("fixed", "inset-0", "z-40", "lg:hidden");
+
+      // A tap inside the pantry keeps it open.
+      await user.click(screen.getByTestId("mobile-pantry"));
+      expect(screen.getByTestId("mobile-pantry")).toBeInTheDocument();
+
+      await user.click(backdrop);
+      expect(screen.queryByTestId("mobile-pantry")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("mobile-pantry-backdrop")).not.toBeInTheDocument();
+      expect(onPageClick).not.toHaveBeenCalled();
+    });
+
+    it("offers Account and a Log out that posts to /logout, so a phone can sign out", async () => {
+      const user = userEvent.setup();
+      render(
+        <MemoryRouter initialEntries={["/"]}>
+          <MobileNav />
+        </MemoryRouter>,
+      );
+
+      await user.click(screen.getByRole("button", { name: "Pantry navigation" }));
+      const pantry = screen.getByTestId("mobile-pantry");
+      expect(within(pantry).getByRole("link", { name: "Account", exact: true })).toHaveAttribute("href", "/account/settings");
+
+      const logOut = within(pantry).getByRole("button", { name: "Log out", exact: true });
+      expect(logOut).toHaveAttribute("type", "submit");
+      const form = logOut.closest("form");
+      expect(form).toHaveAttribute("method", "post");
+      expect(form).toHaveAttribute("action", "/logout");
     });
 
     it("does not render the old dashboard navigation labels before the pantry is opened", () => {

@@ -64,7 +64,7 @@ test.describe("Round trips on iPhone", () => {
     await expect(kitchenHeading).toBeVisible();
 
     // Pantry -> Recipes reaches every public recipe (R-M2-3).
-    await dock.getByRole("button", { name: "Open pantry navigation" }).click();
+    await dock.getByRole("button", { name: "Pantry navigation" }).click();
     await page.getByTestId("mobile-pantry").getByRole("link", { name: "Recipes", exact: true }).click();
     await expect(page).toHaveURL(pathUrl("/recipes"));
     await expect(allPublicRecipes).toBeVisible();

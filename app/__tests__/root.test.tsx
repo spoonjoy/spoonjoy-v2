@@ -23,7 +23,7 @@ function CurrentRootLayoutBehavior({ userId }: { userId: string | null }) {
         <header className="sj-desktop-topbar sticky top-0 z-30 hidden items-center px-4 lg:flex">
           <nav data-testid="desktop-navbar">Desktop Navbar</nav>
         </header>
-        <main className="sj-desktop-surface sj-mobile-surface grow pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0">
+        <main className="sj-desktop-surface sj-mobile-surface grow pb-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] lg:pb-0">
           <div data-testid="outlet">Page Content</div>
         </main>
       </div>
@@ -161,7 +161,7 @@ describe('Root layout responsive behavior', () => {
 
       const mobileContentWrapper = container.querySelector('main.sj-mobile-surface')
       expect(mobileContentWrapper).toBeInTheDocument()
-      expect(mobileContentWrapper?.className).toContain('pb-[calc(5rem+env(safe-area-inset-bottom))]')
+      expect(mobileContentWrapper?.className).toContain('pb-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)]')
     })
 
     it('content padding wrapper contains the Outlet content', () => {

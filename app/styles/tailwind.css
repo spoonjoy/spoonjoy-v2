@@ -143,6 +143,10 @@ html *:where(input, textarea, select, button) {
 
 .sj-app-shell {
   background: var(--sj-page);
+  /* The viewport covers the whole screen (viewport-fit=cover in root.tsx), so keep content out of
+     the notch and rounded corners in landscape. Both insets are 0 everywhere else. */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 .sj-desktop-surface,
