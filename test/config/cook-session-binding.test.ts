@@ -148,6 +148,18 @@ describe("CookSession namespace configuration", () => {
     expect(config.env?.qa?.version_metadata).toEqual({ binding: "CF_VERSION_METADATA" });
   });
 
+  it("serves cook-session protocol v1 on QA, and in production only through a product-activation release", () => {
+    const config = readConfig("wrangler.json");
+    const workflow = readFileSync(".github/workflows/production-deploy.yml", "utf8");
+    const releaseMode = /^\s*SPOONJOY_RELEASE_MODE:\s*(\S+)\s*$/m.exec(workflow)?.[1];
+
+    expect(config.env?.qa?.vars?.COOK_SESSION_PROTOCOL).toBe("v1");
+    expect(["atomic-bootstrap", "atomic-product-activation", "protocol-v1-canary"]).toContain(releaseMode);
+    // Turning the protocol on in production is the one-way product activation, never a bootstrap release.
+    expect(config.vars?.COOK_SESSION_PROTOCOL === "v1" ? releaseMode : "inert").not.toBe("atomic-bootstrap");
+    expect(config.vars?.COOK_SESSION_PROTOCOL ?? "v1").toBe("v1");
+  });
+
   it("runs the official Workers lane with the same SQLite namespace", () => {
     const config = readConfig("wrangler.workers-test.json");
     const vitestSource = readFileSync("vitest.workers.config.ts", "utf8");
@@ -182,6 +194,7 @@ describe("CookSession namespace configuration", () => {
     expect(appSource).toMatch(/export\s*\{\s*CookSession\s*\}/);
     expect(envTypes).toMatch(/COOK_SESSIONS\??:\s*DurableObjectNamespace/);
     expect(envTypes).toContain("COOK_SESSION_BOOTSTRAP_MODE?: string;");
+    expect(envTypes).toContain("COOK_SESSION_PROTOCOL?: string;");
   });
 
   it("documents the bootstrap binding lifecycle and managed E2E server accurately", () => {

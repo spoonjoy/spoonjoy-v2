@@ -8,6 +8,7 @@ import {
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createUserSessionCookie } from "../../app/lib/session.server";
+import { applyRepositoryMigrations } from "./helpers/repository-migrations";
 
 interface TestD1Statement {
   bind(...values: unknown[]): TestD1Statement;
@@ -69,7 +70,15 @@ const publicCookRoutes: PublicCookRoute[] = [
   { method: "GET", path: "/api/cook-sessions/recipe-socket/socket", scope: "read", upgrade: true },
 ];
 
-const internalCookRoutes = publicCookRoutes.filter(({ path }) => path !== "/api/cook-sessions");
+// Internal routes protocol v1 does not implement yet (detail, start, and PATCH are served by
+// the product object; see cook-session-protocol.test.ts).
+const internalCookRoutes = publicCookRoutes.filter(({ path }) => [
+  "/api/cook-sessions/recipe-delete",
+  "/api/cook-sessions/recipe-complete/complete",
+  "/api/cook-sessions/recipe-abandon/abandon",
+  "/api/cook-sessions/recipe-restart/restart",
+  "/api/cook-sessions/recipe-socket/socket",
+].includes(path));
 
 function testEnvironment(): TestWorkerEnvironment {
   return env as unknown as TestWorkerEnvironment;
@@ -121,8 +130,10 @@ async function insertCredential(
   ).run();
 }
 
-async function execStatements(database: TestD1Database, statements: string[]) {
-  for (const statement of statements) await database.exec(statement);
+// Removes this file's user and credentials (credentials first; D1 enforces foreign keys).
+async function removeTestUser(database: TestD1Database) {
+  await database.prepare('DELETE FROM "ApiCredential" WHERE "userId" = ?').bind(TEST_USER_ID).run();
+  await database.prepare('DELETE FROM "User" WHERE "id" = ?').bind(TEST_USER_ID).run();
 }
 
 function requestForRoute(
@@ -272,15 +283,16 @@ describe("CookSession lifecycle bootstrap", () => {
 
   beforeAll(async () => {
     const { DB } = testEnvironment();
-    await execStatements(DB, [
-      "PRAGMA foreign_keys = OFF",
-      "DROP TABLE IF EXISTS ApiCredential",
-      "DROP TABLE IF EXISTS User",
-      "CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, username TEXT NOT NULL UNIQUE, sessionVersion INTEGER NOT NULL DEFAULT 0)",
-      "CREATE TABLE ApiCredential (id TEXT PRIMARY KEY, userId TEXT NOT NULL, name TEXT NOT NULL, tokenHash TEXT NOT NULL UNIQUE, tokenPrefix TEXT NOT NULL, scopes TEXT NOT NULL, lastUsedAt DATETIME, revokedAt DATETIME, oauthClientId TEXT, oauthIssuer TEXT, oauthResource TEXT, oauthConnectionKey TEXT, oauthGrantId TEXT, expiresAt DATETIME, createdAt DATETIME NOT NULL, updatedAt DATETIME NOT NULL, FOREIGN KEY (userId) REFERENCES User(id) ON DELETE CASCADE)",
-      "PRAGMA foreign_keys = ON",
-      "INSERT INTO User (id, email, username) VALUES ('cook-session-user', 'cook-session@example.com', 'cook_session_user')",
-    ]);
+    // The Workers lane shares one D1 across files and runs them in any order. This file uses the
+    // repository's real schema (applied once, idempotently, as the saved-recipe file does) and
+    // only inserts and deletes its own rows, so no file's setup can break another's. (D1 ignores
+    // PRAGMA foreign_keys, so dropping a migrated User table here used to fail whenever the
+    // saved-recipe file had run first.)
+    await applyRepositoryMigrations(DB as unknown as Parameters<typeof applyRepositoryMigrations>[0]);
+    await removeTestUser(DB);
+    await DB.prepare(
+      'INSERT INTO "User" ("id", "email", "username", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?)',
+    ).bind(TEST_USER_ID, "cook-session@example.com", "cook_session_user", "2026-07-20T00:00:00.000Z", "2026-07-20T00:00:00.000Z").run();
     await insertCredential("cook-read", READ_TOKEN, "kitchen:read");
     await insertCredential("cook-write", WRITE_TOKEN, "kitchen:write");
     await insertCredential("cook-wrong", WRONG_SCOPE_TOKEN, "public:read");
@@ -340,12 +352,7 @@ describe("CookSession lifecycle bootstrap", () => {
   });
 
   afterAll(async () => {
-    await execStatements(testEnvironment().DB, [
-      "PRAGMA foreign_keys = OFF",
-      "DROP TABLE IF EXISTS ApiCredential",
-      "DROP TABLE IF EXISTS User",
-      "PRAGMA foreign_keys = ON",
-    ]);
+    await removeTestUser(testEnvironment().DB);
   });
 
   itWithCookSessionNamespace("returns the frozen retryable response for every authenticated future public route", async (namespace) => {
@@ -762,7 +769,7 @@ describe("CookSession lifecycle bootstrap", () => {
     }
   });
 
-  itWithCookSessionNamespace("returns the frozen response for every recognized internal protocol request without storage mutation", async (namespace) => {
+  itWithCookSessionNamespace("returns the frozen response for every unimplemented internal protocol request without storage mutation", async (namespace) => {
     const stub = namespace.get(namespace.idFromName("internal-contract"));
     await seedDurableObjectStorage(stub);
     const storageBefore = await durableObjectStorageSnapshot(stub);

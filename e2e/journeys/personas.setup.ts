@@ -14,22 +14,25 @@
 // per IP (wrangler.json's `env.qa` — raised from the shared default of 20 specifically because
 // CI's Journeys workflow exercises QA from shared GitHub-hosted runner IPs; see
 // docs/deployment.md's Dedicated QA Environment section. Production stays at 20). This project
-// alone performs 3 persona sign-ins + 12 scratch sign-ins (6 indices, each a base account and a
-// desktop twin) = 15 attempts, all up front, before any journey starts (Playwright runs this
+// alone performs 3 persona sign-ins + 16 scratch sign-ins (8 indices, each a base account and a
+// desktop twin) = 19 attempts, all up front, before any journey starts (Playwright runs this
 // "personas" project to completion first, as every journey project depends on it). The
-// journeys themselves add, at most, 14 more across a full run: sign-in.journey.ts's 4 login
+// journeys themselves add, at most, 16 more across a full run: sign-in.journey.ts's 4 login
 // submissions (username, email, wrong-password, and the logout test's fresh sign-in) run on
 // both the iphone-webkit and desktop-chrome device projects (it is a plain *.journey.ts, not
 // device-suffixed) for 8; round-trips.journey.ts's 1 "log in, then redirect back" submission
 // likewise runs on both devices for 2; account-settings.journey.ts's 1 sign-in with the
 // password it just changed (scratch 5's base account on iPhone, its desktop twin on desktop)
 // runs on both devices for 2; cooking.mobile.journey.ts's 1 /signup (the only
-// throwaway-signup journey today) runs on iphone-webkit only for 1; and
+// throwaway-signup journey today) runs on iphone-webkit only for 1;
 // sessions.desktop.journey.ts's 1 fresh scratch-6 sign-in (its second browser) runs on
-// desktop-chrome only for 1 — 8 + 2 + 2 + 1 + 1 = 14. That is a nominal 15 + 14 = 29 attempts
-// across the whole run — under half of the 60/minute cap even in the worst case where every
-// attempt somehow landed in the same rolling 60-second window, so there is still headroom for
-// another sign-in-heavy journey or scratch index.
+// desktop-chrome only for 1; and new-user.journey.ts's 1 rejected /signup (a too-short
+// username, which still counts as an attempt) runs on both devices for 2 — 8 + 2 + 2 + 1 + 1 +
+// 2 = 16. (cook-session-sync.desktop.journey.ts's second browser reuses its stored session and
+// signs in nothing.) That is a nominal 19 + 16 = 35 attempts across the whole run — a little
+// over half of the 60/minute cap even in the worst case where every attempt somehow landed in
+// the same rolling 60-second window, so there is still headroom for another sign-in-heavy
+// journey or scratch index.
 import type { Page } from "@playwright/test";
 import { test as setup } from "./support/journey";
 import {
@@ -93,6 +96,14 @@ setup("scratch 6", async ({ page }) => {
   await signInScratchAndSave(page, 6);
 });
 
+setup("scratch 7", async ({ page }) => {
+  await signInScratchAndSave(page, 7);
+});
+
+setup("scratch 8", async ({ page }) => {
+  await signInScratchAndSave(page, 8);
+});
+
 // Desktop twins: each scratch index's second account, which desktop-chrome signs in as when a
 // journey needs its two devices not to share one account (support/personas.ts's
 // scratchStorageStatePathForProject). Seeded for every index, so any area can opt in.
@@ -118,4 +129,12 @@ setup("scratch 5 desktop", async ({ page }) => {
 
 setup("scratch 6 desktop", async ({ page }) => {
   await signInScratchDesktopAndSave(page, 6);
+});
+
+setup("scratch 7 desktop", async ({ page }) => {
+  await signInScratchDesktopAndSave(page, 7);
+});
+
+setup("scratch 8 desktop", async ({ page }) => {
+  await signInScratchDesktopAndSave(page, 8);
 });

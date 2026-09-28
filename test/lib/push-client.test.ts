@@ -3,6 +3,7 @@ import {
   isPushSupported,
   isIosNonStandalone,
   registerServiceWorker,
+  registerServiceWorkerOnPageLoad,
   subscribeToPush,
   unsubscribeFromPush,
   base64UrlToUint8Array,
@@ -207,6 +208,73 @@ describe("registerServiceWorker", () => {
     const result = await registerServiceWorker();
     expect(register).not.toHaveBeenCalled();
     expect(result).toBe(existing);
+  });
+});
+
+describe("registerServiceWorkerOnPageLoad", () => {
+  it("returns the registration when registering succeeds", async () => {
+    const registration = { scope: "/" };
+    const register = vi.fn(async () => registration);
+    setGlobals({
+      navigator: {
+        serviceWorker: {
+          register,
+          getRegistration: vi.fn(async () => null),
+        },
+      },
+    });
+    await expect(registerServiceWorkerOnPageLoad()).resolves.toBe(registration);
+    expect(register).toHaveBeenCalledWith("/sw.js", { scope: "/" });
+  });
+
+  it("resolves to null instead of rejecting when navigation cancels the registration", async () => {
+    const cancelled = new DOMException(
+      "Script https://example.test/sw.js load failed",
+      "SecurityError",
+    );
+    const register = vi.fn(async () => {
+      throw cancelled;
+    });
+    setGlobals({
+      navigator: {
+        serviceWorker: {
+          register,
+          getRegistration: vi.fn(async () => null),
+        },
+      },
+    });
+    await expect(registerServiceWorkerOnPageLoad()).resolves.toBeNull();
+    expect(register).toHaveBeenCalledTimes(1);
+  });
+
+  it("tries again on the next page load after a cancelled registration", async () => {
+    const registration = { scope: "/" };
+    const register = vi
+      .fn<() => Promise<unknown>>()
+      .mockRejectedValueOnce(new DOMException("load failed", "SecurityError"))
+      .mockResolvedValueOnce(registration);
+    const getRegistration = vi.fn(async () => null);
+    setGlobals({ navigator: { serviceWorker: { register, getRegistration } } });
+
+    await expect(registerServiceWorkerOnPageLoad()).resolves.toBeNull();
+    await expect(registerServiceWorkerOnPageLoad()).resolves.toBe(registration);
+    expect(register).toHaveBeenCalledTimes(2);
+  });
+
+  it("resolves to null when looking up the existing registration fails", async () => {
+    const register = vi.fn(async () => ({ scope: "/" }));
+    setGlobals({
+      navigator: {
+        serviceWorker: {
+          register,
+          getRegistration: vi.fn(async () => {
+            throw new DOMException("load failed", "SecurityError");
+          }),
+        },
+      },
+    });
+    await expect(registerServiceWorkerOnPageLoad()).resolves.toBeNull();
+    expect(register).not.toHaveBeenCalled();
   });
 });
 

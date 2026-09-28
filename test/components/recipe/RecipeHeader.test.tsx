@@ -274,6 +274,16 @@ describe('RecipeHeader', () => {
       renderWithRouter(<RecipeHeader {...defaultProps} />)
       expect(screen.queryByRole('button', { name: 'Clear progress' })).toBeNull()
     })
+
+    it('shows the cook progress sync status when progress syncs to the account', () => {
+      renderWithRouter(<RecipeHeader {...defaultProps} progressSyncStatus="synced" />)
+      expect(screen.getByTestId('cook-sync-status')).toHaveTextContent('Progress synced')
+    })
+
+    it('shows no sync status when progress stays on this device', () => {
+      renderWithRouter(<RecipeHeader {...defaultProps} progressSyncStatus={null} />)
+      expect(screen.queryByTestId('cook-sync-status')).toBeNull()
+    })
   })
 
   describe('no action buttons', () => {

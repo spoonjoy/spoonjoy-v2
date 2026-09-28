@@ -161,9 +161,9 @@ export function generatePersonaPasswords(random = randomBytes) {
   };
 }
 
-// SCRATCH_USER_COUNT counts scratch INDICES (1..6), not accounts: each index is seeded as
+// SCRATCH_USER_COUNT counts scratch INDICES (1..8), not accounts: each index is seeded as
 // SCRATCH_VARIANTS.length accounts, and SCRATCH_ACCOUNT_COUNT below is the total number of
-// accounts (12). The name predates the desktop twins and is kept because journeys, AGENTS.md and
+// accounts (16). The name predates the desktop twins and is kept because journeys, AGENTS.md and
 // the tests refer to it.
 //
 // Number of per-run scratch indices seeded alongside the three kitchen personas. Journeys that
@@ -171,9 +171,9 @@ export function generatePersonaPasswords(random = randomBytes) {
 // throwaway user through /signup, so they stop spending QA's shared auth rate limit
 // (AUTH_IP_RATE_LIMITER, 60/minute in QA — see docs/deployment.md). Each scratch index is owned
 // by exactly one journey area (see AGENTS.md's Validation section for the assignment table) —
-// 6 is exactly today's assignment table; see personas.setup.ts's budget comment for the
+// 8 is exactly today's assignment table; see personas.setup.ts's budget comment for the
 // accounting before raising this further.
-export const SCRATCH_USER_COUNT = 6;
+export const SCRATCH_USER_COUNT = 8;
 
 // Every scratch index is seeded as two accounts: the base account, and a desktop twin.
 // The iphone-webkit and desktop-chrome journey projects run at the same time, and some data is
@@ -187,7 +187,7 @@ export const SCRATCH_VARIANTS = Object.freeze([
   { variant: "desktop", suffix: "d" },
 ]);
 
-// Total scratch ACCOUNTS seeded per run (12): every index (SCRATCH_USER_COUNT), once per variant.
+// Total scratch ACCOUNTS seeded per run (16): every index (SCRATCH_USER_COUNT), once per variant.
 // Use this for anything counted per account, such as passwords or sign-ins.
 export const SCRATCH_ACCOUNT_COUNT = SCRATCH_USER_COUNT * SCRATCH_VARIANTS.length;
 
@@ -431,12 +431,13 @@ export function parseSeedKitchenArgs(argv) {
 // The credentials file lists scratch accounts by index, one array per variant: `scratch` holds
 // the base accounts (scratch[n - 1] is index n) and `scratchDesktop` the desktop twins, in the
 // same order (generateScratchUsers emits each variant in index order). support/personas.ts
-// reads both.
+// reads both. Each entry carries the account's user id, which journeys send to APIs that ask a
+// browser caller to name its user (the cook-session X-Spoonjoy-Cook-User header).
 function scratchCredentials(scratchUsers, scratchPasswords, variant) {
   return scratchUsers
     .map((user, index) => ({ user, password: scratchPasswords[index] }))
     .filter(({ user }) => user.variant === variant)
-    .map(({ user, password }) => ({ username: user.username, email: user.email, password }));
+    .map(({ user, password }) => ({ id: user.id, username: user.username, email: user.email, password }));
 }
 
 function credentialsPayload(passwords, scratchUsers, scratchPasswords) {
