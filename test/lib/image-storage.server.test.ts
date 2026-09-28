@@ -1,13 +1,17 @@
 import { describe, it, expect, vi } from "vitest";
+import { Request as UndiciRequest } from "undici";
 import {
   deleteStoredImage,
   deleteStoredImageWithCapture,
   getImageExtension,
   getStoredImageKey,
   hasUploadedImageFile,
+  IMAGE_UPLOAD_MULTIPART_MAX_BYTES,
+  imageUploadFormDataWithinLimit,
   RECIPE_IMAGE_TYPES,
   storeImage,
   validateImageFile,
+  validateImageFileForStorage,
 } from "~/lib/image-storage.server";
 import type { PostHogServerConfig } from "~/lib/analytics-server";
 
@@ -286,6 +290,41 @@ describe("image storage helpers", () => {
       await expect(validateImageFileForStorage(
         new File([gifBytes], "fake.jpg", { type: "image/jpeg" }),
         { allowedTypes: RECIPE_IMAGE_TYPES, messages },
+      )).resolves.toBe("Invalid image format");
+    });
+
+    it("accepts GIF bytes only when the caller explicitly allows GIF", async () => {
+      const gifBytes = textEncoder.encode("GIF89a");
+      const allowedWithGif = [...RECIPE_IMAGE_TYPES, "image/gif"];
+
+      await expect(validateImageFileForStorage(
+        new File([gifBytes], "profile.gif", { type: "image/gif" }),
+        { allowedTypes: allowedWithGif, messages },
+      )).resolves.toBeNull();
+      await expect(validateImageFileForStorage(
+        new File([gifBytes], "profile.gif", { type: "image/gif" }),
+        { messages },
+      )).resolves.toBe("Invalid image format");
+      await expect(validateImageFileForStorage(
+        new File([gifBytes], "profile.png", { type: "image/png" }),
+        { allowedTypes: allowedWithGif, messages },
+      )).resolves.toBe("Invalid image format");
+    });
+
+    it("requires the full GIF87a or GIF89a header, not just GIF8", async () => {
+      const allowedWithGif = [...RECIPE_IMAGE_TYPES, "image/gif"];
+
+      await expect(validateImageFileForStorage(
+        new File([textEncoder.encode("GIF87a")], "profile.gif", { type: "image/gif" }),
+        { allowedTypes: allowedWithGif, messages },
+      )).resolves.toBeNull();
+      await expect(validateImageFileForStorage(
+        new File([textEncoder.encode("GIF8<html><script>alert(1)</script>")], "profile.gif", { type: "image/gif" }),
+        { allowedTypes: allowedWithGif, messages },
+      )).resolves.toBe("Invalid image format");
+      await expect(validateImageFileForStorage(
+        new File([textEncoder.encode("GIF88a")], "profile.gif", { type: "image/gif" }),
+        { allowedTypes: allowedWithGif, messages },
       )).resolves.toBe("Invalid image format");
     });
 
@@ -730,5 +769,97 @@ describe("image storage helpers", () => {
       expect(calls).toHaveLength(0);
       fetchMock.mockRestore();
     });
+  });
+});
+
+describe("imageUploadFormDataWithinLimit", () => {
+  function streamOf(chunks: Uint8Array[], onCancel?: () => void) {
+    let index = 0;
+    let pulled = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const chunk = chunks[index++];
+        if (!chunk) {
+          controller.close();
+          return;
+        }
+        pulled += chunk.byteLength;
+        controller.enqueue(chunk);
+      },
+      cancel() {
+        onCancel?.();
+      },
+    }, { highWaterMark: 0 });
+    return { stream, pulled: () => pulled };
+  }
+
+  it("answers null for a body whose declared length is over the limit, without reading it", async () => {
+    const body = streamOf([new Uint8Array(10)]);
+    const request = new UndiciRequest("https://spoonjoy.test/upload", {
+      method: "POST",
+      headers: { "Content-Length": String(IMAGE_UPLOAD_MULTIPART_MAX_BYTES + 1), "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.stream,
+      duplex: "half",
+    }) as unknown as Request;
+
+    await expect(imageUploadFormDataWithinLimit(request)).resolves.toBeNull();
+    expect(body.pulled()).toBe(0);
+  });
+
+  it("stops reading a streamed body and answers null as soon as it passes the limit", async () => {
+    const chunk = new Uint8Array(1024 * 1024);
+    let cancelled = false;
+    const body = streamOf(Array.from({ length: 20 }, () => chunk), () => {
+      cancelled = true;
+    });
+    const request = new UndiciRequest("https://spoonjoy.test/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.stream,
+      duplex: "half",
+    }) as unknown as Request;
+
+    await expect(imageUploadFormDataWithinLimit(request)).resolves.toBeNull();
+    expect(cancelled).toBe(true);
+    expect(body.pulled()).toBeLessThanOrEqual(IMAGE_UPLOAD_MULTIPART_MAX_BYTES + 2 * chunk.byteLength);
+  });
+
+  it("still answers null for an oversized body when cancelling the stream fails", async () => {
+    const chunk = new Uint8Array(1024 * 1024);
+    const body = streamOf(Array.from({ length: 20 }, () => chunk), () => {
+      throw new Error("cancel failed");
+    });
+    const request = new UndiciRequest("https://spoonjoy.test/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.stream,
+      duplex: "half",
+    }) as unknown as Request;
+
+    await expect(imageUploadFormDataWithinLimit(request)).resolves.toBeNull();
+  });
+
+  it("returns the form data of a body within the limit", async () => {
+    const encoded = new TextEncoder().encode("intent=uploadPhoto&name=chef");
+    const request = new UndiciRequest("https://spoonjoy.test/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "Content-Length": String(encoded.byteLength) },
+      body: streamOf([encoded.slice(0, 7), encoded.slice(7)]).stream,
+      duplex: "half",
+    }) as unknown as Request;
+
+    const formData = await imageUploadFormDataWithinLimit(request);
+    expect(formData.get("intent")).toBe("uploadPhoto");
+    expect(formData.get("name")).toBe("chef");
+  });
+
+  it("reads a request without a body as the platform does", async () => {
+    const request = new UndiciRequest("https://spoonjoy.test/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    }) as unknown as Request;
+
+    const formData = await imageUploadFormDataWithinLimit(request);
+    expect([...formData.keys()]).toEqual([]);
   });
 });

@@ -13,7 +13,7 @@ import {
   replaceNativeRecipeStepOutputUses,
   updateNativeRecipeStep,
 } from "../../../app/lib/api-v1-recipe-steps.server";
-import { deleteNativeRecipe, updateNativeRecipe } from "../../../app/lib/api-v1-recipe-writes.server";
+import { createNativeRecipe, deleteNativeRecipe, updateNativeRecipe } from "../../../app/lib/api-v1-recipe-writes.server";
 import type { D1ReadDatabase } from "../../../app/lib/d1-read.server";
 import { d1Guard, d1WriteBatch, isD1GuardFailure } from "../../../app/lib/d1-write.server";
 import { getDb } from "../../../app/lib/db.server";
@@ -883,6 +883,31 @@ describe("atomic recipe writes on Wrangler D1", () => {
       expect(await cookbookUpdatedAt()).not.toBe(OLD);
     });
 
+    it("creates a recipe with its steps' output uses together, or nothing", async () => {
+      const input = {
+        clientMutationId: "atomic-create-uses",
+        title: "Atomic Layered Bake",
+        description: null,
+        servings: null,
+        steps: [
+          { stepTitle: null, description: "Sauce", duration: null, ingredients: [{ quantity: 1, unit: "atomic cup", ingredientName: "atomic milk" }], outputStepNums: [] },
+          { stepTitle: null, description: "Layer", duration: null, ingredients: [], outputStepNums: [1] },
+        ],
+      };
+      await failOn("INSERT", "StepOutputUse", `NEW."inputStepNum" = 2 AND NEW."recipeId" = 'atomic-create-uses'`);
+
+      expect(String(await rejection(createNativeRecipe(prisma, CHEF, input, { recipeId: "atomic-create-uses", d1: database() })))).toContain(FAILURE);
+      expect((await recipeGraph("atomic-create-uses")).recipe).toBeNull();
+      expect(await count(`SELECT COUNT(*) AS "count" FROM "RecipeStep" WHERE "recipeId" = 'atomic-create-uses'`)).toBe(0);
+
+      await run(`DROP TRIGGER "${TRIGGER}"`);
+      await expect(createNativeRecipe(prisma, CHEF, input, { recipeId: "atomic-create-uses", d1: database() }))
+        .resolves.toMatchObject({ ok: true, data: { recipeId: "atomic-create-uses" } });
+      const created = await recipeGraph("atomic-create-uses");
+      expect(created.steps).toHaveLength(2);
+      expect(created.uses).toEqual([{ outputStepNum: 1, inputStepNum: 2 }]);
+    });
+
     it("soft-deletes a recipe and writes its sync tombstone together, or neither", async () => {
       await seedRecipe("atomic-api-delete");
       await failOn("INSERT", "NativeSyncTombstone", `NEW."resourceId" = 'atomic-api-delete'`);
@@ -1112,6 +1137,28 @@ describe("atomic recipe writes on Wrangler D1", () => {
       expect(updated.steps).toEqual([{ stepNum: 1, stepTitle: "Only", description: "One step now", duration: null }]);
       expect(updated.ingredients).toEqual([{ stepNum: 1, quantity: 1, unit: "atomic tbsp", ingredient: "atomic salt" }]);
       expect(updated.uses).toEqual([]);
+    });
+
+    it("soft-deletes a recipe with its sync tombstone, updatedAt bump and cookbook touch together, or none of them", async () => {
+      await seedRecipe("atomic-mcp-delete");
+      await run(`UPDATE "Cookbook" SET "updatedAt" = ? WHERE "id" = ?`, OLD, COOKBOOK);
+      await failOn("INSERT", "NativeSyncTombstone", `NEW."resourceId" = 'atomic-mcp-delete'`);
+
+      expect(String(await rejection(callSpoonjoyApiOperation("delete_recipe", { id: "atomic-mcp-delete" }, context())))).toContain(FAILURE);
+      expect((await recipeGraph("atomic-mcp-delete")).recipe).toMatchObject({ deleted: 0 });
+      expect(await recipeUpdatedAt("atomic-mcp-delete")).toBe(OLD);
+      expect(await cookbookUpdatedAt()).toBe(OLD);
+
+      await run(`DROP TRIGGER "${TRIGGER}"`);
+      await expect(callSpoonjoyApiOperation("delete_recipe", { id: "atomic-mcp-delete" }, context()))
+        .resolves.toMatchObject({ deleted: true, recipe: { id: "atomic-mcp-delete" } });
+      const [recipe] = await rows<{ deletedAt: string; updatedAt: string }>(
+        `SELECT "deletedAt", "updatedAt" FROM "Recipe" WHERE "id" = 'atomic-mcp-delete'`,
+      );
+      expect(recipe!.updatedAt).toBe(recipe!.deletedAt);
+      expect(await cookbookUpdatedAt()).toBe(recipe!.deletedAt);
+      expect(await rows(`SELECT "accountId", "resourceType", "title", "deletedAt" FROM "NativeSyncTombstone" WHERE "resourceId" = 'atomic-mcp-delete'`))
+        .toEqual([{ accountId: CHEF, resourceType: "recipe", title: "Recipe atomic-mcp-delete", deletedAt: recipe!.deletedAt }]);
     });
 
     it("creates a recipe with its steps together, or nothing", async () => {

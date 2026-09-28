@@ -7,6 +7,7 @@ import { createUserSessionCookie } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
 import { createTestUser } from "../utils";
+import { expectConsoleError } from "../warning-policy";
 
 // The recipe edit page and the step edit page with a D1 binding: each write is one D1
 // batch (through the SQLite-backed fake binding) and leaves the same rows as the Prisma
@@ -172,6 +173,24 @@ async function expectParity(page: Page, fields: (seeded: Seeded) => Record<strin
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
 
+/**
+ * Runs `run` with stylization scheduling failing, as a failure after the save batch would, and
+ * expects the failure to be logged once.
+ */
+async function withFailingStylization<T>(surface: "recipe_create" | "recipe_edit", run: () => Promise<T>) {
+  const failure = new Error("Stylization queue unavailable");
+  expectConsoleError("recipe save follow-up failed", { surface, error: failure });
+  vi.doMock("~/lib/spoon-cover-stylization.server", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("~/lib/spoon-cover-stylization.server")>()),
+    scheduleSpoonCoverStylization: vi.fn().mockRejectedValue(failure),
+  }));
+  try {
+    return await run();
+  } finally {
+    vi.doUnmock("~/lib/spoon-cover-stylization.server");
+  }
+}
+
 describe("recipe editor routes on a D1 binding", () => {
   beforeEach(async () => {
     db = await getLocalDb();
@@ -244,6 +263,96 @@ describe("recipe editor routes on a D1 binding", () => {
       expect((result as Response).status).toBe(404);
       expect(bucket.delete).toHaveBeenCalledTimes(1);
       await expect(db.recipeCover.count({ where: { recipeId: mine.recipe.id } })).resolves.toBe(0);
+    });
+  });
+
+  describe("after the save batch commits", () => {
+    /** The fake binding, answering an error after its first batch has committed. */
+    function committedThenThrows() {
+      let pending = true;
+      return {
+        prepare: (sql: string) => d1.binding.prepare(sql),
+        async batch(statements: never) {
+          const result = await d1.binding.batch(statements);
+          if (pending) {
+            pending = false;
+            throw new Error("D1 reply lost after commit");
+          }
+          return result;
+        },
+      };
+    }
+
+    it("keeps the edit page's upload and redirects when the save batch commits but answers an error", async () => {
+      const mine = await seedRecipe("Committed then errored");
+      const bucket = photos();
+      const result = await withD1Routes(() => act("edit", mine, () => ({
+        title: "Committed then errored", description: "Landed", image: new File([PNG], "cover.png", { type: "image/png" }),
+      }), { DB: committedThenThrows(), PHOTOS: bucket }));
+
+      expect(result).toBeInstanceOf(Response);
+      expect((result as Response).status).toBe(302);
+      expect((result as Response).headers.get("Location")).toBe(`/recipes/${mine.recipe.id}`);
+      expect(bucket.delete).not.toHaveBeenCalled();
+      const recipe = await db.recipe.findUniqueOrThrow({ where: { id: mine.recipe.id }, include: { activeCover: true } });
+      expect(recipe.description).toBe("Landed");
+      expect(recipe.activeCover?.imageUrl).toBe(`/photos/${bucket.put.mock.calls[0]![0]}`);
+    });
+
+    it("keeps the new recipe page's upload and redirects when the create batch commits but answers an error", async () => {
+      const bucket = photos();
+      const body = form({ title: "Created then errored", steps: "[]", image: new File([PNG], "cover.png", { type: "image/png" }) });
+      const result = await withD1Routes(async () => {
+        const { action } = await import("~/routes/recipes.new");
+        return action({
+          request: new UndiciRequest("http://localhost:3000/recipes/new", { method: "POST", headers: { Cookie: cookie }, body }) as never,
+          context: { cloudflare: { env: { DB: committedThenThrows(), PHOTOS: bucket } } },
+          params: {},
+        } as never);
+      });
+
+      const recipe = await db.recipe.findFirstOrThrow({ where: { title: "Created then errored" }, include: { activeCover: true } });
+      expect(result).toBeInstanceOf(Response);
+      expect((result as Response).status).toBe(302);
+      expect((result as Response).headers.get("Location")).toBe(`/recipes/${recipe.id}`);
+      expect(bucket.delete).not.toHaveBeenCalled();
+      expect(recipe.activeCover?.imageUrl).toBe(`/photos/${bucket.put.mock.calls[0]![0]}`);
+    });
+
+    it("keeps the edit page's upload the committed cover points at, and redirects, when stylization fails", async () => {
+      const mine = await seedRecipe("Saved then stylized");
+      const bucket = photos();
+      const result = await withFailingStylization("recipe_edit", () => withD1Routes(() => act("edit", mine, () => ({
+        title: "Saved then stylized", description: "New photo", image: new File([PNG], "cover.png", { type: "image/png" }),
+      }), { DB: d1.binding, PHOTOS: bucket })));
+
+      expect(result).toBeInstanceOf(Response);
+      expect((result as Response).status).toBe(302);
+      expect((result as Response).headers.get("Location")).toBe(`/recipes/${mine.recipe.id}`);
+      expect(bucket.delete).not.toHaveBeenCalled();
+      const recipe = await db.recipe.findUniqueOrThrow({ where: { id: mine.recipe.id }, include: { activeCover: true } });
+      expect(recipe.description).toBe("New photo");
+      expect(recipe.activeCover?.imageUrl).toBe(`/photos/${bucket.put.mock.calls[0]![0]}`);
+    });
+
+    it("keeps the new recipe page's upload the committed cover points at, and redirects, when stylization fails", async () => {
+      const bucket = photos();
+      const body = form({ title: "Created then stylized", steps: "[]", image: new File([PNG], "cover.png", { type: "image/png" }) });
+      const result = await withFailingStylization("recipe_create", () => withD1Routes(async () => {
+        const { action } = await import("~/routes/recipes.new");
+        return action({
+          request: new UndiciRequest("http://localhost:3000/recipes/new", { method: "POST", headers: { Cookie: cookie }, body }) as never,
+          context: { cloudflare: { env: { DB: d1.binding, PHOTOS: bucket } } },
+          params: {},
+        } as never);
+      }));
+
+      const recipe = await db.recipe.findFirstOrThrow({ where: { title: "Created then stylized" }, include: { activeCover: true } });
+      expect(result).toBeInstanceOf(Response);
+      expect((result as Response).status).toBe(302);
+      expect((result as Response).headers.get("Location")).toBe(`/recipes/${recipe.id}`);
+      expect(bucket.delete).not.toHaveBeenCalled();
+      expect(recipe.activeCover?.imageUrl).toBe(`/photos/${bucket.put.mock.calls[0]![0]}`);
     });
   });
 

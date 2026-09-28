@@ -10,8 +10,9 @@ import { removeUserPasskey, renameUserPasskey } from "~/lib/webauthn-route.serve
 import {
   deleteStoredImageWithCapture,
   hasUploadedImageFile,
+  imageUploadFormDataWithinLimit,
   storeImage,
-  validateImageFile,
+  validateImageFileForStorage,
 } from "~/lib/image-storage.server";
 import { resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { PROFILE_IMAGE_TYPES } from "~/lib/recipe-image";
@@ -283,6 +284,8 @@ export async function loadAccountSettings({
   };
 }
 
+const PROFILE_PHOTO_TOO_LARGE_MESSAGE = "Photo must be less than 5MB";
+
 // R2 delete is best-effort: a throw here was previously uninstrumented and would escape the
 // action. Capture it (and the orphaned-avatar event) and swallow it, so removing or replacing the
 // avatar still succeeds in the database.
@@ -331,7 +334,12 @@ export async function handleAccountSettingsAction({
     await promoteLegacyOAuthIssuerForUser(database, userId, issuerOrigin);
   }
 
-  const formData = await request.formData();
+  // Every settings form posts here, and the profile photo is the only large field, so the body is
+  // read through the image upload limit: an oversized upload is refused before it is buffered whole.
+  const formData = await imageUploadFormDataWithinLimit(request);
+  if (!formData) {
+    return { success: false, intent: "uploadPhoto", error: "file_too_large", message: PROFILE_PHOTO_TOO_LARGE_MESSAGE };
+  }
   const intent = formData.get("intent");
 
   if (intent === "updateUserInfo") {
@@ -436,12 +444,13 @@ export async function handleAccountSettingsAction({
       };
     }
 
-    // Check file type
-    const imageError = validateImageFile(photo, {
+    // Check the declared type, the size, and that the bytes really are that
+    // image format (the client-declared type alone is not trusted).
+    const imageError = await validateImageFileForStorage(photo, {
       allowedTypes: PROFILE_IMAGE_TYPES,
       messages: {
         invalidType: "Please upload an image file",
-        fileTooLarge: "Photo must be less than 5MB",
+        fileTooLarge: PROFILE_PHOTO_TOO_LARGE_MESSAGE,
       },
     });
 
@@ -454,7 +463,7 @@ export async function handleAccountSettingsAction({
       };
     }
 
-    if (imageError === "Photo must be less than 5MB") {
+    if (imageError === PROFILE_PHOTO_TOO_LARGE_MESSAGE) {
       return {
         success: false,
         intent: "uploadPhoto",

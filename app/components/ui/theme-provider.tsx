@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react'
 
 type Theme = 'light' | 'dark' | 'system'
 
@@ -11,6 +11,15 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined)
 
 const STORAGE_KEY = 'spoonjoy-theme'
+
+/**
+ * Colours fade only while <html> carries this attribute (see the theme-switching
+ * rules in app/styles/tailwind.css). Outside that window colour changes are
+ * instant, so state-coloured controls never sit at a low-contrast mid-fade colour.
+ */
+export const THEME_SWITCHING_ATTRIBUTE = 'data-theme-switching'
+/** Long enough for the stylesheet's 0.2s theme fade to finish. */
+export const THEME_SWITCH_DURATION_MS = 250
 
 function getSystemTheme(): 'light' | 'dark' {
   /* istanbul ignore next -- @preserve SSR safety: window is undefined during server-side rendering */
@@ -32,6 +41,35 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>('system')
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light')
   const [mounted, setMounted] = useState(false)
+  const switchingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Set by setTheme; the effect that flips the class opens the fade window.
+  const switchRequested = useRef(false)
+
+  // Open the fade window as the theme class flips, so the window runs from the
+  // flip however long the render before it took. The attribute and the class
+  // change in the same task, and a transition takes its timing from the style
+  // after the change, so the flip still fades. Reduced-motion users get an
+  // instant switch.
+  const markThemeSwitching = () => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const root = document.documentElement
+    root.setAttribute(THEME_SWITCHING_ATTRIBUTE, '')
+    if (switchingTimer.current) clearTimeout(switchingTimer.current)
+    switchingTimer.current = setTimeout(() => {
+      switchingTimer.current = null
+      root.removeAttribute(THEME_SWITCHING_ATTRIBUTE)
+    }, THEME_SWITCH_DURATION_MS)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (switchingTimer.current) {
+        clearTimeout(switchingTimer.current)
+        switchingTimer.current = null
+        document.documentElement.removeAttribute(THEME_SWITCHING_ATTRIBUTE)
+      }
+    }
+  }, [])
 
   // Initialize theme from localStorage after mount
   useEffect(() => {
@@ -50,6 +88,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const root = document.documentElement
     root.classList.remove('light', 'dark')
     root.classList.add(resolved)
+    if (switchRequested.current) {
+      switchRequested.current = false
+      markThemeSwitching()
+    }
   }, [theme, mounted])
 
   // Listen for system theme changes
@@ -59,6 +101,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     const handleChange = () => {
       if (theme === 'system') {
+        markThemeSwitching()
         const resolved = getSystemTheme()
         setResolvedTheme(resolved)
         const root = document.documentElement
@@ -72,6 +115,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [theme, mounted])
 
   const setTheme = (newTheme: Theme) => {
+    switchRequested.current = true
     setThemeState(newTheme)
     localStorage.setItem(STORAGE_KEY, newTheme)
   }

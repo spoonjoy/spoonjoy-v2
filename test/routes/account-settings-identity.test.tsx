@@ -18,6 +18,9 @@ import { cleanupDatabase } from "../helpers/cleanup";
 const PASSWORD = "testPassword123";
 const FORMAT_ERROR = "Username can only use letters, numbers, periods, underscores and hyphens";
 
+// JPEG magic bytes: photo uploads are checked by content, not by the declared type.
+const JPEG_PHOTO_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+
 describe("Account settings - identity", () => {
   let userId: string;
   let email: string;
@@ -235,7 +238,7 @@ describe("Account settings - identity", () => {
       const bucket = { put: vi.fn().mockResolvedValue(undefined), delete: vi.fn().mockResolvedValue(undefined) };
 
       const result = (await action({
-        request: photoRequest(new File(["new image"], "new.jpg", { type: "image/jpeg" })),
+        request: photoRequest(new File([JPEG_PHOTO_BYTES], "new.jpg", { type: "image/jpeg" })),
         context: { cloudflare: { env: { PHOTOS: bucket } } },
         params: {},
       } as any)) as AccountSettingsActionResult;
@@ -255,7 +258,7 @@ describe("Account settings - identity", () => {
       };
 
       const result = (await action({
-        request: photoRequest(new File(["new image"], "new.jpg", { type: "image/jpeg" })),
+        request: photoRequest(new File([JPEG_PHOTO_BYTES], "new.jpg", { type: "image/jpeg" })),
         context: { cloudflare: { env: { PHOTOS: bucket } } },
         params: {},
       } as any)) as AccountSettingsActionResult;
