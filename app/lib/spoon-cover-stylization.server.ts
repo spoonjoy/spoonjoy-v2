@@ -14,6 +14,8 @@ import {
   type StylizationResult,
 } from "~/lib/image-gen.server";
 import { tryConsumeImageGenQuota } from "~/lib/image-gen-ledger.server";
+import { d1Binding, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 import {
   captureImageGenerationException,
   captureImageGenerationProviderFallback,
@@ -232,8 +234,80 @@ async function currentCoverForLifecycle(input: ScheduleSpoonStylizationInput) {
   });
 }
 
-async function markStylizationProcessing(input: ScheduleSpoonStylizationInput): Promise<boolean> {
+type StylizationCoverFields = {
+  status: string;
+  generationStatus: string;
+  failureReason: string | null;
+  stylizedImageUrl?: string;
+};
+
+// Prisma's `status: { not: "archived" }, archivedAt: null` on the cover.
+const UNARCHIVED_COVER = `"id" = ? AND "recipeId" = ? AND "status" <> 'archived' AND "archivedAt" IS NULL`;
+
+function stylizationD1(input: ScheduleSpoonStylizationInput): D1ReadDatabase | null {
+  return d1Binding((input.env as { DB?: unknown } | null | undefined)?.DB);
+}
+
+/**
+ * The cover's lifecycle update and the native-sync touches of its recipe and that recipe's
+ * cookbooks, as one D1 batch: all apply or none do. The update only matches a cover that is
+ * not archived, and the touches only apply when it did, as the Prisma path touches only
+ * after a matching update. Returns the number of covers updated.
+ */
+async function updateStylizationCoverOnD1(
+  input: ScheduleSpoonStylizationInput,
+  d1: D1ReadDatabase,
+  fields: StylizationCoverFields,
+  updatedAt: Date,
+): Promise<number> {
+  const columns: Record<string, unknown> = {
+    ...(fields.stylizedImageUrl !== undefined ? { stylizedImageUrl: fields.stylizedImageUrl } : {}),
+    status: fields.status,
+    generationStatus: fields.generationStatus,
+    failureReason: fields.failureReason,
+    promptVersion: STYLIZATION_PROMPT_VERSION,
+    styleVersion: STYLIZATION_STYLE_VERSION,
+    promptAddition: sanitizeImagePromptAddition(input.promptAddition),
+    ...(input.parentCoverId !== undefined ? { parentCoverId: input.parentCoverId } : {}),
+  };
+  const touchedAt = d1Timestamp(updatedAt);
+  const coverStillUnarchived = `EXISTS (SELECT 1 FROM "RecipeCover" WHERE ${UNARCHIVED_COVER})`;
+  const [coverUpdate] = await d1WriteBatch(d1, [
+    [
+      `UPDATE "RecipeCover" SET ${Object.keys(columns).map((column) => `"${column}" = ?`).join(", ")}
+       WHERE ${UNARCHIVED_COVER}`,
+      ...Object.values(columns),
+      input.coverId,
+      input.recipeId,
+    ],
+    [
+      `UPDATE "Recipe" SET "updatedAt" = ? WHERE "id" = ? AND ${coverStillUnarchived}`,
+      touchedAt,
+      input.recipeId,
+      input.coverId,
+      input.recipeId,
+    ],
+    [
+      `UPDATE "Cookbook" SET "updatedAt" = ?
+       WHERE "id" IN (SELECT "cookbookId" FROM "RecipeInCookbook" WHERE "recipeId" = ?) AND ${coverStillUnarchived}`,
+      touchedAt,
+      input.recipeId,
+      input.coverId,
+      input.recipeId,
+    ],
+  ]);
+  return coverUpdate.changes;
+}
+
+/** Updates a cover that is not archived, then touches its recipe and cookbooks if it did. */
+async function updateStylizationCover(
+  input: ScheduleSpoonStylizationInput,
+  fields: StylizationCoverFields,
+): Promise<boolean> {
   const updatedAt = new Date();
+  const d1 = stylizationD1(input);
+  if (d1) return (await updateStylizationCoverOnD1(input, d1, fields, updatedAt)) > 0;
+
   const promptAddition = sanitizeImagePromptAddition(input.promptAddition);
   const result = await input.db.recipeCover.updateMany({
     where: {
@@ -243,9 +317,7 @@ async function markStylizationProcessing(input: ScheduleSpoonStylizationInput): 
       archivedAt: null,
     },
     data: {
-      status: "processing",
-      generationStatus: "processing",
-      failureReason: null,
+      ...fields,
       promptVersion: STYLIZATION_PROMPT_VERSION,
       styleVersion: STYLIZATION_STYLE_VERSION,
       promptAddition,
@@ -261,37 +333,24 @@ async function markStylizationProcessing(input: ScheduleSpoonStylizationInput): 
   return result.count > 0;
 }
 
+async function markStylizationProcessing(input: ScheduleSpoonStylizationInput): Promise<boolean> {
+  return updateStylizationCover(input, {
+    status: "processing",
+    generationStatus: "processing",
+    failureReason: null,
+  });
+}
+
 async function markStylizationSucceeded(
   input: ScheduleSpoonStylizationInput,
   stylizedImageUrl: string,
 ): Promise<boolean> {
-  const updatedAt = new Date();
-  const promptAddition = sanitizeImagePromptAddition(input.promptAddition);
-  const result = await input.db.recipeCover.updateMany({
-    where: {
-      id: input.coverId,
-      recipeId: input.recipeId,
-      status: { not: "archived" },
-      archivedAt: null,
-    },
-    data: {
-      stylizedImageUrl,
-      status: "ready",
-      generationStatus: "succeeded",
-      failureReason: null,
-      promptVersion: STYLIZATION_PROMPT_VERSION,
-      styleVersion: STYLIZATION_STYLE_VERSION,
-      promptAddition,
-      ...(input.parentCoverId !== undefined ? { parentCoverId: input.parentCoverId } : {}),
-    },
+  return updateStylizationCover(input, {
+    stylizedImageUrl,
+    status: "ready",
+    generationStatus: "succeeded",
+    failureReason: null,
   });
-  if (result.count > 0) {
-    await input.db.$transaction([
-      touchNativeSyncRecipeOperation(input.db, input.recipeId, updatedAt),
-      touchNativeSyncCookbooksForRecipeOperation(input.db, input.recipeId, updatedAt),
-    ]);
-  }
-  return result.count > 0;
 }
 
 async function markStylizationFailed(
@@ -304,14 +363,20 @@ async function markStylizationFailed(
   const wasRequested = cover.status === "processing" || cover.generationStatus === "processing";
   if (!options.force && !wasRequested) return;
 
+  const fields = { status: failureStatusFor(cover), generationStatus: "failed", failureReason };
+  const d1 = stylizationD1(input);
+  if (d1) {
+    // A cover archived since the read is left alone, as the check above would leave it.
+    await updateStylizationCoverOnD1(input, d1, fields, new Date());
+    return;
+  }
+
   const updatedAt = new Date();
   const promptAddition = sanitizeImagePromptAddition(input.promptAddition);
   await input.db.recipeCover.update({
     where: { id: cover.id },
     data: {
-      status: failureStatusFor(cover),
-      generationStatus: "failed",
-      failureReason,
+      ...fields,
       promptVersion: STYLIZATION_PROMPT_VERSION,
       styleVersion: STYLIZATION_STYLE_VERSION,
       promptAddition,

@@ -11,7 +11,7 @@ import {
   oauthRefreshConnectionOwnership,
 } from "../../app/lib/oauth-server.server";
 import {
-  addToCompatibleShoppingListItem,
+  addShoppingListItem,
   mutateCompatibleShoppingListItem,
 } from "../../app/lib/shopping-list-mutations.server";
 import { createUserSessionCookie } from "../../app/lib/session.server";
@@ -21,6 +21,7 @@ import { expectConsoleError } from "../warning-policy";
 import "./helpers/oauth-concurrency-d1-suite";
 import "./helpers/hot-read-paths-d1-suite";
 import "./helpers/recipe-atomic-writes-d1-suite";
+import "./helpers/shopping-cookbook-atomic-writes-d1-suite";
 import { applyRepositoryMigrations } from "./helpers/repository-migrations";
 
 interface TestD1Statement {
@@ -927,19 +928,18 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
       const bothRead = new Promise<void>((resolve) => {
         release = resolve;
       });
-      const add = (added: number) => addToCompatibleShoppingListItem({
-        database: db,
+      // Both rows below are checked or removed, so each add asks for a sort index at the end of
+      // the list after reading the row; that hook holds both reads until both have happened.
+      const add = (added: number) => addShoppingListItem(db, {
         identity,
-        added,
-        async sortIndex(existing) {
+        quantity: added,
+        categoryKey: null,
+        iconKey: null,
+        async nextSortIndex() {
           reads += 1;
           if (reads === 2) release();
           await bothRead;
-          return existing.sortIndex;
-        },
-        update: (existing, sortIndex) => db.shoppingListItem.update({ where: { id: existing.id }, data: { sortIndex } }),
-        create: () => {
-          throw new Error("the row exists; nothing should be created");
+          return 0;
         },
       });
       await Promise.all([add(first), add(second)]);
@@ -957,7 +957,8 @@ describe("saved recipe cutover through the deployed Worker and Wrangler D1", () 
     await raceTwoAdds(3, 2);
     expect(await rowQuantity()).toEqual({ quantity: 5, deletedAt: null, checked: 0 });
 
-    // A live row: both amounts go on top.
+    // A live (checked) row: both amounts go on top.
+    await database().prepare(`UPDATE "ShoppingListItem" SET "checked" = 1 WHERE "id" = 'cutover-d1-race-row'`).run();
     await raceTwoAdds(4, 1);
     expect(await rowQuantity()).toEqual({ quantity: 10, deletedAt: null, checked: 0 });
   });

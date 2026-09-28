@@ -3,6 +3,14 @@ import type {
   PrismaClient,
   ShoppingListItem,
 } from "@prisma/client";
+import { d1Binding, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
+import {
+  d1Guard,
+  d1Timestamp,
+  d1WriteBatch,
+  isD1GuardFailure,
+  type D1WriteResult,
+} from "~/lib/d1-write.server";
 
 // The quantity a shopping-list row ends up with when an amount is added to an existing row with
 // the same ingredient and unit. A live row (checked or not) merges: the added amount goes on top
@@ -52,28 +60,22 @@ interface CompatibleMutationInput<T> {
 interface CompatibleBatch<T, Metadata> {
   operations: Array<Prisma.PrismaPromise<T>>;
   metadata: Metadata;
-  native?: {
-    database: Pick<CompatibleD1Database, "batch">;
-    statements: CompatibleD1PreparedStatement[];
-    items: T[];
-  };
+  native?: CompatibleShoppingListD1Batch<T>;
 }
 
-export interface CompatibleD1PreparedStatement {
-  bind(...values: unknown[]): CompatibleD1PreparedStatement;
+/** A shopping-list write as one atomic D1 batch, and how to read its items from the results. */
+export interface CompatibleShoppingListD1Batch<T> {
+  database: D1ReadDatabase;
+  queries: D1Query[];
+  items: (results: D1WriteResult[]) => T[];
 }
 
-export interface CompatibleD1Database {
-  prepare(query: string): CompatibleD1PreparedStatement;
-  batch(statements: CompatibleD1PreparedStatement[]): Promise<unknown>;
-}
-
-export interface ShoppingListItemWritePlan {
-  mode: "create" | "update";
+interface ShoppingListItemWriteFields {
   id: string;
   shoppingListId: string;
   ingredientRefId: string;
   unitId: string | null;
+  /** The quantity the row is expected to hold after the write (what the Prisma path stores). */
   quantity: number | null;
   checked: boolean;
   checkedAt: Date | null;
@@ -83,6 +85,17 @@ export interface ShoppingListItemWritePlan {
   iconKey: string | null;
   updatedAt: Date;
 }
+
+export type ShoppingListItemWritePlan =
+  | (ShoppingListItemWriteFields & { mode: "create" })
+  | (ShoppingListItemWriteFields & {
+    mode: "update";
+    /**
+     * The amount to add to the stored quantity, in SQL, so a concurrent add to the same item
+     * is not lost; null keeps the stored quantity. `quantity` is only what the read predicted.
+     */
+    quantityDelta: number | null;
+  });
 
 function compareBinary(left: string, right: string): number {
   const encoder = new TextEncoder();
@@ -130,36 +143,71 @@ export function isShoppingListUniqueConflict(error: unknown): boolean {
     /UNIQUE constraint failed: (?:ShoppingListItem\.shoppingListId, ShoppingListItem\.unitId, ShoppingListItem\.ingredientRefId(?![A-Za-z0-9_.]|\s*,)|index ['"]ShoppingListItem_active_identity_key['"](?![A-Za-z0-9_]))/.test(message);
 }
 
-export function asCompatibleD1Database(value: unknown): CompatibleD1Database | null {
-  if (!value || typeof value !== "object") return null;
-  const candidate = value as Partial<CompatibleD1Database>;
-  return typeof candidate.prepare === "function" && typeof candidate.batch === "function"
-    ? candidate as CompatibleD1Database
-    : null;
+/** The request's D1 binding, or null without one (unit tests, scripts): then Prisma writes. */
+export function asCompatibleD1Database(value: unknown): D1ReadDatabase | null {
+  return d1Binding(value);
 }
 
 function d1Date(value: Date | null): string | null {
-  return value?.toISOString() ?? null;
+  return value ? d1Timestamp(value) : null;
 }
 
-export function prepareShoppingListItemD1Write(
-  database: Pick<CompatibleD1Database, "prepare">,
-  plan: ShoppingListItemWritePlan,
-): CompatibleD1PreparedStatement {
-  const updatedAt = plan.updatedAt.toISOString();
+/**
+ * The statements for one planned write. Each one first re-checks, inside the batch, what the
+ * plan was read from: a create needs the identity still free (the unique index does not cover
+ * a null unit), an update needs the row still on this list. If either changed, the guard stops
+ * the whole batch and `runCompatibleShoppingListBatch` reads again. The write itself returns
+ * the quantity it stored.
+ */
+export function shoppingListItemWriteStatements(plan: ShoppingListItemWritePlan): D1Query[] {
+  const updatedAt = d1Timestamp(plan.updatedAt);
   if (plan.mode === "create") {
-    return database.prepare(`
-      INSERT INTO "ShoppingListItem" (
-        "id", "shoppingListId", "quantity", "unitId", "ingredientRefId",
-        "checked", "checkedAt", "deletedAt", "sortIndex", "categoryKey",
-        "iconKey", "updatedAt"
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
+    return [
+      d1Guard(
+        `NOT EXISTS (SELECT 1 FROM "ShoppingListItem"
+          WHERE "shoppingListId" = ? AND "ingredientRefId" = ? AND "unitId" IS ?)`,
+        plan.shoppingListId,
+        plan.ingredientRefId,
+        plan.unitId,
+      ),
+      [
+        `INSERT INTO "ShoppingListItem" (
+          "id", "shoppingListId", "quantity", "unitId", "ingredientRefId",
+          "checked", "checkedAt", "deletedAt", "sortIndex", "categoryKey",
+          "iconKey", "updatedAt"
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        RETURNING "quantity"`,
+        plan.id,
+        plan.shoppingListId,
+        plan.quantity,
+        plan.unitId,
+        plan.ingredientRefId,
+        plan.checked ? 1 : 0,
+        d1Date(plan.checkedAt),
+        d1Date(plan.deletedAt),
+        plan.sortIndex,
+        plan.categoryKey,
+        plan.iconKey,
+        updatedAt,
+      ],
+    ];
+  }
+
+  return [
+    d1Guard(
+      `EXISTS (SELECT 1 FROM "ShoppingListItem" WHERE "id" = ? AND "shoppingListId" = ?)`,
       plan.id,
       plan.shoppingListId,
-      plan.quantity,
-      plan.unitId,
-      plan.ingredientRefId,
+    ),
+    [
+      `UPDATE "ShoppingListItem"
+      SET "quantity" = CASE WHEN ? IS NULL THEN "quantity" ELSE COALESCE("quantity", 0) + ? END,
+          "checked" = ?, "checkedAt" = ?, "deletedAt" = ?,
+          "sortIndex" = ?, "categoryKey" = ?, "iconKey" = ?, "updatedAt" = ?
+      WHERE "id" = ? AND "shoppingListId" = ?
+      RETURNING "quantity"`,
+      plan.quantityDelta,
+      plan.quantityDelta,
       plan.checked ? 1 : 0,
       d1Date(plan.checkedAt),
       d1Date(plan.deletedAt),
@@ -167,37 +215,66 @@ export function prepareShoppingListItemD1Write(
       plan.categoryKey,
       plan.iconKey,
       updatedAt,
-    );
-  }
-
-  return database.prepare(`
-    UPDATE "ShoppingListItem"
-    SET "quantity" = ?, "checked" = ?, "checkedAt" = ?, "deletedAt" = ?,
-        "sortIndex" = ?, "categoryKey" = ?, "iconKey" = ?, "updatedAt" = ?
-    WHERE "id" = ?
-  `).bind(
-    plan.quantity,
-    plan.checked ? 1 : 0,
-    d1Date(plan.checkedAt),
-    d1Date(plan.deletedAt),
-    plan.sortIndex,
-    plan.categoryKey,
-    plan.iconKey,
-    updatedAt,
-    plan.id,
-  );
+      plan.id,
+      plan.shoppingListId,
+    ],
+  ];
 }
 
-export function createCompatibleShoppingListD1Batch<T>(
-  database: CompatibleD1Database | null,
+// D1 allows at most 100 bound parameters per statement.
+const REMOVE_IDS_PER_STATEMENT = 90;
+
+/**
+ * Soft-deletes the given items of one list: an update per chunk of ids, for one batch. The
+ * list filter keeps another account's item ids out.
+ */
+export function shoppingListItemsRemoveStatements(
+  shoppingListId: string,
+  itemIds: string[],
+  deletedAt: Date,
+): D1Query[] {
+  const stored = d1Timestamp(deletedAt);
+  const queries: D1Query[] = [];
+  for (let start = 0; start < itemIds.length; start += REMOVE_IDS_PER_STATEMENT) {
+    const ids = itemIds.slice(start, start + REMOVE_IDS_PER_STATEMENT);
+    queries.push([
+      `UPDATE "ShoppingListItem" SET "deletedAt" = ?, "updatedAt" = ?
+      WHERE "shoppingListId" = ? AND "id" IN (${ids.map(() => "?").join(", ")})`,
+      stored,
+      stored,
+      shoppingListId,
+      ...ids,
+    ]);
+  }
+  return queries;
+}
+
+/**
+ * The planned writes as one D1 batch, or undefined without a binding. `toItem` builds each
+ * response item from its plan and the quantity the row now stores.
+ */
+export function createCompatibleShoppingListD1Batch<T = never>(
+  database: D1ReadDatabase | null,
   writePlans: ShoppingListItemWritePlan[],
-  items: T[],
-) {
+  toItem?: (plan: ShoppingListItemWritePlan, storedQuantity: number | null) => T,
+): CompatibleShoppingListD1Batch<T> | undefined {
   if (!database) return undefined;
+  const queries: D1Query[] = [];
+  const writeIndexes: number[] = [];
+  for (const plan of writePlans) {
+    const statements = shoppingListItemWriteStatements(plan);
+    queries.push(...statements);
+    writeIndexes.push(queries.length - 1);
+  }
   return {
     database,
-    statements: writePlans.map((plan) => prepareShoppingListItemD1Write(database, plan)),
-    items,
+    queries,
+    items: (results) => toItem
+      ? writePlans.map((plan, index) => toItem(
+        plan,
+        results[writeIndexes[index]].rows[0].quantity as number | null,
+      ))
+      : [],
   };
 }
 
@@ -224,6 +301,146 @@ export async function findCompatibleShoppingListItem(
   });
 }
 
+export interface ShoppingListItemAddition {
+  id: string;
+  shoppingListId: string;
+  /** Added to the stored quantity in SQL (null keeps it), so a concurrent add is not lost. */
+  quantityDelta: number | null;
+  sortIndex: number;
+  categoryKey: string | null;
+  iconKey: string | null;
+}
+
+/**
+ * Adds to an existing item in one statement: the new quantity is computed from the row as it
+ * is when the statement runs, not from an earlier read, and the item is unchecked and
+ * restored. It follows mergedShoppingItemQuantity: a removed or cleared row restarts from the
+ * added amount (a cleared "1 lemon" added again is 1, not 2), and a live row adds on top.
+ * SQLite evaluates every SET expression against the row before the update, so the CASE sees
+ * the old "deletedAt". Returns the number of rows changed (0 when the row is no longer on the
+ * list).
+ */
+export async function addToShoppingListItem(
+  database: PrismaClient,
+  addition: ShoppingListItemAddition,
+): Promise<number> {
+  const updatedAt = d1Timestamp(new Date());
+  return database.$executeRaw`
+    UPDATE "ShoppingListItem"
+    SET "quantity" = CASE
+          WHEN "deletedAt" IS NOT NULL THEN ${addition.quantityDelta}
+          WHEN ${addition.quantityDelta} IS NULL THEN "quantity"
+          ELSE COALESCE("quantity", 0) + ${addition.quantityDelta}
+        END,
+        "checked" = 0, "checkedAt" = NULL, "deletedAt" = NULL,
+        "sortIndex" = ${addition.sortIndex}, "categoryKey" = ${addition.categoryKey},
+        "iconKey" = ${addition.iconKey}, "updatedAt" = ${updatedAt}
+    WHERE "id" = ${addition.id} AND "shoppingListId" = ${addition.shoppingListId}
+  `;
+}
+
+/**
+ * Creates the item in one statement, only while no row on the list has its identity (the
+ * unit compared null-safely, which the unique index does not do) and the list still exists.
+ * Returns the number of rows inserted: 0 when a concurrent add created the item first or
+ * the list is gone.
+ */
+async function insertShoppingListItemIfAbsent(
+  database: PrismaClient,
+  item: ShoppingListItemIdentity & {
+    id: string;
+    quantity: number | null;
+    sortIndex: number;
+    categoryKey: string | null;
+    iconKey: string | null;
+  },
+): Promise<number> {
+  const updatedAt = d1Timestamp(new Date());
+  return database.$executeRaw`
+    INSERT INTO "ShoppingListItem" (
+      "id", "shoppingListId", "quantity", "unitId", "ingredientRefId",
+      "checked", "sortIndex", "categoryKey", "iconKey", "updatedAt"
+    )
+    SELECT ${item.id}, ${item.shoppingListId}, ${item.quantity}, ${item.unitId}, ${item.ingredientRefId},
+      0, ${item.sortIndex}, ${item.categoryKey}, ${item.iconKey}, ${updatedAt}
+    WHERE EXISTS (SELECT 1 FROM "ShoppingList" WHERE "id" = ${item.shoppingListId})
+      AND NOT EXISTS (
+        SELECT 1 FROM "ShoppingListItem"
+        WHERE "shoppingListId" = ${item.shoppingListId}
+          AND "ingredientRefId" = ${item.ingredientRefId}
+          AND "unitId" IS ${item.unitId}
+      )
+  `;
+}
+
+export interface ShoppingListItemAdd {
+  identity: ShoppingListItemIdentity;
+  /** The amount to add; null adds none (a new item has no quantity). */
+  quantity: number | null;
+  /** Set on a new item; on an existing one, a null key keeps the item's own. */
+  categoryKey: string | null;
+  iconKey: string | null;
+  /** The sort index after the list's active items. */
+  nextSortIndex: () => Promise<number>;
+}
+
+const SHOPPING_LIST_ITEM_ADD_ATTEMPTS = 3;
+
+/**
+ * Adds one item to a list the way the web, REST and MCP single-item adds do: an existing
+ * item with the same identity (active first, else removed) gets the amount added and is
+ * unchecked and restored; otherwise a new item is created. Each write is one conditional
+ * statement, so a lost race writes nothing: a create that finds the identity taken (a
+ * concurrent add created it), an addition that finds the item gone, or a restore that
+ * conflicts with an item a concurrent add made active reads again and takes the path the
+ * fresh read gives. Returns the item written, or null when the list itself no longer exists.
+ */
+export async function addShoppingListItem(
+  database: PrismaClient,
+  add: ShoppingListItemAdd,
+): Promise<{ created: boolean; id: string } | null> {
+  for (let attempt = 1; attempt <= SHOPPING_LIST_ITEM_ADD_ATTEMPTS; attempt += 1) {
+    const existing = await findCompatibleShoppingListItem(database, add.identity);
+    if (existing) {
+      const moveToEnd = Boolean(existing.checked || existing.checkedAt || existing.deletedAt);
+      const sortIndex = moveToEnd ? await add.nextSortIndex() : existing.sortIndex;
+      try {
+        const changed = await addToShoppingListItem(database, {
+          id: existing.id,
+          shoppingListId: add.identity.shoppingListId,
+          quantityDelta: add.quantity,
+          sortIndex,
+          categoryKey: add.categoryKey ?? existing.categoryKey,
+          iconKey: add.iconKey ?? existing.iconKey,
+        });
+        if (changed > 0) return { created: false, id: existing.id };
+      } catch (error) {
+        // Restoring a removed item conflicts where an active-identity index exists and a
+        // concurrent add already made an active item: read again and add to that one.
+        if (!isShoppingListUniqueConflict(error)) throw error;
+      }
+      continue;
+    }
+
+    const id = crypto.randomUUID();
+    const inserted = await insertShoppingListItemIfAbsent(database, {
+      ...add.identity,
+      id,
+      quantity: add.quantity,
+      sortIndex: await add.nextSortIndex(),
+      categoryKey: add.categoryKey,
+      iconKey: add.iconKey,
+    });
+    if (inserted > 0) return { created: true, id };
+    const list = await database.shoppingList.findUnique({
+      where: { id: add.identity.shoppingListId },
+      select: { id: true },
+    });
+    if (!list) return null;
+  }
+  throw new Error("Shopping list item add kept losing to concurrent writes; try again");
+}
+
 export async function mutateCompatibleShoppingListItem<T>(
   input: CompatibleMutationInput<T>,
 ): Promise<{ created: boolean; item: T }> {
@@ -245,61 +462,6 @@ export async function mutateCompatibleShoppingListItem<T>(
     if (!active) throw error;
     return { created: false, item: await input.update(active) };
   }
-}
-
-// Adds `added` to one row in a single statement, so the new quantity is computed from the row as
-// it is when the write lands rather than from an earlier read: two adds that race on the same row
-// (two devices, a double tap) both count. It follows mergedShoppingItemQuantity: a removed or
-// cleared row restarts from `added`, a live row adds on top (a null `added` leaves it as is). The
-// same statement brings the row back and unchecks it; SQLite evaluates every SET expression
-// against the row before the update, so the CASE sees the old "deletedAt".
-export async function addToShoppingListItemQuantity(
-  database: PrismaClient,
-  itemId: string,
-  added: number | null,
-): Promise<void> {
-  await database.$executeRaw`
-    UPDATE "ShoppingListItem"
-    SET "quantity" = CASE
-          WHEN "deletedAt" IS NOT NULL THEN ${added}
-          WHEN ${added} IS NULL THEN "quantity"
-          ELSE COALESCE("quantity", 0) + ${added}
-        END,
-        "checked" = 0,
-        "checkedAt" = NULL,
-        "deletedAt" = NULL
-    WHERE "id" = ${itemId}
-  `;
-}
-
-interface CompatibleAddInput<T> {
-  database: PrismaClient;
-  identity: ShoppingListItemIdentity;
-  /** The amount to add; null when no amount was given. */
-  added: number | null;
-  /** Where the matched row goes on the list. Runs before the row comes back, so a "move to the
-   * end" position is computed from the other rows. */
-  sortIndex: (existing: ShoppingListItem) => Promise<number>;
-  /** Sets the fields that aren't additive (sort position, category, icon) and returns the row. */
-  update: (existing: ShoppingListItem, sortIndex: number) => Promise<T>;
-  create: () => Promise<T>;
-}
-
-// mutateCompatibleShoppingListItem for an add: the matched row's quantity, check and removed
-// state change atomically (addToShoppingListItemQuantity), and `update` sets only the rest.
-export async function addToCompatibleShoppingListItem<T>(
-  input: CompatibleAddInput<T>,
-): Promise<{ created: boolean; item: T }> {
-  return mutateCompatibleShoppingListItem({
-    database: input.database,
-    identity: input.identity,
-    create: input.create,
-    update: async (existing) => {
-      const sortIndex = await input.sortIndex(existing);
-      await addToShoppingListItemQuantity(input.database, existing.id, input.added);
-      return input.update(existing, sortIndex);
-    },
-  });
 }
 
 export function coalesceShoppingRecipeIngredients(
@@ -347,6 +509,14 @@ export function coalesceShoppingRecipeIngredients(
   return [...coalesced.values()];
 }
 
+const SHOPPING_LIST_BATCH_ATTEMPTS = 3;
+
+/**
+ * Builds and runs a shopping-list batch: one D1 batch on the Worker, one Prisma
+ * `$transaction` without a binding. When the batch loses a race (a guard found the rows it
+ * was planned from changed, or a concurrent create took the identity), nothing in it applied,
+ * so it is built again from fresh reads, up to three times in all.
+ */
 export async function runCompatibleShoppingListBatch<T, Metadata>(
   database: PrismaClient,
   build: () => Promise<CompatibleBatch<T, Metadata>>,
@@ -355,10 +525,10 @@ export async function runCompatibleShoppingListBatch<T, Metadata>(
     const batch = await build();
     let items: T[];
     if (batch.native) {
-      if (batch.native.statements.length > 0) {
-        await batch.native.database.batch(batch.native.statements);
-      }
-      items = batch.native.items;
+      const results = batch.native.queries.length > 0
+        ? await d1WriteBatch(batch.native.database, batch.native.queries)
+        : [];
+      items = batch.native.items(results);
     } else {
       items = batch.operations.length > 0
         ? await database.$transaction(batch.operations)
@@ -367,10 +537,12 @@ export async function runCompatibleShoppingListBatch<T, Metadata>(
     return { items, metadata: batch.metadata };
   };
 
-  try {
-    return await execute();
-  } catch (error) {
-    if (!isShoppingListUniqueConflict(error)) throw error;
-    return execute();
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await execute();
+    } catch (error) {
+      const lostRace = isShoppingListUniqueConflict(error) || isD1GuardFailure(error);
+      if (!lostRace || attempt >= SHOPPING_LIST_BATCH_ATTEMPTS) throw error;
+    }
   }
 }

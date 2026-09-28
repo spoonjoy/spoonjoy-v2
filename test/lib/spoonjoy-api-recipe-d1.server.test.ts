@@ -229,10 +229,30 @@ describe("MCP recipe tools on a D1 binding", () => {
     try {
       const { callSpoonjoyApiOperation: call } = await import("~/lib/spoonjoy-api.server");
       const image = "data:image/png;base64," + Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]).toString("base64");
+      // Name each round trip by what it writes: the recipe batch, or a stylization status
+      // write (the cover's status plus its sync touches, one batch each), which runs
+      // before activation on the same binding. Anything else would fail the assertion.
+      const roundTrips: string[] = [];
+      const binding = {
+        prepare: d1.binding.prepare,
+        batch: async (statements: Parameters<typeof d1.binding.batch>[0]) => {
+          const sql = statements.map((statement) => statement.sql);
+          roundTrips.push(
+            sql.some((text) => text.startsWith('INSERT INTO "Recipe" ('))
+              ? "recipe"
+              : sql[0].startsWith('UPDATE "RecipeCover" SET "status" = ?')
+                ? "stylization status"
+                : `other: ${sql[0].slice(0, 60)}`,
+          );
+          return d1.binding.batch(statements);
+        },
+      };
       const before = d1.roundTrips();
-      await expect(call("create_recipe", { title: "Written once", imageUrl: image, steps }, { ...context(d1.binding), allowLocalImageFallback: true }))
+      await expect(call("create_recipe", { title: "Written once", imageUrl: image, steps }, { ...context(binding), allowLocalImageFallback: true }))
         .rejects.toBeInstanceOf(D1GuardFailure);
-      expect(d1.roundTrips() - before).toBe(1);
+      expect(roundTrips).toEqual(["recipe", "stylization status", "stylization status"]);
+      // No single-statement round trips besides the batches above.
+      expect(d1.roundTrips() - before).toBe(roundTrips.length);
       expect(activate).toHaveBeenCalledTimes(1);
       await expect(db.recipe.count({ where: { title: "Written once" } })).resolves.toBe(1);
     } finally {
