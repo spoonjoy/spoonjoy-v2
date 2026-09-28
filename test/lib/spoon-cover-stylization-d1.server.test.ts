@@ -114,8 +114,8 @@ describe("cover stylization on a D1 binding", () => {
     const before = d1.roundTrips();
     await stylize(viaD1, d1.binding);
 
-    // Processing and succeeded; the quota step still runs through Prisma.
-    expect(d1.roundTrips() - before).toBe(2);
+    // Processing, the atomic quota claim, and succeeded.
+    expect(d1.roundTrips() - before).toBe(3);
     expect(await state(viaD1)).toEqual(await state(viaPrisma));
     expect(await state(viaD1)).toMatchObject({
       status: "ready",
