@@ -27,10 +27,6 @@ import { useToast } from "~/components/ui/toast";
 import { Listbox, ListboxOption, ListboxLabel } from "~/components/ui/listbox";
 import { CookbookHeader, CookbookPage, RuledEmptyState, SettingsPanel } from "~/components/cookbook/page";
 import { ChecklistRow } from "~/components/shopping/checklist-row";
-import {
-  deleteExistingStepOutputUses,
-  createStepOutputUses,
-} from "~/lib/step-output-use-mutations.server";
 import { touchNativeSyncRecipe, touchNativeSyncRecipeOperation } from "~/lib/native-sync-invalidation.server";
 import { validateStepDeletion } from "~/lib/step-deletion-validation.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
@@ -562,20 +558,24 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       return redirect(`/recipes/${id}/edit`);
     }
 
-    await database.recipeStep.update({
-      where: { id: stepId },
-      data: {
-        stepTitle: stepTitle.trim() || null,
-        description: description.trim(),
-      },
-    });
-
-    // Update step output uses: delete existing and create new
-    await deleteExistingStepOutputUses(database, id, step.stepNum);
-    if (usesSteps.length > 0) {
-      await createStepOutputUses(database, id, step.stepNum, usesSteps);
-    }
-    await touchNativeSyncRecipe(database, id);
+    // One transaction: the step, its replaced output uses and the recipe touch land together.
+    const uniqueUses = [...new Set(usesSteps)];
+    await database.$transaction([
+      database.recipeStep.update({
+        where: { id: stepId },
+        data: {
+          stepTitle: stepTitle.trim() || null,
+          description: description.trim(),
+        },
+      }),
+      database.stepOutputUse.deleteMany({ where: { recipeId: id, inputStepNum: step.stepNum } }),
+      ...(uniqueUses.length > 0
+        ? [database.stepOutputUse.createMany({
+          data: uniqueUses.map((outputStepNum) => ({ recipeId: id, inputStepNum: step.stepNum, outputStepNum })),
+        })]
+        : []),
+      touchNativeSyncRecipeOperation(database, id),
+    ]);
 
     return redirect(`/recipes/${id}/edit`);
   } catch (error) {

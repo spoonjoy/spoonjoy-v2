@@ -96,9 +96,9 @@ New structure:
 
 - Full-width bone page with a thin cookbook index rail.
 - Header is a quiet masthead: avatar, kitchen name, counts, actions.
-- Main area is an asymmetric spread:
-  - left column: "Recently Updated" lead recipe with large photo, title, note/provenance/action.
-  - right column: compact recipe index with thumbnails, not cards.
+- Main area reads like a cookbook's table of contents, not a feed:
+  - the recipe index gets the full page width: every recipe, newest update first, numbered, with a thumbnail, title and metadata (two columns on desktop, one on a phone). No recipe is held out as a lead, so there is no "Recently Updated" hero.
+  - a chef with no recipes sees "Create your first recipe" in the index's place.
   - lower band: cookbooks, where each cookbook looks like a cover/spine object.
 - Tabs should be replaced with an index switch or segmented text control only if the content genuinely needs hiding. Prefer showing recipes and cookbooks together because they are different objects, not mutually exclusive dashboards.
 
@@ -166,8 +166,7 @@ Settings can remain Catalyst-like:
 ## Components To Build
 
 - `KitchenMasthead`: identity, counts, primary actions.
-- `RecipeLead`: one dominant recipe object with large image and editorial caption.
-- `RecipeIndex`: compact thumb/title/metadata rows.
+- `RecipeIndex`: the kitchen's table of contents; numbered thumb/title/metadata rows, full width.
 - `CookbookShelf`: horizontal or wrapped shelf of cookbook cover objects.
 - `CookbookCover`: book-like object, not a card.
 - `ReceiptList`: shopping-list and ingredient-list primitive.
@@ -188,7 +187,7 @@ The first real slice should be the logged-in kitchen page because it is the page
 
 Scope:
 
-1. Replace the logged-in `/` layout with `KitchenMasthead`, `RecipeLead`, `RecipeIndex`, and `CookbookShelf`.
+1. Replace the logged-in `/` layout with `KitchenMasthead`, `RecipeIndex`, and `CookbookShelf`.
 2. Remove tab-first structure from the kitchen page.
 3. Remove `sj-photo-tile` as the generic recipe-card default on this route.
 4. Tighten radius tokens to the semantic scale above.

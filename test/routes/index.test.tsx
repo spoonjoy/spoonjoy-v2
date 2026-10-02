@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Request as UndiciRequest } from "undici";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import { absoluteKitchenUrl, loader, meta } from "~/routes/_index";
@@ -469,6 +469,42 @@ describe("Kitchen Index Route", () => {
       ]));
     });
 
+    it("lists every recipe in the index in the loader's order, with no lead hero", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/",
+          Component: Index,
+          loader: () => ({
+            tab: "recipes",
+            isOwner: true,
+            viewer: { id: "viewer-1", username: "chef", email: "chef@example.com", photoUrl: null },
+            kitchenUser: { id: "viewer-1", username: "chef", photoUrl: null },
+            // The loader orders by updatedAt, newest first; the newest has no cover.
+            recipes: [
+              { id: "recipe-new", title: "Newest Without Cover", description: null, servings: null, coverImageUrl: null },
+              { id: "recipe-old", title: "Older With Cover", description: null, servings: null, coverImageUrl: "https://example.com/old.jpg" },
+            ],
+            cookbooks: [],
+          }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/"]} />);
+
+      const index = await screen.findByRole("region", { name: "Recipe index" });
+      const rows = within(index).getAllByRole("article");
+      expect(rows.map((row) => row.textContent)).toEqual([
+        expect.stringContaining("Newest Without Cover"),
+        expect.stringContaining("Older With Cover"),
+      ]);
+      expect(rows[0]).toHaveTextContent("01");
+      expect(rows[1]).toHaveTextContent("02");
+      expect(screen.queryByRole("region", { name: "Recently Updated" })).not.toBeInTheDocument();
+      expect(screen.queryByText("Recently Updated")).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Open Recipe" })).not.toBeInTheDocument();
+      expect(screen.getAllByText("Newest Without Cover")).toHaveLength(1);
+    });
+
     it("renders owner kitchen as a cookbook spread with settings and admin controls", async () => {
       const Stub = createTestRoutesStub([
         {
@@ -523,8 +559,7 @@ describe("Kitchen Index Route", () => {
       expect(screen.queryByRole("button", { name: "Logout" })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "New Recipe" })).not.toBeInTheDocument();
       expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
-      expect(screen.getByRole("region", { name: "Recently Updated" })).toBeInTheDocument();
-      expect(screen.getByText("Recently Updated")).toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "Recently Updated" })).not.toBeInTheDocument();
       expect(screen.queryByText("Latest from the kitchen")).not.toBeInTheDocument();
       expect(screen.queryByText("On the Counter")).not.toBeInTheDocument();
       // The recipe index sits inside root.tsx's <main>, so it's a labelled region rather than
@@ -536,10 +571,8 @@ describe("Kitchen Index Route", () => {
       expect(screen.getByText("3 recipes and 1 cookbook")).toBeInTheDocument();
       expect(screen.getAllByText("Cheese Night").length).toBeGreaterThan(0);
       expect(screen.getByText("Original photo")).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "Open Recipe" })).toHaveAttribute("href", "/recipes/recipe-1");
-      expect(screen.getByText("Fondue")).toBeInTheDocument();
-      expect(screen.getAllByRole("link", { name: "Fondue" }).some((link) => link.classList.contains("min-h-11"))).toBe(true);
-      fireEvent.click(screen.getByRole("button", { name: "Share" }));
+      expect(screen.getByRole("link", { name: /Fondue/ })).toHaveAttribute("href", "/recipes/recipe-1");
+      fireEvent.click(screen.getByRole("button", { name: "Share Fondue" }));
       await waitFor(() => {
         expect(vi.mocked(shareContent)).toHaveBeenCalledWith(expect.objectContaining({
           title: "Fondue",
@@ -623,10 +656,10 @@ describe("Kitchen Index Route", () => {
         },
       ]);
 
-      render(<Stub initialEntries={["/?chef=chef"]} />);
+      const { container } = render(<Stub initialEntries={["/?chef=chef"]} />);
 
-      const image = await screen.findByRole("img", { name: "Image Dish" });
-      expect(image).toHaveAttribute("src", "https://example.com/dish.jpg");
+      await screen.findByText("Image Dish");
+      expect(container.querySelector('img[src="https://example.com/dish.jpg"]')).not.toBeNull();
       expect(screen.queryByText(/Serves/)).not.toBeInTheDocument();
     });
 
@@ -784,7 +817,7 @@ describe("Kitchen Index Route", () => {
       render(<Stub initialEntries={["/"]} />);
 
       await screen.findByText("e2e Chocolate Cake");
-      expect(screen.getAllByRole("link", { name: "e2e Chocolate Cake" }).some((link) => link.getAttribute("href") === "/recipes/recipe-qa-title")).toBe(true);
+      expect(screen.getByRole("link", { name: /e2e Chocolate Cake/ })).toHaveAttribute("href", "/recipes/recipe-qa-title");
       expect(screen.getByRole("link", { name: /Pasta \(variation 2\)/ })).toHaveAttribute("href", "/recipes/recipe-variation");
     });
   });

@@ -61,7 +61,7 @@ export async function readKitchenHomeWithPrisma(
   const [recipes, cookbooks] = await Promise.all([
     database.recipe.findMany({
       where: { chefId: kitchenUser.id, deletedAt: null },
-      orderBy: { updatedAt: "desc" },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
       select: {
         id: true,
         title: true,
@@ -158,7 +158,7 @@ export async function readKitchenHomeFromD1(
       `SELECT r."id", r."title", r."description", r."servings", r."activeCoverId", r."activeCoverVariant", r."coverMode", ${coverSelect}
        FROM "Recipe" r ${ACTIVE_COVER_JOIN}
        WHERE r."chefId" = ${ownerId} AND r."deletedAt" IS NULL
-       ORDER BY r."updatedAt" DESC`,
+       ORDER BY r."updatedAt" DESC, r."createdAt" DESC, r."id" DESC`,
       owner.value,
     ],
     [

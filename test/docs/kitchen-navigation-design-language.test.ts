@@ -26,11 +26,13 @@ describe("kitchen navigation design language", () => {
       "Global search stays at `/search`",
       "personal drawer filters are local filters",
       "`Mine`, `Saved` and `Everyone`",
-      "Recently Updated"
+      "table of contents"
     ]) {
       expect(designLanguage).toContain(marker);
     }
 
+    expect(designLanguage).not.toContain("Recently Updated\" lead");
+    expect(designLanguage).not.toContain("RecipeLead");
     expect(designLanguage).not.toContain("Latest from the kitchen");
     expect(designLanguage).not.toContain("On the Counter");
     expect(designLanguage).not.toContain("Pantry drawer");

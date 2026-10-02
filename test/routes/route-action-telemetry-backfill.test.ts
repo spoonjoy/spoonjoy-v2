@@ -592,7 +592,8 @@ describe("route-action telemetry backfill — unexpected-failure captures", () =
 
     async function run(env: Record<string, unknown> | null, scheduled: Promise<unknown>[]) {
       const { userId, cookie, recipeId, stepId } = await setupStep("stepedit");
-      stubReject(db.recipeStep, "update", new Error("step update failed"));
+      // The step save runs inside one transaction with the output uses and the recipe touch.
+      stubReject(db, "$transaction", new Error("step update failed"));
       const fd = new UndiciFormData();
       fd.append("description", "Updated description");
       const res = await editStepAction(
@@ -779,7 +780,8 @@ describe("route-action telemetry backfill — unexpected-failure captures", () =
       await db.ingredient.create({
         data: { recipeId: recipe.id, stepNum: 1, quantity: 1, unitId: unit.id, ingredientRefId: ref.id },
       });
-      stubReject(db.recipeStep, "update", new Error("step update failed"));
+      // The step save runs inside one transaction with the output uses and the recipe touch.
+      stubReject(db, "$transaction", new Error("step update failed"));
       const fd = new UndiciFormData();
       fd.append("description", "Updated description");
       const res = await editStepAction(

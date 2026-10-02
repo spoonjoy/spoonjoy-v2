@@ -920,6 +920,36 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
       }
     });
 
+    it("saves the step, its output uses and the recipe's updatedAt together or not at all", async () => {
+      const step2 = await db.recipeStep.create({
+        data: { recipeId, stepNum: 2, description: "Second", stepTitle: "Second" },
+      });
+      const old = new Date("2026-01-01T00:00:00.000Z");
+      await db.recipe.update({ where: { id: recipeId }, data: { updatedAt: old } });
+
+      const originalCreateMany = db.stepOutputUse.createMany;
+      db.stepOutputUse.createMany = vi.fn().mockRejectedValue(new Error("Database connection failed")) as any;
+      try {
+        const request = await createFormRequest({ stepTitle: "Changed", description: "Changed description" }, testUserId, recipeId, step2.id, [1]);
+        const response = await action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: { id: recipeId, stepId: step2.id },
+        } as any);
+        expect(extractResponseData(response).status).toBe(500);
+      } finally {
+        db.stepOutputUse.createMany = originalCreateMany;
+      }
+
+      const unchanged = await db.recipeStep.findUnique({ where: { id: step2.id } });
+      expect(unchanged?.description).toBe("Second");
+
+      const request = await createFormRequest({ stepTitle: "Changed", description: "Changed description" }, testUserId, recipeId, step2.id, [1]);
+      await action({ request, context: { cloudflare: { env: null } }, params: { id: recipeId, stepId: step2.id } } as any);
+      const recipe = await db.recipe.findUnique({ where: { id: recipeId } });
+      expect(recipe!.updatedAt.getTime()).toBeGreaterThan(old.getTime());
+    });
+
     describe("delete intent", () => {
       it("should delete step and redirect to recipe edit", async () => {
         const request = await createFormRequest({ intent: "delete" }, testUserId);

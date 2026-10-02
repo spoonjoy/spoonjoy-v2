@@ -324,6 +324,15 @@ describe("Recipes $id Steps New Route", () => {
       });
     }
 
+    it("bumps the recipe's updatedAt when a step is added", async () => {
+      const old = new Date("2026-01-01T00:00:00.000Z");
+      await db.recipe.update({ where: { id: recipeId }, data: { updatedAt: old } });
+      const request = await createFormRequest({ description: "A new step" }, testUserId);
+      await action({ request, context: { cloudflare: { env: null } }, params: { id: recipeId } } as any);
+      const recipe = await db.recipe.findUnique({ where: { id: recipeId } });
+      expect(recipe!.updatedAt.getTime()).toBeGreaterThan(old.getTime());
+    });
+
     it("should redirect when not logged in", async () => {
       const request = await createFormRequest({ description: "Test step" });
 
