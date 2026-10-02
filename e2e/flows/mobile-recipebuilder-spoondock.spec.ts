@@ -54,7 +54,7 @@ async function expectAboveDock(locator: Locator, dock: Locator, label: string) {
   expect(dockBox, 'dock should have a bounding box').not.toBeNull();
   expect(
     box!.y + box!.height,
-    `${label} should remain above the fixed SpoonDock`,
+    `${label} should remain above the fixed tab bar`,
   ).toBeLessThanOrEqual(dockBox!.y);
 }
 

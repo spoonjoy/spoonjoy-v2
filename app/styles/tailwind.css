@@ -87,6 +87,16 @@
 
 html {
   background: var(--sj-page);
+  /* Below 1024px the phone tab bar is fixed to the bottom of the screen. Scrolling something into
+     view (keyboard focus, a #hash link, scrollIntoView) stops short of it instead of leaving the
+     target underneath: the tab bar's bottom margin plus its 4rem height and a 1rem gap. */
+  scroll-padding-bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 5rem);
+}
+
+@media (min-width: 1024px) {
+  html {
+    scroll-padding-bottom: 0;
+  }
 }
 
 body {
