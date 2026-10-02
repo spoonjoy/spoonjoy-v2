@@ -346,7 +346,7 @@ export async function createNativeRecipe(
   db: Database,
   chefId: string,
   input: NativeRecipeCreateInput,
-  options: { recipeId?: string; d1?: D1ReadDatabase | null } = {},
+  options: { recipeId?: string; d1?: D1ReadDatabase | null; placeholderCoverId?: string } = {},
 ): Promise<ApiV1RecipeWriteResult<{ recipeId: string }>> {
   const uniqueTitle = await validateActiveRecipeTitleUnique(db, {
     chefId,
@@ -365,6 +365,17 @@ export async function createNativeRecipe(
       servings: input.servings,
       chefId,
       steps: input.steps,
+      // The same processing placeholder the website writes with a new recipe; generation fills it in.
+      cover: options.placeholderCoverId
+        ? {
+          id: options.placeholderCoverId,
+          imageUrl: "",
+          sourceType: "ai-placeholder",
+          status: "processing",
+          createdById: chefId,
+          generationStatus: "processing",
+        }
+        : undefined,
     }, options.d1 ?? null);
   } catch (error) {
     // The D1 batch re-checks the title as it writes; a recipe created in between loses.

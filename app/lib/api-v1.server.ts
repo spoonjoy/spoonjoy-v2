@@ -186,6 +186,7 @@ import {
   type ScheduleRecipeCoverStylizationInput,
   type ScheduleRecipePlaceholderGenerationInput,
 } from "~/lib/recipe-cover-service.server";
+import { runAfterRecipeSave } from "~/lib/recipe-save-follow-up.server";
 import {
   ImportRecipeError,
   importRecipeFromSource,
@@ -5585,6 +5586,30 @@ async function recoverNativeRecipeFork(
   };
 }
 
+/**
+ * Queues placeholder cover generation after a committed API create, as the website does. The
+ * recipe is already saved, so a scheduling failure is logged and captured, never a failed create.
+ */
+async function scheduleApiRecipeCreatePlaceholder(
+  args: ApiV1RouteArgs,
+  db: ApiV1WriteDb,
+  input: { userId: string; recipeId: string; coverId: string; title: string; description: string | null },
+) {
+  const waitUntil = apiV1WaitUntilFor(args);
+  await runAfterRecipeSave(() => queueApiRecipePlaceholderGeneration(args, {
+    db,
+    ...input,
+    // Like the website, let the placeholder become the active cover while the recipe has none.
+    suppressAutoActivation: false,
+  }), {
+    env: apiV1CloudflareFor(args)?.env ?? null,
+    waitUntil,
+    distinctId: input.userId,
+    request: args.request,
+    surface: "recipe_create",
+  });
+}
+
 async function handleRecipeCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
   const body = await parseApiV1JsonBody(args.request);
   const parsed = parseNativeRecipeCreateBody(body);
@@ -5594,7 +5619,21 @@ async function handleRecipeCreate(args: ApiV1RouteArgs, requestId: string, princ
   const origin = publicContentOrigin(args);
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.create", async (db, reservation) => {
-    const created = recipeWriteResultOrThrow(await createNativeRecipe(db, principal.id, parsed.data, { recipeId: reservation.id, d1: requestD1(args.context) }));
+    // The create request has no cover field, so every API-created recipe starts with the same
+    // AI placeholder cover the website gives a recipe made without a photo.
+    const placeholderCoverId = crypto.randomUUID();
+    const created = recipeWriteResultOrThrow(await createNativeRecipe(db, principal.id, parsed.data, {
+      recipeId: reservation.id,
+      d1: requestD1(args.context),
+      placeholderCoverId,
+    }));
+    await scheduleApiRecipeCreatePlaceholder(args, db, {
+      userId: principal.id,
+      recipeId: created.data.recipeId,
+      coverId: placeholderCoverId,
+      title: parsed.data.title,
+      description: parsed.data.description,
+    });
     const recipe = await serializedRecipeOrThrow(db, created.data.recipeId, origin);
     return {
       status: created.status,
