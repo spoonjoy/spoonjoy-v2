@@ -181,6 +181,8 @@ test.describe("Dock on iPhone", () => {
       const alpha = await dock.evaluate((element) => {
         const probe = document.createElement("canvas").getContext("2d");
         if (!probe) throw new Error("No 2D canvas context.");
+        // Start transparent, so a color the canvas cannot parse reads as alpha 0 and fails.
+        probe.fillStyle = "rgba(0, 0, 0, 0)";
         probe.fillStyle = getComputedStyle(element).backgroundColor;
         probe.fillRect(0, 0, 1, 1);
         return probe.getImageData(0, 0, 1, 1).data[3];
