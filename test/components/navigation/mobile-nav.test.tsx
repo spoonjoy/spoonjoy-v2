@@ -62,7 +62,7 @@ describe("MobileNav", () => {
       expect(screen.queryByRole("link", { name: /settings/i })).not.toBeInTheDocument();
     });
 
-    it("opens a glass pantry drawer with every main kitchen destination", async () => {
+    it("opens a solid pantry drawer with every main kitchen destination", async () => {
       const user = userEvent.setup();
 
       render(
@@ -76,8 +76,8 @@ describe("MobileNav", () => {
       await user.click(screen.getByRole("button", { name: "Pantry navigation" }));
 
       const pantry = screen.getByTestId("mobile-pantry");
-      expect(pantry).toHaveClass("backdrop-blur-2xl");
-      expect(pantry).toHaveClass("bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_95%,transparent)]");
+      expect(pantry).toHaveClass("bg-[var(--sj-photo-charcoal)]");
+      expect(pantry).not.toHaveClass("backdrop-blur-2xl");
       expect(pantry.className).not.toContain("supports-[backdrop-filter]:bg-");
       expect(within(pantry).getByRole("link", { name: "Recipes", exact: true })).toHaveAttribute("href", "/recipes");
       expect(within(pantry).getByRole("link", { name: "My Recipes" })).toHaveAttribute("href", "/my-recipes");
@@ -353,10 +353,10 @@ describe("MobileNav", () => {
       expect(screen.getByRole("link", { name: /add/i })).toHaveAttribute("href", "/shopping-list#add-item");
     });
 
-    it("distributes edge-to-edge (not centered) when the tools cluster is full (3 tools)", () => {
+    it("centers a full tools cluster (3 tools) from 370px up and falls back to edge-to-edge below", () => {
       function RecipeDetailDock() {
         // Owner recipe detail = Back + Cook(primary) + List/Share/Edit (3 tools),
-        // the one case with no room to grow + center.
+        // which fits a centered side zone only from 370px up.
         useRecipeDetailActions({ recipeId: "r1", chefId: "c1", isOwner: true });
         return <MobileNav isAuthenticated />;
       }
@@ -371,6 +371,27 @@ describe("MobileNav", () => {
 
       const nav = screen.getByRole("navigation", { name: "Spoonjoy navigation" });
       expect(nav).toHaveClass("justify-between");
+      // Both side zones grow equally from 370px up, so the primary lands dead-center there.
+      const [placeZone, , toolsZone] = Array.from(nav.children);
+      expect(placeZone).toHaveClass("min-[370px]:flex-1");
+      expect(toolsZone).toHaveClass("min-[370px]:flex-1", "min-[370px]:gap-0.5");
+      for (const tool of Array.from(toolsZone.children)) {
+        expect(tool).toHaveClass("min-[370px]:flex-1", "min-[370px]:w-11");
+      }
+    });
+
+    it("gives the signed-in public Recipes page its own place, not the Kitchen dock", () => {
+      render(
+        <MemoryRouter initialEntries={["/recipes"]}>
+          <MobileNav />
+        </MemoryRouter>,
+      );
+
+      const dock = screen.getByRole("navigation", { name: "Spoonjoy navigation" });
+      expect(within(dock).getByRole("link", { name: "Recipes", exact: true })).toHaveAttribute("aria-current", "page");
+      expect(within(dock).getByRole("link", { name: "My Kitchen" })).toHaveAttribute("href", "/");
+      expect(within(dock).getByRole("link", { name: /search/i })).toHaveAttribute("href", "/search");
+      expect(within(dock).queryByRole("button", { name: "Pantry navigation" })).toBeNull();
     });
 
     it("does not render the dock while a route suppresses it", () => {
