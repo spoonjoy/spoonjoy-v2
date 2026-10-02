@@ -3,7 +3,7 @@ import { expect, test } from '../fixtures';
 import { publicRecipeHrefByTitle } from '../support/recipes';
 
 /**
- * SpoonDock responsive audit: every dock variant must fit — without
+ * Phone tab bar responsive audit: the tab bar must fit on every page — without
  * horizontal overflow and with >=44px touch targets — down to the
  * narrowest phones (iPhone 5/SE = 320px, iPhone 13 mini = 375px).
  *
@@ -13,8 +13,7 @@ import { publicRecipeHrefByTitle } from '../support/recipes';
 
 const NARROW_WIDTHS = [320, 375, 390] as const;
 
-// Routes whose dock config differs. `/recipes/:id` (detail) is resolved at
-// runtime; everything else is a static root/context config.
+// A spread of pages, one per tab. `/recipes/:id` (detail) is resolved at runtime.
 const STATIC_ROUTES: { path: string; label: string }[] = [
   { path: '/', label: 'kitchen (default)' },
   { path: '/search', label: 'search' },
@@ -69,7 +68,7 @@ async function assertDockFits(page: Page, label: string, viewportWidth: number) 
 }
 
 for (const width of NARROW_WIDTHS) {
-  test.describe(`SpoonDock @ ${width}px`, () => {
+  test.describe(`Phone tab bar @ ${width}px`, () => {
     test.use({ viewport: { width, height: 780 }, isMobile: true, hasTouch: true });
 
     for (const route of STATIC_ROUTES) {
@@ -80,7 +79,7 @@ for (const width of NARROW_WIDTHS) {
       });
     }
 
-    test('recipe detail dock fits (worst case: place + primary + 3 tools)', async ({ page }) => {
+    test('recipe detail dock fits', async ({ page }) => {
       const href = await publicRecipeHrefByTitle(page, 'Pan-Seared Salmon with Lemon Butter');
       await page.goto(href);
       await page.waitForLoadState('domcontentloaded');

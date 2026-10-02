@@ -13,6 +13,7 @@ import {
 } from "~/lib/shopping-list-parser";
 import { Text, TextLink } from "~/components/ui/text";
 import { Button } from "~/components/ui/button";
+import { Plus } from "lucide-react";
 import { Input } from "~/components/ui/input";
 import { Field, Label } from "~/components/ui/fieldset";
 import { Select } from "~/components/ui/select";
@@ -173,8 +174,8 @@ export default function ShoppingList() {
     }
   }, [actionData]);
 
-  // The dock's "Add" is a link to #add-item: bring the Item field into view with focus, ready to
-  // type. Keyed on the location, so following the link again focuses it again.
+  // "Add item" at the top is a link to #add-item: bring the Item field into view with focus, ready
+  // to type. Keyed on the location, so following the link again focuses it again.
   useEffect(() => {
     if (location.hash === "#add-item") {
       addItemInputRef.current?.focus();
@@ -290,6 +291,11 @@ export default function ShoppingList() {
           <Text className="mt-3">
             {checkedCount > 0 ? `${checkedCount} checked, ${uncheckedCount} remaining` : "Grouped for the aisle, built for one thumb."}
           </Text>
+          {/* The Item field sits below the list, so a long list needs a way straight to it. */}
+          <Button href="#add-item" className="mt-5" data-testid="shopping-list-add-item-link">
+            <Plus data-slot="icon" className="size-4" />
+            New item
+          </Button>
         </header>
       </div>
 

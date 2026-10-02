@@ -12,6 +12,7 @@ import {
 } from "~/lib/collection-reads.server";
 import { requireUserId } from "~/lib/session.server";
 import { DrawerSearch } from "./my-recipes";
+import { RecipesSectionNav } from "~/components/navigation";
 
 function normalizedQuery(request: Request) {
   return (new URL(request.url).searchParams.get("q") ?? "").trim();
@@ -57,6 +58,7 @@ export default function SavedRecipes() {
 
   return (
     <CookbookPage>
+      <RecipesSectionNav />
       <CookbookHeader eyebrow="My Kitchen" title="Saved Recipes">
         Recipes you saved into your cookbooks.
       </CookbookHeader>

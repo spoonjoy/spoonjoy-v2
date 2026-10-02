@@ -1,43 +1,73 @@
 import clsx from "clsx";
-import { useEffect, useState } from "react";
+import type { ElementType } from "react";
 import { useLocation } from "react-router";
-import {
-  ArrowLeft,
-  BookOpen,
-  Bookmark,
-  Globe,
-  Home,
-  LogOut,
-  Menu,
-  Plus,
-  Search,
-  ShoppingBag,
-  User,
-  Users,
-} from "lucide-react";
-import { SpoonDock } from "./spoon-dock";
-import { DockItem } from "./dock-item";
-import { configFromActions, useDockContext, type DockButton, type DockConfig } from "./dock-context";
+import { BookOpen, Globe, Home, Library, LogIn, Search, ShoppingBag } from "lucide-react";
+import { useDockContext } from "./dock-context";
 import { Link } from "~/components/ui/link";
 
-function buttonHref(action: DockButton) {
-  return typeof action.onAction === "string" ? action.onAction : undefined;
-}
+/**
+ * The phone tab bar. It is navigation only, and it is the same on every page: a row of equal
+ * tabs, each an icon over a short label, plus Search in its own circle beside them (the
+ * iOS 26 tab bar pattern the Spoonjoy iPhone app uses too). Page actions such as create, add,
+ * share, edit and cook live on the page itself, never in the tab bar, so a tab never changes
+ * meaning between pages.
+ */
 
-function buttonOnClick(action: DockButton) {
-  return typeof action.onAction === "function" ? action.onAction : action.onLinkClick;
+interface Tab {
+  id: string;
+  label: string;
+  href: string;
+  icon: ElementType;
+  /** Whether the current page belongs to this tab. */
+  owns: (pathname: string) => boolean;
 }
 
 function isPath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function hasExplicitChefSearch(search: string) {
-  const params = new URLSearchParams(search);
-  return params.has("chef") || params.has("chefId");
-}
+const RECIPE_PATHS = ["/recipes", "/my-recipes", "/saved-recipes"];
 
-function shouldHideDock(pathname: string, isAuthenticated: boolean) {
+const signedInTabs: Tab[] = [
+  {
+    id: "kitchen",
+    label: "Kitchen",
+    href: "/",
+    icon: Home,
+    // Kitchen also owns the pages reached from it: account settings, chefs and profiles.
+    owns: (pathname) =>
+      pathname === "/" || ["/account", "/chefs", "/users"].some((href) => isPath(pathname, href)),
+  },
+  {
+    id: "recipes",
+    label: "Recipes",
+    href: "/my-recipes",
+    icon: BookOpen,
+    owns: (pathname) => RECIPE_PATHS.some((href) => isPath(pathname, href)),
+  },
+  {
+    id: "cookbooks",
+    label: "Cookbooks",
+    href: "/cookbooks",
+    icon: Library,
+    owns: (pathname) => isPath(pathname, "/cookbooks"),
+  },
+  {
+    id: "shopping",
+    label: "Shopping",
+    href: "/shopping-list",
+    icon: ShoppingBag,
+    owns: (pathname) => isPath(pathname, "/shopping-list"),
+  },
+];
+
+const signedOutTabs: Tab[] = [
+  { id: "home", label: "Home", href: "/", icon: Home, owns: (pathname) => pathname === "/" },
+  { id: "recipes", label: "Recipes", href: "/recipes", icon: Globe, owns: (pathname) => isPath(pathname, "/recipes") },
+  { id: "login", label: "Log in", href: "/login", icon: LogIn, owns: () => false },
+];
+
+function shouldHideTabBar(pathname: string, isAuthenticated: boolean) {
   if (pathname === "/oauth/authorize") {
     return true;
   }
@@ -46,8 +76,8 @@ function shouldHideDock(pathname: string, isAuthenticated: boolean) {
     return pathname === "/login" || pathname === "/signup";
   }
 
-  // Forms hide the dock; a cookbook's own page is not a form, so it keeps the dock (R-M3-2). Its
-  // inline title editor hides the dock itself (useDockSuppressed in cookbooks.$id.tsx).
+  // Forms hide the tab bar; a cookbook's own page is not a form, so it keeps it (R-M3-2). Its
+  // inline title editor hides the tab bar itself (useDockSuppressed in cookbooks.$id.tsx).
   if (pathname === "/recipes/new" || pathname === "/cookbooks/new") {
     return true;
   }
@@ -58,373 +88,91 @@ function shouldHideDock(pathname: string, isAuthenticated: boolean) {
   );
 }
 
-interface PantryToggle {
-  isOpen: boolean;
-  toggle: () => void;
-}
+// One solid charcoal surface for the bar and the search circle, so no page content shows
+// through, in light and dark themes alike.
+const surfaceClassName = clsx(
+  "border border-[var(--sj-photo-line)]",
+  "shadow-[0_18px_60px_rgba(31,26,20,0.28),inset_0_1px_0_color-mix(in_srgb,var(--sj-on-photo)_24%,transparent)]",
+);
 
-function rootConfig(pathname: string, search: string, isAuthenticated: boolean, pantry: PantryToggle): DockConfig {
-  if (!isAuthenticated) {
-    return {
-      variant: "root",
-      left: {
-        id: "public-home",
-        icon: Home,
-        label: "SPOONJOY",
-        sublabel: "public",
-        onAction: "/",
-        active: pathname === "/",
-      },
-      primary: {
-        id: "login",
-        icon: User,
-        label: "Log in",
-        onAction: "/login",
-      },
-      tools: [
-        { id: "search", icon: Search, label: "Search", onAction: "/search", active: isPath(pathname, "/search") },
-      ],
-    };
-  }
+// Unselected tabs use a solid muted color, not the translucent --sj-on-photo-soft: a translucent
+// stroke darkens where an icon's lines overlap, which shows as seams inside the icon.
+const mutedClassName = "text-[color-mix(in_srgb,var(--sj-on-photo)_62%,var(--sj-photo-charcoal))]";
 
-  if (pathname === "/recipes") {
-    return {
-      variant: "root",
-      left: {
-        id: "recipes-place",
-        icon: Globe,
-        label: "Recipes",
-        onAction: "/recipes",
-        active: true,
-      },
-      primary: { id: "new-recipe", icon: Plus, label: "+", ariaLabel: "Create recipe", onAction: "/recipes/new" },
-      tools: [
-        { id: "kitchen", icon: Home, label: "Kitchen", ariaLabel: "My Kitchen", onAction: "/" },
-        { id: "search", icon: Search, label: "Search", onAction: "/search" },
-      ],
-    };
-  }
-
-  if (pathname.startsWith("/search")) {
-    return {
-      variant: "root",
-      left: {
-        id: "search-place",
-        icon: Search,
-        label: "Search",
-        onAction: "/search",
-        active: true,
-      },
-      primary: { id: "new-recipe", icon: Plus, label: "+", ariaLabel: "Create recipe", onAction: "/recipes/new" },
-      tools: [
-        { id: "kitchen", icon: Home, label: "Kitchen", onAction: "/" },
-        { id: "shopping", icon: ShoppingBag, label: "Shopping list", onAction: "/shopping-list" },
-      ],
-    };
-  }
-
-  if (pathname.startsWith("/shopping-list")) {
-    return {
-      variant: "root",
-      left: {
-        id: "shopping-place",
-        icon: ShoppingBag,
-        label: "Shopping List",
-        onAction: "/shopping-list",
-        active: true,
-      },
-      primary: { id: "add-shopping-item", icon: Plus, label: "Add", onAction: "/shopping-list#add-item" },
-      tools: [
-        { id: "search", icon: Search, label: "Search", onAction: "/search" },
-        { id: "kitchen", icon: Home, label: "Kitchen", onAction: "/" },
-      ],
-    };
-  }
-
-  if (pathname.startsWith("/account")) {
-    return {
-      variant: "root",
-      left: {
-        id: "account-place",
-        icon: User,
-        label: "Account",
-        sublabel: "settings",
-        onAction: "/account/settings",
-        active: true,
-      },
-      primary: { id: "new-recipe", icon: Plus, label: "+", ariaLabel: "Create recipe", onAction: "/recipes/new" },
-      tools: [
-        { id: "kitchen", icon: Home, label: "Kitchen", onAction: "/" },
-        { id: "search", icon: Search, label: "Search", onAction: "/search" },
-      ],
-    };
-  }
-
-  if (pathname.startsWith("/cookbooks")) {
-    return {
-      variant: "root",
-      left: {
-        id: "cookbooks-place",
-        icon: BookOpen,
-        label: "Cookbooks",
-        onAction: "/cookbooks",
-        // Current across the whole section, like the other place items; on a cookbook's page it
-        // still links back to the list.
-        active: true,
-      },
-      primary: { id: "new-cookbook", icon: Plus, label: "+", ariaLabel: "Create cookbook", onAction: "/cookbooks/new" },
-      tools: [
-        { id: "kitchen", icon: Home, label: "Kitchen", ariaLabel: "My Kitchen", onAction: "/" },
-        { id: "search", icon: Search, label: "Search", onAction: "/search" },
-      ],
-    };
-  }
-
-  if (pathname.startsWith("/my-recipes")) {
-    return {
-      variant: "root",
-      left: {
-        id: "my-recipes-place",
-        icon: BookOpen,
-        label: "My Recipes",
-        onAction: "/my-recipes",
-        active: true,
-      },
-      primary: { id: "new-recipe", icon: Plus, label: "+", ariaLabel: "Create recipe", onAction: "/recipes/new" },
-      tools: [
-        { id: "saved", icon: Bookmark, label: "Saved", onAction: "/saved-recipes" },
-        { id: "chefs", icon: Users, label: "Chefs", onAction: "/chefs" },
-      ],
-    };
-  }
-
-  if (pathname.startsWith("/saved-recipes")) {
-    return {
-      variant: "root",
-      left: {
-        id: "saved-recipes-place",
-        icon: Bookmark,
-        label: "Saved",
-        onAction: "/saved-recipes",
-        active: true,
-      },
-      primary: { id: "new-recipe", icon: Plus, label: "+", ariaLabel: "Create recipe", onAction: "/recipes/new" },
-      tools: [
-        { id: "my-recipes", icon: BookOpen, label: "My Recipes", onAction: "/my-recipes" },
-        { id: "chefs", icon: Users, label: "Chefs", onAction: "/chefs" },
-      ],
-    };
-  }
-
-  if (pathname.startsWith("/chefs")) {
-    return {
-      variant: "root",
-      left: {
-        id: "chefs-place",
-        icon: Users,
-        label: "Chefs",
-        onAction: "/chefs",
-        active: true,
-      },
-      primary: { id: "new-recipe", icon: Plus, label: "+", ariaLabel: "Create recipe", onAction: "/recipes/new" },
-      tools: [
-        { id: "my-recipes", icon: BookOpen, label: "My Recipes", onAction: "/my-recipes" },
-        { id: "search", icon: Search, label: "Search", onAction: "/search" },
-      ],
-    };
-  }
-
-  if (pathname.startsWith("/users")) {
-    return {
-      variant: "context",
-      left: {
-        id: "back-kitchen",
-        icon: ArrowLeft,
-        label: "Back",
-        sublabel: "kitchen",
-        onAction: "/",
-      },
-      primary: { id: "new-recipe", icon: Plus, label: "+", ariaLabel: "Create recipe", onAction: "/recipes/new" },
-      tools: [
-        { id: "search", icon: Search, label: "Search", onAction: "/search" },
-        { id: "shopping", icon: ShoppingBag, label: "Shopping list", onAction: "/shopping-list" },
-      ],
-    };
-  }
-
-  return {
-    variant: "root",
-    left: {
-      id: "kitchen-place",
-      icon: Home,
-      label: "My Kitchen",
-      ariaLabel: "My Kitchen",
-      onAction: "/",
-      active: pathname === "/" && !hasExplicitChefSearch(search),
-    },
-    primary: { id: "new-recipe", icon: Plus, label: "+", ariaLabel: "Create recipe", onAction: "/recipes/new" },
-    tools: [
-      { id: "my-recipes", icon: BookOpen, label: "My Recipes", onAction: "/my-recipes" },
-      { id: "shopping", icon: ShoppingBag, label: "Shopping list", onAction: "/shopping-list" },
-      {
-        id: "pantry",
-        icon: Menu,
-        label: "Pantry",
-        ariaLabel: "Pantry navigation",
-        onAction: pantry.toggle,
-        expanded: pantry.isOpen,
-        controls: PANTRY_ID,
-      },
-    ],
-  };
-}
-
-const PANTRY_ID = "mobile-pantry";
-
-const pantryLinks = [
-  { href: "/recipes", label: "Recipes", icon: Globe },
-  { href: "/my-recipes", label: "My Recipes", icon: BookOpen },
-  { href: "/saved-recipes", label: "Saved Recipes", icon: Bookmark },
-  { href: "/cookbooks", label: "Cookbooks", icon: BookOpen },
-  { href: "/shopping-list", label: "Shopping List", icon: ShoppingBag },
-  { href: "/chefs", label: "Chefs", icon: Users },
-  { href: "/search", label: "Kitchen Search", icon: Search },
-];
-
-const pantryItemClassName =
-  "flex min-h-12 items-center gap-2 rounded-[var(--sj-radius-control)] px-3 py-2 font-sj-ui text-sm font-bold text-[var(--sj-on-photo)] no-underline transition active:scale-[0.98]";
-const pantryIconClassName = "h-4 w-4 shrink-0 text-[var(--sj-on-photo-soft)]";
+const focusClassName =
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-on-photo)]";
 
 interface MobileNavProps {
   isAuthenticated?: boolean;
 }
 
 export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
-  const location = useLocation();
-  const { config, actions, isSuppressed } = useDockContext();
-  const [isPantryOpen, setIsPantryOpen] = useState(false);
+  const { pathname } = useLocation();
+  const { isSuppressed } = useDockContext();
 
-  useEffect(() => {
-    setIsPantryOpen(false);
-  }, [location.pathname, location.search]);
-
-  // Escape closes the pantry and returns focus to the button that opened it.
-  useEffect(() => {
-    if (!isPantryOpen) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setIsPantryOpen(false);
-      document.querySelector<HTMLElement>(`[aria-controls="${PANTRY_ID}"]`)?.focus();
-    };
-    document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
-  }, [isPantryOpen]);
-
-  if (isSuppressed || shouldHideDock(location.pathname, isAuthenticated)) {
+  if (isSuppressed || shouldHideTabBar(pathname, isAuthenticated)) {
     return null;
   }
 
-  const activeConfig = config ?? configFromActions(actions) ?? rootConfig(
-    location.pathname,
-    location.search,
-    isAuthenticated,
-    { isOpen: isPantryOpen, toggle: () => setIsPantryOpen((open) => !open) },
-  );
-  const tools = activeConfig.tools.slice(0, 3);
-
-  // Center the primary on every page so it never jumps sideways between sections. A full
-  // tools cluster (3) fits a centered side zone only from 370px up (three 44px targets and
-  // two 2px gaps need 136px); narrower phones fall back to edge-to-edge.
-  const centered = tools.length <= 2;
-  const grow = centered ? "flex-1" : "min-[370px]:flex-1";
+  const tabs = isAuthenticated ? signedInTabs : signedOutTabs;
+  const searchActive = isPath(pathname, "/search");
 
   return (
-    <>
-      <SpoonDock aria-label={activeConfig.ariaLabel ?? "Spoonjoy navigation"} centered={centered}>
-        {/* When centered, the side zones grow (flex-1) so the place item and the
-            tools fill the dock — no bare dock between items — and the equal zones
-            leave the primary dead-center. */}
-        <div className={clsx("flex min-w-0 justify-start", grow)}>
-          <DockItem
-            {...activeConfig.left}
-            variant="place"
-            className={grow}
-            href={buttonHref(activeConfig.left)}
-            onClick={buttonOnClick(activeConfig.left)}
-          />
-        </div>
-
-        <div className="flex shrink-0 justify-center" data-testid="dock-center">
-          <DockItem
-            {...activeConfig.primary}
-            variant="primary"
-            tone={activeConfig.primary.tone ?? "primary"}
-            href={buttonHref(activeConfig.primary)}
-            onClick={buttonOnClick(activeConfig.primary)}
-          />
-        </div>
-
-        <div className={clsx("flex justify-end", centered ? "gap-1" : "gap-1 min-[370px]:gap-0.5", grow)}>
-          {tools.map((tool) => (
-            <DockItem
-              key={tool.id}
-              {...tool}
-              variant="tool"
-              // A full cluster's tools start at 44px (not 50) so the zone fits its centered share.
-              className={centered ? grow : clsx(grow, "min-[370px]:w-11")}
-              href={buttonHref(tool)}
-              onClick={buttonOnClick(tool)}
-            />
-          ))}
-        </div>
-      </SpoonDock>
-
-      {/* The pantry comes after the dock in the document, although it shows above it, so the next
-          thing after its button, for VoiceOver or the Tab key, is the pantry it just opened. Both
-          it and its backdrop are position: fixed, so their place in the document moves nothing. */}
-      {isPantryOpen ? (
-        <>
-          {/* A tap anywhere outside the pantry closes it without also activating what's under
-              it. It sits under the dock (z-50), so the dock stays usable while the pantry is open. */}
-          <div
-            aria-hidden="true"
-            className="fixed inset-0 z-40 lg:hidden"
-            data-testid="mobile-pantry-backdrop"
-            onClick={() => setIsPantryOpen(false)}
-          />
-          {/* Same solid charcoal surface as the dock, so no page content shows
-              through behind the links. */}
-          <div
-            id={PANTRY_ID}
-            className="fixed bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))] z-50 mx-auto max-w-lg rounded-[var(--sj-radius-surface)] border border-[var(--sj-photo-line)] bg-[var(--sj-photo-charcoal)] p-2 shadow-[0_18px_60px_rgba(31,26,20,0.26),inset_0_1px_0_color-mix(in_srgb,var(--sj-on-photo)_22%,transparent)] lg:hidden"
-            data-testid="mobile-pantry"
-          >
-            <div className="grid grid-cols-2 gap-1.5">
-              {pantryLinks.map(({ href, label, icon: Icon }) => (
-                <Link key={href} href={href} className={pantryItemClassName}>
-                  <Icon className={pantryIconClassName} aria-hidden="true" />
-                  <span className="min-w-0 truncate">{label}</span>
-                </Link>
-              ))}
-            </div>
-            {/* The account and sign-out entries: the only way to either on a phone, where the
-                desktop navigation's Account and Logout are hidden. A plain form post, so it works
-                before the page hydrates and the next page loads fresh. */}
-            <div className="mt-1.5 grid grid-cols-2 gap-1.5 border-t border-[var(--sj-photo-line)] pt-1.5">
-              <Link href="/account/settings" className={pantryItemClassName}>
-                <User className={pantryIconClassName} aria-hidden="true" />
-                <span className="min-w-0 truncate">Account</span>
+    <nav
+      aria-label="Spoonjoy navigation"
+      data-testid="mobile-tab-bar"
+      className={clsx(
+        "fixed bottom-0 left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))]",
+        "z-50 mx-auto mb-[max(1rem,env(safe-area-inset-bottom))] flex max-w-lg items-center gap-2 max-[389px]:gap-1.5 lg:hidden",
+      )}
+    >
+      <ul className={clsx(surfaceClassName, "m-0 flex h-16 bg-[var(--sj-photo-charcoal)] min-w-0 flex-1 list-none items-stretch rounded-full p-1")}>
+        {tabs.map(({ id, label, href, icon: Icon, owns }) => {
+          const active = owns(pathname);
+          return (
+            <li key={id} className="flex min-w-0 flex-1">
+              <Link
+                href={href}
+                aria-current={active ? "page" : undefined}
+                data-testid={`tab-${id}`}
+                className={clsx(
+                  "flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-full no-underline transition duration-150 active:scale-95",
+                  focusClassName,
+                  active
+                    ? "bg-[color-mix(in_srgb,var(--sj-on-photo)_14%,transparent)] text-[var(--sj-on-photo)]"
+                    : mutedClassName,
+                )}
+              >
+                <Icon
+                  className="size-[1.375rem] shrink-0"
+                  aria-hidden="true"
+                />
+                <span className="max-w-full truncate px-0.5 font-sj-ui text-[0.6875rem] font-semibold max-[389px]:text-[0.625rem] leading-none tracking-[0.01em]">
+                  {label}
+                </span>
               </Link>
-              <form method="post" action="/logout" className="m-0 flex">
-                <button type="submit" className={clsx(pantryItemClassName, "w-full bg-transparent text-left")}>
-                  <LogOut className={pantryIconClassName} aria-hidden="true" />
-                  <span className="min-w-0 truncate">Log out</span>
-                </button>
-              </form>
-            </div>
-          </div>
-        </>
-      ) : null}
-    </>
+            </li>
+          );
+        })}
+      </ul>
+
+      <Link
+        href="/search"
+        aria-label="Search"
+        aria-current={searchActive ? "page" : undefined}
+        data-testid="tab-search"
+        className={clsx(
+          surfaceClassName,
+          focusClassName,
+          "grid size-16 shrink-0 place-items-center max-[389px]:size-14 rounded-full no-underline transition duration-150 active:scale-95",
+          // The current search page gets the same lifted fill as a current tab, kept opaque.
+          searchActive
+            ? "bg-[color-mix(in_srgb,var(--sj-on-photo)_14%,var(--sj-photo-charcoal))] text-[var(--sj-on-photo)]"
+            : clsx("bg-[var(--sj-photo-charcoal)]", mutedClassName),
+        )}
+      >
+        <Search className="size-6" aria-hidden="true" />
+      </Link>
+    </nav>
   );
 }

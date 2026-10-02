@@ -37,7 +37,7 @@ import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
 import { StepCard } from "~/components/recipe/StepCard";
 import { IngredientList, type Ingredient } from "~/components/recipe/IngredientList";
 import type { StepReference } from "~/components/recipe/StepOutputUseCallout";
-import { shareContent, useDockSuppressed, useRecipeDetailActions } from "~/components/navigation";
+import { shareContent, useDockSuppressed } from "~/components/navigation";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { useBackNavigation } from "~/hooks/use-back-navigation";
 import { useCookSessionSync } from "~/hooks/use-cook-session-sync";
@@ -751,6 +751,15 @@ export default function RecipeDetail() {
         >
           Share
         </button>
+        {isOwner ? (
+          <Link
+            href={`/recipes/${recipe.id}/edit`}
+            className={recipeMastheadActionClass}
+            data-testid="recipe-header-edit-action"
+          >
+            Edit
+          </Link>
+        ) : null}
         {isAuthenticated ? (
           <button
             type="button"
@@ -816,20 +825,7 @@ export default function RecipeDetail() {
     });
   }, [addToListFetcher.state, addToListFetcher.data, ingredientCount, scaleFactor, showToast]);
 
-  // Register dock actions for this recipe detail page
-  useRecipeDetailActions({
-    recipeId: recipe.id,
-    chefId: recipe.chef.id,
-    chefProfileHref: `/users/${recipe.chef.username}`,
-    isOwner,
-    isInShoppingList: isAlreadyInList,
-    onSave: handleOpenSaveModal,
-    onAddToList: handleAddToList,
-    onShare: handleShare,
-    onCook: enterCookMode,
-    disabled: showOwnerTools,
-  });
-  // The dock is hidden in cook mode so it never covers the step controls.
+  // The tab bar is hidden in cook mode so it never covers the step controls.
   useDockSuppressed(showOwnerTools || (isCookMode && recipe.steps.length > 0));
 
   useEffect(() => {

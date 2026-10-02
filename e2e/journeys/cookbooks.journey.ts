@@ -1,7 +1,7 @@
 // Cookbooks on both devices, as scratch user 2 (AGENTS.md's scratch index table): create a
 // cookbook, save another chef's seeded recipe into it from the recipe's Save dialog, see it listed
 // on the cookbook, remove it, rename the cookbook, and delete it. The user also forks a seeded
-// recipe and adds its own fork from the cookbook page's "Recipe" select. On a phone the dock stays on the
+// recipe and adds its own fork from the cookbook page's "Recipe" select. On a phone the tab bar stays on the
 // cookbook list and a cookbook's page, and hides on the new-cookbook form and the title editor
 // (R-M3-2); a rename closes the editor with a short confirmation (R-M3-3).
 //
@@ -61,7 +61,7 @@ test.describe("Cookbooks", () => {
     const title = `Journey shelf ${uniqueSuffix()}`;
     const main = page.getByRole("main");
 
-    // The list keeps the dock on a phone (R-M3-2).
+    // The list keeps the tab bar on a phone (R-M3-2).
     await page.goto("/cookbooks");
     await waitForHydration(page);
     await expect(cookbooksHeading(page)).toBeVisible();
@@ -76,14 +76,12 @@ test.describe("Cookbooks", () => {
     await expect(cookbookHeading(page, title)).toBeVisible();
     const cookbookPath = new URL(page.url()).pathname;
     await expect(main.getByRole("heading", { name: "No recipes yet", exact: true })).toBeVisible();
-    // A cookbook's page is not a form, so the dock stays too (R-M3-2).
+    // A cookbook's page is not a form, so the tab bar stays too (R-M3-2).
     await expect(dock(page)).toBeVisible({ visible: isMobile });
 
-    // Save the friend's recipe into the new cookbook from the recipe's Save dialog: the dock's Save
-    // on a phone, the masthead's Save on desktop (no dock there).
-    const saveButton = isMobile
-      ? dock(page).getByRole("button", { name: "Save", exact: true })
-      : page.getByTestId("recipe-header-save-action");
+    // Save the friend's recipe into the new cookbook from the recipe's Save dialog, opened by the
+    // masthead's Save on a phone and on desktop alike.
+    const saveButton = page.getByTestId("recipe-header-save-action");
     const saveDialog = page.getByRole("dialog", { name: "Save to Cookbook" });
     const cookbookToggle = saveDialog.getByRole("button", { name: title, exact: true });
 
@@ -172,7 +170,7 @@ test.describe("Cookbooks", () => {
     await newTitleField.fill(originalTitle);
     await waitForHydration(page);
     await expect(newTitleField).toHaveValue(originalTitle);
-    // The new-cookbook form hides the dock (R-M3-2).
+    // The new-cookbook form hides the tab bar (R-M3-2).
     await expect(dock(page)).toBeHidden();
     await expectAccessible();
     await page.getByRole("button", { name: "Create Cookbook", exact: true }).click();
@@ -183,7 +181,7 @@ test.describe("Cookbooks", () => {
     await ownerToolsToggle(page).click();
     await page.getByRole("button", { name: "Edit title", exact: true }).click();
     await expect(titleField).toHaveValue(originalTitle);
-    // The title editor is an edit form, so it hides the dock too (R-M3-2).
+    // The title editor is an edit form, so it hides the tab bar too (R-M3-2).
     await expect(dock(page)).toBeHidden();
 
     // A blank title is refused with a 400, and the editor shows why and stays open. Browsers log
@@ -197,7 +195,7 @@ test.describe("Cookbooks", () => {
     await expect(titleField).toBeVisible();
     await expectAccessible();
 
-    // A good title closes the editor with a short confirmation (R-M3-3) and brings the dock back.
+    // A good title closes the editor with a short confirmation (R-M3-3) and brings the tab bar back.
     await titleField.fill(renamedTitle);
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(renamedToast).toHaveText("Cookbook renamed.");

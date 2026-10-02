@@ -1,6 +1,6 @@
 import type { Route } from "./+types/_index";
 import { useLoaderData } from "react-router";
-import { ArrowRight, BookOpen, ChefHat, Plus, Search as SearchIcon, Settings, Share2 } from "lucide-react";
+import { ArrowRight, BookOpen, ChefHat, Plus, Search as SearchIcon, Settings, Share2, Users } from "lucide-react";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import {
@@ -248,6 +248,11 @@ export default function Index() {
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             {isOwner ? (
               <>
+                {/* Desktop reaches Chefs from its top navigation; a phone reaches it here. */}
+                <Button href="/chefs" plain className="lg:hidden">
+                  <Users data-slot="icon" className="size-4" />
+                  Chefs
+                </Button>
                 <Button href="/account/settings" plain aria-label="Kitchen settings">
                   <Settings data-slot="icon" className="size-4" />
                   Settings

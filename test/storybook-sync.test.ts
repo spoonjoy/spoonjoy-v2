@@ -152,14 +152,14 @@ describe('Storybook curation', () => {
     }
   })
 
-  it('documents the current mobile IA instead of the retired five-item dock', () => {
+  it('documents the current phone tab bar instead of the retired docks', () => {
     const content = readStory('MobileNav.stories.tsx')
 
-    expect(content).toContain('New')
-    expect(content).toContain('List')
-    expect(content).toContain('LoggedOutHome')
-    expect(content).not.toContain('CookbooksActive')
-    expect(content).not.toContain('ProfileActive')
-    expect(content).not.toContain('RecipesActive')
+    for (const story of ['KitchenTab', 'RecipesTab', 'CookbooksTab', 'ShoppingTab', 'SearchCurrent', 'LoggedOutHome', 'RecipesSwitch']) {
+      expect(content).toContain(`export const ${story}`)
+    }
+    expect(content).not.toContain('useDockActions')
+    expect(content).not.toContain('useDockConfig')
+    expect(content).not.toContain('NewRecipeActive')
   })
 })

@@ -1,14 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
-import { ArrowLeft, Check, Edit, Share2, ShoppingBag, Trash2 } from 'lucide-react'
 import { MobileNav } from '../app/components/navigation/mobile-nav'
-import { DockContextProvider, useDockActions, useDockConfig, type DockAction } from '../app/components/navigation/dock-context'
+import { RecipesSectionNav } from '../app/components/navigation/recipes-section-nav'
+import { DockContextProvider } from '../app/components/navigation/dock-context'
 
-// iPhone 5/SE (320px) is the narrowest target; 13 mini (375px) is where the
-// dock historically clipped. These let you eyeball every dock variant at the
-// widths the responsive audit (e2e/flows/spoondock-responsive.spec.ts) guards.
-const NARROW_VIEWPORTS = {
-  iphone5: { name: 'iPhone 5/SE — 320px', styles: { width: '320px', height: '568px' } },
+// iPhone SE (320px) is the narrowest target; 13 mini (375px) and 15 (393px) are the common
+// widths. Every tab keeps an equal share of the bar at each of them.
+const PHONE_VIEWPORTS = {
+  iphone5: { name: 'iPhone SE (1st gen) — 320px', styles: { width: '320px', height: '568px' } },
   iphone13mini: { name: 'iPhone 13 mini — 375px', styles: { width: '375px', height: '812px' } },
+  iphone15: { name: 'iPhone 15 — 393px', styles: { width: '393px', height: '852px' } },
 }
 
 const meta: Meta<typeof MobileNav> = {
@@ -16,13 +16,11 @@ const meta: Meta<typeof MobileNav> = {
   component: MobileNav,
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      defaultViewport: 'mobile1',
-    },
+    viewport: { viewports: PHONE_VIEWPORTS, defaultViewport: 'iphone15' },
     docs: {
       description: {
         component:
-          'The current mobile dock: authenticated users get New, centered home logo, and List; logged-out users get Home, centered logo, and Login. Page-level contextual actions may replace the side slots.',
+          'The phone tab bar. Signed in: Kitchen, Recipes, Cookbooks and Shopping as four equal tabs, each an icon over a short label, with Search in its own circle beside them. Signed out: Home, Recipes and Log in, with Search. It is navigation only and the same on every page; page actions live on the page. The Recipes tab reaches Mine, Saved and Everyone through the switch at the top of each recipe list.',
       },
     },
   },
@@ -30,7 +28,7 @@ const meta: Meta<typeof MobileNav> = {
   argTypes: {
     isAuthenticated: {
       control: 'boolean',
-      description: 'Switches between the authenticated and logged-out dock IA.',
+      description: 'Switches between the signed-in and signed-out tabs.',
     },
   },
 }
@@ -41,11 +39,10 @@ type Story = StoryObj<typeof meta>
 function Frame({ children, caption }: { children: React.ReactNode; caption: string }) {
   return (
     <DockContextProvider>
-      <div className="relative min-h-screen bg-[var(--sj-photo-charcoal)] p-6 pb-32 text-[var(--sj-on-photo)]">
+      <div className="relative min-h-screen bg-[var(--sj-paper)] p-6 pb-32 text-[var(--sj-ink)]">
         <div className="max-w-sm space-y-3">
-          <p className="text-xs uppercase tracking-[0.18em] text-[var(--sj-on-photo-muted)]">Mobile dock</p>
+          <p className="sj-eyebrow">Phone tab bar</p>
           <h1 className="text-2xl font-semibold">{caption}</h1>
-          <p className="text-sm text-[var(--sj-on-photo-muted)]">Resize to a mobile viewport or use Storybook's viewport toolbar to inspect the fixed bottom dock.</p>
         </div>
         {children}
       </div>
@@ -53,130 +50,43 @@ function Frame({ children, caption }: { children: React.ReactNode; caption: stri
   )
 }
 
-function ContextualRecipeActions() {
-  const actions: DockAction[] = [
-    { id: 'back', icon: ArrowLeft, label: 'Back', onAction: '/recipes', position: 'left' },
-    { id: 'share', icon: Share2, label: 'Share', onAction: () => undefined, position: 'right' },
-    { id: 'edit', icon: Edit, label: 'Edit', onAction: '/recipes/r-1/edit', position: 'right' },
-  ]
-  useDockActions(actions)
-  return <MobileNav isAuthenticated />
+function tabStory(path: string, caption: string, isAuthenticated = true): Story {
+  return {
+    args: { isAuthenticated },
+    parameters: { router: { initialEntries: [path] } },
+    render: (args) => (
+      <Frame caption={caption}>
+        <MobileNav {...args} />
+      </Frame>
+    ),
+  }
 }
 
-function ContextualEditActions() {
-  const actions: DockAction[] = [
-    { id: 'back', icon: ArrowLeft, label: 'Back', onAction: '/recipes/r-1', position: 'left' },
-    {
-      id: 'delete',
-      icon: Trash2,
-      label: 'Delete',
-      ariaLabel: 'Delete recipe',
-      iconClassName: 'text-[var(--sj-tomato)]',
-      labelClassName: 'text-[var(--sj-tomato)]',
-      onAction: () => undefined,
-      position: 'right',
-    },
-  ]
-  useDockActions(actions)
-  return <MobileNav isAuthenticated />
-}
+export const KitchenTab = tabStory('/', 'Kitchen')
+export const RecipesTab = tabStory('/my-recipes', 'Recipes')
+export const CookbooksTab = tabStory('/cookbooks', 'Cookbooks')
+export const ShoppingTab = tabStory('/shopping-list', 'Shopping')
+export const SearchCurrent = tabStory('/search', 'Search')
+export const RecipeDetail = tabStory('/recipes/r-1', 'A recipe (under Recipes)')
+export const LoggedOutHome = tabStory('/', 'Signed out', false)
 
-export const AuthenticatedHome: Story = {
-  args: { isAuthenticated: true },
-  parameters: { router: { initialEntries: ['/'] } },
-  render: (args) => (
-    <Frame caption="Kitchen home">
-      <MobileNav {...args} />
-    </Frame>
-  ),
-}
-
-export const NewRecipeActive: Story = {
-  args: { isAuthenticated: true },
-  parameters: { router: { initialEntries: ['/recipes/new'] } },
-  render: (args) => (
-    <Frame caption="New recipe active">
-      <MobileNav {...args} />
-    </Frame>
-  ),
-}
-
-export const ShoppingListActive: Story = {
-  args: { isAuthenticated: true },
-  parameters: { router: { initialEntries: ['/shopping-list'] } },
-  render: (args) => (
-    <Frame caption="Shopping list active">
-      <MobileNav {...args} />
-    </Frame>
-  ),
-}
-
-export const LoggedOutHome: Story = {
-  args: { isAuthenticated: false },
-  parameters: { router: { initialEntries: ['/'] } },
-  render: (args) => (
-    <Frame caption="Logged-out home">
-      <MobileNav {...args} />
-    </Frame>
-  ),
-}
-
-export const RecipeDetailContext: Story = {
-  parameters: { router: { initialEntries: ['/recipes/r-1'] } },
-  render: () => (
-    <Frame caption="Recipe detail actions">
-      <ContextualRecipeActions />
-    </Frame>
-  ),
-}
-
-export const RecipeEditContext: Story = {
-  parameters: { router: { initialEntries: ['/recipes/r-1/edit'] } },
-  render: () => (
-    <Frame caption="Recipe edit actions">
-      <ContextualEditActions />
-    </Frame>
-  ),
-}
-
-/** Worst case for width: place + primary + three tools (recipe detail, owner). */
-function ContextualRecipeActionsFull() {
-  // Registered like the real recipe dock (useRecipeDetailActions): plain "Back", no sublabel.
-  useDockConfig({
-    variant: 'context',
-    left: { id: 'recipe-back', icon: ArrowLeft, label: 'Back', onAction: '/recipes' },
-    primary: { id: 'cook', icon: Check, label: 'Cook', onAction: () => undefined },
-    tools: [
-      { id: 'add-to-list', icon: ShoppingBag, label: 'List', ariaLabel: 'Add ingredients to shopping list', onAction: () => undefined },
-      { id: 'share', icon: Share2, label: 'Share', onAction: () => undefined },
-      { id: 'edit', icon: Edit, label: 'Edit', onAction: '/recipes/r-1/edit' },
-    ],
-  })
-  return <MobileNav isAuthenticated />
-}
-
-export const RecipeDetailNarrow: Story = {
-  name: 'Recipe detail @ iPhone 5 (worst case)',
-  parameters: {
-    router: { initialEntries: ['/recipes/r-1'] },
-    viewport: { viewports: NARROW_VIEWPORTS, defaultViewport: 'iphone5' },
-  },
-  render: () => (
-    <Frame caption="Recipe detail — 320px">
-      <ContextualRecipeActionsFull />
-    </Frame>
-  ),
-}
-
-export const KitchenHomeNarrow: Story = {
-  name: 'Kitchen home @ iPhone 5',
-  args: { isAuthenticated: true },
+export const KitchenTabNarrow: Story = {
+  ...tabStory('/', 'Kitchen — 320px'),
+  name: 'Kitchen @ 320px',
   parameters: {
     router: { initialEntries: ['/'] },
-    viewport: { viewports: NARROW_VIEWPORTS, defaultViewport: 'iphone5' },
+    viewport: { viewports: PHONE_VIEWPORTS, defaultViewport: 'iphone5' },
   },
+}
+
+export const RecipesSwitch: Story = {
+  args: { isAuthenticated: true },
+  parameters: { router: { initialEntries: ['/saved-recipes'] } },
   render: (args) => (
-    <Frame caption="Kitchen home — 320px">
+    <Frame caption="Recipes: Saved">
+      <div className="mt-6">
+        <RecipesSectionNav />
+      </div>
       <MobileNav {...args} />
     </Frame>
   ),

@@ -1,680 +1,130 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { createMemoryRouter, MemoryRouter, RouterProvider } from "react-router";
-import { ArrowLeft, Edit, Share2 } from "lucide-react";
+import { describe, expect, it } from "vitest";
+import { render, screen, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { MobileNav } from "~/components/navigation/mobile-nav";
-import { DockContext, DockContextProvider, useRecipeDetailActions, type DockAction } from "~/components/navigation";
-import { HISTORY_TRAIL_KEY } from "~/hooks/use-back-navigation";
+import { DockContext } from "~/components/navigation";
 
-describe("MobileNav unauthenticated variant", () => {
-  it("renders a mobile-only Spoonjoy dock", () => {
-    render(
-      <MemoryRouter initialEntries={["/"]}>
-        <MobileNav isAuthenticated={false} />
-      </MemoryRouter>,
-    );
+function renderAt(path: string, isAuthenticated = true) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <MobileNav isAuthenticated={isAuthenticated} />
+    </MemoryRouter>,
+  );
+}
 
-    expect(screen.getByRole("navigation")).toHaveClass("lg:hidden");
-    expect(screen.getByRole("navigation")).toHaveAccessibleName("Spoonjoy navigation");
+function tabBar() {
+  return screen.getByRole("navigation", { name: "Spoonjoy navigation" });
+}
+
+function tabNames() {
+  return within(tabBar())
+    .getAllByRole("link")
+    .map((link) => link.getAttribute("aria-label") ?? link.textContent?.trim());
+}
+
+function currentTab() {
+  return within(tabBar())
+    .getAllByRole("link")
+    .filter((link) => link.getAttribute("aria-current") === "page")
+    .map((link) => link.getAttribute("aria-label") ?? link.textContent?.trim());
+}
+
+describe("MobileNav signed in", () => {
+  it("is a phone-only bar of four labeled tabs plus Search in its own circle", () => {
+    renderAt("/");
+
+    expect(tabBar()).toHaveClass("lg:hidden");
+    expect(tabNames()).toEqual(["Kitchen", "Recipes", "Cookbooks", "Shopping", "Search"]);
+    expect(screen.getByRole("link", { name: "Kitchen" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "Recipes" })).toHaveAttribute("href", "/my-recipes");
+    expect(screen.getByRole("link", { name: "Cookbooks" })).toHaveAttribute("href", "/cookbooks");
+    expect(screen.getByRole("link", { name: "Shopping" })).toHaveAttribute("href", "/shopping-list");
+    expect(screen.getByRole("link", { name: "Search" })).toHaveAttribute("href", "/search");
+    // The four tabs share one list, each growing to an equal share of it.
+    const items = within(tabBar()).getAllByRole("listitem");
+    expect(items).toHaveLength(4);
+    for (const item of items) expect(item).toHaveClass("flex-1");
   });
 
-  it("shows public place, login primary action, and search tool", () => {
-    render(
-      <MemoryRouter initialEntries={["/"]}>
-        <MobileNav isAuthenticated={false} />
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByRole("link", { name: /spoonjoy public/i })).toHaveAttribute("href", "/");
-    expect(screen.getByRole("link", { name: /log in/i })).toHaveAttribute("href", "/login");
-    expect(screen.getByRole("link", { name: /search/i })).toHaveAttribute("href", "/search");
-    expect(screen.queryByRole("link", { name: /create recipe/i })).not.toBeInTheDocument();
+  it("is the same on every page: no page actions, no buttons, no drawer", () => {
+    for (const path of ["/", "/my-recipes", "/recipes/r-1", "/cookbooks/c-1", "/shopping-list", "/search", "/account/settings", "/users/someone"]) {
+      const { unmount } = renderAt(path);
+      expect(tabNames(), path).toEqual(["Kitchen", "Recipes", "Cookbooks", "Shopping", "Search"]);
+      expect(within(tabBar()).queryAllByRole("button"), path).toEqual([]);
+      unmount();
+    }
   });
 
-  it("does not render the floating dock on auth routes", () => {
-    render(
-      <MemoryRouter initialEntries={["/login"]}>
-        <MobileNav isAuthenticated={false} />
-      </MemoryRouter>,
-    );
+  it.each([
+    ["/", "Kitchen"],
+    ["/account/settings", "Kitchen"],
+    ["/chefs", "Kitchen"],
+    ["/users/someone", "Kitchen"],
+    ["/my-recipes", "Recipes"],
+    ["/saved-recipes", "Recipes"],
+    ["/recipes", "Recipes"],
+    ["/recipes/r-1", "Recipes"],
+    ["/cookbooks", "Cookbooks"],
+    ["/cookbooks/c-1", "Cookbooks"],
+    ["/shopping-list", "Shopping"],
+    ["/search", "Search"],
+  ])("marks the tab that owns %s as current (%s)", (path, tab) => {
+    renderAt(path);
+    expect(currentTab()).toEqual([tab]);
+  });
 
+  it("marks no tab current on an unrelated page", () => {
+    renderAt("/privacy");
+    expect(currentTab()).toEqual([]);
+  });
+
+  it.each([
+    "/recipes/new",
+    "/cookbooks/new",
+    "/recipes/r-1/edit",
+    "/recipes/r-1/steps/new",
+    "/recipes/r-1/steps/s-1/edit",
+    "/oauth/authorize",
+  ])("stays out of %s", (path) => {
+    renderAt(path);
     expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
   });
-});
 
-describe("MobileNav", () => {
-  describe("root cookbook dock", () => {
-    it("renders the approved place / primary / tools structure", () => {
-      render(
-        <MemoryRouter initialEntries={["/"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.getByRole("link", { name: /my kitchen/i })).toHaveAttribute("href", "/");
-      expect(screen.getByTestId("dock-center")).toContainElement(
-        screen.getByRole("link", { name: /create recipe/i }),
-      );
-      expect(screen.getByRole("link", { name: /my recipes/i })).toHaveAttribute("href", "/my-recipes");
-      expect(screen.getByRole("link", { name: /shopping list/i })).toHaveAttribute("href", "/shopping-list");
-      expect(screen.getByRole("button", { name: "Pantry navigation" })).toBeInTheDocument();
-      expect(screen.queryByRole("link", { name: /settings/i })).not.toBeInTheDocument();
-    });
-
-    it("opens a solid pantry drawer with every main kitchen destination", async () => {
-      const user = userEvent.setup();
-
-      render(
-        <MemoryRouter initialEntries={["/"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.queryByTestId("mobile-pantry")).not.toBeInTheDocument();
-
-      await user.click(screen.getByRole("button", { name: "Pantry navigation" }));
-
-      const pantry = screen.getByTestId("mobile-pantry");
-      expect(pantry).toHaveClass("bg-[var(--sj-photo-charcoal)]");
-      expect(pantry).not.toHaveClass("backdrop-blur-2xl");
-      expect(pantry.className).not.toContain("supports-[backdrop-filter]:bg-");
-      expect(within(pantry).getByRole("link", { name: "Recipes", exact: true })).toHaveAttribute("href", "/recipes");
-      expect(within(pantry).getByRole("link", { name: "My Recipes" })).toHaveAttribute("href", "/my-recipes");
-      expect(within(pantry).getByRole("link", { name: "Saved Recipes" })).toHaveAttribute("href", "/saved-recipes");
-      expect(within(pantry).getByRole("link", { name: "Cookbooks" })).toHaveAttribute("href", "/cookbooks");
-      expect(within(pantry).getByRole("link", { name: "Shopping List" })).toHaveAttribute("href", "/shopping-list");
-      expect(within(pantry).getByRole("link", { name: "Chefs" })).toHaveAttribute("href", "/chefs");
-      expect(within(pantry).getByRole("link", { name: "Kitchen Search" })).toHaveAttribute("href", "/search");
-    });
-
-    it("tells assistive tech whether the pantry is open and which element it controls", async () => {
-      const user = userEvent.setup();
-      render(
-        <MemoryRouter initialEntries={["/"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      const toggle = screen.getByRole("button", { name: "Pantry navigation" });
-      expect(toggle).toHaveAttribute("aria-expanded", "false");
-      expect(toggle).toHaveAttribute("aria-controls", "mobile-pantry");
-
-      await user.click(toggle);
-      expect(toggle).toHaveAttribute("aria-expanded", "true");
-      // The label names the control, not an action, so it stays true while the pantry is open.
-      expect(screen.getByRole("button", { name: "Pantry navigation", expanded: true })).toBe(toggle);
-      expect(screen.getByTestId("mobile-pantry")).toHaveAttribute("id", "mobile-pantry");
-
-      await user.click(toggle);
-      expect(toggle).toHaveAttribute("aria-expanded", "false");
-      expect(screen.queryByTestId("mobile-pantry")).not.toBeInTheDocument();
-    });
-
-    it("puts the pantry right after its button in document and focus order", async () => {
-      const user = userEvent.setup();
-      render(
-        <MemoryRouter initialEntries={["/"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      const toggle = screen.getByRole("button", { name: "Pantry navigation" });
-      await user.click(toggle);
-      const pantry = screen.getByTestId("mobile-pantry");
-
-      // The pantry follows its button in the document, so VoiceOver's next item and the Tab key
-      // both go from the button into the pantry it just opened, not back into the dock.
-      expect(toggle.compareDocumentPosition(pantry) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(toggle).toHaveFocus();
-      await user.tab();
-      expect(within(pantry).getByRole("link", { name: "Recipes", exact: true })).toHaveFocus();
-
-      // From inside the pantry, Escape still closes it and returns focus to its button.
-      await user.keyboard("{Escape}");
-      expect(screen.queryByTestId("mobile-pantry")).not.toBeInTheDocument();
-      expect(toggle).toHaveFocus();
-    });
-
-    it("closes the pantry on Escape and returns focus to its button, ignoring other keys", async () => {
-      const user = userEvent.setup();
-      render(
-        <MemoryRouter initialEntries={["/"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      const toggle = screen.getByRole("button", { name: "Pantry navigation" });
-      await user.click(toggle);
-      toggle.blur();
-
-      await user.keyboard("{Enter}");
-      expect(screen.getByTestId("mobile-pantry")).toBeInTheDocument();
-
-      await user.keyboard("{Escape}");
-      expect(screen.queryByTestId("mobile-pantry")).not.toBeInTheDocument();
-      expect(toggle).toHaveAttribute("aria-expanded", "false");
-      expect(toggle).toHaveFocus();
-
-      // Closed, Escape does nothing (the listener is gone).
-      toggle.blur();
-      await user.keyboard("{Escape}");
-      expect(toggle).not.toHaveFocus();
-    });
-
-    it("closes the pantry on a tap outside it, which does not reach the page underneath", async () => {
-      const user = userEvent.setup();
-      const onPageClick = vi.fn();
-      render(
-        <MemoryRouter initialEntries={["/"]}>
-          <button type="button" onClick={onPageClick}>Page content</button>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      await user.click(screen.getByRole("button", { name: "Pantry navigation" }));
-      const backdrop = screen.getByTestId("mobile-pantry-backdrop");
-      expect(backdrop).toHaveAttribute("aria-hidden", "true");
-      expect(backdrop).toHaveClass("fixed", "inset-0", "z-40", "lg:hidden");
-
-      // A tap inside the pantry keeps it open.
-      await user.click(screen.getByTestId("mobile-pantry"));
-      expect(screen.getByTestId("mobile-pantry")).toBeInTheDocument();
-
-      await user.click(backdrop);
-      expect(screen.queryByTestId("mobile-pantry")).not.toBeInTheDocument();
-      expect(screen.queryByTestId("mobile-pantry-backdrop")).not.toBeInTheDocument();
-      expect(onPageClick).not.toHaveBeenCalled();
-    });
-
-    it("offers Account and a Log out that posts to /logout, so a phone can sign out", async () => {
-      const user = userEvent.setup();
-      render(
-        <MemoryRouter initialEntries={["/"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      await user.click(screen.getByRole("button", { name: "Pantry navigation" }));
-      const pantry = screen.getByTestId("mobile-pantry");
-      expect(within(pantry).getByRole("link", { name: "Account", exact: true })).toHaveAttribute("href", "/account/settings");
-
-      const logOut = within(pantry).getByRole("button", { name: "Log out", exact: true });
-      expect(logOut).toHaveAttribute("type", "submit");
-      const form = logOut.closest("form");
-      expect(form).toHaveAttribute("method", "post");
-      expect(form).toHaveAttribute("action", "/logout");
-    });
-
-    it("does not render the old dashboard navigation labels before the pantry is opened", () => {
-      render(
-        <MemoryRouter initialEntries={["/"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.queryByText("Recipes")).not.toBeInTheDocument();
-      expect(screen.queryByText("Profile")).not.toBeInTheDocument();
-    });
-
-    it("marks the kitchen place active only on the home route", () => {
-      const { unmount } = render(
-        <MemoryRouter initialEntries={["/"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.getByRole("link", { name: /my kitchen/i })).toHaveAttribute("aria-current", "page");
-      unmount();
-
-      const visitor = render(
-        <MemoryRouter initialEntries={["/?chef=guest_chef"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.getByRole("link", { name: /my kitchen/i })).not.toHaveAttribute("aria-current");
-      visitor.unmount();
-
-      render(
-        <MemoryRouter initialEntries={["/shopping-list"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.getByRole("link", { name: /kitchen/i })).not.toHaveAttribute("aria-current");
-    });
-  });
-
-  describe("route-aware docks", () => {
-    it("stays out of the OAuth consent flow", () => {
-      render(
-        <MemoryRouter initialEntries={["/oauth/authorize?client_id=client-1"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
-    });
-
-    it("stays out of write-heavy recipe and cookbook forms while allowing recipe and cookbook detail navigation", () => {
-      const { rerender } = render(
-        <MemoryRouter initialEntries={["/recipes/new"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
-
-      rerender(
-        <MemoryRouter initialEntries={["/cookbooks/new"]} key="cookbook-new">
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
-
-      rerender(
-        <MemoryRouter initialEntries={["/recipes/recipe-1"]} key="recipe-detail">
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.getByRole("navigation", { name: "Spoonjoy navigation" })).toBeInTheDocument();
-
-      rerender(
-        <MemoryRouter initialEntries={["/recipes/recipe-1/edit"]} key="recipe-edit">
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
-
-      rerender(
-        <MemoryRouter initialEntries={["/cookbooks/cookbook-1"]} key="cookbook-detail">
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      // R-M3-2: a cookbook's page is not a form, so the dock stays (only /cookbooks/new and
-      // edit forms hide it).
-      expect(screen.getByRole("navigation", { name: "Spoonjoy navigation" })).toBeInTheDocument();
-    });
-
-    it("stays out of step writing screens", () => {
-      const { rerender, unmount } = render(
-        <MemoryRouter initialEntries={["/recipes/recipe-1/steps/new"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
-
-      rerender(
-        <MemoryRouter initialEntries={["/recipes/recipe-1/steps/step-1/edit"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
-
-      unmount();
-
-      render(
-        <MemoryRouter initialEntries={["/recipes/recipe-1/steps/step-1"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
-    });
-
-    it("turns search into the place slot on search routes", () => {
-      render(
-        <MemoryRouter initialEntries={["/search?q=tomato"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.getByRole("link", { name: /^search$/i })).toHaveAttribute("aria-current", "page");
-      expect(screen.getByRole("link", { name: /kitchen/i })).toHaveAttribute("href", "/");
-      expect(screen.getByRole("link", { name: /shopping list/i })).toHaveAttribute("href", "/shopping-list");
-    });
-
-    it("turns shopping list into the place slot and exposes Add as the primary action", () => {
-      render(
-        <MemoryRouter initialEntries={["/shopping-list"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.getByRole("link", { name: /shopping list/i })).toHaveAttribute("aria-current", "page");
-      expect(screen.getByTestId("dock-center")).toContainElement(screen.getByRole("link", { name: /add/i }));
-      expect(screen.getByRole("link", { name: /add/i })).toHaveAttribute("href", "/shopping-list#add-item");
-    });
-
-    it("centers a full tools cluster (3 tools) from 370px up and falls back to edge-to-edge below", () => {
-      function RecipeDetailDock() {
-        // Owner recipe detail = Back + Cook(primary) + List/Share/Edit (3 tools),
-        // which fits a centered side zone only from 370px up.
-        useRecipeDetailActions({ recipeId: "r1", chefId: "c1", isOwner: true });
-        return <MobileNav isAuthenticated />;
-      }
-
-      render(
-        <MemoryRouter initialEntries={["/recipes/r1"]}>
-          <DockContextProvider>
-            <RecipeDetailDock />
-          </DockContextProvider>
-        </MemoryRouter>,
-      );
-
-      const nav = screen.getByRole("navigation", { name: "Spoonjoy navigation" });
-      expect(nav).toHaveClass("justify-between");
-      // Both side zones grow equally from 370px up, so the primary lands dead-center there.
-      const [placeZone, , toolsZone] = Array.from(nav.children);
-      expect(placeZone).toHaveClass("min-[370px]:flex-1");
-      expect(toolsZone).toHaveClass("min-[370px]:flex-1", "min-[370px]:gap-0.5");
-      for (const tool of Array.from(toolsZone.children)) {
-        expect(tool).toHaveClass("min-[370px]:flex-1", "min-[370px]:w-11");
-      }
-    });
-
-    it("gives the signed-in public Recipes page its own place, not the Kitchen dock", () => {
-      render(
-        <MemoryRouter initialEntries={["/recipes"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      const dock = screen.getByRole("navigation", { name: "Spoonjoy navigation" });
-      expect(within(dock).getByRole("link", { name: "Recipes", exact: true })).toHaveAttribute("aria-current", "page");
-      expect(within(dock).getByRole("link", { name: "My Kitchen" })).toHaveAttribute("href", "/");
-      expect(within(dock).getByRole("link", { name: /search/i })).toHaveAttribute("href", "/search");
-      expect(within(dock).queryByRole("button", { name: "Pantry navigation" })).toBeNull();
-    });
-
-    it("does not render the dock while a route suppresses it", () => {
-      render(
-        <MemoryRouter initialEntries={["/recipes/r1"]}>
-          <DockContext.Provider value={{
-            actions: null,
-            setActions: () => {},
-            config: null,
-            setConfig: () => {},
-            isContextual: false,
-            isSuppressed: true,
-            setSuppressed: () => {},
-          }}>
-            <MobileNav isAuthenticated />
-          </DockContext.Provider>
-        </MemoryRouter>,
-      );
-
-      expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
-    });
-
-    it("provides explicit back navigation for profile-style screens", () => {
-      render(
-        <MemoryRouter initialEntries={["/users/ari/fellow-chefs"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.getByRole("link", { name: /back kitchen/i })).toHaveAttribute("href", "/");
-      expect(screen.getByRole("link", { name: /create recipe/i })).toHaveAttribute("href", "/recipes/new");
-    });
-
-    it("turns account settings into the place slot", () => {
-      render(
-        <MemoryRouter initialEntries={["/account/settings"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.getByRole("link", { name: /account settings/i })).toHaveAttribute("aria-current", "page");
-      expect(screen.getByRole("link", { name: /kitchen/i })).toHaveAttribute("href", "/");
-    });
-
-    it("turns cookbooks into the cookbooks place slot", () => {
-      render(
-        <MemoryRouter initialEntries={["/cookbooks"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.getByRole("link", { name: /^cookbooks$/i })).toHaveAttribute("aria-current", "page");
-      expect(screen.getByRole("link", { name: /create cookbook/i })).toHaveAttribute("href", "/cookbooks/new");
-      expect(screen.getByRole("link", { name: /my kitchen/i })).toHaveAttribute("href", "/");
-    });
-
-    it("keeps the cookbooks dock on a cookbook's page, where Cookbooks stays current and leads back to the list", () => {
-      render(
-        <MemoryRouter initialEntries={["/cookbooks/cookbook-1"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      const dock = screen.getByRole("navigation", { name: "Spoonjoy navigation" });
-      const cookbooks = within(dock).getByRole("link", { name: /^cookbooks$/i });
-      expect(cookbooks).toHaveAttribute("href", "/cookbooks");
-      // Like every other section's place item, Cookbooks is current across the whole section.
-      expect(cookbooks).toHaveAttribute("aria-current", "page");
-      expect(within(dock).getByRole("link", { name: /create cookbook/i })).toHaveAttribute("href", "/cookbooks/new");
-      expect(within(dock).getByRole("link", { name: /my kitchen/i })).toHaveAttribute("href", "/");
-    });
-
-    it("exposes the personal recipe drawers and chefs in route-aware mobile places", () => {
-      const { unmount } = render(
-        <MemoryRouter initialEntries={["/my-recipes"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.getByRole("link", { name: /my recipes/i })).toHaveAttribute("aria-current", "page");
-      expect(screen.getByRole("link", { name: /saved/i })).toHaveAttribute("href", "/saved-recipes");
-      expect(screen.getByRole("link", { name: /chefs/i })).toHaveAttribute("href", "/chefs");
-      unmount();
-
-      const saved = render(
-        <MemoryRouter initialEntries={["/saved-recipes"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.getByRole("link", { name: /^saved$/i })).toHaveAttribute("aria-current", "page");
-      expect(screen.getByRole("link", { name: /my recipes/i })).toHaveAttribute("href", "/my-recipes");
-      saved.unmount();
-
-      render(
-        <MemoryRouter initialEntries={["/chefs"]}>
-          <MobileNav />
-        </MemoryRouter>,
-      );
-
-      expect(screen.getByRole("link", { name: /^chefs$/i })).toHaveAttribute("aria-current", "page");
-      expect(screen.getByRole("link", { name: /search/i })).toHaveAttribute("href", "/search");
-    });
-  });
-
-  describe("contextual actions via DockContext", () => {
-    it("renders default nav items when context has no actions", () => {
-      render(
-        <MemoryRouter initialEntries={["/"]}>
-          <DockContextProvider>
-            <MobileNav />
-          </DockContextProvider>
-        </MemoryRouter>,
-      );
-
-      expect(screen.getByRole("link", { name: /create recipe/i })).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: /my recipes/i })).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: /shopping list/i })).toBeInTheDocument();
-    });
-
-    it("adapts legacy side actions into the new place / primary / tools model", () => {
-      const actions: DockAction[] = [
-        { id: "back", icon: ArrowLeft, label: "Back", onAction: "/recipes", position: "left" },
-        { id: "edit", icon: Edit, label: "Edit", onAction: () => {}, position: "right" },
-        { id: "share", icon: Share2, label: "Share", onAction: () => {}, position: "right" },
-      ];
-
-      render(
-        <MemoryRouter initialEntries={["/users/ari"]}>
-          <DockContext.Provider value={{ actions, setActions: () => {}, config: null, setConfig: () => {}, isContextual: true, isSuppressed: false, setSuppressed: () => {} }}>
-            <MobileNav />
-          </DockContext.Provider>
-        </MemoryRouter>,
-      );
-
-      expect(screen.getByRole("link", { name: /back back/i })).toHaveAttribute("href", "/recipes");
-      expect(screen.getByTestId("dock-center")).toContainElement(screen.getByRole("button", { name: /edit/i }));
-      expect(screen.getByRole("button", { name: /share/i })).toBeInTheDocument();
-      expect(screen.queryByRole("link", { name: /shopping list/i })).not.toBeInTheDocument();
-    });
-
-    it("calls function actions and preserves string actions as links", async () => {
-      const user = userEvent.setup();
-      const handleEdit = vi.fn();
-      const actions: DockAction[] = [
-        { id: "back", icon: ArrowLeft, label: "Back", onAction: "/recipes", position: "left" },
-        { id: "edit", icon: Edit, label: "Edit", onAction: handleEdit, position: "right" },
-      ];
-
-      render(
-        <MemoryRouter initialEntries={["/users/ari"]}>
-          <DockContext.Provider value={{ actions, setActions: () => {}, config: null, setConfig: () => {}, isContextual: true, isSuppressed: false, setSuppressed: () => {} }}>
-            <MobileNav />
-          </DockContext.Provider>
-        </MemoryRouter>,
-      );
-
-      expect(screen.getByRole("link", { name: /back back/i })).toHaveAttribute("href", "/recipes");
-
-      await user.click(screen.getByRole("button", { name: /edit/i }));
-      expect(handleEdit).toHaveBeenCalledTimes(1);
-    });
-
-    it("falls back to route-aware root config when context is cleared", () => {
-      const actions: DockAction[] = [
-        { id: "back", icon: ArrowLeft, label: "Back", onAction: "/recipes", position: "left" },
-        { id: "edit", icon: Edit, label: "Edit", onAction: () => {}, position: "right" },
-      ];
-
-      const { rerender } = render(
-        <MemoryRouter initialEntries={["/users/ari"]}>
-          <DockContext.Provider value={{ actions, setActions: () => {}, config: null, setConfig: () => {}, isContextual: true, isSuppressed: false, setSuppressed: () => {} }}>
-            <MobileNav />
-          </DockContext.Provider>
-        </MemoryRouter>,
-      );
-
-      expect(screen.getByRole("link", { name: /back back/i })).toBeInTheDocument();
-
-      rerender(
-        <MemoryRouter initialEntries={["/users/ari"]}>
-          <DockContext.Provider value={{ actions: null, setActions: () => {}, config: null, setConfig: () => {}, isContextual: false, isSuppressed: false, setSuppressed: () => {} }}>
-            <MobileNav />
-          </DockContext.Provider>
-        </MemoryRouter>,
-      );
-
-      expect(screen.queryByRole("link", { name: /back back/i })).not.toBeInTheDocument();
-      expect(screen.getByRole("link", { name: /create recipe/i })).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: /shopping list/i })).toBeInTheDocument();
-    });
-
-    it("renders the center slot even when a contextual caller has no actions", () => {
-      render(
-        <MemoryRouter initialEntries={["/users/ari"]}>
-          <DockContext.Provider value={{ actions: null, setActions: () => {}, config: null, setConfig: () => {}, isContextual: true, isSuppressed: false, setSuppressed: () => {} }}>
-            <MobileNav />
-          </DockContext.Provider>
-        </MemoryRouter>,
-      );
-
-      expect(screen.getByTestId("dock-center")).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: /create recipe/i })).toBeInTheDocument();
-    });
-  });
-});
-
-describe("MobileNav recipe Back item", () => {
-  afterEach(() => {
-    window.history.replaceState(null, "");
-    window.sessionStorage.clear();
-  });
-
-  function RecipeDetailDock() {
-    useRecipeDetailActions({ recipeId: "r1", chefId: "c1", isOwner: false });
-    return <MobileNav isAuthenticated />;
-  }
-
-  function renderRecipeOpenedFrom(entries: string[]) {
-    const router = createMemoryRouter(
-      [
-        { path: "/", element: <h1>Home page</h1> },
-        { path: "/recipes", element: <h1>All recipes page</h1> },
-        { path: "/recipes/:id/edit", element: <h1>Edit page</h1> },
-        { path: "/recipes/:id", element: <RecipeDetailDock /> },
-      ],
-      { initialEntries: entries, initialIndex: entries.length - 1 },
-    );
+  it("hides while a page suppresses it", () => {
     render(
-      <DockContextProvider>
-        <RouterProvider router={router} />
-      </DockContextProvider>,
+      <DockContext.Provider value={{ isSuppressed: true, setSuppressed: () => {} }}>
+        <MemoryRouter initialEntries={["/"]}>
+          <MobileNav />
+        </MemoryRouter>
+      </DockContext.Provider>,
     );
-    return router;
-  }
-
-  function renderRecipeOpenedFromHome() {
-    return renderRecipeOpenedFrom(["/", "/recipes/r1"]);
-  }
-
-  // What the root history recorder would have stored for these entries.
-  function seedTrail(paths: string[]) {
-    window.sessionStorage.setItem(
-      HISTORY_TRAIL_KEY,
-      JSON.stringify(Object.fromEntries(paths.map((path, idx) => [String(idx), { path, cook: false }]))),
-    );
-  }
-
-  it("stays a real link to /recipes for no-JS and middle click", () => {
-    renderRecipeOpenedFromHome();
-
-    expect(screen.getByRole("link", { name: /back/i })).toHaveAttribute("href", "/recipes");
+    expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
   });
 
-  it("returns to the previous in-app page when the recipe was reached inside the app", async () => {
-    seedTrail(["/", "/recipes/r1"]);
-    window.history.replaceState({ idx: 1, key: "abc", usr: null }, "");
-    const router = renderRecipeOpenedFromHome();
+  it("draws the bar and the search circle on solid charcoal", () => {
+    renderAt("/");
+    expect(within(tabBar()).getByRole("list")).toHaveClass("bg-[var(--sj-photo-charcoal)]");
+    expect(screen.getByRole("link", { name: "Search" })).toHaveClass("bg-[var(--sj-photo-charcoal)]");
+    for (const element of [within(tabBar()).getByRole("list"), screen.getByRole("link", { name: "Search" })]) {
+      expect(element.className).not.toMatch(/backdrop-blur|\/9\d\b/);
+    }
+  });
+});
 
-    fireEvent.click(screen.getByRole("link", { name: /back/i }));
-
-    expect(await screen.findByRole("heading", { name: "Home page" })).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/");
+describe("MobileNav signed out", () => {
+  it("offers Home, Recipes and Log in, plus Search", () => {
+    renderAt("/", false);
+    expect(tabNames()).toEqual(["Home", "Recipes", "Log in", "Search"]);
+    expect(screen.getByRole("link", { name: "Log in" })).toHaveAttribute("href", "/login");
+    expect(screen.getByRole("link", { name: "Recipes" })).toHaveAttribute("href", "/recipes");
+    expect(currentTab()).toEqual(["Home"]);
   });
 
-  it("skips the edit form after an edit and returns to the page before the recipe", async () => {
-    seedTrail(["/", "/recipes/r1", "/recipes/r1/edit", "/recipes/r1"]);
-    window.history.replaceState({ idx: 3, key: "abc", usr: null }, "");
-    const router = renderRecipeOpenedFrom(["/", "/recipes/r1", "/recipes/r1/edit", "/recipes/r1"]);
-
-    fireEvent.click(screen.getByRole("link", { name: /back/i }));
-
-    expect(await screen.findByRole("heading", { name: "Home page" })).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/");
-  });
-
-  it("goes to /recipes when the recipe was opened directly", async () => {
-    window.history.replaceState({ idx: 0, key: "default", usr: null }, "");
-    const router = renderRecipeOpenedFromHome();
-
-    fireEvent.click(screen.getByRole("link", { name: /back/i }));
-
-    expect(await screen.findByRole("heading", { name: "All recipes page" })).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/recipes");
+  it("stays out of the login and signup pages", () => {
+    for (const path of ["/login", "/signup"]) {
+      const { unmount } = renderAt(path, false);
+      expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
+      unmount();
+    }
   });
 });

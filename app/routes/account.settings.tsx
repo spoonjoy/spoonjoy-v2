@@ -8,6 +8,7 @@ import {
   type AccountSettingsActionResult,
   type AccountSettingsLoaderData,
 } from "~/lib/account-settings.server";
+import { LogOut } from "lucide-react";
 import { Text } from "~/components/ui/text";
 import { Button } from "~/components/ui/button";
 import { Field, Label, ErrorMessage } from "~/components/ui/fieldset";
@@ -17,6 +18,7 @@ import { NotificationsSection } from "~/components/notifications-section";
 import { AddPasskeyButton } from "~/components/auth/AddPasskeyButton";
 import { ProfilePhotoField } from "~/components/account/ProfilePhotoField";
 import { CookbookPage, CookbookHeader, SettingsPanel } from "~/components/cookbook/page";
+import { clearCookProgressCache } from "~/lib/cook-session-sync";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -100,7 +102,20 @@ export default function AccountSettings() {
   return (
     <CookbookPage>
       <div className="mx-auto max-w-4xl">
-      <CookbookHeader eyebrow="Kitchen identity" title="Account settings">
+      <CookbookHeader
+        eyebrow="Kitchen identity"
+        title="Account settings"
+        action={(
+          // Desktop logs out from its top navigation; a phone logs out here. A plain form post,
+          // so it works before the page hydrates and the next page loads fresh.
+          <Form method="post" action="/logout" className="m-0 lg:hidden" onSubmit={clearCookProgressCache}>
+            <Button type="submit" plain>
+              <LogOut data-slot="icon" className="size-4" />
+              Log out
+            </Button>
+          </Form>
+        )}
+      >
         <Text className="mt-4 max-w-2xl text-base/7">
           Keep your chef profile, sign-in methods, and photo ready for family, guests, and agents.
         </Text>

@@ -476,8 +476,9 @@ describe("Recipe View Scaling Integration", () => {
 
       await screen.findByRole("heading", { name: "My Recipe" });
 
-      // Edit and delete stay behind the collapsed maintenance affordance.
-      expect(screen.queryByRole("link", { name: /edit/i })).not.toBeInTheDocument();
+      // Edit is one tap away in the masthead; the rest of maintenance stays collapsed.
+      expect(screen.getByTestId("recipe-header-edit-action")).toHaveAttribute("href", "/recipes/recipe-1/edit");
+      expect(screen.queryByRole("link", { name: "Edit recipe" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
     });
 
