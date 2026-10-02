@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { Request as UndiciRequest } from "undici";
 import { action } from "~/routes/api.v1.$";
@@ -9,7 +9,9 @@ import {
 } from "~/lib/api-idempotency.server";
 import { resolveApiV1ScopeRequirement } from "~/lib/api-v1.server";
 import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "~/lib/recipe-title-uniqueness.server";
+import * as placeholderCoverModule from "~/lib/ai-placeholder-cover.server";
 import { getLocalDb } from "~/lib/db.server";
+import { expectConsoleError } from "../warning-policy";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
 
@@ -370,6 +372,108 @@ describe("API v1 recipe write mutations", () => {
     expect(replay.status).toBe(201);
     expectPrivateEnvelopeHeaders(replay, "req_recipe_create_replay");
     expect(replayPayload).toEqual(expectedReplay);
+  });
+
+  describe("placeholder cover on create", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    function createBody(clientMutationId: string, extra: Record<string, unknown> = {}) {
+      return {
+        clientMutationId,
+        title: `Placeholder Soup ${faker.string.alphanumeric(8)}`,
+        description: "  A soup  ",
+        steps: [{ stepTitle: null, description: "Simmer", duration: null, ingredients: [] }],
+        ...extra,
+      };
+    }
+
+    it("schedules an AI placeholder cover for a new recipe, as the website does", async () => {
+      const fixture = await createRecipeWriteFixture(db);
+      const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockResolvedValue(undefined);
+      const waitUntil = vi.fn((promise: Promise<unknown>) => { void promise.catch(() => undefined); });
+      const body = createBody("recipe-create-placeholder");
+
+      const response = await action(routeArgs(
+        mutationRequest("POST", "recipes", fixture.writer.token, "req_placeholder", body),
+        "recipes",
+        { env: null, ctx: { waitUntil } },
+      ));
+      const payload = await readJson(response);
+
+      expect(response.status).toBe(201);
+      expect(waitUntil).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => expect(placeholder).toHaveBeenCalledTimes(1));
+      const cover = await db.recipeCover.findFirstOrThrow({ where: { recipeId: payload.data.recipe.id } });
+      expect(cover).toMatchObject({ sourceType: "ai-placeholder", status: "processing", generationStatus: "processing", imageUrl: "", createdById: fixture.chef.id });
+      expect(placeholder).toHaveBeenCalledWith(expect.objectContaining({
+        userId: fixture.chef.id,
+        recipeId: payload.data.recipe.id,
+        coverId: cover.id,
+        title: body.title,
+        description: "A soup",
+        suppressAutoActivation: false,
+      }));
+      // The response contract is unchanged: the web redirect carries no generation status either.
+      expectExactKeys(payload.data, ["created", "mutation", "recipe"]);
+    });
+
+    it("runs the scheduling inline when there is no waitUntil", async () => {
+      const fixture = await createRecipeWriteFixture(db);
+      const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockResolvedValue(undefined);
+
+      const response = await action(routeArgs(
+        mutationRequest("POST", "recipes", fixture.writer.token, "req_placeholder_inline", createBody("recipe-create-placeholder-inline")),
+        "recipes",
+      ));
+
+      expect(response.status).toBe(201);
+      expect(placeholder).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not schedule a placeholder when the request tries to set a cover", async () => {
+      const fixture = await createRecipeWriteFixture(db);
+      const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockResolvedValue(undefined);
+
+      const response = await action(routeArgs(
+        mutationRequest("POST", "recipes", fixture.writer.token, "req_placeholder_cover", createBody("recipe-create-with-cover", { coverImageUrl: "https://example.com/x.jpg" })),
+        "recipes",
+      ));
+
+      // Create has no cover field, so a cover is rejected before anything is written or scheduled.
+      expect(response.status).toBe(400);
+      expect(placeholder).not.toHaveBeenCalled();
+      expect(await db.recipeCover.count()).toBe(0);
+    });
+
+    it("does not schedule again when a create is replayed", async () => {
+      const fixture = await createRecipeWriteFixture(db);
+      const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockResolvedValue(undefined);
+      const body = createBody("recipe-create-placeholder-replay");
+      for (const id of ["req_a", "req_b"]) {
+        const response = await action(routeArgs(mutationRequest("POST", "recipes", fixture.writer.token, id, body), "recipes"));
+        expect(response.status).toBe(201);
+      }
+      expect(placeholder).toHaveBeenCalledTimes(1);
+      expect(await db.recipeCover.count()).toBe(1);
+    });
+
+    it("still creates the recipe when scheduling the placeholder fails", async () => {
+      const fixture = await createRecipeWriteFixture(db);
+      const error = new Error("scheduler down");
+      vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockRejectedValue(error);
+      expectConsoleError("recipe save follow-up failed", { surface: "recipe_create", error });
+
+      const response = await action(routeArgs(
+        mutationRequest("POST", "recipes", fixture.writer.token, "req_placeholder_fail", createBody("recipe-create-placeholder-fail")),
+        "recipes",
+      ));
+      const payload = await readJson(response);
+
+      expect(response.status).toBe(201);
+      expect(await db.recipe.findUnique({ where: { id: payload.data.recipe.id } })).not.toBeNull();
+    });
   });
 
   it("creates steps that use earlier steps' outputs, as the native app sends them on every step", async () => {
