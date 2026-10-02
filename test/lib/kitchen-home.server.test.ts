@@ -137,6 +137,24 @@ describe("kitchen home reads", () => {
     expect(rows.viewer?.id).toBe(viewer.id);
   });
 
+  it("orders recipes sharing an updatedAt by newest created, then highest id, in both readers", async () => {
+    const owner = await db.user.create({ data: createTestUser() });
+    const shared = at(5);
+    const make = (title: string, createdMinute: number, id: string) =>
+      db.recipe.create({ data: { id, title, chefId: owner.id, createdAt: at(createdMinute), updatedAt: shared } });
+    await make("Created first", 1, "z-first");
+    await make("Created last, low id", 3, "a-last");
+    await make("Created last, high id", 3, "m-last");
+    await make("Updated later", 2, "b-later").then((recipe) =>
+      db.recipe.update({ where: { id: recipe.id }, data: { updatedAt: at(9) } }));
+
+    const input = { viewerId: null, kitchenUserWhere: { id: owner.id } };
+    const expected = ["Updated later", "Created last, high id", "Created last, low id", "Created first"];
+    for (const rows of [await readKitchenHomeFromD1(d1.binding, input), await readKitchenHomeWithPrisma(db, input)]) {
+      expect(rows.recipes.map((recipe) => recipe.title)).toEqual(expected);
+    }
+  });
+
   it("returns no kitchen for an unknown chef, and no viewer for an unknown viewer", async () => {
     const input = { viewerId: "missing-viewer", kitchenUserWhere: { username: "missing-chef" } };
     const fromD1 = await readKitchenHomeFromD1(d1.binding, input);
