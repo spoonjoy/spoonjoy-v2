@@ -3,9 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import type { ApiPrincipal } from "~/lib/api-auth.server";
 import type { D1ReadDatabase } from "~/lib/d1-read.server";
+import * as placeholderCoverModule from "~/lib/ai-placeholder-cover.server";
 import { getLocalDb } from "~/lib/db.server";
 import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "~/lib/recipe-title-uniqueness.server";
 import { callSpoonjoyApiOperation, type SpoonjoyApiContext } from "~/lib/spoonjoy-api.server";
+import { expectConsoleError } from "../warning-policy";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
 import { createTestUser } from "../utils";
@@ -326,6 +328,63 @@ describe("MCP recipe tools on a D1 binding", () => {
       await expect(db.recipe.findUniqueOrThrow({ where: { id } })).resolves.toMatchObject({ title: "Keep me", activeCoverId: null });
       expect((await graph(id)).steps).toHaveLength(2);
     });
+  });
+
+  describe("placeholder cover on create", () => {
+    const image = "data:image/png;base64," + Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]).toString("base64");
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    for (const path of ["Prisma", "D1"] as const) {
+      const ctx = (extra: Partial<SpoonjoyApiContext> = {}): SpoonjoyApiContext => ({ ...context(path === "D1" ? d1.binding : undefined), ...extra });
+
+      it(`writes a processing placeholder and queues generation when there is no image (${path})`, async () => {
+        const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockResolvedValue(undefined);
+        const waitUntil = vi.fn((promise: Promise<unknown>) => { void promise.catch(() => undefined); });
+
+        const id = await createdId(await callSpoonjoyApiOperation("create_recipe", { title: `No image ${path}`, description: "A soup", steps }, ctx({ waitUntil })));
+
+        const cover = await db.recipeCover.findFirstOrThrow({ where: { recipeId: id } });
+        expect(cover).toMatchObject({ sourceType: "ai-placeholder", status: "processing", generationStatus: "processing", imageUrl: "", createdById: principal.id });
+        expect(waitUntil).toHaveBeenCalledTimes(1);
+        await vi.waitFor(() => expect(placeholder).toHaveBeenCalledTimes(1));
+        expect(placeholder).toHaveBeenCalledWith(expect.objectContaining({
+          userId: principal.id,
+          recipeId: id,
+          coverId: cover.id,
+          title: `No image ${path}`,
+          description: "A soup",
+          suppressAutoActivation: false,
+        }));
+        expect(await db.recipeCover.count({ where: { recipeId: id } })).toBe(1);
+      });
+
+      it(`runs the scheduling inline when there is no waitUntil (${path})`, async () => {
+        const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockResolvedValue(undefined);
+        await createdId(await callSpoonjoyApiOperation("create_recipe", { title: `Inline ${path}`, steps }, ctx()));
+        expect(placeholder).toHaveBeenCalledTimes(1);
+      });
+
+      it(`does not queue a placeholder when an image is given (${path})`, async () => {
+        const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockResolvedValue(undefined);
+        const id = await createdId(await callSpoonjoyApiOperation("create_recipe", { title: `With image ${path}`, imageUrl: image, steps }, ctx({ allowLocalImageFallback: true })));
+        expect(placeholder).not.toHaveBeenCalled();
+        const covers = await db.recipeCover.findMany({ where: { recipeId: id } });
+        expect(covers.map((cover) => cover.sourceType)).toEqual(["chef-upload"]);
+      });
+
+      it(`still creates the recipe when queuing the placeholder fails (${path})`, async () => {
+        const error = new Error("scheduler down");
+        vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockRejectedValue(error);
+        expectConsoleError("recipe save follow-up failed", { surface: "recipe_create", error });
+
+        const id = await createdId(await callSpoonjoyApiOperation("create_recipe", { title: `Scheduler down ${path}`, steps }, ctx()));
+
+        expect(await db.recipe.findUnique({ where: { id } })).not.toBeNull();
+      });
+    }
   });
 
   it("never repeats what runs after the write when it hits a guard failure", async () => {

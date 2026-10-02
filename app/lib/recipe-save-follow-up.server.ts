@@ -11,7 +11,8 @@ interface RecipeSaveFollowUpOptions {
   waitUntil?: (promise: Promise<unknown>) => void;
   /** The user whose save this follows. */
   distinctId: string;
-  request: Request;
+  /** The request being served; MCP tool calls have none, so route and method are omitted. */
+  request?: Request;
   surface: "recipe_create" | "recipe_edit";
 }
 
@@ -38,8 +39,7 @@ export async function runAfterRecipeSave(
     const capture = captureException(postHogConfig, {
       error,
       distinctId,
-      route: new URL(request.url).pathname,
-      method: request.method,
+      ...(request ? { route: new URL(request.url).pathname, method: request.method } : {}),
       extras: { surface, stage: "after_save" },
     });
     if (waitUntil) {
