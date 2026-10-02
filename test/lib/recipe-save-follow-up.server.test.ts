@@ -67,6 +67,22 @@ describe("runAfterRecipeSave", () => {
     ]);
   });
 
+  it("captures a failure without a route or method when there is no request, as for an MCP tool call", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
+    const error = new Error("queue down");
+    expectConsoleError("recipe save follow-up failed", { surface: "recipe_create", error });
+
+    await expect(runAfterRecipeSave(() => Promise.reject(error), {
+      env: { POSTHOG_KEY: "ph_test" }, distinctId: "chef", surface: "recipe_create",
+    })).resolves.toBeUndefined();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+    const [captured] = capturedExceptions(fetchMock);
+    expect(captured).toMatchObject({ $exception_message: "queue down", surface: "recipe_create", stage: "after_save" });
+    expect(captured).not.toHaveProperty("route");
+    expect(captured).not.toHaveProperty("method");
+  });
+
   it("hands the capture to waitUntil when there is one", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
     const error = new Error("queue down");

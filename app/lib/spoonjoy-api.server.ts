@@ -23,6 +23,7 @@ import {
   startAgentConnection,
 } from "~/lib/agent-connection.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
+import { runAfterRecipeSave } from "~/lib/recipe-save-follow-up.server";
 import { d1Binding } from "~/lib/d1-read.server";
 import { deleteNativeRecipe } from "~/lib/api-v1-recipe-writes.server";
 import { d1WriteBatch, retryOnD1GuardFailure } from "~/lib/d1-write.server";
@@ -1222,6 +1223,16 @@ function normalizedReplacementSteps(steps: ReturnType<typeof parseSteps>): Repla
 }
 
 /** The recipe fields that make a new chef-upload cover the active one, as setActiveRecipeCover does. */
+function placeholderCoverFields(ownerId: string) {
+  return {
+    imageUrl: "",
+    sourceType: "ai-placeholder",
+    status: "processing",
+    createdById: ownerId,
+    generationStatus: "processing",
+  } as const;
+}
+
 function activeImageCover(coverId: string): RecipeFields {
   return { activeCoverId: coverId, activeCoverVariant: "image", coverMode: "manual" };
 }
@@ -2421,7 +2432,7 @@ const createRecipeTool: SpoonjoyApiOperation = {
         // together, and the title is re-checked as they are written.
         const now = new Date();
         created = { id: crypto.randomUUID() };
-        coverId = imageUrl ? crypto.randomUUID() : null;
+        coverId = crypto.randomUUID();
         await d1WriteBatch(d1, [
           activeRecipeTitleFreeGuard(owner.id, title),
           recipeInsertStatement({
@@ -2434,12 +2445,13 @@ const createRecipeTool: SpoonjoyApiOperation = {
             now,
           }),
           ...recipeStepsReplaceStatements(created.id, normalizedReplacementSteps(steps), now),
-          ...(coverId
+          ...(imageUrl
             ? [
-              coverInsertStatement({ id: coverId, recipeId: created.id, imageUrl: imageUrl!, sourceType: "chef-upload" }, now),
+              coverInsertStatement({ id: coverId, recipeId: created.id, imageUrl, sourceType: "chef-upload" }, now),
               recipeUpdateStatement(created.id, activeImageCover(coverId), now),
             ]
-            : []),
+            // No image: the processing placeholder the website writes; generation fills it in.
+            : [coverInsertStatement({ id: coverId, recipeId: created.id, ...placeholderCoverFields(owner.id) }, now)]),
         ]);
       } else {
         created = await context.db.recipe.create({
@@ -2453,16 +2465,29 @@ const createRecipeTool: SpoonjoyApiOperation = {
         });
 
         await replaceRecipeSteps(context.db, created.id, steps);
-        if (imageUrl) {
-          coverId = (await createCover(context.db, {
-            recipeId: created.id,
-            imageUrl,
-            sourceType: "chef-upload",
-          })).id;
-        }
+        coverId = (await createCover(context.db, imageUrl
+          ? { recipeId: created.id, imageUrl, sourceType: "chef-upload" }
+          : { recipeId: created.id, ...placeholderCoverFields(owner.id) })).id;
       }
       return { owner, title, imageUrl, created, coverId };
     });
+    if (!imageUrl && coverId) {
+      // The recipe is saved; a scheduling failure is logged and captured, never a failed create.
+      await runAfterRecipeSave(() => scheduleRecipePlaceholderGeneration(context, {
+        userId: owner.id,
+        recipeId: created.id,
+        coverId,
+        title,
+        description: optionalString(args.description) ?? null,
+        // Like the website, let the placeholder become the active cover while the recipe has none.
+        suppressAutoActivation: false,
+      }, { scheduling: "waitUntil" }), {
+        env: context.env ?? null,
+        waitUntil: context.waitUntil,
+        distinctId: owner.id,
+        surface: "recipe_create",
+      });
+    }
     if (imageUrl && coverId) {
       await scheduleRecipeCoverStylization(context, {
         userId: owner.id,

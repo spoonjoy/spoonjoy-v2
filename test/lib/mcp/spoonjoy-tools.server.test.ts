@@ -1724,7 +1724,9 @@ describe("spoonjoy MCP tools", () => {
       where: { id: stable.recipe.id },
       select: { title: true },
     })).resolves.toEqual({ title: "Stable Image Assignment Recipe" });
-    await expect(context.db.recipeCover.count({ where: { recipeId: stable.recipe.id } })).resolves.toBe(0);
+    // The rejected update added no cover: only the placeholder written with the recipe remains.
+    await expect(context.db.recipeCover.findMany({ where: { recipeId: stable.recipe.id }, select: { sourceType: true } }))
+      .resolves.toEqual([{ sourceType: "ai-placeholder" }]);
   });
 
   it("creates minimal recipes and finds null for missing recipes", async () => {
