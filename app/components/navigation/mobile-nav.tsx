@@ -87,6 +87,24 @@ function rootConfig(pathname: string, search: string, isAuthenticated: boolean, 
     };
   }
 
+  if (pathname === "/recipes") {
+    return {
+      variant: "root",
+      left: {
+        id: "recipes-place",
+        icon: Globe,
+        label: "Recipes",
+        onAction: "/recipes",
+        active: true,
+      },
+      primary: { id: "new-recipe", icon: Plus, label: "+", ariaLabel: "Create recipe", onAction: "/recipes/new" },
+      tools: [
+        { id: "kitchen", icon: Home, label: "Kitchen", ariaLabel: "My Kitchen", onAction: "/" },
+        { id: "search", icon: Search, label: "Search", onAction: "/search" },
+      ],
+    };
+  }
+
   if (pathname.startsWith("/search")) {
     return {
       variant: "root",
@@ -314,9 +332,11 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
   );
   const tools = activeConfig.tools.slice(0, 3);
 
-  // Center the primary unless the tools cluster is full (3), where there's no
-  // room to grow + center without squishing touch targets below 44px.
+  // Center the primary on every page so it never jumps sideways between sections. A full
+  // tools cluster (3) fits a centered side zone only from 370px up (three 44px targets and
+  // two 2px gaps need 136px); narrower phones fall back to edge-to-edge.
   const centered = tools.length <= 2;
+  const grow = centered ? "flex-1" : "min-[370px]:flex-1";
 
   return (
     <>
@@ -324,11 +344,11 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
         {/* When centered, the side zones grow (flex-1) so the place item and the
             tools fill the dock — no bare dock between items — and the equal zones
             leave the primary dead-center. */}
-        <div className={clsx("flex min-w-0 justify-start", centered && "flex-1")}>
+        <div className={clsx("flex min-w-0 justify-start", grow)}>
           <DockItem
             {...activeConfig.left}
             variant="place"
-            className={centered ? "flex-1" : undefined}
+            className={grow}
             href={buttonHref(activeConfig.left)}
             onClick={buttonOnClick(activeConfig.left)}
           />
@@ -344,13 +364,14 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
           />
         </div>
 
-        <div className={clsx("flex justify-end gap-1", centered && "flex-1")}>
+        <div className={clsx("flex justify-end", centered ? "gap-1" : "gap-1 min-[370px]:gap-0.5", grow)}>
           {tools.map((tool) => (
             <DockItem
               key={tool.id}
               {...tool}
               variant="tool"
-              className={centered ? "flex-1" : undefined}
+              // A full cluster's tools start at 44px (not 50) so the zone fits its centered share.
+              className={centered ? grow : clsx(grow, "min-[370px]:w-11")}
               href={buttonHref(tool)}
               onClick={buttonOnClick(tool)}
             />
@@ -371,11 +392,11 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
             data-testid="mobile-pantry-backdrop"
             onClick={() => setIsPantryOpen(false)}
           />
-          {/* Same 95% charcoal surface as the dock, so the links stay readable
-              over any page content. */}
+          {/* Same solid charcoal surface as the dock, so no page content shows
+              through behind the links. */}
           <div
             id={PANTRY_ID}
-            className="fixed bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))] z-50 mx-auto max-w-lg rounded-[var(--sj-radius-surface)] border border-[var(--sj-photo-line)] bg-[color-mix(in_srgb,var(--sj-photo-charcoal)_95%,transparent)] p-2 shadow-[0_18px_60px_rgba(31,26,20,0.26),inset_0_1px_0_color-mix(in_srgb,var(--sj-on-photo)_22%,transparent)] backdrop-blur-2xl backdrop-saturate-150 lg:hidden"
+            className="fixed bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))] z-50 mx-auto max-w-lg rounded-[var(--sj-radius-surface)] border border-[var(--sj-photo-line)] bg-[var(--sj-photo-charcoal)] p-2 shadow-[0_18px_60px_rgba(31,26,20,0.26),inset_0_1px_0_color-mix(in_srgb,var(--sj-on-photo)_22%,transparent)] lg:hidden"
             data-testid="mobile-pantry"
           >
             <div className="grid grid-cols-2 gap-1.5">

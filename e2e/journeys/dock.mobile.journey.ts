@@ -164,6 +164,47 @@ test.describe("Dock on iPhone", () => {
     await expect(dock.getByRole("button", { name: "Pantry navigation", exact: true })).toHaveCount(0);
   });
 
+  test("the dock is solid and its primary button holds the center on every dock layout", async ({ page }) => {
+    const dock = page.getByRole("navigation", { name: "Spoonjoy navigation" });
+    const primary = page.getByTestId("dock-center").locator("a, button");
+
+    await page.goto("/");
+    await waitForServiceWorker(page);
+    const viewport = page.viewportSize();
+    if (!viewport) throw new Error("The iPhone project always sets a viewport.");
+
+    for (const path of DOCK_PAGES) {
+      await page.goto(path);
+      await waitForHydration(page);
+      await expect(dock, `${path}: dock`).toBeVisible();
+      // Page text must not show through the dock: its background is fully opaque, not 95%.
+      const alpha = await dock.evaluate((element) => {
+        const probe = document.createElement("canvas").getContext("2d");
+        if (!probe) throw new Error("No 2D canvas context.");
+        // Start transparent, so a color the canvas cannot parse reads as alpha 0 and fails.
+        probe.fillStyle = "rgba(0, 0, 0, 0)";
+        probe.fillStyle = getComputedStyle(element).backgroundColor;
+        probe.fillRect(0, 0, 1, 1);
+        return probe.getImageData(0, 0, 1, 1).data[3];
+      });
+      expect(alpha, `${path}: dock background alpha (0-255)`).toBe(255);
+      // The primary button sits at the same place on every page, the middle of the screen, so it does
+      // not jump sideways as you move between sections.
+      const box = await boxOf(primary, `${path} primary button`);
+      expect(Math.abs(box.x + box.width / 2 - viewport.width / 2), `${path}: primary button's distance from the screen's center`).toBeLessThanOrEqual(1);
+    }
+  });
+
+  test("signed in, the public Recipes page has its own dock with Recipes marked current", async ({ page }) => {
+    const dock = page.getByRole("navigation", { name: "Spoonjoy navigation" });
+
+    await page.goto("/recipes");
+    await waitForHydration(page);
+    await expect(dock.getByRole("link", { name: "Recipes", exact: true })).toHaveAttribute("aria-current", "page");
+    await expect(dock.getByRole("link", { name: "My Kitchen", exact: true })).toHaveAttribute("href", "/");
+    await expect(dock.locator('[aria-current="page"]')).toHaveCount(1);
+  });
+
   test("the page's bottom padding clears the dock on every dock layout (R-M3-4)", async ({ page }) => {
     await page.goto("/");
     // The loop below makes a dozen full page loads back to back; let the first one's service-worker
