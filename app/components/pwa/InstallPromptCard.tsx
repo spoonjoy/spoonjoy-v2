@@ -132,8 +132,8 @@ export function InstallPromptCard(props: { options?: UseInstallPromptOptions }) 
 
   if (!visible) return null;
 
-  // The bottom offset clears the mobile dock (SpoonDock): its bottom margin, max(1rem, safe-area
-  // inset), plus its 4.25rem height and a 1rem gap — the same offset the pantry uses.
+  // The bottom offset clears the phone tab bar (MobileNav): its bottom margin, max(1rem, safe-area
+  // inset), plus its 4rem height and a gap.
   return (
     <div
       role="region"

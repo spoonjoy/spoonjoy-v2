@@ -82,10 +82,10 @@ function shouldHideTabBar(pathname: string, isAuthenticated: boolean) {
     return true;
   }
 
-  return pathname.startsWith("/recipes/") && (
-    pathname.includes("/edit") ||
-    pathname.includes("/steps/")
-  );
+  // /recipes/:id/edit and /recipes/:id/steps/...; compare segments, so a recipe id that merely
+  // starts with "edit" keeps the tab bar.
+  const [, section, , subpage] = pathname.split("/");
+  return section === "recipes" && (subpage === "edit" || subpage === "steps");
 }
 
 // One solid charcoal surface for the bar and the search circle, so no page content shows

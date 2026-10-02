@@ -90,6 +90,11 @@ describe("MobileNav signed in", () => {
     expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
   });
 
+  it("keeps the tab bar on a recipe whose id starts with \"edit\"", () => {
+    renderAt("/recipes/editors-pick");
+    expect(tabBar()).toBeInTheDocument();
+  });
+
   it("hides while a page suppresses it", () => {
     render(
       <DockContext.Provider value={{ isSuppressed: true, setSuppressed: () => {} }}>

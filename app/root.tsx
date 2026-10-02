@@ -232,9 +232,9 @@ export default function App() {
           <header className="sj-desktop-topbar sticky top-0 z-30 hidden items-center px-4 lg:flex">
             <AppNavbar userId={userId} oauthProviders={oauthProviders} />
           </header>
-          {/* The bottom padding clears the dock (SpoonDock): its bottom margin,
-              max(1rem, safe-area inset), plus its 4.25rem height and a 1rem gap, so the last
-              thing on a page never sits under it. */}
+          {/* The bottom padding clears the phone tab bar (MobileNav): its bottom margin,
+              max(1rem, safe-area inset), plus its 4rem height and a gap, so the last thing on a
+              page never sits under it. */}
           <main
             id="main"
             tabIndex={-1}
@@ -287,7 +287,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         {/* viewport-fit=cover lets iOS report its safe-area insets (the home indicator, the
-            notch in landscape) to env(safe-area-inset-*), which the dock, the pantry and the page
+            notch in landscape) to env(safe-area-inset-*), which the phone tab bar and the page
             padding use; without it they are all 0. */}
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="theme-color" content="#fbfaf6" />

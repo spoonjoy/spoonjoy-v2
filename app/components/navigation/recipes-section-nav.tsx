@@ -27,7 +27,7 @@ export function RecipesSectionNav({ className }: { className?: string }) {
                 href={href}
                 aria-current={active ? "page" : undefined}
                 className={clsx(
-                  "flex min-h-10 flex-1 items-center justify-center rounded-full font-sj-ui text-sm font-semibold no-underline transition duration-150",
+                  "flex min-h-11 flex-1 items-center justify-center rounded-full font-sj-ui text-sm font-semibold no-underline transition duration-150",
                   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-ink)]",
                   active
                     ? "bg-[var(--sj-ink)] text-[var(--sj-paper)]"

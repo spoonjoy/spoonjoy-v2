@@ -42,35 +42,35 @@ describe('Root layout responsive behavior', () => {
   })
 
   describe('phone tab bar (MobileNav) rendering', () => {
-    it('renders SpoonDock on mobile for authenticated users', () => {
+    it('renders the phone tab bar on mobile for authenticated users', () => {
       render(
         <MemoryRouter>
           <CurrentRootLayoutBehavior userId="test-user" />
         </MemoryRouter>
       )
 
-      // SpoonDock should be present for authenticated users
-      // MobileNav wraps SpoonDock which has role="navigation" and lg:hidden class
+      // the phone tab bar should be present for authenticated users
+      // MobileNav wraps the phone tab bar which has role="navigation" and lg:hidden class
       const navigations = screen.getAllByRole('navigation')
       const mobileNav = navigations.find(nav => nav.className.includes('lg:hidden'))
       expect(mobileNav).toBeInTheDocument()
     })
 
-    it('renders SpoonDock on mobile for unauthenticated users', () => {
+    it('renders the phone tab bar on mobile for unauthenticated users', () => {
       render(
         <MemoryRouter>
           <CurrentRootLayoutBehavior userId={null} />
         </MemoryRouter>
       )
 
-      // SpoonDock should also be present for unauthenticated users
+      // the phone tab bar should also be present for unauthenticated users
       // This test should FAIL initially because current root.tsx only renders MobileNav for authenticated users
       const navigations = screen.getAllByRole('navigation')
       const mobileNav = navigations.find(nav => nav.className.includes('lg:hidden'))
       expect(mobileNav).toBeInTheDocument()
     })
 
-    it('shows authenticated nav items in SpoonDock for authenticated users', () => {
+    it('shows authenticated nav items in the phone tab bar for authenticated users', () => {
       render(
         <MemoryRouter>
           <CurrentRootLayoutBehavior userId="test-user" />
@@ -83,7 +83,7 @@ describe('Root layout responsive behavior', () => {
       }
     })
 
-    it('shows unauthenticated nav items in SpoonDock for unauthenticated users', () => {
+    it('shows unauthenticated nav items in the phone tab bar for unauthenticated users', () => {
       render(
         <MemoryRouter>
           <CurrentRootLayoutBehavior userId={null} />
@@ -153,8 +153,8 @@ describe('Root layout responsive behavior', () => {
     })
   })
 
-  describe('content bottom padding for SpoonDock clearance', () => {
-    it('content has correct bottom padding on mobile for SpoonDock clearance', () => {
+  describe('content bottom padding for the phone tab bar clearance', () => {
+    it('content has correct bottom padding on mobile for the phone tab bar clearance', () => {
       const { container } = render(
         <MemoryRouter>
           <CurrentRootLayoutBehavior userId="test-user" />
