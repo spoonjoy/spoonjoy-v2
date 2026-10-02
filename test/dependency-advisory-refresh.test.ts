@@ -32,12 +32,13 @@ describe("dependency advisory refresh contract", () => {
   it("uses exact defensive transitive overrides and the reviewed React Router patch", () => {
     expect(packageJson.pnpm.overrides).toMatchObject({
       "@babel/core": "7.29.7",
-      "brace-expansion@1": "1.1.18",
-      "brace-expansion@2": "2.1.4",
+      "brace-expansion@1": "1.1.21",
+      "brace-expansion@2": "2.1.7",
+      "brace-expansion@5": "5.0.12",
       "defu": "6.1.5",
-      "dompurify": "3.4.13",
+      "dompurify": "3.4.16",
       "form-data": "4.0.6",
-      "joi@17": "17.13.6",
+      "joi@17": "17.13.7",
       "js-yaml@3": "3.15.2",
       "lodash": "4.18.0",
       "minimatch@3": "3.1.4",
@@ -46,7 +47,7 @@ describe("dependency advisory refresh contract", () => {
       "picomatch@2": "2.3.2",
       "picomatch@4": "4.0.4",
       "rollup@4": "4.59.0",
-      "undici": "7.29.0",
+      "undici": "7.29.1",
       "ws@8": "8.21.0",
     });
     expect(packageJson.pnpm.patchedDependencies).toHaveProperty(
