@@ -14,7 +14,6 @@ vi.mock("~/components/navigation", async () => {
   return {
     ...actual,
     shareContent: vi.fn(async () => ({ success: true, method: "native" })),
-    useRecipeDetailActions: vi.fn(),
   };
 });
 

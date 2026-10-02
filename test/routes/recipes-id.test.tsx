@@ -12,11 +12,10 @@ vi.mock("~/components/navigation", async () => {
   return {
     ...actual,
     shareContent: vi.fn(async () => ({ success: true, method: "native" })),
-    useRecipeDetailActions: vi.fn(),
   };
 });
 
-import { DockContextProvider, MobileNav, shareContent, useRecipeDetailActions } from "~/components/navigation";
+import { DockContextProvider, MobileNav, shareContent } from "~/components/navigation";
 import {
   loader,
   action,
@@ -2360,10 +2359,9 @@ describe("Recipes $id Route", () => {
       });
     };
 
-    const openSaveModalFromDock = async () => {
+    const openSaveModalFromHeader = async () => {
       await act(async () => {
-        const dockActionRegistration = vi.mocked(useRecipeDetailActions).mock.calls.at(-1)?.[0];
-        dockActionRegistration?.onSave?.();
+        fireEvent.click(screen.getByTestId("recipe-header-save-action"));
       });
     };
 
@@ -2410,7 +2408,7 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Save Modal Recipe" });
 
-      await openSaveModalFromDock();
+      await openSaveModalFromHeader();
 
       expect(await screen.findByRole("dialog", { name: "Save to Cookbook" })).toBeInTheDocument();
       await settleBrowserTasks();
@@ -2472,7 +2470,7 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Save Modal Recipe" });
 
-      await openSaveModalFromDock();
+      await openSaveModalFromHeader();
       await screen.findByRole("dialog", { name: "Save to Cookbook" });
 
       await user.type(screen.getByLabelText("Create new cookbook"), "Fresh Saves");
@@ -2516,7 +2514,7 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Save Modal Recipe" });
 
-      await openSaveModalFromDock();
+      await openSaveModalFromHeader();
       const dialog = await screen.findByRole("dialog", { name: "Save to Cookbook" });
       await settleBrowserTasks();
 
@@ -2565,7 +2563,7 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Save Modal Recipe" });
 
-      await openSaveModalFromDock();
+      await openSaveModalFromHeader();
       const dialog = await screen.findByRole("dialog", { name: "Save to Cookbook" });
 
       const titleInput = screen.getByLabelText("Create new cookbook");
@@ -2586,7 +2584,7 @@ describe("Recipes $id Route", () => {
       await closeSaveModal(user);
 
       // Reopening starts clean.
-      await openSaveModalFromDock();
+      await openSaveModalFromHeader();
       const reopened = await screen.findByRole("dialog", { name: "Save to Cookbook" });
       expect(within(reopened).queryByRole("alert")).not.toBeInTheDocument();
       await closeSaveModal(user);
@@ -2632,7 +2630,7 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Toggle Cookbook Recipe" });
 
-      await openSaveModalFromDock();
+      await openSaveModalFromHeader();
       await screen.findByRole("dialog", { name: "Save to Cookbook" });
 
       await user.click(screen.getByTestId("cookbook-item-cb-unsaved"));
@@ -2686,7 +2684,7 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Blank Cookbook Recipe" });
 
-      await openSaveModalFromDock();
+      await openSaveModalFromHeader();
       await screen.findByRole("dialog", { name: "Save to Cookbook" });
 
       const form = screen.getByTestId("create-cookbook-button").closest("form");
@@ -2697,7 +2695,7 @@ describe("Recipes $id Route", () => {
       await closeSaveModal(user);
     });
 
-    it("shares from the registered dock action", async () => {
+    it("shares from the recipe header's Share action", async () => {
       const mockData = {
         recipe: {
           id: "recipe-1",
@@ -2724,8 +2722,9 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Shareable Recipe" });
 
-      const dockActionRegistration = vi.mocked(useRecipeDetailActions).mock.calls.at(-1)?.[0];
-      await dockActionRegistration?.onShare?.();
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("recipe-header-share-action"));
+      });
 
       expect(vi.mocked(shareContent)).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -2805,7 +2804,7 @@ describe("Recipes $id Route", () => {
       expect(submittedScaleFactor).toBe("1.25");
     });
 
-    it("redirects guest recipe mutations to login from header and dock actions", async () => {
+    it("redirects guest recipe mutations to login from the header actions", async () => {
       const assign = vi.fn();
       const originalAssign = window.location.assign;
       Object.defineProperty(window.location, "assign", {
@@ -2843,8 +2842,7 @@ describe("Recipes $id Route", () => {
         await screen.findByRole("heading", { name: "Guest Recipe" });
 
         await user.click(screen.getByTestId("recipe-header-list-action"));
-        const dockActionRegistration = vi.mocked(useRecipeDetailActions).mock.calls.at(-1)?.[0];
-        dockActionRegistration?.onSave?.();
+        await user.click(screen.getByTestId("recipe-header-save-action"));
 
         expect(assign).toHaveBeenCalledTimes(2);
         expect(assign).toHaveBeenCalledWith("/login?redirectTo=%2Frecipes%2Frecipe-1");
@@ -3502,7 +3500,7 @@ describe("Recipes $id Route", () => {
       });
     });
 
-    it("lets the registered dock cook action enter focused cook mode", async () => {
+    it("lets the header's Cook mode action enter focused cook mode", async () => {
       const mockData = {
         recipe: {
           id: "recipe-1",
@@ -3538,8 +3536,7 @@ describe("Recipes $id Route", () => {
       await screen.findByRole("heading", { name: "Dock Cook Recipe" });
 
       await act(async () => {
-        const dockActionRegistration = vi.mocked(useRecipeDetailActions).mock.calls.at(-1)?.[0];
-        dockActionRegistration?.onCook?.();
+        fireEvent.click(screen.getByTestId("recipe-header-cook-action"));
       });
 
       expect(await screen.findByTestId("cook-mode-panel")).toBeInTheDocument();
@@ -3801,7 +3798,8 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
 
       await screen.findByRole("heading", { name: "My Recipe" });
-      expect(screen.queryByRole("link", { name: "Edit" })).not.toBeInTheDocument();
+      expect(screen.getByTestId("recipe-header-edit-action")).toHaveAttribute("href", "/recipes/recipe-1/edit");
+      expect(screen.queryByRole("link", { name: "Edit recipe" })).not.toBeInTheDocument();
       expect(screen.getByTestId("recipe-owner-tools")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
@@ -4418,7 +4416,8 @@ describe("Recipes $id Route", () => {
       expect(screen.getByRole("heading", { name: "The Only Step" })).toBeInTheDocument();
 
       // Owner edit/delete maintenance stays collapsed until explicitly opened.
-      expect(screen.queryByRole("link", { name: "Edit" })).not.toBeInTheDocument();
+      expect(screen.getByTestId("recipe-header-edit-action")).toHaveAttribute("href", "/recipes/recipe-1/edit");
+      expect(screen.queryByRole("link", { name: "Edit recipe" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
 
       // Step output uses section should NOT appear (single step has no dependencies)

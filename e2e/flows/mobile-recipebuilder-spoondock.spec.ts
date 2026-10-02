@@ -54,11 +54,11 @@ async function expectAboveDock(locator: Locator, dock: Locator, label: string) {
   expect(dockBox, 'dock should have a bounding box').not.toBeNull();
   expect(
     box!.y + box!.height,
-    `${label} should remain above the fixed SpoonDock`,
+    `${label} should remain above the fixed tab bar`,
   ).toBeLessThanOrEqual(dockBox!.y);
 }
 
-test.describe('Mobile RecipeBuilder and SpoonDock audit', () => {
+test.describe('Mobile RecipeBuilder and tab bar audit', () => {
   test('create flow keeps RecipeBuilder controls reachable without the fixed dock', async ({ page }) => {
     await page.goto('/recipes/new');
 
@@ -162,9 +162,9 @@ test.describe('Mobile RecipeBuilder and SpoonDock audit', () => {
     await expect(page.getByTestId('shopping-list-page-header').getByRole('heading', { name: 'Shopping list' })).toBeVisible();
     const dock = await getDock(page);
 
-    await expectTouchTarget(dock.getByRole('link', { name: /Shopping List/i }), 'shopping dock Shopping List link');
-    await expectTouchTarget(dock.getByRole('link', { name: 'Add' }), 'shopping dock Add link');
-    await expectTouchTarget(dock.getByRole('link', { name: 'Search' }), 'shopping dock Search link');
+    await expectTouchTarget(dock.getByRole('link', { name: 'Shopping', exact: true }), 'Shopping tab');
+    await expectTouchTarget(dock.getByRole('link', { name: 'Search', exact: true }), 'Search tab');
+    await expectTouchTarget(page.getByRole('main').getByRole('link', { name: 'New item', exact: true }), 'shopping New item link');
     const addButton = page.getByRole('button', { name: /^Add$/ });
     await expectTouchTarget(addButton, 'shopping Add button');
     await expectAboveDock(addButton, dock, 'shopping Add button');

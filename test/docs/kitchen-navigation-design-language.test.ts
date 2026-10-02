@@ -14,7 +14,7 @@ describe("kitchen navigation design language", () => {
       "Main Kitchen Navigation",
       "`Kitchen` -> `/`",
       "`Recipes` -> `/recipes`",
-      "The Pantry drawer contains `Recipes`",
+      "The phone tab bar is navigation only and the same on every page",
       "Back means back",
       "`My Recipes` -> `/my-recipes`",
       "`Saved Recipes` -> `/saved-recipes`",
@@ -25,8 +25,7 @@ describe("kitchen navigation design language", () => {
       "Saved Recipes are recipes saved through cookbooks owned by the signed-in cook",
       "Global search stays at `/search`",
       "personal drawer filters are local filters",
-      "mobile dock",
-      "Pantry drawer",
+      "`Mine`, `Saved` and `Everyone`",
       "Recently Updated"
     ]) {
       expect(designLanguage).toContain(marker);
@@ -34,5 +33,6 @@ describe("kitchen navigation design language", () => {
 
     expect(designLanguage).not.toContain("Latest from the kitchen");
     expect(designLanguage).not.toContain("On the Counter");
+    expect(designLanguage).not.toContain("Pantry drawer");
   });
 });

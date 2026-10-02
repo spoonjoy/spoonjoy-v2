@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 
 vi.mock('motion/react', () => ({
@@ -41,48 +41,49 @@ describe('Root layout responsive behavior', () => {
     vi.restoreAllMocks()
   })
 
-  describe('SpoonDock (MobileNav) rendering', () => {
-    it('renders SpoonDock on mobile for authenticated users', () => {
+  describe('phone tab bar (MobileNav) rendering', () => {
+    it('renders the phone tab bar on mobile for authenticated users', () => {
       render(
         <MemoryRouter>
           <CurrentRootLayoutBehavior userId="test-user" />
         </MemoryRouter>
       )
 
-      // SpoonDock should be present for authenticated users
-      // MobileNav wraps SpoonDock which has role="navigation" and lg:hidden class
+      // the phone tab bar should be present for authenticated users
+      // MobileNav wraps the phone tab bar which has role="navigation" and lg:hidden class
       const navigations = screen.getAllByRole('navigation')
       const mobileNav = navigations.find(nav => nav.className.includes('lg:hidden'))
       expect(mobileNav).toBeInTheDocument()
     })
 
-    it('renders SpoonDock on mobile for unauthenticated users', () => {
+    it('renders the phone tab bar on mobile for unauthenticated users', () => {
       render(
         <MemoryRouter>
           <CurrentRootLayoutBehavior userId={null} />
         </MemoryRouter>
       )
 
-      // SpoonDock should also be present for unauthenticated users
+      // the phone tab bar should also be present for unauthenticated users
       // This test should FAIL initially because current root.tsx only renders MobileNav for authenticated users
       const navigations = screen.getAllByRole('navigation')
       const mobileNav = navigations.find(nav => nav.className.includes('lg:hidden'))
       expect(mobileNav).toBeInTheDocument()
     })
 
-    it('shows authenticated nav items in SpoonDock for authenticated users', () => {
+    it('shows authenticated nav items in the phone tab bar for authenticated users', () => {
       render(
         <MemoryRouter>
           <CurrentRootLayoutBehavior userId="test-user" />
         </MemoryRouter>
       )
 
-      expect(screen.getByRole('link', { name: /my kitchen/i })).toBeInTheDocument()
-      expect(screen.getByRole('link', { name: /create recipe/i })).toBeInTheDocument()
-      expect(screen.getByRole('link', { name: /shopping list/i })).toBeInTheDocument()
+      const tabBar = screen.getByRole('navigation', { name: 'Spoonjoy navigation' })
+      for (const tab of ['Kitchen', 'Recipes', 'Cookbooks', 'Shopping', 'Search']) {
+        expect(within(tabBar).getByRole('link', { name: tab })).toBeInTheDocument()
+      }
     })
 
-    it('shows unauthenticated nav items in SpoonDock for unauthenticated users', () => {
+    it('shows unauthenticated nav items in the phone tab bar for unauthenticated users', () => {
       render(
         <MemoryRouter>
           <CurrentRootLayoutBehavior userId={null} />
@@ -93,8 +94,9 @@ describe('Root layout responsive behavior', () => {
       const mobileNav = navigations.find(nav => nav.className.includes('lg:hidden'))
 
       expect(mobileNav).toBeInTheDocument()
-      expect(screen.getByRole('link', { name: /spoonjoy public/i })).toHaveAttribute('href', '/')
-      expect(screen.getByRole('link', { name: /log in/i })).toHaveAttribute('href', '/login')
+      const tabBar = screen.getByRole('navigation', { name: 'Spoonjoy navigation' })
+      expect(within(tabBar).getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/')
+      expect(within(tabBar).getByRole('link', { name: 'Log in' })).toHaveAttribute('href', '/login')
     })
   })
 
@@ -151,8 +153,8 @@ describe('Root layout responsive behavior', () => {
     })
   })
 
-  describe('content bottom padding for SpoonDock clearance', () => {
-    it('content has correct bottom padding on mobile for SpoonDock clearance', () => {
+  describe('content bottom padding for the phone tab bar clearance', () => {
+    it('content has correct bottom padding on mobile for the phone tab bar clearance', () => {
       const { container } = render(
         <MemoryRouter>
           <CurrentRootLayoutBehavior userId="test-user" />
@@ -179,41 +181,33 @@ describe('Root layout responsive behavior', () => {
   })
 
   describe('unauthenticated user navigation', () => {
-    it('unauthenticated users see SpoonDock with Home and Login', () => {
+    it('unauthenticated users see the tab bar with Home, Recipes, Log in and Search', () => {
       render(
         <MemoryRouter>
           <CurrentRootLayoutBehavior userId={null} />
         </MemoryRouter>
       )
 
-      // For unauthenticated users, SpoonDock should show:
-      // - Home (left side)
-      // - Center Spoonjoy mark
-      // - Login (right side)
-
-      // This test should FAIL initially because MobileNav is only rendered for authenticated users
-      const navigations = screen.getAllByRole('navigation')
-      const mobileNav = navigations.find(nav => nav.className.includes('lg:hidden'))
-      expect(mobileNav).toBeInTheDocument()
-
-      // Check for dock-center (the Spoonjoy mark)
-      expect(screen.getByTestId('dock-center')).toBeInTheDocument()
+      const tabBar = screen.getByRole('navigation', { name: 'Spoonjoy navigation' })
+      expect(within(tabBar).getAllByRole('link').map((link) => link.getAttribute('aria-label') ?? link.textContent?.trim())).toEqual([
+        'Home',
+        'Recipes',
+        'Log in',
+        'Search',
+      ])
     })
 
-    it('unauthenticated users do NOT see authenticated nav items in SpoonDock', () => {
+    it('unauthenticated users do NOT see the signed-in tabs', () => {
       render(
         <MemoryRouter>
           <CurrentRootLayoutBehavior userId={null} />
         </MemoryRouter>
       )
 
-      // Unauthenticated users should NOT see Recipes, Cookbooks, List, Profile
-      // They should only see Home and Login
-      // This test should FAIL initially because MobileNav isn't rendered for unauth users
-      expect(screen.queryByText('Recipes')).not.toBeInTheDocument()
-      expect(screen.queryByText('Cookbooks')).not.toBeInTheDocument()
-      expect(screen.queryByText('List')).not.toBeInTheDocument()
-      expect(screen.queryByText('Profile')).not.toBeInTheDocument()
+      const tabBar = screen.getByRole('navigation', { name: 'Spoonjoy navigation' })
+      expect(within(tabBar).queryByRole('link', { name: 'Kitchen' })).not.toBeInTheDocument()
+      expect(within(tabBar).queryByRole('link', { name: 'Cookbooks' })).not.toBeInTheDocument()
+      expect(within(tabBar).queryByRole('link', { name: 'Shopping' })).not.toBeInTheDocument()
     })
   })
 })

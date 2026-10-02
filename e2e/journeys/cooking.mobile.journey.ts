@@ -1,4 +1,4 @@
-// The recipe dock's list action on iPhone uses the recipe's current scale and then shows that the
+// The recipe's "Add to list" action on iPhone uses the recipe's current scale and then shows that the
 // ingredients are on the list. It writes to a shopping list, so it runs as a throwaway user
 // (codex-e2e-*, removed by the workflow's QA cleanup) who forks Lemon Herb Rice, leaving the
 // personas' lists untouched.
@@ -8,12 +8,12 @@ import { createDisposableJourneyUser, fillSecret } from "./support/secret";
 
 const LEMON_RICE = "/recipes/qa-kitchen-recipe-lemon-rice";
 
-test.describe("Recipe dock list action on iPhone", () => {
+test.describe("Recipe list action on iPhone", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test("the dock adds ingredients at the current scale and then reads as already on the list @mutates", async ({ page, verifyAfterReload, expectAccessible }) => {
+  test("Add to list adds ingredients at the current scale and then reads as already on the list @mutates", async ({ page, verifyAfterReload, expectAccessible }) => {
     const user = createDisposableJourneyUser();
-    const dock = page.getByRole("navigation", { name: "Spoonjoy navigation" });
+    const listAction = page.getByTestId("recipe-header-list-action");
     const scaleDisplay = page.getByTestId("scale-display");
     const increaseScale = page.getByRole("button", { name: "Increase scale" });
 
@@ -38,7 +38,7 @@ test.describe("Recipe dock list action on iPhone", () => {
     await expect(page).not.toHaveURL(pathUrl(LEMON_RICE));
     await expect(page).toHaveURL(/\/recipes\/[^/?#]+$/);
     await expect(page.getByRole("heading", { level: 1, name: "Lemon Herb Rice", exact: true })).toBeVisible();
-    await expect(dock.getByRole("link", { name: "Edit", exact: true })).toBeVisible();
+    await expect(page.getByTestId("recipe-header-edit-action")).toBeVisible();
 
     // 2×, four presses of 0.25.
     await increaseScale.click();
@@ -50,10 +50,12 @@ test.describe("Recipe dock list action on iPhone", () => {
     await increaseScale.click();
     await expect(scaleDisplay).toHaveText("2×");
 
-    await dock.getByRole("button", { name: "Add ingredients to shopping list", exact: true }).click();
+    await expect(listAction).toHaveText("Add to list");
+    await listAction.click();
     // The toast appears once QA's add-and-reload round trip finishes, which can be slow.
     await expect(page.getByRole("status").filter({ hasText: "4 items added at 2x" })).toBeVisible({ timeout: 15_000 });
-    await expect(dock.getByRole("button", { name: "Ingredients already in shopping list", exact: true })).toBeVisible();
+    await expect(listAction).toHaveText("In list");
+    await expect(listAction).toHaveAttribute("aria-pressed", "true");
     await expectAccessible();
 
     // The list holds the 2× quantities (jasmine rice 1 cup -> 2 cup, chicken stock 2 cup -> 4 cup).

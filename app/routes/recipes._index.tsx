@@ -18,6 +18,7 @@ import {
   type PublicRecipe,
 } from "~/lib/collection-reads.server";
 import { formatServingsLabel } from "~/lib/quantity";
+import { RecipesSectionNav } from "~/components/navigation";
 
 const PUBLIC_RECIPE_LIMIT = 48;
 
@@ -54,6 +55,7 @@ export default function RecipesIndex() {
 
   return (
     <CookbookPage>
+      {isAuthenticated ? <RecipesSectionNav /> : null}
       <section>
         <header className="border-b border-[var(--sj-border-strong)] pb-8">
           <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] lg:items-end">

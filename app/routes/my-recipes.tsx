@@ -15,6 +15,7 @@ import {
 import { requestD1 } from "~/lib/d1-read.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
+import { RecipesSectionNav } from "~/components/navigation";
 
 type IngredientLookupDb = {
   ingredient: {
@@ -90,6 +91,7 @@ export default function MyRecipes() {
 
   return (
     <CookbookPage>
+      <RecipesSectionNav />
       <CookbookHeader
         eyebrow="My Kitchen"
         title="My Recipes"

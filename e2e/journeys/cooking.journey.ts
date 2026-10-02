@@ -159,7 +159,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
       // Step 1's quantities follow the scale, and the checklist carries over.
       await expect(panel.getByTestId(JASMINE_RICE_QUANTITY)).toHaveText("1 ½ cup");
       await expect(panel.getByRole("checkbox", { name: "jasmine rice", exact: true })).toHaveAttribute("aria-checked", "true");
-      // Nothing covers the step controls on a phone (R-M2-5): the dock is hidden in cook mode.
+      // Nothing covers the step controls on a phone (R-M2-5): the tab bar is hidden in cook mode.
       await expect(page.getByRole("navigation", { name: "Spoonjoy navigation" })).toBeHidden();
       await expectAccessible();
 
@@ -270,13 +270,11 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await expectAccessible();
     });
 
-    test("after cook mode, the recipe's Back control returns to the page before the recipe", async ({ page, isMobile, expectAccessible }) => {
+    test("after cook mode, the recipe's Back control returns to the page before the recipe", async ({ page, expectAccessible }) => {
       const panel = page.getByTestId("cook-mode-panel");
-      // On a phone that is the dock's Back item; on desktop (no dock) the page's "Recipes" link.
-      // Both keep an /recipes href for a recipe opened directly (R-M2-2).
-      const backControl = isMobile
-        ? page.getByRole("navigation", { name: "Spoonjoy navigation" }).getByRole("link", { name: "Back", exact: true })
-        : page.getByRole("main").getByRole("link", { name: "Recipes", exact: true });
+      // The page's own "Recipes" link at the top, on a phone and on desktop alike. It keeps an
+      // /recipes href for a recipe opened directly (R-M2-2).
+      const backControl = page.getByRole("main").getByRole("link", { name: "Recipes", exact: true });
 
       await openLemonRiceFromHome(page);
       await page.getByRole("link", { name: "Cook mode", exact: true }).click();
