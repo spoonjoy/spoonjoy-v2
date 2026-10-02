@@ -34,6 +34,29 @@ describe("CookbookCoverArt", () => {
     expect(screen.queryByText(legacySpoonjoyCookbookLabel)).not.toBeInTheDocument();
   });
 
+  it("names a photo-less cookbook once, like a printed cover, with no dark caption band", () => {
+    const { container } = render(<CookbookCoverArt title="Plain Book" recipeCount={3} recipeImages={[]} />);
+
+    expect(screen.getAllByText("Plain Book")).toHaveLength(1);
+    expect(screen.getAllByText("3 recipes")).toHaveLength(1);
+    expect(screen.getByRole("heading", { level: 3, name: "Plain Book" })).toBeInTheDocument();
+    expect(container.querySelector("figcaption")).toBeNull();
+  });
+
+  it("keeps the fallback's top-right corner clear for an overlaid share button", () => {
+    render(<CookbookCoverArt title="Corner Book" recipeCount={2} recipeImages={[]} />);
+
+    const header = screen.getByText("Spoonjoy").parentElement as HTMLElement;
+    expect(header).not.toHaveTextContent("2 recipes");
+  });
+
+  it("renders the fallback title as plain text when a caller already exposes it as a heading", () => {
+    render(<CookbookCoverArt title="Detail Book" recipeCount={0} titleAsHeading={false} />);
+
+    expect(screen.queryByRole("heading", { name: "Detail Book" })).not.toBeInTheDocument();
+    expect(screen.getByText("Detail Book")).toBeInTheDocument();
+  });
+
   it("defaults to an editorial fallback cover when images are omitted", () => {
     render(<CookbookCoverArt title="Defaulted Book" recipeCount={0} />);
 
