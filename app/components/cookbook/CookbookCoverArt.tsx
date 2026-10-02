@@ -48,19 +48,20 @@ export function CookbookCoverArt({
       )}
     >
       {images.length === 0 ? (
-        <CookbookFallbackCover title={title} recipeLabel={recipeLabel} />
+        <CookbookFallbackCover title={title} recipeLabel={recipeLabel} TitleTag={TitleTag} />
       ) : (
-        <CookbookImageCover images={images} title={title} />
-      )}
-
-      <figcaption className="absolute inset-x-0 bottom-0 z-10 border-t border-[color-mix(in_srgb,var(--sj-paper)_18%,transparent)] bg-[color-mix(in_srgb,var(--sj-charcoal)_82%,transparent)] p-4 text-[var(--sj-paper)] backdrop-blur-sm">
+        <>
+          <CookbookImageCover images={images} title={title} />
+          <figcaption className="absolute inset-x-0 bottom-0 z-10 border-t border-[color-mix(in_srgb,var(--sj-paper)_18%,transparent)] bg-[color-mix(in_srgb,var(--sj-charcoal)_82%,transparent)] p-4 text-[var(--sj-paper)] backdrop-blur-sm">
         <TitleTag className="font-sj-display line-clamp-2 text-2xl/7 font-semibold tracking-normal">
           {title}
         </TitleTag>
         <p className="font-sj-ui mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-[color-mix(in_srgb,var(--sj-paper)_72%,transparent)]">
           {recipeLabel}
         </p>
-      </figcaption>
+          </figcaption>
+        </>
+      )}
     </figure>
   );
 }
@@ -102,33 +103,40 @@ function CookbookImageCover({
   );
 }
 
+/**
+ * A photo-less cookbook reads like a printed cover: imprint at the top, the title set large,
+ * and the recipe count at the foot. Nothing sits in the top-right corner, so callers can
+ * overlay an action there (the Kitchen shelf's share button) without covering text.
+ */
 function CookbookFallbackCover({
   title,
   recipeLabel,
+  TitleTag,
 }: {
   title: string;
   recipeLabel: string;
+  TitleTag: "h3" | "p";
 }) {
   return (
-    <div className="flex h-full w-full flex-col bg-[var(--sj-paper)] p-5">
-      <div className="flex items-center justify-between border-b border-[var(--sj-border-strong)] pb-4">
+    <div className="@container flex h-full w-full flex-col bg-[var(--sj-paper)] p-5">
+      <div className="flex min-h-11 items-center border-b border-[var(--sj-border-strong)] pb-4">
         <span className="font-sj-ui text-[0.68rem]/4 font-bold uppercase tracking-[0.22em] text-[var(--sj-brass)]">
           Spoonjoy
         </span>
-        <span className="font-sj-ui text-[0.68rem]/4 font-bold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
-          {recipeLabel}
-        </span>
       </div>
       <div className="flex min-h-0 flex-1 flex-col justify-center">
-        <p className="font-sj-display text-4xl/10 font-semibold tracking-normal text-[var(--sj-ink)]">
+        <TitleTag className="font-sj-display line-clamp-4 text-[clamp(1.5rem,17cqi,2.75rem)] leading-[1.1] font-semibold tracking-normal text-balance hyphens-auto [overflow-wrap:anywhere] text-[var(--sj-ink)]">
           {title}
-        </p>
+        </TitleTag>
         <div className="mt-8 space-y-3" aria-hidden="true">
           <span className="block h-px w-full bg-[var(--sj-border)]" />
           <span className="block h-px w-4/5 bg-[var(--sj-border)]" />
           <span className="block h-px w-2/3 bg-[var(--sj-border)]" />
         </div>
       </div>
+      <p className="font-sj-ui border-t border-[var(--sj-border-strong)] pt-4 text-[0.68rem]/4 font-bold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
+        {recipeLabel}
+      </p>
     </div>
   );
 }
