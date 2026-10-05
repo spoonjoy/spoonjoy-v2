@@ -24,6 +24,14 @@
       "ecosystem": "npm",
       "reason": "Tooling-only residual under the legacy Storybook test runner and coverage utilities; application code neither imports this copy nor supplies buffers to UUID generation.",
       "expiresOn": "2026-10-24"
+    },
+    {
+      "id": "GHSA-vfj7-8cjw-p6xm",
+      "packageName": "braces",
+      "version": "3.0.3",
+      "ecosystem": "npm",
+      "reason": "Tooling-only residual through micromatch in the Jest and Storybook test-runner graph; no fixed braces release exists yet (3.0.3 is the last affected and latest version), and the production Worker neither bundles this package nor expands user-supplied brace patterns.",
+      "expiresOn": "2026-10-24"
     }
   ]
 }
