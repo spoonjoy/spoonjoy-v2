@@ -142,13 +142,14 @@ describe("CookSession namespace configuration", () => {
 
     expectCookSessionLifecycle(config);
     expectCookSessionLifecycle(config.env?.qa ?? {});
-    expect(config.vars?.COOK_SESSION_BOOTSTRAP_MODE).toBe("1");
+    // Product activation retired production's public bootstrap probe; QA keeps it alongside the protocol.
+    expect(config.vars).not.toHaveProperty("COOK_SESSION_BOOTSTRAP_MODE");
     expect(config.env?.qa?.vars?.COOK_SESSION_BOOTSTRAP_MODE).toBe("1");
     expect(config.version_metadata).toEqual({ binding: "CF_VERSION_METADATA" });
     expect(config.env?.qa?.version_metadata).toEqual({ binding: "CF_VERSION_METADATA" });
   });
 
-  it("serves cook-session protocol v1 on QA, and in production only through a product-activation release", () => {
+  it("serves cook-session protocol v1 on QA and in production, never through a bootstrap release", () => {
     const config = readConfig("wrangler.json");
     const workflow = readFileSync(".github/workflows/production-deploy.yml", "utf8");
     const releaseMode = /^\s*SPOONJOY_RELEASE_MODE:\s*(\S+)\s*$/m.exec(workflow)?.[1];
@@ -157,7 +158,11 @@ describe("CookSession namespace configuration", () => {
     expect(["atomic-bootstrap", "atomic-product-activation", "protocol-v1-canary"]).toContain(releaseMode);
     // Turning the protocol on in production is the one-way product activation, never a bootstrap release.
     expect(config.vars?.COOK_SESSION_PROTOCOL === "v1" ? releaseMode : "inert").not.toBe("atomic-bootstrap");
-    expect(config.vars?.COOK_SESSION_PROTOCOL ?? "v1").toBe("v1");
+    expect(config.vars?.COOK_SESSION_PROTOCOL).toBe("v1");
+    expect(["atomic-product-activation", "protocol-v1-canary"]).toContain(releaseMode);
+    // Production never runs the public bootstrap probe alongside the protocol.
+    expect(config.vars?.COOK_SESSION_BOOTSTRAP_MODE).toBeUndefined();
+    expect(existsSync("workers/cook-session-protocol-v1-boundary")).toBe(true);
   });
 
   it("runs the official Workers lane with the same SQLite namespace", () => {
