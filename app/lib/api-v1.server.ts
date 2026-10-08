@@ -1,3 +1,5 @@
+import { chefActivity, chefRef as chefActivityRef, type ChefRef } from "~/lib/chef-activity.server";
+import { listFellowChefs, listKitchenVisitors, type FellowChefRow } from "~/lib/fellow-chefs.server";
 import type { ApiCredential, ApiIdempotencyKey, NativePushDevice, Prisma, RecipeCover, RecipeSpoon } from "@prisma/client";
 import { requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1WriteBatch } from "~/lib/d1-write.server";
@@ -625,6 +627,8 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "account.photo.upload";
     case "DELETE me-photo":
       return "account.photo.remove";
+    case "GET me-chefs":
+      return "account.chefs.read";
     case "GET me-notification-preferences":
       return "account.notification-preferences.read";
     case "PATCH me-notification-preferences":
@@ -4816,6 +4820,55 @@ async function handleAccountPhotoRemove(args: ApiV1RouteArgs, requestId: string,
   });
 }
 
+async function handleNativeChefsRead(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const db = await getRequestDb(args.context);
+  const origin = publicContentOrigin(args);
+  const viewer = await db.user.findUnique({
+    where: { id: principal.id },
+    select: { id: true, username: true, photoUrl: true },
+  });
+  /* istanbul ignore if -- @preserve bearer/session auth already resolved the user; this keeps the read honest if the row disappears mid-request. */
+  if (!viewer) {
+    throw new ApiV1Error("not_found", "Account not found");
+  }
+  const chefRefData = (chef: ChefRef) => ({
+    id: chef.id,
+    username: chef.username,
+    photoUrl: publicAssetUrl(origin, chef.photoUrl),
+  });
+  const chefRows = (rows: FellowChefRow[]) => rows.map((row) => ({
+    chefId: row.chefId,
+    username: row.username,
+    photoUrl: publicAssetUrl(origin, row.photoUrl),
+    interactionCounts: row.interactionCounts,
+    latestInteractionAt: row.latestInteractionAt.toISOString(),
+  }));
+  const [fellowChefs, chefsUsingMyRecipes, activity] = await Promise.all([
+    listFellowChefs(db, principal.id),
+    listKitchenVisitors(db, principal.id),
+    chefActivity(db, principal.id, chefActivityRef(viewer)),
+  ]);
+  return withApiV1Telemetry(
+    apiV1PrivateSuccess(requestId, {
+      viewer: chefRefData(chefActivityRef(viewer)),
+      fellowChefs: { total: fellowChefs.total, rows: chefRows(fellowChefs.rows) },
+      chefsUsingMyRecipes: { total: chefsUsingMyRecipes.total, rows: chefRows(chefsUsingMyRecipes.rows) },
+      activity: activity.map((row) => ({
+        id: row.id,
+        kind: row.kind,
+        direction: row.direction,
+        eventAt: row.eventAt.toISOString(),
+        actor: chefRefData(row.actor),
+        otherChef: chefRefData(row.otherChef),
+        recipe: row.recipe,
+        cookbook: row.cookbook,
+        label: row.label,
+      })),
+    }),
+    { idempotencyOutcome: "none" },
+  );
+}
+
 async function handleNotificationPreferencesRead(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
   const db = await getRequestDb(args.context);
   return withApiV1Telemetry(
@@ -6982,6 +7035,12 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "GET" && path === "me/sync") {
       const principal = await authorize(path) as ApiPrincipal;
       const response = await handleNativeAccountSync(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && path === "me/chefs") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleNativeChefsRead(args, requestId, principal);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
