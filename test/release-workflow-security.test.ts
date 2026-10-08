@@ -385,6 +385,31 @@ describe("web dependency advisory gate", () => {
     expect(production).not.toContain("gh run list --workflow .github/workflows/ci.yml");
     expect(production).not.toContain("gh run list --workflow .github/workflows/storybook.yml");
   });
+
+  it("runs the same pinned advisory scan daily on main from a workflow that cannot trigger a deploy", () => {
+    const scheduled = workflowSource("advisory-scheduled.yml");
+    const production = workflowSource("production-deploy.yml");
+
+    expect(scheduled).toContain("schedule:");
+    expect(scheduled).toContain("cron:");
+    expect(scheduled).toContain("ref: main");
+    expect(scheduled).toContain("pnpm run advisory:scan");
+    expect(scheduled).not.toContain("secrets.");
+    expect(scheduled).not.toMatch(/name: CI\b/);
+    expect(production).toContain("workflows: [CI]");
+    for (const pin of ["OSV_SCANNER_VERSION", "OSV_SCANNER_TAG_SHA", "OSV_SCANNER_LINUX_AMD64_SHA256"]) {
+      const line = (source: string) => source.split("\n").find((entry) => entry.trim().startsWith(`${pin}:`));
+      expect(line(scheduled)).toBeDefined();
+      expect(line(scheduled)).toBe(line(ci));
+    }
+    for (const step of [
+      "pnpm install --frozen-lockfile --ignore-scripts",
+      "--scanner .cache/osv-scanner/osv-scanner --output .advisory/osv-results.json",
+    ]) {
+      expect(scheduled).toContain(step);
+      expect(ci).toContain(step);
+    }
+  });
 });
 
 describe("CI warning suppression at source", () => {
