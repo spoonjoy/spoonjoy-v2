@@ -4,12 +4,13 @@
 // (a throwaway fork of Lemon Herb Rice) while these run, so these tests only assert on seeded
 // qa-kitchen records, located by name and seeded URL, and never on result counts or positions.
 import { test, expect } from "./support/journey";
-import { seededRecipeLink } from "./support/navigation";
+import { seededCookbookLink, seededRecipeLink } from "./support/navigation";
 import { personaStorageStatePath } from "./support/personas";
 
 const LEMON_RICE = "/recipes/qa-kitchen-recipe-lemon-rice";
 const TOMATO_SOUP = "/recipes/qa-kitchen-recipe-tomato-soup";
 const RISOTTO = "/recipes/qa-kitchen-recipe-risotto";
+const WEEKNIGHT = "/cookbooks/qa-kitchen-cookbook-weeknight";
 
 test.describe("Search", () => {
   // The stored session path, not persona("chef").storageState: persona() reads the per-run
@@ -94,7 +95,7 @@ test.describe("Search", () => {
     await main.getByRole("link", { name: "Cookbooks", exact: true }).click();
     await expect(page).toHaveURL(/[?&]scope=cookbooks(?:&|$)/);
     await expect(main.getByRole("heading", { name: "Cookbooks", exact: true })).toBeVisible();
-    await expect(results.getByRole("link", { name: "Cookbook Weeknight Dinners", exact: true })).toBeVisible();
+    await expect(seededCookbookLink(results, "Cookbook Weeknight Dinners", WEEKNIGHT)).toBeVisible();
     await expect(results.getByRole("link", { name: /^Recipe / })).toHaveCount(0);
     await expectAccessible();
   });

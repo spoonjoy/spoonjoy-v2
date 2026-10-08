@@ -37,6 +37,11 @@ export function seededRecipeLink(scope: Locator, name: string, recipePath: strin
   return scope.getByRole("link", { name, exact: true }).and(scope.page().locator(`[href="${recipePath}"]`));
 }
 
+// A seeded cookbook's link, pinned to its seeded URL: QA can hold other cookbooks with the same title.
+export function seededCookbookLink(scope: Locator, name: string, cookbookPath: string): Locator {
+  return seededRecipeLink(scope, name, cookbookPath);
+}
+
 // Matches a full URL whose path is exactly `path`, with any query or hash.
 export function pathUrl(path: string): RegExp {
   const escaped = path.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
