@@ -180,8 +180,8 @@ async function handleCookSessionRequest(
     if (requirement.ownerDelete && await requestHasBodyBytes(request)) {
       return cookErrorResponse(400, "invalid_request", "Cook session request is invalid.");
     }
-    // Protocol v1 is switched on per environment (QA first); production keeps the inert
-    // bootstrap answer until its release flips COOK_SESSION_PROTOCOL (see docs/deployment.md).
+    // Protocol v1 is switched on per environment through COOK_SESSION_PROTOCOL; QA and
+    // production both set it (see docs/deployment.md).
     if (requirement.operation && env.COOK_SESSION_PROTOCOL === "v1") {
       return await handleCookSessionProtocolRequest(request, env, principal.id, requirement.operation, {
         // Browser (cookie) callers must name their user; see COOK_EXPECTED_USER_HEADER.

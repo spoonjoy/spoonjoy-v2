@@ -164,8 +164,8 @@ describe("production release provenance", () => {
     expect(reportJob).not.toContain("--allow-recovery");
   });
 
-  it("pins the bootstrap lifecycle phase in source and refuses cross-boundary rollback", () => {
-    const modeLine = "  SPOONJOY_RELEASE_MODE: atomic-bootstrap";
+  it("pins the product-activation lifecycle phase in source and refuses cross-boundary rollback", () => {
+    const modeLine = "  SPOONJOY_RELEASE_MODE: atomic-product-activation";
     const boundaryLine = '  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: ""';
     const rollbackGuard =
       'if [ -n "$ROLLBACK_VERSION_ID" ] && [ "$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" ]; then';
@@ -205,7 +205,7 @@ describe("production release provenance", () => {
       'test "$SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA" = "$marker_boundary_sha"',
     );
     expect(validation).toContain(ancestryCheck);
-    expect(existsSync(markerPath)).toBe(false);
+    expect(existsSync(markerPath)).toBe(true);
     expect(production.indexOf(rollbackGuard)).toBeLessThan(deployStart);
     expect(production.indexOf(ancestryCheck)).toBeLessThan(deployStart);
     expect(production).toContain('releaseMode: $release_mode');

@@ -38,7 +38,7 @@ describe("dependency advisory refresh contract", () => {
       "defu": "6.1.5",
       "dompurify": "3.4.16",
       "form-data": "4.0.6",
-      "joi@17": "17.13.7",
+      "joi@17": "17.13.8",
       "js-yaml@3": "3.15.2",
       "lodash": "4.18.0",
       "minimatch@3": "3.1.4",
@@ -47,6 +47,7 @@ describe("dependency advisory refresh contract", () => {
       "picomatch@2": "2.3.2",
       "picomatch@4": "4.0.4",
       "rollup@4": "4.59.0",
+      "source-map-js": "1.2.2",
       "undici": "7.29.1",
       "ws@8": "8.21.0",
     });
@@ -61,9 +62,9 @@ describe("dependency advisory refresh contract", () => {
   });
 
   it("keeps only exact short-lived reviewed tooling residuals", () => {
-    expect(allowlist.allowedVulnerabilities).toHaveLength(3);
+    expect(allowlist.allowedVulnerabilities).toHaveLength(4);
     expect(allowlist.allowedVulnerabilities.map((entry: { packageName: string }) => entry.packageName).sort())
-      .toEqual(["deepmerge-ts", "esbuild", "uuid"]);
+      .toEqual(["braces", "deepmerge-ts", "esbuild", "uuid"]);
     for (const entry of allowlist.allowedVulnerabilities) {
       expect(entry.id).toMatch(/^GHSA-/);
       expect(entry.version).toMatch(/^\d+\.\d+\.\d+/);
