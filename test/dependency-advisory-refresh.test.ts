@@ -62,15 +62,15 @@ describe("dependency advisory refresh contract", () => {
   });
 
   it("keeps only exact short-lived reviewed tooling residuals", () => {
-    expect(allowlist.allowedVulnerabilities).toHaveLength(4);
+    expect(allowlist.allowedVulnerabilities).toHaveLength(5);
     expect(allowlist.allowedVulnerabilities.map((entry: { packageName: string }) => entry.packageName).sort())
-      .toEqual(["braces", "deepmerge-ts", "esbuild", "uuid"]);
+      .toEqual(["braces", "deepmerge-ts", "esbuild", "sprintf-js", "uuid"]);
     for (const entry of allowlist.allowedVulnerabilities) {
       expect(entry.id).toMatch(/^GHSA-/);
       expect(entry.version).toMatch(/^\d+\.\d+\.\d+/);
       expect(entry.ecosystem).toBe("npm");
       expect(entry.reason).toMatch(/tooling-only/i);
-      expect(entry.expiresOn).toBe("2026-10-24");
+      expect(entry.expiresOn).toBe(entry.packageName === "sprintf-js" ? "2026-10-14" : "2026-10-24");
     }
   });
 });
