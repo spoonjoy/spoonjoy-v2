@@ -371,6 +371,8 @@ describe("agent connect route", () => {
     render(<Stub initialEntries={["/"]} />);
     const codeInput = await screen.findByLabelText("Type the code your agent shows you");
     expect(screen.queryByText("Request details")).not.toBeInTheDocument();
+    // On its own, the scopes section draws its own top and bottom rules.
+    expect(screen.getByText("Requested scopes").parentElement).toHaveClass("mt-6", "border-y");
     fireEvent.change(codeInput, { target: { value: "WRNG-0000" } });
     fireEvent.click(screen.getByRole("button", { name: "Approve Access" }));
     expect(await screen.findByText("That code doesn't match. Type the code your agent shows you.")).toBeInTheDocument();
@@ -396,6 +398,12 @@ describe("agent connect route", () => {
     expect(screen.getByText(/calling itself "slugger" wants permission/)).toBeInTheDocument();
     expect(screen.getByText(/did not verify who made this request/)).toBeInTheDocument();
     expect(screen.getByText("2 minutes ago")).toBeInTheDocument();
+    // Under "Request details", the scopes section shares its rule: one divider, not two.
+    expect(screen.getByText("Request details").parentElement).toHaveClass("border-y");
+    const scopesSection = screen.getByText("Requested scopes").parentElement!;
+    expect(scopesSection).toHaveClass("border-b");
+    expect(scopesSection).not.toHaveClass("border-y", "mt-6");
+    expect(scopesSection.previousElementSibling).toBe(screen.getByText("Request details").parentElement);
     expect(screen.getByText("203.0.113.9 (NZ)")).toBeInTheDocument();
     expect(screen.getByText("curl/8.7.1")).toBeInTheDocument();
     expect(screen.getByText("US")).toBeInTheDocument();
