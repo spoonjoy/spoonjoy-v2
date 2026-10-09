@@ -10,7 +10,6 @@ import type {
   Unit,
 } from "@prisma/client";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
-import { toDate, toNumber } from "~/lib/d1-coerce.server";
 import {
   d1Count,
   d1ReadBatch,
@@ -26,6 +25,13 @@ import {
   type ColumnSpec,
 } from "~/lib/d1-models.server";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
+import {
+  SEARCH_DIRTY_CLOCK_SCHEMA_SQL,
+  SEARCH_DIRTY_SCHEMA_SQL,
+  SEARCH_TRIGGER_COUNT_SQL,
+  SEARCH_TRIGGER_NAMES,
+  searchTriggerInstallStatements,
+} from "~/lib/search-triggers.server";
 
 export const SEARCH_SCOPES = ["all", "recipes", "cookbooks", "chefs", "shopping-list"] as const;
 export type SearchScope = (typeof SEARCH_SCOPES)[number];
@@ -88,23 +94,21 @@ interface SearchIndexMetadataRow {
   documentCount: number | bigint;
 }
 
-interface SearchIndexCountRow {
-  documentCount: number | bigint;
+interface SearchDirtyRow {
+  seq: number;
+  entityType: string;
+  entityId: string;
 }
 
-interface RecipeCoverFingerprintRow {
-  recipeId: string;
-  activeCoverId: string | null;
-  activeCoverVariant: string | null;
-  coverMode: string | null;
-  id: string | null;
-  createdAt: Date | string | number | bigint | null;
-  imageUrl: string | null;
-  stylizedImageUrl: string | null;
-  sourceType: string | null;
-  status: string | null;
-  archivedAt: Date | string | number | bigint | null;
-}
+/**
+ * Marks an index kept current by the per-entity triggers. The column is still called
+ * `sourceFingerprint` because earlier releases stored a whole-database fingerprint there;
+ * any other value (or no row) means the triggers and index must be (re)built.
+ */
+const SEARCH_MAINTENANCE_VERSION = "per-entity-triggers-v1";
+
+/** Past this many queued entities, one full rebuild is cheaper than re-indexing each. */
+const MAX_DIRTY_ENTITIES_PER_SEARCH = 200;
 
 const DEFAULT_SEARCH_LIMIT = 20;
 const MAX_SEARCH_LIMIT = 50;
@@ -112,22 +116,6 @@ const SEARCH_METADATA_ID = "current";
 // A pantry query binds one parameter per term; D1 allows 100 bound parameters per query.
 const MAX_PANTRY_TERMS = 12;
 
-const SEARCH_SOURCE_TABLES = [
-  { tableName: "User", countKey: "userCount", latestKey: "userLatestAt" },
-  { tableName: "Recipe", countKey: "recipeCount", latestKey: "recipeLatestAt" },
-  { tableName: "RecipeCover", countKey: "recipeCoverCount", latestKey: "recipeCoverLatestAt" },
-  { tableName: "RecipeStep", countKey: "recipeStepCount", latestKey: "recipeStepLatestAt" },
-  { tableName: "Ingredient", countKey: "ingredientCount", latestKey: "ingredientLatestAt" },
-  { tableName: "IngredientRef", countKey: "ingredientRefCount", latestKey: "ingredientRefLatestAt" },
-  { tableName: "Unit", countKey: "unitCount", latestKey: "unitLatestAt" },
-  { tableName: "Cookbook", countKey: "cookbookCount", latestKey: "cookbookLatestAt" },
-  { tableName: "RecipeInCookbook", countKey: "recipeInCookbookCount", latestKey: "recipeInCookbookLatestAt" },
-  { tableName: "ShoppingListItem", countKey: "shoppingListItemCount", latestKey: "shoppingListItemLatestAt" },
-] as const;
-
-type SearchSourceFingerprintKey = (typeof SEARCH_SOURCE_TABLES)[number]["countKey" | "latestKey"];
-
-type SearchSourceFingerprintRow = Record<SearchSourceFingerprintKey, number | bigint | string | Date | null>;
 
 const ENTITY_TYPES_BY_SCOPE: Record<SearchScope, readonly SearchEntityType[]> = {
   all: ["recipe", "cookbook", "chef", "shopping-list-item"],
@@ -160,28 +148,52 @@ const SEARCH_METADATA_SCHEMA_SQL = `CREATE TABLE IF NOT EXISTS "SearchIndexMetad
   "rebuiltAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 )`;
 
-const SEARCH_SOURCE_FINGERPRINT_SQL = `SELECT
-  (SELECT COUNT(*) FROM "User") AS userCount,
-  (SELECT MAX("updatedAt") FROM "User") AS userLatestAt,
-  (SELECT COUNT(*) FROM "Recipe") AS recipeCount,
-  (SELECT MAX("updatedAt") FROM "Recipe") AS recipeLatestAt,
-  (SELECT COUNT(*) FROM "RecipeCover") AS recipeCoverCount,
-  (SELECT MAX("createdAt") FROM "RecipeCover") AS recipeCoverLatestAt,
-  (SELECT COUNT(*) FROM "RecipeStep") AS recipeStepCount,
-  (SELECT MAX("updatedAt") FROM "RecipeStep") AS recipeStepLatestAt,
-  (SELECT COUNT(*) FROM "Ingredient") AS ingredientCount,
-  (SELECT MAX("updatedAt") FROM "Ingredient") AS ingredientLatestAt,
-  (SELECT COUNT(*) FROM "IngredientRef") AS ingredientRefCount,
-  (SELECT MAX("updatedAt") FROM "IngredientRef") AS ingredientRefLatestAt,
-  (SELECT COUNT(*) FROM "Unit") AS unitCount,
-  (SELECT MAX("updatedAt") FROM "Unit") AS unitLatestAt,
-  (SELECT COUNT(*) FROM "Cookbook") AS cookbookCount,
-  (SELECT MAX("updatedAt") FROM "Cookbook") AS cookbookLatestAt,
-  (SELECT COUNT(*) FROM "RecipeInCookbook") AS recipeInCookbookCount,
-  (SELECT MAX("updatedAt") FROM "RecipeInCookbook") AS recipeInCookbookLatestAt,
-  (SELECT COUNT(*) FROM "ShoppingListItem") AS shoppingListItemCount,
-  (SELECT MAX("updatedAt") FROM "ShoppingListItem") AS shoppingListItemLatestAt
-`;
+
+// Stable rowids for search documents, so re-indexing one entity deletes its document by
+// rowid instead of scanning the whole full-text table for it.
+const SEARCH_DOCUMENT_KEY_SCHEMA_SQL = `CREATE TABLE IF NOT EXISTS "SearchDocumentKey" (
+  "docRowid" INTEGER PRIMARY KEY AUTOINCREMENT,
+  "docKey" TEXT NOT NULL UNIQUE
+)`;
+
+const SEARCH_INDEX_SCHEMA_QUERIES: readonly D1Query[] = [
+  [SEARCH_SCHEMA_SQL],
+  [SEARCH_METADATA_SCHEMA_SQL],
+  [SEARCH_DOCUMENT_KEY_SCHEMA_SQL],
+  [SEARCH_DIRTY_SCHEMA_SQL],
+  [SEARCH_DIRTY_CLOCK_SCHEMA_SQL],
+];
+
+const SEARCH_METADATA_SQL = `SELECT "sourceFingerprint", "documentCount" FROM "SearchIndexMetadata" WHERE "id" = ? LIMIT 1`;
+
+const WRITE_SEARCH_METADATA_SQL = `INSERT INTO "SearchIndexMetadata" ("id", "sourceFingerprint", "documentCount", "rebuiltAt")
+  VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+  ON CONFLICT("id") DO UPDATE SET
+    "sourceFingerprint" = excluded."sourceFingerprint",
+    "documentCount" = excluded."documentCount",
+    "rebuiltAt" = excluded."rebuiltAt"`;
+
+const SEARCH_DOCUMENT_COUNT_SQL = `SELECT COUNT(*) AS documentCount FROM "SearchDocument"`;
+
+const DELETE_SEARCH_DOCUMENTS_SQL = `DELETE FROM "SearchDocument"`;
+
+const DELETE_SEARCH_DOCUMENT_KEYS_SQL = `DELETE FROM "SearchDocumentKey"`;
+
+const DELETE_SEARCH_DOCUMENTS_BY_KEY_SQL = `DELETE FROM "SearchDocument"
+  WHERE rowid IN (SELECT "docRowid" FROM "SearchDocumentKey" WHERE "docKey" IN (SELECT value FROM json_each(?)))`;
+
+const SEARCH_DIRTY_SQL = `SELECT "seq", "entityType", "entityId" FROM "SearchDirtyEntity" ORDER BY "seq" ASC LIMIT ${MAX_DIRTY_ENTITIES_PER_SEARCH + 1}`;
+
+const SEARCH_DIRTY_CLOCK_SQL = `SELECT COALESCE((SELECT "seq" FROM "SearchDirtyClock" WHERE "id" = 1), 0) AS maxSeq`;
+
+// Clears the whole queue up to the clock value read before the sources were. A write after
+// that read re-stamps its entity with a higher seq, so it survives for the next search.
+const CLEAR_SEARCH_DIRTY_SQL = `DELETE FROM "SearchDirtyEntity" WHERE "seq" <= ?`;
+
+// Clears just the entities that were re-indexed, unless a write re-stamped them since.
+const CLEAR_SEARCH_DIRTY_KEYS_SQL = `DELETE FROM "SearchDirtyEntity"
+  WHERE "seq" <= ?
+    AND ("entityType", "entityId") IN (SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?))`;
 
 export function normalizeSearchScope(value: string | null | undefined): SearchScope {
   if (value === "recipes" || value === "cookbooks" || value === "chefs" || value === "shopping-list") {
@@ -303,128 +315,6 @@ function parseRow(row: SearchRow): SearchResult {
   };
 }
 
-
-async function ensureSearchIndex(database: PrismaClient) {
-  await database.$executeRawUnsafe(SEARCH_SCHEMA_SQL);
-  await database.$executeRawUnsafe(SEARCH_METADATA_SCHEMA_SQL);
-}
-
-function aggregateDateString(value: Date | string | number | bigint | null): string | null {
-  if (value === null) {
-    return null;
-  }
-
-  return toDate(value).toISOString();
-}
-
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(value),
-  );
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-const RECIPE_COVER_FINGERPRINT_SQL = `SELECT
-    r."id" AS "recipeId",
-    r."activeCoverId" AS "activeCoverId",
-    r."activeCoverVariant" AS "activeCoverVariant",
-    r."coverMode" AS "coverMode",
-    rc."id" AS "id",
-    rc."createdAt" AS "createdAt",
-    rc."imageUrl" AS "imageUrl",
-    rc."stylizedImageUrl" AS "stylizedImageUrl",
-    rc."sourceType" AS "sourceType",
-    rc."status" AS "status",
-    rc."archivedAt" AS "archivedAt"
-  FROM "Recipe" r
-  LEFT JOIN "RecipeCover" rc
-    ON rc."id" = r."activeCoverId"
-    AND rc."recipeId" = r."id"
-  WHERE r."deletedAt" IS NULL
-  ORDER BY r."id" ASC`;
-
-const SEARCH_DOCUMENT_COUNT_SQL = `SELECT COUNT(*) AS documentCount FROM "SearchDocument"`;
-
-const SEARCH_METADATA_SQL = `SELECT "sourceFingerprint", "documentCount" FROM "SearchIndexMetadata" WHERE "id" = ? LIMIT 1`;
-
-const WRITE_SEARCH_METADATA_SQL = `INSERT INTO "SearchIndexMetadata" ("id", "sourceFingerprint", "documentCount", "rebuiltAt")
-  VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-  ON CONFLICT("id") DO UPDATE SET
-    "sourceFingerprint" = excluded."sourceFingerprint",
-    "documentCount" = excluded."documentCount",
-    "rebuiltAt" = excluded."rebuiltAt"`;
-
-const DELETE_SEARCH_DOCUMENTS_SQL = `DELETE FROM "SearchDocument"`;
-
-async function recipeCoverContentHash(rows: RecipeCoverFingerprintRow[]): Promise<string> {
-  const payload = JSON.stringify(
-    rows.map((row) => ({
-      recipeId: row.recipeId,
-      activeCoverId: row.activeCoverId,
-      activeCoverVariant: row.activeCoverVariant,
-      coverMode: row.coverMode,
-      id: row.id,
-      createdAt: aggregateDateString(row.createdAt),
-      imageUrl: row.imageUrl,
-      stylizedImageUrl: row.stylizedImageUrl,
-      sourceType: row.sourceType,
-      status: row.status,
-      archivedAt: aggregateDateString(row.archivedAt),
-    })),
-  );
-  return `sha256:${await sha256Hex(payload)}`;
-}
-
-function fingerprintFromRows(row: SearchSourceFingerprintRow, recipeCoverHash: string): string {
-  const normalizedRows = SEARCH_SOURCE_TABLES.map((sourceTable) => ({
-    tableName: sourceTable.tableName,
-    rowCount: toNumber(row[sourceTable.countKey] as number | bigint),
-    latestAt: aggregateDateString(row[sourceTable.latestKey] as Date | string | number | bigint | null),
-    contentHash: sourceTable.tableName === "RecipeCover" ? recipeCoverHash : null,
-  }));
-
-  return JSON.stringify(normalizedRows);
-}
-
-/** What the search index was built from: row counts, latest updates and active cover content. */
-export async function searchSourceFingerprint(database: PrismaClient): Promise<string> {
-  const [rows, coverRows] = await Promise.all([
-    database.$queryRawUnsafe<SearchSourceFingerprintRow[]>(SEARCH_SOURCE_FINGERPRINT_SQL),
-    database.$queryRawUnsafe<RecipeCoverFingerprintRow[]>(RECIPE_COVER_FINGERPRINT_SQL),
-  ]);
-  return fingerprintFromRows(rows[0]!, await recipeCoverContentHash(coverRows));
-}
-
-/** `searchSourceFingerprint` read through a D1 binding; the two agree on the same data. */
-export async function searchSourceFingerprintFromD1(db: D1ReadDatabase): Promise<string> {
-  const [rows, coverRows] = await d1ReadBatch(db, [[SEARCH_SOURCE_FINGERPRINT_SQL], [RECIPE_COVER_FINGERPRINT_SQL]]);
-  return fingerprintFromD1Rows(rows!, coverRows!);
-}
-
-async function fingerprintFromD1Rows(rows: D1Row[], coverRows: D1Row[]): Promise<string> {
-  const row = rows[0];
-  if (!row) throw new Error("D1 search fingerprint returned no row");
-  return fingerprintFromRows(
-    row as SearchSourceFingerprintRow,
-    await recipeCoverContentHash(coverRows as unknown as RecipeCoverFingerprintRow[]),
-  );
-}
-
-function isSearchIndexFresh(
-  metadata: SearchIndexMetadataRow | null | undefined,
-  documentCount: number,
-  sourceFingerprint: string,
-): boolean {
-  return Boolean(
-    metadata &&
-    metadata.sourceFingerprint === sourceFingerprint &&
-    toNumber(metadata.documentCount) === documentCount,
-  );
-}
-
 // The rows search documents are built from. Both readers (Prisma and D1) fill the same
 // shapes, and one set of builders turns them into documents, so both paths index
 // identical documents.
@@ -467,66 +357,6 @@ interface SearchSources {
   cookbooks: Array<Pick<Cookbook, "id" | "title" | "authorId" | "updatedAt">>;
   // Not deleted.
   shoppingItems: SearchShoppingItemSource[];
-}
-
-async function loadSearchSourcesWithPrisma(database: PrismaClient): Promise<SearchSources> {
-  const users = await database.user.findMany({
-    include: {
-      _count: { select: { recipes: true, cookbooks: true } },
-    },
-  });
-  const recipes = await database.recipe.findMany({ orderBy: { id: "asc" } });
-  const covers = await database.recipeCover.findMany();
-  const steps = await database.recipeStep.findMany({
-    orderBy: [{ recipeId: "asc" }, { stepNum: "asc" }],
-  });
-  const ingredients = await database.ingredient.findMany({
-    orderBy: [{ recipeId: "asc" }, { stepNum: "asc" }],
-  });
-  const units = await database.unit.findMany();
-  const ingredientRefs = await database.ingredientRef.findMany();
-  const recipeCookbooks = await database.recipeInCookbook.findMany();
-  const cookbooks = await database.cookbook.findMany();
-  const items = await database.shoppingListItem.findMany({
-    where: { deletedAt: null },
-    include: {
-      unit: true,
-      ingredientRef: true,
-      shoppingList: { include: { author: { select: { id: true, username: true } } } },
-    },
-  });
-
-  return {
-    users: users.map((user) => ({
-      id: user.id,
-      username: user.username,
-      photoUrl: user.photoUrl,
-      updatedAt: user.updatedAt,
-      recipeCount: user._count.recipes,
-      cookbookCount: user._count.cookbooks,
-    })),
-    recipes,
-    covers,
-    steps,
-    ingredients,
-    units,
-    ingredientRefs,
-    recipeCookbooks,
-    cookbooks,
-    shoppingItems: items.map((item) => ({
-      id: item.id,
-      quantity: item.quantity,
-      checked: item.checked,
-      categoryKey: item.categoryKey,
-      iconKey: item.iconKey,
-      sortIndex: item.sortIndex,
-      updatedAt: item.updatedAt,
-      unitName: item.unit?.name ?? null,
-      ingredientName: item.ingredientRef.name,
-      ownerId: item.shoppingList.authorId,
-      ownerUsername: item.shoppingList.author.username,
-    })),
-  };
 }
 
 const SEARCH_USER_COLUMNS: ColumnSpec<SearchUserSource> = {
@@ -583,6 +413,7 @@ const SEARCH_SHOPPING_ITEM_COLUMNS: ColumnSpec<SearchShoppingItemSource> = {
 
 // The same reads as loadSearchSourcesWithPrisma, as one D1 batch. Tables Prisma read
 // without an ORDER BY are read in rowid order, which is the order a plain scan returns.
+
 const SEARCH_SOURCE_QUERIES: readonly D1Query[] = [
   [
     `SELECT u."id", u."username", u."photoUrl", u."updatedAt",
@@ -592,8 +423,8 @@ const SEARCH_SOURCE_QUERIES: readonly D1Query[] = [
   ],
   [`SELECT ${selectColumns(RECIPE_COLUMNS, "r")} FROM "Recipe" r ORDER BY r."id" ASC`],
   [`SELECT ${selectColumns(RECIPE_COVER_COLUMNS, "rc")} FROM "RecipeCover" rc ORDER BY rc.rowid`],
-  [`SELECT "recipeId", "stepNum", "stepTitle", "description" FROM "RecipeStep" ORDER BY "recipeId" ASC, "stepNum" ASC`],
-  [`SELECT "recipeId", "stepNum", "quantity", "unitId", "ingredientRefId" FROM "Ingredient" ORDER BY "recipeId" ASC, "stepNum" ASC`],
+  [`SELECT "recipeId", "stepNum", "stepTitle", "description" FROM "RecipeStep" ORDER BY "recipeId" ASC, "stepNum" ASC, rowid ASC`],
+  [`SELECT "recipeId", "stepNum", "quantity", "unitId", "ingredientRefId" FROM "Ingredient" ORDER BY "recipeId" ASC, "stepNum" ASC, rowid ASC`],
   [`SELECT "id", "name" FROM "Unit" ORDER BY rowid`],
   [`SELECT "id", "name" FROM "IngredientRef" ORDER BY rowid`],
   [`SELECT "recipeId", "cookbookId" FROM "RecipeInCookbook" ORDER BY rowid`],
@@ -611,9 +442,42 @@ const SEARCH_SOURCE_QUERIES: readonly D1Query[] = [
   ],
 ];
 
-async function loadSearchSourcesFromD1(db: D1ReadDatabase): Promise<SearchSources> {
-  const [users, recipes, covers, steps, ingredients, units, ingredientRefs, recipeCookbooks, cookbooks, shoppingItems] =
-    await d1ReadBatch(db, SEARCH_SOURCE_QUERIES);
+// Statements run either as one D1 batch or one at a time through Prisma. Both return the
+// same row shapes, so one set of loaders and builders serves both paths.
+type SearchRunner = (queries: readonly D1Query[]) => Promise<D1Row[][]>;
+
+function d1SearchRunner(db: D1ReadDatabase): SearchRunner {
+  return (queries) => d1ReadBatch(db, queries);
+}
+
+// Prisma's raw rows carry BigInt counts and Date objects where D1 returns plain numbers;
+// normalize them so the D1 column mappers read both.
+function normalizePrismaValue(value: unknown): unknown {
+  if (typeof value === "bigint") return Number(value);
+  if (value instanceof Date) return value.getTime();
+  return value;
+}
+
+function prismaSearchRunner(database: PrismaClient): SearchRunner {
+  return async (queries) => {
+    const results: D1Row[][] = [];
+    for (const [sql, ...values] of queries) {
+      if (/^\s*(SELECT|WITH)\b/i.test(sql)) {
+        const rows = await database.$queryRawUnsafe<D1Row[]>(sql, ...values);
+        results.push(
+          rows.map((row) => Object.fromEntries(Object.entries(row).map(([key, value]) => [key, normalizePrismaValue(value)]))),
+        );
+      } else {
+        await database.$executeRawUnsafe(sql, ...values);
+        results.push([]);
+      }
+    }
+    return results;
+  };
+}
+
+function mapSearchSources(rows: D1Row[][]): SearchSources {
+  const [users, recipes, covers, steps, ingredients, units, ingredientRefs, recipeCookbooks, cookbooks, shoppingItems] = rows;
 
   return {
     users: users!.map((row) => mapModel(SEARCH_USER_COLUMNS, row)),
@@ -627,6 +491,85 @@ async function loadSearchSourcesFromD1(db: D1ReadDatabase): Promise<SearchSource
     cookbooks: cookbooks!.map((row) => mapModel(SEARCH_COOKBOOK_COLUMNS, row)),
     shoppingItems: shoppingItems!.map((row) => mapModel(SEARCH_SHOPPING_ITEM_COLUMNS, row)),
   };
+}
+
+interface DirtyEntityIds {
+  recipe: string[];
+  cookbook: string[];
+  chef: string[];
+  "shopping-list-item": string[];
+}
+
+const IDS = `(SELECT value FROM json_each(?))`;
+
+/**
+ * The same reads as SEARCH_SOURCE_QUERIES, narrowed to what the documents of the given
+ * entities are built from. Besides the entities themselves this loads the rows their
+ * builders look up: chefs and authors, a dirty recipe's covers, steps, ingredients,
+ * names and cookbooks, and a dirty cookbook's recipes. Documents built for those extra
+ * rows are incomplete and are discarded by the caller.
+ */
+function targetedSearchSourceQueries(ids: DirtyEntityIds): D1Query[] {
+  const R = JSON.stringify(ids.recipe);
+  const C = JSON.stringify(ids.cookbook);
+  const U = JSON.stringify(ids.chef);
+  const S = JSON.stringify(ids["shopping-list-item"]);
+  const recipesOfCookbooks = `SELECT "recipeId" FROM "RecipeInCookbook" WHERE "cookbookId" IN ${IDS}`;
+  const cookbooksOfRecipes = `SELECT "cookbookId" FROM "RecipeInCookbook" WHERE "recipeId" IN ${IDS}`;
+
+  return [
+    [
+      `SELECT u."id", u."username", u."photoUrl", u."updatedAt",
+         (SELECT COUNT(*) FROM "Recipe" r WHERE r."chefId" = u."id") AS "recipeCount",
+         (SELECT COUNT(*) FROM "Cookbook" c WHERE c."authorId" = u."id") AS "cookbookCount"
+       FROM "User" u
+       WHERE u."id" IN ${IDS}
+         OR u."id" IN (SELECT "chefId" FROM "Recipe" WHERE "id" IN ${IDS} OR "id" IN (${recipesOfCookbooks}))
+         OR u."id" IN (SELECT "authorId" FROM "Cookbook" WHERE "id" IN ${IDS} OR "id" IN (${cookbooksOfRecipes}))
+       ORDER BY u.rowid`,
+      U, R, C, C, R,
+    ],
+    [
+      `SELECT ${selectColumns(RECIPE_COLUMNS, "r")} FROM "Recipe" r
+       WHERE r."id" IN ${IDS} OR r."id" IN (${recipesOfCookbooks})
+       ORDER BY r."id" ASC`,
+      R, C,
+    ],
+    [`SELECT ${selectColumns(RECIPE_COVER_COLUMNS, "rc")} FROM "RecipeCover" rc WHERE rc."recipeId" IN ${IDS} ORDER BY rc.rowid`, R],
+    [
+      `SELECT "recipeId", "stepNum", "stepTitle", "description" FROM "RecipeStep"
+       WHERE "recipeId" IN ${IDS} ORDER BY "recipeId" ASC, "stepNum" ASC, rowid ASC`,
+      R,
+    ],
+    [
+      `SELECT "recipeId", "stepNum", "quantity", "unitId", "ingredientRefId" FROM "Ingredient"
+       WHERE "recipeId" IN ${IDS} ORDER BY "recipeId" ASC, "stepNum" ASC, rowid ASC`,
+      R,
+    ],
+    [`SELECT "id", "name" FROM "Unit" WHERE "id" IN (SELECT "unitId" FROM "Ingredient" WHERE "recipeId" IN ${IDS}) ORDER BY rowid`, R],
+    [
+      `SELECT "id", "name" FROM "IngredientRef" WHERE "id" IN (SELECT "ingredientRefId" FROM "Ingredient" WHERE "recipeId" IN ${IDS}) ORDER BY rowid`,
+      R,
+    ],
+    [`SELECT "recipeId", "cookbookId" FROM "RecipeInCookbook" WHERE "recipeId" IN ${IDS} OR "cookbookId" IN ${IDS} ORDER BY rowid`, R, C],
+    [
+      `SELECT "id", "title", "authorId", "updatedAt" FROM "Cookbook"
+       WHERE "id" IN ${IDS} OR "id" IN (${cookbooksOfRecipes}) ORDER BY rowid`,
+      C, R,
+    ],
+    [
+      `SELECT sli."id", sli."quantity", sli."checked", sli."categoryKey", sli."iconKey", sli."sortIndex", sli."updatedAt",
+         u."name" AS "unitName", ir."name" AS "ingredientName", sl."authorId" AS "ownerId", a."username" AS "ownerUsername"
+       FROM "ShoppingListItem" sli
+       JOIN "ShoppingList" sl ON sl."id" = sli."shoppingListId"
+       JOIN "User" a ON a."id" = sl."authorId"
+       JOIN "IngredientRef" ir ON ir."id" = sli."ingredientRefId"
+       LEFT JOIN "Unit" u ON u."id" = sli."unitId"
+       WHERE sli."deletedAt" IS NULL AND sli."id" IN ${IDS}
+       ORDER BY sli.rowid`,
+      S,
+    ],
+  ];
 }
 
 function recipeDocuments(sources: SearchSources): SearchDocumentInput[] {
@@ -805,12 +748,23 @@ function buildSearchDocuments(sources: SearchSources): SearchDocumentInput[] {
 // statement instead of eleven per row, so a rebuild stays within D1's bound-parameter
 // limit and needs few statements. A chunk is capped at 64 Ki UTF-16 code units of JSON (up
 // to about 192 KB of UTF-8 for non-ASCII text), well under D1's 2 MB limit for a bound value.
+
+// Documents are inserted as JSON arrays expanded by json_each: one bound value per
+// statement instead of eleven per row, so a rebuild stays within D1's bound-parameter
+// limit and needs few statements. A chunk is capped at 64 Ki UTF-16 code units of JSON (up
+// to about 192 KB of UTF-8 for non-ASCII text), well under D1's 2 MB limit for a bound value.
 const SEARCH_INSERT_CHUNK_BYTES = 64 * 1024;
 
+const DOC_KEY_SQL = `json_extract(value, '$[0]') || ':' || json_extract(value, '$[1]')`;
+
+const INSERT_SEARCH_DOCUMENT_KEYS_SQL = `INSERT OR IGNORE INTO "SearchDocumentKey" ("docKey")
+  SELECT ${DOC_KEY_SQL} FROM json_each(?) ORDER BY key`;
+
 const INSERT_SEARCH_DOCUMENTS_SQL = `INSERT INTO "SearchDocument" (
-    entityType, entityId, ownerId, ownerUsername, sortAt, title, subtitle, body, href, imageUrl, metadata
+    rowid, entityType, entityId, ownerId, ownerUsername, sortAt, title, subtitle, body, href, imageUrl, metadata
   )
   SELECT
+    (SELECT k."docRowid" FROM "SearchDocumentKey" k WHERE k."docKey" = ${DOC_KEY_SQL}),
     json_extract(value, '$[0]'), json_extract(value, '$[1]'), json_extract(value, '$[2]'),
     json_extract(value, '$[3]'), json_extract(value, '$[4]'), json_extract(value, '$[5]'),
     json_extract(value, '$[6]'), json_extract(value, '$[7]'), json_extract(value, '$[8]'),
@@ -820,12 +774,16 @@ const INSERT_SEARCH_DOCUMENTS_SQL = `INSERT INTO "SearchDocument" (
 
 function searchInsertStatements(documents: SearchDocumentInput[]): D1Query[] {
   const statements: D1Query[] = [];
+  const flush = (chunk: string[]) => {
+    const json = `[${chunk.join(",")}]`;
+    statements.push([INSERT_SEARCH_DOCUMENT_KEYS_SQL, json], [INSERT_SEARCH_DOCUMENTS_SQL, json]);
+  };
   let chunk: string[] = [];
   let chunkBytes = 0;
   for (const document of documents) {
     const encoded = JSON.stringify(searchDocumentSqlValues(document));
     if (chunk.length > 0 && chunkBytes + encoded.length > SEARCH_INSERT_CHUNK_BYTES) {
-      statements.push([INSERT_SEARCH_DOCUMENTS_SQL, `[${chunk.join(",")}]`]);
+      flush(chunk);
       chunk = [];
       chunkBytes = 0;
     }
@@ -833,7 +791,7 @@ function searchInsertStatements(documents: SearchDocumentInput[]): D1Query[] {
     chunkBytes += encoded.length + 1;
   }
   if (chunk.length > 0) {
-    statements.push([INSERT_SEARCH_DOCUMENTS_SQL, `[${chunk.join(",")}]`]);
+    flush(chunk);
   }
   return statements;
 }
@@ -854,54 +812,120 @@ function searchDocumentSqlValues(document: SearchDocumentInput): Array<string | 
   ];
 }
 
-async function runPrismaStatements(database: PrismaClient, statements: readonly D1Query[]) {
-  for (const [sql, ...values] of statements) {
-    await database.$executeRawUnsafe(sql, ...values);
+// Rebuilds every document. With `installTriggers`, the triggers go in first, so a write
+// that lands while the sources are read is queued and picked up by the next search.
+async function rebuildAllSearchDocuments(run: SearchRunner, { installTriggers }: { installTriggers: boolean }): Promise<number> {
+  await run(SEARCH_INDEX_SCHEMA_QUERIES);
+  if (installTriggers) {
+    await run(searchTriggerInstallStatements().map((sql): D1Query => [sql]));
   }
+
+  const [maxSeqRows, ...sourceRows] = await run([[SEARCH_DIRTY_CLOCK_SQL], ...SEARCH_SOURCE_QUERIES]);
+  const maxSeq = d1Count(maxSeqRows![0]?.maxSeq, "maxSeq");
+  const documents = buildSearchDocuments(mapSearchSources(sourceRows));
+
+  // On D1 this is one batch, so a concurrent search never sees a half-built index.
+  await run([
+    [DELETE_SEARCH_DOCUMENTS_SQL],
+    [DELETE_SEARCH_DOCUMENT_KEYS_SQL],
+    ...searchInsertStatements(documents),
+    [CLEAR_SEARCH_DIRTY_SQL, maxSeq],
+    [WRITE_SEARCH_METADATA_SQL, SEARCH_METADATA_ID, SEARCH_MAINTENANCE_VERSION, documents.length],
+  ]);
+
+  return documents.length;
 }
 
+function isDirtyEntityType(value: string): value is keyof DirtyEntityIds {
+  return value === "recipe" || value === "cookbook" || value === "chef" || value === "shopping-list-item";
+}
+
+// Re-indexes only the queued entities: their documents are deleted and rebuilt (or just
+// deleted, when the entity is gone or no longer searchable) in one batch.
+async function reindexDirtySearchEntities(run: SearchRunner, dirtyRows: SearchDirtyRow[]): Promise<void> {
+  const ids: DirtyEntityIds = { recipe: [], cookbook: [], chef: [], "shopping-list-item": [] };
+  const keys = new Set<string>();
+  for (const row of dirtyRows) {
+    if (!isDirtyEntityType(row.entityType)) continue;
+    ids[row.entityType].push(row.entityId);
+    keys.add(`${row.entityType}:${row.entityId}`);
+  }
+  const claimed = JSON.stringify(dirtyRows.map((row) => [row.entityType, row.entityId]));
+
+  const documents = keys.size === 0
+    ? []
+    : buildSearchDocuments(mapSearchSources(await run(targetedSearchSourceQueries(ids))))
+      .filter((document) => keys.has(`${document.type}:${document.id}`));
+  const lastSeq = Math.max(...dirtyRows.map((row) => row.seq));
+
+  await run([
+    [DELETE_SEARCH_DOCUMENTS_BY_KEY_SQL, JSON.stringify([...keys])],
+    ...searchInsertStatements(documents),
+    [CLEAR_SEARCH_DIRTY_KEYS_SQL, lastSeq, claimed],
+  ]);
+}
+
+function searchDirtyRows(rows: D1Row[]): SearchDirtyRow[] {
+  return rows.map((row) => ({
+    seq: d1Count(row.seq, "seq"),
+    entityType: String(row.entityType),
+    entityId: String(row.entityId),
+  }));
+}
+
+type SearchIndexState = "current" | "dirty" | "uninstalled";
+
+// One round trip that both checks the index and (when given) runs the search: the schema
+// guards, the maintenance marker, a count of the triggers and the head of the queue.
+async function readSearchIndexState(
+  run: SearchRunner,
+  statement: D1Query | null,
+): Promise<{ state: SearchIndexState; dirtyRows: SearchDirtyRow[]; resultRows: D1Row[] }> {
+  const rows = await run([
+    ...SEARCH_INDEX_SCHEMA_QUERIES,
+    [SEARCH_METADATA_SQL, SEARCH_METADATA_ID],
+    [SEARCH_TRIGGER_COUNT_SQL],
+    [SEARCH_DIRTY_SQL],
+    ...(statement ? [statement] : []),
+  ]);
+  const offset = SEARCH_INDEX_SCHEMA_QUERIES.length;
+  const metadata = rows[offset]![0] as unknown as SearchIndexMetadataRow | undefined;
+  const triggerCount = d1Count(rows[offset + 1]![0]?.triggerCount, "triggerCount");
+  const dirtyRows = searchDirtyRows(rows[offset + 2]!);
+  const installed = metadata?.sourceFingerprint === SEARCH_MAINTENANCE_VERSION && triggerCount === SEARCH_TRIGGER_NAMES.length;
+
+  return {
+    state: !installed ? "uninstalled" : dirtyRows.length > 0 ? "dirty" : "current",
+    dirtyRows,
+    resultRows: statement ? rows[offset + 3]! : [],
+  };
+}
+
+// Brings the index up to date. Returns true when it changed anything.
+async function bringSearchIndexCurrent(run: SearchRunner, state: SearchIndexState, dirtyRows: SearchDirtyRow[]): Promise<boolean> {
+  if (state === "current") return false;
+  if (state === "uninstalled") {
+    await rebuildAllSearchDocuments(run, { installTriggers: true });
+  } else if (dirtyRows.length > MAX_DIRTY_ENTITIES_PER_SEARCH) {
+    await rebuildAllSearchDocuments(run, { installTriggers: false });
+  } else {
+    await reindexDirtySearchEntities(run, dirtyRows);
+  }
+  return true;
+}
+
+/** Rebuilds every search document (and reinstalls the triggers) through Prisma. */
 export async function rebuildSearchIndex(database: PrismaClient): Promise<number> {
-  await ensureSearchIndex(database);
-
-  const sourceFingerprint = await searchSourceFingerprint(database);
-  const documents = buildSearchDocuments(await loadSearchSourcesWithPrisma(database));
-
-  await runPrismaStatements(database, [
-    [DELETE_SEARCH_DOCUMENTS_SQL],
-    ...searchInsertStatements(documents),
-    [WRITE_SEARCH_METADATA_SQL, SEARCH_METADATA_ID, sourceFingerprint, documents.length],
-  ]);
-
-  return documents.length;
+  return rebuildAllSearchDocuments(prismaSearchRunner(database), { installTriggers: true });
 }
 
-// The D1 rebuild replaces the index in one batch, so a concurrent search never sees a
-// half-built index.
-async function rebuildSearchIndexFromD1(db: D1ReadDatabase, sourceFingerprint: string): Promise<number> {
-  const documents = buildSearchDocuments(await loadSearchSourcesFromD1(db));
-  await d1ReadBatch(db, [
-    [DELETE_SEARCH_DOCUMENTS_SQL],
-    ...searchInsertStatements(documents),
-    [WRITE_SEARCH_METADATA_SQL, SEARCH_METADATA_ID, sourceFingerprint, documents.length],
-  ]);
-  return documents.length;
-}
-
+/** Brings the index up to date without searching; returns how many documents it holds. */
 export async function ensureSearchIndexFresh(database: PrismaClient): Promise<number> {
-  await ensureSearchIndex(database);
-
-  const sourceFingerprint = await searchSourceFingerprint(database);
-  const [metadataRows, countRows] = await Promise.all([
-    database.$queryRawUnsafe<SearchIndexMetadataRow[]>(SEARCH_METADATA_SQL, SEARCH_METADATA_ID),
-    database.$queryRawUnsafe<SearchIndexCountRow[]>(SEARCH_DOCUMENT_COUNT_SQL),
-  ]);
-  const documentCount = toNumber(countRows[0]!.documentCount);
-
-  if (isSearchIndexFresh(metadataRows[0], documentCount, sourceFingerprint)) {
-    return documentCount;
-  }
-
-  return rebuildSearchIndex(database);
+  const run = prismaSearchRunner(database);
+  const { state, dirtyRows } = await readSearchIndexState(run, null);
+  await bringSearchIndexCurrent(run, state, dirtyRows);
+  const [countRows] = await run([[SEARCH_DOCUMENT_COUNT_SQL]]);
+  return d1Count(countRows![0]?.documentCount, "documentCount");
 }
 
 interface SearchPlan {
@@ -1014,47 +1038,30 @@ function planSearch(options: SearchOptions): SearchPlan | null {
   };
 }
 
+// The index check and the search go out together. Only when writes are queued (or the
+// triggers are missing) does it update the index and search again.
+async function searchWithRunner(run: SearchRunner, plan: SearchPlan): Promise<SearchResult[]> {
+  const { state, dirtyRows, resultRows } = await readSearchIndexState(run, plan.statement);
+  if (!(await bringSearchIndexCurrent(run, state, dirtyRows))) {
+    return (resultRows as unknown as SearchRow[]).map(parseRow);
+  }
+  const [rows] = await run([plan.statement]);
+  return (rows as unknown as SearchRow[]).map(parseRow);
+}
+
 export async function searchSpoonjoy(database: PrismaClient, options: SearchOptions = {}): Promise<SearchResult[]> {
   const plan = planSearch(options);
   if (!plan) {
     return [];
   }
-
-  await ensureSearchIndexFresh(database);
-
-  const [sql, ...values] = plan.statement;
-  const rows = await database.$queryRawUnsafe<SearchRow[]>(sql, ...values);
-  return rows.map(parseRow);
+  return searchWithRunner(prismaSearchRunner(database), plan);
 }
 
-/**
- * `searchSpoonjoy` on a D1 binding. The freshness check and the search itself go out as
- * one batch; only when the index is stale does it rebuild (one batch of reads, one batch
- * that replaces the index) and search again.
- */
+/** `searchSpoonjoy` on a D1 binding: usually one batch for the index check and the search. */
 export async function searchSpoonjoyFromD1(db: D1ReadDatabase, options: SearchOptions = {}): Promise<SearchResult[]> {
   const plan = planSearch(options);
   if (!plan) {
     return [];
   }
-
-  const [, , fingerprintRows, coverRows, metadataRows, countRows, resultRows] = await d1ReadBatch(db, [
-    [SEARCH_SCHEMA_SQL],
-    [SEARCH_METADATA_SCHEMA_SQL],
-    [SEARCH_SOURCE_FINGERPRINT_SQL],
-    [RECIPE_COVER_FINGERPRINT_SQL],
-    [SEARCH_METADATA_SQL, SEARCH_METADATA_ID],
-    [SEARCH_DOCUMENT_COUNT_SQL],
-    plan.statement,
-  ]);
-  const sourceFingerprint = await fingerprintFromD1Rows(fingerprintRows!, coverRows!);
-  const documentCount = d1Count(countRows![0]?.documentCount, "documentCount");
-
-  if (isSearchIndexFresh(metadataRows![0] as unknown as SearchIndexMetadataRow | undefined, documentCount, sourceFingerprint)) {
-    return (resultRows as unknown as SearchRow[]).map(parseRow);
-  }
-
-  await rebuildSearchIndexFromD1(db, sourceFingerprint);
-  const [rows] = await d1ReadBatch(db, [plan.statement]);
-  return (rows as unknown as SearchRow[]).map(parseRow);
+  return searchWithRunner(d1SearchRunner(db), plan);
 }
