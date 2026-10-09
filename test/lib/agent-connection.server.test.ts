@@ -54,9 +54,9 @@ describe("agent connection requests", () => {
     expect(started.request.userCode).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
     expect(started.request.deviceCodeHash).toBe(await hashApiToken(started.deviceCode));
     expect(started.request.deviceCodeHash).not.toBe(started.deviceCode);
-    expect(started.authorizationUrl).toBe(
-      `http://localhost:5173/agent/connect/${started.request.id}?code=${started.request.userCode}`,
-    );
+    // The link never carries the user code: the chef types it, so a link alone can't approve.
+    expect(started.authorizationUrl).toBe(`http://localhost:5173/agent/connect/${started.request.id}`);
+    expect(started.authorizationUrl).not.toContain(started.request.userCode);
     expect(started.verificationUri).toBe("http://localhost:5173/agent/connect");
     expect(started.verificationUriComplete).toBe(started.authorizationUrl);
     expect(started.expiresIn).toBe(300);
@@ -72,6 +72,58 @@ describe("agent connection requests", () => {
       scopes: "tokens:write",
       now,
     })).rejects.toThrow("Unsupported scope");
+  });
+
+  it("refuses account scopes, so a phished approval can never grant account access", async () => {
+    for (const scopes of ["account:read account:write", "account:write", "kitchen:read account:read"]) {
+      await expect(startAgentConnection(db, { agentName: "Spoonjoy for iPhone", scopes, now }))
+        .rejects.toMatchObject({ status: 400, message: expect.stringContaining("Agent connections cannot grant account:") });
+    }
+    await expect(db.agentConnectionRequest.count()).resolves.toBe(0);
+
+    const kitchen = await startAgentConnection(db, { scopes: "kitchen:read kitchen:write", now });
+    expect(kitchen.request.scopes).toBe("kitchen:read kitchen:write");
+  });
+
+  it("records who started a request, trimmed and bounded, without trusting it", async () => {
+    const started = await startAgentConnection(db, {
+      now,
+      requester: { ip: " 203.0.113.9 ", userAgent: "x".repeat(400), country: "NZ" },
+    });
+    expect(started.request).toMatchObject({
+      requesterIp: "203.0.113.9",
+      requesterCountry: "NZ",
+      requesterUserAgent: "x".repeat(300),
+    });
+    const anonymous = await startAgentConnection(db, { now, requester: { ip: "  ", userAgent: null } });
+    expect(anonymous.request).toMatchObject({ requesterIp: null, requesterUserAgent: null, requesterCountry: null });
+  });
+
+  it("will not approve or mint a token for a request created with account scopes before they were refused", async () => {
+    const user = await db.user.create({
+      data: { email: uniqueEmail(), username: faker.internet.username() },
+    });
+    const legacy = await startAgentConnection(db, { now });
+    await db.agentConnectionRequest.update({
+      where: { id: legacy.request.id },
+      data: { scopes: "account:read account:write" },
+    });
+    await expect(approveAgentConnectionRequest(db, legacy.request.id, user.id, now))
+      .rejects.toMatchObject({ status: 400, message: expect.stringContaining("account access") });
+    await expect(db.agentConnectionRequest.findUniqueOrThrow({ where: { id: legacy.request.id } }))
+      .resolves.toMatchObject({ status: "pending" });
+
+    // Already approved before the fix: polling refuses to mint and closes the request.
+    await db.agentConnectionRequest.update({
+      where: { id: legacy.request.id },
+      data: { status: "approved", approvedById: user.id, approvedAt: now },
+    });
+    const polled = await pollAgentConnection(db, { deviceCode: legacy.deviceCode, now });
+    expect(polled).toMatchObject({ status: "expired", message: expect.stringContaining("account access") });
+    expect(polled).not.toHaveProperty("token");
+    await expect(db.apiCredential.count({ where: { userId: user.id } })).resolves.toBe(0);
+    await expect(db.agentConnectionRequest.findUniqueOrThrow({ where: { id: legacy.request.id } }))
+      .resolves.toMatchObject({ status: "expired" });
   });
 
   it("rethrows unexpected delegated scope normalization failures", async () => {
@@ -158,6 +210,8 @@ describe("agent connection requests", () => {
   });
 
   it("approves once, returns a token once, and authenticates the approved user", async () => {
+    // Real time: the delegated token now expires, and authentication checks against the clock.
+    const now = new Date();
     const user = await db.user.create({
       data: { email: uniqueEmail(), username: faker.internet.username() },
     });
@@ -191,6 +245,13 @@ describe("agent connection requests", () => {
     await expect(db.apiCredential.findUniqueOrThrow({
       where: { id: (tokenResult.credential as { id: string }).id },
     })).resolves.toMatchObject({ scopes: "shopping_list:read shopping_list:write" });
+
+    // The delegated token expires after 90 days instead of living forever.
+    const ninetyDays = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString();
+    expect((tokenResult.credential as { expiresAt: string | null }).expiresAt).toBe(ninetyDays);
+    await expect(db.apiCredential.findUniqueOrThrow({
+      where: { id: (tokenResult.credential as { id: string }).id },
+    })).resolves.toMatchObject({ expiresAt: new Date(ninetyDays) });
 
     await expect(pollAgentConnection(db, {
       deviceCode: started.deviceCode,
