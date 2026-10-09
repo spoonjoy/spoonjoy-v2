@@ -40,7 +40,7 @@ import {
   captureLlmCallFailure,
   captureLlmCallSucceeded,
 } from "~/lib/llm-telemetry.server";
-import { tryConsumeImageGenQuota } from "~/lib/image-gen-ledger.server";
+import { tryConsumeImageGenQuota, type ImageGenBudgetEnv } from "~/lib/image-gen-ledger.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { d1Binding } from "~/lib/d1-read.server";
 import { d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
@@ -148,7 +148,7 @@ export interface ImportRecipeFromSourceOptions {
 export interface ImportRecipeDeps {
   db: PrismaClient;
   /** The Worker environment; with a D1 binding in `DB` the recipe is written as one atomic batch. */
-  env?: (RecipeLlmEnv & PostHogServerEnv & { DB?: unknown }) | null;
+  env?: (RecipeLlmEnv & PostHogServerEnv & ImageGenBudgetEnv & { DB?: unknown }) | null;
   bucket?: R2Bucket;
   waitUntil?: (promise: Promise<unknown>) => void;
   fetchImpl?: typeof fetch;
@@ -587,6 +587,7 @@ async function consumeImportQuota(
   const ok = await tryConsumeImageGenQuota(deps.db, chefId, "import", {
     now: deps.now,
     d1: d1Binding(deps.env?.DB),
+    env: deps.env,
   });
   if (!ok) {
     throw new ImportRecipeError(
