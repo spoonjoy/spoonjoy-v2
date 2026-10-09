@@ -6,6 +6,7 @@ import { Button } from '../ui/button'
 import { RuledEmptyState } from '~/components/cookbook/page'
 import { formatServingsLabel } from '~/lib/quantity'
 import { CoverProvenanceBadge } from '~/components/recipe/CoverProvenanceBadge'
+import { listImageProps } from '~/lib/image-loading'
 
 export interface PantryRecipeCard {
   id: string
@@ -60,7 +61,7 @@ export function RecipeGrid({
       </div>
 
       <div className="sj-list-ruled">
-        {recipes.map((recipe) => {
+        {recipes.map((recipe, index) => {
           const href = recipe.href ?? `/recipes/${recipe.id}`
           const displayImageUrl = recipe.coverImageUrl && recipe.coverImageUrl.length > 0 ? recipe.coverImageUrl : undefined
           const hasQuickActions = Boolean(onShare || onSave)
@@ -81,6 +82,7 @@ export function RecipeGrid({
                     <img
                       src={displayImageUrl}
                       alt={recipe.title}
+                      {...listImageProps(index)}
                       className="h-full w-full object-cover"
                     />
                   ) : (
