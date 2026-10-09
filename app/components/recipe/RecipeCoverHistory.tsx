@@ -34,8 +34,8 @@ export type RecipeCoverSpoonImage = {
 };
 
 function statusLabel(status: string, generationStatus: string, archivedAt?: string | null) {
+  // A failed, unarchived cover is labelled by failedAttemptLabel before this is reached.
   if (status === "archived" || archivedAt) return "Archived";
-  if (status === "failed") return "Failed";
   if (status === "processing" || generationStatus === "processing") return "Processing";
   if (generationStatus === "failed") return "Editorial failed";
   if (status !== "ready") return "Unavailable";
