@@ -691,14 +691,13 @@ describe("loadRecipeDetail when the recipe is gone", () => {
     return response.json();
   }
 
-  it.each([["Prisma", false], ["D1", true]])("says a deleted recipe was deleted and names its chef (%s)", async (_reads, withD1) => {
+  it.each([["Prisma", false], ["D1", true]])("says a deleted recipe was deleted and never names its chef (%s)", async (_reads, withD1) => {
     const chef = await makeUser();
     const recipe = await db.recipe.create({ data: { title: "Gone Soup", chefId: chef.id, deletedAt: new Date() } });
 
     expect(await notFoundBody(recipe.id, withD1 as boolean)).toEqual({
       message: "Recipe not found",
       deleted: true,
-      chefUsername: chef.username,
     });
   });
 
@@ -706,7 +705,6 @@ describe("loadRecipeDetail when the recipe is gone", () => {
     expect(await notFoundBody("never-a-recipe", withD1 as boolean)).toEqual({
       message: "Recipe not found",
       deleted: false,
-      chefUsername: null,
     });
   });
 });

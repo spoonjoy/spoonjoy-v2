@@ -4,17 +4,16 @@ import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
 import { Button } from "~/components/ui/button";
 import { Text } from "~/components/ui/text";
 
-// What a recipe link shows when its recipe is gone: whether it was deleted, a recipe search, the
-// recipe box and, for a deleted recipe, its chef's kitchen (product audit 2026-10-09, finding 20).
-export function RecipeNotFound({ deleted, chefUsername }: { deleted: boolean; chefUsername: string | null }) {
+// What a recipe link shows when its recipe is gone: whether it was deleted, a recipe search and the
+// recipe box (product audit 2026-10-09, finding 20). It never names the deleted recipe's chef: until
+// recipes can be private there is no record of whether it was public when it was deleted.
+export function RecipeNotFound({ deleted }: { deleted: boolean }) {
   return (
     <CookbookPage>
       <CookbookHeader eyebrow="Recipes" title={deleted ? "This recipe was deleted." : "We can't find this recipe."}>
         <Text>
           {deleted
-            ? chefUsername
-              ? `${chefUsername} deleted it, so the link no longer opens. Their other recipes are still in their kitchen.`
-              : "Its chef deleted it, so the link no longer opens."
+            ? "Its chef deleted it, so the link no longer opens. Search for something like it, or browse every public recipe."
             : "The link may be mistyped, or the recipe may have been removed. Try a search, or browse every public recipe."}
         </Text>
       </CookbookHeader>
@@ -36,14 +35,7 @@ export function RecipeNotFound({ deleted, chefUsername }: { deleted: boolean; ch
       </Form>
 
       <div className="mt-6 flex flex-wrap gap-3">
-        {deleted && chefUsername ? (
-          <>
-            <Button href={`/users/${encodeURIComponent(chefUsername)}`}>{`See ${chefUsername}'s kitchen`}</Button>
-            <Button href="/recipes" plain>Browse recipes</Button>
-          </>
-        ) : (
-          <Button href="/recipes">Browse recipes</Button>
-        )}
+        <Button href="/recipes" plain>Browse recipes</Button>
       </div>
     </CookbookPage>
   );

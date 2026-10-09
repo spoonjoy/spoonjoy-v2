@@ -3,28 +3,23 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it } from "vitest";
 import { RecipeNotFound } from "~/components/recipe/RecipeNotFound";
 
-function renderNotFound(props: { deleted: boolean; chefUsername: string | null }) {
+function renderNotFound(props: { deleted: boolean }) {
   const router = createMemoryRouter([{ path: "/", element: <RecipeNotFound {...props} /> }]);
   render(<RouterProvider router={router} />);
 }
 
 describe("RecipeNotFound", () => {
-  it("says a deleted recipe was deleted and offers its chef's kitchen first", () => {
-    renderNotFound({ deleted: true, chefUsername: "ari" });
+  it("says a deleted recipe was deleted, without naming its chef, and offers search and the recipe box", () => {
+    renderNotFound({ deleted: true });
     expect(screen.getByRole("heading", { level: 1, name: "This recipe was deleted." })).toBeInTheDocument();
-    expect(screen.getByText(/ari deleted it, so the link no longer opens/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "See ari's kitchen" })).toHaveAttribute("href", "/users/ari");
-    expect(screen.getByRole("link", { name: "Browse recipes" })).toHaveAttribute("href", "/recipes");
-  });
-
-  it("still explains a deletion when the chef is unknown", () => {
-    renderNotFound({ deleted: true, chefUsername: null });
-    expect(screen.getByText("Its chef deleted it, so the link no longer opens.")).toBeInTheDocument();
+    expect(screen.getByText("Its chef deleted it, so the link no longer opens. Search for something like it, or browse every public recipe.")).toBeInTheDocument();
+    expect(screen.getByRole("search")).toHaveAttribute("action", "/search");
     expect(screen.queryByRole("link", { name: /kitchen/ })).toBeNull();
+    expect(screen.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/recipes"]);
   });
 
   it("offers a recipe search and the recipe box for a link that never worked", () => {
-    renderNotFound({ deleted: false, chefUsername: null });
+    renderNotFound({ deleted: false });
     expect(screen.getByRole("heading", { level: 1, name: "We can't find this recipe." })).toBeInTheDocument();
     const search = screen.getByRole("search");
     expect(search).toHaveAttribute("action", "/search");

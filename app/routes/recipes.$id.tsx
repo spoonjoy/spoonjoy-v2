@@ -300,13 +300,10 @@ export function applyCreatedCookbookState(
   };
 }
 
-function recipeNotFoundDetails(error: unknown): { deleted: boolean; chefUsername: string | null } | null {
+function recipeNotFoundDetails(error: unknown): { deleted: boolean } | null {
   if (!isRouteErrorResponse(error) || error.status !== 404) return null;
-  const body = (error.data && typeof error.data === "object" ? error.data : {}) as { deleted?: unknown; chefUsername?: unknown };
-  return {
-    deleted: body.deleted === true,
-    chefUsername: typeof body.chefUsername === "string" && body.chefUsername ? body.chefUsername : null,
-  };
+  const body = (error.data && typeof error.data === "object" ? error.data : {}) as { deleted?: unknown };
+  return { deleted: body.deleted === true };
 }
 
 // A missing or deleted recipe gets a recipe-specific page; any other error (including one from a
