@@ -177,30 +177,34 @@ export async function isPhotoKeyLive(db: PhotoSweepDatabase, key: string): Promi
 }
 
 /**
- * Rows that ask the sweep to remove `keys` once nothing references them, eligible from
- * `eligibleAt`. An existing row keeps its first-seen time and takes the earlier eligibility. Used
- * by account deletion, which adds them to its own atomic batch.
+ * One statement that asks the sweep to remove the photos behind the stored URLs `urlsSql`
+ * selects (as a column named `url`), once nothing references them, eligible from `eligibleAt`.
+ * Only `/photos/` URLs are queued. An existing row keeps its first-seen time and takes the earlier
+ * eligibility; a quarantined row is left alone. Account deletion runs it inside its own atomic
+ * batch, before the rows that hold the URLs are deleted.
  */
-export function photoCleanupRequestStatements(
-  keys: Iterable<string>,
+export function photoCleanupRequestStatement(
+  urlsSql: string,
+  urlValues: readonly unknown[],
   reason: PhotoCleanupReason,
   now: Date,
   eligibleAt: Date,
-): Array<readonly [string, ...unknown[]]> {
-  return [...new Set(keys)].map((key) => [
+): readonly [string, ...unknown[]] {
+  return [
     `INSERT INTO "PhotoCleanup" ("key", "reason", "firstUnreferencedAt", "eligibleAt", "updatedAt")
-     VALUES (?, ?, ?, ?, ?)
+     SELECT DISTINCT substr("url", ${PHOTO_URL_PREFIX.length + 1}), ?, ?, ?, ?
+     FROM (${urlsSql}) WHERE "url" LIKE '${PHOTO_URL_PREFIX}_%'
      ON CONFLICT("key") DO UPDATE SET
        "reason" = excluded."reason",
        "eligibleAt" = MIN("PhotoCleanup"."eligibleAt", excluded."eligibleAt"),
        "updatedAt" = excluded."updatedAt"
      WHERE "PhotoCleanup"."quarantinedAt" IS NULL`,
-    key,
     reason,
     now.toISOString(),
     eligibleAt.toISOString(),
     now.toISOString(),
-  ] as const);
+    ...urlValues,
+  ];
 }
 
 export interface PhotoSweepReport {

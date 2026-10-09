@@ -7,7 +7,7 @@ import {
   originalKeyOfVariant,
   PHOTO_QUARANTINE_RETENTION_MS,
   PHOTO_SWEEP_GRACE_MS,
-  photoCleanupRequestStatements,
+  photoCleanupRequestStatement,
   photoKeyFromStoredUrl,
   photoSweepD1Database,
   resolvePhotoSweepMode,
@@ -389,14 +389,14 @@ describe("runPhotoSweep", () => {
       "profiles/gone/me.jpg": "g",
       "recipes/gone/shared.jpg": "s",
     });
-    for (const [sql, ...values] of photoCleanupRequestStatements(
-      ["profiles/gone/me.jpg", "recipes/gone/shared.jpg", "profiles/gone/me.jpg"],
+    const [sql, ...values] = photoCleanupRequestStatement(
+      `SELECT ? AS "url" UNION ALL SELECT ? UNION ALL SELECT ? UNION ALL SELECT ? UNION ALL SELECT ?`,
+      ["/photos/profiles/gone/me.jpg", "/photos/recipes/gone/shared.jpg", "/photos/profiles/gone/me.jpg", "https://example.com/x.jpg", "/photos/"],
       "account_deleted",
       T0,
       T0,
-    )) {
-      database.sqlite.prepare(sql).run(...values);
-    }
+    );
+    database.sqlite.prepare(sql).run(...values);
     expect(cleanupRows().map((row) => [row.key, row.reason])).toEqual([
       ["profiles/gone/me.jpg", "account_deleted"],
       ["recipes/gone/shared.jpg", "account_deleted"],
@@ -410,9 +410,8 @@ describe("runPhotoSweep", () => {
 
   it("keeps the earlier eligibility and leaves quarantined rows alone when a cleanup is requested again", () => {
     const run = (eligibleAt: Date) => {
-      for (const [sql, ...values] of photoCleanupRequestStatements(["a.jpg"], "account_deleted", T0, eligibleAt)) {
-        database.sqlite.prepare(sql).run(...values);
-      }
+      const [sql, ...values] = photoCleanupRequestStatement(`SELECT ? AS "url"`, ["/photos/a.jpg"], "account_deleted", T0, eligibleAt);
+      database.sqlite.prepare(sql).run(...values);
     };
     run(new Date(T0.getTime() + DAY));
     run(new Date(T0.getTime() + 2 * DAY));
