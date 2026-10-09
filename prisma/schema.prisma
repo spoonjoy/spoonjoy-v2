@@ -675,3 +675,42 @@ model NotificationPreference {
   notifyFellowChefOriginCook Boolean  @default(true)
   updatedAt                  DateTime @default(now()) @updatedAt
 }
+
+// One stored photo (an R2 key) that no live row references any more. The photo sweep
+// (app/lib/photo-lifecycle.server.ts) records when it first saw the key unreferenced, moves the
+// object under `quarantine/` once `eligibleAt` passes, and purges it after the retention period.
+// A key that is referenced again before then simply loses its row.
+model PhotoCleanup {
+  key                 String    @id
+  reason              String
+  firstUnreferencedAt DateTime
+  eligibleAt          DateTime
+  sizeBytes           Int?
+  quarantinedAt       DateTime?
+  purgedAt            DateTime?
+  updatedAt           DateTime  @default(now()) @updatedAt
+
+  @@index([eligibleAt])
+  @@index([quarantinedAt])
+}
+
+// The counts from one run of the photo sweep, in whatever mode it ran.
+model PhotoSweepRun {
+  id                  String   @id @default(cuid())
+  mode                String
+  startedAt           DateTime
+  finishedAt          DateTime
+  objectsScanned      Int      @default(0)
+  referencedObjects   Int      @default(0)
+  unreferencedObjects Int      @default(0)
+  unreferencedBytes   Int      @default(0)
+  orphanVariants      Int      @default(0)
+  eligibleObjects     Int      @default(0)
+  quarantined         Int      @default(0)
+  purged              Int      @default(0)
+  failures            Int      @default(0)
+  truncated           Boolean  @default(false)
+  note                String?
+
+  @@index([startedAt])
+}
