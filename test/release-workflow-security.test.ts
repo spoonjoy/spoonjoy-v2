@@ -101,8 +101,10 @@ describe("production release provenance", () => {
     );
     expect(workflowSecurity).toContain("const SHA_PATTERN = /^[0-9a-f]{40}$/");
     expect(workflowSecurity).toContain('await run("git", ["merge-base", "--is-ancestor", release.sourceSha, "origin/main"])');
-    expect(workflowSecurity).toContain('"--workflow", ".github/workflows/ci.yml"');
-    expect(workflowSecurity).toContain('const ciEvent = requiresAuthorizedDispatch ? "workflow_dispatch" : "push"');
+    expect(workflowSecurity).toContain('const CI_WORKFLOW_PATH = ".github/workflows/ci.yml"');
+    expect(workflowSecurity).toContain('"--workflow", CI_WORKFLOW_PATH');
+    expect(workflowSecurity).toContain('"--event", "workflow_dispatch"');
+    expect(workflowSecurity).toContain('workflowPath: CI_WORKFLOW_PATH,\n    sha: release.sourceSha,\n    jobs: CANONICAL_CI_JOB_NAMES,');
     expect(workflowSecurity).toContain('const originMainSha = (await run("git", ["rev-parse", "origin/main"])).trim()');
     expect(production).toContain("ROLLBACK_VERSION_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.rollback_version_id || '' }}");
     expect(deploySteps.filter((step) => step.run === "node scripts/workflow-security.mjs run-production-deploy"))
@@ -147,7 +149,7 @@ describe("production release provenance", () => {
       "Upload MCP OAuth canary artifacts",
     ]);
     expect(sha256(normalizedStepRun(production, "Validate release source", "Setup Node.js")))
-      .toBe("c95499e715c882b89cbdb467d525c80669fadadcd7d758a9c776685f07b1405a");
+      .toBe("a332b580987c867fba3f4eefc97d31be854bfc67493261ec14c7b733f5bbfcbc");
     expect(sha256(normalizedStepRun(
       production,
       "Ensure release artifact exists",

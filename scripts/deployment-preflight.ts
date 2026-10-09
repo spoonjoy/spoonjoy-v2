@@ -181,7 +181,7 @@ const EXPECTED_PRODUCTION_DEPLOY_STEP_NAMES = [
   "Ensure release artifact exists",
   "Upload MCP OAuth canary artifacts",
 ] as const;
-const EXPECTED_RELEASE_SOURCE_RUN_SHA256 = "f493d2830d4c2c1bb31dd19bc88a4c289dd480448cea94ee9923b04f434037f6";
+const EXPECTED_RELEASE_SOURCE_RUN_SHA256 = "b49feffbe77bc945d155b1250f2a5db29485d9cd987ca62455c217aeaaf8a3e8";
 const EXPECTED_RELEASE_ARTIFACT_RUN_SHA256 = "3b9febef9ea2e91192eebabb3947a73257bc5df5b03db1a30ba1a4f7a472c721";
 const REQUIRED_IGNORED_BUILD_PACKAGES = [
   "@prisma/client",
@@ -617,6 +617,40 @@ export const CI_WORKFLOW_CONCURRENCY = {
   "cancel-in-progress": "${{ github.event_name == 'pull_request' }}",
 } as const;
 
+// On a push to main, queue-tested reports whether the merge queue already passed every canonical
+// job on this exact commit (scripts/workflow-security.mjs queue-tested-ci); the four canonical jobs
+// skip only when it says so. It alone gets actions: read, to look the queue's run up.
+export const CI_QUEUE_TESTED_JOB = Object.freeze({
+  if: "github.event_name == 'push'",
+  "runs-on": "ubuntu-latest",
+  "timeout-minutes": 5,
+  permissions: { actions: "read", contents: "read" },
+  outputs: { tested: "${{ steps.lookup.outputs.tested }}" },
+  steps: [
+    {
+      uses: PINNED_CHECKOUT_ACTION,
+      with: { ref: "${{ env.CI_SOURCE_SHA }}", "persist-credentials": false },
+    },
+    {
+      name: "📦 Setup Node.js",
+      uses: PINNED_SETUP_NODE_ACTION,
+      with: { "node-version": "22" },
+    },
+    {
+      name: "🔐 Validate CI invocation",
+      run: "node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation",
+    },
+    {
+      name: "🔎 Ask whether the merge queue already tested this commit",
+      id: "lookup",
+      env: { GH_TOKEN: "${{ github.token }}" },
+      run: "node scripts/workflow-security.mjs queue-tested-ci",
+    },
+  ],
+});
+export const CI_CANONICAL_JOB_NEEDS = "queue-tested";
+export const CI_CANONICAL_JOB_CONDITION = "${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' }}";
+
 function parsedCiWorkflowIsCanonical(workflow: string): boolean {
   const root = parsedWorkflow(workflow);
   if (!root || !exactObjectKeys(root, ["name", "on", "defaults", "concurrency", "env", "jobs"])) return false;
@@ -648,16 +682,20 @@ function parsedCiWorkflowIsCanonical(workflow: string): boolean {
   }
 
   const jobs = objectRecord(root.jobs);
-  if (!exactObjectKeys(jobs, Object.keys(CI_JOB_CONTRACTS))) return false;
+  if (!exactObjectKeys(jobs, ["queue-tested", ...Object.keys(CI_JOB_CONTRACTS)])) return false;
+  if (JSON.stringify(jobs["queue-tested"]) !== JSON.stringify(CI_QUEUE_TESTED_JOB)) return false;
 
   for (const [jobName, rawJob] of Object.entries(jobs)) {
+    if (jobName === "queue-tested") continue;
     const job = objectRecord(rawJob);
     const contract = CI_JOB_CONTRACTS[jobName as keyof typeof CI_JOB_CONTRACTS];
     const expectedJobKeys = contract.env
-      ? ["name", "runs-on", "timeout-minutes", "env", "steps"]
-      : ["name", "runs-on", "timeout-minutes", "steps"];
+      ? ["name", "needs", "if", "runs-on", "timeout-minutes", "env", "steps"]
+      : ["name", "needs", "if", "runs-on", "timeout-minutes", "steps"];
     if (
       !exactObjectKeys(job, expectedJobKeys) ||
+      job.needs !== CI_CANONICAL_JOB_NEEDS ||
+      job.if !== CI_CANONICAL_JOB_CONDITION ||
       job.name !== contract.name ||
       job["runs-on"] !== "ubuntu-latest" ||
       job["timeout-minutes"] !== contract.timeoutMinutes ||
@@ -1776,12 +1814,12 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     check(
       "CI workflow",
       ciWorkflowIsCanonical,
-      ".github/workflows/ci.yml.must validate pushes, pull requests and merge-queue groups for main, cancel only superseded pull-request runs, with checkout output suppression, Corepack pnpm activation, and output-gated seed/typecheck/build/test paths."
+      ".github/workflows/ci.yml.must validate pushes, pull requests and merge-queue groups for main, cancel only superseded pull-request runs, skip the canonical jobs on a main push only when its queue-tested job finds the merge queue's green run of the same commit, with checkout output suppression, Corepack pnpm activation, and output-gated seed/typecheck/build/test paths."
     ),
     check(
       "production deploy workflow",
       parsedProductionWorkflowIsCanonical(inputs.productionDeployWorkflow),
-      ".github/workflows/production-deploy.yml must deploy only the newest main commit with successful push CI (chosen by its release-target job), validate exact-SHA manual dispatches, pin every action, run deploy:auto with Cloudflare credentials, and record the released SHA."
+      ".github/workflows/production-deploy.yml must deploy only the newest main commit with green canonical CI, from a push run or the merge queue's run of the same commit (chosen by its release-target job), validate exact-SHA manual dispatches, pin every action, run deploy:auto with Cloudflare credentials, and record the released SHA."
     ),
     check(
       "QA image-cover smoke workflow",

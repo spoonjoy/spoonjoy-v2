@@ -8,6 +8,7 @@ import {
   chooseReleaseTarget,
   isCliEntry,
   main,
+  reportQueueTested,
   runCliIfEntry,
   runInheritedWorkflowCommand,
   runProductionDeploy,
@@ -97,6 +98,61 @@ function successfulRunner(
     if (command === "gh run view 12 --json jobs") {
       return JSON.stringify({ jobs: [{ name: "build-storybook", conclusion: "success" }] });
     }
+    if (command.startsWith("gh api --method GET repos/spoonjoy/spoonjoy-v2/actions/workflows/")) {
+      return JSON.stringify({ workflow_runs: [] });
+    }
+    throw new Error(`Unexpected command: ${command}`);
+  });
+}
+
+const REPOSITORY = "spoonjoy/spoonjoy-v2";
+
+// A merge-queue run as GitHub's REST API returns it: of this workflow, for this commit, in and from
+// this repository, on the queue's branch for main, completed and successful.
+function queueRun(overrides: Record<string, unknown> = {}, workflowPath = ".github/workflows/ci.yml") {
+  return {
+    id: 21,
+    event: "merge_group",
+    head_sha: SOURCE_SHA,
+    head_branch: `gh-readonly-queue/main/pr-421-${"c".repeat(40)}`,
+    status: "completed",
+    conclusion: "success",
+    path: workflowPath,
+    repository: { full_name: REPOSITORY },
+    head_repository: { full_name: REPOSITORY },
+    ...overrides,
+  };
+}
+
+function jobsOutput(names: readonly string[], conclusion: string | null = "success") {
+  return JSON.stringify({ jobs: names.map((name) => ({ name, conclusion })) });
+}
+
+// After a queue merge: main's push CI and Storybook runs exist but their jobs skipped (CI) or have
+// not finished (Storybook); the queue's runs of the same commit passed. Overrides replace the CI
+// queue run list or a run's job list.
+function queueMergedRunner({
+  ciQueueRuns = [queueRun()] as unknown[],
+  ciQueueJobs = jobsOutput(CANONICAL_CI_JOB_NAMES),
+  storybookQueueRuns = [queueRun({ id: 22 }, ".github/workflows/storybook.yml")] as unknown[],
+} = {}) {
+  return vi.fn(async (file: string, args: readonly string[]) => {
+    const command = [file, ...args].join(" ");
+    if (command === "git rev-parse HEAD" || command === "git rev-parse origin/main") return `${SOURCE_SHA}\n`;
+    if (command.startsWith("git fetch ") || command.startsWith("git merge-base ")) return "";
+    if (command.includes("gh run list --workflow .github/workflows/ci.yml")) {
+      return JSON.stringify([{ databaseId: 11, headSha: SOURCE_SHA, event: "push" }]);
+    }
+    if (command === "gh run view 11 --json jobs") return jobsOutput(CANONICAL_CI_JOB_NAMES, "skipped");
+    if (command.includes("gh run list --workflow .github/workflows/storybook.yml")) return "[]";
+    if (command === `gh api --method GET repos/${REPOSITORY}/actions/workflows/ci.yml/runs -f event=merge_group -f head_sha=${SOURCE_SHA} -f status=success -f per_page=100`) {
+      return JSON.stringify({ workflow_runs: ciQueueRuns });
+    }
+    if (command === `gh api --method GET repos/${REPOSITORY}/actions/workflows/storybook.yml/runs -f event=merge_group -f head_sha=${SOURCE_SHA} -f status=success -f per_page=100`) {
+      return JSON.stringify({ workflow_runs: storybookQueueRuns });
+    }
+    if (command === "gh run view 21 --json jobs") return ciQueueJobs;
+    if (command === "gh run view 22 --json jobs") return jobsOutput(["build-storybook"]);
     throw new Error(`Unexpected command: ${command}`);
   });
 }
@@ -383,6 +439,20 @@ describe("validateProductionDeploySource", () => {
     }
   });
 
+  it("fails closed for a malformed or missing report-only dispatch CI run", async () => {
+    for (const output of [
+      "{}",
+      JSON.stringify([null, "bad", { databaseId: "11", headSha: SOURCE_SHA, event: "workflow_dispatch" }]),
+      JSON.stringify([{ databaseId: 11, headSha: SOURCE_SHA, event: "push" }]),
+    ]) {
+      await expect(validateProductionDeploySource({
+        env: productionEnv({ SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: CSP_REPORT_ONLY_BREAK_GLASS_ACK }),
+        run: runnerWithOverride((command) => command.includes("--event workflow_dispatch"), output),
+        sleep: vi.fn(),
+      })).rejects.toThrow(/Canonical CI workflow/);
+    }
+  });
+
   it("fails closed for every malformed dispatch audit field", async () => {
     const baseAudit = {
       actor: { login: "ari" },
@@ -453,6 +523,108 @@ describe("validateProductionDeploySource", () => {
       sleep,
       storybookAttempts: 0,
     })).rejects.toThrow(/lookup exhausted/);
+  });
+
+  it("accepts the merge queue's run of the same commit when main's push run skipped the canonical jobs", async () => {
+    const run = queueMergedRunner();
+    await expect(validateProductionDeploySource({
+      env: productionEnv(),
+      run,
+      sleep: vi.fn(),
+      storybookAttempts: 1,
+    })).resolves.toBeUndefined();
+    expect(run).toHaveBeenCalledWith("gh", ["run", "view", "21", "--json", "jobs"]);
+    expect(run).toHaveBeenCalledWith("gh", ["run", "view", "22", "--json", "jobs"]);
+  });
+
+  it("does not count a push run whose canonical jobs skipped as evidence", async () => {
+    await expect(validateProductionDeploySource({
+      env: productionEnv(),
+      run: queueMergedRunner({ ciQueueRuns: [] }),
+      sleep: vi.fn(),
+      storybookAttempts: 1,
+    })).rejects.toThrow(/no successful push or merge-queue run with every canonical job \(coverage/);
+  });
+
+  it.each([
+    ["from a fork", { head_repository: { full_name: "attacker/spoonjoy-v2" } }],
+    ["with no head repository", { head_repository: null }],
+    ["in another repository", { repository: { full_name: "attacker/spoonjoy-v2" } }],
+    ["that failed", { conclusion: "failure" }],
+    ["that is still running, as a rerun is", { status: "in_progress", conclusion: null }],
+    ["for another commit", { head_sha: "b".repeat(40) }],
+    ["of another workflow file", { path: ".github/workflows/storybook.yml" }],
+    ["of a workflow file only named like CI", { path: ".github/workflows/ci.yml@refs/heads/evil" }],
+    ["off the queue's branch for main", { head_branch: "main" }],
+    ["on a queue branch for another base", { head_branch: "gh-readonly-queue/release/pr-1-abc" }],
+    ["from a push event", { event: "push" }],
+    ["with a malformed id", { id: "21" }],
+  ])("rejects a merge-queue CI run %s", async (_name, overrides) => {
+    await expect(validateProductionDeploySource({
+      env: productionEnv(),
+      run: queueMergedRunner({ ciQueueRuns: [null, "bad", queueRun(overrides)] }),
+      sleep: vi.fn(),
+      storybookAttempts: 1,
+    })).rejects.toThrow(/no successful push or merge-queue run/);
+  });
+
+  it.each([
+    ["a skipped canonical job", jobsOutput(["coverage", "workers-coverage", "e2e"]).replace("]}", ',{"name":"advisory","conclusion":"skipped"}]}')],
+    ["a failed canonical job", jobsOutput(["coverage", "workers-coverage", "e2e"]).replace("]}", ',{"name":"advisory","conclusion":"failure"}]}')],
+    ["a rerun still in progress", jobsOutput(CANONICAL_CI_JOB_NAMES, null)],
+    ["a missing canonical job", jobsOutput(["coverage", "workers-coverage", "e2e"])],
+    ["a duplicated canonical job", jobsOutput([...CANONICAL_CI_JOB_NAMES, "coverage"])],
+    ["an unreadable job list", "rate limited"],
+  ])("rejects a merge-queue CI run with %s", async (_name, ciQueueJobs) => {
+    await expect(validateProductionDeploySource({
+      env: productionEnv(),
+      run: queueMergedRunner({ ciQueueJobs }),
+      sleep: vi.fn(),
+      storybookAttempts: 1,
+    })).rejects.toThrow(/no successful push or merge-queue run/);
+  });
+
+  it.each([
+    ["not JSON", "rate limited", /did not return valid JSON/],
+    ["not a run list", "{}", /did not return a run list/],
+  ])("fails closed when the merge-queue run lookup is %s", async (_name, output, error) => {
+    const fallback = queueMergedRunner();
+    const run = vi.fn(async (file: string, args: readonly string[]) =>
+      [file, ...args].join(" ").includes("/actions/workflows/ci.yml/runs") ? output : fallback(file, args));
+    await expect(validateProductionDeploySource({
+      env: productionEnv(),
+      run,
+      sleep: vi.fn(),
+      storybookAttempts: 1,
+    })).rejects.toThrow(error);
+  });
+
+  it("rejects merge-queue evidence for a commit that is not on main", async () => {
+    const fallback = queueMergedRunner();
+    const run = vi.fn(async (file: string, args: readonly string[]) => {
+      if ([file, ...args].join(" ") === `git merge-base --is-ancestor ${SOURCE_SHA} origin/main`) {
+        throw new Error("not an ancestor");
+      }
+      return fallback(file, args);
+    });
+    await expect(validateProductionDeploySource({
+      env: productionEnv(),
+      run,
+      sleep: vi.fn(),
+      storybookAttempts: 1,
+    })).rejects.toThrow("not an ancestor");
+    expect(run).not.toHaveBeenCalledWith("gh", expect.arrayContaining(["run", "view"]));
+  });
+
+  it("rejects Storybook evidence only from a merge-queue run that fails the same checks", async () => {
+    await expect(validateProductionDeploySource({
+      env: productionEnv(),
+      run: queueMergedRunner({
+        storybookQueueRuns: [queueRun({ id: 22, head_repository: { full_name: "attacker/spoonjoy-v2" } }, ".github/workflows/storybook.yml")],
+      }),
+      sleep: vi.fn(),
+      storybookAttempts: 1,
+    })).rejects.toThrow(/Canonical Storybook workflow has no successful push or merge-queue run/);
   });
 
   it("uses default dependency values without weakening validation", async () => {
@@ -624,6 +796,7 @@ describe("chooseReleaseTarget", () => {
   function targetEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
     return {
       GITHUB_EVENT_NAME: "workflow_run",
+      GITHUB_REPOSITORY: REPOSITORY,
       SOURCE_SHA: TRIGGER,
       GITHUB_OUTPUT: OUTPUT,
       GITHUB_STEP_SUMMARY: SUMMARY,
@@ -631,13 +804,17 @@ describe("chooseReleaseTarget", () => {
     };
   }
 
-  // main is TRIGGER <- MIDDLE <- TIP; `green` lists the commits with a successful push CI run.
+  // main is TRIGGER <- MIDDLE <- TIP. `green` lists the commits whose push CI run passed every
+  // canonical job; `queueGreen` lists those whose push run skipped them because the merge queue's
+  // run of the same commit passed them.
   function mainRunner({
     green = [TRIGGER] as string[],
+    queueGreen = [] as string[],
     newer = [TIP, MIDDLE] as string[],
     onMain = true,
     runList = undefined as string | undefined,
   } = {}) {
+    const runIds = new Map([TRIGGER, MIDDLE, TIP, "9".repeat(40)].map((sha, index) => [sha, index + 1]));
     return vi.fn(async (file: string, args: readonly string[]) => {
       const command = [file, ...args].join(" ");
       if (command === "git fetch --no-tags origin main:refs/remotes/origin/main") return "";
@@ -646,10 +823,27 @@ describe("chooseReleaseTarget", () => {
         return "";
       }
       if (command === `git rev-list --first-parent ${TRIGGER}..origin/main`) return newer.map((sha) => `${sha}\n`).join("");
-      const perCommit = /^gh run list --workflow \.github\/workflows\/ci\.yml --branch main --commit ([0-9a-f]{40}) --event push --status success --limit 1 --json databaseId,headSha,event$/.exec(command);
+      const perCommit = /^gh run list --workflow \.github\/workflows\/ci\.yml --branch main --commit ([0-9a-f]{40}) --event push --status success --limit 100 --json databaseId,headSha,event$/.exec(command);
       if (perCommit) {
-        return runList ?? JSON.stringify(green.includes(perCommit[1]) ? [{ databaseId: 1, headSha: perCommit[1], event: "push" }] : []);
+        const sha = perCommit[1];
+        if (runList !== undefined) return runList;
+        return JSON.stringify(green.includes(sha) || queueGreen.includes(sha)
+          ? [{ databaseId: runIds.get(sha), headSha: sha, event: "push" }]
+          : []);
       }
+      const pushJobs = /^gh run view (\d) --json jobs$/.exec(command);
+      if (pushJobs) {
+        const sha = [...runIds].find(([, id]) => id === Number(pushJobs[1]))![0];
+        return jobsOutput(CANONICAL_CI_JOB_NAMES, green.includes(sha) ? "success" : "skipped");
+      }
+      const queue = /^gh api --method GET repos\/spoonjoy\/spoonjoy-v2\/actions\/workflows\/ci\.yml\/runs -f event=merge_group -f head_sha=([0-9a-f]{40}) -f status=success -f per_page=100$/.exec(command);
+      if (queue) {
+        const sha = queue[1];
+        return JSON.stringify({
+          workflow_runs: queueGreen.includes(sha) ? [queueRun({ id: 100 + runIds.get(sha)!, head_sha: sha })] : [],
+        });
+      }
+      if (/^gh run view 10\d --json jobs$/.test(command)) return jobsOutput(CANONICAL_CI_JOB_NAMES);
       throw new Error(`Unexpected command: ${command}`);
     });
   }
@@ -690,7 +884,30 @@ describe("chooseReleaseTarget", () => {
     expect(atTip.summary).toContain("main's tip");
     const newerPending = await choose(targetEnv(), mainRunner({ green: [TRIGGER, "9".repeat(40)] }));
     expect(newerPending.target).toBe(TRIGGER);
-    expect(newerPending.summary).toContain("2 newer commit(s) have no successful push CI yet");
+    expect(newerPending.summary).toContain("2 newer commit(s) have no green canonical CI yet");
+  });
+
+  it("releases a commit the merge queue tested, whose push run skipped the canonical jobs", async () => {
+    const { target, summary } = await choose(targetEnv(), mainRunner({ green: [TRIGGER], queueGreen: [TIP] }));
+    expect(target).toBe(TIP);
+    expect(summary).toContain("newest main commit with green canonical CI");
+  });
+
+  it("does not release a commit whose push run skipped its jobs without a green queue run", async () => {
+    // MIDDLE's and TIP's push runs exist and GitHub calls them successful, but their canonical jobs
+    // skipped and no merge-queue run proves them, so the trigger is still the newest green commit.
+    const fallback = mainRunner({ green: [TRIGGER], queueGreen: [] });
+    const run = vi.fn(async (file: string, args: readonly string[]) => {
+      const command = [file, ...args].join(" ");
+      if (command.includes(`--commit ${TIP}`) || command.includes(`--commit ${MIDDLE}`)) {
+        const sha = command.includes(TIP) ? TIP : MIDDLE;
+        return JSON.stringify([{ databaseId: sha === TIP ? 3 : 2, headSha: sha, event: "push" }]);
+      }
+      return fallback(file, args);
+    });
+    const { target } = await choose(targetEnv(), run);
+    expect(target).toBe(TRIGGER);
+    expect(run).toHaveBeenCalledWith("gh", ["run", "view", "3", "--json", "jobs"]);
   });
 
   it("passes a dispatch's exact source_sha through", async () => {
@@ -704,7 +921,8 @@ describe("chooseReleaseTarget", () => {
 
   it.each([
     ["the trigger is not on main", targetEnv(), mainRunner({ onMain: false }), /not on main/],
-    ["no commit in range has green push CI", targetEnv(), mainRunner({ green: ["9".repeat(40)] }), /no commit from .* has a successful push CI run/i],
+    ["no commit in range has green canonical CI", targetEnv(), mainRunner({ green: ["9".repeat(40)] }), /no commit from .* has green canonical CI/i],
+    ["GITHUB_REPOSITORY is missing", targetEnv({ GITHUB_REPOSITORY: "" }), mainRunner(), /GITHUB_REPOSITORY is required/],
     ["only non-push runs are green", targetEnv(), mainRunner({ runList: JSON.stringify([{ databaseId: 1, headSha: TRIGGER, event: "workflow_dispatch" }, null, { headSha: "bad" }]) }), /no commit from/i],
     ["the run list is not JSON", targetEnv(), mainRunner({ runList: "rate limited" }), /did not return valid JSON/],
     ["the run list is not a list", targetEnv(), mainRunner({ runList: "{}" }), /did not return a run list/],
@@ -740,5 +958,105 @@ describe("chooseReleaseTarget", () => {
     const appendFile = vi.fn();
     await main(["choose-release-target"], { env: targetEnv(), run: mainRunner({ newer: [] }), appendFile });
     expect(appendFile).toHaveBeenCalledWith(OUTPUT, `source_sha=${TRIGGER}\n`);
+  });
+});
+
+describe("reportQueueTested", () => {
+  const OUTPUT = "/tmp/github-output";
+  const SUMMARY = "/tmp/github-step-summary";
+
+  function pushEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
+    return {
+      GITHUB_EVENT_NAME: "push",
+      GITHUB_REF: "refs/heads/main",
+      GITHUB_SHA: SOURCE_SHA,
+      GITHUB_REPOSITORY: REPOSITORY,
+      GITHUB_OUTPUT: OUTPUT,
+      GITHUB_STEP_SUMMARY: SUMMARY,
+      ...overrides,
+    };
+  }
+
+  function queueRunner({
+    workflowFile = "ci.yml",
+    runs = [queueRun()] as unknown[],
+    jobs = jobsOutput(CANONICAL_CI_JOB_NAMES),
+  } = {}) {
+    return vi.fn(async (file: string, args: readonly string[]) => {
+      const command = [file, ...args].join(" ");
+      if (command === `gh api --method GET repos/${REPOSITORY}/actions/workflows/${workflowFile}/runs -f event=merge_group -f head_sha=${SOURCE_SHA} -f status=success -f per_page=100`) {
+        return JSON.stringify({ workflow_runs: runs });
+      }
+      if (command === "gh run view 21 --json jobs") return jobs;
+      throw new Error(`Unexpected command: ${command}`);
+    });
+  }
+
+  async function report(mode: string, env: NodeJS.ProcessEnv, run: ReturnType<typeof queueRunner>) {
+    const appendFile = vi.fn();
+    const tested = await reportQueueTested({ mode, env, run, appendFile });
+    const summary = appendFile.mock.calls.find(([file]) => file === SUMMARY)?.[1] as string;
+    return { tested, appendFile, summary };
+  }
+
+  it("lets main's push skip CI's canonical jobs when the queue's run of this commit passed them all", async () => {
+    const { tested, appendFile, summary } = await report("queue-tested-ci", pushEnv(), queueRunner());
+    expect(tested).toBe(true);
+    expect(appendFile).toHaveBeenCalledWith(OUTPUT, "tested=true\n");
+    expect(summary).toContain("Merge-queue run 21 already passed coverage, workers-coverage, e2e, advisory");
+  });
+
+  it("checks Journeys against the queue's Journeys run and its journeys job", async () => {
+    const run = queueRunner({
+      workflowFile: "journeys.yml",
+      runs: [queueRun({}, ".github/workflows/journeys.yml")],
+      jobs: jobsOutput(["journeys"]),
+    });
+    expect((await report("queue-tested-journeys", pushEnv(), run)).tested).toBe(true);
+    // A CI run for the same commit is not Journeys evidence.
+    const ciRun = queueRunner({ workflowFile: "journeys.yml", runs: [queueRun()], jobs: jobsOutput(["journeys"]) });
+    expect((await report("queue-tested-journeys", pushEnv(), ciRun)).tested).toBe(false);
+  });
+
+  it.each([
+    ["a pull request", pushEnv({ GITHUB_EVENT_NAME: "pull_request" }), queueRunner(), "not a push to main"],
+    ["a merge-queue group", pushEnv({ GITHUB_EVENT_NAME: "merge_group" }), queueRunner(), "not a push to main"],
+    ["a push to another branch", pushEnv({ GITHUB_REF: "refs/heads/feature" }), queueRunner(), "not a push to main"],
+    ["a push that bypassed the queue", pushEnv(), queueRunner({ runs: [] }), "No successful merge-queue run"],
+    ["a queue run from another repository", pushEnv(), queueRunner({ runs: [queueRun({ head_repository: { full_name: "attacker/spoonjoy-v2" } })] }), "No successful merge-queue run"],
+    ["a failed queue run", pushEnv(), queueRunner({ runs: [queueRun({ conclusion: "failure" })] }), "No successful merge-queue run"],
+    ["a queue run with a skipped job", pushEnv(), queueRunner({ jobs: jobsOutput(CANONICAL_CI_JOB_NAMES, "skipped") }), "No successful merge-queue run"],
+    ["a lookup error", pushEnv(), vi.fn(async () => { throw new Error("HTTP 502"); }), "lookup failed (HTTP 502)"],
+    ["a lookup error that is not an Error", pushEnv(), vi.fn(async () => { throw "boom"; }), "lookup failed (boom)"],
+    ["a malformed commit", pushEnv({ GITHUB_SHA: "abc" }), queueRunner(), "exact 40-character"],
+    ["a missing repository", pushEnv({ GITHUB_REPOSITORY: "" }), queueRunner(), "GITHUB_REPOSITORY is required"],
+  ])("runs the full jobs for %s", async (_name, env, run, why) => {
+    const { tested, appendFile, summary } = await report("queue-tested-ci", env, run as ReturnType<typeof queueRunner>);
+    expect(tested).toBe(false);
+    expect(appendFile).toHaveBeenCalledWith(OUTPUT, "tested=false\n");
+    expect(summary).toContain(why);
+  });
+
+  it("fails, so the jobs run, without somewhere to write its answer or with an unknown mode", async () => {
+    await expect(reportQueueTested({ mode: "queue-tested-ci", env: pushEnv({ GITHUB_OUTPUT: "" }), run: queueRunner(), appendFile: vi.fn() }))
+      .rejects.toThrow("GITHUB_OUTPUT is required.");
+    await expect(reportQueueTested({ mode: "queue-tested-storybook", env: pushEnv(), run: queueRunner(), appendFile: vi.fn() }))
+      .rejects.toThrow("Unknown queue-tested mode: queue-tested-storybook.");
+    await expect(reportQueueTested()).rejects.toThrow("Unknown queue-tested mode: undefined.");
+  });
+
+  it("uses the process environment by default", async () => {
+    vi.stubEnv("GITHUB_OUTPUT", "");
+    try {
+      await expect(reportQueueTested({ mode: "queue-tested-ci" })).rejects.toThrow("GITHUB_OUTPUT is required.");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("is reachable from the CLI for each mode", async () => {
+    const appendFile = vi.fn();
+    await main(["queue-tested-ci"], { env: pushEnv(), run: queueRunner(), appendFile });
+    expect(appendFile).toHaveBeenCalledWith(OUTPUT, "tested=true\n");
   });
 });

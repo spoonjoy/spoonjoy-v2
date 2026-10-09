@@ -12,6 +12,17 @@ const WORKER_VERSION_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab]
 // merge_group: a merge-queue run tests the exact commit that will land on main.
 const ORDINARY_CI_EVENTS = new Set(["push", "pull_request", "merge_group"]);
 const CANONICAL_CI_JOB_NAMES = ["coverage", "workers-coverage", "e2e", "advisory"];
+const CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
+const STORYBOOK_WORKFLOW_PATH = ".github/workflows/storybook.yml";
+const JOURNEYS_WORKFLOW_PATH = ".github/workflows/journeys.yml";
+// The merge queue tests each group on a branch GitHub names gh-readonly-queue/main/pr-<n>-<sha>,
+// and the commit it tests is the commit that lands on main.
+const MERGE_QUEUE_BRANCH_PREFIX = "gh-readonly-queue/main/";
+// What each workflow's push run on main may skip, because the merge queue already ran it.
+export const QUEUE_TESTED_MODES = Object.freeze({
+  "queue-tested-ci": Object.freeze({ workflowPath: CI_WORKFLOW_PATH, jobs: CANONICAL_CI_JOB_NAMES }),
+  "queue-tested-journeys": Object.freeze({ workflowPath: JOURNEYS_WORKFLOW_PATH, jobs: ["journeys"] }),
+});
 const REPORT_ONLY_CI_JOB_NAMES = [
   "report-only-coverage",
   "report-only-workers-coverage",
@@ -194,10 +205,11 @@ function validateReleaseInputs(env) {
   return { acknowledgement, rollbackVersionId, sourceSha };
 }
 
-// An automatic release ships the release-target job's choice: the newest main commit with a
-// successful push CI run, which is the triggering commit or a descendant of it on main. Main moving
-// on while the deploy waited for a runner no longer refuses the release; the chosen commit's own
-// CI and Storybook evidence is still checked below.
+// An automatic release ships the release-target job's choice: the newest main commit with green
+// canonical CI (a push run, or the merge queue's run of that same commit), which is the triggering
+// commit or a descendant of it on main. Main moving on while the deploy waited for a runner no
+// longer refuses the release; the chosen commit's own CI and Storybook evidence is still checked
+// below.
 function validateReleaseEvent(env, release, headSha, originMainSha, triggerIsAncestor) {
   const event = requiredEnv(env, "GITHUB_EVENT_NAME");
   if (event === "workflow_run") {
@@ -227,24 +239,113 @@ function validateReleaseEvent(env, release, headSha, originMainSha, triggerIsAnc
   }
 }
 
-async function findStorybookRun({ run, sleep, sourceSha, attempts }) {
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    const output = await run("gh", [
-      "run", "list",
-      "--workflow", ".github/workflows/storybook.yml",
-      "--branch", "main",
-      "--commit", sourceSha,
-      "--event", "push",
-      "--status", "success",
-      "--limit", "100",
-      "--json", "databaseId,headSha,event",
-    ]);
-    try {
-      return matchingRun(output, sourceSha, "push", "Canonical Storybook workflow");
-    } catch (error) {
-      if (attempt === attempts) throw error;
-      await sleep(10_000);
+function hasSuccessfulJobs(output, requiredJobs, label) {
+  try {
+    requireSuccessfulJobs(output, requiredJobs, label);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Push runs of a workflow on main for this exact commit that GitHub reports successful.
+async function pushRunIds(run, workflowPath, sha) {
+  const parsed = parseJson(await run("gh", [
+    "run", "list",
+    "--workflow", workflowPath,
+    "--branch", "main",
+    "--commit", sha,
+    "--event", "push",
+    "--status", "success",
+    "--limit", "100",
+    "--json", "databaseId,headSha,event",
+  ]), `${workflowPath} push runs`);
+  if (!Array.isArray(parsed)) throw new Error(`${workflowPath} push runs did not return a run list.`);
+  return parsed
+    .filter((entry) =>
+      entry &&
+      typeof entry === "object" &&
+      Number.isInteger(entry.databaseId) &&
+      entry.headSha === sha &&
+      entry.event === "push")
+    .map((entry) => entry.databaseId);
+}
+
+// Merge-queue runs of a workflow for this exact commit: completed and successful, of the workflow
+// file at this path, in this repository, from this repository (never a fork's), on a queue branch
+// for main. The queue tests the commit that then lands on main, running the workflow file from
+// that commit, exactly as a push run does.
+export async function mergeQueueRunIds(run, repository, workflowPath, sha) {
+  const workflowFile = workflowPath.slice(".github/workflows/".length);
+  const parsed = parseJson(await run("gh", [
+    "api", "--method", "GET",
+    `repos/${repository}/actions/workflows/${workflowFile}/runs`,
+    "-f", "event=merge_group",
+    "-f", `head_sha=${sha}`,
+    "-f", "status=success",
+    "-f", "per_page=100",
+  ]), `${workflowPath} merge-queue runs`);
+  const runs = parsed && typeof parsed === "object" && Array.isArray(parsed.workflow_runs)
+    ? parsed.workflow_runs
+    : null;
+  if (!runs) throw new Error(`${workflowPath} merge-queue runs did not return a run list.`);
+  return runs
+    .filter((entry) =>
+      entry &&
+      typeof entry === "object" &&
+      Number.isInteger(entry.id) &&
+      entry.event === "merge_group" &&
+      entry.head_sha === sha &&
+      entry.status === "completed" &&
+      entry.conclusion === "success" &&
+      entry.path === workflowPath &&
+      entry.repository?.full_name === repository &&
+      entry.head_repository?.full_name === repository &&
+      typeof entry.head_branch === "string" &&
+      entry.head_branch.startsWith(MERGE_QUEUE_BRANCH_PREFIX))
+    .map((entry) => entry.id);
+}
+
+async function firstRunWithJobs(run, runIds, jobs, label) {
+  for (const runId of runIds) {
+    if (hasSuccessfulJobs(await run("gh", ["run", "view", String(runId), "--json", "jobs"]), jobs, `${label} ${runId}`)) {
+      return runId;
     }
+  }
+  return null;
+}
+
+// The run that proves this commit passed a workflow's required jobs: a push run on main, or a
+// merge-queue run of the same commit, in which every named job succeeded exactly once. A push run
+// whose jobs skipped because the queue already ran them is not evidence; the queue's run is.
+export async function findEvidenceRun({ run, repository, workflowPath, sha, jobs, label }) {
+  const pushRun = await firstRunWithJobs(run, await pushRunIds(run, workflowPath, sha), jobs, label);
+  if (pushRun !== null) return { runId: pushRun, event: "push" };
+  const queueRun = await firstRunWithJobs(
+    run,
+    await mergeQueueRunIds(run, repository, workflowPath, sha),
+    jobs,
+    label,
+  );
+  if (queueRun !== null) return { runId: queueRun, event: "merge_group" };
+  return null;
+}
+
+async function findStorybookRun({ run, sleep, repository, sourceSha, attempts }) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const evidence = await findEvidenceRun({
+      run,
+      repository,
+      workflowPath: STORYBOOK_WORKFLOW_PATH,
+      sha: sourceSha,
+      jobs: ["build-storybook"],
+      label: "Canonical Storybook run",
+    });
+    if (evidence) return evidence;
+    if (attempt === attempts) {
+      throw new Error(`Canonical Storybook workflow has no successful push or merge-queue run with build-storybook for ${sourceSha}.`);
+    }
+    await sleep(10_000);
   }
   throw new Error("Canonical Storybook workflow lookup exhausted unexpectedly.");
 }
@@ -266,42 +367,46 @@ export async function validateProductionDeploySource({
   const requiresAuthorizedDispatch =
     release.rollbackVersionId === "" &&
     release.acknowledgement === CSP_REPORT_ONLY_BREAK_GLASS_ACK;
-  const ciEvent = requiresAuthorizedDispatch ? "workflow_dispatch" : "push";
-  const ciRuns = await run("gh", [
-    "run", "list",
-    "--workflow", ".github/workflows/ci.yml",
-    "--branch", "main",
-    "--commit", release.sourceSha,
-    "--event", ciEvent,
-    "--status", "success",
-    "--limit", "100",
-    "--json", "databaseId,headSha,event",
-  ]);
-  const ciRunId = matchingRun(ciRuns, release.sourceSha, ciEvent, "Canonical CI workflow");
+  const repository = requiredEnv(env, "GITHUB_REPOSITORY");
   if (requiresAuthorizedDispatch) {
-    const repository = requiredEnv(env, "GITHUB_REPOSITORY");
+    const ciRuns = await run("gh", [
+      "run", "list",
+      "--workflow", CI_WORKFLOW_PATH,
+      "--branch", "main",
+      "--commit", release.sourceSha,
+      "--event", "workflow_dispatch",
+      "--status", "success",
+      "--limit", "100",
+      "--json", "databaseId,headSha,event",
+    ]);
+    const ciRunId = matchingRun(ciRuns, release.sourceSha, "workflow_dispatch", "Canonical CI workflow");
     validateDispatchAudit(
       await run("gh", ["api", `repos/${repository}/actions/runs/${ciRunId}`]),
       release.sourceSha,
     );
+    requireSuccessfulJobs(
+      await run("gh", ["run", "view", String(ciRunId), "--json", "jobs"]),
+      REPORT_ONLY_CI_JOB_NAMES,
+      `Report-only CI run ${ciRunId}`,
+    );
+  } else if (!await findEvidenceRun({
+    run,
+    repository,
+    workflowPath: CI_WORKFLOW_PATH,
+    sha: release.sourceSha,
+    jobs: CANONICAL_CI_JOB_NAMES,
+    label: "Canonical CI run",
+  })) {
+    throw new Error(`Canonical CI workflow has no successful push or merge-queue run with every canonical job (${CANONICAL_CI_JOB_NAMES.join(", ")}) for ${release.sourceSha}.`);
   }
-  requireSuccessfulJobs(
-    await run("gh", ["run", "view", String(ciRunId), "--json", "jobs"]),
-    requiresAuthorizedDispatch ? REPORT_ONLY_CI_JOB_NAMES : CANONICAL_CI_JOB_NAMES,
-    `${requiresAuthorizedDispatch ? "Report-only" : "Canonical"} CI run ${ciRunId}`,
-  );
 
-  const storybookRunId = await findStorybookRun({
+  await findStorybookRun({
     run,
     sleep,
+    repository,
     sourceSha: release.sourceSha,
     attempts: storybookAttempts,
   });
-  requireSuccessfulJobs(
-    await run("gh", ["run", "view", String(storybookRunId), "--json", "jobs"]),
-    ["build-storybook"],
-    `Canonical Storybook run ${storybookRunId}`,
-  );
 }
 
 async function isAncestor(run, ancestor, descendant) {
@@ -314,26 +419,23 @@ async function isAncestor(run, ancestor, descendant) {
   }
 }
 
-// Whether this exact commit has a successful push CI run on main. Asked per commit, newest first,
-// so no window of recent runs can hide a newer green commit and let production move backwards.
-async function hasGreenPushCi(run, sha) {
-  const parsed = parseJson(await run("gh", [
-    "run", "list",
-    "--workflow", ".github/workflows/ci.yml",
-    "--branch", "main",
-    "--commit", sha,
-    "--event", "push",
-    "--status", "success",
-    "--limit", "1",
-    "--json", "databaseId,headSha,event",
-  ]), "Canonical CI workflow");
-  if (!Array.isArray(parsed)) throw new Error("Canonical CI workflow did not return a run list.");
-  return parsed.some((entry) => entry && typeof entry === "object" && entry.event === "push" && entry.headSha === sha);
+// Whether this exact commit passed canonical CI, by the same rule the deploy validates. Asked per
+// commit, newest first, so no window of recent runs can hide a newer green commit and let
+// production move backwards.
+async function hasCanonicalCi(run, repository, sha) {
+  return await findEvidenceRun({
+    run,
+    repository,
+    workflowPath: CI_WORKFLOW_PATH,
+    sha,
+    jobs: CANONICAL_CI_JOB_NAMES,
+    label: "Canonical CI run",
+  }) !== null;
 }
 
 // Chooses what this Production Deploy run releases. A dispatch releases exactly its input. A
 // workflow_run releases the newest main commit, from the tip back to the commit whose CI triggered
-// it, that has a successful push CI run: so a deploy that waited while main moved ships the newest
+// it, that has green canonical CI (findEvidenceRun): so a deploy that waited while main moved ships the newest
 // tested commit instead of refusing, a deploy that runs after a newer one never moves production
 // backwards, and a pending deploy that GitHub replaced loses nothing. Any doubt fails closed.
 export async function chooseReleaseTarget({
@@ -349,6 +451,7 @@ export async function chooseReleaseTarget({
   let reason = "Manual dispatch: releasing the requested commit.";
 
   if (event === "workflow_run") {
+    const repository = requiredEnv(env, "GITHUB_REPOSITORY");
     await run("git", ["fetch", "--no-tags", "origin", "main:refs/remotes/origin/main"]);
     if (!await isAncestor(run, requested, "origin/main")) {
       throw new Error(`Triggering commit ${requested} is not on main; refusing to choose a release.`);
@@ -358,20 +461,20 @@ export async function chooseReleaseTarget({
     if (newer.some((sha) => !SHA_PATTERN.test(sha))) throw new Error("git rev-list returned a malformed commit.");
     let chosen;
     for (const sha of [...newer, requested]) {
-      if (await hasGreenPushCi(run, sha)) {
+      if (await hasCanonicalCi(run, repository, sha)) {
         chosen = sha;
         break;
       }
     }
     if (!chosen) {
-      throw new Error(`No commit from ${requested} to main's tip has a successful push CI run; refusing to deploy.`);
+      throw new Error(`No commit from ${requested} to main's tip has green canonical CI; refusing to deploy.`);
     }
     target = chosen;
     reason = chosen === requested
       ? newer.length === 0
         ? "The triggering commit is main's tip."
-        : `The triggering commit is the newest green main commit; ${newer.length} newer commit(s) have no successful push CI yet.`
-      : `Main moved on; ${chosen} is the newest main commit with a successful push CI run, so this run releases it instead.`;
+        : `The triggering commit is the newest green main commit; ${newer.length} newer commit(s) have no green canonical CI yet.`
+      : `Main moved on; ${chosen} is the newest main commit with green canonical CI, so this run releases it instead.`;
   } else if (event !== "workflow_dispatch") {
     throw new Error(`Unsupported production release event: ${event}.`);
   }
@@ -388,6 +491,50 @@ export async function chooseReleaseTarget({
   return target;
 }
 
+// For a push to main, reports whether the merge queue already ran this workflow's named jobs on
+// this exact commit (tested=true), so the push run can skip repeating them. Anything else reports
+// tested=false and the push run does the full work: a push that bypassed the queue, a missing,
+// failed or partly skipped queue run, a run from another repository, or any lookup error.
+export async function reportQueueTested({
+  mode,
+  env = process.env,
+  run = runWorkflowCommand,
+  appendFile = appendFileSync,
+} = {}) {
+  const spec = QUEUE_TESTED_MODES[mode];
+  if (!spec) throw new Error(`Unknown queue-tested mode: ${mode}.`);
+  const output = requiredEnv(env, "GITHUB_OUTPUT");
+  const summary = requiredEnv(env, "GITHUB_STEP_SUMMARY");
+  let tested = false;
+  let why;
+  try {
+    if (env.GITHUB_EVENT_NAME !== "push" || env.GITHUB_REF !== "refs/heads/main") {
+      why = "This is not a push to main, so the full jobs run.";
+    } else {
+      const sha = exactSha(requiredEnv(env, "GITHUB_SHA"), "GITHUB_SHA");
+      const repository = requiredEnv(env, "GITHUB_REPOSITORY");
+      const runId = await firstRunWithJobs(
+        run,
+        await mergeQueueRunIds(run, repository, spec.workflowPath, sha),
+        spec.jobs,
+        "Merge-queue run",
+      );
+      if (runId === null) {
+        why = `No successful merge-queue run of ${spec.workflowPath} passed ${spec.jobs.join(", ")} on ${sha}, so the full jobs run.`;
+      } else {
+        tested = true;
+        why = `Merge-queue run ${runId} already passed ${spec.jobs.join(", ")} on ${sha}, so this push skips them.`;
+      }
+    }
+  } catch (error) {
+    tested = false;
+    why = `The merge-queue lookup failed (${error instanceof Error ? error.message : String(error)}), so the full jobs run.`;
+  }
+  appendFile(output, `tested=${tested}\n`);
+  appendFile(summary, ["### Merge-queue result", "", why, ""].join("\n"));
+  return tested;
+}
+
 export async function main(argv = process.argv.slice(2), deps = {}) {
   if (argv.length !== 1) throw new Error("workflow-security requires exactly one validation mode.");
   if (argv[0] === "validate-ci-invocation") {
@@ -400,6 +547,10 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
   }
   if (argv[0] === "choose-release-target") {
     await chooseReleaseTarget(deps);
+    return;
+  }
+  if (Object.hasOwn(QUEUE_TESTED_MODES, argv[0])) {
+    await reportQueueTested({ ...deps, mode: argv[0] });
     return;
   }
   if (argv[0] === "run-production-deploy") {

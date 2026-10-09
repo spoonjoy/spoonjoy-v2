@@ -56,6 +56,8 @@ function secureProductionDeployWorkflow(
 
 const COVERAGE_JOB_NAME_LINE =
   "    name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-coverage' || 'coverage' }}";
+const CANONICAL_CI_JOB_IF_LINE = "    if: ${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' }}";
+const COVERAGE_JOB_HEAD = `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    needs: queue-tested\n${CANONICAL_CI_JOB_IF_LINE}\n`;
 const STORYBOOK_JOB_NAME_LINE =
   "    name: ${{ github.event_name == 'workflow_dispatch' && 'manual-build-storybook' || 'build-storybook' }}";
 
@@ -2820,8 +2822,8 @@ describe("deployment preflight", () => {
     ],
     [
       "job ENV",
-      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    runs-on:`,
-      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    env:\n      ENV: /tmp/bypass\n    runs-on:`,
+      `${COVERAGE_JOB_HEAD}    runs-on:`,
+      `${COVERAGE_JOB_HEAD}    env:\n      ENV: /tmp/bypass\n    runs-on:`,
     ],
     [
       "step SHELLOPTS",
@@ -2881,8 +2883,8 @@ describe("deployment preflight", () => {
   it.each([
     [
       "job if false",
-      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    runs-on:`,
-      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    if: false\n    runs-on:`,
+      `${COVERAGE_JOB_HEAD}    runs-on:`,
+      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    needs: queue-tested\n    if: false\n    runs-on:`,
     ],
     [
       "required step if false",
@@ -2906,8 +2908,8 @@ describe("deployment preflight", () => {
     ],
     [
       "inline-map BASH_ENV",
-      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    runs-on:`,
-      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    env: {BASH_ENV: /tmp/preload}\n    runs-on:`,
+      `${COVERAGE_JOB_HEAD}    runs-on:`,
+      `${COVERAGE_JOB_HEAD}    env: {BASH_ENV: /tmp/preload}\n    runs-on:`,
     ],
     [
       "NODE_OPTIONS preload",
@@ -2916,8 +2918,8 @@ describe("deployment preflight", () => {
     ],
     [
       "case-folded dangerous env",
-      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    runs-on:`,
-      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    env: {node_options: --require=/tmp/preload.cjs}\n    runs-on:`,
+      `${COVERAGE_JOB_HEAD}    runs-on:`,
+      `${COVERAGE_JOB_HEAD}    env: {node_options: --require=/tmp/preload.cjs}\n    runs-on:`,
     ],
     [
       "extra trigger",
@@ -3307,12 +3309,31 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
   });
 
+  it.each([
+    ["queue-tested runs on every event", "  queue-tested:\n    if: github.event_name == 'push'\n", "  queue-tested:\n    if: always()\n"],
+    ["queue-tested gains write access", "    permissions:\n      actions: read\n      contents: read\n    outputs:\n      tested:", "    permissions:\n      actions: write\n      contents: read\n    outputs:\n      tested:"],
+    ["queue-tested answers without looking", "        run: node scripts/workflow-security.mjs queue-tested-ci", "        run: echo tested=true >> \"$GITHUB_OUTPUT\""],
+    ["queue-tested reads another workflow's result", "        run: node scripts/workflow-security.mjs queue-tested-ci", "        run: node scripts/workflow-security.mjs queue-tested-journeys"],
+    ["queue-tested's output comes from elsewhere", "      tested: ${{ steps.lookup.outputs.tested }}", "      tested: 'true'"],
+    ["a canonical job skips whatever queue-tested says", `${COVERAGE_JOB_HEAD}`, `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    needs: queue-tested\n    if: \${{ needs.queue-tested.result == 'success' }}\n`],
+    ["a canonical job drops its dependency on queue-tested", `${COVERAGE_JOB_HEAD}`, `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n${CANONICAL_CI_JOB_IF_LINE}\n`],
+    ["a canonical job depends on something else", `${COVERAGE_JOB_HEAD}`, `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    needs: advisory\n${CANONICAL_CI_JOB_IF_LINE}\n`],
+    ["queue-tested is removed", "\n  queue-tested:\n", "\n  queue-tested-removed:\n"],
+  ])("rejects a CI workflow where %s", (_label, expected, replacement) => {
+    const inputs = validInputs();
+    inputs.ciWorkflow = replaceRequired(validCiWorkflow(), expected, replacement);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("CI workflow");
+  });
+
   it("rejects a command-free CI metadata job without warning-clean setup", () => {
     const inputs = validInputs();
     inputs.ciWorkflow = replaceRequired(
       validCiWorkflow(),
-      "jobs:\n  advisory:",
-      "jobs:\n  metadata:\n    runs-on: ubuntu-latest\n  advisory:",
+      "\n  advisory:\n",
+      "\n  metadata:\n    runs-on: ubuntu-latest\n  advisory:\n",
     );
 
     const result = validateDeploymentConfig(inputs);
