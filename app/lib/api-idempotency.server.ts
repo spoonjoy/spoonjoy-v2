@@ -172,11 +172,15 @@ export async function completeIdempotencyKey(
   });
 }
 
-/** A short, stable description of a failed key save for logs: the Prisma error code, or the message. */
+/**
+ * A short, stable description of a failed key save for logs: the Prisma error code, or the
+ * first line of the message. Only the first line, because a Prisma validation message goes on
+ * to print the call, including the response body being saved.
+ */
 export function idempotencyCompletionFailureSummary(error: unknown): string {
   const code = (error as { code?: unknown } | null)?.code;
   if (typeof code === "string") return code;
-  return error instanceof Error ? error.message : String(error);
+  return (error instanceof Error ? error.message : String(error)).split("\n")[0]!;
 }
 
 /**

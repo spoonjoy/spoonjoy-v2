@@ -215,6 +215,7 @@ describe("API v1 idempotent mutation recovery", () => {
     ] as const) {
       const requestId = `req_${clientMutationId.replaceAll("-", "_")}`;
       const body = { clientMutationId, title: `Recipe ${clientMutationId}` };
+      let deletedKeyId: string | undefined;
       expectConsoleError("[api-v1] idempotency_completion_failed", { requestId, operation: "recipes.create", error: "P2025" });
       const response = await runIdempotentApiV1Mutation(
         routeArgs(mutationRequest(requestId, body), "recipes"),
@@ -225,10 +226,13 @@ describe("API v1 idempotent mutation recovery", () => {
         "recipes.create",
         async (database, reservation) => {
           await database.apiIdempotencyKey.delete({ where: { id: reservation.id } });
+          deletedKeyId = reservation.id;
           return { status: 201, data: { mutation: { clientMutationId, replayed: false } } };
         },
         recovery,
       );
+      // The premise: the key the response would be saved on is gone.
+      await expect(db.apiIdempotencyKey.findUnique({ where: { id: deletedKeyId! } })).resolves.toBeNull();
 
       expect(response.status).toBe(201);
       await expect(readJson(response)).resolves.toEqual({

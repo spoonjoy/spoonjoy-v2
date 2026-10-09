@@ -539,6 +539,8 @@ describe("API idempotency helpers", () => {
   it("summarizes a failed key save by its Prisma code, or its message", () => {
     expect(idempotencyCompletionFailureSummary(Object.assign(new Error("Record not found"), { code: "P2025" }))).toBe("P2025");
     expect(idempotencyCompletionFailureSummary(new Error("D1 is down"))).toBe("D1 is down");
+    expect(idempotencyCompletionFailureSummary(new Error("Invalid `update()` invocation:\n  data: { responseBody: \"Chef's soup\" }")))
+      .toBe("Invalid `update()` invocation:");
     expect(idempotencyCompletionFailureSummary("timeout")).toBe("timeout");
     expect(idempotencyCompletionFailureSummary(null)).toBe("null");
   });
