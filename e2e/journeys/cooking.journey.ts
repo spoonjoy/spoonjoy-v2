@@ -192,6 +192,46 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await expectAccessible();
     });
 
+    test("a cook-mode timer keeps running on another step, survives a reload, and can be cancelled @mutates", async ({ page, verifyAfterReload, expectAccessible }) => {
+      const panel = page.getByTestId("cook-mode-panel");
+      const stepTimer = panel.getByTestId("cook-mode-timer");
+      const tray = panel.getByRole("region", { name: "Running timers" });
+      const riceTimer = tray.getByTestId("cook-timer-tray-item-1");
+
+      await openLemonRiceDirectly(page);
+      // The reload below must find cook mode on step 2, so wait for the account to save that step.
+      const onStepTwo = cookProgressSaved(page, LEMON_RICE_ID, (progress) => progress.activeStepIndex === 1);
+      await page.getByRole("link", { name: "Cook mode", exact: true }).click();
+      await expect(panel).toContainText("Step 1 of 3");
+      // Step 1 ("Cook the rice") is seeded with a 15 minute timer.
+      await expect(stepTimer).toContainText("15 min timer");
+      await stepTimer.getByRole("button", { name: "Start timer", exact: true }).click();
+      await expect(stepTimer.getByRole("button", { name: "Pause timer", exact: true })).toBeVisible();
+      await expect(stepTimer).toContainText("14:5");
+
+      // Moving on to the dressing keeps the rice timer counting, in the tray.
+      await panel.getByRole("button", { name: "Next step" }).click();
+      await expect(panel).toContainText("Step 2 of 3");
+      await expect(riceTimer).toContainText("Step 1 · Cook the rice");
+      await expect(riceTimer).toContainText("14:");
+      await expectAccessible();
+      await onStepTwo;
+
+      // The timer is anchored to its end time, so a reload keeps it running.
+      await verifyAfterReload(async () => {
+        await expect(panel).toContainText("Step 2 of 3");
+        await expect(riceTimer).toContainText("14:");
+      });
+
+      await riceTimer.getByRole("button", { name: "Go to step 1", exact: true }).click();
+      await expect(panel).toContainText("Step 1 of 3");
+      await expect(stepTimer.getByRole("button", { name: "Pause timer", exact: true })).toBeVisible();
+      await stepTimer.getByRole("button", { name: "Cancel timer", exact: true }).click();
+      await expect(stepTimer.getByRole("button", { name: "Start timer", exact: true })).toBeVisible();
+      await expect(stepTimer).toContainText("15:00");
+      await expect(tray).toBeHidden();
+    });
+
     test("Clear progress unchecks everything and stays cleared after a reload @mutates", async ({ page, verifyAfterReload, expectAccessible }) => {
       const jasmineRice = page.getByRole("checkbox", { name: "jasmine rice", exact: true });
       const cookedRice = page.getByRole("checkbox", { name: "Step 1: Cook the rice", exact: true });
