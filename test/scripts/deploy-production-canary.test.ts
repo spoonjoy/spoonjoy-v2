@@ -3755,6 +3755,24 @@ describe("production canary release orchestration", () => {
     });
   });
 
+  it("targets the QA Worker name only when the rehearsal override is given", async () => {
+    const fetchImpl = vi.fn(async () => new Response("ok", { status: 200 }));
+    await readCandidateCspHeaders("https://example.test", CANDIDATE_VERSION, fetchImpl as unknown as typeof fetch);
+    await readCandidateCspHeaders(
+      "https://example.test",
+      CANDIDATE_VERSION,
+      fetchImpl as unknown as typeof fetch,
+      "spoonjoy-v2-qa",
+    );
+    const overrides = fetchImpl.mock.calls.map(([, init]) => (
+      (init as RequestInit).headers as Record<string, string>
+    )["Cloudflare-Workers-Version-Overrides"]);
+    expect(overrides).toEqual([
+      `spoonjoy-v2="${CANDIDATE_VERSION}"`,
+      `spoonjoy-v2-qa="${CANDIDATE_VERSION}"`,
+    ]);
+  });
+
   it("restores the previous version when the candidate smoke fails", async () => {
     const smokeCommand = `pnpm run smoke:mcp:oauth -- --out mcp-oauth-canary-artifacts --worker-version-id ${CANDIDATE_VERSION}`;
     const runCommand = successfulRunner({

@@ -319,6 +319,8 @@ export async function readCandidateCspHeaders(
   baseUrl: string,
   candidateVersionId: string,
   fetchImpl: typeof fetch = fetch,
+  // Production is always "spoonjoy-v2"; the QA rehearsal in DEPLOY.md sets SPOONJOY_WORKER_NAME=spoonjoy-v2-qa.
+  workerName: string = process.env.SPOONJOY_WORKER_NAME || "spoonjoy-v2",
 ): Promise<Headers> {
   requireWorkerVersionId(candidateVersionId, "Candidate CSP verification");
   const verificationUrl = new URL("/", baseUrl);
@@ -327,7 +329,7 @@ export async function readCandidateCspHeaders(
     cache: "no-store",
     headers: {
       Accept: "text/html",
-      "Cloudflare-Workers-Version-Overrides": buildWorkerVersionOverride("spoonjoy-v2", candidateVersionId),
+      "Cloudflare-Workers-Version-Overrides": buildWorkerVersionOverride(workerName, candidateVersionId),
     },
     redirect: "error",
   });
