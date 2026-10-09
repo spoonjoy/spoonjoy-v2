@@ -1171,11 +1171,11 @@ async function replaceRecipeSteps(db: PrismaClientType, recipeId: string, steps:
     ingredientRefIds.set(name, (await getOrCreateIngredientRef(db, name)).id);
   }
 
-  // Atomic swap as a single D1 batch: clear-then-rebuild as one transaction so
-  // a mid-sequence failure rolls back the deletes instead of permanently
-  // gutting the recipe. D1 doesn't support Prisma's interactive
-  // `$transaction(async tx => ...)` form, but it does support the batched
-  // PrismaPromise[] form, which is what we use here.
+  // Clear-then-rebuild as one Prisma array transaction, so a mid-sequence failure rolls back
+  // the deletes. This is atomic only without a D1 binding (SQLite in tests and scripts):
+  // Prisma's D1 adapter runs both the array and the interactive `$transaction` forms as
+  // separate statements. Production callers with a binding replace the steps with
+  // recipeStepsReplaceStatements in one d1WriteBatch instead.
   const ops: Prisma.PrismaPromise<unknown>[] = [
     db.stepOutputUse.deleteMany({ where: { recipeId } }),
     db.ingredient.deleteMany({ where: { recipeId } }),
