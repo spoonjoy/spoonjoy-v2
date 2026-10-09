@@ -251,7 +251,7 @@ test.describe('OAuth authorize + consent flow', () => {
     expect(new URL(page.url()).pathname).toBe('/oauth/authorize');
     await expect(page.getByText(/read recipes, cookbooks, and your shopping list/i)).toBeVisible();
     await expect(page.getByText(/this connection stays active until you disconnect it/i)).toBeVisible();
-    const allow = page.getByRole('button', { name: /allow access/i });
+    const allow = page.getByRole('button', { name: /approve access/i });
     await expect(allow).toBeVisible();
     await expectNativeSubmitForm(allow);
     await expectConsentFitsDesktop(page);

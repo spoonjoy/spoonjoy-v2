@@ -247,7 +247,7 @@ async function approveConsent(page, { baseUrl, clientId, codeChallenge, resource
   await expect(page.getByRole("heading", { name: /connect claude to spoonjoy/i })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(/read recipes, cookbooks, and your shopping list/i)).toBeVisible();
   await expect(page.getByText(/add, edit, and remove kitchen data/i)).toBeVisible();
-  const allow = page.getByRole("button", { name: /allow access/i });
+  const allow = page.getByRole("button", { name: /approve access/i });
   await expect(allow).toBeVisible();
   await expect(allow.locator("xpath=ancestor::form[1]")).toHaveAttribute("method", "post");
   await expect(allow.locator("xpath=ancestor::form[1]")).not.toHaveAttribute("data-discover", /.*/);
