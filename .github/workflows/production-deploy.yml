@@ -41,12 +41,47 @@ env:
   SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: ${{ github.event_name == 'workflow_dispatch' && inputs.csp_report_only_break_glass || '' }}
 
 jobs:
+  # Chooses the commit this run releases (scripts/workflow-security.mjs choose-release-target): for a
+  # CI completion, the newest main commit with green canonical CI (a push run, or the merge-queue run
+  # that tested the same commit), so a deploy that waited while main moved ships the newest tested
+  # commit instead of refusing; for a dispatch, exactly source_sha. It runs the trusted workflow
+  # tooling with only a read token, and fails closed. When it fails, deploy and report-canary skip,
+  # so the failed run itself is the only signal: GitHub notifies on the failed workflow run, and
+  # production keeps running the commit it had.
+  release-target:
+    name: release-target
+    if: (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.path == '.github/workflows/ci.yml') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      source_sha: ${{ steps.target.outputs.source_sha }}
+      release: ${{ steps.target.outputs.release }}
+
+    steps:
+      - name: Checkout trusted release tooling
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Choose the newest green main commit
+        id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/workflow-security.mjs choose-release-target
+
+  # Skips, with report-canary, when release-target finds production already runs the chosen commit
+  # or a newer one: a superseded run is green with a notice, not a failure.
   deploy:
     name: deploy
-    if: (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.path == '.github/workflows/ci.yml') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    needs: release-target
+    if: ((github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.path == '.github/workflows/ci.yml') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')) && needs.release-target.outputs.release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     environment: production
+    env:
+      SOURCE_SHA: ${{ needs.release-target.outputs.source_sha }}
 
     steps:
       - name: Checkout approved source SHA
@@ -75,6 +110,9 @@ jobs:
           WORKFLOW_RUN_PATH: ${{ github.event.workflow_run.path }}
         run: |
           set -euo pipefail
+          # Every check below names itself in the log when it fails, instead of ending the step
+          # with only "Process completed with exit code 1".
+          trap 'echo "::error title=Release source refused::Check failed: $BASH_COMMAND" >&2' ERR
 
           if ! printf '%s' "$SOURCE_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
             echo "source_sha must be an exact 40-character lowercase Git SHA" >&2
@@ -82,7 +120,7 @@ jobs:
           fi
           case "$SPOONJOY_RELEASE_MODE" in
             atomic-bootstrap|atomic-product-activation|protocol-v1-canary) ;;
-            *) exit 1 ;;
+            *) echo "::error title=Release source refused::Unknown SPOONJOY_RELEASE_MODE: $SPOONJOY_RELEASE_MODE" >&2; exit 1 ;;
           esac
           if [ "$SPOONJOY_RELEASE_MODE" = "protocol-v1-canary" ]; then
             protocol_boundary_marker=workers/cook-session-protocol-v1-boundary
@@ -108,14 +146,17 @@ jobs:
             exit 1
           fi
 
-          test "$WORKFLOW_RUN_PATH" = '.github/workflows/ci.yml' || test "$GITHUB_EVENT_NAME" = 'workflow_dispatch'
+          if [ "$WORKFLOW_RUN_PATH" != '.github/workflows/ci.yml' ] && [ "$GITHUB_EVENT_NAME" != 'workflow_dispatch' ]; then
+            echo "::error title=Release source refused::The triggering run came from $WORKFLOW_RUN_PATH, not .github/workflows/ci.yml" >&2
+            exit 1
+          fi
           if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
             test -z "$ROLLBACK_VERSION_ID"
             test "$WORKFLOW_RUN_CONCLUSION" = "success"
             test "$WORKFLOW_RUN_EVENT" = "push"
             test "$WORKFLOW_RUN_HEAD_BRANCH" = "main"
-            test "$WORKFLOW_RUN_HEAD_SHA" = "$SOURCE_SHA"
-            test "$(git rev-parse origin/main)" = "$SOURCE_SHA"
+            printf '%s' "$WORKFLOW_RUN_HEAD_SHA" | grep -Eq '^[0-9a-f]{40}$'
+            git merge-base --is-ancestor "$WORKFLOW_RUN_HEAD_SHA" "$SOURCE_SHA"
             test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           else
             if [ -z "$ROLLBACK_VERSION_ID" ]; then

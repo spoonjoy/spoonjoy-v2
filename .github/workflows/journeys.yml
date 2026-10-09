@@ -53,6 +53,34 @@ jobs:
     steps:
       - run: echo "::warning::Journeys need QA credentials and do not run for fork pull requests. A maintainer must re-run them from a same-repo branch."
 
+  # After a merge-queue merge, main's new commit is exactly the commit the queue's Journeys run
+  # already tested. On a push to main, queue-tested asks GitHub whether that run's journeys job
+  # passed; if it did, journeys skips on this push and deploy-shared-qa still mirrors main. A push
+  # that bypassed the queue, a missing or failed queue run, or any lookup error runs the suite.
+  queue-tested:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      tested: ${{ steps.lookup.outputs.tested }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+
+      - name: Ask whether the merge queue already tested this commit
+        id: lookup
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/workflow-security.mjs queue-tested-journeys
+
   # `journeys` is the required check. It builds this commit for QA, checks the build against the
   # QA config, gives the run its own QA stack (Worker, D1 and URL; scripts/qa-run-scope.mjs),
   # deploys there, seeds it, runs the suite, and deletes the stack as its last step. Steps that
@@ -60,7 +88,8 @@ jobs:
   # was created. The Cloudflare token is given only to the steps that need it, never to
   # `pnpm install`, which runs dependency install scripts from the pull request's lockfile.
   journeys:
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    needs: queue-tested
+    if: ${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     name: journeys
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -370,8 +399,8 @@ jobs:
   # there, applying main's migrations to shared QA. One deploy at a time, and only while the
   # commit is still main's tip.
   deploy-shared-qa:
-    needs: journeys
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.journeys.result == 'success' }}
+    needs: [queue-tested, journeys]
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.journeys.result == 'success' || (needs.journeys.result == 'skipped' && needs.queue-tested.outputs.tested == 'true')) }}
     name: deploy main to shared QA
     runs-on: ubuntu-latest
     timeout-minutes: 30
