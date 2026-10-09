@@ -6647,7 +6647,7 @@ async function handleTokenCreate(args: ApiV1RouteArgs, requestId: string, authen
   const db = await getRequestDb(args.context);
   let created: Awaited<ReturnType<typeof createApiCredentialForPrincipal>>;
   try {
-    created = await createApiCredentialForPrincipal(db, authenticated, name, { scopes: storedScopes });
+    created = await createApiCredentialForPrincipal(db, authenticated, name, { scopes: storedScopes, d1: requestD1(args.context) });
   } catch (error) {
     // Sign out everywhere or a password change landed while the token was created.
     if (error instanceof ApiAuthError) throw normalizeApiV1AuthError(error);

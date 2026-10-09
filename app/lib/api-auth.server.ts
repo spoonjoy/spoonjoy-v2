@@ -1,7 +1,8 @@
 import type { ApiCredential, PrismaClient as PrismaClientType, User } from "@prisma/client";
 import { getSessionIdentity, isCurrentSession, type SessionEnv } from "~/lib/session.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
-import { sessionVersionUnchanged } from "~/lib/session-version-fence.server";
+import type { D1Query, D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 
 export type ApiPrincipalSource = "session" | "bearer" | "environment";
 
@@ -218,27 +219,65 @@ export async function createApiCredential(
 }
 
 /**
- * Create a personal API token for the chef `principal` authenticated as. A token has no grant, so
- * nothing else would stop one created while sign out everywhere or a password change lands: the
- * session-version fence checks the version `principal` authenticated with after the insert, and
- * revokes the new token and refuses the request if it moved. A revocation that lands after the
- * check finds the token and revokes it itself.
+ * Create a personal API token for the chef `principal` authenticated as, fenced on how they
+ * authenticated: the insert only happens while the account's session version is still the one
+ * `principal` read and, for a bearer caller, while the calling token is still unrevoked.
+ *
+ * The check and the insert are one `INSERT ... SELECT ... WHERE` statement, so sign out
+ * everywhere or a password change lands either before it (nothing is inserted and the request
+ * is refused) or after it (the revocation's sweep finds the token). There is no insert-then-undo
+ * step that could fail and leave a token behind. Checking the calling token as well covers the
+ * bearer read itself: Prisma reads the token and its user in two queries, so a revocation in
+ * between hands the caller an unrevoked token and the new version, but the same atomic
+ * revocation also revoked the token, which the insert then sees.
+ *
+ * With a D1 binding the statement runs as a D1 batch; without one (unit tests, scripts) it runs
+ * through Prisma as the same single statement. Like the other fences, this relies on D1 read
+ * replication being off. An environment-configured owner carries neither a version nor a
+ * token, so nothing is fenced.
  */
 export async function createApiCredentialForPrincipal(
   db: PrismaClientType,
-  principal: Pick<ApiPrincipal, "id" | "sessionVersion">,
+  principal: Pick<ApiPrincipal, "id" | "sessionVersion" | "credentialId">,
   name: string,
-  options: { expiresAt?: Date | null; scopes?: string | string[] | null } = {},
+  options: { scopes?: string | string[] | null; d1?: D1ReadDatabase | null } = {},
 ): Promise<CreatedApiCredential> {
-  const created = await createApiCredential(db, principal.id, name, options);
-  if (principal.sessionVersion !== undefined && !(await sessionVersionUnchanged(db, principal.id, principal.sessionVersion))) {
-    await db.apiCredential.updateMany({
-      where: { id: created.credential.id, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
+  const guards: string[] = [];
+  const guardValues: unknown[] = [];
+  if (principal.sessionVersion !== undefined) {
+    guards.push(`EXISTS (SELECT 1 FROM "User" WHERE "id" = ? AND "sessionVersion" = ?)`);
+    guardValues.push(principal.id, principal.sessionVersion);
+  }
+  if (principal.credentialId) {
+    guards.push(`EXISTS (SELECT 1 FROM "ApiCredential" WHERE "id" = ? AND "userId" = ? AND "revokedAt" IS NULL)`);
+    guardValues.push(principal.credentialId, principal.id);
+  }
+  if (guards.length === 0) return createApiCredential(db, principal.id, name, options);
+
+  const token = generateApiToken();
+  const id = crypto.randomUUID();
+  const at = d1Timestamp(new Date());
+  const query: D1Query = [
+    `INSERT INTO "ApiCredential" ("id", "userId", "name", "tokenHash", "tokenPrefix", "scopes", "createdAt", "updatedAt")
+     SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE ${guards.join(" AND ")}`,
+    id,
+    principal.id,
+    name.trim(),
+    await hashApiToken(token),
+    token.slice(0, 12),
+    normalizeCredentialScopes(options.scopes),
+    at,
+    at,
+    ...guardValues,
+  ];
+  const [sql, ...values] = query;
+  const inserted = options.d1
+    ? (await d1WriteBatch(options.d1, [query]))[0].changes
+    : await db.$executeRawUnsafe(sql, ...values);
+  if (inserted !== 1) {
     throw new ApiAuthError("Your session was signed out. Sign in again to create a token.", 401);
   }
-  return created;
+  return { token, credential: await db.apiCredential.findUniqueOrThrow({ where: { id } }) };
 }
 
 export async function authenticateApiToken(

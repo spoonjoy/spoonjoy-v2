@@ -1397,9 +1397,9 @@ const createApiTokenTool: SpoonjoyApiOperation = {
     // A signed-in caller's token is fenced on the session version it authenticated with.
     const created = await createApiCredentialForPrincipal(
       context.db,
-      { id: owner.id, sessionVersion: context.principal?.sessionVersion },
+      { id: owner.id, sessionVersion: context.principal?.sessionVersion, credentialId: context.principal?.credentialId },
       name,
-      { scopes },
+      { scopes, d1: d1Binding(context.env?.DB) },
     );
 
     return json({

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { getLocalDb } from "~/lib/db.server";
 import { createUser } from "~/lib/auth.server";
@@ -20,6 +20,7 @@ import {
 } from "~/lib/oauth-server.server";
 import { readSessionVersion, sessionVersionUnchanged } from "~/lib/session-version-fence.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { sqliteD1 } from "../helpers/sqlite-d1";
 
 const ISSUER = "https://spoonjoy.app";
 const REDIRECT = "https://agent.example/cb";
@@ -264,47 +265,121 @@ describe("session-version fence", () => {
   });
 
   describe("personal API token creation", () => {
-    it("revokes a token whose creation sign out everywhere interrupts, and refuses the request", async () => {
-      const raced = racing(db, "apiCredential", "create", signOutEverywhere);
+    /** The guarded insert, with `before` landing just ahead of it. */
+    function racingInsert(before: () => Promise<unknown>) {
+      const execute = db.$executeRawUnsafe.bind(db);
+      let fired = false;
+      return vi.spyOn(db, "$executeRawUnsafe").mockImplementation((async (...args: [string, ...unknown[]]) => {
+        if (!fired && args[0].includes("INSERT INTO \"ApiCredential\"")) {
+          fired = true;
+          await before();
+        }
+        return execute(...args);
+      }) as any);
+    }
 
-      await expect(createApiCredentialForPrincipal(raced, { id: userId, sessionVersion: 0 }, "Laptop script"))
-        .rejects.toMatchObject({ status: 401 });
+    function createThroughApi(token: string) {
+      return apiV1Action({
+        request: new UndiciRequest("http://localhost/api/v1/tokens", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "X-Request-Id": "req_fence_token" },
+          body: JSON.stringify({ name: "Survivor" }),
+        }) as unknown as Request,
+        params: { "*": "tokens" },
+        context: { cloudflare: { env: null } },
+      } as any);
+    }
+
+    /** Nothing was inserted: not a live token, and not one revoked after the fact either. */
+    async function expectNoNewToken(name: string) {
+      expect(await db.apiCredential.count({ where: { userId, name } })).toBe(0);
       expect(await db.apiCredential.count({ where: { userId, revokedAt: null } })).toBe(0);
+    }
+
+    it("inserts nothing when sign out everywhere lands just before the insert", async () => {
+      const spy = racingInsert(signOutEverywhere);
+      try {
+        await expect(createApiCredentialForPrincipal(db, { id: userId, sessionVersion: 0 }, "Laptop script"))
+          .rejects.toMatchObject({ status: 401 });
+      } finally {
+        spy.mockRestore();
+      }
+      await expectNoNewToken("Laptop script");
     });
 
-    it("does not fence an environment-configured owner", async () => {
-      await signOutEverywhere();
-      const created = await createApiCredentialForPrincipal(db, { id: userId }, "Local script");
-      expect(created.credential.revokedAt).toBeNull();
+    it("inserts nothing on the D1 path when the version moved", async () => {
+      const d1 = sqliteD1();
+      try {
+        await signOutEverywhere();
+        await expect(createApiCredentialForPrincipal(db, { id: userId, sessionVersion: 0 }, "Laptop script", { d1: d1.binding as any }))
+          .rejects.toMatchObject({ status: 401 });
+        expect(d1.statements.some((statement) => statement.sql.includes("INSERT INTO \"ApiCredential\""))).toBe(true);
+      } finally {
+        d1.close();
+      }
+      await expectNoNewToken("Laptop script");
     });
 
-    it("refuses a token created through the API by a bearer token the sign-out revoked mid-request", async () => {
+    it("creates the token on the D1 path while the version holds", async () => {
+      const d1 = sqliteD1();
+      let created: Awaited<ReturnType<typeof createApiCredentialForPrincipal>>;
+      try {
+        created = await createApiCredentialForPrincipal(db, { id: userId, sessionVersion: 0 }, "Laptop script", {
+          d1: d1.binding as any, scopes: ["recipes:read"],
+        });
+      } finally {
+        d1.close();
+      }
+      const principal = await authenticateApiToken(db, created.token, ISSUER);
+      expect(principal).toMatchObject({ id: userId, scopes: expect.arrayContaining(["recipes:read"]) });
+      expect(created.credential).toMatchObject({ name: "Laptop script", revokedAt: null, expiresAt: null, scopes: "recipes:read" });
+    });
+
+    it("refuses a caller whose bearer token was revoked even when it read the new session version", async () => {
+      // Prisma reads the bearer token and its user in two queries; a revocation between them hands
+      // the caller an unrevoked token and the post-revocation version.
       const writer = await createApiCredential(db, userId, "Token writer", { scopes: ["tokens:write"] });
-      const create = db.apiCredential.create.bind(db.apiCredential);
+      const { sessionVersion } = await signOutEverywhere();
+
+      await expect(createApiCredentialForPrincipal(db, { id: userId, sessionVersion, credentialId: writer.credential.id }, "Survivor"))
+        .rejects.toMatchObject({ status: 401 });
+      await expectNoNewToken("Survivor");
+    });
+
+    it("refuses a token created through the API when the sign-out lands between the bearer token and user reads", async () => {
+      const writer = await createApiCredential(db, userId, "Token writer", { scopes: ["tokens:write"] });
+      const findUnique = db.apiCredential.findUnique.bind(db.apiCredential);
       let first = true;
-      const spy = (await import("vitest")).vi.spyOn(db.apiCredential, "create").mockImplementation((async (args: any) => {
-        if (first) {
+      const spy = vi.spyOn(db.apiCredential, "findUnique").mockImplementation((async (args: any) => {
+        const credential = await findUnique(args);
+        if (first && credential) {
           first = false;
           await signOutEverywhere();
+          (credential as any).user.sessionVersion = await readSessionVersion(db, userId);
         }
-        return create(args);
+        return credential;
       }) as any);
       try {
-        const response = await apiV1Action({
-          request: new UndiciRequest("http://localhost/api/v1/tokens", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${writer.token}`, "Content-Type": "application/json", "X-Request-Id": "req_fence_token" },
-            body: JSON.stringify({ name: "Survivor" }),
-          }) as unknown as Request,
-          params: { "*": "tokens" },
-          context: { cloudflare: { env: null } },
-        } as any);
+        const response = await createThroughApi(writer.token);
         expect(response.status).toBe(401);
         expect((await response.json() as any).error).toMatchObject({ code: "authentication_required" });
       } finally {
         spy.mockRestore();
       }
-      expect(await db.apiCredential.count({ where: { userId, revokedAt: null } })).toBe(0);
+      await expectNoNewToken("Survivor");
+    });
+
+    it("refuses a token created through the API when the sign-out lands just before the insert", async () => {
+      const writer = await createApiCredential(db, userId, "Token writer", { scopes: ["tokens:write"] });
+      const spy = racingInsert(signOutEverywhere);
+      try {
+        const response = await createThroughApi(writer.token);
+        expect(response.status).toBe(401);
+        expect((await response.json() as any).error).toMatchObject({ code: "authentication_required" });
+      } finally {
+        spy.mockRestore();
+      }
+      await expectNoNewToken("Survivor");
     });
 
     it("refuses a token created through MCP by a caller the sign-out revoked mid-request", async () => {
@@ -312,11 +387,20 @@ describe("session-version fence", () => {
       const principal = await authenticateApiToken(db, writer.token, ISSUER);
       expect(principal.sessionVersion).toBe(0);
 
-      await expect(callSpoonjoyMcpTool("create_api_token", { name: "Survivor" }, {
-        db: racing(db, "apiCredential", "create", signOutEverywhere),
-        principal,
-      })).rejects.toMatchObject({ status: 401 });
-      expect(await db.apiCredential.count({ where: { userId, revokedAt: null } })).toBe(0);
+      const spy = racingInsert(signOutEverywhere);
+      try {
+        await expect(callSpoonjoyMcpTool("create_api_token", { name: "Survivor" }, { db, principal }))
+          .rejects.toMatchObject({ status: 401 });
+      } finally {
+        spy.mockRestore();
+      }
+      await expectNoNewToken("Survivor");
+    });
+
+    it("does not fence an environment-configured owner", async () => {
+      await signOutEverywhere();
+      const created = await createApiCredentialForPrincipal(db, { id: userId }, "Local script");
+      expect(created.credential.revokedAt).toBeNull();
     });
   });
 
