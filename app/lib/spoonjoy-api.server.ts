@@ -95,7 +95,11 @@ import {
 } from "~/lib/notification-triggers.server";
 import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
-import { addRecipeToCookbook, asCompatibleCookbookD1Database } from "~/lib/cookbook-membership-compat.server";
+import {
+  addRecipeToCookbook,
+  asCompatibleCookbookD1Database,
+  removeRecipeFromCookbook,
+} from "~/lib/cookbook-membership-compat.server";
 import {
   addShoppingListItem,
   asCompatibleD1Database,
@@ -3213,14 +3217,16 @@ const removeRecipeFromCookbookTool: SpoonjoyApiOperation = {
     const cookbook = await findOwnerCookbook(context.db, owner.id, args);
     if (!cookbook) throw new Error("Cookbook not found");
 
-    const deleted = await context.db.recipeInCookbook.deleteMany({
-      where: {
-        cookbookId: cookbook.id,
-        recipeId,
-      },
+    // The same membership write as the web and REST paths: the removal and the cookbook
+    // touch (native sync's change marker) land together, as one D1 batch on the Worker.
+    const removed = await removeRecipeFromCookbook({
+      database: context.db,
+      nativeDatabase: asCompatibleCookbookD1Database(context.env?.DB),
+      cookbookId: cookbook.id,
+      recipeId,
     });
     const result = {
-      removed: deleted.count > 0,
+      removed,
       cookbook: await reloadOwnerCookbook(context.db, owner.id, cookbook.id),
     };
 
