@@ -250,7 +250,11 @@ describe("API v1 native account settings", () => {
     expect(emailChangePayload).toMatchObject({
       ok: false,
       requestId: "req_me_email_change",
-      error: { code: "insufficient_scope", details: { field: "email" } },
+      error: {
+        code: "email_change_requires_web",
+        message: "Your email can only be changed in Account settings on the Spoonjoy website.",
+        details: { field: "email" },
+      },
     });
 
 	    const emailConflict = await apiPatch("me", {
@@ -260,6 +264,21 @@ describe("API v1 native account settings", () => {
     expect(emailConflict.status).toBe(403);
     await expect(db.user.findUniqueOrThrow({ where: { id: userId } }))
       .resolves.toMatchObject({ email: currentEmail, username: newUsername });
+
+    // A queued username edit can carry an email cached before a change on the web. The username
+    // saves and the stale email is ignored, never written.
+    const renamed = `${newUsername}x`.slice(0, 30);
+    const staleEmail = await apiPatch("me", {
+      Authorization: `Bearer ${bearer.token}`,
+    }, "req_me_stale_email", { clientMutationId: "cm_me_stale_email", email: faker.internet.email(), username: renamed });
+    expect(staleEmail.status).toBe(200);
+    expect((await readJson(staleEmail)).data).toMatchObject({ email: currentEmail, username: renamed });
+    await expect(db.user.findUniqueOrThrow({ where: { id: userId } }))
+      .resolves.toMatchObject({ email: currentEmail, username: renamed });
+    const restored = await apiPatch("me", {
+      Authorization: `Bearer ${bearer.token}`,
+    }, "req_me_restore_username", { clientMutationId: "cm_me_restore_username", email: currentEmail, username: newUsername });
+    expect(restored.status).toBe(200);
 
 	    const usernameConflict = await apiPatch("me", {
 	      Authorization: `Bearer ${bearer.token}`,

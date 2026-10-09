@@ -334,8 +334,19 @@ export async function linkOAuthAccountByVerifiedEmail(
 
   const normalizedEmail = oauthData.email.toLowerCase();
   const existingUsers = await db.$queryRaw<Array<{ id: string; emailVerifiedAt: unknown }>>`
-    SELECT id, emailVerifiedAt FROM User WHERE LOWER(email) = ${normalizedEmail} LIMIT 1
+    SELECT id, emailVerifiedAt FROM User WHERE LOWER(email) = ${normalizedEmail} LIMIT 2
   `;
+
+  // Older accounts can share an address that differs only in case. Linking would pick one of them
+  // at random, so the provider sign-in is refused and the person signs in the way they usually do.
+  if (existingUsers.length > 1) {
+    return {
+      success: false,
+      error: "account_exists_unverified",
+      message:
+        "An account with this email already exists. Sign in to it the way you usually do, then link this sign-in from Account settings.",
+    };
+  }
 
   const existingUser = existingUsers[0];
   if (!existingUser) {
@@ -351,7 +362,7 @@ export async function linkOAuthAccountByVerifiedEmail(
       success: false,
       error: "account_exists_unverified",
       message:
-        "An account with this email already exists. Sign in to it with your password or passkey, then link this sign-in from Account settings.",
+        "An account with this email already exists. Sign in to it the way you usually do, then link this sign-in from Account settings.",
     };
   }
 
@@ -380,8 +391,10 @@ export async function markEmailVerifiedByProvider(
   const user = await db.user.findUnique({ where: { id: userId }, select: { email: true, emailVerifiedAt: true } });
   if (!user || user.emailVerifiedAt || user.email.toLowerCase() !== providerEmail.toLowerCase()) return false;
   // A typed write, so the timestamp is stored in the same format as every other Prisma DateTime.
+  // The write re-checks the address it read: an email change landing between the read and this
+  // write would otherwise mark the new, unproven address as verified.
   const result = await db.user.updateMany({
-    where: { id: userId, emailVerifiedAt: null },
+    where: { id: userId, emailVerifiedAt: null, email: user.email },
     data: { emailVerifiedAt: new Date() },
   });
   return result.count === 1;

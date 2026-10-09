@@ -848,4 +848,29 @@ describe("google-oauth-callback.server", () => {
       });
     });
   });
+  // Accounts made before email verification existed become verified when they sign in again
+  // through a provider that vouches for the account's own address, and only then.
+  it("verifies a returning google account whose email the provider vouches for", async () => {
+    const existingUser = await db.user.create({ data: { ...createTestUser(), email: "returning.google@example.com" } });
+    testUserIds.push(existingUser.id);
+    const providerUserId = faker.string.numeric(10);
+    await db.oAuth.create({
+      data: { userId: existingUser.id, provider: "google", providerUserId, providerUsername: "returning" },
+    });
+    const signIn = (email: string, emailVerified: boolean) =>
+      handleGoogleOAuthCallback({
+        db,
+        googleUser: createMockGoogleUser({ id: providerUserId, email, emailVerified }),
+        currentUserId: null,
+        redirectTo: null,
+      });
+    const verifiedAt = async () => (await db.user.findUniqueOrThrow({ where: { id: existingUser.id } })).emailVerifiedAt;
+
+    await expect(signIn("returning.google@example.com", false)).resolves.toMatchObject({ action: "user_logged_in" });
+    await expect(signIn("someone.else@example.com", true)).resolves.toMatchObject({ action: "user_logged_in" });
+    expect(await verifiedAt()).toBeNull();
+
+    await expect(signIn("Returning.google@Example.com", true)).resolves.toMatchObject({ action: "user_logged_in" });
+    expect(await verifiedAt()).toBeInstanceOf(Date);
+  });
 });

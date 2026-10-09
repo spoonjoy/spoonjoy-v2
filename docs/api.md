@@ -362,7 +362,7 @@ Public recipe and cookbook endpoints can be called anonymously. If you send cred
 
 Omit `Authorization` on public calls unless you require authenticated behavior. A stale bearer token on an optional public endpoint returns `401 invalid_token`; Spoonjoy does not silently ignore a bad credential and fall back to anonymous.
 
-Treat `authentication_required` and `invalid_token` as `401` responses. Treat `insufficient_scope` as `403`. A malformed `Authorization` header returns `validation_error`. Send your own `X-Request-Id` when you have one, and log the response `requestId` so failures can be traced.
+Treat `authentication_required` and `invalid_token` as `401` responses. Treat `insufficient_scope` as `403`. `PATCH /api/v1/me` never changes the email: a request that changes only the email returns `403 email_change_requires_web` (send the person to Account settings on the website), and a request that also changes the username saves the username and ignores the email. A malformed `Authorization` header returns `validation_error`. Send your own `X-Request-Id` when you have one, and log the response `requestId` so failures can be traced.
 
 ## OAuth And Delegated Flows
 

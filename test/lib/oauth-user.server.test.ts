@@ -653,6 +653,22 @@ describe("oauth-user.server", () => {
       expect(await db.oAuth.count({ where: { userId: user.id } })).toBe(0);
     });
 
+    it("should refuse to pick between older accounts whose emails differ only in case", async () => {
+      const lower = await db.user.create({ data: { ...createTestUser(), email: "twin@example.com", emailVerifiedAt: new Date() } });
+      const upper = await db.user.create({ data: { ...createTestUser(), email: "Twin@Example.com", emailVerifiedAt: new Date() } });
+
+      const result = await linkOAuthAccountByVerifiedEmail(db, {
+        provider: "google",
+        providerUserId: faker.string.uuid(),
+        providerUsername: "Google User",
+        email: "twin@example.com",
+        emailVerified: true,
+      });
+
+      expect(result).toMatchObject({ success: false, error: "account_exists_unverified" });
+      expect(await db.oAuth.count({ where: { userId: { in: [lower.id, upper.id] } } })).toBe(0);
+    });
+
     it("should refuse unverified provider emails", async () => {
       const result = await linkOAuthAccountByVerifiedEmail(db, {
         provider: "google",
@@ -720,6 +736,26 @@ describe("oauth-user.server", () => {
       expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).emailVerifiedAt).toBeInstanceOf(Date);
       // Already verified: nothing to change.
       await expect(markEmailVerifiedByProvider(db, user.id, user.email, true)).resolves.toBe(false);
+    });
+
+    // Review of audit finding 2: an email change landing between the read and the write must not
+    // mark the new, unproven address as verified.
+    it("does not verify an address that changed after it was read", async () => {
+      const user = await db.user.create({ data: createTestUser() });
+      const racing = {
+        user: {
+          findUnique: async (args: Parameters<typeof db.user.findUnique>[0]) => {
+            const read = await db.user.findUnique(args);
+            await db.user.update({ where: { id: user.id }, data: { email: "victim@example.com" } });
+            return read;
+          },
+          updateMany: (args: Parameters<typeof db.user.updateMany>[0]) => db.user.updateMany(args),
+        },
+      } as unknown as typeof db;
+
+      await expect(markEmailVerifiedByProvider(racing, user.id, user.email, true)).resolves.toBe(false);
+      await expect(db.user.findUniqueOrThrow({ where: { id: user.id } }))
+        .resolves.toMatchObject({ email: "victim@example.com", emailVerifiedAt: null });
     });
   });
 

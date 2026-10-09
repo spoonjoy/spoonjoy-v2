@@ -1,4 +1,5 @@
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
+import { captureEvent, resolvePostHogServerConfig, type PostHogServerEnv } from "~/lib/analytics-server";
 
 // Account mail (verification links, email-change confirmations and notices, password resets).
 //
@@ -27,10 +28,21 @@ export interface SendEmailBinding {
   }): Promise<unknown>;
 }
 
-export interface TransactionalEmailEnv {
+export type TransactionalEmailEnv = PostHogServerEnv & {
   EMAIL?: SendEmailBinding | unknown;
   SPOONJOY_EMAIL_FROM?: string;
   SPOONJOY_EMAIL_MODE?: string;
+  SPOONJOY_BASE_URL?: string;
+};
+
+// The public production site. Capture mode stores account mail, including its sign-in links, in a
+// table anyone with database access can read, so it is never allowed there.
+const PRODUCTION_ORIGIN = "https://spoonjoy.app";
+// Captured QA mail is only read by tests moments after it is sent.
+const CAPTURED_EMAIL_RETENTION_MS = 24 * 60 * 60 * 1000;
+
+function isProductionSite(baseUrl: string | undefined): boolean {
+  return Boolean(baseUrl) && URL.canParse(baseUrl!) && new URL(baseUrl!).origin === PRODUCTION_ORIGIN;
 }
 
 export type EmailDeliveryMode = "send" | "capture" | "disabled";
@@ -54,7 +66,9 @@ function hasSendBinding(value: unknown): value is SendEmailBinding {
 }
 
 export function resolveEmailDeliveryMode(env?: TransactionalEmailEnv | null): EmailDeliveryMode {
-  if (env?.SPOONJOY_EMAIL_MODE?.trim().toLowerCase() === "capture") return "capture";
+  if (env?.SPOONJOY_EMAIL_MODE?.trim().toLowerCase() === "capture") {
+    return isProductionSite(env.SPOONJOY_BASE_URL) ? "disabled" : "capture";
+  }
   if (hasSendBinding(env?.EMAIL) && env?.SPOONJOY_EMAIL_FROM?.trim()) return "send";
   return "disabled";
 }
@@ -98,6 +112,7 @@ export async function sendTransactionalEmail(
   }
 
   if (mode === "capture") {
+    await db.emailOutbox.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - CAPTURED_EMAIL_RETENTION_MS) } } });
     await db.emailOutbox.create({
       data: { toAddress: email.to, purpose: email.purpose, subject: email.subject, textBody: email.text },
     });
@@ -113,7 +128,13 @@ export async function sendTransactionalEmail(
       html: textToHtml(email.text),
     });
   } catch (error) {
-    // The provider's message can include the address; keep it out of logs and responses.
+    // The provider's message can include the address; keep it out of logs, telemetry and responses.
+    // Callers turn this into a "couldn't send" answer, so this is where a refused send is recorded.
+    await captureEvent(resolvePostHogServerConfig(env!), {
+      event: "spoonjoy.email.delivery_failed",
+      distinctId: "system",
+      properties: { purpose: email.purpose, error_name: error instanceof Error ? error.name : typeof error },
+    });
     throw new EmailDeliveryError(
       `Email provider refused the ${email.purpose} message${error instanceof Error ? ` (${error.name})` : ""}`,
     );

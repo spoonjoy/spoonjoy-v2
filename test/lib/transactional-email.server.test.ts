@@ -33,6 +33,14 @@ describe("transactional-email.server", () => {
     expect(resolveEmailDeliveryMode({ SPOONJOY_EMAIL_MODE: "send" })).toBe("disabled");
     expect(canSendAccountEmail({})).toBe(false);
     expect(canSendAccountEmail({ SPOONJOY_EMAIL_MODE: "capture" })).toBe(true);
+    // Captured mail keeps its sign-in links in a readable table, so production never captures,
+    // even if the variable reaches it by mistake.
+    expect(resolveEmailDeliveryMode({ SPOONJOY_EMAIL_MODE: "capture", SPOONJOY_BASE_URL: "https://spoonjoy.app/" })).toBe("disabled");
+    expect(resolveEmailDeliveryMode({ SPOONJOY_EMAIL_MODE: "capture", SPOONJOY_BASE_URL: "not a url" })).toBe("capture");
+    expect(resolveEmailDeliveryMode({
+      SPOONJOY_EMAIL_MODE: "capture",
+      SPOONJOY_BASE_URL: "https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
+    })).toBe("capture");
   });
 
   it("refuses to pretend when mail is not configured", async () => {
@@ -46,6 +54,20 @@ describe("transactional-email.server", () => {
     const rows = await db.emailOutbox.findMany({ where: { toAddress: message.to } });
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ purpose: "verify_email", subject: message.subject, textBody: message.text });
+  });
+
+  it("drops captured QA mail older than a day, so sign-in links do not pile up", async () => {
+    const stale = await db.emailOutbox.create({
+      data: { toAddress: "old@example.com", purpose: "verify_email", subject: "Old", textBody: "old link", createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000) },
+    });
+    const recent = await db.emailOutbox.create({
+      data: { toAddress: "recent@example.com", purpose: "verify_email", subject: "Recent", textBody: "recent link", createdAt: new Date(Date.now() - 60 * 60 * 1000) },
+    });
+
+    await sendTransactionalEmail(db, { SPOONJOY_EMAIL_MODE: "capture" }, message);
+
+    expect(await db.emailOutbox.findUnique({ where: { id: stale.id } })).toBeNull();
+    expect(await db.emailOutbox.findUnique({ where: { id: recent.id } })).not.toBeNull();
   });
 
   it("sends text and matching HTML through the Cloudflare binding from the configured address", async () => {
@@ -71,6 +93,30 @@ describe("transactional-email.server", () => {
 
     const nonError = { EMAIL: { send: vi.fn().mockRejectedValue("nope") }, SPOONJOY_EMAIL_FROM: "hello@spoonjoy.app" };
     await expect(sendTransactionalEmail(db, nonError, message)).rejects.toThrow("Email provider refused the verify_email message");
+  });
+
+  it("records a refused send in PostHog with its purpose and error type, never the address", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("ok"));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const env = {
+        EMAIL: { send: vi.fn().mockRejectedValue(new TypeError(`bad recipient ${message.to}`)) },
+        SPOONJOY_EMAIL_FROM: "hello@spoonjoy.app",
+        POSTHOG_KEY: "phc_test",
+      };
+      await expect(sendTransactionalEmail(db, env, message)).rejects.toBeInstanceOf(EmailDeliveryError);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const body = JSON.parse(String(fetchMock.mock.calls[0]![1].body));
+      expect(body).toMatchObject({
+        event: "spoonjoy.email.delivery_failed",
+        distinct_id: "system",
+        properties: { purpose: "verify_email", error_name: "TypeError" },
+      });
+      expect(JSON.stringify(body)).not.toContain(message.to);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("renders paragraphs, line breaks and links, escaping markup", () => {

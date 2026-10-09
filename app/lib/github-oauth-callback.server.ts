@@ -70,6 +70,9 @@ export async function handleGitHubOAuthCallback(
 
   const existingOAuthAccount = await findExistingOAuthAccount(db, "github", githubUser.id);
   if (existingOAuthAccount) {
+    // A returning sign-in whose provider vouches for the account's own address verifies it, so
+    // accounts made before verification existed become verified as people sign in.
+    await markEmailVerifiedByProvider(db, existingOAuthAccount.userId, githubUser.email, githubUser.emailVerified);
     return {
       success: true,
       userId: existingOAuthAccount.userId,

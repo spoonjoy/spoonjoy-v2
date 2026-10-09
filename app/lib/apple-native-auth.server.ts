@@ -215,7 +215,8 @@ export async function verifyNativeAppleIdentityToken(
   }
 
   const id = stringClaim(payload.sub);
-  const email = stringClaim(payload.email) ?? stringClaim(input.email);
+  const tokenEmail = stringClaim(payload.email);
+  const email = tokenEmail ?? stringClaim(input.email);
   if (!id || !email) {
     throw new NativeAppleAuthError("invalid_identity_token", "Apple identity token is missing required account claims.", 401);
   }
@@ -223,7 +224,9 @@ export async function verifyNativeAppleIdentityToken(
   return {
     id,
     email,
-    emailVerified: boolClaim(payload.email_verified),
+    // Apple vouches only for the email in its signed token. An address the app sent alongside it
+    // is unproven, even if the token says its (absent) email is verified.
+    emailVerified: tokenEmail !== null && boolClaim(payload.email_verified),
     isPrivateEmail: boolClaim(payload.is_private_email),
     firstName: null,
     lastName: null,

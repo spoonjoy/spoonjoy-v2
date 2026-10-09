@@ -115,6 +115,9 @@ export async function handleGoogleOAuthCallback(
   );
 
   if (existingOAuthAccount) {
+    // A returning sign-in whose provider vouches for the account's own address verifies it, so
+    // accounts made before verification existed become verified as people sign in.
+    await markEmailVerifiedByProvider(db, existingOAuthAccount.userId, googleUser.email, googleUser.emailVerified);
     return {
       success: true,
       userId: existingOAuthAccount.userId,

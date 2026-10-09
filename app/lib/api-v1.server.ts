@@ -4705,21 +4705,23 @@ async function handleAccountUpdate(args: ApiV1RouteArgs, requestId: string, prin
       throw new ApiV1Error("not_found", "Account not found");
     }
 
-    // An email change needs a recent sign-in and a confirmation link sent to the new address, so
-    // it happens only in account settings on the web. A token (personal, OAuth, agent or the
-    // native app's) that could change the email could hand the account to whoever controls the
-    // new address, since that address can then sign in with Google or reset the password.
-    if (normalizedEmail !== currentUser.email.toLowerCase()) {
+    // The API never changes the email. A token (personal, OAuth, agent or the native app's) that
+    // could change it could hand the account to whoever controls the new address, since that
+    // address could then sign in with Google or GitHub. A request that only changes the email is
+    // refused with its own code, so the client can send the person to the website rather than
+    // treat it as a token problem. When the username changes too, the email is ignored: a queued
+    // username edit can carry an email cached before a change on the web, and the edit still saves.
+    const usernameChanged = submittedUsername !== currentUser.username.trim();
+    if (normalizedEmail !== currentUser.email.toLowerCase() && !usernameChanged) {
       throw new ApiV1Error(
-        "insufficient_scope",
-        "Email can only be changed in Account settings on the Spoonjoy website, which confirms the new address by email",
+        "email_change_requires_web",
+        "Your email can only be changed in Account settings on the Spoonjoy website.",
         { field: "email" },
       );
     }
 
     // The same username rule as signup and account settings (app/lib/username.ts), applied only
     // to a changed username, so an older username that predates it can still save its email.
-    const usernameChanged = submittedUsername !== currentUser.username.trim();
     const username = usernameChanged ? submittedUsername : currentUser.username;
     if (usernameChanged) {
       const formatError = usernameFormatError(username);
