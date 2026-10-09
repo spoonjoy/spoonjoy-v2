@@ -1,14 +1,18 @@
 import type { Route } from "./+types/recipes.$id";
 import {
+  isRouteErrorResponse,
   useActionData,
   useFetcher,
   useLoaderData,
   useLocation,
   useNavigate,
   useRevalidator,
+  useRouteError,
   useSubmit,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
+import { RecipeNotFound } from "~/components/recipe/RecipeNotFound";
+import { RouteErrorContent } from "~/components/errors/route-error";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { MouseEvent } from "react";
 import { usePostHog } from "~/lib/use-posthog";
@@ -54,7 +58,13 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   return loadRecipeDetail({ request, params, context });
 }
 
-export function meta({ data }: Route.MetaArgs) {
+export function meta({ data, error }: Route.MetaArgs) {
+  if (isRouteErrorResponse(error) && error.status === 404) {
+    return [
+      { title: "Recipe not found - Spoonjoy" },
+      { name: "robots", content: "noindex" },
+    ];
+  }
   if (!data) {
     return [
       { title: "Recipe - Spoonjoy" },
@@ -288,6 +298,23 @@ export function applyCreatedCookbookState(
     cookbooks: nextCookbooks,
     savedCookbookIds: nextSavedCookbookIds,
   };
+}
+
+function recipeNotFoundDetails(error: unknown): { deleted: boolean; chefUsername: string | null } | null {
+  if (!isRouteErrorResponse(error) || error.status !== 404) return null;
+  const body = (error.data && typeof error.data === "object" ? error.data : {}) as { deleted?: unknown; chefUsername?: unknown };
+  return {
+    deleted: body.deleted === true,
+    chefUsername: typeof body.chefUsername === "string" && body.chefUsername ? body.chefUsername : null,
+  };
+}
+
+// A missing or deleted recipe gets a recipe-specific page; any other error (including one from a
+// page under this recipe) gets the app's usual error screen, inside the app's own layout.
+export function ErrorBoundary() {
+  const error = useRouteError();
+  const notFound = recipeNotFoundDetails(error);
+  return notFound ? <RecipeNotFound {...notFound} /> : <RouteErrorContent error={error} />;
 }
 
 export default function RecipeDetail() {

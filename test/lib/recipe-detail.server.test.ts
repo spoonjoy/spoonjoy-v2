@@ -5,6 +5,7 @@ import { db } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
 import { loadRecipeDetail, handleRecipeDetailAction } from "~/lib/recipe-detail.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { sqliteD1 } from "../helpers/sqlite-d1";
 
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const GIF_BYTES = new Uint8Array([0x47, 0x49, 0x46, 0x38, 1, 2, 3]);
@@ -661,5 +662,51 @@ describe("handleRecipeDetailAction addToCookbook error surfacing", () => {
     } finally {
       db.$transaction = originalTransaction;
     }
+  });
+});
+
+describe("loadRecipeDetail when the recipe is gone", () => {
+  let d1: ReturnType<typeof sqliteD1>;
+
+  beforeEach(async () => {
+    await cleanupDatabase();
+    d1 = sqliteD1();
+  });
+
+  afterEach(async () => {
+    d1.close();
+    await cleanupDatabase();
+  });
+
+  async function notFoundBody(id: string, withD1: boolean) {
+    const request = new UndiciRequest(`http://localhost/recipes/${id}`) as unknown as Request;
+    const context = { cloudflare: { env: withD1 ? { DB: d1.binding } : null } } as any;
+    const thrown = await loadRecipeDetail({ request, params: { id }, context }).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    expect(thrown).toBeInstanceOf(Response);
+    const response = thrown as Response;
+    expect(response.status).toBe(404);
+    return response.json();
+  }
+
+  it.each([["Prisma", false], ["D1", true]])("says a deleted recipe was deleted and names its chef (%s)", async (_reads, withD1) => {
+    const chef = await makeUser();
+    const recipe = await db.recipe.create({ data: { title: "Gone Soup", chefId: chef.id, deletedAt: new Date() } });
+
+    expect(await notFoundBody(recipe.id, withD1 as boolean)).toEqual({
+      message: "Recipe not found",
+      deleted: true,
+      chefUsername: chef.username,
+    });
+  });
+
+  it.each([["Prisma", false], ["D1", true]])("says nothing more about an id that never existed (%s)", async (_reads, withD1) => {
+    expect(await notFoundBody("never-a-recipe", withD1 as boolean)).toEqual({
+      message: "Recipe not found",
+      deleted: false,
+      chefUsername: null,
+    });
   });
 });

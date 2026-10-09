@@ -29,6 +29,7 @@ import {
   formatTimerSeconds,
   writeCookProgress,
   shouldRevalidate as recipeShouldRevalidate,
+  ErrorBoundary as RecipeDetailErrorBoundary,
 } from "~/routes/recipes.$id";
 import RecipeDetail from "~/routes/recipes.$id";
 import RecipesLayout, * as recipesLayoutRoute from "~/routes/recipes";
@@ -5046,6 +5047,63 @@ describe("Recipes $id Route", () => {
       // Save functionality is tested through the registered recipe actions.
       await screen.findByRole("heading", { name: "Recipe to Save to Cookbook" });
       expect(screen.getByTestId("recipe-header-save-action")).toHaveAccessibleName("Save");
+    });
+  });
+
+  describe("when the recipe is gone", () => {
+    it("shows a recipe-specific page for a deleted recipe, with its chef's kitchen", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          ErrorBoundary: RecipeDetailErrorBoundary,
+          loader: () => {
+            throw Response.json({ message: "Recipe not found", deleted: true, chefUsername: "ari" }, { status: 404 });
+          },
+        },
+      ]);
+      render(<Stub initialEntries={["/recipes/gone"]} />);
+      expect(await screen.findByRole("heading", { level: 1, name: "This recipe was deleted." })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "See ari's kitchen" })).toHaveAttribute("href", "/users/ari");
+    });
+
+    it("treats a bare 404 as a recipe that never existed", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          ErrorBoundary: RecipeDetailErrorBoundary,
+          loader: () => {
+            throw new Response("Recipe not found", { status: 404 });
+          },
+        },
+      ]);
+      render(<Stub initialEntries={["/recipes/never"]} />);
+      expect(await screen.findByRole("heading", { level: 1, name: "We can't find this recipe." })).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /kitchen/ })).toBeNull();
+    });
+
+    it("shows the usual error screen for other errors", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          ErrorBoundary: RecipeDetailErrorBoundary,
+          loader: () => {
+            throw new Response("Not yours", { status: 403 });
+          },
+        },
+      ]);
+      render(<Stub initialEntries={["/recipes/private"]} />);
+      expect(await screen.findByRole("heading", { level: 1, name: "Not allowed." })).toBeInTheDocument();
+    });
+
+    it("titles the page as a missing recipe and keeps it out of search engines", () => {
+      const error = { status: 404, statusText: "", internal: false, data: {} };
+      expect(meta({ data: undefined, error } as any)).toEqual([
+        { title: "Recipe not found - Spoonjoy" },
+        { name: "robots", content: "noindex" },
+      ]);
     });
   });
 

@@ -2,7 +2,7 @@ import type { AppLoadContext } from "react-router";
 import { data, redirect } from "react-router";
 import { deferBackgroundTask } from "~/lib/background-task.server";
 import { getRequestDb } from "~/lib/route-platform.server";
-import { requestD1, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1ReadBatch, requestD1, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Timestamp, d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
 import {
   cookbooksForRecipeTouchStatement,
@@ -230,6 +230,41 @@ async function runOrQueueAiPlaceholderCover(
   await scheduleAiPlaceholderCover(input);
 }
 
+/** What the recipe page's not-found screen is told about a recipe it cannot show. */
+export interface RecipeNotFoundData {
+  message: "Recipe not found";
+  // True when the recipe existed and was deleted; false when there is no such recipe.
+  deleted: boolean;
+  // The deleted recipe's chef, so the page can offer their kitchen; null when unknown.
+  chefUsername: string | null;
+}
+
+// A recipe link can outlive its recipe. The page says whether the recipe was deleted and, if so,
+// links its chef's public kitchen (product audit 2026-10-09, finding 20). Only a soft-deleted row
+// reveals its chef; an id that never existed says nothing more.
+async function recipeNotFoundResponse(context: RecipeDetailRouteArgs["context"], id: string | undefined): Promise<Response> {
+  let deleted = false;
+  let chefUsername: string | null = null;
+  if (id) {
+    const d1 = requestD1(context);
+    const row = d1
+      ? ((await d1ReadBatch(d1, [[
+          'SELECT r."deletedAt" AS "deletedAt", u."username" AS "username" FROM "Recipe" r JOIN "User" u ON u."id" = r."chefId" WHERE r."id" = ? LIMIT 1',
+          id,
+        ]]))[0][0] as { deletedAt: unknown; username: unknown } | undefined)
+      : await (await getRequestDb(context)).recipe.findUnique({
+          where: { id },
+          select: { deletedAt: true, chef: { select: { username: true } } },
+        }).then((found) => (found ? { deletedAt: found.deletedAt, username: found.chef.username } : undefined));
+    if (row && row.deletedAt !== null && row.deletedAt !== undefined) {
+      deleted = true;
+      chefUsername = typeof row.username === "string" ? row.username : null;
+    }
+  }
+  const body: RecipeNotFoundData = { message: "Recipe not found", deleted, chefUsername };
+  return Response.json(body, { status: 404 });
+}
+
 export async function loadRecipeDetail({ request, params, context }: RecipeDetailRouteArgs) {
   const userId = await getUserId(request, context.cloudflare?.env);
   const { id } = params;
@@ -243,7 +278,7 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
   const { recipe } = reads;
 
   if (!recipe) {
-    throw new Response("Recipe not found", { status: 404 });
+    throw await recipeNotFoundResponse(context, id);
   }
 
   const isOwner = userId !== null && recipe.chefId === userId;
