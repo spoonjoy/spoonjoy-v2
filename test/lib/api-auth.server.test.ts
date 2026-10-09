@@ -19,6 +19,7 @@ import {
   requireApiPrincipal,
 } from "~/lib/api-auth.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { expectConsoleWarning } from "../warning-policy";
 
 const authenticateApiToken = (db: any, token: string, issuer = "https://spoonjoy.app") => (
   authenticateApiTokenRaw(db, token, issuer)
@@ -351,7 +352,8 @@ describe("API authentication helpers", () => {
 
   it("logs instead of failing the request when the background lastUsedAt write fails", async () => {
     const deferred: Promise<unknown>[] = [];
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const failure = new Error("D1 write failed");
+    expectConsoleWarning("[api-auth] lastUsedAt update failed", failure);
     const stub = {
       apiCredential: {
         findUnique: async () => ({
@@ -365,17 +367,13 @@ describe("API authentication helpers", () => {
           scopes: "kitchen:read",
           user: { id: "user-bg", email: "bg@example.com", username: "bg" },
         }),
-        updateMany: async () => { throw new Error("D1 write failed"); },
+        updateMany: async () => { throw failure; },
       },
     } as never;
-    try {
-      await expect(authenticateApiTokenRaw(stub, "sj_bg", "https://spoonjoy.app", { waitUntil: (p) => deferred.push(p) }))
-        .resolves.toMatchObject({ credentialId: "credential-bg" });
-      await Promise.all(deferred);
-      expect(warn).toHaveBeenCalledWith("[api-auth] lastUsedAt update failed", expect.any(Error));
-    } finally {
-      warn.mockRestore();
-    }
+    await expect(authenticateApiTokenRaw(stub, "sj_bg", "https://spoonjoy.app", { waitUntil: (p) => deferred.push(p) }))
+      .resolves.toMatchObject({ credentialId: "credential-bg" });
+    // The warning policy fails the test unless exactly this warning was logged.
+    await Promise.all(deferred);
   });
 
   it("rejects issuer metadata on a credential that has no OAuth client", async () => {
