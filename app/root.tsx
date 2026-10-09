@@ -181,7 +181,7 @@ export function AppNavbar({
           <div className="sj-desktop-nav-actions">
             <ThemeToggle />
             <LoginMenu oauthProviders={oauthProviders} />
-            <Button href="/signup">Sign Up</Button>
+            <Button href="/signup">Sign up</Button>
           </div>
         </>
       )}

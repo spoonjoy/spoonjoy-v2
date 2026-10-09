@@ -281,7 +281,7 @@ export default function UserProfile() {
                 Settings
               </Button>
               <Form method="post" action="/logout" onSubmit={clearCookProgressCache}>
-                <Button type="submit" variant="destructive">Logout</Button>
+                <Button type="submit" variant="destructive">Log out</Button>
               </Form>
             </div>
           ) : null}

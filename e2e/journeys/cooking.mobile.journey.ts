@@ -23,9 +23,12 @@ test.describe("Recipe list action on iPhone", () => {
     await page.getByLabel("Email", { exact: true }).fill(user.email);
     await page.getByLabel("Username", { exact: true }).fill(user.username);
     await fillSecret(page.getByLabel("Password", { exact: true }), user.password);
-    await fillSecret(page.getByLabel("Confirm Password", { exact: true }), user.password);
-    await page.getByRole("button", { name: "Sign Up", exact: true }).click();
-    await expect(page).toHaveURL(pathUrl("/recipes"));
+    await fillSecret(page.getByLabel("Confirm password", { exact: true }), user.password);
+    await page.getByRole("button", { name: "Sign up", exact: true }).click();
+    // A new account with nowhere to return to lands in its own Kitchen (product audit 2026-10-09,
+    // finding 11: it used to land in the public recipe box).
+    await expect(page).toHaveURL(pathUrl("/"));
+    await expect(page.getByRole("heading", { level: 1, name: "My Kitchen", exact: true })).toBeVisible();
 
     // Fork Lemon Herb Rice, so the throwaway user owns the copy whose ingredients get added.
     await page.goto(LEMON_RICE);

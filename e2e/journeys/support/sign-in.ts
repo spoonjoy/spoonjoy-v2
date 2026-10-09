@@ -10,7 +10,7 @@ async function submitLoginForm(page: Page, user: { username: string; password: S
   await page.goto("/login");
   await page.getByLabel("Username or email").fill(user.username);
   await fillSecret(page.getByLabel("Password"), user.password);
-  await page.getByRole("button", { name: "Log In", exact: true }).click();
+  await page.getByRole("button", { name: "Log in", exact: true }).click();
   await expect(page).toHaveURL(/\/recipes(?:[?#].*)?$/);
 }
 

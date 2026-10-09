@@ -167,7 +167,7 @@ export default function Index() {
             </Text>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Button href="/signup">Start Your Kitchen</Button>
-              <Button href="/login" plain>Log In</Button>
+              <Button href="/login" plain>Log in</Button>
               <Button href="/search" plain>
                 <SearchIcon data-slot="icon" className="size-4" aria-hidden="true" />
                 Search Recipes

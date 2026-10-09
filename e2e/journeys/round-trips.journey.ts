@@ -35,7 +35,7 @@ test.describe("Deep links, signed out", () => {
 
     await page.getByLabel("Username or email").fill(friend.username);
     await fillSecret(page.getByLabel("Password"), friend.password);
-    await page.getByRole("button", { name: "Log In", exact: true }).click();
+    await page.getByRole("button", { name: "Log in", exact: true }).click();
     await expect(page).toHaveURL(pathUrl("/account/settings"));
     await expect(page.getByRole("heading", { level: 1, name: "Account settings", exact: true })).toBeVisible();
     await expectAccessible();
