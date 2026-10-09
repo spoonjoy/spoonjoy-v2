@@ -8,6 +8,8 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: true,
   retries: 0,
+  // CAPTURE-ONLY branch: run just the capture journey.
+  grep: /@capture/,
   failOnFlakyTests: true,
   workers: 2,
   timeout: 60_000,
