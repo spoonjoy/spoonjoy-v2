@@ -1,8 +1,6 @@
 // CAPTURE-ONLY. Lives on capture branches that never merge. It records before/after screenshots
-// for root review of #386 (rule-parsed rows on the Add Step page when AI parsing is unavailable)
-// and #416 (cover history across regenerations) on this run's own disposable QA stack. Run stacks
+// for root review of #463 (no "No ingredients added yet" under a parsed list, with #386 merged in) on this run's own disposable QA stack. Run stacks
 // have no OpenAI or image-generation key, so AI parsing is off and every regeneration fails.
-import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { Browser, BrowserContext, Page, TestInfo } from "@playwright/test";
@@ -15,7 +13,6 @@ const MOBILE_MODES: Mode[] = [
   { name: "390-light", width: 390, height: 844, colorScheme: "light" },
   { name: "390-dark", width: 390, height: 844, colorScheme: "dark" },
 ];
-const COVER_MODES: Mode[] = [...MOBILE_MODES, { name: "1280-light", width: 1280, height: 900, colorScheme: "light" }];
 const RECIPE_URL = /\/recipes\/(?!new$)[^/?#]+$/;
 const LABEL = process.env.CAPTURE_LABEL ?? "unlabelled";
 
@@ -65,13 +62,6 @@ async function createRecipe(browser: Browser, title: string): Promise<string> {
   return recipePath;
 }
 
-// Writes only to this run's own disposable D1 (prepare points --env qa at it; teardown deletes it).
-function runD1(sql: string) {
-  execFileSync("pnpm", ["exec", "wrangler", "d1", "execute", "DB", "--remote", "--env", "qa", "--command", sql], {
-    stdio: ["ignore", "ignore", "inherit"],
-  });
-}
-
 test.describe("capture @capture", () => {
   test("Add Step page parses typed ingredients with AI parsing unavailable @capture", async ({ browser }, testInfo) => {
     test.setTimeout(240_000);
@@ -95,57 +85,5 @@ test.describe("capture @capture", () => {
     };
     await shoot(MOBILE_MODES[0]);
     await shoot(MOBILE_MODES[1]);
-  });
-
-  test("cover history across regenerations @capture", async ({ browser }, testInfo) => {
-    test.setTimeout(420_000);
-    const recipePath = await createRecipe(browser, `Capture Covers ${Date.now().toString(36)}`);
-    const recipeId = recipePath.split("/").pop() as string;
-    expect(recipeId).toMatch(/^[A-Za-z0-9_-]+$/);
-    const coverId = `capture-cover-${Date.now().toString(36)}`;
-    // A cover with an original and an editorial image, as a finished stylization leaves it.
-    runD1(
-      `INSERT INTO "RecipeCover" ("id","recipeId","imageUrl","stylizedImageUrl","sourceType","status","sourceImageUrl","generationStatus","createdAt") VALUES ('${coverId}','${recipeId}','/og/spoonjoy-home.png','/icons/sj-512.png','chef-upload','ready','/og/spoonjoy-home.png','succeeded',CURRENT_TIMESTAMP); UPDATE "Recipe" SET "activeCoverId"='${coverId}', "activeCoverVariant"='stylized' WHERE "id"='${recipeId}';`,
-    );
-
-    const shot = async (stage: string, mode: Mode) => {
-      const { context, page } = await open(browser, mode);
-      await page.goto(recipePath);
-      await waitForHydration(page);
-      await page.getByRole("button", { name: /^Recipe maintenance/ }).click();
-      const history = page.getByTestId("recipe-cover-history");
-      await expect(history).toBeVisible();
-      await history.scrollIntoViewIfNeeded();
-      await page.waitForTimeout(500);
-      await save(testInfo, `416-${stage}-${mode.name}`, await history.screenshot());
-      await context.close();
-    };
-    const capture = async (stage: string) => {
-      await shot(stage, COVER_MODES[0]);
-      await shot(stage, COVER_MODES[1]);
-      await shot(stage, COVER_MODES[2]);
-    };
-
-    const regenerate = async (direction: string) => {
-      const { context, page } = await open(browser, COVER_MODES[2]);
-      await page.goto(recipePath);
-      await waitForHydration(page);
-      await page.getByRole("button", { name: /^Recipe maintenance/ }).click();
-      const input = page.locator(`#recipe-cover-regenerate-${coverId}`);
-      await input.fill(direction);
-      const form = page.locator("form").filter({ has: input });
-      const done = page.waitForResponse((response) => response.request().method() === "POST");
-      await form.getByRole("button", { name: "Regenerate with direction" }).click();
-      await done;
-      // Let the queued stylization settle (it fails fast without an image key), then the shots reload.
-      await page.waitForTimeout(20_000);
-      await context.close();
-    };
-
-    await capture("0-initial");
-    await regenerate("Warmer window light");
-    await capture("1-after-first-regeneration");
-    await regenerate("Overhead, darker backdrop");
-    await capture("2-after-second-regeneration");
   });
 });
