@@ -282,7 +282,15 @@ export default function OAuthAuthorize() {
   const appName = safeOAuthClientDisplayName(view.clientName);
   const redirectOrigin = new URL(view.params.redirectUri).origin;
   const resourceLabel = view.params.resource || "REST API";
-  const broadScopes = view.scope.split(" ").filter((scope) => scope === "kitchen:read" || scope === "kitchen:write");
+  // The warning names what the app can actually do: kitchen:write can change anything in the
+  // kitchen, while kitchen:read only reads it. A read-only request must not be told it can make
+  // changes (audit 2026-10-09).
+  const requestedScopes = view.scope.split(" ");
+  const kitchenWarning = requestedScopes.includes("kitchen:write")
+    ? `${appName} can make broad kitchen changes. Approve only if this is the connection you started.`
+    : requestedScopes.includes("kitchen:read")
+      ? `${appName} can read your whole kitchen, including your recipes, cookbooks and shopping list, but cannot change anything. Approve only if this is the connection you started.`
+      : null;
   const accessItems = scopeItems(view.scope);
   return (
     <ConnectorConsentShell>
@@ -313,9 +321,9 @@ export default function OAuthAuthorize() {
         </ul>
       </div>
 
-      {broadScopes.length ? (
+      {kitchenWarning ? (
         <Text className="mt-4" role="alert">
-          {appName} can make broad kitchen changes. Approve only if this is the connection you started.
+          {kitchenWarning}
         </Text>
       ) : null}
       <Text className="mt-4">

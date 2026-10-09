@@ -76,6 +76,10 @@ declare global {
     GOOGLE_API_KEY?: string;
     GEMINI_API_KEY?: string;
     GEMINI_IMAGE_MODEL?: string;
+    /** "off" stops every AI generation (kill switch). */
+    SPOONJOY_AI_IMAGE_GENERATION?: string;
+    /** Global AI generations per UTC day across all users; default 200. */
+    SPOONJOY_AI_DAILY_GENERATION_BUDGET?: string;
     GEMINI_IMAGE_TIMEOUT_MS?: string;
     GEMINI_TEXT_MODEL?: string;
     GEMINI_TEXT_TIMEOUT_MS?: string;

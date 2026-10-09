@@ -202,6 +202,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     reason:
       "Dev CLI token cache for the local MCP server; file-IO catch falls back to no cache. Not part of the deployed request path.",
   },
+  {
+    file: "app/lib/health.server.ts",
+    category: "non-request",
+    reason:
+      "Readiness probe for uptime monitoring (GET /health/ready), not a user path. A failed D1 or R2 check is the probe's result: it becomes a 503 with a fixed reason, which the uptime monitor alerts on and Workers Logs record.",
+  },
   // --- catch IS instrumented in a shared helper the file delegates to ---
   {
     file: "app/lib/recipe-detail.server.ts",

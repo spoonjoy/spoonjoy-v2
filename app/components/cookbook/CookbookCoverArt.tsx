@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
+import { HERO_IMAGE_PROPS, LAZY_IMAGE_PROPS } from "~/lib/image-loading";
 
 export interface CookbookCoverImage {
   coverImageUrl: string | null;
@@ -21,6 +22,7 @@ export function CookbookCoverArt({
   recipeImages = [],
   className,
   titleAsHeading = true,
+  priority = false,
 }: {
   title: string;
   recipeCount: number;
@@ -35,6 +37,12 @@ export function CookbookCoverArt({
    * duplicate heading or skip a level in the page's heading order.
    */
   titleAsHeading?: boolean;
+  /**
+   * Whether this cover is the page's main image (the cookbook detail page). Priority covers
+   * load eagerly at high fetch priority; every other cover, such as a card on a shelf or in
+   * a grid, loads lazily so React does not preload it during SSR.
+   */
+  priority?: boolean;
 }) {
   const images = cookbookCoverImages(recipeImages);
   const recipeLabel = `${recipeCount} ${recipeCount === 1 ? "recipe" : "recipes"}`;
@@ -51,7 +59,7 @@ export function CookbookCoverArt({
         <CookbookFallbackCover title={title} recipeLabel={recipeLabel} TitleTag={TitleTag} />
       ) : (
         <>
-          <CookbookImageCover images={images} title={title} />
+          <CookbookImageCover images={images} title={title} priority={priority} />
           <figcaption className="absolute inset-x-0 bottom-0 z-10 border-t border-[color-mix(in_srgb,var(--sj-paper)_18%,transparent)] bg-[color-mix(in_srgb,var(--sj-charcoal)_82%,transparent)] p-4 text-[var(--sj-paper)] backdrop-blur-sm">
         <TitleTag className="font-sj-display line-clamp-2 text-2xl/7 font-semibold tracking-normal">
           {title}
@@ -69,9 +77,11 @@ export function CookbookCoverArt({
 function CookbookImageCover({
   images,
   title,
+  priority,
 }: {
   images: Array<CookbookCoverImage & { coverImageUrl: string }>;
   title: string;
+  priority: boolean;
 }) {
   const layoutClass = images.length === 1
     ? "grid-cols-1 grid-rows-1"
@@ -89,6 +99,7 @@ function CookbookImageCover({
           <img
             src={image.coverImageUrl}
             alt={image.title}
+            {...(priority ? HERO_IMAGE_PROPS : LAZY_IMAGE_PROPS)}
             className="h-full w-full object-cover text-[0px] text-transparent"
           />
           {images.length === 1 ? (
