@@ -42,7 +42,7 @@ test.describe("Sessions", () => {
       await expect(page.getByRole("button", { name: "Confirm sign out everywhere", exact: true })).toBeVisible();
       await expectAccessible();
       await page.getByRole("button", { name: "Confirm sign out everywhere", exact: true }).click();
-      await expect(page.getByText("You've been signed out everywhere else. You're still signed in here.")).toBeVisible();
+      await expect(page.getByText(/You've been signed out everywhere else, and apps, agents and API tokens have been disconnected\. You're still signed in here\./)).toBeVisible();
 
       // A is still signed in after a fresh document load.
       await verifyAfterReload(async () => {
