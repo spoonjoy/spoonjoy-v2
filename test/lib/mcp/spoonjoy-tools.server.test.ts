@@ -2595,6 +2595,32 @@ describe("spoonjoy MCP tools", () => {
     });
   });
 
+  it("touches the cookbook when MCP removes a recipe from it, as the web and API v1 paths do", async () => {
+    // Native sync finds changed cookbooks by updatedAt, so a removal that leaves it alone is
+    // never pulled by iPhone or Mac.
+    const cookbook = parseJson(await callSpoonjoyMcpTool("create_cookbook", {
+      title: "Touched On Removal",
+    }, context));
+    const recipe = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "Removed Soup",
+    }, context));
+    await callSpoonjoyMcpTool("add_recipe_to_cookbook", {
+      cookbookId: cookbook.cookbook.id,
+      recipeId: recipe.recipe.id,
+    }, context);
+    const old = new Date("2026-01-01T00:00:00.000Z");
+    await context.db.cookbook.update({ where: { id: cookbook.cookbook.id }, data: { updatedAt: old } });
+
+    const removed = parseJson(await callSpoonjoyMcpTool("remove_recipe_from_cookbook", {
+      cookbookId: cookbook.cookbook.id,
+      recipeId: recipe.recipe.id,
+    }, context));
+
+    expect(removed).toMatchObject({ removed: true, cookbook: { recipeCount: 0 } });
+    const stored = await context.db.cookbook.findUniqueOrThrow({ where: { id: cookbook.cookbook.id } });
+    expect(stored.updatedAt.getTime()).toBeGreaterThan(old.getTime());
+  });
+
   it("runs owner-scoped write tools without callback-style transactions", async () => {
     const guardedContext = {
       ...context,
@@ -2638,10 +2664,17 @@ describe("spoonjoy MCP tools", () => {
     const removedItem = parseJson(await callSpoonjoyMcpTool("remove_shopping_list_item", {
       itemId: milkItem.id,
     }, guardedContext));
-    const removedRecipe = parseJson(await callSpoonjoyMcpTool("remove_recipe_from_cookbook", {
-      cookbookId: cookbook.cookbook.id,
-      recipeId: recipe.recipe.id,
-    }, guardedContext));
+    // Removal is the same shared membership write: one D1 batch with the cookbook touch.
+    const removalD1 = sqliteD1();
+    let removedRecipe: Record<string, any>;
+    try {
+      removedRecipe = parseJson(await callSpoonjoyMcpTool("remove_recipe_from_cookbook", {
+        cookbookId: cookbook.cookbook.id,
+        recipeId: recipe.recipe.id,
+      }, { ...guardedContext, env: { DB: removalD1.binding } }));
+    } finally {
+      removalD1.close();
+    }
 
     expect(added).toMatchObject({
       added: true,
