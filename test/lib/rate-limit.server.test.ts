@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   enforceAgentCodeLookupRateLimit,
   enforceAuthRateLimit,
+  ipv6NetworkForRateLimit,
   enforceRateLimit,
   hashTokenForRateLimitKey,
   parseBearerToken,
@@ -465,13 +466,13 @@ describe("enforceAgentCodeLookupRateLimit", () => {
     new Request("https://spoonjoy.app/agent/connect", { method: "POST", headers });
 
   it("skips without a limiter", async () => {
-    await expect(enforceAgentCodeLookupRateLimit(request(), undefined, "user-1"))
+    await expect(enforceAgentCodeLookupRateLimit(request(), undefined, async () => "user-1"))
       .resolves.toEqual({ allowed: true, retryAfterSeconds: 0, scope: "skip" });
   });
 
   it("checks the address, then the signed-in user, under the agent-code prefix", async () => {
     const limiter = mockLimiter(true);
-    await expect(enforceAgentCodeLookupRateLimit(request({ "CF-Connecting-IP": "203.0.113.7" }), limiter, "user-1"))
+    await expect(enforceAgentCodeLookupRateLimit(request({ "CF-Connecting-IP": "203.0.113.7" }), limiter, async () => "user-1"))
       .resolves.toEqual({ allowed: true, retryAfterSeconds: 0, scope: "user" });
     expect(limiter.limit.mock.calls.map(([input]) => input.key)).toEqual([
       "agent-code:ip:203.0.113.7",
@@ -479,20 +480,70 @@ describe("enforceAgentCodeLookupRateLimit", () => {
     ]);
 
     const anonymous = mockLimiter(true);
-    await expect(enforceAgentCodeLookupRateLimit(request({ "X-Forwarded-For": "198.51.100.9, 10.0.0.1" }), anonymous, null))
+    await expect(enforceAgentCodeLookupRateLimit(request({ "X-Forwarded-For": "198.51.100.9, 10.0.0.1" }), anonymous, async () => null))
       .resolves.toEqual({ allowed: true, retryAfterSeconds: 0, scope: "ip" });
     expect(anonymous.limit.mock.calls.map(([input]) => input.key)).toEqual(["agent-code:ip:198.51.100.9"]);
   });
 
   it("refuses with the scope that ran out and a retry time", async () => {
     const limiter = { limit: vi.fn(async ({ key }: { key: string }) => ({ success: !key.includes(":user:") })) };
-    await expect(enforceAgentCodeLookupRateLimit(request(), limiter, "user-1"))
+    await expect(enforceAgentCodeLookupRateLimit(request(), limiter, async () => "user-1"))
       .resolves.toEqual({ allowed: false, retryAfterSeconds: 60, scope: "user" });
     expect(limiter.limit.mock.calls[0][0].key).toBe("agent-code:ip:unknown:spoonjoy.app");
   });
 
   it("fails open per check when the limiter throws", async () => {
-    await expect(enforceAgentCodeLookupRateLimit(request(), throwingLimiter(), "user-1"))
+    await expect(enforceAgentCodeLookupRateLimit(request(), throwingLimiter(), async () => "user-1"))
       .resolves.toEqual({ allowed: true, retryAfterSeconds: 0, scope: "skip" });
+  });
+
+  it("does not read the chef until the address check passes", async () => {
+    const resolveUserId = vi.fn(async () => "user-1");
+    await expect(enforceAgentCodeLookupRateLimit(request(), mockLimiter(false), resolveUserId))
+      .resolves.toEqual({ allowed: false, retryAfterSeconds: 60, scope: "ip" });
+    expect(resolveUserId).not.toHaveBeenCalled();
+  });
+
+  it("reports a limiter error on the per-chef check with the user scope", async () => {
+    const origFetch = globalThis.fetch;
+    const phFetch = postHogFetchSpy();
+    globalThis.fetch = phFetch;
+    try {
+      const limiter = { limit: vi.fn(async ({ key }: { key: string }) => {
+        if (key.includes(":user:")) throw new Error("down");
+        return { success: true };
+      }) };
+      await expect(enforceAgentCodeLookupRateLimit(request(), limiter, async () => "user-1", POSTHOG_ENABLED))
+        .resolves.toEqual({ allowed: true, retryAfterSeconds: 0, scope: "ip" });
+      const backendError = postHogBodies(phFetch).find((b) => b.event === "spoonjoy.ratelimit.backend_error");
+      expect(backendError!.properties.scope).toBe("user");
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+
+  it("gives one budget to a whole IPv6 /64", async () => {
+    const limiter = mockLimiter(true);
+    for (const ip of ["2001:db8:1:2:aaaa::1", "2001:0db8:0001:0002:ffff:ffff:ffff:ffff"]) {
+      await enforceAgentCodeLookupRateLimit(request({ "CF-Connecting-IP": ip }), limiter, async () => null);
+    }
+    expect(limiter.limit.mock.calls.map(([input]) => input.key)).toEqual([
+      "agent-code:ip:2001:db8:1:2::/64",
+      "agent-code:ip:2001:db8:1:2::/64",
+    ]);
+  });
+});
+
+describe("ipv6NetworkForRateLimit", () => {
+  it.each([
+    ["203.0.113.7", "203.0.113.7"],
+    ["2001:db8::1", "2001:db8:0:0::/64"],
+    ["::1", "0:0:0:0::/64"],
+    ["2001:db8:1:2:3:4:5:6", "2001:db8:1:2::/64"],
+    ["fe80::1%eth0", "fe80:0:0:0::/64"],
+    ["2001:db8", "2001:db8"],
+    ["not:an:ip:addr:ess", "not:an:ip:addr:ess"],
+  ])("keys %s as %s", (ip, expected) => {
+    expect(ipv6NetworkForRateLimit(ip)).toBe(expected);
   });
 });

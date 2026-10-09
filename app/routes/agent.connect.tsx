@@ -42,7 +42,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const rateLimit = await enforceAgentCodeLookupRateLimit(
     request,
     env?.AUTH_IP_RATE_LIMITER,
-    await getUserId(request, env),
+    () => getUserId(request, env),
   );
   const formData = await request.formData();
   const code = normalizeUserCode(formData.get("code")?.toString() ?? "");

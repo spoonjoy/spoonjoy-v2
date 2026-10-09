@@ -94,7 +94,7 @@ const LIMITER_ERRORED = Symbol("limiter_errored");
 async function safeLimit(
   limiter: RateLimiterBinding,
   key: string,
-  scope: Exclude<RateLimitScope, "skip">,
+  scope: Exclude<RateLimitScope, "skip"> | "user",
   ctx: RateLimitContext,
 ): Promise<{ success: boolean; reset?: number } | typeof LIMITER_ERRORED> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -217,38 +217,63 @@ export async function enforceAuthRateLimit(
 
 function clientIpForRateLimit(request: Request): string {
   const forwardedFor = request.headers.get("X-Forwarded-For")?.split(",")[0]?.trim() || null;
-  return request.headers.get("CF-Connecting-IP") ?? forwardedFor ?? `unknown:${new URL(request.url).host}`;
+  const ip = request.headers.get("CF-Connecting-IP") ?? forwardedFor;
+  return ip ? ipv6NetworkForRateLimit(ip) : `unknown:${new URL(request.url).host}`;
 }
 
 /**
- * Throttle guesses at agent connection codes on `/agent/connect`, per client
- * IP and, when signed in, per user, so neither more addresses nor more
- * accounts buy an attacker more guesses at someone else's pending request.
- * Uses the `AUTH_IP_RATE_LIMITER` binding under its own key prefix, so code
- * lookups never spend the login and signup budget.
+ * One IPv6 subscriber usually holds a whole /64, so keying on the full
+ * address would hand them about 2^64 separate budgets. Key IPv6 on its /64
+ * network instead; IPv4 and anything unparseable pass through unchanged.
+ */
+export function ipv6NetworkForRateLimit(ip: string): string {
+  if (!ip.includes(":")) return ip;
+  const [head, tail] = ip.split("::");
+  const headParts = head ? head.split(":") : [];
+  const tailParts = tail ? tail.split(":") : [];
+  const parts = tail === undefined
+    ? headParts
+    : [...headParts, ...Array(Math.max(0, 8 - headParts.length - tailParts.length)).fill("0"), ...tailParts];
+  const network = parts.slice(0, 4);
+  if (network.length < 4 || !network.every((part) => /^[0-9a-f]{1,4}$/i.test(part))) return ip;
+  return `${network.map((part) => Number.parseInt(part, 16).toString(16)).join(":")}::/64`;
+}
+
+/**
+ * Throttle guesses at agent connection codes on `/agent/connect`. The
+ * per-address check (IPv6 grouped by /64) is the main protection, because the
+ * lookup does not require sign-in; signed-in chefs also get a per-user check,
+ * so adding addresses does not buy a signed-in guesser more tries. The user is
+ * resolved only after the address check passes. Uses the
+ * `AUTH_IP_RATE_LIMITER` binding under its own key prefix, so code lookups
+ * never spend the login and signup budget.
  *
- * Fails OPEN like {@link enforceRateLimit}.
+ * Fails OPEN like {@link enforceRateLimit}, one check at a time.
  */
 export async function enforceAgentCodeLookupRateLimit(
   request: Request,
   limiter: RateLimiterBinding | undefined,
-  userId: string | null,
+  resolveUserId: () => Promise<string | null>,
   postHogConfig?: PostHogServerConfig,
 ): Promise<Omit<RateLimitResult, "scope"> & { scope: "ip" | "user" | "skip" }> {
   if (!limiter) return { allowed: true, retryAfterSeconds: 0, scope: "skip" };
   const ctx: RateLimitContext = { postHogConfig };
-  const checks: Array<{ key: string; scope: "ip" | "user" }> = [
-    { key: `agent-code:ip:${clientIpForRateLimit(request)}`, scope: "ip" },
-  ];
-  if (userId) checks.push({ key: `agent-code:user:${userId}`, scope: "user" });
   let scope: "ip" | "user" | "skip" = "skip";
-  for (const check of checks) {
-    const result = await safeLimit(limiter, check.key, "ip", ctx);
-    if (result === LIMITER_ERRORED) continue;
+  const check = async (key: string, checkScope: "ip" | "user") => {
+    const result = await safeLimit(limiter, key, checkScope, ctx);
+    if (result === LIMITER_ERRORED) return null;
     if (!result.success) {
-      return { allowed: false, retryAfterSeconds: retryAfterSecondsForLimitResult(result), scope: check.scope };
+      return { allowed: false, retryAfterSeconds: retryAfterSecondsForLimitResult(result), scope: checkScope };
     }
-    scope = check.scope;
+    scope = checkScope;
+    return null;
+  };
+  const refusedByAddress = await check(`agent-code:ip:${clientIpForRateLimit(request)}`, "ip");
+  if (refusedByAddress) return refusedByAddress;
+  const userId = await resolveUserId();
+  if (userId) {
+    const refusedByUser = await check(`agent-code:user:${userId}`, "user");
+    if (refusedByUser) return refusedByUser;
   }
   return { allowed: true, retryAfterSeconds: 0, scope };
 }
