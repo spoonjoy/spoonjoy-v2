@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  merge_group:
   workflow_dispatch:
     inputs:
       source_sha:
@@ -23,6 +24,14 @@ permissions:
 defaults:
   run:
     shell: bash
+
+# A newer push to the same pull request cancels that pull request's CI run in progress: its result
+# is already stale, and the runner pool (20 concurrent jobs) is shared with main's CI and the
+# production deploy. Every other run (main pushes, merge-queue groups, dispatches) gets a group of
+# its own and is never cancelled.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   GIT_CONFIG_COUNT: "1"
