@@ -78,7 +78,8 @@ test.describe("Primary button in dark mode", () => {
     await page.emulateMedia({ colorScheme: "dark" });
     await page.goto("/");
     await waitForHydration(page);
-    await expect(page.getByRole("banner")).toBeVisible();
+    // The phone layout has no banner landmark; both layouts have the main one.
+    await expect(page.getByRole("main")).toBeVisible();
     await capture(page, testInfo, "home-top");
     await expectAccessible();
   });
