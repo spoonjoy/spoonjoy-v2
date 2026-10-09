@@ -1092,9 +1092,9 @@ describe("Journeys workflow", () => {
   const step = (name: string) => steps[index(name)];
 
   it("no longer queues runs for one shared QA Worker", () => {
-    expect(Object.keys(workflow.jobs).sort()).toEqual(["deploy-shared-qa", "fork-notice", "journeys", "queue-tested"]);
-    // The only job journeys waits for is the cheap merge-queue lookup, never a QA turn or lock.
-    expect(journeys.needs).toBe("queue-tested");
+    expect(Object.keys(workflow.jobs).sort()).toEqual(["changes", "deploy-shared-qa", "fork-notice", "journeys", "queue-tested"]);
+    // The only jobs journeys waits for are the cheap scope and merge-queue lookups, never a QA turn or lock.
+    expect(journeys.needs).toEqual(["queue-tested", "changes"]);
     const text = JSON.stringify(steps);
     expect(text).not.toMatch(/qa-lock|wait-for-qa-turn|deploy:qa/);
     expect(workflow.env.SPOONJOY_JOURNEYS_BASE_URL).toBeUndefined();
@@ -1166,8 +1166,31 @@ describe("Journeys workflow", () => {
     }
   });
 
+  it("skips a pull request's suite only on an explicit no from the scope check, which never runs outside pull requests", () => {
+    // `!= 'false'`: a failed or missing scope answer runs the suite.
+    expect(journeys.if).toContain("needs.changes.outputs.journeys != 'false'");
+    const changes = workflow.jobs.changes;
+    expect(changes.if).toBe("github.event_name == 'pull_request'");
+    expect(changes.permissions).toEqual({ contents: "read", "pull-requests": "read" });
+    expect(changes.outputs).toEqual({ journeys: "${{ steps.scope.outputs.journeys }}" });
+    expect(changes.steps.at(-1)).toEqual({
+      name: "Decide whether this pull request needs the suite",
+      id: "scope",
+      env: { GH_TOKEN: "${{ github.token }}", PR_NUMBER: "${{ github.event.pull_request.number }}" },
+      run: "node scripts/journeys-scope.mjs",
+    });
+  });
+
+  it("cancels only a superseded pull-request run, whose teardown still runs", () => {
+    expect(workflow.concurrency).toEqual({
+      group: "journeys-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}",
+      "cancel-in-progress": "${{ github.event_name == 'pull_request' }}",
+    });
+    expect(step("Delete this run's QA stack").if).toBe("always()");
+  });
+
   it("skips main's journeys only when the merge queue's Journeys run of the same commit passed", () => {
-    expect(journeys.if).toBe("${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}");
+    expect(journeys.if).toBe("${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && needs.changes.outputs.journeys != 'false')) }}");
     const queueTested = workflow.jobs["queue-tested"];
     expect(queueTested.if).toBe("github.event_name == 'push'");
     expect(queueTested.permissions).toEqual({ actions: "read", contents: "read" });

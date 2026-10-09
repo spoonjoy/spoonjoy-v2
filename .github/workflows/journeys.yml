@@ -29,14 +29,15 @@ defaults:
 
 # Every run gets its own QA stack (scripts/qa-run-scope.mjs): its own Worker, its own D1 database
 # and its own URL, sharing only QA's R2 bucket and rate-limit namespaces. Runs for different pull
-# requests therefore run at the same time instead of queueing for one shared QA Worker. The only
-# shared group left is per pull request, and it never cancels a run in progress, so a run always
-# finishes, including its rotate, cleanup and teardown steps. A newer push to the same pull
-# request still replaces that pull request's pending run (GitHub's one-pending rule). Every other
-# run (pushes to main, the schedule, manual runs) gets a group of its own.
+# requests therefore run at the same time instead of queueing for one shared QA Worker. A newer push
+# to the same pull request cancels that pull request's run in progress, because its result is
+# already stale and runners are shared. The cancelled run's teardown step still runs, because it
+# is `if: always()`; if it cannot, the hourly QA Run Sweep deletes any run stack older than three
+# hours. Every other run (pushes to main, merge-queue groups, the schedule, manual runs) gets a
+# group of its own and is never cancelled.
 concurrency:
   group: journeys-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   PRISMA_HIDE_UPDATE_MESSAGE: "1"
@@ -52,6 +53,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: echo "::warning::Journeys need QA credentials and do not run for fork pull requests. A maintainer must re-run them from a same-repo branch."
+
+  # On a pull request, `changes` decides whether the suite needs to run (scripts/journeys-scope.mjs):
+  # it skips only when every changed file is documentation, a unit test, a story or another
+  # workflow, and the `visual` label always forces it. Any doubt runs the suite. A skipped suite
+  # still reports the required `journeys` check as passed, and the merge queue's run of the same
+  # change always runs the full suite before anything reaches main.
+  changes:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      journeys: ${{ steps.scope.outputs.journeys }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+
+      - name: Decide whether this pull request needs the suite
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node scripts/journeys-scope.mjs
 
   # After a merge-queue merge, main's new commit is exactly the commit the queue's Journeys run
   # already tested. On a push to main, queue-tested asks GitHub whether that run's journeys job
@@ -88,8 +119,8 @@ jobs:
   # was created. The Cloudflare token is given only to the steps that need it, never to
   # `pnpm install`, which runs dependency install scripts from the pull request's lockfile.
   journeys:
-    needs: queue-tested
-    if: ${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs: [queue-tested, changes]
+    if: ${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && needs.changes.outputs.journeys != 'false')) }}
     name: journeys
     runs-on: ubuntu-latest
     timeout-minutes: 40
