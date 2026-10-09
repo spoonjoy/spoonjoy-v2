@@ -22,6 +22,8 @@ export interface PantryRecipeCard {
 
 export interface RecipeGridProps {
   recipes: PantryRecipeCard[]
+  /** Recipes across every page when the grid shows one page of a longer list. */
+  totalCount?: number
   emptyTitle?: string
   emptyMessage?: string
   emptyCtaHref?: string | null
@@ -31,6 +33,7 @@ export interface RecipeGridProps {
 
 export function RecipeGrid({
   recipes,
+  totalCount = recipes.length,
   emptyTitle = 'No recipes yet',
   emptyMessage = 'Start by creating your first recipe for this pantry.',
   emptyCtaHref = '/recipes/new',
@@ -56,7 +59,7 @@ export function RecipeGrid({
     <section>
       <div className="mb-4 flex items-center justify-between gap-3">
         <Subheading level={2} className="text-2xl/8">Recipes</Subheading>
-        <Text className="font-sj-ui text-xs uppercase tracking-[0.14em]">{recipes.length} total</Text>
+        <Text className="font-sj-ui text-xs uppercase tracking-[0.14em]">{totalCount} total</Text>
       </div>
 
       <div className="sj-list-ruled">

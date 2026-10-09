@@ -15,6 +15,8 @@ import { absoluteUrlFromRequest } from "~/lib/og-image.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import { readChefProfileFromD1, readChefProfileWithPrisma } from "~/lib/chef-profile-reads.server";
+import { LIST_PAGE_SIZE, listOffset, listPageHref, listPageInfo, parseListPage } from "~/lib/list-pagination";
+import { ListPager } from "~/components/ui/list-pager";
 import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
 import { LocalDate } from "~/components/ui/local-date";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
@@ -69,11 +71,14 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
   const currentUserId = await getUserId(request, context.cloudflare?.env);
 
   const d1 = requestD1(context);
-  const readInput = { identifier, recipeLimit: null, recipeOffset: 0 };
+  const url = new URL(request.url);
+  const page = parseListPage(url);
+  const readInput = { identifier, recipeLimit: LIST_PAGE_SIZE, recipeOffset: listOffset(page) };
   const {
     profileUser,
     matchedBy,
     recipes,
+    recipeCount,
     cookbooks,
     recentSpoons: recentSpoonsRaw,
     fellowChefsCount,
@@ -87,7 +92,15 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
   }
 
   if (matchedBy === "id") {
-    return redirect(`/users/${profileUser.username}`);
+    const canonical = new URL(url);
+    canonical.pathname = `/users/${profileUser.username}`;
+    return redirect(listPageHref(canonical, page));
+  }
+
+  const recipePages = listPageInfo(url, page, recipeCount);
+  // A page past the end (a stale link after recipes were deleted) goes to the last page.
+  if (page > recipePages.totalPages) {
+    return redirect(listPageHref(url, recipePages.totalPages));
   }
 
   const recipesWithCover = recipes.map(({ covers, ...rest }) => {
@@ -135,9 +148,10 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
   });
 
   const publicOrigin = resolveIssuerOrigin(request.url, context.cloudflare?.env?.SPOONJOY_BASE_URL);
+  // Each page of recipes is its own canonical page, as search engines recommend.
   const canonicalUrl = absoluteUrlFromRequest(
     publicOrigin,
-    `/users/${profileUser.username}`,
+    `/users/${profileUser.username}${page > 1 ? `?page=${page}` : ""}`,
   );
   const ogImageUrl = absoluteUrlFromRequest(
     publicOrigin,
@@ -156,6 +170,8 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     ogImageUrl,
     isOwner: currentUserId === profileUser.id,
     recipes: recipesWithCover,
+    recipeCount,
+    recipePages,
     cookbooks: cookbooksWithCover,
     recentSpoons,
     // What the recent cooks' relative times ("3 hr ago") are measured from, so the server's
@@ -171,6 +187,8 @@ export default function UserProfile() {
     profile,
     isOwner,
     recipes,
+    recipeCount = recipes.length,
+    recipePages,
     cookbooks,
     recentSpoons = EMPTY_SPOONS,
     renderedAt,
@@ -196,7 +214,7 @@ export default function UserProfile() {
                 {profile.username}
               </Heading>
               <Text className="mt-1 text-sm">
-                Joined <LocalDate value={profile.joinedAt} unit="month" /> • {recipes.length} {recipes.length === 1 ? "recipe" : "recipes"} • {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
+                Joined <LocalDate value={profile.joinedAt} unit="month" /> • {recipeCount} {recipeCount === 1 ? "recipe" : "recipes"} • {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
               </Text>
               <Link href={`/?chef=${profile.username}`} className="sj-link mt-2 inline-flex min-h-11 items-center text-sm">
                 Open kitchen view
@@ -237,10 +255,14 @@ export default function UserProfile() {
                 servings: recipe.servings ?? undefined,
                 chefName: profile.username,
               }))}
+              totalCount={recipeCount}
               emptyTitle={isOwner ? "No recipes yet" : "No public recipes yet"}
               emptyMessage={isOwner ? "Create your first recipe to start your kitchen." : `${profile.username} has not shared any recipes yet.`}
               emptyCtaHref={isOwner ? "/recipes/new" : null}
             />
+            {recipePages ? (
+              <ListPager pages={recipePages} aria-label={`${profile.username} recipes pagination`} />
+            ) : null}
           </section>
 
           {/* A <section aria-labelledby>, not <aside>: root.tsx already wraps every route in a

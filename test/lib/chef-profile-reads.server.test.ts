@@ -219,4 +219,39 @@ describe("chef profile loader on a D1 binding", () => {
     await expect(load("missing-chef")).rejects.toMatchObject({ status: 404 });
     expect(getRequestDb).not.toHaveBeenCalled();
   });
+
+  it("pages a long recipe list", async () => {
+    const chef = await db.user.create({ data: createTestUser() });
+    await db.recipe.createMany({
+      data: Array.from({ length: 30 }, (_, index) => ({
+        title: `Recipe ${String(index).padStart(2, "0")}`, chefId: chef.id, createdAt: at(index), updatedAt: at(index),
+      })),
+    });
+    vi.resetModules();
+    vi.doMock("~/lib/route-platform.server", () => ({ getRequestDb: vi.fn() }));
+    const { loader } = await import("~/routes/users.$identifier");
+    const context = { cloudflare: { env: { DB: d1.binding } } };
+    const load = (path: string, identifier = chef.username) =>
+      loader({ request: new UndiciRequest(`http://localhost:3000${path}`), context, params: { identifier } } as never);
+    type Page = Exclude<Awaited<ReturnType<typeof load>>, Response>;
+
+    const first = await load(`/users/${chef.username}`) as Page;
+    expect(first.recipes).toHaveLength(24);
+    expect(first.recipes[0]!.title).toBe("Recipe 29");
+    expect(first.recipeCount).toBe(30);
+    expect(first.recipePages).toMatchObject({ page: 1, totalPages: 2, previousHref: null, nextHref: `/users/${chef.username}?page=2` });
+    expect(first.canonicalUrl).toBe(`http://localhost:3000/users/${chef.username}`);
+
+    const second = await load(`/users/${chef.username}?page=2`) as Page;
+    expect(second.recipes.map((recipe) => recipe.title)).toEqual(
+      ["Recipe 05", "Recipe 04", "Recipe 03", "Recipe 02", "Recipe 01", "Recipe 00"],
+    );
+    expect(second.recipePages).toMatchObject({ page: 2, previousHref: `/users/${chef.username}`, nextHref: null });
+    expect(second.canonicalUrl).toBe(`http://localhost:3000/users/${chef.username}?page=2`);
+
+    const pastTheEnd = await load(`/users/${chef.username}?page=9`) as Response;
+    expect(pastTheEnd.headers.get("Location")).toBe(`/users/${chef.username}?page=2`);
+    const byId = await load(`/users/${chef.id}?page=2`, chef.id) as Response;
+    expect(byId.headers.get("Location")).toBe(`/users/${chef.username}?page=2`);
+  });
 });

@@ -429,6 +429,55 @@ describe("Users $identifier Route", () => {
       expect(screen.getByRole("region", { name: "Cookbooks" })).toBeInTheDocument();
     });
 
+    it("shows the total recipe count and links between pages of recipes", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/users/:identifier",
+          Component: UserProfile,
+          loader: () => ({
+            profile: { id: "user-1", username: "chef-rowan", photoUrl: null, joinedAt: "2026-05-15T12:00:00.000Z" },
+            isOwner: false,
+            recipes: [{ id: "recipe-1", title: "Miso Soup", description: null, coverImageUrl: null, servings: null }],
+            recipeCount: 30,
+            recipePages: { page: 1, totalPages: 2, totalItems: 30, previousHref: null, nextHref: "/users/chef-rowan?page=2" },
+            cookbooks: [],
+          }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/users/chef-rowan"]} />);
+
+      expect(await screen.findByRole("heading", { name: "chef-rowan" })).toBeInTheDocument();
+      expect(profileLine("Joined May 2026 • 30 recipes • 0 cookbooks")).toBeInTheDocument();
+      expect(screen.getByText("30 total")).toBeInTheDocument();
+      const nav = screen.getByRole("navigation", { name: "chef-rowan recipes pagination" });
+      expect(nav).toHaveTextContent("Page 1 of 2");
+      expect(screen.getByRole("link", { name: "Next page" })).toHaveAttribute("href", "/users/chef-rowan?page=2");
+      expect(screen.getByRole("button", { name: "Previous page" })).toBeDisabled();
+    });
+
+    it("hides page links when every recipe fits on one page", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/users/:identifier",
+          Component: UserProfile,
+          loader: () => ({
+            profile: { id: "user-1", username: "chef-rowan", photoUrl: null, joinedAt: "2026-05-15T12:00:00.000Z" },
+            isOwner: false,
+            recipes: [],
+            recipeCount: 0,
+            recipePages: { page: 1, totalPages: 1, totalItems: 0, previousHref: null, nextHref: null },
+            cookbooks: [],
+          }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/users/chef-rowan"]} />);
+
+      expect(await screen.findByRole("heading", { name: "chef-rowan" })).toBeInTheDocument();
+      expect(screen.queryByRole("navigation", { name: "chef-rowan recipes pagination" })).not.toBeInTheDocument();
+    });
+
     it("clears cached cook progress when the owner logs out from their profile", async () => {
       window.localStorage.setItem("spoonjoy-cook-progress:user:user-1:recipe-1", "{}");
       window.localStorage.setItem("spoonjoy-cook-progress:recipe-1", "{}");
