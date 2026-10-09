@@ -584,18 +584,48 @@ export async function waitForBuiltAssets({ fs, fetchImpl, now, sleep, baseUrl, t
   }
 }
 
+// Right after deploy, Cloudflare's API can still say a brand-new script does not exist (seen 1.6 s
+// after "Deployed ... triggers" on #403). Every Cloudflare call verify makes retries a not-found
+// within the readiness window, then fails as a setup error rather than as a suite failure.
+export const CLOUDFLARE_NOT_FOUND_PATTERN = /not found|does not exist|\[code: 10007\]/i;
+
+async function untilCloudflareKnows(task, { now, sleep, deadline, workerName }) {
+  for (;;) {
+    try {
+      return await task();
+    } catch (error) {
+      const text = `${error instanceof Error ? error.message : String(error)}\n${outputOf(error)}`;
+      if (!CLOUDFLARE_NOT_FOUND_PATTERN.test(text)) throw error;
+      if (now() >= deadline) {
+        const reason = text.split("\n").find((line) => CLOUDFLARE_NOT_FOUND_PATTERN.test(line)).trim();
+        throw new Error(
+          `Setup error, not a test failure: Cloudflare still did not know ${workerName} ${Math.round(READY_TIMEOUT_MS / 1000)} s after deploy: ${reason}`,
+        );
+      }
+      await sleep(READY_POLL_MS);
+    }
+  }
+}
+
 export async function verify({ env, exec, fs, fetchImpl, now, sleep, log }) {
   requireGitHubActions(env);
   const state = readState(fs);
   assertWranglerIsRunScoped(fs, state);
+  const known = { now, sleep, deadline: now() + READY_TIMEOUT_MS, workerName: state.workerName };
 
   const secretNames = new Set(
-    parseJsonResults(await runWrangler(exec, ["secret", "list", "--env", "qa", "--format", "json"])).map((row) => row?.name),
+    parseJsonResults(await untilCloudflareKnows(
+      () => runWrangler(exec, ["secret", "list", "--env", "qa", "--format", "json"]),
+      known,
+    )).map((row) => row?.name),
   );
   const missing = REQUIRED_RUN_SECRETS.filter((name) => !secretNames.has(name));
   if (missing.length > 0) throw new Error(`The run's Worker is missing secret(s): ${missing.join(", ")}.`);
 
-  const migrations = await runWrangler(exec, ["d1", "migrations", "list", "DB", "--remote", "--env", "qa"]);
+  const migrations = await untilCloudflareKnows(
+    () => runWrangler(exec, ["d1", "migrations", "list", "DB", "--remote", "--env", "qa"]),
+    known,
+  );
   if (!NO_PENDING_MIGRATIONS_PATTERN.test(migrations)) {
     throw new Error("The run's database still has pending migrations.");
   }

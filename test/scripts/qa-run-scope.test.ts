@@ -12,6 +12,7 @@ import {
   MAX_RETRY_AFTER_MS,
   MAX_RUN_WORKERS,
   READY_TIMEOUT_MS,
+  READY_POLL_MS,
   ASSETS_READY_TIMEOUT_MS,
   ASSET_FETCH_CONCURRENCY,
   CLIENT_ASSETS_DIR,
@@ -732,16 +733,59 @@ describe("verify", () => {
       .rejects.toThrow(`${IDENTITY.baseUrl} did not become ready within ${READY_TIMEOUT_MS / 1000} s: ${reason}.`);
   });
 
+  it("retries a brand-new Worker that Cloudflare does not know yet, then carries on", async () => {
+    const notFound = Object.assign(new Error("Command failed: pnpm exec wrangler secret list"), {
+      stderr: `✘ [ERROR] Worker "${IDENTITY.workerName}" (env: qa) not found.\n`,
+    });
+    const answers = verifyExec();
+    const exec = vi.fn(answers.exec)
+      .mockRejectedValueOnce(notFound)
+      .mockRejectedValueOnce("This Worker does not exist on your account. [code: 10007]");
+    const sleep = vi.fn(async () => {});
+    await verify({ env: RUN_ENV, exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: Date.now, sleep, log: vi.fn() });
+    expect(sleep).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(READY_POLL_MS);
+    expect(exec.mock.calls.map(([, args]) => args.slice(2, 4).join(" "))).toEqual([
+      "secret list", "secret list", "secret list", "d1 migrations",
+    ]);
+  });
+
+  it("fails as a setup error when Cloudflare still does not know the Worker after the readiness window", async () => {
+    let clock = 0;
+    const sleep = vi.fn(async (ms: number) => {
+      clock += ms;
+    });
+    const exec = vi.fn(async (_file: string, args: string[]) => {
+      if (args.includes("migrations")) {
+        throw Object.assign(new Error("Command failed"), { stdout: "", stderr: `Worker "${IDENTITY.workerName}" (env: qa) not found.\n` });
+      }
+      return verifyExec().exec(_file, args);
+    });
+    await expect(verify({ env: RUN_ENV, exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: () => clock, sleep, log: vi.fn() }))
+      .rejects.toThrow(`Setup error, not a test failure: Cloudflare still did not know ${IDENTITY.workerName} ${READY_TIMEOUT_MS / 1000} s after deploy: Worker "${IDENTITY.workerName}" (env: qa) not found.`);
+    expect(clock).toBe(READY_TIMEOUT_MS);
+  });
+
+  it("never retries a Cloudflare failure that is not a not-found", async () => {
+    const exec = vi.fn(async () => {
+      throw new Error("Authentication error [code: 10000]");
+    });
+    const sleep = vi.fn();
+    await expect(verify({ env: RUN_ENV, exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: Date.now, sleep, log: vi.fn() }))
+      .rejects.toThrow("Authentication error [code: 10000]");
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
   it("fails on a missing secret or a pending migration", async () => {
-    await expect(verify({ env: RUN_ENV, exec: verifyExec({ secrets: ["SESSION_SECRET"] }).exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), log: vi.fn() }))
+    await expect(verify({ env: RUN_ENV, exec: verifyExec({ secrets: ["SESSION_SECRET"] }).exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: Date.now, log: vi.fn() }))
       .rejects.toThrow("The run's Worker is missing secret(s): VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT.");
-    await expect(verify({ env: RUN_ENV, exec: verifyExec({ migrations: "0029_x.sql pending" }).exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), log: vi.fn() }))
+    await expect(verify({ env: RUN_ENV, exec: verifyExec({ migrations: "0029_x.sql pending" }).exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: Date.now, log: vi.fn() }))
       .rejects.toThrow(/still has pending migrations/);
     const noJson = fakeExec({ "secret list": "Authentication error" });
-    await expect(verify({ env: RUN_ENV, exec: noJson.exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), log: vi.fn() }))
+    await expect(verify({ env: RUN_ENV, exec: noJson.exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: Date.now, log: vi.fn() }))
       .rejects.toThrow(/no JSON results/);
     const nullRows = fakeExec({ "secret list": "[null]" });
-    await expect(verify({ env: RUN_ENV, exec: nullRows.exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), log: vi.fn() }))
+    await expect(verify({ env: RUN_ENV, exec: nullRows.exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: Date.now, log: vi.fn() }))
       .rejects.toThrow(/missing secret/);
   });
 
