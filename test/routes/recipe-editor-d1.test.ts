@@ -8,6 +8,14 @@ import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
 import { createTestUser } from "../utils";
 import { expectConsoleError } from "../warning-policy";
+import { photoVariantKeys } from "~/lib/photo-variants";
+
+// Removing an upload deletes the original, then its variant objects: exactly one photo, nothing else.
+function expectOneUploadRemoved(remove: ReturnType<typeof vi.fn>) {
+  expect(remove).toHaveBeenCalledTimes(2);
+  const [key] = remove.mock.calls[0] as [string];
+  expect(remove).toHaveBeenNthCalledWith(2, photoVariantKeys(key));
+}
 
 // The recipe edit page and the step edit page with a D1 binding: each write is one D1
 // batch (through the SQLite-backed fake binding) and leaves the same rows as the Prisma
@@ -247,7 +255,7 @@ describe("recipe editor routes on a D1 binding", () => {
       }), { DB: racing, PHOTOS: bucket }));
 
       expect(status).toBe(400);
-      expect(bucket.delete).toHaveBeenCalledTimes(1);
+      expectOneUploadRemoved(bucket.delete);
       await expect(graph(mine)).resolves.toMatchObject({ title: "Mine", touched: false, covers: [] });
     });
 
@@ -261,7 +269,7 @@ describe("recipe editor routes on a D1 binding", () => {
 
       expect(result).toBeInstanceOf(Response);
       expect((result as Response).status).toBe(404);
-      expect(bucket.delete).toHaveBeenCalledTimes(1);
+      expectOneUploadRemoved(bucket.delete);
       await expect(db.recipeCover.count({ where: { recipeId: mine.recipe.id } })).resolves.toBe(0);
     });
   });
@@ -518,7 +526,7 @@ describe("recipe editor routes on a D1 binding", () => {
         await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "RecipeEditorD1_cover_abort"`);
       }
       await expect(db.recipe.count({ where: { title: "Broken cover" } })).resolves.toBe(0);
-      expect(bucket.delete).toHaveBeenCalledTimes(1);
+      expectOneUploadRemoved(bucket.delete);
     });
 
     it("answers a create that lost its title with the title error, removing the upload and capturing nothing", async () => {
@@ -536,7 +544,7 @@ describe("recipe editor routes on a D1 binding", () => {
       expect(posted.filter((body) => body.includes("$exception"))).toEqual([]);
       expect(responseStatus(result)).toBe(400);
       expect((result as { data: { errors: unknown } }).data.errors).toEqual({ title: "You already have an active recipe with this title" });
-      expect(bucket.delete).toHaveBeenCalledTimes(1);
+      expectOneUploadRemoved(bucket.delete);
       await expect(db.recipe.count({ where: { title: "Taken title" } })).resolves.toBe(1);
     });
   });

@@ -530,7 +530,7 @@ const schemas = {
     description: nullableStringSchema,
     servings: nullableStringSchema,
     chef: ref("ChefSummary"),
-    coverImageUrl: { ...nullableStringSchema, description: "Public cover image URL for transient display. API v1 does not provide image alt text or a license to copy/store photos outside Spoonjoy." },
+    coverImageUrl: { ...nullableStringSchema, description: "Public cover image URL for transient display. Spoonjoy-hosted /photos/ URLs accept ?w=<pixels> for a smaller WebP; see photoVariants in the API root. API v1 does not provide image alt text or a license to copy/store photos outside Spoonjoy." },
     coverProvenanceLabel: { ...nullableStringSchema, description: "Human-readable active cover provenance label such as Original photo, Editorial photo, Imported photo, or AI generated." },
     coverSourceType: coverSourceTypeSchema,
     coverVariant: coverVariantSchema,
@@ -546,7 +546,7 @@ const schemas = {
     description: nullableStringSchema,
     servings: nullableStringSchema,
     chef: ref("ChefSummary"),
-    coverImageUrl: { ...nullableStringSchema, description: "Public cover image URL for transient display. API v1 does not provide image alt text or a license to copy/store photos outside Spoonjoy." },
+    coverImageUrl: { ...nullableStringSchema, description: "Public cover image URL for transient display. Spoonjoy-hosted /photos/ URLs accept ?w=<pixels> for a smaller WebP; see photoVariants in the API root. API v1 does not provide image alt text or a license to copy/store photos outside Spoonjoy." },
     coverProvenanceLabel: { ...nullableStringSchema, description: "Human-readable active cover provenance label such as Original photo, Editorial photo, Imported photo, or AI generated." },
     coverSourceType: coverSourceTypeSchema,
     coverVariant: coverVariantSchema,
@@ -960,7 +960,7 @@ const schemas = {
   ClearShoppingListRequest: objectSchema(["clientMutationId"], {
     clientMutationId: shortTextSchema,
   }),
-  DiscoveryData: objectSchema(["app", "version", "status", "docsUrl", "openapiUrl", "sdkOpenapiUrl", "connectorOpenapiUrl", "resources", "auth"], {
+  DiscoveryData: objectSchema(["app", "version", "status", "docsUrl", "openapiUrl", "sdkOpenapiUrl", "connectorOpenapiUrl", "resources", "photoVariants", "auth"], {
     app: { const: "spoonjoy" },
     version: { const: "v1" },
     status: { const: "ok" },
@@ -969,6 +969,12 @@ const schemas = {
     sdkOpenapiUrl: { type: "string" },
     connectorOpenapiUrl: { type: "string" },
     resources: arrayOf({ type: "object" }),
+    photoVariants: objectSchema(["queryParameter", "widths", "contentType", "note"], {
+      queryParameter: { const: "w", description: "Query parameter that asks a Spoonjoy-hosted /photos/ URL for a size variant." },
+      widths: { ...arrayOf({ type: "integer" }), description: "Stored variant widths in pixels. A requested width rounds up to the next one and is capped at the largest." },
+      contentType: { const: "image/webp" },
+      note: { type: "string" },
+    }),
     auth: { type: "object" },
   }),
   BuildDeployment: objectSchema(["id", "tag", "timestamp"], {

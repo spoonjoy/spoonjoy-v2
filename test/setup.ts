@@ -106,6 +106,11 @@ global.ResizeObserver = MockResizeObserver;
 global.confirm = vi.fn(() => true);
 
 // Mock environment variables
+// Anchored to this checkout's prisma/test.db, the file test/helpers/sqlite-d1.ts also opens
+// (through workerDbPath). A relative "file:./test.db" resolves against the generated client's
+// schema path, so worktrees sharing one node_modules would otherwise share one database and
+// delete each other's rows. In a parallel run, each worker process gets its own copy of a
+// snapshot of that file instead (test/support/worker-db.ts): per checkout, then per process.
 process.env.DATABASE_URL = workerDatabaseUrl(prepareWorkerDb());
 process.env.SESSION_SECRET = "test-secret";
 
@@ -152,6 +157,7 @@ beforeAll(async () => {
   await db.oAuthGrant.deleteMany({});
   await db.apiCredential.deleteMany({});
   await db.imageGenLedger.deleteMany({});
+  await db.imageGenDailyBudget.deleteMany({});
   await db.oAuthAuthCode.deleteMany({});
   await db.oAuthRefreshToken.deleteMany({});
   await db.oAuthClient.deleteMany({});
