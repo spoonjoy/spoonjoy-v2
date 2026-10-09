@@ -153,6 +153,19 @@ export function nameUpsertStatements(
   ];
 }
 
+/** Fails the batch if an ingredient with any of these (normalized) names is already in the recipe. */
+export function ingredientNamesFreeGuard(recipeId: string, ingredientNames: readonly string[]): D1Query {
+  // The names go in as one JSON array: D1 allows at most 100 bound values per statement.
+  return d1Guard(
+    `NOT EXISTS (
+       SELECT 1 FROM "Ingredient" JOIN "IngredientRef" ON "IngredientRef"."id" = "Ingredient"."ingredientRefId"
+       WHERE "Ingredient"."recipeId" = ? AND "IngredientRef"."name" IN (SELECT "value" FROM json_each(?))
+     )`,
+    recipeId,
+    JSON.stringify(ingredientNames),
+  );
+}
+
 /**
  * An ingredient whose unit and ingredient ref are given by name. With the names' upserts
  * earlier in the same batch, both resolve to exactly one row and this inserts exactly one

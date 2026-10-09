@@ -444,7 +444,7 @@ describe("D1 recipe write batches", () => {
     it("adds and deletes step ingredients", async () => {
       const { recipe, steps, ingredients, cup, refs } = await seedRecipe("Ingredients");
       await addStepIngredientsOnD1(d1.binding, {
-        recipeId: recipe.id, stepId: steps[2]!.id, stepNum: 3, rows: [{ quantity: 4, unitId: cup.id, ingredientRefId: refs[3]!.id }],
+        recipeId: recipe.id, stepId: steps[2]!.id, stepNum: 3, rows: [{ quantity: 4, unitName: cup.name, ingredientName: refs[3]!.name }],
       });
       expect((await graph(recipe.id))!.steps[2]!.ingredients).toEqual([{ quantity: 4, unit: "cup", name: "salt" }]);
 

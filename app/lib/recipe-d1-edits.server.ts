@@ -6,7 +6,9 @@ import { coverInsertStatement } from "~/lib/recipe-cover.server";
 import {
   activeRecipeTitleFreeGuard,
   cookbooksForRecipeTouchStatement,
-  ingredientInsertStatement,
+  ingredientNamesFreeGuard,
+  namedIngredientInsertStatement,
+  nameUpsertStatements,
   recipeActiveGuard,
   recipeUpdateStatement,
   stepAtGuard,
@@ -47,10 +49,10 @@ export async function stepDeletionRaceAnswer(
 export async function ingredientAlreadyInRecipe(
   db: PrismaClient,
   recipeId: string,
-  ingredientRefIds: readonly string[],
+  ingredientNames: readonly string[],
 ): Promise<string | null> {
   const existing = await db.ingredient.findFirst({
-    where: { recipeId, ingredientRefId: { in: [...ingredientRefIds] } },
+    where: { recipeId, ingredientRef: { name: { in: [...ingredientNames] } } },
     select: { ingredientRef: { select: { name: true } } },
   });
   return existing?.ingredientRef.name ?? null;
@@ -141,8 +143,10 @@ export async function deleteRecipeStepOnD1(
 }
 
 /**
- * Adds ingredients to a step, all or none, then touches the recipe. The guards re-check that
- * the step is still where it was and that none of the ingredients is in the recipe yet.
+ * The step page's ingredient add: the ingredients, with their units and ingredient names
+ * created in the same batch when they are new, then the recipe touch. The guards re-check
+ * that the step is still where it was and that none of the names is in the recipe yet, so a
+ * stopped or failed batch leaves no new unit or ingredient name behind either.
  */
 export async function addStepIngredientsOnD1(
   d1: D1ReadDatabase,
@@ -150,25 +154,16 @@ export async function addStepIngredientsOnD1(
     recipeId: string;
     stepId: string;
     stepNum: number;
-    rows: ReadonlyArray<{ quantity: number; unitId: string; ingredientRefId: string }>;
+    rows: ReadonlyArray<{ quantity: number; unitName: string; ingredientName: string }>;
   },
 ): Promise<void> {
   const now = new Date();
+  const named = input.rows.map((row) => ({ ...row, recipeId: input.recipeId, stepNum: input.stepNum, now }));
   await d1WriteBatch(d1, [
     stepAtGuard(input.stepId, input.recipeId, input.stepNum),
-    // The ids go in as one JSON array: D1 allows at most 100 bound values per statement.
-    d1Guard(
-      `NOT EXISTS (SELECT 1 FROM "Ingredient"
-         WHERE "recipeId" = ? AND "ingredientRefId" IN (SELECT "value" FROM json_each(?)))`,
-      input.recipeId,
-      JSON.stringify(input.rows.map((row) => row.ingredientRefId)),
-    ),
-    ...input.rows.map((row) => ingredientInsertStatement({
-      recipeId: input.recipeId,
-      stepNum: input.stepNum,
-      ...row,
-      now,
-    })),
+    ingredientNamesFreeGuard(input.recipeId, input.rows.map((row) => row.ingredientName)),
+    ...nameUpsertStatements(named, now),
+    ...named.map(namedIngredientInsertStatement),
     recipeUpdateStatement(input.recipeId, {}, now),
   ]);
 }

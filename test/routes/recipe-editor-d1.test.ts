@@ -434,6 +434,56 @@ describe("recipe editor routes on a D1 binding", () => {
         .resolves.toEqual({ status: 409, errors: { general: CHANGED } });
     });
 
+    it("leaves no new unit or ingredient name behind when an ingredient add is refused, loses a race or fails", async () => {
+      // Units and ingredient names are shared lookup rows. An add that writes nothing must not
+      // create them either: they used to be upserted one by one before the checks and the batch.
+      const seeded = await seedRecipe("Lookup residue");
+      const tag = crypto.randomUUID().slice(0, 8);
+      const lookupRows = async () => ({
+        units: await db.unit.count({ where: { name: { startsWith: `residue ${tag}` } } }),
+        names: await db.ingredientRef.count({ where: { name: { startsWith: `residue ${tag}` } } }),
+      });
+      const none = { units: 0, names: 0 };
+      const fresh = (n: number) => ({ quantity: 1, unit: `Residue ${tag} unit ${n}`, ingredientName: `Residue ${tag} name ${n}` });
+      const batch = (...rows: unknown[]) => ({ intent: "addIngredients", ingredientsJson: JSON.stringify(rows) });
+      const single = (n: number, ingredientName = fresh(n).ingredientName) =>
+        ({ intent: "addIngredient", quantity: "1", unitName: fresh(n).unit, ingredientName });
+      const down = { prepare: (sql: string) => d1.binding.prepare(sql), batch: async () => { throw new Error("D1 is down"); } };
+      const moveStep = () => db.recipeStep.update({ where: { id: seeded.steps[2]!.id }, data: { stepNum: 8 } });
+
+      // Refused by the checks: a later row is already in the recipe. With and without a binding.
+      for (const env of [{ DB: d1.binding }, null]) {
+        const refused = await withD1Routes(() => act("step", seeded, () => batch(fresh(1), { quantity: 1, unit: "cup", ingredientName: "Flour" }), env, 2));
+        expect(responseStatus(refused)).toBe(400);
+        const refusedOne = await withD1Routes(() => act("step", seeded, () => single(2, "Flour"), env, 2));
+        expect(responseStatus(refusedOne)).toBe(400);
+        expect(await lookupRows()).toEqual(none);
+      }
+
+      // Stopped in the batch: the step moved in between.
+      await expect(lostRace("step", seeded, batch(fresh(3)), moveStep, 2)).resolves.toEqual({ status: 409, errors: { general: CHANGED } });
+      await db.recipeStep.update({ where: { id: seeded.steps[2]!.id }, data: { stepNum: 3 } });
+      await expect(lostRace("step", seeded, single(4), moveStep, 2)).resolves.toEqual({ status: 409, errors: { general: CHANGED } });
+      await db.recipeStep.update({ where: { id: seeded.steps[2]!.id }, data: { stepNum: 3 } });
+      expect(await lookupRows()).toEqual(none);
+
+      // The batch itself fails.
+      for (const fields of [batch(fresh(5)), single(6)]) {
+        const failed = await withD1Routes(() => act("step", seeded, () => fields, { DB: down }, 2)).catch((error: unknown) => error);
+        expect(failed).toEqual(new Error("D1 is down"));
+      }
+      expect(await lookupRows()).toEqual(none);
+
+      // A successful add on the binding creates each name once, in its batch.
+      const added = await withD1Routes(() => act("step", seeded, () => batch(fresh(7), { ...fresh(8), unit: fresh(7).unit }), { DB: d1.binding }, 2));
+      expect(responseStatus(added)).toBe(200);
+      expect(await lookupRows()).toEqual({ units: 1, names: 2 });
+      const successNames = [`residue ${tag} unit 7`, `residue ${tag} name 7`, `residue ${tag} name 8`];
+      expect(d1.statements
+        .filter((statement) => /INSERT INTO "(Unit|IngredientRef)"/.test(statement.sql))
+        .map((statement) => statement.params[1])).toEqual(successNames);
+    });
+
     it("answers step saves that lost a race as the checks do", async () => {
       const seeded = await seedRecipe("Save race");
       await expect(lostRace("step", seeded, { stepTitle: "Mixed", description: "Mix it" }, () =>

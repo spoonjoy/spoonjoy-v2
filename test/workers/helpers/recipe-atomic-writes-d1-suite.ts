@@ -509,24 +509,33 @@ describe("atomic recipe writes on Wrangler D1", () => {
       expect(after.ingredients.map((row) => row.ingredient)).toEqual(["atomic flour", "atomic milk"]);
     });
 
-    it("adds all of a batch of ingredients or none of them", async () => {
+    it("adds all of a batch of ingredients, with their new units and names, or none of them", async () => {
       await seedRecipe("atomic-add");
       const rowsToAdd = [
-        { quantity: 1, unitId: "atomic-tbsp", ingredientRefId: "atomic-salt" },
-        { quantity: 2, unitId: "atomic-tbsp", ingredientRefId: "atomic-sugar" },
+        { quantity: 1, unitName: "atomic tbsp", ingredientName: "atomic salt" },
+        { quantity: 2, unitName: "atomic tbsp", ingredientName: "atomic sugar" },
+        { quantity: 3, unitName: "atomic dash", ingredientName: "atomic pepper" },
       ];
       const add = { recipeId: "atomic-add", stepId: "atomic-add-step-3", stepNum: 3, rows: rowsToAdd };
+      const newLookupRows = async () => ({
+        units: await count(`SELECT COUNT(*) AS count FROM "Unit" WHERE "name" = 'atomic dash'`),
+        names: await count(`SELECT COUNT(*) AS count FROM "IngredientRef" WHERE "name" = 'atomic pepper'`),
+      });
       await failOn("INSERT", "Ingredient", `NEW."ingredientRefId" = 'atomic-sugar'`);
 
       expect(String(await rejection(addStepIngredientsOnD1(database(), add)))).toContain(FAILURE);
       expect((await recipeGraph("atomic-add")).ingredients).toHaveLength(3);
+      // The new unit and ingredient name were written earlier in the batch, and rolled back with it.
+      expect(await newLookupRows()).toEqual({ units: 0, names: 0 });
 
       await run(`DROP TRIGGER "${TRIGGER}"`);
       await addStepIngredientsOnD1(database(), add);
       expect((await recipeGraph("atomic-add")).ingredients.filter((row) => row.stepNum === 3)).toEqual([
+        { stepNum: 3, quantity: 3, unit: "atomic dash", ingredient: "atomic pepper" },
         { stepNum: 3, quantity: 1, unit: "atomic tbsp", ingredient: "atomic salt" },
         { stepNum: 3, quantity: 2, unit: "atomic tbsp", ingredient: "atomic sugar" },
       ]);
+      expect(await newLookupRows()).toEqual({ units: 1, names: 1 });
       // An ingredient already in the recipe (added in between) stops the whole batch.
       expect(isD1GuardFailure(await rejection(addStepIngredientsOnD1(database(), { ...add, rows: [rowsToAdd[0]!] })))).toBe(true);
     });
