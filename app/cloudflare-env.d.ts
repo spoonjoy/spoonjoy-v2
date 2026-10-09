@@ -11,6 +11,10 @@ declare global {
 
   interface R2ObjectBody {
     body: BodyInit | null;
+    /** Stored size in bytes. */
+    size: number;
+    /** The object's ETag, quoted, ready for an ETag header. */
+    httpEtag: string;
     httpMetadata?: {
       contentType?: string;
     };
@@ -23,7 +27,8 @@ declare global {
       value: Blob | ArrayBuffer | ArrayBufferView | ReadableStream,
       options?: { httpMetadata?: { contentType?: string } }
     ): Promise<unknown>;
-    delete(key: string): Promise<void>;
+    /** Deletes one key or, in one call, up to 1000 keys. */
+    delete(keys: string | string[]): Promise<void>;
   }
 
   interface ExecutionContext {
@@ -76,6 +81,10 @@ declare global {
     GOOGLE_API_KEY?: string;
     GEMINI_API_KEY?: string;
     GEMINI_IMAGE_MODEL?: string;
+    /** "off" stops every AI generation (kill switch). */
+    SPOONJOY_AI_IMAGE_GENERATION?: string;
+    /** Global AI generations per UTC day across all users; default 200. */
+    SPOONJOY_AI_DAILY_GENERATION_BUDGET?: string;
     GEMINI_IMAGE_TIMEOUT_MS?: string;
     GEMINI_TEXT_MODEL?: string;
     GEMINI_TEXT_TIMEOUT_MS?: string;

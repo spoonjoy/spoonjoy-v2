@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { ChefHat } from "lucide-react";
+import { LAZY_IMAGE_PROPS } from "~/lib/image-loading";
 
 export interface SpoonsStripRecipe {
   id: string;
@@ -85,6 +86,7 @@ function CompactCookVisual({ spoon }: { spoon: SpoonsStripItem }) {
       <img
         src={imageUrl}
         alt={alt}
+        {...LAZY_IMAGE_PROPS}
         className="aspect-square w-16 border border-[var(--sj-border)] object-cover"
       />
     );
@@ -187,6 +189,7 @@ export function SpoonsStrip({ spoons, showRecipe = false, emptyAction, now = Dat
             <img
               src={spoon.photoUrl}
               alt={`Cook by ${spoon.chef.username}`}
+              {...LAZY_IMAGE_PROPS}
               className="aspect-square w-full object-cover"
             />
           ) : null}

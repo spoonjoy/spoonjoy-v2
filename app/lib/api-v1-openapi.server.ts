@@ -530,7 +530,7 @@ const schemas = {
     description: nullableStringSchema,
     servings: nullableStringSchema,
     chef: ref("ChefSummary"),
-    coverImageUrl: { ...nullableStringSchema, description: "Public cover image URL for transient display. API v1 does not provide image alt text or a license to copy/store photos outside Spoonjoy." },
+    coverImageUrl: { ...nullableStringSchema, description: "Public cover image URL for transient display. Spoonjoy-hosted /photos/ URLs accept ?w=<pixels> for a smaller WebP; see photoVariants in the API root. API v1 does not provide image alt text or a license to copy/store photos outside Spoonjoy." },
     coverProvenanceLabel: { ...nullableStringSchema, description: "Human-readable active cover provenance label such as Original photo, Editorial photo, Imported photo, or AI generated." },
     coverSourceType: coverSourceTypeSchema,
     coverVariant: coverVariantSchema,
@@ -546,7 +546,7 @@ const schemas = {
     description: nullableStringSchema,
     servings: nullableStringSchema,
     chef: ref("ChefSummary"),
-    coverImageUrl: { ...nullableStringSchema, description: "Public cover image URL for transient display. API v1 does not provide image alt text or a license to copy/store photos outside Spoonjoy." },
+    coverImageUrl: { ...nullableStringSchema, description: "Public cover image URL for transient display. Spoonjoy-hosted /photos/ URLs accept ?w=<pixels> for a smaller WebP; see photoVariants in the API root. API v1 does not provide image alt text or a license to copy/store photos outside Spoonjoy." },
     coverProvenanceLabel: { ...nullableStringSchema, description: "Human-readable active cover provenance label such as Original photo, Editorial photo, Imported photo, or AI generated." },
     coverSourceType: coverSourceTypeSchema,
     coverVariant: coverVariantSchema,
@@ -960,7 +960,7 @@ const schemas = {
   ClearShoppingListRequest: objectSchema(["clientMutationId"], {
     clientMutationId: shortTextSchema,
   }),
-  DiscoveryData: objectSchema(["app", "version", "status", "docsUrl", "openapiUrl", "sdkOpenapiUrl", "connectorOpenapiUrl", "resources", "auth"], {
+  DiscoveryData: objectSchema(["app", "version", "status", "docsUrl", "openapiUrl", "sdkOpenapiUrl", "connectorOpenapiUrl", "resources", "photoVariants", "auth"], {
     app: { const: "spoonjoy" },
     version: { const: "v1" },
     status: { const: "ok" },
@@ -969,6 +969,12 @@ const schemas = {
     sdkOpenapiUrl: { type: "string" },
     connectorOpenapiUrl: { type: "string" },
     resources: arrayOf({ type: "object" }),
+    photoVariants: objectSchema(["queryParameter", "widths", "contentType", "note"], {
+      queryParameter: { const: "w", description: "Query parameter that asks a Spoonjoy-hosted /photos/ URL for a size variant." },
+      widths: { ...arrayOf({ type: "integer" }), description: "Stored variant widths in pixels. A requested width rounds up to the next one and is capped at the largest." },
+      contentType: { const: "image/webp" },
+      note: { type: "string" },
+    }),
     auth: { type: "object" },
   }),
   BuildDeployment: objectSchema(["id", "tag", "timestamp"], {
@@ -3359,13 +3365,13 @@ const agentStartResponseExample = {
   data: {
     deviceCode: "sjdc_...",
     userCode: "ABCD-2345",
-    authorizationUrl: "https://spoonjoy.app/agent/connect/acr_123?code=ABCD-2345",
+    authorizationUrl: "https://spoonjoy.app/agent/connect/acr_123",
     verificationUri: "https://spoonjoy.app/agent/connect",
-    verificationUriComplete: "https://spoonjoy.app/agent/connect/acr_123?code=ABCD-2345",
+    verificationUriComplete: "https://spoonjoy.app/agent/connect/acr_123",
     expiresAt: exampleTimestamp,
     expiresIn: 600,
     interval: 2,
-    message: "Send authorizationUrl to the user, or show verificationUri plus userCode on constrained devices. After approval, call poll_agent_connection with deviceCode. Never ask for their Spoonjoy password.",
+    message: "Show the user authorizationUrl (or verificationUri on constrained devices) and, separately, userCode. They type the code on that page to approve; the link alone cannot approve. After approval, call poll_agent_connection with deviceCode. Never ask for their Spoonjoy password.",
   },
 };
 const agentPollRequestExample = { deviceCode: "sjdc_..." };
@@ -3374,11 +3380,11 @@ const agentPollPendingExample = {
   data: {
     status: "pending",
     expiresAt: exampleTimestamp,
-    authorizationUrl: "https://spoonjoy.app/agent/connect/acr_123?code=ABCD-2345",
+    authorizationUrl: "https://spoonjoy.app/agent/connect/acr_123",
     verificationUri: "https://spoonjoy.app/agent/connect",
-    verificationUriComplete: "https://spoonjoy.app/agent/connect/acr_123?code=ABCD-2345",
+    verificationUriComplete: "https://spoonjoy.app/agent/connect/acr_123",
     userCode: "ABCD-2345",
-    message: "Waiting for the user to approve this Spoonjoy connection.",
+    message: "Waiting for the user to approve this Spoonjoy connection. Show them authorizationUrl and, separately, userCode: they type the code on that page to approve.",
   },
 };
 const agentPollApprovedExample = {
@@ -3393,7 +3399,7 @@ const agentPollApprovedExample = {
 	      tokenPrefix: "sj_abc123456",
 	      scopes: ["shopping_list:read", "shopping_list:write"],
 	      createdAt: exampleTimestamp,
-	      expiresAt: null,
+	      expiresAt: "2026-08-30T00:00:00.000Z",
 	    },
     message: "Connection approved. Cache this token locally and use it for future Spoonjoy calls.",
   },
@@ -3524,7 +3530,7 @@ function authOperationPaths() {
         summary: "Start a delegated approval connection",
         "x-auth": "optional",
         "x-scopes": [],
-        "x-grantable-scopes": ["account:read", "account:write", "kitchen:read", "kitchen:write", "shopping_list:read", "shopping_list:write"],
+        "x-grantable-scopes": ["public:read", "recipes:read", "cookbooks:read", "kitchen:read", "kitchen:write", "shopping_list:read", "shopping_list:write"],
         "x-credential-modes": ["anonymous"],
         security: [{}],
         requestBody: {
@@ -3787,13 +3793,16 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         eyebrow: "Agent, appliance, no callback",
         audience: "Use for agents, CLIs, kitchen displays, and constrained devices that can show a chef an approval URL but cannot run an OAuth callback.",
         endpoints: ["/api/tools/start_agent_connection", "/api/tools/poll_agent_connection", "/api/v1/tokens/{credentialId}"],
-        scopes: ["account:read", "account:write", "kitchen:read", "kitchen:write", "shopping_list:read", "shopping_list:write"],
+        scopes: ["public:read", "recipes:read", "cookbooks:read", "kitchen:read", "kitchen:write", "shopping_list:read", "shopping_list:write"],
         notes: [
+          "Delegated approval never grants account:* or tokens:* scopes; requests for them fail with 400.",
+          "The approval link never carries the code: the chef opens it, signs in, and types userCode, so show both.",
+          "Approved delegated tokens expire after 90 days; start a new connection after that.",
           "The device code expires after 10 minutes.",
           "Poll no faster than the returned interval, currently 2 seconds.",
           "A pending poll returns pending plus authorizationUrl, verificationUri, verificationUriComplete, and userCode.",
           "Pass scopes such as shopping_list:read shopping_list:write to request a least-privilege delegated token; omitted scopes default to shopping_list:read shopping_list:write.",
-          "Tiny devices can show verificationUri plus userCode instead of the long authorizationUrl.",
+          "Tiny devices can show verificationUri plus userCode instead of the long authorizationUrl; verificationUriComplete is the same link as authorizationUrl and also needs the typed code.",
           "An approved poll returns the sj_... token once, plus token metadata.",
           "The token is a normal bearer credential. A device can revoke its own credential id with DELETE /api/v1/tokens/{credentialId}; revoking any other credential requires tokens:write.",
         ],

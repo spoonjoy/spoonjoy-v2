@@ -740,6 +740,7 @@ export async function scheduleSpoonCoverStylization(
       {
         ...(input.now ? { now: () => new Date(input.now!()) } : {}),
         d1: d1Binding(input.env?.DB),
+        env: input.env,
       },
     );
     if (!consumed) {
