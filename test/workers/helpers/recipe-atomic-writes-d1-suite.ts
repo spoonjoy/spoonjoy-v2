@@ -492,6 +492,29 @@ describe("atomic recipe writes on Wrangler D1", () => {
       expect(await recipeUpdatedAt("atomic-swap")).not.toBe(OLD);
     });
 
+    it("swaps nothing when the moved step gained an output dependency the swap would break after the check", async () => {
+      await seedRecipe("atomic-swap-dependency");
+      const swap = {
+        recipeId: "atomic-swap-dependency",
+        stepId: "atomic-swap-dependency-step-2",
+        stepNum: 2,
+        targetStepId: "atomic-swap-dependency-step-1",
+        targetStepNum: 1,
+      };
+      // Another request makes step 2 use step 1's output between the editor's check and its batch.
+      const dependencyAdded = interleaved(() => run(
+        `INSERT INTO "StepOutputUse" ("id", "recipeId", "outputStepNum", "inputStepNum", "updatedAt")
+         VALUES ('atomic-swap-dependency-late-use', 'atomic-swap-dependency', 1, 2, ?)`,
+        OLD,
+      ));
+
+      expect(isD1GuardFailure(await rejection(swapRecipeStepsOnD1(dependencyAdded, swap)))).toBe(true);
+      const unchanged = await recipeGraph("atomic-swap-dependency");
+      expect(unchanged.steps.map((step) => step.stepTitle)).toEqual(["Mix", "Rest", "Bake"]);
+      expect(unchanged.uses).toEqual([{ outputStepNum: 1, inputStepNum: 2 }, { outputStepNum: 1, inputStepNum: 3 }]);
+      expect(await recipeUpdatedAt("atomic-swap-dependency")).toBe(OLD);
+    });
+
     it("deletes a step only while no other step uses it, with the recipe touch", async () => {
       await seedRecipe("atomic-delete-step");
       const used = { recipeId: "atomic-delete-step", stepId: "atomic-delete-step-step-1", stepNum: 1 };
@@ -1035,6 +1058,32 @@ describe("atomic recipe writes on Wrangler D1", () => {
       const reordered = await recipeGraph("atomic-api-reorder");
       expect(reordered.steps.map((step) => step.stepTitle)).toEqual(["Rest", "Mix", "Bake", null]);
       expect(reordered.uses).toEqual([{ outputStepNum: 2, inputStepNum: 3 }]);
+    });
+
+    it.each([
+      ["up", "atomic-api-reorder-up", 2, 1, [1], "Cannot move Step 2 to position 1 because it uses output from Step 1"],
+      ["down", "atomic-api-reorder-down", 1, 2, [2], "Cannot move Step 1 to position 2 because Step 2 uses its output"],
+    ] as const)("renumbers nothing and answers the dependency error when a dependency the move %s would break lands after the check", async (
+      _direction, recipeId, fromStepNum, toStepNum, blockingStepNums, message,
+    ) => {
+      await seedRecipe(recipeId);
+      const input = { clientMutationId: `${recipeId}-mutation`, stepId: `${recipeId}-step-${fromStepNum}`, toStepNum };
+      // Another request makes step 2 use step 1's output between the reorder's check and its batch.
+      const dependencyAdded = interleaved(() => run(
+        `INSERT INTO "StepOutputUse" ("id", "recipeId", "outputStepNum", "inputStepNum", "updatedAt") VALUES (?, ?, 1, 2, ?)`,
+        `${recipeId}-late-use`, recipeId, OLD,
+      ));
+
+      await expect(reorderNativeRecipeStep(prisma, CHEF, recipeId, input, { d1: dependencyAdded })).resolves.toEqual({
+        ok: false,
+        code: "validation_error",
+        message,
+        details: { reason: "step_output_dependency", blockingStepNums },
+      });
+      const unchanged = await recipeGraph(recipeId);
+      expect(unchanged.steps.map((step) => step.stepTitle)).toEqual(["Mix", "Rest", "Bake"]);
+      expect(unchanged.uses).toEqual([{ outputStepNum: 1, inputStepNum: 2 }, { outputStepNum: 1, inputStepNum: 3 }]);
+      expect(await recipeUpdatedAt(recipeId)).toBe(OLD);
     });
 
     it("replaces a step's output uses or keeps the old ones", async () => {

@@ -12,6 +12,7 @@ import {
   stepNumUpdateStatement,
   stepOutputUseInsertStatement,
   stepOutputUsesDeleteStatement,
+  stepReorderDependencyFreeGuard,
 } from "~/lib/recipe-d1-writes.server";
 import { validateStepDeletion } from "~/lib/step-deletion-validation.server";
 import { checkStepUsage } from "~/lib/step-output-use-queries.server";
@@ -1290,8 +1291,9 @@ async function reorderNativeRecipeStepOnce(
 
   if (options.d1) {
     // One atomic batch: every step renumbered (through negative numbers, so no two steps
-    // share a number at any point), the tombstone and the recipe touch. The guard re-checks
-    // that the recipe still has exactly the steps read above, at the same numbers.
+    // share a number at any point), the tombstone and the recipe touch. The guards re-check
+    // that the recipe still has exactly the steps read above, at the same numbers, and that
+    // no step output use the move would break was added after the dependency check.
     const now = new Date();
     await d1WriteBatch(options.d1, [
       d1Guard(
@@ -1304,6 +1306,7 @@ async function reorderNativeRecipeStepOnce(
         JSON.stringify(steps.map((candidate) => `${candidate.id}:${candidate.stepNum}`)),
         steps.length,
       ),
+      stepReorderDependencyFreeGuard(recipeId, step.data.stepNum, input.toStepNum),
       ...reorderedSteps.map((candidate, index) => stepNumUpdateStatement(candidate.id, -(index + 1), now)),
       ...reorderedSteps.map((candidate, index) => stepNumUpdateStatement(candidate.id, index + 1, now)),
       ...(options.tombstone
