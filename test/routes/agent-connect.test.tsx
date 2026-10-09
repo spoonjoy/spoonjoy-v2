@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { cleanup as cleanupDom, render, screen } from "@testing-library/react";
+import { cleanup as cleanupDom, fireEvent, render, screen } from "@testing-library/react";
 import { faker } from "@faker-js/faker";
 import AgentConnectLookup, { action as lookupAction, loader as lookupLoader, meta as lookupMeta } from "~/routes/agent.connect";
 import AgentConnect, { action, loader, meta } from "~/routes/agent.connect.$requestId";
@@ -349,6 +349,36 @@ describe("agent connect route", () => {
     ));
     expect((refused as any).init.status).toBe(400);
     expect((refused as any).data.error).toContain("account access");
+  });
+
+  it("shows an approval error from the action, and pending requests saved without requester details", async () => {
+    const Stub = createTestRoutesStub([
+      {
+        path: "/",
+        Component: AgentConnect,
+        loader: () => ({
+          status: "pending",
+          agentName: "slugger",
+          userEmail,
+          expiresAt: "2026-05-26T12:10:00.000Z",
+          scopes: ["shopping_list:read"],
+          confirmedCode: null,
+          requester: null,
+        }),
+        action: () => ({ error: "That code doesn't match. Type the code your agent shows you." }),
+      },
+    ]);
+    render(<Stub initialEntries={["/"]} />);
+    const codeInput = await screen.findByLabelText("Type the code your agent shows you");
+    expect(screen.queryByText("Request details")).not.toBeInTheDocument();
+    fireEvent.change(codeInput, { target: { value: "WRNG-0000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Approve Access" }));
+    expect(await screen.findByText("That code doesn't match. Type the code your agent shows you.")).toBeInTheDocument();
+  });
+
+  it("shows the lookup page's error", async () => {
+    renderLookupWithData({ code: "", error: "That connection code was not found or has expired." });
+    expect(await screen.findByRole("alert")).toHaveTextContent("That connection code was not found or has expired.");
   });
 
   it("renders pending, approved, denied, and unavailable connection states", async () => {

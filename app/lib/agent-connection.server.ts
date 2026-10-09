@@ -375,13 +375,14 @@ export async function pollAgentConnection(
         message: "This Spoonjoy connection asked for account access, which agent connections can't grant. Start a new connection request.",
       };
     }
+    const tokenExpiresAt = new Date(now.getTime() + AGENT_CONNECTION_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000);
     const created = await createApiCredential(
       db,
       current.approvedById,
       input.tokenName?.trim() || `${current.agentName} delegated token`,
       {
         scopes: current.scopes,
-        expiresAt: new Date(now.getTime() + AGENT_CONNECTION_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000),
+        expiresAt: tokenExpiresAt,
       },
     );
     const claimed = await db.agentConnectionRequest.updateMany({
@@ -422,7 +423,7 @@ export async function pollAgentConnection(
         tokenPrefix: created.credential.tokenPrefix,
         scopes: created.credential.scopes.trim().split(/\s+/).filter(Boolean),
         createdAt: created.credential.createdAt.toISOString(),
-        expiresAt: created.credential.expiresAt?.toISOString() ?? null,
+        expiresAt: tokenExpiresAt.toISOString(),
       },
       storage: {
         vaultItem: "spoonjoy.app",

@@ -107,13 +107,14 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
   const userId = await getUserId(request, env);
   if (!userId) throw redirect(loginRedirect(request));
 
-  const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } });
+  // getUserId has just confirmed this account exists.
+  const user = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { email: true } });
   const typedCode = await typedCodeFor(env, request, connection.id);
   return {
     status: "pending",
     agentName: connection.agentName,
     scopes,
-    userEmail: user?.email ?? null,
+    userEmail: user.email,
     expiresAt: connection.expiresAt.toISOString(),
     confirmedCode: typedCode === connection.userCode ? typedCode : null,
     requester: {
