@@ -5,6 +5,7 @@ import { faker } from "@faker-js/faker";
 import AgentConnectLookup, { action as lookupAction, loader as lookupLoader, meta as lookupMeta } from "~/routes/agent.connect";
 import AgentConnect, { action, loader, meta } from "~/routes/agent.connect.$requestId";
 import { startAgentConnection } from "~/lib/agent-connection.server";
+import { rememberTypedCode } from "~/lib/agent-connection-route.server";
 import { getLocalDb } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -113,34 +114,35 @@ describe("agent connect route", () => {
     await cleanupDatabase();
   });
 
-  it("looks up connection codes, preserves from links, and renders missing-code copy", async () => {
+  it("sends a typed code to its request and remembers it there, but never takes the code from a link", async () => {
     const started = await startAgentConnection(db, { now: activeNow });
     const compactCode = started.request.userCode.toLowerCase().replace("-", "");
 
-    await expect(lookupLoader(lookupArgs(new UndiciRequest(
-      `http://localhost/agent/connect?code=${compactCode}&from=pebble`,
-    )))).rejects.toSatisfy((response: Response) => {
-      expect(response.status).toBe(302);
-      expect(response.headers.get("Location")).toBe(
-        `/agent/connect/${started.request.id}?code=${encodeURIComponent(started.request.userCode)}&from=pebble`,
-      );
-      return true;
-    });
+    // A link with the code in it (older agents, or someone else's link) shows an empty form.
+    await expect(lookupLoader(lookupArgs(new UndiciRequest(`http://localhost/agent/connect?code=${compactCode}`))))
+      .resolves.toEqual({ code: "", error: null });
 
-    const missing = await lookupLoader(lookupArgs(new UndiciRequest("http://localhost/agent/connect?code=nope")));
-    expect(missing).toEqual({
-      code: "NOPE",
-      error: "That connection code was not found or has expired.",
-    });
-
+    // The redirect also sets the signed code cookie (asserted in agent-connect-cookie.test.ts,
+    // which runs where Set-Cookie is readable). Here the cookie is built the same way.
     await expect(lookupAction(lookupArgs(lookupFormRequest("http://localhost/agent/connect", compactCode))))
       .rejects.toSatisfy((response: Response) => {
         expect(response.status).toBe(302);
-        expect(response.headers.get("Location")).toBe(
-          `/agent/connect/${started.request.id}?code=${encodeURIComponent(started.request.userCode)}`,
-        );
+        expect(response.headers.get("Location")).toBe(`/agent/connect/${started.request.id}`);
         return true;
       });
+    const codeCookie = await rememberTypedCode(null, new Request("http://localhost/agent/connect"), started.request.id, started.request.userCode);
+
+    // The approval page then shows the code as confirmed for that request only.
+    const cookie = `${await sessionCookie(userId)}; ${codeCookie.split(";")[0]}`;
+    await expect(loader(routeArgs(
+      new UndiciRequest(`http://localhost/agent/connect/${started.request.id}`, { headers: { Cookie: cookie } }),
+      started.request.id,
+    ))).resolves.toMatchObject({ status: "pending", confirmedCode: started.request.userCode });
+    const other = await startAgentConnection(db, { now: activeNow });
+    await expect(loader(routeArgs(
+      new UndiciRequest(`http://localhost/agent/connect/${other.request.id}`, { headers: { Cookie: cookie } }),
+      other.request.id,
+    ))).resolves.toMatchObject({ status: "pending", confirmedCode: null });
 
     const failedAction = await lookupAction(lookupArgs(lookupFormRequest("http://localhost/agent/connect", "missing")));
     expect(failedAction).toEqual({
@@ -148,16 +150,28 @@ describe("agent connect route", () => {
       error: "That connection code was not found or has expired.",
     });
 
-    renderLookupWithData(missing);
+    renderLookupWithData({ code: "", error: null });
     expect(await screen.findByRole("heading", { name: "Enter Connection Code" })).toBeInTheDocument();
-    expect(screen.getByDisplayValue("NOPE")).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("not found or has expired");
+    expect(screen.getByPlaceholderText("ABCD-2345")).toHaveValue("");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("renders the lookup form without an error before a code is entered", async () => {
-    const empty = await lookupLoader(lookupArgs(new UndiciRequest("http://localhost/agent/connect")));
-    expect(empty).toEqual({ code: "", error: null });
+  it("refuses a code posted to the lookup page from another site", async () => {
+    const started = await startAgentConnection(db, { now: activeNow });
+    for (const headers of [{ Origin: "https://evil.example" }, { "Sec-Fetch-Site": "cross-site" }, { Origin: "null" }]) {
+      const formData = new UndiciFormData();
+      formData.set("code", started.request.userCode);
+      const response = await lookupAction(lookupArgs(new UndiciRequest("http://localhost/agent/connect", {
+        method: "POST",
+        body: formData,
+        headers,
+      })));
+      expect((response as any).init.status).toBe(403);
+      expect((response as any).init.headers).toBeUndefined();
+    }
+  });
 
+  it("renders lookup errors for empty submissions", async () => {
     const emptyAction = await lookupAction(lookupArgs(lookupFormRequest("http://localhost/agent/connect", "")));
     expect(emptyAction).toEqual({
       code: "",
@@ -169,61 +183,46 @@ describe("agent connect route", () => {
       code: "",
       error: "That connection code was not found or has expired.",
     });
-
-    renderLookupWithData(empty);
-    expect(await screen.findByRole("heading", { name: "Enter Connection Code" })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("ABCD-2345")).toHaveValue("");
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("redirects pending unauthenticated approvals to login with the connection URL preserved", async () => {
+  it("redirects pending unauthenticated approvals to login without carrying a code along", async () => {
     const started = await startAgentConnection(db, { now: activeNow });
     const request = new UndiciRequest(`http://localhost/agent/connect/${started.request.id}?code=${started.request.userCode}`);
 
     await expect(loader(routeArgs(request, started.request.id))).rejects.toSatisfy((response: Response) => {
       expect(response.status).toBe(302);
       expect(response.headers.get("Location")).toBe(
-        `/login?redirectTo=${encodeURIComponent(`/agent/connect/${started.request.id}?code=${started.request.userCode}`)}`,
+        `/login?redirectTo=${encodeURIComponent(`/agent/connect/${started.request.id}`)}`,
       );
       return true;
     });
   });
 
-  it("treats pending links with the wrong code as unavailable before login", async () => {
-    const started = await startAgentConnection(db, { now: activeNow });
-    await expect(loader(routeArgs(
-      new UndiciRequest(`http://localhost/agent/connect/${started.request.id}?code=WRNG-0000`),
-      started.request.id,
-    ))).resolves.toEqual({
-      status: "missing",
-      agentName: "this agent",
-      userCode: null,
-      scopes: [],
-      userEmail: null,
-      expiresAt: null,
-    });
-  });
-
-  it("loads a pending connection for the signed-in approver and returns missing links safely", async () => {
+  it("loads a pending connection with the requester's details but without the code from the link", async () => {
     const started = await startAgentConnection(db, {
-      agentName: "slugger",
-      now: activeNow,
+      agentName: "Spoonjoy for iPhone",
+      now: new Date(Date.now() - 3 * 60_000),
+      requester: { ip: "203.0.113.9", userAgent: "curl/8.7.1", country: "NZ" },
     });
     const cookie = await sessionCookie(userId);
     const request = new UndiciRequest(`http://localhost/agent/connect/${started.request.id}?code=${started.request.userCode}`, {
-      headers: { Cookie: cookie },
+      headers: { Cookie: cookie, "CF-IPCountry": "US" },
     });
 
-    await expect(loader(routeArgs(request, started.request.id))).resolves.toMatchObject({
+    const loaded = await loader(routeArgs(request, started.request.id));
+    expect(loaded).toMatchObject({
       status: "pending",
-      agentName: "slugger",
-      userCode: started.request.userCode,
+      agentName: "Spoonjoy for iPhone",
       userEmail,
       scopes: ["shopping_list:read", "shopping_list:write"],
+      confirmedCode: null,
+      requester: { ip: "203.0.113.9", userAgent: "curl/8.7.1", country: "NZ", requestedMinutesAgo: 3 },
+      approverCountry: "US",
     });
+    expect(JSON.stringify(loaded)).not.toContain(started.request.userCode);
 
     await expect(loader(routeArgs(new UndiciRequest("http://localhost/agent/connect/missing"), "missing")))
-      .resolves.toMatchObject({ status: "missing", userCode: null, userEmail: null, expiresAt: null });
+      .resolves.toMatchObject({ status: "missing", userEmail: null, expiresAt: null });
   });
 
   it("lets unauthenticated users view already-finished connection links without loading a user", async () => {
@@ -236,25 +235,56 @@ describe("agent connect route", () => {
       data: { status: "denied", deniedAt: activeNow },
     });
 
-    await expect(loader(routeArgs(
+    const loaded = await loader(routeArgs(
       new UndiciRequest(`http://localhost/agent/connect/${started.request.id}`),
       started.request.id,
-    ))).resolves.toMatchObject({
+    ));
+    expect(loaded).toMatchObject({
       status: "denied",
       agentName: "slugger",
-      userCode: started.request.userCode,
       userEmail: null,
       scopes: ["shopping_list:read", "shopping_list:write"],
     });
+    expect(JSON.stringify(loaded)).not.toContain(started.request.userCode);
   });
 
-  it("approves, denies, rejects bad intents, and redirects unauthenticated actions", async () => {
+  it("approves only with the code the chef typed, denies without one, and redirects unauthenticated actions", async () => {
     const approveTarget = await startAgentConnection(db, { now: activeNow });
     const denyTarget = await startAgentConnection(db, { now: activeNow });
     const cookie = await sessionCookie(userId);
 
+    // One click on Approve, with no typed code, does nothing.
+    const noCode = await action(routeArgs(
+      formRequest(`http://localhost/agent/connect/${approveTarget.request.id}?code=${approveTarget.request.userCode}`, "approve", cookie),
+      approveTarget.request.id,
+    ));
+    expect((noCode as any).init.status).toBe(400);
+    expect((noCode as any).data.error).toContain("doesn't match");
+    await expect(db.agentConnectionRequest.findUnique({ where: { id: approveTarget.request.id } }))
+      .resolves.toMatchObject({ status: "pending", approvedById: null });
+
+    const wrongCode = await action(routeArgs(
+      formRequest(`http://localhost/agent/connect/${approveTarget.request.id}`, "approve", cookie, "WRNG-0000"),
+      approveTarget.request.id,
+    ));
+    expect((wrongCode as any).init.status).toBe(400);
+
+    // Approval from another site is refused even with the right code.
+    const crossSiteForm = new UndiciFormData();
+    crossSiteForm.set("intent", "approve");
+    crossSiteForm.set("userCode", approveTarget.request.userCode);
+    const crossSite = await action(routeArgs(new UndiciRequest(`http://localhost/agent/connect/${approveTarget.request.id}`, {
+      method: "POST",
+      body: crossSiteForm,
+      headers: { Cookie: cookie, Origin: "https://evil.example" },
+    }), approveTarget.request.id));
+    expect((crossSite as any).init.status).toBe(403);
+    await expect(db.agentConnectionRequest.findUnique({ where: { id: approveTarget.request.id } }))
+      .resolves.toMatchObject({ status: "pending" });
+
+    const typed = approveTarget.request.userCode.toLowerCase().replace("-", " ");
     await expect(action(routeArgs(
-      formRequest(`http://localhost/agent/connect/${approveTarget.request.id}`, "approve", cookie, approveTarget.request.userCode),
+      formRequest(`http://localhost/agent/connect/${approveTarget.request.id}`, "approve", cookie, typed),
       approveTarget.request.id,
     ))).rejects.toSatisfy((response: Response) => {
       expect(response.status).toBe(302);
@@ -265,7 +295,7 @@ describe("agent connect route", () => {
       .resolves.toMatchObject({ status: "approved", approvedById: userId });
 
     await expect(action(routeArgs(
-      formRequest(`http://localhost/agent/connect/${denyTarget.request.id}`, "deny", cookie, denyTarget.request.userCode),
+      formRequest(`http://localhost/agent/connect/${denyTarget.request.id}`, "deny", cookie),
       denyTarget.request.id,
     ))).rejects.toSatisfy((response: Response) => {
       expect(response.status).toBe(302);
@@ -281,28 +311,11 @@ describe("agent connect route", () => {
     expect((invalid as any).init.status).toBe(400);
     expect((invalid as any).data.error).toBe("Choose approve or deny");
 
-    const wrongCode = await action(routeArgs(
-      formRequest(`http://localhost/agent/connect/${denyTarget.request.id}`, "approve", cookie, "WRNG-0000"),
-      denyTarget.request.id,
-    ));
-    expect((wrongCode as any).init.status).toBe(400);
-    expect((wrongCode as any).data.error).toBe("Connection code is required");
-
-    const missingCodeForm = new UndiciFormData();
-    missingCodeForm.set("intent", "approve");
-    const missingCode = await action(routeArgs(
-      rawFormRequest(`http://localhost/agent/connect/${denyTarget.request.id}`, missingCodeForm, cookie),
-      denyTarget.request.id,
-    ));
-    expect((missingCode as any).init.status).toBe(400);
-    expect((missingCode as any).data.error).toBe("Connection code is required");
-
     const missingConnection = await action(routeArgs(
       formRequest("http://localhost/agent/connect/missing", "approve", cookie, "ABCD-1234"),
       "missing",
     ));
-    expect((missingConnection as any).init.status).toBe(400);
-    expect((missingConnection as any).data.error).toBe("Connection code is required");
+    expect((missingConnection as any).init.status).toBe(404);
 
     await expect(action(routeArgs(
       formRequest(`http://localhost/agent/connect/${denyTarget.request.id}`, "approve"),
@@ -314,82 +327,116 @@ describe("agent connect route", () => {
     });
   });
 
+  it("approves with the code remembered from the lookup page", async () => {
+    const started = await startAgentConnection(db, { now: activeNow });
+    const codeCookie = await rememberTypedCode(null, new Request("http://localhost/agent/connect"), started.request.id, started.request.userCode);
+    const cookie = `${await sessionCookie(userId)}; ${codeCookie.split(";")[0]}`;
+    await expect(action(routeArgs(
+      formRequest(`http://localhost/agent/connect/${started.request.id}`, "approve", cookie),
+      started.request.id,
+    ))).rejects.toSatisfy((response: Response) => response.status === 302);
+    await expect(db.agentConnectionRequest.findUnique({ where: { id: started.request.id } }))
+      .resolves.toMatchObject({ status: "approved", approvedById: userId });
+  });
+
+  it("reports a request that asks for account scopes instead of approving it", async () => {
+    const started = await startAgentConnection(db, { now: activeNow });
+    await db.agentConnectionRequest.update({ where: { id: started.request.id }, data: { scopes: "account:write" } });
+    const cookie = await sessionCookie(userId);
+    const refused = await action(routeArgs(
+      formRequest(`http://localhost/agent/connect/${started.request.id}`, "approve", cookie, started.request.userCode),
+      started.request.id,
+    ));
+    expect((refused as any).init.status).toBe(400);
+    expect((refused as any).data.error).toContain("account access");
+  });
+
   it("renders pending, approved, denied, and unavailable connection states", async () => {
     renderWithData({
       status: "pending",
       agentName: "slugger",
-      userCode: "ABCD-2345",
       userEmail,
       expiresAt: "2026-05-26T12:10:00.000Z",
-      scopes: ["shopping_list:read", "kitchen:write", "spoonjoy:custom"],
+      scopes: ["shopping_list:read", "shopping_list:write", "kitchen:write", "spoonjoy:custom"],
+      confirmedCode: null,
+      requester: { ip: "203.0.113.9", country: "NZ", userAgent: "curl/8.7.1", requestedMinutesAgo: 2 },
+      approverCountry: "US",
     });
     expect(await screen.findByRole("heading", { name: "Connect Spoonjoy" })).toBeInTheDocument();
-    expect(screen.getByText(/slugger wants permission/)).toBeInTheDocument();
-    expect(screen.getByText("ABCD-2345")).toBeInTheDocument();
+    expect(screen.getByText(/calling itself "slugger" wants permission/)).toBeInTheDocument();
+    expect(screen.getByText(/did not verify who made this request/)).toBeInTheDocument();
+    expect(screen.getByText("2 minutes ago")).toBeInTheDocument();
+    expect(screen.getByText("203.0.113.9 (NZ)")).toBeInTheDocument();
+    expect(screen.getByText("curl/8.7.1")).toBeInTheDocument();
+    expect(screen.getByText("US")).toBeInTheDocument();
     expect(screen.getByText("Read your shopping list")).toBeInTheDocument();
-    expect(screen.getByText("Use write-capable kitchen tools and shopping-list writes")).toBeInTheDocument();
+    expect(screen.getByText("Create, change, and delete your recipes, cookbooks, and shopping list")).toBeInTheDocument();
     expect(screen.getByText("Custom delegated scope")).toBeInTheDocument();
+    const warnings = screen.getByRole("list", { name: "Write access warnings" });
+    expect(warnings).toHaveTextContent("shopping_list:write, this client can add, check off, and remove items");
+    expect(warnings).toHaveTextContent("kitchen:write, this client can create, change, and delete your recipes");
     expect(screen.getByText(`You are approving as ${userEmail}.`)).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("broad kitchen scopes");
+    expect(screen.getByText(/lasts 90 days/)).toBeInTheDocument();
+    const codeInput = screen.getByLabelText("Type the code your agent shows you");
+    expect(codeInput).toHaveValue("");
+    expect(codeInput).toBeRequired();
     expect(screen.getByRole("button", { name: "Approve Access" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Deny" })).toBeInTheDocument();
+
+    cleanupDom();
+    renderWithData({
+      status: "pending",
+      agentName: "slugger",
+      userEmail,
+      expiresAt: "2026-05-26T12:10:00.000Z",
+      scopes: ["shopping_list:read"],
+      confirmedCode: "ABCD-2345",
+      requester: { ip: null, country: null, userAgent: null, requestedMinutesAgo: 0 },
+      approverCountry: null,
+    });
+    expect(await screen.findByText("ABCD-2345")).toBeInTheDocument();
+    expect(screen.getByText("Code you entered")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Type the code your agent shows you")).not.toBeInTheDocument();
+    expect(screen.getByText("an unknown IP address")).toBeInTheDocument();
+    expect(screen.getByText("less than a minute ago")).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Write access warnings" })).not.toBeInTheDocument();
+
+    cleanupDom();
+    renderWithData({
+      status: "pending",
+      agentName: "slugger",
+      userEmail: null,
+      expiresAt: "2026-05-26T12:10:00.000Z",
+      scopes: [],
+      requester: { ip: "198.51.100.1", country: null, userAgent: null, requestedMinutesAgo: 1 },
+    });
+    expect(await screen.findByText("1 minute ago")).toBeInTheDocument();
+    expect(screen.getByText("198.51.100.1")).toBeInTheDocument();
+    expect(screen.queryByText("Requested scopes")).not.toBeInTheDocument();
+    expect(screen.queryByText(/You are approving as/)).not.toBeInTheDocument();
 
     cleanupDom();
     renderWithData({
       status: "approved",
       agentName: "slugger",
-      userCode: "EFGH-6789",
-      userEmail: null,
-      expiresAt: "2026-05-26T12:10:00.000Z",
-    });
-    expect(await screen.findByRole("heading", { name: "Spoonjoy Connected" })).toBeInTheDocument();
-    expect(screen.getByText(/can now use Spoonjoy/)).toBeInTheDocument();
-
-    cleanupDom();
-    renderWithData({
-      status: "claimed",
-      agentName: "slugger",
-      userCode: null,
-      userEmail: null,
-      expiresAt: "2026-05-26T12:10:00.000Z",
-    });
-    expect(await screen.findByRole("heading", { name: "Spoonjoy Connected" })).toBeInTheDocument();
-
-    cleanupDom();
-    renderWithData({
-      status: "denied",
-      agentName: "slugger",
-      userCode: null,
-      userEmail: null,
-      expiresAt: "2026-05-26T12:10:00.000Z",
-    });
-    expect(await screen.findByRole("heading", { name: "Connection Denied" })).toBeInTheDocument();
-
-    cleanupDom();
-    renderWithData({
-      status: "expired",
-      agentName: "slugger",
-      userCode: null,
-      userEmail: null,
-      expiresAt: "2026-05-26T12:10:00.000Z",
-    });
-    expect(await screen.findByRole("heading", { name: "Connection Expired" })).toBeInTheDocument();
-  });
-
-  it("renders a minimal pending connection without optional code, scopes, or email", async () => {
-    renderWithData({
-      status: "pending",
-      agentName: "tiny client",
-      userCode: null,
       userEmail: null,
       expiresAt: "2026-05-26T12:10:00.000Z",
       scopes: [],
     });
+    expect(await screen.findByRole("heading", { name: "Spoonjoy Connected" })).toBeInTheDocument();
+    expect(screen.getByText(/can now use Spoonjoy/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Approve Access" })).not.toBeInTheDocument();
 
-    expect(await screen.findByRole("heading", { name: "Connect Spoonjoy" })).toBeInTheDocument();
-    expect(screen.queryByText("Code")).not.toBeInTheDocument();
-    expect(screen.queryByText("Requested scopes")).not.toBeInTheDocument();
-    expect(screen.queryByText(/You are approving as/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Approve Access" })).toBeInTheDocument();
+    cleanupDom();
+    renderWithData({ status: "claimed", agentName: "slugger", userEmail: null, expiresAt: null, scopes: [] });
+    expect(await screen.findByRole("heading", { name: "Spoonjoy Connected" })).toBeInTheDocument();
+
+    cleanupDom();
+    renderWithData({ status: "denied", agentName: "slugger", userEmail: null, expiresAt: null, scopes: [] });
+    expect(await screen.findByRole("heading", { name: "Connection Denied" })).toBeInTheDocument();
+
+    cleanupDom();
+    renderWithData({ status: "expired", agentName: "slugger", userEmail: null, expiresAt: null });
+    expect(await screen.findByRole("heading", { name: "Connection Expired" })).toBeInTheDocument();
   });
 });

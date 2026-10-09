@@ -64,6 +64,41 @@ const DEFAULT_AGENT_NAME = "Ouroboros agent";
 const DEFAULT_BASE_URL = "https://spoonjoy.app";
 const DEFAULT_TTL_MINUTES = 10;
 const DEFAULT_SCOPES = "shopping_list:read shopping_list:write";
+
+/**
+ * The only scopes an agent connection can grant. Anyone can start a request and send the link to a
+ * chef, so a connection never grants account-level access (email, password, tokens): those stay
+ * with the chef's own signed-in session and OAuth apps they authorize directly.
+ */
+export const AGENT_CONNECTION_SCOPES = [
+  "public:read",
+  "recipes:read",
+  "cookbooks:read",
+  "shopping_list:read",
+  "shopping_list:write",
+  "kitchen:read",
+  "kitchen:write",
+] as const;
+
+const AGENT_CONNECTION_SCOPE_SET = new Set<string>(AGENT_CONNECTION_SCOPES);
+
+/** Scopes that let the agent change the chef's data. The approval page warns about each one. */
+export const AGENT_CONNECTION_WRITE_SCOPES = ["shopping_list:write", "kitchen:write"] as const;
+
+/** How long a token from an approved agent connection lasts. The chef connects again after this. */
+export const AGENT_CONNECTION_TOKEN_TTL_DAYS = 90;
+
+/** Network details of whoever started a request. Reported by the network; never verified. */
+export interface AgentConnectionRequester {
+  ip?: string | null;
+  userAgent?: string | null;
+  country?: string | null;
+}
+
+/** True when every scope on the request is one an agent connection may grant. */
+export function isGrantableAgentConnectionScope(scopes: string): boolean {
+  return scopes.trim().split(/\s+/).filter(Boolean).every((scope) => AGENT_CONNECTION_SCOPE_SET.has(scope));
+}
 const USER_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 export type AgentConnectionPublicStatus = "pending" | "approved" | "denied" | "expired" | "claimed";
@@ -132,14 +167,28 @@ function normalizeAgentName(value: string | undefined): string {
 
 function normalizeDelegatedScopes(value: string | undefined): string {
   if (value === undefined || value.trim() === "") return DEFAULT_SCOPES;
+  let scopes: string;
   try {
-    return normalizeScope(value);
+    scopes = normalizeScope(value);
   } catch (error) {
     if (error instanceof OAuthError) {
       throw new ApiAuthError(error.message, error.status);
     }
     throw error;
   }
+  const refused = scopes.split(" ").filter((scope) => !AGENT_CONNECTION_SCOPE_SET.has(scope));
+  if (refused.length > 0) {
+    throw new ApiAuthError(
+      `Agent connections cannot grant ${refused.join(", ")}. Allowed scopes: ${AGENT_CONNECTION_SCOPES.join(" ")}.`,
+      400,
+    );
+  }
+  return scopes;
+}
+
+function trimmedOrNull(value: string | null | undefined, maxLength: number): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed.slice(0, maxLength) : null;
 }
 
 function normalizeBaseUrl(value: string | undefined): string {
@@ -150,10 +199,10 @@ function normalizeBaseUrl(value: string | undefined): string {
   return url.origin;
 }
 
-function connectionUrl(baseUrl: string, id: string, userCode: string): string {
-  const url = new URL(`/agent/connect/${encodeURIComponent(id)}`, baseUrl);
-  url.searchParams.set("code", userCode);
-  return url.toString();
+// The approval page for one request. It never carries the user code: the chef types the code their
+// agent shows them, so a link alone (for example one sent by someone else) can't approve anything.
+function connectionUrl(baseUrl: string, id: string): string {
+  return new URL(`/agent/connect/${encodeURIComponent(id)}`, baseUrl).toString();
 }
 
 function verificationUrl(baseUrl: string): string {
@@ -199,6 +248,7 @@ export async function startAgentConnection(
     agentName?: string;
     baseUrl?: string;
     scopes?: string;
+    requester?: AgentConnectionRequester | null;
     now?: Date;
     ttlMinutes?: number;
   } = {},
@@ -214,12 +264,16 @@ export async function startAgentConnection(
       userCode,
       agentName: normalizeAgentName(input.agentName),
       scopes: normalizeDelegatedScopes(input.scopes),
+      requesterIp: trimmedOrNull(input.requester?.ip, 64),
+      requesterUserAgent: trimmedOrNull(input.requester?.userAgent, 300),
+      requesterCountry: trimmedOrNull(input.requester?.country, 8),
       expiresAt,
+      createdAt: now,
     },
   });
 
   const baseUrl = normalizeBaseUrl(input.baseUrl);
-  const authorizationUrl = connectionUrl(baseUrl, request.id, userCode);
+  const authorizationUrl = connectionUrl(baseUrl, request.id);
   return {
     request,
     deviceCode,
@@ -249,6 +303,13 @@ export async function approveAgentConnectionRequest(
   const request = await getAgentConnectionRequest(db, id, now);
   if (!request) throw new ApiAuthError("Connection request not found", 404);
   if (publicStatus(request, now) !== "pending") return request;
+  // A request started before account scopes were refused can't be approved with them.
+  if (!isGrantableAgentConnectionScope(request.scopes)) {
+    throw new ApiAuthError(
+      "This request asks for account access, which agent connections can't grant. Ask your agent to start a new connection.",
+      400,
+    );
+  }
 
   return db.agentConnectionRequest.update({
     where: { id },
@@ -303,7 +364,7 @@ export async function pollAgentConnection(
 
   if (status === "pending") {
     const baseUrl = normalizeBaseUrl(input.baseUrl);
-    const authorizationUrl = connectionUrl(baseUrl, current.id, current.userCode);
+    const authorizationUrl = connectionUrl(baseUrl, current.id);
     return {
       status,
       expiresAt,
@@ -311,17 +372,32 @@ export async function pollAgentConnection(
       verificationUri: verificationUrl(baseUrl),
       verificationUriComplete: authorizationUrl,
       userCode: current.userCode,
-      message: "Waiting for the user to approve this Spoonjoy connection.",
+      message: "Waiting for the user to approve this Spoonjoy connection. Show them authorizationUrl and, separately, userCode: they type the code on that page to approve.",
     };
   }
 
   if (status === "approved") {
     if (!current.approvedById) throw new ApiAuthError("Approved connection is missing a user", 400);
+    // Approved before account scopes were refused: never mint a token with them.
+    if (!isGrantableAgentConnectionScope(current.scopes)) {
+      await db.agentConnectionRequest.updateMany({
+        where: { id: current.id, status: "approved", claimedAt: null },
+        data: { status: "expired" },
+      });
+      return {
+        status: "expired",
+        expiresAt,
+        message: "This Spoonjoy connection asked for account access, which agent connections can't grant. Start a new connection request.",
+      };
+    }
     const created = await createApiCredential(
       db,
       current.approvedById,
       input.tokenName?.trim() || `${current.agentName} delegated token`,
-      { scopes: current.scopes },
+      {
+        scopes: current.scopes,
+        expiresAt: new Date(now.getTime() + AGENT_CONNECTION_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000),
+      },
     );
     const claimed = await db.agentConnectionRequest.updateMany({
       where: { id: current.id, status: "approved", claimedAt: null },
