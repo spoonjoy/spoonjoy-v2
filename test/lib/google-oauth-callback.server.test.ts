@@ -450,11 +450,46 @@ describe("google-oauth-callback.server", () => {
     });
 
     describe("email collision handling", () => {
+      // Audit 2026-10-09 finding 2: an attacker signs up with the victim's address (never verified),
+      // or changes an account's email to an address they hold at Google, then waits for Google
+      // sign-in to land in that account. Google vouching for the address is not enough.
+      it("should refuse to link Google to an existing account whose email was never verified", async () => {
+        const existingUser = await db.user.create({
+          data: { ...createTestUser(), email: "victim@example.com", hashedPassword: "attacker-set" },
+        });
+        testUserIds.push(existingUser.id);
+
+        const result = await handleGoogleOAuthCallback({
+          db,
+          googleUser: createMockGoogleUser({ email: "victim@example.com" }),
+          currentUserId: null,
+          redirectTo: null,
+        });
+
+        expect(result).toMatchObject({ success: false, error: "account_exists_unverified" });
+        expect(result.userId).toBeUndefined();
+        expect(await db.oAuth.count({ where: { userId: existingUser.id } })).toBe(0);
+      });
+
+      it("should create new Google accounts with the email already verified", async () => {
+        const result = await handleGoogleOAuthCallback({
+          db,
+          googleUser: createMockGoogleUser({ email: "fresh-google@example.com" }),
+          currentUserId: null,
+          redirectTo: null,
+        });
+
+        expect(result).toMatchObject({ success: true, action: "user_created" });
+        testUserIds.push(result.userId!);
+        const user = await db.user.findUniqueOrThrow({ where: { id: result.userId! } });
+        expect(user.emailVerifiedAt).toBeInstanceOf(Date);
+      });
+
       it("should restore a missing Google OAuth row when verified email exists", async () => {
-        // Create existing user with email
+        // Create existing user with a verified email
         const testUserData = createTestUser();
         const existingUser = await db.user.create({
-          data: testUserData,
+          data: { ...testUserData, emailVerifiedAt: new Date() },
         });
         testUserIds.push(existingUser.id);
 
@@ -491,7 +526,7 @@ describe("google-oauth-callback.server", () => {
         const testUserData = createTestUser();
         testUserData.email = "Test@Example.COM";
         const existingUser = await db.user.create({
-          data: testUserData,
+          data: { ...testUserData, emailVerifiedAt: new Date() },
         });
         testUserIds.push(existingUser.id);
 
@@ -519,6 +554,7 @@ describe("google-oauth-callback.server", () => {
           data: {
             ...createTestUser(),
             email: "linked-google@example.com",
+            emailVerifiedAt: new Date(),
             OAuth: {
               create: {
                 provider: "google",

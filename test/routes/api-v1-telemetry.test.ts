@@ -1331,7 +1331,7 @@ describe("API v1 mutation and validation telemetry", () => {
       forbidden: [user.email, user.username, cookie],
     });
 
-    const nextEmail = faker.internet.email();
+    const nextEmail = user.email;
     const nextUsername = `telemetry_${faker.string.alphanumeric(8)}`;
     const updateProfile = apiJsonRequest("PATCH", "me", "req_account_operation_update", { Cookie: cookie }, {
       clientMutationId: "telemetry-account-update",

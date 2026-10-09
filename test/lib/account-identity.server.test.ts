@@ -109,6 +109,28 @@ describe("saveAccountIdentity", () => {
     })).resolves.toBe("username_taken");
   });
 
+  it("marks a changed email unverified and leaves a username-only change's verification alone", async () => {
+    await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date() } });
+
+    await expect(saveAccountIdentity(db, {
+      userId,
+      email: (await stored()).email,
+      username: "renamed_chef",
+      emailChanged: false,
+      usernameChanged: true,
+    })).resolves.toBe("saved");
+    expect((await db.user.findUniqueOrThrow({ where: { id: userId } })).emailVerifiedAt).toBeInstanceOf(Date);
+
+    await expect(saveAccountIdentity(db, {
+      userId,
+      email: "brand-new-address@example.com",
+      username: "renamed_chef",
+      emailChanged: true,
+      usernameChanged: false,
+    })).resolves.toBe("saved");
+    expect((await db.user.findUniqueOrThrow({ where: { id: userId } })).emailVerifiedAt).toBeNull();
+  });
+
   it("refuses an email another account holds, in any case, before looking at the username", async () => {
     const other = await makeUser("Taken_Chef");
 

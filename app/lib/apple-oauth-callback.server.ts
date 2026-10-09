@@ -15,6 +15,7 @@ import {
   createOAuthUser,
   findExistingOAuthAccount,
   linkOAuthAccount,
+  markEmailVerifiedByProvider,
 } from "./oauth-user.server";
 
 /**
@@ -95,6 +96,8 @@ export async function handleAppleOAuthCallback(
       };
     }
 
+    await markEmailVerifiedByProvider(db, currentUserId, appleUser.email, appleUser.emailVerified);
+
     return {
       success: true,
       userId: currentUserId,
@@ -143,6 +146,7 @@ export async function handleAppleOAuthCallback(
     providerUsername: appleUser.fullName ?? appleUser.email,
     email: appleUser.email,
     name: appleUser.fullName,
+    emailVerified: appleUser.emailVerified,
   }, d1);
 
   if (!createResult.success) {

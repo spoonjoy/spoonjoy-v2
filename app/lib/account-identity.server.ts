@@ -74,7 +74,12 @@ export async function saveAccountIdentity(db: IdentityDb, change: AccountIdentit
     return "username_taken";
   }
 
-  // The guarded write is raw SQL, which leaves updatedAt alone; native sync reads it.
-  await db.user.update({ where: { id: userId }, data: { updatedAt: new Date() } });
+  // The guarded write is raw SQL, which leaves updatedAt alone; native sync reads it. A new
+  // address has not been proven yet, so it starts unverified: Google and GitHub sign-in will not
+  // link to it until it is confirmed.
+  await db.user.update({
+    where: { id: userId },
+    data: emailChanged ? { updatedAt: new Date(), emailVerifiedAt: null } : { updatedAt: new Date() },
+  });
   return "saved";
 }

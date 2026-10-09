@@ -15,6 +15,7 @@ import {
   createOAuthUser,
   findExistingOAuthAccount,
   linkOAuthAccount,
+  markEmailVerifiedByProvider,
   linkOAuthAccountByVerifiedEmail,
 } from "./oauth-user.server";
 
@@ -96,6 +97,8 @@ export async function handleGoogleOAuthCallback(
       };
     }
 
+    await markEmailVerifiedByProvider(db, currentUserId, googleUser.email, googleUser.emailVerified);
+
     return {
       success: true,
       userId: currentUserId,
@@ -164,6 +167,7 @@ export async function handleGoogleOAuthCallback(
     providerUsername: googleUser.name ?? googleUser.email,
     email: googleUser.email,
     name: googleUser.name,
+    emailVerified: googleUser.emailVerified,
   }, d1);
 
   if (!createResult.success) {

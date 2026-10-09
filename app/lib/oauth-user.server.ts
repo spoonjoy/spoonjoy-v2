@@ -9,6 +9,9 @@ export interface OAuthUserData {
   providerUsername: string;
   email: string | null;
   name: string | null;
+  // True when the provider vouches that the user owns `email` (Google's email_verified, GitHub's
+  // verified primary address, Apple's email_verified). The new account starts verified then.
+  emailVerified?: boolean;
 }
 
 export interface CreateOAuthUserResult {
@@ -157,16 +160,18 @@ async function writeOAuthUser(
   if (d1) {
     const id = crypto.randomUUID();
     const at = d1Timestamp(new Date());
+    const verifiedAt = oauthData.emailVerified ? at : null;
     await d1WriteBatch(d1, [
       // The unique index on email is case-sensitive; this stops a racing sign-up that stored
       // the same email in another case from leaving two accounts.
       d1Guard(`NOT EXISTS (SELECT 1 FROM "User" WHERE LOWER("email") = ?)`, normalizedEmail),
       [
-        `INSERT INTO "User" ("id", "email", "username", "hashedPassword", "salt", "createdAt", "updatedAt")
-         VALUES (?, ?, ?, NULL, NULL, ?, ?)`,
+        `INSERT INTO "User" ("id", "email", "username", "hashedPassword", "salt", "emailVerifiedAt", "createdAt", "updatedAt")
+         VALUES (?, ?, ?, NULL, NULL, ?, ?, ?)`,
         id,
         normalizedEmail,
         username,
+        verifiedAt,
         at,
         at,
       ],
@@ -189,6 +194,7 @@ async function writeOAuthUser(
       username,
       hashedPassword: null,
       salt: null,
+      emailVerifiedAt: oauthData.emailVerified ? new Date() : null,
       OAuth: {
         create: {
           provider: oauthData.provider,
@@ -304,10 +310,15 @@ export async function findExistingOAuthAccount(
 }
 
 /**
- * Restore a missing OAuth row for an existing Spoonjoy account when a provider
- * returns the same verified email. This covers migrated accounts whose provider
- * identity did not make it into the OAuth table, while still relying on
- * linkOAuthAccount for provider uniqueness checks.
+ * Sign in with a provider whose identity is not linked yet, to the existing account that has the
+ * same email. This restores links for migrated accounts whose provider row went missing.
+ *
+ * Both sides must vouch for the address: the provider must say the email is verified, and the
+ * Spoonjoy account must have verified it too (`emailVerifiedAt`). Without the second check anyone
+ * could sign up with someone else's address and wait for them to "Sign in with Google" into an
+ * account the attacker still holds the password for, or change an account's email to an address
+ * they control at Google and then sign in to it. An unverified account gets
+ * `account_exists_unverified`: sign in to it another way, then link the provider in settings.
  */
 export async function linkOAuthAccountByVerifiedEmail(
   db: PrismaClient,
@@ -322,8 +333,8 @@ export async function linkOAuthAccountByVerifiedEmail(
   }
 
   const normalizedEmail = oauthData.email.toLowerCase();
-  const existingUsers = await db.$queryRaw<Array<{ id: string }>>`
-    SELECT id FROM User WHERE LOWER(email) = ${normalizedEmail} LIMIT 1
+  const existingUsers = await db.$queryRaw<Array<{ id: string; emailVerifiedAt: unknown }>>`
+    SELECT id, emailVerifiedAt FROM User WHERE LOWER(email) = ${normalizedEmail} LIMIT 1
   `;
 
   const existingUser = existingUsers[0];
@@ -332,6 +343,15 @@ export async function linkOAuthAccountByVerifiedEmail(
       success: false,
       error: "account_not_found",
       message: "No account exists for this verified email address.",
+    };
+  }
+
+  if (existingUser.emailVerifiedAt === null || existingUser.emailVerifiedAt === undefined) {
+    return {
+      success: false,
+      error: "account_exists_unverified",
+      message:
+        "An account with this email already exists. Sign in to it with your password or passkey, then link this sign-in from Account settings.",
     };
   }
 
@@ -344,6 +364,27 @@ export async function linkOAuthAccountByVerifiedEmail(
     ...linkResult,
     userId: existingUser.id,
   };
+}
+
+/**
+ * After a signed-in user links a provider that vouches for the same address their account uses,
+ * the account's email counts as verified.
+ */
+export async function markEmailVerifiedByProvider(
+  db: PrismaClient,
+  userId: string,
+  providerEmail: string | null,
+  providerEmailVerified: boolean,
+): Promise<boolean> {
+  if (!providerEmail || !providerEmailVerified) return false;
+  const user = await db.user.findUnique({ where: { id: userId }, select: { email: true, emailVerifiedAt: true } });
+  if (!user || user.emailVerifiedAt || user.email.toLowerCase() !== providerEmail.toLowerCase()) return false;
+  // A typed write, so the timestamp is stored in the same format as every other Prisma DateTime.
+  const result = await db.user.updateMany({
+    where: { id: userId, emailVerifiedAt: null },
+    data: { emailVerifiedAt: new Date() },
+  });
+  return result.count === 1;
 }
 
 /**

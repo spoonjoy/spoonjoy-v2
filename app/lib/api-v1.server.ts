@@ -4680,6 +4680,8 @@ async function handleAccountUpdate(args: ApiV1RouteArgs, requestId: string, prin
   const body = await parseApiV1JsonBody(args.request);
   assertKnownFields(body, ["email", "username", "clientMutationId"]);
   const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
+  // `email` must be the account's current address: the API never changes it. Clients (the native
+  // app included) send the profile they show, so an unchanged email is accepted as before.
   const normalizedEmail = normalizeEmail(body.email);
   const submittedUsername = normalizeUsername(body.username);
   const fieldErrors: string[] = [];
@@ -4703,6 +4705,18 @@ async function handleAccountUpdate(args: ApiV1RouteArgs, requestId: string, prin
       throw new ApiV1Error("not_found", "Account not found");
     }
 
+    // An email change needs a recent sign-in and a confirmation link sent to the new address, so
+    // it happens only in account settings on the web. A token (personal, OAuth, agent or the
+    // native app's) that could change the email could hand the account to whoever controls the
+    // new address, since that address can then sign in with Google or reset the password.
+    if (normalizedEmail !== currentUser.email.toLowerCase()) {
+      throw new ApiV1Error(
+        "insufficient_scope",
+        "Email can only be changed in Account settings on the Spoonjoy website, which confirms the new address by email",
+        { field: "email" },
+      );
+    }
+
     // The same username rule as signup and account settings (app/lib/username.ts), applied only
     // to a changed username, so an older username that predates it can still save its email.
     const usernameChanged = submittedUsername !== currentUser.username.trim();
@@ -4716,9 +4730,9 @@ async function handleAccountUpdate(args: ApiV1RouteArgs, requestId: string, prin
 
     const saved = await saveAccountIdentity(db, {
       userId: principal.id,
-      email: normalizedEmail,
+      email: currentUser.email,
       username,
-      emailChanged: normalizedEmail !== currentUser.email.toLowerCase(),
+      emailChanged: false,
       usernameChanged,
     });
     if (saved === "email_taken") {

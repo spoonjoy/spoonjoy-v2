@@ -9,6 +9,7 @@ import {
   createOAuthUser,
   findExistingOAuthAccount,
   linkOAuthAccount,
+  markEmailVerifiedByProvider,
   linkOAuthAccountByVerifiedEmail,
 } from "./oauth-user.server";
 
@@ -56,6 +57,8 @@ export async function handleGitHubOAuthCallback(
         redirectTo,
       };
     }
+
+    await markEmailVerifiedByProvider(db, currentUserId, githubUser.email, githubUser.emailVerified);
 
     return {
       success: true,
@@ -109,6 +112,7 @@ export async function handleGitHubOAuthCallback(
     providerUsername: githubUser.login,
     email: githubUser.email,
     name: githubUser.name ?? githubUser.login,
+    emailVerified: githubUser.emailVerified,
   }, d1);
 
   if (!createResult.success || !createResult.user) {

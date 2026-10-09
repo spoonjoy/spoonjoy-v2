@@ -8796,7 +8796,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
     {
       "id": "PATCH /api/v1/me",
       "operationId": "patchApiV1Me",
-      "label": "Update the authenticated account email and username",
+      "label": "Update the authenticated account username (the email cannot be changed through the API)",
       "method": "PATCH",
       "path": "/api/v1/me",
       "profiles": [

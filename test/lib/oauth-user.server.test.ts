@@ -11,6 +11,7 @@ import {
   findExistingOAuthAccount,
   linkOAuthAccount,
   linkOAuthAccountByVerifiedEmail,
+  markEmailVerifiedByProvider,
   unlinkOAuthAccount,
 } from "~/lib/oauth-user.server";
 
@@ -614,6 +615,7 @@ describe("oauth-user.server", () => {
         data: {
           ...createTestUser(),
           email: existingEmail,
+          emailVerifiedAt: new Date(),
         },
       });
 
@@ -633,6 +635,22 @@ describe("oauth-user.server", () => {
           providerUsername: "existingchef",
         },
       });
+    });
+
+    it("should refuse an existing account that never verified its email", async () => {
+      const user = await db.user.create({ data: createTestUser() });
+
+      const result = await linkOAuthAccountByVerifiedEmail(db, {
+        provider: "google",
+        providerUserId: faker.string.uuid(),
+        providerUsername: "Google User",
+        email: user.email.toLowerCase(),
+        emailVerified: true,
+      });
+
+      expect(result).toMatchObject({ success: false, error: "account_exists_unverified" });
+      expect(result.userId).toBeUndefined();
+      expect(await db.oAuth.count({ where: { userId: user.id } })).toBe(0);
     });
 
     it("should refuse unverified provider emails", async () => {
@@ -665,7 +683,7 @@ describe("oauth-user.server", () => {
 
     it("should preserve provider ownership errors", async () => {
       const firstUser = await db.user.create({ data: createTestUser() });
-      const secondUser = await db.user.create({ data: createTestUser() });
+      const secondUser = await db.user.create({ data: { ...createTestUser(), emailVerifiedAt: new Date() } });
       const providerUserId = faker.string.uuid();
 
       await linkOAuthAccount(db, firstUser.id, {
@@ -685,6 +703,23 @@ describe("oauth-user.server", () => {
       expect(result.success).toBe(false);
       expect(result.error).toBe("provider_account_taken");
       expect(result.userId).toBeUndefined();
+    });
+  });
+
+  describe("markEmailVerifiedByProvider", () => {
+    it("verifies the account only for a provider-verified match of its current address", async () => {
+      const user = await db.user.create({ data: createTestUser() });
+
+      await expect(markEmailVerifiedByProvider(db, user.id, null, true)).resolves.toBe(false);
+      await expect(markEmailVerifiedByProvider(db, "missing-user", user.email, true)).resolves.toBe(false);
+      await expect(markEmailVerifiedByProvider(db, user.id, user.email, false)).resolves.toBe(false);
+      await expect(markEmailVerifiedByProvider(db, user.id, "someone-else@example.com", true)).resolves.toBe(false);
+      expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).emailVerifiedAt).toBeNull();
+
+      await expect(markEmailVerifiedByProvider(db, user.id, user.email.toUpperCase(), true)).resolves.toBe(true);
+      expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).emailVerifiedAt).toBeInstanceOf(Date);
+      // Already verified: nothing to change.
+      await expect(markEmailVerifiedByProvider(db, user.id, user.email, true)).resolves.toBe(false);
     });
   });
 

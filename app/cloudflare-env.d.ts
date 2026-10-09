@@ -55,6 +55,15 @@ declare global {
 
   interface Env {
     DB?: D1Database;
+    /**
+     * Cloudflare Email Service `send_email` binding for account mail (verification, email change,
+     * password reset). Absent until the sending domain is set up; see transactional-email.server.ts.
+     */
+    EMAIL?: { send(message: { to: string; from: string; subject: string; text: string; html?: string }): Promise<unknown> };
+    /** The From address for account mail, on the domain the EMAIL binding is allowed to send from. */
+    SPOONJOY_EMAIL_FROM?: string;
+    /** "capture" (QA) writes account mail to the EmailOutbox table instead of sending it. */
+    SPOONJOY_EMAIL_MODE?: string;
     PHOTOS?: R2Bucket;
     /** Sliding-window throttle for authenticated bearer-token traffic. */
     API_TOKEN_RATE_LIMITER?: RateLimitBinding;
