@@ -5,6 +5,7 @@ import { ApiAuthError, authenticateApiRequest } from "../app/lib/api-auth.server
 import { getDb } from "../app/lib/db.server";
 import { handleMcpRouteRequest } from "../app/lib/mcp/http-mcp-route.server";
 import { oauthCorsPreflightResponse } from "../app/lib/oauth-cors.server";
+import { runScheduledPhotoSweep } from "../app/lib/photo-lifecycle.server";
 import { generateNonce, withSecurityHeaders } from "../app/lib/security-headers.server";
 import {
   captureException,
@@ -315,5 +316,11 @@ export default {
       }
       throw error;
     }
+  },
+
+  // The cron trigger in wrangler.json. The photo sweep runs in PHOTO_SWEEP_MODE, which is a dry
+  // run unless that setting is exactly "apply" (see app/lib/photo-lifecycle.server.ts).
+  async scheduled(_controller, env, ctx) {
+    ctx.waitUntil(runScheduledPhotoSweep(env));
   },
 } satisfies ExportedHandler<CloudflareEnvironment>;

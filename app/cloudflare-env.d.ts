@@ -31,12 +31,23 @@ declare global {
     passThroughOnException(): void;
   }
 
+  interface ScheduledController {
+    cron: string;
+    scheduledTime: number;
+    noRetry(): void;
+  }
+
   interface ExportedHandler<Environment = unknown> {
     fetch(
       request: Request,
       env: Environment,
       ctx: ExecutionContext
     ): Response | Promise<Response>;
+    scheduled?(
+      controller: ScheduledController,
+      env: Environment,
+      ctx: ExecutionContext
+    ): void | Promise<void>;
   }
 
   /**
@@ -67,6 +78,8 @@ declare global {
     COOK_SESSION_BOOTSTRAP_MODE?: string;
     /** "v1" serves cook-session protocol v1 (cross-device cook progress); unset keeps the inert 503. */
     COOK_SESSION_PROTOCOL?: string;
+    /** "apply" lets the photo sweep move unreferenced photos to quarantine; "off" stops it; anything else is a dry run. */
+    PHOTO_SWEEP_MODE?: string;
     SPOONJOY_CSP_MODE?: string;
     VITE_POSTHOG_HOST?: string;
     SESSION_SECRET?: string;
