@@ -372,6 +372,7 @@ export async function scheduleAiPlaceholderCover(
       {
         ...(input.now ? { now: () => new Date(input.now!()) } : {}),
         d1: placeholderD1(input),
+        env: input.env,
       },
     );
     if (!consumed) {
