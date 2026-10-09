@@ -78,7 +78,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {mounted && toast
         ? createPortal(
             <div
-              className="pointer-events-none fixed inset-x-0 z-[80] flex justify-center px-4"
+              className="pointer-events-none fixed inset-x-0 z-[80] flex justify-center px-4 print:hidden"
               style={{ bottom: "calc(5.5rem + env(safe-area-inset-bottom))" }}
             >
               <div

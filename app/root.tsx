@@ -238,7 +238,7 @@ export default function App() {
           <main
             id="main"
             tabIndex={-1}
-            className="sj-desktop-surface sj-mobile-surface grow pb-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] lg:pb-0"
+            className="sj-desktop-surface sj-mobile-surface grow pb-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] lg:pb-0 print:pb-0"
           >
             <Outlet />
           </main>

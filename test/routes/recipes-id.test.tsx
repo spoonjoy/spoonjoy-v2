@@ -5049,6 +5049,73 @@ describe("Recipes $id Route", () => {
     });
   });
 
+  describe("on paper", () => {
+    it("prints where the recipe lives and leaves the cooks log and cook-mode hints off the page", async () => {
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Printed Recipe",
+          description: null,
+          servings: "4 servings",
+          coverImageUrl: null,
+          chef: { id: "user-1", username: "testchef" },
+          steps: [
+            {
+              id: "step-1",
+              stepNum: 1,
+              stepTitle: "Boil",
+              description: "Boil the water.",
+              ingredients: [],
+              usingSteps: [],
+            },
+          ],
+        },
+        isOwner: false,
+        isAuthenticated: false,
+        canonicalUrl: "https://spoonjoy.app/recipes/recipe-1",
+      };
+      const Stub = createTestRoutesStub([
+        { path: "/recipes/:id", Component: RecipeDetail, loader: () => mockData },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+      await screen.findByRole("heading", { level: 1, name: "Printed Recipe" });
+
+      const source = screen.getByTestId("recipe-print-source");
+      expect(source).toHaveTextContent("From Spoonjoy: https://spoonjoy.app/recipes/recipe-1");
+      expect(source).toHaveClass("hidden", "print:block");
+      expect(screen.getByTestId("recipe-cooks")).toHaveClass("print:hidden");
+      expect(screen.getByText("Tap ingredients as you go")).toHaveClass("print:hidden");
+      expect(document.getElementById("step-1")).toHaveClass("print:break-inside-avoid");
+    });
+
+    it("prints no source line when the page has no canonical address", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader: () => ({
+            recipe: {
+              id: "recipe-2",
+              title: "Unlisted Recipe",
+              description: null,
+              servings: null,
+              coverImageUrl: null,
+              chef: { id: "user-1", username: "testchef" },
+              steps: [],
+            },
+            isOwner: false,
+            isAuthenticated: false,
+          }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-2"]} />);
+      await screen.findByRole("heading", { level: 1, name: "Unlisted Recipe" });
+      expect(screen.queryByTestId("recipe-print-source")).toBeNull();
+    });
+  });
+
   describe("action - addToCookbook", () => {
     let testCookbookId: string;
 

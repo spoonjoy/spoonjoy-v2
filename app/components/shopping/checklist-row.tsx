@@ -35,7 +35,7 @@ export function ChecklistRow({
     <span
       aria-hidden="true"
       className={clsx(
-        "sj-instant-state grid size-6 place-items-center rounded-[var(--sj-radius-control)] border-2 font-sj-ui text-sm font-bold",
+        "sj-instant-state sj-checklist-box grid size-6 place-items-center rounded-[var(--sj-radius-control)] border-2 font-sj-ui text-sm font-bold",
         checked
           ? "border-[var(--sj-ink)] bg-[var(--sj-ink)] text-[var(--sj-paper)]"
           : "border-[var(--sj-border-strong)] bg-transparent text-transparent",
@@ -49,7 +49,7 @@ export function ChecklistRow({
     <span className="min-w-0">
       <span
         className={clsx(
-          "block truncate font-sj-ui text-base text-[var(--sj-ink)]",
+          "sj-checklist-name block truncate font-sj-ui text-base text-[var(--sj-ink)] print:whitespace-normal",
           checked && "text-[var(--sj-ink-soft)]",
         )}
       >
