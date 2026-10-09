@@ -73,7 +73,7 @@ import { productActivationPendingWebResponse } from "~/lib/saved-recipe-cutover.
 interface CloudflareContextLike {
   cloudflare?: {
     env?:
-      | (ImageGenEnv & { PHOTOS?: R2Bucket } & VapidEnv & PostHogServerEnv)
+      | (ImageGenEnv & { PHOTOS?: R2Bucket; DB?: unknown } & VapidEnv & PostHogServerEnv)
       | null;
     ctx?: { waitUntil?: (promise: Promise<unknown>) => void };
   };
@@ -94,7 +94,7 @@ function spoonErrorToResponse(error: unknown): never {
 
 function getCloudflareCtx(context: AppLoadContext): {
   bucket?: R2Bucket;
-  env: (ImageGenEnv & PostHogServerEnv) | null;
+  env: (ImageGenEnv & PostHogServerEnv & { DB?: unknown }) | null;
   vapidEnv: VapidEnv;
   waitUntil?: (promise: Promise<unknown>) => void;
 } {
@@ -114,6 +114,9 @@ function getCloudflareCtx(context: AppLoadContext): {
           POSTHOG_KEY: envSource.POSTHOG_KEY,
           POSTHOG_HOST: envSource.POSTHOG_HOST,
           POSTHOG_DISABLED: envSource.POSTHOG_DISABLED,
+          // The D1 binding: background stylization and its quota claim write through atomic
+          // D1 batches with it, and fall back to separate Prisma writes without it.
+          DB: envSource.DB,
         }
       : null,
     vapidEnv: {

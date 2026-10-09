@@ -1,4 +1,5 @@
-import { createExecutionContext, env } from "cloudflare:test";
+import { env } from "cloudflare:test";
+import { trackedExecutionContext } from "./execution-contexts";
 import type { PrismaClient } from "@prisma/client";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
@@ -578,7 +579,7 @@ describe("atomic recipe writes on Wrangler D1", () => {
       return handleRecipeDetailAction({
         request: new Request(`${ORIGIN}/recipes/${recipeId}`, { method: "POST", headers: { Cookie: cookie }, body }),
         params: { id: recipeId },
-        context: { cloudflare: { env, ctx: createExecutionContext() } },
+        context: { cloudflare: { env, ctx: trackedExecutionContext() } },
       } as never).catch((error: unknown) => error);
     }
 
@@ -1082,7 +1083,7 @@ describe("atomic recipe writes on Wrangler D1", () => {
           }),
         }),
         params: { "*": "recipes" },
-        context: { cloudflare: { env: routeEnv(DB), ctx: createExecutionContext() } },
+        context: { cloudflare: { env: routeEnv(DB), ctx: trackedExecutionContext() } },
       } as never);
       await failOn("INSERT", "Ingredient", `NEW."quantity" = 3`);
       expectConsoleError("[api-v1] internal_error", {

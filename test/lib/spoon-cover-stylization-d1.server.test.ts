@@ -188,4 +188,168 @@ describe("cover stylization on a D1 binding", () => {
     expect(image.imageToImage).not.toHaveBeenCalled();
     expect(await state(seeded)).toMatchObject({ status: "archived", recipeTouched: false, cookbookTouched: false });
   });
+
+  describe("activation after a successful stylization", () => {
+    const TRIGGER = "StylizationD1_injected_failure";
+
+    afterEach(async () => {
+      await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${TRIGGER}"`);
+    });
+
+    async function activation(seeded: Awaited<ReturnType<typeof seed>>) {
+      const recipe = await db.recipe.findUniqueOrThrow({ where: { id: seeded.recipeId } });
+      return {
+        active: recipe.activeCoverId === null
+          ? null
+          : recipe.activeCoverId === seeded.coverId ? "stylized cover" : "other cover",
+        activeCoverVariant: recipe.activeCoverVariant,
+        coverMode: recipe.coverMode,
+      };
+    }
+
+    /** Another cover on the recipe, made its active cover with the given fields. */
+    async function activeCover(seeded: Awaited<ReturnType<typeof seed>>, fields: Record<string, unknown>, variant: string | null) {
+      const cover = await db.recipeCover.create({
+        data: { recipeId: seeded.recipeId, imageUrl: "https://stub.test/other.png", sourceType: "chef-upload", ...fields },
+      });
+      await db.recipe.update({
+        where: { id: seeded.recipeId },
+        data: { activeCoverId: cover.id, activeCoverVariant: variant, updatedAt: OLD },
+      });
+      return cover.id;
+    }
+
+    it("marks the cover succeeded and activates it in one batch, or neither", async () => {
+      const seeded = await seed("injected");
+      await db.$executeRawUnsafe(`CREATE TRIGGER "${TRIGGER}" BEFORE UPDATE ON "Recipe"
+        WHEN NEW."activeCoverId" = '${seeded.coverId}' AND OLD."activeCoverId" IS NOT NEW."activeCoverId"
+        BEGIN SELECT RAISE(ABORT, 'stylization_injected_failure'); END`);
+
+      await stylize(seeded, d1.binding, { suppressAutoActivation: false });
+
+      // The success mark was rolled back with the failed activation, so no stylized image is
+      // recorded on a cover marked failed; the recipe keeps its cover.
+      expect(await state(seeded)).toMatchObject({ stylized: null, generationStatus: "failed" });
+      expect((await state(seeded)).failureReason).toContain("stylization_injected_failure");
+      expect(await activation(seeded)).toMatchObject({ active: null });
+
+      await db.$executeRawUnsafe(`DROP TRIGGER "${TRIGGER}"`);
+      await stylize(seeded, d1.binding, { suppressAutoActivation: false });
+      expect(await state(seeded)).toMatchObject({ status: "ready", generationStatus: "succeeded", cookbookTouched: true });
+      expect(await activation(seeded)).toEqual({ active: "stylized cover", activeCoverVariant: "stylized", coverMode: "auto" });
+    });
+
+    it("auto-activates on D1 exactly when the Prisma path does", async () => {
+      const scenarios: Array<[string, (seeded: Awaited<ReturnType<typeof seed>>) => Promise<unknown>]> = [
+        ["no active cover", async () => undefined],
+        ["a real active cover", (seeded) => activeCover(seeded, {}, "image")],
+        ["a real stylized active cover", (seeded) => activeCover(seeded, { stylizedImageUrl: "https://stub.test/s.png" }, "stylized")],
+        ["a real active cover with either variant", (seeded) => activeCover(seeded, {}, null)],
+        ["an active placeholder", (seeded) => activeCover(seeded, { sourceType: "ai-placeholder" }, "image")],
+        ["an archived active cover", (seeded) => activeCover(seeded, { status: "archived", archivedAt: new Date() }, "image")],
+        ["an active cover still processing", (seeded) => activeCover(seeded, { status: "processing" }, "image")],
+        ["an active cover without its variant's image", (seeded) => activeCover(seeded, {}, "stylized")],
+        ["an active cover with no image at all", (seeded) => activeCover(seeded, { imageUrl: "" }, null)],
+        ["a manual recipe", (seeded) => db.recipe.update({ where: { id: seeded.recipeId }, data: { coverMode: "manual", updatedAt: OLD } })],
+      ];
+      const outcomes: Record<string, unknown> = {};
+      for (const [label, arrange] of scenarios) {
+        const viaPrisma = await seed(`prisma ${label}`);
+        const viaD1 = await seed(`d1 ${label}`);
+        await arrange(viaPrisma);
+        await arrange(viaD1);
+
+        await stylize(viaPrisma, null, { suppressAutoActivation: false });
+        await stylize(viaD1, d1.binding, { suppressAutoActivation: false });
+
+        const prismaActivation = await activation(viaPrisma);
+        expect({ label, ...(await activation(viaD1)) }).toEqual({ label, ...prismaActivation });
+        outcomes[label] = prismaActivation.active === "stylized cover";
+      }
+      expect(outcomes).toEqual({
+        "no active cover": true,
+        "a real active cover": false,
+        "a real stylized active cover": false,
+        "a real active cover with either variant": false,
+        "an active placeholder": true,
+        "an archived active cover": true,
+        "an active cover still processing": true,
+        "an active cover without its variant's image": true,
+        "an active cover with no image at all": true,
+        "a manual recipe": false,
+      });
+    });
+
+    it("activates a requested cover with its success only while the guard still matches", async () => {
+      const guard = { activeCoverId: null, activeCoverVariant: null, coverMode: "auto" };
+      const viaPrisma = await seed("prisma");
+      const viaD1 = await seed("d1");
+
+      await stylize(viaPrisma, null, { activateWhenReady: true, activationGuard: guard });
+      await stylize(viaD1, d1.binding, { activateWhenReady: true, activationGuard: guard });
+
+      expect(await activation(viaD1)).toEqual(await activation(viaPrisma));
+      expect(await activation(viaD1)).toEqual({ active: "stylized cover", activeCoverVariant: "stylized", coverMode: "manual" });
+
+      const stale = await seed("stale");
+      await db.recipe.update({ where: { id: stale.recipeId }, data: { coverMode: "none", updatedAt: OLD } });
+      await stylize(stale, d1.binding, { activateWhenReady: true, activationGuard: guard });
+      expect(await activation(stale)).toEqual({ active: null, activeCoverVariant: null, coverMode: "none" });
+      expect(await state(stale)).toMatchObject({ status: "ready", generationStatus: "succeeded" });
+
+      const unguarded = await seed("unguarded");
+      await stylize(unguarded, d1.binding, { activateWhenReady: true });
+      expect(await activation(unguarded)).toEqual({ active: null, activeCoverVariant: null, coverMode: "auto" });
+    });
+
+    it("never activates a cover archived after it was marked succeeded (Prisma path)", async () => {
+      const auto = await seed("archived-auto");
+      const requested = await seed("archived-requested");
+      const read = db.recipe.findUnique.bind(db.recipe);
+      const archiving = vi.spyOn(db.recipe, "findUnique").mockImplementation((async (args: never) => {
+        await db.recipeCover.updateMany({
+          where: { id: { in: [auto.coverId, requested.coverId] } },
+          data: { status: "archived", archivedAt: new Date() },
+        });
+        return read(args);
+      }) as never);
+      const update = db.recipe.updateMany.bind(db.recipe);
+      const archivingBeforeRequested = vi.spyOn(db.recipe, "updateMany").mockImplementation((async (args: never) => {
+        await db.recipeCover.update({ where: { id: requested.coverId }, data: { status: "archived", archivedAt: new Date() } });
+        return update(args);
+      }) as never);
+
+      await stylize(auto, null, { suppressAutoActivation: false });
+      archiving.mockRestore();
+      await stylize(requested, null, {
+        activateWhenReady: true,
+        activationGuard: { activeCoverId: null, activeCoverVariant: null, coverMode: "auto" },
+      });
+      archivingBeforeRequested.mockRestore();
+
+      expect(await activation(auto)).toMatchObject({ active: null });
+      expect(await activation(requested)).toMatchObject({ active: null, coverMode: "auto" });
+    });
+
+    it("does not mark failed, or touch, a cover archived after the failure read (Prisma path)", async () => {
+      const seeded = await seed("archived-failure");
+      const read = db.recipeCover.findFirst.bind(db.recipeCover);
+      const archiving = vi.spyOn(db.recipeCover, "findFirst").mockImplementation((async (args: never) => {
+        const cover = await read(args);
+        await db.recipeCover.update({ where: { id: seeded.coverId }, data: { status: "archived", archivedAt: new Date() } });
+        return cover;
+      }) as never);
+
+      await stylize(seeded, null, { rawPhotoUrl: " " });
+      archiving.mockRestore();
+
+      expect(await state(seeded)).toMatchObject({
+        status: "archived",
+        generationStatus: "none",
+        failureReason: null,
+        recipeTouched: false,
+        cookbookTouched: false,
+      });
+    });
+  });
 });
