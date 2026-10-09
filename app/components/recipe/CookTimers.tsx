@@ -149,7 +149,9 @@ export function CookTimerTray({
                 ) : (
                   <TimerReset aria-hidden="true" className="size-5 shrink-0 text-[var(--sj-brass)]" />
                 )}
-                <div className="min-w-0 flex-1">
+                {/* A floor on the text's width makes the buttons wrap below it on a phone, instead of
+                    squeezing "Time's up" onto two lines and cutting off the step. */}
+                <div className="min-w-48 flex-1">
                   <p className="font-sj-ui m-0 truncate text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
                     Step {view.stepNum}{view.label ? ` · ${view.label}` : ""}
                   </p>
