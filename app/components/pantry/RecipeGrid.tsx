@@ -1,3 +1,4 @@
+import type React from 'react'
 import { Bookmark, Share2, UtensilsCrossed } from 'lucide-react'
 import { Subheading } from '../ui/heading'
 import { Link } from '../ui/link'
@@ -22,8 +23,10 @@ export interface PantryRecipeCard {
 
 export interface RecipeGridProps {
   recipes: PantryRecipeCard[]
-  /** Recipes across every page when the grid shows one page of a longer list. */
+  /** Recipes across every page when the grid shows part of a longer list. */
   totalCount?: number
+  /** Focus target for the first card a "Show more" added (see useFocusFirstNew). */
+  firstNew?: { index: number | null; ref: React.Ref<HTMLAnchorElement> }
   emptyTitle?: string
   emptyMessage?: string
   emptyCtaHref?: string | null
@@ -34,6 +37,7 @@ export interface RecipeGridProps {
 export function RecipeGrid({
   recipes,
   totalCount = recipes.length,
+  firstNew,
   emptyTitle = 'No recipes yet',
   emptyMessage = 'Start by creating your first recipe for this pantry.',
   emptyCtaHref = '/recipes/new',
@@ -63,7 +67,7 @@ export function RecipeGrid({
       </div>
 
       <div className="sj-list-ruled">
-        {recipes.map((recipe) => {
+        {recipes.map((recipe, index) => {
           const href = recipe.href ?? `/recipes/${recipe.id}`
           const displayImageUrl = recipe.coverImageUrl && recipe.coverImageUrl.length > 0 ? recipe.coverImageUrl : undefined
           const hasQuickActions = Boolean(onShare || onSave)
@@ -76,6 +80,7 @@ export function RecipeGrid({
             >
               <Link
                 href={href}
+                ref={firstNew && index === firstNew.index ? firstNew.ref : undefined}
                 aria-label={recipe.title}
                 className="grid gap-4 py-5 no-underline sm:grid-cols-[7rem_minmax(0,1fr)] sm:pr-24"
               >
