@@ -356,16 +356,20 @@ function validateRequiredMcpTools(payload) {
 }
 
 async function waitForAiPlaceholder({ recipeId, mcpTool, maxAttempts, delayMs, wait }, state) {
+  let lastSeen = "no covers listed";
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const payload = await mcpTool("list_recipe_covers", { recipeId, includeArchived: true, limit: 50 });
     addObservedCoverArtifacts(payload, state);
+    lastSeen = coverListFrom(payload)
+      .map((cover) => `${cover?.provenanceLabel ?? "unlabelled"}:${cover?.generationStatus ?? cover?.status ?? "unknown"}${cover?.failureReason ? `(${String(cover.failureReason).slice(0, 120)})` : ""}`)
+      .join(", ") || "no covers listed";
     const aiCover = coverListFrom(payload).find((cover) => cover?.provenanceLabel === "AI generated");
     if (aiCover && coverTerminalState(aiCover) === "succeeded" && (aiCover.imageUrl || aiCover.displayUrl)) {
       return aiCover;
     }
     if (attempt < maxAttempts) await wait(delayMs);
   }
-  throw new Error(`AI generated placeholder cover was not ready for recipe ${recipeId}.`);
+  throw new Error(`AI generated placeholder cover was not ready for recipe ${recipeId}. Last seen: ${lastSeen}.`);
 }
 
 async function cleanupSmokeArtifacts(options, state) {
