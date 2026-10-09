@@ -2442,6 +2442,18 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
   });
 
+  it("requires the CI workflow token to be read-only", () => {
+    const readOnly = "permissions:\n  contents: read\n";
+    const errorsFor = (ciWorkflow: string) =>
+      validateDeploymentConfig({ ...validInputs(), ciWorkflow }).errors.map((error) => error.name);
+
+    expect(errorsFor(validCiWorkflow())).not.toContain("CI workflow");
+    expect(errorsFor(replaceRequired(validCiWorkflow(), readOnly, ""))).toContain("CI workflow");
+    expect(errorsFor(replaceRequired(validCiWorkflow(), readOnly, "permissions:\n  contents: write\n"))).toContain("CI workflow");
+    expect(errorsFor(replaceRequired(validCiWorkflow(), readOnly, "permissions: write-all\n"))).toContain("CI workflow");
+    expect(errorsFor(replaceRequired(validCiWorkflow(), readOnly, readOnly + "  pull-requests: write\n"))).toContain("CI workflow");
+  });
+
   it("requires warning-clean CI workflow setup", () => {
     const valid = validateDeploymentConfig(validInputs());
     const missingGitConfig = validateDeploymentConfig({

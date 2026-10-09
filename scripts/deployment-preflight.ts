@@ -612,8 +612,11 @@ function requiredDispatchStringInput(value: unknown): boolean {
 
 function parsedCiWorkflowIsCanonical(workflow: string): boolean {
   const root = parsedWorkflow(workflow);
-  if (!root || !exactObjectKeys(root, ["name", "on", "defaults", "env", "jobs"])) return false;
+  if (!root || !exactObjectKeys(root, ["name", "on", "permissions", "defaults", "env", "jobs"])) return false;
   if (root.name !== "CI" || !exactWorkflowRecord(root.env, CI_WORKFLOW_ENV)) return false;
+  // CI runs pull request code, so its GITHUB_TOKEN may only read the repository.
+  const permissions = objectRecord(root.permissions);
+  if (!exactObjectKeys(permissions, ["contents"]) || permissions.contents !== "read") return false;
 
   const triggers = objectRecord(root.on);
   const push = objectRecord(triggers.push);
