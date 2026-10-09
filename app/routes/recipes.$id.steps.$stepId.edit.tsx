@@ -31,10 +31,10 @@ import { touchNativeSyncRecipe, touchNativeSyncRecipeOperation } from "~/lib/nat
 import { validateStepDeletion } from "~/lib/step-deletion-validation.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import {
-  parseIngredients,
   IngredientParseError,
   type ParsedIngredient,
 } from "~/lib/ingredient-parse.server";
+import { parseIngredientsWithRulesFallback } from "~/lib/ingredient-parse-fallback.server";
 import {
   validateStepTitle,
   validateStepDescription,
@@ -213,7 +213,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     const ingredientText = formData.get("ingredientText")?.toString() || "";
 
     try {
-      const parsedIngredients = await parseIngredients(
+      const parsedIngredients = await parseIngredientsWithRulesFallback(
         ingredientText,
         getIngredientParserEnv(context),
         { distinctId: userId }
