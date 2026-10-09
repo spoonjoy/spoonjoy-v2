@@ -9,8 +9,6 @@ import { getRecipeCoverDisplay } from "../../../app/lib/recipe-cover.server";
 import { readRecipeDetailFromD1, readRecipeDetailWithPrisma } from "../../../app/lib/recipe-detail-reads.server";
 import {
   rebuildSearchIndex,
-  searchSourceFingerprint,
-  searchSourceFingerprintFromD1,
   searchSpoonjoy,
   searchSpoonjoyFromD1,
   type SearchOptions,
@@ -311,9 +309,7 @@ describe("hot read paths on Wrangler D1", () => {
     expect(weeknights!.searchableRecipeTitles).not.toContain("Hot Read Deleted");
   });
 
-  it("fingerprints and indexes search sources exactly as the Prisma path does", async () => {
-    expect(await searchSourceFingerprintFromD1(database())).toBe(await searchSourceFingerprint(prisma));
-
+  it("indexes search sources exactly as the Prisma path does", async () => {
     await rebuildSearchIndex(prisma);
     const prismaDocuments = await database().prepare(`SELECT * FROM "SearchDocument" ORDER BY rowid`).all();
     await run(`DELETE FROM "SearchIndexMetadata"`);
@@ -335,5 +331,23 @@ describe("hot read paths on Wrangler D1", () => {
     const friendResults = await searchSpoonjoyFromD1(database(), { query: "hot read", viewerId: FRIEND });
     expect(friendResults.filter((result) => result.type === "shopping-list-item").every((result) => result.ownerId === FRIEND))
       .toBe(true);
+  });
+  it("keeps the search index current through triggers on real D1", async () => {
+    await searchSpoonjoyFromD1(database(), { query: "hot read" });
+    const triggers = await database()
+      .prepare(`SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'SearchDirty_%'`)
+      .first<{ count: number }>();
+    expect(triggers!.count).toBeGreaterThan(20);
+
+    await run(`UPDATE "Recipe" SET "title" = 'Hot Read Triggered Damson', "updatedAt" = CURRENT_TIMESTAMP WHERE "id" = ?`, RECIPE);
+    const queued = await database().prepare(`SELECT "entityType", "entityId" FROM "SearchDirtyEntity"`).all();
+    expect(queued.results).toContainEqual({ entityType: "recipe", entityId: RECIPE });
+
+    await expect(searchSpoonjoyFromD1(database(), { query: "triggered damson", scope: "recipes" }))
+      .resolves.toMatchObject([{ id: RECIPE, title: "Hot Read Triggered Damson" }]);
+    const after = await database().prepare(`SELECT COUNT(*) AS count FROM "SearchDirtyEntity"`).first<{ count: number }>();
+    expect(after!.count).toBe(0);
+    await expect(searchSpoonjoy(prisma, { query: "triggered damson", scope: "recipes" }))
+      .resolves.toMatchObject([{ id: RECIPE }]);
   });
 });
