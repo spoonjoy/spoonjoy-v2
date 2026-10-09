@@ -9,7 +9,7 @@ import React from "react";
 import { Link } from "react-router";
 import { createTestRoutesStub } from "../utils";
 
-vi.mock("framer-motion", () => {
+vi.mock("motion/react", () => {
   const MotionDiv = ({
     children,
     onDragEnd: _onDragEnd,
@@ -32,7 +32,8 @@ vi.mock("framer-motion", () => {
   return {
     AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
     LayoutGroup: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    motion: { div: MotionDiv },
+    LazyMotion: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    m: { div: MotionDiv },
   };
 });
 

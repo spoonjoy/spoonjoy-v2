@@ -21,7 +21,7 @@ vi.mock('~/components/recipe/StepEditorCard', () => ({
   },
 }))
 
-vi.mock('framer-motion', () => ({
+vi.mock('motion/react', () => ({
   Reorder: {
     Group: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
     Item: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,

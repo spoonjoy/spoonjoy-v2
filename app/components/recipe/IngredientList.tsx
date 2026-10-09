@@ -1,4 +1,5 @@
-import { LayoutGroup, motion, useReducedMotion } from 'framer-motion'
+import { m, useReducedMotion } from 'motion/react'
+import { LazyLayoutGroup } from '~/components/motion/lazy-motion'
 import type { StepReference } from './StepOutputUseCallout'
 import type { IngredientIconKey } from '~/lib/ingredient-affordances'
 import { formatQuantity, scaleQuantity } from '~/lib/quantity'
@@ -88,7 +89,7 @@ export function IngredientList({
   const layoutTransition = getIngredientLayoutTransition(prefersReducedMotion)
 
   return (
-    <LayoutGroup>
+    <LazyLayoutGroup>
       <ul
         data-testid="ingredient-list"
         className="m-0 p-0"
@@ -101,7 +102,7 @@ export function IngredientList({
                 const shouldShowCheckbox = showCheckboxes && onStepOutputToggle
 
                 return (
-                  <motion.li
+                  <m.li
                     key={ref.id}
                     layout="position"
                     transition={layoutTransition}
@@ -114,7 +115,7 @@ export function IngredientList({
                       note={isChecked ? 'used' : 'step output'}
                       onToggle={shouldShowCheckbox ? () => onStepOutputToggle(ref.id) : undefined}
                     />
-                  </motion.li>
+                  </m.li>
                 )
               })}
             </ul>
@@ -122,7 +123,7 @@ export function IngredientList({
         )}
 
         {orderedIngredients.map(({ ingredient, checked }) => (
-          <motion.li
+          <m.li
             key={ingredient.id}
             layout="position"
             transition={layoutTransition}
@@ -137,10 +138,10 @@ export function IngredientList({
               showCheckboxes={showCheckboxes}
               onToggle={onToggle}
             />
-          </motion.li>
+          </m.li>
         ))}
       </ul>
-    </LayoutGroup>
+    </LazyLayoutGroup>
   )
 }
 
