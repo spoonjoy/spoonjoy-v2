@@ -31,6 +31,22 @@ describe("Photos Resource Route", () => {
       });
     });
 
+    it("returns 404 for a quarantined photo without reading R2", async () => {
+      const get = vi.fn();
+      await expect(
+        loader({
+          params: { "*": "quarantine/recipes/user123/image.jpg" },
+          context: { cloudflare: { env: { PHOTOS: { get } } } },
+          request: new Request("http://localhost:3000/photos/quarantine/recipes/user123/image.jpg"),
+        } as any)
+      ).rejects.toSatisfy((error: any) => {
+        expect(error).toBeInstanceOf(Response);
+        expect(error.status).toBe(404);
+        return true;
+      });
+      expect(get).not.toHaveBeenCalled();
+    });
+
     it("should return 503 when R2 bucket is not available", async () => {
       await expect(
         loader({

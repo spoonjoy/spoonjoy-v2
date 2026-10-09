@@ -1,4 +1,5 @@
 import type { Route } from "./+types/photos.$";
+import { isServablePhotoKey } from "~/lib/photo-lifecycle.server";
 import { getCloudflareEnv } from "~/lib/route-platform.server";
 
 /**
@@ -8,7 +9,8 @@ import { getCloudflareEnv } from "~/lib/route-platform.server";
 export async function loader({ params, context }: Route.LoaderArgs) {
   const key = params["*"];
 
-  if (!key) {
+  // Quarantined photos (moved there by the photo sweep) are never served.
+  if (!key || !isServablePhotoKey(key)) {
     throw new Response("Not Found", { status: 404 });
   }
 
