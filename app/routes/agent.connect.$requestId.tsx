@@ -247,7 +247,12 @@ export default function AgentConnect() {
       ) : null}
 
       {(actionable || connected) && scopes.length > 0 ? (
-        <div className="mt-6 border-y border-[var(--sj-border)] py-5">
+        // Directly under "Request details", share its bottom rule instead of drawing a second one.
+        <div
+          className={actionable && requester
+            ? "border-b border-[var(--sj-border)] py-5"
+            : "mt-6 border-y border-[var(--sj-border)] py-5"}
+        >
           <p className={LABEL}>{connected ? "Access granted" : "Requested scopes"}</p>
           <ul className="mt-3 grid gap-2">
             {scopes.map((scope) => (
