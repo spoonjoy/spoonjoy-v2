@@ -38,6 +38,7 @@ import { SpoonjoyLogo } from "~/components/ui/spoonjoy-logo";
 import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
 import { Text } from "~/components/ui/text";
 import { SkipLink } from "~/components/navigation/skip-link";
+import { PhoneBrandBar } from "~/components/navigation/phone-brand-bar";
 import { useHistoryTrail } from "~/hooks/use-back-navigation";
 import "./styles/tailwind.css";
 
@@ -229,6 +230,7 @@ export default function App() {
       <ToastProvider>
         <RouteTransitionIndicator />
         <div className="sj-app-shell relative isolate flex min-h-svh w-full flex-col">
+          {userId ? null : <PhoneBrandBar />}
           <header className="sj-desktop-topbar sticky top-0 z-30 hidden items-center px-4 lg:flex">
             <AppNavbar userId={userId} oauthProviders={oauthProviders} />
           </header>

@@ -57,21 +57,22 @@ export default function RecipesIndex() {
     <CookbookPage>
       {isAuthenticated ? <RecipesSectionNav /> : null}
       <section>
-        <header className="border-b border-[var(--sj-border-strong)] pb-8">
-          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] lg:items-end">
+        {/* On a phone the header stays short, so the first recipe shows on the first screen (finding 18). */}
+        <header className="border-b border-[var(--sj-border-strong)] pb-6 sm:pb-8">
+          <div className="grid gap-5 sm:gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] lg:items-end">
             <div>
               <p className="sj-eyebrow">Public recipe box</p>
-              <Heading level={1} className="mt-3 max-w-4xl text-5xl/12 sm:text-7xl/18 lg:text-[84px] lg:leading-[1.04]">
-                {isAuthenticated ? "Recipes worth opening." : "Recipes worth opening before you sign in."}
+              <Heading level={1} className="mt-3 max-w-4xl text-4xl/10 sm:text-7xl/18 lg:text-[84px] lg:leading-[1.04]">
+                Recipes worth opening.
               </Heading>
-              <Text className="mt-5 max-w-2xl text-lg/8">
+              <Text className="mt-3 max-w-2xl text-base/7 sm:mt-5 sm:text-lg/8">
                 {isAuthenticated
-                  ? "Browse every public Spoonjoy recipe — then cook, fork, save, or add ingredients to your list."
-                  : "Browse every public Spoonjoy recipe. Sign in only when you want to cook, fork, save, or add ingredients to your own list."}
+                  ? "Every public Spoonjoy recipe, to cook, fork, save or shop from."
+                  : "Every public Spoonjoy recipe, free to read. Sign up to cook, save and shop from them."}
               </Text>
             </div>
 
-            <div className="border-t border-[var(--sj-border)] pt-5 lg:border-t-0">
+            <div className="border-t border-[var(--sj-border)] pt-4 sm:pt-5 lg:border-t-0">
               <Form method="get" role="search" className="grid gap-3">
                 <label htmlFor="public-recipe-search" className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
                   Search recipes
@@ -88,7 +89,7 @@ export default function RecipesIndex() {
                     // server-rendered query (the browser skips form restoration for these fields).
                     autoComplete="off"
                     placeholder="tomato, beans, lemon"
-                    className="min-w-0 flex-1 before:hidden after:hidden [&_input]:h-14 [&_input]:border-0 [&_input]:bg-transparent [&_input]:px-0 [&_input]:py-0 [&_input]:font-sj-display [&_input]:text-2xl/8 [&_input]:outline-none [&_input]:placeholder:text-[var(--sj-ink-soft)]"
+                    className="min-w-0 flex-1 before:hidden after:hidden [&_input]:h-14 [&_input]:border-0 [&_input]:bg-transparent [&_input]:px-0 [&_input]:py-0 [&_input]:font-sj-display [&_input]:text-xl/7 sm:[&_input]:text-2xl/8 [&_input]:outline-none [&_input]:placeholder:text-[var(--sj-ink-soft)]"
                   />
                 </div>
                 <div className="flex flex-wrap gap-3">
