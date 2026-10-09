@@ -155,6 +155,7 @@ function validStorybookWorkflow(): string {
     "    branches: [main]",
     "  pull_request:",
     "    branches: [main]",
+    "  merge_group:",
     "  workflow_dispatch:",
     "env:",
     "  GIT_CONFIG_COUNT: '1'",
@@ -2440,6 +2441,29 @@ describe("deployment preflight", () => {
     const result = validateDeploymentConfig(inputs);
 
     expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it("requires merge-queue CI and cancels only superseded pull-request runs", () => {
+    const ciErrors = (ciWorkflow: string) =>
+      validateDeploymentConfig({ ...validInputs(), ciWorkflow }).errors.map((item) => item.name);
+    const concurrency = [
+      "concurrency:",
+      "  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}",
+      "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+      "",
+    ].join("\n");
+
+    expect(validCiWorkflow()).toContain(concurrency);
+    expect(ciErrors(validCiWorkflow())).not.toContain("CI workflow");
+    for (const broken of [
+      replaceRequired(validCiWorkflow(), "  merge_group:\n", ""),
+      replaceRequired(validCiWorkflow(), "  merge_group:\n", "  merge_group:\n    types: [checks_requested]\n"),
+      replaceRequired(validCiWorkflow(), concurrency, ""),
+      replaceRequired(validCiWorkflow(), "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}", "  cancel-in-progress: true"),
+      replaceRequired(validCiWorkflow(), "format('run-{0}', github.run_id)", "github.ref"),
+    ]) {
+      expect(ciErrors(broken)).toContain("CI workflow");
+    }
   });
 
   it("requires warning-clean CI workflow setup", () => {
@@ -5032,7 +5056,7 @@ describe("Storybook deploy warning cleanup", () => {
 
   it("requires push-to-main trigger and workflow-level Git default-branch config", () => {
     const missingOnBlock = validateDeploymentConfig(
-      inputsWithStorybookWorkflow(validStorybookWorkflow().replace("on:\n  push:\n    branches: [main]\n  pull_request:\n    branches: [main]\n  workflow_dispatch:\n", "")),
+      inputsWithStorybookWorkflow(validStorybookWorkflow().replace("on:\n  push:\n    branches: [main]\n  pull_request:\n    branches: [main]\n  merge_group:\n  workflow_dispatch:\n", "")),
     );
     const missingPushMain = validateDeploymentConfig(
       inputsWithStorybookWorkflow(validStorybookWorkflow().replace("  push:\n    branches: [main]\n", "")),

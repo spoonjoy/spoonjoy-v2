@@ -610,10 +610,18 @@ function requiredDispatchStringInput(value: unknown): boolean {
     allowedObjectKeys(input, ["required", "type"], ["description"]);
 }
 
+// Only a superseded pull-request run is ever cancelled; main pushes, merge-queue groups and
+// dispatches each get a group of their own.
+export const CI_WORKFLOW_CONCURRENCY = {
+  group: "ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}",
+  "cancel-in-progress": "${{ github.event_name == 'pull_request' }}",
+} as const;
+
 function parsedCiWorkflowIsCanonical(workflow: string): boolean {
   const root = parsedWorkflow(workflow);
-  if (!root || !exactObjectKeys(root, ["name", "on", "defaults", "env", "jobs"])) return false;
+  if (!root || !exactObjectKeys(root, ["name", "on", "defaults", "concurrency", "env", "jobs"])) return false;
   if (root.name !== "CI" || !exactWorkflowRecord(root.env, CI_WORKFLOW_ENV)) return false;
+  if (!exactWorkflowRecord(root.concurrency, CI_WORKFLOW_CONCURRENCY)) return false;
 
   const triggers = objectRecord(root.on);
   const push = objectRecord(triggers.push);
@@ -621,7 +629,8 @@ function parsedCiWorkflowIsCanonical(workflow: string): boolean {
   const dispatch = objectRecord(triggers.workflow_dispatch);
   const inputs = objectRecord(dispatch.inputs);
   if (
-    !exactObjectKeys(triggers, ["push", "pull_request", "workflow_dispatch"]) ||
+    !exactObjectKeys(triggers, ["push", "pull_request", "merge_group", "workflow_dispatch"]) ||
+    triggers.merge_group !== null ||
     !exactObjectKeys(push, ["branches"]) ||
     !exactObjectKeys(pullRequest, ["branches"]) ||
     !exactStringArray(push.branches, ["main"]) ||
@@ -1033,7 +1042,7 @@ function workflowBuildsPullRequestsAndDeploysPushesToMain(workflow: string): boo
   const onEnd = blockEnd(lines, onIndex);
   const workflowDispatch = childBlock(lines, onIndex, onEnd, "workflow_dispatch");
   return (
-    workflowHasOnlyTriggers(lines, onIndex, onEnd, ["push", "pull_request", "workflow_dispatch"]) &&
+    workflowHasOnlyTriggers(lines, onIndex, onEnd, ["push", "pull_request", "merge_group", "workflow_dispatch"]) &&
     Boolean(workflowDispatch) &&
     workflowTriggerTargetsMain(lines, onIndex, onEnd, "push") &&
     workflowTriggerTargetsMain(lines, onIndex, onEnd, "pull_request")
@@ -1735,7 +1744,7 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     check(
       "CI workflow",
       ciWorkflowIsCanonical,
-      ".github/workflows/ci.yml must validate pushes and pull requests to main with checkout output suppression, Corepack pnpm activation, and output-gated seed/typecheck/build/test paths."
+      ".github/workflows/ci.yml.must validate pushes, pull requests and merge-queue groups for main, cancel only superseded pull-request runs, with checkout output suppression, Corepack pnpm activation, and output-gated seed/typecheck/build/test paths."
     ),
     check(
       "production deploy workflow",
