@@ -101,10 +101,20 @@ async function seedCookbook() {
 
   const book = await db.cookbook.create({ data: { title: "Weeknights", authorId: owner.id, createdAt: at(0), updatedAt: at(1) } });
   const entries = [covered, stylized, processing, noCover, inactive, failed, archived, archivedStatus, borrowed, coverOff, missingVariant, deleted];
+  // The page lists entries oldest first. They are inserted newest first, and their recipes
+  // were created in the opposite order to the page's, so neither insertion order nor the
+  // (cookbookId, recipeId) index gives the page's order without the ORDER BY. "Covered" and
+  // "Stylized" share a createdAt; the larger entry id is inserted first, so only the id
+  // tiebreak puts "Stylized" (entry-tie-a) before "Covered" (entry-tie-b).
   for (const [index, entry] of entries.entries()) {
     await db.recipeInCookbook.create({
-      // Two entries share a createdAt, so the id breaks the tie.
-      data: { cookbookId: book.id, recipeId: entry.id, addedById: owner.id, createdAt: at(index === 1 ? 20 : 20 + index) },
+      data: {
+        ...(index === 0 ? { id: "entry-tie-b" } : index === 1 ? { id: "entry-tie-a" } : {}),
+        cookbookId: book.id,
+        recipeId: entry.id,
+        addedById: owner.id,
+        createdAt: at(index === 1 ? 40 : 40 - index),
+      },
     });
   }
 
@@ -166,7 +176,12 @@ describe("cookbook page reads", () => {
     const shown = Object.fromEntries(cookbook.recipes.map(({ recipe }) => [recipe.title, recipe.coverImageUrl]));
     expect(Object.keys(shown)).not.toContain("Deleted");
     expect(cookbook.recipes).toHaveLength(11);
-    expect(cookbook.recipes[0]!.recipe).toMatchObject({ title: "Covered", description: "Covered notes", servings: "2", chef: { username: owner.username } });
+    expect(cookbook.recipes.map((entry) => entry.recipe.title)).toEqual([
+      "Missing stylized", "Cover mode none", "Borrowed cover", "Archived status", "Archived cover",
+      "Failed cover", "Inactive history", "No cover", "Processing", "Stylized", "Covered",
+    ]);
+    expect(cookbook.recipes.slice(-2).map((entry) => entry.id)).toEqual(["entry-tie-a", "entry-tie-b"]);
+    expect(cookbook.recipes.at(-1)!.recipe).toMatchObject({ title: "Covered", description: "Covered notes", servings: "2", chef: { username: owner.username } });
     // The chosen image variant of the active cover, not the newest cover or its stylized image.
     expect(shown["Covered"]).toMatch(/-2\.jpg$/);
     expect(shown["Stylized"]).toBe("https://example.com/s2.jpg");
@@ -174,9 +189,6 @@ describe("cookbook page reads", () => {
     for (const title of ["No cover", "Inactive history", "Failed cover", "Archived cover", "Archived status", "Borrowed cover", "Cover mode none", "Missing stylized"]) {
       expect(shown[title], title).toBeNull();
     }
-    // Entries with the same createdAt come in id order.
-    const tied = cookbook.recipes.filter((entry) => entry.createdAt.getTime() === at(20).getTime());
-    expect(tied.map((entry) => entry.id)).toEqual([...tied.map((entry) => entry.id)].sort());
 
     expect(rows.availableRecipes).toEqual([
       { id: expect.any(String), title: "Apple tart" },
@@ -266,7 +278,7 @@ describe("cookbook page loader on a D1 binding", () => {
     expect(signedOut.isOwner).toBe(false);
     expect(signedOut.availableRecipes).toEqual([]);
     expect(signedOut.cookbook.recipes).toHaveLength(11);
-    const first = signedOut.cookbook.recipes[0]!.recipe;
+    const first = signedOut.cookbook.recipes.find((entry) => entry.recipe.title === "Covered")!.recipe;
     expect(Object.keys(first).sort()).toEqual(["chef", "coverImageUrl", "coverProvenanceLabel", "description", "id", "servings", "title"]);
     expect(first).toMatchObject({
       title: "Covered",
