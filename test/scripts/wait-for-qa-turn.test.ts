@@ -347,7 +347,9 @@ describe("waitForQaTurn", () => {
 
     expect(requests[0].url).toBe("https://api.github.com/repos/spoonjoy/spoonjoy-v2/actions/runs/500");
     expect(DEFAULT_POLL_MS).toBe(60_000);
-    expect(DEFAULT_MAX_WAIT_MS).toBe(90 * 60_000);
+    // Long enough to sit out a full queue of Journeys runs (about 10 minutes each) rather than
+    // fail and need a re-run, which only adds to the queue.
+    expect(DEFAULT_MAX_WAIT_MS).toBe(330 * 60_000);
     expect(LISTED_RUN_STATUSES).toEqual(["queued", "in_progress"]);
     expect(QA_TURN_JOB_NAME).toBe("wait for QA");
   });
@@ -471,6 +473,8 @@ describe("Journeys workflow queue wiring", () => {
     expect(qaTurn.if).toBe(FORK_GATE);
     expect(qaTurn.permissions).toEqual({ actions: "read", contents: "read" });
     expect(qaTurn["timeout-minutes"]).toBeGreaterThanOrEqual(DEFAULT_MAX_WAIT_MS / 60_000 + 15);
+    // GitHub-hosted jobs stop at 360 minutes, so the wait must end, with its clear message, first.
+    expect(qaTurn["timeout-minutes"]).toBeLessThanOrEqual(360);
     const wait = qaTurn.steps.find((step: { name?: string }) => step.name === "Wait for this run's turn on QA");
     expect(wait.run).toBe("node scripts/wait-for-qa-turn.mjs");
     expect(wait.env).toEqual({ GITHUB_TOKEN: "${{ github.token }}" });

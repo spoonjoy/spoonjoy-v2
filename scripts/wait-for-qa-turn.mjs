@@ -36,7 +36,7 @@ export const WORKFLOW_FILE = "journeys.yml";
 export const LISTED_RUN_STATUSES = ["queued", "in_progress"];
 export const QA_TURN_JOB_NAME = "wait for QA";
 export const DEFAULT_POLL_MS = 60_000;
-export const DEFAULT_MAX_WAIT_MS = 90 * 60_000;
+export const DEFAULT_MAX_WAIT_MS = 330 * 60_000;
 export const PAGE_SIZE = 100;
 export const MAX_PAGES = 10;
 
