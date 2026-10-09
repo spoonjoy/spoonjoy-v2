@@ -6003,23 +6003,48 @@ describe("release artifact and CLI boundary", () => {
   });
 
   it.each([
-    ["a malformed restore point", "not-a-bookmark", "succeeded"],
-    ["a restore point when no migration ran", PRE_MIGRATION_BOOKMARK, "not_started"],
-  ] as const)("rejects an artifact with %s", async (_label, preMigrationBookmark, migrationApply) => {
-    const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-bad-restore-point-"));
-    try {
-      await expect(writeReleaseArtifactFile(artifactDir, {
+    [
+      "a malformed restore point",
+      "not-a-bookmark",
+      {
+        status: "forward_repair_required",
+        sourceSha: RELEASE_SHA,
+        releaseMode: "atomic-bootstrap",
+        deploymentStrategy: "atomic",
+        phase: "migration_apply",
+        treeHash: TREE_HASH,
+        reviewedMigrations: ["0024_add_release_marker.sql"],
+        migrationApply: "failed",
+        databaseRollbackSupported: false,
+        previousVersionId: PREVIOUS_VERSION,
+        failure: "migration failed",
+      },
+    ],
+    [
+      "a restore point when no migration ran",
+      PRE_MIGRATION_BOOKMARK,
+      {
         status: "failed_before_stage",
         sourceSha: RELEASE_SHA,
         releaseMode: "atomic-bootstrap",
         deploymentStrategy: "atomic",
         phase: "migration_review",
+        treeHash: TREE_HASH,
         reviewedMigrations: ["0024_add_release_marker.sql"],
-        migrationApply,
+        migrationApply: "not_started",
         databaseRollbackSupported: false,
-        preMigrationBookmark,
         failure: "stopped",
-      } as ReleaseArtifact)).rejects.toThrow("lifecycle");
+      },
+    ],
+  ] as const)("rejects an otherwise valid artifact with %s", async (_label, preMigrationBookmark, artifact) => {
+    const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-bad-restore-point-"));
+    try {
+      // The artifact alone is valid, so the rejection below comes from the restore point.
+      await expect(writeReleaseArtifactFile(artifactDir, artifact as unknown as ReleaseArtifact)).resolves.toBeUndefined();
+      await expect(writeReleaseArtifactFile(artifactDir, {
+        ...artifact,
+        preMigrationBookmark,
+      } as unknown as ReleaseArtifact)).rejects.toThrow("lifecycle");
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
     }

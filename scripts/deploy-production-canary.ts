@@ -2513,6 +2513,20 @@ export function createReleaseCommandRunner(
 }
 
 function assertReleaseArtifactLifecycle(artifact: ReleaseArtifact): void {
+  assertReleaseLifecycleShape(artifact);
+  // Checked after the lifecycle shape, so every lifecycle check stays reachable on every status path:
+  // a restore point is recorded only once migrations were about to run, as a D1 Time Travel bookmark.
+  const { preMigrationBookmark, migrationApply } = artifact as unknown as Record<string, unknown>;
+  if (preMigrationBookmark === undefined) return;
+  if (
+    !D1_BOOKMARK_PATTERN.test(String(preMigrationBookmark)) ||
+    !(typeof migrationApply === "string" && ["attempted", "succeeded", "failed"].includes(migrationApply))
+  ) {
+    throw new Error("Release artifact lifecycle is invalid.");
+  }
+}
+
+function assertReleaseLifecycleShape(artifact: ReleaseArtifact): void {
   const value = artifact as unknown as Record<string, unknown>;
   const present = (key: string): boolean => value[key] !== undefined;
   const phase = value.phase;
@@ -2538,10 +2552,6 @@ function assertReleaseArtifactLifecycle(artifact: ReleaseArtifact): void {
     if (!RELEASE_SHA_PATTERN.test(String(value.protocolV1BoundarySha))) fail();
   } else if (present("protocolV1BoundarySha")) fail();
   if (value.databaseRollbackSupported !== false) fail();
-  if (present("preMigrationBookmark")) {
-    if (!D1_BOOKMARK_PATTERN.test(String(value.preMigrationBookmark))) fail();
-    if (!inSet(migrationApply, ["attempted", "succeeded", "failed"])) fail();
-  }
   if (!reviewedMigrations.every((name: unknown) => (
     typeof name === "string" && MIGRATION_NAME_PATTERN.test(name) && !name.includes("..")
   ))) fail();
