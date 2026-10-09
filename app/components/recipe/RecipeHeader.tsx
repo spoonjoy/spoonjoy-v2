@@ -148,7 +148,7 @@ export function RecipeHeader({
                 className="absolute left-4 top-4 inline-flex min-h-7 max-w-[calc(100%-2rem)] items-center gap-2 border border-[rgba(255,252,246,0.76)] bg-[rgba(37,34,31,0.96)] px-2 font-sj-ui text-xs font-semibold text-[var(--sj-paper)] shadow-[0_3px_18px_rgba(0,0,0,0.45)] [text-shadow:0_1px_1px_rgba(0,0,0,0.62)]"
               >
                 <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-                Editorializing cover
+                Styling cover
               </span>
             ) : null}
           </div>
