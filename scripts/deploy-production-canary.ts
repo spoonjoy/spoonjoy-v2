@@ -1,6 +1,6 @@
 import { execFile as nodeExecFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolvePostHogBuildHost } from "../app/lib/security-headers.server";
 import { validateCspHeaderSet } from "./production-readiness";
@@ -31,6 +31,22 @@ const DEFAULT_VERIFICATION_ATTEMPTS = 60;
 const VERIFICATION_DELAY_MS = 1_000;
 const PROTOCOL_V1_BOUNDARY_MARKER = "workers/cook-session-protocol-v1-boundary";
 const GENERATED_WORKER_CONFIG_PATH = "build/server/wrangler.json";
+const CLIENT_ASSET_DIRECTORY = "build/client/assets";
+// Must match app/lib/release-assets.server.ts, which serves these keys for earlier releases.
+const RELEASE_ASSET_ARCHIVE_PREFIX = "release-assets/";
+const ARCHIVABLE_ASSET_NAME = /^[A-Za-z0-9_-][A-Za-z0-9._-]*\.(js|css|woff2|svg|png|webp|json|map)$/;
+const ARCHIVED_ASSET_CONTENT_TYPES: Record<string, string> = {
+  js: "text/javascript; charset=utf-8",
+  css: "text/css; charset=utf-8",
+  woff2: "font/woff2",
+  svg: "image/svg+xml",
+  png: "image/png",
+  webp: "image/webp",
+  json: "application/json",
+  map: "application/json",
+};
+const ARCHIVE_UPLOAD_CONCURRENCY = 8;
+const R2_BUCKET_NAME_PATTERN = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
 const CLOUDFLARE_SECRET_ENV_NAMES = [
   "CF_API_KEY",
   "CF_API_TOKEN",
@@ -133,6 +149,7 @@ interface RunProductionCanaryReleaseDeps {
   readGeneratedWorkerConfig?: () => Promise<Record<string, unknown>>;
   readPublicWorkerVersion: (baseUrl: string) => Promise<string | null>;
   verifyCandidatePages?: (baseUrl: string, candidateVersionId: string) => Promise<void>;
+  listClientAssets?: () => Promise<readonly string[]>;
   releaseSha: string;
   releaseMode: ReleaseMode;
   protocolV1BoundarySha?: string;
@@ -459,6 +476,61 @@ async function readJsonObjectFile(filePath: string, context: string): Promise<Re
 
 async function readDefaultGeneratedWorkerConfig(): Promise<Record<string, unknown>> {
   return readJsonObjectFile(GENERATED_WORKER_CONFIG_PATH, "Generated Worker config");
+}
+
+// Hashed client asset names from the build, filtered to what the Worker's archive fallback serves.
+export function selectArchivableAssets(names: readonly string[]): string[] {
+  return names.filter((name) => ARCHIVABLE_ASSET_NAME.test(name) && !name.includes("..")).sort();
+}
+
+function photosBucketName(config: Record<string, unknown>): string {
+  const buckets = Array.isArray(config.r2_buckets) ? config.r2_buckets : [];
+  const photos = buckets.find((bucket) => (
+    bucket && typeof bucket === "object" && (bucket as Record<string, unknown>).binding === "PHOTOS"
+  )) as Record<string, unknown> | undefined;
+  const name = photos?.bucket_name;
+  if (typeof name !== "string" || !R2_BUCKET_NAME_PATTERN.test(name)) {
+    throw new Error("Generated Worker config has no valid PHOTOS R2 bucket for the asset archive.");
+  }
+  return name;
+}
+
+export async function listClientAssetNames(directory: string = CLIENT_ASSET_DIRECTORY): Promise<readonly string[]> {
+  return readdir(directory);
+}
+
+// Copies this build's hashed assets into R2 before the version can serve traffic, so tabs still
+// running an earlier build keep loading their chunks after the promotion (asset skew).
+// Re-uploading an unchanged name writes identical bytes, so the step is idempotent.
+async function archiveReleaseAssets(
+  deps: Pick<RunProductionCanaryReleaseDeps, "readGeneratedWorkerConfig" | "runCommand"> & {
+    listClientAssets: () => Promise<readonly string[]>;
+  },
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
+  const bucket = photosBucketName(
+    await (deps.readGeneratedWorkerConfig ?? readDefaultGeneratedWorkerConfig)(),
+  );
+  const names = selectArchivableAssets(await deps.listClientAssets());
+  if (names.length === 0) {
+    throw new Error("Production build has no hashed client assets to archive.");
+  }
+  let next = 0;
+  const upload = async () => {
+    while (next < names.length) {
+      const name = names[next];
+      next += 1;
+      const extension = name.slice(name.lastIndexOf(".") + 1);
+      await deps.runCommand("pnpm", [
+        "exec", "wrangler", "r2", "object", "put", `${bucket}/${RELEASE_ASSET_ARCHIVE_PREFIX}${name}`,
+        "--file", `${CLIENT_ASSET_DIRECTORY}/${name}`,
+        "--content-type", ARCHIVED_ASSET_CONTENT_TYPES[extension],
+        "--cache-control", "public, max-age=31536000, immutable",
+        "--remote",
+      ], { env });
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(ARCHIVE_UPLOAD_CONCURRENCY, names.length) }, upload));
 }
 
 async function readDefaultClientBuildMetadata(): Promise<Record<string, unknown>> {
@@ -2140,6 +2212,9 @@ export async function runProductionCanaryRelease(
 
     if (releaseMode === "protocol-v1-canary") {
       phase = "version_upload";
+      // The CLI always supplies the lister; a direct caller without one has no build to archive.
+      if (!deps.listClientAssets) throw new Error("Release has no client asset lister for the asset archive.");
+      await archiveReleaseAssets({ ...deps, listClientAssets: deps.listClientAssets }, workersEnv);
       await deps.runCommand("pnpm", [
         "exec", "wrangler", "versions", "upload", "--tag", sourceSha,
         "--message", `Spoonjoy source ${sourceSha}`,
@@ -2821,6 +2896,7 @@ interface ReleaseCliDeps {
   readCandidateCspHeaders?: (baseUrl: string, candidateVersionId: string) => Promise<Headers>;
   readPublicWorkerVersion?: (baseUrl: string) => Promise<string | null>;
   verifyCandidatePages?: (baseUrl: string, candidateVersionId: string) => Promise<void>;
+  listClientAssets?: () => Promise<readonly string[]>;
   runCommand?: ReleaseCommandRunner;
   sleep?: (milliseconds: number) => Promise<void>;
   verificationAttempts?: number;
@@ -2846,6 +2922,7 @@ export async function runProductionReleaseCli(deps: ReleaseCliDeps): Promise<Rel
     readGeneratedWorkerConfig: deps.readGeneratedWorkerConfig,
     readPublicWorkerVersion: deps.readPublicWorkerVersion ?? readPublicWorkerVersion,
     verifyCandidatePages: deps.verifyCandidatePages,
+    listClientAssets: deps.listClientAssets ?? listClientAssetNames,
     releaseSha: options.releaseSha,
     releaseMode: options.releaseMode,
     ...(options.protocolV1BoundarySha

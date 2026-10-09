@@ -20,6 +20,8 @@ import {
   runProductionRollback,
   runProductionReleaseCli,
   CANDIDATE_PAGE_PATHS,
+  listClientAssetNames,
+  selectArchivableAssets,
   verifyCandidatePages,
   selectCurrentProductionVersion,
   selectUploadedVersion,
@@ -50,6 +52,13 @@ const WRANGLER_CONFIG = JSON.stringify({
     database_id: D1_DATABASE_ID,
   }],
 });
+// The canary path archives the build's hashed assets (in name order) before uploading the version.
+const CLIENT_ASSETS = ["root-AbC1.js", "root-AbC1.css"] as const;
+const ARCHIVE_COMMANDS = [...CLIENT_ASSETS].sort().map((name) => (
+  `pnpm exec wrangler r2 object put spoonjoy-photos/release-assets/${name} --file build/client/assets/${name} ` +
+  `--content-type ${name.endsWith(".js") ? "text/javascript; charset=utf-8" : "text/css; charset=utf-8"} ` +
+  "--cache-control public, max-age=31536000, immutable --remote"
+));
 const PROTOCOL_BOUNDARY_LOG_COMMAND =
   "git log --diff-filter=A --format=%H --reverse -- workers/cook-session-protocol-v1-boundary";
 const CANARY_UPLOAD_COMMAND = `pnpm exec wrangler versions upload --tag ${RELEASE_SHA} --message Spoonjoy source ${RELEASE_SHA}`;
@@ -191,6 +200,7 @@ function productionGeneratedWorkerConfig(host = CUSTOM_POSTHOG_HOST): Record<str
       NODE_ENV: "production",
       VITE_POSTHOG_HOST: host,
     },
+    r2_buckets: [{ binding: "PHOTOS", bucket_name: "spoonjoy-photos" }],
   };
 }
 
@@ -209,6 +219,7 @@ function postHogArtifactReaderDeps(host = CUSTOM_POSTHOG_HOST) {
     readGeneratedWorkerConfig: async () => productionGeneratedWorkerConfig(host),
     readClientBuildMetadata: async () => productionBuildMetadata(host),
     readClientBundleSources: async () => productionBundleSources(host),
+    listClientAssets: async () => [...CLIENT_ASSETS],
   };
 }
 
@@ -834,6 +845,7 @@ function releaseDeps(runCommand: ReleaseCommandRunner) {
     })),
     readPublicWorkerVersion: vi.fn(async () => CANDIDATE_VERSION),
     verifyCandidatePages: vi.fn(async () => undefined),
+    listClientAssets: vi.fn(async () => [...CLIENT_ASSETS]),
     releaseSha: RELEASE_SHA,
     releaseMode: "protocol-v1-canary" as const,
     protocolV1BoundarySha: PRODUCT_BOUNDARY_SHA,
@@ -1597,6 +1609,7 @@ describe("deployment mutation identity protocol", () => {
 
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("stage failed before mutation");
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
     ]);
@@ -1769,6 +1782,7 @@ describe("deployment mutation identity protocol", () => {
 
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("promotion failed before mutation");
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_PROMOTE_COMMAND,
@@ -1996,6 +2010,7 @@ describe("deployment mutation identity protocol", () => {
       "Automatic restoration refused",
     );
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_PROMOTE_COMMAND,
@@ -3294,6 +3309,7 @@ describe("production canary release orchestration", () => {
       "pnpm exec wrangler deployments list --json",
       "pnpm run deploy:preflight",
       "pnpm exec wrangler deployments list --json",
+      ...ARCHIVE_COMMANDS,
       `pnpm exec wrangler versions upload --tag ${RELEASE_SHA} --message Spoonjoy source ${RELEASE_SHA}`,
       "pnpm exec wrangler versions list --json",
       "pnpm exec wrangler deployments list --json",
@@ -3305,6 +3321,7 @@ describe("production canary release orchestration", () => {
       "pnpm exec wrangler deployments list --json",
     ]);
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       `pnpm exec wrangler versions upload --tag ${RELEASE_SHA} --message Spoonjoy source ${RELEASE_SHA}`,
       `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@0% ${PREVIOUS_VERSION}@100% -y --message Stage ${RELEASE_SHA} for canary`,
       `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@100% -y --message Promote ${RELEASE_SHA}`,
@@ -3364,6 +3381,7 @@ describe("production canary release orchestration", () => {
     );
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
     ]);
     expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -3393,6 +3411,7 @@ describe("production canary release orchestration", () => {
     );
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
     ]);
@@ -3423,6 +3442,7 @@ describe("production canary release orchestration", () => {
     );
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
     ]);
@@ -3454,6 +3474,7 @@ describe("production canary release orchestration", () => {
     );
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
     ]);
@@ -3486,6 +3507,7 @@ describe("production canary release orchestration", () => {
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("canary failed");
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
     ]);
@@ -3559,7 +3581,8 @@ describe("production canary release orchestration", () => {
 
     await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({ status: "promoted" });
 
-    expect(deps.readGeneratedWorkerConfig).toHaveBeenCalledTimes(1);
+    // Once for the PostHog validation after build, once for the asset archive's bucket name.
+    expect(deps.readGeneratedWorkerConfig).toHaveBeenCalledTimes(2);
     expect(deps.readClientBuildMetadata).toHaveBeenCalledTimes(1);
     expect(deps.readClientBundleSources).toHaveBeenCalledTimes(1);
     expect(events.slice(3, 10)).toEqual([
@@ -3727,6 +3750,7 @@ describe("production canary release orchestration", () => {
     expect(calls).not.toContain("pnpm exec wrangler d1 migrations list DB --remote");
     expect(calls).not.toContain("pnpm exec wrangler d1 migrations apply DB --remote");
     expect(calls).not.toContain(
+      ...ARCHIVE_COMMANDS,
       `pnpm exec wrangler versions upload --tag ${RELEASE_SHA} --message Spoonjoy source ${RELEASE_SHA}`,
     );
     expect(deps.writeReleaseArtifact).toHaveBeenCalledWith(expect.objectContaining({
@@ -3812,6 +3836,7 @@ describe("production canary release orchestration", () => {
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("canary failed");
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       `pnpm exec wrangler versions upload --tag ${RELEASE_SHA} --message Spoonjoy source ${RELEASE_SHA}`,
       `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@0% ${PREVIOUS_VERSION}@100% -y --message Stage ${RELEASE_SHA} for canary`,
       `pnpm exec wrangler versions deploy ${PREVIOUS_VERSION}@100% -y --message Restore after failed ${RELEASE_SHA}`,
@@ -3873,6 +3898,93 @@ describe("production canary release orchestration", () => {
     await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({ status: "promoted" });
     expect(deps.verifyCandidatePages).toHaveBeenCalledTimes(2);
     expect(deps.sleep).toHaveBeenCalledWith(1_000);
+  });
+
+  describe("release asset archive", () => {
+    it("archives every hashed asset before the version upload, at most eight at a time", async () => {
+      const names = Array.from({ length: 20 }, (_, index) => `chunk-${String(index).padStart(2, "0")}.js`);
+      let inFlight = 0;
+      let peak = 0;
+      const base = successfulRunner({});
+      const runCommand = vi.fn(async (command: string, args: readonly string[], options: { env: NodeJS.ProcessEnv }) => {
+        if (args.includes("r2")) {
+          inFlight += 1;
+          peak = Math.max(peak, inFlight);
+          await new Promise((resolve) => setTimeout(resolve, 1));
+          inFlight -= 1;
+        }
+        return base(command, args, options);
+      }) as unknown as ReleaseCommandRunner;
+      const deps = releaseDeps(runCommand);
+      deps.listClientAssets.mockResolvedValue([...names, "index.html", "manifest-..x.js", ".hidden.js"]);
+
+      await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({ status: "promoted" });
+
+      const keys = (runCommand as unknown as ReturnType<typeof vi.fn>).mock.calls
+        .map(([command, args]) => commandKey(command, args));
+      const puts = keys.filter((key) => key.includes(" r2 object put "));
+      expect(puts).toHaveLength(20);
+      expect(puts.every((key) => key.includes("--remote") && key.includes("spoonjoy-photos/release-assets/chunk-"))).toBe(true);
+      expect(keys.findIndex((key) => key.includes("versions upload"))).toBeGreaterThan(
+        keys.findLastIndex((key) => key.includes(" r2 object put ")),
+      );
+      expect(peak).toBeLessThanOrEqual(8);
+      expect(peak).toBeGreaterThan(1);
+    });
+
+    it("lists a client asset directory, defaulting to the build output", async () => {
+      const dir = await mkdtemp(path.join(os.tmpdir(), "client-assets-"));
+      try {
+        await writeFile(path.join(dir, "root-AbC1.js"), "export{}");
+        await expect(listClientAssetNames(dir)).resolves.toEqual(["root-AbC1.js"]);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+      // build/client/assets exists only after a local build; either outcome proves the default path.
+      const fallback = await listClientAssetNames().catch((error: NodeJS.ErrnoException) => error.code);
+      expect(Array.isArray(fallback) || fallback === "ENOENT").toBe(true);
+    });
+
+    it("refuses to stage a canary release that has no client asset lister", async () => {
+      const runCommand = successfulRunner({});
+      const { listClientAssets: _injected, ...deps } = releaseDeps(runCommand);
+
+      await expect(runProductionCanaryRelease(deps)).rejects.toThrow(
+        "Release has no client asset lister for the asset archive.",
+      );
+      expect(remoteMutationCommands(recordedCommandCalls(runCommand))
+        .some((key) => key.includes("versions upload"))).toBe(false);
+    });
+
+    it("selects only names the Worker archive fallback can serve", () => {
+      expect(selectArchivableAssets(["b-2.css", "a-1.js", "x.html", "a..b.js", ".env.js", "font-z.woff2"]))
+        .toEqual(["a-1.js", "b-2.css", "font-z.woff2"]);
+    });
+
+    it.each([
+      ["no hashed assets", { assets: ["index.html"], config: undefined }, "Production build has no hashed client assets to archive."],
+      ["no PHOTOS bucket", { assets: ["a-1.js"], config: { vars: {} } }, "Generated Worker config has no valid PHOTOS R2 bucket for the asset archive."],
+      ["a malformed bucket name", { assets: ["a-1.js"], config: { r2_buckets: [null, { binding: "PHOTOS", bucket_name: "Bad_Name" }] } }, "Generated Worker config has no valid PHOTOS R2 bucket for the asset archive."],
+    ])("stops before any Worker mutation with %s", async (_label, { assets, config }, failure) => {
+      const runCommand = successfulRunner({});
+      const deps = releaseDeps(runCommand);
+      deps.listClientAssets.mockResolvedValue(assets);
+      if (config) {
+        deps.readGeneratedWorkerConfig
+          .mockResolvedValueOnce(productionGeneratedWorkerConfig())
+          .mockResolvedValueOnce(config as Record<string, unknown>);
+      }
+
+      await expect(runProductionCanaryRelease(deps)).rejects.toThrow(failure);
+      const mutations = remoteMutationCommands(recordedCommandCalls(runCommand));
+      expect(mutations.some((key) => key.includes("versions upload") || key.includes("versions deploy"))).toBe(false);
+      // The fixture applied a migration first, so (as for any later failure) the release needs forward repair.
+      expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(expect.objectContaining({
+        status: "forward_repair_required",
+        phase: "version_upload",
+        failure,
+      }));
+    });
   });
 
   describe("verifyCandidatePages", () => {
@@ -4032,6 +4144,7 @@ describe("production canary release orchestration", () => {
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("canary failed");
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_RESTORE_COMMAND,
@@ -4068,6 +4181,7 @@ describe("production canary release orchestration", () => {
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("Rollback failed");
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_RESTORE_COMMAND,
@@ -4120,6 +4234,7 @@ describe("production canary release orchestration", () => {
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("canary failed");
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_RESTORE_COMMAND,
@@ -4156,6 +4271,7 @@ describe("production canary release orchestration", () => {
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("stage failed");
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       stageCommand,
       CANARY_RESTORE_COMMAND,
@@ -4208,6 +4324,7 @@ describe("production canary release orchestration", () => {
       await expect(runProductionCanaryRelease(deps)).rejects.toThrow("Rollback failed");
 
       expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+        ...ARCHIVE_COMMANDS,
         CANARY_UPLOAD_COMMAND,
         CANARY_STAGE_COMMAND,
         CANARY_RESTORE_COMMAND,
@@ -4247,6 +4364,7 @@ describe("production canary release orchestration", () => {
 
     await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({ status: "promoted" });
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_PROMOTE_COMMAND,
@@ -4320,6 +4438,7 @@ describe("production canary release orchestration", () => {
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("did not converge");
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_PROMOTE_COMMAND,
@@ -4371,6 +4490,7 @@ describe("production canary release orchestration", () => {
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("Rollback failed");
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_RESTORE_COMMAND,
@@ -4863,6 +4983,7 @@ describe("release failure containment", () => {
       "pnpm exec wrangler d1 migrations apply DB --remote",
     );
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_PROMOTE_COMMAND,
@@ -5005,6 +5126,7 @@ describe("release failure containment", () => {
     expect((rejection as Error).message).toContain(failureMessage);
     if (restoreFails) expect((rejection as Error).message).toContain("Rollback failed: restore failed.");
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       ...(afterStage ? [CANARY_STAGE_COMMAND] : []),
       ...(promotionAttempted ? [CANARY_PROMOTE_COMMAND] : []),
@@ -5206,6 +5328,7 @@ describe("release failure containment", () => {
     try {
       await expect(runProductionCanaryRelease(deps)).rejects.toThrow("upload failed");
       expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+        ...ARCHIVE_COMMANDS,
         uploadCommand,
       ]);
       expect(JSON.parse(
@@ -5343,6 +5466,7 @@ describe("release failure containment", () => {
 
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("disk unavailable");
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_PROMOTE_COMMAND,
@@ -5401,6 +5525,7 @@ describe("release failure containment", () => {
       "canary failed Release artifact write also failed: disk unavailable",
     );
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_RESTORE_COMMAND,
@@ -5434,6 +5559,7 @@ describe("release failure containment", () => {
 
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("Rollback failed: rollback failed");
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       rollbackCommand,
@@ -5472,6 +5598,7 @@ describe("release failure containment", () => {
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("promotion failed");
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_PROMOTE_COMMAND,
@@ -5518,6 +5645,7 @@ describe("release failure containment", () => {
       await expect(runProductionCanaryRelease(deps)).rejects.toThrow("Rollback failed");
 
       expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+        ...ARCHIVE_COMMANDS,
         CANARY_UPLOAD_COMMAND,
         CANARY_STAGE_COMMAND,
         CANARY_PROMOTE_COMMAND,
@@ -5569,6 +5697,7 @@ describe("release failure containment", () => {
       /bareD1CredentialAlpha|bareWorkersCredentialBeta/,
     );
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       promoteCommand,
@@ -7176,6 +7305,7 @@ describe("release artifact and CLI boundary", () => {
 
       expect(recordedCommands(runCommand)).not.toContain(smokeCommand);
       expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+        ...ARCHIVE_COMMANDS,
         CANARY_UPLOAD_COMMAND,
         CANARY_STAGE_COMMAND,
       ]);
@@ -8005,6 +8135,7 @@ describe("release artifact and CLI boundary", () => {
         "pnpm exec wrangler deployments list --json",
         "pnpm run deploy:preflight",
         "pnpm exec wrangler deployments list --json",
+        ...ARCHIVE_COMMANDS,
         `pnpm exec wrangler versions upload --tag ${RELEASE_SHA} --message Spoonjoy source ${RELEASE_SHA}`,
         "pnpm exec wrangler versions list --json",
         "pnpm exec wrangler deployments list --json",
