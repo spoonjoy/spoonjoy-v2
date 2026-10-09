@@ -30,6 +30,12 @@ import { d1Binding } from "~/lib/d1-read.server";
 import { deleteNativeRecipe } from "~/lib/api-v1-recipe-writes.server";
 import { d1WriteBatch, retryOnD1GuardFailure } from "~/lib/d1-write.server";
 import {
+  applyRecipeStepsUpdateWithPrisma,
+  loadCurrentRecipeSteps,
+  planRecipeStepsUpdate,
+  type StepUpdate,
+} from "~/lib/recipe-steps-update.server";
+import {
   activeRecipeTitleFreeGuard,
   cookbooksForRecipeTouchStatement,
   recipeActiveGuard,
@@ -1224,6 +1230,26 @@ function normalizedReplacementSteps(steps: ReturnType<typeof parseSteps>): Repla
       unit: normalizeName(ingredient.unit),
     })),
   }));
+}
+
+/**
+ * update_recipe's steps: each is a create_recipe step plus the optional `id` of the step it
+ * updates and the optional step numbers whose output it uses.
+ */
+function parseStepUpdates(value: unknown): StepUpdate[] {
+  const steps = parseSteps(value);
+  return normalizedReplacementSteps(steps).map((step, index) => {
+    const raw = (value as Array<Record<string, unknown>>)[index]!;
+    const update: StepUpdate = { ...step };
+    if (raw.id !== undefined) update.id = requiredString(raw, "id");
+    if (raw.outputStepNums !== undefined) {
+      if (!Array.isArray(raw.outputStepNums) || !raw.outputStepNums.every((num) => Number.isInteger(num))) {
+        throw new Error(`steps[${index}].outputStepNums must be an array of step numbers`);
+      }
+      update.outputStepNums = raw.outputStepNums as number[];
+    }
+    return update;
+  });
 }
 
 /** The recipe fields that make a new chef-upload cover the active one, as setActiveRecipeCover does. */
@@ -2553,7 +2579,11 @@ const createRecipeTool: SpoonjoyApiOperation = {
 
 const updateRecipeTool: SpoonjoyApiOperation = {
   name: "update_recipe",
-  description: "Update a recipe owned by the configured owner, optionally replacing its steps and ingredients.",
+  description:
+    "Update a recipe owned by the configured owner. With steps, the recipe's steps become the given list, in order: "
+    + "a step with an id updates that step, a step without one updates the step at its position or is added, and steps "
+    + "left out are removed. Updated steps keep their ids, their ingredients keep theirs, and a step keeps the steps "
+    + "whose output it uses unless outputStepNums says otherwise. Each ingredient appears in one step only.",
   requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
@@ -2570,9 +2600,15 @@ const updateRecipeTool: SpoonjoyApiOperation = {
         items: {
           type: "object",
           properties: {
+            id: { type: "string", description: "The id of the step this one updates." },
             title: { type: "string" },
             description: { type: "string" },
             duration: { type: "number" },
+            outputStepNums: {
+              type: "array",
+              items: { type: "integer", minimum: 1 },
+              description: "Earlier step numbers, in this list's order, whose output this step uses.",
+            },
             ingredients: {
               type: "array",
               items: {
@@ -2605,8 +2641,7 @@ const updateRecipeTool: SpoonjoyApiOperation = {
       const servings = optionalNullableStringArgument(args, "servings");
       const sourceUrl = optionalNullableStringArgument(args, "sourceUrl");
       const imageUrl = optionalNullableStringArgument(args, "imageUrl");
-      const shouldReplaceSteps = hasArgument(args, "steps");
-      const steps = shouldReplaceSteps ? parseSteps(args.steps) : undefined;
+      const steps = hasArgument(args, "steps") ? parseStepUpdates(args.steps) : undefined;
 
       const owner = await getOrCreateOwner(context, email);
       const existing = await context.db.recipe.findFirst({
@@ -2614,6 +2649,9 @@ const updateRecipeTool: SpoonjoyApiOperation = {
         select: { id: true, title: true },
       });
       if (!existing) throw new Error("Recipe not found");
+      const stepsPlan = steps
+        ? planRecipeStepsUpdate(existing.id, await loadCurrentRecipeSteps(context.db, existing.id), steps, new Date())
+        : undefined;
 
       const data: Pick<RecipeFields, "title" | "description" | "servings" | "sourceUrl"> = {};
       if (title !== undefined) {
@@ -2640,16 +2678,16 @@ const updateRecipeTool: SpoonjoyApiOperation = {
 
       const d1 = d1Binding(context.env?.DB);
       let coverId: string | null = null;
-      if (d1 && (Object.keys(data).length > 0 || steps || imageUrl)) {
-        // One atomic batch: the field changes, the step replacement and the new cover (created
+      if (d1 && (Object.keys(data).length > 0 || stepsPlan || imageUrl)) {
+        // One atomic batch: the field changes, the step update and the new cover (created
         // and made active) apply together. The guards re-check that the recipe is still active
-        // and a new title still free.
+        // and a new title still free, and that the steps are still the ones the update was planned from.
         const now = new Date();
         coverId = imageUrl ? crypto.randomUUID() : null;
         await d1WriteBatch(d1, [
           recipeActiveGuard(existing.id),
           ...(title === undefined ? [] : [activeRecipeTitleFreeGuard(owner.id, title, existing.id)]),
-          ...(steps ? recipeStepsReplaceStatements(existing.id, normalizedReplacementSteps(steps), now) : []),
+          ...(stepsPlan ? [stepsPlan.guard, ...stepsPlan.statements] : []),
           ...(coverId
             ? [coverInsertStatement({ id: coverId, recipeId: existing.id, imageUrl: imageUrl!, sourceType: "chef-upload" }, now)]
             : []),
@@ -2661,8 +2699,8 @@ const updateRecipeTool: SpoonjoyApiOperation = {
           await context.db.recipe.update({ where: { id: existing.id }, data });
         }
 
-        if (steps) {
-          await replaceRecipeSteps(context.db, existing.id, steps);
+        if (stepsPlan) {
+          await applyRecipeStepsUpdateWithPrisma(context.db, stepsPlan);
           await context.db.recipe.update({ where: { id: existing.id }, data: { updatedAt: new Date() } });
         }
         if (imageUrl) {

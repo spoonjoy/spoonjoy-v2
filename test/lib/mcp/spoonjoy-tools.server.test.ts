@@ -1837,7 +1837,13 @@ describe("spoonjoy MCP tools", () => {
     expect(updated.recipe.steps[0].ingredients).toEqual([
       expect.objectContaining({ name: "egg", quantity: 2, unit: "whole" }),
     ]);
-    await expect(context.db.stepOutputUse.count({ where: { recipeId: created.recipe.id } })).resolves.toBe(0);
+    // The steps are updated in place: they keep their ids, and step 2 still uses step 1's output.
+    expect(updated.recipe.steps.map((step: { id: string }) => step.id))
+      .toEqual(created.recipe.steps.map((step: { id: string }) => step.id));
+    await expect(context.db.stepOutputUse.findMany({
+      where: { recipeId: created.recipe.id },
+      select: { outputStepNum: true, inputStepNum: true },
+    })).resolves.toEqual([{ outputStepNum: 1, inputStepNum: 2 }]);
     await expect(context.db.ingredient.count({ where: { recipeId: created.recipe.id } })).resolves.toBe(1);
   });
 
