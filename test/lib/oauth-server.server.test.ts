@@ -13,12 +13,13 @@ import {
   promoteLegacyOAuthIssuerForUser,
   registerOAuthClient as registerOAuthClientRaw,
   revokeConnectorGrantsByConnectionKeys,
+  revokeConnectorRefreshToken,
   validateConnectorGrantConnectionKeys,
   rotateConnectorTokens as rotateConnectorTokensRaw,
   verifyPkceS256,
 } from "~/lib/oauth-server.server";
 import { getLocalDb } from "~/lib/db.server";
-import { createApiCredential } from "~/lib/api-auth.server";
+import { createApiCredential, hashApiToken } from "~/lib/api-auth.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestUser } from "../utils";
 
@@ -558,21 +559,25 @@ describe("connector token issuance + rotation", () => {
     await cleanupDatabase();
   });
 
-  it("issues a persistent MCP access token plus a refresh token", async () => {
+  it("issues a 90-day MCP access token plus a 180-day refresh token", async () => {
+    const now = new Date("2026-10-09T12:00:00.000Z");
     const tokens = await issueConnectorTokens(db, {
       userId,
       clientId,
       scope: "kitchen:read",
       resource: "https://spoonjoy.app/mcp",
       persistentMcpResource: "https://spoonjoy.app/mcp",
+      now,
     });
     expect(tokens.accessToken).toMatch(/^/);
     expect(tokens.refreshToken).toMatch(/^ort_/);
-    expect(tokens.expiresIn).toBeNull();
+    expect(tokens.expiresIn).toBe(90 * 24 * 60 * 60);
     expect(tokens.scope).toBe("kitchen:read");
 
     const credential = await db.apiCredential.findFirst({ where: { userId } });
-    expect(credential?.expiresAt).toBeNull();
+    expect(credential?.expiresAt).toEqual(new Date("2027-01-07T12:00:00.000Z"));
+    await expect(db.oAuthRefreshToken.findFirstOrThrow({ where: { userId } }))
+      .resolves.toMatchObject({ expiresAt: new Date("2027-04-07T12:00:00.000Z") });
     expect(credential?.scopes).toBe("kitchen:read");
     expect(credential?.oauthClientId).toBe(clientId);
     expect(credential?.oauthIssuer).toBe(ISSUER);
@@ -673,6 +678,86 @@ describe("connector token issuance + rotation", () => {
     await expect(
       rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId }),
     ).rejects.toMatchObject({ code: "invalid_grant" });
+  });
+
+  describe("refresh token reuse and expiry", () => {
+    const t0 = new Date("2026-10-09T12:00:00.000Z");
+    const at = (seconds: number) => new Date(t0.getTime() + seconds * 1000);
+
+    async function rotatedPair() {
+      const first = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read", now: t0 });
+      const second = await rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId, now: at(1) });
+      return { first, second };
+    }
+
+    async function accessWorks(token: string, now: Date) {
+      const credential = await db.apiCredential.findUnique({ where: { tokenHash: await hashApiToken(token) } });
+      return Boolean(credential && !credential.revokedAt && (!credential.expiresAt || credential.expiresAt > now));
+    }
+
+    it("revokes the whole connection when a rotated refresh token is replayed after the grace window", async () => {
+      const { first, second } = await rotatedPair();
+
+      await expect(rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId, now: at(62) }))
+        .rejects.toMatchObject({ code: "invalid_grant" });
+
+      // The legitimate client's current refresh and access tokens stop working too.
+      await expect(rotateConnectorTokens(db, { refreshToken: second.refreshToken, clientId, now: at(63) }))
+        .rejects.toMatchObject({ code: "invalid_grant" });
+      await expect(accessWorks(second.accessToken, at(63))).resolves.toBe(false);
+      expect(await db.oAuthRefreshToken.count({ where: { userId, revokedAt: null } })).toBe(0);
+      await expect(db.oAuthGrant.findFirstOrThrow({ where: { userId } }))
+        .resolves.toMatchObject({ status: "compromised", statusReason: "refresh_reuse" });
+    });
+
+    it("rejects a replay inside the grace window without signing the client out", async () => {
+      const { first, second } = await rotatedPair();
+
+      await expect(rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId, now: at(30) }))
+        .rejects.toMatchObject({ code: "invalid_grant" });
+
+      await expect(accessWorks(second.accessToken, at(30))).resolves.toBe(true);
+      await expect(rotateConnectorTokens(db, { refreshToken: second.refreshToken, clientId, now: at(31) }))
+        .resolves.toMatchObject({ scope: "kitchen:read" });
+      await expect(db.oAuthGrant.findFirstOrThrow({ where: { userId } }))
+        .resolves.toMatchObject({ status: "active", statusReason: null });
+    });
+
+    it("leaves a disconnected connection's grant as disconnected when its old token comes back", async () => {
+      const { second } = await rotatedPair();
+      await revokeConnectorRefreshToken(db, { refreshToken: second.refreshToken, issuer: ISSUER, now: at(2) });
+
+      await expect(rotateConnectorTokens(db, { refreshToken: second.refreshToken, clientId, now: at(600) }))
+        .rejects.toMatchObject({ code: "invalid_grant" });
+      await expect(db.oAuthGrant.findFirstOrThrow({ where: { userId } }))
+        .resolves.toMatchObject({ status: "revoked", statusReason: "disconnect" });
+    });
+
+    it("refuses a refresh token 180 days after it was issued and ends the connection", async () => {
+      const first = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read", now: t0 });
+
+      await expect(rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId, now: at(180 * 24 * 60 * 60) }))
+        .rejects.toMatchObject({ code: "invalid_grant", message: "Refresh token expired" });
+      expect(await db.oAuthRefreshToken.count({ where: { userId, revokedAt: null } })).toBe(0);
+      await expect(db.oAuthGrant.findFirstOrThrow({ where: { userId } }))
+        .resolves.toMatchObject({ status: "revoked", statusReason: "absolute_expiry" });
+    });
+
+    it("gives every rotation a fresh 180-day window, so an active client stays connected", async () => {
+      const first = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read", now: t0 });
+      const second = await rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId, now: at(170 * 24 * 60 * 60) });
+
+      await expect(rotateConnectorTokens(db, { refreshToken: second.refreshToken, clientId, now: at(300 * 24 * 60 * 60) }))
+        .resolves.toMatchObject({ scope: "kitchen:read" });
+    });
+
+    it("accepts a legacy refresh token that has no expiry", async () => {
+      const first = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read", now: t0 });
+      await db.oAuthRefreshToken.updateMany({ where: { userId }, data: { expiresAt: null } });
+
+      await expect(rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId, now: at(400 * 24 * 60 * 60) }))
+        .resolves.toMatchObject({ scope: "kitchen:read" });
+    });
   });
 
   it("promotes a legacy refresh token before rotating it", async () => {

@@ -183,6 +183,33 @@ export async function principalFromUserEmail(
   return user ? toPrincipal(user, source) : null;
 }
 
+/** Personal API tokens expire after this many days unless the caller chooses otherwise. */
+export const DEFAULT_PERSONAL_API_TOKEN_TTL_DAYS = 90;
+export const MAX_PERSONAL_API_TOKEN_TTL_DAYS = 365;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * When a new personal API token expires. Omitted means the 90-day default; a whole number of
+ * days from 1 to 365 sets it; `null` or "never" makes a non-expiring token, which callers must
+ * ask for explicitly so a leaked token does not work forever by default.
+ */
+export function resolvePersonalTokenExpiry(value: unknown, now: Date = new Date()): Date | null {
+  if (value === undefined) return new Date(now.getTime() + DEFAULT_PERSONAL_API_TOKEN_TTL_DAYS * DAY_MS);
+  if (value === null || value === "never") return null;
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 1 ||
+    value > MAX_PERSONAL_API_TOKEN_TTL_DAYS
+  ) {
+    throw new ApiAuthError(
+      `expiresInDays must be a whole number of days from 1 to ${MAX_PERSONAL_API_TOKEN_TTL_DAYS}, or null for a token that never expires`,
+      400,
+    );
+  }
+  return new Date(now.getTime() + value * DAY_MS);
+}
+
 export async function createApiCredential(
   db: PrismaClientType,
   userId: string,

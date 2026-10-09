@@ -10,6 +10,7 @@ import {
   createApiCredential,
   expandCredentialScopes,
   normalizeCredentialScopes,
+  resolvePersonalTokenExpiry,
   type ApiPrincipal,
 } from "~/lib/api-auth.server";
 import {
@@ -6662,8 +6663,15 @@ async function handleTokenList(args: ApiV1RouteArgs, requestId: string, authenti
 
 async function handleTokenCreate(args: ApiV1RouteArgs, requestId: string, authenticated: ApiPrincipal) {
   const body = await parseApiV1JsonBody(args.request);
-  assertKnownFields(body, ["name", "scopes"]);
+  assertKnownFields(body, ["name", "scopes", "expiresInDays"]);
   const name = nonblankString(body.name, "name");
+  let expiresAt: Date | null;
+  try {
+    expiresAt = resolvePersonalTokenExpiry(body.expiresInDays);
+  } catch (error) {
+    if (error instanceof ApiAuthError) throw normalizeApiV1AuthError(error);
+    throw error;
+  }
   const normalizedScopes = normalizeCreateTokenScopes(body.scopes);
   const storedScopes = normalizedScopes ?? (
     authenticated.source === "bearer"
@@ -6675,7 +6683,7 @@ async function handleTokenCreate(args: ApiV1RouteArgs, requestId: string, authen
   }
 
   const db = await getRequestDb(args.context);
-  const created = await createApiCredential(db, authenticated.id, name, { scopes: storedScopes });
+  const created = await createApiCredential(db, authenticated.id, name, { scopes: storedScopes, expiresAt });
 
   return withApiV1Telemetry(apiV1PrivateSuccess(requestId, {
     token: created.token,

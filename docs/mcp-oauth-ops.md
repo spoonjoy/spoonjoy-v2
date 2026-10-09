@@ -47,6 +47,14 @@ Claude may show support references such as `ofid_...` when connector authorizati
 - Do not ask the user for raw OAuth codes, bearer tokens, refresh tokens, or callback URLs.
 - If the reference cannot be correlated, preserve it in the incident issue/comment and add any available workflow run links.
 
+## Token Lifetimes
+
+- MCP-bound access tokens (the Claude connector) expire after 90 days and token responses carry `expires_in: 7776000`. They had no expiry until migration `0030_oauth_token_expiry`, which gave every live MCP access credential 90 days from the migration; the connector refreshes when its token runs out.
+- Generic OAuth access tokens, including the iPhone app's, expire after 15 minutes.
+- Every refresh token is accepted for 180 days after it was issued. Rotation issues a fresh 180-day one, so a client that refreshes at least every 180 days stays connected. An expired refresh token is refused with `invalid_grant` ("Refresh token expired") and its grant moves to `revoked` / `absolute_expiry`.
+- A refresh token that was already rotated is refused with `invalid_grant`. If it arrives more than 60 seconds after its rotation while the connection is still active, every refresh and access token on that connection is revoked and the grant moves to `compromised` / `refresh_reuse`. Inside 60 seconds it is only refused, because the iPhone app's App Intents can race two refreshes.
+- A chef who reports being signed out of Claude or the app with a `compromised` grant had a copy of an old refresh token replayed: treat it as a possible token leak, not a connector bug.
+
 ## D1 Audit Interpretation
 
 `mcp-oauth-d1-audit-results.json` contains normalized invariant rows:

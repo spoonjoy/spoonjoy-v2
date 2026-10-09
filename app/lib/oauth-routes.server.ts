@@ -19,6 +19,7 @@ import {
   hashOAuthOpaqueToken,
   issueConnectorTokens,
   normalizeScope,
+  OAUTH_ACCESS_TOKEN_TTL_SECONDS,
   OAuthError,
   registerOAuthClient,
   revokeConnectorRefreshToken,
@@ -374,8 +375,10 @@ function tokenResponse(tokens: IssuedConnectorTokens): Response {
   });
 }
 
+// "persistent" names the long-lived MCP-bound access token (90 days), as distinct from a
+// generic client's 15-minute one. The telemetry value predates MCP tokens having an expiry.
 function tokenLifetime(tokens: IssuedConnectorTokens): "expiring" | "persistent" {
-  return tokens.expiresIn === null ? "persistent" : "expiring";
+  return tokens.expiresIn > OAUTH_ACCESS_TOKEN_TTL_SECONDS ? "persistent" : "expiring";
 }
 
 /**

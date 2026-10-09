@@ -107,7 +107,8 @@ async function exchangeCodeForTokens(
   };
   expect(body.token_type).toBe('Bearer');
   expect(body.scope).toBe('kitchen:read');
-  expect(body.expires_in).toBeUndefined();
+  // MCP-bound access tokens last 90 days.
+  expect(body.expires_in).toBe(90 * 24 * 60 * 60);
   expect(body.access_token).toMatch(/^sj_/);
   expect(body.refresh_token).toMatch(/^ort_/);
   return { accessToken: body.access_token, refreshToken: body.refresh_token };
@@ -126,7 +127,7 @@ async function refreshTokens(
   });
   expect(res.status()).toBe(200);
   const body = (await res.json()) as { access_token: string; refresh_token: string; expires_in?: number };
-  expect(body.expires_in).toBeUndefined();
+  expect(body.expires_in).toBe(90 * 24 * 60 * 60);
   expect(body.access_token).toMatch(/^sj_/);
   expect(body.refresh_token).toMatch(/^ort_/);
   expect(body.refresh_token).not.toBe(input.refreshToken);

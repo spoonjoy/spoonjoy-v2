@@ -5,7 +5,7 @@ import {
   API_V1_SCOPE_REQUIREMENTS,
   type ApiV1ErrorCode,
 } from "~/lib/api-v1-contract.server";
-import { OAUTH_ACCESS_TOKEN_TTL_SECONDS } from "~/lib/oauth-server.server";
+import { OAUTH_ACCESS_TOKEN_TTL_SECONDS, OAUTH_MCP_ACCESS_TOKEN_TTL_SECONDS } from "~/lib/oauth-server.server";
 import { USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, USERNAME_PATTERN_SOURCE } from "~/lib/username";
 import { SEARCH_SCOPES } from "~/lib/search.server";
 import { PRODUCT_ACTIVATION_PENDING_MESSAGE } from "~/lib/saved-recipe-cutover.server";
@@ -382,8 +382,8 @@ const schemas = {
     token_type: { const: "Bearer" },
     expires_in: {
       type: "integer",
-      const: OAUTH_ACCESS_TOKEN_TTL_SECONDS,
-      description: "Present for expiring non-MCP OAuth credentials. Omitted for MCP-bound connections that remain active until revocation.",
+      enum: [OAUTH_ACCESS_TOKEN_TTL_SECONDS, OAUTH_MCP_ACCESS_TOKEN_TTL_SECONDS],
+      description: "Seconds until the access token expires: 900 (15 minutes) for generic OAuth clients and 7776000 (90 days) for MCP-bound connections. Refresh before it runs out; each refresh_token is accepted for 180 days after it was issued.",
     },
     scope: { type: "string" },
   }),
@@ -934,6 +934,13 @@ const schemas = {
       oneOf: [
         { type: "string" },
         arrayOf({ type: "string" }),
+      ],
+    },
+    expiresInDays: {
+      description: "Days until the token expires, from 1 to 365. Omit it for the 90-day default; send null for a token that never expires.",
+      oneOf: [
+        { type: "integer", minimum: 1, maximum: 365 },
+        { type: "null" },
       ],
     },
   }),

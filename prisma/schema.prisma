@@ -66,8 +66,9 @@ model ApiCredential {
   oauthConnectionKey String?
   // Expand-phase compatibility hint only. OAuthGrant-owned sidecars are authoritative.
   oauthGrantId       String?
-  // Optional expiry. Null = non-expiring (API tokens, agent-delegated tokens).
-  // OAuth-connector access tokens set this so they roll over via refresh.
+  // Optional expiry. Null = non-expiring, which personal tokens get only when the owner asks for
+  // it. Personal tokens default to 90 days; OAuth access tokens always expire and roll over
+  // through refresh.
   expiresAt          DateTime?
 
   createdAt DateTime @default(now())
@@ -277,6 +278,8 @@ model OAuthRefreshToken {
   resource      String?
   connectionKey String?
   revokedAt     DateTime?
+  // Refused after this time. Each rotation issues a new token with a fresh window.
+  expiresAt     DateTime?
   createdAt     DateTime  @default(now())
   // Expand-phase compatibility hint only. OAuthGrant-owned sidecars are authoritative.
   grantId       String?
