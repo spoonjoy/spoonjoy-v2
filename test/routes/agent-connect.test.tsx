@@ -304,7 +304,7 @@ describe("agent connect route", () => {
     expect(JSON.stringify(loaded)).not.toContain(started.request.userCode);
   });
 
-  it("approves only with the code the chef typed, denies without one, and redirects unauthenticated actions", async () => {
+  it("approves and denies only with the code the chef typed, and redirects unauthenticated actions", async () => {
     const approveTarget = await startAgentConnection(db, { now: activeNow });
     const denyTarget = await startAgentConnection(db, { now: activeNow });
     const cookie = await sessionCookie(userId);
@@ -350,8 +350,21 @@ describe("agent connect route", () => {
     await expect(db.agentConnectionRequest.findUnique({ where: { id: approveTarget.request.id } }))
       .resolves.toMatchObject({ status: "approved", approvedById: userId });
 
+    // A leaked link or a guessed request is not enough to cancel someone's connection: deny needs
+    // the same code proof as approve.
+    for (const userCode of [undefined, "WRNG-0000"]) {
+      const refusedDeny = await action(routeArgs(
+        formRequest(`http://localhost/agent/connect/${denyTarget.request.id}`, "deny", cookie, userCode),
+        denyTarget.request.id,
+      ));
+      expect((refusedDeny as any).init.status).toBe(400);
+      expect((refusedDeny as any).data.error).toBe("That code doesn't match. To deny, type the code your agent shows you.");
+    }
+    await expect(db.agentConnectionRequest.findUnique({ where: { id: denyTarget.request.id } }))
+      .resolves.toMatchObject({ status: "pending" });
+
     await expect(action(routeArgs(
-      formRequest(`http://localhost/agent/connect/${denyTarget.request.id}`, "deny", cookie),
+      formRequest(`http://localhost/agent/connect/${denyTarget.request.id}`, "deny", cookie, denyTarget.request.userCode),
       denyTarget.request.id,
     ))).rejects.toSatisfy((response: Response) => {
       expect(response.status).toBe(302);
@@ -393,6 +406,27 @@ describe("agent connect route", () => {
     ))).rejects.toSatisfy((response: Response) => response.status === 302);
     await expect(db.agentConnectionRequest.findUnique({ where: { id: started.request.id } }))
       .resolves.toMatchObject({ status: "approved", approvedById: userId });
+  });
+
+  it("denies with the code remembered from the lookup page, but not with another request's code", async () => {
+    const started = await startAgentConnection(db, { now: activeNow });
+    const other = await startAgentConnection(db, { now: activeNow });
+    const otherCookie = await rememberTypedCode(null, new Request("http://localhost/agent/connect"), other.request.id, other.request.userCode);
+    const refused = await action(routeArgs(
+      formRequest(`http://localhost/agent/connect/${started.request.id}`, "deny", `${await sessionCookie(userId)}; ${otherCookie.split(";")[0]}`),
+      started.request.id,
+    ));
+    expect((refused as any).init.status).toBe(400);
+    await expect(db.agentConnectionRequest.findUnique({ where: { id: started.request.id } }))
+      .resolves.toMatchObject({ status: "pending" });
+
+    const codeCookie = await rememberTypedCode(null, new Request("http://localhost/agent/connect"), started.request.id, started.request.userCode);
+    await expect(action(routeArgs(
+      formRequest(`http://localhost/agent/connect/${started.request.id}`, "deny", `${await sessionCookie(userId)}; ${codeCookie.split(";")[0]}`),
+      started.request.id,
+    ))).rejects.toSatisfy((response: Response) => response.status === 302);
+    await expect(db.agentConnectionRequest.findUnique({ where: { id: started.request.id } }))
+      .resolves.toMatchObject({ status: "denied" });
   });
 
   it("reports a request that asks for account scopes instead of approving it", async () => {

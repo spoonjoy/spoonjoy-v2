@@ -541,8 +541,25 @@ describe("ipv6NetworkForRateLimit", () => {
     ["::1", "0:0:0:0::/64"],
     ["2001:db8:1:2:3:4:5:6", "2001:db8:1:2::/64"],
     ["fe80::1%eth0", "fe80:0:0:0::/64"],
+    ["2001:DB8:ABCD:12::1", "2001:db8:abcd:12::/64"],
+    ["2001:0db8:abcd:0012:ffff::", "2001:db8:abcd:12::/64"],
+    // IPv4-mapped addresses keep their own IPv4 budget instead of sharing ::/64.
+    ["::ffff:1.2.3.4", "1.2.3.4"],
+    ["::ffff:5.6.7.8", "5.6.7.8"],
+    ["::ffff:0102:0304", "1.2.3.4"],
+    ["0:0:0:0:0:ffff:203.0.113.7", "203.0.113.7"],
+    ["64:ff9b::1.2.3.4", "64:ff9b:0:0::/64"],
+    // Not well-formed IPv6: passed through unchanged.
     ["2001:db8", "2001:db8"],
     ["not:an:ip:addr:ess", "not:an:ip:addr:ess"],
+    ["1::2::3", "1::2::3"],
+    [":::", ":::"],
+    ["2001:db8:1:2:zz::", "2001:db8:1:2:zz::"],
+    ["1:2:3:4:5:6:7:8:9", "1:2:3:4:5:6:7:8:9"],
+    ["1:2:3:4:5:6:7::8", "1:2:3:4:5:6:7::8"],
+    ["::ffff:1.2.3.256", "::ffff:1.2.3.256"],
+    ["::ffff:1.2.3", "::ffff:1.2.3"],
+    ["[2001:db8::1]:443", "[2001:db8::1]:443"],
   ])("keys %s as %s", (ip, expected) => {
     expect(ipv6NetworkForRateLimit(ip)).toBe(expected);
   });

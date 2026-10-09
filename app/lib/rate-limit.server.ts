@@ -224,19 +224,40 @@ function clientIpForRateLimit(request: Request): string {
 /**
  * One IPv6 subscriber usually holds a whole /64, so keying on the full
  * address would hand them about 2^64 separate budgets. Key IPv6 on its /64
- * network instead; IPv4 and anything unparseable pass through unchanged.
+ * network instead. An IPv4-mapped address (::ffff:a.b.c.d) is keyed on its
+ * IPv4 address, so mapped clients never share one bucket. IPv4 and anything
+ * that is not a well-formed IPv6 address pass through unchanged.
  */
 export function ipv6NetworkForRateLimit(ip: string): string {
   if (!ip.includes(":")) return ip;
-  const [head, tail] = ip.split("::");
-  const headParts = head ? head.split(":") : [];
-  const tailParts = tail ? tail.split(":") : [];
-  const parts = tail === undefined
-    ? headParts
-    : [...headParts, ...Array(Math.max(0, 8 - headParts.length - tailParts.length)).fill("0"), ...tailParts];
-  const network = parts.slice(0, 4);
-  if (network.length < 4 || !network.every((part) => /^[0-9a-f]{1,4}$/i.test(part))) return ip;
-  return `${network.map((part) => Number.parseInt(part, 16).toString(16)).join(":")}::/64`;
+  const groups = parseIpv6Groups(ip.split("%")[0]);
+  if (!groups) return ip;
+  if (groups.slice(0, 5).every((group) => group === 0) && groups[5] === 0xffff) {
+    return [groups[6] >> 8, groups[6] & 0xff, groups[7] >> 8, groups[7] & 0xff].join(".");
+  }
+  return `${groups.slice(0, 4).map((group) => group.toString(16)).join(":")}::/64`;
+}
+
+/** The eight 16-bit groups of a well-formed IPv6 address, or null. */
+function parseIpv6Groups(address: string): number[] | null {
+  const halves = address.split("::");
+  if (halves.length > 2) return null;
+  const parsed = halves.map((half) => (half ? half.split(":") : []));
+  const last = parsed[parsed.length - 1];
+  const tail = last[last.length - 1];
+  if (tail?.includes(".")) {
+    const octets = tail.split(".");
+    if (octets.length !== 4 || !octets.every((octet) => /^\d{1,3}$/.test(octet) && Number(octet) <= 255)) return null;
+    const [a, b, c, d] = octets.map(Number);
+    last.splice(last.length - 1, 1, ((a << 8) | b).toString(16), ((c << 8) | d).toString(16));
+  }
+  const parts = parsed.flat();
+  if (!parts.every((part) => /^[0-9a-f]{1,4}$/i.test(part))) return null;
+  if (halves.length === 1 ? parts.length !== 8 : parts.length > 7) return null;
+  const head = parsed[0];
+  const rest = halves.length === 2 ? parsed[1] : [];
+  const groups = [...head, ...Array(8 - head.length - rest.length).fill("0"), ...rest];
+  return groups.map((group) => Number.parseInt(group, 16));
 }
 
 /**
