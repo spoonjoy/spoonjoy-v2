@@ -2956,6 +2956,21 @@ describe("deployment preflight", () => {
         "      - name: 🧪 Test & Coverage\n        env:\n          PATH: /tmp/attacker\n        run: pnpm run verify:clean:test:coverage",
       ),
     ],
+    // queue-tested comes first in ci.yml and is compared whole, so these target a canonical job's
+    // own checkout and setup-node steps rather than the first match in the file.
+    ...([
+      ["canonical job checkout with persisted credentials", "          persist-credentials: false", "          persist-credentials: true"],
+      ["canonical job checkout with an extra key", `      - uses: ${CHECKOUT_ACTION} # v6\n`, `      - uses: ${CHECKOUT_ACTION} # v6\n        id: checkout\n`],
+      ["canonical job setup-node on another Node version", "          node-version: '22'", "          node-version: '20'"],
+      ["canonical job setup-node without a name", "      - name: 📦 Setup Node.js\n        uses:", "      - uses:"],
+    ] as const).map(([label, expected, replacement]) => [
+      label,
+      (workflow: string) => {
+        const start = workflow.indexOf("\n  advisory:\n");
+        const end = workflow.indexOf("\n  coverage:\n");
+        return workflow.slice(0, start) + replaceRequired(workflow.slice(start, end), expected, replacement) + workflow.slice(end);
+      },
+    ] as const),
     [
       "removed advisory job",
       (workflow: string) => replaceRequired(
