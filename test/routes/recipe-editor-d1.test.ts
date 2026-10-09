@@ -405,6 +405,16 @@ describe("recipe editor routes on a D1 binding", () => {
       expect(unchanged.touched).toBe(false);
     });
 
+    it("answers a step moved down whose next step started using its output in between with the dependency error", async () => {
+      const seeded = await seedRecipe("Swap down dependency race");
+      const nextUsesStep = () => db.stepOutputUse.create({ data: { recipeId: seeded.recipe.id, outputStepNum: 2, inputStepNum: 3 } });
+      await expect(lostRace("edit", seeded, { intent: "reorderStep", stepId: seeded.steps[1]!.id, direction: "down" }, nextUsesStep))
+        .resolves.toEqual({ status: 400, errors: { reorder: "Cannot move Step 2 to position 3 because Step 3 uses its output" } });
+      const unchanged = await graph(seeded);
+      expect(unchanged.steps.map((step) => [step.position, step.stepNum])).toEqual([[0, 1], [1, 2], [2, 3]]);
+      expect(unchanged.touched).toBe(false);
+    });
+
     it("answers a step swap whose step went away in between with the changed-recipe message", async () => {
       const seeded = await seedRecipe("Swap gone race");
       const deleteStep = () => db.recipeStep.delete({ where: { id: seeded.steps[1]!.id } });
