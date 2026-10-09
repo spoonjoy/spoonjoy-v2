@@ -13,6 +13,8 @@ import {
   promoteLegacyOAuthIssuerForUser,
   registerOAuthClient as registerOAuthClientRaw,
   revokeConnectorGrantsByConnectionKeys,
+  revokeConnectorRefreshToken,
+  hashOAuthOpaqueToken,
   validateConnectorGrantConnectionKeys,
   rotateConnectorTokens as rotateConnectorTokensRaw,
   verifyPkceS256,
@@ -673,6 +675,49 @@ describe("connector token issuance + rotation", () => {
     await expect(
       rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId }),
     ).rejects.toMatchObject({ code: "invalid_grant" });
+  });
+
+  it("says revoked_by_user on a refused refresh only when the chef ended the session", async () => {
+    const refusal = async (refreshToken: string, client = clientId) => {
+      const error = await rotateConnectorTokens(db, { refreshToken, clientId: client }).catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(OAuthError);
+      return { code: (error as OAuthError).code, message: (error as OAuthError).message, reason: (error as OAuthError).reason };
+    };
+    const plain = { code: "invalid_grant", message: "Unknown or revoked refresh token", reason: undefined };
+
+    // The chef disconnected the app: the app is told so.
+    const disconnected = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read" });
+    await expect(revokeConnectorRefreshToken(db, { refreshToken: disconnected.refreshToken, issuer: ISSUER })).resolves.toBe(true);
+    await expect(refusal(disconnected.refreshToken))
+      .resolves.toEqual({ code: "invalid_grant", message: "Session revoked", reason: "revoked_by_user" });
+    // ...but not another client presenting that token.
+    await db.oAuthClient.create({ data: { id: "client-other", clientName: "Other", redirectUris: "https://other.example/cb" } });
+    await expect(refusal(disconnected.refreshToken, "client-other")).resolves.toEqual(plain);
+
+    // A token that was simply rotated is an ordinary refusal.
+    const rotatedAway = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read" });
+    await rotateConnectorTokens(db, { refreshToken: rotatedAway.refreshToken, clientId });
+    await expect(refusal(rotatedAway.refreshToken)).resolves.toEqual(plain);
+
+    // A grant revoked for a reason that is not the chef's is an ordinary refusal.
+    const byServer = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read" });
+    const serverRow = await db.oAuthRefreshToken.findUniqueOrThrow({ where: { tokenHash: await hashOAuthOpaqueToken(byServer.refreshToken) } });
+    await db.oAuthRefreshToken.update({ where: { id: serverRow.id }, data: { revokedAt: new Date() } });
+    await db.oAuthGrant.update({
+      where: { id: serverRow.grantId! },
+      data: { status: "revoked", statusReason: "administrative", statusChangedAt: new Date() },
+    });
+    await expect(refusal(byServer.refreshToken)).resolves.toEqual(plain);
+
+    // A token from before grants existed cannot say why it was revoked.
+    const legacy = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read" });
+    await db.oAuthRefreshToken.update({
+      where: { tokenHash: await hashOAuthOpaqueToken(legacy.refreshToken) },
+      data: { grantId: null, revokedAt: new Date() },
+    });
+    await expect(refusal(legacy.refreshToken)).resolves.toEqual(plain);
+
+    await expect(refusal("ort_unknown")).resolves.toEqual(plain);
   });
 
   it("promotes a legacy refresh token before rotating it", async () => {

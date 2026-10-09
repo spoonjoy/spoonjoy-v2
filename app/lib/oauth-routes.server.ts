@@ -72,7 +72,7 @@ function oauthErrorResponse(error: unknown): Response {
     throw error;
   }
   return Response.json(
-    { error: error.code, error_description: error.message },
+    { error: error.code, error_description: error.message, ...(error.reason ? { reason: error.reason } : {}) },
     { status: error.status },
   );
 }

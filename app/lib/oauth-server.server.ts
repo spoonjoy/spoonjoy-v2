@@ -137,15 +137,44 @@ export async function revokeConnectorGrantsByConnectionKeys(
 }
 
 /** OAuth 2.1 error, carrying an RFC 6749 error code for the wire response. */
+/**
+ * Why a refresh was refused, for clients that act on it. `revoked_by_user` means the chef ended
+ * this session on purpose (sign out everywhere, a password change, or a disconnect), so the
+ * iPhone app signs out quietly instead of reporting an error. Every other refusal carries none.
+ */
+export type OAuthErrorReason = "revoked_by_user";
+
 export class OAuthError extends Error {
   code: string;
   status: number;
-  constructor(code: string, message: string, status = 400) {
+  reason?: OAuthErrorReason;
+  constructor(code: string, message: string, status = 400, reason?: OAuthErrorReason) {
     super(message);
     this.name = "OAuthError";
     this.code = code;
     this.status = status;
+    if (reason) this.reason = reason;
   }
+}
+
+// Grant revocations the chef made: a disconnect, or sign out everywhere / a password change
+// (`security_event`, from account-revocation). Expiry, client or administrative revocation and
+// reuse detection (`compromised`) are not the chef's doing.
+const USER_REVOCATION_REASONS = new Set(["disconnect", "security_event"]);
+
+/**
+ * The refusal for a refresh token that is no longer usable, saying `revoked_by_user` when its
+ * grant was revoked by the chef. Tokens from before grants existed (no `grantId`) and tokens of
+ * a deleted account (no row at all) cannot be told apart from unknown ones.
+ */
+async function refusedRefreshError(db: Database, record: OAuthRefreshTokenRecord): Promise<OAuthError> {
+  const grant = record.grantId
+    ? await db.oAuthGrant.findUnique({ where: { id: record.grantId }, select: { status: true, statusReason: true } })
+    : null;
+  const byUser = grant?.status === "revoked" && USER_REVOCATION_REASONS.has(grant.statusReason ?? "");
+  return byUser
+    ? new OAuthError("invalid_grant", "Session revoked", 400, "revoked_by_user")
+    : new OAuthError("invalid_grant", "Unknown or revoked refresh token");
 }
 
 function base64UrlEncode(bytes: Uint8Array): string {
@@ -961,8 +990,13 @@ export async function rotateConnectorTokens(
   let record = await db.oAuthRefreshToken.findUnique({
     where: { tokenHash: await hashOAuthOpaqueToken(input.refreshToken) },
   });
-  if (!record || record.revokedAt) {
+  if (!record) {
     throw new OAuthError("invalid_grant", "Unknown or revoked refresh token");
+  }
+  if (record.revokedAt) {
+    throw record.clientId === input.clientId
+      ? await refusedRefreshError(db, record)
+      : new OAuthError("invalid_grant", "Unknown or revoked refresh token");
   }
   if (record.clientId !== input.clientId) {
     throw new OAuthError("invalid_grant", "Refresh token was issued to a different client");

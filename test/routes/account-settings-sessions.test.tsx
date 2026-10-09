@@ -18,7 +18,7 @@ import {
   registerOAuthClient,
   rotateConnectorTokens,
 } from "~/lib/oauth-server.server";
-import { handleOAuthRevoke } from "~/lib/oauth-routes.server";
+import { handleOAuthRevoke, handleOAuthToken } from "~/lib/oauth-routes.server";
 import { approveAgentConnectionRequest, pollAgentConnection, startAgentConnection } from "~/lib/agent-connection.server";
 import { revokeAllAccountAccess } from "~/lib/account-revocation.server";
 import { sqliteD1 } from "../helpers/sqlite-d1";
@@ -180,9 +180,16 @@ describe("Account settings - revocable sessions", () => {
       expect(grants.length).toBeGreaterThan(0);
       expect(grants.map((grant) => [grant.status, grant.statusReason])).toEqual(grants.map(() => ["revoked", "security_event"]));
 
-      // Refreshing fails.
+      // Refreshing fails, and says the chef revoked the session, so the iPhone app signs out quietly.
       await expect(rotateConnectorTokens(db, { refreshToken: seed.oauth.refreshToken, clientId: seed.client.clientId, issuer: ISSUER }))
-        .rejects.toMatchObject({ code: "invalid_grant" });
+        .rejects.toMatchObject({ code: "invalid_grant", reason: "revoked_by_user" });
+      const refresh = await handleOAuthToken(new UndiciRequest(`${ISSUER}/oauth/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: seed.oauth.refreshToken, client_id: seed.client.clientId }).toString(),
+      }) as unknown as Request, db, null);
+      expect(refresh.status).toBe(400);
+      expect(await refresh.json()).toEqual({ error: "invalid_grant", error_description: "Session revoked", reason: "revoked_by_user" });
       // The authorization code issued before the sign-out cannot be exchanged.
       await expect(consumeAuthorizationCode(db, {
         code: seed.code, clientId: seed.client.clientId, redirectUri: "https://agent.example/cb", codeVerifier: VERIFIER, issuer: ISSUER,
