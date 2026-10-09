@@ -87,6 +87,9 @@ export const WEB_ROUTE_MANIFEST = [
   route("routes/cookbooks.$id.tsx", "/cookbooks/:id", "user-product", { universalLink: true, publicShareable: true }),
   route("routes/shopping-list.tsx", "/shopping-list", "user-product", { universalLink: true }),
   route("routes/account.settings.tsx", "/account/settings", "user-product", { universalLink: true }),
+  // A file download and the page after deletion stay in the browser.
+  route("routes/account.export.ts", "/account/export", "secure-web-handoff"),
+  route("routes/account.deleted.tsx", "/account/deleted", "platform-asset"),
   route("routes/developers.tsx", "/developers", "developer-resource"),
   route("routes/developers.playground.tsx", "/developers/playground", "developer-resource"),
   route("routes/api.tsx", "/api", "developer-resource"),

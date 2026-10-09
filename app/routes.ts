@@ -45,6 +45,8 @@ export default [
   ]),
   route("shopping-list", "routes/shopping-list.tsx"),
   route("account/settings", "routes/account.settings.tsx"),
+  route("account/export", "routes/account.export.ts"),
+  route("account/deleted", "routes/account.deleted.tsx"),
   route("developers", "routes/developers.tsx"),
   route("developers/playground", "routes/developers.playground.tsx"),
   route("api", "routes/api.tsx"),
