@@ -141,6 +141,20 @@ test.describe("Search", () => {
     expect(pageErrors).toEqual([]);
   });
 
+  test("a recipe link that opens nothing says so and leads to a recipe search", async ({ page, expectAccessible }) => {
+    const response = await page.goto("/recipes/qa-kitchen-recipe-that-was-never-written");
+    expect(response?.status()).toBe(404);
+    await expect(page.getByRole("heading", { level: 1, name: "We can't find this recipe." })).toBeVisible();
+    await expect(page.getByRole("main").getByRole("link", { name: "Browse recipes" })).toHaveAttribute("href", "/recipes");
+    await expectAccessible();
+
+    await page.getByRole("searchbox", { name: "Search recipes" }).fill("saffron");
+    await page.getByRole("main").getByRole("button", { name: "Search", exact: true }).click();
+    await expect(page).toHaveURL(/\/search\?scope=recipes&q=saffron$/);
+    const results = page.getByRole("region", { name: "Search results" });
+    await expect(seededRecipeLink(results, "Recipe Saffron Risotto", RISOTTO)).toBeVisible();
+  });
+
   test("the recipes page search box finds and clears a search", async ({ page, expectAccessible }) => {
     await page.goto("/recipes");
     const main = page.getByRole("main");
