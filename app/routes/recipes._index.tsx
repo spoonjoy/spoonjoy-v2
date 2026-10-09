@@ -19,6 +19,7 @@ import {
 } from "~/lib/collection-reads.server";
 import { formatServingsLabel } from "~/lib/quantity";
 import { RecipesSectionNav } from "~/components/navigation";
+import { photoSrcSet } from "~/lib/photo-variants";
 
 const PUBLIC_RECIPE_LIMIT = 48;
 
@@ -162,7 +163,7 @@ function RecipeRow({ recipe, ordinal }: { recipe: PublicRecipe; ordinal: number 
       </span>
       <span className="flex aspect-[4/3] items-center justify-center overflow-hidden bg-[color-mix(in_srgb,var(--sj-flour)_62%,var(--sj-panel-solid))]">
         {displayImageUrl ? (
-          <img src={displayImageUrl} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.025]" />
+          <img src={displayImageUrl} srcSet={photoSrcSet(displayImageUrl)} sizes="(min-width: 640px) 7rem, 100vw" alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.025]" />
         ) : (
           <ChefHat className="size-6 text-[var(--sj-brass)]" aria-hidden="true" />
         )}

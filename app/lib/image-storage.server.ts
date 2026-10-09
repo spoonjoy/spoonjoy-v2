@@ -1,3 +1,4 @@
+import { photoVariantKeys } from "~/lib/photo-variants";
 import { FOOD_IMAGE_TYPES, IMAGE_MAX_FILE_SIZE } from "~/lib/recipe-image";
 import {
   captureEvent,
@@ -420,6 +421,8 @@ export async function deleteStoredImage({ bucket, imageUrl }: DeleteStoredImageO
   }
 
   await bucket.delete(key);
+  // A deleted photo takes its size variants with it; R2 ignores keys that were never generated.
+  await bucket.delete(photoVariantKeys(key));
   return true;
 }
 

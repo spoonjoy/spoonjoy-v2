@@ -10,6 +10,7 @@ import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { formatServingsLabel } from "~/lib/quantity";
 import { shareContent } from "~/components/navigation";
+import { photoSrcSet } from "~/lib/photo-variants";
 
 export function absoluteKitchenUrl(path: string) {
   if (typeof window === "undefined") {
@@ -204,7 +205,7 @@ function RecipeIndexRow({
         </div>
         <span className="sj-photo-tile block aspect-[4/3] overflow-hidden bg-[color-mix(in_srgb,var(--sj-flour)_70%,var(--sj-panel-solid))] sm:aspect-square">
           {displayImageUrl ? (
-            <img src={displayImageUrl} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.025]" />
+            <img src={displayImageUrl} srcSet={photoSrcSet(displayImageUrl)} sizes="88px" alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.025]" />
           ) : (
             <span className="flex h-full w-full items-center justify-center bg-[var(--sj-photo-charcoal)] text-[var(--sj-on-photo-muted)]">
               <ChefHat className="size-5" aria-hidden="true" />

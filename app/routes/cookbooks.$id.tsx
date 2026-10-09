@@ -87,6 +87,7 @@ import {
   removeRecipeFromCookbook,
 } from "~/lib/cookbook-membership-compat.server";
 import { productActivationPendingWebResponse } from "~/lib/saved-recipe-cutover.server";
+import { photoSrcSet } from "~/lib/photo-variants";
 
 export function meta({ data }: Route.MetaArgs) {
   if (!data) {
@@ -511,7 +512,7 @@ export default function CookbookDetail() {
                       </span>
                       <span className="block aspect-[4/3] overflow-hidden bg-[color-mix(in_srgb,var(--sj-flour)_70%,var(--sj-panel-solid))]">
                         {item.recipe.coverImageUrl ? (
-                          <img src={item.recipe.coverImageUrl} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.025]" />
+                          <img src={item.recipe.coverImageUrl} srcSet={photoSrcSet(item.recipe.coverImageUrl)} sizes="(min-width: 640px) 7rem, 100vw" alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.025]" />
                         ) : (
                           <span className="block h-full w-full bg-[linear-gradient(135deg,color-mix(in_srgb,var(--sj-flour)_82%,var(--sj-panel-solid)),var(--sj-panel-solid))]" />
                         )}

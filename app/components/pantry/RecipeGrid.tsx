@@ -6,6 +6,7 @@ import { Button } from '../ui/button'
 import { RuledEmptyState } from '~/components/cookbook/page'
 import { formatServingsLabel } from '~/lib/quantity'
 import { CoverProvenanceBadge } from '~/components/recipe/CoverProvenanceBadge'
+import { photoSrcSet } from "~/lib/photo-variants";
 
 export interface PantryRecipeCard {
   id: string
@@ -80,6 +81,8 @@ export function RecipeGrid({
                   {displayImageUrl ? (
                     <img
                       src={displayImageUrl}
+                      srcSet={photoSrcSet(displayImageUrl)}
+                      sizes="(min-width: 640px) 7rem, 100vw"
                       alt={recipe.title}
                       className="h-full w-full object-cover"
                     />

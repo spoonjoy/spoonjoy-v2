@@ -1,0 +1,107 @@
+name: Photo variants
+
+# Generates the WebP size variants (256, 512, 1024 and 1536 wide) of every stored photo that does
+# not have them yet, so apps and pages can download a photo at the size they show it. The Worker
+# serves the original until a photo's variants exist, so a new upload looks the same as before
+# for at most one schedule interval. Writes only new variants/ objects; originals are only read.
+#
+# - schedule and workflow_dispatch on main: QA, then production.
+# - pull requests that change the generator: QA only, which proves the generator against real R2.
+
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: Most photos to process per environment (blank for all)
+        required: false
+        type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/generate-photo-variants.mjs
+      - .github/workflows/photo-variants.yml
+
+concurrency:
+  group: photo-variants-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'main' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+  PRISMA_HIDE_UPDATE_MESSAGE: "1"
+  LIMIT_ARGS: ${{ github.event_name == 'workflow_dispatch' && inputs.limit != '' && format('--limit {0}', inputs.limit) || '' }}
+
+jobs:
+  qa:
+    name: qa
+    # Fork pull requests get no secrets; the generator only runs where it can reach QA.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+
+      - name: Activate pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.28.1 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate QA photo variants
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/generate-photo-variants.mjs --target-env qa --apply $LIMIT_ARGS
+
+  production:
+    name: production
+    needs: qa
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+
+      - name: Activate pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.28.1 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate production photo variants
+        env:
+          # D1 reads go through wrangler with the D1 token; R2 reads and writes use the Workers
+          # token, which carries R2 Storage write.
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+          CLOUDFLARE_R2_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/generate-photo-variants.mjs --target-env production --apply $LIMIT_ARGS
