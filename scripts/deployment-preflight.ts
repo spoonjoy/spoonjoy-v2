@@ -181,7 +181,7 @@ const EXPECTED_PRODUCTION_DEPLOY_STEP_NAMES = [
   "Ensure release artifact exists",
   "Upload MCP OAuth canary artifacts",
 ] as const;
-const EXPECTED_RELEASE_SOURCE_RUN_SHA256 = "b49feffbe77bc945d155b1250f2a5db29485d9cd987ca62455c217aeaaf8a3e8";
+const EXPECTED_RELEASE_SOURCE_RUN_SHA256 = "b494fb577393eeb7242014f9d0eb582c473cf1c9e7825e945b5b2d0b790b6f32";
 const EXPECTED_RELEASE_ARTIFACT_RUN_SHA256 = "3b9febef9ea2e91192eebabb3947a73257bc5df5b03db1a30ba1a4f7a472c721";
 const REQUIRED_IGNORED_BUILD_PACKAGES = [
   "@prisma/client",
@@ -776,6 +776,10 @@ function parsedCiWorkflowIsCanonical(workflow: string): boolean {
 
 const PRODUCTION_DEPLOY_JOB_CONDITION =
   "(github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.path == '.github/workflows/ci.yml') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')";
+// The deploy job also needs release-target to have chosen something to release: a run superseded
+// by an earlier deploy of the same or a newer commit skips deploy and report-canary and stays green.
+const PRODUCTION_DEPLOY_RELEASE_CONDITION =
+  `(${PRODUCTION_DEPLOY_JOB_CONDITION}) && needs.release-target.outputs.release == 'true'`;
 const PRODUCTION_VALIDATION_COMMAND =
   "node scripts/workflow-security.mjs validate-production-deploy-source";
 const PRODUCTION_DEPLOY_COMMAND = "node scripts/workflow-security.mjs run-production-deploy";
@@ -786,7 +790,10 @@ export const PRODUCTION_RELEASE_TARGET_JOB = Object.freeze({
   if: PRODUCTION_DEPLOY_JOB_CONDITION,
   "runs-on": "ubuntu-latest",
   "timeout-minutes": 10,
-  outputs: { source_sha: "${{ steps.target.outputs.source_sha }}" },
+  outputs: {
+    source_sha: "${{ steps.target.outputs.source_sha }}",
+    release: "${{ steps.target.outputs.release }}",
+  },
   steps: [
     {
       name: "Checkout trusted release tooling",
@@ -1066,7 +1073,7 @@ export function parsedProductionWorkflowIsCanonical(workflow: string): boolean {
     deploy.name !== "deploy" ||
     deploy.needs !== "release-target" ||
     !exactWorkflowRecord(deploy.env, PRODUCTION_DEPLOY_JOB_ENV) ||
-    deploy.if !== PRODUCTION_DEPLOY_JOB_CONDITION ||
+    deploy.if !== PRODUCTION_DEPLOY_RELEASE_CONDITION ||
     deploy["runs-on"] !== "ubuntu-latest" ||
     deploy["timeout-minutes"] !== 40 ||
     deploy.environment !== "production" ||

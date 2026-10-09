@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CSP_REPORT_ONLY_BREAK_GLASS_ACK,
   chooseReleaseTarget,
+  latestPromotedSha,
   isCliEntry,
   main,
   reportQueueTested,
@@ -851,11 +852,66 @@ describe("chooseReleaseTarget", () => {
     });
   }
 
-  async function choose(env: NodeJS.ProcessEnv, run: ReturnType<typeof mainRunner>) {
+  async function choose(
+    env: NodeJS.ProcessEnv,
+    run: ReturnType<typeof mainRunner>,
+    promoted: string | null = null,
+  ) {
     const appendFile = vi.fn();
-    const target = await chooseReleaseTarget({ env, run, appendFile });
-    return { target, appendFile, summary: appendFile.mock.calls.find(([file]) => file === SUMMARY)?.[1] as string };
+    const log = vi.fn();
+    const promotedSha = vi.fn(async () => promoted);
+    const target = await chooseReleaseTarget({ env, run, appendFile, log, promotedSha });
+    return {
+      target,
+      appendFile,
+      log,
+      promotedSha,
+      summary: appendFile.mock.calls.find(([file]) => file === SUMMARY)?.[1] as string,
+    };
   }
+
+  // Answers whether one commit is an ancestor of another on TRIGGER <- MIDDLE <- TIP.
+  function withAncestry(base: ReturnType<typeof mainRunner>) {
+    const order = [TRIGGER, MIDDLE, TIP];
+    return vi.fn(async (file: string, args: readonly string[]) => {
+      if (file === "git" && args[0] === "merge-base" && args[1] === "--is-ancestor" && args[3] !== "origin/main") {
+        const [ancestor, descendant] = [args[2], args[3]];
+        if (order.indexOf(ancestor) < 0 || order.indexOf(ancestor) > order.indexOf(descendant)) throw new Error("not an ancestor");
+        return "";
+      }
+      return base(file, args);
+    });
+  }
+
+  it("marks a run superseded, releasing nothing and staying green, when production already runs the chosen commit", async () => {
+    const { target, appendFile, log, summary } = await choose(targetEnv(), mainRunner({ green: [TIP, TRIGGER] }), TIP);
+    expect(target).toBe(TIP);
+    expect(appendFile).toHaveBeenCalledWith(OUTPUT, `source_sha=${TIP}\n`);
+    expect(appendFile).toHaveBeenCalledWith(OUTPUT, "release=false\n");
+    expect(log).toHaveBeenCalledWith(expect.stringMatching(/^::notice title=Release superseded::Superseded: production already runs 3{40}/));
+    expect(summary).toContain(`- Releasing: nothing (\`${TIP}\` is already in production)`);
+  });
+
+  it("marks a run superseded when production already runs a newer commit than the chosen one", async () => {
+    // TIP is in production, but its CI evidence is briefly missing (being re-run): MIDDLE is chosen.
+    const { target, appendFile } = await choose(targetEnv(), withAncestry(mainRunner({ green: [MIDDLE, TRIGGER] })), TIP);
+    expect(target).toBe(MIDDLE);
+    expect(appendFile).toHaveBeenCalledWith(OUTPUT, "release=false\n");
+  });
+
+  it("releases when production runs an older commit, or its commit is unknown", async () => {
+    const older = await choose(targetEnv(), withAncestry(mainRunner({ green: [TIP, TRIGGER] })), TRIGGER);
+    expect(older.appendFile).toHaveBeenCalledWith(OUTPUT, "release=true\n");
+    expect(older.log).not.toHaveBeenCalled();
+    const unknown = await choose(targetEnv(), mainRunner({ green: [TIP, TRIGGER] }), null);
+    expect(unknown.appendFile).toHaveBeenCalledWith(OUTPUT, "release=true\n");
+  });
+
+  it("never treats a dispatch as superseded", async () => {
+    const { appendFile, promotedSha } = await choose(targetEnv({ GITHUB_EVENT_NAME: "workflow_dispatch", SOURCE_SHA: TIP }), mainRunner(), TIP);
+    expect(appendFile).toHaveBeenCalledWith(OUTPUT, "release=true\n");
+    expect(promotedSha).not.toHaveBeenCalled();
+  });
 
   it("releases the newest green main commit when main moved on while the deploy waited", async () => {
     const { target, appendFile, summary } = await choose(targetEnv(), mainRunner({ green: [MIDDLE, TRIGGER] }));
@@ -959,8 +1015,104 @@ describe("chooseReleaseTarget", () => {
 
   it("is reachable from the CLI", async () => {
     const appendFile = vi.fn();
-    await main(["choose-release-target"], { env: targetEnv(), run: mainRunner({ newer: [] }), appendFile });
+    await main(["choose-release-target"], {
+      env: targetEnv(),
+      run: mainRunner({ newer: [] }),
+      appendFile,
+      promotedSha: async () => null,
+    });
     expect(appendFile).toHaveBeenCalledWith(OUTPUT, `source_sha=${TRIGGER}\n`);
+  });
+
+  it("logs the superseded notice to stdout by default", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    try {
+      await chooseReleaseTarget({
+        env: targetEnv(),
+        run: mainRunner({ newer: [] }),
+        appendFile: vi.fn(),
+        promotedSha: async () => TRIGGER,
+      });
+      expect(write).toHaveBeenCalledWith(expect.stringContaining("::notice title=Release superseded::"));
+    } finally {
+      write.mockRestore();
+    }
+  });
+});
+
+describe("latestPromotedSha", () => {
+  const RELEASED = "4".repeat(40);
+  const LIST = `gh run list --repo ${REPOSITORY} --workflow production-deploy.yml --branch main --status success --limit 10 --json databaseId`;
+
+  function releaseRunner({
+    runs = [{ databaseId: 7 }] as unknown,
+    artifacts = { 7: { status: "promoted", phase: "complete", sourceSha: RELEASED } } as Record<number, unknown>,
+    list = undefined as string | undefined,
+  } = {}) {
+    const files = new Map<string, string>();
+    const run = vi.fn(async (file: string, args: readonly string[]) => {
+      const command = [file, ...args].join(" ");
+      if (command === LIST) return list ?? JSON.stringify(runs);
+      const download = /^gh run download (\d+) --repo spoonjoy\/spoonjoy-v2 --name mcp-oauth-canary-artifacts --dir (\S+)$/.exec(command);
+      if (download) {
+        const artifact = artifacts[Number(download[1])];
+        if (artifact === undefined) throw new Error("no valid artifacts found to download");
+        files.set(`${download[2]}/production-release.json`, typeof artifact === "string" ? artifact : JSON.stringify(artifact));
+        return "";
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+    let dirs = 0;
+    return {
+      run,
+      readFile: (file: string) => files.get(file) ?? "",
+      makeTempDir: () => `/tmp/release-${(dirs += 1)}`,
+    };
+  }
+
+  it("reads the commit the newest promoted release recorded", async () => {
+    expect(await latestPromotedSha({ repository: REPOSITORY, ...releaseRunner() })).toBe(RELEASED);
+  });
+
+  it("passes over successful runs with no release artifact, as superseded runs have", async () => {
+    const deps = releaseRunner({ runs: [{ databaseId: 9 }, { databaseId: 7 }] });
+    expect(await latestPromotedSha({ repository: REPOSITORY, ...deps })).toBe(RELEASED);
+    expect(deps.run).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([
+    ["no successful run", { runs: [] }],
+    ["no run with an artifact", { runs: [{ databaseId: 9 }] }],
+    ["a rollback as the newest release", { artifacts: { 7: { status: "rolled_back", phase: "complete", sourceSha: RELEASED } } }],
+    ["an incomplete release", { artifacts: { 7: { status: "promoted", phase: "canary", sourceSha: RELEASED } } }],
+    ["a malformed commit", { artifacts: { 7: { status: "promoted", phase: "complete", sourceSha: "abc" } } }],
+    ["an artifact that is not JSON", { artifacts: { 7: "not json" } }],
+    ["an artifact that is null", { artifacts: { 7: "null" } }],
+    ["a run list that is not a list", { list: "{}" }],
+    ["a run list that is not JSON", { list: "rate limited" }],
+    ["a run with a malformed id", { runs: [{ databaseId: "7" }] }],
+    ["a null run", { runs: [null] }],
+  ])("returns null, so the run releases as usual, for %s", async (_name, options) => {
+    expect(await latestPromotedSha({ repository: REPOSITORY, ...releaseRunner(options as never) })).toBeNull();
+  });
+
+  it("returns null when GitHub cannot be asked", async () => {
+    const run = vi.fn(async () => {
+      throw new Error("HTTP 502");
+    });
+    expect(await latestPromotedSha({ repository: REPOSITORY, run })).toBeNull();
+  });
+
+  it("downloads into a real temporary directory and reads the artifact from disk by default", async () => {
+    const { mkdirSync, writeFileSync } = await import("node:fs");
+    const run = vi.fn(async (file: string, args: readonly string[]) => {
+      if (args[1] === "list") return JSON.stringify([{ databaseId: 7 }]);
+      const dir = args[args.indexOf("--dir") + 1];
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(`${dir}/production-release.json`, JSON.stringify({ status: "promoted", phase: "complete", sourceSha: RELEASED }));
+      return "";
+    });
+    expect(await latestPromotedSha({ repository: REPOSITORY, run })).toBe(RELEASED);
   });
 });
 

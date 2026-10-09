@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -433,6 +434,56 @@ async function hasCanonicalCi(run, repository, sha) {
   }) !== null;
 }
 
+const PRODUCTION_DEPLOY_WORKFLOW_FILE = "production-deploy.yml";
+const RELEASE_ARTIFACT_NAME = "mcp-oauth-canary-artifacts";
+const RELEASE_ARTIFACT_FILE = "production-release.json";
+const RELEASED_RUN_LOOKBACK = 10;
+
+// The commit production runs, as the newest successful Production Deploy run that recorded a
+// release says: its release artifact must show the release promoted and complete. A successful run
+// with no artifact (one that was superseded, so its deploy job skipped) is passed over. Anything
+// else, including a rollback or any lookup error, gives null, and the caller releases as usual.
+export async function latestPromotedSha({
+  run,
+  repository,
+  readFile = (file) => readFileSync(file, "utf8"),
+  makeTempDir = () => mkdtempSync(path.join(tmpdir(), "spoonjoy-release-")),
+}) {
+  try {
+    const runs = parseJson(await run("gh", [
+      "run", "list",
+      "--repo", repository,
+      "--workflow", PRODUCTION_DEPLOY_WORKFLOW_FILE,
+      "--branch", "main",
+      "--status", "success",
+      "--limit", String(RELEASED_RUN_LOOKBACK),
+      "--json", "databaseId",
+    ]), "gh run list");
+    if (!Array.isArray(runs)) return null;
+    for (const entry of runs) {
+      if (!Number.isSafeInteger(entry?.databaseId)) return null;
+      const directory = makeTempDir();
+      try {
+        await run("gh", [
+          "run", "download", String(entry.databaseId),
+          "--repo", repository,
+          "--name", RELEASE_ARTIFACT_NAME,
+          "--dir", directory,
+        ]);
+      } catch {
+        continue;
+      }
+      const artifact = parseJson(readFile(path.join(directory, RELEASE_ARTIFACT_FILE)), "The release artifact");
+      return artifact?.status === "promoted" && artifact.phase === "complete" && SHA_PATTERN.test(artifact.sourceSha)
+        ? artifact.sourceSha
+        : null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // Chooses what this Production Deploy run releases. A dispatch releases exactly its input. A
 // workflow_run releases the newest main commit, from the tip back to the commit whose CI triggered
 // it, that has green canonical CI (findEvidenceRun). A deploy that waited while main moved ships the
@@ -444,12 +495,15 @@ export async function chooseReleaseTarget({
   env = process.env,
   run = runWorkflowCommand,
   appendFile = appendFileSync,
+  log = (message) => process.stdout.write(`${message}\n`),
+  promotedSha = latestPromotedSha,
 } = {}) {
   const event = requiredEnv(env, "GITHUB_EVENT_NAME");
   const requested = exactSha(requiredEnv(env, "SOURCE_SHA"), "SOURCE_SHA");
   const output = requiredEnv(env, "GITHUB_OUTPUT");
   const summary = requiredEnv(env, "GITHUB_STEP_SUMMARY");
   let target = requested;
+  let release = true;
   let reason = "Manual dispatch: releasing the requested commit.";
 
   if (event === "workflow_run") {
@@ -477,16 +531,25 @@ export async function chooseReleaseTarget({
         ? "The triggering commit is main's tip."
         : `The triggering commit is the newest green main commit; ${newer.length} newer commit(s) have no green canonical CI yet.`
       : `Main moved on; ${chosen} is the newest main commit with green canonical CI, so this run releases it instead.`;
+    // Superseded is not a failure: when production already runs this commit or a newer one, an
+    // earlier deploy got there first, so this run releases nothing and stays green.
+    const released = await promotedSha({ run, repository });
+    if (released && (released === target || await isAncestor(run, target, released))) {
+      release = false;
+      reason = `Superseded: production already runs ${released}, which includes ${target}, so this run releases nothing.`;
+      log(`::notice title=Release superseded::${reason}`);
+    }
   } else if (event !== "workflow_dispatch") {
     throw new Error(`Unsupported production release event: ${event}.`);
   }
 
   appendFile(output, `source_sha=${target}\n`);
+  appendFile(output, `release=${release}\n`);
   appendFile(summary, [
     "### Release target",
     "",
     `- Requested commit: \`${requested}\``,
-    `- Releasing: \`${target}\``,
+    release ? `- Releasing: \`${target}\`` : `- Releasing: nothing (\`${target}\` is already in production)`,
     `- Why: ${reason}`,
     "",
   ].join("\n"));

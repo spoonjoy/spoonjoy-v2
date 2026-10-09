@@ -149,7 +149,7 @@ describe("production release provenance", () => {
       "Upload MCP OAuth canary artifacts",
     ]);
     expect(sha256(normalizedStepRun(production, "Validate release source", "Setup Node.js")))
-      .toBe("a332b580987c867fba3f4eefc97d31be854bfc67493261ec14c7b733f5bbfcbc");
+      .toBe("3ff88c349cd432e51be408d25d8bbcd1d1f5c8cbd52049d3146b0626cd94f29b");
     expect(sha256(normalizedStepRun(
       production,
       "Ensure release artifact exists",
