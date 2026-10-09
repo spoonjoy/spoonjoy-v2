@@ -397,6 +397,41 @@ describe("session-version fence", () => {
       await expectNoNewToken("Survivor");
     });
 
+    it("refuses a token created through MCP when the sign-out lands between the bearer token and user reads", async () => {
+      const writer = await createApiCredential(db, userId, "Token writer", { scopes: ["tokens:write"] });
+      const findUnique = db.apiCredential.findUnique.bind(db.apiCredential);
+      const spy = vi.spyOn(db.apiCredential, "findUnique").mockImplementationOnce((async (args: any) => {
+        const credential = await findUnique(args);
+        await signOutEverywhere();
+        (credential as any).user.sessionVersion = await readSessionVersion(db, userId);
+        return credential;
+      }) as any);
+      let principal: Awaited<ReturnType<typeof authenticateApiToken>>;
+      try {
+        principal = await authenticateApiToken(db, writer.token, ISSUER);
+      } finally {
+        spy.mockRestore();
+      }
+      // The caller read an unrevoked token with the post-revocation version.
+      expect(principal.sessionVersion).toBe(1);
+
+      await expect(callSpoonjoyMcpTool("create_api_token", { name: "Survivor" }, { db, principal }))
+        .rejects.toMatchObject({ status: 401 });
+      await expectNoNewToken("Survivor");
+    });
+
+    it("stores an expiry on a fenced token", async () => {
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+      const created = await createApiCredentialForPrincipal(db, { id: userId, sessionVersion: 0 }, "Short lived", { expiresAt });
+      expect(created.credential.expiresAt?.toISOString()).toBe(expiresAt.toISOString());
+      await expect(authenticateApiToken(db, created.token, ISSUER)).resolves.toMatchObject({ id: userId });
+
+      const expired = await createApiCredentialForPrincipal(db, { id: userId, sessionVersion: 0 }, "Expired", {
+        expiresAt: new Date(Date.now() - 1000),
+      });
+      await expect(authenticateApiToken(db, expired.token, ISSUER)).rejects.toMatchObject({ status: 401 });
+    });
+
     it("does not fence an environment-configured owner", async () => {
       await signOutEverywhere();
       const created = await createApiCredentialForPrincipal(db, { id: userId }, "Local script");

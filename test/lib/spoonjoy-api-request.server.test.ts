@@ -118,12 +118,14 @@ describe("spoonjoy-api-request shared helper", () => {
   describe("callSpoonjoyApiOperation auth and token scope edges", () => {
     async function makePrincipal(scopes: string[]): Promise<ApiPrincipal> {
       const user = await db.user.create({ data: { email: uniqueEmail("apiop"), username: faker.internet.username() } });
+      // A real, unrevoked calling token: token creation is fenced on the caller's token.
+      const caller = await createApiCredential(db, user.id, "Calling token", { scopes });
       return {
         id: user.id,
         email: user.email,
         username: user.username,
         source: "bearer",
-        credentialId: "cred_test",
+        credentialId: caller.credential.id,
         scopes,
       };
     }

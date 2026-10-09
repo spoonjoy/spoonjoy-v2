@@ -240,7 +240,7 @@ export async function createApiCredentialForPrincipal(
   db: PrismaClientType,
   principal: Pick<ApiPrincipal, "id" | "sessionVersion" | "credentialId">,
   name: string,
-  options: { scopes?: string | string[] | null; d1?: D1ReadDatabase | null } = {},
+  options: { expiresAt?: Date | null; scopes?: string | string[] | null; d1?: D1ReadDatabase | null } = {},
 ): Promise<CreatedApiCredential> {
   const guards: string[] = [];
   const guardValues: unknown[] = [];
@@ -258,14 +258,15 @@ export async function createApiCredentialForPrincipal(
   const id = crypto.randomUUID();
   const at = d1Timestamp(new Date());
   const query: D1Query = [
-    `INSERT INTO "ApiCredential" ("id", "userId", "name", "tokenHash", "tokenPrefix", "scopes", "createdAt", "updatedAt")
-     SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE ${guards.join(" AND ")}`,
+    `INSERT INTO "ApiCredential" ("id", "userId", "name", "tokenHash", "tokenPrefix", "scopes", "expiresAt", "createdAt", "updatedAt")
+     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${guards.join(" AND ")}`,
     id,
     principal.id,
     name.trim(),
     await hashApiToken(token),
     token.slice(0, 12),
     normalizeCredentialScopes(options.scopes),
+    options.expiresAt ? d1Timestamp(options.expiresAt) : null,
     at,
     at,
     ...guardValues,
