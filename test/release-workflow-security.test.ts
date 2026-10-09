@@ -152,7 +152,7 @@ describe("production release provenance", () => {
       production,
       "Ensure release artifact exists",
       "Upload MCP OAuth canary artifacts",
-    ))).toBe("b1c4e32132d0875f95444f3723cfb83b2d3981607ce04a40092e56bed34c949d");
+    ))).toBe("6a407c0d5a265942889c49a3f39ecea4185630f612d5fac8392b43bc57b791d8");
   });
 
   it("derives release recovery only from required canary evidence", () => {

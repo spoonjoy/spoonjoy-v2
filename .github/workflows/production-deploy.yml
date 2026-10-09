@@ -190,7 +190,7 @@ jobs:
                       end
                     else
                       (if .status == "failed_before_stage" then
-                        ((.phase | IN("validate", "provenance", "initial_preflight", "build", "post_build_posthog", "post_build_provenance", "migration_list", "migration_review", "current_deployment", "version_snapshot", "rollback_version_lookup", "rollback_current_deployment", "rollback_already_active", "rollback_active_version_mapping")) or
+                        ((.phase | IN("validate", "provenance", "initial_preflight", "build", "post_build_posthog", "post_build_provenance", "migration_list", "migration_review", "current_deployment", "version_snapshot", "rollback_version_lookup", "rollback_current_deployment", "rollback_already_active", "rollback_active_version_mapping", "rollback_protocol_ancestry")) or
                           (.phase == "full_preflight" and .migrationApply == "not_needed") or
                           (.phase == "deployment_revalidation" and (.migrationApply | IN("not_started", "not_needed"))))
                       else true end) and

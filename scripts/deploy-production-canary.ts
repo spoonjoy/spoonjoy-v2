@@ -975,11 +975,10 @@ function requireExactTaggedVersion(
   return version.id;
 }
 
-async function requireProtocolBoundaryMarker(
+async function readProtocolBoundaryMarkerCommit(
   deps: Pick<RunProductionCanaryReleaseDeps, "runCommand">,
-  configuredBoundarySha: string,
   env: NodeJS.ProcessEnv,
-): Promise<void> {
+): Promise<string> {
   const result = await deps.runCommand("git", [
     "log",
     "--diff-filter=A",
@@ -992,7 +991,15 @@ async function requireProtocolBoundaryMarker(
   if (lines.length !== 1 || !RELEASE_SHA_PATTERN.test(lines[0])) {
     throw new Error("Git did not return one exact protocol-v1 boundary marker commit.");
   }
-  if (lines[0] !== configuredBoundarySha) {
+  return lines[0];
+}
+
+async function requireProtocolBoundaryMarker(
+  deps: Pick<RunProductionCanaryReleaseDeps, "runCommand">,
+  configuredBoundarySha: string,
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
+  if (await readProtocolBoundaryMarkerCommit(deps, env) !== configuredBoundarySha) {
     throw new Error("Configured protocol-v1 boundary marker commit does not match Git history.");
   }
 }
@@ -1504,7 +1511,8 @@ export async function runProductionRollback(
   deps: RunProductionRollbackDeps,
 ): Promise<ReleaseArtifact> {
   const releaseMode = requireReleaseMode(deps.releaseMode);
-  // Rollback works in every release mode. Only canary mode declares a protocol boundary to enforce.
+  // Rollback works in every release mode. Canary mode declares its protocol boundary; product
+  // activation reads it from Git (below), so no mode can roll back to the inert bootstrap Worker.
   const protocolV1BoundarySha = requireProtocolBoundary(
     releaseMode,
     deps.protocolV1BoundarySha,
@@ -1551,8 +1559,11 @@ export async function runProductionRollback(
     const provenanceTreeHash = requireTreeHash(
       (await deps.runCommand("git", ["rev-parse", "HEAD^{tree}"], { env: cleanEnv })).stdout.trim(),
     );
+    let rollbackBoundarySha = protocolV1BoundarySha;
     if (protocolV1BoundarySha) {
       await requireProtocolBoundaryMarker(deps, protocolV1BoundarySha, cleanEnv);
+    } else if (releaseMode === "atomic-product-activation") {
+      rollbackBoundarySha = await readProtocolBoundaryMarkerCommit(deps, cleanEnv);
     }
     treeHash = provenanceTreeHash;
 
@@ -1588,18 +1599,18 @@ export async function runProductionRollback(
       { env: workersEnv },
     );
     const previousSourceSha = selectExactVersionSourceSha(previousVersion.stdout, previousVersionId);
-    if (protocolV1BoundarySha) {
+    if (rollbackBoundarySha) {
       phase = "rollback_protocol_ancestry";
       await requireAncestor(
         deps,
-        protocolV1BoundarySha,
+        rollbackBoundarySha,
         sourceSha,
         cleanEnv,
         "Rollback target source is below the protocol-v1 boundary.",
       );
       await requireAncestor(
         deps,
-        protocolV1BoundarySha,
+        rollbackBoundarySha,
         previousSourceSha,
         cleanEnv,
         "Current Worker source is below the protocol-v1 boundary.",
@@ -2507,7 +2518,7 @@ function assertReleaseArtifactLifecycle(artifact: ReleaseArtifact): void {
         "version_snapshot",
         // Rollback dispatches run in every release mode and fail before staging in these phases.
         "rollback_version_lookup", "rollback_current_deployment", "rollback_already_active",
-        "rollback_active_version_mapping",
+        "rollback_active_version_mapping", "rollback_protocol_ancestry",
       ];
       if (!(
         inSet(phase, atomicEarly) ||

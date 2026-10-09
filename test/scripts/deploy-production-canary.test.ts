@@ -1439,7 +1439,7 @@ describe("deployment mutation identity protocol", () => {
   });
 
   it.each(["atomic-bootstrap", "atomic-product-activation"] as const)(
-    "rolls back in %s mode without a protocol boundary and writes a valid artifact",
+    "rolls back in %s mode without a configured protocol boundary and writes a valid artifact",
     async (releaseMode) => {
       const runCommand = successfulRunner({
         "git rev-parse HEAD": TOOLING_SHA,
@@ -1477,8 +1477,18 @@ describe("deployment mutation identity protocol", () => {
       expect(result).not.toHaveProperty("protocolV1BoundarySha");
       expect(written).toHaveLength(1);
       const keys = recordedCommandCalls(runCommand).map(({ command, args }) => commandKey(command, args));
-      expect(keys.some((key) => key.startsWith("git log"))).toBe(false);
-      expect(keys.some((key) => key.includes("merge-base"))).toBe(false);
+      if (releaseMode === "atomic-bootstrap") {
+        // Before product activation there is no boundary marker, so there is nothing to cross.
+        expect(keys.some((key) => key.startsWith("git log"))).toBe(false);
+        expect(keys.some((key) => key.includes("merge-base"))).toBe(false);
+      } else {
+        // After product activation the boundary comes from Git, and both sources must descend from it.
+        expect(keys).toContain(PROTOCOL_BOUNDARY_LOG_COMMAND);
+        expect(keys).toEqual(expect.arrayContaining([
+          `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${RELEASE_SHA}`,
+          `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${PREVIOUS_PRODUCT_SHA}`,
+        ]));
+      }
       expect(keys).toContain(
         `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@100% -y --message Roll back to ${RELEASE_SHA}`,
       );
@@ -7972,6 +7982,45 @@ describe("release artifact and CLI boundary", () => {
         failure,
       });
     });
+
+    it.each(["rollback target", "current active"])(
+      "refuses an atomic product-activation rollback when the %s is below the Git boundary marker",
+      async (version) => {
+        const failure = version === "rollback target"
+          ? "Rollback target source is below the protocol-v1 boundary."
+          : "Current Worker source is below the protocol-v1 boundary.";
+        const targetCommand = `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${RELEASE_SHA}`;
+        const currentCommand = `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${PREVIOUS_PRODUCT_SHA}`;
+        const runCommand = successfulRunner({
+          "git rev-parse HEAD": TOOLING_SHA,
+          "git rev-parse origin/main": TOOLING_SHA,
+          [PROTOCOL_BOUNDARY_LOG_COMMAND]: PRODUCT_BOUNDARY_SHA,
+          "pnpm exec wrangler deployments list --json": deploymentPayload(PREVIOUS_VERSION),
+          [version === "rollback target" ? targetCommand : currentCommand]: new Error("not an ancestor"),
+        });
+        const { protocolV1BoundarySha: _boundary, ...base } = rollbackDeps(runCommand);
+        const written: ReleaseArtifact[] = [];
+        const deps = {
+          ...base,
+          releaseMode: "atomic-product-activation" as const,
+          writeReleaseArtifact: vi.fn(async (artifact: ReleaseArtifact) => {
+            written.push(artifact);
+            const dir = await mkdtemp(path.join(os.tmpdir(), "rollback-artifact-"));
+            await writeReleaseArtifactFile(dir, artifact);
+          }),
+        };
+
+        await expect(runProductionRollback(deps)).rejects.toThrow(failure);
+        expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([]);
+        expect(written).toEqual([expect.objectContaining({
+          status: "failed_before_stage",
+          releaseMode: "atomic-product-activation",
+          phase: "rollback_protocol_ancestry",
+          failure,
+        })]);
+        expect(written[0]).not.toHaveProperty("protocolV1BoundarySha");
+      },
+    );
 
     it.each(["rollback target", "current active"])(
       "refuses a manual %s below the protocol-v1 boundary",
