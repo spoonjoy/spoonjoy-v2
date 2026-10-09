@@ -2,12 +2,16 @@ import { PrismaD1 } from "@prisma/adapter-d1";
 
 // Type import only - doesn't cause runtime bundling issues
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
+import { requestScopedClient } from "~/lib/request-db.server";
 
-// Cloudflare D1 for all environments (local + production)
-export async function getDb(env: { DB: D1Database }): Promise<PrismaClientType> {
-  const { PrismaClient } = await import("@prisma/client");
-  const adapter = new PrismaD1(env.DB as never);
-  return new PrismaClient({ adapter });
+// Cloudflare D1 for all environments (local + production). Inside a Worker request this is the
+// request's one client, disconnected when the request finishes (see request-db.server.ts).
+export function getDb(env: { DB: D1Database }): Promise<PrismaClientType> {
+  return requestScopedClient(async () => {
+    const { PrismaClient } = await import("@prisma/client");
+    const adapter = new PrismaD1(env.DB as never);
+    return new PrismaClient({ adapter });
+  });
 }
 
 async function createLocalSqliteDb(): Promise<PrismaClientType> {

@@ -3,6 +3,7 @@ import * as serverBuild from "virtual:react-router/server-build";
 import { canonicalizeRequestUrlForHost } from "../app/lib/canonical-host.server";
 import { ApiAuthError, authenticateApiRequest } from "../app/lib/api-auth.server";
 import { getDb } from "../app/lib/db.server";
+import { withRequestDb } from "../app/lib/request-db.server";
 import { handleMcpRouteRequest } from "../app/lib/mcp/http-mcp-route.server";
 import { oauthCorsPreflightResponse } from "../app/lib/oauth-cors.server";
 import { defaultPhotoCache, deliverPhoto, photoKeyFromPath } from "../app/lib/photo-delivery.server";
@@ -260,8 +261,11 @@ function finalizeResponse(
   return finalized;
 }
 
-export default {
-  async fetch(request, env, ctx) {
+async function handleFetch(
+  request: Request,
+  env: CloudflareEnvironment,
+  ctx: ExecutionContext,
+): Promise<Response> {
     const oauthPreflight = oauthCorsPreflightResponse(request);
     if (oauthPreflight) {
       return finalizeResponse(oauthPreflight, env);
@@ -329,5 +333,10 @@ export default {
       }
       throw error;
     }
+}
+
+export default {
+  fetch(request, env, ctx) {
+    return withRequestDb(ctx, (scopedCtx) => handleFetch(request, env, scopedCtx));
   },
 } satisfies ExportedHandler<CloudflareEnvironment>;
