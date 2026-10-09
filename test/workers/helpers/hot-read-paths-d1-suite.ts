@@ -3,6 +3,11 @@ import type { PrismaClient } from "@prisma/client";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { readAccountSettingsFromD1, readAccountSettingsWithPrisma } from "../../../app/lib/account-settings-reads.server";
+import {
+  readCookbookPageFromD1,
+  readCookbookPageWithPrisma,
+  type CookbookPageRows,
+} from "../../../app/lib/cookbook-page-reads.server";
 import { getDb } from "../../../app/lib/db.server";
 import { readKitchenHomeFromD1, readKitchenHomeWithPrisma, type KitchenHomeRows } from "../../../app/lib/kitchen-home.server";
 import { getRecipeCoverDisplay } from "../../../app/lib/recipe-cover.server";
@@ -217,6 +222,22 @@ function displayed(rows: KitchenHomeRows) {
   };
 }
 
+// The cookbook page's D1 reader returns only a recipe's active cover, the Prisma reader its
+// whole history, so covers are compared by what the page shows.
+function displayedCookbookPage(rows: CookbookPageRows) {
+  if (!rows.cookbook) return rows;
+  return {
+    ...rows,
+    cookbook: {
+      ...rows.cookbook,
+      recipes: rows.cookbook.recipes.map(({ recipe: { covers, ...recipe }, ...entry }) => ({
+        ...entry,
+        recipe: { ...recipe, cover: getRecipeCoverDisplay(recipe, covers) },
+      })),
+    },
+  };
+}
+
 describe("hot read paths on Wrangler D1", () => {
   beforeAll(async () => {
     await applyRepositoryMigrations(database());
@@ -260,6 +281,36 @@ describe("hot read paths on Wrangler D1", () => {
 
     await expect(readRecipeDetailFromD1(database(), { recipeId: "hot-read-deleted", userId: OWNER }))
       .resolves.toMatchObject({ recipe: null });
+  });
+
+  it("reads the cookbook page as Prisma does, for the owner, another chef and a visitor", async () => {
+    for (const cookbookId of ["hot-read-cookbook", "hot-read-friend-cookbook", "hot-read-missing-cookbook"]) {
+      for (const viewerId of [OWNER, FRIEND, null]) {
+        const input = { cookbookId, viewerId };
+        expect(displayedCookbookPage(await readCookbookPageFromD1(database(), input)), JSON.stringify(input))
+          .toEqual(displayedCookbookPage(await readCookbookPageWithPrisma(prisma, input)));
+      }
+    }
+
+    // The owner's cookbook holds a deleted recipe, which the page skips, and recipes
+    // without an active cover beside the lemon rice and its stylized cover.
+    const forVisitor = await readCookbookPageFromD1(database(), { cookbookId: "hot-read-cookbook", viewerId: null });
+    expect(forVisitor.cookbook?.author).toEqual({ id: OWNER, username: "hot_read_owner" });
+    expect(forVisitor.cookbook?.recipes.map((entry) => entry.id)).toEqual([
+      "hot-read-entry-1", "hot-read-entry-2", "hot-read-entry-4", "hot-read-entry-5", "hot-read-entry-6", "hot-read-entry-7",
+    ]);
+    const [lemonRice, source] = forVisitor.cookbook!.recipes;
+    expect(getRecipeCoverDisplay(lemonRice!.recipe, lemonRice!.recipe.covers)?.displayUrl).toBe("https://example.com/hot-read-editorial.jpg");
+    expect(source!.recipe).toMatchObject({ activeCoverId: null, covers: [], chef: { username: "hot_read_friend" } });
+    expect(forVisitor.availableRecipes).toEqual([]);
+
+    // Only the author is offered recipes to add: the friend's own recipes outside their cookbook.
+    const forFriend = await readCookbookPageFromD1(database(), { cookbookId: "hot-read-friend-cookbook", viewerId: FRIEND });
+    expect(forFriend.availableRecipes.map((recipe) => recipe.id)).toEqual([
+      "hot-read-extra-1", "hot-read-extra-2", "hot-read-extra-3", "hot-read-extra-4", "hot-read-source",
+    ]);
+    await expect(readCookbookPageFromD1(database(), { cookbookId: "hot-read-friend-cookbook", viewerId: OWNER }))
+      .resolves.toMatchObject({ availableRecipes: [] });
   });
 
   it("promotes legacy OAuth rows and reads account settings in one D1 batch, as Prisma reads them", async () => {
