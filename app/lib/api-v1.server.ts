@@ -2,6 +2,7 @@ import { chefActivity, chefRef as chefActivityRef, type ChefRef } from "~/lib/ch
 import { listFellowChefs, listKitchenVisitors, type FellowChefRow } from "~/lib/fellow-chefs.server";
 import type { ApiCredential, ApiIdempotencyKey, NativePushDevice, Prisma, RecipeCover, RecipeSpoon } from "@prisma/client";
 import { requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { loadApiRecipeFromD1, loadApiRecipeWithPrisma } from "~/lib/api-recipe-reads.server";
 import { d1WriteBatch } from "~/lib/d1-write.server";
 import type { AppLoadContext } from "react-router";
 import {
@@ -1677,61 +1678,7 @@ type RecipeRow = NonNullable<Awaited<ReturnType<typeof loadRecipeById>>>;
 type CookbookRow = NonNullable<Awaited<ReturnType<typeof loadCookbookById>>>;
 
 async function loadRecipeById(db: Awaited<ReturnType<typeof getRequestDb>>, id: string) {
-  return db.recipe.findFirst({
-    where: { id, deletedAt: null },
-    select: {
-      id: true,
-      title: true,
-      description: true,
-      servings: true,
-      sourceUrl: true,
-      activeCoverId: true,
-      activeCoverVariant: true,
-      coverMode: true,
-      createdAt: true,
-      updatedAt: true,
-      chef: { select: { id: true, username: true } },
-      sourceRecipe: {
-        select: {
-          id: true,
-          title: true,
-          deletedAt: true,
-          chef: { select: { id: true, username: true } },
-        },
-      },
-      activeCover: { select: RECIPE_COVER_DISPLAY_SELECT },
-      steps: {
-        select: {
-          id: true,
-          stepNum: true,
-          stepTitle: true,
-          description: true,
-          duration: true,
-          ingredients: {
-            select: {
-              id: true,
-              quantity: true,
-              ingredientRef: { select: { name: true } },
-              unit: { select: { name: true } },
-            },
-          },
-          usingSteps: {
-            select: {
-              id: true,
-              inputStepNum: true,
-              outputStepNum: true,
-              outputOfStep: { select: { stepNum: true, stepTitle: true } },
-            },
-            orderBy: { outputStepNum: "asc" },
-          },
-        },
-      },
-      cookbooks: {
-        select: { cookbook: { select: { id: true, title: true } } },
-        orderBy: { createdAt: "asc" },
-      },
-    },
-  });
+  return loadApiRecipeWithPrisma(db, id);
 }
 
 async function handleRecipeList(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal | null) {
@@ -1795,9 +1742,10 @@ async function handleRecipeList(args: ApiV1RouteArgs, requestId: string, princip
 }
 
 async function handleRecipeDetail(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal | null, id: string) {
-  const db = await getRequestDb(args.context);
   const origin = publicContentOrigin(args);
-  const recipe = await loadRecipeById(db, id);
+  // One D1 batch where the binding exists, instead of Prisma's query per relation level.
+  const d1 = requestD1(args.context);
+  const recipe = d1 ? await loadApiRecipeFromD1(d1, id) : await loadRecipeById(await getRequestDb(args.context), id);
   if (!recipe) {
     throw new ApiV1Error("not_found", "Recipe not found");
   }
