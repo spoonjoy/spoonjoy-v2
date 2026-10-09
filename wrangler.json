@@ -71,7 +71,8 @@
     "COOK_SESSION_PROTOCOL": "v1",
     "SPOONJOY_CSP_MODE": "enforce",
     "VITE_POSTHOG_HOST": "https://us.i.posthog.com",
-    "SPOONJOY_AI_DAILY_GENERATION_BUDGET": "200"
+    "SPOONJOY_AI_DAILY_GENERATION_BUDGET": "200",
+    "SPOONJOY_API_EVENT_SAMPLE_RATE": "0.1"
   },
 
   "env": {
