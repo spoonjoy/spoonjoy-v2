@@ -5,6 +5,7 @@ import {
   createAuthorizationCode as createAuthorizationCodeRaw,
   DEFAULT_SCOPE,
   getOAuthClient as getOAuthClientRaw,
+  hashOAuthOpaqueToken,
   isCanonicalOAuthClientRegistration,
   isValidRedirectUri,
   issueConnectorTokens as issueConnectorTokensRaw,
@@ -751,12 +752,19 @@ describe("connector token issuance + rotation", () => {
         .resolves.toMatchObject({ scope: "kitchen:read" });
     });
 
-    it("accepts a legacy refresh token that has no expiry", async () => {
+    it("accepts a refresh token from before expiries until the 2027-04-07 cutover", async () => {
       const first = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read", now: t0 });
+      const second = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read", now: t0 });
       await db.oAuthRefreshToken.updateMany({ where: { userId }, data: { expiresAt: null } });
 
-      await expect(rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId, now: at(400 * 24 * 60 * 60) }))
-        .resolves.toMatchObject({ scope: "kitchen:read" });
+      const rotated = await rotateConnectorTokens(db, {
+        refreshToken: first.refreshToken, clientId, now: new Date("2027-04-06T23:59:00.000Z"),
+      });
+      await expect(db.oAuthRefreshToken.findUniqueOrThrow({ where: { tokenHash: await hashOAuthOpaqueToken(rotated.refreshToken) } }))
+        .resolves.toMatchObject({ expiresAt: new Date("2027-10-03T23:59:00.000Z") });
+      await expect(rotateConnectorTokens(db, {
+        refreshToken: second.refreshToken, clientId, now: new Date("2027-04-07T00:00:00.000Z"),
+      })).rejects.toMatchObject({ code: "invalid_grant", message: "Refresh token expired" });
     });
   });
 

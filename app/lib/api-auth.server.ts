@@ -183,6 +183,19 @@ export async function principalFromUserEmail(
   return user ? toPrincipal(user, source) : null;
 }
 
+/**
+ * OAuth access credentials issued before MCP tokens had an expiry (migration 0031) have
+ * `expiresAt` NULL. They stop working at this cutover, 90 days after the change shipped, and the
+ * client refreshes. Personal and delegated tokens (no OAuth client) keep a NULL expiry as chosen.
+ */
+export const LEGACY_OAUTH_ACCESS_EXPIRES_AT = new Date("2027-01-07T00:00:00.000Z");
+
+/** When a credential stops working, or null when it never does. */
+export function effectiveCredentialExpiry(credential: { expiresAt: Date | null; oauthClientId: string | null }): Date | null {
+  if (credential.expiresAt) return credential.expiresAt;
+  return credential.oauthClientId ? LEGACY_OAUTH_ACCESS_EXPIRES_AT : null;
+}
+
 /** Personal API tokens expire after this many days unless the caller chooses otherwise. */
 export const DEFAULT_PERSONAL_API_TOKEN_TTL_DAYS = 90;
 export const MAX_PERSONAL_API_TOKEN_TTL_DAYS = 365;
@@ -251,7 +264,7 @@ export async function authenticateApiToken(
   if (
     !credential ||
     credential.revokedAt ||
-    (credential.expiresAt !== null && credential.expiresAt.getTime() <= Date.now())
+    (effectiveCredentialExpiry(credential)?.getTime() ?? Infinity) <= Date.now()
   ) {
     throw new ApiAuthError("Invalid API token", 401);
   }

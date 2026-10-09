@@ -74,6 +74,12 @@ export const OAUTH_MCP_ACCESS_TOKEN_TTL_SECONDS = 90 * 24 * 60 * 60;
 /** Each refresh token is refused 180 days after it was issued; rotation issues a fresh one. */
 export const OAUTH_REFRESH_TOKEN_TTL_SECONDS = 180 * 24 * 60 * 60;
 /**
+ * Refresh tokens issued before they had an expiry (migration 0031) have `expiresAt` NULL and are
+ * accepted until this cutover, 180 days after the change shipped. Rotating one issues a token with
+ * its own 180-day expiry, so a connection in use never reaches the cutover.
+ */
+export const LEGACY_OAUTH_REFRESH_EXPIRES_AT = new Date("2027-04-07T00:00:00.000Z");
+/**
  * A refresh token replayed this soon after its rotation is refused without revoking the
  * connection: two refreshes racing from the same client (the iPhone app's App Intents each run
  * their own refresh) are not an attack. Later replays mean the token was copied.
@@ -1055,7 +1061,7 @@ export async function rotateConnectorTokens(
   if (record.clientId !== input.clientId) {
     throw new OAuthError("invalid_grant", "Refresh token was issued to a different client");
   }
-  if (record.expiresAt && record.expiresAt.getTime() <= now.getTime()) {
+  if ((record.expiresAt ?? LEGACY_OAUTH_REFRESH_EXPIRES_AT).getTime() <= now.getTime()) {
     await expireConnection(db, record, now);
     throw new OAuthError("invalid_grant", "Refresh token expired");
   }

@@ -46,6 +46,26 @@ describe("API authentication helpers", () => {
     await cleanupDatabase();
   });
 
+  it("stops OAuth access tokens issued without an expiry at the 2027-01-07 cutover, but not personal tokens", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail("legacy"), username: faker.internet.username() } });
+    await db.oAuthClient.create({ data: { id: "legacy-client", clientName: "Claude", redirectUris: "https://claude.ai/api/mcp/auth_callback" } });
+    const oauth = await createApiCredential(db, user.id, "Claude (OAuth)", { oauthClientId: "legacy-client", oauthIssuer: "https://spoonjoy.app" });
+    const personal = await createApiCredential(db, user.id, "Script", { expiresAt: null });
+    expect(oauth.credential.expiresAt).toBeNull();
+
+    try {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2027-01-06T23:59:00.000Z"));
+      await expect(authenticateApiToken(db, oauth.token)).resolves.toMatchObject({ id: user.id });
+
+      vi.setSystemTime(new Date("2027-01-07T00:00:00.000Z"));
+      await expect(authenticateApiToken(db, oauth.token)).rejects.toMatchObject({ status: 401 });
+      await expect(authenticateApiToken(db, personal.token)).resolves.toMatchObject({ id: user.id });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("extracts bearer tokens and reports malformed authorization headers", () => {
     expect(extractBearerToken(new UndiciRequest("http://localhost/api"))).toBeNull();
     expect(extractBearerToken(new UndiciRequest("http://localhost/api", {
