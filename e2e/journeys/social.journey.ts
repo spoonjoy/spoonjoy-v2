@@ -59,18 +59,18 @@ function logCookDialog(page: Page) {
   return page.getByRole("dialog", { name: "Log a cook" });
 }
 
-// Opens "Log a cook" and checks that "Save spoon" waits for something to save.
+// Opens "Log a cook" and checks that "Log cook" waits for something to save.
 async function openLogCook(page: Page) {
   await page.getByTestId("recipe-header-log-cook-action").click();
   const dialog = logCookDialog(page);
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Save spoon", exact: true })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "Log cook", exact: true })).toBeDisabled();
   return dialog;
 }
 
 async function saveCook(page: Page) {
   const dialog = logCookDialog(page);
-  await dialog.getByRole("button", { name: "Save spoon", exact: true }).click();
+  await dialog.getByRole("button", { name: "Log cook", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "Cook logged." })).toBeVisible();
   await expect(dialog).toBeHidden();
 }
@@ -204,11 +204,11 @@ test.describe("Social, in a British locale in Kiritimati", () => {
   }, testInfo) => {
     const note = `Journey cook ${runSuffix(testInfo)}: more saffron next time`;
 
-    // "Save spoon" stays disabled until there is a note.
+    // "Log cook" stays disabled until there is a note.
     await openRisotto(page);
     const dialog = await openLogCook(page);
     await dialog.getByLabel("Note", { exact: true }).fill(note);
-    await expect(dialog.getByRole("button", { name: "Save spoon", exact: true })).toBeEnabled();
+    await expect(dialog.getByRole("button", { name: "Log cook", exact: true })).toBeEnabled();
     await expectAccessible();
     await saveCook(page);
 
