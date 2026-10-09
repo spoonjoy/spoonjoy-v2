@@ -1,4 +1,5 @@
 import type { Route } from "./+types/recipes._index";
+import { chefDisplayName } from "~/lib/username";
 import { Form, useLoaderData } from "react-router";
 import { BookOpen, ChefHat, Plus, Search as SearchIcon } from "lucide-react";
 import { Button } from "~/components/ui/button";
@@ -173,11 +174,11 @@ function RecipeRow({ recipe, ordinal }: { recipe: PublicRecipe; ordinal: number 
         </span>
         <CoverProvenanceBadge label={recipe.coverProvenanceLabel} className="mt-2" />
         <span className="mt-1 block max-w-2xl text-base/6 text-[var(--sj-ink-soft)]">
-          {recipe.description ?? `By ${recipe.chef.username}`}
+          {recipe.description ?? `By ${chefDisplayName(recipe.chef.username)}`}
         </span>
       </span>
       <span className="font-sj-ui col-start-3 flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)] sm:col-start-auto sm:block sm:justify-self-end sm:text-right">
-        <span>By {recipe.chef.username}</span>
+        <span>By {chefDisplayName(recipe.chef.username)}</span>
         {servingsLabel ? <span className="sm:mt-1 sm:block">{servingsLabel}</span> : null}
       </span>
     </Link>

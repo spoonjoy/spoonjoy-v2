@@ -1,4 +1,5 @@
 import { BookOpen, ChefHat, Plus, Search as SearchIcon, Settings, Share2, Users } from "lucide-react";
+import { chefDisplayName } from "~/lib/username";
 import { Button } from "~/components/ui/button";
 import { Link } from "~/components/ui/link";
 import { Heading, Subheading } from "~/components/ui/heading";
@@ -31,7 +32,7 @@ export function KitchenHome({
   cookbooks: KitchenCookbook[];
 }) {
   const displayRecipes = recipes;
-  const heading = isOwner ? "My Kitchen" : `${kitchenUser.username}'s Kitchen`;
+  const heading = isOwner ? "My Kitchen" : `${chefDisplayName(kitchenUser.username)}'s Kitchen`;
   const handleShareRecipe = async (recipe: KitchenRecipe) => {
     await shareContent({
       title: recipe.title,

@@ -1,4 +1,5 @@
 import type { Route } from "./+types/recipes.$id";
+import { chefDisplayName } from "~/lib/username";
 import {
   useActionData,
   useFetcher,
@@ -63,7 +64,7 @@ export function meta({ data }: Route.MetaArgs) {
   }
 
   const description = data.recipe.description?.trim()
-    || `A Spoonjoy recipe by ${data.recipe.chef.username}.`;
+    || `A Spoonjoy recipe by ${chefDisplayName(data.recipe.chef.username)}.`;
 
   return [
     { title: `${data.recipe.title} - Spoonjoy` },
@@ -989,7 +990,7 @@ export default function RecipeDetail() {
       <RecipeHeader
         title={recipe.title}
         description={recipe.description ?? undefined}
-        chefName={recipe.chef.username}
+        chefName={chefDisplayName(recipe.chef.username)}
         chefId={recipe.chef.id}
         chefProfileHref={`/users/${recipe.chef.username}`}
         chefPhotoUrl={recipe.chef.photoUrl ?? undefined}

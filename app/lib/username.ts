@@ -20,6 +20,12 @@ const ACCOUNT_ID_SHAPE = /^c[a-z0-9]{24}$/i;
 export const DELETED_CHEF_USERNAME = "deleted-chef";
 const RESERVED_USERNAMES = new Set([DELETED_CHEF_USERNAME]);
 
+/** What bylines show for a chef: the username, or "Deleted chef" for the account that keeps a deleted chef's shared recipes. */
+export const DELETED_CHEF_DISPLAY_NAME = "Deleted chef";
+export function chefDisplayName(username: string): string {
+  return username === DELETED_CHEF_USERNAME ? DELETED_CHEF_DISPLAY_NAME : username;
+}
+
 // True for a username reserved for Spoonjoy itself, in any letter case. It counts as taken.
 export function isReservedUsername(username: string): boolean {
   return RESERVED_USERNAMES.has(username.toLowerCase());
