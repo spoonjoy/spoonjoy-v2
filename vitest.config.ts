@@ -55,16 +55,20 @@ const hasFocusedTestFilter = process.argv.some((arg) =>
 // should not fail because unrelated imported helpers are partially covered.
 const isFocusedCoverageRun = hasCoverageFlag && hasFocusedTestFilter;
 
+const dbWorkers = Number(process.env.VITEST_DB_WORKERS ?? 4);
+process.env.VITEST_DB_WORKERS = String(dbWorkers);
+
 export default defineConfig({
   test: {
     environment: "happy-dom",
     globals: true,
     setupFiles: ["./test/setup.ts"],
     pool: "forks",
-    // DB-backed route/model tests share test.db and destructive cleanup helpers.
-    // Keep files serial until the suite has per-worker database isolation.
-    maxWorkers: 1,
-    fileParallelism: false,
+    // DB-backed tests run in parallel: test/support/global-setup.ts copies prisma/test.db to
+    // prisma/test-<n>.db and test/setup.ts points each worker at its own file (VITEST_POOL_ID).
+    globalSetup: ["./test/support/global-setup.ts"],
+    maxWorkers: dbWorkers,
+    fileParallelism: true,
     sequence: {
       shuffle: false,
     },
