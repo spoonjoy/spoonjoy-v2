@@ -66,7 +66,9 @@ test.describe("Sign-in", () => {
     try {
       await signInThroughForm(page, "newbie");
       // Opening /logout (as a link or an image tag on another site would) must not sign out.
+      // A signed-in visitor sees a confirm page instead.
       await page.goto("/logout");
+      await expect(page.getByRole("heading", { name: "Log out of Spoonjoy?" })).toBeVisible();
       await page.goto("/account/settings");
       await expect(page).toHaveURL(/\/account\/settings/);
       // The Log out button posts the sign-out: the top navigation on desktop, the settings

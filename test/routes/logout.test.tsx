@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { render, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub } from "../utils";
-import { loader, action } from "~/routes/logout";
+import { loader, action, meta } from "~/routes/logout";
 import Logout from "~/routes/logout";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -19,7 +20,7 @@ describe("Logout Route", () => {
 
   describe("loader", () => {
     // A GET must never sign out: any site can make a browser send one (an image tag, a link).
-    it("keeps a signed-in session and sends the visitor to their kitchen", async () => {
+    it("keeps a signed-in session and asks the visitor to confirm", async () => {
       const user = await db.user.create({
         data: { email: "logout-get@example.com", username: "logout_get" },
       });
@@ -30,15 +31,14 @@ describe("Logout Route", () => {
 
       const request = new UndiciRequest("http://localhost:3000/logout", { headers: { Cookie: cookieValue } });
 
-      const response = await loader({
+      const result = await loader({
         request,
         context: { cloudflare: { env: null } },
         params: {},
-      } as any).catch((thrown: unknown) => thrown);
+      } as any);
 
-      expect(response).toBeInstanceOf(Response);
-      expect((response as Response).status).toBe(302);
-      expect((response as Response).headers.get("Location")).toBe("/");
+      // Data, not a Response: nothing here can set a cookie.
+      expect(result).toEqual({ signedIn: true });
     });
 
     it("sends a signed-out visitor to the login page", async () => {
@@ -117,6 +117,7 @@ describe("Logout Route", () => {
 
         expect(response).not.toBeInstanceOf(Response);
         expect((response as any).init?.status).toBe(403);
+        expect((response as any).init?.headers).toBeUndefined();
       }
     });
 
@@ -141,8 +142,37 @@ describe("Logout Route", () => {
     });
   });
 
+  it("keeps the confirm page out of search results", () => {
+    expect(meta({} as any)).toEqual([
+      { title: "Log out - Spoonjoy" },
+      { name: "robots", content: "noindex" },
+    ]);
+  });
+
   describe("component", () => {
-    it("should render null (empty component)", async () => {
+    it("asks a signed-in visitor to confirm, and posts the sign-out", async () => {
+      const posted: string[] = [];
+      const Stub = createTestRoutesStub([
+        {
+          path: "/logout",
+          Component: Logout,
+          loader: () => ({ signedIn: true }),
+          action: ({ request }) => {
+            posted.push(request.method);
+            return { error: "Sign-out must come from Spoonjoy." };
+          },
+        },
+      ]);
+      render(<Stub initialEntries={["/logout"]} />);
+
+      expect(await screen.findByRole("heading", { name: "Log out of Spoonjoy?" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Stay signed in" })).toHaveAttribute("href", "/");
+      await userEvent.setup().click(screen.getByRole("button", { name: "Log out" }));
+      expect(await screen.findByText("Sign-out must come from Spoonjoy.")).toBeInTheDocument();
+      expect(posted).toEqual(["POST"]);
+    });
+
+    it("sends a signed-out visitor to the login page", async () => {
       const Stub = createTestRoutesStub([
         {
           path: "/logout",
@@ -157,18 +187,10 @@ describe("Logout Route", () => {
         },
       ]);
 
-      const { container } = render(<Stub initialEntries={["/logout"]} />);
+      render(<Stub initialEntries={["/logout"]} />);
 
-      // Wait for redirect navigation to complete to avoid act() warning
-      await waitFor(() => {
-        expect(container).toBeDefined();
-      });
+      expect(await screen.findByText("Login Page")).toBeInTheDocument();
     });
 
-    it("should render nothing when component is called directly", () => {
-      // Test the component directly returns null
-      const result = Logout();
-      expect(result).toBeNull();
-    });
   });
 });
