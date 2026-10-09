@@ -23,9 +23,10 @@ import {
   STEP_TITLE_MAX_LENGTH,
   STEP_DESCRIPTION_MAX_LENGTH,
 } from "~/lib/validation";
-import { createStepOutputUses } from "~/lib/step-output-use-mutations.server";
+import { createNativeRecipeStep } from "~/lib/api-v1-recipe-steps.server";
+import { newStepFormErrors } from "~/lib/new-step-form-errors";
+import { requestD1 } from "~/lib/d1-read.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
-import { touchNativeSyncRecipe } from "~/lib/native-sync-invalidation.server";
 import {
   parseIngredients,
   IngredientParseError,
@@ -248,71 +249,29 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   // Original validation required: if (usesSteps.length === 0 && ingredients.length === 0) { ... }
 
   try {
-    const step = await database.recipeStep.create({
-      data: {
-        recipeId: id,
-        stepNum: nextStepNum,
+    // One write for the step, its output uses and its ingredients: every check (a repeated
+    // ingredient, a missing output step) runs before anything is written, and with the D1
+    // binding the writes go as one guarded batch, so a failure leaves no partial step.
+    const result = await createNativeRecipeStep(
+      database,
+      userId,
+      id,
+      {
+        clientMutationId: crypto.randomUUID(),
         stepTitle: stepTitle.trim() || null,
         description: description.trim(),
+        duration: null,
+        ingredients: ingredients.map(({ quantity, unit, ingredientName }) => ({ quantity, unit, ingredientName })),
+        outputStepNums: usesSteps,
       },
-    });
-    await touchNativeSyncRecipe(database, id);
+      { d1: requestD1(context) },
+    );
 
-    if (usesSteps.length > 0) {
-      await createStepOutputUses(database, id, nextStepNum, usesSteps);
+    if (!result.ok) {
+      return data({ errors: newStepFormErrors(result) }, { status: 400 });
     }
 
-    for (const ingredient of ingredients) {
-      const normalizedUnitName = ingredient.unit.toLowerCase();
-      const normalizedIngredientName = ingredient.ingredientName.toLowerCase();
-
-      let unit = await database.unit.findUnique({
-        where: { name: normalizedUnitName },
-      });
-
-      if (!unit) {
-        unit = await database.unit.create({
-          data: { name: normalizedUnitName },
-        });
-      }
-
-      let ingredientRef = await database.ingredientRef.findUnique({
-        where: { name: normalizedIngredientName },
-      });
-
-      if (!ingredientRef) {
-        ingredientRef = await database.ingredientRef.create({
-          data: { name: normalizedIngredientName },
-        });
-      }
-
-      const existingIngredient = await database.ingredient.findFirst({
-        where: {
-          recipeId: id,
-          ingredientRefId: ingredientRef.id,
-        },
-      });
-
-      if (existingIngredient) {
-        return data(
-          { errors: { ingredientName: "This ingredient is already in the recipe" } },
-          { status: 400 }
-        );
-      }
-
-      await database.ingredient.create({
-        data: {
-          recipeId: id,
-          stepNum: nextStepNum,
-          quantity: ingredient.quantity,
-          unitId: unit.id,
-          ingredientRefId: ingredientRef.id,
-        },
-      });
-    }
-
-    await touchNativeSyncRecipe(database, id);
-    return redirect(`/recipes/${id}/steps/${step.id}/edit?created=1`);
+    return redirect(`/recipes/${id}/steps/${result.data.stepId}/edit?created=1`);
   } catch (error) {
     // Validation + duplicate checks happened above and surface as 400s; reaching
     // here means the step/ingredient persistence itself failed (DB/infra fault).

@@ -729,7 +729,7 @@ describe("Recipes $id Steps New Route", () => {
       expect(await db.ingredientRef.count({ where: { name: "sugar" } })).toBe(1);
     });
 
-    it("should return duplicate ingredient error after creating the step", async () => {
+    it("should return duplicate ingredient error without writing any of the step", async () => {
       const existingStep = await db.recipeStep.create({
         data: {
           recipeId,
@@ -766,9 +766,11 @@ describe("Recipes $id Steps New Route", () => {
       const { data, status } = extractResponseData(response);
       expect(status).toBe(400);
       expect(data.errors.ingredientName).toBe("This ingredient is already in the recipe");
+      // The check runs before any write: no step 2, and no second flour row.
       expect(await db.recipeStep.findUnique({
         where: { recipeId_stepNum: { recipeId, stepNum: 2 } },
-      })).toBeTruthy();
+      })).toBeNull();
+      expect(await db.ingredient.count({ where: { recipeId } })).toBe(1);
     });
 
     it("should create step without optional title", async () => {

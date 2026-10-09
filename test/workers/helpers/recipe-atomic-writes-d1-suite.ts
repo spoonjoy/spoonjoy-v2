@@ -3,6 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { action as apiV1Action } from "../../../app/routes/api.v1.$";
+import { action as newStepAction } from "../../../app/routes/recipes.$id.steps.new";
 import { hashApiToken } from "../../../app/lib/api-auth.server";
 import {
   createNativeRecipeStep,
@@ -610,6 +611,78 @@ describe("atomic recipe writes on Wrangler D1", () => {
       await expect(recipePageAction("atomic-page-cover", fields)).resolves.toEqual({ success: true, intent: "setRecipeNoCover" });
       expect((await recipeGraph("atomic-page-cover")).recipe).toMatchObject({ coverMode: "none" });
       expect(await cookbookUpdatedAt()).not.toBe(OLD);
+    });
+
+    async function newStepFormAction(recipeId: string, fields: Record<string, string | string[]>) {
+      const cookie = await createUserSessionCookie(CHEF, env as never, new Request(`${ORIGIN}/recipes/${recipeId}/steps/new`));
+      const body = new FormData();
+      for (const [key, value] of Object.entries(fields)) {
+        for (const item of Array.isArray(value) ? value : [value]) body.append(key, item);
+      }
+      return newStepAction({
+        request: new Request(`${ORIGIN}/recipes/${recipeId}/steps/new`, { method: "POST", headers: { Cookie: cookie }, body }),
+        params: { id: recipeId },
+        context: { cloudflare: { env, ctx: createExecutionContext() } },
+      } as never).catch((error: unknown) => error);
+    }
+
+    function statusOf(result: unknown): number | undefined {
+      if (result instanceof Response) return result.status;
+      return (result as { init?: { status?: number } } | null)?.init?.status;
+    }
+
+    it("adds a web-form step with its output uses and ingredients together, or nothing", async () => {
+      await seedRecipe("atomic-web-step");
+      const before = await recipeGraph("atomic-web-step");
+      await failOn("INSERT", "Ingredient", `NEW."recipeId" = 'atomic-web-step' AND NEW."stepNum" = 4 AND NEW."quantity" = 7`);
+      const fields = {
+        description: "Glaze it",
+        usesSteps: ["3"],
+        ingredientsJson: JSON.stringify([
+          { quantity: 1, unit: "atomic tbsp", ingredientName: "atomic sugar" },
+          { quantity: 7, unit: "atomic web gram", ingredientName: "atomic web glaze" },
+        ]),
+      };
+
+      expect(statusOf(await newStepFormAction("atomic-web-step", fields))).toBe(500);
+      expect(await recipeGraph("atomic-web-step")).toEqual(before);
+      expect(await count(`SELECT COUNT(*) AS "count" FROM "Unit" WHERE "name" = 'atomic web gram'`)).toBe(0);
+      expect(await count(`SELECT COUNT(*) AS "count" FROM "IngredientRef" WHERE "name" = 'atomic web glaze'`)).toBe(0);
+
+      await run(`DROP TRIGGER "${TRIGGER}"`);
+      const created = await newStepFormAction("atomic-web-step", fields);
+      expect(statusOf(created)).toBe(302);
+      const after = await recipeGraph("atomic-web-step");
+      expect(after.steps).toHaveLength(4);
+      expect(after.steps[3]).toMatchObject({ stepNum: 4, description: "Glaze it" });
+      expect(after.uses).toEqual([...before.uses, { outputStepNum: 3, inputStepNum: 4 }]);
+      expect(after.ingredients.filter((row) => row.stepNum === 4)).toEqual([
+        { stepNum: 4, quantity: 1, unit: "atomic tbsp", ingredient: "atomic sugar" },
+        { stepNum: 4, quantity: 7, unit: "atomic web gram", ingredient: "atomic web glaze" },
+      ]);
+      expect(await recipeUpdatedAt("atomic-web-step")).not.toBe(OLD);
+    });
+
+    it("rejects a web-form step repeating a recipe ingredient without writing any of it", async () => {
+      await seedRecipe("atomic-web-step-repeat");
+      const before = await recipeGraph("atomic-web-step-repeat");
+      const fields = {
+        description: "Dust it",
+        ingredientsJson: JSON.stringify([
+          { quantity: 1, unit: "atomic tbsp", ingredientName: "atomic sugar" },
+          { quantity: 1, unit: "atomic cup", ingredientName: "Atomic Flour" },
+        ]),
+      };
+
+      const rejected = await newStepFormAction("atomic-web-step-repeat", fields);
+      expect(statusOf(rejected)).toBe(400);
+      expect((rejected as { data: unknown }).data).toEqual({ errors: { ingredientName: "This ingredient is already in the recipe" } });
+      expect(await recipeGraph("atomic-web-step-repeat")).toEqual(before);
+      expect(await recipeUpdatedAt("atomic-web-step-repeat")).toBe(OLD);
+
+      // Resubmitting gives the same answer and still adds no step.
+      expect(statusOf(await newStepFormAction("atomic-web-step-repeat", fields))).toBe(400);
+      expect((await recipeGraph("atomic-web-step-repeat")).steps).toHaveLength(3);
     });
 
     it("imports a recipe with its steps and ingredients together, or nothing", async () => {
