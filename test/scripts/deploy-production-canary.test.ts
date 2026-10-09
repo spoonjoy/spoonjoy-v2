@@ -3863,6 +3863,18 @@ describe("production canary release orchestration", () => {
     }));
   });
 
+  it("retries the candidate page probe while the version override catches up", async () => {
+    const runCommand = successfulRunner({});
+    const deps = releaseDeps(runCommand);
+    deps.verifyCandidatePages
+      .mockRejectedValueOnce(new Error("Candidate page verification failed: / was not served by the candidate."))
+      .mockResolvedValueOnce(undefined);
+
+    await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({ status: "promoted" });
+    expect(deps.verifyCandidatePages).toHaveBeenCalledTimes(2);
+    expect(deps.sleep).toHaveBeenCalledWith(1_000);
+  });
+
   describe("verifyCandidatePages", () => {
     const html = (asset = "/assets/root-AbC123.js") =>
       `<!doctype html><script type="module" src="${asset}"></script>`;

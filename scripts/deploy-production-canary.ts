@@ -2198,7 +2198,18 @@ export async function runProductionCanaryRelease(
       await deps.runCommand("pnpm", [
         "run", "smoke:mcp:oauth", "--", "--out", deps.artifactDir, "--worker-version-id", candidateVersionId,
       ], { env: d1Env });
-      await (deps.verifyCandidatePages ?? verifyCandidatePages)(baseUrl, candidateVersionId);
+      // The exact-version override can lag the staging call by a few seconds (seen on QA), so the
+      // page probe gets the same bounded retries as the other override probes.
+      const pageAttempts = requireVerificationAttempts(deps.verificationAttempts);
+      for (let attempt = 1; ; attempt += 1) {
+        try {
+          await (deps.verifyCandidatePages ?? verifyCandidatePages)(baseUrl, candidateVersionId);
+          break;
+        } catch (error) {
+          if (attempt >= pageAttempts) throw error;
+          await deps.sleep(VERIFICATION_DELAY_MS);
+        }
+      }
 
       phase = "candidate_csp";
       const candidateCspHeaders = await (
