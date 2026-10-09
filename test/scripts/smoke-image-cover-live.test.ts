@@ -652,6 +652,32 @@ describe("image-cover live smoke flow", () => {
     expect(listCalls).toBe(1);
   });
 
+  it("says no reason was reported when a failed placeholder has no failure reason", async () => {
+    const harness = createFlowHarness({ maxPollAttempts: 50 });
+    harness.options.mcpTool = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      harness.calls.push({ kind: "mcp", name, args });
+      if (name === "list_recipe_covers") return { covers: [{ id: "cover-failed", status: "failed" }] };
+      throw new Error(`Unexpected MCP tool ${name}`);
+    });
+
+    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/generation failed \(no reason reported\)/);
+  });
+
+  it("reports the covers it last saw when the placeholder never becomes ready", async () => {
+    const harness = createFlowHarness();
+    harness.options.mcpTool = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      harness.calls.push({ kind: "mcp", name, args });
+      if (name === "list_recipe_covers") {
+        return { covers: [{ id: "a" }, { id: "b", provenanceLabel: "AI generated", generationStatus: "pending", failureReason: "slow" }] };
+      }
+      throw new Error(`Unexpected MCP tool ${name}`);
+    });
+
+    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(
+      "Last seen: unlabelled:unknown, AI generated:pending(slow).",
+    );
+  });
+
   it("ignores malformed cover rows while waiting for the AI placeholder", async () => {
     const harness = createFlowHarness();
     const originalMcpTool = harness.options.mcpTool;
