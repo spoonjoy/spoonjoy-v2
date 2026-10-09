@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import Database from "better-sqlite3";
 import bcrypt from "bcryptjs";
 import { describe, expect, it, vi } from "vitest";
-import {
+import { pagerRecipes, PAGER_FORBIDDEN_WORDS,
   KITCHEN,
   SCRATCH_ACCOUNT_COUNT,
   SCRATCH_USER_COUNT,
@@ -53,6 +53,42 @@ describe("seed-qa-kitchen", () => {
     expect(db.prepare("SELECT COUNT(*) n FROM ShoppingListItem i JOIN ShoppingList l ON l.id = i.shoppingListId WHERE l.authorId = ? AND i.checked = 0").get(KITCHEN.chef.id)).toEqual({ n: 3 });
     expect(db.prepare("SELECT COUNT(*) n FROM RecipeSpoon WHERE chefId = ?").get(KITCHEN.chef.id)).toEqual({ n: 1 });
     expect(db.prepare("SELECT COUNT(*) n FROM Recipe WHERE chefId = ?").get(KITCHEN.newbie.id)).toEqual({ n: 0 });
+  });
+
+  it("seeds a public chef with more than two profile pages of recipes, and resets it on every run", () => {
+    const db = migratedDb();
+    db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
+    db.exec(`INSERT INTO Recipe (id, title, chefId, updatedAt) VALUES ('journey-made', 'Left by a journey', '${KITCHEN.pager.id}', CURRENT_TIMESTAMP)`);
+    db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
+
+    const pager = db.prepare('SELECT username, hashedPassword FROM "User" WHERE id = ?').get(KITCHEN.pager.id);
+    expect(pager).toEqual({ username: "qa_kitchen_pager", hashedPassword: null });
+    const recipes = db.prepare("SELECT id, title FROM Recipe WHERE chefId = ? AND deletedAt IS NULL ORDER BY id").all(KITCHEN.pager.id) as Array<{ id: string; title: string }>;
+    // The profile shows 24 a page: 60 makes two full pages and a partial third.
+    expect(recipes).toHaveLength(60);
+    expect(new Set(recipes.map((recipe) => recipe.title)).size).toBe(60);
+    expect(recipes.map((recipe) => recipe.id)).toEqual(pagerRecipes().map((recipe) => recipe.id));
+  });
+
+  it("dates the paging fixture before every other seeded recipe, so seeded recipes stay on page one", () => {
+    const db = migratedDb();
+    db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
+    // The order both public lists use: newest updatedAt first, then id.
+    const order = db.prepare('SELECT chefId FROM Recipe WHERE deletedAt IS NULL ORDER BY updatedAt DESC, id DESC').all() as Array<{ chefId: string }>;
+    const firstPager = order.findIndex((row) => row.chefId === KITCHEN.pager.id);
+    expect(firstPager).toBe(order.length - 60);
+    expect(order.slice(0, firstPager).every((row) => row.chefId !== KITCHEN.pager.id)).toBe(true);
+  });
+
+  it("keeps the words other journeys search for out of the paging fixture", () => {
+    const db = migratedDb();
+    db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
+    const text = db.prepare("SELECT r.title || ' ' || s.description AS t FROM Recipe r JOIN RecipeStep s ON s.recipeId = r.id WHERE r.chefId = ?")
+      .all(KITCHEN.pager.id) as Array<{ t: string }>;
+    expect(text).toHaveLength(60);
+    for (const word of PAGER_FORBIDDEN_WORDS) {
+      expect(text.filter((row) => row.t.toLowerCase().includes(word))).toEqual([]);
+    }
   });
 
   describe("session versions (revoking leftover persona sessions)", () => {
