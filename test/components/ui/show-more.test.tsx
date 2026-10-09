@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { describe, expect, it } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useLoaderData } from "react-router";
+import { MemoryRouter, useLoaderData } from "react-router";
 import { createTestRoutesStub } from "../../utils";
 import { ShowMore, useAppendingList, type AppendingList } from "~/components/ui/show-more";
 
@@ -100,5 +100,16 @@ describe("useAppendingList and ShowMore", () => {
     expect(busy).toHaveAttribute("aria-busy", "true");
     release();
     expect(await screen.findByText("Zucchini")).toBeInTheDocument();
+  });
+  it("leaves no spacing where the button was once there is no next page", () => {
+    const list = { nextCursor: null, loading: false, showMore: () => {}, announcement: "Showing 60 recipes" };
+    const { container, rerender } = render(<ShowMore list={{ ...list, nextCursor: "c" }} href="/rows?after=c" label="Show more" />, { wrapper: MemoryRouter });
+    // With a next page, the button keeps its space under the list.
+    expect(container.firstElementChild).toHaveClass("mt-6");
+    rerender(<ShowMore list={list} href={null} label="Show more" />);
+    expect(screen.queryByTestId("show-more")).toBeNull();
+    // The status still announces the last page, but the wrapper adds no margin of its own.
+    expect(screen.getByTestId("show-more-status")).toHaveTextContent("Showing 60 recipes");
+    expect(container.firstElementChild).not.toHaveClass("mt-6");
   });
 });

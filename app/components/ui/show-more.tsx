@@ -111,12 +111,15 @@ export function ShowMore({
   href: string | null
   label: string
 }) {
+  const hasNext = Boolean(list.nextCursor && href)
+  // The status stays mounted for the last announcement, but takes no room: once the button
+  // is gone, the wrapper's top margin goes with it, so what follows sits right after the list.
   return (
-    <div className="mt-6 flex flex-col items-center gap-2">
+    <div className={hasNext ? 'mt-6 flex flex-col items-center gap-2' : 'flex flex-col items-center'}>
       <p className="sr-only" aria-live="polite" data-testid="show-more-status">
         {list.announcement}
       </p>
-      {list.nextCursor && href ? (
+      {hasNext ? (
         <Button
           href={href}
           plain
