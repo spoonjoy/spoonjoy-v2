@@ -76,7 +76,7 @@ test.describe("capture @capture", () => {
   test("Add Step page parses typed ingredients with AI parsing unavailable @capture", async ({ browser }, testInfo) => {
     test.setTimeout(240_000);
     const recipePath = await createRecipe(browser, `Capture Pasta ${Date.now().toString(36)}`);
-    for (const mode of MOBILE_MODES) {
+    const shoot = async (mode: Mode) => {
       const { context, page } = await open(browser, mode);
       await page.goto(`${recipePath}/steps/new`);
       await waitForHydration(page);
@@ -92,7 +92,9 @@ test.describe("capture @capture", () => {
       await page.waitForTimeout(500);
       await save(testInfo, `386-add-step-${mode.name}`, await page.screenshot({ fullPage: true }));
       await context.close();
-    }
+    };
+    await shoot(MOBILE_MODES[0]);
+    await shoot(MOBILE_MODES[1]);
   });
 
   test("cover history across regenerations @capture", async ({ browser }, testInfo) => {
@@ -106,19 +108,22 @@ test.describe("capture @capture", () => {
       `INSERT INTO "RecipeCover" ("id","recipeId","imageUrl","stylizedImageUrl","sourceType","status","sourceImageUrl","generationStatus","createdAt") VALUES ('${coverId}','${recipeId}','/og/spoonjoy-home.png','/icons/sj-512.png','chef-upload','ready','/og/spoonjoy-home.png','succeeded',CURRENT_TIMESTAMP); UPDATE "Recipe" SET "activeCoverId"='${coverId}', "activeCoverVariant"='stylized' WHERE "id"='${recipeId}';`,
     );
 
+    const shot = async (stage: string, mode: Mode) => {
+      const { context, page } = await open(browser, mode);
+      await page.goto(recipePath);
+      await waitForHydration(page);
+      await page.getByRole("button", { name: /^Recipe maintenance/ }).click();
+      const history = page.getByTestId("recipe-cover-history");
+      await expect(history).toBeVisible();
+      await history.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(500);
+      await save(testInfo, `416-${stage}-${mode.name}`, await history.screenshot());
+      await context.close();
+    };
     const capture = async (stage: string) => {
-      for (const mode of COVER_MODES) {
-        const { context, page } = await open(browser, mode);
-        await page.goto(recipePath);
-        await waitForHydration(page);
-        await page.getByRole("button", { name: /^Recipe maintenance/ }).click();
-        const history = page.getByTestId("recipe-cover-history");
-        await expect(history).toBeVisible();
-        await history.scrollIntoViewIfNeeded();
-        await page.waitForTimeout(500);
-        await save(testInfo, `416-${stage}-${mode.name}`, await history.screenshot());
-        await context.close();
-      }
+      await shot(stage, COVER_MODES[0]);
+      await shot(stage, COVER_MODES[1]);
+      await shot(stage, COVER_MODES[2]);
     };
 
     const regenerate = async (direction: string) => {
@@ -132,15 +137,8 @@ test.describe("capture @capture", () => {
       const done = page.waitForResponse((response) => response.request().method() === "POST");
       await form.getByRole("button", { name: "Regenerate with direction" }).click();
       await done;
-      // Wait for the queued stylization to settle (it fails fast without an image key).
-      for (let attempt = 0; attempt < 20; attempt += 1) {
-        await page.waitForTimeout(3_000);
-        await page.reload();
-        await waitForHydration(page);
-        await page.getByRole("button", { name: /^Recipe maintenance/ }).click();
-        const text = (await page.getByTestId("recipe-cover-history").innerText()).toLowerCase();
-        if (!text.includes("processing")) break;
-      }
+      // Let the queued stylization settle (it fails fast without an image key), then the shots reload.
+      await page.waitForTimeout(20_000);
       await context.close();
     };
 
