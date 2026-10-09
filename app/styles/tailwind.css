@@ -18,6 +18,12 @@
   --sj-brass: #9b6834;
   --sj-action: #28231d;
   --sj-action-deep: #1f1b17;
+  /* The primary button: its label, and its hover/pressed and disabled fills. Every pair passes
+     WCAG AA 4.5:1 (test/styles/primary-button-contrast.test.ts). */
+  --sj-on-action: var(--sj-bone);
+  --sj-action-hover: var(--sj-action-deep);
+  --sj-action-disabled: #6b655c;
+  --sj-on-action-disabled: var(--sj-bone);
   --sj-tomato: #a24a38;
   --sj-herb: #596a4f;
   --sj-ink: var(--sj-charcoal);
@@ -58,6 +64,12 @@
   --sj-brass: #c4945c;
   --sj-action: #b9854b;
   --sj-action-deep: #95683a;
+  /* A dark label on the amber: the light one measured 2.61:1. Hover lightens instead of deepening,
+     so the dark label keeps its contrast. */
+  --sj-on-action: var(--sj-charcoal);
+  --sj-action-hover: #cc9a62;
+  --sj-action-disabled: #463d33;
+  --sj-on-action-disabled: var(--sj-charcoal-soft);
   /* Bumped from #d26850 (4.24:1 on --sj-panel-solid) to pass WCAG AA (≥4.5:1)
    * — it's the error-text color, so it has to be readable. */
   --sj-tomato: #e58263;
