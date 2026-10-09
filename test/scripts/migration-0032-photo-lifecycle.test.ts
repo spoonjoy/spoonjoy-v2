@@ -4,10 +4,10 @@ import DatabaseSync from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { assertAdditiveMigrationSql } from "../../scripts/deploy-production-canary";
 
-const ROOT_MIGRATION = resolve(__dirname, "../../migrations/0029_photo_lifecycle.sql");
-const PRISMA_MIGRATION = resolve(__dirname, "../../prisma/migrations/20261009120000_photo_lifecycle/migration.sql");
+const ROOT_MIGRATION = resolve(__dirname, "../../migrations/0032_photo_lifecycle.sql");
+const PRISMA_MIGRATION = resolve(__dirname, "../../prisma/migrations/20261009140000_photo_lifecycle/migration.sql");
 
-describe("migration 0029 - photo lifecycle", () => {
+describe("migration 0032 - photo lifecycle", () => {
   const sql = readFileSync(ROOT_MIGRATION, "utf8");
 
   it("keeps root D1 and Prisma migration SQL byte-identical", () => {
@@ -15,7 +15,7 @@ describe("migration 0029 - photo lifecycle", () => {
   });
 
   it("is additive so the production release can apply it automatically", () => {
-    expect(() => assertAdditiveMigrationSql("0029_photo_lifecycle.sql", sql)).not.toThrow();
+    expect(() => assertAdditiveMigrationSql("0032_photo_lifecycle.sql", sql)).not.toThrow();
   });
 
   it("creates the bookkeeping tables and can be applied twice", () => {
