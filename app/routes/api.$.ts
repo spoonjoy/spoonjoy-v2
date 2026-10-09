@@ -358,7 +358,7 @@ async function handleApiRequest({ request, context, params }: Route.LoaderArgs |
     const data = await callSpoonjoyApiOperation(
       dispatch.operation,
       dispatch.args,
-      buildSpoonjoyApiContext({ db, principal, cloudflareEnv: cfEnv ?? null, waitUntil }),
+      buildSpoonjoyApiContext({ db, principal, cloudflareEnv: cfEnv ?? null, waitUntil, request }),
     );
     const response = apiJson(
       { ok: true, data },

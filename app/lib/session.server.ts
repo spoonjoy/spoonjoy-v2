@@ -94,6 +94,14 @@ function resolveSessionSecret(env?: SessionEnv | null, request?: Request | null)
   return DEFAULT_DEV_SESSION_SECRET;
 }
 
+/**
+ * The secret and Secure flag the session cookie uses, for other short-lived signed cookies that must
+ * follow the same production rules (fail closed without SESSION_SECRET, Secure outside localhost).
+ */
+export function signedCookieSettings(env?: SessionEnv | null, request?: Request | null): { secret: string; secure: boolean } {
+  return { secret: resolveSessionSecret(env, request), secure: shouldUseSecureSessionCookie(env, request) };
+}
+
 export function sanitizeSessionRedirect(
   redirectTo: string | null | undefined,
   fallback: string = "/"
