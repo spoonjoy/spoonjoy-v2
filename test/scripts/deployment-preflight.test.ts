@@ -2391,11 +2391,32 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
   });
 
+  it("requires the release-target job to choose what the deploy job releases", () => {
+    const productionErrors = (workflow: string) => {
+      const inputs = validInputs();
+      inputs.productionDeployWorkflow = workflow;
+      return validateDeploymentConfig(inputs).errors.map((item) => item.name);
+    };
+    const valid = secureProductionDeployWorkflow();
+    expect(productionErrors(valid)).not.toContain("production deploy workflow");
+    for (const [expected, replacement] of [
+      ["    needs: release-target\n", ""],
+      ["      SOURCE_SHA: ${{ needs.release-target.outputs.source_sha }}\n", "      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}\n"],
+      ["        run: node scripts/workflow-security.mjs choose-release-target", "        run: echo \"source_sha=$SOURCE_SHA\" >> \"$GITHUB_OUTPUT\""],
+      ["      source_sha: ${{ steps.target.outputs.source_sha }}", "      source_sha: ${{ github.event.workflow_run.head_sha }}"],
+      ["          GH_TOKEN: ${{ github.token }}\n        run: node scripts/workflow-security.mjs choose-release-target", "          GH_TOKEN: ${{ github.token }}\n          CLOUDFLARE_WORKERS_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}\n        run: node scripts/workflow-security.mjs choose-release-target"],
+      ["    timeout-minutes: 10\n    outputs:", "    timeout-minutes: 10\n    permissions:\n      contents: write\n    outputs:"],
+      ["            git merge-base --is-ancestor \"$WORKFLOW_RUN_HEAD_SHA\" \"$SOURCE_SHA\"\n", ""],
+    ]) {
+      expect(productionErrors(replaceRequired(valid, expected, replacement))).toContain("production deploy workflow");
+    }
+  });
+
   it("rejects extra production jobs without warning-clean setup", () => {
     const inputs = validInputs();
     inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
-      "jobs:\n  deploy:",
-      "jobs:\n  metadata:\n    runs-on: ubuntu-latest\n  deploy:",
+      "jobs:\n",
+      "jobs:\n  metadata:\n    runs-on: ubuntu-latest\n",
     );
 
     const result = validateDeploymentConfig(inputs);
@@ -3039,8 +3060,8 @@ describe("deployment preflight", () => {
     ],
     [
       "inline dangerous environment",
-      "  deploy:\n    name: deploy\n    if:",
-      "  deploy:\n    name: deploy\n    env: {NODE_OPTIONS: --require=/tmp/preload.cjs}\n    if:",
+      "    env:\n      SOURCE_SHA: ${{ needs.release-target.outputs.source_sha }}\n",
+      "    env:\n      SOURCE_SHA: ${{ needs.release-target.outputs.source_sha }}\n      NODE_OPTIONS: --require=/tmp/preload.cjs\n",
     ],
   ])("rejects parsed production mutation: %s", (_label, expected, replacement) => {
     const inputs = validInputs();

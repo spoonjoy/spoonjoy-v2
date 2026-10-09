@@ -1,4 +1,5 @@
 import { execFile, spawn } from "node:child_process";
+import { appendFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -193,7 +194,11 @@ function validateReleaseInputs(env) {
   return { acknowledgement, rollbackVersionId, sourceSha };
 }
 
-function validateReleaseEvent(env, release, headSha, originMainSha) {
+// An automatic release ships the release-target job's choice: the newest main commit with a
+// successful push CI run, which is the triggering commit or a descendant of it on main. Main moving
+// on while the deploy waited for a runner no longer refuses the release; the chosen commit's own
+// CI and Storybook evidence is still checked below.
+function validateReleaseEvent(env, release, headSha, originMainSha, triggerIsAncestor) {
   const event = requiredEnv(env, "GITHUB_EVENT_NAME");
   if (event === "workflow_run") {
     if (
@@ -202,10 +207,10 @@ function validateReleaseEvent(env, release, headSha, originMainSha) {
       env.WORKFLOW_RUN_CONCLUSION !== "success" ||
       env.WORKFLOW_RUN_EVENT !== "push" ||
       env.WORKFLOW_RUN_HEAD_BRANCH !== "main" ||
-      env.WORKFLOW_RUN_HEAD_SHA !== release.sourceSha ||
+      !SHA_PATTERN.test(env.WORKFLOW_RUN_HEAD_SHA) ||
+      !triggerIsAncestor ||
       env.WORKFLOW_RUN_PATH !== ".github/workflows/ci.yml" ||
-      headSha !== release.sourceSha ||
-      originMainSha !== release.sourceSha
+      headSha !== release.sourceSha
     ) {
       throw new Error("Automatic production release is not bound to the successful canonical main CI SHA.");
     }
@@ -255,7 +260,8 @@ export async function validateProductionDeploySource({
   await run("git", ["merge-base", "--is-ancestor", release.sourceSha, "origin/main"]);
   const originMainSha = (await run("git", ["rev-parse", "origin/main"])).trim();
   const headSha = (await run("git", ["rev-parse", "HEAD"])).trim();
-  validateReleaseEvent(env, release, headSha, originMainSha);
+  const triggerIsAncestor = await isAncestor(run, env.WORKFLOW_RUN_HEAD_SHA, release.sourceSha);
+  validateReleaseEvent(env, release, headSha, originMainSha, triggerIsAncestor);
 
   const requiresAuthorizedDispatch =
     release.rollbackVersionId === "" &&
@@ -298,6 +304,84 @@ export async function validateProductionDeploySource({
   );
 }
 
+async function isAncestor(run, ancestor, descendant) {
+  if (!SHA_PATTERN.test(ancestor)) return false;
+  try {
+    await run("git", ["merge-base", "--is-ancestor", ancestor, descendant]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function greenMainCommits(output) {
+  const parsed = parseJson(output, "Canonical CI workflow");
+  if (!Array.isArray(parsed)) throw new Error("Canonical CI workflow did not return a run list.");
+  return new Set(parsed
+    .filter((entry) => entry && typeof entry === "object" && entry.event === "push" && SHA_PATTERN.test(entry.headSha))
+    .map((entry) => entry.headSha));
+}
+
+// Chooses what this Production Deploy run releases. A dispatch releases exactly its input. A
+// workflow_run releases the newest main commit, from the tip back to the commit whose CI triggered
+// it, that has a successful push CI run: so a deploy that waited while main moved ships the newest
+// tested commit instead of refusing, a deploy that runs after a newer one never moves production
+// backwards, and a pending deploy that GitHub replaced loses nothing. Any doubt fails closed.
+export async function chooseReleaseTarget({
+  env = process.env,
+  run = runWorkflowCommand,
+  appendFile = appendFileSync,
+} = {}) {
+  const event = requiredEnv(env, "GITHUB_EVENT_NAME");
+  const requested = exactSha(requiredEnv(env, "SOURCE_SHA"), "SOURCE_SHA");
+  const output = requiredEnv(env, "GITHUB_OUTPUT");
+  const summary = requiredEnv(env, "GITHUB_STEP_SUMMARY");
+  let target = requested;
+  let reason = "Manual dispatch: releasing the requested commit.";
+
+  if (event === "workflow_run") {
+    await run("git", ["fetch", "--no-tags", "origin", "main:refs/remotes/origin/main"]);
+    if (!await isAncestor(run, requested, "origin/main")) {
+      throw new Error(`Triggering commit ${requested} is not on main; refusing to choose a release.`);
+    }
+    const newer = (await run("git", ["rev-list", "--first-parent", `${requested}..origin/main`]))
+      .split("\n").map((line) => line.trim()).filter(Boolean);
+    if (newer.some((sha) => !SHA_PATTERN.test(sha))) throw new Error("git rev-list returned a malformed commit.");
+    const green = greenMainCommits(await run("gh", [
+      "run", "list",
+      "--workflow", ".github/workflows/ci.yml",
+      "--branch", "main",
+      "--event", "push",
+      "--status", "success",
+      "--limit", "100",
+      "--json", "databaseId,headSha,event",
+    ]));
+    const chosen = [...newer, requested].find((sha) => green.has(sha));
+    if (!chosen) {
+      throw new Error(`No commit from ${requested} to main's tip has a successful push CI run; refusing to deploy.`);
+    }
+    target = chosen;
+    reason = chosen === requested
+      ? newer.length === 0
+        ? "The triggering commit is main's tip."
+        : `The triggering commit is the newest green main commit; ${newer.length} newer commit(s) have no successful push CI yet.`
+      : `Main moved on; ${chosen} is the newest main commit with a successful push CI run, so this run releases it instead.`;
+  } else if (event !== "workflow_dispatch") {
+    throw new Error(`Unsupported production release event: ${event}.`);
+  }
+
+  appendFile(output, `source_sha=${target}\n`);
+  appendFile(summary, [
+    "### Release target",
+    "",
+    `- Requested commit: \`${requested}\``,
+    `- Releasing: \`${target}\``,
+    `- Why: ${reason}`,
+    "",
+  ].join("\n"));
+  return target;
+}
+
 export async function main(argv = process.argv.slice(2), deps = {}) {
   if (argv.length !== 1) throw new Error("workflow-security requires exactly one validation mode.");
   if (argv[0] === "validate-ci-invocation") {
@@ -306,6 +390,10 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
   }
   if (argv[0] === "validate-production-deploy-source") {
     await validateProductionDeploySource(deps);
+    return;
+  }
+  if (argv[0] === "choose-release-target") {
+    await chooseReleaseTarget(deps);
     return;
   }
   if (argv[0] === "run-production-deploy") {

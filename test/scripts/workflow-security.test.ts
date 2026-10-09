@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { describe, expect, it, vi } from "vitest";
 import {
   CSP_REPORT_ONLY_BREAK_GLASS_ACK,
+  chooseReleaseTarget,
   isCliEntry,
   main,
   runCliIfEntry,
@@ -282,7 +283,8 @@ describe("validateProductionDeploySource", () => {
       { WORKFLOW_RUN_CONCLUSION: "failure" },
       { WORKFLOW_RUN_EVENT: "pull_request" },
       { WORKFLOW_RUN_HEAD_BRANCH: "feature" },
-      { WORKFLOW_RUN_HEAD_SHA: "b".repeat(40) },
+      { WORKFLOW_RUN_HEAD_SHA: "" },
+      { WORKFLOW_RUN_HEAD_SHA: "B".repeat(40) },
       { WORKFLOW_RUN_PATH: ".github/workflows/fake.yml" },
     ]) {
       await expect(validateProductionDeploySource({
@@ -297,11 +299,25 @@ describe("validateProductionDeploySource", () => {
       run: runnerWithOverride((command) => command === "git rev-parse HEAD", `${"b".repeat(40)}\n`),
       sleep: vi.fn(),
     })).rejects.toThrow(/automatic production release/i);
+
+    // The release target may be behind main's tip (main moved while the deploy waited), and may be
+    // newer than the commit whose CI triggered the run, but never older than it or off its line.
+    const trigger = "c".repeat(40);
     await expect(validateProductionDeploySource({
-      env: valid,
+      env: { ...valid, WORKFLOW_RUN_HEAD_SHA: trigger },
       run: runnerWithOverride((command) => command === "git rev-parse origin/main", `${"b".repeat(40)}\n`),
       sleep: vi.fn(),
+    })).resolves.toBeUndefined();
+    const triggerNotAncestor = runnerWithOverride(
+      (command) => command === `git merge-base --is-ancestor ${trigger} ${SOURCE_SHA}`,
+      new Error("not an ancestor"),
+    );
+    await expect(validateProductionDeploySource({
+      env: { ...valid, WORKFLOW_RUN_HEAD_SHA: trigger },
+      run: triggerNotAncestor,
+      sleep: vi.fn(),
     })).rejects.toThrow(/automatic production release/i);
+    expect(triggerNotAncestor).toHaveBeenCalledWith("git", ["merge-base", "--is-ancestor", trigger, SOURCE_SHA]);
   });
 
   it("rejects unsupported release events and checkout drift", async () => {
@@ -595,5 +611,124 @@ describe("workflow-security CLI", () => {
       process.exitCode = previousExitCode;
       stderr.mockRestore();
     }
+  });
+});
+
+describe("chooseReleaseTarget", () => {
+  const TRIGGER = "1".repeat(40);
+  const MIDDLE = "2".repeat(40);
+  const TIP = "3".repeat(40);
+  const OUTPUT = "/tmp/github-output";
+  const SUMMARY = "/tmp/github-step-summary";
+
+  function targetEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
+    return {
+      GITHUB_EVENT_NAME: "workflow_run",
+      SOURCE_SHA: TRIGGER,
+      GITHUB_OUTPUT: OUTPUT,
+      GITHUB_STEP_SUMMARY: SUMMARY,
+      ...overrides,
+    };
+  }
+
+  // main is TRIGGER <- MIDDLE <- TIP; `green` lists the commits with a successful push CI run.
+  function mainRunner({
+    green = [TRIGGER] as string[],
+    newer = [TIP, MIDDLE] as string[],
+    onMain = true,
+    runList = undefined as string | undefined,
+  } = {}) {
+    return vi.fn(async (file: string, args: readonly string[]) => {
+      const command = [file, ...args].join(" ");
+      if (command === "git fetch --no-tags origin main:refs/remotes/origin/main") return "";
+      if (command === `git merge-base --is-ancestor ${TRIGGER} origin/main`) {
+        if (!onMain) throw new Error("not an ancestor");
+        return "";
+      }
+      if (command === `git rev-list --first-parent ${TRIGGER}..origin/main`) return newer.map((sha) => `${sha}\n`).join("");
+      if (command.startsWith("gh run list --workflow .github/workflows/ci.yml --branch main --event push --status success")) {
+        return runList ?? JSON.stringify(green.map((headSha, index) => ({ databaseId: index + 1, headSha, event: "push" })));
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+  }
+
+  async function choose(env: NodeJS.ProcessEnv, run: ReturnType<typeof mainRunner>) {
+    const appendFile = vi.fn();
+    const target = await chooseReleaseTarget({ env, run, appendFile });
+    return { target, appendFile, summary: appendFile.mock.calls.find(([file]) => file === SUMMARY)?.[1] as string };
+  }
+
+  it("releases the newest green main commit when main moved on while the deploy waited", async () => {
+    const { target, appendFile, summary } = await choose(targetEnv(), mainRunner({ green: [MIDDLE, TRIGGER] }));
+    expect(target).toBe(MIDDLE);
+    expect(appendFile).toHaveBeenCalledWith(OUTPUT, `source_sha=${MIDDLE}\n`);
+    expect(summary).toContain(`- Requested commit: \`${TRIGGER}\``);
+    expect(summary).toContain(`- Releasing: \`${MIDDLE}\``);
+    expect(summary).toContain("Main moved on");
+  });
+
+  it("never releases an older commit than a newer green one, so production cannot move backwards", async () => {
+    // TIP's CI finished first and its deploy may already have run; this late run releases TIP too.
+    const { target } = await choose(targetEnv(), mainRunner({ green: [TRIGGER, TIP] }));
+    expect(target).toBe(TIP);
+  });
+
+  it("releases the triggering commit when it is the tip or nothing newer is green yet", async () => {
+    const atTip = await choose(targetEnv(), mainRunner({ newer: [] }));
+    expect(atTip.target).toBe(TRIGGER);
+    expect(atTip.summary).toContain("main's tip");
+    const newerPending = await choose(targetEnv(), mainRunner({ green: [TRIGGER, "9".repeat(40)] }));
+    expect(newerPending.target).toBe(TRIGGER);
+    expect(newerPending.summary).toContain("2 newer commit(s) have no successful push CI yet");
+  });
+
+  it("passes a dispatch's exact source_sha through", async () => {
+    const run = mainRunner();
+    const { target, appendFile, summary } = await choose(targetEnv({ GITHUB_EVENT_NAME: "workflow_dispatch", SOURCE_SHA: TIP }), run);
+    expect(target).toBe(TIP);
+    expect(run).not.toHaveBeenCalled();
+    expect(appendFile).toHaveBeenCalledWith(OUTPUT, `source_sha=${TIP}\n`);
+    expect(summary).toContain("Manual dispatch");
+  });
+
+  it.each([
+    ["the trigger is not on main", targetEnv(), mainRunner({ onMain: false }), /not on main/],
+    ["no commit in range has green push CI", targetEnv(), mainRunner({ green: ["9".repeat(40)] }), /no commit from .* has a successful push CI run/i],
+    ["only non-push runs are green", targetEnv(), mainRunner({ runList: JSON.stringify([{ databaseId: 1, headSha: TRIGGER, event: "workflow_dispatch" }, null, { headSha: "bad" }]) }), /no commit from/i],
+    ["the run list is not JSON", targetEnv(), mainRunner({ runList: "rate limited" }), /did not return valid JSON/],
+    ["the run list is not a list", targetEnv(), mainRunner({ runList: "{}" }), /did not return a run list/],
+    ["git returns a malformed commit", targetEnv(), mainRunner({ newer: ["not-a-sha"] }), /malformed commit/],
+    ["the requested commit is malformed", targetEnv({ SOURCE_SHA: "abc\nsource_sha=evil" }), mainRunner(), /exact 40-character/],
+    ["the event is unsupported", targetEnv({ GITHUB_EVENT_NAME: "push" }), mainRunner(), /unsupported production release event/i],
+    ["GITHUB_OUTPUT is missing", targetEnv({ GITHUB_OUTPUT: "" }), mainRunner(), /GITHUB_OUTPUT is required/],
+  ])("fails closed, writing no output, when %s", async (_name, env, run, error) => {
+    const appendFile = vi.fn();
+    await expect(chooseReleaseTarget({ env, run, appendFile })).rejects.toThrow(error);
+    expect(appendFile).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when a GitHub or git call fails", async () => {
+    const failing = vi.fn(async () => {
+      throw new Error("HTTP 502");
+    });
+    const appendFile = vi.fn();
+    await expect(chooseReleaseTarget({ env: targetEnv(), run: failing, appendFile })).rejects.toThrow("HTTP 502");
+    expect(appendFile).not.toHaveBeenCalled();
+  });
+
+  it("reads the process environment by default", async () => {
+    vi.stubEnv("GITHUB_EVENT_NAME", "");
+    try {
+      await expect(chooseReleaseTarget()).rejects.toThrow("GITHUB_EVENT_NAME is required.");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("is reachable from the CLI", async () => {
+    const appendFile = vi.fn();
+    await main(["choose-release-target"], { env: targetEnv(), run: mainRunner({ newer: [] }), appendFile });
+    expect(appendFile).toHaveBeenCalledWith(OUTPUT, `source_sha=${TRIGGER}\n`);
   });
 });

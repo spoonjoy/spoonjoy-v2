@@ -41,12 +41,41 @@ env:
   SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: ${{ github.event_name == 'workflow_dispatch' && inputs.csp_report_only_break_glass || '' }}
 
 jobs:
+  # Chooses the commit this run releases (scripts/workflow-security.mjs choose-release-target): for a
+  # CI completion, the newest main commit with a successful push CI run, so a deploy that waited
+  # while main moved ships the newest tested commit instead of refusing; for a dispatch, exactly
+  # source_sha. It runs the trusted workflow tooling with only a read token, and fails closed.
+  release-target:
+    name: release-target
+    if: (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.path == '.github/workflows/ci.yml') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      source_sha: ${{ steps.target.outputs.source_sha }}
+
+    steps:
+      - name: Checkout trusted release tooling
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Choose the newest green main commit
+        id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/workflow-security.mjs choose-release-target
+
   deploy:
     name: deploy
+    needs: release-target
     if: (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.path == '.github/workflows/ci.yml') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 40
     environment: production
+    env:
+      SOURCE_SHA: ${{ needs.release-target.outputs.source_sha }}
 
     steps:
       - name: Checkout approved source SHA
@@ -114,8 +143,8 @@ jobs:
             test "$WORKFLOW_RUN_CONCLUSION" = "success"
             test "$WORKFLOW_RUN_EVENT" = "push"
             test "$WORKFLOW_RUN_HEAD_BRANCH" = "main"
-            test "$WORKFLOW_RUN_HEAD_SHA" = "$SOURCE_SHA"
-            test "$(git rev-parse origin/main)" = "$SOURCE_SHA"
+            printf '%s' "$WORKFLOW_RUN_HEAD_SHA" | grep -Eq '^[0-9a-f]{40}$'
+            git merge-base --is-ancestor "$WORKFLOW_RUN_HEAD_SHA" "$SOURCE_SHA"
             test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           else
             if [ -z "$ROLLBACK_VERSION_ID" ]; then

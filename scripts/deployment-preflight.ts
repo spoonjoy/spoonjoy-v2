@@ -741,6 +741,35 @@ const PRODUCTION_DEPLOY_JOB_CONDITION =
 const PRODUCTION_VALIDATION_COMMAND =
   "node scripts/workflow-security.mjs validate-production-deploy-source";
 const PRODUCTION_DEPLOY_COMMAND = "node scripts/workflow-security.mjs run-production-deploy";
+// The release-target job chooses the commit the deploy job releases; see choose-release-target in
+// scripts/workflow-security.mjs.
+export const PRODUCTION_RELEASE_TARGET_JOB = Object.freeze({
+  name: "release-target",
+  if: PRODUCTION_DEPLOY_JOB_CONDITION,
+  "runs-on": "ubuntu-latest",
+  "timeout-minutes": 10,
+  outputs: { source_sha: "${{ steps.target.outputs.source_sha }}" },
+  steps: [
+    {
+      name: "Checkout trusted release tooling",
+      uses: PINNED_CHECKOUT_ACTION,
+      with: {
+        ref: "${{ github.workflow_sha }}",
+        "fetch-depth": 0,
+        "persist-credentials": false,
+      },
+    },
+    {
+      name: "Choose the newest green main commit",
+      id: "target",
+      env: { GH_TOKEN: "${{ github.token }}" },
+      run: "node scripts/workflow-security.mjs choose-release-target",
+    },
+  ],
+});
+export const PRODUCTION_DEPLOY_JOB_ENV = Object.freeze({
+  SOURCE_SHA: "${{ needs.release-target.outputs.source_sha }}",
+});
 const PRODUCTION_WORKFLOW_ENV = Object.freeze({
   GIT_CONFIG_COUNT: "1",
   GIT_CONFIG_KEY_0: "init.defaultBranch",
@@ -990,12 +1019,15 @@ export function parsedProductionWorkflowIsCanonical(workflow: string): boolean {
   ) return false;
 
   const jobs = objectRecord(root.jobs);
-  if (!exactObjectKeys(jobs, ["deploy", "report-canary"])) return false;
+  if (!exactObjectKeys(jobs, ["release-target", "deploy", "report-canary"])) return false;
+  if (JSON.stringify(jobs["release-target"]) !== JSON.stringify(PRODUCTION_RELEASE_TARGET_JOB)) return false;
   const deploy = objectRecord(jobs.deploy);
   const report = objectRecord(jobs["report-canary"]);
   if (
-    !exactObjectKeys(deploy, ["name", "if", "runs-on", "timeout-minutes", "environment", "steps"]) ||
+    !exactObjectKeys(deploy, ["name", "needs", "if", "runs-on", "timeout-minutes", "environment", "env", "steps"]) ||
     deploy.name !== "deploy" ||
+    deploy.needs !== "release-target" ||
+    !exactWorkflowRecord(deploy.env, PRODUCTION_DEPLOY_JOB_ENV) ||
     deploy.if !== PRODUCTION_DEPLOY_JOB_CONDITION ||
     deploy["runs-on"] !== "ubuntu-latest" ||
     deploy["timeout-minutes"] !== 40 ||
@@ -1749,7 +1781,7 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     check(
       "production deploy workflow",
       parsedProductionWorkflowIsCanonical(inputs.productionDeployWorkflow),
-      ".github/workflows/production-deploy.yml must deploy only an exact successful main-branch CI SHA, validate exact-SHA manual dispatches, pin every action, run deploy:auto with Cloudflare credentials, and record the released SHA."
+      ".github/workflows/production-deploy.yml must deploy only the newest main commit with successful push CI (chosen by its release-target job), validate exact-SHA manual dispatches, pin every action, run deploy:auto with Cloudflare credentials, and record the released SHA."
     ),
     check(
       "QA image-cover smoke workflow",
