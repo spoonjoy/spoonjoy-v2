@@ -59,6 +59,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "Dev/test platform-proxy bind failure falls back to a local SQLite db; restricted sandboxes legitimately cannot bind loopback ports.",
   },
   {
+    file: "app/lib/photo-delivery.server.ts",
+    category: "swallow",
+    reason:
+      "A /photos/ path that is not valid percent-encoding is answered as not found, and a failed edge-cache write is skipped because the photo was already served from R2.",
+  },
+  {
     file: "app/lib/recipe-import-jsonld.server.ts",
     category: "swallow",
     reason:
@@ -201,6 +207,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     category: "non-request",
     reason:
       "Dev CLI token cache for the local MCP server; file-IO catch falls back to no cache. Not part of the deployed request path.",
+  },
+  {
+    file: "app/lib/health.server.ts",
+    category: "non-request",
+    reason:
+      "Readiness probe for uptime monitoring (GET /health/ready), not a user path. A failed D1 or R2 check is the probe's result: it becomes a 503 with a fixed reason, which the uptime monitor alerts on and Workers Logs record.",
   },
   // --- catch IS instrumented in a shared helper the file delegates to ---
   {

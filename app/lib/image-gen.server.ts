@@ -13,6 +13,9 @@ export interface ImageGenEnv {
   GEMINI_IMAGE_TIMEOUT_MS?: string;
   IMAGE_PROVIDER_PRIMARY?: string;
   IMAGE_PROVIDER_FALLBACKS?: string;
+  /** Operator kill switch and global daily budget, read by the image-gen ledger. */
+  SPOONJOY_AI_IMAGE_GENERATION?: string;
+  SPOONJOY_AI_DAILY_GENERATION_BUDGET?: string;
 }
 
 export interface GeneratedImageOutput {

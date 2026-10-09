@@ -1000,7 +1000,8 @@ export default function RecipeDetail() {
         servings={recipe.servings ?? undefined}
         scaleFactor={scaleFactor}
         onScaleChange={handleScaleChange}
-        onClearProgress={handleClearProgress}
+        // Only offered when there is something to clear (product audit 2026-10-09, finding 15).
+        onClearProgress={cookProgressChecked > 0 ? handleClearProgress : undefined}
         progressSyncStatus={cookSyncStatus}
         masthead={headerMasthead}
         provenance={headerProvenance}
@@ -1017,7 +1018,7 @@ export default function RecipeDetail() {
               aria-controls="recipe-owner-maintenance"
               onClick={() => setShowOwnerTools((visible) => !visible)}
             >
-              <span>Recipe maintenance</span>
+              <span>Manage recipe</span>
               <span className="text-[var(--sj-ink)]">{showOwnerTools ? "Close" : "Open +"}</span>
             </button>
 
@@ -1173,9 +1174,9 @@ export default function RecipeDetail() {
         size="sm"
         role="alertdialog"
       >
-        <DialogTitle>Delete this recipe?</DialogTitle>
+        <DialogTitle>{`Delete "${recipe.title}"?`}</DialogTitle>
         <DialogDescription>
-          Delete this recipe? This cannot be undone.
+          It will be removed from your kitchen and your cookbooks, and links to it will stop working. You can't undo this.
         </DialogDescription>
         <DialogActions>
           <Button plain onClick={() => setIsDeleteDialogOpen(false)}>

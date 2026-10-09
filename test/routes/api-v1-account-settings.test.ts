@@ -784,7 +784,7 @@ describe("API v1 native account settings", () => {
       where: { id: userId },
       data: { photoUrl: `/photos/profiles/${userId}/avatar.jpg` },
     });
-    const deleteCalls: string[] = [];
+    const deleteCalls: (string | string[])[] = [];
 	    const removeWithEnv = await action(routeArgs(jsonRequest("me/photo", "DELETE", {
 	      Cookie: cookie,
 	      "X-Request-Id": "req_me_photo_remove_with_env",
@@ -792,7 +792,7 @@ describe("API v1 native account settings", () => {
       cloudflare: {
         env: {
           POSTHOG_KEY: "ph_test",
-          PHOTOS: { delete: async (key: string) => { deleteCalls.push(key); } },
+          PHOTOS: { delete: async (key: string | string[]) => { deleteCalls.push(key); } },
         },
       },
     }));
@@ -803,7 +803,11 @@ describe("API v1 native account settings", () => {
 	      photoUrl: null,
 	      mutation: { clientMutationId: "cm_me_photo_remove_with_env", replayed: false },
 	    });
-	    expect(deleteCalls).toEqual([`profiles/${userId}/avatar.jpg`]);
+	    // The removed photo's size variants go with it.
+	    expect(deleteCalls).toEqual([
+	      `profiles/${userId}/avatar.jpg`,
+	      [256, 512, 1024, 1536].map((width) => `variants/w${width}/profiles/${userId}/avatar.jpg.webp`),
+	    ]);
 	  });
 
 	  it("replays idempotent native account mutations and rejects body conflicts", async () => {
