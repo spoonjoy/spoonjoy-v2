@@ -950,6 +950,99 @@ describe("API v1 recipe cover management", () => {
     expect(leftCovers.map((cover) => cover.id)).not.toContain(payload.data.createdCover.id);
   });
 
+  it("keeps an abandoned upload's key when undoing it fails partway, and finishes the undo on the next retry", async () => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    let reached = false;
+    vi.spyOn(recipeCoverModule, "setActiveRecipeCover").mockImplementationOnce(() => {
+      reached = true;
+      return new Promise<never>(() => undefined);
+    });
+    const body = {
+      clientMutationId: "upload-abandoned-undo-fails",
+      photo: photoFile("abandoned-undo-fails.png"),
+      activate: true,
+      generateEditorial: false,
+      postAsSpoon: true,
+      note: "Posted dinner",
+    };
+    const upload = (requestId: string) => action(routeArgs(
+      recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, requestId, recipeImageForm(body)),
+      `recipes/${fixture.recipe.id}/image`,
+      backgroundContext({ PHOTOS: photoBucket.bucket }),
+    ));
+
+    void upload("req_upload_undo_fails_first");
+    await vi.waitFor(() => expect(reached).toBe(true));
+    await db.apiIdempotencyKey.updateMany({
+      where: { key: body.clientMutationId },
+      data: { createdAt: new Date(Date.now() - 6 * 60_000) },
+    });
+
+    const coverDeleteError = new Error("cover delete failed");
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_upload_undo_fails_release",
+      method: "POST",
+      path: `/api/v1/recipes/${fixture.recipe.id}/image`,
+      error: { name: coverDeleteError.name, message: coverDeleteError.message, stack: coverDeleteError.stack },
+    });
+    const originalDeleteMany = db.recipeCover.deleteMany;
+    db.recipeCover.deleteMany = vi.fn().mockRejectedValueOnce(coverDeleteError)
+      .mockImplementation((...args: Parameters<typeof originalDeleteMany>) => originalDeleteMany(...args)) as unknown as typeof db.recipeCover.deleteMany;
+    try {
+      const failed = await upload("req_upload_undo_fails_release");
+      expect(failed.status).toBe(500);
+      // The spoon went first; the cover, its photo and the key are all still there.
+      await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+      await expect(db.recipeCover.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(1);
+      expect(photoBucket.keys.size).toBe(1);
+      await expect(db.apiIdempotencyKey.count({ where: { key: body.clientMutationId } })).resolves.toBe(1);
+
+      const finished = await upload("req_upload_undo_fails_retry");
+      expect(finished.status).toBe(409);
+      await expect(db.recipeCover.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+      await expect(db.apiIdempotencyKey.count({ where: { key: body.clientMutationId } })).resolves.toBe(0);
+      await vi.waitFor(() => expect(photoBucket.keys.size).toBe(0));
+    } finally {
+      db.recipeCover.deleteMany = originalDeleteMany;
+    }
+
+    const fresh = await upload("req_upload_undo_fails_fresh");
+    expect(fresh.status).toBe(201);
+  });
+
+  it("keeps a finished upload's retry waiting when its cover is gone", async () => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    const body = {
+      clientMutationId: "upload-finished-cover-gone",
+      photo: photoFile("finished-cover-gone.png"),
+      activate: false,
+      generateEditorial: false,
+      postAsSpoon: false,
+    };
+    const upload = (requestId: string) => action(routeArgs(
+      recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, requestId, recipeImageForm(body)),
+      `recipes/${fixture.recipe.id}/image`,
+      backgroundContext({ PHOTOS: photoBucket.bucket }),
+    ));
+
+    const first = await upload("req_upload_cover_gone_first");
+    expect(first.status).toBe(201);
+    const { data } = await readJson(first);
+    // The upload finished (its marker is written) but its response was never saved, and its
+    // cover has since gone: there is nothing to answer with, so the retry is told to wait.
+    await db.apiIdempotencyKey.updateMany({
+      where: { key: body.clientMutationId },
+      data: { responseStatus: null, responseBody: null },
+    });
+    await db.recipeCover.deleteMany({ where: { id: data.createdCover.id } });
+
+    const retry = await upload("req_upload_cover_gone_retry");
+    expect(retry.status).toBe(409);
+    await expect(readJson(retry)).resolves.toMatchObject({ ok: false, error: { code: "idempotency_in_progress" } });
+  });
+
   it("does not answer an upload as committed when a step after its marker fails and its cleanup fails too", async () => {
     const fixture = await createFirstPhotoFixture(db);
     const photoBucket = mockPhotoBucket();

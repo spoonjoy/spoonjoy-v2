@@ -2422,10 +2422,13 @@ async function releaseAbandonedRecipeImageUpload(
     select: { imageUrl: true, sourceSpoonId: true },
   });
   if (cover) {
-    await input.db.recipeCover.deleteMany({ where: { id: input.record.id, recipeId: input.recipeId } }).catch(() => undefined);
+    // Spoon first, then cover, then photo, then key. A failed delete throws, the key stays held,
+    // and the next retry repeats only what is left: the cover row still points at the photo
+    // until it goes, so neither the spoon nor the photo is ever orphaned.
     if (cover.sourceSpoonId) {
-      await input.db.recipeSpoon.deleteMany({ where: { id: cover.sourceSpoonId, recipeId: input.recipeId } }).catch(() => undefined);
+      await input.db.recipeSpoon.deleteMany({ where: { id: cover.sourceSpoonId, recipeId: input.recipeId } });
     }
+    await input.db.recipeCover.deleteMany({ where: { id: input.record.id, recipeId: input.recipeId } });
     await cleanupUploadedRecipeImageObject(args, input.principal, cover.imageUrl);
   }
   await input.db.apiIdempotencyKey.deleteMany({ where: { id: input.record.id, responseStatus: null } });
