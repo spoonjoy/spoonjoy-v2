@@ -3,6 +3,7 @@ import type { ApiV1ErrorCode } from "~/lib/api-v1-contract.server";
 import type { D1Query, D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Guard, d1Timestamp, d1WriteBatch, retryOnD1GuardFailure } from "~/lib/d1-write.server";
 import {
+  ingredientNamesFreeGuard,
   nameUpsertStatements,
   namedIngredientInsertStatement,
   recipeUpdateStatement,
@@ -674,14 +675,7 @@ function namedIngredientStatements(
 
 /** Fails the batch if any of the named ingredients is already in the recipe. */
 function noRecipeIngredientConflictsGuard(recipeId: string, ingredients: NativeRecipeStepIngredientInput[]): D1Query {
-  return d1Guard(
-    `NOT EXISTS (
-       SELECT 1 FROM "Ingredient" JOIN "IngredientRef" ON "IngredientRef"."id" = "Ingredient"."ingredientRefId"
-       WHERE "Ingredient"."recipeId" = ? AND "IngredientRef"."name" IN (SELECT "value" FROM json_each(?))
-     )`,
-    recipeId,
-    JSON.stringify(ingredients.map((ingredient) => normalizeName(ingredient.ingredientName))),
-  );
+  return ingredientNamesFreeGuard(recipeId, ingredients.map((ingredient) => normalizeName(ingredient.ingredientName)));
 }
 
 /**
