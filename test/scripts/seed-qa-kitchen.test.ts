@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import Database from "better-sqlite3";
 import bcrypt from "bcryptjs";
 import { describe, expect, it, vi } from "vitest";
-import { pagerRecipes, PAGER_FORBIDDEN_WORDS,
+import { pagerRecipes, pagerRecipe, PAGER_OLDEST_RECIPE, PAGER_FORBIDDEN_WORDS,
   KITCHEN,
   SCRATCH_ACCOUNT_COUNT,
   SCRATCH_USER_COUNT,
@@ -77,6 +77,13 @@ describe("seed-qa-kitchen", () => {
     const order = db.prepare('SELECT chefId FROM Recipe WHERE deletedAt IS NULL ORDER BY updatedAt DESC, id DESC').all() as Array<{ chefId: string }>;
     const firstPager = order.findIndex((row) => row.chefId === KITCHEN.pager.id);
     expect(firstPager).toBe(order.length - 60);
+    const pager = db.prepare("SELECT id, createdAt, coverMode FROM Recipe WHERE chefId = ? ORDER BY createdAt ASC").all(KITCHEN.pager.id) as Array<{ id: string; createdAt: string; coverMode: string }>;
+    // Distinct dates fix the newest-first order; the oldest is the last one a list reaches.
+    expect(new Set(pager.map((row) => row.createdAt)).size).toBe(60);
+    expect(pager[0]!.id).toBe(PAGER_OLDEST_RECIPE.id);
+    expect(pager[59]!.id).toBe(pagerRecipe(60).id);
+    expect(new Set(pager.map((row) => row.coverMode))).toEqual(new Set(["none"]));
+    expect(() => pagerRecipe(61)).toThrow();
     expect(order.slice(0, firstPager).every((row) => row.chefId !== KITCHEN.pager.id)).toBe(true);
   });
 

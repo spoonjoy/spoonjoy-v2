@@ -46,7 +46,7 @@ export const PAGER_FORBIDDEN_WORDS = ["saffron", "lemon", "arborio", "tomato", "
 const PAGER_EPOCH_MS = Date.UTC(2020, 0, 1);
 const PAGER_STYLES = ["Weeknight", "Sunday", "Market", "Pantry", "Picnic"];
 
-/** The pager chef's recipes, newest-sorting last: ids 01..60 with distinct, readable titles. */
+/** The pager chef's recipes, oldest first: ids 01..60, distinct titles, one minute apart. */
 export function pagerRecipes() {
   return Array.from({ length: KITCHEN.pager.recipeCount }, (_, index) => {
     const number = String(index + 1).padStart(2, "0");
@@ -56,6 +56,16 @@ export function pagerRecipes() {
     return { id: `qa-kitchen-pager-recipe-${number}`, title: `${style} ${dish}`, at };
   });
 }
+
+/** Paging fixture recipe `n` (1 to 60; 1 is the oldest, 60 the newest). */
+export function pagerRecipe(n) {
+  const recipe = pagerRecipes()[n - 1];
+  if (!recipe) throw new Error(`pagerRecipe(n) takes 1 to ${KITCHEN.pager.recipeCount}; got ${n}.`);
+  return recipe;
+}
+
+/** The fixture's oldest recipe: the last one a newest-first list reaches. */
+export const PAGER_OLDEST_RECIPE = Object.freeze(pagerRecipe(1));
 
 // Recipe content: steps (with an optional StepOutputUse) and per-step ingredients.
 // Units and ingredient refs are shared, named lookup tables — see buildKitchenResetSql,
@@ -375,13 +385,14 @@ export function buildKitchenResetSql({ passwords, hash = (password) => bcrypt.ha
     );
   }
 
-  // 6b. The pager chef: a public profile with no password, signed into by nobody.
+  // 6b. The pager chef: a public profile with no password, signed into by nobody. Its recipes
+  // use coverMode 'none', so showing them never asks for an AI cover.
   statements.push(
     `INSERT INTO "User" (id, email, username, hashedPassword, salt, sessionVersion, createdAt, updatedAt) VALUES (${sqlString(KITCHEN.pager.id)}, ${sqlString(KITCHEN.pager.email)}, ${sqlString(KITCHEN.pager.username)}, NULL, NULL, ${sessionVersion}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
   );
   for (const recipe of pagerRecipes()) {
     statements.push(
-      `INSERT INTO Recipe (id, title, description, servings, chefId, deletedAt, sourceRecipeId, sourceUrl, activeCoverId, activeCoverVariant, coverMode, createdAt, updatedAt) VALUES (${sqlString(recipe.id)}, ${sqlString(recipe.title)}, NULL, NULL, ${sqlString(KITCHEN.pager.id)}, NULL, NULL, NULL, NULL, NULL, ${sqlString("auto")}, ${sqlString(recipe.at)}, ${sqlString(recipe.at)});`,
+      `INSERT INTO Recipe (id, title, description, servings, chefId, deletedAt, sourceRecipeId, sourceUrl, activeCoverId, activeCoverVariant, coverMode, createdAt, updatedAt) VALUES (${sqlString(recipe.id)}, ${sqlString(recipe.title)}, NULL, NULL, ${sqlString(KITCHEN.pager.id)}, NULL, NULL, NULL, NULL, NULL, ${sqlString("none")}, ${sqlString(recipe.at)}, ${sqlString(recipe.at)});`,
     );
     statements.push(
       `INSERT INTO RecipeStep (id, recipeId, stepNum, stepTitle, description, updatedAt) VALUES (${sqlString(`${recipe.id}-step-1`)}, ${sqlString(recipe.id)}, 1, NULL, ${sqlString("Cook until it smells done.")}, ${sqlString(recipe.at)});`,
