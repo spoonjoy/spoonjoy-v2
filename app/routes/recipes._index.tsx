@@ -224,15 +224,15 @@ function RecipeRow({
         )}
       </span>
       <span className="min-w-0 self-center">
-        <span className="font-sj-display block text-2xl/7 font-semibold text-[var(--sj-ink)] group-hover:text-[var(--sj-tomato)] sm:text-3xl/8">
+        <span className="font-sj-display block text-2xl/7 font-semibold [overflow-wrap:anywhere] text-[var(--sj-ink)] group-hover:text-[var(--sj-tomato)] sm:text-3xl/8">
           {recipe.title}
         </span>
         <CoverProvenanceBadge label={recipe.coverProvenanceLabel} className="mt-2" />
-        <span className="mt-1 block max-w-2xl text-base/6 text-[var(--sj-ink-soft)]">
+        <span className="mt-1 block max-w-2xl text-base/6 text-[var(--sj-ink-soft)] [overflow-wrap:anywhere]">
           {recipe.description ?? `By ${recipe.chef.username}`}
         </span>
       </span>
-      <span className="font-sj-ui col-start-3 flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)] sm:col-start-auto sm:block sm:justify-self-end sm:text-right">
+      <span className="font-sj-ui col-start-3 flex min-w-0 flex-wrap [overflow-wrap:anywhere] gap-x-3 gap-y-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)] sm:col-start-auto sm:block sm:justify-self-end sm:text-right">
         <span>By {recipe.chef.username}</span>
         {servingsLabel ? <span className="sm:mt-1 sm:block">{servingsLabel}</span> : null}
       </span>
