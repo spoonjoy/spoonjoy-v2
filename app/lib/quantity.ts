@@ -273,7 +273,7 @@ export interface FormatAmountOptions {
  * @example
  * formatAmount(0.3125, 'cup') // "⅓ cup"
  * formatAmount(2.5, 'cup') // "2 ½ cups"
- * formatAmount(1.25, 'whole', { roundCountsUp: true }) // "2 whole"
+ * formatAmount(1.25, 'whole', { roundCountsUp: true }) // "2"
  * formatAmount(null, 'pinch') // "pinch"
  */
 export function formatAmount(
@@ -288,6 +288,12 @@ export function formatAmount(
     ? Math.ceil(numeric - 1e-9)
     : numeric
   const quantityText = hasQuantity ? formatQuantity(value as number) : ''
+
+  // "whole" is how a counted ingredient is stored, not a word a cook writes: "2 lemons" reads as
+  // "2", not "2 whole" (product review 2026-10-09).
+  if (trimmedUnit.toLowerCase() === 'whole') {
+    return quantityText
+  }
 
   let unitText = trimmedUnit
   const plural = PLURAL_UNITS[trimmedUnit.toLowerCase()]

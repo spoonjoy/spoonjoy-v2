@@ -189,7 +189,8 @@ describe("shopping list UX updates", () => {
     expect(await amountOf("chicken stock")).toContain("⅓ cup");
     expect(await amountOf("chicken stock")).not.toContain("0.3125");
     expect(await amountOf("jasmine rice")).toContain("2 ½ cups");
-    expect(await amountOf("lemon")).toContain("2 whole");
+    // A counted thing shows its number alone: "whole" is a stored unit, not a word a cook writes.
+    expect(await amountOf("lemon")).toMatch(/lemon2$/);
     expect(await amountOf("garlic")).toContain("3 cloves");
     expect(await amountOf("salt")).not.toMatch(/\d/);
   });

@@ -64,7 +64,8 @@ test.describe("Recipe list action on iPhone", () => {
       await expect(chickenStock).toContainText("2 ½ cups");
       await expect(parsley).toContainText("⅓ cup");
       await expect(parsley).not.toContainText("0.3125");
-      await expect(lemon).toContainText("2 whole");
+      // A counted thing shows its number alone, not "2 whole".
+      await expect(lemon).toHaveText(/lemon2$/);
     };
     await page.goto("/shopping-list");
     await expectWrittenAmounts();
