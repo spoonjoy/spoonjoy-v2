@@ -168,6 +168,10 @@ describe("Logout Route", () => {
       render(<Stub initialEntries={["/logout"]} />);
 
       expect(await screen.findByRole("heading", { name: "Log out of Spoonjoy?" })).toBeInTheDocument();
+      // A chef who is leaving does not read the sign-in page's welcome.
+      expect(screen.getByRole("heading", { name: "Your recipes will be here when you're back." })).toBeInTheDocument();
+      expect(screen.queryByText("Kitchen sign-in")).not.toBeInTheDocument();
+      expect(screen.queryByText(/Sign in to cook/)).not.toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Stay signed in" })).toHaveAttribute("href", "/");
       await userEvent.setup().click(screen.getByRole("button", { name: "Log out" }));
       expect(await screen.findByText("Sign-out must come from Spoonjoy.")).toBeInTheDocument();

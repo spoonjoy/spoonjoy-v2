@@ -50,7 +50,11 @@ export async function action({ request, context }: Route.ActionArgs) {
 export default function Logout() {
   const actionData = useActionData<{ error?: string }>();
   return (
-    <AuthLayout>
+    <AuthLayout
+      eyebrow="Signing out"
+      title="Your recipes will be here when you're back."
+      description="Sign in again on any device to pick up where you left off."
+    >
       <div className="w-full max-w-sm">
         <Heading>Log out of Spoonjoy?</Heading>
         {actionData?.error && <ValidationError error={actionData.error} className="mt-4" />}
