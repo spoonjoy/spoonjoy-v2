@@ -56,10 +56,12 @@ const hasFocusedTestFilter = process.argv.some((arg) =>
 // should not fail because unrelated imported helpers are partially covered.
 const isFocusedCoverageRun = hasCoverageFlag && hasFocusedTestFilter;
 
-const dbWorkers = Number(process.env.VITEST_DB_WORKERS ?? 4);
 // One temporary directory per run for each worker process's own copy of prisma/test.db
-// (test/support/worker-db.ts). Set SPOONJOY_TEST_DB_DIR="" to use prisma/test.db directly.
-claimRunDbDir();
+// (test/support/worker-db.ts). Set SPOONJOY_TEST_DB_DIR="" to use prisma/test.db directly; that
+// shares one file, so the run is then serial.
+const runDbDir = claimRunDbDir();
+const requestedDbWorkers = Number(process.env.VITEST_DB_WORKERS ?? 4);
+const dbWorkers = runDbDir && Number.isInteger(requestedDbWorkers) && requestedDbWorkers > 0 ? requestedDbWorkers : 1;
 
 export default defineConfig({
   test: {
@@ -71,7 +73,7 @@ export default defineConfig({
     // prisma/test.db (test/support/worker-db.ts); the global setup removes the copies afterwards.
     globalSetup: ["./test/support/global-setup.ts"],
     maxWorkers: dbWorkers,
-    fileParallelism: true,
+    fileParallelism: dbWorkers > 1,
     sequence: {
       shuffle: false,
     },
