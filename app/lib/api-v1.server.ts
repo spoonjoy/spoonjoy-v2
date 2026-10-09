@@ -2373,6 +2373,9 @@ async function recoverRecipeImageUpload(
   },
 ): Promise<ApiV1IdempotentMutationResult | null> {
   await loadOwnedCoverRecipe(input.db, input.principal, input.recipeId);
+  // Without the marker the upload may have stopped (or may still be running) before its spoon,
+  // activation or job: the cover row alone is not an upload.
+  if (!await writeFinished(input.db, input.record, WRITE_FINISHED_RESOURCE.recipeImageUpload, input.record.id)) return null;
   const cover = await input.db.recipeCover.findFirst({
     where: {
       id: input.record.id,
@@ -2504,6 +2507,9 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
         }
       }
 
+      // Last, just before the job is queued: queueing hands the job to waitUntil without I/O, and
+      // a marker written after it would let the job run ahead of the response's read of the cover.
+      await markWriteFinished(db, reservation, WRITE_FINISHED_RESOURCE.recipeImageUpload, createdCover.id);
       if (generateEditorial) {
         await queueApiRecipeCoverStylization(args, {
           db,
@@ -3829,7 +3835,14 @@ type ApiV1IdempotentMutationResult = { status: number; data: Record<string, unkn
 type ApiV1IdempotentRecovery = (
   db: ApiV1WriteDb,
   reservation: ApiIdempotencyKey,
+  attempt: ApiV1RecoveryAttempt,
 ) => Promise<ApiV1IdempotentMutationResult | null>;
+/**
+ * `stopped` is true when the attempt that reserved the key is known to have stopped: recovery
+ * runs in that attempt's own request after its write threw. A retry that finds the key in flight
+ * cannot know whether the first attempt is still running.
+ */
+type ApiV1RecoveryAttempt = { stopped: boolean };
 type ApiV1IdempotentMutationOptions = {
   beforeWrite?: (
     db: ApiV1WriteDb,
@@ -3952,7 +3965,7 @@ export async function runIdempotentApiV1Mutation(
   }
 
   if (reservation.status === "in_flight") {
-    const recovered = await options.recoverInFlight?.(db, reservation.record);
+    const recovered = await options.recoverInFlight?.(db, reservation.record, { stopped: false });
     if (recovered) {
       await completeRecoveredIdempotencyKey(db, reservation.record, requestId, recovered);
       return apiV1RecoveredReplayResponse(requestId, operation, recovered);
@@ -3975,7 +3988,7 @@ export async function runIdempotentApiV1Mutation(
   } catch (error) {
     const recovered = error instanceof ApiV1Error
       ? null
-      : await options.recoverInFlight?.(db, reservation.record);
+      : await options.recoverInFlight?.(db, reservation.record, { stopped: true });
     if (recovered) {
       await completeRecoveredIdempotencyKey(db, reservation.record, requestId, recovered);
       return apiV1IdempotentResponse(requestId, operation, recovered, "committed");
@@ -5454,6 +5467,57 @@ function ingredientMatchesCreateInput(
     normalizedText(actual.name) === normalizedText(expected.ingredientName);
 }
 
+/**
+ * A write made of several steps that are not one batch (an upload's cover, spoon, activation and
+ * job; a create's commit and its placeholder job) records this marker after its last step.
+ * Recovery answers such a write as done only with the marker, so a retry is never told about a
+ * spoon, an activation or a job that did not happen.
+ */
+const WRITE_FINISHED_RESOURCE = {
+  recipeImageUpload: { operation: "recipes.image.upload", resourceType: "recipe_cover" },
+  recipeCreate: { operation: "recipes.create", resourceType: "recipe" },
+} as const;
+
+/** How long after its reservation an unfinished write is taken to have stopped. */
+export const UNFINISHED_WRITE_STOPPED_AFTER_MS = 30_000;
+
+/**
+ * Records that a multi-step write finished. A failed marker never fails the write: every step
+ * has happened, so the answer is still true. Recovery, needed only if saving the response fails
+ * as well, then treats the write as unfinished.
+ */
+async function markWriteFinished(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  marker: (typeof WRITE_FINISHED_RESOURCE)[keyof typeof WRITE_FINISHED_RESOURCE],
+  resourceId: string,
+) {
+  try {
+    await db.apiMutationTombstone.create({
+      data: {
+        idempotencyKeyId: reservation.id,
+        operation: marker.operation,
+        resourceType: marker.resourceType,
+        resourceId,
+      },
+    });
+  } catch (error) {
+    console.error("[api-v1] write_finished_mark_failed", {
+      operation: marker.operation,
+      error: (error instanceof Error ? error.message : String(error)).split("\n")[0],
+    });
+  }
+}
+
+async function writeFinished(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  marker: (typeof WRITE_FINISHED_RESOURCE)[keyof typeof WRITE_FINISHED_RESOURCE],
+  resourceId: string,
+) {
+  return Boolean(await findMutationTombstone(db, reservation, { ...marker, resourceId }));
+}
+
 async function findMutationTombstone(
   db: ApiV1WriteDb,
   reservation: ApiIdempotencyKey,
@@ -5474,12 +5538,43 @@ async function findMutationTombstone(
 }
 
 async function recoverNativeRecipeCreate(
+  args: ApiV1RouteArgs,
   db: ApiV1WriteDb,
   reservation: ApiIdempotencyKey,
-  input: { clientMutationId: string; origin: string; principalId: string },
+  attempt: ApiV1RecoveryAttempt,
+  input: {
+    clientMutationId: string;
+    origin: string;
+    principalId: string;
+    title: string;
+    description: string | null;
+    /** True when this request's own write already scheduled the placeholder. */
+    placeholderScheduled: () => boolean;
+  },
 ): Promise<ApiV1IdempotentMutationResult | null> {
   const recipe = await loadRecipeById(db, reservation.id);
   if (!recipe || recipe.chef.id !== input.principalId) return null;
+  if (!await writeFinished(db, reservation, WRITE_FINISHED_RESOURCE.recipeCreate, reservation.id)) {
+    // The recipe committed, but its placeholder may never have been scheduled. While the first
+    // attempt may still be running (it schedules right after its commit), the retry waits; once
+    // it has stopped, recovery schedules the placeholder itself, so the answer is true.
+    const stopped = attempt.stopped || Date.now() - reservation.createdAt.getTime() >= UNFINISHED_WRITE_STOPPED_AFTER_MS;
+    if (!stopped) return null;
+    const placeholder = await db.recipeCover.findFirst({
+      where: { recipeId: reservation.id, sourceType: "ai-placeholder", generationStatus: "processing" },
+      select: { id: true },
+    });
+    if (placeholder && !input.placeholderScheduled()) {
+      await scheduleApiRecipeCreatePlaceholder(args, db, {
+        userId: input.principalId,
+        recipeId: reservation.id,
+        coverId: placeholder.id,
+        title: input.title,
+        description: input.description,
+      });
+    }
+    await markWriteFinished(db, reservation, WRITE_FINISHED_RESOURCE.recipeCreate, reservation.id);
+  }
   return {
     status: 201,
     data: {
@@ -5630,6 +5725,7 @@ async function handleRecipeCreate(args: ApiV1RouteArgs, requestId: string, princ
     throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
   }
   const origin = publicContentOrigin(args);
+  let placeholderScheduled = false;
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.create", async (db, reservation) => {
     // The create request has no cover field, so every API-created recipe starts with the same
@@ -5647,6 +5743,8 @@ async function handleRecipeCreate(args: ApiV1RouteArgs, requestId: string, princ
       title: parsed.data.title,
       description: parsed.data.description,
     });
+    placeholderScheduled = true;
+    await markWriteFinished(db, reservation, WRITE_FINISHED_RESOURCE.recipeCreate, created.data.recipeId);
     const recipe = await serializedRecipeOrThrow(db, created.data.recipeId, origin);
     return {
       status: created.status,
@@ -5656,10 +5754,13 @@ async function handleRecipeCreate(args: ApiV1RouteArgs, requestId: string, princ
         mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
       },
     };
-  }, (db, reservation) => recoverNativeRecipeCreate(db, reservation, {
+  }, (db, reservation, attempt) => recoverNativeRecipeCreate(args, db, reservation, attempt, {
     clientMutationId: parsed.data.clientMutationId,
     origin,
     principalId: principal.id,
+    title: parsed.data.title,
+    description: parsed.data.description,
+    placeholderScheduled: () => placeholderScheduled,
   }));
 }
 

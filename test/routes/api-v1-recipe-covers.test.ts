@@ -9,6 +9,7 @@ import {
   FOOD_IMAGE_TYPE_MESSAGE,
   IMAGE_MAX_FILE_SIZE,
 } from "~/lib/recipe-image";
+import * as recipeSpoonModule from "~/lib/recipe-spoon.server";
 import { SpoonValidationError } from "~/lib/recipe-spoon.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser } from "../utils";
@@ -804,6 +805,84 @@ describe("API v1 recipe cover management", () => {
       await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(1);
     } finally {
       db.apiIdempotencyKey.update = originalUpdate;
+    }
+  });
+
+  // An upload writes its cover row first, then the spoon, the activation and the stylization
+  // job as separate steps. Recovery used to answer "uploaded" as soon as the cover row existed,
+  // so a retry could be told a spoon was posted and a cover activated when neither happened.
+  it("answers a retry as in progress, not uploaded, while the first upload has only saved its cover", async () => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    const realCreateSpoon = recipeSpoonModule.createSpoon;
+    let releaseSpoon!: () => void;
+    const spoonGate = new Promise<void>((resolve) => { releaseSpoon = resolve; });
+    vi.spyOn(recipeSpoonModule, "createSpoon").mockImplementation(async (...args) => {
+      await spoonGate;
+      return await realCreateSpoon(...args);
+    });
+    const body = {
+      clientMutationId: "upload-retry-before-spoon",
+      photo: photoFile("retry-before-spoon.png"),
+      activate: true,
+      generateEditorial: false,
+      postAsSpoon: true,
+      note: "Posted dinner",
+    };
+    const upload = (requestId: string) => action(routeArgs(
+      recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, requestId, recipeImageForm(body)),
+      `recipes/${fixture.recipe.id}/image`,
+      backgroundContext({ PHOTOS: photoBucket.bucket }),
+    ));
+
+    const first = upload("req_upload_retry_first");
+    await vi.waitFor(async () => expect(await db.recipeCover.count({ where: { recipeId: fixture.recipe.id } })).toBe(1));
+
+    const retry = await upload("req_upload_retry_second");
+    expect(retry.status).toBe(409);
+    await expect(readJson(retry)).resolves.toMatchObject({ error: { code: "idempotency_in_progress" } });
+    await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+
+    releaseSpoon();
+    const firstResponse = await first;
+    expect(firstResponse.status).toBe(201);
+    const firstPayload = await readJson(firstResponse);
+    expect(firstPayload.data).toMatchObject({ spoon: { id: expect.any(String) }, activeCover: { id: firstPayload.data.createdCover.id } });
+  });
+
+  it("does not answer an upload as committed when a later step fails and its cleanup fails too", async () => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    const spoonError = new Error("spoon insert failed");
+    vi.spyOn(recipeSpoonModule, "createSpoon").mockRejectedValue(spoonError);
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_upload_cleanup_fails",
+      method: "POST",
+      path: `/api/v1/recipes/${fixture.recipe.id}/image`,
+      error: { name: spoonError.name, message: spoonError.message, stack: spoonError.stack },
+    });
+    const originalDeleteMany = db.recipeCover.deleteMany;
+    db.recipeCover.deleteMany = vi.fn().mockRejectedValue(new Error("cleanup failed")) as unknown as typeof db.recipeCover.deleteMany;
+    const body = {
+      clientMutationId: "upload-step-fails-cleanup-fails",
+      photo: photoFile("step-fails.png"),
+      activate: true,
+      generateEditorial: false,
+      postAsSpoon: true,
+    };
+
+    try {
+      const response = await action(routeArgs(
+        recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_upload_cleanup_fails", recipeImageForm(body)),
+        `recipes/${fixture.recipe.id}/image`,
+        backgroundContext({ PHOTOS: photoBucket.bucket }),
+      ));
+
+      expect(response.status).toBe(500);
+      await expect(readJson(response)).resolves.toMatchObject({ ok: false, error: { code: "internal_error" } });
+      await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+    } finally {
+      db.recipeCover.deleteMany = originalDeleteMany;
     }
   });
 

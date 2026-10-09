@@ -10,6 +10,8 @@ import {
 import { resolveApiV1ScopeRequirement } from "~/lib/api-v1.server";
 import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "~/lib/recipe-title-uniqueness.server";
 import * as placeholderCoverModule from "~/lib/ai-placeholder-cover.server";
+import * as recipeReadsModule from "~/lib/api-recipe-reads.server";
+import * as recipeWritesModule from "~/lib/api-v1-recipe-writes.server";
 import { getLocalDb } from "~/lib/db.server";
 import { expectConsoleError } from "../warning-policy";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -460,6 +462,155 @@ describe("API v1 recipe write mutations", () => {
       expect(await db.recipeCover.count()).toBe(1);
     });
 
+    // A create commits the recipe with its placeholder cover, then schedules the placeholder's
+    // generation. Recovery used to answer "created" from the recipe row alone, so a retry after
+    // the first attempt stopped in between was told a placeholder was on its way when none was.
+    async function committedCreateWithoutSchedule(
+      fixture: Awaited<ReturnType<typeof createRecipeWriteFixture>>,
+      clientMutationId: string,
+      { withPlaceholder = true }: { withPlaceholder?: boolean } = {},
+    ) {
+      const body = createBody(clientMutationId);
+      const reservation = await reserveMutation(db, {
+        body,
+        credentialId: fixture.writer.credential.id,
+        method: "POST",
+        operation: "recipes.create",
+        path: "recipes",
+        userId: fixture.chef.id,
+      });
+      const placeholderCoverId = crypto.randomUUID();
+      await db.recipe.create({ data: { id: reservation.id, chefId: fixture.chef.id, title: body.title, description: "A soup" } });
+      if (withPlaceholder) {
+        await db.recipeCover.create({
+          data: { id: placeholderCoverId, recipeId: reservation.id, imageUrl: "", sourceType: "ai-placeholder", status: "processing", generationStatus: "processing", createdById: fixture.chef.id },
+        });
+      }
+      return { body, reservation, placeholderCoverId };
+    }
+
+    it("answers a retry as in progress, not created, while the first attempt may still schedule the placeholder", async () => {
+      const fixture = await createRecipeWriteFixture(db);
+      const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockResolvedValue(undefined);
+      const { body } = await committedCreateWithoutSchedule(fixture, "recipe-create-retry-before-schedule");
+
+      const retry = await action(routeArgs(mutationRequest("POST", "recipes", fixture.writer.token, "req_retry_before_schedule", body), "recipes"));
+
+      expect(retry.status).toBe(409);
+      expect((await readJson(retry)).error).toMatchObject({ code: "idempotency_in_progress" });
+      expect(placeholder).not.toHaveBeenCalled();
+    });
+
+    it("schedules the placeholder from recovery when the first attempt stopped before scheduling it", async () => {
+      const fixture = await createRecipeWriteFixture(db);
+      const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockResolvedValue(undefined);
+      const { body, reservation, placeholderCoverId } = await committedCreateWithoutSchedule(fixture, "recipe-create-stopped-before-schedule");
+      // Long enough ago that the first attempt, which schedules right after its commit, has stopped.
+      await db.apiIdempotencyKey.update({ where: { id: reservation.id }, data: { createdAt: new Date(Date.now() - 60_000) } });
+
+      const retry = await action(routeArgs(mutationRequest("POST", "recipes", fixture.writer.token, "req_retry_after_stop", body), "recipes"));
+
+      expect(retry.status).toBe(201);
+      expect((await readJson(retry)).data).toMatchObject({
+        created: true,
+        recipe: { id: reservation.id },
+        mutation: { clientMutationId: body.clientMutationId, replayed: true },
+      });
+      expect(placeholder).toHaveBeenCalledTimes(1);
+      expect(placeholder).toHaveBeenCalledWith(expect.objectContaining({ recipeId: reservation.id, coverId: placeholderCoverId, title: body.title }));
+
+      const replay = await action(routeArgs(mutationRequest("POST", "recipes", fixture.writer.token, "req_retry_after_stop_again", body), "recipes"));
+      expect(replay.status).toBe(201);
+      expect(placeholder).toHaveBeenCalledTimes(1);
+    });
+
+    it("recovers a finished create without scheduling its placeholder again", async () => {
+      const fixture = await createRecipeWriteFixture(db);
+      const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockResolvedValue(undefined);
+      const body = createBody("recipe-create-finished-recover");
+      const originalUpdate = db.apiIdempotencyKey.update;
+      db.apiIdempotencyKey.update = vi.fn()
+        .mockRejectedValueOnce(new Error("save failed"))
+        .mockRejectedValueOnce(new Error("save failed again")) as unknown as typeof db.apiIdempotencyKey.update;
+      try {
+        const first = await action(routeArgs(mutationRequest("POST", "recipes", fixture.writer.token, "req_finished_first", body), "recipes"));
+        expect(first.status).toBe(201);
+      } finally {
+        db.apiIdempotencyKey.update = originalUpdate;
+      }
+
+      const retry = await action(routeArgs(mutationRequest("POST", "recipes", fixture.writer.token, "req_finished_retry", body), "recipes"));
+
+      expect(retry.status).toBe(201);
+      expect((await readJson(retry)).data.mutation).toMatchObject({ replayed: true });
+      expect(placeholder).toHaveBeenCalledTimes(1);
+    });
+
+    it("recovers a stopped create that has no placeholder cover without scheduling one", async () => {
+      const fixture = await createRecipeWriteFixture(db);
+      const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockResolvedValue(undefined);
+      const { body, reservation } = await committedCreateWithoutSchedule(fixture, "recipe-create-stopped-no-placeholder", { withPlaceholder: false });
+      await db.apiIdempotencyKey.update({ where: { id: reservation.id }, data: { createdAt: new Date(Date.now() - 60_000) } });
+
+      const retry = await action(routeArgs(mutationRequest("POST", "recipes", fixture.writer.token, "req_stopped_no_placeholder", body), "recipes"));
+
+      expect(retry.status).toBe(201);
+      expect(placeholder).not.toHaveBeenCalled();
+    });
+
+    it("schedules the placeholder from recovery when the write throws after its commit", async () => {
+      const fixture = await createRecipeWriteFixture(db);
+      const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockResolvedValue(undefined);
+      const realCreate = recipeWritesModule.createNativeRecipe;
+      vi.spyOn(recipeWritesModule, "createNativeRecipe").mockImplementation(async (...args) => {
+        await realCreate(...args);
+        throw new Error("failed after commit");
+      });
+      const body = createBody("recipe-create-throws-after-commit");
+
+      const response = await action(routeArgs(mutationRequest("POST", "recipes", fixture.writer.token, "req_throws_after_commit", body), "recipes"));
+
+      expect(response.status).toBe(201);
+      expect((await readJson(response)).data).toMatchObject({ created: true, recipe: { title: body.title } });
+      expect(placeholder).toHaveBeenCalledTimes(1);
+    });
+
+    it("still answers created when the finish marker cannot be saved", async () => {
+      const fixture = await createRecipeWriteFixture(db);
+      const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockResolvedValue(undefined);
+      const originalCreate = db.apiMutationTombstone.create;
+      db.apiMutationTombstone.create = vi.fn().mockRejectedValue(new Error("marker failed\nwith detail")) as unknown as typeof db.apiMutationTombstone.create;
+      expectConsoleError("[api-v1] write_finished_mark_failed", { operation: "recipes.create", error: "marker failed" });
+
+      try {
+        const response = await action(routeArgs(mutationRequest("POST", "recipes", fixture.writer.token, "req_marker_fails", createBody("recipe-create-marker-fails")), "recipes"));
+        expect(response.status).toBe(201);
+        expect(placeholder).toHaveBeenCalledTimes(1);
+      } finally {
+        db.apiMutationTombstone.create = originalCreate;
+      }
+    });
+
+    it("does not schedule the placeholder twice when the marker and the response read both fail", async () => {
+      const fixture = await createRecipeWriteFixture(db);
+      const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockResolvedValue(undefined);
+      vi.spyOn(recipeReadsModule, "loadApiRecipeWithPrisma").mockRejectedValueOnce(new Error("read failed"));
+      const originalCreate = db.apiMutationTombstone.create;
+      db.apiMutationTombstone.create = vi.fn().mockRejectedValue("marker failed") as unknown as typeof db.apiMutationTombstone.create;
+      expectConsoleError("[api-v1] write_finished_mark_failed", { operation: "recipes.create", error: "marker failed" });
+      expectConsoleError("[api-v1] write_finished_mark_failed", { operation: "recipes.create", error: "marker failed" });
+      const body = createBody("recipe-create-marker-and-read-fail");
+
+      try {
+        const response = await action(routeArgs(mutationRequest("POST", "recipes", fixture.writer.token, "req_marker_read_fail", body), "recipes"));
+        expect(response.status).toBe(201);
+        expect((await readJson(response)).data).toMatchObject({ created: true, recipe: { title: body.title } });
+        expect(placeholder).toHaveBeenCalledTimes(1);
+      } finally {
+        db.apiMutationTombstone.create = originalCreate;
+      }
+    });
+
     it("still creates the recipe when scheduling the placeholder fails", async () => {
       const fixture = await createRecipeWriteFixture(db);
       const error = new Error("scheduler down");
@@ -896,6 +1047,11 @@ describe("API v1 recipe write mutations", () => {
     });
     await db.recipe.create({
       data: { id: createReservation.id, chefId: fixture.chef.id, title: createBody.title },
+    });
+    // A finished create: its follow-up ran and left the marker (unfinished creates are covered
+    // under "placeholder cover on create").
+    await db.apiMutationTombstone.create({
+      data: { idempotencyKeyId: createReservation.id, operation: "recipes.create", resourceType: "recipe", resourceId: createReservation.id },
     });
     const recoveredCreate = await action(routeArgs(
       mutationRequest("POST", "recipes", fixture.writer.token, "req_recover_route_create", createBody),
