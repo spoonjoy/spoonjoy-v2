@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import type { D1ReadDatabase } from "~/lib/d1-read.server";
 import { validateStepDeletion } from "~/lib/step-deletion-validation.server";
+import { validateStepReorderComplete } from "~/lib/step-reorder-validation.server";
 import { d1Guard, d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 import { coverInsertStatement } from "~/lib/recipe-cover.server";
 import {
@@ -14,6 +15,7 @@ import {
   stepNumUpdateStatement,
   stepOutputUseInsertStatement,
   stepOutputUsesDeleteStatement,
+  stepReorderDependencyFreeGuard,
   type RecipeFields,
 } from "~/lib/recipe-d1-writes.server";
 
@@ -37,6 +39,23 @@ export async function stepDeletionRaceAnswer(
   const step = await db.recipeStep.findUnique({ where: { id: stepId }, select: { recipeId: true, stepNum: true } });
   if (!step || step.recipeId !== recipeId) return { error: "Step not found", status: 404 };
   const validation = await validateStepDeletion(db, recipeId, step.stepNum);
+  return validation.valid ? { error: RECIPE_CHANGED_MESSAGE, status: 409 } : { error: validation.error, status: 400 };
+}
+
+/**
+ * What the step-move checks answer now, for a swap whose batch was stopped because a step
+ * moved or went away, or the moved step gained an output dependency, in between.
+ */
+export async function stepSwapRaceAnswer(
+  db: PrismaClient,
+  recipeId: string,
+  stepId: string,
+  direction: "up" | "down",
+): Promise<{ error: string; status: number }> {
+  const step = await db.recipeStep.findUnique({ where: { id: stepId }, select: { recipeId: true, stepNum: true } });
+  if (!step || step.recipeId !== recipeId) return { error: RECIPE_CHANGED_MESSAGE, status: 409 };
+  const targetStepNum = direction === "up" ? step.stepNum - 1 : step.stepNum + 1;
+  const validation = await validateStepReorderComplete(db, recipeId, step.stepNum, targetStepNum);
   return validation.valid ? { error: RECIPE_CHANGED_MESSAGE, status: 409 } : { error: validation.error, status: 400 };
 }
 
@@ -112,6 +131,7 @@ export async function swapRecipeStepsOnD1(
   await d1WriteBatch(d1, [
     stepAtGuard(input.stepId, input.recipeId, input.stepNum),
     stepAtGuard(input.targetStepId, input.recipeId, input.targetStepNum),
+    stepReorderDependencyFreeGuard(input.recipeId, input.stepNum, input.targetStepNum),
     stepNumUpdateStatement(input.stepId, -1, now),
     stepNumUpdateStatement(input.targetStepId, input.stepNum, now),
     stepNumUpdateStatement(input.stepId, input.targetStepNum, now),
