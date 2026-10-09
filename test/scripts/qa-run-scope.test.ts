@@ -1019,8 +1019,9 @@ describe("Journeys workflow", () => {
   const step = (name: string) => steps[index(name)];
 
   it("no longer queues runs for one shared QA Worker", () => {
-    expect(Object.keys(workflow.jobs).sort()).toEqual(["deploy-shared-qa", "fork-notice", "journeys"]);
-    expect(journeys.needs).toBeUndefined();
+    expect(Object.keys(workflow.jobs).sort()).toEqual(["deploy-shared-qa", "fork-notice", "journeys", "queue-tested"]);
+    // The only job journeys waits for is the cheap merge-queue lookup, never a QA turn or lock.
+    expect(journeys.needs).toBe("queue-tested");
     const text = JSON.stringify(steps);
     expect(text).not.toMatch(/qa-lock|wait-for-qa-turn|deploy:qa/);
     expect(workflow.env.SPOONJOY_JOURNEYS_BASE_URL).toBeUndefined();
@@ -1092,12 +1093,26 @@ describe("Journeys workflow", () => {
     }
   });
 
+  it("skips main's journeys only when the merge queue's Journeys run of the same commit passed", () => {
+    expect(journeys.if).toBe("${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}");
+    const queueTested = workflow.jobs["queue-tested"];
+    expect(queueTested.if).toBe("github.event_name == 'push'");
+    expect(queueTested.permissions).toEqual({ actions: "read", contents: "read" });
+    expect(queueTested.outputs).toEqual({ tested: "${{ steps.lookup.outputs.tested }}" });
+    expect(queueTested.steps.at(-1)).toEqual({
+      name: "Ask whether the merge queue already tested this commit",
+      id: "lookup",
+      env: { GH_TOKEN: "${{ github.token }}" },
+      run: "node scripts/workflow-security.mjs queue-tested-journeys",
+    });
+  });
+
   it("keeps shared QA a mirror of main: deployed only after main's journeys pass, one deploy at a time", () => {
     const deploy = workflow.jobs["deploy-shared-qa"];
-    expect(deploy.needs).toBe("journeys");
-    expect(deploy.if).toContain("github.event_name == 'push'");
-    expect(deploy.if).toContain("github.ref == 'refs/heads/main'");
-    expect(deploy.if).toContain("needs.journeys.result == 'success'");
+    expect(deploy.needs).toEqual(["queue-tested", "journeys"]);
+    // After a queue merge, main's journeys skip because the queue's run of the same commit passed;
+    // shared QA still mirrors main then, and never after a journeys failure.
+    expect(deploy.if).toBe("${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.journeys.result == 'success' || (needs.journeys.result == 'skipped' && needs.queue-tested.outputs.tested == 'true')) }}");
     expect(deploy.concurrency).toEqual({ group: "journeys-shared-qa-deploy", "cancel-in-progress": false });
     const deploySteps: Array<{ name?: string; id?: string; if?: string; run?: string; env?: Record<string, string> }> = deploy.steps;
     expect(deploySteps.at(-1)).toMatchObject({
