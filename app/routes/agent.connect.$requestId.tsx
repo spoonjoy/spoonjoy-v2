@@ -215,7 +215,7 @@ export default function AgentConnect() {
       {actionable ? (
         <>
           <Text className="mt-5" role="alert">
-            Spoonjoy did not verify who made this request; the name above is whatever the client chose. Deny it unless you just started this connection from your own agent, device, or app.
+            Spoonjoy did not verify who made this request; the name above is whatever the client chose. If you didn't just start this connection from your own agent, device, or app, close this page. Without its code, nobody can approve it, and it expires on its own.
           </Text>
 
           {requester ? (
@@ -332,12 +332,13 @@ export default function AgentConnect() {
             </label>
           )}
           {/* Full-width stacked buttons on phones, side by side from sm up, as on the other auth pages.
-              Deny skips validation, so it works without a code; the action ignores the code on deny. */}
+              Deny needs the code too, so a leaked link or a guessed request can't cancel a connection;
+              the browser asks for the code before either button submits. */}
           <div className="flex flex-col gap-3 sm:flex-row">
             <Button type="submit" name="intent" value="approve">
               Approve Access
             </Button>
-            <Button type="submit" name="intent" value="deny" formNoValidate plain>
+            <Button type="submit" name="intent" value="deny" plain>
               Deny
             </Button>
           </div>

@@ -485,6 +485,9 @@ describe("agent connect route", () => {
     expect(await screen.findByRole("heading", { name: "Connect Spoonjoy" })).toBeInTheDocument();
     expect(screen.getByText(/calling itself "slugger" wants permission/)).toBeInTheDocument();
     expect(screen.getByText(/did not verify who made this request/)).toBeInTheDocument();
+    // Deny needs the code, so a chef who didn't start the request is told to leave it, not deny it.
+    expect(screen.getByText(/close this page\. Without its code, nobody can approve it, and it expires on its own\./)).toBeInTheDocument();
+    expect(screen.queryByText(/Deny it unless/)).not.toBeInTheDocument();
     expect(screen.getByText("2 minutes ago")).toBeInTheDocument();
     expect(screen.getByText("203.0.113.9 (NZ)")).toBeInTheDocument();
     expect(screen.getByText("curl/8.7.1")).toBeInTheDocument();
@@ -506,8 +509,8 @@ describe("agent connect route", () => {
     expect(codeInput).toHaveAttribute("autocorrect", "off");
     expect(codeInput).toHaveAttribute("spellcheck", "false");
     expect(screen.getByRole("button", { name: "Approve Access" })).toBeInTheDocument();
-    // Deny works without a code.
-    expect(screen.getByRole("button", { name: "Deny" })).toHaveAttribute("formnovalidate");
+    // Deny needs the code too, so the browser asks for it before either button submits.
+    expect(screen.getByRole("button", { name: "Deny" })).not.toHaveAttribute("formnovalidate");
 
     cleanupDom();
     renderWithData({
