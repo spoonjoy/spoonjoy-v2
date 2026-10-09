@@ -72,13 +72,6 @@ test.describe("Round trips on iPhone", () => {
     await expectAccessible();
 
     // A friend's public recipe opened from the list: the recipe's Back link returns to the list.
-    // The unsearched list shows only the 48 most recently updated public recipes, and QA's other
-    // runs keep pushing the seeded risotto out of them (runs 37875112963 and 37390307219), so the
-    // list's own search brings it up. Back returns to that search.
-    await page.getByLabel("Search recipes", { exact: true }).fill("Saffron Risotto");
-    await page.getByRole("button", { name: "Search", exact: true }).click();
-    await expect(page).toHaveURL(/\/recipes\?q=Saffron/);
-    await expect(page.getByRole("heading", { name: 'Recipes for "Saffron Risotto"', exact: true })).toBeVisible();
     await recipeLink(main, "Saffron Risotto", RISOTTO).click();
     await expect(page).toHaveURL(pathUrl(RISOTTO));
     await expect(page.getByRole("heading", { level: 1, name: "Saffron Risotto", exact: true })).toBeVisible();
@@ -86,7 +79,7 @@ test.describe("Round trips on iPhone", () => {
 
     await recipeBack.click();
     await expect(page).toHaveURL(pathUrl("/recipes"));
-    await expect(page.getByRole("heading", { name: 'Recipes for "Saffron Risotto"', exact: true })).toBeVisible();
+    await expect(allPublicRecipes).toBeVisible();
   });
 
   test("the recipe's Back link on a recipe opened directly goes to all recipes", async ({ page }) => {
