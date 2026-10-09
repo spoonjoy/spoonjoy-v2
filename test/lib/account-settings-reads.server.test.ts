@@ -118,6 +118,13 @@ describe("account settings reads", () => {
     await refreshToken(user.id, lapsed.id, { connectionKey: "lapsed", expiresAt: new Date("2026-10-01T00:00:00Z") });
     await refreshToken(user.id, live.id, { connectionKey: "live", expiresAt: new Date("2027-06-01T00:00:00Z") });
     await refreshToken(user.id, legacy.id, { connectionKey: "legacy", expiresAt: null });
+    // A row written by raw SQL with a zoneless timestamp, as some D1 paths store them.
+    const zoneless = await db.oAuthClient.create({ data: { clientName: "Zoneless lapsed", redirectUris: "[]", issuer: ISSUER } });
+    await db.$executeRawUnsafe(
+      `INSERT INTO "OAuthRefreshToken" ("id", "tokenHash", "userId", "clientId", "scope", "issuer", "connectionKey", "createdAt", "expiresAt")
+       VALUES (?, ?, ?, ?, 'recipes:read', ?, 'zoneless', '2026-04-01 00:00:00', '2026-10-01 00:00:00')`,
+      `zoneless-${user.id}`, `refresh-zoneless-${user.id}`, user.id, zoneless.id, ISSUER,
+    );
     await createApiCredential(db, user.id, "Lapsed access", { oauthClientId: lapsed.id, oauthIssuer: ISSUER, oauthConnectionKey: "lapsed" });
     await createApiCredential(db, user.id, "Live access", { oauthClientId: live.id, oauthIssuer: ISSUER, oauthConnectionKey: "live" });
 

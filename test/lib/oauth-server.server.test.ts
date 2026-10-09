@@ -19,6 +19,10 @@ import {
   rotateConnectorTokens as rotateConnectorTokensRaw,
   verifyPkceS256,
   OAUTH_REFRESH_REUSE_GRACE_SECONDS,
+  FIRST_PARTY_NATIVE_REFRESH_REUSE_GRACE_SECONDS,
+  SPOONJOY_APPLE_NATIVE_CLIENT_ID,
+  SPOONJOY_APPLE_OAUTH_CLIENT_NAME,
+  SPOONJOY_APPLE_OAUTH_REDIRECT_URI,
 } from "~/lib/oauth-server.server";
 import { getLocalDb } from "~/lib/db.server";
 import { createApiCredential, hashApiToken } from "~/lib/api-auth.server";
@@ -730,16 +734,64 @@ describe("connector token issuance + rotation", () => {
         .resolves.toMatchObject({ status: "compromised", statusReason: "refresh_reuse" });
     });
 
-    it("keeps the chef signed in when a suspended App Intent replays the token it read minutes ago", async () => {
-      const { first, second } = await rotatedPair();
+    async function nativePair(nativeClientId: string) {
+      const first = await issueConnectorTokens(db, { userId, clientId: nativeClientId, scope: "kitchen:read", now: t0 });
+      const second = await rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId: nativeClientId, now: at(1) });
+      return { first, second };
+    }
+
+    it("keeps the chef signed in when a suspended iPhone App Intent replays the token it read minutes ago", async () => {
+      await db.oAuthClient.create({ data: { id: SPOONJOY_APPLE_NATIVE_CLIENT_ID, clientName: "Spoonjoy Apple", redirectUris: "spoonjoy-native://apple-sign-in" } });
+      const { first, second } = await nativePair(SPOONJOY_APPLE_NATIVE_CLIENT_ID);
       // The main app refreshed at at(1) and kept using its new tokens; the App Intent wakes
       // five minutes later and sends the refresh token it read before it was suspended.
-      await expect(rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId, now: at(5 * 60) }))
-        .rejects.toMatchObject({ code: "invalid_grant" });
+      await expect(rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId: SPOONJOY_APPLE_NATIVE_CLIENT_ID, now: at(5 * 60) }))
+        .rejects.toMatchObject({ code: "invalid_grant", refusal: "grace_replay" });
 
       await expect(accessWorks(second.accessToken, at(5 * 60))).resolves.toBe(true);
-      await expect(rotateConnectorTokens(db, { refreshToken: second.refreshToken, clientId, now: at(5 * 60 + 1) }))
+      await expect(rotateConnectorTokens(db, { refreshToken: second.refreshToken, clientId: SPOONJOY_APPLE_NATIVE_CLIENT_ID, now: at(5 * 60 + 1) }))
         .resolves.toMatchObject({ scope: "kitchen:read" });
+    });
+
+    it("gives every other client only the 60-second grace, so a thief who refreshes first is caught", async () => {
+      // An attacker redeems a stolen current refresh token first (at(1)); the real client sends
+      // the same token when its access token runs out, five minutes later.
+      const { first, second: attacker } = await rotatedPair();
+      await expect(rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId, now: at(5 * 60) }))
+        .rejects.toMatchObject({ code: "invalid_grant", refusal: "reuse_revoked" });
+
+      await expect(accessWorks(attacker.accessToken, at(5 * 60))).resolves.toBe(false);
+      await expect(rotateConnectorTokens(db, { refreshToken: attacker.refreshToken, clientId, now: at(5 * 60 + 1) }))
+        .rejects.toMatchObject({ code: "invalid_grant" });
+      await expect(db.oAuthGrant.findFirstOrThrow({ where: { userId } }))
+        .resolves.toMatchObject({ status: "compromised", statusReason: "refresh_reuse" });
+    });
+
+    it.each([
+      ["the native sign-in client", `${SPOONJOY_APPLE_NATIVE_CLIENT_ID}:0123abcd`, "Spoonjoy Apple", "spoonjoy-native://apple-sign-in"],
+      ["the reserved Spoonjoy Apple OAuth client", "spoonjoy-apple-oauth", SPOONJOY_APPLE_OAUTH_CLIENT_NAME, SPOONJOY_APPLE_OAUTH_REDIRECT_URI],
+    ])("accepts the risk for %s: a thief who refreshes first survives the app's replay inside 15 minutes", async (_label, nativeClientId, clientName, redirectUris) => {
+      await db.oAuthClient.create({ data: { id: nativeClientId, clientName, redirectUris } });
+      const { first, second: attacker } = await nativePair(nativeClientId);
+      const native = FIRST_PARTY_NATIVE_REFRESH_REUSE_GRACE_SECONDS;
+
+      // Inside the window the app's replay revokes nothing, and the attacker keeps going.
+      await expect(rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId: nativeClientId, now: at(native) }))
+        .rejects.toMatchObject({ refusal: "grace_replay" });
+      await expect(accessWorks(attacker.accessToken, at(native))).resolves.toBe(true);
+
+      // After it, the replay is reuse and the attacker's session ends.
+      await expect(rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId: nativeClientId, now: at(native + 2) }))
+        .rejects.toMatchObject({ refusal: "reuse_revoked" });
+      await expect(accessWorks(attacker.accessToken, at(native + 2))).resolves.toBe(false);
+    });
+
+    it("does not give a client merely named Spoonjoy Apple the longer grace", async () => {
+      await db.oAuthClient.create({ data: { id: "lookalike", clientName: "Spoonjoy Apple", redirectUris: "https://evil.example/cb" } });
+      const { first, second } = await nativePair("lookalike");
+      await expect(rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId: "lookalike", now: at(5 * 60) }))
+        .rejects.toMatchObject({ refusal: "reuse_revoked" });
+      await expect(accessWorks(second.accessToken, at(5 * 60))).resolves.toBe(false);
     });
 
     it("revokes access tokens from before connection keys when reuse ends the connection", async () => {

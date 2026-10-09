@@ -81,13 +81,23 @@ export const OAUTH_REFRESH_TOKEN_TTL_SECONDS = 180 * 24 * 60 * 60;
 export const LEGACY_OAUTH_REFRESH_EXPIRES_AT = new Date("2027-04-07T00:00:00.000Z");
 /**
  * A refresh token replayed this soon after its rotation is refused without revoking the
- * connection. The iPhone app's main app, root view and App Intents each refresh on their own,
- * and a process the system suspended between reading the keychain and sending its refresh can
- * replay the token it read minutes later; that is a race on one device, not a stolen token, and
- * revoking would sign the chef out. Fifteen minutes, one generic access-token lifetime, covers
- * a suspended App Intent; a replay later than that means someone holds a copy of an old token.
+ * connection: two refreshes racing from the same client are not an attack. Later replays mean
+ * someone holds a copy of an old token.
  */
-export const OAUTH_REFRESH_REUSE_GRACE_SECONDS = 15 * 60;
+export const OAUTH_REFRESH_REUSE_GRACE_SECONDS = 60;
+/**
+ * The grace for Spoonjoy's own iPhone app. Its main app, root view and App Intents each refresh
+ * on their own, and a process the system suspended between reading the Keychain and sending its
+ * refresh can replay the token it read minutes later; revoking then would sign the chef out.
+ *
+ * Accepted risk: if an attacker redeems a stolen current refresh token first, the app's own
+ * replay inside this window revokes nothing, and the attacker keeps a renewing session until the
+ * chef signs out everywhere. It goes back to 60 seconds once the app shares one refresh across
+ * its processes (spoonjoy/spoonjoy-apple#113).
+ */
+export const FIRST_PARTY_NATIVE_REFRESH_REUSE_GRACE_SECONDS = 15 * 60;
+/** The iPhone app's client id; other servers than spoonjoy.app suffix it with `:<origin hash>`. */
+export const SPOONJOY_APPLE_NATIVE_CLIENT_ID = "spoonjoy-apple-native";
 // Each refresh ownership query binds every key twice (connectionKey + legacy id).
 // D1 allows 100 bound parameters, so 32 leaves headroom for fixed predicates,
 // mutation values, and adapter-added pagination bindings.
@@ -162,9 +172,17 @@ export async function revokeConnectorGrantsByConnectionKeys(
 }
 
 /** OAuth 2.1 error, carrying an RFC 6749 error code for the wire response. */
+/**
+ * Why a refresh was refused, for telemetry and triage only (never sent to the client):
+ * a replay inside the grace window, a replay that revoked the connection as compromised, or an
+ * expired refresh token that ended its connection.
+ */
+export type OAuthRefreshRefusal = "grace_replay" | "reuse_revoked" | "expired";
+
 export class OAuthError extends Error {
   code: string;
   status: number;
+  refusal?: OAuthRefreshRefusal;
   constructor(code: string, message: string, status = 400) {
     super(message);
     this.name = "OAuthError";
@@ -1020,11 +1038,14 @@ async function revokeConnectionOnRefreshReuse(
   db: Database,
   record: OAuthRefreshTokenRecord,
   now: Date,
-): Promise<void> {
+): Promise<OAuthRefreshRefusal | undefined> {
   const revokedAt = record.revokedAt;
   /* istanbul ignore if -- @preserve callers pass only revoked records */
-  if (!revokedAt) return;
-  if (now.getTime() - revokedAt.getTime() <= OAUTH_REFRESH_REUSE_GRACE_SECONDS * 1000) return;
+  if (!revokedAt) return undefined;
+  const graceSeconds = await isFirstPartyNativeClient(db, record.clientId)
+    ? FIRST_PARTY_NATIVE_REFRESH_REUSE_GRACE_SECONDS
+    : OAUTH_REFRESH_REUSE_GRACE_SECONDS;
+  if (now.getTime() - revokedAt.getTime() <= graceSeconds * 1000) return "grace_replay";
   const connectionKey = connectionKeyOf(record);
   const stillActive = await db.oAuthRefreshToken.count({
     where: {
@@ -1034,8 +1055,29 @@ async function revokeConnectionOnRefreshReuse(
       OR: [{ connectionKey }, { connectionKey: null, id: connectionKey }],
     },
   });
-  if (stillActive === 0) return;
+  if (stillActive === 0) return undefined;
   await revokeConnection(db, record, now, { status: "compromised", statusReason: "refresh_reuse" });
+  return "reuse_revoked";
+}
+
+/**
+ * Spoonjoy's own iPhone app: the native sign-in client, or the reserved "Spoonjoy Apple" OAuth
+ * registration, which can only use Spoonjoy's own callback.
+ */
+async function isFirstPartyNativeClient(db: Database, clientId: string): Promise<boolean> {
+  if (clientId === SPOONJOY_APPLE_NATIVE_CLIENT_ID || clientId.startsWith(`${SPOONJOY_APPLE_NATIVE_CLIENT_ID}:`)) {
+    return true;
+  }
+  const client = await db.oAuthClient.findUnique({ where: { id: clientId }, select: { clientName: true, redirectUris: true } });
+  return client?.clientName?.trim().toLowerCase() === SPOONJOY_APPLE_OAUTH_CLIENT_NAME.toLowerCase()
+    && client.redirectUris.trim() === SPOONJOY_APPLE_OAUTH_REDIRECT_URI;
+}
+
+/** A refused refresh with the reason telemetry records, for triage. */
+function refusedRefresh(message: string, refusal: OAuthRefreshRefusal | undefined): OAuthError {
+  const error = new OAuthError("invalid_grant", message);
+  if (refusal) error.refusal = refusal;
+  return error;
 }
 
 /**
@@ -1066,17 +1108,17 @@ export async function rotateConnectorTokens(
     throw new OAuthError("invalid_grant", "Unknown or revoked refresh token");
   }
   if (record.revokedAt) {
-    if (record.clientId === input.clientId) {
-      await revokeConnectionOnRefreshReuse(db, record, now);
-    }
-    throw new OAuthError("invalid_grant", "Unknown or revoked refresh token");
+    const refusal = record.clientId === input.clientId
+      ? await revokeConnectionOnRefreshReuse(db, record, now)
+      : undefined;
+    throw refusedRefresh("Unknown or revoked refresh token", refusal);
   }
   if (record.clientId !== input.clientId) {
     throw new OAuthError("invalid_grant", "Refresh token was issued to a different client");
   }
   if ((record.expiresAt ?? LEGACY_OAUTH_REFRESH_EXPIRES_AT).getTime() <= now.getTime()) {
     await expireConnection(db, record, now);
-    throw new OAuthError("invalid_grant", "Refresh token expired");
+    throw refusedRefresh("Refresh token expired", "expired");
   }
   if (record.issuer !== null && record.issuer !== input.issuer) {
     throw new OAuthError("invalid_grant", "Refresh token was issued by a different issuer");

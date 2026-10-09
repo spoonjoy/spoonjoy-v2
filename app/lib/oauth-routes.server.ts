@@ -21,6 +21,7 @@ import {
   normalizeScope,
   OAUTH_ACCESS_TOKEN_TTL_SECONDS,
   OAuthError,
+  type OAuthRefreshRefusal,
   registerOAuthClient,
   revokeConnectorRefreshToken,
   rotateConnectorTokens,
@@ -484,7 +485,9 @@ export async function handleOAuthToken(
         {
           outcome: "error",
           grantType: safeGrantType,
+          clientId,
           errorCode: error.code,
+          ...(error.refusal ? { refusal: error.refusal } : {}),
         },
       );
     }
@@ -644,6 +647,8 @@ export interface OAuthTokenTelemetryMetadata {
   scope?: string;
   resource?: string;
   tokenLifetime?: "expiring" | "persistent";
+  /** Why a refresh was refused: a replay in the grace window, reuse that revoked the connection, or expiry. */
+  refusal?: OAuthRefreshRefusal;
 }
 
 const oauthTokenTelemetrySymbol = Symbol("spoonjoy.oauth.token.telemetry");
