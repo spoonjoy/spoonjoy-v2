@@ -1482,17 +1482,22 @@ const searchRecipesTool: SpoonjoyApiOperation = {
     // it now matches only the caller's own address (or the local owner in stdio mode), and any
     // other address returns nothing without looking it up. Usernames are public, so chefUsername
     // filters by any chef.
-    const callerEmail = (context.principal?.email ?? (context.principal ? undefined : context.defaultOwnerEmail))?.toLowerCase();
+    // Without a principal, only a configured owner (stdio MCP mode) counts as the caller; the web
+    // API never configures one, so an anonymous web caller matches no email.
+    const callerEmail = (context.principal ? context.principal.email : context.defaultOwnerEmail)?.toLowerCase();
     if (chefEmail && chefEmail !== callerEmail) {
       return json({ recipes: [] });
     }
-    const chef = chefEmail
+    const ownChef = chefEmail
       ? context.principal
         ? { id: context.principal.id }
         : await context.db.user.findUnique({ where: { email: chefEmail }, select: { id: true } })
-      : chefUsername
-        ? await context.db.user.findUnique({ where: { username: chefUsername }, select: { id: true } })
-        : null;
+      : null;
+    const namedChef = chefUsername
+      ? await context.db.user.findUnique({ where: { username: chefUsername }, select: { id: true } })
+      : null;
+    // Given both, they must name the same chef.
+    const chef = chefEmail && chefUsername ? (ownChef && namedChef?.id === ownChef.id ? ownChef : null) : ownChef ?? namedChef;
 
     if ((chefEmail || chefUsername) && !chef) {
       return json({ recipes: [] });

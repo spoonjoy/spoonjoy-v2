@@ -1287,6 +1287,11 @@ describe("spoonjoy MCP tools", () => {
     await expect(titles({ chefEmail: other.email }, { db: context.db, defaultOwnerEmail: other.email.toUpperCase() })).resolves.toEqual(["Oracle Pie"]);
     await expect(titles({ chefEmail: other.email }, { db: context.db, defaultOwnerEmail: me.email })).resolves.toEqual([]);
 
+    // Both filters must name the same chef.
+    await expect(titles({ chefEmail: me.email.toLowerCase(), chefUsername: me.username }, signedIn)).resolves.toEqual(["Oracle Tart"]);
+    await expect(titles({ chefEmail: me.email.toLowerCase(), chefUsername: other.username }, signedIn)).resolves.toEqual([]);
+    const ghostOwner = uniqueEmail("ghost-owner");
+    await expect(titles({ chefEmail: ghostOwner, chefUsername: other.username }, { db: context.db, defaultOwnerEmail: ghostOwner })).resolves.toEqual([]);
     await expect(titles({ chefUsername: other.username }, anonymous)).resolves.toEqual(["Oracle Pie"]);
     await expect(titles({ chefUsername: "nobody-by-this-name" }, anonymous)).resolves.toEqual([]);
   });
