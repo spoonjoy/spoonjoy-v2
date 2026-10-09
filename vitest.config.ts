@@ -1,7 +1,5 @@
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { defineConfig } from "vitest/config";
+import { claimRunDbDir } from "./test/support/worker-db";
 
 const appDirectory = new URL("./app", import.meta.url).pathname;
 const componentsDirectory = new URL("./app/components", import.meta.url).pathname;
@@ -61,7 +59,7 @@ const isFocusedCoverageRun = hasCoverageFlag && hasFocusedTestFilter;
 const dbWorkers = Number(process.env.VITEST_DB_WORKERS ?? 4);
 // One temporary directory per run for each worker process's own copy of prisma/test.db
 // (test/support/worker-db.ts). Set SPOONJOY_TEST_DB_DIR="" to use prisma/test.db directly.
-process.env.SPOONJOY_TEST_DB_DIR ??= mkdtempSync(join(tmpdir(), "spoonjoy-vitest-db-"));
+claimRunDbDir();
 
 export default defineConfig({
   test: {
