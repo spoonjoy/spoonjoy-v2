@@ -979,34 +979,6 @@ describe("deployment preflight", () => {
       "          artifact_valid=0",
       "          artifact_valid=0\n          artifact_valid=1",
     ],
-    [
-      "rollback guard text preserved only in comments",
-      [
-        '          if [ -n "$ROLLBACK_VERSION_ID" ] && [ "$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" ]; then',
-        "            exit 1",
-        "          fi",
-      ].join("\n"),
-      [
-        '          # if [ -n "$ROLLBACK_VERSION_ID" ] && [ "$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" ]; then',
-        "          #   exit 1",
-        "          # fi",
-      ].join("\n"),
-    ],
-    [
-      "rollback guard text hidden in a dead branch",
-      [
-        '          if [ -n "$ROLLBACK_VERSION_ID" ] && [ "$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" ]; then',
-        "            exit 1",
-        "          fi",
-      ].join("\n"),
-      [
-        "          if false; then",
-        '            if [ -n "$ROLLBACK_VERSION_ID" ] && [ "$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" ]; then',
-        "              exit 1",
-        "            fi",
-        "          fi",
-      ].join("\n"),
-    ],
   ])("rejects %s", (_label, expected, replacement) => {
     const inputs = validInputs();
     const workflow = secureProductionDeployWorkflow();
@@ -2112,14 +2084,24 @@ describe("deployment preflight", () => {
     }
   }, 120_000);
 
+  it.each(["atomic-bootstrap", "atomic-product-activation", "protocol-v1-canary"] as const)(
+    "does not block a rollback dispatch in %s mode",
+    (releaseMode) => {
+      const workflow = secureProductionDeployWorkflow(
+        releaseMode,
+        releaseMode === "protocol-v1-canary" ? "d".repeat(40) : "",
+      );
+      expect(workflow).not.toMatch(/\[ "\$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" \]; then\s+exit 1/);
+      const inputs = validInputs();
+      inputs.productionDeployWorkflow = workflow;
+      expect(validateDeploymentConfig(inputs).errors.map((item) => item.name))
+        .not.toContain("production deploy workflow");
+    },
+  );
+
   it.each([
     ["a missing canary boundary", `  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: "${"d".repeat(40)}"`, '  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: ""'],
     ["a malformed canary boundary", `  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: "${"d".repeat(40)}"`, '  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: "main"'],
-    [
-      "a missing rollback-mode guard",
-      '          if [ -n "$ROLLBACK_VERSION_ID" ] && [ "$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" ]; then',
-      '          if [ -n "$ROLLBACK_VERSION_ID" ]; then',
-    ],
     [
       "a missing protocol ancestry check",
       '            git merge-base --is-ancestor "$SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA" "$SOURCE_SHA"',
