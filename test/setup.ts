@@ -105,7 +105,10 @@ global.ResizeObserver = MockResizeObserver;
 global.confirm = vi.fn(() => true);
 
 // Mock environment variables
-process.env.DATABASE_URL = "file:./test.db?connection_limit=1&socket_timeout=60";
+// Anchored to this checkout's prisma/test.db (the file test/helpers/sqlite-d1.ts also opens). A
+// relative "file:./test.db" resolves against the generated client's schema path, so worktrees
+// sharing one node_modules would otherwise share one database and delete each other's rows.
+process.env.DATABASE_URL = `file:${path.resolve(__dirname, "../prisma/test.db")}?connection_limit=1&socket_timeout=60`;
 process.env.SESSION_SECRET = "test-secret";
 
 // Mock Cloudflare context
@@ -151,6 +154,7 @@ beforeAll(async () => {
   await db.oAuthGrant.deleteMany({});
   await db.apiCredential.deleteMany({});
   await db.imageGenLedger.deleteMany({});
+  await db.imageGenDailyBudget.deleteMany({});
   await db.oAuthAuthCode.deleteMany({});
   await db.oAuthRefreshToken.deleteMany({});
   await db.oAuthClient.deleteMany({});

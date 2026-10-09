@@ -275,7 +275,7 @@ describe("RecipeCoverHistory", () => {
     });
 
     expect(screen.getByRole("heading", { name: "Spoon photos" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Editorialize spoon photo by rowan" }));
+    await user.click(screen.getByRole("button", { name: "Make a styled cover from the cook photo by rowan" }));
     await waitFor(() => {
       expect(submitted).toContainEqual({
         intent: "createCoverFromSpoon",
@@ -391,7 +391,7 @@ describe("RecipeCoverHistory", () => {
     });
 
     await user.type(screen.getByLabelText("Spoon photo direction for rowan"), "make the greens pop");
-    await user.click(screen.getByRole("button", { name: "Editorialize spoon photo by rowan" }));
+    await user.click(screen.getByRole("button", { name: "Make a styled cover from the cook photo by rowan" }));
     await waitFor(() => {
       expect(submitted).toContainEqual({
         intent: "createCoverFromSpoon",

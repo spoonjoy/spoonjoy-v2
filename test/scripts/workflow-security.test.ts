@@ -124,6 +124,19 @@ describe("validateCiInvocation", () => {
     })).rejects.toThrow(/ordinary CI.*break-glass/i);
   });
 
+  it("treats a merge-queue run as ordinary CI on the exact queued commit", async () => {
+    const env = ciEnv({ GITHUB_EVENT_NAME: "merge_group", GITHUB_REF: "refs/heads/gh-readonly-queue/main/pr-1-abc" });
+    await expect(validateCiInvocation({ env, run: successfulRunner() })).resolves.toBeUndefined();
+    await expect(validateCiInvocation({
+      env: { ...env, SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: CSP_REPORT_ONLY_BREAK_GLASS_ACK },
+      run: successfulRunner(),
+    })).rejects.toThrow(/ordinary CI.*break-glass/i);
+    await expect(validateCiInvocation({
+      env: { ...env, CI_SOURCE_SHA: "b".repeat(40) },
+      run: successfulRunner(),
+    })).rejects.toThrow();
+  });
+
   it("accepts only an authenticated dispatch bound to the exact checked-out SHA", async () => {
     const env = ciEnv({
       GITHUB_EVENT_NAME: "workflow_dispatch",

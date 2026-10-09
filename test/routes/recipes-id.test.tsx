@@ -3802,7 +3802,7 @@ describe("Recipes $id Route", () => {
       expect(screen.queryByRole("link", { name: "Edit recipe" })).not.toBeInTheDocument();
       expect(screen.getByTestId("recipe-owner-tools")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
+      fireEvent.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
       expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
     });
 
@@ -3887,7 +3887,7 @@ describe("Recipes $id Route", () => {
 
       const ownerRender = render(<OwnerStub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Cover History Recipe" });
-      await user.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
+      await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
 
       const history = await screen.findByTestId("recipe-cover-history");
       expect(within(history).getByRole("heading", { name: "Recipe covers" })).toBeInTheDocument();
@@ -3896,10 +3896,10 @@ describe("Recipes $id Route", () => {
       expect(within(history).getByText("Editorial photo")).toBeInTheDocument();
       expect(within(history).getByText("Imported photo")).toBeInTheDocument();
       expect(within(history).queryByText("No cover selected")).toBeNull();
-      expect(screen.getByRole("heading", { name: "Photo studio" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Photos" })).toBeInTheDocument();
       expect(screen.getByText("Add cover photo")).toBeInTheDocument();
-      expect(screen.getByRole("checkbox", { name: "Post as Spoon" })).toBeChecked();
-      expect(screen.getByRole("checkbox", { name: "Editorialize cover" })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: "Also log this as a cook" })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: "Make a styled cover" })).toBeChecked();
 
       await user.click(within(history).getByRole("button", { name: "Use Imported photo cover" }));
       await waitFor(() => {
@@ -3972,11 +3972,11 @@ describe("Recipes $id Route", () => {
       await screen.findByRole("heading", { name: "Processing Cover Recipe" });
       expect(screen.getByAltText("Photo of Processing Cover Recipe")).toHaveAttribute("src", "/photos/raw-spoon.jpg");
       expect(screen.getByTestId("cover-provenance-badge")).toHaveTextContent("Original photo");
-      expect(screen.getByRole("status")).toHaveTextContent("Editorializing cover");
+      expect(screen.getByRole("status")).toHaveTextContent("Styling cover");
 
-      await user.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
-      expect(await screen.findByRole("heading", { name: "Photo studio" })).toBeInTheDocument();
-      expect(screen.getAllByRole("status").map((status) => status.textContent)).toContain("Editorializing cover");
+      await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
+      expect(await screen.findByRole("heading", { name: "Photos" })).toBeInTheDocument();
+      expect(screen.getAllByRole("status").map((status) => status.textContent)).toContain("Styling cover");
     });
 
     it("polls while the active cover is processing and swaps to the editorial variant", async () => {
@@ -4061,7 +4061,7 @@ describe("Recipes $id Route", () => {
 
         expect(loader.mock.calls.length).toBeGreaterThan(visibleLoaderCalls);
         expect(screen.getByAltText("Photo of Autoswap Recipe")).toHaveAttribute("src", "/photos/editorial-spoon.jpg");
-        expect(screen.queryByText("Editorializing cover")).toBeNull();
+        expect(screen.queryByText("Styling cover")).toBeNull();
       } finally {
         setIntervalSpy.mockRestore();
         clearIntervalSpy.mockRestore();
@@ -4538,13 +4538,14 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
 
       await screen.findByRole("heading", { name: "Recipe to Delete" });
-      expect(screen.queryByRole("alertdialog", { name: "Delete this recipe?" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("alertdialog", { name: /^Delete ".+"\?$/ })).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
+      await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
       await user.click(screen.getByRole("button", { name: "Delete" }));
 
-      expect(await screen.findByRole("alertdialog", { name: "Delete this recipe?" })).toBeInTheDocument();
-      expect(screen.getByText("Delete this recipe? This cannot be undone.")).toBeInTheDocument();
+      // The dialog names the recipe and what deleting it does, instead of asking the same question twice.
+      expect(await screen.findByRole("alertdialog", { name: 'Delete "Recipe to Delete"?' })).toBeInTheDocument();
+      expect(screen.getByText("It will be removed from your kitchen and your cookbooks, and links to it will stop working. You can't undo this.")).toBeInTheDocument();
     });
 
     it("should cancel recipe deletion from the dialog without submitting", async () => {
@@ -4581,11 +4582,11 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Recipe Delete Actions" });
 
-      await user.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
+      await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
       await user.click(screen.getByRole("button", { name: "Delete" }));
       await user.click(await screen.findByRole("button", { name: "Cancel" }));
       await waitFor(() => {
-        expect(screen.queryByRole("alertdialog", { name: "Delete this recipe?" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("alertdialog", { name: /^Delete ".+"\?$/ })).not.toBeInTheDocument();
       });
       await settleBrowserTasks();
       expect(submittedIntents).toEqual([]);
@@ -4624,7 +4625,7 @@ describe("Recipes $id Route", () => {
 
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Recipe Delete Confirm" });
-      await user.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
+      await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
       await user.click(screen.getByRole("button", { name: "Delete" }));
       await user.click(await screen.findByRole("button", { name: "Delete" }));
 
@@ -4632,7 +4633,7 @@ describe("Recipes $id Route", () => {
         expect(submittedIntents).toEqual(["delete"]);
       });
       await waitFor(() => {
-        expect(screen.queryByRole("alertdialog", { name: "Delete this recipe?" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("alertdialog", { name: /^Delete ".+"\?$/ })).not.toBeInTheDocument();
       });
       await settleBrowserTasks();
     });
@@ -5003,6 +5004,8 @@ describe("Recipes $id Route", () => {
 
       const checkboxes = screen.getAllByRole("checkbox");
       expect(checkboxes.length).toBeGreaterThanOrEqual(2);
+      // Nothing is ticked yet, so there is nothing to clear (finding 15).
+      expect(screen.queryByRole("button", { name: "Clear progress" })).toBeNull();
 
       await user.click(checkboxes[0]);
       await user.click(checkboxes[1]);
@@ -5012,6 +5015,7 @@ describe("Recipes $id Route", () => {
       await user.click(screen.getByRole("button", { name: "Clear progress" }));
       expect(checkboxes[0]).not.toBeChecked();
       expect(checkboxes[1]).not.toBeChecked();
+      expect(screen.queryByRole("button", { name: "Clear progress" })).toBeNull();
     });
 
     it("should keep cookbook-save controls out of the recipe page", async () => {

@@ -30,6 +30,11 @@ function makeLedgerStub(opts: {
   const state = { createCalls: 0, retryCalls: 0 };
   let firstUpdate = true;
   const stub = {
+    // The global day always has room here; these tests are about the per-user consume race.
+    imageGenDailyBudget: {
+      updateMany: vi.fn(async () => ({ count: 1 })),
+      create: vi.fn(async () => ({})),
+    },
     imageGenLedger: {
       updateMany: vi.fn(async () => {
         if (firstUpdate) {

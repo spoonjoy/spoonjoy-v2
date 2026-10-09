@@ -4,8 +4,8 @@
 // more" is there; nothing asserts counts or positions beyond that.
 import { test, expect } from "./support/journey";
 import { seededRecipeLink, waitForHydration } from "./support/navigation";
+import { PAGER_OLDEST_RECIPE } from "../../scripts/seed-qa-kitchen.mjs";
 
-const RISOTTO = "/recipes/qa-kitchen-recipe-risotto";
 const MAX_PAGES = 40;
 
 test.describe("Public recipes", () => {
@@ -36,7 +36,9 @@ test.describe("Public recipes", () => {
   test("following the next-page links reaches the oldest seeded recipe", async ({ page }) => {
     test.setTimeout(180_000);
     const main = page.getByRole("main");
-    const risotto = seededRecipeLink(main, "Saffron Risotto", RISOTTO);
+    // The paging fixture's recipes are dated 2020, older than anything else on QA, so its oldest
+    // one is the last row the newest-first list reaches.
+    const oldest = seededRecipeLink(main, PAGER_OLDEST_RECIPE.title, `/recipes/${PAGER_OLDEST_RECIPE.id}`);
     const showMore = main.getByRole("link", { name: "Show more recipes", exact: true });
 
     let path: string | null = "/recipes";
@@ -44,10 +46,10 @@ test.describe("Public recipes", () => {
     while (path && pages < MAX_PAGES) {
       await page.goto(path);
       pages += 1;
-      if (await risotto.isVisible()) break;
+      if (await oldest.isVisible()) break;
       path = (await showMore.count()) > 0 ? await showMore.getAttribute("href") : null;
     }
 
-    await expect(risotto).toBeVisible();
+    await expect(oldest).toBeVisible();
   });
 });

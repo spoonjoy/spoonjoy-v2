@@ -19,6 +19,7 @@ import {
   type SearchResult,
   type SearchScope,
 } from "~/lib/search.server";
+import { listImageProps, type ImageLoadingProps } from "~/lib/image-loading";
 
 const SCOPE_LABELS: Record<SearchScope, string> = {
   all: "Everything",
@@ -91,7 +92,7 @@ function resultCountLabel(count: number) {
   return `${count} ${count === 1 ? "result" : "results"}`;
 }
 
-function ResultCard({ result }: { result: SearchResult }) {
+function ResultCard({ result, imageProps }: { result: SearchResult; imageProps: ImageLoadingProps }) {
   const Icon = RESULT_ICONS[result.type];
   const displayImageUrl = result.imageUrl && result.imageUrl.length > 0 ? result.imageUrl : undefined;
   const coverProvenanceLabel = typeof result.metadata.coverProvenanceLabel === "string"
@@ -109,7 +110,7 @@ function ResultCard({ result }: { result: SearchResult }) {
     >
       <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-[var(--sj-flour)] sm:aspect-square">
         {displayImageUrl ? (
-          <img src={displayImageUrl} alt="" className="h-full w-full object-cover transition group-hover:scale-105" />
+          <img src={displayImageUrl} alt="" {...imageProps} className="h-full w-full object-cover transition group-hover:scale-105" />
         ) : (
           <Icon className="size-5" aria-hidden="true" />
         )}
@@ -274,8 +275,8 @@ export default function Search() {
 
             {results.length > 0 ? (
               <div className="grid gap-3">
-                {results.map((result) => (
-                  <ResultCard key={`${result.type}:${result.id}`} result={result} />
+                {results.map((result, index) => (
+                  <ResultCard key={`${result.type}:${result.id}`} result={result} imageProps={listImageProps(index)} />
                 ))}
               </div>
             ) : (

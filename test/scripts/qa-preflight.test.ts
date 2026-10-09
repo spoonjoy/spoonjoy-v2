@@ -152,6 +152,7 @@ function warningCleanStorybookWorkflow(): string {
     "    branches: [main]",
     "  pull_request:",
     "    branches: [main]",
+    "  merge_group:",
     "  workflow_dispatch:",
     "env:",
     "  GIT_CONFIG_COUNT: '1'",

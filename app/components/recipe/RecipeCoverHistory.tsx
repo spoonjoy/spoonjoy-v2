@@ -354,9 +354,9 @@ export function RecipeCoverHistory({
                       type="submit"
                       plain
                       className="mt-2"
-                      aria-label={`Editorialize spoon photo by ${spoon.chef.username}`}
+                      aria-label={`Make a styled cover from the cook photo by ${spoon.chef.username}`}
                     >
-                      Editorialize cover
+                      Make a styled cover
                     </Button>
                   </Form>
                 </div>
