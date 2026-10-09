@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { threadId } from "node:worker_threads";
 
 // Every Vitest worker gets its own copy of the schema-initialised prisma/test.db, so DB-backed
@@ -15,7 +16,8 @@ import { threadId } from "node:worker_threads";
 // SPOONJOY_TEST_DB_DIR is set by vitest.config.ts (claimRunDbDir) for parallel runs. Without it
 // (a bare script, or a run that sets it empty, which vitest.config.ts then runs serially) tests
 // keep using prisma/test.db directly.
-const templatePath = resolve(__dirname, "../../prisma/test.db");
+// Resolved from this module, so it works under Vitest (CommonJS-style __dirname) and plain ESM.
+const templatePath = resolve(dirname(fileURLToPath(import.meta.url)), "../../prisma/test.db");
 const SNAPSHOT_NAME = "template.db";
 
 // Each Vitest run owns one directory, recorded with the pid of the Vitest process that made it.
@@ -76,6 +78,14 @@ async function backupWithBetterSqlite(from: string, to: string): Promise<void> {
   const db = new Database(from, { readonly: true, fileMustExist: true });
   try {
     await db.backup(to);
+  } catch (error) {
+    // A read-only handle cannot roll back a hot journal left beside prisma/test.db by a crashed
+    // writer, so the snapshot fails here rather than giving workers a torn copy.
+    throw new Error(
+      `Could not snapshot ${from} for this run's test databases; if a crashed process left ` +
+        `${from}-journal beside it, recreate the test database. ${(error as Error).message}`,
+      { cause: error },
+    );
   } finally {
     db.close();
   }
@@ -96,7 +106,15 @@ const fsIo: WorkerDbIo = {
   copy: copyFileSync,
   exists: existsSync,
   remove: (path) => rmSync(path, { force: true }),
-  onExit: (cleanup) => process.once("exit", cleanup),
+  onExit: (cleanup) => {
+    process.once("exit", cleanup);
+    // Vitest stops an isolated fork with a bare SIGTERM, and Node does not emit "exit" when a
+    // signal kills it, so the copy is also removed on SIGTERM before exiting as the signal would.
+    process.once("SIGTERM", () => {
+      cleanup();
+      process.exit(143);
+    });
+  },
 };
 
 const SQLITE_SIDE_FILES = ["-journal", "-wal", "-shm"];
@@ -115,7 +133,13 @@ export function prepareWorkerDb(
   // stale journal beside a fresh copy would be rolled into it.
   for (const suffix of SQLITE_SIDE_FILES) io.remove(path + suffix);
   const snapshot = snapshotPath(dir);
-  io.copy(io.exists(snapshot) ? snapshot : templatePath, path);
+  if (!io.exists(snapshot)) {
+    throw new Error(
+      `${snapshot} is missing: test/support/global-setup.ts takes it before workers start, so ` +
+        "this run's config claimed SPOONJOY_TEST_DB_DIR without that global setup.",
+    );
+  }
+  io.copy(snapshot, path);
   env.SPOONJOY_TEST_DB_PATH = path;
   // Isolated forks exit after each file, so removing the copy on exit keeps the run directory
   // to the live workers' copies instead of one per test file.
