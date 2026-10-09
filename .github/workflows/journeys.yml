@@ -197,6 +197,8 @@ jobs:
           done < <(jq -r '(.scratch[]?, .scratchDesktop[]?) | .password' "$SPOONJOY_QA_CREDENTIALS")
 
       - name: Run test suite
+        env:
+          CAPTURE_LABEL: skip-before
         run: |
           if [ "$SUITE" = "explore" ]; then
             pnpm run explore:qa

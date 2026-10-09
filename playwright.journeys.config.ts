@@ -8,6 +8,8 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: true,
   retries: 0,
+  // CAPTURE-ONLY branch: run just the capture journey and the skip-link journey.
+  grep: /@capture|Skip to main content/,
   failOnFlakyTests: true,
   workers: 2,
   timeout: 60_000,
@@ -19,7 +21,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   projects: [
-    { name: "personas", testMatch: /personas\.setup\.ts/, use: { ...devices["Desktop Chrome"] } },
+    { name: "personas", testMatch: /personas\.setup\.ts/, grep: /./, use: { ...devices["Desktop Chrome"] } },
     // A plain *.journey.ts runs on both devices. *.desktop.journey.ts / *.mobile.journey.ts
     // route to one device only; check:journeys still scans them (they end in .journey.ts).
     {
