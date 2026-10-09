@@ -76,6 +76,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     reason:
       "Cycle-safe error recognizer treats a throwing adapter-wrapper getter as an absent field; recognized cutover errors and all non-matches still return to the instrumented request boundary.",
   },
+  {
+    file: "app/lib/api-auth.server.ts",
+    category: "swallow",
+    reason:
+      "Both catches guard the advisory lastUsedAt write after the token is already authenticated: the awaited branch swallows only P2025 (credential deleted between read and write) and rethrows everything else, and the waitUntil branch logs a failed best-effort background write. No user-facing failure is hidden.",
+  },
 
   // --- pure rethrow / race recovery (surfaced to instrumented callers) ---
   {
