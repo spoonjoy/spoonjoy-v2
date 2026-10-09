@@ -29,6 +29,7 @@ const coverageInclude = [
   "scripts/sanitize-journey-traces.mjs",
   "scripts/count-cloudflare-requests.mjs",
   "scripts/qa-run-scope.mjs",
+  "scripts/d1-logical-export.mjs",
   "test/warning-policy.ts",
   "e2e/warning-policy.ts",
   "e2e/fixtures.ts",
