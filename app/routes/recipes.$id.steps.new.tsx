@@ -23,9 +23,15 @@ import {
   STEP_TITLE_MAX_LENGTH,
   STEP_DESCRIPTION_MAX_LENGTH,
 } from "~/lib/validation";
-import { createStepOutputUses } from "~/lib/step-output-use-mutations.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
-import { touchNativeSyncRecipe } from "~/lib/native-sync-invalidation.server";
+import { touchNativeSyncRecipeOperation } from "~/lib/native-sync-invalidation.server";
+import { requestD1 } from "~/lib/d1-read.server";
+import { isD1GuardFailure } from "~/lib/d1-write.server";
+import {
+  createRecipeStepOnD1,
+  ingredientAlreadyInRecipe,
+  RECIPE_CHANGED_MESSAGE,
+} from "~/lib/recipe-d1-edits.server";
 import {
   parseIngredients,
   IngredientParseError,
@@ -242,77 +248,98 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   // Filter to only valid step numbers and de-duplicate (extra safety)
   const usesSteps = [...new Set(parsedSteps.filter((n) => !isNaN(n) && n > 0 && n < nextStepNum))];
 
-  // Note: We allow creating empty steps (no ingredients or dependencies) during initial creation.
-  // Ingredients and dependencies can be added afterward via the step edit action.
-  // This was changed to support the workflow where users create a step first, then add ingredients later.
-  // Original validation required: if (usesSteps.length === 0 && ingredients.length === 0) { ... }
+  // Empty steps (no ingredients or step output uses) are allowed here: ingredients and output
+  // uses can be added afterward from the step's edit page.
+
+  // Every ingredient is checked before anything is written, then the step, its output uses and
+  // its ingredients are written together. A rejected save leaves the recipe as it was, so the
+  // cook can fix the form and submit again without piling up copies of the step.
+  const seenNames = new Set<string>();
+  for (const ingredient of ingredients) {
+    const name = ingredient.ingredientName.toLowerCase();
+    if (seenNames.has(name)) {
+      return data(
+        { errors: { ingredientName: `${name} is listed more than once` } },
+        { status: 400 }
+      );
+    }
+    seenNames.add(name);
+  }
 
   try {
-    const step = await database.recipeStep.create({
-      data: {
-        recipeId: id,
-        stepNum: nextStepNum,
-        stepTitle: stepTitle.trim() || null,
-        description: description.trim(),
-      },
-    });
-    await touchNativeSyncRecipe(database, id);
-
-    if (usesSteps.length > 0) {
-      await createStepOutputUses(database, id, nextStepNum, usesSteps);
-    }
-
+    const rows = [];
     for (const ingredient of ingredients) {
-      const normalizedUnitName = ingredient.unit.toLowerCase();
-      const normalizedIngredientName = ingredient.ingredientName.toLowerCase();
-
-      let unit = await database.unit.findUnique({
-        where: { name: normalizedUnitName },
+      const unitName = ingredient.unit.toLowerCase();
+      const ingredientName = ingredient.ingredientName.toLowerCase();
+      const unit = await database.unit.upsert({
+        where: { name: unitName },
+        update: {},
+        create: { name: unitName },
       });
-
-      if (!unit) {
-        unit = await database.unit.create({
-          data: { name: normalizedUnitName },
-        });
-      }
-
-      let ingredientRef = await database.ingredientRef.findUnique({
-        where: { name: normalizedIngredientName },
+      const ingredientRef = await database.ingredientRef.upsert({
+        where: { name: ingredientName },
+        update: {},
+        create: { name: ingredientName },
       });
-
-      if (!ingredientRef) {
-        ingredientRef = await database.ingredientRef.create({
-          data: { name: normalizedIngredientName },
-        });
-      }
-
-      const existingIngredient = await database.ingredient.findFirst({
-        where: {
-          recipeId: id,
-          ingredientRefId: ingredientRef.id,
-        },
-      });
-
-      if (existingIngredient) {
-        return data(
-          { errors: { ingredientName: "This ingredient is already in the recipe" } },
-          { status: 400 }
-        );
-      }
-
-      await database.ingredient.create({
-        data: {
-          recipeId: id,
-          stepNum: nextStepNum,
-          quantity: ingredient.quantity,
-          unitId: unit.id,
-          ingredientRefId: ingredientRef.id,
-        },
-      });
+      rows.push({ quantity: ingredient.quantity, unitId: unit.id, ingredientRefId: ingredientRef.id });
     }
 
-    await touchNativeSyncRecipe(database, id);
-    return redirect(`/recipes/${id}/steps/${step.id}/edit?created=1`);
+    const taken = await ingredientAlreadyInRecipe(database, id, rows.map((row) => row.ingredientRefId));
+    if (taken) {
+      return data(
+        { errors: { ingredientName: `${taken} is already in the recipe` } },
+        { status: 400 }
+      );
+    }
+
+    const stepId = crypto.randomUUID();
+    const stepTitleValue = stepTitle.trim() || null;
+    const descriptionValue = description.trim();
+    const d1 = requestD1(context);
+    if (d1) {
+      try {
+        await createRecipeStepOnD1(d1, {
+          recipeId: id,
+          stepId,
+          stepNum: nextStepNum,
+          stepTitle: stepTitleValue,
+          description: descriptionValue,
+          usesSteps,
+          rows,
+        });
+      } catch (error) {
+        // Another request added a step or one of these ingredients in between; nothing was
+        // written.
+        if (!isD1GuardFailure(error)) throw error;
+        const raced = await ingredientAlreadyInRecipe(database, id, rows.map((row) => row.ingredientRefId));
+        return raced
+          ? data({ errors: { ingredientName: `${raced} is already in the recipe` } }, { status: 400 })
+          : data({ errors: { general: RECIPE_CHANGED_MESSAGE } }, { status: 409 });
+      }
+    } else {
+      await database.$transaction([
+        database.recipeStep.create({
+          data: {
+            id: stepId,
+            recipeId: id,
+            stepNum: nextStepNum,
+            stepTitle: stepTitleValue,
+            description: descriptionValue,
+          },
+        }),
+        ...(usesSteps.length > 0
+          ? [database.stepOutputUse.createMany({
+            data: usesSteps.map((outputStepNum) => ({ recipeId: id, inputStepNum: nextStepNum, outputStepNum })),
+          })]
+          : []),
+        ...rows.map((row) => database.ingredient.create({
+          data: { recipeId: id, stepNum: nextStepNum, ...row },
+        })),
+        touchNativeSyncRecipeOperation(database, id),
+      ]);
+    }
+
+    return redirect(`/recipes/${id}/steps/${stepId}/edit?created=1`);
   } catch (error) {
     // Validation + duplicate checks happened above and surface as 400s; reaching
     // here means the step/ingredient persistence itself failed (DB/infra fault).
