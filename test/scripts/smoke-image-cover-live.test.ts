@@ -636,6 +636,22 @@ describe("image-cover live smoke flow", () => {
     expect(harness.calls.some((call) => call.kind === "api" && call.name === "upload_recipe_image")).toBe(false);
   });
 
+  it("fails at once with the provider's reason when placeholder generation has failed", async () => {
+    const harness = createFlowHarness({ maxPollAttempts: 50 });
+    let listCalls = 0;
+    harness.options.mcpTool = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      harness.calls.push({ kind: "mcp", name, args });
+      if (name === "list_recipe_covers") {
+        listCalls += 1;
+        return { covers: [{ id: "cover-failed", generationStatus: "failed", failureReason: "Gemini image generation failed with status 403" }] };
+      }
+      throw new Error(`Unexpected MCP tool ${name}`);
+    });
+
+    await expect(runImageCoverSmokeFlow(harness.options)).rejects.toThrow(/generation failed \(Gemini image generation failed with status 403\)/);
+    expect(listCalls).toBe(1);
+  });
+
   it("ignores malformed cover rows while waiting for the AI placeholder", async () => {
     const harness = createFlowHarness();
     const originalMcpTool = harness.options.mcpTool;

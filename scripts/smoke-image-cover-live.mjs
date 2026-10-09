@@ -367,6 +367,14 @@ async function waitForAiPlaceholder({ recipeId, mcpTool, maxAttempts, delayMs, w
     if (aiCover && coverTerminalState(aiCover) === "succeeded" && (aiCover.imageUrl || aiCover.displayUrl)) {
       return aiCover;
     }
+    // A cover that has already failed will never become ready: report the provider's reason now
+    // instead of polling to the deadline.
+    const failedCover = coverListFrom(payload).find((cover) => coverTerminalState(cover) === "failed");
+    if (failedCover) {
+      throw new Error(
+        `AI generated placeholder cover was not ready for recipe ${recipeId}: generation failed (${failedCover.failureReason ?? "no reason reported"}).`,
+      );
+    }
     if (attempt < maxAttempts) await wait(delayMs);
   }
   throw new Error(`AI generated placeholder cover was not ready for recipe ${recipeId}. Last seen: ${lastSeen}.`);
