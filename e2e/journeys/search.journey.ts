@@ -101,12 +101,15 @@ test.describe("Search", () => {
   });
 
   test("a comma-separated pantry query finds recipes matching any ingredient", async ({ page, expectAccessible }) => {
+    // Jasmine rice is in the seeded Lemon Herb Rice and arborio in the seeded Saffron Risotto. A
+    // common ingredient such as lemon or tomato matches more QA recipes than the 30-result page
+    // holds (run 37129200484), which pushes a seeded recipe off it.
     await page.goto("/search");
-    await page.getByLabel("Search terms", { exact: true }).fill("tomato, lemon");
+    await page.getByLabel("Search terms", { exact: true }).fill("jasmine, arborio");
     await page.getByLabel("Search terms", { exact: true }).press("Enter");
-    await expect(page.getByRole("heading", { name: 'Results for "tomato, lemon"', exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: 'Results for "jasmine, arborio"', exact: true })).toBeVisible();
     const results = page.getByRole("region", { name: "Search results" });
-    await expect(seededRecipeLink(results, "Recipe Roasted Tomato Soup", TOMATO_SOUP)).toBeVisible();
+    await expect(seededRecipeLink(results, "Recipe Saffron Risotto", RISOTTO)).toBeVisible();
     await expect(seededRecipeLink(results, "Recipe Lemon Herb Rice", LEMON_RICE)).toBeVisible();
     await expectAccessible();
   });

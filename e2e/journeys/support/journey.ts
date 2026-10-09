@@ -23,6 +23,7 @@ import { test as base, expect } from "@playwright/test";
 import type { ConsoleMessage, Page } from "@playwright/test";
 import { runAxe } from "./axe";
 import { redactUrl, redactUrlsInText } from "./redact";
+import { retryOnceOnQaNoise } from "./qa-transient";
 import { isWebKitCancelledSameOriginFetch } from "./webkit-noise";
 
 const FAILING_IMPACTS = new Set(["serious", "critical"]);
@@ -219,6 +220,14 @@ interface JourneyFixtures {
 }
 
 export const test = base.extend<JourneyFixtures>({
+  // page.goto tries once more when QA answers 502/503/504 or resets the connection
+  // (support/qa-transient.ts); every other outcome is reported as it happened.
+  page: async ({ page }, use) => {
+    const goto = page.goto.bind(page);
+    page.goto = (url, options) => retryOnceOnQaNoise(() => goto(url, options));
+    await use(page);
+  },
+
   verifyAfterReload: async ({ page }, use) => {
     await use(async (assertion) => {
       await page.reload({ waitUntil: "load" });
