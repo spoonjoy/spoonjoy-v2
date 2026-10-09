@@ -155,6 +155,7 @@ function validStorybookWorkflow(): string {
     "    branches: [main]",
     "  pull_request:",
     "    branches: [main]",
+    "  merge_group:",
     "  workflow_dispatch:",
     "env:",
     "  GIT_CONFIG_COUNT: '1'",
@@ -977,34 +978,6 @@ describe("deployment preflight", () => {
       "an artifact-validity override",
       "          artifact_valid=0",
       "          artifact_valid=0\n          artifact_valid=1",
-    ],
-    [
-      "rollback guard text preserved only in comments",
-      [
-        '          if [ -n "$ROLLBACK_VERSION_ID" ] && [ "$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" ]; then',
-        "            exit 1",
-        "          fi",
-      ].join("\n"),
-      [
-        '          # if [ -n "$ROLLBACK_VERSION_ID" ] && [ "$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" ]; then',
-        "          #   exit 1",
-        "          # fi",
-      ].join("\n"),
-    ],
-    [
-      "rollback guard text hidden in a dead branch",
-      [
-        '          if [ -n "$ROLLBACK_VERSION_ID" ] && [ "$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" ]; then',
-        "            exit 1",
-        "          fi",
-      ].join("\n"),
-      [
-        "          if false; then",
-        '            if [ -n "$ROLLBACK_VERSION_ID" ] && [ "$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" ]; then',
-        "              exit 1",
-        "            fi",
-        "          fi",
-      ].join("\n"),
     ],
   ])("rejects %s", (_label, expected, replacement) => {
     const inputs = validInputs();
@@ -2111,14 +2084,24 @@ describe("deployment preflight", () => {
     }
   }, 120_000);
 
+  it.each(["atomic-bootstrap", "atomic-product-activation", "protocol-v1-canary"] as const)(
+    "does not block a rollback dispatch in %s mode",
+    (releaseMode) => {
+      const workflow = secureProductionDeployWorkflow(
+        releaseMode,
+        releaseMode === "protocol-v1-canary" ? "d".repeat(40) : "",
+      );
+      expect(workflow).not.toMatch(/\[ "\$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" \]; then\s+exit 1/);
+      const inputs = validInputs();
+      inputs.productionDeployWorkflow = workflow;
+      expect(validateDeploymentConfig(inputs).errors.map((item) => item.name))
+        .not.toContain("production deploy workflow");
+    },
+  );
+
   it.each([
     ["a missing canary boundary", `  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: "${"d".repeat(40)}"`, '  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: ""'],
     ["a malformed canary boundary", `  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: "${"d".repeat(40)}"`, '  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: "main"'],
-    [
-      "a missing rollback-mode guard",
-      '          if [ -n "$ROLLBACK_VERSION_ID" ] && [ "$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" ]; then',
-      '          if [ -n "$ROLLBACK_VERSION_ID" ]; then',
-    ],
     [
       "a missing protocol ancestry check",
       '            git merge-base --is-ancestor "$SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA" "$SOURCE_SHA"',
@@ -2440,6 +2423,29 @@ describe("deployment preflight", () => {
     const result = validateDeploymentConfig(inputs);
 
     expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it("requires merge-queue CI and cancels only superseded pull-request runs", () => {
+    const ciErrors = (ciWorkflow: string) =>
+      validateDeploymentConfig({ ...validInputs(), ciWorkflow }).errors.map((item) => item.name);
+    const concurrency = [
+      "concurrency:",
+      "  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}",
+      "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+      "",
+    ].join("\n");
+
+    expect(validCiWorkflow()).toContain(concurrency);
+    expect(ciErrors(validCiWorkflow())).not.toContain("CI workflow");
+    for (const broken of [
+      replaceRequired(validCiWorkflow(), "  merge_group:\n", ""),
+      replaceRequired(validCiWorkflow(), "  merge_group:\n", "  merge_group:\n    types: [checks_requested]\n"),
+      replaceRequired(validCiWorkflow(), concurrency, ""),
+      replaceRequired(validCiWorkflow(), "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}", "  cancel-in-progress: true"),
+      replaceRequired(validCiWorkflow(), "format('run-{0}', github.run_id)", "github.ref"),
+    ]) {
+      expect(ciErrors(broken)).toContain("CI workflow");
+    }
   });
 
   it("requires warning-clean CI workflow setup", () => {
@@ -5032,7 +5038,7 @@ describe("Storybook deploy warning cleanup", () => {
 
   it("requires push-to-main trigger and workflow-level Git default-branch config", () => {
     const missingOnBlock = validateDeploymentConfig(
-      inputsWithStorybookWorkflow(validStorybookWorkflow().replace("on:\n  push:\n    branches: [main]\n  pull_request:\n    branches: [main]\n  workflow_dispatch:\n", "")),
+      inputsWithStorybookWorkflow(validStorybookWorkflow().replace("on:\n  push:\n    branches: [main]\n  pull_request:\n    branches: [main]\n  merge_group:\n  workflow_dispatch:\n", "")),
     );
     const missingPushMain = validateDeploymentConfig(
       inputsWithStorybookWorkflow(validStorybookWorkflow().replace("  push:\n    branches: [main]\n", "")),
