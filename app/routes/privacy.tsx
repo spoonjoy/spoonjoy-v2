@@ -4,7 +4,7 @@ import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
 import { Subheading } from "~/components/ui/heading";
 import { Text, TextLink } from "~/components/ui/text";
 
-const LAST_UPDATED = "May 29, 2026";
+const LAST_UPDATED = "October 9, 2026";
 const CONTACT_EMAIL = "ari@spoonjoy.app";
 
 export function meta({}: Route.MetaArgs) {
@@ -14,9 +14,9 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ id, title, children }: { id?: string; title: string; children: ReactNode }) {
   return (
-    <section className="mt-8">
+    <section id={id} className="mt-8 scroll-mt-24">
       <Subheading level={2} className="text-2xl/8">{title}</Subheading>
       <div className="mt-3 space-y-3 text-base/7 text-[var(--sj-ink-soft)]">{children}</div>
     </section>
@@ -60,10 +60,14 @@ export default function Privacy() {
 
         <Section title="What others can see">
           <Text>
-            Recipes and cookbooks you publish are visible to anyone, along with your username
-            and profile photo. Your shopping list, cook notes, account email, and API tokens
-            are private to you. Anything you mark or keep public can be viewed, forked, and
-            saved by other people.
+            Spoonjoy is a public cookbook. Every recipe you create, its covers and photos, your
+            cookbooks, the cooks you log (with their notes and photos), your username, and your
+            profile photo can be seen by anyone, signed in or not, and can show up in search.
+            Other cooks can fork your recipes into their own kitchens and save them to their
+            cookbooks.
+          </Text>
+          <Text>
+            Your email address, shopping list, sign-in methods, and API tokens are private to you.
           </Text>
         </Section>
 
@@ -73,13 +77,17 @@ export default function Privacy() {
             run Spoonjoy:
           </Text>
           <ul className="list-disc space-y-2 pl-6">
-            <li>Cloudflare — application hosting, database, and image storage.</li>
-            <li>Product analytics and error monitoring — usage and error data, with on-page text masked by default.</li>
-            <li>OpenAI — only when you import a recipe from a URL or generate a recipe image, to process that specific request.</li>
-            <li>Apple, GitHub, and Google — only if you choose to sign in with them.</li>
-            <li>Web-push services — only if you enable notifications.</li>
+            <li>Cloudflare: application hosting, database, and photo storage.</li>
+            <li>PostHog: product analytics and error monitoring, with on-page text masked by default.</li>
+            <li>OpenAI: the text of a recipe page you import, the ingredient lines it reads into amounts and units, and the recipe details or photo used to make a recipe cover.</li>
+            <li>Google Gemini: the same ingredient lines and cover requests when OpenAI is unavailable, and the photos of your cooks that Spoonjoy restyles into recipe covers.</li>
+            <li>Apple, GitHub, and Google: only if you choose to sign in with them.</li>
+            <li>Apple, Google, Mozilla, and Microsoft push services: only if you turn on notifications, to deliver them to your browser or device.</li>
           </ul>
-          <Text>We do not sell your personal information or share it for advertising.</Text>
+          <Text>
+            OpenAI and Google receive only what a request needs, not your email address or
+            password. We do not sell your personal information or share it for advertising.
+          </Text>
         </Section>
 
         <Section title="Connectors and AI assistants">
@@ -91,11 +99,41 @@ export default function Privacy() {
           </Text>
         </Section>
 
+        <Section id="export" title="Download your data">
+          <Text>
+            In <TextLink href="/account/settings#delete-account">account settings</TextLink>, choose
+            Download my data to get one JSON file with your account details, your recipes with
+            their steps and ingredients, your cookbooks, shopping list, and cooks, and links to
+            your photos. The iPhone app offers the same download in its account screen.
+          </Text>
+        </Section>
+
+        <Section id="deletion" title="Deleting your account">
+          <Text>
+            You can delete your account yourself in account settings or in the iPhone app. We ask
+            you to type your username and confirm it is you: with your password, or, if you have
+            no password, by signing in again.
+          </Text>
+          <Text>Deleting your account permanently removes:</Text>
+          <ul className="list-disc space-y-2 pl-6">
+            <li>your account, email address, and profile photo;</li>
+            <li>your recipes, cookbooks, shopping list, and the cooks you logged, with their photos;</li>
+            <li>your passkeys, linked sign-in accounts, API tokens, and every app and assistant you connected;</li>
+            <li>your notifications, and notifications to other cooks that mention you.</li>
+          </ul>
+          <Text>
+            A recipe of yours that another cook has forked, saved to a cookbook, or cooked stays
+            up so their kitchen keeps working, but it is credited to a &ldquo;deleted-chef&rdquo;
+            account instead of you. Their forks remain theirs. Photos are erased from storage
+            after a short grace period once nothing uses them.
+          </Text>
+        </Section>
+
         <Section title="Data retention">
           <Text>
             We keep your account and content for as long as your account is active. Deleting a
-            recipe or shopping-list item removes it from your kitchen. If you want your account
-            and associated data deleted, contact us and we will remove it.
+            recipe or shopping-list item removes it from your kitchen. Analytics and error data
+            already sent to PostHog stay there until PostHog&rsquo;s retention period ends.
           </Text>
         </Section>
 
@@ -104,7 +142,7 @@ export default function Privacy() {
             <li>Update your profile and content at any time.</li>
             <li>Revoke API tokens and connector access from account settings.</li>
             <li>Turn notifications off at any time.</li>
-            <li>Request export or deletion of your data by emailing us.</li>
+            <li>Download your data or delete your account from account settings, or email us and we will help.</li>
           </ul>
         </Section>
 
