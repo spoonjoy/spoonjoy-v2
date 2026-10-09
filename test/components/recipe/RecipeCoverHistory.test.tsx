@@ -157,6 +157,8 @@ describe("RecipeCoverHistory", () => {
     expect(screen.getAllByText("Unavailable")).toHaveLength(4);
     expect(screen.getByText("No usable image variants.")).toBeInTheDocument();
     expect(screen.getByText("No image")).toBeInTheDocument();
+    // Light on-photo text on the charcoal tile, in both themes.
+    expect(screen.getByText("No image")).toHaveClass("text-[var(--sj-on-photo)]");
     expect(screen.getAllByRole("button", { name: "Use Original photo cover" })).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Use Imported photo cover" })).toBeNull();
     expect(screen.queryByText(legacyChefPhotoLabel)).toBeNull();
@@ -212,6 +214,9 @@ describe("RecipeCoverHistory", () => {
       // The status and the thumbnail both name the failure.
       expect(within(card).getAllByText(label)).toHaveLength(2);
       expect(within(card).getByTestId("recipe-cover-failed-thumbnail")).toHaveTextContent(label);
+      // Its text uses the light on-photo color in both themes. --sj-paper is the page color, which
+      // is dark in dark mode, so it would vanish on the charcoal tile.
+      expect(within(card).getByTestId("recipe-cover-failed-thumbnail")).toHaveClass("text-[var(--sj-on-photo)]");
       // Nothing on the card reads like a usable cover: no photo, no variant row, no "Unavailable".
       expect(card.querySelector("img")).toBeNull();
       expect(within(card).queryByText("Original photo")).toBeNull();
