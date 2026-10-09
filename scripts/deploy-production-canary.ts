@@ -2000,7 +2000,7 @@ export async function runProductionCanaryRelease(
         previousSourceSha,
         sourceSha,
         cleanEnv,
-        "Release source does not contain the commit production is running; refusing to move production backwards.",
+        "Release source does not contain, or this checkout cannot verify that it contains, the commit production is running; refusing to move production backwards.",
       );
     }
 

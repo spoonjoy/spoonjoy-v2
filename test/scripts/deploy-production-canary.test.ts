@@ -7991,7 +7991,7 @@ describe("release artifact and CLI boundary", () => {
     describe("forward-only production releases", () => {
       const NEWER_PRODUCTION_SHA = "f".repeat(40);
       const BACKWARDS_FAILURE =
-        "Release source does not contain the commit production is running; refusing to move production backwards.";
+        "Release source does not contain, or this checkout cannot verify that it contains, the commit production is running; refusing to move production backwards.";
 
       function runnerWithActiveTag(
         activeTag: unknown,
