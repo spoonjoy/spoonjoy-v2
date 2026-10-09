@@ -191,6 +191,17 @@ test.describe("Shopping list", () => {
     });
   });
 
+  test("a recipe's ingredients are filed under the aisle a shopper finds them in", async ({ page, expectAccessible }) => {
+    // Lemon Herb Rice's chicken stock was filed under Protein, because "chicken" matched first
+    // (product audit 2026-10-09, finding 9). The head noun, stock, decides: Pantry.
+    await page.goto("/recipes/qa-kitchen-recipe-lemon-rice");
+    await waitForHydration(page);
+    await expect(page.getByTestId("ingredient-item-qa-kitchen-recipe-lemon-rice-ingredient-1-chicken-stock")).toContainText("Pantry");
+    await expect(page.getByTestId("ingredient-item-qa-kitchen-recipe-lemon-rice-ingredient-1-chicken-stock")).not.toContainText("Protein");
+    await expect(page.getByTestId("ingredient-item-qa-kitchen-recipe-lemon-rice-ingredient-2-parsley")).toContainText("Produce");
+    await expectAccessible();
+  });
+
   test("a recipe's ingredients added from its page at 2x are on the list doubled @mutates", async ({
     page,
     verifyAfterReload,
