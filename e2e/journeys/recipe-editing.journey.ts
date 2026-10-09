@@ -211,4 +211,28 @@ test.describe("Recipe create and edit", () => {
     await page.goto(recipePath);
     await expect(page.getByRole("heading", { level: 1, name: "Page not found." })).toBeVisible();
   });
+
+  // QA has no OpenAI key (see AGENTS.md), so import answers that it isn't switched on rather than
+  // reading the page; if that secret is ever added to QA, this test must import a seeded page
+  // instead. It writes nothing, so it is not tagged @mutates.
+  test("a chef is offered import first on New Recipe, and gets a plain answer when it is unavailable", async ({
+    page,
+    expectAccessible,
+  }) => {
+    await page.goto("/recipes/new");
+    await waitForHydration(page);
+    const importHeading = page.getByRole("heading", { name: "Start from a recipe you already have." });
+    await expect(importHeading).toBeVisible();
+    await expect(page.getByRole("button", { name: "From a link", exact: true })).toHaveAttribute("aria-pressed", "true");
+
+    await page.getByLabel("Recipe link", { exact: true }).fill("https://example.com/recipes/weeknight-soup");
+    await page.getByRole("button", { name: "Import recipe", exact: true }).click();
+    await expect(page.getByRole("alert")).toHaveText("Importing isn't switched on here yet. You can still write the recipe below.");
+    await expect(page).toHaveURL(pathUrl("/recipes/new"));
+
+    await page.getByRole("button", { name: "Paste the recipe", exact: true }).click();
+    await expect(page.getByLabel("Recipe text", { exact: true })).toBeVisible();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expectAccessible();
+  });
 });
