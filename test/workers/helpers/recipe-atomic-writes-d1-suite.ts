@@ -1139,6 +1139,36 @@ describe("atomic recipe writes on Wrangler D1", () => {
       expect(updated.uses).toEqual([]);
     });
 
+    it("updates steps in place on real D1: ids, ingredient ids and output links survive a reorder", async () => {
+      await seedRecipe("atomic-mcp-reorder");
+      const id = "atomic-mcp-reorder";
+      await callSpoonjoyApiOperation("update_recipe", {
+        id,
+        steps: [
+          { id: `${id}-step-2`, title: "Rest", description: "Rest it longer", ingredients: [{ name: "atomic egg", quantity: 2, unit: "atomic cup" }] },
+          {
+            id: `${id}-step-1`,
+            title: "Mix",
+            description: "Mix it",
+            ingredients: [{ name: "atomic flour", quantity: 2, unit: "atomic cup" }, { name: "atomic milk", quantity: 1, unit: "atomic cup" }],
+          },
+          { id: `${id}-step-3`, title: "Bake", description: "Bake it", ingredients: [] },
+        ],
+      }, context());
+
+      expect(await rows(`SELECT "id", "stepNum", "description" FROM "RecipeStep" WHERE "recipeId" = ? ORDER BY "stepNum"`, id)).toEqual([
+        { id: `${id}-step-2`, stepNum: 1, description: "Rest it longer" },
+        { id: `${id}-step-1`, stepNum: 2, description: "Mix it" },
+        { id: `${id}-step-3`, stepNum: 3, description: "Bake it" },
+      ]);
+      expect(await rows(`SELECT "id", "stepNum", "quantity" FROM "Ingredient" WHERE "recipeId" = ? ORDER BY "id"`, id)).toEqual([
+        { id: `${id}-ingredient-egg`, stepNum: 1, quantity: 2 },
+        { id: `${id}-ingredient-flour`, stepNum: 2, quantity: 2 },
+        { id: `${id}-ingredient-milk`, stepNum: 2, quantity: 1 },
+      ]);
+      expect((await recipeGraph(id)).uses).toEqual([{ outputStepNum: 2, inputStepNum: 3 }]);
+    });
+
     it("soft-deletes a recipe with its sync tombstone, updatedAt bump and cookbook touch together, or none of them", async () => {
       await seedRecipe("atomic-mcp-delete");
       await run(`UPDATE "Cookbook" SET "updatedAt" = ? WHERE "id" = ?`, OLD, COOKBOOK);
