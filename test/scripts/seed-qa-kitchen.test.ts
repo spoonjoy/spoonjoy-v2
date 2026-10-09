@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import Database from "better-sqlite3";
 import bcrypt from "bcryptjs";
 import { describe, expect, it, vi } from "vitest";
-import { pagerRecipes,
+import { pagerRecipes, pagerRecipe, PAGER_OLDEST_RECIPE, PAGER_FORBIDDEN_WORDS,
   KITCHEN,
   SCRATCH_ACCOUNT_COUNT,
   SCRATCH_USER_COUNT,
@@ -68,6 +68,34 @@ describe("seed-qa-kitchen", () => {
     expect(recipes).toHaveLength(60);
     expect(new Set(recipes.map((recipe) => recipe.title)).size).toBe(60);
     expect(recipes.map((recipe) => recipe.id)).toEqual(pagerRecipes().map((recipe) => recipe.id));
+  });
+
+  it("dates the paging fixture before every other seeded recipe, so seeded recipes stay on page one", () => {
+    const db = migratedDb();
+    db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
+    // The order both public lists use: newest updatedAt first, then id.
+    const order = db.prepare('SELECT chefId FROM Recipe WHERE deletedAt IS NULL ORDER BY updatedAt DESC, id DESC').all() as Array<{ chefId: string }>;
+    const firstPager = order.findIndex((row) => row.chefId === KITCHEN.pager.id);
+    expect(firstPager).toBe(order.length - 60);
+    const pager = db.prepare("SELECT id, createdAt, coverMode FROM Recipe WHERE chefId = ? ORDER BY createdAt ASC").all(KITCHEN.pager.id) as Array<{ id: string; createdAt: string; coverMode: string }>;
+    // Distinct dates fix the newest-first order; the oldest is the last one a list reaches.
+    expect(new Set(pager.map((row) => row.createdAt)).size).toBe(60);
+    expect(pager[0]!.id).toBe(PAGER_OLDEST_RECIPE.id);
+    expect(pager[59]!.id).toBe(pagerRecipe(60).id);
+    expect(new Set(pager.map((row) => row.coverMode))).toEqual(new Set(["none"]));
+    expect(() => pagerRecipe(61)).toThrow();
+    expect(order.slice(0, firstPager).every((row) => row.chefId !== KITCHEN.pager.id)).toBe(true);
+  });
+
+  it("keeps the words other journeys search for out of the paging fixture", () => {
+    const db = migratedDb();
+    db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
+    const text = db.prepare("SELECT r.title || ' ' || s.description AS t FROM Recipe r JOIN RecipeStep s ON s.recipeId = r.id WHERE r.chefId = ?")
+      .all(KITCHEN.pager.id) as Array<{ t: string }>;
+    expect(text).toHaveLength(60);
+    for (const word of PAGER_FORBIDDEN_WORDS) {
+      expect(text.filter((row) => row.t.toLowerCase().includes(word))).toEqual([]);
+    }
   });
 
   describe("session versions (revoking leftover persona sessions)", () => {
