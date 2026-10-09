@@ -152,6 +152,23 @@ describe("saveAccountIdentity", () => {
       .resolves.toMatchObject({ email: "moved-address@example.com", emailVerifiedAt: null });
   });
 
+  // Re-review: a username-only save passed an email read earlier in the request, so an email change
+  // landing in between was quietly undone. A username-only save never writes the email.
+  it("leaves the email alone on a username-only save, even when given a stale one", async () => {
+    const current = await stored();
+    await db.user.update({ where: { id: userId }, data: { email: "changed-on-web@example.com" } });
+
+    await expect(saveAccountIdentity(db, {
+      userId,
+      email: current.email,
+      username: "renamed_after_race",
+      emailChanged: false,
+      usernameChanged: true,
+    })).resolves.toBe("saved");
+    await expect(db.user.findUniqueOrThrow({ where: { id: userId } }))
+      .resolves.toMatchObject({ email: "changed-on-web@example.com", username: "renamed_after_race" });
+  });
+
   it("keeps the verification when only the letter case of the email changes", async () => {
     await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date() } });
     const current = await stored();

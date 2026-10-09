@@ -35,14 +35,16 @@ export type TransactionalEmailEnv = PostHogServerEnv & {
   SPOONJOY_BASE_URL?: string;
 };
 
-// The public production site. Capture mode stores account mail, including its sign-in links, in a
-// table anyone with database access can read, so it is never allowed there.
-const PRODUCTION_ORIGIN = "https://spoonjoy.app";
+// Capture mode stores account mail, including its sign-in links, in a table anyone with database
+// access can read, so it runs only where the site is a QA stack (shared QA or a per-run Journeys
+// stack) or a local host. Anywhere else, including production with the variable set by mistake or
+// with no SPOONJOY_BASE_URL at all, mail is disabled instead.
+const CAPTURE_HOST = /^(spoonjoy-v2-qa(-run-[a-z0-9-]+)?\.mendelow-studio\.workers\.dev|localhost|127\.0\.0\.1)$/;
 // Captured QA mail is only read by tests moments after it is sent.
 const CAPTURED_EMAIL_RETENTION_MS = 24 * 60 * 60 * 1000;
 
-function isProductionSite(baseUrl: string | undefined): boolean {
-  return Boolean(baseUrl) && URL.canParse(baseUrl!) && new URL(baseUrl!).origin === PRODUCTION_ORIGIN;
+function isCaptureSite(baseUrl: string | undefined): boolean {
+  return Boolean(baseUrl) && URL.canParse(baseUrl!) && CAPTURE_HOST.test(new URL(baseUrl!).hostname);
 }
 
 export type EmailDeliveryMode = "send" | "capture" | "disabled";
@@ -67,7 +69,7 @@ function hasSendBinding(value: unknown): value is SendEmailBinding {
 
 export function resolveEmailDeliveryMode(env?: TransactionalEmailEnv | null): EmailDeliveryMode {
   if (env?.SPOONJOY_EMAIL_MODE?.trim().toLowerCase() === "capture") {
-    return isProductionSite(env.SPOONJOY_BASE_URL) ? "disabled" : "capture";
+    return isCaptureSite(env.SPOONJOY_BASE_URL) ? "capture" : "disabled";
   }
   if (hasSendBinding(env?.EMAIL) && env?.SPOONJOY_EMAIL_FROM?.trim()) return "send";
   return "disabled";

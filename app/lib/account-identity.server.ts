@@ -52,8 +52,10 @@ export async function saveAccountIdentity(db: IdentityDb, change: AccountIdentit
   const checkEmail = emailChanged ? 1 : 0;
   const checkUsername = usernameChanged ? 1 : 0;
   const updated = await db.$executeRaw`
-    UPDATE "User" SET "email" = ${email}, "username" = ${username},
-      "emailVerifiedAt" = CASE WHEN lower("email") = lower(${email}) THEN "emailVerifiedAt" ELSE NULL END
+    UPDATE "User" SET
+      "email" = CASE WHEN ${checkEmail} = 1 THEN ${email} ELSE "email" END,
+      "username" = ${username},
+      "emailVerifiedAt" = CASE WHEN ${checkEmail} = 0 OR lower("email") = lower(${email}) THEN "emailVerifiedAt" ELSE NULL END
     WHERE "id" = ${userId}
       AND (${checkEmail} = 0 OR NOT EXISTS (
         SELECT 1 FROM "User" AS "other" WHERE "other"."id" != ${userId} AND lower("other"."email") = lower(${email})

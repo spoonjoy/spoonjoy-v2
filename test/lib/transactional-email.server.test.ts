@@ -29,14 +29,22 @@ describe("transactional-email.server", () => {
     expect(resolveEmailDeliveryMode({ EMAIL: binding, SPOONJOY_EMAIL_FROM: "  " })).toBe("disabled");
     expect(resolveEmailDeliveryMode({ EMAIL: {}, SPOONJOY_EMAIL_FROM: "chef@spoonjoy.app" })).toBe("disabled");
     expect(resolveEmailDeliveryMode({ EMAIL: binding, SPOONJOY_EMAIL_FROM: "chef@spoonjoy.app" })).toBe("send");
-    expect(resolveEmailDeliveryMode({ SPOONJOY_EMAIL_MODE: " Capture " })).toBe("capture");
+    expect(resolveEmailDeliveryMode({ SPOONJOY_EMAIL_MODE: " Capture ", SPOONJOY_BASE_URL: "https://spoonjoy-v2-qa.mendelow-studio.workers.dev" })).toBe("capture");
     expect(resolveEmailDeliveryMode({ SPOONJOY_EMAIL_MODE: "send" })).toBe("disabled");
     expect(canSendAccountEmail({})).toBe(false);
-    expect(canSendAccountEmail({ SPOONJOY_EMAIL_MODE: "capture" })).toBe(true);
+    expect(canSendAccountEmail({ SPOONJOY_EMAIL_MODE: "capture", SPOONJOY_BASE_URL: "https://spoonjoy-v2-qa.mendelow-studio.workers.dev" })).toBe(true);
     // Captured mail keeps its sign-in links in a readable table, so production never captures,
     // even if the variable reaches it by mistake.
     expect(resolveEmailDeliveryMode({ SPOONJOY_EMAIL_MODE: "capture", SPOONJOY_BASE_URL: "https://spoonjoy.app/" })).toBe("disabled");
-    expect(resolveEmailDeliveryMode({ SPOONJOY_EMAIL_MODE: "capture", SPOONJOY_BASE_URL: "not a url" })).toBe("capture");
+    // Only QA stacks and local hosts capture; an unknown, missing or malformed site never does.
+    for (const baseUrl of [undefined, "not a url", "https://www.spoonjoy.app", "https://spoonjoy-v2-qa.mendelow-studio.workers.dev.evil.example"]) {
+      expect(resolveEmailDeliveryMode({ SPOONJOY_EMAIL_MODE: "capture", SPOONJOY_BASE_URL: baseUrl })).toBe("disabled");
+    }
+    expect(resolveEmailDeliveryMode({
+      SPOONJOY_EMAIL_MODE: "capture",
+      SPOONJOY_BASE_URL: "https://spoonjoy-v2-qa-run-37930015761-1.mendelow-studio.workers.dev",
+    })).toBe("capture");
+    expect(resolveEmailDeliveryMode({ SPOONJOY_EMAIL_MODE: "capture", SPOONJOY_BASE_URL: "http://localhost:5173" })).toBe("capture");
     expect(resolveEmailDeliveryMode({
       SPOONJOY_EMAIL_MODE: "capture",
       SPOONJOY_BASE_URL: "https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
@@ -49,7 +57,7 @@ describe("transactional-email.server", () => {
   });
 
   it("captures the message in the outbox on QA instead of sending it", async () => {
-    await sendTransactionalEmail(db, { SPOONJOY_EMAIL_MODE: "capture" }, message);
+    await sendTransactionalEmail(db, { SPOONJOY_EMAIL_MODE: "capture", SPOONJOY_BASE_URL: "https://spoonjoy-v2-qa.mendelow-studio.workers.dev" }, message);
 
     const rows = await db.emailOutbox.findMany({ where: { toAddress: message.to } });
     expect(rows).toHaveLength(1);
@@ -64,7 +72,7 @@ describe("transactional-email.server", () => {
       data: { toAddress: "recent@example.com", purpose: "verify_email", subject: "Recent", textBody: "recent link", createdAt: new Date(Date.now() - 60 * 60 * 1000) },
     });
 
-    await sendTransactionalEmail(db, { SPOONJOY_EMAIL_MODE: "capture" }, message);
+    await sendTransactionalEmail(db, { SPOONJOY_EMAIL_MODE: "capture", SPOONJOY_BASE_URL: "https://spoonjoy-v2-qa.mendelow-studio.workers.dev" }, message);
 
     expect(await db.emailOutbox.findUnique({ where: { id: stale.id } })).toBeNull();
     expect(await db.emailOutbox.findUnique({ where: { id: recent.id } })).not.toBeNull();
