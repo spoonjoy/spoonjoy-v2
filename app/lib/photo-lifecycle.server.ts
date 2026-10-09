@@ -27,6 +27,8 @@
  * A key that is referenced again before it is moved simply loses its bookkeeping row.
  */
 
+
+import { captureException, resolvePostHogServerConfig, type PostHogServerEnv } from "~/lib/analytics-server";
 /** Where stored photos are served from; rows keep this relative URL. */
 export const PHOTO_URL_PREFIX = "/photos/";
 /** Moved objects wait here, unserved, until they are purged or restored. */
@@ -229,6 +231,14 @@ export interface PhotoSweepReport {
   note: string | null;
 }
 
+/** The step of an apply run that a failed change belongs to. */
+export type PhotoSweepFailurePhase = "quarantine" | "purge" | "variant_cleanup";
+
+export interface PhotoSweepFailure {
+  phase: PhotoSweepFailurePhase;
+  error: unknown;
+}
+
 export interface RunPhotoSweepOptions {
   db: PhotoSweepDatabase;
   bucket: PhotoSweepBucket;
@@ -236,6 +246,8 @@ export interface RunPhotoSweepOptions {
   now?: () => Date;
   newId?: () => string;
   maxChanges?: number;
+  /** Told about each change that failed; the run counts it and carries on either way. */
+  onFailure?: (failure: PhotoSweepFailure) => void | Promise<void>;
 }
 
 interface CleanupRow {
@@ -404,8 +416,9 @@ export async function runPhotoSweep(options: RunPhotoSweepOptions): Promise<Phot
           );
           report.quarantined += 1;
         }
-      } catch {
+      } catch (error) {
         report.failures += 1;
+        await options.onFailure?.({ phase: "quarantine", error });
       }
     }
     for (const row of purgeable) {
@@ -418,15 +431,17 @@ export async function runPhotoSweep(options: RunPhotoSweepOptions): Promise<Phot
         await bucket.delete(`${PHOTO_QUARANTINE_PREFIX}${row.key}`);
         await db.run(`UPDATE "PhotoCleanup" SET "purgedAt" = ?, "updatedAt" = ? WHERE "key" = ?`, at, at, row.key);
         report.purged += 1;
-      } catch {
+      } catch (error) {
         report.failures += 1;
+        await options.onFailure?.({ phase: "purge", error });
       }
     }
     for (const variants of orphanVariantGroups) {
       try {
         await bucket.delete(variants);
-      } catch {
+      } catch (error) {
         report.failures += 1;
+        await options.onFailure?.({ phase: "variant_cleanup", error });
       }
     }
   }
@@ -456,7 +471,7 @@ export async function runPhotoSweep(options: RunPhotoSweepOptions): Promise<Phot
   return report;
 }
 
-export interface ScheduledPhotoSweepEnv {
+export interface ScheduledPhotoSweepEnv extends PostHogServerEnv {
   DB?: D1Database;
   PHOTOS?: R2Bucket;
   PHOTO_SWEEP_MODE?: string;
@@ -471,11 +486,27 @@ export async function runScheduledPhotoSweep(
   log: (line: string) => void = console.log,
 ): Promise<PhotoSweepReport | null> {
   if (!env.DB || !env.PHOTOS) return null;
-  const report = await runPhotoSweep({
-    db: photoSweepD1Database(env.DB as unknown as D1Like),
-    bucket: env.PHOTOS as unknown as PhotoSweepBucket,
-    mode: resolvePhotoSweepMode(env.PHOTO_SWEEP_MODE),
-  });
+  const mode = resolvePhotoSweepMode(env.PHOTO_SWEEP_MODE);
+  const telemetry = resolvePostHogServerConfig(env);
+  const capture = (phase: PhotoSweepFailurePhase | "run", error: unknown) =>
+    captureException(telemetry, {
+      error,
+      distinctId: "server",
+      route: "cron:photo_sweep",
+      extras: { operation: "photo_sweep", phase, mode },
+    });
+  let report: PhotoSweepReport;
+  try {
+    report = await runPhotoSweep({
+      db: photoSweepD1Database(env.DB as unknown as D1Like),
+      bucket: env.PHOTOS as unknown as PhotoSweepBucket,
+      mode,
+      onFailure: ({ phase, error }) => capture(phase, error),
+    });
+  } catch (error) {
+    await capture("run", error);
+    throw error;
+  }
   log(JSON.stringify({ event: "spoonjoy.photo_sweep", ...report }));
   return report;
 }

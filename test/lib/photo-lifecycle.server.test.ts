@@ -357,8 +357,11 @@ describe("runPhotoSweep", () => {
     bucket.get = vi.fn(async () => {
       throw new Error("R2 unavailable");
     });
-    const report = await runPhotoSweep({ db, bucket, mode: "apply", now: at(PHOTO_SWEEP_GRACE_MS) });
+    const onFailure = vi.fn();
+    const report = await runPhotoSweep({ db, bucket, mode: "apply", now: at(PHOTO_SWEEP_GRACE_MS), onFailure });
     expect(report).toMatchObject({ quarantined: 0, failures: 2 });
+    expect(onFailure).toHaveBeenCalledTimes(2);
+    expect(onFailure).toHaveBeenCalledWith({ phase: "quarantine", error: expect.objectContaining({ message: "R2 unavailable" }) });
 
     // An object deleted between the listing and the move is skipped, not counted as moved.
     const vanishing = memoryBucket({ "spoons/deleted.jpg": "x", "covers/archived.jpg": "y", "profiles/chef/me.jpg": "z" });
@@ -375,8 +378,10 @@ describe("runPhotoSweep", () => {
     bucket.delete = vi.fn(async () => {
       throw new Error("R2 unavailable");
     });
-    const report = await runPhotoSweep({ db, bucket, mode: "apply", now: at(PHOTO_SWEEP_GRACE_MS + PHOTO_QUARANTINE_RETENTION_MS) });
+    const onFailure = vi.fn();
+    const report = await runPhotoSweep({ db, bucket, mode: "apply", now: at(PHOTO_SWEEP_GRACE_MS + PHOTO_QUARANTINE_RETENTION_MS), onFailure });
     expect(report).toMatchObject({ purged: 0, failures: 3 });
+    expect(onFailure.mock.calls.map(([failure]) => failure.phase)).toEqual(["purge", "purge", "variant_cleanup"]);
   });
 
   it("removes photos of a deleted account on the next run, unless a fork still uses them", async () => {
@@ -476,6 +481,51 @@ describe("runScheduledPhotoSweep", () => {
 
     const off = await runScheduledPhotoSweep({ DB: database.binding as never, PHOTOS: bucket as never, PHOTO_SWEEP_MODE: "off" }, log);
     expect(off?.mode).toBe("off");
+  });
+
+  it("reports each failed change to PostHog with its phase", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      insertUser("chef", "/photos/profiles/chef/me.jpg");
+      const bucket = memoryBucket({ "profiles/chef/me.jpg": "me", "spoons/a.jpg": "a" });
+      const env = { DB: database.binding as never, PHOTOS: bucket as never, POSTHOG_KEY: "phc_test" };
+      // First run records the unreferenced photo; skip the grace period by backdating its row.
+      await runScheduledPhotoSweep(env, vi.fn());
+      database.sqlite.prepare(`UPDATE "PhotoCleanup" SET "eligibleAt" = ?`).run("2000-01-01T00:00:00.000Z");
+      bucket.get = vi.fn(async () => {
+        throw new Error("R2 unavailable");
+      });
+      const report = await runScheduledPhotoSweep({ ...env, PHOTO_SWEEP_MODE: "apply" }, vi.fn());
+      expect(report).toMatchObject({ failures: 1 });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const body = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body));
+      expect(body).toMatchObject({
+        event: "$exception",
+        distinct_id: "server",
+        properties: { operation: "photo_sweep", phase: "quarantine", mode: "apply" },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("reports a run that fails outright to PostHog and rethrows", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const bucket = memoryBucket();
+      bucket.list = vi.fn(async () => {
+        throw new Error("R2 listing failed");
+      });
+      await expect(
+        runScheduledPhotoSweep({ DB: database.binding as never, PHOTOS: bucket as never, POSTHOG_KEY: "phc_test" }, vi.fn()),
+      ).rejects.toThrow("R2 listing failed");
+      const body = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body));
+      expect(body).toMatchObject({ event: "$exception", properties: { operation: "photo_sweep", phase: "run", mode: "dry-run" } });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("logs to the console by default", async () => {
