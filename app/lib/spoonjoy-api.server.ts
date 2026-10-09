@@ -3243,10 +3243,12 @@ const setShoppingListItemCheckedTool: SpoonjoyApiOperation = {
 
     await context.db.shoppingListItem.update({
       where: { id: item.id },
+      // Unchecking leaves the position alone rather than writing back the one read above, which a
+      // concurrent renumbering may already have changed.
       data: {
         checked,
         checkedAt: checked ? new Date() : null,
-        sortIndex: checked ? await nextSortIndex(context.db, shoppingList.id) : item.sortIndex,
+        ...(checked ? { sortIndex: await nextSortIndex(context.db, shoppingList.id) } : {}),
       },
     });
 
