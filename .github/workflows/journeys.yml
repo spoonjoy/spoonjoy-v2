@@ -198,7 +198,7 @@ jobs:
 
       - name: Run test suite
         env:
-          CAPTURE_LABEL: skip-before
+          CAPTURE_LABEL: skip-after
         run: |
           if [ "$SUITE" = "explore" ]; then
             pnpm run explore:qa
