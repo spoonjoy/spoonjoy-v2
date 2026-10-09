@@ -4,6 +4,18 @@ import { stripVTControlCharacters } from "node:util";
 export const EXPECTED_PRISMA_D1_TRANSACTION_WARNING =
   "Cloudflare D1 does not support transactions yet. When using Prisma's D1 adapter, implicit & explicit transactions will be ignored and run as individual queries, which breaks the guarantees of the ACID properties of transactions. For more details see https://pris.ly/d/d1-transactions";
 
+// pnpm reports a transient registry fetch failure that it is about to retry like this:
+// (pnpm pads WARN with thin spaces, U+2009; without colour it prints two plain spaces)
+//   WARN  GET https://registry.npmjs.org/ansi-escapes/-/ansi-escapes-7.2.0.tgz error (ERR_PNPM_FETCH_502). Will retry in 10 seconds. 2 retries left.
+// Only that exact shape, for the npm registry and a transient cause, is tolerated. A fetch that
+// still fails after its last retry exits non-zero, so the command fails anyway.
+export const PNPM_TRANSIENT_FETCH_RETRY_PATTERN =
+  /^WARN(?:  | {2})GET https:\/\/registry\.npmjs\.org\/[A-Za-z0-9@%._~\/+-]+ error \((?:ERR_PNPM_FETCH_(?:429|5\d\d)|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ERR_SOCKET_TIMEOUT)\)\. Will retry in \d+(?:\.\d+)? seconds?\. \d+ retr(?:y|ies) left\.$/;
+
+function isTolerableTransientRetry(text: string): boolean {
+  return PNPM_TRANSIENT_FETCH_RETRY_PATTERN.test(text);
+}
+
 const BRACKETED_WARNING_PATTERN = /(?:^|[\s([<{])\[\s*warn(?:ings?)?(?:\s*:\s*[^\]\r\n]+)?\s*\](?::|\s|$)/i;
 const WARNING_WORD_PATTERN = /(?:^|[^A-Za-z0-9])(?:[A-Za-z]+warnings?|warnings?|warn)(?!-gate\.ts\b|-summary\.log\b)(?=[:!.,;\s([<{=]|$|-)/i;
 const PRISMA_WARNING_PATTERN = /(?:^|[\s([<{])prisma:warn(?::|\s|$)/i;
@@ -93,7 +105,7 @@ export function findUnexpectedWarnings(output: string): string[] {
       unexpectedWarnings.push(formatRejectedTerminalControlLine(line.text));
       continue;
     }
-    if (line.text !== "" && isWarningLine(line.text)) {
+    if (line.text !== "" && isWarningLine(line.text) && !isTolerableTransientRetry(line.text)) {
       unexpectedWarnings.push(line.text);
     }
   }
@@ -107,7 +119,7 @@ export function findUnexpectedDiagnosticOutput(
   const warningChannelLines = warningOutput
     .split(/\r?\n/)
     .map((line) => normalizeOutputLine(line))
-    .filter((line) => line.text !== "" || line.rejectedTerminalControl)
+    .filter((line) => line.rejectedTerminalControl || (line.text !== "" && !isTolerableTransientRetry(line.text)))
     .map((line) =>
       line.rejectedTerminalControl ? formatRejectedTerminalControlLine(line.text) : line.text
     );
