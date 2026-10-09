@@ -97,9 +97,6 @@ jobs:
           else
             test -z "$SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA"
           fi
-          if [ -n "$ROLLBACK_VERSION_ID" ] && [ "$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" ]; then
-            exit 1
-          fi
           if [ -n "$ROLLBACK_VERSION_ID" ] && ! printf '%s' "$ROLLBACK_VERSION_ID" | grep -Eq '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'; then
             echo "rollback_version_id must be an exact Worker version UUID" >&2
             exit 1
@@ -192,9 +189,8 @@ jobs:
                       else true
                       end
                     else
-                      (.status | IN("rollback_promoted", "rolled_back", "rollback_failed") | not) and
                       (if .status == "failed_before_stage" then
-                        ((.phase | IN("validate", "provenance", "initial_preflight", "build", "post_build_posthog", "post_build_provenance", "migration_list", "migration_review", "current_deployment", "version_snapshot")) or
+                        ((.phase | IN("validate", "provenance", "initial_preflight", "build", "post_build_posthog", "post_build_provenance", "migration_list", "migration_review", "current_deployment", "version_snapshot", "rollback_version_lookup", "rollback_current_deployment", "rollback_already_active", "rollback_active_version_mapping")) or
                           (.phase == "full_preflight" and .migrationApply == "not_needed") or
                           (.phase == "deployment_revalidation" and (.migrationApply | IN("not_started", "not_needed"))))
                       else true end) and

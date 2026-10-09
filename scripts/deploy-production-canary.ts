@@ -1502,13 +1502,11 @@ export async function runProductionRollback(
   deps: RunProductionRollbackDeps,
 ): Promise<ReleaseArtifact> {
   const releaseMode = requireReleaseMode(deps.releaseMode);
-  if (releaseMode !== "protocol-v1-canary") {
-    throw new Error("Production rollback is only available in protocol-v1-canary mode.");
-  }
+  // Rollback works in every release mode. Only canary mode declares a protocol boundary to enforce.
   const protocolV1BoundarySha = requireProtocolBoundary(
     releaseMode,
     deps.protocolV1BoundarySha,
-  )!;
+  );
   const sourceSha = requireReleaseSha(deps.releaseSha);
   const rollbackVersionId = requireWorkerVersionId(deps.rollbackVersionId, "Rollback version");
   const metadata = protocolFields(releaseMode, protocolV1BoundarySha);
@@ -1551,7 +1549,9 @@ export async function runProductionRollback(
     const provenanceTreeHash = requireTreeHash(
       (await deps.runCommand("git", ["rev-parse", "HEAD^{tree}"], { env: cleanEnv })).stdout.trim(),
     );
-    await requireProtocolBoundaryMarker(deps, protocolV1BoundarySha, cleanEnv);
+    if (protocolV1BoundarySha) {
+      await requireProtocolBoundaryMarker(deps, protocolV1BoundarySha, cleanEnv);
+    }
     treeHash = provenanceTreeHash;
 
     phase = "rollback_version_lookup";
@@ -1586,21 +1586,23 @@ export async function runProductionRollback(
       { env: workersEnv },
     );
     const previousSourceSha = selectExactVersionSourceSha(previousVersion.stdout, previousVersionId);
-    phase = "rollback_protocol_ancestry";
-    await requireAncestor(
-      deps,
-      protocolV1BoundarySha,
-      sourceSha,
-      cleanEnv,
-      "Rollback target source is below the protocol-v1 boundary.",
-    );
-    await requireAncestor(
-      deps,
-      protocolV1BoundarySha,
-      previousSourceSha,
-      cleanEnv,
-      "Current Worker source is below the protocol-v1 boundary.",
-    );
+    if (protocolV1BoundarySha) {
+      phase = "rollback_protocol_ancestry";
+      await requireAncestor(
+        deps,
+        protocolV1BoundarySha,
+        sourceSha,
+        cleanEnv,
+        "Rollback target source is below the protocol-v1 boundary.",
+      );
+      await requireAncestor(
+        deps,
+        protocolV1BoundarySha,
+        previousSourceSha,
+        cleanEnv,
+        "Current Worker source is below the protocol-v1 boundary.",
+      );
+    }
 
     phase = "rollback_current_deployment";
     const currentDeployments = await deps.runCommand(
@@ -2495,13 +2497,15 @@ function assertReleaseArtifactLifecycle(artifact: ReleaseArtifact): void {
   ) fail();
 
   if (!isCanary) {
-    if (inSet(status, ["rollback_promoted", "rolled_back", "rollback_failed"])) fail();
     if (phase === "bootstrap_probe" && releaseMode !== "atomic-bootstrap") fail();
     if (status === "failed_before_stage") {
       const atomicEarly = [
         "validate", "provenance", "initial_preflight", "build", "post_build_provenance",
         "post_build_posthog", "migration_list", "migration_review", "current_deployment",
         "version_snapshot",
+        // Rollback dispatches run in every release mode and fail before staging in these phases.
+        "rollback_version_lookup", "rollback_current_deployment", "rollback_already_active",
+        "rollback_active_version_mapping",
       ];
       if (!(
         inSet(phase, atomicEarly) ||
@@ -2524,12 +2528,11 @@ function assertReleaseArtifactLifecycle(artifact: ReleaseArtifact): void {
     return;
   }
   if (status === "rollback_promoted") {
-    if (!isCanary || !completeFields() || migrationApply !== "not_needed" || reviewedMigrations.length !== 0) fail();
+    if (!completeFields() || migrationApply !== "not_needed" || reviewedMigrations.length !== 0) fail();
     return;
   }
   if (status === "rolled_back" || status === "rollback_failed") {
     if (
-      !isCanary ||
       !inSet(phase, [
         "stage", "canary", "candidate_csp", "promotion_revalidation", "promote",
         "verify_promotion", "artifact",
@@ -2706,9 +2709,6 @@ export function parseReleaseCliOptions(argv: readonly string[], env: NodeJS.Proc
 
   const releaseMode = requireReleaseMode(releaseModeValue);
   const boundary = requireProtocolBoundary(releaseMode, protocolV1BoundarySha);
-  if (rollbackVersionId && releaseMode !== "protocol-v1-canary") {
-    throw new Error("Production rollback is forbidden in atomic release modes.");
-  }
   return {
     artifactDir,
     releaseMode,
