@@ -313,4 +313,26 @@ describe("native username/password sign-in API", () => {
     expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
     expect(response.headers.get("Access-Control-Allow-Headers")).toBeNull();
   });
+
+  /** Sign out everywhere lands just before the sign-in's grant is written. */
+  function signOutEverywhereBeforeTheGrant() {
+    const create = db.oAuthGrant.create.bind(db.oAuthGrant);
+    return vi.spyOn(db.oAuthGrant, "create").mockImplementation((async (args: any) => {
+      await db.user.update({ where: { id: args.data.userId }, data: { sessionVersion: { increment: 1 } } });
+      return create(args);
+    }) as any);
+  }
+
+  it("answers as a failed sign-in when the password changes before the sign-in's grant exists", async () => {
+    await createUser(db, "racer@example.com", "racer_chef", "correctHorseBatteryStaple");
+    signOutEverywhereBeforeTheGrant();
+
+    const response = await action(routeArgs(jsonRequest({ emailOrUsername: "racer@example.com", password: "correctHorseBatteryStaple" })));
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(401);
+    expect(json.error).toMatchObject({ code: "invalid_token", details: { providerCode: "invalid_credentials" } });
+    expect(await db.oAuthGrant.count({ where: { status: "active" } })).toBe(0);
+    expect(await db.oAuthRefreshToken.count({ where: { revokedAt: null } })).toBe(0);
+  });
 });

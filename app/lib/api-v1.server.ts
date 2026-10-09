@@ -45,6 +45,7 @@ import {
 import { safeOAuthClientDisplayName } from "~/lib/oauth-client-metadata";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import {
+  OAuthError,
   oauthAccessConnectionOwnership,
   OAUTH_CONNECTION_KEY_BATCH_SIZE,
   oauthRefreshConnectionOwnership,
@@ -6326,6 +6327,11 @@ function nativeSignInTokenPayload(
   };
 }
 
+/** Sign out everywhere or a password change landed part way through a native sign-in. */
+function revokedDuringSignIn(error: unknown): boolean {
+  return error instanceof OAuthError && error.reason === "revoked_by_user";
+}
+
 async function handleNativeAppleSignInRequest(args: ApiV1RouteArgs, requestId: string) {
   const authRateLimit = await enforceAuthRateLimit(args.request, args.context.cloudflare?.env?.AUTH_IP_RATE_LIMITER);
   if (!authRateLimit.allowed) {
@@ -6372,6 +6378,11 @@ async function handleNativeAppleSignInRequest(args: ApiV1RouteArgs, requestId: s
     if (error instanceof NativeAppleAuthError) {
       const code = error.status === 401 ? "invalid_token" : "validation_error";
       throw new ApiV1Error(code, error.message, { providerCode: error.code });
+    }
+    if (revokedDuringSignIn(error)) {
+      throw new ApiV1Error("validation_error", "Your account was signed out everywhere while you were signing in. Try again.", {
+        providerCode: "sign_in_interrupted",
+      });
     }
     if (error instanceof Error && error.message.startsWith("Missing required environment variable")) {
       throw new ApiV1Error("validation_error", "Native Apple sign-in is not configured", { providerCode: "apple_native_unconfigured" });
@@ -6420,6 +6431,10 @@ async function handleNativePasswordSignInRequest(args: ApiV1RouteArgs, requestId
     if (error instanceof NativePasswordAuthError) {
       const code = error.status === 401 ? "invalid_token" : "validation_error";
       throw new ApiV1Error(code, error.message, { providerCode: error.code });
+    }
+    // The password may have changed since it was checked: answer as a failed sign-in.
+    if (revokedDuringSignIn(error)) {
+      throw new ApiV1Error("invalid_token", "Invalid username/email or password.", { providerCode: "invalid_credentials" });
     }
     throw error;
   }

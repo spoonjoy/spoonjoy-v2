@@ -4,11 +4,9 @@ import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 
 type Database = PrismaClientType;
 
-// Why every credential on an account was revoked. Callers name the event; OAuth grants all record
-// it as `security_event`, because migration 0027's CHECK constraint on "OAuthGrant" allows only a
-// fixed set of revocation reasons and an account-wide revocation is a security event.
-export type AccountRevocationReason = "sign_out_everywhere" | "password_change" | "password_reset";
-
+// OAuth grants revoked account-wide record `security_event`: migration 0027's CHECK constraint on
+// "OAuthGrant" allows only a fixed set of revocation reasons, and sign out everywhere and a
+// password change are both security events.
 export const ACCOUNT_REVOCATION_GRANT_REASON = "security_event";
 
 export interface AccountRevocationCounts {
@@ -21,25 +19,20 @@ export interface AccountRevocationCounts {
 }
 
 export interface AccountRevocationResult extends AccountRevocationCounts {
-  /** The user's new session version when `user.bumpSessionVersion` was set, otherwise null. */
-  sessionVersion: number | null;
+  /** The user's new session version. */
+  sessionVersion: number;
 }
 
 export interface AccountRevocationOptions {
   now?: Date;
-  reason: AccountRevocationReason;
   /**
    * The request's D1 binding. With it, the user write and every sweep run as one D1 batch, so
    * either all of them apply or none does. Without it (unit tests, scripts) they run in a Prisma
    * transaction.
    */
   d1?: D1ReadDatabase | null;
-  /**
-   * The user-row write that goes with the revocation, in the same atomic step: always a session
-   * version bump (which signs out every browser session), plus the new password hash for a
-   * password change or reset.
-   */
-  user?: { bumpSessionVersion: true; password?: { hashedPassword: string; salt: string } };
+  /** The new password hash for a password change, written in the same atomic step. */
+  password?: { hashedPassword: string; salt: string };
 }
 
 /**
@@ -56,8 +49,11 @@ export interface AccountRevocationOptions {
  *   grant is not active, so a refresh that inserts an access token after the sweep still mints
  *   nothing usable.
  * - Codes and consent screens are spent, so nothing can be exchanged for a fresh grant.
+ * - The session-version bump signs out every browser session, and is the fence for flows that
+ *   create a grant, an authorization code or an approval after this sweep would have run (see
+ *   `session-version-fence.server.ts`).
  *
- * Everything, including the optional user write, applies atomically (one D1 batch, or one Prisma
+ * Everything, including the user write, applies atomically (one D1 batch, or one Prisma
  * transaction without a binding), so a failure leaves the account exactly as it was.
  *
  * Passkeys and linked Google, GitHub or Apple sign-ins are kept: they are how the chef signs in.
@@ -65,12 +61,12 @@ export interface AccountRevocationOptions {
 export async function revokeAllAccountAccess(
   db: Database,
   userId: string,
-  options: AccountRevocationOptions,
+  options: AccountRevocationOptions = {},
 ): Promise<AccountRevocationResult> {
   const now = options.now ?? new Date();
   return options.d1
-    ? revokeOnD1(options.d1, userId, now, options.user)
-    : revokeWithPrisma(db, userId, now, options.user);
+    ? revokeOnD1(options.d1, userId, now, options.password)
+    : revokeWithPrisma(db, userId, now, options.password);
 }
 
 function revocationStatements(userId: string, now: Date): D1Query[] {
@@ -100,21 +96,20 @@ async function revokeOnD1(
   d1: D1ReadDatabase,
   userId: string,
   now: Date,
-  user: AccountRevocationOptions["user"],
+  password: AccountRevocationOptions["password"],
 ): Promise<AccountRevocationResult> {
-  const statements = revocationStatements(userId, now);
-  if (user) {
-    const sets = [`"sessionVersion" = "sessionVersion" + 1`, `"updatedAt" = ?`];
-    const values: unknown[] = [d1Timestamp(now)];
-    if (user.password) {
-      sets.push(`"hashedPassword" = ?`, `"salt" = ?`);
-      values.push(user.password.hashedPassword, user.password.salt);
-    }
-    statements.unshift([`UPDATE "User" SET ${sets.join(", ")} WHERE "id" = ? RETURNING "sessionVersion"`, ...values, userId]);
+  const sets = [`"sessionVersion" = "sessionVersion" + 1`, `"updatedAt" = ?`];
+  const values: unknown[] = [d1Timestamp(now)];
+  if (password) {
+    sets.push(`"hashedPassword" = ?`, `"salt" = ?`);
+    values.push(password.hashedPassword, password.salt);
   }
-  const results = await d1WriteBatch(d1, statements);
-  const userResult = user ? results.shift() : undefined;
-  if (user && userResult?.rows.length !== 1) throw new Error("Account revocation found no user to update");
+  const results = await d1WriteBatch(d1, [
+    [`UPDATE "User" SET ${sets.join(", ")} WHERE "id" = ? RETURNING "sessionVersion"`, ...values, userId],
+    ...revocationStatements(userId, now),
+  ]);
+  const userResult = results.shift()!;
+  if (userResult.rows.length !== 1) throw new Error("Account revocation found no user to update");
   const [agents, grants, codes, consents, refresh, credentials] = results.map((result) => result.changes);
   return {
     pendingAgentConnections: agents,
@@ -123,7 +118,7 @@ async function revokeOnD1(
     consentTransactions: consents,
     refreshTokens: refresh,
     apiCredentials: credentials,
-    sessionVersion: userResult ? Number(userResult.rows[0].sessionVersion) : null,
+    sessionVersion: Number(userResult.rows[0].sessionVersion),
   };
 }
 
@@ -131,19 +126,14 @@ async function revokeWithPrisma(
   db: Database,
   userId: string,
   now: Date,
-  user: AccountRevocationOptions["user"],
+  password: AccountRevocationOptions["password"],
 ): Promise<AccountRevocationResult> {
   return db.$transaction(async (tx) => {
-    const updatedUser = user
-      ? await tx.user.update({
-        where: { id: userId },
-        data: {
-          sessionVersion: { increment: 1 },
-          ...user.password,
-        },
-        select: { sessionVersion: true },
-      })
-      : null;
+    const updatedUser = await tx.user.update({
+      where: { id: userId },
+      data: { sessionVersion: { increment: 1 }, ...password },
+      select: { sessionVersion: true },
+    });
     const pendingAgentConnections = await tx.agentConnectionRequest.updateMany({
       where: { approvedById: userId, status: "approved", claimedAt: null },
       data: { status: "denied", deniedAt: now },
@@ -172,7 +162,7 @@ async function revokeWithPrisma(
       consentTransactions: consentTransactions.count,
       refreshTokens: refreshTokens.count,
       apiCredentials: apiCredentials.count,
-      sessionVersion: updatedUser?.sessionVersion ?? null,
+      sessionVersion: updatedUser.sessionVersion,
     };
   });
 }

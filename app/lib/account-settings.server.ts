@@ -778,10 +778,9 @@ export async function handleAccountSettingsAction({
     // when chosen, the bearer revocation apply together or not at all.
     const sessionVersion = revokeConnections
       ? (await revokeAllAccountAccess(database, userId, {
-        reason: "password_change",
         d1: requestD1(context),
-        user: { bumpSessionVersion: true, password: { hashedPassword, salt } },
-      })).sessionVersion!
+        password: { hashedPassword, salt },
+      })).sessionVersion
       : (await database.user.update({
         where: { id: userId },
         data: { hashedPassword, salt, sessionVersion: { increment: 1 } },
@@ -801,16 +800,12 @@ export async function handleAccountSettingsAction({
     // Everywhere includes bearer credentials: the iPhone app, connected agents, OAuth apps and
     // personal API tokens. Otherwise a stolen token outlives the sign-out meant to stop it. The
     // session-version bump and the revocation apply together or not at all.
-    const { sessionVersion } = await revokeAllAccountAccess(database, userId, {
-      reason: "sign_out_everywhere",
-      d1: requestD1(context),
-      user: { bumpSessionVersion: true },
-    });
+    const { sessionVersion } = await revokeAllAccountAccess(database, userId, { d1: requestD1(context) });
 
     return withSessionForVersion({
       success: true,
       message: `You've been signed out everywhere else, and apps, agents and API tokens have been disconnected. You're still signed in here. ${KEPT_SIGN_INS_NOTE}`,
-    }, sessionVersion!);
+    }, sessionVersion);
   }
 
   if (intent === "setPassword") {

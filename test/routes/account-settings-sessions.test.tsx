@@ -145,15 +145,16 @@ describe("Account settings - revocable sessions", () => {
       const personal = await createApiCredential(db, userId, "Laptop script");
       // A real device-flow token, approved and collected.
       const started = await startAgentConnection(db, { agentName: "Ouro agent", scopes: "kitchen:read" });
-      await approveAgentConnectionRequest(db, started.request.id, userId);
+      await approveAgentConnectionRequest(db, started.request.id, { userId, sessionVersion: 0 });
       const delegated = await pollAgentConnection(db, { deviceCode: started.deviceCode });
       // Approved but not collected yet: collecting it later must not mint a token.
       const pendingStart = await startAgentConnection(db, { agentName: "Uncollected agent", scopes: "kitchen:read" });
-      await approveAgentConnectionRequest(db, pendingStart.request.id, userId);
+      await approveAgentConnectionRequest(db, pendingStart.request.id, { userId, sessionVersion: 0 });
       const client = await registerOAuthClient(db, { clientName: "Some agent", redirectUris: ["https://agent.example/cb"], issuer: ISSUER });
-      const oauth = await issueConnectorTokens(db, { userId, clientId: client.clientId, scope: "kitchen:read", issuer: ISSUER });
+      const oauth = await issueConnectorTokens(db, { sessionVersion: 0, userId, clientId: client.clientId, scope: "kitchen:read", issuer: ISSUER });
       // The Claude connector's MCP-bound access token.
       const mcp = await issueConnectorTokens(db, {
+        sessionVersion: 0,
         userId, clientId: client.clientId, scope: "kitchen:read", issuer: ISSUER, resource: MCP, persistentMcpResource: MCP,
       });
       // An authorization the chef (or whoever held the session) approved but nobody exchanged yet.
@@ -272,7 +273,7 @@ describe("Account settings - revocable sessions", () => {
       raced = await rotateConnectorTokens(seed.db, { refreshToken: seed.mcp.refreshToken, clientId: seed.client.clientId, issuer: ISSUER }, {
         onPersistenceMutation: async (stage, timing) => {
           if (stage === "access_insert" && timing === "before") {
-            await revokeAllAccountAccess(seed.db, userId, { reason: "sign_out_everywhere" });
+            await revokeAllAccountAccess(seed.db, userId);
           }
         },
       });
@@ -293,7 +294,7 @@ describe("Account settings - revocable sessions", () => {
         }))),
       } as unknown as typeof seed.db;
 
-      await expect(revokeAllAccountAccess(failing, userId, { reason: "sign_out_everywhere", user: { bumpSessionVersion: true } }))
+      await expect(revokeAllAccountAccess(failing, userId))
         .rejects.toThrow("D1 went away");
 
       expect(await currentVersion(userId)).toBe(0);
@@ -306,11 +307,7 @@ describe("Account settings - revocable sessions", () => {
       const seed = await seedAccess();
       const d1 = sqliteD1();
       try {
-        const result = await revokeAllAccountAccess(seed.db, userId, {
-          reason: "sign_out_everywhere",
-          d1: d1.binding,
-          user: { bumpSessionVersion: true },
-        });
+        const result = await revokeAllAccountAccess(seed.db, userId, { d1: d1.binding });
 
         expect(d1.roundTrips()).toBe(1);
         expect(result).toMatchObject({ sessionVersion: 1, refreshTokens: 2, oauthGrants: 2, pendingAgentConnections: 1, authorizationCodes: 1, consentTransactions: 1 });
@@ -322,27 +319,20 @@ describe("Account settings - revocable sessions", () => {
       await expectAllRevoked(seed);
     });
 
-    it("writes the new password in the same D1 batch, and works without a user write", async () => {
+    it("writes the new password in the same D1 batch, and refuses a missing account", async () => {
       const seed = await seedAccess();
       const before = await seed.db.user.findUniqueOrThrow({ where: { id: userId }, select: { hashedPassword: true, salt: true } });
       const d1 = sqliteD1();
       try {
         const result = await revokeAllAccountAccess(seed.db, userId, {
-          reason: "password_change",
           d1: d1.binding,
-          user: { bumpSessionVersion: true, password: { hashedPassword: "new-hash", salt: "new-salt" } },
+          password: { hashedPassword: "new-hash", salt: "new-salt" },
         });
         expect(result.sessionVersion).toBe(1);
         expect(d1.roundTrips()).toBe(1);
 
-        const sweepOnly = await revokeAllAccountAccess(seed.db, userId, { reason: "password_reset", d1: d1.binding });
-        expect(sweepOnly).toMatchObject({ sessionVersion: null, apiCredentials: 0, refreshTokens: 0 });
-
-        await expect(revokeAllAccountAccess(seed.db, "no-such-user", {
-          reason: "sign_out_everywhere",
-          d1: d1.binding,
-          user: { bumpSessionVersion: true },
-        })).rejects.toThrow("Account revocation found no user to update");
+        await expect(revokeAllAccountAccess(seed.db, "no-such-user", { d1: d1.binding }))
+          .rejects.toThrow("Account revocation found no user to update");
       } finally {
         d1.close();
       }

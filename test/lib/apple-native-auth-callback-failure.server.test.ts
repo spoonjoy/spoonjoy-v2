@@ -18,6 +18,9 @@ function dbMock() {
     oAuthClient: {
       upsert: vi.fn(),
     },
+    user: {
+      findUnique: vi.fn().mockResolvedValue({ sessionVersion: 0 }),
+    },
   } as any;
 }
 
@@ -134,5 +137,23 @@ describe("native Sign in with Apple callback failure handling", () => {
       userId: "chef-linked",
       tokens: { accessToken: "sj_access" },
     });
+  });
+
+  it("reads the session-version fence for the signed-in chef and hands it to token issuance", async () => {
+    callbackMock.mockResolvedValueOnce({ success: true, userId: "chef-linked", action: "user_logged_in" });
+    issueConnectorTokensMock.mockResolvedValueOnce({ accessToken: "sj_access", refreshToken: "ort_refresh", expiresIn: 900, scope: "account:read" });
+    const fixture = await signedAppleToken();
+    const db = dbMock();
+    db.user.findUnique.mockResolvedValueOnce({ sessionVersion: 3 });
+
+    await handleNativeAppleSignIn(
+      db,
+      { identityToken: fixture.identityToken, rawNonce: fixture.rawNonce },
+      { clientIds: ["app.spoonjoy"] },
+      { fetcher: fixture.fetcher },
+    );
+
+    expect(db.user.findUnique).toHaveBeenCalledWith({ where: { id: "chef-linked" }, select: { sessionVersion: true } });
+    expect(issueConnectorTokensMock).toHaveBeenCalledWith(db, expect.objectContaining({ userId: "chef-linked", sessionVersion: 3 }));
   });
 });

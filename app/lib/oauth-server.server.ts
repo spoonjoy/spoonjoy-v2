@@ -20,11 +20,13 @@ import {
   hasProhibitedOAuthClientNameCharacters,
   MAX_OAUTH_CLIENT_NAME_CODE_POINTS,
 } from "~/lib/oauth-client-metadata";
+import { readSessionVersion, sessionVersionUnchanged } from "~/lib/session-version-fence.server";
 
 type Database = PrismaClientType;
 
 export type OAuthPersistenceStage =
   | "code_consumption"
+  | "grant_insert"
   | "access_insert"
   | "refresh_insert"
   | "parent_revoke"
@@ -160,7 +162,7 @@ export class OAuthError extends Error {
 // Grant revocations the chef made: a disconnect, or sign out everywhere / a password change
 // (`security_event`, from account-revocation). Expiry, client or administrative revocation and
 // reuse detection (`compromised`) are not the chef's doing.
-const USER_REVOCATION_REASONS = new Set(["disconnect", "security_event"]);
+const USER_REVOCATION_REASONS: ReadonlySet<string | null> = new Set(["disconnect", "security_event"]);
 
 /**
  * The refusal for a refresh token that is no longer usable, saying `revoked_by_user` when its
@@ -171,10 +173,25 @@ async function refusedRefreshError(db: Database, record: OAuthRefreshTokenRecord
   const grant = record.grantId
     ? await db.oAuthGrant.findUnique({ where: { id: record.grantId }, select: { status: true, statusReason: true } })
     : null;
-  const byUser = grant?.status === "revoked" && USER_REVOCATION_REASONS.has(grant.statusReason ?? "");
+  const byUser = grant?.status === "revoked" && USER_REVOCATION_REASONS.has(grant.statusReason);
   return byUser
-    ? new OAuthError("invalid_grant", "Session revoked", 400, "revoked_by_user")
+    ? sessionRevokedError()
     : new OAuthError("invalid_grant", "Unknown or revoked refresh token");
+}
+
+/** `revoked_by_user`: the chef disconnected this session, signed out everywhere or changed their password. */
+function sessionRevokedError(): OAuthError {
+  return new OAuthError("invalid_grant", "Session revoked", 400, "revoked_by_user");
+}
+
+/**
+ * The account's session version, read before a flow's first write that an account-wide
+ * revocation would undo; `issueConnectorTokens` checks it again after creating a grant.
+ */
+export async function requireSessionVersionFence(db: Database, userId: string): Promise<number> {
+  const sessionVersion = await readSessionVersion(db, userId);
+  if (sessionVersion === null) throw new OAuthError("invalid_grant", "Unknown account");
+  return sessionVersion;
 }
 
 function base64UrlEncode(bytes: Uint8Array): string {
@@ -500,6 +517,8 @@ export interface ConsumedAuthorizationCode {
   userId: string;
   scope: string;
   resource: string | null;
+  /** The account's session version, read before the code was burned: the fence for `issueConnectorTokens`. */
+  sessionVersion: number;
 }
 
 /**
@@ -547,6 +566,9 @@ export async function consumeAuthorizationCode(
     throw new OAuthError("invalid_grant", "PKCE verification failed");
   }
 
+  // Read before the burn: a revocation that lands earlier has already spent the code, so the burn
+  // below fails; one that lands later moves the version, so the grant fence refuses.
+  const sessionVersion = await requireSessionVersionFence(db, record.userId);
   // Burn the code; the guard makes a concurrent second exchange a no-op.
   if (dependencies.onPersistenceMutation) {
     await dependencies.onPersistenceMutation("code_consumption", "before");
@@ -562,7 +584,7 @@ export async function consumeAuthorizationCode(
     await dependencies.onPersistenceMutation("code_consumption", "after");
   }
 
-  return { userId: record.userId, scope: record.scope, resource: record.resource };
+  return { userId: record.userId, scope: record.scope, resource: record.resource, sessionVersion };
 }
 
 export interface IssuedConnectorTokens {
@@ -606,6 +628,9 @@ function grantMatches(
   return grantIdentityMatches(grant, input) && grant.status === "active";
 }
 
+const ACTIVE_GRANT_STATUSES: ReadonlySet<string> = new Set(["active"]);
+const REVOCABLE_GRANT_STATUSES: ReadonlySet<string> = new Set(["active", "revoked", "compromised"]);
+
 async function requireLinkedConnectorGrant(
   db: Database,
   record: {
@@ -632,12 +657,11 @@ async function requireLinkedConnectorGrant(
     scope: normalizeCredentialScopes(record.scope),
     connectionKey: record.connectionKey,
   };
-  const permittedStatus = grant?.status === "active"
-    // Revoking a token that is already dead succeeds (RFC 7009 §2.2), whatever ended its grant:
-    // a disconnect, sign out everywhere, expiry or reuse detection. Otherwise the iPhone app's
-    // sign-out, which waits for the revoke call, fails after the account was revoked elsewhere.
-    || (allowDisconnected && (grant?.status === "revoked" || grant?.status === "compromised"));
-  if (!grant || !grantIdentityMatches(grant, expected) || !permittedStatus) {
+  // Revoking a token that is already dead succeeds (RFC 7009 §2.2), whatever ended its grant:
+  // a disconnect, sign out everywhere, expiry or reuse detection. Otherwise the iPhone app's
+  // sign-out, which waits for the revoke call, fails after the account was revoked elsewhere.
+  const permittedStatuses = allowDisconnected ? REVOCABLE_GRANT_STATUSES : ACTIVE_GRANT_STATUSES;
+  if (!grant || !grantIdentityMatches(grant, expected) || !permittedStatuses.has(grant.status)) {
     throw new OAuthError("invalid_grant", "OAuth grant identity does not match the connector");
   }
   return grant;
@@ -767,8 +791,10 @@ async function resolveConnectorGrant(
     scope: string;
     connectionKey: string;
     grantId?: string | null;
+    sessionVersion: number;
     now: Date;
   },
+  dependencies: OAuthPersistenceDependencies,
 ): Promise<string> {
   const existing = input.grantId
     ? await db.oAuthGrant.findUnique({ where: { id: input.grantId } })
@@ -781,6 +807,9 @@ async function resolveConnectorGrant(
   }
   if (input.grantId) {
     throw new OAuthError("invalid_grant", "OAuth grant no longer exists");
+  }
+  if (dependencies.onPersistenceMutation) {
+    await dependencies.onPersistenceMutation("grant_insert", "before");
   }
   const created = await db.oAuthGrant.create({
     data: {
@@ -796,6 +825,19 @@ async function resolveConnectorGrant(
       updatedAt: input.now,
     },
   });
+  if (dependencies.onPersistenceMutation) {
+    await dependencies.onPersistenceMutation("grant_insert", "after");
+  }
+  // The session-version fence: sign out everywhere or a password change that landed since the flow
+  // read the version revoked every grant then, before this one existed, so this one must not
+  // survive it. One that lands after this check finds the grant and revokes it.
+  if (!(await sessionVersionUnchanged(db, input.userId, input.sessionVersion))) {
+    await db.oAuthGrant.updateMany({
+      where: { id: created.id, status: "active" },
+      data: { status: "revoked", statusReason: "security_event", statusChangedAt: input.now },
+    });
+    throw sessionRevokedError();
+  }
   return created.id;
 }
 
@@ -820,6 +862,11 @@ export async function issueConnectorTokens(
     now?: Date;
     connectionKey?: string | null;
     grantId?: string | null;
+    /**
+     * The account's session version, read at the start of the flow (see
+     * `requireSessionVersionFence`). A new grant is kept only while it is unchanged.
+     */
+    sessionVersion: number;
   },
   dependencies: OAuthPersistenceDependencies = {},
 ): Promise<IssuedConnectorTokens> {
@@ -836,8 +883,9 @@ export async function issueConnectorTokens(
     scope: canonicalScope,
     connectionKey,
     grantId: input.grantId,
+    sessionVersion: input.sessionVersion,
     now,
-  });
+  }, dependencies);
   const persistentAccessToken = Boolean(
     input.resource &&
     input.persistentMcpResource &&
@@ -994,7 +1042,8 @@ export async function rotateConnectorTokens(
     throw new OAuthError("invalid_grant", "Unknown or revoked refresh token");
   }
   if (record.revokedAt) {
-    throw record.clientId === input.clientId
+    // The reason is told only to the client and issuer the token was issued to.
+    throw record.clientId === input.clientId && (record.issuer === null || record.issuer === input.issuer)
       ? await refusedRefreshError(db, record)
       : new OAuthError("invalid_grant", "Unknown or revoked refresh token");
   }
@@ -1031,6 +1080,10 @@ export async function rotateConnectorTokens(
   const resource = !record.resource && input.legacyMcpResource && isClaudeMcpOAuthClient(client)
     ? input.legacyMcpResource
     : record.resource;
+  // Read before the parent is revoked: a revocation that lands earlier has already revoked it, so
+  // the revoke below fails; one that lands later moves the version, so a legacy token's new grant
+  // is refused.
+  const sessionVersion = await requireSessionVersionFence(db, record.userId);
   if (dependencies.onPersistenceMutation) {
     await dependencies.onPersistenceMutation("parent_revoke", "before");
   }
@@ -1055,6 +1108,7 @@ export async function rotateConnectorTokens(
     now,
     connectionKey: record.connectionKey ?? record.id,
     grantId: record.grantId,
+    sessionVersion,
   }, dependencies);
   if (dependencies.onPersistenceMutation) {
     await dependencies.onPersistenceMutation("replacement_insert", "after");

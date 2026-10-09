@@ -1,6 +1,7 @@
 import type { AgentConnectionRequest, PrismaClient as PrismaClientType } from "@prisma/client";
 import { ApiAuthError, createApiCredential, hashApiToken } from "~/lib/api-auth.server";
 import { normalizeScope, OAuthError } from "~/lib/oauth-server.server";
+import { sessionVersionUnchanged } from "~/lib/session-version-fence.server";
 import {
   captureEvent,
   type PostHogServerConfig,
@@ -279,10 +280,15 @@ export async function getAgentConnectionRequest(
   return request ? expirePendingRequest(db, request, now) : null;
 }
 
+/**
+ * Approve a pending request for the signed-in chef. `sessionVersion` is the version of the
+ * session that made the request: if sign out everywhere or a password change lands while this
+ * runs, the approval is turned into a denial, so no later poll collects a token for it.
+ */
 export async function approveAgentConnectionRequest(
   db: Database,
   id: string,
-  userId: string,
+  approver: { userId: string; sessionVersion: number },
   now: Date = new Date(),
 ): Promise<AgentConnectionRequest> {
   const request = await getAgentConnectionRequest(db, id, now);
@@ -296,14 +302,24 @@ export async function approveAgentConnectionRequest(
     );
   }
 
-  return db.agentConnectionRequest.update({
+  const approved = await db.agentConnectionRequest.update({
     where: { id },
     data: {
       status: "approved",
-      approvedById: userId,
+      approvedById: approver.userId,
       approvedAt: now,
     },
   });
+  // The session-version fence: a revocation that landed before this check denied every approved
+  // request then, before this one was approved, so deny it here. One that lands after this check
+  // finds the approval and denies it, or revokes the token a poll already collected.
+  if (!(await sessionVersionUnchanged(db, approver.userId, approver.sessionVersion))) {
+    return db.agentConnectionRequest.update({
+      where: { id },
+      data: { status: "denied", deniedAt: now },
+    });
+  }
+  return approved;
 }
 
 export async function denyAgentConnectionRequest(
