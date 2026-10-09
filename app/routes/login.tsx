@@ -134,7 +134,7 @@ export default function Login() {
   return (
     <AuthLayout>
       <div className="w-full max-w-sm">
-        <Heading>Log In</Heading>
+        <Heading>Log in</Heading>
 
         {/* OAuth error messages */}
         <OAuthError error={loaderData?.oauthError} className="mt-4" />
@@ -176,6 +176,7 @@ export default function Login() {
               type="password"
               id="password"
               name="password"
+              autoComplete="current-password"
               required
               invalid={/* istanbul ignore next -- @preserve */ !!actionData?.errors?.password}
             />
@@ -185,7 +186,7 @@ export default function Login() {
           </Field>
 
           <Button type="submit" className="w-full">
-            Log In
+            Log in
           </Button>
         </Form>
 
@@ -194,7 +195,7 @@ export default function Login() {
 
         <Text className="mt-6 text-center">
           Don't have an account?{" "}
-          <TextLink href="/signup">Sign up</TextLink>
+          <TextLink href={redirectTo ? `/signup?redirectTo=${encodeURIComponent(redirectTo)}` : "/signup"}>Sign up</TextLink>
         </Text>
       </div>
     </AuthLayout>

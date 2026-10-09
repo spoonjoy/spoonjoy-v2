@@ -7,6 +7,9 @@
 export const USERNAME_MIN_LENGTH = 3;
 export const USERNAME_MAX_LENGTH = 50;
 
+// The rule in a sentence, shown under the sign-up field before anyone gets it wrong.
+export const USERNAME_HINT = `${USERNAME_MIN_LENGTH} to ${USERNAME_MAX_LENGTH} letters, numbers, periods, underscores or hyphens.`;
+
 // Also the OpenAPI schema's pattern for UpdateAccountProfileRequest.username.
 export const USERNAME_PATTERN_SOURCE = "^[A-Za-z0-9._-]+$";
 const USERNAME_PATTERN = new RegExp(USERNAME_PATTERN_SOURCE);
