@@ -37,12 +37,12 @@ describe("API v1 request event sampling", () => {
     expect(sampleApiEvent(read, null)).toEqual({ send: true, sampleRate: 1, reason: "sampled" });
   });
 
-  it("samples production at 10% and leaves QA unsampled", () => {
+  it("samples production at 10% and sends every QA event", () => {
     const wrangler = JSON.parse(readFileSync("wrangler.json", "utf8")) as {
       vars: Record<string, string>;
       env: { qa: { vars: Record<string, string> } };
     };
     expect(wrangler.vars.SPOONJOY_API_EVENT_SAMPLE_RATE).toBe("0.1");
-    expect(wrangler.env.qa.vars.SPOONJOY_API_EVENT_SAMPLE_RATE).toBeUndefined();
+    expect(wrangler.env.qa.vars.SPOONJOY_API_EVENT_SAMPLE_RATE).toBe("1");
   });
 });
