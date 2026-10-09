@@ -273,13 +273,9 @@ Key models:
 - `ShoppingList` - Personal shopping lists
 - `ApiCredential` - Hashed owner-scoped API tokens for REST and MCP clients
 
-## Feedback
-
-Ongoing feedback is tracked in `feedback/YYYY-MM-DD.md` files. Check there for known issues and planned improvements.
-
 ## Backlog
 
-The canonical proposed backlog lives in [`BACKLOG.md`](./BACKLOG.md). Historical task snapshots under `.tasks/` are not the source of truth unless they explicitly reference a current `SJ-*` backlog item.
+The canonical proposed backlog lives in [`BACKLOG.md`](./BACKLOG.md). Agent task logs and evidence do not live in this repository; the `.tasks/templates/` folder holds the only task templates.
 
 ## License
 
